@@ -419,19 +419,21 @@ function startRecording() {
   recognition.lang = 'en-US';
 
   transcript = '';
+  let lastResultIndex = 0;
 
-  let interimTranscript = '';
   recognition.onresult = e => {
-    interimTranscript = '';
-    for (let i = e.resultIndex; i < e.results.length; i++) {
+    // Only process truly new results to avoid duplication on restart
+    let interim = '';
+    for (let i = Math.max(e.resultIndex, lastResultIndex); i < e.results.length; i++) {
       if (e.results[i].isFinal) {
         transcript += e.results[i][0].transcript + ' ';
+        lastResultIndex = i + 1;
       } else {
-        interimTranscript += e.results[i][0].transcript;
+        interim += e.results[i][0].transcript;
       }
     }
     const preview = document.getElementById('transcriptPreview');
-    preview.textContent = transcript + interimTranscript;
+    preview.textContent = transcript + interim;
     preview.classList.add('visible');
   };
 
@@ -463,29 +465,37 @@ function stopRecording() {
   if (!isRecording) return;
   isRecording = false;
 
-  if (recognition) {
-    recognition.onend = null;
-    recognition.onresult = null;
-    recognition.onerror = null;
-    recognition.stop();
-    recognition = null;
-  }
-
-  const captured = transcript.trim();
-
-  if (!captured) {
-    resetMic();
-    return;
-  }
-
+  // Show processing UI immediately
   document.getElementById('micBtn').classList.remove('recording');
   document.getElementById('micBtn').classList.add('processing');
   document.getElementById('stopIcon').style.display = 'none';
   document.getElementById('micSpinner').style.display = 'block';
-  document.getElementById('statusText').textContent = 'claude is thinking...';
+  document.getElementById('statusText').textContent = 'processing...';
   document.getElementById('statusText').className = 'status-text processing';
 
-  processEntry(captured);
+  if (recognition) {
+    // Let onend fire to collect final results, then process
+    recognition.onerror = null;
+    recognition.onend = () => {
+      recognition = null;
+      // Small delay to ensure all final results are in
+      setTimeout(() => {
+        const captured = transcript.trim();
+        if (!captured) {
+          resetMic();
+          return;
+        }
+        document.getElementById('statusText').textContent = 'claude is thinking...';
+        processEntry(captured);
+      }, 300);
+    };
+    recognition.stop();
+  } else {
+    const captured = transcript.trim();
+    if (!captured) { resetMic(); return; }
+    document.getElementById('statusText').textContent = 'claude is thinking...';
+    processEntry(captured);
+  }
 }
 
 function resetMic() {
