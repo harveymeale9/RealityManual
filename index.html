@@ -531,6 +531,11 @@ async function callClaude(system, user) {
 }
 
 async function processEntry(raw) {
+  const recentEntries = db.entries().slice(-5);
+  const context = recentEntries.length > 0
+    ? `\n\nFor context, here are Harvey's last ${recentEntries.length} entries:\n${recentEntries.map(e => `[${new Date(e.timestamp).toLocaleDateString()}] ${e.cleaned||e.raw}`).join('\n')}`
+    : '';
+
   const system = `You are Harvey's personal journal AI. He has spoken a voice entry and you need to process it intelligently.
 
 1. Detect the type:
@@ -540,7 +545,7 @@ async function processEntry(raw) {
 
 2. Write a cleaned-up version in Harvey's voice — flowing, clear prose. Preserve everything he said but make it readable. Keep it personal and in first person.
 
-3. Add a one-sentence "reflection" that captures what you think is really going on beneath the surface — what this entry reveals about where Harvey is at, what he might be working through, or what matters to him right now. Be perceptive, not generic.
+3. Add a "reflection" — 1-2 sentences that are genuinely perceptive. Reference patterns across his recent entries if relevant. What does this reveal? What is he working through? How does this connect to what he's been saying lately? Be specific, not generic.
 
 4. Extract metric updates if mentioned (stress, emotional_wellbeing, energy, meaning, connection, progress — scale 1-10).
 
@@ -550,13 +555,13 @@ Respond ONLY with valid JSON, no markdown:
 {
   "type": "journal|idea|metric",
   "cleaned": "full cleaned up version of what he said",
-  "reflection": "one perceptive sentence about what this entry really reveals",
+  "reflection": "1-2 perceptive sentences connecting this entry to patterns in his life",
   "tags": ["tag1", "tag2"],
   "metrics": { "stress": 7 }
 }`;
 
   try {
-    const result = await callClaude(system, `Raw voice entry:\n\n${raw}`);
+    const result = await callClaude(system, `Raw voice entry:\n\n${raw}${context}`);
     const clean = result.replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(clean);
 
@@ -613,8 +618,13 @@ function renderEntries() {
         <span class="entry-time">${new Date(e.timestamp).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</span>
       </div>
       <div class="entry-date">${new Date(e.timestamp).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'long',year:'numeric'})}</div>
-      <div class="entry-preview">${e.cleaned||e.raw||''}</div>
-      ${e.reflection ? `<div style="font-size:13px;color:var(--text3);font-style:italic;margin-top:10px;padding-top:10px;border-top:1px solid var(--bg3);font-family:'Cormorant Garamond',serif;line-height:20px">${e.reflection}</div>` : ''}
+      ${e.cleaned && e.cleaned !== e.raw ? `
+        <div style="font-size:9px;color:var(--gold);letter-spacing:2px;margin-bottom:6px">CLAUDE'S VERSION</div>
+        <div class="entry-preview">${e.cleaned}</div>
+        <div style="font-size:9px;color:var(--text3);letter-spacing:2px;margin:12px 0 6px">YOU SAID</div>
+        <div style="font-size:13px;color:var(--text3);font-style:italic;font-family:'Cormorant Garamond',serif;line-height:22px">${e.raw}</div>
+      ` : `<div class="entry-preview">${e.cleaned||e.raw||''}</div>`}
+      ${e.reflection ? `<div style="font-size:14px;color:var(--text3);font-style:italic;margin-top:12px;padding-top:12px;border-top:1px solid var(--bg3);font-family:'Cormorant Garamond',serif;line-height:22px">↳ ${e.reflection}</div>` : ''}
       ${e.tags?.length ? `<div class="entry-tags">${e.tags.map(t=>`<span class="entry-tag">${t}</span>`).join('')}</div>` : ''}
     </div>
   `).join('');
