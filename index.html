@@ -233,10 +233,10 @@
     <div class="home-line"></div>
   </div>
 
-  <div class="mic-wrap" onclick="toggleRecord()">
+  <div class="mic-wrap">
     <div class="ring ring-1" id="ring1"></div>
     <div class="ring ring-2" id="ring2"></div>
-    <button class="mic-btn" id="micBtn">
+    <button class="mic-btn" id="micBtn" onclick="toggleRecord(); event.stopPropagation();">
       <!-- mic icon -->
       <svg id="micIcon" viewBox="0 0 24 24" fill="none" stroke="#080810" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4z"/>
@@ -459,6 +459,7 @@ function startRecording() {
   };
 
   recognition.onend = () => {
+    if (!isRecording) return;
     if (isRecording) recognition.start();
   };
 
@@ -530,28 +531,29 @@ async function callClaude(system, user) {
 }
 
 async function processEntry(raw) {
-  const system = `You are Harvey's personal journal AI. He has just spoken a voice entry. Your job is to:
+  const system = `You are Harvey's personal journal AI. He has spoken a voice entry and you need to process it intelligently.
 
-1. Detect what type of entry this is by reading the content:
-   - "journal" = general thoughts, reflections, how his day went, feelings, observations
-   - "idea" = a theory, concept, philosophy, business idea, creative thought
-   - "metric" = an update to his wellbeing scores (he might say things like "stress has been high", "feeling about a 7 on energy", "been pretty happy", etc.)
+1. Detect the type:
+   - "journal" = thoughts, reflections, feelings, how his day went, observations about life
+   - "idea" = a theory, philosophy, concept, business idea, creative thought he is developing
+   - "metric" = mentions of how he has been feeling in terms of stress, energy, wellbeing, happiness, purpose, connection
 
-2. Clean up the raw voice transcript into clear, flowing prose in Harvey's voice.
+2. Write a cleaned-up version in Harvey's voice — flowing, clear prose. Preserve everything he said but make it readable. Keep it personal and in first person.
 
-3. Extract any metric updates if mentioned (stress, emotional_wellbeing, energy, meaning, connection, progress - all on scale 1-10).
+3. Add a one-sentence "reflection" that captures what you think is really going on beneath the surface — what this entry reveals about where Harvey is at, what he might be working through, or what matters to him right now. Be perceptive, not generic.
 
-4. Generate 2-3 relevant tags that describe the themes.
+4. Extract metric updates if mentioned (stress, emotional_wellbeing, energy, meaning, connection, progress — scale 1-10).
+
+5. Generate 2-3 tags describing the themes.
 
 Respond ONLY with valid JSON, no markdown:
 {
   "type": "journal|idea|metric",
-  "cleaned": "cleaned up version of what he said",
+  "cleaned": "full cleaned up version of what he said",
+  "reflection": "one perceptive sentence about what this entry really reveals",
   "tags": ["tag1", "tag2"],
   "metrics": { "stress": 7 }
-}
-
-The "metrics" field should only be included if he actually mentioned specific scores or levels. Leave it out for pure journal/idea entries.`;
+}`;
 
   try {
     const result = await callClaude(system, `Raw voice entry:\n\n${raw}`);
@@ -563,6 +565,7 @@ The "metrics" field should only be included if he actually mentioned specific sc
       id: Date.now().toString(),
       raw,
       cleaned: parsed.cleaned,
+      reflection: parsed.reflection || '',
       type: parsed.type,
       tags: parsed.tags || [],
       timestamp: Date.now()
@@ -610,7 +613,8 @@ function renderEntries() {
         <span class="entry-time">${new Date(e.timestamp).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</span>
       </div>
       <div class="entry-date">${new Date(e.timestamp).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'long',year:'numeric'})}</div>
-      <div class="entry-preview">${(e.cleaned||e.raw||'').substring(0,160)}${(e.cleaned||e.raw||'').length>160?'...':''}</div>
+      <div class="entry-preview">${e.cleaned||e.raw||''}</div>
+      ${e.reflection ? `<div style="font-size:13px;color:var(--text3);font-style:italic;margin-top:10px;padding-top:10px;border-top:1px solid var(--bg3);font-family:'Cormorant Garamond',serif;line-height:20px">${e.reflection}</div>` : ''}
       ${e.tags?.length ? `<div class="entry-tags">${e.tags.map(t=>`<span class="entry-tag">${t}</span>`).join('')}</div>` : ''}
     </div>
   `).join('');
