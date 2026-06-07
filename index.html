@@ -576,6 +576,17 @@
   #toast.error { border-color: var(--red); color: #e87070; }
 
   /* no-creds warning */
+  /* pull to refresh */
+  .ptr-indicator {
+    text-align: center; padding: 16px; height: 0; overflow: hidden;
+    font-family: 'IBM Plex Mono', monospace; font-size: 10px;
+    letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint);
+    transition: height 0.15s, color 0.2s;
+  }
+  .ptr-indicator.pulling { height: 40px; }
+  .ptr-indicator.ready { color: var(--accent); height: 40px; }
+  .ptr-indicator.refreshing { color: var(--accent); height: 40px; animation: dot-pulse 1s infinite; }
+
   /* context menu */
   .ctx-item {
     display: flex; align-items: center; gap: 10px;
@@ -752,6 +763,7 @@
       <div class="entries-title">entries</div>
       <div class="entries-sub" id="entries-sub">today</div>
     </div>
+    <div class="ptr-indicator" id="ptr-entries">↓ pull to refresh</div>
     <div class="entries-list" id="entries-list"></div>
   </div>
 
@@ -820,6 +832,7 @@
       <button class="pieces-tab active" id="ptab-awaiting" onclick="switchPiecesTab('awaiting')">awaiting</button>
       <button class="pieces-tab" id="ptab-published" onclick="switchPiecesTab('published')">published</button>
     </div>
+    <div class="ptr-indicator" id="ptr-pieces">↓ pull to refresh</div>
     <div class="entries-list" id="pieces-list"></div>
   </div>
 
@@ -951,6 +964,16 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!cfg.clientId) {
     setTimeout(() => showSetupOverlay(), 300);
   }
+
+  // Pull to refresh
+  initPullToRefresh('entries-list', 'ptr-entries', () => {
+    Object.keys(entriesCache).forEach(k => delete entriesCache[k]);
+    renderEntriesList();
+  });
+  initPullToRefresh('pieces-list', 'ptr-pieces', () => {
+    Object.keys(entriesCache).forEach(k => delete entriesCache[k]);
+    renderPiecesList(currentPiecesTab);
+  });
 });
 
 function updateHeaderDate() {
@@ -1760,18 +1783,26 @@ async function renderPiecesList(tab) {
     return;
   }
 
-  // Load last 24 months of entries, find blog type
-  const now = new Date();
-  let pieces = [];
-  for (let i = 0; i < 24; i++) {
-    const d = new Date(now); d.setMonth(d.getMonth() - i);
-    const mk = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
-    const entries = await loadMonthEntries(mk).catch(() => []);
-    entries.filter(e => e.type === 'blog').forEach(e => {
-      pieces.push({ ...e, _monthKey: mk });
-    });
-  }
-  pieces.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+  try {
+    // Scan all cached months + current month for blog entries
+    const now = new Date();
+    const monthsToCheck = new Set();
+    // Always check last 6 months
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(now); d.setMonth(d.getMonth() - i);
+      monthsToCheck.add(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'));
+    }
+    // Also check any already-cached months
+    Object.keys(entriesCache).forEach(mk => monthsToCheck.add(mk));
+
+    let pieces = [];
+    for (const mk of monthsToCheck) {
+      const entries = await loadMonthEntries(mk).catch(() => []);
+      entries.filter(e => e.type === 'blog').forEach(e => {
+        pieces.push({ ...e, _monthKey: mk });
+      });
+    }
+    pieces.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
 
   const filtered = pieces.filter(p => tab === 'published' ? p.blogStatus === 'published' : p.blogStatus !== 'published');
   const sub = document.getElementById('pieces-sub');
@@ -1798,6 +1829,10 @@ async function renderPiecesList(tab) {
       + '<div class="entry-tags">' + statusBadge + (p.tags||[]).filter(t=>t!=='blog'&&t!=='published'&&t!=='awaiting').map(t=>'<span class="tag">' + t + '</span>').join('') + '</div>'
       + '</div>';
   }).join('');
+  } catch(err) {
+    console.error('renderPiecesList error:', err);
+    list.innerHTML = '<div class="empty-state"><p>Error loading pieces.</p><span>' + (err.message||'') + '</span></div>';
+  }
 }
 
 function zoomChart(dir) {
@@ -2392,43 +2427,98 @@ function showScreen(name) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// PULL TO REFRESH
+// ═══════════════════════════════════════════════════════════════════
+function initPullToRefresh(listId, indicatorId, onRefresh) {
+  const list = document.getElementById(listId);
+  const ind = document.getElementById(indicatorId);
+  if (!list || !ind) return;
+
+  let startY = 0, pulling = false, triggered = false;
+  const THRESHOLD = 70;
+
+  list.addEventListener('touchstart', (e) => {
+    if (list.scrollTop > 0) return; // only trigger when at top
+    startY = e.touches[0].clientY;
+    pulling = true;
+    triggered = false;
+  }, { passive: true });
+
+  list.addEventListener('touchmove', (e) => {
+    if (!pulling) return;
+    const dy = e.touches[0].clientY - startY;
+    if (dy < 0) { pulling = false; return; }
+    if (dy > 20) {
+      ind.classList.add('pulling');
+      ind.textContent = dy > THRESHOLD ? '↑ release to refresh' : '↓ pull to refresh';
+      if (dy > THRESHOLD) ind.classList.add('ready'); else ind.classList.remove('ready');
+      triggered = dy > THRESHOLD;
+    }
+  }, { passive: true });
+
+  list.addEventListener('touchend', () => {
+    if (!pulling) return;
+    pulling = false;
+    if (triggered) {
+      ind.classList.remove('pulling','ready');
+      ind.classList.add('refreshing');
+      ind.textContent = 'refreshing…';
+      Promise.resolve(onRefresh()).finally(() => {
+        setTimeout(() => {
+          ind.classList.remove('refreshing');
+          ind.textContent = '↓ pull to refresh';
+          ind.style.height = '';
+        }, 400);
+      });
+    } else {
+      ind.classList.remove('pulling','ready','refreshing');
+    }
+  }, { passive: true });
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // SWIPE BACK GESTURE
 // ═══════════════════════════════════════════════════════════════════
+// Swipe state per screen
+const swipeState = {};
+
 function initSwipeBack(el, backScreen) {
   if (!el) return;
-  // Remove old listeners by cloning
-  const fresh = el.cloneNode(true);
-  el.parentNode.replaceChild(fresh, el);
-  // Re-attach click handlers that were in the HTML (back-btn etc)
-  // — these are inline onclick so they survive cloneNode
+  const id = el.id;
+  if (swipeState[id]) return; // already initialised
+  swipeState[id] = true;
 
   let startX = 0, startY = 0, tracking = false;
-  fresh.addEventListener('touchstart', (e) => {
-    if (e.touches[0].clientX > 40) return; // only trigger from left 40px edge
-    startX = e.touches[0].clientX;
-    startY = e.touches[0].clientY;
+
+  el.addEventListener('touchstart', (e) => {
+    const touch = e.touches[0];
+    // Trigger from anywhere in left 60px — more forgiving
+    if (touch.clientX > 60) return;
+    startX = touch.clientX;
+    startY = touch.clientY;
     tracking = true;
   }, { passive: true });
 
-  fresh.addEventListener('touchmove', (e) => {
+  el.addEventListener('touchmove', (e) => {
     if (!tracking) return;
-    const dx = e.touches[0].clientX - startX;
-    const dy = Math.abs(e.touches[0].clientY - startY);
-    if (dy > 30) { tracking = false; return; } // vertical scroll, cancel
-    if (dx > 0) fresh.style.transform = 'translateX(' + Math.min(dx, 80) + 'px)';
+    const touch = e.touches[0];
+    const dx = touch.clientX - startX;
+    const dy = Math.abs(touch.clientY - startY);
+    if (dy > dx) { tracking = false; el.style.transform = ''; return; } // more vertical than horizontal
+    if (dx > 0) el.style.transform = 'translateX(' + Math.min(dx * 0.6, 120) + 'px)';
   }, { passive: true });
 
-  fresh.addEventListener('touchend', (e) => {
+  el.addEventListener('touchend', (e) => {
     if (!tracking) return;
     tracking = false;
     const dx = e.changedTouches[0].clientX - startX;
-    fresh.style.transform = '';
-    if (dx > 60) showScreen(backScreen);
+    el.style.transform = '';
+    if (dx > 50) showScreen(backScreen);
   }, { passive: true });
 
-  fresh.addEventListener('touchcancel', () => {
+  el.addEventListener('touchcancel', () => {
     tracking = false;
-    fresh.style.transform = '';
+    el.style.transform = '';
   }, { passive: true });
 }
 
