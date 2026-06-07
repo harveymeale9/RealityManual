@@ -1552,48 +1552,60 @@ function toggleEditPanel() {
 }
 
 let editDictationActive = false;
-let editRecognition = null;
+let editMediaRecorder = null;
+let editAudioChunks = [];
 
-function toggleEditDictation() {
+async function toggleEditDictation() {
   const btn = document.getElementById('edit-mic-btn');
   const inp = document.getElementById('edit-input-area');
   if (!inp) return;
 
+  // Stop recording
   if (editDictationActive) {
-    if (editRecognition) editRecognition.stop();
     editDictationActive = false;
-    if (btn) { btn.style.borderColor = ''; btn.style.color = ''; }
+    if (editMediaRecorder && editMediaRecorder.state === 'recording') {
+      editMediaRecorder.stop();
+      editMediaRecorder.stream.getTracks().forEach(t => t.stop());
+    }
+    if (btn) { btn.style.borderColor = ''; btn.style.color = ''; btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="17" x2="12" y2="21"/><line x1="9" y1="21" x2="15" y2="21"/></svg>'; }
     return;
   }
 
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { toast('Speech recognition not supported in this browser', true); return; }
-
-  editRecognition = new SR();
-  editRecognition.continuous = true;
-  editRecognition.interimResults = true;
-  editRecognition.lang = 'en-GB';
-
-  let baseText = inp.value;
-  editRecognition.onresult = (e) => {
-    let interim = '';
-    let final = baseText;
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      if (e.results[i].isFinal) { final += e.results[i][0].transcript + ' '; baseText = final; }
-      else interim += e.results[i][0].transcript;
-    }
-    inp.value = final + interim;
-  };
-  editRecognition.onerror = () => { editDictationActive = false; if (btn) { btn.style.borderColor=''; btn.style.color=''; } };
-  editRecognition.onend = () => { if (editDictationActive) editRecognition.start(); }; // keep going until stopped
-  editRecognition.start();
-  editDictationActive = true;
-  if (btn) { btn.style.borderColor = 'var(--red)'; btn.style.color = 'var(--red)'; }
+  // Start recording
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mimeType = ['audio/webm;codecs=opus','audio/webm','audio/ogg','audio/mp4'].find(m => MediaRecorder.isTypeSupported(m)) || '';
+    editMediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+    editAudioChunks = [];
+    editMediaRecorder.ondataavailable = e => { if (e.data.size > 0) editAudioChunks.push(e.data); };
+    editMediaRecorder.onstop = async () => {
+      if (!editAudioChunks.length) return;
+      const mtype = editMediaRecorder.mimeType || 'audio/webm';
+      const blob = new Blob(editAudioChunks, { type: mtype });
+      const ext = mtype.includes('ogg') ? 'ogg' : mtype.includes('mp4') ? 'mp4' : 'webm';
+      if (btn) { btn.innerHTML = '…'; btn.disabled = true; }
+      try {
+        const text = await whisperTranscribe(blob, ext);
+        inp.value = (inp.value ? inp.value.trim() + ' ' : '') + text.trim();
+      } catch(e) { toast('Transcription failed: ' + e.message, true); }
+      if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="17" x2="12" y2="21"/><line x1="9" y1="21" x2="15" y2="21"/></svg>'; }
+    };
+    editMediaRecorder.start(250);
+    editDictationActive = true;
+    if (btn) { btn.style.borderColor = 'var(--red)'; btn.style.color = 'var(--red)'; btn.innerHTML = '⏹'; }
+  } catch(e) {
+    toast('Mic access denied', true);
+  }
 }
 
 async function submitEdits(monthKey) {
   // Stop dictation if running
-  if (editDictationActive && editRecognition) { editRecognition.stop(); editDictationActive = false; }
+  if (editDictationActive && editMediaRecorder && editMediaRecorder.state === 'recording') {
+    editMediaRecorder.stop();
+    editMediaRecorder.stream.getTracks().forEach(t => t.stop());
+    editDictationActive = false;
+    await new Promise(r => setTimeout(r, 400)); // let onstop fire
+  }
   const inp = document.getElementById('edit-input-area');
   const instructions = inp ? inp.value.trim() : '';
   if (!instructions) { toast('Describe the changes first', true); return; }
@@ -1775,15 +1787,41 @@ async function renderPiecesList(tab, silent) {
     return;
   }
 
-  // Don't blank the list while refreshing — only show loading on first load
   if (!silent && piecesCache === null) {
     list.innerHTML = '<div style="padding:40px;text-align:center;font-family:monospace;font-size:11px;color:var(--text-dim);opacity:0.4;letter-spacing:0.1em">loading…</div>';
   }
 
   try {
-    // Force reload from Drive if silent refresh
     if (silent) piecesCache = null;
     const pieces = await loadPiecesFile();
+
+    // Auto-migrate: scan entriesCache for blog entries not yet in pieces.json
+    const pieceIds = new Set(pieces.map(p => p.id));
+    let migrated = false;
+    for (const mk of Object.keys(entriesCache)) {
+      for (const e of (entriesCache[mk] || [])) {
+        if (e.type === 'blog' && !pieceIds.has(e.id)) {
+          pieces.unshift({ ...e, _monthKey: mk });
+          pieceIds.add(e.id);
+          migrated = true;
+        }
+      }
+    }
+    // Also check current month from Drive in case it's not cached yet
+    const now2 = new Date();
+    const curMk = now2.getFullYear() + '-' + String(now2.getMonth()+1).padStart(2,'0');
+    if (!entriesCache[curMk]) {
+      const curEntries = await loadMonthEntries(curMk).catch(() => []);
+      for (const e of curEntries) {
+        if (e.type === 'blog' && !pieceIds.has(e.id)) {
+          pieces.unshift({ ...e, _monthKey: curMk });
+          pieceIds.add(e.id);
+          migrated = true;
+        }
+      }
+    }
+    if (migrated) await savePiecesFile(pieces);
+
     pieces.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
 
     const filtered = pieces.filter(p => tab === 'published' ? p.blogStatus === 'published' : p.blogStatus !== 'published');
