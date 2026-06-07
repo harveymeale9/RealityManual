@@ -576,6 +576,61 @@
   #toast.error { border-color: var(--red); color: #e87070; }
 
   /* no-creds warning */
+  /* pieces tabs */
+  .pieces-tab {
+    flex: 1; background: none; border: none; border-bottom: 2px solid transparent;
+    color: var(--text-faint); font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+    padding: 12px; cursor: pointer; transition: color 0.2s, border-color 0.2s;
+  }
+  .pieces-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .pieces-tab:hover { color: var(--text-dim); }
+
+  /* zoom buttons */
+  .zoom-btn {
+    background: none; border: 1px solid var(--border2); border-radius: 4px;
+    color: var(--text-dim); font-size: 16px; width: 32px; height: 32px;
+    cursor: pointer; transition: border-color 0.2s, color 0.2s;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .zoom-btn:hover { border-color: var(--accent-dim); color: var(--accent); }
+
+  /* tags */
+  .entry-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .tag {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 3px 7px; border-radius: 2px;
+    border: 1px solid var(--border2); color: var(--text-faint);
+    background: none;
+  }
+  .tag.blog { border-color: var(--accent-dim); color: var(--accent); }
+  .tag.published { border-color: var(--green); color: var(--green); }
+  .tag.awaiting { border-color: #e8a84a; color: #e8a84a; }
+
+  /* blog approval UI */
+  .blog-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+  .blog-action-btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    background: none; border: 1px solid var(--border2); border-radius: 4px;
+    color: var(--text-dim); font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 12px; cursor: pointer; transition: all 0.2s;
+  }
+  .blog-action-btn.approve { border-color: var(--green); color: var(--green); }
+  .blog-action-btn.approve:hover { background: rgba(76,175,130,0.08); }
+  .blog-action-btn.edit-req { border-color: var(--accent-dim); color: var(--accent); }
+  .blog-action-btn.edit-req:hover { background: var(--glow2); }
+  .edit-input {
+    width: 100%; background: var(--surface); border: 1px solid var(--border2);
+    border-radius: 4px; color: var(--text); font-family: 'Lora', serif;
+    font-size: 14px; padding: 12px; outline: none; resize: vertical;
+    min-height: 80px; display: none;
+    -webkit-appearance: none;
+  }
+  .edit-input:focus { border-color: var(--accent-dim); }
+
   .no-creds-banner {
     margin: 24px;
     padding: 14px 18px;
@@ -728,6 +783,46 @@
     </div>
   </div>
 
+  <!-- PIECES SCREEN -->
+  <div class="screen" id="screen-pieces">
+    <div class="entries-header">
+      <div class="entries-title">pieces</div>
+      <div class="entries-sub" id="pieces-sub">your published writing</div>
+    </div>
+    <div style="display:flex;border-bottom:1px solid var(--border);flex-shrink:0">
+      <button class="pieces-tab active" id="ptab-awaiting" onclick="switchPiecesTab('awaiting')">awaiting</button>
+      <button class="pieces-tab" id="ptab-published" onclick="switchPiecesTab('published')">published</button>
+    </div>
+    <div class="entries-list" id="pieces-list"></div>
+  </div>
+
+  <!-- CHART SCREEN -->
+  <div class="screen" id="screen-chart">
+    <div class="entries-header" style="display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div class="entries-title">published</div>
+        <div class="entries-sub" id="chart-sub">loading…</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="zoom-btn" onclick="zoomChart(-1)">−</button>
+        <button class="zoom-btn" onclick="zoomChart(1)">+</button>
+      </div>
+    </div>
+    <div style="flex:1;position:relative;overflow:hidden">
+      <canvas id="pub-chart" style="width:100%;height:100%;display:block"></canvas>
+      <div id="dot-tooltip" style="display:none;position:absolute;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;padding:8px 12px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text);pointer-events:none;max-width:220px;z-index:10"></div>
+    </div>
+  </div>
+
+  <!-- BLOG DETAIL SCREEN -->
+  <div class="screen" id="screen-blog">
+    <div class="detail-header">
+      <button class="back-btn" id="blog-back-btn" onclick="showScreen('pieces')">←</button>
+      <div class="detail-meta" id="blog-meta">—</div>
+    </div>
+    <div class="detail-body" id="blog-body"></div>
+  </div>
+
   <!-- BOTTOM NAV -->
   <nav>
     <button class="nav-btn active" id="nav-record" onclick="showScreen('record')">
@@ -742,6 +837,26 @@
         <path d="M4 6h16M4 12h16M4 18h10"/>
       </svg>
       entries
+    </button>
+    <button class="nav-btn" id="nav-pieces" onclick="showScreen('pieces')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/>
+        <line x1="16" y1="17" x2="8" y2="17"/>
+      </svg>
+      pieces
+    </button>
+    <button class="nav-btn" id="nav-chart" onclick="showScreen('chart')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="6" cy="18" r="1.5" fill="currentColor" stroke="none"/>
+        <circle cx="10" cy="12" r="1.5" fill="currentColor" stroke="none"/>
+        <circle cx="15" cy="8" r="1.5" fill="currentColor" stroke="none"/>
+        <circle cx="19" cy="5" r="1.5" fill="currentColor" stroke="none"/>
+        <path d="M4 20h17"/>
+        <path d="M4 4v17"/>
+      </svg>
+      published
     </button>
   </nav>
 </div>
@@ -1016,9 +1131,23 @@ async function handleRecordingStop() {
     setStep('transcribe');
     const rawTranscript = await whisperTranscribe(audioBlob, ext);
 
-    // STEP 3: Clean with gpt-5.4-mini
+    // STEP 3: Detect type, tag, clean
     setStep('clean');
-    const cleanedText = await cleanTranscript(rawTranscript);
+    const isBlog = new RegExp("^(ok\s+)?(here\s+(is|are)|this\s+is)\s+(a\s+)?(blog|piece|article|post|essay)", "i").test(rawTranscript.trim());
+    let cleanedText, tags, blogTitle = null;
+
+    if (isBlog) {
+      // Full blog processing — deep clean + title
+      const blogResult = await processBlogEntry(rawTranscript);
+      cleanedText = blogResult.body;
+      blogTitle = blogResult.title;
+      tags = ['blog', ...blogResult.extraTags];
+    } else {
+      [cleanedText, tags] = await Promise.all([
+        cleanTranscript(rawTranscript),
+        autoTag(rawTranscript)
+      ]);
+    }
 
     // STEP 4: Save entry JSON to Drive
     setStep('save');
@@ -1030,8 +1159,10 @@ async function handleRecordingStop() {
       audioFilename,
       rawTranscript,
       cleanedText,
+      tags,
       insights: null,
-      insightsStatus: 'none'
+      insightsStatus: 'none',
+      ...(isBlog ? { type: 'blog', blogTitle, blogStatus: 'awaiting', blogVersion: 1 } : { type: 'journal' })
     };
 
     await saveEntryToDrive(entry, monthKey);
@@ -1041,7 +1172,12 @@ async function handleRecordingStop() {
     entriesCache[monthKey].unshift(entry);
 
     showProcessing(false);
-    toast('Entry saved ✓');
+
+    if (isBlog) {
+      toast('Piece saved — review in Pieces tab');
+    } else {
+      toast('Entry saved ✓');
+    }
 
     // Switch to entries to see the new entry
     setTimeout(() => {
@@ -1105,6 +1241,456 @@ async function whisperTranscribe(blob, ext) {
 // ═══════════════════════════════════════════════════════════════════
 // OPENAI — CLEAN TRANSCRIPT
 // ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
+// AUTO-TAG
+// ═══════════════════════════════════════════════════════════════════
+const VALID_TAGS = ['metric update','idea','personal philosophy','metaphysics','gratitude','frustration','decision','relationship','work','health','memory','creative'];
+
+async function autoTag(text) {
+  const res = await openaiChat(cfg.modelLight || 'gpt-5.4-mini', [
+    { role: 'system', content: `You are a journal entry tagger. Given a voice journal entry, pick 1-3 tags that best describe it from this list: ${VALID_TAGS.join(', ')}. Return ONLY a JSON array of tag strings, nothing else. Example: ["idea","work"]` },
+    { role: 'user', content: text.slice(0, 800) }
+  ]);
+  try { return JSON.parse(res.replace(/\`\`\`json|\`\`\`/g,'').trim()); } catch { return []; }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// BLOG PROCESSING
+// ═══════════════════════════════════════════════════════════════════
+async function processBlogEntry(rawText) {
+  const sysPrompt = 'You are an editor turning a voice-recorded brain dump into a polished piece of writing. '
+    + 'The speaker has said this is a blog entry. Your job:\n'
+    + '1. Give it a compelling, specific title (not generic)\n'
+    + '2. Clean the spoken text into clear, engaging prose — paragraphs every 2-3 sentences, good flow, preserve the speaker voice and opinions exactly\n'
+    + '3. Fix transcription errors\n'
+    + '4. Suggest 1-2 content tags from: idea, personal philosophy, metaphysics, work, health, creative, decision, relationship\n\n'
+    + 'Return ONLY valid JSON with keys: title (string), body (string with paragraph breaks as \\n\\n), extraTags (array of strings).';
+  const res = await openaiChat(cfg.modelHeavy || 'gpt-5.5', [
+    { role: 'system', content: sysPrompt },
+    { role: 'user', content: rawText }
+  ]);
+  try {
+    const clean = res.replace(/```json|```/g,'').trim();
+    return JSON.parse(clean);
+  } catch { return { title: 'Untitled piece', body: rawText, extraTags: [] }; }
+}
+
+async function sendBlogDraftEmail(entry) {
+  try {
+    const subject = 'Draft ready: "' + entry.blogTitle + '" — approve or request edits';
+    const dateStr = new Date(entry.timestamp).toLocaleDateString('en-GB', {weekday:'long',day:'numeric',month:'long'});
+    const paraHtml = entry.cleanedText.split('\n\n').filter(Boolean)
+      .map(p => '<p style="margin-bottom:1.4em;font-size:15px;line-height:1.8;color:#c8d8f0">' + p.trim() + '</p>')
+      .join('');
+    const inner = '<p style="color:var(--text-dim);font-family:monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:24px">Draft v' + (entry.blogVersion||1) + ' · ' + dateStr + '</p>'
+      + '<h1 style="font-size:22px;font-weight:400;color:#e8edf5;margin-bottom:24px;line-height:1.3">' + entry.blogTitle + '</h1>'
+      + paraHtml
+      + '<div style="border-top:1px solid #2e333f;margin-top:32px;padding-top:20px">'
+      + '<p style="font-family:monospace;font-size:11px;color:#4a5568">To approve: open the app → this entry → tap Approve</p>'
+      + '<p style="font-family:monospace;font-size:11px;color:#4a5568;margin-top:6px">To request edits: open the app → tap Request Edits → type changes</p>'
+      + '</div>';
+    await sendGmail(subject, emailHtmlWrapper(inner));
+  } catch(e) { console.warn('Blog email failed:', e); }
+}
+
+async function approveBlog(entry, monthKey) {
+  entry.blogStatus = 'published';
+  entry.publishedAt = new Date().toISOString();
+  if (!entry.tags) entry.tags = [];
+  if (!entry.tags.includes('published')) entry.tags.push('published');
+  entry.tags = entry.tags.filter(t => t !== 'awaiting');
+  await patchEntryInDrive(entry, monthKey);
+  if (currentDetailEntry && currentDetailEntry.id === entry.id) currentDetailEntry = entry;
+  const count = await countPublished();
+  renderEntriesList();
+  if (currentDetailEntry && currentDetailEntry.id === entry.id) openBlogEntry(entry, monthKey);
+  toast('Published ✓ — ' + count + ' piece' + (count !== 1 ? 's' : '') + ' total');
+}
+
+
+async function requestBlogEdits(entry, monthKey, editInstructions) {
+  // Show making changes state
+  const panel = document.getElementById('edit-panel');
+  if (panel) {
+    panel.innerHTML = '<div style="font-family:monospace;font-size:11px;color:var(--accent);letter-spacing:0.1em;animation:dot-pulse 1s infinite">making changes…</div>';
+  }
+  const appBtn = document.getElementById('approve-btn');
+  if (appBtn) appBtn.disabled = true;
+  try {
+    const revised = await openaiChat(cfg.modelHeavy || 'gpt-5.5', [
+      { role: 'system', content: 'You are an editor. Apply the requested changes to this piece. Preserve the author voice and style. Return ONLY the revised body text with paragraph breaks as \n\n, no title, no commentary.' },
+      { role: 'user', content: `Original piece:
+
+${entry.cleanedText}
+
+Requested changes:
+${editInstructions}` }
+    ]);
+    entry.cleanedText = revised;
+    entry.blogVersion = (entry.blogVersion || 1) + 1;
+    entry.blogStatus = 'awaiting';
+    await patchEntryInDrive(entry, monthKey);
+    if (currentDetailEntry && currentDetailEntry.id === entry.id) currentDetailEntry = entry;
+    toast('Edits applied ✓');
+    if (currentDetailEntry && currentDetailEntry.id === entry.id) openBlogEntry(entry, monthKey);
+  } catch(e) { toast('Edit failed: ' + e.message, true); }
+}
+
+async function countPublished() {
+  let count = 0;
+  const now = new Date();
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now); d.setMonth(d.getMonth() - i);
+    const mk = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const entries = await loadMonthEntries(mk).catch(() => []);
+    count += entries.filter(e => e.blogStatus === 'published').length;
+  }
+  return count;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// BLOG ENTRY DETAIL
+// ═══════════════════════════════════════════════════════════════════
+function openBlogEntry(entry, monthKey) {
+  currentDetailEntry = entry;
+  document.getElementById('blog-meta').textContent =
+    new Date(entry.timestamp).toLocaleDateString('en-GB', {weekday:'long',day:'numeric',month:'long',year:'numeric'}).toUpperCase() +
+    (entry.blogVersion > 1 ? ` · v${entry.blogVersion}` : '');
+
+  const body = document.getElementById('blog-body');
+  const statusBadge = entry.blogStatus === 'published'
+    ? `<span style="color:var(--green);font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;text-transform:uppercase">✓ published ${entry.publishedAt ? new Date(entry.publishedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : ''}</span>`
+    : `<span style="color:#e8a84a;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;text-transform:uppercase">awaiting approval · v${entry.blogVersion||1}</span>`;
+
+  const approvalUI = entry.blogStatus !== 'published' ? `
+    <div class="blog-actions">
+      <button class="blog-action-btn approve" id="approve-btn" onclick="approveBlog(currentDetailEntry, '${monthKey}')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+        approve & publish
+      </button>
+      <button class="blog-action-btn edit-req" id="edit-toggle-btn" onclick="toggleEditPanel()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        request edits
+      </button>
+      <div id="edit-panel" style="display:none;flex-direction:column;gap:10px">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim)">dictate or type your changes</div>
+        <div style="display:flex;gap:8px;align-items:flex-start">
+          <textarea class="edit-input" id="edit-input-area" placeholder="Tap mic or type what to change…" style="display:block;flex:1"></textarea>
+          <button class="play-btn" id="edit-mic-btn" onclick="toggleEditDictation()" style="flex-shrink:0;width:42px;height:42px;margin-top:2px" title="Dictate changes">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="17" x2="12" y2="21"/><line x1="9" y1="21" x2="15" y2="21"/></svg>
+          </button>
+        </div>
+        <button class="blog-action-btn" style="border-color:var(--accent-dim);color:var(--accent)" onclick="submitEdits('${monthKey}')">apply changes</button>
+      </div>
+    </div>
+  ` : '';
+
+  const paras = (entry.cleanedText || '').split('\n\n').filter(Boolean);
+
+  body.innerHTML = `
+    <div style="margin-bottom:4px">${statusBadge}</div>
+    <h1 style="font-size:22px;font-weight:400;color:var(--text);line-height:1.3;margin-bottom:20px">${escHtml(entry.blogTitle || 'Untitled')}</h1>
+    ${approvalUI}
+    <div style="margin-top:20px">
+      <div class="detail-section-label">piece</div>
+      <div class="text-block clean">
+        ${paras.map(p => `<p style="margin-bottom:1.3em">${escHtml(p.trim())}</p>`).join('')}
+      </div>
+    </div>
+    <div style="margin-top:24px">
+      <div class="detail-section-label">raw transcript</div>
+      <div class="text-block raw">${escHtml(entry.rawTranscript || '—')}</div>
+    </div>
+  `;
+  showScreen('blog');
+}
+
+function toggleEditPanel() {
+  const panel = document.getElementById('edit-panel');
+  if (!panel) return;
+  const visible = panel.style.display === 'flex';
+  panel.style.display = visible ? 'none' : 'flex';
+  if (!visible) {
+    const inp = document.getElementById('edit-input-area');
+    if (inp) setTimeout(() => inp.focus(), 100);
+  }
+}
+
+let editDictationActive = false;
+let editRecognition = null;
+
+function toggleEditDictation() {
+  const btn = document.getElementById('edit-mic-btn');
+  const inp = document.getElementById('edit-input-area');
+  if (!inp) return;
+
+  if (editDictationActive) {
+    if (editRecognition) editRecognition.stop();
+    editDictationActive = false;
+    if (btn) { btn.style.borderColor = ''; btn.style.color = ''; }
+    return;
+  }
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { toast('Speech recognition not supported in this browser', true); return; }
+
+  editRecognition = new SR();
+  editRecognition.continuous = true;
+  editRecognition.interimResults = true;
+  editRecognition.lang = 'en-GB';
+
+  let baseText = inp.value;
+  editRecognition.onresult = (e) => {
+    let interim = '';
+    let final = baseText;
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) { final += e.results[i][0].transcript + ' '; baseText = final; }
+      else interim += e.results[i][0].transcript;
+    }
+    inp.value = final + interim;
+  };
+  editRecognition.onerror = () => { editDictationActive = false; if (btn) { btn.style.borderColor=''; btn.style.color=''; } };
+  editRecognition.onend = () => { if (editDictationActive) editRecognition.start(); }; // keep going until stopped
+  editRecognition.start();
+  editDictationActive = true;
+  if (btn) { btn.style.borderColor = 'var(--red)'; btn.style.color = 'var(--red)'; }
+}
+
+async function submitEdits(monthKey) {
+  // Stop dictation if running
+  if (editDictationActive && editRecognition) { editRecognition.stop(); editDictationActive = false; }
+  const inp = document.getElementById('edit-input-area');
+  const instructions = inp ? inp.value.trim() : '';
+  if (!instructions) { toast('Describe the changes first', true); return; }
+  if (!currentDetailEntry) return;
+  await requestBlogEdits(currentDetailEntry, monthKey, instructions);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PUBLISHED SCATTER CHART
+// ═══════════════════════════════════════════════════════════════════
+let chartZoom = 1; // 1 = all time, 2 = 6mo, 3 = 3mo, 4 = 1mo
+let chartData = []; // [{date, title, id, monthKey}]
+
+async function loadPublishedEntries() {
+  const all = [];
+  const now = new Date();
+  for (let i = 0; i < 24; i++) {
+    const d = new Date(now); d.setMonth(d.getMonth() - i);
+    const mk = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const entries = await loadMonthEntries(mk).catch(() => []);
+    entries.filter(e => e.blogStatus === 'published').forEach(e => {
+      all.push({ date: new Date(e.publishedAt || e.timestamp), title: e.blogTitle || 'Untitled', id: e.id, monthKey: mk, entry: e });
+    });
+  }
+  return all.sort((a,b) => a.date - b.date);
+}
+
+async function renderPublishedChart() {
+  const canvas = document.getElementById('pub-chart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+
+  // Retina
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+
+  chartData = await loadPublishedEntries();
+  document.getElementById('chart-sub').textContent = `${chartData.length} piece${chartData.length !== 1 ? 's' : ''} published`;
+
+  drawChart(ctx, W, H);
+
+  // Touch/click handler
+  canvas.onclick = (e) => {
+    const r = canvas.getBoundingClientRect();
+    const mx = (e.clientX - r.left), my = (e.clientY - r.top);
+    const hit = chartData.find(d => d._x && Math.abs(d._x - mx) < 14 && Math.abs(d._y - my) < 14);
+    const tip = document.getElementById('dot-tooltip');
+    if (hit) {
+      tip.style.display = 'block';
+      tip.style.left = Math.min(mx + 12, W - 240) + 'px';
+      tip.style.top = Math.max(my - 40, 8) + 'px';
+      tip.textContent = hit.title;
+      tip.onclick = () => { openBlogEntry(hit.entry, hit.monthKey); tip.style.display = 'none'; };
+      tip.style.cursor = 'pointer';
+    } else {
+      tip.style.display = 'none';
+    }
+  };
+}
+
+function drawChart(ctx, W, H) {
+  const PAD = { top: 24, right: 24, bottom: 48, left: 40 };
+  const cW = W - PAD.left - PAD.right;
+  const cH = H - PAD.top - PAD.bottom;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Determine date range based on zoom
+  const now = new Date();
+  let startDate;
+  const zoomMonths = [null, 36, 12, 6, 2][Math.min(chartZoom, 4)];
+  if (zoomMonths && chartData.length) {
+    startDate = new Date(now); startDate.setMonth(startDate.getMonth() - zoomMonths);
+  } else {
+    startDate = chartData.length ? new Date(Math.min(...chartData.map(d => d.date))) : new Date(now.getFullYear(), 0, 1);
+    startDate = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+  }
+  const endDate = now;
+  const totalMs = endDate - startDate || 1;
+
+  // Filter to visible range
+  const visible = chartData.filter(d => d.date >= startDate);
+
+  // Y axis: cumulative count
+  const maxY = Math.max(visible.length, 5);
+
+  // Grid lines
+  ctx.strokeStyle = 'rgba(46,51,63,0.8)';
+  ctx.lineWidth = 1;
+  const ySteps = Math.min(maxY, 8);
+  for (let i = 0; i <= ySteps; i++) {
+    const y = PAD.top + cH - (i / ySteps) * cH;
+    ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + cW, y); ctx.stroke();
+    ctx.fillStyle = '#4a5568';
+    ctx.font = '10px IBM Plex Mono, monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(Math.round((i / ySteps) * maxY), PAD.left - 6, y + 4);
+  }
+
+  // X axis labels
+  ctx.fillStyle = '#4a5568';
+  ctx.font = '10px IBM Plex Mono, monospace';
+  ctx.textAlign = 'center';
+  const xLabelCount = Math.min(6, Math.ceil(zoomMonths || 36));
+  for (let i = 0; i <= xLabelCount; i++) {
+    const d = new Date(startDate.getTime() + (i / xLabelCount) * totalMs);
+    const x = PAD.left + (i / xLabelCount) * cW;
+    ctx.fillText(d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }), x, H - PAD.bottom + 18);
+  }
+
+  // Axis lines
+  ctx.strokeStyle = '#2e333f';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(PAD.left, PAD.top); ctx.lineTo(PAD.left, PAD.top + cH + 1); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(PAD.left, PAD.top + cH); ctx.lineTo(PAD.left + cW, PAD.top + cH); ctx.stroke();
+
+  if (!visible.length) {
+    ctx.fillStyle = '#4a5568';
+    ctx.font = '13px Lora, serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('no published pieces yet', PAD.left + cW/2, PAD.top + cH/2);
+    return;
+  }
+
+  // Draw connecting line first (behind dots)
+  ctx.strokeStyle = 'rgba(126,184,247,0.2)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 5]);
+  ctx.beginPath();
+  visible.forEach((d, i) => {
+    const x = PAD.left + ((d.date - startDate) / totalMs) * cW;
+    const y = PAD.top + cH - ((i + 1) / maxY) * cH;
+    d._x = x; d._y = y;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Dots
+  visible.forEach((d, i) => {
+    const x = d._x, y = d._y;
+    // Glow
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, 14);
+    grad.addColorStop(0, 'rgba(126,184,247,0.25)');
+    grad.addColorStop(1, 'rgba(126,184,247,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(x, y, 14, 0, Math.PI*2); ctx.fill();
+    // Dot
+    ctx.fillStyle = '#7eb8f7';
+    ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#a8d4ff';
+    ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI*2); ctx.fill();
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PIECES SCREEN
+// ═══════════════════════════════════════════════════════════════════
+let currentPiecesTab = 'awaiting';
+
+function switchPiecesTab(tab) {
+  currentPiecesTab = tab;
+  document.querySelectorAll('.pieces-tab').forEach(b => b.classList.remove('active'));
+  const el = document.getElementById('ptab-' + tab);
+  if (el) el.classList.add('active');
+  renderPiecesList(tab);
+}
+
+async function renderPiecesList(tab) {
+  const list = document.getElementById('pieces-list');
+  if (!list) return;
+  list.innerHTML = '<div style="padding:40px;text-align:center;font-family:monospace;font-size:11px;color:var(--text-dim);opacity:0.4;letter-spacing:0.1em">loading…</div>';
+
+  if (!accessToken || Date.now() > tokenExpiry) {
+    list.innerHTML = '<div class="empty-state"><p>Connect Google Drive first.</p></div>';
+    return;
+  }
+
+  // Load last 24 months of entries, find blog type
+  const now = new Date();
+  let pieces = [];
+  for (let i = 0; i < 24; i++) {
+    const d = new Date(now); d.setMonth(d.getMonth() - i);
+    const mk = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+    const entries = await loadMonthEntries(mk).catch(() => []);
+    entries.filter(e => e.type === 'blog').forEach(e => {
+      pieces.push({ ...e, _monthKey: mk });
+    });
+  }
+  pieces.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  const filtered = pieces.filter(p => tab === 'published' ? p.blogStatus === 'published' : p.blogStatus !== 'published');
+  const sub = document.getElementById('pieces-sub');
+  if (sub) sub.textContent = tab === 'published'
+    ? filtered.length + ' piece' + (filtered.length !== 1 ? 's' : '') + ' published'
+    : filtered.length + ' awaiting approval';
+
+  if (!filtered.length) {
+    list.innerHTML = '<div class="empty-state"><p>' + (tab === 'published' ? 'Nothing published yet.' : 'Nothing awaiting approval.') + '</p><span>Say "ok here is a blog entry" when recording</span></div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(p => {
+    const d = new Date(p.timestamp);
+    const dateStr = d.toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}).toUpperCase();
+    const words = (p.cleanedText || '').trim().split(/s+/).length;
+    const statusBadge = p.blogStatus === 'published'
+      ? '<span class="tag published">published</span>'
+      : '<span class="tag awaiting">v' + (p.blogVersion||1) + ' · awaiting</span>';
+    const clickAttr = 'openBlogEntryById("' + p.id + '","' + p._monthKey + '")';
+    return '<div class="entry-card" onclick="' + clickAttr + '">'
+      + '<div class="entry-time"><div class="has-audio"></div>' + dateStr + ' · ' + words + ' words</div>'
+      + '<div style="font-size:15px;font-weight:400;color:var(--text);margin:6px 0 8px;line-height:1.4">' + escHtml(p.blogTitle || 'Untitled') + '</div>'
+      + '<div class="entry-tags">' + statusBadge + (p.tags||[]).filter(t=>t!=='blog'&&t!=='published'&&t!=='awaiting').map(t=>'<span class="tag">' + t + '</span>').join('') + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function zoomChart(dir) {
+  chartZoom = Math.max(1, Math.min(4, chartZoom + dir));
+  const canvas = document.getElementById('pub-chart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width / (window.devicePixelRatio || 1);
+  const H = canvas.height / (window.devicePixelRatio || 1);
+  drawChart(ctx, W, H);
+}
+
 async function cleanTranscript(rawText) {
   const res = await openaiChat(cfg.modelLight || 'gpt-5.4-mini', [
     { role: 'system', content: `You are a personal journal editor. The user has spoken a voice journal entry and it has been transcribed by Whisper. Clean and format it into readable prose. Rules:
@@ -1445,11 +2031,16 @@ async function renderEntriesList() {
     const preview = (e.cleanedText || e.rawTranscript || '').slice(0, 180);
     const badge = '';
     const dur = e.duration ? `${Math.floor(e.duration/60)}:${String(e.duration%60).padStart(2,'0')}` : '';
-    return `<div class="entry-card" onclick="openEntry('${e.id}','${monthKey}')">
+    const tagHtml = (e.tags||[]).length
+      ? `<div class="entry-tags">${[...(e.type==='blog'?['blog']:[]),(e.blogStatus==='published'?['published']:e.blogStatus==='awaiting'?['awaiting']:[]),(e.tags||[]).filter(t=>t!=='blog'&&t!=='published'&&t!=='awaiting')].flat().map(t=>`<span class="tag ${t==='blog'||t==='published'||t==='awaiting'?t:''}">${t}</span>`).join('')}</div>`
+      : (e.type==='blog' ? `<div class="entry-tags"><span class="tag blog">blog</span>${e.blogStatus==='published'?'<span class="tag published">published</span>':e.blogStatus==='awaiting'?'<span class="tag awaiting">awaiting</span>':''}</div>` : '');
+    const clickFn = e.type === 'blog' ? `openBlogEntryById('${e.id}','${monthKey}')` : `openEntry('${e.id}','${monthKey}')`;
+    return `<div class="entry-card" onclick="${clickFn}">
       <div class="entry-time">
         <div class="has-audio"></div>${dateStr.toUpperCase()}${dur ? ' · ' + dur : ''}
       </div>
-      <div class="entry-preview">${escHtml(preview)}${preview.length >= 180 ? '…' : ''}</div>
+      <div class="entry-preview">${e.type==='blog'?`<strong style="color:var(--text)">${escHtml(e.blogTitle||'Untitled piece')}</strong><br>`:''} ${escHtml(preview)}${preview.length >= 180 ? '…' : ''}</div>
+      ${tagHtml}
       ${badge}
     </div>`;
   }).join('');
@@ -1458,6 +2049,12 @@ async function renderEntriesList() {
 // ═══════════════════════════════════════════════════════════════════
 // ENTRY DETAIL
 // ═══════════════════════════════════════════════════════════════════
+async function openBlogEntryById(entryId, monthKey) {
+  const entries = entriesCache[monthKey] || [];
+  const entry = entries.find(e => e.id === entryId);
+  if (entry) openBlogEntry(entry, monthKey);
+}
+
 async function openEntry(entryId, monthKey) {
   const entries = entriesCache[monthKey] || [];
   const entry = entries.find(e => e.id === entryId);
@@ -1625,8 +2222,8 @@ function saveSettings() {
 // ═══════════════════════════════════════════════════════════════════
 // SCREEN ROUTING
 // ═══════════════════════════════════════════════════════════════════
-const SCREENS = ['record','entries','detail','settings'];
-const NAV_MAP = { record: 'nav-record', entries: 'nav-entries' };
+const SCREENS = ['record','entries','detail','settings','chart','blog','pieces'];
+const NAV_MAP = { record: 'nav-record', entries: 'nav-entries', pieces: 'nav-pieces', chart: 'nav-chart' };
 
 function showScreen(name) {
   // Stop audio if leaving detail
@@ -1647,6 +2244,14 @@ function showScreen(name) {
   // Load entries when switching to entries screen
   if (name === 'entries') {
     renderEntriesList();
+  }
+  // Render chart when switching to chart screen
+  if (name === 'chart') {
+    setTimeout(() => renderPublishedChart(), 100);
+  }
+  // Load pieces screen
+  if (name === 'pieces') {
+    renderPiecesList('awaiting');
   }
 
   // Load settings UI when opening settings
