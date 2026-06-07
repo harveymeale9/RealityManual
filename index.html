@@ -405,6 +405,24 @@
   .text-block.clean { color: var(--text); }
 
   /* Insights */
+  .insights-run-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: none;
+    border: 1px solid var(--border2);
+    border-radius: 4px;
+    color: var(--text-dim);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+  }
+  .insights-run-btn:hover {
+    border-color: var(--accent-dim);
+    color: var(--accent);
+    background: var(--glow2);
+  }
+
   .insights-block {
     background: var(--surface);
     border-left: 2px solid var(--accent);
@@ -1013,7 +1031,7 @@ async function handleRecordingStop() {
       rawTranscript,
       cleanedText,
       insights: null,
-      insightsStatus: 'pending'
+      insightsStatus: 'none'
     };
 
     await saveEntryToDrive(entry, monthKey);
@@ -1024,9 +1042,6 @@ async function handleRecordingStop() {
 
     showProcessing(false);
     toast('Entry saved ✓');
-
-    // Run insights in background (non-blocking)
-    generateInsights(entry, monthKey);
 
     // Switch to entries to see the new entry
     setTimeout(() => {
@@ -1092,13 +1107,13 @@ async function whisperTranscribe(blob, ext) {
 // ═══════════════════════════════════════════════════════════════════
 async function cleanTranscript(rawText) {
   const res = await openaiChat(cfg.modelLight || 'gpt-5.4-mini', [
-    { role: 'system', content: `You are a personal journal assistant. The user has just spoken a voice journal entry and it has been transcribed by Whisper. Your job is to clean and lightly format the transcription into readable prose. Rules:
-- Fix obvious transcription errors (wrong words, run-ons)
-- Add punctuation and paragraph breaks where natural
-- Do NOT change the meaning or add content
-- Do NOT add a title or commentary
-- Preserve first-person voice exactly
-- Return ONLY the cleaned text, nothing else` },
+    { role: 'system', content: `You are a personal journal editor. The user has spoken a voice journal entry and it has been transcribed by Whisper. Clean and format it into readable prose. Rules:
+- Fix obvious transcription errors and run-on sentences
+- Add punctuation throughout
+- Break into paragraphs every 2-3 sentences — like a blog post, not a wall of text
+- Do NOT change the meaning, add commentary, or add a title
+- Preserve first-person voice exactly as spoken
+- Return ONLY the cleaned text with paragraph breaks (use double newlines between paragraphs), nothing else` },
     { role: 'user', content: rawText }
   ]);
   return res;
@@ -1107,39 +1122,58 @@ async function cleanTranscript(rawText) {
 // ═══════════════════════════════════════════════════════════════════
 // OPENAI — INSIGHTS (background, runs after save)
 // ═══════════════════════════════════════════════════════════════════
-async function generateInsights(entry, monthKey) {
+async function runInsightsForCurrent() {
+  if (!currentDetailEntry) return;
+  const entry = currentDetailEntry;
+  const now = new Date(entry.timestamp);
+  const monthKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+
+  entry.insightsStatus = 'running';
+  renderDetailInsights(entry);
+
   try {
-    // Pull recent entries for cross-referencing (up to 20)
-    const recent = (entriesCache[monthKey] || [])
+    // Pull ALL entries across last 3 months for full context
+    const months = [];
+    for (let i = 0; i < 3; i++) {
+      const d = new Date(); d.setMonth(d.getMonth() - i);
+      months.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+    }
+    let allEntries = [];
+    for (const m of months) {
+      const es = await loadMonthEntries(m).catch(() => []);
+      allEntries.push(...es);
+    }
+    // Sort by date
+    allEntries.sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    // Entries before and after this one — full context
+    const context = allEntries
       .filter(e => e.id !== entry.id)
-      .slice(0, 19)
-      .map(e => ({ date: e.timestamp.slice(0,10), text: e.cleanedText?.slice(0, 400) }));
+      .map(e => ({
+        date: e.timestamp.slice(0,10),
+        relation: new Date(e.timestamp) < new Date(entry.timestamp) ? 'before' : 'after',
+        text: (e.cleanedText || e.rawTranscript || '').slice(0, 500)
+      }));
 
     const res = await openaiChat(cfg.modelHeavy || 'gpt-5.5', [
-      { role: 'system', content: `You are an insightful personal journal analyst. You read journal entries deeply and notice patterns, themes, emotional undercurrents, and connections the writer might not have noticed themselves. You write in a warm, curious, thoughtful voice — like a brilliant friend who genuinely pays attention. Be specific and reference actual content.` },
-      { role: 'user', content: `Here is my latest journal entry:\n\n${entry.cleanedText}\n\n${recent.length ? `\nContext from recent entries:\n${JSON.stringify(recent)}` : ''}\n\nGive me:\n1. Your observations about this entry — what stands out, what might be worth reflecting on, emotional undercurrents, what I might not have noticed\n2. Any connections to patterns or themes from my recent entries\n3. One or two genuinely interesting questions to sit with\n\nWrite in flowing paragraphs, not bullet points. Be specific to what I actually said.` }
-    ], true); // true = use reasoning
+      { role: 'system', content: `You are Harvey's personal journal analyst. You have access to his entries before AND after the one he's asking about. You notice patterns, emotional undercurrents, things he might not have seen himself, connections across time. Write in a warm, direct voice — like a brilliant friend who has read everything. Be specific. One tight paragraph only — no bullet points, no headers, no lists.` },
+      { role: 'user', content: `Entry to analyse (${entry.timestamp.slice(0,10)}):\n\n${entry.cleanedText || entry.rawTranscript}\n\nOther journal entries for context:\n${JSON.stringify(context)}\n\nWrite ONE paragraph of genuine observations. Reference what I actually said. Note any patterns or connections across entries. End with one question worth sitting with.` }
+    ], true);
 
-    // Update entry
     entry.insights = res;
     entry.insightsStatus = 'done';
-
-    // Patch the Drive JSON
     await patchEntryInDrive(entry, monthKey);
-
-    // If detail screen is showing this entry, refresh
-    if (currentDetailEntry && currentDetailEntry.id === entry.id) {
-      currentDetailEntry = entry;
-      renderDetailInsights(entry);
-    }
-    // Refresh entries list badge
-    renderEntriesList();
+    renderDetailInsights(entry);
 
   } catch (err) {
     console.error('Insights failed:', err);
     entry.insightsStatus = 'error';
+    renderDetailInsights(entry);
   }
 }
+
+// Keep old name for email scheduler compatibility
+async function generateInsights(entry, monthKey) {}
 
 // ═══════════════════════════════════════════════════════════════════
 // OPENAI — GENERIC CHAT
@@ -1409,9 +1443,7 @@ async function renderEntriesList() {
       ? `Today · ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`
       : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
     const preview = (e.cleanedText || e.rawTranscript || '').slice(0, 180);
-    const badge = e.insightsStatus === 'pending'
-      ? '<div class="entry-badge processing">ai thinking…</div>'
-      : '';
+    const badge = '';
     const dur = e.duration ? `${Math.floor(e.duration/60)}:${String(e.duration%60).padStart(2,'0')}` : '';
     return `<div class="entry-card" onclick="openEntry('${e.id}','${monthKey}')">
       <div class="entry-time">
@@ -1466,12 +1498,15 @@ function renderDetailBody(entry) {
 
     <div>
       <div class="detail-section-label">cleaned</div>
-      <div class="text-block clean">${escHtml(entry.cleanedText || '—')}</div>
+      <div class="text-block clean" id="cleaned-text">${formatCleanedText(entry.cleanedText || '—')}</div>
     </div>
 
     <div id="insights-section">
       <div class="detail-section-label">ai insights</div>
-      ${renderInsightsHtml(entry)}
+      <button class="insights-run-btn" id="insights-btn" onclick="runInsightsForCurrent()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        generate insights
+      </button>
     </div>
   `;
 
@@ -1484,18 +1519,21 @@ function renderDetailBody(entry) {
 function renderDetailInsights(entry) {
   const sec = document.getElementById('insights-section');
   if (!sec) return;
-  sec.innerHTML = `<div class="detail-section-label">ai insights</div>${renderInsightsHtml(entry)}`;
-}
-
-function renderInsightsHtml(entry) {
-  if (entry.insightsStatus === 'pending' || !entry.insights) {
-    return `<div class="insights-pending">thinking in background…</div>`;
+  let inner = '';
+  if (entry.insightsStatus === 'running') {
+    inner = `<div class="insights-pending">thinking…</div>`;
+  } else if (entry.insightsStatus === 'done' && entry.insights) {
+    const paras = entry.insights.split(/\n+/).filter(Boolean);
+    inner = `<div class="insights-block">${paras.map(p => `<p>${escHtml(p)}</p>`).join('')}</div>`;
+  } else if (entry.insightsStatus === 'error') {
+    inner = `<button class="insights-run-btn" id="insights-btn" onclick="runInsightsForCurrent()">retry insights</button>`;
+  } else {
+    inner = `<button class="insights-run-btn" id="insights-btn" onclick="runInsightsForCurrent()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+      generate insights
+    </button>`;
   }
-  if (entry.insightsStatus === 'error') {
-    return `<div class="insights-pending" style="color:var(--red)">insights failed — will retry next open</div>`;
-  }
-  const paras = entry.insights.split(/\n+/).filter(Boolean);
-  return `<div class="insights-block">${paras.map(p => `<p>${escHtml(p)}</p>`).join('')}</div>`;
+  sec.innerHTML = `<div class="detail-section-label">ai insights</div>${inner}`;
 }
 
 async function loadAudioForEntry(entry) {
@@ -1839,6 +1877,13 @@ CRITICAL: Respond ONLY with valid JSON, no markdown:
 // ═══════════════════════════════════════════════════════════════════
 // UTILS
 // ═══════════════════════════════════════════════════════════════════
+function formatCleanedText(text) {
+  // Split on double newlines → paragraphs, single newlines → <br>
+  return text.split(/\n\n+/).map(para =>
+    `<p style="margin-bottom:1.2em">${para.trim().replace(/\n/g,'<br>')}</p>`
+  ).join('');
+}
+
 function escHtml(str) {
   return String(str)
     .replace(/&/g,'&amp;')
