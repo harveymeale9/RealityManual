@@ -576,6 +576,21 @@
   #toast.error { border-color: var(--red); color: #e87070; }
 
   /* no-creds warning */
+  /* context menu */
+  .ctx-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 14px 18px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px; letter-spacing: 0.08em;
+    color: var(--text-dim); cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    border-bottom: 1px solid var(--border);
+  }
+  .ctx-item:last-child { border-bottom: none; }
+  .ctx-item:hover { background: var(--surface); color: var(--text); }
+  .ctx-item.ctx-danger { color: var(--red); }
+  .ctx-item.ctx-danger:hover { background: rgba(224,85,85,0.08); }
+
   /* pieces tabs */
   .pieces-tab {
     flex: 1; background: none; border: none; border-bottom: 2px solid transparent;
@@ -651,6 +666,18 @@
 <body>
 
 <div id="app">
+  <!-- LONG-PRESS CONTEXT MENU -->
+  <div id="ctx-menu" style="display:none;position:fixed;z-index:500;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;overflow:hidden;min-width:200px;box-shadow:0 8px 32px rgba(0,0,0,0.5)">
+    <div id="ctx-convert" class="ctx-item" onclick="ctxConvert()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Convert to Piece
+    </div>
+    <div id="ctx-delete" class="ctx-item ctx-danger" onclick="ctxDelete()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+      Delete Entry
+    </div>
+  </div>
+
   <!-- FIRST-RUN SETUP OVERLAY (mobile bootstrap) -->
   <div id="setup-overlay" style="display:none;position:fixed;inset:0;background:var(--paper);z-index:999;flex-direction:column;align-items:center;justify-content:center;padding:32px;gap:24px">
     <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:var(--text-dim)">Harvey's Journal — First Run</div>
@@ -1241,6 +1268,98 @@ async function whisperTranscribe(blob, ext) {
 // ═══════════════════════════════════════════════════════════════════
 // OPENAI — CLEAN TRANSCRIPT
 // ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
+// LONG-PRESS CONTEXT MENU
+// ═══════════════════════════════════════════════════════════════════
+let ctxEntry = null;
+let ctxMonthKey = null;
+let longPressTimer = null;
+const LONG_PRESS_MS = 500;
+
+function attachLongPress(el, entry, monthKey) {
+  const show = (e) => {
+    e.preventDefault();
+    ctxEntry = entry;
+    ctxMonthKey = monthKey;
+    const menu = document.getElementById('ctx-menu');
+    // Hide convert option if already a piece
+    document.getElementById('ctx-convert').style.display = entry.type === 'blog' ? 'none' : 'flex';
+    // Position near touch/click
+    const x = e.touches ? e.touches[0].clientX : e.clientX;
+    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    menu.style.display = 'block';
+    menu.style.left = Math.min(x, window.innerWidth - 220) + 'px';
+    menu.style.top = Math.min(y, window.innerHeight - 100) + 'px';
+  };
+
+  // Touch
+  el.addEventListener('touchstart', (e) => {
+    longPressTimer = setTimeout(() => show(e), LONG_PRESS_MS);
+  }, { passive: true });
+  el.addEventListener('touchend', () => clearTimeout(longPressTimer));
+  el.addEventListener('touchmove', () => clearTimeout(longPressTimer));
+
+  // Desktop right-click
+  el.addEventListener('contextmenu', (e) => { e.preventDefault(); show(e); });
+}
+
+function hideCtxMenu() {
+  document.getElementById('ctx-menu').style.display = 'none';
+}
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#ctx-menu')) hideCtxMenu();
+});
+document.addEventListener('touchstart', (e) => {
+  if (!e.target.closest('#ctx-menu')) hideCtxMenu();
+}, { passive: true });
+
+async function ctxConvert() {
+  hideCtxMenu();
+  if (!ctxEntry || !ctxMonthKey) return;
+  toast('Converting to piece…');
+  try {
+    const result = await processBlogEntry(ctxEntry.rawTranscript || ctxEntry.cleanedText);
+    ctxEntry.type = 'blog';
+    ctxEntry.blogTitle = result.title;
+    ctxEntry.cleanedText = result.body;
+    ctxEntry.blogStatus = 'awaiting';
+    ctxEntry.blogVersion = 1;
+    if (!ctxEntry.tags) ctxEntry.tags = [];
+    result.extraTags.forEach(t => { if (!ctxEntry.tags.includes(t)) ctxEntry.tags.push(t); });
+    await patchEntryInDrive(ctxEntry, ctxMonthKey);
+    // Update cache
+    const cached = entriesCache[ctxMonthKey];
+    if (cached) { const i = cached.findIndex(e => e.id === ctxEntry.id); if (i>=0) cached[i] = ctxEntry; }
+    toast('Converted ✓ — find it in Pieces');
+    renderEntriesList();
+  } catch(e) { toast('Convert failed: ' + e.message, true); }
+}
+
+async function ctxDelete() {
+  hideCtxMenu();
+  if (!ctxEntry || !ctxMonthKey) return;
+  if (!confirm('Delete this entry? This cannot be undone.')) return;
+  try {
+    // Remove from month JSON on Drive
+    const fileId = await getMonthFileId(ctxMonthKey);
+    if (fileId) {
+      const res = await driveRequest('https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media');
+      let entries = await res.json().catch(() => []);
+      entries = entries.filter(e => e.id !== ctxEntry.id);
+      await driveRequest(
+        'https://www.googleapis.com/upload/drive/v3/files/' + fileId + '?uploadType=media',
+        { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: new Blob([JSON.stringify(entries, null, 2)], { type: 'application/json' }) }
+      );
+    }
+    // Remove from cache
+    if (entriesCache[ctxMonthKey]) {
+      entriesCache[ctxMonthKey] = entriesCache[ctxMonthKey].filter(e => e.id !== ctxEntry.id);
+    }
+    toast('Entry deleted');
+    renderEntriesList();
+  } catch(e) { toast('Delete failed: ' + e.message, true); }
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // AUTO-TAG
 // ═══════════════════════════════════════════════════════════════════
@@ -2022,6 +2141,7 @@ async function renderEntriesList() {
   const today = now.toDateString();
   document.getElementById('entries-sub').textContent = now.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
 
+  // Build cards and attach long-press after render
   list.innerHTML = entries.map(e => {
     const d = new Date(e.timestamp);
     const isToday = d.toDateString() === today;
@@ -2035,7 +2155,7 @@ async function renderEntriesList() {
       ? `<div class="entry-tags">${[...(e.type==='blog'?['blog']:[]),(e.blogStatus==='published'?['published']:e.blogStatus==='awaiting'?['awaiting']:[]),(e.tags||[]).filter(t=>t!=='blog'&&t!=='published'&&t!=='awaiting')].flat().map(t=>`<span class="tag ${t==='blog'||t==='published'||t==='awaiting'?t:''}">${t}</span>`).join('')}</div>`
       : (e.type==='blog' ? `<div class="entry-tags"><span class="tag blog">blog</span>${e.blogStatus==='published'?'<span class="tag published">published</span>':e.blogStatus==='awaiting'?'<span class="tag awaiting">awaiting</span>':''}</div>` : '');
     const clickFn = e.type === 'blog' ? `openBlogEntryById('${e.id}','${monthKey}')` : `openEntry('${e.id}','${monthKey}')`;
-    return `<div class="entry-card" onclick="${clickFn}">
+    return `<div class="entry-card" data-id="${e.id}" onclick="${clickFn}">
       <div class="entry-time">
         <div class="has-audio"></div>${dateStr.toUpperCase()}${dur ? ' · ' + dur : ''}
       </div>
