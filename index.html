@@ -901,15 +901,18 @@ async function setupAndConnect() {
   status.textContent = 'connecting…';
   try {
     await doGoogleAuth();
-    // Pull settings from Drive — will populate OpenAI key etc
-    const driveCfg = await loadSettingsFromDrive();
-    if (driveCfg) {
-      cfg = { ...driveCfg, accessToken, tokenExpiry: cfg.tokenExpiry, clientId };
+    // Pull credentials.json from Drive
+    const creds = await loadCredentialsFromDrive();
+    if (creds) {
+      cfg.openaiKey  = creds.openaiKey  || '';
+      cfg.email      = creds.email      || '';
+      cfg.modelLight = creds.modelLight || 'gpt-5.4-mini';
+      cfg.modelHeavy = creds.modelHeavy || 'gpt-5.5';
       saveCfg(cfg);
       loadSettingsUI();
-      status.textContent = 'synced ✓';
+      status.textContent = 'all credentials loaded ✓';
     } else {
-      status.textContent = 'connected — add OpenAI key in settings';
+      status.textContent = 'connected — add your OpenAI key in settings';
     }
     setTimeout(() => {
       document.getElementById('setup-overlay').style.display = 'none';
@@ -1192,17 +1195,21 @@ async function googleAuth() {
   try {
     await doGoogleAuth();
     updateGoogleAuthBtn();
-    toast('Connected — syncing settings…');
-    // Pull settings from Drive and merge (gives cross-device sync)
-    const driveCfg = await loadSettingsFromDrive();
-    if (driveCfg) {
-      cfg = { ...driveCfg, accessToken, tokenExpiry: cfg.tokenExpiry };
+    toast('Connected — loading credentials…');
+    const creds = await loadCredentialsFromDrive();
+    if (creds) {
+      // Merge Drive credentials into cfg (Drive is source of truth)
+      cfg.openaiKey  = creds.openaiKey  || cfg.openaiKey  || '';
+      cfg.email      = creds.email      || cfg.email      || '';
+      cfg.modelLight = creds.modelLight || cfg.modelLight || 'gpt-5.4-mini';
+      cfg.modelHeavy = creds.modelHeavy || cfg.modelHeavy || 'gpt-5.5';
+      // clientId stays from local (needed for auth)
       saveCfg(cfg);
       loadSettingsUI();
-      toast('Settings synced from Drive ✓');
+      toast('Credentials loaded from Drive ✓');
     } else {
-      // First time on this device — push local settings to Drive
-      await saveSettingsToDrive(cfg);
+      // No credentials file yet — save current cfg to Drive
+      await saveCredentialsToDrive();
       toast('Google Drive connected ✓');
     }
     setTimeout(() => runEmailScheduler(), 2000);
@@ -1568,11 +1575,11 @@ function saveSettings() {
   saveCfg(cfg);
   const st = document.getElementById('settings-status');
   st.textContent = 'saved ✓';
-  // Also push to Drive if connected so other devices pick it up
+  // Push credentials to Drive so all devices have them
   if (accessToken && Date.now() < tokenExpiry) {
-    saveSettingsToDrive(cfg).then(() => {
-      st.textContent = 'saved & synced ✓';
-    }).catch(() => {});
+    saveCredentialsToDrive().then(() => {
+      st.textContent = 'saved & synced to Drive ✓';
+    }).catch(() => { st.textContent = 'saved locally ✓'; });
   }
   setTimeout(() => { st.textContent = ''; }, 3000);
 }
@@ -1624,55 +1631,72 @@ function toast(msg, isError = false) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// SETTINGS SYNC — store in Drive so all devices share them
+// CREDENTIALS FILE — credentials.json in Journal folder
+// Contains ALL keys. Private app, single user, stored plaintext.
 // ═══════════════════════════════════════════════════════════════════
-async function saveSettingsToDrive(settings) {
+async function saveCredentialsToDrive() {
   try {
     const { journalId } = await getDriveFolderIds();
-    const name = 'settings.json';
-    const q = `name='${name}' and '${journalId}' in parents and trashed=false`;
-    const res = await driveRequest(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`);
-    const data = await res.json();
-    const existingId = data.files?.[0]?.id || null;
-
-    // Don't save token/expiry to Drive — those are per-device
-    const toSave = { ...settings };
-    delete toSave.accessToken;
-    delete toSave.tokenExpiry;
-
-    const blob = new Blob([JSON.stringify(toSave, null, 2)], { type: 'application/json' });
-    if (existingId) {
-      await driveRequest(
-        `https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=media`,
-        { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: blob }
-      );
-    } else {
-      const form = new FormData();
-      form.append('metadata', new Blob([JSON.stringify({ name, parents: [journalId] })], { type: 'application/json' }));
-      form.append('file', blob, name);
-      await driveRequest('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', { method: 'POST', body: form });
-    }
+    const creds = {
+      openaiKey:   cfg.openaiKey   || '',
+      clientId:    cfg.clientId    || '',
+      email:       cfg.email       || '',
+      modelLight:  cfg.modelLight  || 'gpt-5.4-mini',
+      modelHeavy:  cfg.modelHeavy  || 'gpt-5.5',
+      _note: "Harvey's Journal credentials — do not share"
+    };
+    await upsertDriveFile('credentials.json', journalId, JSON.stringify(creds, null, 2), 'application/json');
+    console.log('Credentials saved to Drive');
   } catch (e) {
-    console.warn('saveSettingsToDrive failed:', e);
+    console.warn('saveCredentialsToDrive failed:', e);
   }
 }
 
-async function loadSettingsFromDrive() {
+async function loadCredentialsFromDrive() {
   try {
     const { journalId } = await getDriveFolderIds();
-    const name = 'settings.json';
-    const q = `name='${name}' and '${journalId}' in parents and trashed=false`;
-    const res = await driveRequest(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`);
-    const data = await res.json();
-    const fileId = data.files?.[0]?.id;
+    const fileId = await findDriveFile('credentials.json', journalId);
     if (!fileId) return null;
-    const fileRes = await driveRequest(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
-    return await fileRes.json();
+    const res = await driveRequest(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
+    const creds = await res.json();
+    return creds;
   } catch (e) {
-    console.warn('loadSettingsFromDrive failed:', e);
+    console.warn('loadCredentialsFromDrive failed:', e);
     return null;
   }
 }
+
+// Helper: find a file by name in a folder, return its id or null
+async function findDriveFile(name, folderId) {
+  const q = `name='${name}' and '${folderId}' in parents and trashed=false`;
+  const res = await driveRequest(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`);
+  const data = await res.json();
+  return data.files?.[0]?.id || null;
+}
+
+// Helper: create or update a file
+async function upsertDriveFile(name, folderId, content, mimeType) {
+  const existingId = await findDriveFile(name, folderId);
+  const blob = new Blob([content], { type: mimeType });
+  if (existingId) {
+    await driveRequest(
+      `https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=media`,
+      { method: 'PATCH', headers: { 'Content-Type': mimeType }, body: blob }
+    );
+    return existingId;
+  } else {
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify({ name, parents: [folderId] })], { type: 'application/json' }));
+    form.append('file', blob, name);
+    const res = await driveRequest('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', body: form });
+    const data = await res.json();
+    return data.id;
+  }
+}
+
+// Keep old name as alias so nothing breaks
+async function saveSettingsToDrive(s) { return saveCredentialsToDrive(); }
+async function loadSettingsFromDrive() { return loadCredentialsFromDrive(); }
 
 // ═══════════════════════════════════════════════════════════════════
 // GMAIL — SEND EMAIL
