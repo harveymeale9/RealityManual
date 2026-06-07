@@ -724,6 +724,7 @@
       </div>
     </div>
 
+    <div id="bg-save-status" style="position:absolute;bottom:24px;left:50%;transform:translateX(-50%);font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent-dim);opacity:0;transition:opacity 0.4s;pointer-events:none;white-space:nowrap"></div>
     <div class="record-center">
       <!-- Waveform ring -->
       <div class="waveform-ring">
@@ -929,6 +930,18 @@ let tokenExpiry = cfg.tokenExpiry || 0;
 
 // Recording state
 let mediaRecorder = null;
+let wakeLock = null;
+
+async function acquireWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+    }
+  } catch(e) { console.warn('WakeLock:', e); }
+}
+function releaseWakeLock() {
+  if (wakeLock) { wakeLock.release(); wakeLock = null; }
+}
 let audioChunks = [];
 let recTimerInterval = null;
 let recSeconds = 0;
@@ -1157,6 +1170,7 @@ function stopRecording() {
   document.getElementById('rec-timer').textContent = '0:00';
   stopWaveform();
   if (audioCtx) { audioCtx.close(); audioCtx = null; }
+  releaseWakeLock();
 }
 
 async function handleRecordingStop() {
@@ -1167,8 +1181,18 @@ async function handleRecordingStop() {
 
   if (duration < 1) { toast('Recording too short'); return; }
 
-  showProcessing(true);
+  // Show subtle saving indicator but DON'T block — fire and forget
+  // Show subtle background indicator
+  const bgStatus = document.getElementById('bg-save-status');
+  if (bgStatus) { bgStatus.textContent = 'saving previous entry…'; bgStatus.style.opacity = '1'; }
+  processSaveEntry(audioBlob, mimeType, duration).finally(() => {
+    if (bgStatus) { bgStatus.style.opacity = '0'; }
+  });
+}
 
+// Runs in background — returns promise so caller can track completion
+async function processSaveEntry(audioBlob, mimeType, duration) {
+  showProcessing(true);
   try {
     const now = new Date();
     const entryId = `${now.getTime()}`;
