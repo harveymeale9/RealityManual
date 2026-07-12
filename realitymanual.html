@@ -9,8 +9,8 @@
 <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=IM+Fell+English+SC&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
 <style>
   :root{
-    --desk-dark:#17110c;
-    --desk:#241a12;
+    --desk-dark:#100905;
+    --desk:#2c1c0e;
     --leather:#2e1f16;
     --leather-edge:#4a3320;
     --paper:#e9dcbd;
@@ -19,9 +19,9 @@
     --ink-faint:#5d4c35;
     --brass:#9c7c3c;
     --rubric:#7a2f1d; /* oxblood red used in medieval rubrication */
-    --page-w: min(44vw, calc((100vh - 190px) / 1.36));
-    --page-w: min(44vw, calc((100dvh - 190px) / 1.36));
-    --page-h: calc(var(--page-w) * 1.36);
+    --page-w: min(46vw, calc((100vh - 150px) / 1.32));
+    --page-w: min(46vw, calc((100dvh - 150px) / 1.32));
+    --page-h: calc(var(--page-w) * 1.32);
     --turn-ms: 900ms;
   }
 
@@ -34,7 +34,12 @@
     align-items:center;
     justify-content:center;
     background:
-      radial-gradient(ellipse 120% 90% at 50% 30%, var(--desk) 0%, var(--desk-dark) 75%);
+      radial-gradient(ellipse 45% 32% at 16% 84%, rgba(125,62,16,.12), transparent 70%),
+      radial-gradient(ellipse 38% 30% at 86% 14%, rgba(145,78,22,.09), transparent 70%),
+      radial-gradient(ellipse 55% 38% at 72% 92%, rgba(35,16,4,.6), transparent 75%),
+      radial-gradient(ellipse 50% 35% at 8% 10%, rgba(30,13,4,.55), transparent 75%),
+      radial-gradient(ellipse 120% 90% at 50% 34%, var(--desk) 0%, var(--desk-dark) 78%);
+    background-color:var(--desk-dark);
     font-family:'IM Fell English', Georgia, serif;
     color:var(--paper);
     overflow-x:hidden;
@@ -44,7 +49,7 @@
   /* ambient candlelight flicker on the desk */
   .glow{
     position:fixed; inset:0; pointer-events:none;
-    background:radial-gradient(ellipse 60% 45% at 50% 42%, rgba(255,190,90,.07), transparent 70%);
+    background:radial-gradient(ellipse 60% 45% at 50% 42%, rgba(255,165,70,.1), transparent 70%);
     animation:flicker 7s ease-in-out infinite;
   }
   @keyframes flicker{
@@ -53,22 +58,22 @@
 
   header.site{
     text-align:center;
-    margin-bottom:2vh;
+    margin-bottom:1.4vh;
     user-select:none;
   }
   header.site h1{
     font-family:'IM Fell English SC', Georgia, serif;
     font-weight:400;
-    font-size:clamp(1.2rem, 2.6vw, 1.9rem);
+    font-size:clamp(1rem, 2vw, 1.5rem);
     letter-spacing:.35em;
     text-indent:.35em;
     color:var(--brass);
   }
   header.site p{
     font-style:italic;
-    font-size:.85rem;
+    font-size:.78rem;
     color:#8a7452;
-    margin-top:.4em;
+    margin-top:.3em;
     letter-spacing:.08em;
   }
 
@@ -161,6 +166,35 @@
       inset 5px 0 6px -5px rgba(55,32,6,.5);
   }
 
+  /* the gutter: pages curving down into the binding at the centre */
+  .spine{
+    position:absolute; top:0; bottom:0; left:50%;
+    width:calc(var(--page-w) * .22);
+    transform:translateX(-50%);
+    z-index:3; pointer-events:none;
+    background:linear-gradient(90deg,
+      transparent 0%,
+      rgba(80,48,16,.06) 18%,
+      rgba(62,36,12,.16) 34%,
+      rgba(44,24,7,.34) 44%,
+      rgba(22,11,3,.58) 48.6%,
+      rgba(12,6,1,.68) 50%,
+      rgba(22,11,3,.58) 51.4%,
+      rgba(44,24,7,.34) 56%,
+      rgba(62,36,12,.16) 66%,
+      rgba(80,48,16,.06) 82%,
+      transparent 100%);
+  }
+  /* faint sheen where each page curls back up out of the valley */
+  .spine::before, .spine::after{
+    content:""; position:absolute; top:0; bottom:0; width:1px;
+    background:linear-gradient(180deg,
+      rgba(255,242,205,.0), rgba(255,242,205,.12) 20%,
+      rgba(255,242,205,.12) 80%, rgba(255,242,205,.0));
+  }
+  .spine::before{ left:26%; }
+  .spine::after{ right:26%; }
+
   .page{
     position:relative;
     width:var(--page-w);
@@ -170,9 +204,9 @@
     flex:none;
   }
   .page.left{ border-radius:4px 0 0 4px;
-    box-shadow:inset -18px 0 28px -18px rgba(60,40,10,.55), inset 3px 0 6px rgba(0,0,0,.2);}
+    box-shadow:inset -14px 0 22px -16px rgba(60,40,10,.35);}
   .page.right{ border-radius:0 4px 4px 0;
-    box-shadow:inset 18px 0 28px -18px rgba(60,40,10,.55), inset -3px 0 6px rgba(0,0,0,.2);}
+    box-shadow:inset 14px 0 22px -16px rgba(60,40,10,.35);}
 
   /* aged paper: stains + grain, all CSS/SVG, no images */
   .parchment{
@@ -227,7 +261,7 @@
 
   .body-text{
     font-family:'IM Fell English', Georgia, serif;
-    font-size:calc(var(--page-w) * .0295);
+    font-size:calc(var(--page-w) * .031);
     line-height:1.62;
     text-align:justify;
     hyphens:auto;
@@ -378,8 +412,8 @@
   .zone:hover::after{ opacity:1; }
 
   .spread-label{
-    margin-top:2.6vh; font-family:'Cormorant Garamond', serif;
-    font-style:italic; font-size:.8rem; color:#8a7452; letter-spacing:.1em;
+    margin-top:1.6vh; font-family:'Cormorant Garamond', serif;
+    font-style:italic; font-size:.75rem; color:#8a7452; letter-spacing:.1em;
     user-select:none; text-align:center;
   }
 
@@ -431,6 +465,7 @@
     <div class="page left"><div class="parchment"></div><svg class="grain" width="100%" height="100%"><filter id="g1"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 0.45  0 0 0 0 0.36  0 0 0 0 0.22  0 0 0 0.06 0"/></filter><rect width="100%" height="100%" filter="url(#g1)"/></svg><div class="page-inner" id="pageL"></div></div>
     <div class="page right"><div class="parchment"></div><svg class="grain" width="100%" height="100%"><filter id="g2"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 0.45  0 0 0 0 0.36  0 0 0 0 0.22  0 0 0 0.06 0"/></filter><rect width="100%" height="100%" filter="url(#g2)"/></svg><div class="page-inner" id="pageR"></div></div>
 
+    <div class="spine" aria-hidden="true"></div>
     <div class="leaf" id="leaf">
       <div class="leaf-face front"><div class="parchment"></div><div class="page-inner" id="leafFront"></div></div>
       <div class="leaf-face back"><div class="parchment"></div><div class="page-inner" id="leafBack"></div></div>
