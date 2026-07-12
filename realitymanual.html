@@ -19,8 +19,8 @@
     --ink-faint:#5d4c35;
     --brass:#9c7c3c;
     --rubric:#7a2f1d; /* oxblood red used in medieval rubrication */
-    --page-w: min(46vw, calc((100vh - 118px) / 1.32));
-    --page-w: min(46vw, calc((100dvh - 118px) / 1.32));
+    --page-w: min(46vw, calc((100vh - 96px) / 1.32));
+    --page-w: min(46vw, calc((100dvh - 96px) / 1.32));
     --page-h: calc(var(--page-w) * 1.32);
     --turn-ms: 900ms;
   }
@@ -28,11 +28,12 @@
   *{box-sizing:border-box; margin:0; padding:0;}
 
   body{
-    min-height:100vh;
+    height:100vh;
+    height:100dvh;
     display:flex;
     flex-direction:column;
     align-items:center;
-    justify-content:center;
+    overflow:hidden;
     background:
       radial-gradient(ellipse 45% 32% at 16% 84%, rgba(125,62,16,.12), transparent 70%),
       radial-gradient(ellipse 38% 30% at 86% 14%, rgba(145,78,22,.09), transparent 70%),
@@ -43,7 +44,7 @@
     font-family:'IM Fell English', Georgia, serif;
     color:var(--paper);
     overflow-x:hidden;
-    padding:2vh 2vw;
+    padding:0 2vw 24px;
   }
 
   /* ambient candlelight flicker on the desk */
@@ -57,8 +58,13 @@
   }
 
   header.site{
+    flex:1 1 auto;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-height:0;
     text-align:center;
-    margin-bottom:1.4vh;
+    margin:0;
     user-select:none;
   }
   header.site h1{
@@ -411,19 +417,14 @@
   }
   .zone:hover::after{ opacity:1; }
 
-  .spread-label{
-    margin-top:1.6vh; font-family:'Cormorant Garamond', serif;
-    font-style:italic; font-size:.75rem; color:#8a7452; letter-spacing:.1em;
-    user-select:none; text-align:center;
-  }
-
   /* ============ MOBILE / PORTRAIT: scrollable pages, like a PDF ============ */
   .scroll-book{ display:none; }
 
   @media (orientation: portrait) and (max-width: 940px), (max-width: 720px){
     :root{ --page-w: min(94vw, 520px); }
-    body{ justify-content:flex-start; padding:3vh 0 8vh; }
-    .book-wrap, .spread-label{ display:none; }
+    body{ height:auto; min-height:100dvh; overflow:visible; justify-content:flex-start; padding:0 0 8vh; }
+    header.site{ flex:0 0 auto; padding:3vh 0 2vh; }
+    .book-wrap{ display:none; }
     .scroll-book{
       display:block;
       width:var(--page-w);
@@ -478,8 +479,6 @@
     <button class="zone next" id="btnNext" data-hint="turn the page" aria-label="Next page"></button>
   </div>
 </div>
-
-<div class="spread-label" id="spreadLabel"></div>
 
 <div class="scroll-book" id="scrollBook"></div>
 
@@ -618,7 +617,6 @@ const leaf = document.getElementById('leaf');
 const leafFront = document.getElementById('leafFront');
 const leafBack = document.getElementById('leafBack');
 const shade = document.getElementById('shade');
-const label = document.getElementById('spreadLabel');
 const stackL = document.getElementById('stackL');
 const stackR = document.getElementById('stackR');
 
@@ -643,7 +641,6 @@ function render(){
   if (isMobile()) return; /* portrait mode is the pre-built scroll stack */
   fillSlot('pageL', pages[spread*2]);
   fillSlot('pageR', pages[spread*2+1]);
-  label.textContent = `spread ${spread+1} of ${maxSpread+1} · click the page edges, or use ← →`;
   updateStacks(maxSpread > 0 ? spread / maxSpread : 0);
 }
 
