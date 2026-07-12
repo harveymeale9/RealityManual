@@ -366,6 +366,116 @@
     margin-bottom:1.4em; font-size:calc(var(--page-w) * .03); text-align:justify;
   }
 
+  /* ============ SPECIMEN COMPONENTS (appendix) ============ */
+  /* numbered laws: rubricated roman numerals, hanging indent */
+  .laws{ list-style:none; counter-reset:law; margin-top:.6em; font-size:calc(var(--page-w) * .0295); }
+  .laws li{
+    counter-increment:law;
+    position:relative;
+    padding-left:2.7em;
+    margin-bottom:1em;
+    line-height:1.5;
+    text-align:left;
+  }
+  .laws li::before{
+    content:counter(law, upper-roman) ".";
+    position:absolute; left:0; top:.05em;
+    font-family:'IM Fell English SC', serif;
+    color:var(--rubric);
+  }
+  .laws .law-name{ font-variant:small-caps; letter-spacing:.04em; }
+
+  /* pull quote with brass rules */
+  .pullquote{
+    margin:1.2em 0 .4em;
+    text-align:center;
+    font-family:'Cormorant Garamond', serif;
+    font-style:italic;
+    font-size:calc(var(--page-w) * .05);
+    line-height:1.35;
+    color:var(--ink);
+  }
+  .pullquote .q-mark{
+    display:block;
+    font-size:1.8em; line-height:.5;
+    color:var(--brass);
+    font-style:normal;
+  }
+  .pullquote-attr{
+    text-align:center;
+    font-family:'IM Fell English SC', serif;
+    font-size:calc(var(--page-w) * .0175);
+    letter-spacing:.28em; text-indent:.28em;
+    color:var(--ink-faint);
+    margin:.9em 0 1.2em;
+  }
+  .rule-orn{ display:flex; align-items:center; gap:.8em; margin:1.1em 0; color:var(--brass);
+    font-size:calc(var(--page-w) * .024); }
+  .rule-orn::before,.rule-orn::after{ content:""; flex:1; border-top:1px solid rgba(156,124,60,.45); }
+
+  /* table of correspondences */
+  .grim-table{ width:100%; border-collapse:collapse; margin:1.1em 0 .5em;
+    font-size:calc(var(--page-w) * .027); }
+  .grim-table th{
+    font-family:'IM Fell English SC', serif; font-weight:400;
+    font-size:calc(var(--page-w) * .019); letter-spacing:.2em; text-indent:.2em;
+    color:var(--rubric); padding:.5em .3em;
+    border-bottom:1px solid rgba(122,47,29,.45);
+  }
+  .grim-table td{
+    padding:.6em .3em; text-align:center;
+    border-bottom:1px dotted rgba(93,76,53,.4);
+  }
+  .grim-table td:first-child{ font-variant:small-caps; letter-spacing:.03em; }
+  .grim-table .glyph{ color:var(--rubric); font-size:1.1em; }
+
+  /* two-column lexicon */
+  .lexicon{ column-count:2; column-gap:2em; column-rule:1px solid rgba(156,124,60,.3);
+    font-size:calc(var(--page-w) * .026); margin-top:.8em; }
+  .lexicon dt{ font-variant:small-caps; letter-spacing:.05em; color:var(--rubric); break-after:avoid; }
+  .lexicon dd{ font-family:'Cormorant Garamond', serif; font-style:italic;
+    color:var(--ink-faint); margin:0 0 .95em; line-height:1.45; }
+
+  /* ritual steps with tall numerals */
+  .steps{ list-style:none; counter-reset:step; margin-top:.7em;
+    font-size:calc(var(--page-w) * .0295); }
+  .steps li{ counter-increment:step; display:flex; gap:.95em; margin-bottom:1.15em; line-height:1.55; }
+  .steps li::before{
+    content:counter(step);
+    font-family:'Cormorant Garamond', serif;
+    font-size:2em; line-height:.9;
+    color:var(--brass);
+    min-width:1em; text-align:center;
+  }
+
+  /* illuminated frame page */
+  .frame-svg{ position:absolute; inset:4%; width:92%; height:92%; pointer-events:none; }
+
+  /* ============ PLATE ANIMATIONS (CSS-driven) ============ */
+  .orbit-slow{ animation:sigilspin 44s linear infinite; transform-origin:50% 50%; }
+  .orbit-mid{ animation:sigilspin 23s linear infinite reverse; transform-origin:50% 50%; }
+  .orbit-fast{ animation:sigilspin 11s linear infinite; transform-origin:50% 50%; }
+  .twinkle{ animation:twinkle 3.4s ease-in-out infinite; }
+  .twinkle.t2{ animation-duration:4.8s; animation-delay:1.2s; }
+  .twinkle.t3{ animation-duration:6.1s; animation-delay:2.5s; }
+  @keyframes twinkle{ 0%,100%{opacity:.2} 50%{opacity:1} }
+  .inscribe{ stroke-dasharray:1; stroke-dashoffset:1; animation:inscribe 10s ease-in-out infinite; }
+  .inscribe.d2{ animation-delay:1.3s; }
+  .inscribe.d3{ animation-delay:2.6s; }
+  .inscribe.d4{ animation-delay:3.9s; }
+  .inscribe.d5{ animation-delay:5s; }
+  @keyframes inscribe{
+    0%{stroke-dashoffset:1; opacity:1}
+    42%{stroke-dashoffset:0; opacity:1}
+    80%{stroke-dashoffset:0; opacity:1}
+    94%{stroke-dashoffset:0; opacity:0}
+    100%{stroke-dashoffset:1; opacity:0}
+  }
+  .breathe{ animation:breathe 6s ease-in-out infinite; transform-origin:50% 50%; }
+  @keyframes breathe{ 0%,100%{ transform:scale(.95); opacity:.7 } 50%{ transform:scale(1.05); opacity:1 } }
+  .moon-shadow{ animation:moondrift 16s ease-in-out infinite alternate; }
+  @keyframes moondrift{ from{ transform:translateX(-24px) } to{ transform:translateX(24px) } }
+
   /* ============ PAGE TURN ============ */
   .leaf{
     position:absolute;
@@ -448,7 +558,8 @@
   @media (prefers-reduced-motion: reduce){
     .leaf{ display:none !important; }
     .turn-shade{ display:none !important; }
-    .glow, .sigil-rotate, .sigil-pulse{ animation:none !important; }
+    .glow{ animation:none !important; }
+    svg *{ animation:none !important; }
   }
 </style>
 </head>
@@ -545,6 +656,7 @@ const pages = [
     <li><span class="t">III · Maps Are Not Territory</span><span class="dots"></span><span class="n sealed-mark">sealed</span></li>
     <li><span class="t">IV · The Economy of Meaning</span><span class="dots"></span><span class="n sealed-mark">sealed</span></li>
     <li><span class="t">V · On Thresholds</span><span class="dots"></span><span class="n sealed-mark">forthcoming</span></li>
+    <li><span class="t">Appendix · Specimen Leaves</span><span class="dots"></span><span class="n">4</span></li>
   </ul>
   <p class="marginal">Entries marked <span class="xref">sealed</span> open to keyholders. Entries marked <span class="xref">forthcoming</span> are still being inscribed — the Manual is alive.</p>
   <span class="folio">ii</span>
@@ -597,7 +709,221 @@ const pages = [
   <span class="folio">3</span>
 </div>`,
 
-/* 7 — colophon */
+/* 7 — appendix opener, illuminated frame */
+`<div class="page-inner title-page" style="position:static">
+  <svg class="frame-svg" viewBox="0 0 400 528" preserveAspectRatio="none" aria-hidden="true">
+    <g fill="none" stroke="#9c7c3c">
+      <rect x="10" y="10" width="380" height="508" stroke-opacity=".55"/>
+      <rect x="18" y="18" width="364" height="492" stroke-width=".6" stroke-opacity=".35"/>
+    </g>
+    <g fill="#7a2f1d" fill-opacity=".65">
+      <polygon points="10,3 17,10 10,17 3,10"/>
+      <polygon points="390,3 397,10 390,17 383,10"/>
+      <polygon points="10,511 17,518 10,525 3,518"/>
+      <polygon points="390,511 397,518 390,525 383,518"/>
+    </g>
+    <g stroke="#9c7c3c" stroke-opacity=".5" fill="none">
+      <path d="M186 10 h28 M200 3 v14"/>
+      <path d="M186 518 h28 M200 511 v14"/>
+    </g>
+  </svg>
+  <div>
+    <p class="tp-small">Appendix</p>
+    <h1>Specimen<br>Leaves</h1>
+    <p class="tp-rule">✦ ❦ ✦</p>
+    <p class="tp-edition">A gathering of the page forms<br>
+    from which entries are composed —<br>
+    laws, lexicons, tables of correspondence,<br>
+    and plates that move.</p>
+  </div>
+  <span class="folio">4</span>
+</div>`,
+
+/* 8 — numbered laws */
+`<div class="page-inner" style="position:static">
+  <p class="running-head">Appendix · Numbered Laws</p>
+  <p class="entry-no">Specimen · The Law Form</p>
+  <h2 class="entry-title">The Seven Laws</h2>
+  <p class="ornament">✦ ✦ ✦</p>
+  <ol class="laws">
+    <li><span class="law-name">Attention.</span> Whatever you attend to, you enlarge.</li>
+    <li><span class="law-name">Reflection.</span> Every judgment describes the judge before the judged.</li>
+    <li><span class="law-name">Cartography.</span> The map is a rumour; the territory is a visit.</li>
+    <li><span class="law-name">Economy.</span> Meaning is spent wherever attention is paid.</li>
+    <li><span class="law-name">Thresholds.</span> Nothing changes except at a door.</li>
+    <li><span class="law-name">Return.</span> What is refused arrives again, wearing new clothes.</li>
+    <li><span class="law-name">Silence.</span> The Manual ends where the reader begins.</li>
+  </ol>
+  <span class="folio">5</span>
+</div>`,
+
+/* 9 — animated celestial chart */
+`<div class="page-inner" style="position:static">
+  <p class="running-head">Appendix · Plates in Motion</p>
+  <svg class="plate" viewBox="0 0 200 200" role="img" aria-label="Celestial chart of turning orbits and wavering stars">
+    <g fill="none" stroke="#7a2f1d" stroke-width="1">
+      <circle cx="100" cy="100" r="88" stroke-dasharray="2 5" stroke-opacity=".4"/>
+      <g stroke="#9c7c3c" stroke-width=".9">
+        <path class="twinkle" d="M27 42 h8 M31 38 v8"/>
+        <path class="twinkle t2" d="M165 54 h8 M169 50 v8"/>
+        <path class="twinkle t3" d="M42 158 h8 M46 154 v8"/>
+        <path class="twinkle t2" d="M158 150 h8 M162 146 v8"/>
+        <path class="twinkle" d="M96 12 h8 M100 8 v8"/>
+      </g>
+      <g class="orbit-slow">
+        <circle cx="100" cy="100" r="68" stroke-opacity=".5"/>
+        <circle cx="100" cy="32" r="4.5" fill="#7a2f1d" stroke="none"/>
+      </g>
+      <g class="orbit-mid">
+        <circle cx="100" cy="100" r="46" stroke-opacity=".55"/>
+        <circle cx="100" cy="54" r="3.5" fill="#9c7c3c" stroke="none"/>
+      </g>
+      <g class="orbit-fast">
+        <circle cx="100" cy="100" r="26" stroke-opacity=".6"/>
+        <circle cx="100" cy="74" r="2.5" fill="#7a2f1d" stroke="none"/>
+      </g>
+      <g class="breathe">
+        <circle cx="100" cy="100" r="8" stroke="#7a2f1d"/>
+        <circle cx="100" cy="100" r="3" fill="#7a2f1d" stroke="none"/>
+        <path d="M100 87 v-6 M100 113 v6 M87 100 h-6 M113 100 h6" stroke-opacity=".7"/>
+      </g>
+    </g>
+  </svg>
+  <p class="plate-caption">Plate II — Three spheres in contrary motion about a breathing centre;<br>the fixed stars waver in their stations.</p>
+  <div class="body-text">
+    <p>Orbits may turn at their own periods and in contrary directions; stars may waver; the centre may breathe. Motion of this kind is drawn, not filmed — it costs the page nothing.</p>
+  </div>
+  <span class="folio">6</span>
+</div>`,
+
+/* 10 — pull quote */
+`<div class="page-inner" style="position:static">
+  <p class="running-head">Appendix · The Quotation Form</p>
+  <div class="rule-orn">✦</div>
+  <div class="pullquote">
+    <span class="q-mark">❝</span>
+    The map is a rumour;<br>the territory is a visit.
+  </div>
+  <p class="pullquote-attr">Entry III · Maps Are Not Territory</p>
+  <div class="rule-orn">❦</div>
+  <div class="body-text">
+    <p>A saying worth carrying is set apart in this manner, ruled above and below in brass, with its source given in the small capitals of the Manual. Around it, ordinary matter resumes: the page holds one raised voice at a time, and the quiet text beneath it carries on as though nothing had been said.</p>
+  </div>
+  <span class="folio">7</span>
+</div>`,
+
+/* 11 — self-inscribing sigil */
+`<div class="page-inner" style="position:static">
+  <p class="running-head">Appendix · Plates in Motion</p>
+  <svg class="plate" viewBox="0 0 200 200" role="img" aria-label="A sigil that inscribes itself stroke by stroke, then fades and begins again">
+    <g fill="none" stroke="#7a2f1d" stroke-width="1.2" stroke-linecap="round">
+      <circle class="inscribe" pathLength="1" cx="100" cy="100" r="74"/>
+      <path class="inscribe d2" pathLength="1" d="M100 34 L157 133 L43 133 Z"/>
+      <path class="inscribe d3" pathLength="1" d="M100 166 L43 67 L157 67 Z" stroke="#9c7c3c"/>
+      <circle class="inscribe d4" pathLength="1" cx="100" cy="100" r="18"/>
+      <path class="inscribe d5" pathLength="1" d="M100 82 V118 M82 100 H118"/>
+    </g>
+  </svg>
+  <p class="plate-caption">Plate III — A figure inscribing itself, stroke by stroke,<br>as a hand would draw it; then the ink lifts, and it begins again.</p>
+  <div class="body-text">
+    <p>Figures may be drawn before the reader's eyes in the order a scribe would draw them — circle first, then the triangles, then the inner work. Use this where the <em>construction</em> of an idea is the lesson.</p>
+  </div>
+  <span class="folio">8</span>
+</div>`,
+
+/* 12 — table of correspondences */
+`<div class="page-inner" style="position:static">
+  <p class="running-head">Appendix · The Tabular Form</p>
+  <p class="entry-no">Specimen · Correspondences</p>
+  <h2 class="entry-title">A Table of<br>Correspondences</h2>
+  <table class="grim-table">
+    <tr><th>Principle</th><th>Element</th><th>Hour</th><th>Glyph</th></tr>
+    <tr><td>Attention</td><td>Fire</td><td>Dawn</td><td class="glyph">△</td></tr>
+    <tr><td>Reflection</td><td>Water</td><td>Dusk</td><td class="glyph">▽</td></tr>
+    <tr><td>Meaning</td><td>Air</td><td>Noon</td><td class="glyph">○</td></tr>
+    <tr><td>Threshold</td><td>Earth</td><td>Midnight</td><td class="glyph">□</td></tr>
+    <tr><td>Return</td><td>Aether</td><td>The hour between</td><td class="glyph">✦</td></tr>
+  </table>
+  <p class="marginal">Tables rule their rows in dotted ink and their heads in oxblood. They are for matter the eye should compare, not read.</p>
+  <span class="folio">9</span>
+</div>`,
+
+/* 13 — moon phases */
+`<div class="page-inner" style="position:static">
+  <p class="running-head">Appendix · Plates in Motion</p>
+  <svg class="plate" style="width:80%" viewBox="0 0 220 130" role="img" aria-label="A moon slowly waxing and waning above a row of its fixed phases">
+    <defs><clipPath id="rmMoonClip"><circle cx="110" cy="48" r="30"/></clipPath></defs>
+    <g fill="none" stroke="#7a2f1d" stroke-width="1">
+      <circle cx="110" cy="48" r="34" stroke-dasharray="2 4" stroke-opacity=".35"/>
+      <circle cx="110" cy="48" r="30" fill="#efe4c6"/>
+      <g clip-path="url(#rmMoonClip)">
+        <circle class="moon-shadow" cx="110" cy="48" r="30" fill="#7a2f1d" fill-opacity=".28" stroke="none"/>
+      </g>
+      <g stroke-width=".8" stroke-opacity=".7">
+        <circle cx="40" cy="110" r="7"/>
+        <circle cx="75" cy="110" r="7"/><path d="M75 103 a7 7 0 0 0 0 14 Z" fill="#7a2f1d" fill-opacity=".25" stroke="none"/>
+        <circle cx="110" cy="110" r="7" fill="#7a2f1d" fill-opacity=".25"/>
+        <circle cx="145" cy="110" r="7"/><path d="M145 103 a7 7 0 0 1 0 14 Z" fill="#7a2f1d" fill-opacity=".25" stroke="none"/>
+        <circle cx="180" cy="110" r="7"/>
+      </g>
+    </g>
+  </svg>
+  <p class="plate-caption">Plate IV — The wandering shadow; beneath it, the five stations of the month.</p>
+  <div class="body-text">
+    <p>Slow motion suits slow subjects. The shadow above crosses the disc in sixteen seconds and returns; a reader who lingers will notice, and one who does not will lose nothing. Ambient movement should never demand to be watched.</p>
+  </div>
+  <span class="folio">10</span>
+</div>`,
+
+/* 14 — two-column lexicon */
+`<div class="page-inner" style="position:static">
+  <p class="running-head">Appendix · The Lexicon Form</p>
+  <p class="entry-no">Specimen · Terms of Art</p>
+  <h2 class="entry-title">A Brief Lexicon</h2>
+  <p class="ornament">❦</p>
+  <dl class="lexicon">
+    <dt>Aperture</dt><dd>The width of attention at a given hour; what it admits and what it refuses.</dd>
+    <dt>Entry</dt><dd>A single idea stated once, completely, and left alone.</dd>
+    <dt>Gutter</dt><dd>The valley between two pages; also, the part of a thought that binds it to its neighbour.</dd>
+    <dt>Keyholder</dt><dd>One for whom the sealed leaves open.</dd>
+    <dt>Plate</dt><dd>A drawn figure; in the living edition, one that may move.</dd>
+    <dt>Rubric</dt><dd>Matter set in oxblood: laws, numerals, and the first letters of things.</dd>
+    <dt>Sealed</dt><dd>Written, but not yet yours.</dd>
+  </dl>
+  <span class="folio">11</span>
+</div>`,
+
+/* 15 — ritual steps */
+`<div class="page-inner" style="position:static">
+  <p class="running-head">Appendix · The Practice Form</p>
+  <p class="entry-no">Specimen · A Working</p>
+  <h2 class="entry-title">The Evening<br>Recension</h2>
+  <p class="ornament">✦ ✦ ✦</p>
+  <ol class="steps">
+    <li>At the day's end, name aloud the three things that held your attention longest. Do not judge them yet.</li>
+    <li>Ask of each: did I choose this, or did it choose me? Mark the answer in the margin of the day.</li>
+    <li>Choose one object of attention for tomorrow, and one refusal. A refusal unnamed is a door left open.</li>
+    <li>Close the book. The practice ends with the closing, not before.</li>
+  </ol>
+  <span class="folio">12</span>
+</div>`,
+
+/* 16 — kitchen-sink text page */
+`<div class="page-inner" style="position:static">
+  <p class="running-head">Appendix · Ordinary Matter</p>
+  <div class="body-text">
+    <p class="dropcap">Ordinary matter is set thus: justified, in the English hand, opening upon a rubricated versal. Most of the Manual is ordinary matter, and the forms in this appendix are its punctuation — a law here, a table there, a figure where a figure earns its ink.</p>
+    <p>Cross-references are set in the small capitals of the house, so the eye can follow a corridor without leaving the page: <span class="xref">see Entry I, On the Nature of Attention.</span></p>
+  </div>
+  <p class="marginal">Asides, doubts, and instructions to the reader stand in the margin hand — italic, half-voiced, ruled in oxblood — so the main text never has to interrupt itself.</p>
+  <div class="body-text">
+    <p>When a page has said enough, it says so, and stops.</p>
+  </div>
+  <p class="ornament">❦</p>
+  <span class="folio">13</span>
+</div>`,
+
+/* 17 — colophon */
 `<div class="page-inner title-page" style="position:static">
   <div>
     <p class="tp-small">Colophon</p>
