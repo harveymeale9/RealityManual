@@ -653,6 +653,45 @@
   .jump button:hover, .jump button:focus-visible{
     background:var(--brass); color:#1c1108; outline:none;
   }
+  .jump input{ cursor:pointer; caret-color:transparent; }
+
+  /* the number pad: opens beneath the panel when the box is tapped */
+  .numpad{
+    position:absolute;
+    top:calc(100% + 10px); right:0;
+    display:none;
+    grid-template-columns:repeat(3, 2.9em);
+    gap:7px;
+    padding:10px;
+    background:rgba(24,14,7,.95);
+    border:1px solid rgba(156,124,60,.45);
+    border-radius:4px;
+    z-index:30;
+    box-shadow:0 14px 30px rgba(0,0,0,.55);
+  }
+  .jump.open .numpad{ display:grid; }
+  .numpad button{
+    font-family:'Cormorant Garamond', serif;
+    font-size:1.1rem;
+    letter-spacing:0; text-indent:0;
+    padding:.42em 0;
+    background:none;
+    border:1px solid rgba(156,124,60,.4);
+    border-radius:3px;
+    color:var(--paper);
+    cursor:pointer;
+  }
+  .numpad button:hover, .numpad button:focus-visible{
+    background:rgba(156,124,60,.25); color:var(--paper); outline:none;
+  }
+  .numpad button.np-go{
+    font-family:'IM Fell English SC', serif;
+    font-size:.72rem; letter-spacing:.18em; text-indent:.18em;
+    color:var(--brass);
+  }
+  .numpad button.np-go:hover, .numpad button.np-go:focus-visible{
+    background:var(--brass); color:#1c1108;
+  }
 
   /* ============ MOBILE / PORTRAIT: scrollable pages, like a PDF ============ */
   .scroll-book{ display:none; }
@@ -686,7 +725,7 @@
       bottom:calc(10px + env(safe-area-inset-bottom, 0px));
       background:none; border:none; padding:0; gap:0;
     }
-    .jump span, .jump .total, .jump button{ display:none; }
+    .jump span, .jump .total, .jump > button{ display:none; }
     .jump input{
       width:3.4em;
       font-size:1rem;
@@ -696,6 +735,13 @@
       border-radius:3px;
       color:var(--paper);
     }
+    .numpad{
+      top:auto; bottom:calc(100% + 10px);
+      right:50%; transform:translateX(50%);
+      grid-template-columns:repeat(3, 54px);
+      gap:8px;
+    }
+    .numpad button{ font-size:1.2rem; padding:.5em 0; }
   }
 
   @media (prefers-reduced-motion: reduce){
@@ -713,9 +759,23 @@
   <h1>The Reality Manual</h1>
   <div class="jump" role="group" aria-label="Jump to a page of the book">
     <span>Page</span>
-    <input id="jumpInput" type="number" min="1" inputmode="numeric" aria-label="Page number">
+    <input id="jumpInput" type="text" readonly inputmode="none" aria-label="Page number">
     <span class="total" id="jumpTotal"></span>
     <button id="jumpGo">Go</button>
+    <div class="numpad" id="numpad" aria-label="Number pad">
+      <button type="button" data-k="1">1</button>
+      <button type="button" data-k="2">2</button>
+      <button type="button" data-k="3">3</button>
+      <button type="button" data-k="4">4</button>
+      <button type="button" data-k="5">5</button>
+      <button type="button" data-k="6">6</button>
+      <button type="button" data-k="7">7</button>
+      <button type="button" data-k="8">8</button>
+      <button type="button" data-k="9">9</button>
+      <button type="button" data-k="del">⌫</button>
+      <button type="button" data-k="0">0</button>
+      <button type="button" class="np-go" data-k="go">Go</button>
+    </div>
   </div>
 </header>
 
@@ -1439,25 +1499,75 @@ function flutterTo(target){
     turning = false;
   }, lastEnd + 60);
 }
-document.getElementById('jumpGo').addEventListener('click', jumpTo);
-jumpInput.addEventListener('keydown', e=>{ if (e.key === 'Enter') jumpTo(); });
+/* ===== numpad-driven jump: tapping the box clears it and opens the pad
+   (no native keyboard — the input is readonly, so the layout never shifts) */
+const jumpBox = document.querySelector('.jump');
+const numpad = document.getElementById('numpad');
+
+function syncMobilePage(){
+  const els = document.querySelectorAll('#scrollBook .page.m');
+  let best = 0, bestDist = Infinity;
+  els.forEach((el, i)=>{
+    const d = Math.abs(el.getBoundingClientRect().top - 40);
+    if (d < bestDist){ bestDist = d; best = i; }
+  });
+  jumpInput.value = best + 1;
+}
+
+function openPad(){
+  jumpInput.value = '';
+  jumpBox.classList.add('open');
+}
+function closePad(restore){
+  jumpBox.classList.remove('open');
+  if (restore){
+    if (isMobile()) syncMobilePage();
+    else jumpInput.value = spread*2 + 1;
+  }
+}
+function doJump(){
+  closePad(false);
+  jumpTo();
+}
+
+jumpInput.addEventListener('focus', openPad);
+jumpInput.addEventListener('click', openPad);
+
+numpad.addEventListener('click', e=>{
+  const b = e.target.closest('button');
+  if (!b) return;
+  const k = b.dataset.k;
+  if (k === 'del') jumpInput.value = jumpInput.value.slice(0, -1);
+  else if (k === 'go') doJump();
+  else if (jumpInput.value.length < 3) jumpInput.value += k;
+});
+
+/* physical keyboard still works on desktop (input is readonly, so we type for it) */
+jumpInput.addEventListener('keydown', e=>{
+  if (e.key === 'Enter'){ e.preventDefault(); doJump(); }
+  else if (e.key === 'Escape'){ closePad(true); jumpInput.blur(); }
+  else if (e.key === 'Backspace'){ e.preventDefault(); jumpInput.value = jumpInput.value.slice(0, -1); }
+  else if (/^[0-9]$/.test(e.key)){ e.preventDefault(); if (jumpInput.value.length < 3) jumpInput.value += e.key; }
+});
+
+document.getElementById('jumpGo').addEventListener('click', doJump);
+
+/* tapping anywhere outside cancels and restores the current page number */
+document.addEventListener('pointerdown', e=>{
+  if (jumpBox.classList.contains('open') && !jumpBox.contains(e.target)) closePad(true);
+});
+
 if (isMobile()) jumpInput.value = 1;
 
-/* on mobile, the box tracks the page you've scrolled to */
+/* on mobile, the box tracks the page you've scrolled to (paused while the pad is open) */
 let scrollTick = false;
 window.addEventListener('scroll', ()=>{
   if (!isMobile() || scrollTick) return;
   scrollTick = true;
   requestAnimationFrame(()=>{
     scrollTick = false;
-    if (document.activeElement === jumpInput) return;
-    const els = document.querySelectorAll('#scrollBook .page.m');
-    let best = 0, bestDist = Infinity;
-    els.forEach((el, i)=>{
-      const d = Math.abs(el.getBoundingClientRect().top - 40);
-      if (d < bestDist){ bestDist = d; best = i; }
-    });
-    jumpInput.value = best + 1;
+    if (jumpBox.classList.contains('open')) return;
+    syncMobilePage();
   });
 }, {passive:true});
 
