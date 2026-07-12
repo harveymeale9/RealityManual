@@ -86,6 +86,11 @@
   }
 
   /* ============ THE BOOK ============ */
+  /* the book reveals as one piece once fonts and layout are ready,
+     so no element (gutter, shadows, type) pops in after the rest */
+  .book-wrap, .scroll-book{ opacity:0; transition:opacity .7s ease; }
+  body.ready .book-wrap, body.ready .scroll-book{ opacity:1; }
+
   .book-wrap{
     perspective:2600px;
     position:relative;
@@ -174,12 +179,14 @@
       inset 5px 0 6px -5px rgba(55,32,6,.5);
   }
 
-  /* the gutter: pages curving down into the binding at the centre */
+  /* the gutter: pages curving down into the binding at the centre.
+     Sits ABOVE the turning leaves so the valley's shadow stays constant
+     through every turn — a leaf passing the spine passes through its shade. */
   .spine{
     position:absolute; top:0; bottom:0; left:50%;
     width:calc(var(--page-w) * .22);
     transform:translateX(-50%);
-    z-index:3; pointer-events:none;
+    z-index:7; pointer-events:none;
     background:linear-gradient(90deg,
       transparent 0%,
       rgba(80,48,16,.06) 18%,
@@ -514,6 +521,15 @@
     animation-timing-function:cubic-bezier(.42,.05,.3,.98);
   }
   .flit.rev{ animation-name:flitBack; }
+  /* a copy of the gutter shadow INSIDE the flutter's own 3D context,
+     held nearer the viewer than any leaf's apex (58px), so the valley
+     stays painted over the flying pages regardless of how the browser
+     sorts 3D layers against outside elements. Counter-scaled so the
+     perspective doesn't enlarge it. */
+  .flit-spine{
+    z-index:8;
+    transform:translateX(-50%) translateZ(90px) scale(.936);
+  }
   /* flutter leaves arc up toward the viewer at the apex */
   @keyframes flitFwd{
     0%{ transform:rotateY(0) }
@@ -645,15 +661,18 @@
       position:fixed;
       top:auto; right:50%; transform:translateX(50%);
       bottom:calc(10px + env(safe-area-inset-bottom, 0px));
-      font-size:.5rem;
-      padding:.32em .6em;
-      gap:.4em;
-      background:rgba(24,14,7,.5);
-      border-color:rgba(156,124,60,.28);
+      background:none; border:none; padding:0; gap:0;
     }
-    .jump input{ font-size:.72rem; width:2.4em; border-bottom-color:rgba(156,124,60,.35); }
-    .jump .total{ font-size:.66rem; }
-    .jump button{ font-size:.46rem; padding:.3em .5em; border-color:rgba(156,124,60,.35); }
+    .jump span, .jump .total, .jump button{ display:none; }
+    .jump input{
+      width:3.4em;
+      font-size:1rem;
+      padding:.22em 0;
+      background:rgba(24,14,7,.55);
+      border:1px solid rgba(156,124,60,.35);
+      border-radius:3px;
+      color:var(--paper);
+    }
   }
 
   @media (prefers-reduced-motion: reduce){
@@ -1205,6 +1224,10 @@ function flutterTo(target){
       '<div class="leaf-face back"><div class="parchment"></div><div class="page-inner" id="flitB'+i+'"></div></div>';
     box.appendChild(el);
   }
+  /* the gutter rides above the flutter, constant throughout */
+  const spineTop = document.createElement('div');
+  spineTop.className = 'spine flit-spine';
+  box.appendChild(spineTop);
   document.querySelector('.pages-wrap').appendChild(box);
 
   if (dir > 0){
@@ -1232,10 +1255,35 @@ function flutterTo(target){
 }
 document.getElementById('jumpGo').addEventListener('click', jumpTo);
 jumpInput.addEventListener('keydown', e=>{ if (e.key === 'Enter') jumpTo(); });
+if (isMobile()) jumpInput.value = 1;
+
+/* on mobile, the box tracks the page you've scrolled to */
+let scrollTick = false;
+window.addEventListener('scroll', ()=>{
+  if (!isMobile() || scrollTick) return;
+  scrollTick = true;
+  requestAnimationFrame(()=>{
+    scrollTick = false;
+    if (document.activeElement === jumpInput) return;
+    const els = document.querySelectorAll('#scrollBook .page.m');
+    let best = 0, bestDist = Infinity;
+    els.forEach((el, i)=>{
+      const d = Math.abs(el.getBoundingClientRect().top - 40);
+      if (d < bestDist){ bestDist = d; best = i; }
+    });
+    jumpInput.value = best + 1;
+  });
+}, {passive:true});
 
 window.addEventListener('resize', render);
 buildScrollBook();
 render();
+
+/* reveal once fonts are in, so the whole book paints in its final form;
+   the timeout guarantees reveal even if font loading stalls */
+function reveal(){ document.body.classList.add('ready'); }
+if (document.fonts && document.fonts.ready){ document.fonts.ready.then(reveal); }
+setTimeout(reveal, 900);
 </script>
 </body>
 </html>
