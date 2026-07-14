@@ -116,6 +116,7 @@
     display:flex;
     align-items:center;
     height:var(--page-h);
+    overflow:hidden;
     /* leather cover peeking out beneath the pages */
     background:
       linear-gradient(160deg, var(--leather-edge), var(--leather) 40%, #1d130c);
@@ -710,9 +711,9 @@
     position:absolute;
     bottom:calc(100% + 10px); top:auto; right:0;
     display:none;
-    grid-template-columns:repeat(3, 2.6rem);
-    gap:7px;
-    padding:10px;
+    grid-template-columns:repeat(3, 40px);
+    gap:6px;
+    padding:8px;
     background:rgba(24,14,7,.95);
     border:1px solid rgba(156,124,60,.45);
     border-radius:4px;
@@ -721,10 +722,10 @@
   }
   .jump.open .numpad{ display:grid; }
   .numpad button{
-    width:2.6rem; height:2.6rem;
+    width:40px; height:40px;
     display:flex; align-items:center; justify-content:center;
     font-family:'Cormorant Garamond', serif;
-    font-size:1.1rem;
+    font-size:16px;
     letter-spacing:0; text-indent:0;
     padding:0;
     background:none;
@@ -738,7 +739,7 @@
   }
   .numpad button.np-go{
     font-family:'IM Fell English SC', serif;
-    font-size:.72rem; letter-spacing:.18em; text-indent:.18em;
+    font-size:11.5px; letter-spacing:.18em; text-indent:.18em;
     color:var(--brass);
   }
   .numpad button.np-go:hover, .numpad button.np-go:focus-visible{
@@ -787,19 +788,15 @@
       background:none; border:none; padding:0; gap:0;
     }
     .jump .total{ display:none; }
-    .jump-badge{
-      width:56px; height:36px;
-      overflow:hidden;
+    .jump-badge{ display:contents; }
+    .jump input{
+      width:3.4em;
+      height:auto;
+      font-size:1rem;
+      padding:.22em 0;
       background:rgba(24,14,7,.55);
       border:1px solid rgba(156,124,60,.35);
       border-radius:3px;
-    }
-    .jump input{
-      width:100%; height:100%;
-      font-size:1rem;
-      padding:0;
-      background:none;
-      border:none;
       color:var(--paper);
     }
     .numpad{
