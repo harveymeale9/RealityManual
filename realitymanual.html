@@ -19,8 +19,8 @@
     --ink-faint:#5d4c35;
     --brass:#9c7c3c;
     --rubric:#7a2f1d; /* oxblood red used in medieval rubrication */
-    --page-w: min(46vw, calc((100vh - 96px) / 1.32), 800px);
-    --page-w: min(46vw, calc((100dvh - 96px) / 1.32), 800px);
+    --page-w: min(46vw, calc((100vh - 96px) / 1.32), 1200px);
+    --page-w: min(46vw, calc((100dvh - 96px) / 1.32), 1200px);
     --page-h: calc(var(--page-w) * 1.32);
     --turn-ms: 900ms;
   }
@@ -879,7 +879,7 @@ const pages = [
     inscribed entry by entry.<br><br>
     <em>The Living Edition — grows as it is written</em></p>
   </div>
-  <span class="folio">i</span>
+  <span class="folio" data-num="roman"></span>
 </div>`,
 
 /* 2 — contents */
@@ -895,7 +895,7 @@ const pages = [
     <li><span class="t">Appendix · Specimen Leaves</span><span class="dots"></span><span class="n">12</span></li>
   </ul>
   <p class="marginal">Entries marked <span class="xref">sealed</span> open to keyholders. Entries marked <span class="xref">forthcoming</span> are still being inscribed — the Manual is alive.</p>
-  <span class="folio">ii</span>
+  <span class="folio" data-num="roman"></span>
 </div>`,
 
 /* 3 — how to read */
@@ -906,7 +906,7 @@ const pages = [
     <p>New entries appear as they are finished. What you hold is never the final Manual — only the Manual as of tonight.</p>
   </div>
   <p class="ornament">❦</p>
-  <span class="folio">iii</span>
+  <span class="folio" data-num="roman"></span>
 </div>`,
 
 /* 4 — Entry I, first page */
@@ -919,7 +919,7 @@ const pages = [
     <p class="dropcap">Whatever you attend to, you enlarge. This is the first law of the Manual, and every later entry is a footnote to it. The world does not arrive whole; it arrives selected, and the instrument of selection is attention — which means the instrument is you.</p>
     <p>Most struggle is therefore a dispute about aim, not about the world. The anxious mind is not perceiving more danger; it is aiming at danger with great skill.</p>
   </div>
-  <span class="folio">1</span>
+  <span class="folio" data-num="arabic"></span>
 </div>`,
 
 /* 5 — Entry I, plate page */
@@ -930,7 +930,7 @@ const pages = [
   <div class="body-text">
     <p>Attention behaves like the aperture drawn above: what widens admits more world and less detail; what narrows admits detail and loses the world. Neither setting is correct. The error is forgetting that there is a setting at all. <span class="xref">See also: Entry V, The Economy of Meaning.</span></p>
   </div>
-  <span class="folio">2</span>
+  <span class="folio" data-num="arabic"></span>
 </div>`,
 
 /* 6 — Entry II, first page: opening + the gilded formula plate */
@@ -946,7 +946,7 @@ const pages = [
   <img class="plate-img" style="width:64%" src="entry-02-plate-1.webp"
     alt="Gilded diagram: Emotional Well-Being equals positive emotions over negative emotions, over time — flanked by a sun, an all-seeing eye, a heart, and an hourglass">
   <p class="plate-caption">Plate — The wager of emotions: what is felt for, against what is felt against, over time.</p>
-  <span class="folio">3</span>
+  <span class="folio" data-num="arabic"></span>
 </div>`,
 
 /* 7 — Entry II, gauging it */
@@ -959,7 +959,7 @@ const pages = [
     <p>The subconscious mind treats emotional well-being like a computer game.</p>
     <p>Every time you experience a positive emotion, its score increases by some amount, and every time you experience a negative emotion, its score decreases.</p>
   </div>
-  <span class="folio">4</span>
+  <span class="folio" data-num="arabic"></span>
 </div>`,
 
 /* 8 — Entry II, the game's aim */
@@ -972,7 +972,7 @@ const pages = [
     <p>So if the subconscious' objective in life is to maximize your emotional well-being, what would a highly successful life feel like?</p>
   </div>
   <p class="ornament">❦</p>
-  <span class="folio">5</span>
+  <span class="folio" data-num="arabic"></span>
 </div>`,
 
 /* 9 — Entry II, Heaven on Earth */
@@ -984,7 +984,7 @@ const pages = [
     <p>Now, you must understand, Heaven on Earth doesn't have a particular location anywhere in the physical world. Your Heaven on Earth could look incredibly different to mine. But wherever your Heaven on Earth is, whatever you're doing, whomever you're with, Heaven on Earth will always feel like perfection.</p>
   </div>
   <p class="marginal">Heaven has no address; yours need not resemble mine. Both feel like perfection.</p>
-  <span class="folio">6</span>
+  <span class="folio" data-num="arabic"></span>
 </div>`,
 
 /* 10 — Entry II, Hell on Earth */
@@ -998,7 +998,7 @@ const pages = [
     <p>Right at this very moment, every single one of us participating in the game of life currently resides somewhere between Hell on Earth, and Heaven on Earth. The aim is, of course, to edge ever closer to Heaven!</p>
   </div>
   <p class="ornament">✦</p>
-  <span class="folio">7</span>
+  <span class="folio" data-num="arabic"></span>
 </div>`,
 
 /* 11 — Entry II, the measuring device */
@@ -1009,7 +1009,7 @@ const pages = [
     <p>I want you to imagine that there was a device that could take a reading of your emotional state every second of the day. This device would determine exactly what emotion you were experiencing, as well as the intensity of that emotion, and would correspondingly spit out an "emotional well-being score" for every second of every day, for your entire life.</p>
     <p>Suppose the most intensely positive emotion would give you a +100 emotional quality score (this would mean you're in Heaven on Earth), and the most intensely negative emotion would be -100 (Hell on Earth).</p>
   </div>
-  <span class="folio">8</span>
+  <span class="folio" data-num="arabic"></span>
 </div>`,
 
 /* 12 — Entry II, the lifetime score */
@@ -1020,7 +1020,7 @@ const pages = [
     <p>We could then find your lifetime average emotional well-being score and say whether, at least according to your subconscious mind, you had lived a successful life or not.</p>
     <p>A positive score would likely mean you spent the majority of your life experiencing desirable emotions. A negative score would likely mean you didn't.</p>
   </div>
-  <span class="folio">9</span>
+  <span class="folio" data-num="arabic"></span>
 </div>`,
 
 /* 13 — Entry II, the tide of a life (chart plate) */
@@ -1033,7 +1033,7 @@ const pages = [
     <p style="text-indent:0;">Imagine a life overflowing with happiness, joy, and fulfillment. That might score a +51. Now imagine a life consumed by abuse, depression, and anxiety. That could be a -60.</p>
   </div>
   <p class="ornament">❦</p>
-  <span class="folio">10</span>
+  <span class="folio" data-num="arabic"></span>
 </div>`,
 
 /* 14 — sealed page (paywall inside the book) */
@@ -1045,7 +1045,7 @@ const pages = [
     <p>The sealed entries beyond open to keyholders of the Manual.</p>
     <button onclick="alert('In the real site, this goes to checkout — the license key unlocks every sealed page, forever.')">Obtain the Key · $59</button>
   </div>
-  <span class="folio">11</span>
+  <span class="folio" data-num="arabic"></span>
 </div>`,
 
 /* 7 — appendix opener, illuminated frame */
@@ -1075,7 +1075,7 @@ const pages = [
     laws, lexicons, tables of correspondence,<br>
     and plates that move.</p>
   </div>
-  <span class="folio">12</span>
+  <span class="folio" data-num="arabic"></span>
 </div>`,
 
 /* 8 — numbered laws */
@@ -1093,7 +1093,7 @@ const pages = [
     <li><span class="law-name">Return.</span> What is refused arrives again, wearing new clothes.</li>
     <li><span class="law-name">Silence.</span> The Manual ends where the reader begins.</li>
   </ol>
-  <span class="folio">13</span>
+  <span class="folio" data-num="arabic"></span>
 </div>`,
 
 /* 9 — animated celestial chart */
@@ -1132,7 +1132,7 @@ const pages = [
   <div class="body-text">
     <p>Orbits may turn at their own periods and in contrary directions; stars may waver; the centre may breathe. Motion of this kind is drawn, not filmed — it costs the page nothing.</p>
   </div>
-  <span class="folio">14</span>
+  <span class="folio" data-num="arabic"></span>
 </div>`,
 
 /* 10 — pull quote */
@@ -1148,7 +1148,7 @@ const pages = [
   <div class="body-text">
     <p>A saying worth carrying is set apart in this manner, ruled above and below in brass, with its source given in the small capitals of the Manual. Around it, ordinary matter resumes: the page holds one raised voice at a time, and the quiet text beneath it carries on as though nothing had been said.</p>
   </div>
-  <span class="folio">15</span>
+  <span class="folio" data-num="arabic"></span>
 </div>`,
 
 /* 11 — self-inscribing sigil */
@@ -1167,7 +1167,7 @@ const pages = [
   <div class="body-text">
     <p>Figures may be drawn before the reader's eyes in the order a scribe would draw them — circle first, then the triangles, then the inner work. Use this where the <em>construction</em> of an idea is the lesson.</p>
   </div>
-  <span class="folio">16</span>
+  <span class="folio" data-num="arabic"></span>
 </div>`,
 
 /* 12 — table of correspondences */
@@ -1184,7 +1184,7 @@ const pages = [
     <tr><td>Return</td><td>Aether</td><td>The hour between</td><td class="glyph">✦</td></tr>
   </table>
   <p class="marginal">Tables rule their rows in dotted ink and their heads in oxblood. They are for matter the eye should compare, not read.</p>
-  <span class="folio">17</span>
+  <span class="folio" data-num="arabic"></span>
 </div>`,
 
 /* 13 — moon phases */
@@ -1211,7 +1211,7 @@ const pages = [
   <div class="body-text">
     <p>Slow motion suits slow subjects. The shadow above crosses the disc in sixteen seconds and returns; a reader who lingers will notice, and one who does not will lose nothing. Ambient movement should never demand to be watched.</p>
   </div>
-  <span class="folio">18</span>
+  <span class="folio" data-num="arabic"></span>
 </div>`,
 
 /* 14 — two-column lexicon */
@@ -1229,7 +1229,7 @@ const pages = [
     <dt>Rubric</dt><dd>Matter set in oxblood: laws, numerals, and the first letters of things.</dd>
     <dt>Sealed</dt><dd>Written, but not yet yours.</dd>
   </dl>
-  <span class="folio">19</span>
+  <span class="folio" data-num="arabic"></span>
 </div>`,
 
 /* 15 — ritual steps */
@@ -1244,7 +1244,7 @@ const pages = [
     <li>Choose one object of attention for tomorrow, and one refusal. A refusal unnamed is a door left open.</li>
     <li>Close the book. The practice ends with the closing, not before.</li>
   </ol>
-  <span class="folio">20</span>
+  <span class="folio" data-num="arabic"></span>
 </div>`,
 
 /* 16 — kitchen-sink text page */
@@ -1259,7 +1259,7 @@ const pages = [
     <p>When a page has said enough, it says so, and stops.</p>
   </div>
   <p class="ornament">❦</p>
-  <span class="folio">21</span>
+  <span class="folio" data-num="arabic"></span>
 </div>`,
 
 /* 17 — the lecturer's slate */
@@ -1286,7 +1286,7 @@ const pages = [
   <div class="body-text">
     <p>Where a law wants the feel of a lecture — chalk, slate, the hand mid-thought — it is set upon the slate, and the page writes it in real time. <span class="xref">See Law IV, The Economy of Meaning.</span></p>
   </div>
-  <span class="folio">22</span>
+  <span class="folio" data-num="arabic"></span>
 </div>`,
 
 /* 18 — the threefold instrument (anatomy plate) */
@@ -1359,7 +1359,7 @@ const pages = [
     </g>
   </svg>
   <p class="plate-caption">Plate VI — The threefold instrument: one self, playing upon two minds and a vessel.</p>
-  <span class="folio">23</span>
+  <span class="folio" data-num="arabic"></span>
 </div>`,
 
 /* — the tide of a life, drawn in ink */
@@ -1443,7 +1443,7 @@ const pages = [
   <div class="body-text">
     <p style="text-indent:0;">The same chart may be painted or drawn. Drawn, it stays crisp at any size, weighs a few thousand bytes — and, as here, it moves.</p>
   </div>
-  <span class="folio">24</span>
+  <span class="folio" data-num="arabic"></span>
 </div>`,
 
 /* 19 — colophon */
@@ -1455,9 +1455,41 @@ const pages = [
     Keyholders receive each new entry<br>as it is completed.<br><br>
     The bound tome — the First Edition,<br>printed and gilded — is drawn<br>from these pages once a year.</p>
   </div>
-  <span class="folio">iv</span>
+  <span class="folio" data-num="roman"></span>
 </div>`
 ];
+
+/* Folio numbers are computed here, not hand-typed in the templates above.
+   Each page's <span class="folio" data-num="roman|arabic"></span> gets its
+   number filled in based on its position — two independent running counters,
+   one for roman (front/back matter) and one for arabic (the body). Insert,
+   remove, or reorder pages freely; the folios always fall in line. */
+(function numberFolios(){
+  const toRoman = (n) => {
+    const table = [[1000,'m'],[900,'cm'],[500,'d'],[400,'cd'],[100,'c'],[90,'xc'],
+      [50,'l'],[40,'xl'],[10,'x'],[9,'ix'],[5,'v'],[4,'iv'],[1,'i']];
+    let out = '';
+    for (const [val, sym] of table){ while (n >= val){ out += sym; n -= val; } }
+    return out;
+  };
+  let romanN = 0, arabicN = 0;
+  for (let i = 0; i < pages.length; i++){
+    if (!pages[i]) continue;
+    if (pages[i].indexOf('data-num="roman"') !== -1){
+      romanN++;
+      pages[i] = pages[i].replace(
+        '<span class="folio" data-num="roman"></span>',
+        '<span class="folio">' + toRoman(romanN) + '</span>'
+      );
+    } else if (pages[i].indexOf('data-num="arabic"') !== -1){
+      arabicN++;
+      pages[i] = pages[i].replace(
+        '<span class="folio" data-num="arabic"></span>',
+        '<span class="folio">' + arabicN + '</span>'
+      );
+    }
+  }
+})();
 
 /* ============ book engine ============ */
 const pageL = document.getElementById('pageL');
