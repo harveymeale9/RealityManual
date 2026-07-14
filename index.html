@@ -148,7 +148,7 @@
     display:flex;
     flex:none;
     height:calc(var(--page-h) - 28px);
-    z-index:7;
+    z-index:2;
   }
   .stack{
     flex:none;
@@ -202,7 +202,7 @@
     position:absolute; top:0; bottom:0; left:50%;
     width:calc(var(--page-w) * .22);
     transform:translateX(-50%);
-    z-index:12; pointer-events:none;
+    z-index:7; pointer-events:none;
     background:linear-gradient(90deg,
       transparent 0%,
       rgba(80,48,16,.06) 18%,
@@ -560,7 +560,7 @@
     transform-style:preserve-3d;
     transform-origin:left center;
     pointer-events:none;
-    z-index:10;
+    z-index:5;
     display:none;
   }
   .leaf.turning{ display:block; animation:turnFwd var(--turn-ms) cubic-bezier(.45,.05,.3,1) forwards; }
@@ -573,7 +573,7 @@
      leaves) so only the flutter renders in true 3D. */
   .flits{
     position:absolute; inset:0;
-    z-index:10; pointer-events:none;
+    z-index:5; pointer-events:none;
     perspective:1400px;
     perspective-origin:50% 42%;
   }
@@ -593,7 +593,7 @@
      sorts 3D layers against outside elements. Counter-scaled so the
      perspective doesn't enlarge it. */
   .flit-spine{
-    z-index:13;
+    z-index:8;
     transform:translateX(-50%) translateZ(90px) scale(.936);
   }
   /* flutter leaves arc up toward the viewer at the apex */
@@ -640,7 +640,7 @@
     box-shadow:inset -18px 0 28px -18px rgba(60,40,10,.55);}
   /* moving shadow cast on the book while the leaf turns */
   .turn-shade{
-    position:absolute; inset:0; pointer-events:none; z-index:9;
+    position:absolute; inset:0; pointer-events:none; z-index:4;
     opacity:0; background:linear-gradient(90deg, transparent 45%, rgba(0,0,0,.28) 50%, transparent 60%);
   }
   .turn-shade.on{ animation:shade var(--turn-ms) ease-in-out forwards; }
@@ -657,7 +657,7 @@
   /* ============ JUMP TO PAGE ============ */
   .jump{
     position:absolute;
-    right:8px; bottom:8px;
+    right:calc(var(--stack-right-w, 25px) + 22px); bottom:22px;
     z-index:20;
     display:flex; align-items:baseline; gap:.55em;
     padding:.5em .9em;
@@ -819,25 +819,7 @@
     <div class="stack left" aria-hidden="true"><div class="fill" id="stackL"></div></div>
     <div class="pages-wrap">
     <div class="page left"><div class="parchment"></div><svg class="grain" width="100%" height="100%"><filter id="g1"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 0.45  0 0 0 0 0.36  0 0 0 0 0.22  0 0 0 0.06 0"/></filter><rect width="100%" height="100%" filter="url(#g1)"/></svg><div class="page-inner" id="pageL"></div></div>
-    <div class="page right"><div class="parchment"></div><svg class="grain" width="100%" height="100%"><filter id="g2"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 0.45  0 0 0 0 0.36  0 0 0 0 0.22  0 0 0 0.06 0"/></filter><rect width="100%" height="100%" filter="url(#g2)"/></svg><div class="page-inner" id="pageR"></div>
-      <div class="jump" role="group" aria-label="Jump to a page of the book">
-        <input id="jumpInput" type="text" readonly inputmode="none" aria-label="Page number">
-        <span class="total" id="jumpTotal"></span>
-        <div class="numpad" id="numpad" aria-label="Number pad">
-          <button type="button" data-k="1">1</button>
-          <button type="button" data-k="2">2</button>
-          <button type="button" data-k="3">3</button>
-          <button type="button" data-k="4">4</button>
-          <button type="button" data-k="5">5</button>
-          <button type="button" data-k="6">6</button>
-          <button type="button" data-k="7">7</button>
-          <button type="button" data-k="8">8</button>
-          <button type="button" data-k="9">9</button>
-          <button type="button" data-k="del">⌫</button>
-          <button type="button" data-k="0">0</button>
-          <button type="button" class="np-go" data-k="go">Go</button>
-        </div>
-      </div>
+    <div class="page right"><div class="parchment"></div><svg class="grain" width="100%" height="100%"><filter id="g2"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 0.45  0 0 0 0 0.36  0 0 0 0 0.22  0 0 0 0.06 0"/></filter><rect width="100%" height="100%" filter="url(#g2)"/></svg><div class="page-inner" id="pageR"></div></div>
     </div>
 
     <div class="spine" aria-hidden="true"></div>
@@ -846,6 +828,23 @@
       <div class="leaf-face back"><div class="parchment"></div><div class="page-inner" id="leafBack"></div></div>
     </div>
     <div class="turn-shade" id="shade"></div>
+    <div class="jump" role="group" aria-label="Jump to a page of the book">
+      <input id="jumpInput" type="text" readonly inputmode="none" aria-label="Page number">
+      <span class="total" id="jumpTotal"></span>
+      <div class="numpad" id="numpad" aria-label="Number pad">
+        <button type="button" data-k="1">1</button>
+        <button type="button" data-k="2">2</button>
+        <button type="button" data-k="3">3</button>
+        <button type="button" data-k="4">4</button>
+        <button type="button" data-k="5">5</button>
+        <button type="button" data-k="6">6</button>
+        <button type="button" data-k="7">7</button>
+        <button type="button" data-k="8">8</button>
+        <button type="button" data-k="9">9</button>
+        <button type="button" data-k="del">⌫</button>
+        <button type="button" data-k="0">0</button>
+        <button type="button" class="np-go" data-k="go">Go</button>
+      </div>
     </div>
     <div class="stack right" aria-hidden="true"><div class="fill" id="stackR"></div></div>
 
@@ -1531,14 +1530,17 @@ const leafBack = document.getElementById('leafBack');
 const shade = document.getElementById('shade');
 const stackL = document.getElementById('stackL');
 const stackR = document.getElementById('stackR');
+const book = document.getElementById('book');
 
 /* the tome's thickness: shifts subtly toward the left as you read.
    Fills sit in fixed-width slots, so the pages themselves never move. */
 function updateStacks(frac){
   const max = isMobile() ? 15 : 30;
   const min = isMobile() ? 9  : 20;
+  const rightW = Math.round(max - frac * (max - min));
   stackL.style.width = Math.round(min + frac * (max - min)) + 'px';
-  stackR.style.width = Math.round(max - frac * (max - min)) + 'px';
+  stackR.style.width = rightW + 'px';
+  book.style.setProperty('--stack-right-w', rightW + 'px');
 }
 
 let spread = 0; // spread n shows pages [2n, 2n+1]
