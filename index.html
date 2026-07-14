@@ -658,8 +658,8 @@
 
   /* ============ JUMP TO PAGE ============ */
   .jump{
-    position:fixed;
-    right:20px; bottom:20px;
+    position:absolute;
+    right:11%; bottom:5.5%;
     z-index:20;
     display:flex; align-items:baseline; gap:.55em;
     padding:.5em .9em;
@@ -744,7 +744,14 @@
     :root{ --page-w: min(94vw, 520px); }
     body{ height:auto; min-height:100dvh; overflow:visible; justify-content:flex-start; padding:0 0 8vh; }
     header.site{ flex:0 0 auto; padding:3vh 0 2vh; }
-    .book-wrap{ display:none; }
+    .book-wrap{
+      visibility:hidden;
+      perspective:none;
+      position:absolute;
+      width:0; height:0;
+      overflow:hidden;
+      pointer-events:none;
+    }
     .side-zone{ display:none; }
     .scroll-book{
       display:block;
@@ -765,6 +772,7 @@
     .page.m .folio{ left:50%; right:auto; transform:translateX(-50%); }
     .page.m > .page-inner{ position:absolute !important; inset:0; }
     .jump{
+      visibility:visible;
       position:fixed;
       top:auto; right:50%; transform:translateX(50%);
       bottom:calc(10px + env(safe-area-inset-bottom, 0px));
@@ -813,7 +821,27 @@
     <div class="stack left" aria-hidden="true"><div class="fill" id="stackL"></div></div>
     <div class="pages-wrap">
     <div class="page left"><div class="parchment"></div><svg class="grain" width="100%" height="100%"><filter id="g1"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 0.45  0 0 0 0 0.36  0 0 0 0 0.22  0 0 0 0.06 0"/></filter><rect width="100%" height="100%" filter="url(#g1)"/></svg><div class="page-inner" id="pageL"></div></div>
-    <div class="page right"><div class="parchment"></div><svg class="grain" width="100%" height="100%"><filter id="g2"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 0.45  0 0 0 0 0.36  0 0 0 0 0.22  0 0 0 0.06 0"/></filter><rect width="100%" height="100%" filter="url(#g2)"/></svg><div class="page-inner" id="pageR"></div></div>
+    <div class="page right"><div class="parchment"></div><svg class="grain" width="100%" height="100%"><filter id="g2"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 0.45  0 0 0 0 0.36  0 0 0 0 0.22  0 0 0 0.06 0"/></filter><rect width="100%" height="100%" filter="url(#g2)"/></svg><div class="page-inner" id="pageR"></div>
+      <div class="jump" role="group" aria-label="Jump to a page of the book">
+        <span>Page</span>
+        <input id="jumpInput" type="text" readonly inputmode="none" aria-label="Page number">
+        <span class="total" id="jumpTotal"></span>
+        <div class="numpad" id="numpad" aria-label="Number pad">
+          <button type="button" data-k="1">1</button>
+          <button type="button" data-k="2">2</button>
+          <button type="button" data-k="3">3</button>
+          <button type="button" data-k="4">4</button>
+          <button type="button" data-k="5">5</button>
+          <button type="button" data-k="6">6</button>
+          <button type="button" data-k="7">7</button>
+          <button type="button" data-k="8">8</button>
+          <button type="button" data-k="9">9</button>
+          <button type="button" data-k="del">⌫</button>
+          <button type="button" data-k="0">0</button>
+          <button type="button" class="np-go" data-k="go">Go</button>
+        </div>
+      </div>
+    </div>
 
     <div class="spine" aria-hidden="true"></div>
     <div class="leaf" id="leaf">
@@ -829,26 +857,6 @@
   </div>
 </div>
 <button class="side-zone" id="sideRight" aria-label="Next page" tabindex="-1"></button>
-</div>
-
-<div class="jump" role="group" aria-label="Jump to a page of the book">
-  <span>Page</span>
-  <input id="jumpInput" type="text" readonly inputmode="none" aria-label="Page number">
-  <span class="total" id="jumpTotal"></span>
-  <div class="numpad" id="numpad" aria-label="Number pad">
-    <button type="button" data-k="1">1</button>
-    <button type="button" data-k="2">2</button>
-    <button type="button" data-k="3">3</button>
-    <button type="button" data-k="4">4</button>
-    <button type="button" data-k="5">5</button>
-    <button type="button" data-k="6">6</button>
-    <button type="button" data-k="7">7</button>
-    <button type="button" data-k="8">8</button>
-    <button type="button" data-k="9">9</button>
-    <button type="button" data-k="del">⌫</button>
-    <button type="button" data-k="0">0</button>
-    <button type="button" class="np-go" data-k="go">Go</button>
-  </div>
 </div>
 
 <div class="scroll-book" id="scrollBook"></div>
@@ -1553,39 +1561,6 @@ function render(){
   updateStacks(maxSpread > 0 ? spread / maxSpread : 0);
   const ji = document.getElementById('jumpInput');
   if (document.activeElement !== ji) ji.value = spread*2 + 1;
-  positionJumpBox();
-  setTimeout(positionJumpBox, 920); /* the stack fill's own width transition
-    (var(--turn-ms), 900ms) settles after this render call — the immediate
-    sync above measures its starting point, this one catches where it lands */
-}
-
-/* the jump box lives at the top level of the page (not nested inside the
-   book), so it's immune to book-wrap's mobile display:none and its
-   perspective (which would otherwise hijack position:fixed descendants
-   into its own containing block). On desktop it's aligned here, in JS,
-   to sit right where the right page's own folio would print — same
-   right/bottom ratios the folio itself uses. On mobile its inline
-   styles are cleared so the dedicated mobile CSS rule takes over. */
-function positionJumpBox(){
-  const jump = document.querySelector('.jump');
-  if (!jump) return;
-  if (isMobile()){
-    jump.style.right = '';
-    jump.style.bottom = '';
-    jump.style.left = '';
-    jump.style.top = '';
-    return;
-  }
-  const pageEl = document.querySelector('.page.right');
-  if (!pageEl) return;
-  const r = pageEl.getBoundingClientRect();
-  if (r.width === 0 || r.height === 0) return;
-  const right = window.innerWidth - (r.right - r.width * 0.11);
-  const bottom = window.innerHeight - (r.bottom - r.height * 0.055);
-  jump.style.left = '';
-  jump.style.top = '';
-  jump.style.right = Math.max(4, right) + 'px';
-  jump.style.bottom = Math.max(4, bottom) + 'px';
 }
 
 /* build the scrollable page stack once; CSS decides when it's shown */
@@ -1848,14 +1823,12 @@ window.addEventListener('scroll', ()=>{
 }, {passive:true});
 
 window.addEventListener('resize', render);
-window.addEventListener('resize', positionJumpBox);
 buildScrollBook();
 render();
-positionJumpBox();
 
 /* reveal once fonts are in, so the whole book paints in its final form;
    the timeout guarantees reveal even if font loading stalls */
-function reveal(){ document.body.classList.add('ready'); positionJumpBox(); }
+function reveal(){ document.body.classList.add('ready'); }
 if (document.fonts && document.fonts.ready){ document.fonts.ready.then(reveal); }
 setTimeout(reveal, 900);
 </script>
