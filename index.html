@@ -766,7 +766,7 @@
       bottom:calc(10px + env(safe-area-inset-bottom, 0px));
       background:none; border:none; padding:0; gap:0;
     }
-    .jump span, .jump .total, .jump > button{ display:none; }
+    .jump span, .jump .total{ display:none; }
     .jump input{
       width:3.4em;
       font-size:1rem;
@@ -804,7 +804,6 @@
     <span>Page</span>
     <input id="jumpInput" type="text" readonly inputmode="none" aria-label="Page number">
     <span class="total" id="jumpTotal"></span>
-    <button id="jumpGo">Go</button>
     <div class="numpad" id="numpad" aria-label="Number pad">
       <button type="button" data-k="1">1</button>
       <button type="button" data-k="2">2</button>
@@ -1534,6 +1533,8 @@ function updateStacks(frac){
 
 let spread = 0; // spread n shows pages [2n, 2n+1]
 let turning = false;
+let turnTimeout = null; // the pending setTimeout for the in-flight turn, if any
+let inFlightNext = null; // the spread that turn is heading to
 const maxSpread = Math.ceil(pages.length / 2) - 1;
 const isMobile = () => window.matchMedia('(orientation: portrait) and (max-width: 940px), (max-width: 720px)').matches;
 const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1567,8 +1568,21 @@ function fillSlot(id, html){
   el.innerHTML = w ? w.innerHTML : '';
 }
 
+function finishTurnNow(){
+  if (!turning) return;
+  clearTimeout(turnTimeout);
+  leaf.classList.remove('turning','back');
+  shade.classList.remove('on');
+  spread = inFlightNext;
+  render();
+  turning = false;
+}
+
 function go(dir, ms, done){
-  if (turning || isMobile()) return;
+  if (isMobile()) return;
+  if (turning) finishTurnNow(); /* don't wait it out — snap it to its
+    destination instantly and proceed, so state always tracks clicks
+    in real time rather than being gated by animation length */
   ms = ms || 900;
 
   const next = spread + dir;
@@ -1581,6 +1595,7 @@ function go(dir, ms, done){
   }
 
   turning = true;
+  inFlightNext = next;
   leaf.style.animationDuration = ms + 'ms';
   shade.style.animationDuration = ms + 'ms';
 
@@ -1603,14 +1618,14 @@ function go(dir, ms, done){
   leaf.classList.remove('turning');
   shade.classList.remove('on');
   void leaf.offsetWidth; /* force a reflow so a class that was just removed
-    (e.g. by a chained flip firing in the same tick) is registered as gone
+    (e.g. by finishTurnNow() firing in the same tick) is registered as gone
     before we re-add it — otherwise the browser never sees a real toggle
     and the CSS animation doesn't restart, it just snaps to its end state */
 
   leaf.classList.add('turning');
   shade.classList.add('on');
 
-  setTimeout(()=>{
+  turnTimeout = setTimeout(()=>{
     leaf.classList.remove('turning','back');
     shade.classList.remove('on');
     spread = next;
@@ -1630,38 +1645,13 @@ document.addEventListener('keydown', e=>{
   if (e.key === 'ArrowLeft') requestGo(-1);
 });
 
-/* rapid clicks/keypresses shouldn't be dropped or bundled into a flutter
-   while a turn is mid-flight. desiredTarget is the spread we're ultimately
-   headed toward — set the moment a click arrives and left in place across
-   every intermediate flip, only clearing once we've actually landed on it.
-   Each click nudges it by one; each completed flip checks whether it still
-   has ground to cover and, if so, immediately fires the next single-page
-   flip toward it. That's what keeps N clicks mapped to exactly N flips,
-   however fast they arrive, with no multi-leaf flutter substituted in. */
-let desiredTarget = null;
-
+/* every click acts immediately — no queue. If a turn is already mid-flight,
+   go() itself snaps it to completion first, so the new request always
+   starts right away rather than waiting for the previous animation to
+   run its full course. */
 function requestGo(dir){
   if (isMobile()) return;
-  const base = (desiredTarget !== null) ? desiredTarget : spread;
-  const target = Math.min(maxSpread, Math.max(0, base + dir));
-  if (target === base) return;
-  const wasIdle = (desiredTarget === null);
-  desiredTarget = target;
-  if (wasIdle) stepToward();
-}
-
-function stepToward(){
-  if (desiredTarget === null || desiredTarget === spread){ desiredTarget = null; return; }
-  const dir = desiredTarget > spread ? 1 : -1;
-  go(dir, undefined, onStepDone);
-}
-
-function onStepDone(){
-  if (desiredTarget !== null && desiredTarget !== spread){
-    stepToward();
-  } else {
-    desiredTarget = null;
-  }
+  go(dir);
 }
 
 /* jump to leaf */
@@ -1799,7 +1789,6 @@ jumpInput.addEventListener('keydown', e=>{
   else if (/^[0-9]$/.test(e.key)){ e.preventDefault(); if (jumpInput.value.length < 3) jumpInput.value += e.key; }
 });
 
-document.getElementById('jumpGo').addEventListener('click', doJump);
 
 /* tapping anywhere outside cancels and restores the current page number */
 document.addEventListener('pointerdown', e=>{
