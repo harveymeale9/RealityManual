@@ -671,7 +671,9 @@
     display:flex; align-items:center; gap:.5em;
     font-family:'Cormorant Garamond', serif;
     font-style:italic;
-    font-size:calc(var(--page-w) * .0185);
+    /* clamp so the "x of xx" indicator never renders too small to read on
+       smaller (tablet) pages, while desktop keeps its page-proportional size */
+    font-size:clamp(14px, calc(var(--page-w) * .0185), 22px);
     letter-spacing:.04em;
     color:var(--ink-faint);
   }
@@ -687,7 +689,7 @@
     overflow:hidden;
     background:radial-gradient(ellipse at center, rgba(156,124,60,.1), transparent 72%);
     border:1px solid var(--brass);
-    border-radius:4px;
+    border-radius:0;            /* sharp, square edges (desktop/tablet) */
   }
   .jump-badge:focus-within{ border-color:var(--rubric); background:rgba(122,47,29,.08); }
   .jump input{
@@ -709,16 +711,16 @@
   .jump input{ cursor:pointer; caret-color:transparent; }
 
   /* the number pad: opens beneath the panel when the box is tapped.
-     Sized entirely in rem, deliberately decoupled from --page-w — the
-     grid columns and the buttons living inside them must reference the
-     same stable unit, or a large book renders a grid track sized one
-     way and buttons sized another, leaving empty cells and misaligned
-     digits. */
+     One --np variable drives BOTH the grid track and the button size, so they
+     can never diverge. It scales gently with --page-w but is clamped, so it
+     stays 40px on a full desktop page yet shrinks on a smaller tablet page
+     (where a fixed 40px read as oversized) rather than dominating the leaf. */
   .numpad{
+    --np: clamp(30px, calc(var(--page-w) * .05), 40px);
     position:absolute;
     bottom:calc(100% + 10px); top:auto; right:0;
     display:none;
-    grid-template-columns:repeat(3, 40px);
+    grid-template-columns:repeat(3, var(--np));
     gap:6px;
     padding:8px;
     background:rgba(24,14,7,.95);
@@ -729,10 +731,10 @@
   }
   .jump.open .numpad{ display:grid; }
   .numpad button{
-    width:40px; height:40px;
+    width:var(--np); height:var(--np);
     display:flex; align-items:center; justify-content:center;
     font-family:'Cormorant Garamond', serif;
-    font-size:16px;
+    font-size:calc(var(--np) * .4);
     letter-spacing:0; text-indent:0;
     padding:0;
     background:none;
@@ -746,7 +748,7 @@
   }
   .numpad button.np-go{
     font-family:'IM Fell English SC', serif;
-    font-size:11.5px; letter-spacing:.18em; text-indent:.18em;
+    font-size:calc(var(--np) * .29); letter-spacing:.18em; text-indent:.18em;
     color:var(--brass);
   }
   .numpad button.np-go:hover, .numpad button.np-go:focus-visible{
@@ -789,8 +791,12 @@
     .page.m > .page-inner{ position:absolute !important; inset:0; }
     .jump{
       visibility:visible;
+      /* .book-wrap sets pointer-events:none on mobile and .jump lives inside
+         it; without this the (inherited) none makes the box untappable, so the
+         numpad never opens. Re-enable taps for the panel and its children. */
+      pointer-events:auto;
       position:fixed;
-      top:auto; right:50%; transform:translateX(50%);
+      top:auto; left:50%; right:auto; transform:translateX(-50%);
       bottom:calc(10px + env(safe-area-inset-bottom, 0px));
       background:none; border:none; padding:0; gap:0;
     }
@@ -808,7 +814,7 @@
     }
     .numpad{
       top:auto; bottom:calc(100% + 8px);
-      right:50%; transform:translateX(50%);
+      left:50%; right:auto; transform:translateX(-50%);
       grid-template-columns:repeat(3, 34px);
       gap:5px;
       padding:6px;
