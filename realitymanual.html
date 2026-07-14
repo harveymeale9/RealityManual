@@ -72,7 +72,7 @@
   header.site h1{
     font-family:'IM Fell English SC', Georgia, serif;
     font-weight:400;
-    font-size:clamp(1rem, 2vw, 1.5rem);
+    font-size:clamp(1rem, 0.5rem + 1.1vw, 3rem);
     letter-spacing:.35em;
     text-indent:.35em;
     color:var(--brass);
@@ -341,14 +341,6 @@
     margin:1em auto .3em;
     mix-blend-mode:multiply;
     height:auto;
-  }
-  /* full-bleed illustrations that already carry their own border/ivy work —
-     multiply would muddy the fine linework, so these sit as clean plates
-     with a soft frame and shadow instead */
-  .plate-img.full-plate{
-    mix-blend-mode:normal;
-    border-radius:2px;
-    box-shadow:0 0 0 1px rgba(93,76,53,.25), 0 10px 24px -10px rgba(43,33,22,.35);
   }
   .plate-caption{
     font-family:'Cormorant Garamond', serif; font-style:italic;
@@ -1452,17 +1444,6 @@ const pages = [
     <p style="text-indent:0;">The same chart may be painted or drawn. Drawn, it stays crisp at any size, weighs a few thousand bytes — and, as here, it moves.</p>
   </div>
   <span class="folio">24</span>
-</div>`,
-
-/* — the subconscious mind, illustrated */
-`<div class="page-inner" style="position:static">
-  <p class="running-head">Appendix · A Full Plate</p>
-  <p class="entry-no">Specimen · An Illustration</p>
-  <h2 class="entry-title" style="font-size:calc(var(--page-w) * .034); margin-bottom:.3em;">The Subconscious Mind,<br>Between Two Dimensions</h2>
-  <img class="plate-img full-plate" style="width:100%; margin-top:.4em;" src="c4.png"
-    alt="Illustrated plate: the subconscious mind receiving from above, standing between the non-physical dimension (brain, conscious mind) at left and the physical dimension (body) at right, within an ivy and star border">
-  <p class="plate-caption">Plate — Between two dimensions: the non-physical giving rise to the conscious mind,<br>the physical giving rise to the body, and the subconscious standing at the crossing.</p>
-  <span class="folio">25</span>
 </div>`,
 
 /* 19 — colophon */
