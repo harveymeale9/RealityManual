@@ -148,7 +148,7 @@
     display:flex;
     flex:none;
     height:calc(var(--page-h) - 28px);
-    z-index:2;
+    z-index:7;
   }
   .stack{
     flex:none;
@@ -202,7 +202,7 @@
     position:absolute; top:0; bottom:0; left:50%;
     width:calc(var(--page-w) * .22);
     transform:translateX(-50%);
-    z-index:7; pointer-events:none;
+    z-index:12; pointer-events:none;
     background:linear-gradient(90deg,
       transparent 0%,
       rgba(80,48,16,.06) 18%,
@@ -560,7 +560,7 @@
     transform-style:preserve-3d;
     transform-origin:left center;
     pointer-events:none;
-    z-index:5;
+    z-index:10;
     display:none;
   }
   .leaf.turning{ display:block; animation:turnFwd var(--turn-ms) cubic-bezier(.45,.05,.3,1) forwards; }
@@ -573,7 +573,7 @@
      leaves) so only the flutter renders in true 3D. */
   .flits{
     position:absolute; inset:0;
-    z-index:5; pointer-events:none;
+    z-index:10; pointer-events:none;
     perspective:1400px;
     perspective-origin:50% 42%;
   }
@@ -593,7 +593,7 @@
      sorts 3D layers against outside elements. Counter-scaled so the
      perspective doesn't enlarge it. */
   .flit-spine{
-    z-index:8;
+    z-index:13;
     transform:translateX(-50%) translateZ(90px) scale(.936);
   }
   /* flutter leaves arc up toward the viewer at the apex */
@@ -640,7 +640,7 @@
     box-shadow:inset -18px 0 28px -18px rgba(60,40,10,.55);}
   /* moving shadow cast on the book while the leaf turns */
   .turn-shade{
-    position:absolute; inset:0; pointer-events:none; z-index:4;
+    position:absolute; inset:0; pointer-events:none; z-index:9;
     opacity:0; background:linear-gradient(90deg, transparent 45%, rgba(0,0,0,.28) 50%, transparent 60%);
   }
   .turn-shade.on{ animation:shade var(--turn-ms) ease-in-out forwards; }
