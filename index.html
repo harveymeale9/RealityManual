@@ -672,12 +672,19 @@
     color:var(--brass); font-style:normal;
     font-size:1.3em; line-height:1;
   }
-  .jump input{
+  .jump-badge{
     width:1.7em; height:1.7em;
     margin:0 -.05em;
+    display:flex; align-items:center; justify-content:center;
     background:radial-gradient(ellipse at center, rgba(156,124,60,.1), transparent 72%);
     border:1px solid var(--brass);
-    border-radius:50%;
+    border-radius:4px;
+  }
+  .jump-badge:focus-within{ border-color:var(--rubric); background:rgba(122,47,29,.08); }
+  .jump input{
+    width:100%; height:100%;
+    margin:0; padding:0;
+    background:none; border:none;
     color:var(--rubric);
     font-family:'IM Fell English SC', serif;
     font-size:.82em; line-height:1; text-align:center;
@@ -686,7 +693,6 @@
   }
   .jump input::-webkit-outer-spin-button,
   .jump input::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
-  .jump input:focus{ border-color:var(--rubric); background:rgba(122,47,29,.08); }
   .jump .total{
     color:var(--ink-faint); font-family:'Cormorant Garamond', serif;
     font-size:1em; font-style:italic; letter-spacing:.04em;
@@ -782,15 +788,19 @@
       bottom:calc(10px + env(safe-area-inset-bottom, 0px));
       background:none; border:none; padding:0; gap:0;
     }
-    .jump span, .jump .total{ display:none; }
-    .jump input{
-      width:3.4em;
-      height:auto;
-      font-size:1rem;
-      padding:.22em 0;
+    .jump .total{ display:none; }
+    .jump-badge{
+      width:3.4em; height:2.2em;
       background:rgba(24,14,7,.55);
       border:1px solid rgba(156,124,60,.35);
       border-radius:3px;
+    }
+    .jump input{
+      width:100%; height:100%;
+      font-size:1rem;
+      padding:0;
+      background:none;
+      border:none;
       color:var(--paper);
     }
     .numpad{
@@ -828,7 +838,7 @@
     <div class="page left"><div class="parchment"></div><svg class="grain" width="100%" height="100%"><filter id="g1"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 0.45  0 0 0 0 0.36  0 0 0 0 0.22  0 0 0 0.06 0"/></filter><rect width="100%" height="100%" filter="url(#g1)"/></svg><div class="page-inner" id="pageL"></div></div>
     <div class="page right"><div class="parchment"></div><svg class="grain" width="100%" height="100%"><filter id="g2"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 0.45  0 0 0 0 0.36  0 0 0 0 0.22  0 0 0 0.06 0"/></filter><rect width="100%" height="100%" filter="url(#g2)"/></svg><div class="page-inner" id="pageR"></div>
       <div class="jump" role="group" aria-label="Jump to a page of the book">
-        <input id="jumpInput" type="text" readonly inputmode="none" aria-label="Page number">
+        <span class="jump-badge"><input id="jumpInput" type="text" readonly inputmode="none" aria-label="Page number"></span>
         <span class="total" id="jumpTotal"></span>
         <div class="numpad" id="numpad" aria-label="Number pad">
           <button type="button" data-k="1">1</button>
