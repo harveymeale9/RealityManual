@@ -555,7 +555,14 @@
   /* ============ PAGE TURN ============ */
   .leaf{
     position:absolute;
-    top:0; bottom:0;
+    /* match the visible page area exactly (book has 14px padding), NOT the
+       full book height. A leaf sized to the whole book overhangs the page
+       block by 14px top and bottom; since the leaf is preserve-3d, the
+       book's overflow:hidden can't clip it while it rotates, so that overhang
+       renders above/below the book — the "page pops up then settles" bug.
+       Sized to the page area, a rotateY only ever foreshortens (shrinks) it,
+       so it can never exceed the page bounds. */
+    top:14px; bottom:14px;
     left:50%;
     width:var(--page-w);
     transform-style:preserve-3d;
