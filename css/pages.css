@@ -5,7 +5,9 @@
    Keep it small: if a rule gets used twice, promote it.
    ========================================================== */
 
-/* The frontispiece prints the sigil larger than a body plate.
-   This replaces an inline style that used to be patched on in JS,
-   so the sigil can stay a single shared partial (assets/svg/sigil.svg). */
-.frontispiece .plate{ width:84%; }
+/* (Empty, and that's correct.)
+
+   This file used to hold `.frontispiece .plate{ width:84% }` — which existed
+   only to print the sigil LARGER than a 62% body plate. Plates now fill the
+   measure by default (typography.css), so that rule would make the frontispiece
+   the one plate in the book that DOESN'T. Removed. */

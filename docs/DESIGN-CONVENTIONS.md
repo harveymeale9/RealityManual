@@ -26,8 +26,9 @@ So: **count the words before writing, not after.**
 |---|---|---|
 | Body text, running head only | ~990 chars / ~165 words | **150 words** |
 | Entry opening (no. + title + ornament + text) | ~771 chars / ~128 words | **115 words** |
-| Text + a plate at 64% width | ~600–900 words vary by plate height | **measure it** |
+| Text + a full-width plate | varies with plate height | **measure it** |
 | Add a `.marginal` | subtract ~45 words | |
+| Add a roughly square plate | subtract ~50 words | |
 | Add an `.ornament` | subtract ~12 words | |
 
 These hold at **every screen size**. Nothing above is a desktop-only number.
@@ -171,7 +172,8 @@ already appear in existing pages and are fine to reuse:
 ```html
 style="text-align:center; font-style:italic; text-indent:0; margin:1em 0;"
 style="text-indent:0;"     /* kills the auto-indent on a p that follows another */
-style="width:64%"          /* on a plate */
+style="width:64%"          /* on a plate — ONLY to make it NARROWER than the
+                              default full measure. Rare. Have a reason. */
 ```
 
 Nothing else. No colours, no font sizes, no padding.
@@ -215,15 +217,18 @@ improvise one with `<sup>`.
 
 Two kinds, and picking wrong is a real error:
 
+**Plates fill the measure.** Don't write a width — full-column is the default, for
+raster and vector alike. A width only ever makes a plate *narrower*, in `%`, never
+`px`. A full-width plate is roughly 1.5× the height of the old 64% one: budget it.
+
 **Raster plates** — painted/photographic. `assets/images/*.webp`.
 ```html
-<img class="plate-img" style="width:64%" src="assets/images/entry-03-plate-1.webp"
+<img class="plate-img" src="assets/images/entry-03-plate-1.webp"
      alt="Describe what is drawn, fully — this is read aloud.">
 <p class="plate-caption">Plate — What it shows, stated plainly.</p>
 ```
 `.plate-img` is `mix-blend-mode:multiply` — it prints *into* the parchment instead
-of pasting a white box onto it. **Export on white.** Width in `%` only, never px,
-or it won't scale with the page.
+of pasting a white box onto it. **Export on white.**
 
 **Vector plates** — line art. `assets/svg/*.svg`, pulled in with `{{> svg/sigil.svg }}`.
 Use a partial (not `<img>`) whenever the art animates: our CSS drives the sigil's
@@ -242,6 +247,11 @@ Convention is `Plate — ` then a statement, not a label:
 Present tense, no full stop unless it's two clauses. A caption says what the plate
 *means*, never "Figure 1" or "Diagram of X". `alt` carries the literal description;
 the caption carries the sense.
+
+The caption sits at **70% of the measure**, centred — deliberately narrower than
+the plate above it, so it reads as a whisper beneath the image rather than a second
+column of text. It wraps to two lines more readily than it used to; that's fine,
+and it's another line off the budget.
 
 ## 10. Animation
 

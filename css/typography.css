@@ -94,23 +94,36 @@ h2.entry-title{
 .toc .n{ font-family:'Cormorant Garamond', serif; color:var(--ink-faint); }
 .toc .sealed-mark{ color:var(--rubric); font-size:.85em; }
 
-/* the animated sigil illustration */
+/* PLATES FILL THE MEASURE. Both kinds default to the full text column —
+   a page never writes a width unless it wants one NARROWER, and then in % only.
+   flex:none matters: .page-inner is a column flexbox, and a plate in one gets
+   SQUASHED (aspect ratio silently altered) when the page overruns, instead of
+   clipped. flex:none makes an overlong page fail honestly, per conventions §1. */
+
+/* vector plates — the animated sigil illustration */
 .plate{
-  margin:1.2em auto .4em; width:62%;
+  margin:1.2em auto .4em; width:100%;
   display:block;
+  flex:none;
 }
 /* raster plates (AI-painted illustrations): multiply blend prints them
    into the parchment rather than pasting them onto it */
 .plate-img{
   display:block;
+  width:100%;
   margin:1em auto .3em;
   mix-blend-mode:multiply;
   height:auto;
+  flex:none;
 }
+/* caption sits narrower than the plate above it — a whisper beneath the image,
+   not a second column of text */
 .plate-caption{
   font-family:'Cormorant Garamond', serif; font-style:italic;
-  text-align:center; font-size:calc(var(--page-w) * .0235); color:var(--ink-faint);
-  margin-bottom:1em;
+  font-weight:500;
+  text-align:center; font-size:calc(var(--page-w) * .028); color:var(--ink-faint);
+  width:70%; line-height:1.45;
+  margin:0 auto 1em;
 }
 /* .sigil-rotate / .sigil-pulse animations live in animations.css */
 
