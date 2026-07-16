@@ -326,17 +326,23 @@ moves, it's broken for a reader who's turned motion off.
 
 **You do not write a mobile version of a page.** There is one fragment and it
 renders everywhere. This is the payoff of §3: because every size is
-`calc(var(--page-w) * n)`, and `--page-w` becomes `min(94vw, 520px)` on a phone,
+`calc(var(--page-w) * n)`, and `responsive.css` redefines `--page-w` on a phone,
 the entire page scales as one — the same measure, the same proportions, the same
 word count.
+
+`--page-w` names the *page*, not the leaf you can see. On a phone the two
+diverge: the leaf spends its side margin to buy type size. In page units it is
+the same page as desktop — same measure, same budget. That divergence is
+`responsive.css`'s business, never a page's.
 
 What actually changes on mobile is the *book*, not the page: the 3D spread is
 replaced by a vertical scroll of single leaves. That's `responsive.css`'s business,
 not yours.
 
 Consequences worth knowing:
-- **Desktop is the binding constraint.** Mobile leaves are proportionally taller
-  (1.36 vs 1.32), so slightly *more* fits. If it fits on desktop, it fits.
+- **Desktop is the binding constraint.** Mobile leaves are proportionally taller,
+  so slightly *more* fits — a few percent, not a licence. If it fits on desktop,
+  it fits.
 - **Pages stop being pairs.** Facing-page compositions read as two consecutive
   leaves. Nothing may depend on being seen alongside its neighbour.
 - `.lexicon` keeps two columns at 520px. It's tight. Prefer it on shorter lists.
