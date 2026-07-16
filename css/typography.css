@@ -114,9 +114,22 @@ h2.entry-title{
    SQUASHED (aspect ratio silently altered) when the page overruns, instead of
    clipped. flex:none makes an overlong page fail honestly, per conventions §1. */
 
+/* PLATE MARGINS ARE PAGE-PROPORTIONAL, NOT em.
+   These used to be `margin:1.2em auto .4em`. .page-inner never sets a
+   font-size, so those em resolved against the browser's default 16px — a
+   hard 19.2px and 6.4px on every device, forever. They were px in disguise,
+   and the only two in the book: every other margin here and in
+   components.css sits on an element that declares its own font-size, so its
+   em is self-relative and scales correctly.
+   Because they were fixed, they ate nearly twice the proportion of a small
+   page as a large one — which is why PLATE pages, and only plate pages,
+   lost more content on a tablet than on a desktop. The multipliers below
+   reproduce the old pixel values at a typical laptop page. */
+
 /* vector plates — the animated sigil illustration */
 .plate{
-  margin:1.2em auto .4em; width:100%;
+  margin:calc(var(--page-w) * .033) auto calc(var(--page-w) * .011);
+  width:100%;
   display:block;
   flex:none;
 }
@@ -125,7 +138,7 @@ h2.entry-title{
 .plate-img{
   display:block;
   width:100%;
-  margin:1em auto .3em;
+  margin:calc(var(--page-w) * .027) auto calc(var(--page-w) * .008);
   mix-blend-mode:multiply;
   height:auto;
   flex:none;

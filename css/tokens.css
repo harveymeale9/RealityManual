@@ -19,8 +19,21 @@
   --ink-faint:#5d4c35;
   --brass:#9c7c3c;
   --rubric:#7a2f1d; /* oxblood red used in medieval rubrication */
-  --page-w: min(46vw, calc((100vh - 96px) / 1.32), 1200px);
-  --page-w: min(46vw, calc((100dvh - 96px) / 1.32), 1200px);
+
+  /* --page-w is the PAGE's width, and the unit every size in the book is a
+     multiple of. --page-h is the PAGE's height — NOT the book's.
+
+     The 28px is the book's binding (book.css sets padding:14px), and it is
+     subtracted from the VIEWPORT here rather than from the page later. That
+     is the whole point of this edit. It used to come off the page:
+     .page was calc(var(--page-h) - 28px), a fixed pixel taken out of a
+     scaling number — so the page's height in page-units drifted with screen
+     size (1.274 on a laptop, 1.297 on a large display). There was no single
+     word budget; §1's "~150 words" was an average across screens.
+     Now the page is exactly 1.32 units tall on every screen, and the budget
+     is one number you can actually check. */
+  --page-w: min(46vw, calc((100vh - 96px - 28px) / 1.32), 1200px);
+  --page-w: min(46vw, calc((100dvh - 96px - 28px) / 1.32), 1200px);
   --page-h: calc(var(--page-w) * 1.32);
   --turn-ms: 900ms;
 }

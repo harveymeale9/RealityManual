@@ -17,7 +17,9 @@ body.ready .book-wrap, body.ready .scroll-book{ opacity:1; }
   position:relative;
   display:flex;
   align-items:center;
-  height:var(--page-h);
+  /* the PAGE plus its binding. --page-h is now the page alone, so the 14px
+     padding is added here instead of being subtracted from every page below. */
+  height:calc(var(--page-h) + 28px);
   overflow:hidden;
   /* leather cover peeking out beneath the pages */
   background:
@@ -50,14 +52,14 @@ body.ready .book-wrap, body.ready .scroll-book{ opacity:1; }
   position:relative;
   display:flex;
   flex:none;
-  height:calc(var(--page-h) - 28px);
+  height:var(--page-h);
   z-index:2;
 }
 .stack{
   flex:none;
   align-self:center;
-  width:34px;                        /* fixed slot: layout never shifts */
-  height:calc(var(--page-h) - 28px); /* flush with the open pages */
+  width:34px;              /* fixed slot: layout never shifts */
+  height:var(--page-h);    /* flush with the open pages */
   position:relative;
 }
 .stack .fill{
@@ -132,7 +134,7 @@ body.ready .book-wrap, body.ready .scroll-book{ opacity:1; }
 .page{
   position:relative;
   width:var(--page-w);
-  height:calc(var(--page-h) - 28px);
+  height:var(--page-h);   /* exactly 1.32 page-units, on every screen */
   background:var(--paper);
   overflow:hidden;
   flex:none;
@@ -187,7 +189,7 @@ body.ready .book-wrap, body.ready .scroll-book{ opacity:1; }
   content:""; position:absolute; inset:0; pointer-events:none;
   background-color:var(--mottle);
   opacity:.34;
-  -webkit-mask:center/cover no-repeat url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='600'%20height='792'%3E%3Cfilter%20id='m'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.008'%20numOctaves='4'%20seed='11'/%3E%3CfeColorMatrix%20type='matrix'%20values='0%200%200%200%200%200%200%200%200%200%200%200%200%200%200%201%200%200%200%20-0.30'/%3E%3C/filter%3E%3Crect%20width='600'%20height='792'%20filter='url(%23m)'/%3E%3C/svg%3E");
+  -webkit-mask:center/cover no-repeat url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='600'%20height='792'%3E%3Cfilter%20id='m'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.010'%20numOctaves='4'%20seed='11'/%3E%3CfeColorMatrix%20type='matrix'%20values='0%200%200%200%200%200%200%200%200%200%200%200%200%200%200%201%200%200%200%20-0.30'/%3E%3C/filter%3E%3Crect%20width='600'%20height='792'%20filter='url(%23m)'/%3E%3C/svg%3E");
   mask:center/cover no-repeat url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='600'%20height='792'%3E%3Cfilter%20id='m'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.010'%20numOctaves='4'%20seed='11'/%3E%3CfeColorMatrix%20type='matrix'%20values='0%200%200%200%200%200%200%200%200%200%200%200%200%200%200%201%200%200%200%20-0.30'/%3E%3C/filter%3E%3Crect%20width='600'%20height='792'%20filter='url(%23m)'/%3E%3C/svg%3E");
 }
 

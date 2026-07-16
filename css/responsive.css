@@ -19,7 +19,7 @@
      as the type reads it. We trade the leaf's side margin (11% -> 5%) for
      1.15x type: the measure stays at ~51 characters — identical to desktop —
      while body text goes 12.5px -> 14.3px on a 390px screen.
-     1.15 is not a taste value: it is 0.90 / 0.78, new column over old.
+     1.15 is not a taste value: it is 0.897 / 0.78, new column over old.
      CHANGE BOTH OR NEITHER: this factor and the side padding further down are
      the same decision written twice. Move one alone and the measure drifts. */
   :root{
@@ -54,14 +54,29 @@
       inset 0 0 0 1px rgba(90,60,20,.25);
   }
   .page.m .folio{ left:50%; right:auto; transform:translateX(-50%); }
-  /* Percentages here resolve against the LEAF, not --page-w: 5% sides = the
-     90% measure, as seen.
-     The foot was 12%, mirroring desktop's reserved indicator strip. On mobile
-     nothing occupies it: .folio is display:none (typography.css) and .jump is
-     position:fixed to the viewport, not the leaf. Reclaiming it to 6% pays for
-     the taller caption below — without it, plate pages clip a line that
-     desktop shows, silently (conventions §0). */
-  .page.m > .page-inner{ position:absolute !important; inset:0; padding:9% 5% 6%; }
+  /* PARITY GEOMETRY. Percentages resolve against the LEAF, not --page-w,
+     so every number here is a leaf-percentage derived from a desktop
+     page-percentage by multiplying by the 1.15 factor above.
+
+     5.15% sides  -> a column of 89.7% of the leaf = EXACTLY .78 of --page-w,
+                     which is desktop's measure to three digits. It is not
+                     "90ish": it is derived, and it is why the phone measures
+                     the same ~51 characters as a desktop.
+     9% head      -> .0783 of --page-w, against desktop's .09. Slightly
+                     tighter; that difference is deliberate headroom.
+     5% foot      -> .0435 of --page-w, against desktop's .1224 (a 7% inset
+                     of the page plus 3% padding). Desktop reserves that strip
+                     for the "x of xx" indicator. Mobile has nothing to
+                     reserve: .folio is display:none (typography.css) and
+                     .jump is position:fixed to the VIEWPORT, not the leaf.
+
+     Net: the phone holds 22.5 body lines against desktop's 20.1. That 2.4
+     line surplus is not slack — it is what pays for the two enlarged
+     elements below, which cost up to ~2.2 lines on a plate page. Desktop
+     stays the binding constraint, so a page authored to desktop's budget
+     shows in full on every device. Spend this surplus and that stops being
+     true. */
+  .page.m > .page-inner{ position:absolute !important; inset:0; padding:9% 5.15% 5%; }
   /* THE TWO EXCEPTIONS TO "ONE SCALE, ONE PAGE".
      Every other size in the book inflates for free via --page-w above. These
      two do not survive it: their multipliers were tuned against a ~600px
