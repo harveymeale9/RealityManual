@@ -27,27 +27,6 @@
   color:var(--ink-faint);
 }
 
-/* The flanking ornament: a hairline through an open lozenge, ending in a
-   detached bead. ::after is the graphic as drawn (bead outermost); ::before is
-   the same graphic mirrored, so the pair is symmetric about the centre — what
-   sits left of the first numeral is the mirror of what sits right of the second.
-
-   The SVG is a MASK, not an image: it is painted #000 and only its alpha is
-   used, with the colour supplied by background-color:var(--brass). So the
-   ornament follows the palette in tokens.css like everything else, instead of
-   hard-coding a hex the way the old chevron did. */
-.jump::before, .jump::after{
-  content:"";
-  width:3.4em; height:1.1em;
-  flex:none;
-  align-self:center;
-  background-color:var(--brass);
-  -webkit-mask:center/contain no-repeat url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2042%2014'%3E%3Cg%20fill='none'%20stroke='%23000'%20stroke-width='1.1'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M2%207%20H12'/%3E%3Cpath%20d='M12%207%20L17%203.2%20L22%207%20L17%2010.8%20Z'/%3E%3Cpath%20d='M22%207%20H34'/%3E%3C/g%3E%3Ccircle%20cx='38.5'%20cy='7'%20r='1.5'%20fill='%23000'/%3E%3C/svg%3E");
-  mask:center/contain no-repeat url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2042%2014'%3E%3Cg%20fill='none'%20stroke='%23000'%20stroke-width='1.1'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M2%207%20H12'/%3E%3Cpath%20d='M12%207%20L17%203.2%20L22%207%20L17%2010.8%20Z'/%3E%3Cpath%20d='M22%207%20H34'/%3E%3C/g%3E%3Ccircle%20cx='38.5'%20cy='7'%20r='1.5'%20fill='%23000'/%3E%3C/svg%3E");
-  opacity:.9;
-}
-.jump::before{ transform:scaleX(-1); }   /* mirror: its bead points outward too */
-
 /* The first numeral is the editable one, and it says so by sitting on a ruled
    blank — the way a ledger leaves a line to be written on. Dashed while idle,
    solid rubric once the pad is open (jump.js empties the field then, so it
