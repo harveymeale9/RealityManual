@@ -18,11 +18,13 @@ The tragedy lies in devoting oneself earnestly to a contest without first determ
 [DROPCAP OPENING]
 No sensible person would sit down at a chessboard and begin playing before first understanding the objective of the game. No athlete would dedicate years to training for a competition without knowing how points are scored. No general would march an army into battle without first knowing what victory requires. The very suggestion is absurd.
 [/DROPCAP OPENING]
+[BODY]
+Yet this is precisely how most people approach life.
+[/BODY]
 [/PAGE 1]
 
 [PAGE 2 · pages/nature-of-the-manual-continued.html — built]
 [BODY]
-Yet this is precisely how most people approach life.
 They strive endlessly. They sacrifice. They worry. They plan. They pursue wealth, status, pleasure, security, virtue, power, knowledge, love, freedom, and countless other aims. They spend decades refining their strategies while neglecting to answer the single question upon which the value of every strategy depends:
 What, precisely, constitutes success within physical reality?
 What does it mean to have existed well?
