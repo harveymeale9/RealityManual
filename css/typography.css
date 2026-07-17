@@ -20,7 +20,12 @@
   position:absolute; left:0; right:0; bottom:0; height:7%;
   display:flex; align-items:center; justify-content:center;
   font-family:'Cormorant Garamond', serif; font-style:italic;
-  font-size:calc(var(--page-w) * .0165); letter-spacing:.1em;
+  /* 25% larger than the book's usual .0165 baseline — a deliberate exception
+     to §3's "type scales with the page" rule, made because this is a UI
+     control (it opens the jump pad) rather than book prose. Height stays a
+     fixed 7% regardless: enlarging the glyph must never eat into the word
+     budget above it. Tablet/mobile go further still — see responsive.css. */
+  font-size:calc(var(--page-w) * .020625); letter-spacing:.1em;
   color:var(--ink-faint);
   cursor:pointer; transition:color .2s;
 }

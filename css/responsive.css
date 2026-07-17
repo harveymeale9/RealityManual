@@ -11,6 +11,7 @@
    desktop (pointer:fine) is untouched. */
 @media (pointer: coarse) and (orientation: landscape) and (min-width: 721px){
   .jump{ font-size:clamp(10px, calc(var(--page-w) * .0158), 18px); }
+  .folio{ font-size:calc(var(--page-w) * .04125); }
 }
 
 @media (orientation: portrait) and (max-width: 940px), (max-width: 720px){
@@ -46,6 +47,10 @@
      with — .page-inner then falls back to book.css's own rule, which
      reserves the same 7% bottom strip mobile now shares with desktop. */
   .page.m > .page-inner{ position:absolute !important; }
+  /* 2.5x the book's .0165 baseline (desktop only goes to 1.25x, typography.css)
+     — mobile's page is physically small enough that a merely-proportional
+     size reads illegibly tiny. Still just the glyph: height:7% is unchanged. */
+  .folio{ font-size:calc(var(--page-w) * .04125); }
   .jump{
     /* .jump lives inside .book-wrap, which is hidden and unclickable on
        mobile (above); escape both so the badge can still show and be
