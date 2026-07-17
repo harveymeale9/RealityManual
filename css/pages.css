@@ -5,15 +5,35 @@
    Keep it small: if a rule gets used twice, promote it.
    ========================================================== */
 
-/* nature-of-the-manual-opening: the chapter plate at full width lands at
-   ~45% of the page's own height (its 4:3 source image, at the standard
-   measure width, just happens to fall there) — the tallest plate in the
-   book by a wide margin, since every other page carries a plate ALONGSIDE
-   a normal word budget rather than a plate, a pull quote, AND a dropcap
-   opening all at once. Everything below it is tightened only far enough
-   to give the opening paragraph room to breathe on the same page — the
-   plate's own size is untouched. */
-.chapter-opening .plate-img{ margin:0 auto .05em; }
+/* nature-of-the-manual-opening: the chapter plate bleeds off the text
+   measure entirely — full PAGE width, spine to outer trim, not just the
+   78%-of-page-w column every other plate in the book fills (typography.css
+   §9: "plates fill the measure"). Deliberately breaking that convention
+   for this one page: .page-inner's own 11%-of-page-w left/right padding
+   is what normally keeps a plate inside the measure, so cancelling it
+   with an equal negative margin is what lets the image reach both page
+   edges — margin-left pulls it back out to the spine side, and an
+   explicit width of the full --page-w (not "100%", which is the
+   NARROWER content-box width after padding) carries it the rest of the
+   way to the outer edge on its own; margin-right needs no matching value
+   because that explicit width already lands exactly there.
+
+   Held to a fixed 35% of the page's own HEIGHT (not width-driven
+   aspect-ratio auto sizing, which is what every other plate in the book
+   uses) — at this width, the source image's native 4:3 ratio would make
+   it much taller than that, so object-fit:cover crops rather than
+   letterboxes it down to the target box. object-position favours the
+   lower-right, where the open manuscript and candle — the actual subject
+   — sit in the source photo; the top third is mostly bookshelf and can
+   afford to be the part a wide, short crop trims first. */
+.chapter-opening .chapter-bleed{
+  display:block;
+  width:var(--page-w);
+  height:calc(var(--page-w) * 1.32 * .35);
+  margin:0 0 .3em calc(var(--page-w) * -.11);
+  object-fit:cover;
+  object-position:65% 60%;
+}
 .chapter-opening .entry-title{ margin-bottom:.05em; }
 /* Pixel-identical to the title page's own "✦ ❦ ✦" (.tp-rule, typography.css)
    with the heart swapped for the book glyph — copied rather than
@@ -40,12 +60,13 @@
   line-height:1.4;
   margin:.05em 0 .05em;
 }
-/* Even at the above, the plate (~45% of the page) plus title, ornament,
-   and pull quote leave less room than the closing dropcap paragraph
-   needs at the book's standard .034 body size — margins alone can't
-   close that gap without either shrinking the plate below "not a tiny
-   little illustration" or splitting the paragraph onto a second page,
-   both explicitly ruled out. This is the one page in the book where the
+/* Even with the plate at 35% of the page (down from an earlier
+   full-measure ~45% version), the plate plus title, ornament, and pull
+   quote leave less room than the closing dropcap paragraph needs at the
+   book's standard .034 body size — margins alone can't close that gap
+   without either shrinking the plate further or splitting the paragraph
+   onto a second page, both ruled out. This is the one page in the book
+   where the
    body text itself is scaled down, as a deliberate, isolated exception
    to §3's "type scales with the page, not the page's own content" rule —
    made here, and only here, to let an unusually dense opening (full
@@ -61,4 +82,4 @@
    windows (900×600, 721×500 — narrower than this book's own mobile
    breakpoint would allow at that height) that fall outside the range
    any other page in the book is expected to survive either. */
-.chapter-opening .body-text{ font-size:calc(var(--page-w) * .0135); line-height:1.22; }
+.chapter-opening .body-text{ font-size:calc(var(--page-w) * .0205); line-height:1.36; }
