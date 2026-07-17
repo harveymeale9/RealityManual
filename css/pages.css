@@ -53,13 +53,13 @@
    afford, and needs, more presence to still read as a heading rather
    than a caption underneath the image. */
 .chapter-opening .entry-no{ font-size:calc(var(--page-w) * .02625); }
-.chapter-opening .entry-title{ margin-bottom:.05em; }
+.chapter-opening .entry-title{ margin-bottom:.22em; }
 /* Brass rules bracketing the pull quote — reuses .rule-orn (components.css)
    rather than inventing a new divider, per the reference layout for this
    page. There is no standalone ornament glyph on this page any more (the
    book icon that used to sit above the first rule was dropped — at this
    size it never sat evenly against the rest of the page). */
-.chapter-opening .rule-orn{ margin:.5em 0; font-size:calc(var(--page-w) * .018); }
+.chapter-opening .rule-orn{ margin:.62em 0; font-size:calc(var(--page-w) * .018); }
 /* Same size as the title page's own quote-sized prose (.tp-edition,
    typography.css) — this page's pull quote no longer needs to be the
    loudest thing on the page (the plate already is), so it borrows the
@@ -88,4 +88,4 @@
    through 4K), tablet landscape, mobile's scroll stack, AND fullscreen
    mode's 1200px-capped worst case — held real, positive slack (not just
    zero-overflow) at every one of them. */
-.chapter-opening .body-text{ font-size:calc(var(--page-w) * .028); line-height:1.5; margin-top:.7em; }
+.chapter-opening .body-text{ font-size:calc(var(--page-w) * .028); line-height:1.5; margin-top:.8em; }
