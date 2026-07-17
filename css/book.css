@@ -157,6 +157,31 @@ body.ready .book-wrap, body.ready .scroll-book{ opacity:1; }
 }
 .grain{ position:absolute; inset:0; opacity:.5; mix-blend-mode:multiply; pointer-events:none;}
 
+/* The light the candle throws on the near page. Lives INSIDE .page.left
+   (base.css has the candle itself) rather than as a stage-wide overlay,
+   because .book-wrap sets `perspective` — which starts a new stacking
+   context — so a sibling element's mix-blend-mode can't reliably reach
+   through it into the book's own content in every browser. Painted as the
+   page's own last child, it blends against that page's parchment and text
+   directly, no boundary to cross. Anchored near the page's outer edge (8%
+   in, not 0, so the hottest point isn't clipped at the edge) and fading
+   toward the spine — the right page sits in the candle's shadow, which
+   reads truer than a glow that reaches evenly across the gutter.
+   screen, not multiply: this is light being added to the scene. Kept low,
+   because parchment screened too hard goes white, and nothing here is white.
+   Same 9s clock as the flame (animations.css), so the light gutters when it does. */
+.candle-cast{
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  mix-blend-mode:screen;
+  background:radial-gradient(ellipse 70% 65% at 8% 46%,
+    rgba(255,170,78,.32) 0%,
+    rgba(255,150,60,.13) 42%,
+    transparent 70%);
+  animation:candle-cast 9s ease-in-out infinite;
+}
+
 .page-inner{
   position:absolute;
   /* Reserve a clear strip at the foot of the page for the "x of xx" page

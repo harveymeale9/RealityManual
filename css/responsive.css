@@ -29,7 +29,9 @@
   .side-zone{ display:none; }
   /* the candle is desk furniture for the 3D book; portrait has no desk.
      .stage itself isn't hidden here (only its contents collapse), so this
-     must be explicit or the candle floats over the scroll stack. */
+     must be explicit or the candle floats over the scroll stack. .candle-cast
+     now lives inside .page.left (book.css) and is already hidden along with
+     .book-wrap above; listed here too as a harmless belt-and-braces. */
   .candle, .candle-cast{ display:none; }
   .scroll-book{
     display:block;

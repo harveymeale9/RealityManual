@@ -110,9 +110,8 @@ header.site p{
 }
 .candle-body{
   position:relative;
-  /* half the previous scale — a small presence filling the gutter, not a
-     second object competing with the book */
-  width:clamp(27px, 31%, 98px);
+  /* a real presence in the gutter without crowding the book */
+  width:clamp(42px, 48%, 155px);
 }
 .candle-stick{
   display:block;
@@ -179,23 +178,8 @@ header.site p{
   animation:flame-halo 9s ease-in-out infinite;
 }
 
-/* The light the candle throws ON THE BOOK. Centred on the gutter — i.e. on
-   the candle itself — so the left page catches more of it than the right,
-   and it guts on the same beats the flame does (same 9s clock).
-   screen, not multiply: this is light being added to the scene. Kept low,
-   because parchment screened too hard goes white, and nothing here is white. */
-.candle-cast{
-  position:absolute;
-  inset:0;
-  pointer-events:none;
-  z-index:2;
-  mix-blend-mode:screen;
-  background:radial-gradient(ellipse 62% 66% at calc((50% - var(--page-w) - 14px) / 2) 46%,
-    rgba(255,170,78,.15) 0%,
-    rgba(255,150,60,.05) 42%,
-    transparent 66%);
-  animation:candle-cast 9s ease-in-out infinite;
-}
+/* The light the candle throws ON THE BOOK lives in book.css as a child of
+   .page.left, not here — see the note there for why. */
 
 /* ---- load failure notice ----
    Hidden unless js/main.js couldn't fetch the pages. The commonest cause is
