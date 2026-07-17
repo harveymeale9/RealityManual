@@ -99,12 +99,15 @@ h2.entry-title{
   text-align:justify;
   hyphens:auto;
 }
-.body-text p + p{ text-indent:1.6em; margin-top:.15em; }
+/* Convention: paragraphs are never indented. A new paragraph is marked by
+   a real vertical gap instead, so every paragraph starts and ends at the
+   same left/right measure as the one before it. */
+.body-text p + p{ margin-top:.85em; }
 
 .dropcap::first-letter{
   font-family:'IM Fell English SC', serif;
   float:left;
-  font-size:3.4em; line-height:.82;
+  font-size:3.4em; line-height:.68;
   padding:.06em .12em 0 0;
   color:var(--rubric);
 }
