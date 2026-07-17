@@ -65,6 +65,15 @@ h2.entry-title{
   font-size:calc(var(--page-w) * .026); margin:.6em 0 1.1em;
   letter-spacing:.6em; text-indent:.6em;
 }
+/* a book glyph standing in for the centre ✦ of an ornament, on the rare
+   page that asks for one by name. Line art (currentColor stroke), same
+   family as the sigil's own glyphs, sized off the ornament's own
+   font-size so it scales exactly like the ✦s flanking it — never a raw px. */
+.orn-book{
+  width:1.05em; height:.78em;
+  display:inline-block;
+  vertical-align:-0.05em;
+}
 
 .body-text{
   font-family:'IM Fell English', Georgia, serif;
