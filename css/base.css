@@ -101,17 +101,28 @@ header.site p{
    --page-h, converted through the artwork's own pixel ratio (457×1310, so
    height*457/1310 ≈ height*.2093) — so the candle is the same proportion of
    the book on a small window and a huge monitor alike. That target is
-   wrapped in min(…, 100%): 100% here is .candle's OWN width, which by
+   wrapped in min(…, 100% - 56px): 100% here is .candle's OWN width, which by
    construction (left/right above) already equals the true gutter, so on a
    window where the gutter is thinner than 60%-of-book would need — width and
    height don't shrink together, a short-but-not-narrow window can pinch the
    gutter hard even at a generous viewport width — the candle yields to the
-   gutter instead of overflowing past the browser edge or over the book.
+   gutter instead of overflowing past the browser edge or over the book. The
+   trailing `- 56px` reserves 28px of clear parchment-dark desk on EACH side
+   even at that shrink point, so the flame never ends up glued to the book's
+   cover — centred always means centred with visible air on both sides, not
+   just centred within a box it's touching the walls of.
 
-   Only shown once the gutter has real room to spare: responsive.css hides
-   it below a width floor, rather than relying on the shrink-to-fit above
-   alone, because a candle pinched down to a sliver reads as clutter, not
-   furniture, even when it technically fits. */
+   Only shown once the gutter has real room to spare: the container query
+   below (keyed off .candle's own rendered width, which IS the true gutter —
+   see above) hides the candle once that space pinches too tight, rather than
+   relying on the shrink-to-fit above alone, because a candle pinched down to
+   a sliver reads as clutter, not furniture, even when it technically fits.
+   This deliberately measures the ACTUAL free space next to the book rather
+   than raw viewport width (a `@media` query could only see the latter) —
+   a short, wide window and a tall, narrow one are judged the same way, so a
+   tablet in landscape whose book is height-capped small (leaving a wide
+   gutter) keeps its candle even under a viewport width where a plain desktop
+   window would lose it, and vice versa. */
 .candle{
   position:absolute;
   top:0; bottom:0; left:-2vw;
@@ -123,10 +134,17 @@ header.site p{
   justify-content:center;
   pointer-events:none;   /* the gutter is a page-turn button; keep it clickable */
   z-index:1;
+  container-type:inline-size;   /* lets the query below read the true gutter width */
+}
+/* Below this the reserved 28px-per-side margin above would eat nearly the
+   whole candle, so it's hidden outright instead of shown-but-tiny. Tune by
+   eye, same as every other fit-and-finish number in this file. */
+@container (max-width: 150px){
+  .candle-body{ display:none; }
 }
 .candle-body{
   position:relative;
-  width:min(calc(var(--page-h) * .2093), 96%);
+  width:min(calc(var(--page-h) * .2093), calc(100% - 56px));
   height:auto;
 }
 .candle-stick{

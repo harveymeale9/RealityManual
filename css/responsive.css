@@ -14,20 +14,6 @@
   .folio{ font-size:calc(var(--page-w) * .04125); }
 }
 
-/* Below this width the gutter is still fighting the book for room, even in
-   landscape (the portrait query further down already removes the 3D book,
-   and the candle with it, below 940/720 — this covers the landscape gap
-   above that). .candle-body's own min() (base.css) already stops it from
-   ever overflowing the gutter, on ANY window — this is a separate, coarser
-   rule for a case that cap doesn't cover: a candle that technically fits but
-   has been pinched down to a sliver still reads as clutter, not furniture.
-   Hidden outright rather than shown-but-tiny. Tune the number by eye — it's
-   a stand-in for "the book has stopped growing with the window", which
-   --page-w's min() doesn't expose to a media query directly. */
-@media (max-width: 1000px){
-  .candle{ display:none; }
-}
-
 @media (orientation: portrait) and (max-width: 940px), (max-width: 720px){
   :root{ --page-w: min(94vw, 520px); }
   body{ height:auto; min-height:100dvh; overflow:visible; justify-content:flex-start; padding:0 0 8vh; }
