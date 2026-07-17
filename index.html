@@ -65,24 +65,6 @@
     <div class="pages-wrap">
     <div class="page left"><div class="parchment"></div><svg class="grain" width="100%" height="100%"><filter id="g1"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 0.45  0 0 0 0 0.36  0 0 0 0 0.22  0 0 0 0.06 0"/></filter><rect width="100%" height="100%" filter="url(#g1)"/></svg><div class="page-inner" id="pageL"></div><div class="candle-cast" aria-hidden="true"></div></div>
     <div class="page right"><div class="parchment"></div><svg class="grain" width="100%" height="100%"><filter id="g2"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 0.45  0 0 0 0 0.36  0 0 0 0 0.22  0 0 0 0.06 0"/></filter><rect width="100%" height="100%" filter="url(#g2)"/></svg><div class="page-inner" id="pageR"></div>
-      <div class="jump" role="group" aria-label="Jump to a page of the book">
-        <span class="jump-badge"><input id="jumpInput" type="text" readonly inputmode="none" aria-label="Page number"></span>
-        <span class="total" id="jumpTotal"></span>
-        <div class="numpad" id="numpad" aria-label="Number pad">
-          <button type="button" data-k="1">1</button>
-          <button type="button" data-k="2">2</button>
-          <button type="button" data-k="3">3</button>
-          <button type="button" data-k="4">4</button>
-          <button type="button" data-k="5">5</button>
-          <button type="button" data-k="6">6</button>
-          <button type="button" data-k="7">7</button>
-          <button type="button" data-k="8">8</button>
-          <button type="button" data-k="9">9</button>
-          <button type="button" data-k="del">⌫</button>
-          <button type="button" data-k="0">0</button>
-          <button type="button" class="np-go" data-k="go">Go</button>
-        </div>
-      </div>
     </div>
     </div>
 
@@ -102,6 +84,35 @@
 </div>
 
 <div class="scroll-book" id="scrollBook"></div>
+
+<!-- A direct child of body, deliberately not nested inside .book-wrap:
+     .book-wrap sets `perspective`, and perspective (like transform) on an
+     ancestor makes THAT ancestor the containing block for any
+     position:fixed descendant instead of the real viewport — so a .jump
+     nested inside it would compute its "fixed" coordinates relative to
+     the book's own box, landing wherever the book happens to sit rather
+     than where jump.js actually asked for. Living out here, its
+     positioning is against the true viewport, which is what jump.js
+     assumes when it reads a folio's getBoundingClientRect() (always
+     viewport-relative) and writes it straight to style.left/top. -->
+<div class="jump" role="group" aria-label="Jump to a page of the book">
+  <span class="jump-badge"><input id="jumpInput" type="text" readonly inputmode="none" aria-label="Page number"></span>
+  <span class="total" id="jumpTotal"></span>
+  <div class="numpad" id="numpad" aria-label="Number pad">
+    <button type="button" data-k="1">1</button>
+    <button type="button" data-k="2">2</button>
+    <button type="button" data-k="3">3</button>
+    <button type="button" data-k="4">4</button>
+    <button type="button" data-k="5">5</button>
+    <button type="button" data-k="6">6</button>
+    <button type="button" data-k="7">7</button>
+    <button type="button" data-k="8">8</button>
+    <button type="button" data-k="9">9</button>
+    <button type="button" data-k="del">⌫</button>
+    <button type="button" data-k="0">0</button>
+    <button type="button" class="np-go" data-k="go">Go</button>
+  </div>
+</div>
 
 <!-- shown only if the pages can't be fetched (see js/main.js) -->
 <div id="bookError" role="alert" aria-live="polite"></div>

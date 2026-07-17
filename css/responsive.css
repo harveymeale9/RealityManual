@@ -62,11 +62,11 @@
   .folio{ font-size:calc(var(--page-w) * .04125); }
   /* Position itself (ui.css: fixed, jump.js sets left/top from the tapped
      folio's own getBoundingClientRect()) is identical to desktop now —
-     only the tighter touch-target sizing stays mobile-specific here.
-     visibility:visible counters .book-wrap's own visibility:hidden a few
-     lines up — visibility inherits, and .jump would otherwise vanish with
-     the book it's nested inside on mobile. */
-  .jump{ visibility:visible; gap:0; }
+     .jump lives at the top level of the document (index.html), outside
+     .book-wrap, precisely so mobile's visibility:hidden/pointer-events:none
+     on .book-wrap a few lines up never touches it. Only the tighter
+     touch-target sizing stays mobile-specific here. */
+  .jump{ gap:0; }
   .numpad{
     grid-template-columns:repeat(3, 34px);
     gap:5px;
