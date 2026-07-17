@@ -13,12 +13,22 @@
    book.json — so it is derived, never typed, and stays honest on the next
    insert.
 
-   Desktop and mobile now share this rule set exactly; the only mobile-only
-   overrides left (responsive.css) are position:fixed and a shrunken numpad,
-   both needed because mobile has no book chrome to anchor to. */
+   position:fixed and viewport coordinates on EVERY device, desktop
+   included (jump.js sets left/top on open): a folio tapped on the LEFT
+   page needs the pad to open directly above IT, and the left page sits
+   inside .page.left's own overflow:hidden — an ancestor .jump can't
+   escape if it's positioned (even absolutely) relative to anything
+   short of the viewport itself. Desktop and mobile share this rule set
+   exactly now; the only mobile-only override left (responsive.css) is a
+   shrunken numpad, for touch targets, not positioning. */
 .jump{
-  position:absolute;
-  left:50%; bottom:2.2%;
+  position:fixed;
+  /* fallback only — jump.js always sets left/top explicitly before opening
+     it. Only a top fallback, not bottom too: the element is never visible
+     without both being JS-set first, but a stray bottom left over from
+     CSS would fight an inline top for the box's height once one arrived
+     without the other being cleared. */
+  left:50%; top:50%;
   transform:translateX(-50%);
   z-index:20;
   display:flex; align-items:center; gap:.3em;

@@ -60,21 +60,14 @@
      — mobile's page is physically small enough that a merely-proportional
      size reads illegibly tiny. Still just the glyph: height:7% is unchanged. */
   .folio{ font-size:calc(var(--page-w) * .04125); }
-  .jump{
-    /* .jump lives inside .book-wrap, which is hidden and unclickable on
-       mobile (above); escape both so the badge can still show and be
-       tapped once a folio opens it. opacity/pointer-events stay governed
-       by .jump / .jump.open in ui.css — identical open/closed logic to
-       desktop, just anchored to the viewport instead of the book chrome. */
-    visibility:visible;
-    position:fixed;
-    top:auto; left:50%; right:auto; transform:translateX(-50%);
-    bottom:calc(10px + env(safe-area-inset-bottom, 0px));
-    background:none; border:none; padding:0; gap:0;
-  }
+  /* Position itself (ui.css: fixed, jump.js sets left/top from the tapped
+     folio's own getBoundingClientRect()) is identical to desktop now —
+     only the tighter touch-target sizing stays mobile-specific here.
+     visibility:visible counters .book-wrap's own visibility:hidden a few
+     lines up — visibility inherits, and .jump would otherwise vanish with
+     the book it's nested inside on mobile. */
+  .jump{ visibility:visible; gap:0; }
   .numpad{
-    top:auto; bottom:calc(100% + 8px);
-    left:50%; right:auto; transform:translateX(-50%);
     grid-template-columns:repeat(3, 34px);
     gap:5px;
     padding:6px;
