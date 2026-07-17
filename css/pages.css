@@ -12,27 +12,17 @@
    edge too, not just its sides. Deliberately breaking that convention for
    this one page: .page-inner's own 9%/11%-of-page-w top/left/right padding
    is what normally keeps a plate inside the measure, so cancelling it with
-   a matching negative margin is what lets the image reach those edges —
-   margin-top and margin-left pull it back out to the top and spine sides.
+   a matching negative margin is what lets the image reach those edges.
 
-   The RIGHT edge bleeds the full way (no matching margin-right needed —
-   width alone carries it there, see below) — but the LEFT edge stops
-   6% short of the true spine centreline rather than reaching it exactly.
-   That's not a leftover margin, it's deliberate: .spine (book.css) paints
-   its sheen highlight — a thin, warm-white line meant to catch light on
-   bare parchment — at z-index:7, ABOVE the page content's own z-index:2,
-   because for ORDINARY pages that sheen has to sit on top of the plain
-   parchment near the gutter for it to be visible at all. This is the
-   first plate in the book to ever reach that far, and the sheen line
-   drawn over a dark photograph reads as a stray white seam rather than a
-   glint on paper. Lowering .spine's z-index would fix this page but
-   erase the effect from every other page in the book (spine's shadow
-   gradient needs to sit ON TOP of ordinary pages' own parchment
-   background to read at all — moving it under would hide it completely,
-   not just soften it). Pulling the image back those few percent, measured
-   to clear the sheen line with a small margin (it sits ~5.3% of --page-w
-   in from the page edge), was the trade that didn't cost the rest of the
-   book its own effect.
+   True full bleed on ALL sides, including the spine — a first attempt
+   here pulled the left edge 6% short of the spine to dodge .spine's sheen
+   highlight (book.css), which paints above ordinary page content and was
+   showing through as a stray white seam over the dark photograph. That
+   compromise is gone: the real fix lives with .spine itself now (see its
+   own comment in book.css) — it suppresses just its sheen lines, only
+   while THIS page is the one showing, via :has(), rather than asking this
+   page to stand off from its own spine to avoid a conflict that belongs
+   to the other element to solve.
 
    Held to a fixed 35% of the page's own HEIGHT (not width-driven
    aspect-ratio auto sizing, which is what every other plate in the book
@@ -48,9 +38,9 @@
    layout error rather than a deliberate edge. */
 .chapter-opening .chapter-bleed{
   display:block;
-  width:calc(var(--page-w) * .94);
+  width:var(--page-w);
   height:calc(var(--page-w) * 1.32 * .35);
-  margin:calc(var(--page-w) * -.09) 0 .9em calc(var(--page-w) * -.05);
+  margin:calc(var(--page-w) * -.09) 0 .9em calc(var(--page-w) * -.11);
   object-fit:cover;
   object-position:65% 60%;
   border-bottom:1px solid var(--brass);
@@ -61,51 +51,48 @@
    than a caption underneath the image. */
 .chapter-opening .entry-no{ font-size:calc(var(--page-w) * .02625); }
 .chapter-opening .entry-title{ margin-bottom:.05em; }
-/* Pixel-identical to the title page's own "✦ ❦ ✦" (.tp-rule, typography.css)
-   with the heart swapped for the book glyph — copied rather than
-   re-derived: .tp-rule sets no font-size of its own, so it inherits
-   whatever ambient size reaches it (the browser default, since nothing
-   between .page-inner and :root sets one either) instead of scaling off
-   --page-w like the rest of the book's type. font-size:unset here
-   reproduces exactly that inheritance, rather than hard-typing the
-   16px it happens to resolve to — same reasoning as tp-rule taking it
-   from ambient the same way. letter-spacing/text-indent/margin are
-   .tp-rule's own values verbatim. */
-.chapter-opening .ornament{
-  font-size:unset;
-  letter-spacing:.5em; text-indent:.5em;
-  margin:1em 0;
+/* The star-flanked version (matching .tp-rule on the title page) read as
+   uneven no matter how the spacing around the SVG was tuned — small
+   enough glyphs at close range are unforgiving of any asymmetry — so the
+   stars are gone and the book glyph stands alone, sized up a little
+   (1.35em vs the plain .orn-book default) since it's no longer sharing
+   the line with anything else that would make it look oversized. */
+.chapter-opening .ornament .orn-book{
+  width:calc(1.05em * 1.35); height:calc(.78em * 1.35);
 }
+.chapter-opening .ornament{ margin:1em 0 0; }
+/* Brass rules bracketing the pull quote — reuses .rule-orn (components.css)
+   rather than inventing a new divider, per the reference layout for this
+   page. Sits where .ornament's own bottom margin would otherwise go, so
+   the two together read as one continuous rhythm down the page rather
+   than two independently-spaced elements. */
+.chapter-opening .rule-orn{ margin:.5em 0; font-size:calc(var(--page-w) * .018); }
 /* Same size as the title page's own quote-sized prose (.tp-edition,
    typography.css) — this page's pull quote no longer needs to be the
    loudest thing on the page (the plate already is), so it borrows the
    size of the OTHER piece of quiet italic prose already in the book
-   rather than inventing a new one. */
+   rather than inventing a new one. No forced line breaks in the markup
+   any more either — left to wrap on its own, at this size and measure,
+   it settles at two lines instead of the four a hand-placed <br> after
+   every clause was producing. */
 .chapter-opening .pullquote{
   font-size:calc(var(--page-w) * .029);
   line-height:1.4;
-  margin:.05em 0 .5em;
+  margin:0;
 }
-/* Even with the plate at 35% of the page (down from an earlier
-   full-measure ~45% version), the plate plus title, ornament, and pull
-   quote leave less room than the closing dropcap paragraph needs at the
-   book's standard .034 body size — margins alone can't close that gap
-   without either shrinking the plate further or splitting the paragraph
-   onto a second page, both ruled out. This is the one page in the book
-   where the
-   body text itself is scaled down, as a deliberate, isolated exception
-   to §3's "type scales with the page, not the page's own content" rule —
-   made here, and only here, to let an unusually dense opening (full
-   plate + title + ornament + pull quote + full opening paragraph) share
-   a single leaf.
+/* Still below the book's standard .034 body size — the plate, title,
+   ornament, and rule-bracketed pull quote above still leave less room
+   than a FULL .034 paragraph needs — but the pull quote wrapping down to
+   two lines (was four) freed up enough space to bring this most of the
+   way back up from an earlier, much smaller version. This remains a
+   deliberate, isolated exception to §3's "type scales with the page, not
+   the page's own content" rule, made only here, for this unusually dense
+   opening (full-bleed plate + title + ornament + pull quote + full
+   opening paragraph sharing a single leaf).
 
    Tuned and verified against every viewport this book actually renders
    at differently, not just one: normal desktop widths (1280×720 up
    through 4K), tablet landscape, mobile's scroll stack, AND fullscreen
-   mode — which, on a large enough monitor, pushes --page-w well past
-   any size this page was previously checked against. Held zero-overflow
-   everywhere tested except two genuinely extreme, short landscape
-   windows (900×600, 721×500 — narrower than this book's own mobile
-   breakpoint would allow at that height) that fall outside the range
-   any other page in the book is expected to survive either. */
-.chapter-opening .body-text{ font-size:calc(var(--page-w) * .0205); line-height:1.36; }
+   mode's 1200px-capped worst case — held real, positive slack (not just
+   zero-overflow) at every one of them. */
+.chapter-opening .body-text{ font-size:calc(var(--page-w) * .028); line-height:1.5; }

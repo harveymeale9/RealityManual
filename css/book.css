@@ -132,6 +132,29 @@ body.ready .book-wrap, body.ready .scroll-book{ opacity:1; }
 }
 .spine::before{ left:26%; }
 .spine::after{ right:26%; }
+/* .spine sits at z-index:7, ABOVE every ordinary page's own content
+   (z-index:2 via .pages-wrap) — necessary so its shadow and sheen read
+   against plain parchment near the gutter, which they'd never do painted
+   underneath an opaque page background. That's fine for ordinary text
+   pages, whose own content stays inset from the edges anyway — but a
+   plate that bleeds all the way to the spine (pages.css:
+   .chapter-opening .chapter-bleed) sits exactly where the sheen lines
+   are, and a thin warm-white line drawn over a dark photograph reads as
+   a stray seam rather than a glint on paper. Lowering .spine's z-index
+   would fix that one page but silently erase the sheen from every other
+   page in the book, so instead: suppress only the two sheen lines, only
+   while a page with a full-bleed plate is the one actually showing,
+   detected via :has() rather than any change to how .spine renders
+   normally. The dark shadow gradient above is left untouched — it reads
+   fine (even flatteringly) over a photograph, it's specifically the
+   BRIGHT sheen that clashed. Extend the selector list here if a future
+   page ever needs the same treatment. */
+.book:has(#pageL.chapter-opening) .spine::before,
+.book:has(#pageL.chapter-opening) .spine::after,
+.book:has(#pageR.chapter-opening) .spine::before,
+.book:has(#pageR.chapter-opening) .spine::after{
+  opacity:0;
+}
 
 .page{
   position:relative;
