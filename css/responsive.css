@@ -52,7 +52,7 @@
        way regardless of device. */
     height:var(--page-h);
     background:var(--paper);
-    border-radius:4px;
+    border-radius:0; /* square, matching the desktop page — see book.css */
     overflow:hidden;
     margin-bottom:16px;
     box-shadow:
@@ -106,4 +106,8 @@
   /* the candle stops burning but stays lit — a flame whose meaning only
      appears once it moves is broken for a reader who's turned motion off */
   .flame, .flame-core, .flame-halo, .candle-cast{ animation:none !important; }
+  /* the chapter plate's gold sheen (pages.css) — the bar itself stays, a
+     plain static brass line, just as a photograph must "still read
+     correctly as a fully static image" per this rule's own convention */
+  .chapter-bleed-sheen::after{ animation:none !important; }
 }

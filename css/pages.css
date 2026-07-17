@@ -50,9 +50,9 @@
    thing that reads: at low opacity it's just enough to keep the top edge
    (which used to bleed straight into the book's dark leather with nothing
    marking where photograph ends and page begins) from disappearing,
-   without reading as a picture frame. Bottom stays the stronger, fully
-   opaque brass — the one edge meant to be seen clearly, since it's also
-   the page's own transition into text. */
+   without reading as a picture frame. Bottom is `none` here — that edge
+   is owned entirely by .chapter-bleed-sheen below, so the two don't
+   double up into one edge that reads thicker than intended. */
 .chapter-opening .chapter-bleed{
   display:block;
   width:var(--page-w);
@@ -61,29 +61,40 @@
   object-fit:cover;
   object-position:65% 60%;
   border:1px solid rgba(156,124,60,.5);
-  border-bottom:1px solid var(--brass);
+  border-bottom:none;
 }
-/* The image-to-text transition: a small ❦ (echoing .rule-orn's own glyph
-   elsewhere on this page) centred on the plate's bottom rule, softened
-   into it by a radial paper-coloured glow rather than a hard-edged badge.
-   Positioned absolutely against .page-inner (the nearest positioned
-   ancestor) using the SAME height*.33 formula .chapter-bleed's own height
-   is built from, rather than relying on flex flow — being a sibling AFTER
-   the image in the flex column would put it below the image's own
-   margin-bottom gap (near "Chapter I"), not on the boundary line itself.
-   Taken out of flow entirely, so it can't disturb any of the gap tuning
-   elsewhere on this page. */
-.chapter-opening .chapter-bleed-mark{
+/* The plate's foot: a 3px solid brass bar (thicker than the hairline
+   sides, since this is the one edge meant to read clearly — it's also
+   the page's transition into text) with a slow gold sheen that sweeps
+   across it once every 7s. A sibling div, not a border or ::after on the
+   <img> itself (replaced elements don't support pseudo-elements, and
+   box-shadow doesn't paint over an <img>'s content — see the note
+   above) — positioned absolutely against .page-inner using the SAME
+   height*.33 formula .chapter-bleed's own height is built from, so it
+   sits exactly on the image's true bottom edge regardless of viewport.
+   overflow:hidden on the bar clips the sweep to its own width; disabled
+   under prefers-reduced-motion in responsive.css, alongside the book's
+   other ambient animation. */
+.chapter-opening .chapter-bleed-sheen{
   position:absolute;
-  left:50%; top:calc(var(--page-w) * 1.32 * .33);
-  transform:translate(-50%,-50%);
-  width:1.9em; height:1.9em;
-  border-radius:50%;
-  display:flex; align-items:center; justify-content:center;
-  background:radial-gradient(circle, var(--paper) 58%, rgba(233,220,189,0) 100%);
-  color:var(--brass);
-  font-size:calc(var(--page-w) * .02);
+  left:0; top:calc(var(--page-w) * 1.32 * .33 - 3px);
+  width:100%; height:3px;
+  overflow:hidden;
+  background:var(--brass);
   pointer-events:none;
+}
+.chapter-opening .chapter-bleed-sheen::after{
+  content:"";
+  position:absolute;
+  top:0; bottom:0; left:-35%;
+  width:35%;
+  background:linear-gradient(90deg, transparent 0%, rgba(255,244,214,.95) 50%, transparent 100%);
+  animation:chapter-sheen 7s ease-in-out infinite;
+}
+@keyframes chapter-sheen{
+  0%{ left:-35%; }
+  55%{ left:100%; }
+  100%{ left:100%; }
 }
 /* 50% larger than .entry-no's book-wide default (typography.css) — the
    plate now separates it from the title by real space (above), so it can

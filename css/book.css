@@ -177,9 +177,12 @@ body.ready .book-wrap, body.ready .scroll-book{ opacity:1; }
    Same inset-shadow technique the spine-side shadow already uses, just
    aimed at the top instead of the gutter, so it reads as the same kind
    of physical depth rather than a second, unrelated effect. */
-.page.left{ border-radius:4px 0 0 4px;
+/* Square, not rounded — a real leaf has a cut corner, not a moulded one,
+   and the rounding was softening the hairline border/trim treatments
+   (pages.css) right where they need to read most crisply: the corners. */
+.page.left{ border-radius:0;
   box-shadow:inset -14px 0 22px -16px rgba(60,40,10,.35), inset 0 5px 9px -7px rgba(0,0,0,.4);}
-.page.right{ border-radius:0 4px 4px 0;
+.page.right{ border-radius:0;
   box-shadow:inset 14px 0 22px -16px rgba(60,40,10,.35), inset 0 5px 9px -7px rgba(0,0,0,.4);}
 
 /* aged paper: stains + mottle + foxing + grain, all CSS/SVG, no images */
