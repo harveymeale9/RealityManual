@@ -3,18 +3,28 @@
    Styling lives in css/page-turn.css.
    ========================================================== */
 
-import { el, state, isMobile, reduced, fillSlot, render, updateStacks } from './book.js';
+import { el, state, isMobile, reduced, fillSlot, settleFromLeaf, render, updateStacks } from './book.js?v=1';
 
 const TURN_MS = 900;   /* keep in step with --turn-ms in css/tokens.css */
+
+/* Shared by the normal turn-completion timeout and finishTurnNow() (fired
+   when a new click cuts an in-flight turn short) — both need to land the
+   spread the same way, settleFromLeaf and all, or a rapid-clicked turn
+   would restart an animation that a leisurely one wouldn't. */
+function land(dir, next){
+  el.leaf.classList.remove('turning','back');
+  el.shade.classList.remove('on');
+  if (dir > 0) settleFromLeaf('pageL', 'leafBack');
+  else settleFromLeaf('pageR', 'leafFront');
+  state.spread = next;
+  render();
+  state.turning = false;
+}
 
 export function finishTurnNow(){
   if (!state.turning) return;
   clearTimeout(state.turnTimeout);
-  el.leaf.classList.remove('turning','back');
-  el.shade.classList.remove('on');
-  state.spread = state.inFlightNext;
-  render();
-  state.turning = false;
+  land(state.turningDir, state.inFlightNext);
 }
 
 export function go(dir, ms, done){
@@ -35,6 +45,7 @@ export function go(dir, ms, done){
 
   state.turning = true;
   state.inFlightNext = next;
+  state.turningDir = dir;
   el.leaf.style.animationDuration = ms + 'ms';
   el.shade.style.animationDuration = ms + 'ms';
 
@@ -66,11 +77,7 @@ export function go(dir, ms, done){
   el.shade.classList.add('on');
 
   state.turnTimeout = setTimeout(()=>{
-    el.leaf.classList.remove('turning','back');
-    el.shade.classList.remove('on');
-    state.spread = next;
-    render();
-    state.turning = false;
+    land(dir, next);
     if (done) done();
   }, ms + 20);
 }

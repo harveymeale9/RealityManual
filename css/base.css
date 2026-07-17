@@ -72,6 +72,7 @@ header.site p{
    only: js/fullscreen.js also hides it outright when the Fullscreen API
    itself isn't available (iOS Safari), so it never sits there inert. */
 .fs-toggle{
+  -webkit-appearance:none; appearance:none;   /* strip native <button> chrome before anything below applies */
   font-family:'IM Fell English SC', Georgia, serif;
   font-size:clamp(.7rem, .55rem + .3vw, .95rem);
   letter-spacing:.15em;
@@ -80,7 +81,9 @@ header.site p{
   background:none;
   border:none;
   border-bottom:1px dashed rgba(156,124,60,.85);
+  border-radius:0;
   padding:0 0 .15em;
+  line-height:normal;
   cursor:var(--cursor-point);
   transition:color .2s, border-color .2s, top .35s ease, right .35s ease;
 }

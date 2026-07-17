@@ -19,17 +19,25 @@
      fresh fetch on the next push instead of a stale cached file. Bump every
      number below by 1 (they don't need to match each other) whenever a CSS
      change isn't showing up after a normal refresh. Remove the ?cb=N suffixes
-     entirely once we're done iterating and want normal caching back. -->
-<link rel="stylesheet" href="css/tokens.css?cb=2">
-<link rel="stylesheet" href="css/base.css?cb=2">
-<link rel="stylesheet" href="css/book.css?cb=2">
-<link rel="stylesheet" href="css/typography.css?cb=2">
-<link rel="stylesheet" href="css/components.css?cb=2">
-<link rel="stylesheet" href="css/animations.css?cb=2">
-<link rel="stylesheet" href="css/page-turn.css?cb=2">
-<link rel="stylesheet" href="css/ui.css?cb=2">
-<link rel="stylesheet" href="css/pages.css?cb=2">
-<link rel="stylesheet" href="css/responsive.css?cb=2">
+     entirely once we're done iterating and want normal caching back.
+
+     THE SAME APPLIES TO JS, via ?v=N — but ES module import specifiers are
+     static strings the browser resolves literally, so bumping the entry
+     script's own tag below is NOT enough: every `import … from './x.js'`
+     inside js/*.js carries its own ?v=N too, and ALL of them need bumping
+     together whenever ANY js/*.js file changes, or the browser can keep
+     serving a stale cached copy of a file nothing here appears to reference
+     by a new URL. -->
+<link rel="stylesheet" href="css/tokens.css?cb=3">
+<link rel="stylesheet" href="css/base.css?cb=3">
+<link rel="stylesheet" href="css/book.css?cb=3">
+<link rel="stylesheet" href="css/typography.css?cb=3">
+<link rel="stylesheet" href="css/components.css?cb=3">
+<link rel="stylesheet" href="css/animations.css?cb=3">
+<link rel="stylesheet" href="css/page-turn.css?cb=3">
+<link rel="stylesheet" href="css/ui.css?cb=3">
+<link rel="stylesheet" href="css/pages.css?cb=3">
+<link rel="stylesheet" href="css/responsive.css?cb=3">
 </head>
 <body>
 <div class="glow"></div>
@@ -98,6 +106,6 @@
 <!-- shown only if the pages can't be fetched (see js/main.js) -->
 <div id="bookError" role="alert" aria-live="polite"></div>
 
-<script type="module" src="js/main.js"></script>
+<script type="module" src="js/main.js?v=1"></script>
 </body>
 </html>

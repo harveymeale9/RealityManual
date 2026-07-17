@@ -9,8 +9,8 @@
    delegate below.
    ========================================================== */
 
-import { el, state, isMobile, reduced, savePos } from './book.js';
-import { flutterTo } from './page-turn.js';
+import { el, state, isMobile, reduced, savePos } from './book.js?v=1';
+import { flutterTo } from './page-turn.js?v=1';
 
 let jumpBox, numpad;
 

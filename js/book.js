@@ -19,6 +19,7 @@ export const state = {
   turning: false,
   turnTimeout: null,  // the pending setTimeout for the in-flight turn
   inFlightNext: null, // the spread that turn is heading to
+  turningDir: 1,       // direction of the in-flight turn (1 or -1)
   maxSpread: 0,
 };
 
@@ -96,6 +97,37 @@ export function fillSlot(id, page){
   if (stale) stale.remove();
   const folio = node.querySelector('.folio');
   if (folio && node.parentElement) node.parentElement.appendChild(folio);
+}
+
+/* The other half of the animation-restart fix above. fillSlot()'s
+   dataset-slug guard protects the slot that was pre-filled UNDERNEATH the
+   flipping leaf — but the leaf itself has its OWN two faces (#leafFront /
+   #leafBack), and whichever face is facing the reader when the turn ends
+   is what the real slot has to end up showing. That face has been
+   carrying a live, already-running animation for the whole turn; calling
+   fillSlot() for the real slot at that point would still rebuild it from
+   the page's HTML string — a DIFFERENT element than the one that was just
+   animating — restarting the animation exactly as before, just on the
+   other side of the spread. So instead of rebuilding, MOVE the leaf
+   face's actual DOM nodes into the real slot: same elements, same
+   in-flight animation, no restart. The leaf face is left empty and its
+   data-slug cleared so a future fillSlot() call on it (next turn) doesn't
+   mistake "empty" for "already showing that page" and skip its own fill. */
+export function settleFromLeaf(id, leafFaceId){
+  const node = el[id] || document.getElementById(id);
+  const source = el[leafFaceId] || document.getElementById(leafFaceId);
+  const sourceParent = source.parentElement;
+  const stale = node.parentElement && node.parentElement.querySelector(':scope > .folio');
+  if (stale) stale.remove();
+  node.className = source.className;
+  node.dataset.slug = source.dataset.slug || '';
+  while (source.firstChild) node.appendChild(source.firstChild);
+  /* the folio for this page was already lifted out of `source` into
+     sourceParent (.leaf-face) back when fillSlot() first filled the leaf */
+  const folio = sourceParent && sourceParent.querySelector(':scope > .folio');
+  if (folio && node.parentElement) node.parentElement.appendChild(folio);
+  source.className = 'page-inner';
+  source.dataset.slug = '';
 }
 
 export function render(){

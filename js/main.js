@@ -2,11 +2,11 @@
    MAIN — load the book, wire the controls, open it
    ========================================================== */
 
-import { loadBook } from './loader.js';
-import { el, state, cacheDom, isMobile, render, buildScrollBook, savedPageIndex } from './book.js';
-import { requestGo } from './page-turn.js';
-import { initJump, syncMobilePage } from './jump.js';
-import { initFullscreen } from './fullscreen.js';
+import { loadBook } from './loader.js?v=1';
+import { el, state, cacheDom, isMobile, render, buildScrollBook, savedPageIndex } from './book.js?v=1';
+import { requestGo } from './page-turn.js?v=1';
+import { initJump, syncMobilePage } from './jump.js?v=1';
+import { initFullscreen } from './fullscreen.js?v=1';
 
 /* reveal once fonts are in, so the whole book paints in its final form;
    the timeout guarantees reveal even if font loading stalls */
