@@ -43,17 +43,14 @@
    zoom) instead of scaling with the page like every other gap on this leaf
    — which is exactly why this gap used to render a visibly different size
    on desktop, tablet, and mobile despite being "the same" value everywhere. */
-/* Frame — box-shadow does NOT paint over an opaque <img>'s own raster
-   content (replaced-element content sits above it in paint order,
-   confirmed by testing an 8px inset red box-shadow here that rendered
-   completely invisible), so a real `border` is the only thing that reads
-   on the one edge left as a plain border. Right: bright gold
-   (--brass-bright) — sits right next to the book's own gilt page-edge
-   trim (.stack, book.css), and this reads as a deliberate double-gold
-   edge rather than vanishing into it. Top and bottom are left `none`
-   here — both are the cast-gold bar instead (see .chapter-bleed-trim
-   below), not a plain border. Left: none — the spine side needs no edge
-   at all. */
+/* Frame, all four sides, a plain 1px gold hairline — box-shadow does NOT
+   paint over an opaque <img>'s own raster content (replaced-element
+   content sits above it in paint order, confirmed by testing an 8px
+   inset red box-shadow here that rendered completely invisible), so a
+   real `border` is the only thing that reads. Kept deliberately simple
+   (no gradient bars, no sheen) after those read badly at mobile's much
+   smaller plate size — one hairline, same weight and colour on every
+   side, on every device. */
 .chapter-opening .chapter-bleed{
   display:block;
   width:var(--page-w);
@@ -61,31 +58,8 @@
   margin:calc(var(--page-w) * -.09) 0 calc(var(--page-w) * .049) calc(var(--page-w) * -.11);
   object-fit:cover;
   object-position:65% 60%;
-  border-top:none;
-  border-right:1px solid rgba(240,211,140,.85);
-  border-bottom:none;
-  border-left:none;
+  border:1px solid rgba(240,211,140,.85);
 }
-/* The plate's head and foot: a cast gold bar — a TOP-TO-BOTTOM gradient
-   (dark bronze edges, pale highlight through the middle) that reads as a
-   lit, rounded rod of metal rather than a flat painted stripe. Static, no
-   sweep. Two sibling divs (one per edge), not borders or ::after on the
-   <img> itself (replaced elements don't support pseudo-elements, and
-   box-shadow doesn't paint over an <img>'s content — see the note above)
-   — .chapter-bleed-trim-bottom is positioned against .page-inner using
-   the SAME height*.33 formula .chapter-bleed's own height is built from,
-   so it sits exactly on the image's true bottom edge regardless of
-   viewport; .chapter-bleed-trim-top simply sits flush with the image's
-   own top. */
-.chapter-opening .chapter-bleed-trim{
-  position:absolute;
-  left:0; width:100%; height:6px;
-  background:linear-gradient(180deg,
-    #8a6d2f 0%, #d4af37 20%, #f5e1a4 45%, #d4af37 55%, #a9822f 75%, #6e5420 100%);
-  pointer-events:none;
-}
-.chapter-opening .chapter-bleed-trim-top{ top:0; }
-.chapter-opening .chapter-bleed-trim-bottom{ top:calc(var(--page-w) * 1.32 * .33 - 6px); }
 /* 50% larger than .entry-no's book-wide default (typography.css) — the
    plate now separates it from the title by real space (above), so it can
    afford, and needs, more presence to still read as a heading rather
