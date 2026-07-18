@@ -101,6 +101,21 @@ The hierarchy, largest to smallest — as multiples of `--page-w`:
 strategy — see §9. Never write `font-size` in `px`, `rem`, or `em` on a page.
 If you need a size that isn't listed, you almost certainly need an existing class.
 
+**The same rule applies to margin and padding, and it's easier to get wrong.**
+`em` is only page-relative if the SAME element (or a close ancestor in the same
+context) already has its own `calc(var(--page-w) * n)` font-size — most classes
+do, so most existing `em` margins in this codebase are already safe. But a plate,
+a plate wrapper, or anything else that sits as a bare sibling of `.body-text`
+rather than inside it has NO font-size of its own; a bare `em` margin on it
+silently falls back to the browser's ambient default font-size — a fixed pixel
+value that does not track the page at all. It looks identical to a correct value
+at whatever page-w you happened to test it at, and only reveals itself as wrong
+on a different device or window size, which is what makes it easy to reintroduce
+(this happened for real: `.plate-img`'s own book-wide default margin used bare
+`em` for a long time before being caught and fixed). When in doubt, ask: "does
+this exact element have a `calc(var(--page-w) * n)` font-size declared on it?" —
+if not, its margin/padding needs `calc(var(--page-w) * n)` too, never a bare unit.
+
 Body text is `justify` + `hyphens:auto`, `line-height:1.62`. Paragraphs after the
 first get a 1.6em indent automatically (`p + p`) — **do not add blank lines or
 `<br>` between paragraphs**; just write consecutive `<p>` tags.
@@ -358,7 +373,11 @@ Consequences worth knowing:
    derived from `book.json`, and anything hard-typed becomes a lie on the next
    insert.
 2. **Never overrun the page.** §1. It fails silently.
-3. **Never use `px` for type or plate widths.** It breaks the scaling in §11.
+3. **Never use `px` for type or plate widths — or a bare `em`/`px` for margin or
+   padding on anything that lacks its own `calc(var(--page-w) * n)` font-size.**
+   Both break the scaling in §11, and the margin version is the sneakier of the
+   two: it renders fine at whatever size you tested, then drifts on every other
+   device. See §3's own note on this.
 4. **Never write a hex colour or a font family on a page.** Tokens and classes.
 5. **Never invent a class**, and never restyle an existing one to suit one page —
    that's what `css/pages.css` is for.

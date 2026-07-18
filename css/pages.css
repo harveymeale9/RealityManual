@@ -177,19 +177,26 @@
    ::after, and replaced elements don't support pseudo-elements — same
    reason .mount-c-wrap used a wrapper earlier. The wrapper carries the
    width and margin that used to sit on the plate-img directly; the img
-   inside is simply width:100% of it. Margin matches the book-wide
-   .plate-img default (1em auto .3em) — a plate followed by a caption
-   (universal-principles.html) wants that tight .3em, a caption is meant
-   to read as "a whisper beneath the image," not a separate block. */
+   inside is simply width:100% of it.
+
+   calc(var(--page-w) * n), NOT em — same bug as .plate-img's own book-
+   wide default had (see typography.css's note on it): this wrapper has
+   no font-size of its own, so a bare em silently pinned the gap to a
+   fixed pixel size that didn't track the page across devices at all,
+   which is what actually produced the desktop/tablet/mobile mismatch
+   here, not a difference in how much text each device fits. Top and
+   bottom are the SAME value now too (were 1em/.3em) — asymmetric margins
+   around a plate aren't a real convention here, that was just an
+   unexamined carry-over from .plate-img's own default. */
 .plate-frame{
   position:relative;
   display:block;
-  margin:1em auto .3em;
+  margin:calc(var(--page-w) * .012) auto;
 }
 .plate-frame img{ display:block; width:100%; margin:0; }
-/* a-clear-answer.html's plate has body text after it instead of a
-   caption — .3em read as crowded there, so more room below only. */
-.plate-frame-loose{ margin-bottom:1.7em; }
+/* a-clear-answer.html's plate has body text before AND after it instead
+   of a caption — the tighter default above read as crowded there. */
+.plate-frame-loose{ margin:calc(var(--page-w) * .045) auto; }
 /* A vignette — darkens toward the edges, the opposite job from
    .misty-edge above (which fades toward TRANSPARENT, not dark, and only
    at the corners). Plain normal blend, no special compositing needed:

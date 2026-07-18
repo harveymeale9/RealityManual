@@ -162,17 +162,29 @@ h2.entry-title{
    clipped. flex:none makes an overlong page fail honestly, per conventions §1. */
 
 /* vector plates — the animated sigil illustration */
+/* calc(var(--page-w) * n), NOT a bare em — a plate sits as a SIBLING of
+   .body-text, not inside it, so it has no font-size of its own to make
+   an em mean anything page-relative; a bare em here quietly inherits
+   whatever fixed default the browser gives .page-inner, which is why
+   this margin used to render a visibly different size relative to the
+   page on desktop, tablet, and mobile despite being "the same" value
+   everywhere (the exact bug .chapter-bleed's own margin, pages.css, was
+   already written to avoid — this is that same fix, generalized to
+   every plate in the book instead of just the one page). Ratio (3:1
+   top:bottom) kept the same as the em values this replaces. */
 .plate{
-  margin:1.2em auto .4em; width:100%;
+  margin:calc(var(--page-w) * .036) auto calc(var(--page-w) * .012);
+  width:100%;
   display:block;
   flex:none;
 }
 /* raster plates (AI-painted illustrations): multiply blend prints them
-   into the parchment rather than pasting them onto it */
+   into the parchment rather than pasting them onto it. Margin: see
+   .plate's own note just above — same bug, same fix, same ratio. */
 .plate-img{
   display:block;
   width:100%;
-  margin:1em auto .3em;
+  margin:calc(var(--page-w) * .03) auto calc(var(--page-w) * .009);
   mix-blend-mode:multiply;
   height:auto;
   flex:none;
