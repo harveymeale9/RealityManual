@@ -170,10 +170,13 @@ h2.entry-title{
    page on desktop, tablet, and mobile despite being "the same" value
    everywhere (the exact bug .chapter-bleed's own margin, pages.css, was
    already written to avoid — this is that same fix, generalized to
-   every plate in the book instead of just the one page). Ratio (3:1
-   top:bottom) kept the same as the em values this replaces. */
+   every plate in the book instead of just the one page). Symmetric top/
+   bottom, matching .plate-frame's own default just below — the earlier
+   3:1 top:bottom ratio was never a deliberate convention, just an
+   unexamined carry-over from the em values it replaced, and it read as
+   a large gap floating a plate away from the text above it. */
 .plate{
-  margin:calc(var(--page-w) * .036) auto calc(var(--page-w) * .012);
+  margin:calc(var(--page-w) * .012) auto;
   width:100%;
   display:block;
   flex:none;
