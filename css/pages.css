@@ -190,17 +190,37 @@
 /* a-clear-answer.html's plate has body text after it instead of a
    caption — .3em read as crowded there, so more room below only. */
 .plate-frame-loose{ margin-bottom:1.7em; }
-/* The spotlight: an off-centre soft highlight, as if the plate were
-   being examined by lamplight rather than lit evenly. mix-blend-mode
-   screen (not the plain overlay this would be without it) lightens what's
-   under it instead of sitting on top as a flat wash — this is a plain
-   div's ::after, not the <img>, so it doesn't touch the flicker issue
-   .heavenly-plate's own note describes above. */
+/* A shimmer, not the spotlight this used to be (removed — that read as
+   an odd fixed highlight rather than an effect). animates
+   background-position, not left/transform — a background never paints
+   outside its own element's box regardless of any ancestor's overflow,
+   so the sweep clips itself to the frame automatically. That matters
+   here specifically because overflow:hidden on .plate-frame (the more
+   usual way to clip a sweep, see the chapter-opening plate's own retired
+   sheen) would ALSO clip .heavenly-plate's drop-shadow glow and
+   .plate-float's own motion, both of which are meant to extend past the
+   plate's edges. Screen blend so it lightens rather than sitting on top
+   as a flat band; a plain div's ::after, not the <img>, so it doesn't
+   touch the flicker issue .heavenly-plate's own note describes above.
+   Disabled under prefers-reduced-motion (responsive.css) — hidden
+   outright rather than frozen mid-sweep, since a STILL diagonal light
+   band reads as a stray mark, not a design element, the way the torn
+   edge/mist/glow still do when their own motion (plate-float) stops. */
 .plate-frame::after{
   content:"";
   position:absolute; inset:0;
-  background:radial-gradient(ellipse 55% 42% at 42% 30%,
-    rgba(255,250,230,.55) 0%, rgba(255,250,230,0) 72%);
+  background:linear-gradient(200deg,
+    transparent 35%, rgba(255,252,235,.6) 47%,
+    rgba(255,255,255,.85) 50%, rgba(255,252,235,.6) 53%, transparent 65%);
+  background-size:260% 260%;
+  background-repeat:no-repeat;
+  background-position:-70% -70%;
   mix-blend-mode:screen;
   pointer-events:none;
+  animation:plate-shimmer 6s ease-in-out infinite;
+}
+@keyframes plate-shimmer{
+  0%{ background-position:-70% -70%; }
+  55%{ background-position:170% 170%; }
+  100%{ background-position:170% 170%; }
 }

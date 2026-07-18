@@ -119,4 +119,8 @@
      torn edge, glow, and shadow all stay; only the drift stops, so it
      still reads correctly as a fully still image */
   .plate-float{ animation:none !important; }
+  /* the shimmer (pages.css: .plate-frame::after) — hidden outright, not
+     just paused, since a still diagonal light band reads as a stray
+     mark rather than a design element */
+  .plate-frame::after{ display:none !important; }
 }
