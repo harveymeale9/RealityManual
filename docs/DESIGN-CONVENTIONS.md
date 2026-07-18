@@ -399,7 +399,13 @@ Consequences worth knowing:
 6. **Never use pure black, pure white, or any colour outside the palette.**
 7. **One `.page-inner` per file**, with `style="position:static"`. Exactly one
    `.folio`, empty, last. No `<html>`, `<head>`, or `<body>`.
-8. **Never nest `.body-text`** or put a plate inside it.
+8. **Never nest `.body-text`** or put a plate inside it — **except** a floated
+   plate (`.plate-frame-float`/`-right`), which MUST go inside `.body-text` (as
+   its first child) or it won't float at all: `.page-inner` is `display:flex`
+   (column), and float has no effect on a flex item, so a float placed as
+   `.body-text`'s sibling just becomes an inert second flex item — floating
+   only works once it shares an ordinary block context with the text it wraps.
+   A plain (non-floated) plate stays outside `.body-text` as before.
 9. **One dropcap per entry, one ornament per page, one marginal per page, one
    pull quote per page.**
 10. **Never animate text.** SVG only.

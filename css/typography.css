@@ -283,7 +283,22 @@ h2.entry-title{
    .plate-frame's own symmetric auto-centred margin), which is what
    opens the gap between the plate and the wrapped text. Used twice now
    (this and the alchemical plate on an earlier page), so promoted here
-   from a one-off in pages.css. */
+   from a one-off in pages.css.
+
+   MUST be placed INSIDE .body-text (as its first child, before the
+   paragraphs it wraps beside) — a deliberate, narrow exception to §9's
+   "never nest .body-text or put a plate inside it," made ONLY for a
+   floated plate, for a real technical reason: .page-inner is
+   display:flex (column), and float has NO EFFECT on a flex item per
+   the CSS spec — a .plate-frame-float placed as .body-text's SIBLING
+   (a second flex item) simply doesn't float at all, it just stacks
+   below as an ordinary flex item, and the paragraphs after it never
+   wrap (confirmed: this is exactly what shipped once, and did nothing).
+   Floating only works again once the float and the text it wraps share
+   an ordinary block-formatting-context parent — .body-text, in this
+   case — rather than being siblings inside the flex container. A
+   plain, non-floated .plate-frame must stay OUTSIDE .body-text as
+   before; this exception is for the float variant only. */
 .plate-frame-float{
   float:left;
   margin:0 calc(var(--page-w) * .035) calc(var(--page-w) * .02) 0;
