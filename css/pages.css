@@ -63,10 +63,15 @@
   margin:calc(var(--page-w) * -.09) 0 calc(var(--page-w) * .049) calc(var(--page-w) * -.11);
   object-fit:cover;
   object-position:65% 60%;
-  border:1px solid rgba(122,47,29,.55);
+  /* top edge: bright gold (--brass-bright), matching the sheen bar below it —
+     left/right stay rubric, per the note above about gold-on-gold vanishing
+     against the gilt page-edge trim next to the right side. */
+  border-left:1px solid rgba(122,47,29,.55);
+  border-right:1px solid rgba(122,47,29,.55);
+  border-top:1px solid rgba(240,211,140,.85);
   border-bottom:none;
 }
-/* The plate's foot: a 4px solid brass bar (thicker than the hairline
+/* The plate's foot: a 4px solid bright-gold bar (thicker than the hairline
    sides, since this is the one edge meant to read clearly — it's also
    the page's transition into text) with a slow gold sheen that sweeps
    across it once every 7s. A sibling div, not a border or ::after on the
@@ -77,13 +82,15 @@
    sits exactly on the image's true bottom edge regardless of viewport.
    overflow:hidden on the bar clips the sweep to its own width; disabled
    under prefers-reduced-motion in responsive.css, alongside the book's
-   other ambient animation. */
+   other ambient animation. --brass-bright (not --brass): plain ornament
+   brass reads as a dark, dull mustard at this size — this bar wants the
+   same light, shiny gold as the sheen sweeping over it. */
 .chapter-opening .chapter-bleed-sheen{
   position:absolute;
   left:0; top:calc(var(--page-w) * 1.32 * .33 - 4px);
   width:100%; height:4px;
   overflow:hidden;
-  background:var(--brass);
+  background:var(--brass-bright);
   pointer-events:none;
 }
 .chapter-opening .chapter-bleed-sheen::after{

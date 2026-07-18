@@ -10,7 +10,7 @@
    see their own overrides in responsive.css. */
 .running-head{
   font-family:'IM Fell English SC', serif;
-  font-size:calc(var(--page-w) * .0256); letter-spacing:.32em; text-indent:.32em;
+  font-size:calc(var(--page-w) * .0205); letter-spacing:.32em; text-indent:.32em;
   text-align:center; color:var(--ink-faint);
   margin-bottom:1.6em;
 }
@@ -111,8 +111,9 @@ h2.entry-title{
 .dropcap::first-letter{
   font-family:'IM Fell English SC', serif;
   float:left;
-  font-size:3.4em; line-height:.68;
-  padding:.06em .12em 0 0;
+  font-size:3.4em; line-height:.6;
+  margin-top:-.04em;
+  padding:0 .08em 0 0;
   color:var(--rubric);
 }
 

@@ -17,7 +17,15 @@
      off in fullscreen: fs-mode's own --page-w is already bigger, and at
      that size the plain 1.55x default reads correctly — this 2.2x is
      specifically for tablet's smaller NORMAL page-w. */
-  body:not(.fs-mode) .running-head{ font-size:calc(var(--page-w) * .0363); }
+  body:not(.fs-mode) .running-head{ font-size:calc(var(--page-w) * .0254); }
+  /* the chapter-opening plate's foot bar (pages.css) reads noticeably
+     thicker on a tablet-sized page than the same 4px does on desktop —
+     1px thinner here only, with top recalculated so it still sits flush
+     on the plate's true bottom edge. */
+  .chapter-opening .chapter-bleed-sheen{
+    height:3px;
+    top:calc(var(--page-w) * 1.32 * .33 - 3px);
+  }
 }
 
 @media (orientation: portrait) and (max-width: 940px), (max-width: 720px){
@@ -26,7 +34,7 @@
   header.site{ flex:0 0 auto; padding:3vh 0 2vh; }
   /* Same 2.2x-of-baseline boost as tablet's own (non-fullscreen) override
      above — .0165 * 2.2, not the desktop/default 1.55x (typography.css). */
-  .running-head{ font-size:calc(var(--page-w) * .0363); }
+  .running-head{ font-size:calc(var(--page-w) * .02); }
   .book-wrap{
     visibility:hidden;
     perspective:none;
