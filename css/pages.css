@@ -126,3 +126,26 @@
    to .plate-img — it's the standard for every future image on every
    page, not a one-off tweak for a single leaf, so it belongs there
    rather than here. See typography.css §9 for the full thing. */
+
+/* alchemical-book-plate.html: the plate sits in a bottom corner with
+   body text wrapping around it, rather than the book's usual "plate as
+   its own full-width block" placement (typography.css §9: "Plates fill
+   the measure") — a real, if unusual, exception, tried here because the
+   page was reading as mostly blank beneath two short paragraphs.
+
+   A plain CSS float: the plate-frame div floats left at whatever page
+   in the source order it's placed (here, between the second and third
+   paragraphs — the FIRST two paragraphs come before it in the markup,
+   so they render full-width, untouched by the float; the paragraph
+   AFTER it wraps beside it, same as any block-level sibling would).
+   .plate-frame itself is never nested inside .body-text (typography.css
+   §9's own "never nest .body-text" rule still holds) — it sits between
+   two separate .body-text blocks instead, a sibling of both, exactly
+   like the two-body-text-block pattern already used on other pages that
+   split their prose around a plate. margin-right (not the book-wide
+   .plate-frame's own symmetric auto-centred margin) is what actually
+   opens the gap between the image and the wrapped text beside it. */
+.plate-frame-float{
+  float:left;
+  margin:0 calc(var(--page-w) * .035) calc(var(--page-w) * .02) 0;
+}
