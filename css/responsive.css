@@ -115,4 +115,8 @@
   /* the candle stops burning but stays lit — a flame whose meaning only
      appears once it moves is broken for a reader who's turned motion off */
   .flame, .flame-core, .flame-halo, .candle-cast{ animation:none !important; }
+  /* the chapter plate's gold-foil trim (pages.css) — the bar itself stays,
+     a plain static gold-foil gradient, just as a photograph must "still
+     read correctly as a fully static image" per this rule's own convention */
+  .chapter-bleed-trim::after{ animation:none !important; }
 }
