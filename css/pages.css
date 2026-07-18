@@ -190,24 +190,46 @@
 /* a-clear-answer.html's plate has body text after it instead of a
    caption — .3em read as crowded there, so more room below only. */
 .plate-frame-loose{ margin-bottom:1.7em; }
+/* A vignette — darkens toward the edges, the opposite job from
+   .misty-edge above (which fades toward TRANSPARENT, not dark, and only
+   at the corners). Plain normal blend, no special compositing needed:
+   a dark, partly-opaque wash reads as a shadow through ordinary alpha
+   compositing. ::before, not ::after (that's the candlelight below) —
+   paint order for a positioned ::before/::after pair against a
+   non-positioned sibling <img> is: img first, then ::before, then
+   ::after, so this sits between the plate and the candlelight, which is
+   the right order (light flickers on TOP of an already-vignetted
+   image, not the other way round). */
+.plate-frame::before{
+  content:"";
+  position:absolute; inset:0;
+  background:radial-gradient(ellipse at center,
+    transparent 55%, rgba(15,9,3,.4) 100%);
+  pointer-events:none;
+}
 /* Candlelight, not the glints/shimmer/spotlight this was for three
-   attempts (none of them read right). Rides @keyframes flicker
-   (animations.css) directly — the SAME irregular rhythm already lighting
-   the desk in base.css's .glow, reused rather than reinvented, since
-   "as if a candle were flickering on it" is exactly that rhythm applied
-   somewhere else. One soft warm wash, off-centre like real light falling
-   from one side, not several discrete points — screen blend lightens
-   what's under it rather than sitting on top as a flat tint. Subtle by
-   keeping the gradient's own peak alpha low (.28): the flicker keyframe
-   itself only ranges opacity .75–1, so the effective wash never exceeds
-   ~.28 either. Disabled under prefers-reduced-motion (responsive.css),
-   same as .glow itself. */
+   attempts (none of them read right) — and turned up a full stop from
+   the first pass at this, which read as invisible. One soft warm wash,
+   off-centre like real light falling from one side, not several
+   discrete points — screen blend lightens what's under it rather than
+   sitting on top as a flat tint. plate-candlelight (below), not the
+   book's own shared @keyframes flicker any more: that one's .75–1 range
+   was too narrow to read once the gradient itself was also strong
+   enough to see, so this has its own wider swing, same irregular
+   mostly-steady-with-flares shape. Disabled under prefers-reduced-motion
+   (responsive.css), same as .glow itself. */
 .plate-frame::after{
   content:"";
   position:absolute; inset:0;
   background:radial-gradient(ellipse at 42% 34%,
-    rgba(255,205,120,.28) 0%, rgba(255,205,120,0) 62%);
+    rgba(255,195,100,.55) 0%, rgba(255,195,100,0) 68%);
   mix-blend-mode:screen;
   pointer-events:none;
-  animation:flicker 7s ease-in-out infinite;
+  animation:plate-candlelight 7s ease-in-out infinite;
+}
+@keyframes plate-candlelight{
+  0%,100%{ opacity:.55 }
+  40%{ opacity:1 }
+  60%{ opacity:.3 }
+  80%{ opacity:.8 }
 }
