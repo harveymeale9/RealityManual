@@ -119,8 +119,7 @@
      torn edge, glow, and shadow all stay; only the drift stops, so it
      still reads correctly as a fully still image */
   .plate-float{ animation:none !important; }
-  /* the glints (pages.css: .plate-glint) — hidden outright, not just
-     paused, since a glint frozen at partial opacity reads as an odd
-     translucent smudge rather than a design element */
-  .plate-glint{ animation:none !important; opacity:0 !important; }
+  /* the candlelight wash (pages.css: .plate-frame::after) — same
+     treatment as .glow itself just above */
+  .plate-frame::after{ animation:none !important; }
 }
