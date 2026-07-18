@@ -174,12 +174,22 @@ h2.entry-title{
    bottom, matching .plate-frame's own default just below — the earlier
    3:1 top:bottom ratio was never a deliberate convention, just an
    unexamined carry-over from the em values it replaced, and it read as
-   a large gap floating a plate away from the text above it. */
+   a large gap floating a plate away from the text above it.
+
+   Margin narrows automatically whenever a .plate-caption immediately
+   follows — exactly like .plate-frame below, and for the same reason: a
+   vector and a raster plate used the same way (body text on both
+   sides, no caption) must get the same spacing, or the inconsistency
+   just moves from "forgot a modifier class" to "the two plate types
+   don't match each other." */
 .plate{
-  margin:calc(var(--page-w) * .012) auto;
+  margin:calc(var(--page-w) * .045) auto;
   width:100%;
   display:block;
   flex:none;
+}
+.plate:has(+ .plate-caption){
+  margin:calc(var(--page-w) * .012) auto;
 }
 /* raster plates (AI-painted illustrations): multiply blend prints them
    into the parchment rather than pasting them onto it. Margin: see
@@ -208,9 +218,22 @@ h2.entry-title{
    exception, not something every plain plate-img should now also grow
    torn edges. .plate-frame is for the ordinary case: an illustration
    sitting in the text column. */
+/* Margin is DERIVED, not chosen by hand: tight by default (a whisper
+   before a caption), automatically widening whenever no .plate-caption
+   immediately follows. This used to be a manual modifier class
+   (.plate-frame-loose) that had to be remembered and added by hand any
+   time a page's caption was removed or its surrounding text changed —
+   which is exactly how it drifted (one page kept the tight margin after
+   losing its caption, reading as inconsistent with every other plate in
+   the book). Deriving it from the actual DOM structure via :has()
+   instead makes that class of mistake structurally impossible: there is
+   nothing left to forget. */
 .plate-frame{
   position:relative;
   display:block;
+  margin:calc(var(--page-w) * .045) auto;
+}
+.plate-frame:has(+ .plate-caption){
   margin:calc(var(--page-w) * .012) auto;
 }
 /* Waviness on all four sides — traced clockwise from the top-left: top
@@ -270,9 +293,6 @@ h2.entry-title{
     plate-float 9s ease-in-out infinite,
     glow-pulse 5s ease-in-out infinite;
 }
-/* For a plate with body text before AND after it instead of a caption —
-   the tighter default above reads as crowded there. */
-.plate-frame-loose{ margin:calc(var(--page-w) * .045) auto; }
 /* A real, if unusual, exception to "plates fill the measure": a tall
    plate that would otherwise need more vertical room than the page has
    to spare renders in full instead of clipping, by letting body text

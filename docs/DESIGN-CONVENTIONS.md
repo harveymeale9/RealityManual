@@ -10,7 +10,7 @@ Where a number appears below, it's one you can't get by reading a stylesheet.
 
 ---
 
-## 0. The one rule
+## 0. The two rules
 
 **A page is a fixed box that clips. It does not scroll.**
 
@@ -19,6 +19,20 @@ not scrolled, not warned about — it is *silently invisible*. Overrunning a pag
 is the only way to actually break this book, and it fails quietly.
 
 So: **count the words before writing, not after.**
+
+**If a value depends on context, derive it — don't ask an author to remember it.**
+A modifier class that must be manually added whenever a page's surrounding
+content changes (a caption removed, text added around a plate) *will* eventually
+be forgotten on some page, and the book will read as internally inconsistent —
+not because a rule was broken, but because nobody was reminded to apply it. This
+already happened once for real: `.plate-frame`'s margin used to be a `-loose`
+class you had to remember to add whenever a plate lost its caption, and one page
+kept the tight spacing after its caption was removed, reading as an unexplained
+inconsistency next to every other plate in the book. Prefer CSS that derives its
+own state from the actual markup — `:has()`, sibling selectors — over a class
+whose correctness depends on someone remembering to toggle it. If you catch
+yourself writing "add class X whenever condition Y," ask whether the CSS can just
+check for Y directly instead.
 
 ## 1. How much fits (measured, not estimated)
 
@@ -252,8 +266,13 @@ classes to remember:
 <p class="plate-caption">What it shows, stated plainly.</p>
 ```
 Narrow it the usual way — `style="width:64%"` on the `.plate-frame`, not the
-`<img>` — and reach for `.plate-frame-loose` instead of the plain `.plate-frame`
-when body text follows the plate directly rather than a caption (more room below).
+`<img>`. Its margin (tight before a caption, more room when body text follows
+instead) is **derived automatically** from whether a `.plate-caption` actually
+follows in the markup (`.plate-frame:has(+ .plate-caption)`) — there used to be a
+`.plate-frame-loose` modifier class for this and it's gone now, precisely because
+it had to be remembered and re-applied by hand every time a page's caption was
+added or removed, and it drifted on a real page as a result. Nothing to choose
+here any more: add or remove a `.plate-caption`, the spacing follows on its own.
 
 A bare `<img class="plate-img">` with **no** `.plate-frame` wrapper still exists —
 flat, `mix-blend-mode:multiply`, printed straight into the parchment, no torn

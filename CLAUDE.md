@@ -226,6 +226,7 @@ The load pipeline (`js/loader.js` → `js/book.js` → `js/main.js`) depends on 
 5. **Animate SVG only, never text or layout**, and keep motion slow/ambient/looping — nothing reacts to scroll, hover, or click. `prefers-reduced-motion` disables all SVG animation and the page-turn itself, so a plate must still read correctly as a fully static image.
 6. **Reader position is keyed by page slug**, not content hash — so editing a page's text is safe, but renaming a slug without updating `book.json` (or vice versa) will silently reset or break position memory.
 7. **Run `python3 tools/check.py` after any change to `book.json` or `/pages`** before pushing — it's the only safety net for the invariants above (missing files, missing partials, missing `.page-inner`, duplicate/orphaned slugs, stray template syntax).
+8. **If a CSS value depends on context (what's before/after a plate, whether a caption follows), derive it from the actual markup — don't create a modifier class an author has to remember to add or remove.** A class that must be manually kept in sync with a page's content will eventually fall out of sync on some page, and the book reads as inconsistent even though no single rule was "broken." This shipped for real once: `.plate-frame`'s margin was a `-loose` modifier class that had to be re-applied by hand whenever a caption was added/removed, and it drifted on a live page. Fixed by deriving the margin with `:has(+ .plate-caption)` instead — see `docs/DESIGN-CONVENTIONS.md` §0 for the full principle.
 
 ---
 
