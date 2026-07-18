@@ -50,10 +50,9 @@
    Top and right: bright gold (--brass-bright) — the right edge sits right
    next to the book's own gilt page-edge trim (.stack, book.css), and this
    reads as a deliberate double-gold edge rather than vanishing into it.
-   Bottom: rubric, the same red as "Chapter I" (.entry-no) below the plate —
-   its foot is the page's transition into text, so it borrows that page's
-   own structural colour rather than more ornament gold. Left: none — the
-   spine side needs no edge at all. No sheen: a plain static frame. */
+   Bottom is left `none` here — that edge is a soft gold trim instead (see
+   .chapter-bleed-trim below), not a plain border, so the two don't double
+   up. Left: none — the spine side needs no edge at all. */
 .chapter-opening .chapter-bleed{
   display:block;
   width:var(--page-w);
@@ -63,8 +62,27 @@
   object-position:65% 60%;
   border-top:1px solid rgba(240,211,140,.85);
   border-right:1px solid rgba(240,211,140,.85);
-  border-bottom:3px solid var(--rubric);
+  border-bottom:none;
   border-left:none;
+}
+/* The plate's foot: a soft gold trim — brightest at the centre, fading to
+   nothing at both edges, like a gleam catching the gilt rather than a flat
+   painted line. A sibling div, not a border or ::after on the <img> itself
+   (replaced elements don't support pseudo-elements, and box-shadow doesn't
+   paint over an <img>'s content — see the note above) — positioned
+   absolutely against .page-inner using the SAME height*.33 formula
+   .chapter-bleed's own height is built from, so it sits exactly on the
+   image's true bottom edge regardless of viewport. Static, not the
+   sweeping animated version this used to be — just the gleam, at rest. */
+.chapter-opening .chapter-bleed-trim{
+  position:absolute;
+  left:0; top:calc(var(--page-w) * 1.32 * .33 - 3px);
+  width:100%; height:3px;
+  background:linear-gradient(90deg,
+    transparent 0%, rgba(240,211,140,.15) 18%,
+    rgba(250,224,160,.95) 50%,
+    rgba(240,211,140,.15) 82%, transparent 100%);
+  pointer-events:none;
 }
 /* 50% larger than .entry-no's book-wide default (typography.css) — the
    plate now separates it from the title by real space (above), so it can
