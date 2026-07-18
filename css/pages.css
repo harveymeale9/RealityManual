@@ -129,15 +129,17 @@
    that won. Percentages throughout (not px), so it scales with whichever
    plate it's on at every page-w.
 
-   Waviness on TOP and BOTTOM both (sides stay straight) — halved twice
+   Waviness on all FOUR sides now (was top/bottom only) — halved twice
    over from an initial ~3% amplitude down to ~0.8%, same uneven-point
-   shape, just a fainter ripple each time. */
+   shape, just a fainter ripple each time. Traced clockwise from the
+   top-left: top edge, right edge, bottom edge (right to left), left
+   edge (bottom to top). */
 .torn-edge{
   clip-path:polygon(
-    0% .2%, 10% .65%, 20% .3%, 30% .8%, 40% .25%, 50% .6%,
-    60% .35%, 70% .75%, 80% .2%, 90% .55%, 100% .3%,
-    100% 99.75%, 90% 99.3%, 80% 99.85%, 70% 99.2%, 60% 99.8%, 50% 99.35%,
-    40% 99.9%, 30% 99.25%, 20% 99.8%, 10% 99.35%, 0% 99.75%
+    0% .3%, 14% .7%, 28% .25%, 42% .65%, 56% .3%, 70% .75%, 84% .2%, 100% .45%,
+    99.7% 14%, 99.25% 28%, 99.8% 42%, 99.3% 56%, 99.75% 70%, 99.2% 84%, 99.6% 100%,
+    86% 99.7%, 72% 99.25%, 58% 99.8%, 44% 99.3%, 30% 99.75%, 16% 99.2%, 0% 99.55%,
+    .25% 86%, .7% 72%, .2% 58%, .75% 44%, .3% 30%, .65% 16%
   );
 }
 /* A corners-only fade — a single centred radial reaches the corners
@@ -170,4 +172,35 @@
   filter:
     drop-shadow(0 10px 16px rgba(20,12,4,.28))
     drop-shadow(0 0 22px rgba(255,248,222,.5));
+}
+/* Wraps the <img> (not a class on the <img> itself): a spotlight needs a
+   ::after, and replaced elements don't support pseudo-elements — same
+   reason .mount-c-wrap used a wrapper earlier. The wrapper carries the
+   width and margin that used to sit on the plate-img directly; the img
+   inside is simply width:100% of it. Margin matches the book-wide
+   .plate-img default (1em auto .3em) — a plate followed by a caption
+   (universal-principles.html) wants that tight .3em, a caption is meant
+   to read as "a whisper beneath the image," not a separate block. */
+.plate-frame{
+  position:relative;
+  display:block;
+  margin:1em auto .3em;
+}
+.plate-frame img{ display:block; width:100%; margin:0; }
+/* a-clear-answer.html's plate has body text after it instead of a
+   caption — .3em read as crowded there, so more room below only. */
+.plate-frame-loose{ margin-bottom:1.7em; }
+/* The spotlight: an off-centre soft highlight, as if the plate were
+   being examined by lamplight rather than lit evenly. mix-blend-mode
+   screen (not the plain overlay this would be without it) lightens what's
+   under it instead of sitting on top as a flat wash — this is a plain
+   div's ::after, not the <img>, so it doesn't touch the flicker issue
+   .heavenly-plate's own note describes above. */
+.plate-frame::after{
+  content:"";
+  position:absolute; inset:0;
+  background:radial-gradient(ellipse 55% 42% at 42% 30%,
+    rgba(255,250,230,.55) 0%, rgba(255,250,230,0) 72%);
+  mix-blend-mode:screen;
+  pointer-events:none;
 }
