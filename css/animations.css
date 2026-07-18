@@ -107,15 +107,37 @@
    one rides a plain <img> instead, testing whether a very slow vertical
    drift sells "a loose piece of parchment, hovering" for one specific
    plate (universal-principles.html) — paired there with a clip-path torn
-   edge and a soft glow (pages.css: .torn-edge, .heavenly-plate). Small
-   amplitude and a slow clock, same as every other ambient loop in the
-   book. Disabled under prefers-reduced-motion like all the others (see
-   responsive.css) — the plate's shape and glow stay, only the drift
-   stops, so it still reads correctly fully still. */
-.plate-float{ animation:plate-float 7s ease-in-out infinite; }
+   edge and a soft glow (pages.css: .torn-edge, .heavenly-plate). Turned
+   down again after the second pass read as too much: smaller drift,
+   slower clock. Two animations in one shorthand, not one class each —
+   plate-float only ever touches `transform`, glow-pulse only ever
+   touches `filter`, so they run independently on the same element
+   without fighting over a property. Disabled under prefers-reduced-
+   motion like all the others (see responsive.css): setting
+   `animation:none` on .plate-float cancels both at once, since both are
+   declared through this one property. glow-pulse's resting keyframe
+   matches .heavenly-plate's own static filter value exactly, so the
+   fallback (motion off) shows the same glow, just not pulsing. */
+.plate-float{
+  animation:
+    plate-float 9s ease-in-out infinite,
+    glow-pulse 5s ease-in-out infinite;
+}
 @keyframes plate-float{
   0%,100%{ transform:translateY(0) scale(1); }
-  50%{ transform:translateY(-3%) scale(1.015); }
+  50%{ transform:translateY(-1.2%) scale(1.005); }
+}
+@keyframes glow-pulse{
+  0%,100%{
+    filter:
+      drop-shadow(0 10px 16px rgba(20,12,4,.28))
+      drop-shadow(0 0 22px rgba(255,248,222,.5));
+  }
+  50%{
+    filter:
+      drop-shadow(0 10px 16px rgba(20,12,4,.28))
+      drop-shadow(0 0 30px rgba(255,248,222,.7));
+  }
 }
 
 /* the living chart: the curve draws itself across the years in 3s, rests
