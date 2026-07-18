@@ -183,18 +183,39 @@
 
 /* EXPERIMENTAL — universal-principles.html's plate, testing whether it
    can read as a loose leaf of parchment rather than a printed
-   rectangle. Percentages (not px), so the torn shape scales with the
-   plate itself at every page-w. Subtle on purpose: amplitude is only
-   3% of the plate's own height, and only the bottom edge tears — the
-   top/sides stay clean, since a torn edge on every side starts reading
-   as a sticker, not a page. */
+   rectangle. Percentages (not px), so everything below scales with the
+   plate itself at every page-w.
+
+   Waviness on TOP and BOTTOM both now (sides stay straight) — turned
+   down from the first pass's ~3% amplitude to ~1.6%, and from a sharp
+   zigzag to many small, unevenly-spaced points, closer to a soft torn
+   ripple than a row of teeth. */
 .torn-edge{
   clip-path:polygon(
-    0% 0%, 100% 0%, 100% 97%,
-    92% 100%, 85% 97%, 78% 100%, 71% 97%, 64% 100%, 57% 97%,
-    50% 100%, 43% 97%, 36% 100%, 29% 97%, 22% 100%, 15% 97%,
-    8% 100%, 0% 97%
+    0% .4%, 10% 1.3%, 20% .6%, 30% 1.6%, 40% .5%, 50% 1.2%,
+    60% .7%, 70% 1.5%, 80% .4%, 90% 1.1%, 100% .6%,
+    100% 99.5%, 90% 98.6%, 80% 99.7%, 70% 98.4%, 60% 99.6%, 50% 98.7%,
+    40% 99.8%, 30% 98.5%, 20% 99.6%, 10% 98.7%, 0% 99.5%
   );
+}
+/* An all-round misty fade, not just the corners a radial gradient would
+   give (that's .mount-d, above — a single centred radial, which reaches
+   the midpoint of each side later than it reaches a corner, so corners
+   fade first and edges stay comparatively sharp). Two linear fades,
+   intersected, feather every edge by the same amount instead: visible
+   only where BOTH "far enough from the left/right edges" AND "far
+   enough from the top/bottom edges" hold, which is a soft-edged
+   rectangle rather than a soft-edged circle. mask-image reads alpha
+   here, not colour — the black/transparent stops only encode opacity. */
+.misty-edge{
+  mask-image:
+    linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%),
+    linear-gradient(to bottom, transparent 0%, black 6%, black 94%, transparent 100%);
+  mask-composite:intersect;
+  -webkit-mask-image:
+    linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%),
+    linear-gradient(to bottom, transparent 0%, black 6%, black 94%, transparent 100%);
+  -webkit-mask-composite:source-in;
 }
 /* filter:drop-shadow, not box-shadow — box-shadow doesn't paint over an
    <img>'s own raster content (see .chapter-bleed's own note above) and,

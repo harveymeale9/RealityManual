@@ -112,10 +112,10 @@
    book. Disabled under prefers-reduced-motion like all the others (see
    responsive.css) — the plate's shape and glow stay, only the drift
    stops, so it still reads correctly fully still. */
-.plate-float{ animation:plate-float 9s ease-in-out infinite; }
+.plate-float{ animation:plate-float 7s ease-in-out infinite; }
 @keyframes plate-float{
-  0%,100%{ transform:translateY(0); }
-  50%{ transform:translateY(-1.6%); }
+  0%,100%{ transform:translateY(0) scale(1); }
+  50%{ transform:translateY(-3%) scale(1.015); }
 }
 
 /* the living chart: the curve draws itself across the years in 3s, rests
