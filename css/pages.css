@@ -58,7 +58,7 @@
   margin:calc(var(--page-w) * -.09) 0 calc(var(--page-w) * .049) calc(var(--page-w) * -.11);
   object-fit:cover;
   object-position:65% 60%;
-  border:1px solid rgba(240,211,140,.85);
+  border:1px solid rgba(216,189,120,.85);
 }
 /* 50% larger than .entry-no's book-wide default (typography.css) — the
    plate now separates it from the title by real space (above), so it can
