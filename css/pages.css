@@ -194,17 +194,19 @@
    .misty-edge above (which fades toward TRANSPARENT, not dark, and only
    at the corners). Plain normal blend, no special compositing needed:
    a dark, partly-opaque wash reads as a shadow through ordinary alpha
-   compositing. ::before, not ::after (that's the candlelight below) —
-   paint order for a positioned ::before/::after pair against a
-   non-positioned sibling <img> is: img first, then ::before, then
-   ::after, so this sits between the plate and the candlelight, which is
-   the right order (light flickers on TOP of an already-vignetted
-   image, not the other way round). */
+   compositing. Tinted --foxing (tokens.css: "the fine rust speckle"),
+   not black — a burnt, aged brown reads as the page's own damage/age
+   rather than a flat photographic vignette. ::before, not ::after
+   (that's the candlelight below) — paint order for a positioned
+   ::before/::after pair against a non-positioned sibling <img> is: img
+   first, then ::before, then ::after, so this sits between the plate
+   and the candlelight, which is the right order (light flickers on TOP
+   of an already-vignetted image, not the other way round). */
 .plate-frame::before{
   content:"";
   position:absolute; inset:0;
   background:radial-gradient(ellipse at center,
-    transparent 55%, rgba(15,9,3,.4) 100%);
+    transparent 55%, rgba(150,100,40,.45) 100%);
   pointer-events:none;
 }
 /* Candlelight, not the glints/shimmer/spotlight this was for three
