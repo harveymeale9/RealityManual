@@ -25,12 +25,9 @@ Yet this is precisely how most people approach life.
 
 [PAGE 2 · pages/nature-of-the-manual-continued.html — built]
 [BODY]
-They strive endlessly. They sacrifice. They worry. They plan. They pursue wealth, status, pleasure, security, virtue, power, knowledge, love, freedom, and countless other aims. They spend decades refining their strategies while neglecting to answer the single question upon which the value of every strategy depends:
-What, precisely, constitutes success within physical reality?
+They strive endlessly. They sacrifice. They worry. They plan. They pursue wealth, status, pleasure, security, virtue, power, knowledge, love, freedom, and countless other aims. They spend decades refining their strategies while neglecting to answer the single question upon which the value of every strategy depends: What, precisely, constitutes success within physical reality?
 What does it mean to have existed well?
-Most people have never seriously considered the question.
-Many assume the answer is unknowable.
-Others inherit an answer from their culture, religion, family, or peers.
+Most people have never seriously considered the question. Many assume the answer is unknowable. Others inherit an answer from their culture, religion, family, or peers.
 [/BODY]
 [/PAGE 2]
 
