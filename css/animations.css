@@ -102,6 +102,22 @@
 .moon-shadow{ animation:moondrift 16s ease-in-out infinite alternate; }
 @keyframes moondrift{ from{ transform:translateX(-24px) } to{ transform:translateX(24px) } }
 
+/* EXPERIMENTAL — every other entry on this page animates an SVG (§10 of
+   DESIGN-CONVENTIONS.md: "animate SVG only, never a raster plate"). This
+   one rides a plain <img> instead, testing whether a very slow vertical
+   drift sells "a loose piece of parchment, hovering" for one specific
+   plate (universal-principles.html) — paired there with a clip-path torn
+   edge and a soft glow (pages.css: .torn-edge, .heavenly-plate). Small
+   amplitude and a slow clock, same as every other ambient loop in the
+   book. Disabled under prefers-reduced-motion like all the others (see
+   responsive.css) — the plate's shape and glow stay, only the drift
+   stops, so it still reads correctly fully still. */
+.plate-float{ animation:plate-float 9s ease-in-out infinite; }
+@keyframes plate-float{
+  0%,100%{ transform:translateY(0); }
+  50%{ transform:translateY(-1.6%); }
+}
+
 /* the living chart: the curve draws itself across the years in 3s, rests
    complete for ~4.5s, then begins again; a bead on the y-axis rides the
    line's present height (sampled from the curve along the sweep) */

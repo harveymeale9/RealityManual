@@ -136,10 +136,10 @@
   border:1px solid rgba(60,40,20,.25);
 }
 
-/* TEMP — 4-way mount-style comparison for the alchemical plate (a-clear-
-   answer.html), side by side so they can be judged against each other.
-   Remove this whole block, .plate-compare's markup, and go back to a
-   single .alchemical-plate <img> once one is picked. */
+/* TEMP — mount-style comparison for the alchemical plate
+   (alchemical-book-plate.html), side by side so they can be judged
+   against each other. Remove this whole block, .plate-compare's markup,
+   and go back to a single .alchemical-plate <img> once one is picked. */
 .plate-compare{
   display:flex; flex-wrap:wrap;
   gap:4%;
@@ -179,4 +179,31 @@
 .mount-d{
   mask-image:radial-gradient(ellipse at center, rgba(0,0,0,1) 55%, rgba(0,0,0,0) 100%);
   -webkit-mask-image:radial-gradient(ellipse at center, rgba(0,0,0,1) 55%, rgba(0,0,0,0) 100%);
+}
+
+/* EXPERIMENTAL — universal-principles.html's plate, testing whether it
+   can read as a loose leaf of parchment rather than a printed
+   rectangle. Percentages (not px), so the torn shape scales with the
+   plate itself at every page-w. Subtle on purpose: amplitude is only
+   3% of the plate's own height, and only the bottom edge tears — the
+   top/sides stay clean, since a torn edge on every side starts reading
+   as a sticker, not a page. */
+.torn-edge{
+  clip-path:polygon(
+    0% 0%, 100% 0%, 100% 97%,
+    92% 100%, 85% 97%, 78% 100%, 71% 97%, 64% 100%, 57% 97%,
+    50% 100%, 43% 97%, 36% 100%, 29% 97%, 22% 100%, 15% 97%,
+    8% 100%, 0% 97%
+  );
+}
+/* filter:drop-shadow, not box-shadow — box-shadow doesn't paint over an
+   <img>'s own raster content (see .chapter-bleed's own note above) and,
+   separately, wouldn't follow .torn-edge's clip-path anyway: drop-shadow
+   is cast from the element's actual (clipped) silhouette, box-shadow
+   from its rectangular box. Two shadows: a dark one to ground it above
+   the parchment, a warm pale one to read as a glow rather than a stain. */
+.heavenly-plate{
+  filter:
+    drop-shadow(0 10px 16px rgba(20,12,4,.28))
+    drop-shadow(0 0 22px rgba(255,248,222,.5));
 }
