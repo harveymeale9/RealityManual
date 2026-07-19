@@ -135,8 +135,9 @@ Before proceeding further, however, the claim itself that life is fundamentally 
 
 [PAGE 11 · pages/chapter-2-two-characteristics.html — built]
 [BODY]
-What qualities distinguish a game from every other form of experience? Two characteristics are required.
-The first is interactivity.
+For an activity to be considered a game, it must possess precisely two characteristics: interactivity and outcome asymmetry.
+
+The most obvious of these qualities is interactivity.
 [/BODY]
 [ILLUSTRATION https://realitymanual.com/assets/images/GameVenDiagramDigital.webp]
 [BODY]
