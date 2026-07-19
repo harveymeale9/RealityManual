@@ -3,6 +3,10 @@
    The page-turn and jump modules both read and drive this.
    ========================================================== */
 
+/* dynamic + window.__BUST, not a static import — see js/main.js's own
+   top-of-file note for why */
+const { preloadAround } = await import(`./preload.js?v=${window.__BUST}`);
+
 export const el = {};
 export function cacheDom(){
   ['pageL','pageR','leaf','leafFront','leafBack','shade','stackL','stackR',
@@ -192,12 +196,15 @@ export function primeLeafFace(sourceId, leafFaceId){
 }
 
 export function render(){
-  if (isMobile()) return; /* portrait mode is the pre-built scroll stack */
+  if (isMobile()) return; /* portrait mode is the pre-built scroll stack — the
+    whole book lands in the DOM at once (buildScrollBook), so every image is
+    already requested; there's no adjacent-page gap here to preload for. */
   fillSlot('pageL', state.pages[state.spread*2]);
   fillSlot('pageR', state.pages[state.spread*2+1]);
   updateStacks(state.maxSpread > 0 ? state.spread / state.maxSpread : 0);
   if (document.activeElement !== el.jumpInput) el.jumpInput.value = state.spread*2 + 1;
   savePos(state.spread*2);   /* remember the (left) page of this spread */
+  preloadAround(state.pages, state.spread);
 }
 
 /* build the scrollable page stack once; CSS decides when it's shown.

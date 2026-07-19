@@ -144,13 +144,13 @@ h2.entry-title{
   margin:.7em 0 .3em; line-height:1.2;
 }
 /* the "Volume I: First Principles" subtitle beneath the h1 — same
-   small-caps face and tracked-out treatment as .entry-no, but sized
-   for a subtitle's weight relative to the h1 above it, and in brass
-   to tie visually into .tp-rule just below. */
+   small-caps face and tracked-out treatment as .entry-no, and the
+   same --rubric red as the "Chapter I" entry-no text itself, so the
+   two read as the same kind of label. */
 .title-page .tp-volume{
   font-family:'IM Fell English SC', serif;
   font-size:calc(var(--page-w) * .034); letter-spacing:.25em; text-indent:.25em;
-  color:var(--brass); margin-bottom:.3em;
+  color:var(--rubric); margin-bottom:.3em;
 }
 /* font-size was previously unset here, so its 1em margin resolved
    against the browser's fixed default rather than the page — the
