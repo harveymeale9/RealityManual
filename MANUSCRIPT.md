@@ -74,32 +74,34 @@ Ancient mysteries reveal themselves as ordinary features of reality, hiding in p
 [BODY]
 The Manual begins by establishing the single objective toward which all successful participation in this reality is directed, explaining in plain language what it is you are actually here to do.
 Having established the objective, it then supplies the reader with the optimal strategy for accomplishing this objective.
+The result is something far more valuable than a collection of ideas.
 [/BODY]
 [/PAGE 6]
 
 [PAGE 7 · pages/nature-of-the-manual-the-second-volume.html — built]
 [BODY]
-The result is something far more valuable than a collection of ideas. It is a personal philosophy. A coherent way of acting inside reality on a daily basis. A way of showing up in the world that can be carried into every decision, every challenge, every relationship, and every moment for the remainder of one's life.
+It is a personal philosophy. A coherent way of acting inside reality on a daily basis. A way of showing up in the world that can be carried into every decision, every challenge, every relationship, and every moment for the remainder of one's life.
 And it is precisely here that the true value of the Reality Manual begins to reveal itself.
 For this volume is concerned not merely with what reality is, but with how reality works. It seeks to provide the reader with the map, the rules of the game, and the strategic principles from which intelligent action may be derived.
 The Manual's second volume, yet to be published, concerns itself with the application of those principles. Where this volume establishes the strategy, the second demonstrates its use. Where this volume explains the game, the second explores the countless situations in which that understanding may be employed. It examines the practical problems, dilemmas, uncertainties, and decisions that confront every human being and demonstrates how an individual equipped with the Manual's principles is able to navigate them with clarity.
+Most people accept suffering as an unavoidable feature of existence.
+The Manual does not.
 [/BODY]
 [/PAGE 7]
+(p6/p7 boundary: "The result is something far more valuable than a collection of ideas. It is a personal philosophy..." is one manuscript sentence-pair split across the page break — p6 was under budget, p7 was over, so the boundary moved back one sentence. Same for p7/p8 below: "Most people accept suffering... The Manual does not." moved from p8's opening onto p7's end for the same reason.)
 
 [PAGE 8 · pages/nature-of-the-manual-the-source-of-suffering.html — built]
 [ILLUSTRATION https://realitymanual.com/assets/images/IgnoranceToImprisonmentDigital.webp]
 [BODY]
-Most people accept suffering as an unavoidable feature of existence.
-The Manual does not.
 It advances a different proposition: that suffering is not an intrinsic property of reality, but a consequence of ignorance regarding the nature of reality itself. That ignorance generates confusion, that confusion generates a sense of futility, and that futility is the source of all human suffering.
 For how could one move confidently through a reality that appears chaotic, unpredictable, and fundamentally unknowable? How could one act decisively if success seemed arbitrary? How could one experience peace while believing oneself trapped inside a game whose rules remain hidden?
 The Reality Manual proposes that the opposite is true. That reality is intelligible. That the game is understandable. That success is not nearly as mysterious as it first appears. And that as understanding increases, the sense of futility dissolves entirely.
+What once seemed like a prison reveals itself to be a playground.
 [/BODY]
 [/PAGE 8]
 
 [PAGE 9 · pages/nature-of-the-manual-understanding-the-structure.html — built]
 [BODY]
-What once seemed like a prison reveals itself to be a playground.
 The central promise of this text is that one's experience of reality becomes profoundly different once it is properly understood.
 [/BODY]
 [ILLUSTRATION https://realitymanual.com/assets/images/ConcentricCirclesPrisonToFreedomDigital.webp]
@@ -108,6 +110,7 @@ Such understanding must come first. For only when the nature of the game is unde
 For until one understands the rules and the objective of the game, the optimal strategy may appear so contrary to conventional wisdom that it risks being dismissed before its validity can be properly appreciated.
 [/BODY]
 [/PAGE 9]
+(p8/p9: "What once seemed like a prison reveals itself to be a playground." moved onto the end of p8 for the same reason as above; ONLY that one sentence moved, not both of p9's original opening paragraphs — p9's plate needs a paragraph in front of it too, per the images-couched-in-text rule, so p9 kept "The central promise of this text..." as its own lead-in rather than losing both.)
 
 [CHAPTER II · The Structure of Reality: A Game]
 
@@ -126,12 +129,13 @@ The first claim of the Reality Manual is that physical reality possesses the str
 This conclusion is of extraordinary importance. For if reality is indeed structured as a game, then it follows that it may be understood in precisely the same manner as every other game.
 It follows then that he who applies the appropriate game theory will maximize his chances of winning in life.
 Before proceeding further, however, the claim itself that life is fundamentally a game must be evaluated.
-What qualities distinguish a game from every other form of experience? Two characteristics are required.
 [/BODY]
 [/PAGE 10]
+(this page was overflowing — "What qualities distinguish a game from every other form of experience?" was clipping mid-word at the bottom edge. Moved that whole sentence onto PAGE 11 instead; entry-opening pages in this book top out around 85 words across 4 paragraphs, notably less than docs/page-template.html's generic ~115-word guideline for this layout — see CLAUDE.md.)
 
 [PAGE 11 · pages/chapter-2-two-characteristics.html — built]
 [BODY]
+What qualities distinguish a game from every other form of experience? Two characteristics are required.
 The first is interactivity.
 [/BODY]
 [ILLUSTRATION https://realitymanual.com/assets/images/GameVenDiagramDigital.webp]
@@ -166,27 +170,28 @@ Naturally, the most effective strategy can only be described as the optimal stra
 The curious player then asks a further question: How might one go about developing the most optimal strategy for the game of life?
 The answer is remarkably simple. Only two pieces of information must be known before an optimal strategy can be derived: the objective of the game and the rules which govern it.
 The objective defines what constitutes success, while the rules define the boundaries within which success must be pursued. Once these two elements are understood, strategy ceases to be a matter of speculation and becomes a matter of deduction.
+The purpose of the Reality Manual is therefore threefold: to reveal the objective of the game, to reveal the rules by which the game operates, and to reveal the optimal strategy that may be derived from an understanding of both.
 [/BODY]
 [/PAGE 13]
 (this is no longer a quote-only page — a standalone pull-quote page in this book left too much empty parchment below it, so it now carries lead-in and follow-on body text like every other page. The quote itself is styled to match Chapter I's own pull quote — same size, no decorative quote-mark, no attribution line underneath, since Chapter I's doesn't use either)
 
 [PAGE 14 · pages/chapter-2-threefold-purpose.html — built]
 [BODY]
-The purpose of the Reality Manual is therefore threefold: to reveal the objective of the game, to reveal the rules by which the game operates, and to reveal the optimal strategy that may be derived from an understanding of both. The present volume concerns itself principally with these foundational matters. The practical deployment of that strategy across the various domains of life shall be reserved for the second volume.
+The present volume concerns itself principally with these foundational matters. The practical deployment of that strategy across the various domains of life shall be reserved for the second volume.
 [/BODY]
 [ILLUSTRATION https://realitymanual.com/assets/images/OptimalStrategyInfographicDigital.webp]
 [BODY]
 Most manuals concern themselves only with the first two tasks, explaining the objective and describing the rules while leaving the reader to determine strategy for himself.
+This Manual relieves the reader of that burden by deriving the optimal strategy directly from the objective and the rules themselves. Having established that strategy, the second volume shall concern itself with its practical application throughout the ordinary circumstances of life.
 [/BODY]
 [/PAGE 14]
 
 [PAGE 15 · pages/chapter-2-the-rules-of-reality.html — built]
 [BODY]
-This Manual relieves the reader of that burden by deriving the optimal strategy directly from the objective and the rules themselves. Having established that strategy, the second volume shall concern itself with its practical application throughout the ordinary circumstances of life.
 Throughout the pages that follow, the rules of reality shall be revealed: the underlying principles that govern the structure of the playing field itself. These are the metaphysical principles which define the boundaries within which the player operates, determine which actions advance him toward victory, and establish the consequences attached to his conduct. Only once these principles have been understood can an optimal strategy be deduced with confidence.
 The objective of the game shall be presented in the forthcoming chapters, but not until the most foundational principle of reality has first been established. For without this foundation, the objective appears far less self-evident than it truly is, and the optimal strategy cannot be recognized for what it truly is. Once the objective, the rules, and the strategy derived from them have all been established, the first volume shall have completed its task. The second volume shall then concern itself with the practical question that naturally follows: how such a strategy is to be implemented within the realities of everyday life.
 [/BODY]
 [/PAGE 15]
-(one sentence of the manuscript's own paragraph here — "Most manuals concern themselves ... determine strategy for himself. This Manual relieves ..." — is deliberately split mid-paragraph across PAGE 14 and PAGE 15: the first half fills out PAGE 14 next to its plate, the second half opens PAGE 15, which was otherwise sitting well under budget. See CLAUDE.md's word-budget note — mid-paragraph splits are fine when a page needs filling and the next natural paragraph break doesn't land soon enough.)
+(pages 12-15 were rebalanced as a group: p12 was full (210w/6p, at the confirmed-safe ceiling), p13 (the pull quote page) still had a lot of visible slack even after the first fix, and p14 had a large empty gap at the bottom while p15 sat packed right at the ceiling with nothing pulled forward from it despite having room to give. Moved "The purpose of the Reality Manual is therefore threefold..." (first sentence only) from p14 onto the end of p13, and p15's first paragraph ("This Manual relieves the reader...") onto the end of p14, after its plate. Net: p13 154w/6p, p14 96w/3p, p15 170w/2p — none at the exact edge, none with a large visible gap, image on p14 left at its original 58% width since text (not a bigger plate) was the right lever this time.)
 
 [Chapters I-II above are built and live on /dev (dev/book.json). Chapter I is also promoted to the public book.json; Chapter II is not — it goes live only when told to promote it. See CLAUDE.md's "Public book vs. dev book" section.]
