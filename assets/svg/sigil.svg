@@ -283,6 +283,12 @@
     <g transform="rotate(352.5) translate(0,-360) scale(1.6) rotate(-352.5)"><use xlink:href="#glyph_moon"/></g>
   </g>
 
+  <!-- ================= ORBIT: the three emblems (with their triangle & feed-lines)
+       revolve together around the fixed center, opposite the outer ring's drift ================= -->
+  <g id="orbit_group">
+    <animateTransform attributeName="transform" type="rotate"
+      values="0 400 400;-360 400 400" dur="50s" repeatCount="indefinite"/>
+
   <!-- ================= TRIANGULAR FRAMEWORK — equilateral, double-line channels ================= -->
   <g class="bronze" stroke-width="0.9" opacity="0.85">
     <!-- Objective <-> Rules -->
@@ -320,56 +326,57 @@
   </g>
 
   <!-- ================= DOTTED FEED-LINES: from each emblem into the book ================= -->
-  <!-- 5 lines per emblem now (was 3) for a denser "energy feeding the book" effect. -->
+  <!-- 5 lines per emblem, each still starting from the same edge point, but now landing on
+       5 different points spread around the book's ring instead of converging on one spot. -->
   <g class="gold" stroke-width="1" stroke-dasharray="1.5 4" stroke-linecap="round">
     <!-- Objective -->
-    <path d="M421.01,240.38 C449.27,270.93 446.29,293.53 411.09,315.73" fill="none">
+    <path d="M421.02,240.38 C378.76,252.57 366.94,275.56 381.60,317.01" fill="none">
       <animate attributeName="stroke-dashoffset" values="0;-22" dur="1.7s" repeatCount="indefinite"/>
     </path>
-    <path d="M421.01,240.38 C433.41,268.84 430.43,291.44 411.09,315.73" fill="none">
+    <path d="M421.02,240.38 C397.17,261.50 389.76,283.91 396.29,315.08" fill="none">
       <animate attributeName="stroke-dashoffset" values="0;-22" dur="1.85s" repeatCount="indefinite"/>
     </path>
-    <line x1="421.01" y1="240.38" x2="411.09" y2="315.73">
+    <path d="M421.02,240.38 C417.54,266.75 414.57,289.36 411.09,315.73" fill="none">
       <animate attributeName="stroke-dashoffset" values="0;-22" dur="2s" repeatCount="indefinite"/>
-    </line>
-    <path d="M421.01,240.38 C401.68,264.66 398.70,287.27 411.09,315.73" fill="none">
+    </path>
+    <path d="M421.02,240.38 C438.58,266.95 439.94,290.52 425.56,318.93" fill="none">
       <animate attributeName="stroke-dashoffset" values="0;-22" dur="2.15s" repeatCount="indefinite"/>
     </path>
-    <path d="M421.01,240.38 C385.82,262.57 382.84,285.18 411.09,315.73" fill="none">
+    <path d="M421.02,240.38 C458.67,263.09 464.14,288.36 439.25,324.60" fill="none">
       <animate attributeName="stroke-dashoffset" values="0;-22" dur="2.3s" repeatCount="indefinite"/>
     </path>
 
     <!-- Rules -->
-    <path d="M251.26,461.61 C263.58,421.87 284.65,413.14 321.47,432.53" fill="none">
+    <path d="M251.26,461.61 C282.94,492.11 308.76,490.85 337.33,457.43" fill="none">
       <animate attributeName="stroke-dashoffset" values="0;-22" dur="1.8s" repeatCount="indefinite"/>
     </path>
-    <path d="M251.26,461.61 C269.71,436.65 290.77,427.93 321.47,432.53" fill="none">
+    <path d="M251.26,461.61 C281.47,471.70 304.58,466.92 328.31,445.67" fill="none">
       <animate attributeName="stroke-dashoffset" values="0;-22" dur="1.95s" repeatCount="indefinite"/>
     </path>
-    <line x1="251.26" y1="461.61" x2="321.47" y2="432.53">
+    <path d="M251.26,461.61 C275.83,451.43 296.90,442.71 321.47,432.53" fill="none">
       <animate attributeName="stroke-dashoffset" values="0;-22" dur="2.1s" repeatCount="indefinite"/>
-    </line>
-    <path d="M251.26,461.61 C281.95,466.21 303.02,457.49 321.47,432.53" fill="none">
+    </path>
+    <path d="M251.26,461.61 C265.48,433.12 285.21,420.15 317.01,418.40" fill="none">
       <animate attributeName="stroke-dashoffset" values="0;-22" dur="2.25s" repeatCount="indefinite"/>
     </path>
-    <path d="M251.26,461.61 C288.08,481.00 309.14,472.27 321.47,432.53" fill="none">
+    <path d="M251.26,461.61 C252.09,417.65 271.24,400.28 315.08,403.71" fill="none">
       <animate attributeName="stroke-dashoffset" values="0;-22" dur="2.4s" repeatCount="indefinite"/>
     </path>
 
     <!-- Strategy -->
-    <path d="M527.73,498.01 C487.15,507.20 469.06,493.33 467.44,451.74" fill="none">
+    <path d="M527.73,498.01 C538.30,455.33 524.30,433.59 481.07,425.56" fill="none">
       <animate attributeName="stroke-dashoffset" values="0;-22" dur="1.9s" repeatCount="indefinite"/>
     </path>
-    <path d="M527.73,498.01 C496.89,494.51 478.80,480.63 467.44,451.74" fill="none">
+    <path d="M527.73,498.01 C521.36,466.80 505.66,449.18 475.40,439.25" fill="none">
       <animate attributeName="stroke-dashoffset" values="0;-22" dur="2.05s" repeatCount="indefinite"/>
     </path>
-    <line x1="527.73" y1="498.01" x2="467.44" y2="451.74">
+    <path d="M527.73,498.01 C506.63,481.82 488.54,467.94 467.44,451.74" fill="none">
       <animate attributeName="stroke-dashoffset" values="0;-22" dur="2.2s" repeatCount="indefinite"/>
-    </line>
-    <path d="M527.73,498.01 C516.37,469.12 498.28,455.24 467.44,451.74" fill="none">
+    </path>
+    <path d="M527.73,498.01 C495.94,499.94 474.84,489.33 457.43,462.67" fill="none">
       <animate attributeName="stroke-dashoffset" values="0;-22" dur="2.35s" repeatCount="indefinite"/>
     </path>
-    <path d="M527.73,498.01 C526.11,456.43 508.02,442.55 467.44,451.74" fill="none">
+    <path d="M527.73,498.01 C489.23,519.27 464.62,511.37 445.67,471.69" fill="none">
       <animate attributeName="stroke-dashoffset" values="0;-22" dur="2.5s" repeatCount="indefinite"/>
     </path>
   </g>
@@ -377,7 +384,7 @@
   <!-- inward-moving markers along the feed-lines toward the book -->
   <g class="goldfill">
     <circle r="1.8">
-      <animateMotion path="M421.01,240.38 L411.09,315.73" dur="5s" repeatCount="indefinite"/>
+      <animateMotion path="M421.02,240.38 L411.09,315.73" dur="5s" repeatCount="indefinite"/>
     </circle>
     <circle r="1.8">
       <animateMotion path="M251.26,461.61 L321.47,432.53" dur="5.3s" repeatCount="indefinite"/>
@@ -405,10 +412,12 @@
         <line x1="0" y1="-64" x2="0" y2="-78" transform="rotate(270)"/>
         <line x1="0" y1="-64" x2="0" y2="-78" transform="rotate(315)"/>
       </g>
-      <!-- counter-rotation keeps the compass always upright while the frame spins -->
+      <!-- counter-rotation keeps the compass always upright while the frame spins and the group orbits -->
       <g>
         <animateTransform attributeName="transform" type="rotate"
           values="0;-360" additive="sum" dur="12s" repeatCount="indefinite"/>
+        <animateTransform attributeName="transform" type="rotate"
+          values="0;360" additive="sum" dur="50s" repeatCount="indefinite"/>
         <use xlink:href="#compass_icon" class="inkfill" transform="scale(0.15625) translate(-256,-256)"/>
       </g>
     </g>
@@ -426,6 +435,8 @@
       <g>
         <animateTransform attributeName="transform" type="rotate"
           values="0;360" additive="sum" dur="18s" repeatCount="indefinite"/>
+        <animateTransform attributeName="transform" type="rotate"
+          values="0;360" additive="sum" dur="50s" repeatCount="indefinite"/>
         <use xlink:href="#scale_icon" class="inkfill" transform="scale(5) translate(-8,-8)"/>
       </g>
     </g>
@@ -448,10 +459,13 @@
       <g>
         <animateTransform attributeName="transform" type="rotate"
           values="0;-360" additive="sum" dur="15s" repeatCount="indefinite"/>
+        <animateTransform attributeName="transform" type="rotate"
+          values="0;360" additive="sum" dur="50s" repeatCount="indefinite"/>
         <use xlink:href="#knight_icon" class="inkfill" transform="scale(1.186) translate(-29.5,-29.5)"/>
       </g>
     </g>
   </g>
+  </g><!-- /orbit_group -->
 
   <!-- ================= CORE (center of everything) — the book ================= -->
   <g transform="translate(400,400)">
