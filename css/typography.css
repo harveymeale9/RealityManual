@@ -161,18 +161,21 @@ h2.entry-title{
   margin:1em 0; letter-spacing:.5em; text-indent:.5em;
 }
 /* Narrowed to 60% of the title block's own column (not the full page)
-   and sized down specifically so each of the three <br>-separated
-   clauses in the markup (title-page.html) stays on its own single
-   line at that width — the previous size let the middle clause
-   ("the objective toward which successful participation is
-   directed,") run past one line's width and spill "directed," onto
-   an orphaned fourth line. Deliberately kept as three hard breaks
-   rather than left to wrap on its own: that's what guarantees exactly
-   three lines regardless of viewport, rather than trusting natural
-   reflow not to overrun by a word at some width. */
+   and sized so each of the three <br>-separated clauses in the markup
+   (title-page.html) stays on its own single line at that width — an
+   earlier, larger size let the middle clause ("the objective toward
+   which successful participation is directed,") run past one line's
+   width and spill "directed," onto an orphaned fourth line; a later
+   correction (.017) fixed that but ran noticeably too small. .0195 is
+   the computed near-threshold for the longest clause at this column
+   width, nudged fractionally under it rather than exactly on it.
+   Deliberately kept as three hard breaks rather than left to wrap on
+   its own: that's what guarantees exactly three lines regardless of
+   viewport, rather than trusting natural reflow not to overrun by a
+   word at some width. */
 .title-page .tp-edition{
   font-family:'Cormorant Garamond', serif; font-style:italic;
-  font-size:calc(var(--page-w) * .017); color:var(--ink-faint); line-height:1.7;
+  font-size:calc(var(--page-w) * .0195); color:var(--ink-faint); line-height:1.7;
   width:60%; margin:0 auto;
 }
 
