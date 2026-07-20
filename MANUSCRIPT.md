@@ -175,13 +175,14 @@ The curious player then asks a further question: How might one go about developi
 The answer is remarkably simple. Only two pieces of information must be known before an optimal strategy can be derived: the objective of the game and the rules which govern it.
 The objective defines what constitutes success, while the rules define the boundaries within which success must be pursued. Once these two elements are understood, strategy ceases to be a matter of speculation and becomes a matter of deduction.
 The purpose of the Reality Manual is therefore threefold: to reveal the objective of the game, to reveal the rules by which the game operates, and to reveal the optimal strategy that may be derived from an understanding of both.
+The present volume concerns itself principally with these foundational matters.
 [/BODY]
 [/PAGE 13]
-(this is no longer a quote-only page — a standalone pull-quote page in this book left too much empty parchment below it, so it now carries lead-in and follow-on body text like every other page. The quote itself is styled to match Chapter I's own pull quote — same size, no decorative quote-mark, no attribution line underneath, since Chapter I's doesn't use either)
+(this is no longer a quote-only page — a standalone pull-quote page in this book left too much empty parchment below it, so it now carries lead-in and follow-on body text like every other page. The quote itself is styled to match Chapter I's own pull quote — same size, no decorative quote-mark, no attribution line underneath, since Chapter I's doesn't use either. Even after the p12-15 rebalance below, this page still rendered with a large empty gap at the bottom — 154w/6p turned out to be well short of what the page could actually hold, pull quote and rule-orns included. Pulled just the first sentence of PAGE 14's opening paragraph ("The present volume concerns itself principally with these foundational matters.") onto the end of this page as its own paragraph, per the sentence-level (not whole-paragraph) filling rule in CLAUDE.md.)
 
 [PAGE 14 · pages/chapter-2-threefold-purpose.html — built]
 [BODY]
-The present volume concerns itself principally with these foundational matters. The practical deployment of that strategy across the various domains of life shall be reserved for the second volume.
+The practical deployment of that strategy across the various domains of life shall be reserved for the second volume.
 [/BODY]
 [ILLUSTRATION https://realitymanual.com/assets/images/OptimalStrategyInfographicDigital.webp]
 [BODY]
@@ -189,6 +190,7 @@ Most manuals concern themselves only with the first two tasks, explaining the ob
 This Manual relieves the reader of that burden by deriving the optimal strategy directly from the objective and the rules themselves. Having established that strategy, the second volume shall concern itself with its practical application throughout the ordinary circumstances of life.
 [/BODY]
 [/PAGE 14]
+(losing its first sentence to PAGE 13 left this page with only 86 words against its infographic's original 58% width — noticeably text-light. Widened the plate to 68% rather than pulling PAGE 15's first sentence forward too, since PAGE 15's own budget (170w/2p) leaves too little margin to donate a sentence without risking overflow there next — sizing the image up instead is the correct lever per CLAUDE.md's §6 note on text-light pages after a cascade.)
 
 [PAGE 15 · pages/chapter-2-the-rules-of-reality.html — built]
 [BODY]
