@@ -119,7 +119,7 @@
    still shows the same glow, just not pulsing. */
 @keyframes plate-float{
   0%,100%{ transform:translateY(0) scale(1); }
-  50%{ transform:translateY(-1.2%) scale(1.005); }
+  50%{ transform:translateY(-1.8%) scale(1.008); }
 }
 @keyframes glow-pulse{
   0%,100%{
