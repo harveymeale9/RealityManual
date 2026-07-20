@@ -63,6 +63,7 @@ Nothing is to be accepted merely because it appears in this book. The reader is 
 The Reality Manual demonstrates that many questions commonly assumed to be unanswerable are, in fact, resolved through careful observation.
 [/BODY]
 [/PAGE 5]
+(mobile-only overflow: the closing sentence's final word, "observation.", was clipping on narrow viewports — the eye-orbiting-globe.svg partial has no width-narrowing style, so it renders at the full content column width on both breakpoints, and mobile's wider column (responsive.css's 7.5%-each-side padding vs desktop's 11%) meant the SVG rendered proportionally taller there too, eating more of the page than on desktop. Trimmed the svg's own viewBox from "20 52 160 96" to "20 57 160 86" — tightening the vertical crop around the existing artwork (which only ever used y 60.4-139.6 of the old 52-148 range, so nothing is cropped) rather than changing its on-page width, which shortens its rendered height on every breakpoint without shrinking it horizontally. Estimated to just clear one line's worth of missing text; not verified against an actual mobile render in this session.)
 
 [PAGE 6 · pages/nature-of-the-manual-scope-of-this-volume.html — built]
 [BODY]
