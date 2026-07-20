@@ -140,12 +140,15 @@ For an activity to be considered a game, it must possess precisely two character
 The most obvious of these qualities is interactivity.
 [/BODY]
 [ILLUSTRATION https://realitymanual.com/assets/images/GameVenDiagramDigital.webp]
+[CAPTION]
+Game ⟹ (Interactivity ∧ Outcome Asymmetry)
+[/CAPTION]
 [BODY]
 A spectator watching a film possesses no meaningful influence over the events unfolding before him. The story proceeds according to a predetermined sequence regardless of his wishes, preferences, or intentions. A game is fundamentally different. A game responds to the actions of the participant. Inputs supplied by the player influence the outcomes that follow.
 Reality plainly exhibits this characteristic. Every moment presents myriad possible actions. One may speak or remain silent. Advance or retreat. Create or destroy. Act or refrain from acting altogether. Different choices produce different outcomes. Reality is therefore very clearly interactive.
 [/BODY]
 [/PAGE 11]
-(image moved off the very top of the page — house rule now is every plate needs body text both before AND after it on the same page, see CLAUDE.md)
+(image moved off the very top of the page — house rule now is every plate needs body text both before AND after it on the same page, see CLAUDE.md. Added a formal caption beneath the plate stating the game-condition as a logical formula. The manuscript's own text growth on this page — "For an activity to be considered a game..." replacing the shorter original opening — plus the new caption pushed the page slightly over its image budget at the plate's original 75% width; narrowed the plate to 64% to bring it back within budget rather than move any body text off the page.)
 
 [PAGE 12 · pages/chapter-2-outcome-asymmetry.html — built]
 [BODY]
