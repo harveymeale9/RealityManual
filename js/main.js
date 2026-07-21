@@ -41,7 +41,13 @@ function wireControls(){
 function restorePosition(){
   const idx = savedPageIndex();
   if (isMobile()){
-    if (idx < 0){ el.jumpInput.value = 1; return; }
+    /* idx 0 (the first page) is already where the document naturally
+       rests on load, title header and all — forcing a scrollIntoView
+       for it would shove that header out of view for no reason, since
+       block:'start' always pins the target's top edge to the viewport's
+       top, even when the natural scroll position already shows it
+       correctly. Only pages AFTER the first actually need the jump. */
+    if (idx <= 0){ el.jumpInput.value = 1; return; }
     el.jumpInput.value = idx + 1;
     /* wait a frame so the scroll stack has laid out before we jump to it */
     requestAnimationFrame(()=>{
