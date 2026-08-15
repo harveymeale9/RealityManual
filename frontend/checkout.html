@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Checkout — The Reality Manual</title>
+  <meta name="description" content="Complete your order of The Reality Manual, First Edition Premium Hardcover." />
+  <meta name="robots" content="noindex" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=EB+Garamond:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-header__inner">
+      <a class="wordmark" href="/">The Reality Manual</a>
+    </div>
+  </header>
+
+  <main>
+    <div class="checkout-grid">
+      <div>
+        <h2>Shipping &amp; Payment</h2>
+
+        <div id="form-error-banner" class="form-error-banner" role="alert"></div>
+
+        <form id="checkout-form" novalidate>
+          <div class="field" data-field="customer_name">
+            <label for="customer_name">Full name</label>
+            <input type="text" id="customer_name" name="customer_name" maxlength="30" autocomplete="name" required />
+            <div class="field-error"></div>
+          </div>
+
+          <div class="field" data-field="email">
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" autocomplete="email" required />
+            <div class="field-error"></div>
+          </div>
+
+          <div class="field" data-field="phone">
+            <label for="phone">Phone</label>
+            <input type="tel" id="phone" name="phone" maxlength="20" autocomplete="tel" required />
+            <div class="field-error"></div>
+          </div>
+
+          <div class="field" data-field="country_code">
+            <label for="country_code">Country</label>
+            <select id="country_code" name="country_code" autocomplete="country" required></select>
+            <div class="field-error"></div>
+          </div>
+
+          <div class="field" data-field="street1">
+            <label for="street1">Street address</label>
+            <input type="text" id="street1" name="street1" maxlength="30" autocomplete="address-line1" required />
+            <div class="field-error"></div>
+          </div>
+
+          <div class="field" data-field="street2">
+            <label for="street2">Street address line 2 (optional)</label>
+            <input type="text" id="street2" name="street2" maxlength="30" autocomplete="address-line2" />
+            <div class="field-error"></div>
+          </div>
+
+          <div class="field-row">
+            <div class="field" data-field="city">
+              <label for="city">City</label>
+              <input type="text" id="city" name="city" autocomplete="address-level2" required />
+              <div class="field-error"></div>
+            </div>
+            <div class="field" data-field="state">
+              <label for="state">State / Province</label>
+              <input type="text" id="state" name="state" autocomplete="address-level1" />
+              <div class="field-error"></div>
+            </div>
+          </div>
+
+          <div class="field" data-field="postal_code">
+            <label for="postal_code">Postal / ZIP code</label>
+            <input type="text" id="postal_code" name="postal_code" maxlength="64" autocomplete="postal-code" required />
+            <div class="field-error"></div>
+          </div>
+
+          <div id="payment-element"></div>
+
+          <button type="submit" id="submit-button" class="btn btn-block" disabled>
+            Pay $39.00
+          </button>
+        </form>
+      </div>
+
+      <aside class="order-summary" aria-live="polite">
+        <h3>Order Summary</h3>
+        <div class="summary-row">
+          <span>The Reality Manual</span>
+          <span>$39.00</span>
+        </div>
+        <div class="summary-row">
+          <span>Shipping</span>
+          <span id="summary-shipping">—</span>
+        </div>
+        <div class="summary-row total">
+          <span>Total</span>
+          <span id="summary-total">—</span>
+        </div>
+        <p style="font-size:0.85rem; color:var(--ink-soft); margin-top:1rem;">
+          Select a country to calculate shipping.
+        </p>
+      </aside>
+    </div>
+  </main>
+
+  <footer>
+    &copy; <span id="year"></span> The Reality Manual. All rights reserved.
+  </footer>
+
+  <script src="https://js.stripe.com/v3/"></script>
+  <script src="/js/config.js"></script>
+  <script src="/js/countries.js"></script>
+  <script src="/js/checkout.js"></script>
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>

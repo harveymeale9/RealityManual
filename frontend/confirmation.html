@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Order Confirmation — The Reality Manual</title>
+  <meta name="robots" content="noindex" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=EB+Garamond:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-header__inner">
+      <a class="wordmark" href="/">The Reality Manual</a>
+    </div>
+  </header>
+
+  <main>
+    <div class="confirmation-box" id="confirmation-box" aria-live="polite">
+      <div class="spinner" id="spinner"></div>
+      <h2 id="status-title">We're confirming your payment</h2>
+      <p id="status-message">Please wait a moment — this usually only takes a few seconds.</p>
+      <div class="order-meta" id="order-meta"></div>
+      <div id="action-area"></div>
+    </div>
+  </main>
+
+  <footer>
+    &copy; <span id="year"></span> The Reality Manual. All rights reserved.
+  </footer>
+
+  <script src="/js/config.js"></script>
+  <script src="/js/confirmation.js"></script>
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
