@@ -8,5 +8,5 @@
 //   production -> https://api.realitymanual.com
 window.RM_CONFIG = {
   API_BASE_URL: 'http://localhost:4000',
-  STRIPE_PUBLISHABLE_KEY: 'pk_test_REPLACE_ME',
+  STRIPE_PUBLISHABLE_KEY: 'pk_test_51TYNf5R2O5kp0xhWNCcqAOvkKO6lYACpdKfOnxiIeJTuxsPJGhM5OmTgl146Fi91lpmbKbZ6a9Ek3xH4mbEKKebs00tGix5uI0',
 };
