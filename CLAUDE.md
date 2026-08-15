@@ -1605,3 +1605,4 @@ Do not turn the project into a large ecommerce platform.
 The goal is a beautiful, premium single-product website with a reliable payment and Lulu fulfillment pipeline.
 
 **Let me know whenever you want me to jump into the VPS terminal to make any changes. Or if i can give u vps access somehow even better.
+**Btw were using github desktop for all this and u have rights to push any changes automatically. for instance in the directory youre in now, if u were to create a index.html file, that would show at realitymanual.com/
