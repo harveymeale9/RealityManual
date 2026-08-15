@@ -281,6 +281,14 @@ Do not hardcode deployment-specific values.
 
 I have another company installed at n8n.tattoogrowth.co on that VPS (it's my n8n server for a separate business), but i wanna use the same server for Reality Manual stuff too.
 
+**Infrastructure note (confirmed 2026-08-15):** the actual frontend hosting
+is **GitHub Pages** (via `.github/workflows/static.yml`, publishing the
+`/frontend` directory on every push to `main`), with Cloudflare sitting in
+front purely as a DNS/CDN proxy — not the separate "Cloudflare Pages"
+hosting product. Don't remove or replace `static.yml` without checking with
+Harvey first; a prior session deleted it assuming Cloudflare Pages was the
+real host, which broke the live site.
+
 ---
 
 # 11. Landing / Sales Page

@@ -95,7 +95,7 @@
     if (showRetry) {
       const link = document.createElement('a');
       link.className = 'btn';
-      link.href = '/checkout';
+      link.href = 'checkout.html';
       link.textContent = 'Try again';
       actionArea.appendChild(link);
     }

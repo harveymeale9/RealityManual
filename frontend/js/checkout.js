@@ -198,7 +198,10 @@
       return;
     }
 
-    const confirmationUrl = `${window.location.origin}/confirmation?order=${orderResponse.order_id}`;
+    const confirmationUrl = new URL(
+      `confirmation.html?order=${orderResponse.order_id}`,
+      window.location.href
+    ).toString();
 
     const { error: confirmError } = await stripe.confirmPayment({
       elements,
