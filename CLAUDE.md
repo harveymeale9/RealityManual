@@ -1603,3 +1603,5 @@ Build the simplest reliable system that accomplishes this.
 Do not turn the project into a large ecommerce platform.
 
 The goal is a beautiful, premium single-product website with a reliable payment and Lulu fulfillment pipeline.
+
+**Let me know whenever you want me to jump into the VPS terminal to make any changes. Or if i can give u vps access somehow even better.
