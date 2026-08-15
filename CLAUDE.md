@@ -1,366 +1,1605 @@
-# CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+# The Reality Manual
 
-## What this is
-
-**The Reality Manual** — a digital grimoire: a 3D page-turning book on desktop, a scrollable stack of leaves on mobile. Static files only — no build step, no dependencies, no framework, no `package.json`. `book.json` is the book; everything else is loose parts.
+## Project Instructions for Claude Code
 
 ---
 
-## Reality Manual Production Workflow
+## 1. Project Overview
 
-The primary source of truth for all book content is:
+The Reality Manual is a premium physical book sold directly through:
 
-MANUSCRIPT.md
+https://realitymanual.com
 
-When MANUSCRIPT.md and the website disagree, MANUSCRIPT.md should be considered correct.
+The website (which you are to help build and maintain) is a custom single-product ecommerce site for selling and fulfilling the book.
 
-The manuscript is authored, edited, and approved outside of Claude Code.
+### Product
 
-Do not rewrite manuscript content.
+**The Reality Manual, First Edition Premium Hardcover**
 
-Do not attempt to improve prose.
+The product is a premium linen hardcover with a dust jacket.
 
-Do not make editorial decisions.
+Retail price:
 
-Assume manuscript text has already been reviewed and approved.
+**$39 USD**
 
-Your responsibility is to faithfully transform the manuscript into website pages while preserving existing Reality Manual conventions.
+Currency:
 
-The manuscript is the product.
+**USD**
 
-The website is the presentation layer.
+Taxes:
 
-Your responsibility is implementation, formatting, consistency, structure, navigation, asset integration, and deployment.
+**No taxes are currently being added.**
 
----
+The website is intentionally simple and focuses on one objective:
 
-## Existing Chapters Are Canon
-
-When implementing new manuscript content, first inspect previously completed chapters.
-
-Use existing published chapters as the authoritative reference for:
-
-- page structure
-- typography
-- image placement
-- SVG placement
-- pullquote placement
-- chapter openings
-- ornamental separators
-- animation usage
-- chapter transitions
-- visual rhythm
-
-Consistency is preferred over invention.
-
-When uncertainty exists, inspect existing chapters and follow the established pattern.
+**Sell the book, collect payment, submit the order to Lulu for fulfillment, and confirm the order to the customer.**
 
 ---
 
-## Visual Conventions
+# 2. Your Role
 
-The visual language of the book is derived from existing published pages.
+You are the lead engineer responsible for building, maintaining, debugging, and improving the Reality Manual website and its supporting backend infrastructure.
 
-When implementing new pages:
+Your responsibilities include:
 
-- preserve existing manuscript aesthetics
-- preserve typography conventions
-- preserve spacing conventions
-- preserve image conventions
-- preserve SVG conventions
-- preserve pullquote conventions
-- preserve animation conventions
+- Frontend development
+- Backend development
+- Database design
+- Stripe integration
+- Lulu integration
+- Order processing
+- Shipping calculation
+- First-party analytics
+- SEO
+- Admin functionality
+- Error handling
+- Testing
+- Deployment
+- Documentation
+- Ongoing maintenance
 
-Do not introduce new visual systems unless explicitly requested.
+Before making significant changes:
 
-Prefer existing project patterns over creating new ones.
+1. Inspect the existing implementation.
+2. Understand how the relevant components work.
+3. Determine how the proposed change affects the rest of the system.
+4. Make the smallest clean change that solves the problem.
+5. Test the change.
+6. Update documentation when appropriate.
 
----
+Do not unnecessarily rewrite working systems.
 
-## Editorial Boundaries
+Do not introduce dependencies or architectural complexity without a clear reason.
 
-The manuscript is considered approved source material.
+Prefer simple, maintainable solutions.
 
-Do not:
-
-- rewrite manuscript content
-- alter wording
-- modify arguments
-- modify philosophy
-- change meaning
-- shorten text
-- expand text
-
-Only make editorial changes when explicitly instructed.
-
-Editorial responsibility belongs outside Claude Code.
-
-Implementation responsibility belongs inside Claude Code.
-
----
-
-## Manuscript Processing
-
-When MANUSCRIPT.md is updated:
-
-- identify new chapters
-- identify modified chapters
-- identify page breaks
-- identify pullquotes
-- identify chapter illustrations
-- identify SVGs
-- identify animations
-- identify referenced assets
-- identify structural changes
-
-Then determine which website files require updating.
-
-Your responsibility is implementation, not authorship.
+You may however update this file whenever you see fit as we progress through the project so it stays up-to-date.
 
 ---
 
-## Assets
+# 3. Core Product
 
-MANUSCRIPT.md may reference:
+There is one product:
 
-- WebP illustrations
-- chapter plates
-- SVG diagrams
-- SVG animations
-- pullquotes
-- ornamental separators
-- supporting graphics
+**The Reality Manual**
 
-Assume referenced assets have already been created and approved.
+Edition:
 
-Your responsibility is to correctly integrate those assets into the book.
+**First Edition Premium Hardcover**
 
-Do not redesign approved assets unless explicitly requested.
+Physical format:
+
+**Premium linen hardcover with dust jacket**
+
+Price:
+
+**$39 USD**
+
+Currency:
+
+**USD**
+
+Taxes:
+
+**None at this stage**
+
+There are no additional products or product tiers.
 
 ---
 
-## Chapter / page editing conventions
+# 4. Website
 
-**`book.json`'s `order` array is the single source of truth for the book's sequence.** Each slug in it is a filename in `/pages` minus `.html`. Pages are named for *what they say*, never for where they sit, so nothing is ever renumbered when the book is reordered.
+The public website is:
 
-| You want to… | You do… |
-|---|---|
-| Insert a page anywhere | Drop its slug into `order` at that spot. Nothing else changes. |
-| Reorder | Move slugs around in `order`. |
-| Pull a page but keep the file | Move its slug from `order` into `drafts`. |
-| Delete a page | Remove the slug from `order`/`drafts`, delete the file. |
-| Rename a page's subject | Rename the file *and* its slug in `order`. |
+**https://realitymanual.com**
 
-Page numbers, folio numerals, the "N of total" count, and the reader's saved reading position are all derived from `order` at load time — never hand-typed. Every page counts straight through, 1, 2, 3…, title page and contents included; there's no separate roman-numeral front matter.
+The website (which you are to build and maintain) consists of three primary public pages:
 
-**Pages come in facing pairs on desktop** (even index = left page, odd index = right page). Inserting one page shifts every later page to the opposite side of the spread — never design a page assuming a specific neighbour, and never build content that depends on being seen alongside the page before/after it.
+1. Landing / Sales Page
+2. Checkout Page
+3. Confirmation Page
 
-After editing `book.json` or any page file, validate before committing:
+There is also a lightweight Admin Dashboard which will have SEO settings and also an analytics dashboard.
 
-```bash
-python3 tools/check.py
+---
+
+# 5. Core Customer Flow
+
+The core customer journey is:
+
+
+Landing Page
+      ↓
+Checkout
+      ↓
+Customer enters shipping information
+      ↓
+Country selected
+      ↓
+Shipping calculated
+      ↓
+Total displayed
+      ↓
+Stripe Elements
+      ↓
+Payment succeeds
+      ↓
+Confirmation Page
+      ↓
+"We're placing your order, please wait..."
+      ↓
+Order submitted to Lulu
+      ↓
+Lulu confirms successful order submission
+      ↓
+Confirmation Page updates
+      ↓
+"Your order is confirmed."
+
+
+The customer should receive a clear and definitive success message only after our backend has confirmed that Lulu successfully accepted the order.
+
+---
+
+# 6. Technology Philosophy
+
+The project should use a lightweight architecture.
+
+Avoid unnecessary complexity.
+
+This is a single-product ecommerce website, not a large ecommerce platform.
+
+Prefer:
+
+- Simple frontend
+- Lightweight backend
+- PostgreSQL or SQLlite or whatever u prefer
+- Stripe
+- Lulu API
+- First-party analytics
+- Small admin dashboard
+
+Avoid unnecessary:
+
+- SaaS services
+- CMS platforms
+- third-party analytics platforms
+- complex frontend frameworks
+- microservices
+- unnecessary queues
+- complicated authentication systems
+- unnecessary abstractions
+
+Choose technologies based on reliability, simplicity, maintainability, and ease of deployment.
+
+---
+
+# 7. Frontend
+
+The public frontend should use standard HTML, CSS, and JavaScript unless there is a compelling reason to use another technology.
+
+The public site must be:
+
+- Lightning Fast
+- Mobile Responsive
+- Accessible
+- SEO-friendly
+- Lightweight
+- Visually polished
+- Easy to maintain
+
+Do not introduce a frontend framework simply for the sake of using one.
+
+---
+
+# 8. Backend
+
+Use a lightweight backend application running on a VPS.
+
+I already have a Hostinger VPS with Ngix on it. So we can use this for processing webhooks etc and the database for analytics etc.
+
+The backend is responsible for:
+
+- Stripe integration
+- Stripe webhooks
+- Lulu integration
+- Order creation
+- Order status
+- Shipping calculation
+- Database access
+- Analytics ingestion
+- Analytics reporting
+- SEO settings
+- Site settings
+- Admin functionality
+- Error logging
+- Refund processing
+
+The exact backend framework can be selected based on what is most appropriate for the project.
+
+The backend must be authoritative for all important business logic.
+
+I'll leave the management of the VPS up to you, but basically we're running the front-end on Cloudflare pages and then we have a VPS we can use also as the "brain".
+
+---
+
+# 9. Database
+
+Use PostgreSQL or SQLite i'll leave this up to you. It needs to be free.
+
+The database should contain at least the following logical areas:
+
+- Orders
+- Analytics events: pageviews on each stage of the funnel, conversions, etc.
+- Shipping rates
+- Site settings
+- SEO settings
+- Error logs
+
+Use appropriate indexes and constraints.
+
+Use database transactions where appropriate.
+
+Use parameterized queries or safe ORM/database abstractions.
+
+---
+
+# 10. Domain
+
+Public website:
+
+`realitymanual.com`
+
+The backend/API may use a suitable subdomain such as:
+
+`api.realitymanual.com`
+
+The exact VPS hostname, IP, deployment platform, and infrastructure should remain configurable.
+
+Do not hardcode deployment-specific values.
+
+I have another company installed at n8n.tattoogrowth.co on that VPS (it's my n8n server for a separate business), but i wanna use the same server for Reality Manual stuff too.
+
+---
+
+# 11. Landing / Sales Page
+
+Route:
+
+`/`
+
+The landing page is the primary sales page.
+
+Its purpose is to:
+
+- Present The Reality Manual
+- Communicate the value of the book
+- Present the physical product
+- Establish the visual identity
+- Encourage the visitor to purchase
+
+The primary CTA should lead to:
+
+`/checkout`
+
+The page should clearly communicate:
+
+- The Reality Manual
+- First Edition Premium Hardcover
+- $39 USD
+- Relevant product information
+- Clear purchase CTA
+
+Final marketing copy and imagery may be supplied separately, use placeholders for VSL and or images initially.
+
+The page structure should make it easy to replace or refine copy and assets without rebuilding the entire application.
+
+---
+
+# 12. Public Design Direction
+
+The website should feel like an extension of the physical book.
+
+The visual language should be:
+
+- Elegant
+- Minimal
+- Literary
+- Premium
+- Luxury
+- Editorial
+- Archival
+- Esoteric/slightly occultish/ancient manuscript-ish
+- Restrained
+
+Use a visual system based around:
+
+- Warm ivory
+- Dark text
+- Elegant serif typography
+- Generous whitespace
+- Subtle borders
+- Restrained ornamentation
+- Sophisticated typography
+- High-quality book imagery
+
+The website should feel like a premium literary object.
+
+Avoid:
+
+- Generic Shopify aesthetics
+- Generic SaaS aesthetics
+- Bright modern startup colors
+- Excessive gradients
+- Excessive rounded cards
+- Excessive animations
+- Cluttered interfaces
+- Overly complicated navigation
+- Unnecessary visual effects
+
+The physical book should remain the visual centerpiece.
+
+---
+
+# 13. Checkout Page
+
+Route:
+
+`/checkout`
+
+The checkout must use Stripe Elements.
+
+Do not redirect the customer to Stripe's generic hosted checkout.
+
+The checkout should visually belong to the Reality Manual website.
+
+Display:
+
+**The Reality Manual**
+
+**First Edition Premium Hardcover**
+
+**$39.00 USD**
+
+The customer must provide all information required for Lulu fulfillment.
+
+Use Lulu's current official API documentation as the source of truth for required shipping fields.
+
+Expected fields include:
+
+- Full name
+- Email
+- Phone number
+- Country
+- Street address
+- City
+- State/province/region where applicable
+- Postal/ZIP code
+
+The exact required fields should be confirmed against the current Lulu API documentation before implementation.
+
+---
+
+# 14. Lulu Address Constraints
+
+Lulu has character limits on certain fulfillment address fields. I believe 30 characters max for certain fields, check on their website and make sure whatever someone enters into our form will be accepted when we place the order via Lulu API.
+
+The implementation must validate these limits.
+
+Pay particular attention to Lulu's documented limits for fields such as:
+
+- First name
+- Last name
+- Organization
+- Street 1
+- Street 2
+
+Validate these restrictions:
+
+1. On the frontend for good UX.
+2. On the backend for correctness and security.
+
+Do not silently truncate customer information.
+
+If a field is too long, display a useful validation message and allow the customer to correct it.
+
+Do not invent character limits.
+
+Verify the current limits against Lulu's official documentation.
+
+Country codes must use the format expected by Lulu.
+
+Do not use incorrect country-code assumptions.
+
+Phone number should be collected because Lulu fulfillment requires it.
+
+---
+
+# 15. Shipping
+
+Shipping is calculated by our own backend.
+
+The customer selects their country.
+
+The backend determines the shipping cost.
+
+The browser must never be trusted to determine the shipping price.
+
+The browser may send a country selection, but the server must determine the corresponding shipping rate.
+
+The final order total is:
+
+
+$39.00 book price
++
+server-side shipping price
+=
+final total
+
+
+No taxes are currently added.
+
+---
+
+# 16. Initial Shipping Countries
+
+Maintain explicit shipping rates for the following countries:
+
+1. United States
+2. Canada
+3. United Kingdom
+4. Australia
+5. Germany
+6. France
+7. Netherlands
+8. New Zealand
+9. Ireland
+10. Switzerland
+11. Sweden
+12. Norway
+13. Denmark
+14. Singapore
+15. Japan
+
+Also support:
+
+**Rest of World**
+
+The actual shipping prices will be manually supplied based on Lulu's current shipping rates.
+
+Do not invent these rates.
+
+---
+
+# 17. Shipping Configuration
+
+Create a clear configuration/database structure for the shipping rates.
+
+Initial placeholders:
+
+```text
+US = PLACEHOLDER
+CA = PLACEHOLDER
+GB = PLACEHOLDER
+AU = PLACEHOLDER
+DE = PLACEHOLDER
+FR = PLACEHOLDER
+NL = PLACEHOLDER
+NZ = PLACEHOLDER
+IE = PLACEHOLDER
+CH = PLACEHOLDER
+SE = PLACEHOLDER
+NO = PLACEHOLDER
+DK = PLACEHOLDER
+SG = PLACEHOLDER
+JP = PLACEHOLDER
+REST_OF_WORLD = PLACEHOLDER
+```
+*I will grab these values myself and update this file when done so.
+The actual values will be supplied later.
+
+Shipping rates should be editable through the Admin Dashboard.
+
+So after they input their country, the checkout should dynamically display:
+
+```text
+The Reality Manual      $39.00
+Shipping                $XX.XX
+Total                   $XX.XX
 ```
 
-This catches: a slug in `order`/`drafts` with no matching file, a page file nobody lists (invisible), a slug listed twice, a slug in both `order` and `drafts`, a missing image or partial reference, leftover `${...}` template syntax, and a missing `.page-inner` wrapper. There is no other automated check in this repo — this script is it. `tools/check.py` validates **both** `book.json` and `dev/book.json` in one run, against the same shared `/pages`.
-
-`tools/check.py` cannot see any of the following — it checks structure, not fullness or layout. This is a MANDATORY procedure, not background reading: run it on every page you touch, every time, without being asked, whether you're laying out a brand-new chapter or fixing one page in isolation. Skipping it — or documenting it once and then not actually following it out of caution — is exactly how this went wrong on Chapter II AND on Chapter I's own pages 9-12: a page was correctly *identified* as under-filled and then left that way because touching the image-bearing page next to it felt risky. **Don't stop at diagnosis. Apply the fix, all the way down the cascade, every time.**
-
-### The per-page checklist
-
-Run this on EVERY page in reading order, left to right through however many pages you're touching. Fix each one before moving to the next — a fix on page N can change whether page N+1 needs one too.
-
-**"The pages I'm touching" means the whole flowing section, not just the page whose words changed.** A real incident: an edit to one page's text (word count basically unchanged) was treated as fully scoped to that one page and its immediate neighbor; a *different*, pre-existing page two spots later in the same chapter had been sitting well under budget the entire time — never touched by the edit, so never re-walked — and stayed visibly empty at the bottom until the user caught it from a screenshot. An untouched page's pre-existing under-fill is exactly as real a defect as one you just introduced; "I didn't change that page" is not a reason to skip it. Whenever you touch anything in a chapter, re-run this full checklist top to bottom across every page in that chapter's run, not just the ones whose content moved. Do the sentence-by-sentence pull described in step 2 for real — actually re-count after each pull and keep pulling until the page is close to the ceiling, rather than judging a page "fine" because its word count sits somewhere under the ceiling. A page can be under the 210-word ceiling and still be visibly, badly empty at the bottom if its paragraphs are short or it carries a pull quote/rule-orn — the ceiling is a maximum, not a target, and "under the ceiling" alone tells you nothing about whether it's actually full.
-
-1. **Word/paragraph count.** Count actual `<p>` tags and words in them (script it — don't eyeball, hand-counts have been off by ~5 words in practice, and a bare `<p>` regex misses `<p class="dropcap">` — match `<p[^>]*>` or you'll silently undercount the one page type most likely to overflow). **Ceiling for a plain `.chapter-continued` page (no image): ~210 words AND ≤6 paragraphs.** Confirmed by a real overflow: 204 words/6 paragraphs rendered fully; 213 words/7 paragraphs clipped the last line. The 7th *paragraph* is what did it, not just the words — `.body-text p + p` (typography.css) adds `.85em` of gap per paragraph after the first, so more paragraphs cost real space even at a similar word count. **Ceiling for a `.chapter-opening` entry-opening page (plate + entry-no + title + ornament + dropcap paragraph, no pull quote): ~85 words across 4 paragraphs**, also confirmed by a real overflow (100 words/5 paragraphs clipped mid-word) — meaningfully less than docs/page-template.html's generic "~115 words" figure for this layout, which is too generous; don't trust that number over this one. **Tell-tale symptom of THIS exact failure**: a paragraph's last visible word ends in a hyphen with nothing after it and then the page just ends (no folio-adjacent line following it). An ordinary mid-paragraph hyphen from `hyphens:auto` (e.g. "fun-/damentally" wrapping to the next line) is completely normal and appears throughout the book — the difference is whether text continues after it. A hyphenated fragment as the literal last thing rendered is `overflow:hidden` clipping, not a line wrap; treat it exactly like any other overflow (§1's fix, or the entry-opening equivalent).
-2. **Under budget (page sitting well below the ceiling, e.g. under ~170-180 words with no image, or under the image-adjusted budget from step 5 with one)?** Pull the next page's FIRST sentence (or first short paragraph) onto the bottom of this page. **Splitting mid-paragraph, even mid-sentence, is fine and expected** — do it rather than leave a gap. Re-count this page. Still under? Pull another sentence. Repeat until it's close to the ceiling, THEN move on to re-checking the page you just took content from (it may now need its own top-up from the page after it — this is a cascade, follow it through to wherever it naturally stops, which is usually the last page of that flowing section).
-3. **Over budget (>210 words or >6 paragraphs)?** Move the excess — usually the last paragraph or sentence — forward onto the NEXT page, then re-run this whole checklist on that next page too (it just gained content and may now be over budget itself, continuing the cascade).
-4. **Close to the ceiling (within ~10-15 words of it)?** Back off slightly rather than sitting exactly on the line — leave a small margin. (Desktop is the tighter constraint device-to-device — see §5 below — so "close on desktop" is the number that matters; there's no separate mobile-specific overflow risk to check for given the current responsive.css architecture, only a desktop one.)
-5. **Every image couched in text — text both above AND below it, never the first or last element on the page?** True for floated plates too (their required "first child of `.body-text`" positioning still needs a preceding sibling paragraph/element before that `.body-text` block, or another `.body-text` block before it in the page). The one exception: the chapter-opening full-bleed plate (`.chapter-bleed`) — nothing goes above it, by an established, different convention.
-   - If removing/adding paragraphs around an image would leave it as the page's first or last element, **don't just cut a paragraph — reallocate so at least one paragraph remains on each side**, even if that means moving less than a full paragraph's worth to the neighboring page.
-6. **Is the plate sized safely, not eyeballed?** Get its real pixel dimensions first:
-   ```bash
-   python3 -c "
-   data = open('assets/images/X.webp','rb').read(60)
-   w = data[26] | ((data[27]&0x3f)<<8); h = data[28] | ((data[29]&0x3f)<<8)
-   print(w, h, w/h)
-   "
-   ```
-   (Common lossy-VP8 header layout; VP8X/VP8L differ — see this file's commit history for the fuller parser if a webp doesn't match.) Compute, don't guess: content column ≈ `0.78 * --page-w`; `.plate-frame` costs `0.09 * --page-w` in margin (or the captioned-plate margin above, if a caption follows); a plate at width W% of that column with aspect ratio r (width/height) renders at height ≈ `W% * 0.78 * --page-w / r`. Remaining image budget ≈ `(210 - words_on_page) / 210` of the ~1.05×`--page-w` total content budget. Solve for W%, and **default to sizing AT that computed max, not noticeably under it — images should be as large as the page's own text budget allows, not merely "big enough."** A real incident: a plate was sized conservatively under its computed max, the user called it "too small" against a screenshot showing real headroom below it, and it had to be enlarged twice before it actually used the space available. Undersizing on purpose is now the mistake to avoid, not oversizing — solve for the true max width given the words actually on the page, then use that number (a couple of points under it is fine as pure rounding safety margin, but don't deliberately leave it small). **If a page ends up text-light after the cascade above (step 2), that's a legitimate reason to WIDEN its plate rather than leave the page looking empty** — more image, less bare parchment, as long as the widened size still checks out against the same formula. If the page's own required text (fixed by manuscript order — what has to lead into or follow the plate) genuinely doesn't leave room for a large plate even at the text's bare minimum, that's a real constraint, not a reason to undersize by default elsewhere — see the note on inserting a new page when even the minimum doesn't fit.
-7. **Pull quotes NOT on the chapter-opening page** get body text before and after them too (a standalone quote-only page leaves too much bare parchment in this book). Style: `.chapter-continued .pullquote` (pages.css: font `.029`, `margin:0`, no `.q-mark`, no `.pullquote-attr`) and `.chapter-continued .rule-orn` (`.62em` margin, `.018` font) bracketing it one on each side — this matches Chapter I's actual opening pull quote exactly, not the louder, unused base `.pullquote`/`.rule-orn` sizing from docs/page-template.html, which was never actually shipped anywhere in the book before Chapter II and isn't canon just for being in the template file. `.pullquote`'s own base margin does NOT collapse with the surrounding rule-orns' margins (`.page-inner` is `display:flex`, flex items never margin-collapse) — that's an easy place to end up with double-spacing.
-
-**5. Mobile fits more per line than desktop — budget against desktop, always.** `responsive.css` deliberately narrows `.page-inner`'s side padding from desktop's 11%-each-side down to 7.5%-each-side on mobile ("easier to read one-handed"), which widens mobile's text column to ~85% of the page vs desktop's ~78%. More characters fit per line, so the same word count wraps to fewer lines and uses less vertical space than it does on desktop — the exact same page can end a sentence mid-word on desktop and finish it clean on mobile. This is intentional (a real one-handed-readability win) and not worth undoing for parity's sake. The ~210-word ceiling above is a DESKTOP ceiling — hitting it means desktop is full and mobile has slack, which is the safe direction. Never budget toward mobile's larger capacity; a page sized to just fill mobile would overflow on desktop, which is the failure mode that actually breaks the book (`.page-inner`'s `overflow:hidden` clips silently either way, but desktop is the tighter constraint every time).
+The server must calculate the authoritative total.
 
 ---
 
-## Public book vs. dev book
+# 18. Stripe
 
-There are two running orders sharing one `/pages` directory: **`book.json`** (served at `/`, the public, locked-down book) and **`dev/book.json`** (served at `/dev`, where new chapters get drafted, reordered, and checked before anyone outside the project sees them).
+Use Stripe Elements.
 
-- Both are read by the exact same code (`index.html`, `dev/index.html`, and every file in `/js` and `/css` are shared) — `js/main.js` is the only place that decides which `book.json` to fetch, based on whether `location.pathname` starts with `/dev`.
-- **New/unfinished chapter work goes into `dev/book.json`'s `order` only.** Create the page file in `/pages` as usual, then add its slug to `dev/book.json` — it appears on `/dev` and nowhere else.
-- **Never add a slug to the public `book.json` unless told to.** Moving a chapter from dev to public ("promoting" it) means copying its slug(s) from `dev/book.json`'s `order` into `book.json`'s `order`, in the right spot — a deliberate, explicit action taken only when instructed, not a side effect of other work.
-- `dev/book.json` should always be a superset of (or equal to) `book.json` — it's fine for dev to be ahead, never for public to contain something dev doesn't.
-- `index.html` and `dev/index.html` must stay identical apart from nothing — literally the same markup, same `<base href="/">` (this is what makes every relative `fetch()`/`src=` in a shared page fragment resolve correctly regardless of which of the two loaded it). If you edit one, mirror the edit into the other in the same change.
+Use Stripe PaymentIntents.
 
----
+The backend creates the PaymentIntent.
 
-## Deployment workflow
+The backend calculates the authoritative final amount.
 
-No build step. Deployment is GitHub Pages via `.github/workflows/static.yml`, triggered on push to `main`, which uploads the repo root as-is. Because GitHub Pages serves over real HTTP, the site works there with zero special handling.
+The browser must never be trusted to determine:
 
-**Local development** requires an actual HTTP server, because pages are fetched at runtime with `fetch()` and browsers block `fetch` over `file://`. Double-clicking `index.html` shows a "the book must be served" notice instead of the book — that's expected, not a bug.
+- Product price
+- Shipping price
+- Total price
 
-```bash
-python3 -m http.server 8000
-# then open http://localhost:8000
+The backend must calculate:
+
+```text
+book price + shipping price = total
 ```
 
-Before pushing: run `python3 tools/check.py` to catch broken references, then verify in an actual browser — page turning, the jump-to-page numpad, folio numbering, and (at a narrow viewport) the mobile scroll mode, since none of that is covered by an automated test.
+The resulting total is used to create the PaymentIntent.
+
+Use Stripe metadata to associate payments with internal orders.
+
+At minimum, associate:
+
+- Internal order ID
+- Product identifier
+- Country
 
 ---
 
-## HTML structure
+# 19. Stripe Credentials
 
-`index.html` is a ~4 KB shell — `<head>`, the book's DOM skeleton, nothing else. It knows nothing about page content or order.
+Use environment variables.
 
-Each file in `/pages` is an HTML **fragment**, not a document:
+Required configuration should include:
 
-```html
-<!-- entry-03-mirror-principle-opening
-     Entry III, opening: the mirror as instrument -->
-<div class="page-inner" style="position:static">
-  <p class="running-head">The Reality Manual</p>
-  <p class="entry-no">Entry the Third</p>
-  <h2 class="entry-title">The Mirror<br>Principle</h2>
-  <p class="ornament">✦ ✦ ✦</p>
-  <div class="body-text">
-    <p class="dropcap">Every judgment describes the judge before the judged…</p>
-  </div>
-  <span class="folio" data-num="arabic"></span>
-</div>
+```text
+STRIPE_PUBLISHABLE_KEY
+STRIPE_SECRET_KEY
+STRIPE_WEBHOOK_SECRET
 ```
 
-Rules that make this load correctly:
+Never expose:
 
-- **No `<html>`, `<head>`, or `<body>` tags** — it's inlined into the running book, not rendered standalone.
-- **Exactly one `.page-inner` wrapper per file**, with `style="position:static"`.
-- **Exactly one `<span class="folio" data-num="arabic"></span>`**, empty, as the last element. `loader.js` fills in the actual numeral based on the page's position in `order` — never type a numeral by hand.
-- **The leading HTML comment is a note to editors, not markup** — `loader.js` strips it before the fragment reaches the DOM.
-- **Shared markup** (e.g. the sigil) lives under `assets/` and is pulled in with `{{> svg/sigil.svg }}`, which `loader.js` inlines literally into the page HTML. Use a partial (not `<img>`) for anything the stylesheet needs to animate — CSS can't reach inside an externally-referenced `<img src="....svg">`. Use plain `<img>` for static raster plates.
+`STRIPE_SECRET_KEY`
 
-CSS loads in a fixed order from `index.html`, split by *concern* rather than by breakpoint: `tokens.css` → `base.css` → `book.css` → `typography.css` → `components.css` → `animations.css` → `page-turn.css` → `ui.css` → `pages.css` → `responsive.css` (always last, since mobile replaces the 3D book with a scrollable stack rather than resizing it).
+to the frontend.
 
----
+Never expose:
 
-## Preserving book functionality
+`STRIPE_WEBHOOK_SECRET`
 
-The load pipeline (`js/loader.js` → `js/book.js` → `js/main.js`) depends on strict conventions holding across every page file. Breaking any of these produces a blank page or a silent layout failure rather than a loud error:
+to the frontend.
 
-1. **Never hand-type a page number, hex colour, or font-family/size in `px`/`rem`/`em` on a page.** Numbers come from `book.json`'s order; colours and sizes come from tokens and classes in `css/tokens.css` / `css/typography.css`. Hard-typed values silently drift out of sync on the next reorder or font change. **This includes margin/padding**, not just font-size: a bare `em` on any element without its own `calc(var(--page-w) * n)` font-size (e.g. a plate — it sits as a sibling of `.body-text`, not inside it, so it has no page-relative font-size to inherit) resolves against the browser's fixed default instead, and looks fine at whatever size you tested it at while silently drifting on every other device. This exact bug shipped once already (`.plate-img`'s own book-wide default margin, `css/typography.css`) before being caught — see `docs/DESIGN-CONVENTIONS.md` §3 and §12.3 for the full story.
-2. **Never let a page overrun.** `.page-inner` is `overflow:hidden` — content past the bottom edge is not scrolled or warned about, it's simply invisible. This is the one way to actually break the book, and it fails silently, so word budgets must be respected.
-3. **Never invent a class**, and never restyle an existing one to suit a single page — an unstyled class renders as naked text; one-off rules belong in `css/pages.css`.
-4. **Keep exactly one `.page-inner`, one empty `.folio`, one dropcap per entry, one ornament per page, one marginal per page, one pull quote per page.** The renderer and stylesheet assume these cardinalities.
-5. **Animate SVG only, never text or layout**, and keep motion slow/ambient/looping — nothing reacts to scroll, hover, or click. `prefers-reduced-motion` disables all SVG animation and the page-turn itself, so a plate must still read correctly as a fully static image.
-6. **Reader position is keyed by page slug**, not content hash — so editing a page's text is safe, but renaming a slug without updating `book.json` (or vice versa) will silently reset or break position memory.
-7. **Run `python3 tools/check.py` after any change to `book.json` or `/pages`** before pushing — it's the only safety net for the invariants above (missing files, missing partials, missing `.page-inner`, duplicate/orphaned slugs, stray template syntax).
-8. **If a CSS value depends on context (what's before/after a plate, whether a caption follows), derive it from the actual markup — don't create a modifier class an author has to remember to add or remove.** A class that must be manually kept in sync with a page's content will eventually fall out of sync on some page, and the book reads as inconsistent even though no single rule was "broken." This shipped for real once: `.plate-frame`'s margin was a `-loose` modifier class that had to be re-applied by hand whenever a caption was added/removed, and it drifted on a live page. Fixed by deriving the margin with `:has(+ .plate-caption)` instead — see `docs/DESIGN-CONVENTIONS.md` §0 for the full principle.
+Development must use Stripe Test Mode.
+
+Do not use production credentials during development.
+
+Let me know where you want these Stripe credentials and I'll supply you with everything you need.
 
 ---
 
-## Website Development
+# 20. Stripe Webhooks
 
-You are responsible for helping maintain and improve the Reality Manual website.
+Use Stripe's official webhook mechanism to confirm successful payments.
 
-You may:
+Verify Stripe webhook signatures.
 
-- create pages
-- modify pages
-- update HTML
-- update CSS
-- update JavaScript
-- update book.json
-- update navigation
-- update chapter metadata
-- update page references
-- update supporting files
-- create new implementation files
+Do not trust a frontend-only payment success message.
 
-When implementing changes:
+A payment should only be considered successfully received after the backend has verified the Stripe event.
 
-- identify all affected files
-- update all affected files
-- preserve existing architecture
-- preserve repository consistency
+Stripe webhooks may be delivered multiple times.
 
-Do not leave the repository in a partially updated state.
+Webhook processing must therefore be idempotent.
 
 ---
 
-## Production Responsibilities
+# 21. Orders
 
-The intended workflow is:
+Every order should have a unique internal order ID.
 
-1. MANUSCRIPT.md is updated.
-2. Images, SVGs, and animations are created and approved.
-3. Assets are uploaded to the repository.
-4. Website pages are updated to reflect the manuscript.
-5. Navigation and supporting files are updated.
-6. Changes are committed.
-7. Changes are pushed.
-8. Deployment occurs automatically.
+At minimum, store:
 
-Optimize for this workflow.
+```text
+id
+stripe_payment_intent_id
+stripe_payment_status
+customer_name
+email
+phone
+country
+street1
+street2
+city
+state
+postal_code
+book_price
+shipping_price
+total_price
+currency
+lulu_order_id
+order_status
+created_at
+updated_at
+```
 
----
+Do not store:
 
-## Commit And Push Behavior
+- Card numbers
+- CVC
+- Full payment credentials
+- Raw sensitive payment information
 
-For routine implementation work:
-
-- make requested changes
-- update all affected files
-- verify consistency
-- run validation checks
-- commit changes
-- push changes
-
-Deployment is expected unless a request is ambiguous, destructive, or unclear.
-
-In those cases, ask for clarification first.
-
----
-
-## Project Awareness
-
-Always attempt to understand the repository before making changes.
-
-When modifying a feature:
-
-- identify all related files
-- update all affected files
-- preserve existing architecture
-- avoid introducing unnecessary complexity
-
-Do not make isolated changes that break repository consistency.
+Stripe should remain responsible for payment-card information.
 
 ---
 
-## General Principle
+# 22. Order Status
 
-The manuscript is the product.
+Keep the order state simple.
 
-The website is the presentation layer.
+Recommended states:
 
-Your responsibility is to faithfully transform the manuscript into a polished reading experience while preserving consistency across the entire Reality Manual project.
+```text
+PAYMENT_PENDING
+PAYMENT_RECEIVED
+LULU_PENDING
+COMPLETE
+FAILED
+REFUNDED
+```
+Up to you to determine this tbh.
 
-When in doubt:
+Do not create an unnecessarily complex fulfillment state machine.
 
-1. Follow MANUSCRIPT.md.
-2. Follow existing chapters.
-3. Follow existing project patterns.
-4. Preserve consistency.
-5. Ask before making major or destructive changes.
+We do not need to continuously mirror Lulu's entire downstream printing and shipping lifecycle.
 
-Deployment is GitHub Pages on push to `main` (see Deployment workflow above) — ask before proceeding with major or destructive changes; otherwise, for routine implementation work, assume deployment is the desired end state and no extra confirmation is needed to push.
+Once Lulu confirms successful submission of the order, the order is considered complete from the website's perspective.
+
+Store the Lulu order ID.
+
+---
+
+# 23. Customer Confirmation Flow
+
+After Stripe confirms payment:
+
+1. Record the order.
+2. Send the order to Lulu.
+3. Show the customer the confirmation page.
+4. Keep the page in a waiting state.
+5. Wait for our backend to confirm Lulu success.
+6. Update the page immediately once confirmation is available.
+
+Initial confirmation state:
+
+```text
+We're placing your order.
+
+Please wait while we confirm your order.
+```
+
+Show a spinner/loading indicator.
+
+Do not tell the customer the order is complete simply because Stripe payment succeeded.
+
+The customer should remain on the confirmation page while the backend processes the Lulu submission.
+
+---
+
+# 24. Confirmation Page
+
+Route:
+
+`/confirmation`
+
+The page should receive a safe internal order identifier.
+
+Do not trust arbitrary customer-supplied order information.
+
+The backend should verify the order before returning order information.
+
+The frontend should periodically query our backend for the order status.
+
+Example:
+
+```text
+GET /api/orders/{order_id}/status
+```
+
+The browser communicates only with our backend.
+
+The browser does not communicate directly with Lulu.
+
+When the backend knows that Lulu successfully accepted the order:
+
+Update the page immediately.
+
+Display:
+
+**Your order is confirmed.**
+
+Include:
+
+- Order number
+- Product name
+- Confirmation message
+- Delivery estimate
+
+The delivery estimate should be configurable through the Admin Dashboard.
+
+Do not permanently hardcode the estimate into frontend code.
+
+---
+
+# 25. Lulu Integration
+
+Use Lulu's official Print API.
+
+Before implementing or changing the Lulu integration, inspect the current official Lulu developer documentation.
+
+Verify:
+
+- Authentication
+- Sandbox base URL
+- Production base URL
+- Print job creation
+- Required request fields
+- Product/package identifier
+- Shipping address schema
+- Shipping method requirements
+- Order response
+- Order status behavior
+- Current fulfillment confirmation mechanism
+- Address validation requirements
+- Relevant API restrictions
+
+Do not invent Lulu endpoints.
+
+Do not assume a webhook exists.
+
+Do not rely on outdated examples if the current documentation differs.
+
+The current official Lulu documentation is the source of truth.
+
+---
+
+# 26. Lulu Environment
+
+Development must use Lulu Sandbox.
+
+Production must use Lulu's production API only after testing is complete.
+
+Use environment variables.
+
+Required configuration should include:
+
+```text
+LULU_CLIENT_ID
+LULU_CLIENT_SECRET
+LULU_API_BASE_URL
+LULU_POD_PACKAGE_ID
+```
+
+The Lulu product/package ID will be supplied later.
+
+Do not invent it.
+
+---
+
+# 27. Lulu Fulfillment
+
+The desired flow is:
+
+```text
+Stripe payment succeeds
+        ↓
+Order recorded
+        ↓
+Confirmation page shows waiting state
+        ↓
+Backend submits order to Lulu
+        ↓
+Lulu confirms successful submission
+        ↓
+Database records Lulu confirmation
+        ↓
+Confirmation page becomes successful
+```
+
+The confirmation page must not show successful fulfillment until our backend has authoritative confirmation from Lulu.
+
+Determine the most reliable current mechanism using Lulu's official documentation.
+
+If Lulu provides an appropriate webhook/event mechanism, use it where appropriate.
+
+If not, use the appropriate Lulu API status/query mechanism.
+
+The website should not claim success based solely on having sent a request to Lulu.
+
+---
+
+# 28. Lulu Failure Handling
+
+Keep failure handling simple.
+
+If Lulu fails because of a temporary issue:
+
+- Retry automatically a small number of times.
+- Record each failure.
+- Do not create duplicate orders.
+
+If Lulu ultimately cannot accept the order:
+
+1. Mark the order `FAILED`.
+2. Record the error.
+3. Refund the Stripe PaymentIntent.
+4. Mark the order `REFUNDED`.
+5. Update the confirmation page.
+
+Customer-facing message (something like):
+
+```text
+We're sorry, but we couldn't complete your order.
+
+Your payment has been refunded.
+
+Please try placing your order again.
+```
+
+The customer should not need to contact support for ordinary fulfillment failures. If it fails, they're refunded and they can try again if they like.
+
+---
+
+# 29. Stripe Refunds
+
+Refunds must be performed server-side.
+
+Use Stripe's official refund API.
+
+Refund the PaymentIntent associated with the internal order.
+
+Do not allow the browser to arbitrarily trigger a refund.
+
+Refund processing must be idempotent.
+
+Never refund the same payment multiple times.
+
+If a refund fails:
+
+1. Record the failure.
+2. Record the Stripe response/reference.
+3. Flag the error in the Admin Dashboard.
+4. Do not falsely tell the customer that their payment has been refunded.
+
+---
+
+# 30. Idempotency
+
+Idempotency is mandatory throughout payment and fulfillment processing.
+
+Potential duplicate events include:
+
+- Stripe webhook delivered more than once
+- Browser refreshing confirmation page
+- Browser retrying a request
+- Backend retrying a Lulu request
+- Network timeout after Lulu accepted an order
+- Refund request being repeated
+
+Before creating a Lulu order:
+
+- Check whether `lulu_order_id` already exists.
+- Check whether order status is already `COMPLETE`.
+- Only submit if fulfillment has not already succeeded.
+
+The same internal order must never result in multiple Lulu print jobs.
+
+Refund processing must also be idempotent.
+
+---
+
+# 31. Analytics
+
+Do not use Cloudflare Web Analytics.
+
+Build first-party analytics directly into the website.
+
+Analytics data should be stored in our own database.
+
+Every public page should automatically track page views.
+
+At minimum track:
+
+```text
+page_view
+landing_page_view
+purchase_cta_clicked
+checkout_view
+checkout_started
+payment_submitted
+payment_succeeded
+lulu_submission_started
+lulu_submission_succeeded
+lulu_submission_failed
+order_complete
+order_failed
+refund_created
+```
+So i wanna be able to see a bit of a pipeline with how many visitors go through each stage.
+
+Analytics must never block or interfere with:
+
+- Page loading
+- Checkout
+- Payment
+- Fulfillment
+
+If an analytics request fails, the user experience should continue normally.
+
+---
+
+# 32. Analytics Session Tracking
+
+Create an anonymous first-party session identifier.
+
+Track:
+
+- Session ID
+- Timestamp
+- Event name
+- Page
+- Referrer
+- Country where appropriate
+- Order ID where appropriate
+
+Do not collect unnecessary sensitive personal information through analytics.
+
+---
+
+# 33. UTM Attribution
+
+Capture UTM parameters:
+
+```text
+utm_source
+utm_medium
+utm_campaign
+utm_term
+utm_content
+```
+
+Also capture:
+
+- Initial referrer
+- Initial landing page
+- Anonymous session ID
+
+Preserve acquisition data through the funnel.
+
+For example:
+
+```text
+Instagram
+    ↓
+Landing Page
+    ↓
+Checkout
+    ↓
+Purchase
+```
+
+should preserve the Instagram attribution through to the completed order.
+
+---
+
+# 34. Analytics Database
+
+Create an `analytics_events` table.
+
+Suggested fields:
+
+```text
+id
+session_id
+event_name
+page
+order_id
+referrer
+utm_source
+utm_medium
+utm_campaign
+utm_term
+utm_content
+country
+created_at
+```
+
+Create appropriate indexes.
+
+The analytics system should support reporting for:
+
+- Page views
+- Unique visitors
+- Checkout visits
+- Checkout starts
+- Payment attempts
+- Successful payments
+- Completed orders
+- Refunds
+- Revenue
+- Average order value
+- Conversion rate
+- Revenue by country
+- Traffic source
+- Campaign performance
+
+---
+
+# 35. Conversion Metrics
+
+Do not use an undefined "conversion rate."
+
+Clearly define metrics.
+
+Recommended:
+
+### Landing Page Conversion Rate
+
+```text
+Completed Orders / Unique Landing Page Visitors
+```
+
+### Checkout Conversion Rate
+
+```text
+Completed Orders / Checkout Visitors
+```
+
+The Admin Dashboard should make the definitions clear.
+
+---
+
+# 36. Admin Dashboard
+
+Route:
+
+`/admin-dashboard`
+
+The Admin Dashboard should be lightweight and functional.
+
+It should include:
+
+1. Overview
+2. Orders
+3. Analytics
+4. Shipping
+5. Site Settings
+6. SEO Settings
+7. Error Log
+
+---
+
+# 37. Admin Overview
+
+Display:
+
+- Today's page views
+- Monthly page views
+- Unique visitors
+- Checkout visits
+- Completed orders
+- Refunded orders
+- Conversion rate
+- Revenue
+- Average order value
+
+Allow basic date/month selection.
+
+---
+
+# 38. Admin Orders
+
+Display:
+
+- Order ID
+- Date
+- Customer
+- Email
+- Country
+- Book price
+- Shipping price
+- Total
+- Stripe status
+- Lulu status
+- Lulu order ID
+- Internal order status
+
+Allow viewing order details.
+
+Never display payment card information.
+
+---
+
+# 39. Admin Analytics
+
+Provide useful reporting for:
+
+- Traffic
+- Funnel
+- Orders
+- Revenue
+- Conversion
+- Country
+- UTM source
+- UTM medium
+- UTM campaign
+
+Allow monthly analysis.
+
+---
+
+# 40. Admin Shipping
+
+Provide an editable table for:
+
+- United States
+- Canada
+- United Kingdom
+- Australia
+- Germany
+- France
+- Netherlands
+- New Zealand
+- Ireland
+- Switzerland
+- Sweden
+- Norway
+- Denmark
+- Singapore
+- Japan
+- Rest of World
+
+Each should have an editable USD shipping price.
+
+The checkout must always use the server-side values.
+
+---
+
+# 41. Admin Site Settings
+
+Allow editing of:
+
+- Book price
+- Currency
+- Delivery estimate minimum
+- Delivery estimate maximum
+- Product name
+- Product description
+
+Default:
+
+```text
+Book price: $39
+Currency: USD
+```
+**honestly not necessary as this might require updating on Stripe side anyway. If i change the price i'll just let you know.
+The browser must not be allowed to override these values.
+
+---
+
+# 42. Admin SEO
+
+Create a lightweight SEO editor.
+
+This should provide basic controls similar to a very lightweight SEO plugin.
+
+For each public page, allow editing of:
+
+- Page title
+- Meta description
+- H1
+- Canonical URL
+- Open Graph title
+- Open Graph description
+- Open Graph image
+- Robots directive
+
+Pages:
+
+```text
+/
+ /checkout
+ /confirmation or thank-you
+ Failure pages too
+```
+
+SEO configuration should be stored in the database.
+
+---
+
+# 43. SEO Infrastructure
+
+Generate:
+
+`robots.txt`
+
+I don't want a sitemap actually *** i don't want people looking around the site.
+
+Use appropriate:
+
+- Canonical URLs
+- Meta descriptions
+- Open Graph metadata
+- Structured data
+
+Add relevant Product/Book structured data where appropriate.
+
+---
+
+# 44. Admin Authentication
+
+The Admin Dashboard must not be publicly writable.
+
+A complicated multi-user permission system is unnecessary.
+
+Use a simple secure authentication mechanism appropriate for a single administrator.
+
+Never store the admin password in plaintext.
+
+Honestly the admin password can just be 'harvey' for now, no one will know the admin URL or pw anyway, and security isn't that big of a deal for this rn anyway.
+
+
+
+---
+
+# 45. Error Logging
+
+Create an `error_logs` table.
+
+Suggested fields:
+
+```text
+id
+order_id
+service
+error_type
+error_message
+request_reference
+attempt_number
+created_at
+```
+
+Record errors from:
+
+- Stripe
+- Lulu
+- Refund processing
+- Database
+- Critical backend operations
+
+Never store secrets.
+
+Never store full payment information.
+
+Never expose internal stack traces to customers.
+
+The Admin Dashboard should display recent errors.
+
+---
+
+# 46. Security
+
+Never expose:
+
+- Stripe secret key
+- Stripe webhook secret
+- Lulu credentials
+- Database credentials
+- Admin credentials
+
+to the frontend.
+
+Use environment variables.
+
+Validate all backend inputs.
+
+Use parameterized database queries.
+
+**Im very relaxed regarding security for this version, don't worry about the above much tbh. just do the basics.
+
+Validate:
+
+- Email
+- Phone
+- Country
+- Address
+- Lulu field lengths
+- Order IDs
+- Payment references
+
+Never trust the browser for:
+
+- Product price
+- Shipping price
+- Total price
+- Order status
+- Lulu status
+- Refund state
+
+Never allow frontend code to communicate directly with Lulu.
+
+Never allow frontend code to initiate arbitrary refunds.
+
+Verify Stripe webhooks cryptographically.
+
+Use HTTPS in production.
+
+Do not log secrets.
+
+Use appropriate rate limiting on sensitive endpoints.
+
+---
+
+# 47. Performance
+
+The public site should be extremely lightweight.
+
+Avoid unnecessary dependencies.
+
+Avoid unnecessary JavaScript.
+
+Optimize images.
+
+Only load Stripe Elements where required.
+
+Keep analytics lightweight.
+
+Do not load third-party analytics scripts.
+
+Prioritize fast loading on mobile.
+
+# 49. Responsive Design
+
+The website must work well on:
+
+- Mobile
+- Tablet
+- Desktop
+
+Mobile checkout is particularly important.
+
+Do not create horizontal scrolling.
+
+Stripe Elements must work properly on mobile devices.
+
+---
+
+# 51. Development Environment
+
+Development must initially use:
+
+**Stripe Test Mode**
+
+and:
+
+**Lulu Sandbox**
+
+Do not use production payment credentials during development.
+
+Do not submit real Lulu production orders during development.
+
+---
+
+# 52. Testing
+
+Before production deployment, test the complete system.
+
+Test:
+
+- Landing page
+- Purchase CTA
+- Mobile layout
+- Checkout
+- Country selection
+- Shipping calculation
+- Server-side price calculation
+- Stripe Elements
+- PaymentIntent creation
+- Stripe payment success
+- Stripe webhook verification
+- Order creation
+- Lulu sandbox submission
+- Lulu confirmation
+- Confirmation page
+- Duplicate Stripe webhook handling
+- Confirmation page refresh
+- Lulu failure
+- Lulu retry
+- Stripe refund
+- Refund failure handling
+- Analytics events
+- UTM attribution
+- Admin dashboard
+- Shipping editing
+- SEO editing
+- Mobile checkout
+- Address validation
+- Lulu character limits
+- Idempotency
+
+---
+
+# 53. Production Readiness
+
+Do not switch to production until the complete sandbox/test flow has been successfully verified.
+
+The production transition should require explicitly changing:
+
+- Stripe credentials
+- Lulu credentials
+- Lulu API base URL
+- Database configuration
+- Deployment configuration
+- Webhook configuration
+
+Do not automatically switch environments.
+
+---
+
+# 54. Documentation
+
+Maintain a README containing:
+
+- Project overview
+- Architecture
+- Installation
+- Local development
+- Environment variables
+- Database setup
+- Database migrations
+- Stripe Test Mode
+- Lulu Sandbox
+- Shipping configuration
+- Lulu product/package configuration
+- Deployment
+- Production configuration
+- Stripe webhook configuration
+- Analytics
+- Refund handling
+- Troubleshooting
+
+Keep documentation updated when architecture changes. Or just update this claude.md or whatever u want. however u need to keep on top of things.
+
+---
+
+---
+
+
+# 58. Changes and Maintenance
+
+When making a change:
+
+1. Inspect relevant files.
+2. Understand the existing implementation.
+3. Make the smallest clean change.
+4. Avoid unrelated refactoring.
+5. Test the change.
+6. Check for regressions.
+7. Update documentation if necessary.
+
+If a permanent architectural decision changes, update this `CLAUDE.md`.
+
+---
+
+# 59. Configuration Values To Be Supplied
+
+The following values will be supplied during development:
+
+- Lulu product/package ID
+- Lulu sandbox credentials
+- Lulu production credentials
+- Actual Lulu shipping rates
+- Stripe test credentials
+- Stripe production credentials
+- Production database credentials
+- VPS/deployment configuration
+- Final website copy
+- Final images/assets
+- Final SEO copy
+- Final delivery estimate
+
+Do not invent these values.
+
+Use placeholders until they are supplied.
+
+---
+
+# 60. Definition of Done
+
+The project is complete when a customer can:
+
+1. Visit `realitymanual.com`
+2. Understand the product
+3. Click the purchase CTA
+4. Enter their shipping information
+5. Select their country
+6. See the correct shipping price
+7. See the correct total
+8. Pay securely through Stripe Elements
+9. Reach the confirmation page
+10. See that their order is being placed
+11. Wait while the Lulu order is confirmed
+12. Receive a successful confirmation only after Lulu confirms the order
+
+If Lulu cannot fulfill the order:
+
+1. The system records the failure.
+2. The system retries where appropriate.
+3. The payment is automatically refunded.
+4. The order is marked refunded.
+5. The customer is informed.
+6. The customer can try again.
+
+Meanwhile the system must:
+
+- Record every order
+- Record Stripe payment status
+- Submit orders to Lulu
+- Store Lulu order IDs
+- Prevent duplicate fulfillment
+- Handle refunds
+- Log errors
+- Track analytics
+- Preserve UTM attribution
+- Provide monthly reporting
+- Allow shipping rates to be edited
+- Allow SEO settings to be edited
+- Remain secure
+- Remain maintainable
+- Work correctly in sandbox before production
+
+---
+
+# 61. Guiding Principle
+
+The entire application should remain focused on one simple flow:
+
+```text
+DISCOVER
+   ↓
+BUY
+   ↓
+PAY
+   ↓
+FULFILL
+   ↓
+CONFIRM
+```
+
+Build the simplest reliable system that accomplishes this.
+
+Do not turn the project into a large ecommerce platform.
+
+The goal is a beautiful, premium single-product website with a reliable payment and Lulu fulfillment pipeline.
