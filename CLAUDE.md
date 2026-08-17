@@ -816,11 +816,19 @@ Do not invent it.
 
 **Configured (2026-08-17):** Lulu sandbox `LULU_CLIENT_ID`, `LULU_CLIENT_SECRET`,
 and `LULU_POD_PACKAGE_ID` are set in `backend/.env` (gitignored, not in the
-repo). Product spec: `0827X1169.BW.PRE.LW.060UW444.GNG` — A4 trim, B&W
-interior, premium quality, navy linen wrap hardcover, gold foil spine stamp,
-gloss-laminated dust jacket. Production Lulu credentials were also provided
-by Harvey but are intentionally not stored anywhere yet — hold off until
-sandbox testing is fully verified per section 53.
+repo). Product spec: `0827X1169.BW.PRE.LW.060UW444.GBG` — A4 trim, B&W
+interior, premium quality, black linen wrap hardcover, gold foil spine stamp,
+gloss-laminated dust jacket. Confirmed against Harvey's existing published
+Lulu project (project ID `e7q9gz4` on the self-publish side, a separate
+system from the Print API — not itself usable as the pod_package_id) and
+against Lulu's official SKU spec sheet for the exact linen/foil letter codes
+(Linen: Red=R, Navy=N, Black=B, Gray=G, Tan=T, Forest=F; Foil: Gold=G,
+Black=B, White=W, None=X). This is config only — no interior/cover PDF has
+been uploaded for the Print API yet; that's a separate later step for
+building actual print-job submission, distinct from the self-publish
+project's own print-ready files. Production Lulu credentials were also
+provided by Harvey but are intentionally not stored anywhere yet — hold off
+until sandbox testing is fully verified per section 53.
 
 ---
 
