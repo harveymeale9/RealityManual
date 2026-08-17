@@ -814,6 +814,14 @@ The Lulu product/package ID will be supplied later.
 
 Do not invent it.
 
+**Configured (2026-08-17):** Lulu sandbox `LULU_CLIENT_ID`, `LULU_CLIENT_SECRET`,
+and `LULU_POD_PACKAGE_ID` are set in `backend/.env` (gitignored, not in the
+repo). Product spec: `0827X1169.BW.PRE.LW.060UW444.GNG` — A4 trim, B&W
+interior, premium quality, navy linen wrap hardcover, gold foil spine stamp,
+gloss-laminated dust jacket. Production Lulu credentials were also provided
+by Harvey but are intentionally not stored anywhere yet — hold off until
+sandbox testing is fully verified per section 53.
+
 ---
 
 # 27. Lulu Fulfillment
