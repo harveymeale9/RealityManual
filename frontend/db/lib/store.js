@@ -85,7 +85,7 @@ window.RMStore = (function () {
     { id: 'filmed', label: 'Filmed' },
     { id: 'edited', label: 'Edited' },
     { id: 'uploaded', label: 'Uploaded' },
-    { id: 'processed', label: 'Processed (Audio)' },
+    { id: 'processed', label: 'Processing' },
     { id: 'thumbnail', label: 'Thumbnail Selected' },
     { id: 'scheduled', label: 'Scheduled' },
     { id: 'live', label: 'Posted / Live' }

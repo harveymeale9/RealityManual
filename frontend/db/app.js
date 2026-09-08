@@ -4,6 +4,10 @@
   var Store = window.RMStore;
   var Auth = window.RMAuth;
 
+  var UPLOADED_INDEX = window.RMStore.STAGES.map(function (s) { return s.id; }).indexOf('uploaded');
+  var MANUAL_STAGE_IDS = window.RMStore.STAGES.slice(0, UPLOADED_INDEX + 1).map(function (s) { return s.id; });
+  var AUTO_STAGE_IDS = window.RMStore.STAGES.slice(UPLOADED_INDEX + 1).map(function (s) { return s.id; });
+
   var TABS = [
     { id: 'content-ops', label: 'Content Ops' },
     { id: 'upload-files', label: 'Upload Files' },
@@ -226,8 +230,20 @@
 
   /* ---------- auto-scheduling ---------- */
 
+  /* Once a piece has a video attached, its stage is no longer something
+     Harvey drags around on the board — it's derived entirely from what's
+     been done to it (audio picked, thumbnail picked, scheduled), and
+     "live" is reserved for when real posting confirmation exists. */
+  function deriveAndApplyStage(p) {
+    if (!p.hasVideo || p.stage === 'live') return;
+    var target = 'processed'; // "Processing" — a video piece never sits at "Uploaded", that column is the plan archive
+    if (p.thumbnailDataUrl) target = 'thumbnail';
+    if (p.scheduledAt) target = 'scheduled';
+    p.stage = target;
+  }
+
   function maybeAutoSchedule(p) {
-    if (!(p.hasVideo && p.stage === 'scheduled' && !p.scheduledAt)) return Promise.resolve();
+    if (!(p.hasVideo && p.audioTrackId && p.thumbnailDataUrl && !p.scheduledAt)) return Promise.resolve();
     return Store.getSettings().then(function (settings) {
       var cfg = settings.cadence[p.contentType] || Store.DEFAULT_CADENCE[p.contentType] || { every: 1, unit: 'days' };
       var ms = Store.cadenceMs(cfg);
@@ -303,7 +319,8 @@
       platformGrid, metaCreated, metaUpdated, saveFlag, modalEyebrowText, btnDelete,
       videoSection, videoPreview, fieldTranscript, fieldAudioTrack, thumbPreview,
       pickFrameBtn, thumbScrub, scrubRange, captureFrameBtn, captionReadout,
-      utmField, fieldUtmLink, copyUtmBtn, scheduleStatus;
+      utmField, fieldUtmLink, copyUtmBtn, scheduleStatus,
+      stageField, stageReadoutField, stageReadout;
 
   var activeId = null;
   var isNewUnsaved = false;
@@ -346,8 +363,11 @@
     fieldUtmLink = document.getElementById('fieldUtmLink');
     copyUtmBtn = document.getElementById('copyUtmBtn');
     scheduleStatus = document.getElementById('scheduleStatus');
+    stageField = document.getElementById('stageField');
+    stageReadoutField = document.getElementById('stageReadoutField');
+    stageReadout = document.getElementById('stageReadout');
 
-    Store.STAGES.forEach(function (s) {
+    Store.STAGES.filter(function (s) { return MANUAL_STAGE_IDS.indexOf(s.id) !== -1; }).forEach(function (s) {
       var o = document.createElement('option');
       o.value = s.id; o.textContent = s.label;
       fieldStage.appendChild(o);
@@ -413,7 +433,14 @@
       if (p) {
         p.thumbnailDataUrl = dataUrl;
         p.updatedAt = nowIso();
-        Store.put('pieces', p).then(function () { flashSaved(); notifyPiecesChanged(); });
+        maybeAutoSchedule(p).then(function () {
+          deriveAndApplyStage(p);
+          return Store.put('pieces', p);
+        }).then(function () {
+          updateStageAndScheduleUI(p);
+          flashSaved();
+          notifyPiecesChanged();
+        });
       }
     });
     copyUtmBtn.addEventListener('click', function () {
@@ -492,20 +519,28 @@
     return base + sep + 'utm_source=' + encodeURIComponent(source) + '&utm_medium=video&utm_campaign=' + encodeURIComponent(p.contentType || 'longform') + '&utm_content=' + encodeURIComponent(p.id);
   }
 
-  function updateScheduleStatusUI(p) {
+  function updateStageAndScheduleUI(p) {
+    stageReadout.textContent = stageLabelOf(p.stage);
     if (p.stage === 'scheduled' && p.scheduledAt) {
       scheduleStatus.textContent = 'Scheduled for ' + fmtFull(p.scheduledAt);
     } else if (p.stage === 'live') {
       scheduleStatus.textContent = p.scheduledAt ? ('Posted ' + fmtFull(p.scheduledAt)) : 'Posted — connect an API in Settings to confirm.';
+    } else if (!p.audioTrackId) {
+      scheduleStatus.textContent = 'Pick a backing audio track, then a thumbnail, and this schedules itself.';
+    } else if (!p.thumbnailDataUrl) {
+      scheduleStatus.textContent = 'Audio picked — pick a thumbnail frame and this schedules itself.';
     } else {
-      scheduleStatus.textContent = 'Not scheduled yet — move this to the Scheduled stage above to queue it.';
+      scheduleStatus.textContent = 'Ready — this will schedule itself shortly.';
     }
   }
 
   function populateFields(p) {
     fieldTitle.value = p.title || '';
-    fieldStage.value = p.stage;
     fieldContentType.value = p.contentType || 'short';
+    stageField.hidden = !!p.hasVideo;
+    stageReadoutField.hidden = !p.hasVideo;
+    if (p.hasVideo) stageReadout.textContent = stageLabelOf(p.stage);
+    else fieldStage.value = p.stage;
     fieldNotes.innerHTML = p.notesHtml || '';
     platformGrid.querySelectorAll('.platform-toggle').forEach(function (t) {
       var checked = (p.platforms || []).indexOf(t.dataset.platform) !== -1;
@@ -526,7 +561,7 @@
     fieldTranscript.value = p.transcript || '';
     thumbPreview.innerHTML = p.thumbnailDataUrl ? ('<img src="' + p.thumbnailDataUrl + '" alt="" />') : '<span class="thumb-empty">No thumbnail yet</span>';
     utmField.hidden = p.contentType !== 'longform';
-    updateScheduleStatusUI(p);
+    updateStageAndScheduleUI(p);
 
     return Promise.all([
       Store.get('videos', p.id).then(function (v) {
@@ -610,17 +645,18 @@
     platformGrid.querySelectorAll('.platform-toggle').forEach(function (t) {
       if (t.querySelector('input').checked) platforms.push(t.dataset.platform);
     });
+    var p = pieces[activeId];
     var vals = {
       title: fieldTitle.value,
-      stage: fieldStage.value,
       contentType: fieldContentType.value,
       notesHtml: fieldNotes.innerHTML,
       platforms: platforms
     };
-    var p = pieces[activeId];
     if (p && p.hasVideo) {
       vals.transcript = fieldTranscript.value;
       vals.audioTrackId = fieldAudioTrack.value;
+    } else {
+      vals.stage = fieldStage.value;
     }
     return vals;
   }
@@ -667,9 +703,10 @@
     }
 
     maybeAutoSchedule(p).then(function () {
+      deriveAndApplyStage(p);
       return Store.put('pieces', p);
     }).then(function () {
-      if (p.hasVideo) updateScheduleStatusUI(p);
+      if (p.hasVideo) updateStageAndScheduleUI(p);
       flashSaved();
       notifyPiecesChanged();
     });
@@ -828,17 +865,23 @@
     var title = (piece.title || '').trim();
     var titleHtml = title ? escapeHtml(title) : 'Untitled piece';
     var titleClass = title ? 'card-title' : 'card-title untitled';
-    var stageOpts = Store.STAGES.map(function (s) {
-      return '<option value="' + s.id + '"' + (s.id === piece.stage ? ' selected' : '') + '>' + s.label + '</option>';
-    }).join('');
+    var isAuto = !!piece.hasVideo;
+    var moveControl = isAuto
+      ? '<span class="auto-stage-badge">Auto · ' + stageLabelOf(piece.stage) + '</span>'
+      : (function () {
+          var stageOpts = Store.STAGES.filter(function (s) { return MANUAL_STAGE_IDS.indexOf(s.id) !== -1; }).map(function (s) {
+            return '<option value="' + s.id + '"' + (s.id === piece.stage ? ' selected' : '') + '>' + s.label + '</option>';
+          }).join('');
+          return '<select class="card-move" data-id="' + id + '">' + stageOpts + '</select>';
+        })();
     return '' +
-      '<div class="card" draggable="true" data-id="' + id + '">' +
-        '<span class="card-grip">⋮⋮</span>' +
+      '<div class="card' + (isAuto ? ' card-auto' : '') + '" draggable="' + (isAuto ? 'false' : 'true') + '" data-id="' + id + '">' +
+        (isAuto ? '' : '<span class="card-grip">⋮⋮</span>') +
         '<div class="' + titleClass + '">' + titleHtml + '</div>' +
         '<div class="chip-row">' + chipHtml(piece) + '</div>' +
         '<div class="card-foot">' +
           '<span class="card-time">' + fmtTime(piece.updatedAt) + '</span>' +
-          '<select class="card-move" data-id="' + id + '">' + stageOpts + '</select>' +
+          moveControl +
         '</div>' +
       '</div>';
   }
@@ -847,18 +890,20 @@
     var scrollLeft = boardWrap.scrollLeft;
     board.innerHTML = Store.STAGES.map(function (s, idx) {
       var ids = orderedIds(s.id);
+      var isAutoCol = AUTO_STAGE_IDS.indexOf(s.id) !== -1;
       var cards = ids.map(function (id) { return cardHtml(id, pieces[id]); }).join('');
-      if (!cards) cards = '<div class="empty-slot">Nothing here yet</div>';
+      if (!cards) cards = '<div class="empty-slot">' + (isAutoCol ? 'Nothing here yet' : 'Nothing here yet') + '</div>';
       var num = String(idx + 1).padStart(2, '0');
       return '' +
-        '<div class="column" data-stage="' + s.id + '">' +
+        '<div class="column' + (isAutoCol ? ' column-auto' : '') + '" data-stage="' + s.id + '">' +
           '<div class="column-head">' +
             '<span class="column-index">' + num + '</span>' +
             '<span class="column-title">' + s.label + '</span>' +
             '<span class="column-count">' + ids.length + '</span>' +
+            (isAutoCol ? '<span class="column-auto-note">automatic</span>' : '') +
           '</div>' +
           '<div class="column-body" data-stage="' + s.id + '">' + cards + '</div>' +
-          '<button class="column-add" data-stage="' + s.id + '">+ add here</button>' +
+          (isAutoCol ? '' : '<button class="column-add" data-stage="' + s.id + '">+ add here</button>') +
         '</div>';
     }).join('');
     boardWrap.scrollLeft = scrollLeft;
@@ -897,6 +942,7 @@
     });
 
     board.querySelectorAll('.column').forEach(function (col) {
+      if (AUTO_STAGE_IDS.indexOf(col.dataset.stage) !== -1) return; // system-managed — never a manual drop target
       col.addEventListener('dragover', function (e) {
         if (!draggingId) return;
         e.preventDefault();
@@ -1043,7 +1089,7 @@
       var piece = {
         id: id,
         title: file.name.replace(/\.[^.]+$/, ''),
-        stage: 'uploaded',
+        stage: 'processed', // "Processing" — a brand-new opportunity, not the same thing as any plan in "Uploaded"
         platforms: [],
         contentType: 'short',
         notesHtml: '',
@@ -1052,7 +1098,7 @@
         audioTrackId: '',
         thumbnailDataUrl: '',
         scheduledAt: '',
-        order: maxOrder('uploaded') + 10,
+        order: maxOrder('processed') + 10,
         createdAt: nowIso(),
         updatedAt: nowIso()
       };

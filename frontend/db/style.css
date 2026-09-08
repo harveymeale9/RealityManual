@@ -260,6 +260,13 @@ a { color: var(--accent); }
   height: 100%;
 }
 .column.drag-target { border-color: var(--accent); }
+.column.column-auto { background: var(--ivory); opacity: 0.82; }
+.column-auto-note {
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
 
 .column-head {
   display: flex;
@@ -345,6 +352,15 @@ a { color: var(--accent); }
 .card:hover .card-grip { opacity: 1; }
 .card:active { cursor: grabbing; }
 .card.dragging { opacity: 0.35; }
+.card.card-auto { cursor: pointer; }
+
+.auto-stage-badge {
+  font-size: 0.68rem;
+  color: var(--accent-2);
+  background: var(--accent-soft);
+  border-radius: 2px;
+  padding: 2.5px 7px;
+}
 
 .card-grip {
   position: absolute;
@@ -691,6 +707,15 @@ a { color: var(--accent); }
 .thumb-empty { font-size: 0.68rem; color: var(--ink-faint); text-align: center; padding: 0 6px; }
 .thumb-scrub { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
 .thumb-scrub input[type="range"] { flex: 1; accent-color: var(--accent); }
+
+.stage-readout {
+  background: var(--accent-soft);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  padding: 9px 10px;
+  font-size: 0.9rem;
+  color: var(--accent-2);
+}
 
 .caption-readout {
   background: var(--surface-2);

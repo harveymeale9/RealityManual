@@ -1659,28 +1659,44 @@ across devices/browsers. If Harvey wants that, it needs a small dedicated
 service on the VPS, kept separate from the storefront backend/database per
 the original instruction below.
 
+**Content Ops and Upload Files are two views over one `pieces` store, but
+deliberately not the same workflow** (Harvey's clarification, 2026-09-08):
+Content Ops is pure planning — Ideation → Outline Started → Outline
+Completed → Filmed → Edited → **Uploaded**. Harvey drags/selects a card
+through those six stages himself, and "Uploaded" is the archive/end state
+for a plan — he stops interacting with it there. It is NOT the same thing
+as an actual uploaded video file.
+
+Dropping a real file in the Upload Files tab creates a **brand-new piece**
+(unrelated to any plan card) starting at **Processing**, which — together
+with Thumbnail Selected, Scheduled, and Posted/Live — is system-managed:
+no drag-and-drop, no manual stage dropdown, just an "Auto · <stage>" badge
+on the card. `frontend/db/app.js`'s `deriveAndApplyStage()` derives the
+piece's stage purely from what's been done to it (audio track picked →
+Processing; thumbnail captured → Thumbnail Selected; both present →
+Scheduled, with `maybeAutoSchedule()` stamping `scheduledAt` from the
+Settings cadence for that content type, queued after whatever's already
+scheduled). "Posted/Live" is reserved for real posting confirmation, which
+doesn't exist yet. `MANUAL_STAGE_IDS`/`AUTO_STAGE_IDS` in `app.js` are the
+source of truth for the split — a piece with `hasVideo: true` never
+exposes manual stage controls on the board or in the modal.
+
 **Tabs (`frontend/db/app.js`):**
-- **Content Ops** — the kanban board: Ideation → Outline Started → Outline
-  Completed → Filmed → Edited → Uploaded → Processed (Audio) → Thumbnail
-  Selected → Scheduled → Posted/Live. Drag-and-drop or the per-card stage
-  dropdown to move a piece; click a card for a large modal editor
-  (autosaving, paste-to-embed screenshots in notes). Each piece has a
-  content type — Ultra-short (10–20s), Short (~1 min), Long-short (up to
-  3 min), Longform (YT/FB) — plus a per-card platform tag. An overview
-  strip shows, per content type, how many pieces are queued and how many
-  days out the furthest-scheduled one is.
+- **Content Ops** — the planning kanban described above. Click a card for
+  a large modal editor (autosaving, paste-to-embed screenshots in notes).
+  Each piece has a content type — Ultra-short (10–20s), Short (~1 min),
+  Long-short (up to 3 min), Longform (YT/FB) — plus a per-card platform
+  tag. An overview strip shows, per content type, how many real pieces
+  are queued and how many days out the furthest-scheduled one is.
 - **Upload Files** — drag-and-drop drop zone for already-edited (cut +
-  captioned) videos. Dropping a file creates a piece at the `uploaded`
-  stage; the same shared modal gains a Video section for that piece:
-  video preview, transcript (manual for now — auto-transcribe is a
-  visibly disabled stub until a transcription provider is wired up),
-  backing-audio dropdown (from the ambient library in Settings), an
-  in-browser thumbnail frame-picker (scrub the video, capture a frame to
-  canvas — no API needed), the shared caption read-only, and a
-  UTM-tracked link for longform pieces. Moving a video-linked piece to
-  the `scheduled` stage (drag, dropdown, or the modal's stage select)
-  auto-stamps `scheduledAt` based on the Settings cadence, appending
-  after whatever's already queued for that content type.
+  captioned) videos, each becoming its own new piece as described above.
+  The shared modal gains a Video section for these: video preview,
+  transcript (manual for now — auto-transcribe is a visibly disabled
+  stub until a transcription provider is wired up), backing-audio
+  dropdown (from the ambient library in Settings), an in-browser
+  thumbnail frame-picker (scrub the video, capture a frame to canvas —
+  no API needed), the shared caption read-only, and a UTM-tracked link
+  for longform pieces.
 - **Content Analytics / Sales Analytics / Website Analytics** — currently
   informational placeholders listing what will populate once the
   relevant APIs/backend exist (per-video view counts; Stripe/BookVault

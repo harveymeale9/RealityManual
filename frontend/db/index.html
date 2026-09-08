@@ -53,9 +53,13 @@
           <input class="title-input" id="fieldTitle" placeholder="Untitled piece" maxlength="200" />
         </div>
         <div class="toolbar-row">
-          <div class="field">
+          <div class="field" id="stageField">
             <label for="fieldStage">Stage</label>
             <select class="stage-select" id="fieldStage"></select>
+          </div>
+          <div class="field" id="stageReadoutField" hidden>
+            <div class="field-label">Stage <span class="field-hint">— automatic once uploaded</span></div>
+            <div class="stage-readout" id="stageReadout">—</div>
           </div>
           <div class="field">
             <label for="fieldContentType">Content type</label>
