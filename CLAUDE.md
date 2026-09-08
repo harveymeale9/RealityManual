@@ -21,7 +21,7 @@ The product is a premium linen hardcover with a dust jacket.
 
 Retail price:
 
-**$39 USD**
+**$59 USD**
 
 Currency:
 
@@ -33,7 +33,14 @@ Taxes:
 
 The website is intentionally simple and focuses on one objective:
 
-**Sell the book, collect payment, submit the order to Lulu for fulfillment, and confirm the order to the customer.**
+**Sell the book, collect payment, submit the order to BookVault for fulfillment, and confirm the order to the customer.**
+
+**Cost/pricing note (confirmed 2026-09-08):** fulfillment provider switched
+from Lulu to **BookVault**. Print cost is approximately £20 / $29 USD per
+unit. Retail price is $59 USD + server-calculated shipping. Harvey has
+already uploaded print-ready files directly through BookVault's own
+interface (not yet via API) and a physical proof copy is on the way,
+expected within a few days.
 
 ---
 
@@ -47,7 +54,7 @@ Your responsibilities include:
 - Backend development
 - Database design
 - Stripe integration
-- Lulu integration
+- BookVault integration
 - Order processing
 - Shipping calculation
 - First-party analytics
@@ -94,7 +101,7 @@ Physical format:
 
 Price:
 
-**$39 USD**
+**$59 USD**
 
 Currency:
 
@@ -149,16 +156,16 @@ Confirmation Page
       ↓
 "We're placing your order, please wait..."
       ↓
-Order submitted to Lulu
+Order submitted to BookVault
       ↓
-Lulu confirms successful order submission
+BookVault confirms successful order submission
       ↓
 Confirmation Page updates
       ↓
 "Your order is confirmed."
 
 
-The customer should receive a clear and definitive success message only after our backend has confirmed that Lulu successfully accepted the order.
+The customer should receive a clear and definitive success message only after our backend has confirmed that BookVault successfully accepted the order.
 
 ---
 
@@ -176,7 +183,7 @@ Prefer:
 - Lightweight backend
 - PostgreSQL or SQLlite or whatever u prefer
 - Stripe
-- Lulu API
+- BookVault API
 - First-party analytics
 - Small admin dashboard
 
@@ -223,7 +230,7 @@ The backend is responsible for:
 
 - Stripe integration
 - Stripe webhooks
-- Lulu integration
+- BookVault integration
 - Order creation
 - Order status
 - Shipping calculation
@@ -315,7 +322,7 @@ The page should clearly communicate:
 
 - The Reality Manual
 - First Edition Premium Hardcover
-- $39 USD
+- $59 USD
 - Relevant product information
 - Clear purchase CTA
 
@@ -388,11 +395,11 @@ Display:
 
 **First Edition Premium Hardcover**
 
-**$39.00 USD**
+**$59.00 USD**
 
-The customer must provide all information required for Lulu fulfillment.
+The customer must provide all information required for BookVault fulfillment.
 
-Use Lulu's current official API documentation as the source of truth for required shipping fields.
+Use BookVault's current official API documentation as the source of truth for required shipping fields.
 
 Expected fields include:
 
@@ -405,17 +412,17 @@ Expected fields include:
 - State/province/region where applicable
 - Postal/ZIP code
 
-The exact required fields should be confirmed against the current Lulu API documentation before implementation.
+The exact required fields should be confirmed against the current BookVault API documentation before implementation.
 
 ---
 
-# 14. Lulu Address Constraints
+# 14. BookVault Address Constraints
 
-Lulu has character limits on certain fulfillment address fields. I believe 30 characters max for certain fields, check on their website and make sure whatever someone enters into our form will be accepted when we place the order via Lulu API.
+BookVault likely has character limits on certain fulfillment address fields, similar to other print-on-demand APIs. Do not assume Lulu's old limits carry over — check BookVault's official documentation and make sure whatever someone enters into our form will be accepted when we place the order via the BookVault API.
 
 The implementation must validate these limits.
 
-Pay particular attention to Lulu's documented limits for fields such as:
+Pay particular attention to BookVault's documented limits for fields such as:
 
 - First name
 - Last name
@@ -434,13 +441,13 @@ If a field is too long, display a useful validation message and allow the custom
 
 Do not invent character limits.
 
-Verify the current limits against Lulu's official documentation.
+Verify the current limits against BookVault's official documentation.
 
-Country codes must use the format expected by Lulu.
+Country codes must use the format expected by BookVault.
 
 Do not use incorrect country-code assumptions.
 
-Phone number should be collected because Lulu fulfillment requires it.
+Phone number should be collected because BookVault fulfillment requires it.
 
 ---
 
@@ -459,7 +466,7 @@ The browser may send a country selection, but the server must determine the corr
 The final order total is:
 
 
-$39.00 book price
+$59.00 book price
 +
 server-side shipping price
 =
@@ -494,7 +501,7 @@ Also support:
 
 **Rest of World**
 
-The actual shipping prices will be manually supplied based on Lulu's current shipping rates.
+The actual shipping prices will be manually supplied based on BookVault's current shipping rates.
 
 Do not invent these rates.
 
@@ -532,7 +539,7 @@ Shipping rates should be editable through the Admin Dashboard.
 So after they input their country, the checkout should dynamically display:
 
 ```text
-The Reality Manual      $39.00
+The Reality Manual      $59.00
 Shipping                $XX.XX
 Total                   $XX.XX
 ```
@@ -646,7 +653,7 @@ book_price
 shipping_price
 total_price
 currency
-lulu_order_id
+bookvault_order_id
 order_status
 created_at
 updated_at
@@ -672,7 +679,7 @@ Recommended states:
 ```text
 PAYMENT_PENDING
 PAYMENT_RECEIVED
-LULU_PENDING
+BOOKVAULT_PENDING
 COMPLETE
 FAILED
 REFUNDED
@@ -681,11 +688,11 @@ Up to you to determine this tbh.
 
 Do not create an unnecessarily complex fulfillment state machine.
 
-We do not need to continuously mirror Lulu's entire downstream printing and shipping lifecycle.
+We do not need to continuously mirror BookVault's entire downstream printing and shipping lifecycle.
 
-Once Lulu confirms successful submission of the order, the order is considered complete from the website's perspective.
+Once BookVault confirms successful submission of the order, the order is considered complete from the website's perspective.
 
-Store the Lulu order ID.
+Store the BookVault order ID.
 
 ---
 
@@ -694,10 +701,10 @@ Store the Lulu order ID.
 After Stripe confirms payment:
 
 1. Record the order.
-2. Send the order to Lulu.
+2. Send the order to BookVault.
 3. Show the customer the confirmation page.
 4. Keep the page in a waiting state.
-5. Wait for our backend to confirm Lulu success.
+5. Wait for our backend to confirm BookVault success.
 6. Update the page immediately once confirmation is available.
 
 Initial confirmation state:
@@ -712,7 +719,7 @@ Show a spinner/loading indicator.
 
 Do not tell the customer the order is complete simply because Stripe payment succeeded.
 
-The customer should remain on the confirmation page while the backend processes the Lulu submission.
+The customer should remain on the confirmation page while the backend processes the BookVault submission.
 
 ---
 
@@ -738,9 +745,9 @@ GET /api/orders/{order_id}/status
 
 The browser communicates only with our backend.
 
-The browser does not communicate directly with Lulu.
+The browser does not communicate directly with BookVault.
 
-When the backend knows that Lulu successfully accepted the order:
+When the backend knows that BookVault successfully accepted the order:
 
 Update the page immediately.
 
@@ -761,78 +768,74 @@ Do not permanently hardcode the estimate into frontend code.
 
 ---
 
-# 25. Lulu Integration
+# 25. BookVault Integration
 
-Use Lulu's official Print API.
+Use BookVault's official API.
 
-Before implementing or changing the Lulu integration, inspect the current official Lulu developer documentation.
+Before implementing or changing the BookVault integration, inspect the current official BookVault developer documentation.
 
 Verify:
 
 - Authentication
-- Sandbox base URL
-- Production base URL
-- Print job creation
+- API base URL
+- Print/order job creation
 - Required request fields
-- Product/package identifier
+- Product identifier
 - Shipping address schema
 - Shipping method requirements
 - Order response
 - Order status behavior
-- Current fulfillment confirmation mechanism
+- Current fulfillment confirmation mechanism (webhook or polling)
 - Address validation requirements
 - Relevant API restrictions
 
-Do not invent Lulu endpoints.
+Do not invent BookVault endpoints.
 
 Do not assume a webhook exists.
 
 Do not rely on outdated examples if the current documentation differs.
 
-The current official Lulu documentation is the source of truth.
+The current official BookVault documentation is the source of truth.
 
 ---
 
-# 26. Lulu Environment
+# 26. BookVault Environment
 
-Development must use Lulu Sandbox.
-
-Production must use Lulu's production API only after testing is complete.
+**BookVault does not provide a sandbox environment** (confirmed 2026-09-08).
+Development/integration testing will be done by placing a real test order
+against BookVault's live API — there is no separate sandbox/test mode to
+target. Treat that first real order carefully: verify address handling,
+pricing, and confirmation behavior before relying on the flow for real
+customers.
 
 Use environment variables.
 
-Required configuration should include:
+Required configuration should include (exact names to be confirmed against
+BookVault's docs before implementation):
 
 ```text
-LULU_CLIENT_ID
-LULU_CLIENT_SECRET
-LULU_API_BASE_URL
-LULU_POD_PACKAGE_ID
+BOOKVAULT_API_KEY
+BOOKVAULT_API_BASE_URL
+BOOKVAULT_PRODUCT_ID
 ```
 
-The Lulu product/package ID will be supplied later.
+The BookVault product/package identifier will be supplied later, once
+confirmed against Harvey's uploaded print-ready files.
 
 Do not invent it.
 
-**Configured (2026-08-17):** Lulu sandbox `LULU_CLIENT_ID`, `LULU_CLIENT_SECRET`,
-and `LULU_POD_PACKAGE_ID` are set in `backend/.env` (gitignored, not in the
-repo). Product spec: `0827X1169.BW.PRE.LW.060UW444.GBG` — A4 trim, B&W
-interior, premium quality, black linen wrap hardcover, gold foil spine stamp,
-gloss-laminated dust jacket. Confirmed against Harvey's existing published
-Lulu project (project ID `e7q9gz4` on the self-publish side, a separate
-system from the Print API — not itself usable as the pod_package_id) and
-against Lulu's official SKU spec sheet for the exact linen/foil letter codes
-(Linen: Red=R, Navy=N, Black=B, Gray=G, Tan=T, Forest=F; Foil: Gold=G,
-Black=B, White=W, None=X). This is config only — no interior/cover PDF has
-been uploaded for the Print API yet; that's a separate later step for
-building actual print-job submission, distinct from the self-publish
-project's own print-ready files. Production Lulu credentials were also
-provided by Harvey but are intentionally not stored anywhere yet — hold off
-until sandbox testing is fully verified per section 53.
+**Status (2026-09-08):** Harvey has uploaded print-ready interior/cover files
+directly through BookVault's own interface and a physical proof copy is on
+the way (expected within a few days). No BookVault API credentials are
+configured in `backend/.env` yet. All prior Lulu configuration (client
+ID/secret, POD package ID, sandbox setup) has been abandoned — Lulu is no
+longer part of this project. Actual API integration work starts once Harvey
+is back from a trip to Samui (leaving 2026-09-09, back roughly one week
+later) and BookVault credentials/product ID are supplied.
 
 ---
 
-# 27. Lulu Fulfillment
+# 27. BookVault Fulfillment
 
 The desired flow is:
 
@@ -843,38 +846,38 @@ Order recorded
         ↓
 Confirmation page shows waiting state
         ↓
-Backend submits order to Lulu
+Backend submits order to BookVault
         ↓
-Lulu confirms successful submission
+BookVault confirms successful submission
         ↓
-Database records Lulu confirmation
+Database records BookVault confirmation
         ↓
 Confirmation page becomes successful
 ```
 
-The confirmation page must not show successful fulfillment until our backend has authoritative confirmation from Lulu.
+The confirmation page must not show successful fulfillment until our backend has authoritative confirmation from BookVault.
 
-Determine the most reliable current mechanism using Lulu's official documentation.
+Determine the most reliable current mechanism using BookVault's official documentation.
 
-If Lulu provides an appropriate webhook/event mechanism, use it where appropriate.
+If BookVault provides an appropriate webhook/event mechanism, use it where appropriate.
 
-If not, use the appropriate Lulu API status/query mechanism.
+If not, use the appropriate BookVault API status/query mechanism.
 
-The website should not claim success based solely on having sent a request to Lulu.
+The website should not claim success based solely on having sent a request to BookVault.
 
 ---
 
-# 28. Lulu Failure Handling
+# 28. BookVault Failure Handling
 
 Keep failure handling simple.
 
-If Lulu fails because of a temporary issue:
+If BookVault fails because of a temporary issue:
 
 - Retry automatically a small number of times.
 - Record each failure.
 - Do not create duplicate orders.
 
-If Lulu ultimately cannot accept the order:
+If BookVault ultimately cannot accept the order:
 
 1. Mark the order `FAILED`.
 2. Record the error.
@@ -928,17 +931,17 @@ Potential duplicate events include:
 - Stripe webhook delivered more than once
 - Browser refreshing confirmation page
 - Browser retrying a request
-- Backend retrying a Lulu request
-- Network timeout after Lulu accepted an order
+- Backend retrying a BookVault request
+- Network timeout after BookVault accepted an order
 - Refund request being repeated
 
-Before creating a Lulu order:
+Before creating a BookVault order:
 
-- Check whether `lulu_order_id` already exists.
+- Check whether `bookvault_order_id` already exists.
 - Check whether order status is already `COMPLETE`.
 - Only submit if fulfillment has not already succeeded.
 
-The same internal order must never result in multiple Lulu print jobs.
+The same internal order must never result in multiple BookVault print jobs.
 
 Refund processing must also be idempotent.
 
@@ -964,9 +967,9 @@ checkout_view
 checkout_started
 payment_submitted
 payment_succeeded
-lulu_submission_started
-lulu_submission_succeeded
-lulu_submission_failed
+bookvault_submission_started
+bookvault_submission_succeeded
+bookvault_submission_failed
 order_complete
 order_failed
 refund_created
@@ -1156,8 +1159,8 @@ Display:
 - Shipping price
 - Total
 - Stripe status
-- Lulu status
-- Lulu order ID
+- BookVault status
+- BookVault order ID
 - Internal order status
 
 Allow viewing order details.
@@ -1225,7 +1228,7 @@ Allow editing of:
 Default:
 
 ```text
-Book price: $39
+Book price: $59
 Currency: USD
 ```
 **honestly not necessary as this might require updating on Stripe side anyway. If i change the price i'll just let you know.
@@ -1318,7 +1321,7 @@ created_at
 Record errors from:
 
 - Stripe
-- Lulu
+- BookVault
 - Refund processing
 - Database
 - Critical backend operations
@@ -1339,7 +1342,7 @@ Never expose:
 
 - Stripe secret key
 - Stripe webhook secret
-- Lulu credentials
+- BookVault credentials
 - Database credentials
 - Admin credentials
 
@@ -1359,7 +1362,7 @@ Validate:
 - Phone
 - Country
 - Address
-- Lulu field lengths
+- BookVault field lengths
 - Order IDs
 - Payment references
 
@@ -1369,10 +1372,10 @@ Never trust the browser for:
 - Shipping price
 - Total price
 - Order status
-- Lulu status
+- BookVault status
 - Refund state
 
-Never allow frontend code to communicate directly with Lulu.
+Never allow frontend code to communicate directly with BookVault.
 
 Never allow frontend code to initiate arbitrary refunds.
 
@@ -1426,13 +1429,13 @@ Development must initially use:
 
 **Stripe Test Mode**
 
-and:
+BookVault has no sandbox environment, so BookVault-side testing will
+necessarily involve real orders against BookVault's live API (see section
+26). Keep this scoped and deliberate — e.g. a single manual test order
+placed by Harvey — rather than routine automated testing against BookVault's
+production API.
 
-**Lulu Sandbox**
-
-Do not use production payment credentials during development.
-
-Do not submit real Lulu production orders during development.
+Do not use production Stripe credentials during development.
 
 ---
 
@@ -1454,13 +1457,13 @@ Test:
 - Stripe payment success
 - Stripe webhook verification
 - Order creation
-- Lulu sandbox submission
-- Lulu confirmation
+- BookVault order submission (real test order — no sandbox available)
+- BookVault confirmation
 - Confirmation page
 - Duplicate Stripe webhook handling
 - Confirmation page refresh
-- Lulu failure
-- Lulu retry
+- BookVault failure
+- BookVault retry
 - Stripe refund
 - Refund failure handling
 - Analytics events
@@ -1470,20 +1473,23 @@ Test:
 - SEO editing
 - Mobile checkout
 - Address validation
-- Lulu character limits
+- BookVault character limits
 - Idempotency
 
 ---
 
 # 53. Production Readiness
 
-Do not switch to production until the complete sandbox/test flow has been successfully verified.
+Do not switch to full production traffic until a real BookVault test order
+has been placed and verified end-to-end (order submission, confirmation
+mechanism, address handling), and the Stripe test-mode flow has been
+successfully verified.
 
 The production transition should require explicitly changing:
 
 - Stripe credentials
-- Lulu credentials
-- Lulu API base URL
+- BookVault credentials
+- BookVault API base URL
 - Database configuration
 - Deployment configuration
 - Webhook configuration
@@ -1504,9 +1510,9 @@ Maintain a README containing:
 - Database setup
 - Database migrations
 - Stripe Test Mode
-- Lulu Sandbox
+- BookVault integration (no sandbox — testing notes)
 - Shipping configuration
-- Lulu product/package configuration
+- BookVault product configuration
 - Deployment
 - Production configuration
 - Stripe webhook configuration
@@ -1541,10 +1547,9 @@ If a permanent architectural decision changes, update this `CLAUDE.md`.
 
 The following values will be supplied during development:
 
-- Lulu product/package ID
-- Lulu sandbox credentials
-- Lulu production credentials
-- Actual Lulu shipping rates
+- BookVault product ID
+- BookVault API credentials
+- Actual BookVault shipping rates
 - Stripe test credentials
 - Stripe production credentials
 - Production database credentials
@@ -1574,10 +1579,10 @@ The project is complete when a customer can:
 8. Pay securely through Stripe Elements
 9. Reach the confirmation page
 10. See that their order is being placed
-11. Wait while the Lulu order is confirmed
-12. Receive a successful confirmation only after Lulu confirms the order
+11. Wait while the BookVault order is confirmed
+12. Receive a successful confirmation only after BookVault confirms the order
 
-If Lulu cannot fulfill the order:
+If BookVault cannot fulfill the order:
 
 1. The system records the failure.
 2. The system retries where appropriate.
@@ -1590,8 +1595,8 @@ Meanwhile the system must:
 
 - Record every order
 - Record Stripe payment status
-- Submit orders to Lulu
-- Store Lulu order IDs
+- Submit orders to BookVault
+- Store BookVault order IDs
 - Prevent duplicate fulfillment
 - Handle refunds
 - Log errors
@@ -1602,7 +1607,7 @@ Meanwhile the system must:
 - Allow SEO settings to be edited
 - Remain secure
 - Remain maintainable
-- Work correctly in sandbox before production
+- Be verified against a real BookVault test order before full production use
 
 ---
 
@@ -1626,7 +1631,33 @@ Build the simplest reliable system that accomplishes this.
 
 Do not turn the project into a large ecommerce platform.
 
-The goal is a beautiful, premium single-product website with a reliable payment and Lulu fulfillment pipeline.
+The goal is a beautiful, premium single-product website with a reliable payment and BookVault fulfillment pipeline.
 
 **Let me know whenever you want me to jump into the VPS terminal to make any changes. Or if i can give u vps access somehow even better.
 **Btw were using github desktop for all this and u have rights to push any changes automatically. for instance in the directory youre in now, if u were to create a index.html file, that would show at realitymanual.com/
+
+---
+
+# 62. Future: Content Distribution Tool (Not Started)
+
+Separate from the storefront/checkout/fulfillment pipeline described above,
+Harvey is planning a second, distinct tool to support marketing the book
+through video content (short-form and long-form).
+
+Intended workflow (confirmed 2026-09-08, details to be ironed out later):
+
+- Drag-and-drop upload of already-edited videos
+- Automatic splicing in of background music
+- Automatic transcription of spoken content, used to help generate/inform a
+  title for each piece
+- Scheduling and cross-posting to: YouTube (long-form + Shorts), TikTok,
+  Instagram, Facebook
+- Target publishing cadence: roughly one piece every 8 hours
+
+This is unrelated to the ecommerce site's architecture and should be treated
+as a separate system when it's eventually built — do not conflate it with
+the storefront backend/database. Do not start building this yet: Harvey is
+traveling to Samui starting 2026-09-09 for about a week to brainstorm
+content ideas, and work on this tool begins after he's back and has
+finalized the details. Keep it lightweight, consistent with this project's
+general philosophy of avoiding unnecessary complexity.
