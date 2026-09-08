@@ -1,5 +1,6 @@
 User-agent: *
 Disallow: /checkout.html
 Disallow: /confirmation.html
+Disallow: /db/
 
 # No sitemap is published intentionally.

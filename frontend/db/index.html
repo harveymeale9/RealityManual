@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Control Panel — The Reality Manual</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,400&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div id="loginGate" class="login-gate">
+    <form id="loginForm" class="login-card" autocomplete="off">
+      <div class="login-kicker">The Reality Manual</div>
+      <h1 class="login-title">Control Panel</h1>
+      <div class="field">
+        <label for="loginPassword">Password</label>
+        <input type="password" id="loginPassword" name="password" autocomplete="current-password" />
+      </div>
+      <button type="submit" class="btn-primary btn-block">Enter</button>
+      <p class="login-error" id="loginError" hidden>Incorrect password.</p>
+    </form>
+  </div>
+
+  <div id="appShell" class="panel-app" hidden>
+    <header class="panel-header">
+      <div class="panel-brand">
+        <span class="wordmark-sm">The Reality Manual</span>
+        <span class="panel-sub">Control Panel</span>
+      </div>
+      <nav class="panel-tabs" id="panelTabs"></nav>
+      <div class="panel-actions">
+        <button class="link-btn" id="logoutBtn">Log out</button>
+      </div>
+    </header>
+    <main class="panel-main" id="panelMain"></main>
+  </div>
+
+  <div class="scrim" id="scrim"></div>
+  <div class="modal-wrap" id="modalWrap">
+    <div class="modal" id="pieceModal" role="dialog" aria-modal="true" aria-hidden="true">
+      <div class="modal-head">
+        <div class="modal-eyebrow"><span id="modalEyebrowText">Piece</span><span class="save-flag" id="saveFlag">Saved</span></div>
+        <button class="modal-close" id="modalClose" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <input class="title-input" id="fieldTitle" placeholder="Untitled piece" maxlength="200" />
+        </div>
+        <div class="toolbar-row">
+          <div class="field">
+            <label for="fieldStage">Stage</label>
+            <select class="stage-select" id="fieldStage"></select>
+          </div>
+          <div class="field">
+            <label for="fieldFormat">Format</label>
+            <select class="format-select" id="fieldFormat">
+              <option value="short">Short-form</option>
+              <option value="long">Long-form</option>
+            </select>
+          </div>
+          <div class="field grow">
+            <div class="field-label">Platform</div>
+            <div class="platform-grid" id="platformGrid"></div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="fieldNotes">Notes <span class="field-hint">— paste a screenshot to drop it in</span></label>
+          <div class="notes-input" id="fieldNotes" contenteditable="true" data-placeholder="Hook, talking points, script beats, edit notes..."></div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <div class="meta-row">
+          <span id="metaCreated">—</span>
+          <span id="metaUpdated">—</span>
+        </div>
+        <button class="btn-delete" id="btnDelete">Delete piece</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
