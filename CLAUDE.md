@@ -1638,26 +1638,99 @@ The goal is a beautiful, premium single-product website with a reliable payment 
 
 ---
 
-# 62. Future: Content Distribution Tool (Not Started)
+# 62. Internal Control Panel (/db)
 
-Separate from the storefront/checkout/fulfillment pipeline described above,
-Harvey is planning a second, distinct tool to support marketing the book
-through video content (short-form and long-form).
+A password-gated internal control panel lives at `frontend/db/` (deployed
+alongside the storefront via the same GitHub Pages workflow, so it's live
+at `realitymanual.com/db/`). It is explicitly **separate from the
+storefront** — do not conflate its data with the Stripe/BookVault order
+pipeline or its Postgres/SQLite schema in `backend/`.
 
-Intended workflow (confirmed 2026-09-08, details to be ironed out later):
+**Access:** hardcoded client-side password `ormiston` (see
+`frontend/db/lib/auth.js`), persisted in `localStorage` so it stays logged
+in on a given device. Deliberately not a real security boundary — Harvey's
+call, matches the admin-password precedent in section 44. `robots.txt`
+disallows `/db/`.
+
+**Storage:** everything is client-side in IndexedDB (`frontend/db/lib/store.js`,
+DB name `rm_content_ops`) — pieces, uploaded video blobs, ambient audio
+blobs, and settings. There is **no backend for this yet**, so nothing syncs
+across devices/browsers. If Harvey wants that, it needs a small dedicated
+service on the VPS, kept separate from the storefront backend/database per
+the original instruction below.
+
+**Tabs (`frontend/db/app.js`):**
+- **Content Ops** — the kanban board: Ideation → Outline Started → Outline
+  Completed → Filmed → Edited → Uploaded → Processed (Audio) → Thumbnail
+  Selected → Scheduled → Posted/Live. Drag-and-drop or the per-card stage
+  dropdown to move a piece; click a card for a large modal editor
+  (autosaving, paste-to-embed screenshots in notes). Each piece has a
+  content type — Ultra-short (10–20s), Short (~1 min), Long-short (up to
+  3 min), Longform (YT/FB) — plus a per-card platform tag. An overview
+  strip shows, per content type, how many pieces are queued and how many
+  days out the furthest-scheduled one is.
+- **Upload Files** — drag-and-drop drop zone for already-edited (cut +
+  captioned) videos. Dropping a file creates a piece at the `uploaded`
+  stage; the same shared modal gains a Video section for that piece:
+  video preview, transcript (manual for now — auto-transcribe is a
+  visibly disabled stub until a transcription provider is wired up),
+  backing-audio dropdown (from the ambient library in Settings), an
+  in-browser thumbnail frame-picker (scrub the video, capture a frame to
+  canvas — no API needed), the shared caption read-only, and a
+  UTM-tracked link for longform pieces. Moving a video-linked piece to
+  the `scheduled` stage (drag, dropdown, or the modal's stage select)
+  auto-stamps `scheduledAt` based on the Settings cadence, appending
+  after whatever's already queued for that content type.
+- **Content Analytics / Sales Analytics / Website Analytics** — currently
+  informational placeholders listing what will populate once the
+  relevant APIs/backend exist (per-video view counts; Stripe/BookVault
+  order and revenue reporting; the storefront pageview funnel from
+  sections 31–39). No fake data — empty until real.
+- **Settings** — publishing cadence per content type, the ambient audio
+  library (upload/delete mp3s), the shared caption applied to every
+  upload, the base URL used for longform UTM links, and API key fields
+  for YouTube/Instagram/Facebook/TikTok plus a transcription provider.
+  **These keys are stored in IndexedDB only and are not sent anywhere** —
+  there's nothing wired up to use them yet. TikTok access hasn't been
+  granted yet either; the field is there for when it is.
+
+**Quick-add shortcut:** `frontend/db/quick-add.html` is a minimal
+standalone page (same password/storage) meant to be added to a phone home
+screen (`manifest.json` + `icon.svg` for the install prompt) — one big
+textarea, autofocused, dictate via the OS keyboard's mic button, "Save to
+Ideation" writes straight into the same IndexedDB store the main board
+reads from, so a captured idea shows up in Content Ops immediately.
+
+**Known limitation:** built and reviewed without a browser available in
+that session to click through it — verified by Node syntax-checking the
+JS/JSON and a careful manual read, not by loading the page. Test it for
+real before relying on it, especially the login gate, drag-and-drop, and
+the thumbnail picker.
+
+---
+
+## Original brief for this tool (confirmed 2026-09-08)
+
+Harvey's intended eventual workflow, for context on where this is headed:
 
 - Drag-and-drop upload of already-edited videos
-- Automatic splicing in of background music
+- Automatic splicing in of background music (currently: manual pick from
+  an uploaded ambient-audio library, not automatic)
 - Automatic transcription of spoken content, used to help generate/inform a
-  title for each piece
+  title for each piece (currently: manual transcript + manual title —
+  auto-transcribe and auto-title need a transcription/LLM API key and are
+  stubbed out)
 - Scheduling and cross-posting to: YouTube (long-form + Shorts), TikTok,
-  Instagram, Facebook
-- Target publishing cadence: roughly one piece every 8 hours
+  Instagram, Facebook (currently: scheduling/cadence logic is real and
+  working; actual cross-posting to platforms is not built — no API keys
+  exist yet and it needs a backend, not client-side JS, to hold them)
+- Target publishing cadence: roughly one piece every 8 hours (currently:
+  cadence is configurable per content type in Settings, defaulting to
+  ultra-short/8h, short/1d, long-short/3d, longform/7d — Harvey's call to
+  tune)
 
-This is unrelated to the ecommerce site's architecture and should be treated
-as a separate system when it's eventually built — do not conflate it with
-the storefront backend/database. Do not start building this yet: Harvey is
-traveling to Samui starting 2026-09-09 for about a week to brainstorm
-content ideas, and work on this tool begins after he's back and has
-finalized the details. Keep it lightweight, consistent with this project's
-general philosophy of avoiding unnecessary complexity.
+Real API integration (posting, transcription, analytics pulls) starts once
+Harvey is back from Samui (left 2026-09-09, back roughly a week later) and
+has API credentials to supply — see the Settings tab's API keys section for
+where those go. Keep it lightweight, consistent with this project's general
+philosophy of avoiding unnecessary complexity.

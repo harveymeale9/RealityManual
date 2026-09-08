@@ -1,14 +1,16 @@
 (function () {
   'use strict';
 
-  var PANEL_PASSWORD = 'ormiston';
-  var AUTH_KEY = 'rm_panel_auth';
-  var SEEDED_KEY = 'rm_content_ops_seeded';
+  var Store = window.RMStore;
+  var Auth = window.RMAuth;
 
   var TABS = [
     { id: 'content-ops', label: 'Content Ops' },
+    { id: 'upload-files', label: 'Upload Files' },
     { id: 'content-analytics', label: 'Content Analytics' },
-    { id: 'sales-analytics', label: 'Sales Analytics' }
+    { id: 'sales-analytics', label: 'Sales Analytics' },
+    { id: 'website-analytics', label: 'Website Analytics' },
+    { id: 'settings', label: 'Settings' }
   ];
 
   /* ============================================================
@@ -20,18 +22,6 @@
   var loginPassword = document.getElementById('loginPassword');
   var loginError = document.getElementById('loginError');
   var appShell = document.getElementById('appShell');
-
-  function isAuthed() {
-    try { return localStorage.getItem(AUTH_KEY) === '1'; }
-    catch (e) { return false; }
-  }
-
-  function setAuthed(v) {
-    try {
-      if (v) localStorage.setItem(AUTH_KEY, '1');
-      else localStorage.removeItem(AUTH_KEY);
-    } catch (e) {}
-  }
 
   function showApp() {
     loginGate.hidden = true;
@@ -47,8 +37,8 @@
 
   loginForm.addEventListener('submit', function (e) {
     e.preventDefault();
-    if (loginPassword.value === PANEL_PASSWORD) {
-      setAuthed(true);
+    if (Auth.checkPassword(loginPassword.value)) {
+      Auth.setAuthed(true);
       loginError.hidden = true;
       loginForm.reset();
       showApp();
@@ -60,11 +50,11 @@
   });
 
   document.getElementById('logoutBtn').addEventListener('click', function () {
-    setAuthed(false);
+    Auth.setAuthed(false);
     showLogin();
   });
 
-  if (isAuthed()) showApp(); else showLogin();
+  if (Auth.isAuthed()) showApp(); else showLogin();
 
   /* ============================================================
      TAB SHELL
@@ -73,7 +63,6 @@
   var appInitialized = false;
   var panelTabs = document.getElementById('panelTabs');
   var panelMain = document.getElementById('panelMain');
-  var contentOpsBooted = false;
 
   function currentTabId() {
     var h = (location.hash || '').replace('#', '');
@@ -86,10 +75,57 @@
       return '<button class="panel-tab" data-tab="' + t.id + '">' + t.label + '</button>';
     }).join('');
     panelTabs.querySelectorAll('.panel-tab').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        location.hash = btn.dataset.tab;
-      });
+      btn.addEventListener('click', function () { location.hash = btn.dataset.tab; });
     });
+  }
+
+  var ANALYTICS_INFO = {
+    'content-analytics': {
+      title: 'Content Analytics',
+      blurb: 'Per-video and per-content-type performance, once the YouTube / TikTok / Instagram / Facebook API keys in Settings are actually wired up to a backend that can call them.',
+      metrics: [
+        'Views — daily, weekly, monthly, per video and per content type',
+        'Watch time / retention where the platform provides it',
+        'Likes, comments, shares per video',
+        'Performance by content type — ultra-short vs. short vs. long-short vs. longform',
+        'Best and worst performing pieces this month'
+      ]
+    },
+    'sales-analytics': {
+      title: 'Sales Analytics',
+      blurb: 'Order and revenue reporting once the storefront backend (backend/) is deployed with live Stripe and BookVault credentials.',
+      metrics: [
+        'Revenue — daily, weekly, monthly',
+        'Orders completed, refunded',
+        'Average order value',
+        'Conversion rate — completed orders / checkout visitors',
+        'Revenue by country',
+        'Revenue by UTM source / campaign'
+      ]
+    },
+    'website-analytics': {
+      title: 'Website Analytics',
+      blurb: 'First-party funnel analytics for realitymanual.com, once analytics ingestion is wired into the storefront backend.',
+      metrics: [
+        'Page views — daily, weekly, monthly',
+        'Unique visitors',
+        'Funnel: landing view → checkout view → checkout started → payment succeeded → order complete',
+        'Landing page conversion rate — completed orders / unique landing visitors',
+        'Checkout conversion rate — completed orders / checkout visitors',
+        'Traffic by source / UTM campaign'
+      ]
+    }
+  };
+
+  function renderAnalyticsPlaceholder(tabId) {
+    var info = ANALYTICS_INFO[tabId];
+    panelMain.innerHTML =
+      '<div class="tab-placeholder wide">' +
+        '<div class="eyebrow">Not connected yet</div>' +
+        '<h2>' + info.title + '</h2>' +
+        '<p>' + info.blurb + '</p>' +
+        '<ul class="metric-list">' + info.metrics.map(function (m) { return '<li>' + m + '</li>'; }).join('') + '</ul>' +
+      '</div>';
   }
 
   function renderActiveTab() {
@@ -100,14 +136,14 @@
     if (active === 'content-ops') {
       panelMain.innerHTML = OPS_MARKUP;
       bootContentOps();
+    } else if (active === 'upload-files') {
+      panelMain.innerHTML = UPLOAD_MARKUP;
+      bootUploadFiles();
+    } else if (active === 'settings') {
+      panelMain.innerHTML = SETTINGS_MARKUP;
+      bootSettings();
     } else {
-      var label = TABS.filter(function (t) { return t.id === active; })[0].label;
-      panelMain.innerHTML =
-        '<div class="tab-placeholder">' +
-          '<div class="eyebrow">Coming soon</div>' +
-          '<h2>' + label + '</h2>' +
-          '<p>This section isn\'t built yet — it\'ll live here alongside Content Ops as the rest of the control panel comes online.</p>' +
-        '</div>';
+      renderAnalyticsPlaceholder(active);
     }
   }
 
@@ -115,143 +151,28 @@
     if (appInitialized) { renderActiveTab(); return; }
     appInitialized = true;
     renderTabs();
+    bootModal();
     window.addEventListener('hashchange', renderActiveTab);
     if (!location.hash) location.hash = TABS[0].id;
     renderActiveTab();
   }
 
   /* ============================================================
-     CONTENT OPS — markup mounted into #panelMain
+     SHARED PIECE STATE (Content Ops + Upload Files read/write the
+     same underlying `pieces` store — one board, two views onto it)
      ============================================================ */
 
-  var OPS_MARKUP =
-    '<div class="ops-panel">' +
-      '<div class="ops-toolbar">' +
-        '<div class="ops-stats" id="statStrip"></div>' +
-        '<button class="btn-primary" id="btnNew">+ New Piece</button>' +
-      '</div>' +
-      '<div class="storage-note" id="storageNote">Stored locally in this browser — not yet synced across devices.</div>' +
-      '<div class="board-wrap" id="boardWrap"><div class="board" id="board"></div></div>' +
-    '</div>';
-
-  var STAGES = [
-    { id: 'ideation', label: 'Ideation' },
-    { id: 'outline_started', label: 'Outline Started' },
-    { id: 'outline_completed', label: 'Outline Completed' },
-    { id: 'filmed', label: 'Filmed' },
-    { id: 'edited', label: 'Edited' },
-    { id: 'uploaded', label: 'Uploaded' },
-    { id: 'processed', label: 'Processed (Audio)' },
-    { id: 'thumbnail', label: 'Thumbnail Selected' },
-    { id: 'scheduled', label: 'Scheduled' },
-    { id: 'live', label: 'Posted / Live' }
-  ];
-
-  var PLATFORMS = [
-    { id: 'ytlong', label: 'YT · Long', color: '#c9683a' },
-    { id: 'ytshort', label: 'YT · Shorts', color: '#c9683a' },
-    { id: 'tiktok', label: 'TikTok', color: '#4a9b96' },
-    { id: 'instagram', label: 'Instagram', color: '#b8577e' },
-    { id: 'facebook', label: 'Facebook', color: '#5b80b0' }
-  ];
-
-  /* ---------- tiny IndexedDB wrapper ---------- */
-
-  var DB_NAME = 'rm_content_ops';
-  var STORE = 'pieces';
-  var idbPromise = null;
-
-  function openDb() {
-    if (idbPromise) return idbPromise;
-    idbPromise = new Promise(function (resolve) {
-      if (!window.indexedDB) { resolve(null); return; }
-      var req;
-      try { req = indexedDB.open(DB_NAME, 1); } catch (e) { resolve(null); return; }
-      req.onupgradeneeded = function () {
-        var db = req.result;
-        if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'id' });
-      };
-      req.onsuccess = function () { resolve(req.result); };
-      req.onerror = function () { resolve(null); };
-    });
-    return idbPromise;
-  }
-
-  function idbGetAll() {
-    return openDb().then(function (db) {
-      if (!db) return [];
-      return new Promise(function (resolve) {
-        var tx = db.transaction(STORE, 'readonly');
-        var req = tx.objectStore(STORE).getAll();
-        req.onsuccess = function () { resolve(req.result || []); };
-        req.onerror = function () { resolve([]); };
-      });
-    });
-  }
-
-  function idbPut(piece) {
-    return openDb().then(function (db) {
-      if (!db) return;
-      return new Promise(function (resolve) {
-        var tx = db.transaction(STORE, 'readwrite');
-        tx.objectStore(STORE).put(piece);
-        tx.oncomplete = function () { resolve(); };
-        tx.onerror = function () { resolve(); };
-      });
-    });
-  }
-
-  function idbDelete(id) {
-    return openDb().then(function (db) {
-      if (!db) return;
-      return new Promise(function (resolve) {
-        var tx = db.transaction(STORE, 'readwrite');
-        tx.objectStore(STORE).delete(id);
-        tx.oncomplete = function () { resolve(); };
-        tx.onerror = function () { resolve(); };
-      });
-    });
-  }
-
-  function genId() {
-    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
-    return 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-  }
-
-  function nowIso() { return new Date().toISOString(); }
-
-  /* ---------- state ---------- */
-
   var pieces = {};
-  var activeId = null;
-  var isNewUnsaved = false;
-  var draggingId = null;
-  var saveTimer = null;
-  var deleteArmed = false;
-  var deleteArmTimer = null;
+  var piecesLoadedPromise = null;
 
-  var board, statStrip, storageNote, boardWrap;
-  var modalWrap, pieceModal, scrim, fieldTitle, fieldStage, fieldFormat, fieldNotes,
-      platformGrid, metaCreated, metaUpdated, saveFlag, modalEyebrowText, btnDelete;
-
-  function fmtTime(iso) {
-    if (!iso) return '—';
-    var d = new Date(iso);
-    var diff = Date.now() - d.getTime();
-    var min = Math.round(diff / 60000);
-    if (min < 1) return 'just now';
-    if (min < 60) return min + 'm ago';
-    var hr = Math.round(min / 60);
-    if (hr < 24) return hr + 'h ago';
-    var day = Math.round(hr / 24);
-    if (day < 30) return day + 'd ago';
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-  }
-
-  function fmtFull(iso) {
-    if (!iso) return '—';
-    var d = new Date(iso);
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' · ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  function ensurePiecesLoaded() {
+    if (!piecesLoadedPromise) {
+      piecesLoadedPromise = Store.getAll('pieces').then(function (rows) {
+        rows.forEach(function (r) { pieces[r.id] = r; });
+        return maybeSeedExamples();
+      });
+    }
+    return piecesLoadedPromise;
   }
 
   function orderedIds(stageId) {
@@ -266,27 +187,26 @@
     return pieces[ids[ids.length - 1]].order || 0;
   }
 
-  function renderStats() {
-    var total = Object.keys(pieces).length;
-    var liveCount = orderedIds('live').length;
-    var activeCount = total - liveCount;
-    statStrip.innerHTML =
-      '<span><span class="n">' + total + '</span>total</span>' +
-      '<span><span class="n">' + activeCount + '</span>in motion</span>' +
-      '<span><span class="n">' + liveCount + '</span>live</span>';
+  function nowIso() { return Store.nowIso(); }
+
+  function fmtTime(iso) {
+    if (!iso) return '—';
+    var d = new Date(iso);
+    var diff = Date.now() - d.getTime();
+    var min = Math.round(diff / 60000);
+    if (min < 1 && min > -1) return 'just now';
+    if (min >= 0 && min < 60) return min + 'm ago';
+    var hr = Math.round(min / 60);
+    if (hr >= 0 && hr < 24) return hr + 'h ago';
+    var day = Math.round(hr / 24);
+    if (day >= 0 && day < 30) return day + 'd ago';
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
-  function chipHtml(piece) {
-    var out = '';
-    (piece.platforms || []).forEach(function (pid) {
-      var p = PLATFORMS.filter(function (x) { return x.id === pid; })[0];
-      if (!p) return;
-      out += '<span class="chip"><span class="dot" style="background:' + p.color + '"></span>' + p.label + '</span>';
-    });
-    if (piece.format) {
-      out += '<span class="chip format">' + (piece.format === 'long' ? 'Long-form' : 'Short-form') + '</span>';
-    }
-    return out;
+  function fmtFull(iso) {
+    if (!iso) return '—';
+    var d = new Date(iso);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' · ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
   }
 
   function escapeHtml(s) {
@@ -295,159 +215,258 @@
     return div.innerHTML;
   }
 
-  function cardHtml(id, piece) {
-    var title = (piece.title || '').trim();
-    var titleHtml = title ? escapeHtml(title) : 'Untitled piece';
-    var titleClass = title ? 'card-title' : 'card-title untitled';
-    var stageOpts = STAGES.map(function (s) {
-      return '<option value="' + s.id + '"' + (s.id === piece.stage ? ' selected' : '') + '>' + s.label + '</option>';
-    }).join('');
-    return '' +
-      '<div class="card" draggable="true" data-id="' + id + '">' +
-        '<span class="card-grip">⋮⋮</span>' +
-        '<div class="' + titleClass + '">' + titleHtml + '</div>' +
-        '<div class="chip-row">' + chipHtml(piece) + '</div>' +
-        '<div class="card-foot">' +
-          '<span class="card-time">' + fmtTime(piece.updatedAt) + '</span>' +
-          '<select class="card-move" data-id="' + id + '">' + stageOpts + '</select>' +
-        '</div>' +
-      '</div>';
+  function contentTypeOf(id) {
+    return Store.CONTENT_TYPES.filter(function (c) { return c.id === id; })[0] || Store.CONTENT_TYPES[1];
   }
 
-  function render() {
-    var scrollLeft = boardWrap.scrollLeft;
-    board.innerHTML = STAGES.map(function (s, idx) {
-      var ids = orderedIds(s.id);
-      var cards = ids.map(function (id) { return cardHtml(id, pieces[id]); }).join('');
-      if (!cards) cards = '<div class="empty-slot">Nothing here yet</div>';
-      var num = String(idx + 1).padStart(2, '0');
-      return '' +
-        '<div class="column" data-stage="' + s.id + '">' +
-          '<div class="column-head">' +
-            '<span class="column-index">' + num + '</span>' +
-            '<span class="column-title">' + s.label + '</span>' +
-            '<span class="column-count">' + ids.length + '</span>' +
-          '</div>' +
-          '<div class="column-body" data-stage="' + s.id + '">' + cards + '</div>' +
-          '<button class="column-add" data-stage="' + s.id + '">+ add here</button>' +
-        '</div>';
-    }).join('');
-    boardWrap.scrollLeft = scrollLeft;
-    renderStats();
-    bindBoardEvents();
+  function stageLabelOf(id) {
+    var s = Store.STAGES.filter(function (s) { return s.id === id; })[0];
+    return s ? s.label : id;
   }
 
-  function bindBoardEvents() {
-    board.querySelectorAll('.card').forEach(function (el) {
-      el.addEventListener('click', function (e) {
-        if (e.target.closest('.card-move')) return;
-        openPiece(el.dataset.id);
-      });
-      el.addEventListener('dragstart', function (e) {
-        draggingId = el.dataset.id;
-        el.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'move';
-        try { e.dataTransfer.setData('text/plain', draggingId); } catch (err) {}
-      });
-      el.addEventListener('dragend', function () {
-        el.classList.remove('dragging');
-        draggingId = null;
-        board.querySelectorAll('.column').forEach(function (c) { c.classList.remove('drag-target'); });
-      });
-    });
+  /* ---------- auto-scheduling ---------- */
 
-    board.querySelectorAll('.card-move').forEach(function (sel) {
-      sel.addEventListener('click', function (e) { e.stopPropagation(); });
-      sel.addEventListener('change', function () {
-        moveCard(sel.dataset.id, sel.value, maxOrder(sel.value) + 10);
-      });
-    });
-
-    board.querySelectorAll('.column').forEach(function (col) {
-      col.addEventListener('dragover', function (e) {
-        if (!draggingId) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        col.classList.add('drag-target');
-      });
-      col.addEventListener('dragleave', function (e) {
-        if (e.target === col) col.classList.remove('drag-target');
-      });
-      col.addEventListener('drop', function (e) {
-        e.preventDefault();
-        col.classList.remove('drag-target');
-        if (!draggingId) return;
-        var stageId = col.dataset.stage;
-        var body = col.querySelector('.column-body');
-
-        var cardEls = Array.prototype.slice.call(body.querySelectorAll('.card'));
-        var afterEl = cardEls.find(function (c) {
-          var r = c.getBoundingClientRect();
-          return e.clientY < r.top + r.height / 2;
-        });
-
-        var siblingIds = orderedIds(stageId).filter(function (id) { return id !== draggingId; });
-        var insertAt = siblingIds.length;
-        if (afterEl) {
-          var idx = siblingIds.indexOf(afterEl.dataset.id);
-          if (idx !== -1) insertAt = idx;
+  function maybeAutoSchedule(p) {
+    if (!(p.hasVideo && p.stage === 'scheduled' && !p.scheduledAt)) return Promise.resolve();
+    return Store.getSettings().then(function (settings) {
+      var cfg = settings.cadence[p.contentType] || Store.DEFAULT_CADENCE[p.contentType] || { every: 1, unit: 'days' };
+      var ms = Store.cadenceMs(cfg);
+      var latest = null;
+      Object.keys(pieces).forEach(function (id) {
+        var o = pieces[id];
+        if (o.id !== p.id && o.contentType === p.contentType && o.scheduledAt && (o.stage === 'scheduled' || o.stage === 'live')) {
+          var t = new Date(o.scheduledAt).getTime();
+          if (!latest || t > latest) latest = t;
         }
-        siblingIds.splice(insertAt, 0, draggingId);
-
-        siblingIds.forEach(function (id, i) {
-          var newOrder = (i + 1) * 10;
-          var p = pieces[id];
-          if (!p) return;
-          var changedStage = (id === draggingId && p.stage !== stageId);
-          if (p.order !== newOrder || changedStage) {
-            p.order = newOrder;
-            if (changedStage) p.stage = stageId;
-            p.updatedAt = nowIso();
-            idbPut(p);
-          }
-        });
-        render();
       });
-    });
-
-    board.querySelectorAll('.column-add').forEach(function (btn) {
-      btn.addEventListener('click', function () { createDraft(btn.dataset.stage); });
+      var base = latest || Date.now();
+      p.scheduledAt = new Date(base + ms).toISOString();
     });
   }
 
-  function moveCard(id, stageId, order) {
-    var p = pieces[id];
-    if (!p) return;
-    p.stage = stageId;
-    p.order = order;
+  function setPieceStage(p, newStage, cb) {
+    p.stage = newStage;
     p.updatedAt = nowIso();
-    idbPut(p);
-    render();
+    maybeAutoSchedule(p).then(function () {
+      return Store.put('pieces', p);
+    }).then(function () {
+      if (cb) cb();
+    });
   }
 
-  /* ---------- click-and-drag horizontal panning ---------- */
+  /* ---------- seed examples (first run only) ---------- */
 
-  function bindPanning() {
-    var isPanning = false, startX = 0, startScroll = 0;
-    boardWrap.addEventListener('pointerdown', function (e) {
-      if (e.button !== 0) return;
-      if (e.target.closest('.card, .card-move, button, select, input, textarea, [contenteditable]')) return;
-      isPanning = true;
-      startX = e.clientX;
-      startScroll = boardWrap.scrollLeft;
-      try { boardWrap.setPointerCapture(e.pointerId); } catch (err) {}
-      boardWrap.classList.add('panning');
+  var SEEDED_KEY = 'rm_content_ops_seeded';
+
+  function maybeSeedExamples() {
+    var alreadySeeded = false;
+    try { alreadySeeded = localStorage.getItem(SEEDED_KEY) === '1'; } catch (e) {}
+    if (Object.keys(pieces).length || alreadySeeded) return;
+    var now = Date.now();
+    var examples = [
+      {
+        title: 'Example — "Why I wrote The Reality Manual" origin story',
+        stage: 'ideation', platforms: ['ytlong', 'instagram'], contentType: 'longform',
+        notesHtml: 'Delete or edit me. Rough idea: talk-to-camera on the personal turning point behind the book.<br>Hook candidates:<br>— "I spent 3 years trying to disprove my own book"<br>— The night everything clicked'
+      },
+      {
+        title: 'Example — Unboxing the linen hardcover',
+        stage: 'outline_completed', platforms: ['tiktok', 'ytshort', 'instagram'], contentType: 'short',
+        notesHtml: 'Delete or edit me. Beat sheet:<br>1. Package arrives<br>2. Slow reveal of dust jacket<br>3. Texture close-up on linen<br>4. First page open, close on epigraph'
+      },
+      {
+        title: 'Example — 3 ideas from the book, explained in 60s each',
+        stage: 'edited', platforms: ['ytshort', 'tiktok'], contentType: 'ultra_short',
+        notesHtml: 'Delete or edit me. Edit is locked, waiting on audio pass.'
+      }
+    ];
+    examples.forEach(function (ex, i) {
+      ex.id = Store.genId();
+      ex.order = 10;
+      ex.hasVideo = false;
+      ex.notesHtml = ex.notesHtml || '';
+      ex.createdAt = new Date(now - (3 - i) * 3600000).toISOString();
+      ex.updatedAt = ex.createdAt;
+      pieces[ex.id] = ex;
+      Store.put('pieces', ex);
     });
-    boardWrap.addEventListener('pointermove', function (e) {
-      if (!isPanning) return;
-      boardWrap.scrollLeft = startScroll - (e.clientX - startX);
-    });
-    function endPan() { isPanning = false; boardWrap.classList.remove('panning'); }
-    boardWrap.addEventListener('pointerup', endPan);
-    boardWrap.addEventListener('pointercancel', endPan);
+    try { localStorage.setItem(SEEDED_KEY, '1'); } catch (e) {}
   }
 
-  /* ---------- modal ---------- */
+  /* ============================================================
+     SHARED MODAL — opens for both Content Ops cards and
+     Upload Files video cards; shows the Video section only when
+     the piece has an uploaded video attached.
+     ============================================================ */
+
+  var modalWrap, pieceModal, scrim, fieldTitle, fieldStage, fieldContentType, fieldNotes,
+      platformGrid, metaCreated, metaUpdated, saveFlag, modalEyebrowText, btnDelete,
+      videoSection, videoPreview, fieldTranscript, fieldAudioTrack, thumbPreview,
+      pickFrameBtn, thumbScrub, scrubRange, captureFrameBtn, captionReadout,
+      utmField, fieldUtmLink, copyUtmBtn, scheduleStatus;
+
+  var activeId = null;
+  var isNewUnsaved = false;
+  var saveTimer = null;
+  var deleteArmed = false;
+  var deleteArmTimer = null;
+  var currentVideoObjectUrl = null;
+  var modalBound = false;
+  var onModalClosed = null; // optional callback set by whichever tab opened the modal
+
+  function bootModal() {
+    if (modalBound) return;
+    modalBound = true;
+
+    modalWrap = document.getElementById('modalWrap');
+    pieceModal = document.getElementById('pieceModal');
+    scrim = document.getElementById('scrim');
+    fieldTitle = document.getElementById('fieldTitle');
+    fieldStage = document.getElementById('fieldStage');
+    fieldContentType = document.getElementById('fieldContentType');
+    fieldNotes = document.getElementById('fieldNotes');
+    platformGrid = document.getElementById('platformGrid');
+    metaCreated = document.getElementById('metaCreated');
+    metaUpdated = document.getElementById('metaUpdated');
+    saveFlag = document.getElementById('saveFlag');
+    modalEyebrowText = document.getElementById('modalEyebrowText');
+    btnDelete = document.getElementById('btnDelete');
+
+    videoSection = document.getElementById('videoSection');
+    videoPreview = document.getElementById('videoPreview');
+    fieldTranscript = document.getElementById('fieldTranscript');
+    fieldAudioTrack = document.getElementById('fieldAudioTrack');
+    thumbPreview = document.getElementById('thumbPreview');
+    pickFrameBtn = document.getElementById('pickFrameBtn');
+    thumbScrub = document.getElementById('thumbScrub');
+    scrubRange = document.getElementById('scrubRange');
+    captureFrameBtn = document.getElementById('captureFrameBtn');
+    captionReadout = document.getElementById('captionReadout');
+    utmField = document.getElementById('utmField');
+    fieldUtmLink = document.getElementById('fieldUtmLink');
+    copyUtmBtn = document.getElementById('copyUtmBtn');
+    scheduleStatus = document.getElementById('scheduleStatus');
+
+    Store.STAGES.forEach(function (s) {
+      var o = document.createElement('option');
+      o.value = s.id; o.textContent = s.label;
+      fieldStage.appendChild(o);
+    });
+    Store.CONTENT_TYPES.forEach(function (c) {
+      var o = document.createElement('option');
+      o.value = c.id; o.textContent = c.label + ' (' + c.hint + ')';
+      fieldContentType.appendChild(o);
+    });
+    Store.PLATFORMS.forEach(function (p) {
+      var label = document.createElement('label');
+      label.className = 'platform-toggle';
+      label.dataset.platform = p.id;
+      label.innerHTML = '<input type="checkbox" value="' + p.id + '"><span class="dot" style="background:' + p.color + '"></span>' + p.label;
+      platformGrid.appendChild(label);
+    });
+
+    bindNotesPaste();
+
+    [fieldTitle].forEach(function (el) {
+      el.addEventListener('input', debounceSync);
+      el.addEventListener('blur', function () { clearTimeout(saveTimer); syncFromForm(); });
+    });
+    fieldNotes.addEventListener('input', debounceSync);
+    fieldNotes.addEventListener('blur', function () { clearTimeout(saveTimer); syncFromForm(); });
+    fieldTranscript.addEventListener('input', debounceSync);
+    fieldTranscript.addEventListener('blur', function () { clearTimeout(saveTimer); syncFromForm(); });
+    fieldStage.addEventListener('change', function () { clearTimeout(saveTimer); syncFromForm(); });
+    fieldContentType.addEventListener('change', function () { clearTimeout(saveTimer); syncFromForm(); });
+    fieldAudioTrack.addEventListener('change', function () { clearTimeout(saveTimer); syncFromForm(); });
+    platformGrid.addEventListener('click', function (e) {
+      var toggle = e.target.closest('.platform-toggle');
+      if (!toggle) return;
+      setTimeout(function () {
+        var checked = toggle.querySelector('input').checked;
+        toggle.classList.toggle('checked', checked);
+        clearTimeout(saveTimer);
+        syncFromForm();
+      }, 0);
+    });
+
+    pickFrameBtn.addEventListener('click', function () {
+      thumbScrub.hidden = false;
+      if (videoPreview.duration) scrubRange.max = videoPreview.duration;
+    });
+    videoPreview.addEventListener('loadedmetadata', function () {
+      if (videoPreview.duration) scrubRange.max = videoPreview.duration;
+    });
+    scrubRange.addEventListener('input', function () {
+      try { videoPreview.currentTime = parseFloat(scrubRange.value); } catch (e) {}
+    });
+    captureFrameBtn.addEventListener('click', function () {
+      if (!activeId) return;
+      var canvas = document.createElement('canvas');
+      canvas.width = videoPreview.videoWidth || 640;
+      canvas.height = videoPreview.videoHeight || 360;
+      var ctx = canvas.getContext('2d');
+      try { ctx.drawImage(videoPreview, 0, 0, canvas.width, canvas.height); } catch (e) { return; }
+      var dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      thumbPreview.innerHTML = '<img src="' + dataUrl + '" alt="" />';
+      thumbScrub.hidden = true;
+      var p = pieces[activeId];
+      if (p) {
+        p.thumbnailDataUrl = dataUrl;
+        p.updatedAt = nowIso();
+        Store.put('pieces', p).then(function () { flashSaved(); notifyPiecesChanged(); });
+      }
+    });
+    copyUtmBtn.addEventListener('click', function () {
+      fieldUtmLink.select();
+      try { document.execCommand('copy'); } catch (e) {}
+    });
+
+    btnDelete.addEventListener('click', function () {
+      if (!activeId) return;
+      if (isNewUnsaved) {
+        delete pieces[activeId];
+        var closingId1 = activeId;
+        activeId = null; isNewUnsaved = false;
+        hideModal();
+        notifyPiecesChanged();
+        return;
+      }
+      if (!deleteArmed) {
+        deleteArmed = true;
+        btnDelete.textContent = 'Click again to confirm';
+        btnDelete.classList.add('armed');
+        deleteArmTimer = setTimeout(disarmDelete, 3500);
+        return;
+      }
+      var id = activeId;
+      var p = pieces[id];
+      disarmDelete();
+      delete pieces[id];
+      Store.del('pieces', id);
+      if (p && p.hasVideo) Store.del('videos', id);
+      activeId = null;
+      hideModal();
+      notifyPiecesChanged();
+    });
+
+    document.getElementById('modalClose').addEventListener('click', closeModal);
+    scrim.addEventListener('click', closeModal);
+    modalWrap.addEventListener('click', function (e) { if (e.target === modalWrap) closeModal(); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && modalWrap.classList.contains('open')) closeModal();
+    });
+  }
+
+  function notifyPiecesChanged() {
+    if (typeof window.__rmOnPiecesChanged === 'function') window.__rmOnPiecesChanged();
+  }
+
+  function disarmDelete() {
+    deleteArmed = false;
+    clearTimeout(deleteArmTimer);
+    btnDelete.textContent = 'Delete piece';
+    btnDelete.classList.remove('armed');
+  }
 
   function focusEndInput(el) {
     el.focus();
@@ -466,53 +485,107 @@
     el.scrollTop = el.scrollHeight;
   }
 
+  function buildUtmLink(p, settings) {
+    var base = (settings.baseLinkUrl || 'https://realitymanual.com').trim() || 'https://realitymanual.com';
+    var source = (p.platforms || []).indexOf('facebook') !== -1 && (p.platforms || []).indexOf('ytlong') === -1 ? 'facebook' : 'youtube';
+    var sep = base.indexOf('?') === -1 ? '?' : '&';
+    return base + sep + 'utm_source=' + encodeURIComponent(source) + '&utm_medium=video&utm_campaign=' + encodeURIComponent(p.contentType || 'longform') + '&utm_content=' + encodeURIComponent(p.id);
+  }
+
+  function updateScheduleStatusUI(p) {
+    if (p.stage === 'scheduled' && p.scheduledAt) {
+      scheduleStatus.textContent = 'Scheduled for ' + fmtFull(p.scheduledAt);
+    } else if (p.stage === 'live') {
+      scheduleStatus.textContent = p.scheduledAt ? ('Posted ' + fmtFull(p.scheduledAt)) : 'Posted — connect an API in Settings to confirm.';
+    } else {
+      scheduleStatus.textContent = 'Not scheduled yet — move this to the Scheduled stage above to queue it.';
+    }
+  }
+
   function populateFields(p) {
     fieldTitle.value = p.title || '';
     fieldStage.value = p.stage;
-    fieldFormat.value = p.format || 'short';
+    fieldContentType.value = p.contentType || 'short';
     fieldNotes.innerHTML = p.notesHtml || '';
     platformGrid.querySelectorAll('.platform-toggle').forEach(function (t) {
       var checked = (p.platforms || []).indexOf(t.dataset.platform) !== -1;
       t.classList.toggle('checked', checked);
       t.querySelector('input').checked = checked;
     });
+
+    if (currentVideoObjectUrl) { URL.revokeObjectURL(currentVideoObjectUrl); currentVideoObjectUrl = null; }
+
+    if (!p.hasVideo) {
+      videoSection.hidden = true;
+      videoPreview.removeAttribute('src');
+      return Promise.resolve();
+    }
+
+    videoSection.hidden = false;
+    thumbScrub.hidden = true;
+    fieldTranscript.value = p.transcript || '';
+    thumbPreview.innerHTML = p.thumbnailDataUrl ? ('<img src="' + p.thumbnailDataUrl + '" alt="" />') : '<span class="thumb-empty">No thumbnail yet</span>';
+    utmField.hidden = p.contentType !== 'longform';
+    updateScheduleStatusUI(p);
+
+    return Promise.all([
+      Store.get('videos', p.id).then(function (v) {
+        if (v && v.blob) {
+          currentVideoObjectUrl = URL.createObjectURL(v.blob);
+          videoPreview.src = currentVideoObjectUrl;
+        }
+      }),
+      Store.getAll('audioTracks').then(function (tracks) {
+        fieldAudioTrack.innerHTML = '<option value="">No audio track selected</option>' +
+          tracks.map(function (t) { return '<option value="' + t.id + '"' + (t.id === p.audioTrackId ? ' selected' : '') + '>' + escapeHtml(t.name) + '</option>'; }).join('');
+      }),
+      Store.getSettings().then(function (settings) {
+        captionReadout.textContent = settings.sharedCaption && settings.sharedCaption.trim() ? settings.sharedCaption : 'No shared caption set yet — add one in Settings.';
+        fieldUtmLink.value = buildUtmLink(p, settings);
+      })
+    ]);
   }
 
-  function openPiece(id) {
+  function openPiece(id, closedCb) {
     activeId = id;
     isNewUnsaved = false;
+    onModalClosed = closedCb || null;
     disarmDelete();
     var p = pieces[id];
+    if (!p) return;
     modalEyebrowText.textContent = 'Editing piece';
-    populateFields(p);
-    metaCreated.textContent = 'Created ' + fmtFull(p.createdAt);
-    metaUpdated.textContent = 'Updated ' + fmtFull(p.updatedAt);
-    showModal();
-    var hasNotes = fieldNotes.textContent.trim().length > 0 || !!fieldNotes.querySelector('img');
-    var hasTitle = (p.title || '').trim().length > 0;
-    setTimeout(function () {
-      if (hasNotes) focusEndEditable(fieldNotes);
-      else if (hasTitle) focusEndInput(fieldTitle);
-      else fieldTitle.focus();
-    }, 200);
+    populateFields(p).then(function () {
+      metaCreated.textContent = 'Created ' + fmtFull(p.createdAt);
+      metaUpdated.textContent = 'Updated ' + fmtFull(p.updatedAt);
+      showModal();
+      var hasNotes = fieldNotes.textContent.trim().length > 0 || !!fieldNotes.querySelector('img');
+      var hasTitle = (p.title || '').trim().length > 0;
+      setTimeout(function () {
+        if (p.hasVideo) fieldTitle.focus();
+        else if (hasNotes) focusEndEditable(fieldNotes);
+        else if (hasTitle) focusEndInput(fieldTitle);
+        else fieldTitle.focus();
+      }, 200);
+    });
   }
 
-  function createDraft(stageId) {
-    var id = genId();
+  function createDraft(stageId, closedCb) {
+    var id = Store.genId();
     pieces[id] = {
-      id: id, title: '', stage: stageId, platforms: [], format: 'short', notesHtml: '',
+      id: id, title: '', stage: stageId, platforms: [], contentType: 'short', notesHtml: '', hasVideo: false,
       order: maxOrder(stageId) + 10,
       createdAt: nowIso(),
       updatedAt: nowIso()
     };
     activeId = id;
     isNewUnsaved = true;
+    onModalClosed = closedCb || null;
     disarmDelete();
     modalEyebrowText.textContent = 'New piece';
     populateFields(pieces[id]);
     metaCreated.textContent = 'Not yet saved';
     metaUpdated.textContent = '—';
-    render();
+    notifyPiecesChanged();
     showModal();
     setTimeout(function () { fieldTitle.focus(); }, 200);
   }
@@ -527,6 +600,9 @@
     modalWrap.classList.remove('open');
     pieceModal.setAttribute('aria-hidden', 'true');
     scrim.classList.remove('show');
+    if (currentVideoObjectUrl) { URL.revokeObjectURL(currentVideoObjectUrl); currentVideoObjectUrl = null; }
+    var cb = onModalClosed; onModalClosed = null;
+    if (cb) cb();
   }
 
   function currentFormValues() {
@@ -534,13 +610,19 @@
     platformGrid.querySelectorAll('.platform-toggle').forEach(function (t) {
       if (t.querySelector('input').checked) platforms.push(t.dataset.platform);
     });
-    return {
+    var vals = {
       title: fieldTitle.value,
       stage: fieldStage.value,
-      format: fieldFormat.value,
+      contentType: fieldContentType.value,
       notesHtml: fieldNotes.innerHTML,
       platforms: platforms
     };
+    var p = pieces[activeId];
+    if (p && p.hasVideo) {
+      vals.transcript = fieldTranscript.value;
+      vals.audioTrackId = fieldAudioTrack.value;
+    }
+    return vals;
   }
 
   function flashSaved() {
@@ -570,16 +652,27 @@
         isNewUnsaved = false;
         modalEyebrowText.textContent = 'Editing piece';
         metaCreated.textContent = 'Created ' + fmtFull(p.createdAt);
-        idbPut(p);
-        flashSaved();
+        Store.put('pieces', p).then(function () { flashSaved(); notifyPiecesChanged(); });
+      } else {
+        notifyPiecesChanged();
       }
-      render();
       return;
     }
 
-    idbPut(p);
-    render();
-    flashSaved();
+    if (p.hasVideo) {
+      utmField.hidden = p.contentType !== 'longform';
+      if (!utmField.hidden) {
+        Store.getSettings().then(function (settings) { fieldUtmLink.value = buildUtmLink(p, settings); });
+      }
+    }
+
+    maybeAutoSchedule(p).then(function () {
+      return Store.put('pieces', p);
+    }).then(function () {
+      if (p.hasVideo) updateScheduleStatusUI(p);
+      flashSaved();
+      notifyPiecesChanged();
+    });
   }
 
   function debounceSync() {
@@ -592,24 +685,15 @@
     disarmDelete();
     if (activeId) {
       syncFromForm();
-      if (isNewUnsaved) {
-        delete pieces[activeId];
-      }
+      if (isNewUnsaved) delete pieces[activeId];
     }
-    hideModal();
     activeId = null;
     isNewUnsaved = false;
-    render();
+    hideModal();
+    notifyPiecesChanged();
   }
 
-  function disarmDelete() {
-    deleteArmed = false;
-    clearTimeout(deleteArmTimer);
-    btnDelete.textContent = 'Delete piece';
-    btnDelete.classList.remove('armed');
-  }
-
-  /* ---------- paste-image support ---------- */
+  /* ---------- paste-image support in notes ---------- */
 
   var MAX_IMG_DIM = 1400;
 
@@ -639,13 +723,11 @@
         var w = image.width, h = image.height;
         if (w > MAX_IMG_DIM || h > MAX_IMG_DIM) {
           var scale = Math.min(MAX_IMG_DIM / w, MAX_IMG_DIM / h);
-          w = Math.round(w * scale);
-          h = Math.round(h * scale);
+          w = Math.round(w * scale); h = Math.round(h * scale);
         }
         var canvas = document.createElement('canvas');
         canvas.width = w; canvas.height = h;
-        var ctx = canvas.getContext('2d');
-        ctx.drawImage(image, 0, 0, w, h);
+        canvas.getContext('2d').drawImage(image, 0, 0, w, h);
         cb(canvas.toDataURL('image/jpeg', 0.85));
       };
       image.onerror = function () { cb(ev.target.result); };
@@ -661,17 +743,11 @@
       var items = cd.items || [];
       var imageFile = null;
       for (var i = 0; i < items.length; i++) {
-        if (items[i].type && items[i].type.indexOf('image') === 0) {
-          imageFile = items[i].getAsFile();
-          break;
-        }
+        if (items[i].type && items[i].type.indexOf('image') === 0) { imageFile = items[i].getAsFile(); break; }
       }
       if (imageFile) {
         e.preventDefault();
-        downscaleImage(imageFile, function (dataUrl) {
-          insertImageAtCursor(dataUrl);
-          debounceSync();
-        });
+        downscaleImage(imageFile, function (dataUrl) { insertImageAtCursor(dataUrl); debounceSync(); });
         return;
       }
       e.preventDefault();
@@ -680,160 +756,482 @@
     });
   }
 
-  /* ---------- seed examples ---------- */
+  /* ============================================================
+     CONTENT OPS — kanban board
+     ============================================================ */
 
-  function seedExamples() {
+  var OPS_MARKUP =
+    '<div class="ops-panel">' +
+      '<div class="ops-toolbar">' +
+        '<div class="ops-stats" id="statStrip"></div>' +
+        '<button class="btn-primary" id="btnNew">+ New Piece</button>' +
+      '</div>' +
+      '<div class="overview-row" id="overviewRow"></div>' +
+      '<div class="storage-note" id="storageNote">Stored locally in this browser — not yet synced across devices.</div>' +
+      '<div class="board-wrap" id="boardWrap"><div class="board" id="board"></div></div>' +
+    '</div>';
+
+  var board, statStrip, overviewRow, storageNote, boardWrap, draggingId = null;
+
+  function renderStats() {
+    var total = Object.keys(pieces).length;
+    var liveCount = orderedIds('live').length;
+    var activeCount = total - liveCount;
+    statStrip.innerHTML =
+      '<span><span class="n">' + total + '</span>total</span>' +
+      '<span><span class="n">' + activeCount + '</span>in motion</span>' +
+      '<span><span class="n">' + liveCount + '</span>live</span>';
+  }
+
+  function renderOverview() {
+    if (!overviewRow) return;
     var now = Date.now();
-    var examples = [
-      {
-        title: 'Example — "Why I wrote The Reality Manual" origin story',
-        stage: 'ideation', platforms: ['ytlong', 'instagram'], format: 'long',
-        notesHtml: 'Delete or edit me. Rough idea: talk-to-camera on the personal turning point behind the book.<br>Hook candidates:<br>— "I spent 3 years trying to disprove my own book"<br>— The night everything clicked'
-      },
-      {
-        title: 'Example — Unboxing the linen hardcover',
-        stage: 'outline_completed', platforms: ['tiktok', 'ytshort', 'instagram'], format: 'short',
-        notesHtml: 'Delete or edit me. Beat sheet:<br>1. Package arrives<br>2. Slow reveal of dust jacket<br>3. Texture close-up on linen<br>4. First page open, close on epigraph'
-      },
-      {
-        title: 'Example — 3 ideas from the book, explained in 60s each',
-        stage: 'edited', platforms: ['ytshort', 'tiktok'], format: 'short',
-        notesHtml: 'Delete or edit me. Edit is locked, waiting on audio pass.'
-      },
-      {
-        title: 'Example — Full read-through of Chapter 1 (long-form)',
-        stage: 'scheduled', platforms: ['ytlong'], format: 'long',
-        notesHtml: 'Delete or edit me. Scheduled for release alongside launch week push.'
-      }
-    ];
-    examples.forEach(function (ex, i) {
-      ex.id = genId();
-      ex.order = 10;
-      ex.createdAt = new Date(now - (4 - i) * 3600000).toISOString();
-      ex.updatedAt = ex.createdAt;
-      pieces[ex.id] = ex;
-      idbPut(ex);
+    var tiles = Store.CONTENT_TYPES.map(function (ct) {
+      var items = Object.keys(pieces).map(function (k) { return pieces[k]; }).filter(function (p) { return p.contentType === ct.id && p.hasVideo; });
+      var scheduled = items.filter(function (p) { return p.stage === 'scheduled'; });
+      var live = items.filter(function (p) { return p.stage === 'live'; });
+      var furthest = 0;
+      scheduled.forEach(function (p) {
+        if (p.scheduledAt) {
+          var days = (new Date(p.scheduledAt).getTime() - now) / 86400000;
+          if (days > furthest) furthest = days;
+        }
+      });
+      return '<div class="overview-tile">' +
+        '<div class="overview-tile-head"><span class="dot" style="background:' + ct.color + '"></span>' + ct.label + '</div>' +
+        '<div class="overview-tile-stat"><span class="n">' + scheduled.length + '</span> scheduled</div>' +
+        '<div class="overview-tile-sub">' + (scheduled.length ? furthest.toFixed(1) + ' days out' : 'nothing queued') + '</div>' +
+        '<div class="overview-tile-sub2">' + live.length + ' posted</div>' +
+      '</div>';
+    }).join('');
+    overviewRow.innerHTML = tiles + '<div class="overview-tile overview-errors" id="overviewErrorsTile"><div class="overview-tile-head">Errors</div><div class="overview-tile-stat"><span class="n" id="overviewErrorCount">0</span> logged</div><div class="overview-tile-sub">none yet — this fills in once posting is connected</div></div>';
+    Store.getAll('errors').then(function (rows) {
+      var el = document.getElementById('overviewErrorCount');
+      if (el) el.textContent = rows.length;
     });
   }
 
-  /* ---------- boot ---------- */
+  function chipHtml(piece) {
+    var out = '';
+    (piece.platforms || []).forEach(function (pid) {
+      var p = Store.PLATFORMS.filter(function (x) { return x.id === pid; })[0];
+      if (!p) return;
+      out += '<span class="chip"><span class="dot" style="background:' + p.color + '"></span>' + p.label + '</span>';
+    });
+    var ct = contentTypeOf(piece.contentType);
+    out += '<span class="chip format"><span class="dot" style="background:' + ct.color + '"></span>' + ct.label + '</span>';
+    if (piece.hasVideo) out += '<span class="chip video-chip">▶ video</span>';
+    return out;
+  }
+
+  function cardHtml(id, piece) {
+    var title = (piece.title || '').trim();
+    var titleHtml = title ? escapeHtml(title) : 'Untitled piece';
+    var titleClass = title ? 'card-title' : 'card-title untitled';
+    var stageOpts = Store.STAGES.map(function (s) {
+      return '<option value="' + s.id + '"' + (s.id === piece.stage ? ' selected' : '') + '>' + s.label + '</option>';
+    }).join('');
+    return '' +
+      '<div class="card" draggable="true" data-id="' + id + '">' +
+        '<span class="card-grip">⋮⋮</span>' +
+        '<div class="' + titleClass + '">' + titleHtml + '</div>' +
+        '<div class="chip-row">' + chipHtml(piece) + '</div>' +
+        '<div class="card-foot">' +
+          '<span class="card-time">' + fmtTime(piece.updatedAt) + '</span>' +
+          '<select class="card-move" data-id="' + id + '">' + stageOpts + '</select>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function render() {
+    var scrollLeft = boardWrap.scrollLeft;
+    board.innerHTML = Store.STAGES.map(function (s, idx) {
+      var ids = orderedIds(s.id);
+      var cards = ids.map(function (id) { return cardHtml(id, pieces[id]); }).join('');
+      if (!cards) cards = '<div class="empty-slot">Nothing here yet</div>';
+      var num = String(idx + 1).padStart(2, '0');
+      return '' +
+        '<div class="column" data-stage="' + s.id + '">' +
+          '<div class="column-head">' +
+            '<span class="column-index">' + num + '</span>' +
+            '<span class="column-title">' + s.label + '</span>' +
+            '<span class="column-count">' + ids.length + '</span>' +
+          '</div>' +
+          '<div class="column-body" data-stage="' + s.id + '">' + cards + '</div>' +
+          '<button class="column-add" data-stage="' + s.id + '">+ add here</button>' +
+        '</div>';
+    }).join('');
+    boardWrap.scrollLeft = scrollLeft;
+    renderStats();
+    renderOverview();
+    bindBoardEvents();
+  }
+
+  function bindBoardEvents() {
+    board.querySelectorAll('.card').forEach(function (el) {
+      el.addEventListener('click', function (e) {
+        if (e.target.closest('.card-move')) return;
+        openPiece(el.dataset.id, render);
+      });
+      el.addEventListener('dragstart', function (e) {
+        draggingId = el.dataset.id;
+        el.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        try { e.dataTransfer.setData('text/plain', draggingId); } catch (err) {}
+      });
+      el.addEventListener('dragend', function () {
+        el.classList.remove('dragging');
+        draggingId = null;
+        board.querySelectorAll('.column').forEach(function (c) { c.classList.remove('drag-target'); });
+      });
+    });
+
+    board.querySelectorAll('.card-move').forEach(function (sel) {
+      sel.addEventListener('click', function (e) { e.stopPropagation(); });
+      sel.addEventListener('change', function () {
+        var p = pieces[sel.dataset.id];
+        if (!p) return;
+        p.order = maxOrder(sel.value) + 10;
+        setPieceStage(p, sel.value, render);
+      });
+    });
+
+    board.querySelectorAll('.column').forEach(function (col) {
+      col.addEventListener('dragover', function (e) {
+        if (!draggingId) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        col.classList.add('drag-target');
+      });
+      col.addEventListener('dragleave', function (e) {
+        if (e.target === col) col.classList.remove('drag-target');
+      });
+      col.addEventListener('drop', function (e) {
+        e.preventDefault();
+        col.classList.remove('drag-target');
+        if (!draggingId) return;
+        var stageId = col.dataset.stage;
+        var body = col.querySelector('.column-body');
+        var cardEls = Array.prototype.slice.call(body.querySelectorAll('.card'));
+        var afterEl = cardEls.find(function (c) {
+          var r = c.getBoundingClientRect();
+          return e.clientY < r.top + r.height / 2;
+        });
+        var siblingIds = orderedIds(stageId).filter(function (id) { return id !== draggingId; });
+        var insertAt = siblingIds.length;
+        if (afterEl) {
+          var idx = siblingIds.indexOf(afterEl.dataset.id);
+          if (idx !== -1) insertAt = idx;
+        }
+        siblingIds.splice(insertAt, 0, draggingId);
+
+        var draggedP = pieces[draggingId];
+        siblingIds.forEach(function (id, i) {
+          var p = pieces[id];
+          if (!p) return;
+          var newOrder = (i + 1) * 10;
+          if (id === draggingId) {
+            p.order = newOrder;
+            setPieceStage(p, stageId, render);
+          } else if (p.order !== newOrder) {
+            p.order = newOrder;
+            p.updatedAt = nowIso();
+            Store.put('pieces', p);
+          }
+        });
+        render();
+      });
+    });
+
+    board.querySelectorAll('.column-add').forEach(function (btn) {
+      btn.addEventListener('click', function () { createDraft(btn.dataset.stage, render); });
+    });
+  }
+
+  function bindPanning() {
+    var isPanning = false, startX = 0, startScroll = 0;
+    boardWrap.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0) return;
+      if (e.target.closest('.card, .card-move, button, select, input, textarea, [contenteditable]')) return;
+      isPanning = true;
+      startX = e.clientX;
+      startScroll = boardWrap.scrollLeft;
+      try { boardWrap.setPointerCapture(e.pointerId); } catch (err) {}
+      boardWrap.classList.add('panning');
+    });
+    boardWrap.addEventListener('pointermove', function (e) {
+      if (!isPanning) return;
+      boardWrap.scrollLeft = startScroll - (e.clientX - startX);
+    });
+    function endPan() { isPanning = false; boardWrap.classList.remove('panning'); }
+    boardWrap.addEventListener('pointerup', endPan);
+    boardWrap.addEventListener('pointercancel', endPan);
+  }
 
   function bootContentOps() {
     board = document.getElementById('board');
     statStrip = document.getElementById('statStrip');
+    overviewRow = document.getElementById('overviewRow');
     storageNote = document.getElementById('storageNote');
     boardWrap = document.getElementById('boardWrap');
-
-    modalWrap = document.getElementById('modalWrap');
-    pieceModal = document.getElementById('pieceModal');
-    scrim = document.getElementById('scrim');
-    fieldTitle = document.getElementById('fieldTitle');
-    fieldStage = document.getElementById('fieldStage');
-    fieldFormat = document.getElementById('fieldFormat');
-    fieldNotes = document.getElementById('fieldNotes');
-    platformGrid = document.getElementById('platformGrid');
-    metaCreated = document.getElementById('metaCreated');
-    metaUpdated = document.getElementById('metaUpdated');
-    saveFlag = document.getElementById('saveFlag');
-    modalEyebrowText = document.getElementById('modalEyebrowText');
-    btnDelete = document.getElementById('btnDelete');
-
-    render();
-    bindPanning();
-
-    if (contentOpsBooted) return;
-    contentOpsBooted = true;
-
-    if (fieldStage.children.length === 0) {
-      STAGES.forEach(function (s) {
-        var o = document.createElement('option');
-        o.value = s.id; o.textContent = s.label;
-        fieldStage.appendChild(o);
-      });
-    }
-    if (platformGrid.children.length === 0) {
-      PLATFORMS.forEach(function (p) {
-        var label = document.createElement('label');
-        label.className = 'platform-toggle';
-        label.dataset.platform = p.id;
-        label.innerHTML = '<input type="checkbox" value="' + p.id + '"><span class="dot" style="background:' + p.color + '"></span>' + p.label;
-        platformGrid.appendChild(label);
-      });
-    }
-
-    bindNotesPaste();
-
-    [fieldTitle].forEach(function (el) {
-      el.addEventListener('input', debounceSync);
-      el.addEventListener('blur', function () { clearTimeout(saveTimer); syncFromForm(); });
-    });
-    fieldNotes.addEventListener('input', debounceSync);
-    fieldNotes.addEventListener('blur', function () { clearTimeout(saveTimer); syncFromForm(); });
-    fieldStage.addEventListener('change', function () { clearTimeout(saveTimer); syncFromForm(); });
-    fieldFormat.addEventListener('change', function () { clearTimeout(saveTimer); syncFromForm(); });
-    platformGrid.addEventListener('click', function (e) {
-      var toggle = e.target.closest('.platform-toggle');
-      if (!toggle) return;
-      setTimeout(function () {
-        var checked = toggle.querySelector('input').checked;
-        toggle.classList.toggle('checked', checked);
-        clearTimeout(saveTimer);
-        syncFromForm();
-      }, 0);
-    });
-
-    btnDelete.addEventListener('click', function () {
-      if (!activeId) return;
-      if (isNewUnsaved) {
-        delete pieces[activeId];
-        activeId = null;
-        isNewUnsaved = false;
-        hideModal();
-        render();
-        return;
-      }
-      if (!deleteArmed) {
-        deleteArmed = true;
-        btnDelete.textContent = 'Click again to confirm';
-        btnDelete.classList.add('armed');
-        deleteArmTimer = setTimeout(disarmDelete, 3500);
-        return;
-      }
-      var id = activeId;
-      disarmDelete();
-      delete pieces[id];
-      idbDelete(id);
-      activeId = null;
-      hideModal();
-      render();
-    });
-
-    document.getElementById('btnNew').addEventListener('click', function () { createDraft('ideation'); });
-    document.getElementById('modalClose').addEventListener('click', closeModal);
-    scrim.addEventListener('click', closeModal);
-    modalWrap.addEventListener('click', function (e) {
-      if (e.target === modalWrap) closeModal();
-    });
-    document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && modalWrap.classList.contains('open')) closeModal();
-    });
 
     if (!window.indexedDB) {
       storageNote.textContent = 'This browser has no local storage available — changes will be lost when you close the tab.';
       storageNote.classList.add('warn');
-      render();
-      return;
     }
 
-    idbGetAll().then(function (rows) {
-      rows.forEach(function (r) { pieces[r.id] = r; });
-      var alreadySeeded = false;
-      try { alreadySeeded = localStorage.getItem(SEEDED_KEY) === '1'; } catch (e) {}
-      if (!rows.length && !alreadySeeded) {
-        seedExamples();
-        try { localStorage.setItem(SEEDED_KEY, '1'); } catch (e) {}
-      }
-      render();
+    bindPanning();
+    document.getElementById('btnNew').addEventListener('click', function () { createDraft('ideation', render); });
+
+    window.__rmOnPiecesChanged = render;
+    ensurePiecesLoaded().then(render);
+    render();
+  }
+
+  /* ============================================================
+     UPLOAD FILES
+     ============================================================ */
+
+  var UPLOAD_MARKUP =
+    '<div class="upload-panel">' +
+      '<div class="dropzone" id="dropzone">' +
+        '<div class="dropzone-title">Drop edited videos here</div>' +
+        '<div class="dropzone-sub">or click to browse — cuts and captions done, ready for audio + thumbnail</div>' +
+        '<input type="file" id="fileInput" accept="video/*" multiple hidden />' +
+      '</div>' +
+      '<h3 class="upload-heading">In production</h3>' +
+      '<div class="upload-grid" id="uploadGrid"></div>' +
+      '<h3 class="upload-heading">Posted</h3>' +
+      '<div class="upload-grid" id="postedGrid"></div>' +
+    '</div>';
+
+  var dropzone, fileInput, uploadGrid, postedGrid;
+
+  function videoCardHtml(id, p) {
+    var thumb = p.thumbnailDataUrl ? '<img src="' + p.thumbnailDataUrl + '" alt="" />' : '<span class="video-card-noThumb">No thumbnail</span>';
+    var ct = contentTypeOf(p.contentType);
+    var scheduledLine = p.scheduledAt ? (p.stage === 'live' ? 'Posted ' : 'Scheduled ') + fmtFull(p.scheduledAt) : '';
+    return '<div class="video-card" data-id="' + id + '">' +
+      '<div class="video-card-thumb">' + thumb + '</div>' +
+      '<div class="video-card-body">' +
+        '<div class="video-card-title">' + escapeHtml(p.title || 'Untitled') + '</div>' +
+        '<div class="video-card-meta"><span class="chip format"><span class="dot" style="background:' + ct.color + '"></span>' + ct.label + '</span><span class="video-card-stage">' + stageLabelOf(p.stage) + '</span></div>' +
+        (scheduledLine ? '<div class="video-card-sched">' + scheduledLine + '</div>' : '') +
+      '</div>' +
+    '</div>';
+  }
+
+  function renderUploadLists() {
+    var items = Object.keys(pieces).map(function (k) { return pieces[k]; }).filter(function (p) { return p.hasVideo; });
+    var inProgress = items.filter(function (p) { return p.stage !== 'live'; }).sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
+    var posted = items.filter(function (p) { return p.stage === 'live'; }).sort(function (a, b) { return new Date(b.updatedAt) - new Date(a.updatedAt); });
+
+    uploadGrid.innerHTML = inProgress.length ? inProgress.map(function (p) { return videoCardHtml(p.id, p); }).join('') : '<div class="empty-slot wide">Nothing uploaded yet — drop a video above.</div>';
+    postedGrid.innerHTML = posted.length ? posted.map(function (p) { return videoCardHtml(p.id, p); }).join('') : '<div class="empty-slot wide">Nothing posted yet.</div>';
+
+    [uploadGrid, postedGrid].forEach(function (grid) {
+      grid.querySelectorAll('.video-card').forEach(function (el) {
+        el.addEventListener('click', function () { openPiece(el.dataset.id, renderUploadLists); });
+      });
+    });
+  }
+
+  function handleFiles(fileList) {
+    Array.prototype.slice.call(fileList).forEach(function (file) {
+      if (file.type.indexOf('video') !== 0) return;
+      var id = Store.genId();
+      var piece = {
+        id: id,
+        title: file.name.replace(/\.[^.]+$/, ''),
+        stage: 'uploaded',
+        platforms: [],
+        contentType: 'short',
+        notesHtml: '',
+        hasVideo: true,
+        transcript: '',
+        audioTrackId: '',
+        thumbnailDataUrl: '',
+        scheduledAt: '',
+        order: maxOrder('uploaded') + 10,
+        createdAt: nowIso(),
+        updatedAt: nowIso()
+      };
+      pieces[id] = piece;
+      Store.put('videos', { id: id, fileName: file.name, blob: file, sizeBytes: file.size, createdAt: nowIso() });
+      Store.put('pieces', piece).then(renderUploadLists);
+    });
+    renderUploadLists();
+  }
+
+  function bootUploadFiles() {
+    dropzone = document.getElementById('dropzone');
+    fileInput = document.getElementById('fileInput');
+    uploadGrid = document.getElementById('uploadGrid');
+    postedGrid = document.getElementById('postedGrid');
+
+    dropzone.addEventListener('click', function () { fileInput.click(); });
+    fileInput.addEventListener('change', function () { handleFiles(fileInput.files); fileInput.value = ''; });
+    ['dragenter', 'dragover'].forEach(function (evt) {
+      dropzone.addEventListener(evt, function (e) { e.preventDefault(); dropzone.classList.add('drag-over'); });
+    });
+    ['dragleave', 'drop'].forEach(function (evt) {
+      dropzone.addEventListener(evt, function (e) { e.preventDefault(); dropzone.classList.remove('drag-over'); });
+    });
+    dropzone.addEventListener('drop', function (e) {
+      if (e.dataTransfer && e.dataTransfer.files) handleFiles(e.dataTransfer.files);
+    });
+
+    window.__rmOnPiecesChanged = renderUploadLists;
+    ensurePiecesLoaded().then(renderUploadLists);
+    renderUploadLists();
+  }
+
+  /* ============================================================
+     SETTINGS
+     ============================================================ */
+
+  var SETTINGS_MARKUP =
+    '<div class="settings-panel">' +
+      '<section class="settings-section">' +
+        '<h3>Publishing cadence</h3>' +
+        '<p class="settings-hint">How often each content type gets scheduled. A new piece queues up after whatever’s already scheduled for that type.</p>' +
+        '<div class="cadence-grid" id="cadenceGrid"></div>' +
+      '</section>' +
+      '<section class="settings-section">' +
+        '<h3>Ambient audio library</h3>' +
+        '<p class="settings-hint">Backing tracks offered in the audio dropdown when editing an uploaded video.</p>' +
+        '<label class="btn-secondary file-btn">Upload audio<input type="file" id="audioUpload" accept="audio/*" multiple hidden /></label>' +
+        '<div class="audio-list" id="audioList"></div>' +
+      '</section>' +
+      '<section class="settings-section">' +
+        '<h3>Shared caption</h3>' +
+        '<p class="settings-hint">Applied to every upload — shown read-only on each piece, edited here.</p>' +
+        '<textarea class="notes-input settings-textarea" id="captionInput" placeholder="Caption text..."></textarea>' +
+      '</section>' +
+      '<section class="settings-section">' +
+        '<h3>Longform link</h3>' +
+        '<p class="settings-hint">Base URL used to build the UTM-tracked link for longform descriptions.</p>' +
+        '<input class="title-input settings-input" id="baseLinkInput" />' +
+      '</section>' +
+      '<section class="settings-section">' +
+        '<h3>API keys</h3>' +
+        '<p class="settings-hint warn">Stored only in this browser’s local storage, never sent anywhere — there’s no backend wired up to use them yet. TikTok access still needs approving; the field is here for when it does.</p>' +
+        '<div class="key-grid" id="keyGrid"></div>' +
+      '</section>' +
+    '</div>';
+
+  var KEY_FIELDS = [
+    { id: 'youtube', label: 'YouTube' },
+    { id: 'instagram', label: 'Instagram' },
+    { id: 'facebook', label: 'Facebook' },
+    { id: 'tiktok', label: 'TikTok (pending access)' },
+    { id: 'transcriptionProvider', label: 'Transcription provider', placeholder: 'e.g. AssemblyAI, Deepgram, Whisper' },
+    { id: 'transcriptionKey', label: 'Transcription API key', type: 'password' }
+  ];
+
+  var settingsCache = null;
+  var settingsSaveTimer = null;
+
+  function saveSettingsDebounced() {
+    clearTimeout(settingsSaveTimer);
+    settingsSaveTimer = setTimeout(function () { Store.saveSettings(settingsCache); }, 400);
+  }
+
+  function renderCadenceGrid() {
+    var grid = document.getElementById('cadenceGrid');
+    grid.innerHTML = Store.CONTENT_TYPES.map(function (ct) {
+      var cfg = settingsCache.cadence[ct.id];
+      return '<div class="cadence-row" data-type="' + ct.id + '">' +
+        '<span class="cadence-label"><span class="dot" style="background:' + ct.color + '"></span>' + ct.label + ' <span class="ink-faint">(' + ct.hint + ')</span></span>' +
+        '<span class="cadence-inputs">1 every <input type="number" min="1" step="1" class="cadence-every" value="' + cfg.every + '" /> ' +
+        '<select class="cadence-unit"><option value="hours"' + (cfg.unit === 'hours' ? ' selected' : '') + '>hours</option><option value="days"' + (cfg.unit === 'days' ? ' selected' : '') + '>days</option></select></span>' +
+      '</div>';
+    }).join('');
+    grid.querySelectorAll('.cadence-row').forEach(function (row) {
+      var type = row.dataset.type;
+      row.querySelector('.cadence-every').addEventListener('input', function (e) {
+        settingsCache.cadence[type].every = Math.max(1, parseInt(e.target.value, 10) || 1);
+        saveSettingsDebounced();
+      });
+      row.querySelector('.cadence-unit').addEventListener('change', function (e) {
+        settingsCache.cadence[type].unit = e.target.value;
+        saveSettingsDebounced();
+      });
+    });
+  }
+
+  var audioListObjectUrls = [];
+
+  function renderAudioList() {
+    var list = document.getElementById('audioList');
+    audioListObjectUrls.forEach(function (u) { URL.revokeObjectURL(u); });
+    audioListObjectUrls = [];
+    Store.getAll('audioTracks').then(function (tracks) {
+      if (!tracks.length) { list.innerHTML = '<div class="empty-slot wide">No ambient tracks yet.</div>'; return; }
+      list.innerHTML = tracks.map(function (t) {
+        var url = URL.createObjectURL(t.blob);
+        audioListObjectUrls.push(url);
+        return '<div class="audio-row" data-id="' + t.id + '">' +
+          '<span class="audio-name">' + escapeHtml(t.name) + '</span>' +
+          '<audio controls preload="none" src="' + url + '"></audio>' +
+          '<button type="button" class="link-btn audio-delete" data-id="' + t.id + '">Delete</button>' +
+        '</div>';
+      }).join('');
+      list.querySelectorAll('.audio-delete').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          Store.del('audioTracks', btn.dataset.id).then(renderAudioList);
+        });
+      });
+    });
+  }
+
+  function renderKeyGrid() {
+    var grid = document.getElementById('keyGrid');
+    grid.innerHTML = KEY_FIELDS.map(function (f) {
+      return '<div class="key-row">' +
+        '<label for="key-' + f.id + '">' + f.label + '</label>' +
+        '<input type="' + (f.type || 'text') + '" id="key-' + f.id + '" placeholder="' + (f.placeholder || '') + '" />' +
+      '</div>';
+    }).join('');
+    KEY_FIELDS.forEach(function (f) {
+      var input = document.getElementById('key-' + f.id);
+      input.value = settingsCache.apiKeys[f.id] || '';
+      input.addEventListener('input', function () {
+        settingsCache.apiKeys[f.id] = input.value;
+        saveSettingsDebounced();
+      });
+    });
+  }
+
+  function bootSettings() {
+    Store.getSettings().then(function (settings) {
+      settingsCache = settings;
+      renderCadenceGrid();
+      renderAudioList();
+      renderKeyGrid();
+
+      var captionInput = document.getElementById('captionInput');
+      captionInput.value = settings.sharedCaption || '';
+      captionInput.addEventListener('input', function () {
+        settingsCache.sharedCaption = captionInput.value;
+        saveSettingsDebounced();
+      });
+
+      var baseLinkInput = document.getElementById('baseLinkInput');
+      baseLinkInput.value = settings.baseLinkUrl || '';
+      baseLinkInput.addEventListener('input', function () {
+        settingsCache.baseLinkUrl = baseLinkInput.value;
+        saveSettingsDebounced();
+      });
+
+      var audioUpload = document.getElementById('audioUpload');
+      audioUpload.addEventListener('change', function () {
+        Array.prototype.slice.call(audioUpload.files).forEach(function (file) {
+          Store.put('audioTracks', { id: Store.genId(), name: file.name, blob: file, createdAt: nowIso() });
+        });
+        audioUpload.value = '';
+        setTimeout(renderAudioList, 200);
+      });
     });
   }
 })();
