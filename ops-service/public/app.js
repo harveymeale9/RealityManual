@@ -802,11 +802,10 @@
         '<button class="btn-primary" id="btnNew">+ New Piece</button>' +
       '</div>' +
       '<div class="overview-row" id="overviewRow"></div>' +
-      '<div class="storage-note" id="storageNote">Stored locally in this browser — not yet synced across devices.</div>' +
       '<div class="board-wrap" id="boardWrap"><div class="board" id="board"></div></div>' +
     '</div>';
 
-  var board, statStrip, overviewRow, storageNote, boardWrap, draggingId = null;
+  var board, statStrip, overviewRow, boardWrap, draggingId = null;
 
   function renderStats() {
     var total = Object.keys(pieces).length;
@@ -1016,13 +1015,7 @@
     board = document.getElementById('board');
     statStrip = document.getElementById('statStrip');
     overviewRow = document.getElementById('overviewRow');
-    storageNote = document.getElementById('storageNote');
     boardWrap = document.getElementById('boardWrap');
-
-    if (!window.indexedDB) {
-      storageNote.textContent = 'This browser has no local storage available — changes will be lost when you close the tab.';
-      storageNote.classList.add('warn');
-    }
 
     bindPanning();
     document.getElementById('btnNew').addEventListener('click', function () { createDraft('ideation', render); });
