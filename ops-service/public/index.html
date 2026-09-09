@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Control Panel — The Reality Manual</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,400&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div id="loginGate" class="login-gate">
+    <form id="loginForm" class="login-card" autocomplete="off">
+      <div class="login-kicker">The Reality Manual</div>
+      <h1 class="login-title">Control Panel</h1>
+      <div class="field">
+        <label for="loginPassword">Password</label>
+        <input type="password" id="loginPassword" name="password" autocomplete="current-password" />
+      </div>
+      <button type="submit" class="btn-primary btn-block">Enter</button>
+      <p class="login-error" id="loginError" hidden>Incorrect password.</p>
+    </form>
+  </div>
+
+  <div id="appShell" class="panel-app" hidden>
+    <header class="panel-header">
+      <div class="panel-brand">
+        <span class="wordmark-sm">The Reality Manual</span>
+        <span class="panel-sub">Control Panel</span>
+      </div>
+      <nav class="panel-tabs" id="panelTabs"></nav>
+      <div class="panel-actions">
+        <a class="link-btn" id="quickAddLink" href="quick-add.html" target="_blank" rel="noopener">Quick add ↗</a>
+        <button class="link-btn" id="logoutBtn">Log out</button>
+      </div>
+    </header>
+    <main class="panel-main" id="panelMain"></main>
+  </div>
+
+  <div class="scrim" id="scrim"></div>
+  <div class="modal-wrap" id="modalWrap">
+    <div class="modal" id="pieceModal" role="dialog" aria-modal="true" aria-hidden="true">
+      <div class="modal-head">
+        <div class="modal-eyebrow"><span id="modalEyebrowText">Piece</span><span class="save-flag" id="saveFlag">Saved</span></div>
+        <button class="modal-close" id="modalClose" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <input class="title-input" id="fieldTitle" placeholder="Untitled piece" maxlength="200" />
+        </div>
+        <div class="toolbar-row">
+          <div class="field" id="stageField">
+            <label for="fieldStage">Stage</label>
+            <select class="stage-select" id="fieldStage"></select>
+          </div>
+          <div class="field" id="stageReadoutField" hidden>
+            <div class="field-label">Stage <span class="field-hint">— automatic once uploaded</span></div>
+            <div class="stage-readout" id="stageReadout">—</div>
+          </div>
+          <div class="field">
+            <label for="fieldContentType">Content type</label>
+            <select class="format-select" id="fieldContentType"></select>
+          </div>
+          <div class="field grow">
+            <div class="field-label">Platform</div>
+            <div class="platform-grid" id="platformGrid"></div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="fieldNotes">Notes <span class="field-hint">— paste a screenshot to drop it in</span></label>
+          <div class="notes-input" id="fieldNotes" contenteditable="true" data-placeholder="Hook, talking points, script beats, edit notes..."></div>
+        </div>
+
+        <div class="video-section" id="videoSection" hidden>
+          <div class="video-section-head">Video</div>
+
+          <div class="field">
+            <video class="video-preview" id="videoPreview" controls playsinline></video>
+          </div>
+
+          <div class="field">
+            <label for="fieldTranscript">Transcript</label>
+            <textarea class="transcript-input" id="fieldTranscript" placeholder="Paste or type the transcript..."></textarea>
+            <button type="button" class="btn-secondary btn-tiny" id="autoTranscribeBtn" disabled title="Wire up a transcription API key in Settings, then this will run automatically — not built yet">Auto-transcribe (coming soon)</button>
+          </div>
+
+          <div class="toolbar-row">
+            <div class="field">
+              <label for="fieldAudioTrack">Backing audio</label>
+              <select class="stage-select" id="fieldAudioTrack">
+                <option value="">No audio track selected</option>
+              </select>
+            </div>
+            <div class="field grow">
+              <div class="field-label">Thumbnail</div>
+              <div class="thumb-picker">
+                <div class="thumb-preview" id="thumbPreview"><span class="thumb-empty">No thumbnail yet</span></div>
+                <button type="button" class="btn-secondary btn-tiny" id="pickFrameBtn">Pick frame</button>
+              </div>
+              <div class="thumb-scrub" id="thumbScrub" hidden>
+                <input type="range" id="scrubRange" min="0" max="100" value="0" step="0.1" />
+                <button type="button" class="btn-secondary btn-tiny" id="captureFrameBtn">Use this frame</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="field" id="captionField">
+            <label>Caption <span class="field-hint">— shared across all uploads, edit in Settings</span></label>
+            <div class="caption-readout" id="captionReadout">—</div>
+          </div>
+
+          <div class="field" id="utmField" hidden>
+            <label for="fieldUtmLink">Longform link (with UTM tracking)</label>
+            <div class="utm-row">
+              <input class="title-input utm-input" id="fieldUtmLink" readonly />
+              <button type="button" class="btn-secondary btn-tiny" id="copyUtmBtn">Copy</button>
+            </div>
+          </div>
+
+          <div class="schedule-row" id="scheduleRow">
+            <span id="scheduleStatus">Not scheduled yet — move this to the Scheduled stage above to queue it.</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <div class="meta-row">
+          <span id="metaCreated">—</span>
+          <span id="metaUpdated">—</span>
+        </div>
+        <button class="btn-delete" id="btnDelete">Delete piece</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="lib/store.js"></script>
+  <script src="lib/auth.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

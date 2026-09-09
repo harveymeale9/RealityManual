@@ -1640,58 +1640,89 @@ The goal is a beautiful, premium single-product website with a reliable payment 
 
 # 62. Internal Control Panel (/db)
 
-A password-gated internal control panel lives at `frontend/db/` (deployed
-alongside the storefront via the same GitHub Pages workflow, so it's live
-at `realitymanual.com/db/`). It is explicitly **separate from the
-storefront** — do not conflate its data with the Stripe/BookVault order
-pipeline or its Postgres/SQLite schema in `backend/`.
+A password-gated internal control panel is served at
+**`https://ops.realitymanual.com/`** by `rm-ops-service` itself (source in
+`ops-service/public/` — index.html, quick-add.html, migrate.html, app.js,
+lib/, style.css, manifest.json, icon.svg). It is explicitly **separate
+from the storefront** — do not conflate its data with the Stripe/BookVault
+order pipeline or its Postgres/SQLite schema in `backend/`.
 
-**Access:** password `ormiston`, checked server-side by `rm-ops-service`
-(see below) via `POST /api/login`, which sets a real httpOnly session
-cookie (30-day expiry). `frontend/db/lib/auth.js` also keeps a plain
-`localStorage` flag for fast client-side UI state (show app vs. show login
-immediately on page load), but that flag is not the security boundary —
-every actual data request is gated by the server checking the session
-cookie. Still deliberately low-security overall (single shared password,
-no rate-limit beyond a basic per-IP throttle on `/api/login`) — Harvey's
-call, matches the admin-password precedent in section 44. `robots.txt`
-disallows `/db/` on the storefront domain, and `rm-ops-service` also
-serves its own `Disallow: /` robots.txt on its subdomain.
+**Why it moved off `realitymanual.com/db/` (2026-09-09):** it originally
+lived in `frontend/db/` and deployed via the same GitHub Pages workflow as
+the storefront. GitHub Pages hardcodes `Cache-Control: max-age=600` on
+every file it serves with no way to override it from the repo — every
+push left browsers silently running a stale build (including stale JS
+logic, not just stale content) for up to 10 minutes, which surfaced as
+real bugs (login state disagreeing with the server, one device showing
+data another didn't). Moving the panel onto `rm-ops-service` — already a
+Node/Express origin fully under our control — fixed it outright: every
+response, static files included, is sent with `Cache-Control: no-store`.
+`frontend/db/` now holds only three tiny redirect stubs (`index.html`,
+`quick-add.html`, `migrate.html`) pointing to the new URLs, so old
+bookmarks/home-screen shortcuts don't break. **The phone home-screen
+shortcut for quick-add should be redone pointing at
+`ops.realitymanual.com/quick-add.html` directly** — a meta-refresh
+redirect doesn't preserve the installed-PWA "standalone" display mode.
 
-**Backend (`ops-service/`, deployed as `rm-ops-service`):** a small
-dedicated Node/Express + better-sqlite3 service, added 2026-09-09, living
-at **`ops.realitymanual.com`** — completely separate code and data from
-the storefront's `backend/`, per Harvey's repeated instruction. Runs as a
-Docker container on the same Hostinger VPS as n8n (`docker run --name
-rm-ops-service`, `--restart unless-stopped`, bound to `127.0.0.1:4001`),
-fronted by an nginx site (`/etc/nginx/sites-available/ops`) with a Let's
-Encrypt cert via certbot, same pattern as the existing n8n site. Data
-lives on the VPS at `/root/ops-service-data` (bind-mounted into the
-container at `/data`): `db.sqlite` holds a generic `records(store_name,
-id, data, updated_at)` table (one JSON blob per record — mirrors the old
-IndexedDB object-store shape almost exactly) plus a `sessions` table;
-uploaded video/audio files are plain files on disk under
-`/data/uploads/<store>/<id>`, not in SQLite. CORS is locked to
-`https://realitymanual.com`/`https://www.realitymanual.com` with
-credentials enabled. DNS (`ops` A record, Cloudflare-proxied) was created
-via a Cloudflare API token scoped to DNS-edit on the `realitymanual.com`
-zone only.
+**Access:** password `ormiston`, checked server-side via `POST
+/api/login`, which sets a real httpOnly session cookie (30-day expiry).
+There is **no client-side storage of auth state at all** — no
+`localStorage`, no IndexedDB. Every page load calls `GET /api/me` and
+trusts *that* answer, never a local flag — an earlier version kept a
+`localStorage` flag for instant UI state, but that could drift from the
+real server session (a device with a stale "logged in" flag would skip
+the login form and therefore never actually establish a session, then
+silently see empty data / silently fail every save, since a 401 was
+being swallowed as "no data" rather than surfaced). Removing the flag
+entirely closed that whole bug class. Still deliberately low-security
+overall (single shared password, no rate-limit beyond a basic per-IP
+throttle on `/api/login`) — Harvey's call, matches the admin-password
+precedent in section 44. `robots.txt` disallows `/db/` on the storefront
+domain (now just redirect stubs), and `rm-ops-service` serves its own
+`Disallow: /` robots.txt on its own origin.
 
-**Storage / data flow:** `frontend/db/lib/store.js` keeps its original
-`getAll/get/put/del` interface (so `app.js` needed almost no changes) but
-now calls the `rm-ops-service` REST API instead of IndexedDB directly —
-`GET/PUT/DELETE /api/store/:storeName[/:id]` for plain JSON records
-(`pieces`, `settings`, `errors`), and `POST/GET /api/files/:storeName/:id`
-for the file-backed stores (`videos`, `audioTracks`), where `put()`
-detects a `Blob`/`File` under `record.blob` and uploads it as multipart
-form data instead of JSON. `get()`/`getAll()` on those two stores fetch
-the file bytes back and reattach them as `record.blob`, so the rest of
-the app (video preview, audio playback via `URL.createObjectURL`) is
-unaffected. Nothing syncs automatically from a browser's *old* pre-backend
-IndexedDB data — `frontend/db/migrate.html` is a one-time, password-gated
-tool that reads that device's legacy IndexedDB and pushes everything up
-to the new backend; run it once per device that had local data worth
-keeping, then it's no longer needed.
+**Backend + frontend (`ops-service/`, deployed as `rm-ops-service`):** a
+small dedicated Node/Express + better-sqlite3 service, added 2026-09-09,
+living at **`ops.realitymanual.com`** — completely separate code and data
+from the storefront's `backend/`, per Harvey's repeated instruction. Runs
+as a Docker container on the same Hostinger VPS as n8n (`docker run
+--name rm-ops-service`, `--restart unless-stopped`, bound to
+`127.0.0.1:4001`), fronted by an nginx site
+(`/etc/nginx/sites-available/ops`) with a Let's Encrypt cert via certbot,
+same pattern as the existing n8n site. Data lives on the VPS at
+`/root/ops-service-data` (bind-mounted into the container at `/data`):
+`db.sqlite` holds a generic `records(store_name, id, data, updated_at)`
+table (one JSON blob per record — mirrors the old IndexedDB object-store
+shape almost exactly) plus a `sessions` table; uploaded video/audio files
+are plain files on disk under `/data/uploads/<store>/<id>`, not in
+SQLite. The frontend is same-origin with the API now (both served from
+`ops.realitymanual.com`), so `RMStore.API_BASE` is just `''` — CORS/cookie
+cross-origin complexity from the original `realitymanual.com` +
+`ops.realitymanual.com` split is gone, though the CORS allowlist is left
+in place (harmless) in case anything ever needs cross-origin access
+again. DNS (`ops` A record, Cloudflare-proxied) was created via a
+Cloudflare API token scoped to DNS-edit on the `realitymanual.com` zone
+only. **Deploying a change to `ops-service/public/` requires rebuilding
+and restarting the `rm-ops-service` Docker container on the VPS** — a
+plain `git push` alone does not deploy it (unlike the storefront's
+GitHub Pages workflow).
+
+**Storage / data flow:** `ops-service/public/lib/store.js` keeps the
+original `getAll/get/put/del` interface it had back when it talked to
+IndexedDB (so `app.js` needed almost no changes for the backend move) but
+now calls the `rm-ops-service` REST API — `GET/PUT/DELETE
+/api/store/:storeName[/:id]` for plain JSON records (`pieces`, `settings`,
+`errors`), and `POST/GET /api/files/:storeName/:id` for the file-backed
+stores (`videos`, `audioTracks`), where `put()` detects a `Blob`/`File`
+under `record.blob` and uploads it as multipart form data instead of
+JSON. `get()`/`getAll()` on those two stores fetch the file bytes back and
+reattach them as `record.blob`, so the rest of the app (video preview,
+audio playback via `URL.createObjectURL`) is unaffected. Nothing syncs
+automatically from a browser's *old* pre-backend IndexedDB data —
+`ops-service/public/migrate.html` is a one-time, password-gated tool that
+reads that device's legacy IndexedDB and pushes everything up to the
+backend; run it once per device that had local data worth keeping, then
+it's no longer needed.
 
 **Content Ops and Upload Files are two views over one `pieces` store, but
 deliberately not the same workflow** (Harvey's clarification, 2026-09-08):
@@ -1705,7 +1736,7 @@ Dropping a real file in the Upload Files tab creates a **brand-new piece**
 (unrelated to any plan card) starting at **Processing**, which — together
 with Thumbnail Selected, Scheduled, and Posted/Live — is system-managed:
 no drag-and-drop, no manual stage dropdown, just an "Auto · <stage>" badge
-on the card. `frontend/db/app.js`'s `deriveAndApplyStage()` derives the
+on the card. `ops-service/public/app.js`'s `deriveAndApplyStage()` derives the
 piece's stage purely from what's been done to it (audio track picked →
 Processing; thumbnail captured → Thumbnail Selected; both present →
 Scheduled, with `maybeAutoSchedule()` stamping `scheduledAt` from the
@@ -1715,7 +1746,7 @@ doesn't exist yet. `MANUAL_STAGE_IDS`/`AUTO_STAGE_IDS` in `app.js` are the
 source of truth for the split — a piece with `hasVideo: true` never
 exposes manual stage controls on the board or in the modal.
 
-**Tabs (`frontend/db/app.js`):**
+**Tabs (`ops-service/public/app.js`):**
 - **Content Ops** — the planning kanban described above. Click a card for
   a large modal editor (autosaving, paste-to-embed screenshots in notes).
   Each piece has a content type — Ultra-short (10–20s), Short (~1 min),
@@ -1745,22 +1776,22 @@ exposes manual stage controls on the board or in the modal.
   TikTok access hasn't been granted yet either; the field is there for
   when it is.
 
-**Quick-add shortcut:** `frontend/db/quick-add.html` is a minimal
-standalone page (same password/storage) meant to be added to a phone home
-screen (`manifest.json` + `icon.svg` for the install prompt) — one big
-textarea, autofocused, dictate via the OS keyboard's mic button, "Save to
-Ideation" writes straight into the same IndexedDB store the main board
-reads from, so a captured idea shows up in Content Ops immediately.
+**Quick-add shortcut:** `ops-service/public/quick-add.html` is a minimal
+standalone page (same password/session) meant to be added to a phone home
+screen (`manifest.json` + `icon.svg` for the install prompt, `start_url`/
+`scope` now rooted at `/` since the move) — one big textarea, autofocused,
+dictate via the OS keyboard's mic button, "Save to Ideation" writes
+straight into the same backend store the main board reads from, so a
+captured idea shows up in Content Ops immediately. It reports a visible
+error (not a false "Saved ✓") if the save actually fails server-side.
 
-**Known limitation:** the `rm-ops-service` backend itself was verified
-directly (login, session auth, JSON CRUD, and multipart file
-upload/download all smoke-tested against the live
-`https://ops.realitymanual.com` API), but the frontend UI has not been
-click-tested in an actual browser against this new backend — only the
-original IndexedDB version was ever loaded in a browser. Test the real
-flow before relying on it: login gate, Content Ops drag-and-drop, Upload
-Files drop zone + thumbnail picker, and `migrate.html` against a device
-that actually has old local data.
+**Known limitation:** Content Ops (board, cards, modal editor) and
+quick-add have been used for real by Harvey against the live backend at
+`ops.realitymanual.com` and confirmed working, including catching and
+fixing the two bugs described above. The Upload Files tab's drag-and-drop
++ in-browser thumbnail frame-picker, and `migrate.html` against a device
+with genuine old local data, have not yet been exercised for real — test
+those before relying on them.
 
 ---
 

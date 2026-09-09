@@ -76,7 +76,19 @@ app.use(cors({
 }));
 app.use(cookieParser());
 app.use(express.json({ limit: '2mb' }));
-app.use('/api', function (req, res, next) { res.set('Cache-Control', 'no-store'); next(); });
+app.use(function (req, res, next) { res.set('Cache-Control', 'no-store'); next(); });
+
+// Serves the /db control panel itself (index.html, quick-add.html,
+// migrate.html, app.js, lib/, style.css, manifest/icon) from this same
+// origin. GitHub Pages hardcodes `Cache-Control: max-age=600` on every
+// file with no way to override it from the repo, which caused browsers to
+// silently run a stale build for up to 10 minutes after every deploy —
+// serving it from here instead guarantees no-store on every response.
+app.use(express.static(path.join(__dirname, 'public'), {
+  etag: false,
+  lastModified: false,
+  cacheControl: false
+}));
 
 // --- Simple login rate limiting (per-IP, in-memory) ---
 const loginAttempts = new Map();

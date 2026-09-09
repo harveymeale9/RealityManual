@@ -3,7 +3,7 @@
 // browser-local IndexedDB, so data syncs across devices. Used by both the
 // main dashboard (app.js) and the quick-add shortcut (quick-add.html).
 window.RMStore = (function () {
-  var API_BASE = 'https://ops.realitymanual.com';
+  var API_BASE = ''; // same-origin now that the panel is served by rm-ops-service itself
   var FILE_STORES = ['videos', 'audioTracks'];
 
   function apiFetch(path, opts) {

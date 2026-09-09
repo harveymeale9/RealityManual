@@ -1,8 +1,8 @@
 {
   "name": "Reality Manual — Quick Add",
   "short_name": "RM Quick Add",
-  "start_url": "/db/quick-add.html",
-  "scope": "/db/",
+  "start_url": "/quick-add.html",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#16140f",
   "theme_color": "#16140f",
