@@ -165,12 +165,16 @@
             order: maxOrder + 10, createdAt: now, updatedAt: now
           };
           return Store.put('pieces', piece);
-        }).then(function () {
+        }).then(function (saved) {
+          saving = false;
+          saveBtn.disabled = false;
+          if (!saved) {
+            alert('Could not save — check your connection (or that you\'re still logged in) and try again.');
+            return;
+          }
           ideaText.value = '';
           toast.classList.add('show');
           setTimeout(function () { toast.classList.remove('show'); }, 2200);
-          saving = false;
-          saveBtn.disabled = false;
           ideaText.focus();
         });
       }
