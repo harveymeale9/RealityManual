@@ -59,8 +59,6 @@
     Auth.logout().then(showLogin);
   });
 
-  if (Auth.isAuthed()) showApp(); else showLogin();
-
   /* ============================================================
      TAB SHELL
      ============================================================ */
@@ -1281,4 +1279,11 @@
       });
     });
   }
+
+  // Runs last, after OPS_MARKUP/UPLOAD_MARKUP/SETTINGS_MARKUP and all boot*
+  // functions above are defined — calling this any earlier (it used to sit
+  // right after the login form wiring) crashes on any visit where
+  // Auth.isAuthed() is already true, since showApp() renders a tab
+  // immediately using markup that doesn't exist yet.
+  if (Auth.isAuthed()) showApp(); else showLogin();
 })();
