@@ -62,7 +62,9 @@
 </head>
 <body>
 
-  <div id="loginGate" class="qa-gate">
+  <div id="authChecking" class="auth-checking"><div class="spinner" aria-hidden="true"></div></div>
+
+  <div id="loginGate" class="qa-gate" hidden>
     <form id="loginForm" class="login-card" autocomplete="off">
       <div class="login-kicker">The Reality Manual</div>
       <h1 class="login-title">Quick Add</h1>
@@ -101,16 +103,19 @@
       var loginPassword = document.getElementById('loginPassword');
       var loginError = document.getElementById('loginError');
       var qaApp = document.getElementById('qaApp');
+      var authChecking = document.getElementById('authChecking');
       var ideaText = document.getElementById('ideaText');
       var saveBtn = document.getElementById('saveBtn');
       var toast = document.getElementById('toast');
 
       function showApp() {
+        authChecking.hidden = true;
         loginGate.hidden = true;
         qaApp.hidden = false;
         setTimeout(function () { ideaText.focus(); }, 80);
       }
       function showLogin() {
+        authChecking.hidden = true;
         qaApp.hidden = true;
         loginGate.hidden = false;
         setTimeout(function () { loginPassword.focus(); }, 50);

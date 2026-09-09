@@ -26,14 +26,17 @@
   var loginPassword = document.getElementById('loginPassword');
   var loginError = document.getElementById('loginError');
   var appShell = document.getElementById('appShell');
+  var authChecking = document.getElementById('authChecking');
 
   function showApp() {
+    authChecking.hidden = true;
     loginGate.hidden = true;
     appShell.hidden = false;
     initApp();
   }
 
   function showLogin() {
+    authChecking.hidden = true;
     appShell.hidden = true;
     loginGate.hidden = false;
     setTimeout(function () { loginPassword.focus(); }, 50);

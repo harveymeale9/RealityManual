@@ -60,6 +60,26 @@ a { color: var(--accent); }
 
 [hidden] { display: none !important; }
 
+/* ---------- auth checking (shown while verifying an existing session,
+   before deciding whether to show the login form or the app) ---------- */
+
+.auth-checking {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.spinner {
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: rm-spin 0.7s linear infinite;
+}
+@keyframes rm-spin { to { transform: rotate(360deg); } }
+
 /* ---------- login gate ---------- */
 
 .login-gate {
