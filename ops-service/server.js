@@ -76,6 +76,7 @@ app.use(cors({
 }));
 app.use(cookieParser());
 app.use(express.json({ limit: '2mb' }));
+app.use('/api', function (req, res, next) { res.set('Cache-Control', 'no-store'); next(); });
 
 // --- Simple login rate limiting (per-IP, in-memory) ---
 const loginAttempts = new Map();
@@ -126,6 +127,7 @@ function requireAuth(req, res, next) {
   next();
 }
 
+app.get('/api/me', requireAuth, function (req, res) { res.json({ ok: true }); });
 app.get('/api/health', function (req, res) { res.json({ ok: true }); });
 app.get('/robots.txt', function (req, res) { res.type('text/plain').send('User-agent: *\nDisallow: /\n'); });
 

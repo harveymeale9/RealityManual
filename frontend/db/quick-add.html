@@ -120,7 +120,6 @@
         e.preventDefault();
         Auth.checkPassword(loginPassword.value).then(function (ok) {
           if (ok) {
-            Auth.setAuthed(true);
             loginError.hidden = true;
             loginForm.reset();
             showApp();
@@ -132,7 +131,7 @@
         });
       });
 
-      if (Auth.isAuthed()) showApp(); else showLogin();
+      Auth.checkSession().then(function (ok) { if (ok) showApp(); else showLogin(); });
 
       function escapeHtml(s) {
         var div = document.createElement('div');

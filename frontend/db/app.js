@@ -43,7 +43,6 @@
     e.preventDefault();
     Auth.checkPassword(loginPassword.value).then(function (ok) {
       if (ok) {
-        Auth.setAuthed(true);
         loginError.hidden = true;
         loginForm.reset();
         showApp();
@@ -1282,8 +1281,8 @@
 
   // Runs last, after OPS_MARKUP/UPLOAD_MARKUP/SETTINGS_MARKUP and all boot*
   // functions above are defined — calling this any earlier (it used to sit
-  // right after the login form wiring) crashes on any visit where
-  // Auth.isAuthed() is already true, since showApp() renders a tab
+  // right after the login form wiring) crashes on any visit where the
+  // session check below resolves true, since showApp() renders a tab
   // immediately using markup that doesn't exist yet.
-  if (Auth.isAuthed()) showApp(); else showLogin();
+  Auth.checkSession().then(function (ok) { if (ok) showApp(); else showLogin(); });
 })();
