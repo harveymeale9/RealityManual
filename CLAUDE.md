@@ -1646,18 +1646,52 @@ at `realitymanual.com/db/`). It is explicitly **separate from the
 storefront** — do not conflate its data with the Stripe/BookVault order
 pipeline or its Postgres/SQLite schema in `backend/`.
 
-**Access:** hardcoded client-side password `ormiston` (see
-`frontend/db/lib/auth.js`), persisted in `localStorage` so it stays logged
-in on a given device. Deliberately not a real security boundary — Harvey's
+**Access:** password `ormiston`, checked server-side by `rm-ops-service`
+(see below) via `POST /api/login`, which sets a real httpOnly session
+cookie (30-day expiry). `frontend/db/lib/auth.js` also keeps a plain
+`localStorage` flag for fast client-side UI state (show app vs. show login
+immediately on page load), but that flag is not the security boundary —
+every actual data request is gated by the server checking the session
+cookie. Still deliberately low-security overall (single shared password,
+no rate-limit beyond a basic per-IP throttle on `/api/login`) — Harvey's
 call, matches the admin-password precedent in section 44. `robots.txt`
-disallows `/db/`.
+disallows `/db/` on the storefront domain, and `rm-ops-service` also
+serves its own `Disallow: /` robots.txt on its subdomain.
 
-**Storage:** everything is client-side in IndexedDB (`frontend/db/lib/store.js`,
-DB name `rm_content_ops`) — pieces, uploaded video blobs, ambient audio
-blobs, and settings. There is **no backend for this yet**, so nothing syncs
-across devices/browsers. If Harvey wants that, it needs a small dedicated
-service on the VPS, kept separate from the storefront backend/database per
-the original instruction below.
+**Backend (`ops-service/`, deployed as `rm-ops-service`):** a small
+dedicated Node/Express + better-sqlite3 service, added 2026-09-09, living
+at **`ops.realitymanual.com`** — completely separate code and data from
+the storefront's `backend/`, per Harvey's repeated instruction. Runs as a
+Docker container on the same Hostinger VPS as n8n (`docker run --name
+rm-ops-service`, `--restart unless-stopped`, bound to `127.0.0.1:4001`),
+fronted by an nginx site (`/etc/nginx/sites-available/ops`) with a Let's
+Encrypt cert via certbot, same pattern as the existing n8n site. Data
+lives on the VPS at `/root/ops-service-data` (bind-mounted into the
+container at `/data`): `db.sqlite` holds a generic `records(store_name,
+id, data, updated_at)` table (one JSON blob per record — mirrors the old
+IndexedDB object-store shape almost exactly) plus a `sessions` table;
+uploaded video/audio files are plain files on disk under
+`/data/uploads/<store>/<id>`, not in SQLite. CORS is locked to
+`https://realitymanual.com`/`https://www.realitymanual.com` with
+credentials enabled. DNS (`ops` A record, Cloudflare-proxied) was created
+via a Cloudflare API token scoped to DNS-edit on the `realitymanual.com`
+zone only.
+
+**Storage / data flow:** `frontend/db/lib/store.js` keeps its original
+`getAll/get/put/del` interface (so `app.js` needed almost no changes) but
+now calls the `rm-ops-service` REST API instead of IndexedDB directly —
+`GET/PUT/DELETE /api/store/:storeName[/:id]` for plain JSON records
+(`pieces`, `settings`, `errors`), and `POST/GET /api/files/:storeName/:id`
+for the file-backed stores (`videos`, `audioTracks`), where `put()`
+detects a `Blob`/`File` under `record.blob` and uploads it as multipart
+form data instead of JSON. `get()`/`getAll()` on those two stores fetch
+the file bytes back and reattach them as `record.blob`, so the rest of
+the app (video preview, audio playback via `URL.createObjectURL`) is
+unaffected. Nothing syncs automatically from a browser's *old* pre-backend
+IndexedDB data — `frontend/db/migrate.html` is a one-time, password-gated
+tool that reads that device's legacy IndexedDB and pushes everything up
+to the new backend; run it once per device that had local data worth
+keeping, then it's no longer needed.
 
 **Content Ops and Upload Files are two views over one `pieces` store, but
 deliberately not the same workflow** (Harvey's clarification, 2026-09-08):
@@ -1706,9 +1740,10 @@ exposes manual stage controls on the board or in the modal.
   library (upload/delete mp3s), the shared caption applied to every
   upload, the base URL used for longform UTM links, and API key fields
   for YouTube/Instagram/Facebook/TikTok plus a transcription provider.
-  **These keys are stored in IndexedDB only and are not sent anywhere** —
-  there's nothing wired up to use them yet. TikTok access hasn't been
-  granted yet either; the field is there for when it is.
+  **These keys are stored in the `rm-ops-service` database only and are
+  not sent anywhere else** — there's nothing wired up to use them yet.
+  TikTok access hasn't been granted yet either; the field is there for
+  when it is.
 
 **Quick-add shortcut:** `frontend/db/quick-add.html` is a minimal
 standalone page (same password/storage) meant to be added to a phone home
@@ -1717,11 +1752,15 @@ textarea, autofocused, dictate via the OS keyboard's mic button, "Save to
 Ideation" writes straight into the same IndexedDB store the main board
 reads from, so a captured idea shows up in Content Ops immediately.
 
-**Known limitation:** built and reviewed without a browser available in
-that session to click through it — verified by Node syntax-checking the
-JS/JSON and a careful manual read, not by loading the page. Test it for
-real before relying on it, especially the login gate, drag-and-drop, and
-the thumbnail picker.
+**Known limitation:** the `rm-ops-service` backend itself was verified
+directly (login, session auth, JSON CRUD, and multipart file
+upload/download all smoke-tested against the live
+`https://ops.realitymanual.com` API), but the frontend UI has not been
+click-tested in an actual browser against this new backend — only the
+original IndexedDB version was ever loaded in a browser. Test the real
+flow before relying on it: login gate, Content Ops drag-and-drop, Upload
+Files drop zone + thumbnail picker, and `migrate.html` against a device
+that actually has old local data.
 
 ---
 
