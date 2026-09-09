@@ -41,21 +41,22 @@
 
   loginForm.addEventListener('submit', function (e) {
     e.preventDefault();
-    if (Auth.checkPassword(loginPassword.value)) {
-      Auth.setAuthed(true);
-      loginError.hidden = true;
-      loginForm.reset();
-      showApp();
-    } else {
-      loginError.hidden = false;
-      loginPassword.value = '';
-      loginPassword.focus();
-    }
+    Auth.checkPassword(loginPassword.value).then(function (ok) {
+      if (ok) {
+        Auth.setAuthed(true);
+        loginError.hidden = true;
+        loginForm.reset();
+        showApp();
+      } else {
+        loginError.hidden = false;
+        loginPassword.value = '';
+        loginPassword.focus();
+      }
+    });
   });
 
   document.getElementById('logoutBtn').addEventListener('click', function () {
-    Auth.setAuthed(false);
-    showLogin();
+    Auth.logout().then(showLogin);
   });
 
   if (Auth.isAuthed()) showApp(); else showLogin();

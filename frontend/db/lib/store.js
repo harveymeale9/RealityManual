@@ -1,74 +1,71 @@
 // Shared data layer for the Reality Manual control panel.
-// Used by both the main dashboard (app.js) and the quick-add shortcut
-// (quick-add.html), so a new idea captured on a phone home screen lands
-// in the same IndexedDB store the dashboard reads from.
+// Talks to the rm-ops-service backend (ops.realitymanual.com) instead of
+// browser-local IndexedDB, so data syncs across devices. Used by both the
+// main dashboard (app.js) and the quick-add shortcut (quick-add.html).
 window.RMStore = (function () {
-  var DB_NAME = 'rm_content_ops';
-  var DB_VERSION = 2;
-  var dbPromise = null;
+  var API_BASE = 'https://ops.realitymanual.com';
+  var FILE_STORES = ['videos', 'audioTracks'];
 
-  function openDb() {
-    if (dbPromise) return dbPromise;
-    dbPromise = new Promise(function (resolve) {
-      if (!window.indexedDB) { resolve(null); return; }
-      var req;
-      try { req = indexedDB.open(DB_NAME, DB_VERSION); } catch (e) { resolve(null); return; }
-      req.onupgradeneeded = function () {
-        var db = req.result;
-        ['pieces', 'videos', 'audioTracks', 'settings', 'errors'].forEach(function (name) {
-          if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, { keyPath: 'id' });
-        });
-      };
-      req.onsuccess = function () { resolve(req.result); };
-      req.onerror = function () { resolve(null); };
-    });
-    return dbPromise;
+  function apiFetch(path, opts) {
+    opts = opts || {};
+    opts.credentials = 'include';
+    return fetch(API_BASE + path, opts);
+  }
+
+  function attachBlob(storeName, record) {
+    return apiFetch('/api/files/' + storeName + '/' + encodeURIComponent(record.id))
+      .then(function (r) {
+        if (!r.ok) return record;
+        return r.blob().then(function (blob) { record.blob = blob; return record; });
+      })
+      .catch(function () { return record; });
   }
 
   function getAll(storeName) {
-    return openDb().then(function (db) {
-      if (!db) return [];
-      return new Promise(function (resolve) {
-        var req = db.transaction(storeName, 'readonly').objectStore(storeName).getAll();
-        req.onsuccess = function () { resolve(req.result || []); };
-        req.onerror = function () { resolve([]); };
-      });
-    });
+    return apiFetch('/api/store/' + storeName)
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .then(function (records) {
+        if (FILE_STORES.indexOf(storeName) === -1) return records;
+        return Promise.all(records.map(function (rec) { return attachBlob(storeName, rec); }));
+      })
+      .catch(function () { return []; });
   }
 
   function get(storeName, id) {
-    return openDb().then(function (db) {
-      if (!db) return undefined;
-      return new Promise(function (resolve) {
-        var req = db.transaction(storeName, 'readonly').objectStore(storeName).get(id);
-        req.onsuccess = function () { resolve(req.result); };
-        req.onerror = function () { resolve(undefined); };
-      });
-    });
+    return apiFetch('/api/store/' + storeName + '/' + encodeURIComponent(id))
+      .then(function (r) { return r.ok ? r.json() : undefined; })
+      .then(function (record) {
+        if (!record || FILE_STORES.indexOf(storeName) === -1) return record;
+        return attachBlob(storeName, record);
+      })
+      .catch(function () { return undefined; });
   }
 
   function put(storeName, record) {
-    return openDb().then(function (db) {
-      if (!db) return;
-      return new Promise(function (resolve) {
-        var t = db.transaction(storeName, 'readwrite');
-        t.objectStore(storeName).put(record);
-        t.oncomplete = function () { resolve(); };
-        t.onerror = function () { resolve(); };
-      });
-    });
+    if (FILE_STORES.indexOf(storeName) !== -1 && record.blob instanceof Blob) {
+      var fd = new FormData();
+      var meta = {};
+      Object.keys(record).forEach(function (k) { if (k !== 'blob') meta[k] = record[k]; });
+      fd.append('file', record.blob, record.fileName || record.name || 'file');
+      fd.append('meta', JSON.stringify(meta));
+      return apiFetch('/api/files/' + storeName + '/' + encodeURIComponent(record.id), {
+        method: 'POST',
+        body: fd
+      }).then(function (r) { return r.ok ? r.json() : undefined; }).catch(function () {});
+    }
+    var body = {};
+    Object.keys(record).forEach(function (k) { if (k !== 'blob') body[k] = record[k]; });
+    return apiFetch('/api/store/' + storeName + '/' + encodeURIComponent(record.id), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }).then(function (r) { return r.ok ? r.json() : undefined; }).catch(function () {});
   }
 
   function del(storeName, id) {
-    return openDb().then(function (db) {
-      if (!db) return;
-      return new Promise(function (resolve) {
-        var t = db.transaction(storeName, 'readwrite');
-        t.objectStore(storeName).delete(id);
-        t.oncomplete = function () { resolve(); };
-        t.onerror = function () { resolve(); };
-      });
-    });
+    return apiFetch('/api/store/' + storeName + '/' + encodeURIComponent(id), { method: 'DELETE' })
+      .then(function () {})
+      .catch(function () {});
   }
 
   function genId() {
@@ -149,7 +146,8 @@ window.RMStore = (function () {
   }
 
   return {
-    openDb: openDb, getAll: getAll, get: get, put: put, del: del,
+    API_BASE: API_BASE,
+    getAll: getAll, get: get, put: put, del: del,
     genId: genId, nowIso: nowIso,
     STAGES: STAGES, CONTENT_TYPES: CONTENT_TYPES, PLATFORMS: PLATFORMS,
     DEFAULT_CADENCE: DEFAULT_CADENCE,

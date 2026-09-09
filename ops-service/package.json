@@ -1,0 +1,16 @@
+{
+  "name": "rm-ops-service",
+  "version": "1.0.0",
+  "description": "Backend for the Reality Manual /db internal content-ops control panel. Separate from the storefront backend.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1"
+  }
+}
