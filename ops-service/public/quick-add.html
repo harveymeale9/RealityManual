@@ -153,16 +153,17 @@
         var title = firstLine.length > 80 ? firstLine.slice(0, 80).trim() + '…' : firstLine;
 
         Store.getAll('pieces').then(function (rows) {
-          var maxOrder = 0;
+          var minOrder = 0;
+          var seen = false;
           rows.forEach(function (p) {
-            if (p.stage === 'ideation' && (p.order || 0) > maxOrder) maxOrder = p.order || 0;
+            if (p.stage === 'ideation' && (!seen || (p.order || 0) < minOrder)) { minOrder = p.order || 0; seen = true; }
           });
           var id = Store.genId();
           var now = Store.nowIso();
           var piece = {
             id: id, title: title, stage: 'ideation', platforms: [], contentType: 'short',
             notesHtml: textToNotesHtml(text), hasVideo: false,
-            order: maxOrder + 10, createdAt: now, updatedAt: now
+            order: minOrder - 10, createdAt: now, updatedAt: now
           };
           return Store.put('pieces', piece);
         }).then(function (saved) {

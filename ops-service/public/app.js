@@ -189,6 +189,12 @@
     return pieces[ids[ids.length - 1]].order || 0;
   }
 
+  function minOrder(stageId) {
+    var ids = orderedIds(stageId);
+    if (!ids.length) return 0;
+    return pieces[ids[0]].order || 0;
+  }
+
   function nowIso() { return Store.nowIso(); }
 
   function fmtTime(iso) {
@@ -606,7 +612,7 @@
     var id = Store.genId();
     pieces[id] = {
       id: id, title: '', stage: stageId, platforms: [], contentType: 'short', notesHtml: '', hasVideo: false,
-      order: maxOrder(stageId) + 10,
+      order: minOrder(stageId) - 10,
       createdAt: nowIso(),
       updatedAt: nowIso()
     };
