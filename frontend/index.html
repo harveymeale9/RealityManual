@@ -41,6 +41,14 @@
 
     <!-- ============================================================ HERO -->
     <section class="hero">
+      <!-- Desktop-only (900px+): true full-bleed background spanning the
+           entire hero section, text overlaid on top — this is the actual
+           mockup composition. §67's attempt at this broke because the
+           candle wasn't cleanly separated from the book in that photo;
+           this one (Harvey's bg.png) has that fixed at the source, so
+           full-bleed can work here. See CLAUDE.md §69. -->
+      <img class="bg-img hero-bg-desktop" src="img/photo/bg.png" alt="" aria-hidden="true" />
+
       <div class="wrap">
         <div class="hero-grid">
 
@@ -55,18 +63,10 @@
             </p>
           </div>
 
-          <!-- Back to one combined candle+book photo (§68) — Harvey's own
-               composition, shadow and candle placement baked in, no CSS
-               vignette needed. A contained image in its own grid cell,
-               not full-bleed behind the text, so it can never repeat the
-               §67 problem of the candle landing under the copy text: text
-               and photo simply never share space. Mobile gets the
-               portrait crop (free-bleeding, matches the mobile mockup);
-               desktop gets the landscape crop, sized by its grid track
-               rather than viewport width so it can't drift independently
-               the way the very first full-bleed attempt (§63/§64) did. -->
-          <img class="hero-mobile-photo" src="img/photo/bg-vertical.png" alt="The Reality Manual, first edition hardcover, on a candlelit desk" />
-          <img class="hero-book" src="img/photo/bg.png" alt="The Reality Manual, first edition hardcover, on a candlelit desk" />
+          <!-- Mobile-only (<900px): unchanged from before §68 — the
+               square combined photo, free-bleeding in normal flow. Left
+               exactly as-is; only the desktop treatment changes below. -->
+          <img class="hero-mobile-photo" src="img/photo/book-desk-square.png" alt="The Reality Manual, first edition hardcover, on a candlelit desk" />
 
           <div class="hero-trust">
             <div class="trust-item">

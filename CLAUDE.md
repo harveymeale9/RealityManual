@@ -2298,3 +2298,45 @@ the stepper's number/buttons read as too small next to the new
 icons and the stepper's font sizes — confirmed via a CDP-driven
 `getComputedStyle` check (not just eyeballing a screenshot) that the
 icons render with a real border and the enlarged sizes actually apply.
+
+---
+
+# 69. Hero: True Full-Bleed, For Real This Time (2026-09-17, same day as §68)
+
+§68 was wrong. Harvey: "this whole image is supposed to span the entire
+hero" — he meant it as a full-bleed background behind all the text
+(matching the original mockup), not a contained box in the middle
+column. §68 also accidentally swapped the mobile image over to
+`bg-vertical.png`; Harvey caught that too ("you put the tablet one on
+mobile... it was perfect as it was").
+
+**Fixed:**
+- Mobile reverted to exactly what it was before §68 —
+  `book-desk-square.png`, free-bleeding in normal flow. Untouched
+  otherwise.
+- Desktop (900px+) is `bg.png` as a genuine `position: absolute`
+  background spanning the whole `<section class="hero">`, the same
+  `.bg-img` pattern `.video-card`/`.final-cta` already use — not a grid
+  item. `hero-grid`'s middle column goes back to being an empty `.` gap;
+  there's no "book" grid item on desktop at all anymore.
+- A lighter radial vignette than §67's (this composition already keeps
+  real dark space around the candle/book, so it needed less help).
+
+**Found and fixed for real, not just tuned around:** the eyebrow line
+("A Strategy Manual for the Game of Life") reached far enough right at
+~960-1024px to land on the book — the same independent-cropping tension
+every hero attempt has hit, just milder since this photo has better
+built-in clearance. Nudging `object-position` helped a little but
+didn't fully fix it at every width tested. The fix that actually holds:
+`.hero-copy .eyebrow { max-width: 24ch; }`, forcing it to wrap 3 lines
+at every desktop breakpoint rather than 1 line at wide viewports and an
+uncontrolled overlap at narrow ones — a constraint on the text's own
+width, not a guess about where the image crop will land. Verified clean
+at 960/1024/1440/1920px.
+
+**Known remaining gap, not yet raised by Harvey:** at 1920px+ the
+section's aspect ratio (wide, ~800px tall) vs. `bg.png`'s own ratio
+(1.78:1) crops the image in more tightly than at 1440 — noticeably more
+zoomed in, losing some of the surrounding desk/books context. Left
+as-is since the realistic viewing range (~960-1600px) looks right and
+nothing has been said about ultra-wide; revisit if it comes up.

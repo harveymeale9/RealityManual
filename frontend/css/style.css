@@ -344,22 +344,21 @@ img { max-width: 100%; }
 
 .hero .wrap { position: relative; z-index: 2; }
 
-/* Mobile (<900px): the combined candle+book photo, free-bleeding in
-   normal flow, matching the mobile mockup. aspect-ratio matches the
-   source (img/photo/bg-vertical.png, 1086×1448) so it's never cropped —
-   Harvey's own composition, shown whole. */
+/* Mobile (<900px): unchanged since before §68 — the combined candle+book
+   photo, free-bleeding in normal flow, matching the mobile mockup. */
 .hero-mobile-photo {
   grid-area: book;
   display: block;
   width: calc(100% + 3rem);
   margin-inline: -1.5rem;
-  aspect-ratio: 1086 / 1448;
+  aspect-ratio: 1 / 1;
   object-fit: cover;
+  object-position: 50% 42%;
 }
 
-/* Desktop (900px+, see media query below). Hidden here so mobile shows
-   only the combined photo above. */
-.hero-book {
+/* Desktop (900px+, see media query below): true full-bleed background.
+   Hidden here so mobile shows only the combined photo above. */
+.hero-bg-desktop {
   display: none;
 }
 
@@ -379,6 +378,14 @@ img { max-width: 100%; }
 .hero-quote { grid-area: quote; }
 
 .hero-copy h1 { margin-bottom: 0.35em; }
+
+/* Wrapped to 2 lines deliberately — at the full single-line width, this
+   phrase's rightmost letters reached far enough right to land on the
+   book in the full-bleed photo behind it at some viewport widths
+   (~960-1024px), regardless of how the image crop was tuned. Capping
+   the width is a fix that holds regardless of exactly where the image's
+   crop lands, rather than chasing that per breakpoint. */
+.hero-copy .eyebrow { max-width: 24ch; }
 
 .tagline {
   font-family: var(--serif);
@@ -446,35 +453,44 @@ img { max-width: 100%; }
   .hero { padding: 6rem 0 6.5rem; }
 
   .hero-mobile-photo { display: none; }
+  /* Shifted right of dead-center — at a bare position:50%, the book's
+     left edge crept into the eyebrow line's text at ~960-1024px
+     (object-fit:cover's crop shifts independently of the text grid, the
+     same underlying tension as §63/§64/§67, just milder here since this
+     composition already has better clearance baked in). This gives the
+     copy column consistent breathing room across the whole desktop
+     range instead of only at the exact widths first tested. */
+  .hero-bg-desktop { display: block; object-position: 58% 42%; }
 
-  /* One combined photo again (§68), shown whole — aspect-ratio matches
-     the source (img/photo/bg.png, 1672×941) so nothing is cropped.
-     Contained in its own grid cell rather than full-bleed behind the
-     text, so it can't repeat §67's problem of the candle landing under
-     the copy text: text and photo simply never share space, and the
-     shadow/candle placement are just whatever Harvey composed — no CSS
-     vignette or mask needed. */
-  .hero-book {
-    display: block;
-    grid-area: book;
-    width: 100%;
-    aspect-ratio: 1672 / 941;
-    align-self: center;
+  /* Text legibility over the full-bleed photo. Lighter than §67's
+     vignette needed to be — this composition (img/photo/bg.png) already
+     keeps the candle clearly separated from the book with real dark
+     space around both, so it doesn't take much extra darkening to read
+     clean everywhere copy/trust/quote text sits. */
+  .hero::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: radial-gradient(
+      ellipse 50% 55% at 50% 42%,
+      rgba(8, 6, 4, 0.15) 0%,
+      rgba(8, 6, 4, 0.6) 70%,
+      rgba(8, 6, 4, 0.82) 100%
+    );
+    pointer-events: none;
   }
 
   .hero-grid {
     /* minmax(0, …fr), not bare …fr: a bare fr track's implicit min-width is
        "auto" (the content's intrinsic min-content size), so a long word in
        the copy or quote column could otherwise force that column wider
-       than its fr share. Book column is much wider than earlier versions
-       (was 0.95fr of a 2.9fr total) — this photo is landscape (1.78:1),
-       not the portrait book cutout the old proportions were tuned for, so
-       it needs real width to read as prominent rather than a small,
-       squashed strip. */
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.6fr) minmax(0, 0.5fr);
+       than its fr share. Middle column is an empty gap ('.') — the book
+       is part of the full-bleed background now, not a grid item. */
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.95fr) minmax(0, 0.8fr);
     grid-template-areas:
-      'copy  book quote'
-      'trust book quote';
+      'copy  .    quote'
+      'trust .    quote';
     column-gap: clamp(1.25rem, 2vw, 2rem);
     row-gap: 2.6rem;
     align-items: start;
