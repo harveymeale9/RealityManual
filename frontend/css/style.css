@@ -342,32 +342,53 @@ img { max-width: 100%; }
   padding: 5rem 0 4.5rem;
 }
 
-.hero .wrap { position: relative; z-index: 2; }
-
-/* Both crops are normal contained grid items, never a full-bleed
-   position:absolute background — that was tried first and broke at
-   in-between (tablet / small-desktop) widths, because the image's crop was
-   anchored by a fixed object-position percentage of the *whole section*
-   while the text columns were sized by independent grid fr-tracks; the two
-   didn't scale together, so the book and the copy text drifted into each
-   other below ~1200px. Keeping the photo as a real grid item ties it to
-   the same track math as the text at every width. */
-.hero-photo {
-  display: none;
-  width: 100%;
-  object-fit: cover;
+/* Radial vignette over the full-bleed background photo: lighter in the
+   center (where the book floats — no legibility to protect there, and it
+   benefits from more of the photo's warmth showing through), heavily
+   darkened toward the edges (where the copy/trust/quote text always
+   sits). A flat overlay wasn't enough — the background's candle flame is
+   bright enough to land under the text at some viewport widths (its
+   crop shifts independently of the text grid, by design — see the
+   .hero-book comment below) and hurt legibility there. Darkening by
+   position rather than tuning object-position is robust to *any* crop,
+   not just the ones tested. */
+.hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: radial-gradient(
+    ellipse 55% 60% at 50% 42%,
+    rgba(8, 6, 4, 0.25) 0%,
+    rgba(8, 6, 4, 0.72) 70%,
+    rgba(8, 6, 4, 0.9) 100%
+  );
+  pointer-events: none;
 }
 
-/* Mobile-first: the square crop, free-bleeding to the screen edges with no
-   border/card frame — it should read as part of the page, not a boxed-in
-   product photo (matches the mobile mockup). */
-.hero-photo--mobile {
+.hero .wrap { position: relative; z-index: 2; }
+
+/* The background photo (pure atmosphere, no book in it) is the ordinary
+   full-bleed .bg-img pattern used elsewhere on this page (.video-card,
+   .final-cta) — safe here specifically *because* it has no single
+   subject that must never be cropped, unlike earlier attempts (§63/§64)
+   that tried to make one photo serve as both the background and the
+   product shot and broke at in-between viewport widths as a result (see
+   CLAUDE.md §67). The book below is a completely separate element,
+   simply centered and scaled — never cropped, so it can't drift out of
+   place the way the old combined photo did. */
+
+.hero-book {
+  grid-area: book;
   display: block;
-  grid-area: photo;
-  width: calc(100% + 3rem);
-  margin-inline: -1.5rem;
-  aspect-ratio: 1 / 1;
-  object-position: 50% 42%;
+  width: min(58vw, 300px);
+  margin: 0 auto;
+  aspect-ratio: 1024 / 1536;
+  /* Source has a dark vignette rather than true alpha transparency —
+     this feathers its edges so they blend into the page/background scrim
+     instead of showing a visible rectangle. */
+  -webkit-mask-image: radial-gradient(ellipse 68% 72% at 50% 50%, black 68%, transparent 100%);
+  mask-image: radial-gradient(ellipse 68% 72% at 50% 50%, black 68%, transparent 100%);
 }
 
 .hero-grid {
@@ -375,7 +396,7 @@ img { max-width: 100%; }
   grid-template-columns: 1fr;
   grid-template-areas:
     'copy'
-    'photo'
+    'book'
     'trust'
     'quote';
   gap: 2.2rem;
@@ -404,10 +425,6 @@ img { max-width: 100%; }
   max-width: 42ch;
   margin-bottom: 0;
 }
-
-/* .hero-book (a contained product-shot slot) is unused now that the hero
-   background photo already includes the book — kept only if a future photo
-   needs the book shown as a separate framed element again. */
 
 .hero-trust {
   display: flex;
@@ -456,13 +473,9 @@ img { max-width: 100%; }
 @media (min-width: 900px) {
   .hero { padding: 6rem 0 6.5rem; }
 
-  .hero-photo--mobile { display: none; }
-
-  .hero-photo--desktop {
-    display: block;
-    grid-area: photo;
-    aspect-ratio: 4 / 5;
-    object-position: 50% 45%;
+  .hero-book {
+    width: min(20vw, 340px);
+    align-self: center;
   }
 
   .hero-grid {
@@ -472,8 +485,8 @@ img { max-width: 100%; }
        than its fr share. */
     grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.95fr) minmax(0, 0.8fr);
     grid-template-areas:
-      'copy  photo quote'
-      'trust photo quote';
+      'copy  book quote'
+      'trust book quote';
     column-gap: clamp(1.25rem, 2vw, 2rem);
     row-gap: 2.6rem;
     align-items: start;

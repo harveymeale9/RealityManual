@@ -11,7 +11,7 @@
   <meta property="og:description" content="The objective. The rules. A better life. First edition premium hardcover." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://realitymanual.com/" />
-  <meta property="og:image" content="https://realitymanual.com/img/photo/book-desk.png" />
+  <meta property="og:image" content="https://realitymanual.com/img/photo/hero-book.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Archivo:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -41,6 +41,14 @@
 
     <!-- ============================================================ HERO -->
     <section class="hero">
+      <!-- Full-bleed atmosphere layer (candle/desk, no book in it) — see
+           CLAUDE.md §67. Safe to crop freely at any viewport because it has
+           no single subject that must stay uncropped, unlike the earlier
+           single-photo attempts (§63/§64/§66) that tried to make one photo
+           serve as both background and product shot and broke at
+           in-between viewport widths as a result. -->
+      <img class="bg-img" src="img/photo/hero-background.png" alt="" aria-hidden="true" />
+
       <div class="wrap">
         <div class="hero-grid">
 
@@ -55,16 +63,12 @@
             </p>
           </div>
 
-          <!-- Hero photograph: book on a candlelit desk. Native resolution
-               noted per file — see CLAUDE.md §63/§64 for the crispness note
-               if either ever gets swapped for a higher-res version. Two
-               crops, each a normal contained grid item (not a full-bleed
-               background) so it always scales with the text columns instead
-               of drifting independently at in-between viewport widths —
-               swapped by breakpoint via plain CSS display, matching how the
-               rest of this page picks responsive images. -->
-          <img class="hero-photo hero-photo--mobile" src="img/photo/book-desk-square.png" alt="The Reality Manual, first edition hardcover, on a candlelit desk" />
-          <img class="hero-photo hero-photo--desktop" src="img/photo/book-desk.png" alt="The Reality Manual, first edition hardcover, on a candlelit desk" />
+          <!-- The book, as its own cutout-ish product shot — simply
+               centered and scaled (never cropped), decoupled entirely from
+               the background layer above. Edges are feathered by a CSS
+               mask since the source has a dark vignette rather than true
+               transparency. -->
+          <img class="hero-book" src="img/photo/hero-book.png" alt="The Reality Manual, first edition hardcover" />
 
           <div class="hero-trust">
             <div class="trust-item">

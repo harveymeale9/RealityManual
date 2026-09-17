@@ -2181,3 +2181,60 @@ has no side effects): qty 1/2/3 all stayed on USPS Consolidator with
 `shipping_upgraded: false`; qty 5 correctly flipped to `true`; quantity 0
 and 999 both rejected with 400; an omitted quantity defaults to 1
 (pre-existing checkout behavior untouched).
+
+---
+
+# 67. Hero Rebuilt on Two Decoupled Assets (2026-09-17)
+
+Every earlier hero attempt (§63/§64/§66's "known limitation" note,
+implicitly) tried to make **one photo** serve two jobs at once: a
+full-bleed atmospheric background, and a book that must never be
+cropped awkwardly. Those two jobs need different crop behavior at
+different viewport widths — the background can crop however it needs
+to, but the book can't lose its edges — and a single `object-position`
+percentage can't satisfy both simultaneously once the background's crop
+and the text grid's `fr`-tracks stop scaling in lockstep (which happens
+below ~1200px). That mismatch was the root cause of the tablet-width
+text/book overlap, fixed at the time by making the photo a contained
+grid item — which worked, but visibly diverged from the mockup (Harvey:
+"the image is supposed to form the entire background of the hero
+section"; "would it be easier if I got you a true background library
+candle sprite and then a separate book image").
+
+Harvey generated exactly that split:
+- `frontend/img/photo/hero-background.png` (1672×941) — pure atmosphere,
+  candle + blurred books/globe, **no book in it at all**.
+- `frontend/img/photo/hero-book.png` (1024×1536) — the book alone, shot
+  on a dark vignette (not true alpha transparency, but close enough to
+  the page's near-black `--bg` that a CSS mask can hide the seam — see
+  below).
+
+**Current structure** (`frontend/index.html` hero section,
+`frontend/css/style.css` `.hero`/`.hero-book`/`.hero::after`):
+- Background: an ordinary full-bleed `.bg-img` (`position: absolute;
+  inset: 0; object-fit: cover`) — the exact same pattern `.video-card`
+  and `.final-cta` already use elsewhere on this page. No longer needs
+  the `.hero-photo--mobile`/`--desktop` display-toggling split from
+  §64/§66 at all, at any breakpoint, because there's nothing in it that
+  cropping could ruin.
+- Book: `.hero-book`, a plain centered `<img>` — `width: min(58vw,
+  300px)` on mobile, `min(20vw, 340px)` from 900px up, `margin: 0 auto`
+  on mobile / grid-area alignment on desktop. Never cropped (no
+  `object-fit` needed — the whole image just scales). Edges feathered
+  via `mask-image: radial-gradient(ellipse 68% 72% at 50% 50%, black
+  68%, transparent 100%)` so its vignette blends into the page instead
+  of showing a visible rectangle.
+- `.hero::after`: a **radial** vignette over the whole section — lighter
+  in the center (where the book floats), heavily darkened toward the
+  edges (where copy/trust/quote text always sits). Started as a flat
+  overlay, which wasn't enough: the background photo's candle flame is
+  bright enough to land directly under the copy text at some viewport
+  widths (its crop shifts independently of the text grid, by design —
+  that's the whole point of decoupling them), which hurt legibility.
+  Darkening by *position* rather than trying to tune `object-position`
+  per breakpoint is robust to any crop, not just the ones tested.
+
+Render-verified at 390 / 960 / 1440 / 1920px — legible, correctly
+positioned, no recurrence of the squish this replaces. The old combined
+`book-desk.png` / `book-desk-square.png` files from §63/§64/§66 are no
+longer referenced by any page but left on disk.
