@@ -11,8 +11,7 @@
   <meta property="og:description" content="The objective. The rules. A better life. First edition premium hardcover." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://realitymanual.com/" />
-  <!-- TODO: replace with a real 1200x630 social image once artwork exists -->
-  <meta property="og:image" content="https://realitymanual.com/img/placeholder/hero-bg.svg" />
+  <meta property="og:image" content="https://realitymanual.com/img/photo/book-desk.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Archivo:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -42,9 +41,6 @@
 
     <!-- ============================================================ HERO -->
     <section class="hero">
-      <!-- IMAGE SLOT: hero photograph -->
-      <img class="bg-img" src="img/placeholder/hero-bg.svg" alt="" aria-hidden="true" />
-
       <div class="wrap">
         <div class="hero-grid">
 
@@ -59,10 +55,12 @@
             </p>
           </div>
 
-          <!-- IMAGE SLOT: the book itself -->
-          <div class="hero-book">
-            <img src="img/placeholder/book-hero.svg" alt="The Reality Manual, first edition hardcover" width="520" height="700" />
-          </div>
+          <!-- Hero photograph: book on a candlelit desk. Native 1536x1024 —
+               see CLAUDE.md §63 for the crispness note if this ever gets
+               swapped for a higher-res version. Framed inline on small
+               screens; becomes the full-bleed hero background from tablet
+               width up. -->
+          <img class="hero-bg-photo" src="img/photo/book-desk.png" alt="The Reality Manual, first edition hardcover, on a candlelit desk" />
 
           <div class="hero-trust">
             <div class="trust-item">

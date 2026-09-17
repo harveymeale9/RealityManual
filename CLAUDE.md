@@ -1872,3 +1872,25 @@ admin-editable delivery estimate later (section 24).
 **Type:** display serif is now Cormorant Garamond (was Fraunces); UI sans
 stays Archivo. Stripe Elements now uses the `night` appearance theme so
 checkout matches the dark site instead of rendering as a white block.
+
+**Real hero photo (added 2026-09-17):** the `hero-bg` and `book-hero`
+placeholders described above are gone from the hero section — replaced by
+a real AI-generated photo (book on a candlelit desk, 1536x1024) at
+`frontend/img/photo/book-desk.png`. It's a single flat photo (not a
+transparent book cutout), so it's used two different ways by breakpoint:
+a contained framed image in normal flow on mobile (`<900px`, between the
+copy and the trust icons — matches the mobile mockup), promoted to the
+full-bleed hero background from `900px` up via a stronger gradient wash
+for text legibility. The `.hero-book` slot/CSS from the original build is
+dead now that the photo carries the book itself.
+
+Checked at a forced 2x device-scale-factor (retina/4K-scaled displays):
+holds up cleanly because `--wrap` caps content at ~1200px, so even a
+full-bleed desktop render only upscales the source ~1.5x. A plain 4K
+screen at 100% OS scaling needs no upscaling at all — the same width cap
+applies. No urgent need to upscale the source file, but if this section
+ever goes edge-to-edge beyond the content cap, or the file needs a bigger
+`og:image` crop, regenerating at ~3000px wide would add headroom. The
+other placeholder slots (video poster, interior pages, edition thumbnail,
+closing background) are still the hand-drawn SVGs from the initial
+redesign and are unaffected.
