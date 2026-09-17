@@ -349,18 +349,19 @@ img { max-width: 100%; }
    can never collide with .hero-grid's own grid-area bookkeeping. */
 .hero-bg-photo-desktop { display: none; }
 
-/* Mobile-first: a normal framed image sitting in the stack, between the
-   copy and the trust icons (matches the mobile mockup). Hidden again once
-   the desktop background copy takes over at 900px. */
+/* Mobile-first: a normal image sitting in the stack, between the copy and
+   the trust icons (matches the mobile mockup). Free-bleeding to the screen
+   edges, no border/card frame — it should read as part of the page, not a
+   boxed-in product photo. Hidden again once the desktop background copy
+   takes over at 900px. */
 .hero-bg-photo-mobile {
   grid-area: photo;
   display: block;
-  width: 100%;
+  width: calc(100% + 3rem);
+  margin-inline: -1.5rem;
   aspect-ratio: 3 / 2;
   object-fit: cover;
   object-position: 50% 38%;
-  border: 1px solid var(--border-warm);
-  box-shadow: 0 30px 60px -25px rgba(0, 0, 0, 0.7);
 }
 
 .hero-grid {
