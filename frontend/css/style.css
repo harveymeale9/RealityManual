@@ -387,7 +387,7 @@ img { max-width: 100%; }
    (~960-1024px), regardless of how the image crop was tuned. Capping
    the width is a fix that holds regardless of exactly where the image's
    crop lands, rather than chasing that per breakpoint. */
-.hero-copy .eyebrow { max-width: 24ch; }
+.hero-copy .eyebrow { max-width: none; }
 
 .tagline {
   font-family: var(--serif);
@@ -535,7 +535,13 @@ img { max-width: 100%; }
     z-index: 2;
   }
 
-  .hero-copy { max-width: min(26ch, 100%); }
+  .hero-copy { max-width: 100%; }
+  /* Only the tagline needs its own cap here — it's the one line in this
+     column long enough to reach the candle/book once .hero-copy's own
+     max-width (above) was loosened for the eyebrow/H1 (Harvey: match the
+     mockup's one-line eyebrow, two-line H1). Eyebrow and H1 both wrap
+     naturally within their own line lengths without needing a cap. */
+  .tagline { max-width: 24ch; }
   .hero-quote { align-self: center; margin-top: 0; max-width: min(30ch, 100%); }
 }
 
