@@ -41,13 +41,13 @@
 
     <!-- ============================================================ HERO -->
     <section class="hero">
-      <!-- Full-bleed atmosphere layer (candle/desk, no book in it) — see
-           CLAUDE.md §67. Safe to crop freely at any viewport because it has
-           no single subject that must stay uncropped, unlike the earlier
-           single-photo attempts (§63/§64/§66) that tried to make one photo
-           serve as both background and product shot and broke at
-           in-between viewport widths as a result. -->
-      <img class="bg-img" src="img/photo/hero-background.png" alt="" aria-hidden="true" />
+      <!-- Desktop-only (900px+): full-bleed atmosphere layer, no book in
+           it — see CLAUDE.md §67. Safe to crop freely at any viewport
+           because it has no single subject that must stay uncropped,
+           unlike the earlier single-photo attempts (§63/§64/§66) that
+           tried to make one photo serve as both background and product
+           shot and broke at in-between viewport widths as a result. -->
+      <img class="bg-img hero-bg-desktop" src="img/photo/hero-background.png" alt="" aria-hidden="true" />
 
       <div class="wrap">
         <div class="hero-grid">
@@ -63,11 +63,16 @@
             </p>
           </div>
 
-          <!-- The book, as its own cutout-ish product shot — simply
-               centered and scaled (never cropped), decoupled entirely from
-               the background layer above. Edges are feathered by a CSS
-               mask since the source has a dark vignette rather than true
-               transparency. -->
+          <!-- Mobile-only (<900px): the combined candle+book photo,
+               reverted per Harvey's call — the decoupled desktop treatment
+               below didn't read as well at this size. -->
+          <img class="hero-mobile-photo" src="img/photo/book-desk-square.png" alt="The Reality Manual, first edition hardcover, on a candlelit desk" />
+
+          <!-- Desktop-only (900px+): the book, as its own cutout-ish
+               product shot — simply centered and scaled (never cropped),
+               decoupled entirely from the background layer above. Edges
+               are feathered by a CSS mask since the source has a dark
+               vignette rather than true transparency. -->
           <img class="hero-book" src="img/photo/hero-book.png" alt="The Reality Manual, first edition hardcover" />
 
           <div class="hero-trust">

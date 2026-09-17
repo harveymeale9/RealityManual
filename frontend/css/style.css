@@ -342,53 +342,29 @@ img { max-width: 100%; }
   padding: 5rem 0 4.5rem;
 }
 
-/* Radial vignette over the full-bleed background photo: lighter in the
-   center (where the book floats — no legibility to protect there, and it
-   benefits from more of the photo's warmth showing through), heavily
-   darkened toward the edges (where the copy/trust/quote text always
-   sits). A flat overlay wasn't enough — the background's candle flame is
-   bright enough to land under the text at some viewport widths (its
-   crop shifts independently of the text grid, by design — see the
-   .hero-book comment below) and hurt legibility there. Darkening by
-   position rather than tuning object-position is robust to *any* crop,
-   not just the ones tested. */
-.hero::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  background: radial-gradient(
-    ellipse 55% 60% at 50% 42%,
-    rgba(8, 6, 4, 0.25) 0%,
-    rgba(8, 6, 4, 0.72) 70%,
-    rgba(8, 6, 4, 0.9) 100%
-  );
-  pointer-events: none;
-}
-
 .hero .wrap { position: relative; z-index: 2; }
 
-/* The background photo (pure atmosphere, no book in it) is the ordinary
-   full-bleed .bg-img pattern used elsewhere on this page (.video-card,
-   .final-cta) — safe here specifically *because* it has no single
-   subject that must never be cropped, unlike earlier attempts (§63/§64)
-   that tried to make one photo serve as both the background and the
-   product shot and broke at in-between viewport widths as a result (see
-   CLAUDE.md §67). The book below is a completely separate element,
-   simply centered and scaled — never cropped, so it can't drift out of
-   place the way the old combined photo did. */
-
-.hero-book {
+/* Mobile (<900px): back to the combined candle+book photo, free-bleeding
+   in normal flow — Harvey's call, it reads better here than the
+   decoupled desktop treatment below. No vignette needed since the text
+   never sits on top of it (it's a normal block in the stack, not a
+   background), matching how this looked before §67's split. */
+.hero-mobile-photo {
   grid-area: book;
   display: block;
-  width: min(58vw, 300px);
-  margin: 0 auto;
-  aspect-ratio: 1024 / 1536;
-  /* Source has a dark vignette rather than true alpha transparency —
-     this feathers its edges so they blend into the page/background scrim
-     instead of showing a visible rectangle. */
-  -webkit-mask-image: radial-gradient(ellipse 68% 72% at 50% 50%, black 68%, transparent 100%);
-  mask-image: radial-gradient(ellipse 68% 72% at 50% 50%, black 68%, transparent 100%);
+  width: calc(100% + 3rem);
+  margin-inline: -1.5rem;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  object-position: 50% 42%;
+}
+
+/* Desktop (900px+, see media query below): the full-bleed background and
+   the decoupled book photo from §67. Hidden here so mobile shows only the
+   combined photo above. */
+.hero-bg-desktop,
+.hero-book {
+  display: none;
 }
 
 .hero-grid {
@@ -473,9 +449,51 @@ img { max-width: 100%; }
 @media (min-width: 900px) {
   .hero { padding: 6rem 0 6.5rem; }
 
+  .hero-mobile-photo { display: none; }
+  .hero-bg-desktop { display: block; }
+
+  /* Radial vignette over the full-bleed background photo: lighter in the
+     center (where the book floats — no legibility to protect there, and
+     it benefits from more of the photo's warmth showing through), heavily
+     darkened toward the edges (where the copy/trust/quote text always
+     sits). A flat overlay wasn't enough — the background's candle flame
+     is bright enough to land under the text at some viewport widths (its
+     crop shifts independently of the text grid, by design) and hurt
+     legibility there. Darkening by position rather than tuning
+     object-position is robust to any crop, not just the ones tested.
+     Desktop-only: mobile uses the combined photo above instead, where
+     the text never sits on top of it. */
+  .hero::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: radial-gradient(
+      ellipse 55% 60% at 50% 42%,
+      rgba(8, 6, 4, 0.25) 0%,
+      rgba(8, 6, 4, 0.72) 70%,
+      rgba(8, 6, 4, 0.9) 100%
+    );
+    pointer-events: none;
+  }
+
+  /* Large and stable across widths — clamp()'s floor (not a vw-scaled
+     minimum) is what keeps it "towering" rather than shrinking away at
+     smaller desktop/tablet widths. Pushed to the right edge of its grid
+     cell (margin-left: auto) rather than centered, so the candle in the
+     background — which sits left-of-center — has clear space to its left
+     instead of the book crowding right up against it. */
   .hero-book {
-    width: min(20vw, 340px);
+    display: block;
+    width: clamp(300px, 27vw, 420px);
+    margin: 0 0 0 auto;
     align-self: center;
+    aspect-ratio: 1024 / 1536;
+    /* Source has a dark vignette rather than true alpha transparency —
+       this feathers its edges so they blend into the page/background
+       scrim instead of showing a visible rectangle. */
+    -webkit-mask-image: radial-gradient(ellipse 68% 72% at 50% 50%, black 68%, transparent 100%);
+    mask-image: radial-gradient(ellipse 68% 72% at 50% 50%, black 68%, transparent 100%);
   }
 
   .hero-grid {
@@ -483,7 +501,7 @@ img { max-width: 100%; }
        "auto" (the content's intrinsic min-content size), so a long word in
        the copy or quote column could otherwise force that column wider
        than its fr share. */
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.95fr) minmax(0, 0.8fr);
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 0.75fr);
     grid-template-areas:
       'copy  book quote'
       'trust book quote';
