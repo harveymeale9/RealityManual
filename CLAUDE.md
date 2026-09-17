@@ -2340,3 +2340,53 @@ section's aspect ratio (wide, ~800px tall) vs. `bg.png`'s own ratio
 zoomed in, losing some of the surrounding desk/books context. Left
 as-is since the realistic viewing range (~960-1600px) looks right and
 nothing has been said about ultra-wide; revisit if it comes up.
+
+---
+
+# 70. §69's "Known Gap" Was Real — Fixed on Harvey's Actual PC (2026-09-17)
+
+The ultra-wide crop noted as an unconfirmed gap at the end of §69 turned
+out to be real and worse than expected: on Harvey's own monitor, `.hero`
+cropped tight enough to cut "THE" off the title entirely ("this is my
+pc, the layout is still supposed to be boxed" — meaning: not stretched/
+cropped like this, confined to a sane frame).
+
+**Root cause:** `.hero`'s height stayed pinned to its content's natural
+height (roughly constant regardless of viewport width) while width kept
+growing with the viewport, so `object-fit: cover` cropped more and more
+aggressively the wider the screen. Likely worse on Harvey's actual
+hardware than in most of this session's own headless-browser tests
+because of OS display scaling (125-150% Windows scaling narrows the
+*effective* CSS viewport well below the monitor's physical resolution)
+— a gap this session's render-testing had flagged as unconfirmed but
+hadn't reproduced.
+
+**Fix:** `.hero { min-height: min(56vw, 1000px); }` — 56vw approximates
+the height a full-viewport-width section needs to match `bg.png`'s own
+1672:941 (≈1.78:1) aspect ratio, so `cover` stops needing to crop much
+at all past a certain width. `min-height` only ever *adds* space, so
+narrower desktop widths (900-1400px, where natural content height
+already exceeds this) see no change. Paired with `align-content: center`
+on `.hero-grid` (and `height: 100%` threaded through `.hero .wrap`, since
+a percentage height only resolves against an ancestor with a *definite*
+height) so the text block recenters within the now-taller section
+instead of pinning to the top with dead space below.
+
+**Second-order effect this surfaced:** with the crop reduced to nearly
+zero at some widths, the book's on-screen position stopped being
+distorted by cropping — and at ~1757px (tested directly, matches
+Harvey's approximate effective viewport) its *natural*, barely-cropped
+position was close enough to "Manual" in the H1 to overlap. Confirmed
+via CDP `getComputedStyle` that this wasn't a rendering/caching fluke —
+`object-position` was correctly applied but had essentially no crop left
+to shift at that near-native aspect ratio, so retuning the percentage
+didn't help. Fixed the same way as §69's eyebrow-line overlap: capped
+`hero-copy`'s own `max-width` (34ch → 26ch) so the whole copy block —
+H1 included — physically cannot reach far enough right to hit the book,
+regardless of exactly where it sits. A constraint on the text's own
+width holds at every viewport; chasing the "correct" crop position for
+each one does not, because the two systems (grid tracks vs.
+`object-fit: cover`) scale independently by construction.
+
+Render-verified at 390 (mobile, untouched) / 960 / 1024 / 1440 / 1757 /
+1920px — full title visible and no text/book overlap at any of them.

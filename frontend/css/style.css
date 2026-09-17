@@ -450,7 +450,26 @@ img { max-width: 100%; }
 }
 
 @media (min-width: 900px) {
-  .hero { padding: 6rem 0 6.5rem; }
+  .hero {
+    padding: 6rem 0 6.5rem;
+    /* Keeps the section's own box roughly matched to bg.png's native
+       aspect ratio (1672:941 ≈ 1.78:1, i.e. ~56vw of height for a
+       full-viewport-width section) as the viewport gets wide. Without
+       this, height stays pinned to content's natural height while width
+       keeps growing, so object-fit:cover crops in tighter and tighter —
+       fine up to a point, but on a genuinely wide monitor (1900px+) it
+       zoomed in enough to crop "THE" off the title. min-height only
+       ever adds space, never removes it, so narrower desktop widths
+       (900-1400px, where content height already exceeds this) are
+       unaffected — this only kicks in where the mismatch is real. */
+    min-height: min(56vw, 1000px);
+  }
+
+  /* Needed so .hero-grid's height:100% (below) actually resolves to
+     something — a percentage height only means anything against an
+     ancestor with a definite height, and .wrap itself is otherwise
+     auto-height. */
+  .hero .wrap { height: 100%; }
 
   .hero-mobile-photo { display: none; }
   /* Shifted right of dead-center — at a bare position:50%, the book's
@@ -460,7 +479,7 @@ img { max-width: 100%; }
      composition already has better clearance baked in). This gives the
      copy column consistent breathing room across the whole desktop
      range instead of only at the exact widths first tested. */
-  .hero-bg-desktop { display: block; object-position: 58% 42%; }
+  .hero-bg-desktop { display: block; object-position: 50% 42%; }
 
   /* Text legibility over the full-bleed photo. Lighter than §67's
      vignette needed to be — this composition (img/photo/bg.png) already
@@ -495,9 +514,11 @@ img { max-width: 100%; }
     row-gap: 2.6rem;
     align-items: start;
     min-height: 560px;
+    height: 100%;
+    align-content: center;
   }
 
-  .hero-copy { max-width: min(34ch, 100%); }
+  .hero-copy { max-width: min(26ch, 100%); }
   .hero-quote { align-self: center; margin-top: 0; max-width: min(30ch, 100%); }
 }
 
