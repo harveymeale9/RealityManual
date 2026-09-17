@@ -24,14 +24,16 @@
   <main class="page-wrap">
     <div class="checkout-grid">
       <div>
-        <div class="qty-field">
-          <label for="quantity">Quantity</label>
+        <h2>Quantity</h2>
+        <div class="qty-section">
           <div class="qty-stepper">
             <button type="button" id="qty-decrease" aria-label="Decrease quantity">&minus;</button>
             <input type="number" id="quantity" name="quantity" value="1" min="1" max="20" step="1" inputmode="numeric" aria-label="Quantity" />
             <button type="button" id="qty-increase" aria-label="Increase quantity">+</button>
           </div>
+          <div class="qty-books" id="qty-books" aria-hidden="true"></div>
         </div>
+        <p class="qty-gift-note">Know someone who'd appreciate a copy of their own? It makes a thoughtful gift.</p>
         <div id="quantity-warning-banner" class="quantity-warning-banner" role="alert" hidden></div>
 
         <h2>Shipping &amp; Payment</h2>

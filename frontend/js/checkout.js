@@ -15,6 +15,8 @@
   const summaryTotal = document.getElementById('summary-total');
   const summaryHint = document.getElementById('summary-hint');
   const quantityWarningBanner = document.getElementById('quantity-warning-banner');
+  const qtyBooks = document.getElementById('qty-books');
+  const QTY_ICON_MAX = 5; // beyond this many copies, show a "+N" badge instead of one icon per copy
 
   const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const PHONE_REGEX = /^\+?[\d\s\-.()/]{6,35}$/;
@@ -102,6 +104,31 @@
     qtyDecreaseButton.addEventListener('click', () => setQuantity(getQuantity() - 1));
     qtyIncreaseButton.addEventListener('click', () => setQuantity(getQuantity() + 1));
     quantityInput.addEventListener('change', () => setQuantity(getQuantity()));
+
+    renderQtyBooks(getQuantity());
+  }
+
+  // One small book icon per copy, up to QTY_ICON_MAX — beyond that a "+N"
+  // badge instead of letting the row grow without bound.
+  function renderQtyBooks(quantity) {
+    qtyBooks.innerHTML = '';
+    const iconCount = Math.min(quantity, QTY_ICON_MAX);
+
+    for (let i = 0; i < iconCount; i += 1) {
+      const icon = document.createElement('img');
+      icon.className = 'qty-book-icon';
+      icon.src = 'img/placeholder/edition-thumb.svg';
+      icon.alt = '';
+      icon.setAttribute('aria-hidden', 'true');
+      qtyBooks.appendChild(icon);
+    }
+
+    if (quantity > QTY_ICON_MAX) {
+      const more = document.createElement('span');
+      more.className = 'qty-book-more';
+      more.textContent = `+${quantity - QTY_ICON_MAX}`;
+      qtyBooks.appendChild(more);
+    }
   }
 
   function getQuantity() {
@@ -119,6 +146,7 @@
     // warning below.
     summaryBookPrice.textContent = formatCents(BOOK_PRICE_CENTS * clamped);
     quantityWarningBanner.hidden = true;
+    renderQtyBooks(clamped);
     updateShipping();
   }
 
