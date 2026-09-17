@@ -11,7 +11,7 @@
   <meta property="og:description" content="The objective. The rules. A better life. First edition premium hardcover." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://realitymanual.com/" />
-  <meta property="og:image" content="https://realitymanual.com/img/photo/hero-book.png" />
+  <meta property="og:image" content="https://realitymanual.com/img/photo/bg.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Archivo:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -41,14 +41,6 @@
 
     <!-- ============================================================ HERO -->
     <section class="hero">
-      <!-- Desktop-only (900px+): full-bleed atmosphere layer, no book in
-           it — see CLAUDE.md §67. Safe to crop freely at any viewport
-           because it has no single subject that must stay uncropped,
-           unlike the earlier single-photo attempts (§63/§64/§66) that
-           tried to make one photo serve as both background and product
-           shot and broke at in-between viewport widths as a result. -->
-      <img class="bg-img hero-bg-desktop" src="img/photo/hero-background.png" alt="" aria-hidden="true" />
-
       <div class="wrap">
         <div class="hero-grid">
 
@@ -63,17 +55,18 @@
             </p>
           </div>
 
-          <!-- Mobile-only (<900px): the combined candle+book photo,
-               reverted per Harvey's call — the decoupled desktop treatment
-               below didn't read as well at this size. -->
-          <img class="hero-mobile-photo" src="img/photo/book-desk-square.png" alt="The Reality Manual, first edition hardcover, on a candlelit desk" />
-
-          <!-- Desktop-only (900px+): the book, as its own cutout-ish
-               product shot — simply centered and scaled (never cropped),
-               decoupled entirely from the background layer above. Edges
-               are feathered by a CSS mask since the source has a dark
-               vignette rather than true transparency. -->
-          <img class="hero-book" src="img/photo/hero-book.png" alt="The Reality Manual, first edition hardcover" />
+          <!-- Back to one combined candle+book photo (§68) — Harvey's own
+               composition, shadow and candle placement baked in, no CSS
+               vignette needed. A contained image in its own grid cell,
+               not full-bleed behind the text, so it can never repeat the
+               §67 problem of the candle landing under the copy text: text
+               and photo simply never share space. Mobile gets the
+               portrait crop (free-bleeding, matches the mobile mockup);
+               desktop gets the landscape crop, sized by its grid track
+               rather than viewport width so it can't drift independently
+               the way the very first full-bleed attempt (§63/§64) did. -->
+          <img class="hero-mobile-photo" src="img/photo/bg-vertical.png" alt="The Reality Manual, first edition hardcover, on a candlelit desk" />
+          <img class="hero-book" src="img/photo/bg.png" alt="The Reality Manual, first edition hardcover, on a candlelit desk" />
 
           <div class="hero-trust">
             <div class="trust-item">

@@ -344,25 +344,21 @@ img { max-width: 100%; }
 
 .hero .wrap { position: relative; z-index: 2; }
 
-/* Mobile (<900px): back to the combined candle+book photo, free-bleeding
-   in normal flow — Harvey's call, it reads better here than the
-   decoupled desktop treatment below. No vignette needed since the text
-   never sits on top of it (it's a normal block in the stack, not a
-   background), matching how this looked before §67's split. */
+/* Mobile (<900px): the combined candle+book photo, free-bleeding in
+   normal flow, matching the mobile mockup. aspect-ratio matches the
+   source (img/photo/bg-vertical.png, 1086×1448) so it's never cropped —
+   Harvey's own composition, shown whole. */
 .hero-mobile-photo {
   grid-area: book;
   display: block;
   width: calc(100% + 3rem);
   margin-inline: -1.5rem;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 1086 / 1448;
   object-fit: cover;
-  object-position: 50% 42%;
 }
 
-/* Desktop (900px+, see media query below): the full-bleed background and
-   the decoupled book photo from §67. Hidden here so mobile shows only the
-   combined photo above. */
-.hero-bg-desktop,
+/* Desktop (900px+, see media query below). Hidden here so mobile shows
+   only the combined photo above. */
 .hero-book {
   display: none;
 }
@@ -450,58 +446,32 @@ img { max-width: 100%; }
   .hero { padding: 6rem 0 6.5rem; }
 
   .hero-mobile-photo { display: none; }
-  .hero-bg-desktop { display: block; }
 
-  /* Radial vignette over the full-bleed background photo: lighter in the
-     center (where the book floats — no legibility to protect there, and
-     it benefits from more of the photo's warmth showing through), heavily
-     darkened toward the edges (where the copy/trust/quote text always
-     sits). A flat overlay wasn't enough — the background's candle flame
-     is bright enough to land under the text at some viewport widths (its
-     crop shifts independently of the text grid, by design) and hurt
-     legibility there. Darkening by position rather than tuning
-     object-position is robust to any crop, not just the ones tested.
-     Desktop-only: mobile uses the combined photo above instead, where
-     the text never sits on top of it. */
-  .hero::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    background: radial-gradient(
-      ellipse 55% 60% at 50% 42%,
-      rgba(8, 6, 4, 0.25) 0%,
-      rgba(8, 6, 4, 0.72) 70%,
-      rgba(8, 6, 4, 0.9) 100%
-    );
-    pointer-events: none;
-  }
-
-  /* Large and stable across widths — clamp()'s floor (not a vw-scaled
-     minimum) is what keeps it "towering" rather than shrinking away at
-     smaller desktop/tablet widths. Pushed to the right edge of its grid
-     cell (margin-left: auto) rather than centered, so the candle in the
-     background — which sits left-of-center — has clear space to its left
-     instead of the book crowding right up against it. */
+  /* One combined photo again (§68), shown whole — aspect-ratio matches
+     the source (img/photo/bg.png, 1672×941) so nothing is cropped.
+     Contained in its own grid cell rather than full-bleed behind the
+     text, so it can't repeat §67's problem of the candle landing under
+     the copy text: text and photo simply never share space, and the
+     shadow/candle placement are just whatever Harvey composed — no CSS
+     vignette or mask needed. */
   .hero-book {
     display: block;
-    width: clamp(300px, 27vw, 420px);
-    margin: 0 0 0 auto;
+    grid-area: book;
+    width: 100%;
+    aspect-ratio: 1672 / 941;
     align-self: center;
-    aspect-ratio: 1024 / 1536;
-    /* Source has a dark vignette rather than true alpha transparency —
-       this feathers its edges so they blend into the page/background
-       scrim instead of showing a visible rectangle. */
-    -webkit-mask-image: radial-gradient(ellipse 68% 72% at 50% 50%, black 68%, transparent 100%);
-    mask-image: radial-gradient(ellipse 68% 72% at 50% 50%, black 68%, transparent 100%);
   }
 
   .hero-grid {
     /* minmax(0, …fr), not bare …fr: a bare fr track's implicit min-width is
        "auto" (the content's intrinsic min-content size), so a long word in
        the copy or quote column could otherwise force that column wider
-       than its fr share. */
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 0.75fr);
+       than its fr share. Book column is much wider than earlier versions
+       (was 0.95fr of a 2.9fr total) — this photo is landscape (1.78:1),
+       not the portrait book cutout the old proportions were tuned for, so
+       it needs real width to read as prominent rather than a small,
+       squashed strip. */
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.6fr) minmax(0, 0.5fr);
     grid-template-areas:
       'copy  book quote'
       'trust book quote';
@@ -1008,19 +978,23 @@ footer a:hover { color: var(--ink-soft); }
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  min-height: 2.35rem;
+  min-height: 3.3rem;
 }
 
 .qty-book-icon {
-  width: 1.55rem;
-  height: 2.05rem;
+  width: 2.5rem;
+  height: 3.3rem;
   display: block;
+  /* The SVG's own background is near-black, close enough to the page
+     background that it was invisible at the old smaller size — this
+     border is what actually makes each icon read as a distinct object. */
+  border: 1px solid var(--accent-3);
   animation: qty-book-in 0.2s ease-out;
 }
 
 .qty-book-more {
   font-family: var(--sans);
-  font-size: 0.8rem;
+  font-size: 1.1rem;
   font-weight: 600;
   color: var(--accent-2);
   letter-spacing: 0.02em;
@@ -1060,8 +1034,8 @@ footer a:hover { color: var(--ink-soft); }
   background: transparent;
   border: 0;
   color: var(--ink);
-  width: 2rem;
-  font-size: 1.1rem;
+  width: 2.75rem;
+  font-size: 1.5rem;
   font-family: var(--sans);
   cursor: pointer;
   transition: background 0.15s ease;
@@ -1077,14 +1051,14 @@ footer a:hover { color: var(--ink-soft); }
 }
 
 .qty-stepper input {
-  width: 2.6rem;
+  width: 3.25rem;
   border: 0;
   border-left: 1px solid var(--border);
   border-right: 1px solid var(--border);
   background: transparent;
   color: var(--ink);
   font-family: inherit;
-  font-size: 0.95rem;
+  font-size: 1.35rem;
   text-align: center;
   -moz-appearance: textfield;
 }

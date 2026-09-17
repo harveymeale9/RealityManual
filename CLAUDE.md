@@ -2238,3 +2238,63 @@ Render-verified at 390 / 960 / 1440 / 1920px — legible, correctly
 positioned, no recurrence of the squish this replaces. The old combined
 `book-desk.png` / `book-desk-square.png` files from §63/§64/§66 are no
 longer referenced by any page but left on disk.
+
+---
+
+# 68. Hero Reverted to One Combined Photo, Again — This Time For Good (2026-09-17)
+
+§67's decoupled two-layer split (full-bleed background + separately
+floating book) lasted about one round of feedback. Harvey caught two
+real problems with it: the book had no drop shadow (it was baked into
+the *background* photo in earlier versions, but split apart from it
+once the book became its own element — there was never a shadow drawn
+for the book on its own), and the candle — dimmed by the vignette
+overlay and positioned by a crop that moves independently of the book —
+ended up landing behind the copy text rather than looking like it was
+lighting the book.
+
+Harvey's fix: regenerate the *combined* candle+book+shadow scene (same
+one-photo approach as `book-desk.png` back in §63/§64), but properly
+composed this time — candle clearly separated from the book with room
+to spare, bright rather than muted, shadow naturally part of the shot —
+and supply two crops instead of one:
+
+```
+frontend/img/photo/bg.png           1672×941   (16:9-ish) — desktop, 900px+
+frontend/img/photo/bg-vertical.png  1086×1448  (3:4)      — mobile, <900px
+```
+
+**Both shown as contained images, never full-bleed behind text** — the
+mobile one free-bleeds to the screen edges in normal flow (same
+treatment §64/§66/§67 already established there), the desktop one is a
+plain grid item sized to its own `aspect-ratio` so nothing is cropped.
+This is the actual fix, not the multi-crop part: with the photo
+confined to its own space, copy/quote text can never end up sharing
+territory with it, so the "flame behind text" failure mode (§67) is
+structurally impossible now, not just tuned away. No CSS vignette, no
+mask — Harvey's own composition carries all of that.
+
+The desktop grid's column split changed to fit this: `bg.png` is
+landscape, not the portrait crop earlier versions were tuned for, so it
+needs real width to read as prominent rather than a short, squashed
+strip — `grid-template-columns` went from roughly even thirds to
+`1.1fr 1.6fr 0.5fr` (copy / book / quote). Verified the copy column still
+holds "The Reality Manual" to two lines at 960/1440/1920px despite
+`hero-quote` giving up width to make room.
+
+`hero-background.png` and `hero-book.png` from §67 are no longer
+referenced by any page but left on disk, alongside the earlier
+`book-desk.png` / `book-desk-square.png` from §63/§64/§66. `og:image`
+now points at `bg.png`.
+
+**Also fixed the same day, unrelated to the hero:** the checkout page's
+quantity control (§66) had two problems Harvey flagged — the little
+book-count icons next to the stepper were invisible (the placeholder
+SVG's own background is `#0c0a06`, nearly identical to the page's
+`--bg`, so at the original small size there was nothing to see), and
+the stepper's number/buttons read as too small next to the new
+"Quantity" `<h2>`. Fixed by adding a visible border to each icon
+(`border: 1px solid var(--accent-3)`) and roughly enlarging both the
+icons and the stepper's font sizes — confirmed via a CDP-driven
+`getComputedStyle` check (not just eyeballing a screenshot) that the
+icons render with a real border and the enlarged sizes actually apply.
