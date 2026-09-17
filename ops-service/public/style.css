@@ -59,9 +59,9 @@ body::before {
   content: '';
   position: fixed;
   inset: 0;
-  background: url('img/earth.png') no-repeat right -8% top -10%;
-  background-size: 44% auto;
-  opacity: 0.32;
+  background: url('img/earth.png') no-repeat right -6% top -18%;
+  background-size: 78% auto;
+  opacity: 0.4;
   z-index: -1;
   pointer-events: none;
 }

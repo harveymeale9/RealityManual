@@ -453,12 +453,11 @@ img { max-width: 100%; }
 
 @media (min-width: 900px) {
   .hero {
-    /* No bottom padding: the boxed photo (via .wrap) should run flush to
-       the next section, not leave a strip of solid --bg showing below it
-       before .offer's own top border/padding starts (Harvey: "make sure
-       theres no gap here under the image before the next panel"). Top
-       padding stays, for breathing room under the site header. */
-    padding: 6rem 0 0;
+    /* No padding at all: Harvey flagged solid---bg gaps on BOTH sides —
+       above the hero (below the sticky header) and below it (before
+       .offer starts). The photo itself should run completely flush,
+       top and bottom, with nothing but its own content in between. */
+    padding: 0;
     /* Keeps the box roughly matched to book-desk.png's native aspect
        ratio (1536:1024 = 1.5:1) as .wrap approaches its var(--wrap)
        (1200px) cap. Using min(100vw, 1200px) rather than a bare vw unit
@@ -469,13 +468,28 @@ img { max-width: 100%; }
        (900-1200px, where content height already exceeds this) are
        unaffected. */
     min-height: calc(min(100vw, 1200px) * 0.667);
+    /* The real fix for the bottom gap (padding:0 alone wasn't enough):
+       .wrap's old `height: 100%` never actually resolved. A percentage
+       height only resolves against an ancestor with a *definite* height,
+       and .hero's height was 'auto' (min-height is a floor, not a
+       definite height) — so `height:100%` silently computed to 'auto'
+       instead, and .wrap (and therefore the absolutely-positioned photo
+       pinned to its edges) only grew as tall as hero-grid's own content,
+       leaving .hero's min-height-driven extra space as a bare gap below
+       it. display:flex sidesteps the percentage-height rule entirely:
+       flex children stretch to the container's real content-box height
+       (including anything added by min-height) by construction. */
+    display: flex;
+    flex-direction: column;
   }
 
-  /* Needed so .hero-grid's height:100% (below) actually resolves to
-     something — a percentage height only means anything against an
-     ancestor with a definite height, and .wrap itself is otherwise
-     auto-height. */
-  .hero .wrap { height: 100%; }
+  /* flex:1 (not height:100%, see above) — stretches to .hero's full
+     flex-resolved height, which is now a definite height that
+     .hero-grid's own `height:100%` below can correctly resolve against
+     in turn. min-height:0 overrides flex's default min-height:auto,
+     which would otherwise refuse to shrink .wrap below its content's
+     natural size and reintroduce the same gap. */
+  .hero .wrap { flex: 1; min-height: 0; }
 
   .hero-mobile-photo { display: none; }
 
