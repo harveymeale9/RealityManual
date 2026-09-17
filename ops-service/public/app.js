@@ -68,6 +68,7 @@
   var appInitialized = false;
   var panelTabs = document.getElementById('panelTabs');
   var panelMain = document.getElementById('panelMain');
+  var sideRail = document.getElementById('sideRail');
 
   function currentTabId() {
     var h = (location.hash || '').replace('#', '');
@@ -80,6 +81,16 @@
       return '<button class="panel-tab" data-tab="' + t.id + '">' + t.label + '</button>';
     }).join('');
     panelTabs.querySelectorAll('.panel-tab').forEach(function (btn) {
+      btn.addEventListener('click', function () { location.hash = btn.dataset.tab; });
+    });
+  }
+
+  /* The left icon rail is a second entry point into the same tabs above —
+     it doesn't have its own state, just mirrors panelTabs via the same
+     location.hash routing so the two navs can never disagree. */
+  function bindSideRail() {
+    if (!sideRail) return;
+    sideRail.querySelectorAll('.side-rail-btn').forEach(function (btn) {
       btn.addEventListener('click', function () { location.hash = btn.dataset.tab; });
     });
   }
@@ -138,6 +149,11 @@
     panelTabs.querySelectorAll('.panel-tab').forEach(function (btn) {
       btn.classList.toggle('active', btn.dataset.tab === active);
     });
+    if (sideRail) {
+      sideRail.querySelectorAll('.side-rail-btn').forEach(function (btn) {
+        btn.classList.toggle('active', btn.dataset.tab === active);
+      });
+    }
     if (active === 'content-ops') {
       panelMain.innerHTML = OPS_MARKUP;
       bootContentOps();
@@ -156,6 +172,7 @@
     if (appInitialized) { renderActiveTab(); return; }
     appInitialized = true;
     renderTabs();
+    bindSideRail();
     bootModal();
     window.addEventListener('hashchange', renderActiveTab);
     if (!location.hash) location.hash = TABS[0].id;
@@ -909,7 +926,7 @@
             (isAutoCol ? '<span class="column-auto-note">automatic</span>' : '') +
           '</div>' +
           '<div class="column-body" data-stage="' + s.id + '">' + cards + '</div>' +
-          (isAutoCol ? '' : '<button class="column-add" data-stage="' + s.id + '">+ add here</button>') +
+          (isAutoCol ? '' : '<button class="column-add" data-stage="' + s.id + '">+ Add card</button>') +
         '</div>';
     }).join('');
     boardWrap.scrollLeft = scrollLeft;

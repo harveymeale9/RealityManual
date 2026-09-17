@@ -1,31 +1,37 @@
 /* The Reality Manual — internal control panel
-   Reuses the storefront's palette (near-black ivory, gold accent, Fraunces/Archivo)
-   in an app-shell layout rather than the marketing site's editorial one. */
+   Dark neon-green "matrix/tech" theme (Harvey's mockup, 2026-09-17) — a
+   near-black surface stack with a bright green accent instead of the
+   storefront's warm gold, plus an Earth-from-space backdrop (img/earth.png)
+   glimpsed through the gaps between panels. Structure/markup is otherwise
+   unchanged from the gold theme; this is a palette + a few new chrome
+   components (side rail, avatar, footer), not a rebuild. */
 
 :root {
-  --ivory: #16140f;
-  --ivory-dim: #1e1b14;
-  --surface: #1e1b14;
-  --surface-2: #262117;
-  --surface-3: #2d2719;
-  --ink: #f2ede1;
-  --ink-soft: #a89c85;
-  --ink-faint: #6f6552;
-  --border: #332c20;
-  --border-soft: #2a2418;
-  --accent: #c9a24d;
-  --accent-2: #e3c37a;
-  --accent-3: #a97f34;
-  --accent-soft: rgba(201, 162, 77, 0.14);
-  --accent-soft-strong: rgba(201, 162, 77, 0.28);
-  --accent-ink: #16140f;
-  --error: #e2685f;
-  --error-soft: rgba(226, 104, 95, 0.14);
-  --good: #8ea373;
-  --scrollbar-thumb: #47402f;
-  --radius: 3px;
+  --ivory: #060a08;
+  --ivory-dim: #080d0a;
+  --surface: #0a0f0c;
+  --surface-2: #0e1712;
+  --surface-3: #142018;
+  --ink: #e9fbf0;
+  --ink-soft: #86a696;
+  --ink-faint: #4a6156;
+  --border: #1d3527;
+  --border-soft: #16261c;
+  --accent: #3cff89;
+  --accent-2: #8dffbc;
+  --accent-3: #1f9d55;
+  --accent-soft: rgba(60, 255, 137, 0.12);
+  --accent-soft-strong: rgba(60, 255, 137, 0.26);
+  --accent-ink: #04170c;
+  --error: #ff6259;
+  --error-soft: rgba(255, 98, 89, 0.14);
+  --good: #3cff89;
+  --scrollbar-thumb: #23402f;
+  --radius: 8px;
+  --rail-w: 62px;
   --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
   --font-body: 'Archivo', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 * { box-sizing: border-box; }
@@ -40,6 +46,24 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+  position: relative;
+}
+
+/* Earth backdrop — fixed, behind everything (negative z-index puts it
+   behind body's own in-flow children without needing z-index on each of
+   them), faint enough to read as atmosphere rather than compete with
+   content. Only visible through the gaps between solid panel surfaces
+   (board padding, column gutters) since every real UI surface below has
+   its own opaque background. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: url('img/earth.png') no-repeat right -8% top -10%;
+  background-size: 44% auto;
+  opacity: 0.32;
+  z-index: -1;
+  pointer-events: none;
 }
 
 ::selection { background: var(--accent-soft-strong); color: var(--ink); }
@@ -167,7 +191,7 @@ a { color: var(--accent); }
 
 .panel-app {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   height: 100vh;
   /* 100vh on mobile includes space behind the browser's address bar, which
      starves the column-body flex chain below of any real height, hiding
@@ -177,6 +201,45 @@ a { color: var(--accent); }
   height: 100dvh;
 }
 
+/* Left icon rail — a second, decorative-first way into the same tabs
+   panel-tabs already drives (see app.js bindSideRail()). Only the 5
+   sections with an obvious icon get one; Content Analytics stays
+   reachable from the top tab row only. */
+.side-rail {
+  width: var(--rail-w);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 18px 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border-soft);
+}
+.side-rail-logo {
+  color: var(--accent);
+  margin-bottom: 16px;
+  display: flex;
+}
+.side-rail-logo svg { width: 20px; height: 20px; }
+.side-rail-btn {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: var(--radius);
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+.side-rail-btn svg { width: 18px; height: 18px; }
+.side-rail-btn:hover { color: var(--ink-soft); background: var(--surface-2); }
+.side-rail-btn.active { color: var(--accent); background: var(--accent-soft); }
+
+.panel-body { flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100%; }
+
 .panel-header {
   display: flex;
   align-items: center;
@@ -184,41 +247,77 @@ a { color: var(--accent); }
   padding: 16px clamp(16px, 3vw, 36px);
   border-bottom: 1px solid var(--border-soft);
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
-.panel-brand { display: flex; flex-direction: column; gap: 2px; margin-right: 8px; }
+.panel-brand { display: flex; align-items: center; gap: 10px; margin-right: 8px; }
+.brand-mark { color: var(--accent); display: flex; flex-shrink: 0; }
+.brand-mark svg { width: 16px; height: 16px; }
+.panel-brand-text { display: flex; flex-direction: column; gap: 2px; }
 .wordmark-sm {
-  font-family: var(--font-display);
-  font-size: 1rem;
-  letter-spacing: 0.1em;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 0.86rem;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 .panel-sub {
-  font-size: 0.7rem;
+  font-size: 0.66rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--ink-faint);
 }
 
-.panel-tabs { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; }
+.panel-tabs { display: flex; gap: 22px; flex: 1; flex-wrap: wrap; }
 .panel-tab {
   background: none;
   border: none;
+  border-bottom: 2px solid transparent;
   color: var(--ink-faint);
   font-family: var(--font-body);
   font-weight: 500;
-  font-size: 0.88rem;
-  padding: 8px 14px;
-  border-radius: var(--radius);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 6px 1px 14px;
+  border-radius: 0;
   cursor: pointer;
-  letter-spacing: 0.01em;
 }
-.panel-tab:hover { color: var(--ink-soft); background: var(--surface-2); }
-.panel-tab.active { color: var(--ink); background: var(--accent-soft); }
+.panel-tab:hover { color: var(--ink-soft); background: none; }
+.panel-tab.active { color: var(--accent); background: none; border-bottom-color: var(--accent); }
 
-.panel-actions { margin-left: auto; }
+.panel-actions { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+
+.avatar-btn {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.avatar-btn:hover { border-color: var(--accent); }
 
 .panel-main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+.panel-footer {
+  flex-shrink: 0;
+  padding: 9px clamp(16px, 3vw, 36px);
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  border-top: 1px solid var(--border-soft);
+  text-align: center;
+}
 
 .tab-placeholder {
   margin: auto;
@@ -256,8 +355,8 @@ a { color: var(--accent); }
   padding-bottom: 12px;
 }
 
-.ops-stats { display: flex; gap: 18px; font-size: 0.82rem; color: var(--ink-soft); }
-.ops-stats .n { color: var(--ink); font-variant-numeric: tabular-nums; font-weight: 600; margin-right: 4px; }
+.ops-stats { display: flex; gap: 18px; font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); }
+.ops-stats .n { color: var(--accent); font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 600; margin-right: 4px; }
 
 .board-wrap {
   flex: 1;
@@ -318,6 +417,7 @@ a { color: var(--accent); }
 }
 .column-count {
   font-size: 0.72rem;
+  font-family: var(--font-mono);
   color: var(--ink-soft);
   font-variant-numeric: tabular-nums;
   background: var(--surface-3);
@@ -367,7 +467,7 @@ a { color: var(--accent); }
 
 .card {
   background: var(--surface-2);
-  border: 1px solid var(--border-soft);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 12px 13px 11px;
   cursor: grab;
@@ -377,7 +477,7 @@ a { color: var(--accent); }
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
   position: relative;
 }
-.card:hover { border-color: var(--border); box-shadow: 0 16px 40px -18px rgba(0,0,0,0.6); }
+.card:hover { border-color: var(--accent-3); box-shadow: 0 16px 40px -18px rgba(0,0,0,0.6); }
 .card:hover .card-grip { opacity: 1; }
 .card:active { cursor: grabbing; }
 .card.dragging { opacity: 0.35; }
@@ -661,25 +761,28 @@ a { color: var(--accent); }
   padding-bottom: 14px;
 }
 .overview-tile {
-  border: 1px solid var(--border-soft);
+  border: 1px solid var(--border);
   background: var(--surface);
-  border-radius: var(--radius);
-  padding: 12px 14px;
+  border-radius: 14px;
+  padding: 12px 16px;
 }
 .overview-tile-head {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--ink-soft);
   margin-bottom: 6px;
 }
 .overview-tile-head .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-.overview-tile-stat { font-family: var(--font-display); font-size: 1.15rem; color: var(--ink); }
+.overview-tile-stat { font-family: var(--font-mono); font-size: 1.15rem; color: var(--accent); }
 .overview-tile-stat .n { font-variant-numeric: tabular-nums; }
 .overview-tile-sub { font-size: 0.72rem; color: var(--ink-faint); margin-top: 2px; }
 .overview-tile-sub2 { font-size: 0.7rem; color: var(--ink-faint); margin-top: 4px; border-top: 1px solid var(--border-soft); padding-top: 4px; }
-.overview-tile.overview-errors { border-color: rgba(226,104,95,0.3); }
+.overview-tile.overview-errors { border-color: rgba(255,98,89,0.35); background: var(--error-soft); }
+.overview-tile.overview-errors .overview-tile-stat { color: var(--error); }
 
 /* ---------- video section inside the shared modal ---------- */
 
@@ -885,6 +988,11 @@ a { color: var(--accent); }
 .metric-list { margin: 18px 0 0; padding: 0 0 0 1.1em; color: var(--ink-soft); font-size: 0.9rem; line-height: 1.9; }
 
 @media (max-width: 640px) {
+  /* Same space problem as everything else below: the icon rail is a
+     bonus nav, not the only way to reach a tab (the top tab row still
+     works), so it's the first thing to go on a phone. */
+  .side-rail { display: none; }
+  .panel-footer { display: none; }
   .panel-header { gap: 14px; padding: 12px 16px; flex-wrap: nowrap; }
   .ops-stats { display: none; }
   /* Wrapping 6 tabs onto 2-3 lines (the desktop behavior) ate most of the
