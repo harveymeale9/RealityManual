@@ -9,7 +9,13 @@ module.exports = {
   port: Number(process.env.PORT) || 4000,
   nodeEnv: process.env.NODE_ENV || 'development',
   databasePath,
-  corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5500',
+  // Comma-separated list — supports testing from both the live site and a
+  // local static server at once, e.g.
+  // "https://realitymanual.com,http://localhost:5500".
+  corsOrigins: (process.env.CORS_ORIGIN || 'http://localhost:5500')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
 
   stripe: {
     secretKey: process.env.STRIPE_SECRET_KEY || '',

@@ -2,7 +2,8 @@
 
 Node/Express API for realitymanual.com: shipping calculation, Stripe
 PaymentIntents, order storage, Stripe webhook handling. SQLite (via
-`better-sqlite3`) is the database — a single file, no server to run.
+Node's built-in `node:sqlite` module — no native dependency to compile)
+is the database — a single file, no server to run.
 
 **Phase status:** this is Phase 1 (core paid flow), now with live BookVault
 shipping quotes wired into checkout (see CLAUDE.md §64). BookVault order

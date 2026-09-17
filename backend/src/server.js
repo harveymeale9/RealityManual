@@ -10,7 +10,22 @@ const orderRoutes = require('./routes/orders');
 
 const app = express();
 
-app.use(cors({ origin: config.corsOrigin }));
+// Chrome (and other Chromium browsers) block a public HTTPS page fetching a
+// private-network address (this includes localhost) unless the server
+// explicitly opts in via this header on the preflight response — a separate
+// check from ordinary CORS, part of the Private Network Access spec. This
+// only matters while the backend runs locally rather than on a real public
+// server (see CLAUDE.md §64/README) — harmless once it's deployed properly.
+// Must run *before* the cors() middleware below, which ends OPTIONS
+// preflight requests itself and would otherwise skip this entirely.
+app.use((req, res, next) => {
+  if (req.headers['access-control-request-private-network']) {
+    res.setHeader('Access-Control-Allow-Private-Network', 'true');
+  }
+  next();
+});
+
+app.use(cors({ origin: config.corsOrigins }));
 
 // Must be mounted before express.json() — Stripe webhook signature
 // verification needs the raw, unparsed request body.
