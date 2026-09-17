@@ -34,6 +34,10 @@
     mode: 'payment',
     amount: BOOK_PRICE_CENTS,
     currency: 'usd',
+    // Matches the server's payment_method_types on the actual PaymentIntent
+    // (stripeService.js) — card only, so the Payment Element never shows a
+    // method (Link, etc.) that the backend would then refuse at confirm time.
+    paymentMethodTypes: ['card'],
     appearance: {
       theme: 'night',
       variables: {

@@ -12,11 +12,14 @@ async function createPaymentIntent({ amountCents, currency, orderId, country }) 
   return stripe.paymentIntents.create({
     amount: amountCents,
     currency,
-    // allow_redirects: 'never' keeps this to card/wallet methods that
-    // complete inline (Payment Element), not redirect-based methods like
-    // Klarna/Affirm/Cashapp/Amazon Pay — unnecessary complexity for a
-    // single $39 product and would otherwise require return_url handling.
-    automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
+    // Explicit ['card'] rather than automatic_payment_methods — the latter
+    // was surfacing every non-redirect method enabled in the Dashboard
+    // (Link, Cash App Pay, etc.) as separate tabs on the Payment Element,
+    // which read as cluttered for a single $65 product. Card still covers
+    // Apple Pay / Google Pay (they ride on the card payment method when
+    // enabled in the Dashboard and supported by the browser/device) —
+    // just not Link or anything redirect-based.
+    payment_method_types: ['card'],
     metadata: {
       order_id: orderId,
       product: 'reality-manual-first-edition-hardcover',
