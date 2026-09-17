@@ -453,7 +453,12 @@ img { max-width: 100%; }
 
 @media (min-width: 900px) {
   .hero {
-    padding: 6rem 0 6.5rem;
+    /* No bottom padding: the boxed photo (via .wrap) should run flush to
+       the next section, not leave a strip of solid --bg showing below it
+       before .offer's own top border/padding starts (Harvey: "make sure
+       theres no gap here under the image before the next panel"). Top
+       padding stays, for breathing room under the site header. */
+    padding: 6rem 0 0;
     /* Keeps the box roughly matched to book-desk.png's native aspect
        ratio (1536:1024 = 1.5:1) as .wrap approaches its var(--wrap)
        (1200px) cap. Using min(100vw, 1200px) rather than a bare vw unit
@@ -477,6 +482,12 @@ img { max-width: 100%; }
   .hero-bg-desktop {
     display: block;
     object-position: 50% 42%;
+    /* book-desk.png reads dull/muted at hero size compared to the source
+       file — a small brightness/contrast lift on the photo itself (not a
+       darkening overlay) so the candlelight actually reads as bright.
+       Text legibility still comes from the text-shadow above, not from
+       darkening the image (Harvey, §72). */
+    filter: brightness(1.18) contrast(1.06) saturate(1.08);
   }
 
   /* Text legibility over the photo — a soft shadow directly behind the
