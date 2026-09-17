@@ -41,15 +41,19 @@
 
     <!-- ============================================================ HERO -->
     <section class="hero">
-      <!-- Desktop-only (900px+): true full-bleed background spanning the
-           entire hero section, text overlaid on top — this is the actual
-           mockup composition. §67's attempt at this broke because the
-           candle wasn't cleanly separated from the book in that photo;
-           this one (Harvey's bg.png) has that fixed at the source, so
-           full-bleed can work here. See CLAUDE.md §69. -->
-      <img class="bg-img hero-bg-desktop" src="img/photo/bg.png" alt="" aria-hidden="true" />
-
       <div class="wrap">
+        <!-- Desktop-only (900px+): background image bled to .wrap's own
+             box (max-width: var(--wrap), same 1200px cap as every other
+             section on the page — .offer, .why, etc.), not the full
+             viewport. Harvey's correction to §69/§70: the rest of the
+             page is "boxed" to that width and the hero has to match it,
+             not bleed past it. This also incidentally caps the
+             aspect-ratio distortion §70 was fighting — past ~1200px
+             viewport, .wrap (and this image with it) simply stops
+             growing, so there's no more width for cover to crop
+             against. See CLAUDE.md §71. -->
+        <img class="bg-img hero-bg-desktop" src="img/photo/bg.png" alt="" aria-hidden="true" />
+
         <div class="hero-grid">
 
           <div class="hero-copy">

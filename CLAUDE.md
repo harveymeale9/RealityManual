@@ -2390,3 +2390,45 @@ each one does not, because the two systems (grid tracks vs.
 
 Render-verified at 390 (mobile, untouched) / 960 / 1024 / 1440 / 1757 /
 1920px — full title visible and no text/book overlap at any of them.
+
+---
+
+# 71. Hero Photo Boxed to `--wrap`, Not the Viewport (2026-09-17, same day as §70)
+
+§69/§70 both assumed "spans the entire hero" meant the full browser
+viewport. It didn't. Harvey's correction, with a screenshot marking
+exactly where the header wordmark and "Get Your Copy" button sit versus
+where the photo extended past them: **every other section on this page**
+(`.offer`, `.why`, `.inside`, `.faq`, `.final-cta` — all via `.wrap`,
+`max-width: var(--wrap)` = 1200px) is capped at that width and never
+reaches the true viewport edges once the viewport exceeds ~1200px. The
+hero has to match that, not bleed past it to 100vw the way §69 had it.
+
+**Fix:** moved `.hero-bg-desktop` from a sibling of `.wrap` (a full
+*section*-width background) to a child of `.wrap` (a background capped
+at `.wrap`'s own box — the same `.bg-img` pattern, just re-parented).
+Below 1200px viewport this looks identical to before (`.wrap` still
+fills the available width there, same as the header does), but past
+1200px the image now stops growing and sits in a centered box exactly
+matching where the header/footer/every-other-section's content lives.
+
+**This also permanently closes §70's aspect-ratio fight**, as a
+side-effect rather than the goal: since `.wrap`'s width is now hard-
+capped, `object-fit: cover` never has more than 1200px to crop against,
+no matter how wide the actual monitor is. `.hero`'s `min-height` formula
+changed from a bare `56vw` to `calc(min(100vw, 1200px) * 0.56)` so it's
+bounded the identical way — past 1200px viewport both the width
+reference and the resulting height simply stop changing.
+
+**Stacking order needed fixing** as a consequence of the move: the
+legibility vignette can't be a `.hero::after` pseudo-element anymore.
+Once the image lives inside `.wrap` alongside `.hero-grid`, a
+pseudo-element of `.hero` (generated *after* `.wrap` in the tree) would
+paint on top of the text rather than behind it, once both have
+`position` set. Moved to `.hero .wrap::after` with explicit z-index
+layering: image `0`, vignette `1`, `.hero-grid` `2`.
+
+Render-verified at mobile (untouched) / 960 / 1440 / 1757 / 2560px:
+below 1200px the image fills the viewport exactly like the header does
+at that width; above it, both freeze at the identical 1200px box,
+matching Harvey's annotated screenshot precisely.
