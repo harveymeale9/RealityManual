@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 780" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Placeholder — video poster frame">
+  <defs>
+    <linearGradient id="parch" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#b79a68"/>
+      <stop offset="0.55" stop-color="#8e754c"/>
+      <stop offset="1" stop-color="#5d4c30"/>
+    </linearGradient>
+    <radialGradient id="dark" cx="0.5" cy="0.5" r="0.75">
+      <stop offset="0" stop-color="#0f0c08" stop-opacity="0.3"/>
+      <stop offset="1" stop-color="#0b0906" stop-opacity="0.72"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="780" fill="url(#parch)"/>
+  <g stroke="#2a1f10" stroke-opacity="0.45" fill="none" stroke-width="1.6">
+    <circle cx="250" cy="250" r="130"/>
+    <circle cx="250" cy="250" r="86"/>
+    <path d="M120 250 H380 M250 120 V380"/>
+    <circle cx="930" cy="470" r="150"/>
+    <path d="M930 320 L1010 470 L930 620 L850 470 Z"/>
+    <path d="M140 640 H1060" stroke-opacity="0.25"/>
+    <path d="M140 680 H1060" stroke-opacity="0.25"/>
+  </g>
+  <rect width="1200" height="780" fill="url(#dark)"/>
+</svg>

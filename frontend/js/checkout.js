@@ -1,6 +1,6 @@
 (function () {
   const API_BASE_URL = window.RM_CONFIG.API_BASE_URL;
-  const BOOK_PRICE_CENTS = 3900;
+  const BOOK_PRICE_CENTS = 6500;
 
   const form = document.getElementById('checkout-form');
   const submitButton = document.getElementById('submit-button');
@@ -24,12 +24,19 @@
     amount: BOOK_PRICE_CENTS,
     currency: 'usd',
     appearance: {
+      theme: 'night',
       variables: {
-        colorPrimary: '#6b2e2e',
-        colorBackground: '#ffffff',
-        colorText: '#211d15',
-        fontFamily: 'Georgia, serif',
+        colorPrimary: '#c9a24d',
+        colorBackground: '#14100b',
+        colorText: '#ece4d5',
+        colorTextSecondary: '#a2957e',
+        colorDanger: '#e2685f',
+        fontFamily: 'Archivo, system-ui, sans-serif',
         borderRadius: '0px',
+      },
+      rules: {
+        '.Input': { border: '1px solid #2a2318', boxShadow: 'none' },
+        '.Input:focus': { border: '1px solid #c9a24d', boxShadow: 'none' },
       },
     },
   });

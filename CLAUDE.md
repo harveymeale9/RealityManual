@@ -15,13 +15,13 @@ The website (which you are to help build and maintain) is a custom single-produc
 
 ### Product
 
-**The Reality Manual, First Edition Premium Hardcover**
+**The Reality Manual, Hardcover — Deluxe First Edition**
 
 The product is a premium linen hardcover with a dust jacket.
 
 Retail price:
 
-**$59 USD**
+**$65 USD**
 
 Currency:
 
@@ -37,7 +37,8 @@ The website is intentionally simple and focuses on one objective:
 
 **Cost/pricing note (confirmed 2026-09-08):** fulfillment provider switched
 from Lulu to **BookVault**. Print cost is approximately £20 / $29 USD per
-unit. Retail price is $59 USD + server-calculated shipping. Harvey has
+unit. Retail price is $65 USD + server-calculated shipping (raised from $59
+on 2026-09-17, see section 63). Harvey has
 already uploaded print-ready files directly through BookVault's own
 interface (not yet via API) and a physical proof copy is on the way,
 expected within a few days.
@@ -93,7 +94,7 @@ There is one product:
 
 Edition:
 
-**First Edition Premium Hardcover**
+**Hardcover — Deluxe First Edition**
 
 Physical format:
 
@@ -101,7 +102,7 @@ Physical format:
 
 Price:
 
-**$59 USD**
+**$65 USD**
 
 Currency:
 
@@ -321,8 +322,8 @@ The primary CTA should lead to:
 The page should clearly communicate:
 
 - The Reality Manual
-- First Edition Premium Hardcover
-- $59 USD
+- Hardcover — Deluxe First Edition
+- $65 USD
 - Relevant product information
 - Clear purchase CTA
 
@@ -393,9 +394,9 @@ Display:
 
 **The Reality Manual**
 
-**First Edition Premium Hardcover**
+**Hardcover — Deluxe First Edition**
 
-**$59.00 USD**
+**$65.00 USD**
 
 The customer must provide all information required for BookVault fulfillment.
 
@@ -466,7 +467,7 @@ The browser may send a country selection, but the server must determine the corr
 The final order total is:
 
 
-$59.00 book price
+$65.00 book price
 +
 server-side shipping price
 =
@@ -539,7 +540,7 @@ Shipping rates should be editable through the Admin Dashboard.
 So after they input their country, the checkout should dynamically display:
 
 ```text
-The Reality Manual      $59.00
+The Reality Manual      $65.00
 Shipping                $XX.XX
 Total                   $XX.XX
 ```
@@ -1228,7 +1229,7 @@ Allow editing of:
 Default:
 
 ```text
-Book price: $59
+Book price: $65
 Currency: USD
 ```
 **honestly not necessary as this might require updating on Stripe side anyway. If i change the price i'll just let you know.
@@ -1820,3 +1821,54 @@ Harvey is back from Samui (left 2026-09-09, back roughly a week later) and
 has API credentials to supply — see the Settings tab's API keys section for
 where those go. Keep it lightweight, consistent with this project's general
 philosophy of avoiding unnecessary complexity.
+
+---
+
+# 63. Landing Page Redesign (2026-09-17)
+
+The storefront was rebuilt from Harvey's desktop + mobile design mockups.
+Still plain HTML/CSS/JS, no build step, no framework — one stylesheet
+(`frontend/css/style.css`) shared by all three public pages.
+
+**Price is now $65 USD** (was $59 in this file, $39 in code — both were
+stale/inconsistent). Updated in:
+`backend/src/config.js` (`site.bookPriceCents: 6500` — the authoritative
+value), `frontend/js/checkout.js` (`BOOK_PRICE_CENTS`, used only to
+initialise Stripe Elements before a country is chosen), and the static
+display copy on the landing + checkout pages. The server still calculates
+the real total; frontend numbers are display-only.
+
+**Product naming:** "Hardcover — Deluxe First Edition". One edition only —
+the mockup's three-tier selector (hardcover/paperback/digital) was
+deliberately collapsed to a single card, per Harvey.
+
+**Landing page structure** (`frontend/index.html`, top to bottom): sticky
+header (wordmark, About, FAQ, Get Your Copy) → hero (eyebrow, H1, tagline,
+body, book image, 3 trust icons, pull-quote) → offer band (video card +
+edition selector side by side) → four "why this book" features → "Inside
+the book" page strip + testimonial → FAQ accordion (`<details>`, no JS) →
+closing CTA band with flanking quotes → footer.
+
+**Image placeholders** live in `frontend/img/placeholder/` as hand-written
+SVGs and are marked in the HTML with `<!-- IMAGE SLOT: ... -->` comments.
+Replacing artwork = dropping a real file in and changing the `src`; no CSS
+changes needed. Slots: `hero-bg` (hero photograph), `book-hero` (the book),
+`video-poster`, `page-1..4` (interior pages), `edition-thumb`, `cta-bg`.
+The old `frontend/img/product/*.svg` gallery placeholders are no longer
+referenced by any page but are left in place.
+
+**Video:** the play button is wired but inert until `VIDEO_EMBED_URL` is
+set in the inline script at the bottom of `index.html`. Set it to a
+YouTube/Vimeo embed URL or a local `.mp4`/`.webm` and the poster swaps for
+a real player on click.
+
+**Copy status:** all headline/feature/FAQ copy comes from the mockups and
+is live on the site — it is not marked as placeholder. Two things to
+confirm: "The 14 Rules" (is 14 the real number?) and the FAQ shipping
+estimate, which is hardcoded as `7–14 days` inside a
+`<span data-setting="delivery-estimate">` so it can be wired to the
+admin-editable delivery estimate later (section 24).
+
+**Type:** display serif is now Cormorant Garamond (was Fraunces); UI sans
+stays Archivo. Stripe Elements now uses the `night` appearance theme so
+checkout matches the dark site instead of rendering as a white block.

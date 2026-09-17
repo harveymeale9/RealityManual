@@ -4,125 +4,390 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="dark" />
-  <title>The Reality Manual — First Edition Premium Hardcover</title>
-  <meta name="description" content="The Reality Manual, First Edition Premium Hardcover. A premium linen hardcover with dust jacket." />
+  <title>The Reality Manual — A Strategy Manual for the Game of Life</title>
+  <meta name="description" content="The Reality Manual. A single edition, printed once and bound to last — a complete framework for constructing the most effective life strategy possible. Premium hardcover, $65, ships worldwide." />
   <link rel="canonical" href="https://realitymanual.com/" />
-  <meta property="og:title" content="The Reality Manual — First Edition Premium Hardcover" />
-  <meta property="og:description" content="A premium linen hardcover with dust jacket." />
+  <meta property="og:title" content="The Reality Manual — A Strategy Manual for the Game of Life" />
+  <meta property="og:description" content="The objective. The rules. A better life. First edition premium hardcover." />
   <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://realitymanual.com/" />
+  <!-- TODO: replace with a real 1200x630 social image once artwork exists -->
+  <meta property="og:image" content="https://realitymanual.com/img/placeholder/hero-bg.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;1,400&family=Archivo:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Archivo:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
+
+  <header class="site-header">
+    <div class="site-header__inner">
+      <a class="wordmark" href="index.html">The Reality Manual</a>
+
+      <button class="nav-toggle" id="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" aria-label="Menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <path d="M3 6h18M3 12h18M3 18h18" />
+        </svg>
+      </button>
+
+      <nav class="site-nav" id="site-nav">
+        <a href="#about">About</a>
+        <a href="#faq">FAQ</a>
+        <a class="btn btn--nav" href="checkout.html" data-cta="nav">Get Your Copy</a>
+      </nav>
+    </div>
+  </header>
+
   <main>
-    <!-- HERO -->
+
+    <!-- ============================================================ HERO -->
     <section class="hero">
-      <div class="hero-grid">
-        <div class="hero-copy">
-          <div class="kicker">First Edition &middot; Premium Hardcover</div>
-          <h1>The Reality Manual</h1>
-          <p class="lede">A single edition, printed once and bound to last.</p>
-          <p class="hero-body">
-            [Placeholder — replace with final marketing copy.] Black linen
-            cloth, a spine stamped in genuine gold foil, wrapped in a jacket
-            that won't fade. Sold directly, in one edition &mdash; made to be
-            read, not shelved.
-          </p>
-          <a class="btn" href="checkout.html">Get Your Copy</a>
-          <p class="secure-note">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.6"/><path d="M8 11V7a4 4 0 0 1 8 0v4" stroke="currentColor" stroke-width="1.6"/></svg>
-            Secure checkout powered by Stripe
-          </p>
-          <div class="trust-row">
-            <span>Encrypted payment</span>
-            <span>Ships worldwide</span>
+      <!-- IMAGE SLOT: hero photograph -->
+      <img class="bg-img" src="img/placeholder/hero-bg.svg" alt="" aria-hidden="true" />
+
+      <div class="wrap">
+        <div class="hero-grid">
+
+          <div class="hero-copy">
+            <p class="eyebrow">A Strategy Manual for the Game of Life</p>
+            <h1>The Reality Manual</h1>
+            <p class="tagline">The objective. The rules. A better life.</p>
+            <p class="hero-body">
+              A single edition, printed once and bound to last. A comprehensive
+              framework for constructing the most effective life strategy
+              possible.
+            </p>
           </div>
+
+          <!-- IMAGE SLOT: the book itself -->
+          <div class="hero-book">
+            <img src="img/placeholder/book-hero.svg" alt="The Reality Manual, first edition hardcover" width="520" height="700" />
+          </div>
+
+          <div class="hero-trust">
+            <div class="trust-item">
+              <svg viewBox="0 0 24 24" aria-hidden="true" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5z" />
+                <path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5z" />
+              </svg>
+              <span>Premium<br />Hardcover</span>
+            </div>
+            <div class="trust-item">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="8.5" />
+                <path d="M3.5 12h17M12 3.5c2.5 2.6 2.5 14.4 0 17M12 3.5c-2.5 2.6-2.5 14.4 0 17" />
+              </svg>
+              <span>Ships<br />Worldwide</span>
+            </div>
+            <div class="trust-item">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="5" y="10.5" width="14" height="9.5" rx="1.5" />
+                <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" />
+              </svg>
+              <span>Secure<br />Checkout</span>
+            </div>
+          </div>
+
+          <blockquote class="hero-quote">
+            "Reality exhibits the defining characteristics of a game which is
+            solvable. An optimal strategy exists and has been identified."
+          </blockquote>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================== OFFER -->
+    <section class="offer" id="order">
+      <div class="wrap">
+        <div class="offer-grid">
+
+          <!-- video -->
+          <div class="video-card" id="video-card">
+            <!-- IMAGE SLOT: video poster frame -->
+            <img class="bg-img" src="img/placeholder/video-poster.svg" alt="" aria-hidden="true" />
+            <div class="video-inner">
+              <p class="eyebrow">Watch the Video</p>
+              <h2>What is The Reality Manual?</h2>
+              <button class="play-btn" id="play-btn" type="button" aria-label="Play the video">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l12 7-12 7z" /></svg>
+              </button>
+              <p class="video-duration">1–2 Minutes</p>
+            </div>
+          </div>
+
+          <!-- edition selector -->
+          <div class="edition-panel">
+            <p class="panel-label">Choose Your Edition</p>
+
+            <div class="edition">
+              <!-- IMAGE SLOT: edition thumbnail -->
+              <img class="edition-thumb" src="img/placeholder/edition-thumb.svg" alt="" aria-hidden="true" />
+              <div>
+                <p class="edition-name">Hardcover</p>
+                <p class="edition-desc">
+                  Deluxe first edition.<br />
+                  Premium cloth, gold foil.
+                </p>
+              </div>
+              <div class="edition-price">$65</div>
+            </div>
+
+            <p class="edition-note">One edition. Shipping calculated at checkout.</p>
+
+            <a class="btn btn--block" href="checkout.html" data-cta="edition-panel">Continue to Checkout →</a>
+
+            <div class="assurance">
+              <div>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                  <rect x="5" y="11" width="14" height="9" rx="1.5" /><path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                </svg>
+                Secure checkout powered by Stripe
+              </div>
+              <div>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                  <path d="M12 3l7 3v5.5c0 4.2-2.9 7.7-7 9-4.1-1.3-7-4.8-7-9V6z" />
+                </svg>
+                Encrypted payment &nbsp;·&nbsp; Ships worldwide
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= WHY -->
+    <section class="why" id="about">
+      <div class="wrap">
+        <p class="section-label">Why This Book</p>
+        <div class="why-grid">
+
+          <div class="why-item">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+            </svg>
+            <div>
+              <h3>The Objective</h3>
+              <p>Discover the true objective of the game of life.</p>
+            </div>
+          </div>
+
+          <div class="why-item">
+            <svg viewBox="0 0 24 24" aria-hidden="true" stroke-linecap="round">
+              <path d="M6 3h12v18H6z" /><path d="M9 8h6M9 12h6M9 16h4" />
+            </svg>
+            <div>
+              <h3>The 14 Rules</h3>
+              <p>A complete framework for life strategy.</p>
+            </div>
+          </div>
+
+          <div class="why-item">
+            <svg viewBox="0 0 24 24" aria-hidden="true" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 5.5c-1.8-1.8-5.2-1-5.6 1.7-1.9.7-2.2 3.3-.6 4.4-.8 2 .8 4.2 3 4.1.6 1.8 3 2.3 4.2.9" />
+              <path d="M12 5.5c1.8-1.8 5.2-1 5.6 1.7 1.9.7 2.2 3.3.6 4.4.8 2-.8 4.2-3 4.1-.6 1.8-3 2.3-4.2.9" />
+              <path d="M12 5.5V20" />
+            </svg>
+            <div>
+              <h3>A Clearer Mind</h3>
+              <p>See reality through a new lens.</p>
+            </div>
+          </div>
+
+          <div class="why-item">
+            <svg viewBox="0 0 24 24" aria-hidden="true" stroke-linejoin="round">
+              <path d="M2.5 19l6-11 4 6.5 2.5-4 6.5 8.5z" /><path d="M2.5 19h19" />
+            </svg>
+            <div>
+              <h3>A Better Life</h3>
+              <p>Make better decisions. Experience greater well-being.</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================== INSIDE THE BOOK -->
+    <section class="inside">
+      <div class="wrap">
+        <div class="inside-head">
+          <p class="section-label">Inside the Book</p>
+          <p class="inside-sub">A look at the content, without giving it all away.</p>
         </div>
 
-        <div class="hero-gallery">
-          <div class="stage">
-            <img id="gallery-main-img" src="img/product/front-cover.svg" alt="The Reality Manual — Front Cover" />
-          </div>
-          <p class="stage-caption" id="stage-caption">Front Cover</p>
-          <div class="thumbs" id="thumbs">
-            <button type="button" class="thumb is-active" data-full="img/product/front-cover.svg" data-caption="Front Cover" aria-pressed="true" aria-label="Front cover">
-              <img src="img/product/front-cover.svg" alt="" />
-            </button>
-            <button type="button" class="thumb" data-full="img/product/spine.svg" data-caption="Spine — Gold Foil" aria-pressed="false" aria-label="Spine">
-              <img src="img/product/spine.svg" alt="" />
-            </button>
-            <button type="button" class="thumb" data-full="img/product/back-cover.svg" data-caption="Back Cover" aria-pressed="false" aria-label="Back cover">
-              <img src="img/product/back-cover.svg" alt="" />
-            </button>
-            <button type="button" class="thumb" data-full="img/product/jacket-detail.svg" data-caption="Jacket Detail" aria-pressed="false" aria-label="Jacket detail">
-              <img src="img/product/jacket-detail.svg" alt="" />
-            </button>
-            <button type="button" class="thumb" data-full="img/product/full-set.svg" data-caption="Full Set" aria-pressed="false" aria-label="Full set">
-              <img src="img/product/full-set.svg" alt="" />
-            </button>
+        <div class="inside-grid">
+          <!-- IMAGE SLOTS: interior page photographs -->
+          <figure class="page-card">
+            <img src="img/placeholder/page-1.svg" alt="Interior page — core principles" />
+            <figcaption>Core Principles</figcaption>
+          </figure>
+          <figure class="page-card">
+            <img src="img/placeholder/page-2.svg" alt="Interior page — original diagrams" />
+            <figcaption>Original Diagrams</figcaption>
+          </figure>
+          <figure class="page-card">
+            <img src="img/placeholder/page-3.svg" alt="Interior page — practical application" />
+            <figcaption>Practical Application</figcaption>
+          </figure>
+          <figure class="page-card">
+            <img src="img/placeholder/page-4.svg" alt="Interior page — typography and design" />
+            <figcaption>Beautifully Designed</figcaption>
+          </figure>
+
+          <div class="testimonial">
+            <p>"A rare combination of depth, clarity, and practical value."</p>
+            <div class="stars" aria-label="Five out of five stars">★★★★★</div>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- WHY THIS BOOK -->
-    <section class="why">
-      <div class="why-inner">
-        <div class="why-eyebrow">Why This Book</div>
-        <h2>Most people are operating on assumptions they never chose.</h2>
-        <p>
-          [Placeholder — replace with final narrative copy.] You've absorbed
-          a working model of how reality functions &mdash; inherited from
-          school, media, and people who never examined their own. It wasn't
-          built for you, and it wasn't built to be questioned.
-        </p>
-        <p>
-          The Reality Manual is a direct, structured examination of how
-          perception, belief, and reality actually interact &mdash; written
-          to be read once, then returned to for the rest of your life.
-        </p>
+    <!-- ============================================================= FAQ -->
+    <section class="faq" id="faq">
+      <div class="wrap">
+        <p class="section-label">Frequently Asked Questions</p>
+
+        <div class="faq-grid">
+          <details class="faq-item">
+            <summary>How long does shipping take?</summary>
+            <p class="faq-answer">
+              Each copy is printed and bound to order, then dispatched from the
+              press nearest you. Most orders arrive within
+              <span data-setting="delivery-estimate">7–14 days</span>, depending
+              on destination. You'll see your exact shipping cost at checkout.
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary>What is your return policy?</summary>
+            <p class="faq-answer">
+              If your copy arrives damaged or misprinted, email us and we'll send
+              a replacement at no cost. Because every book is printed to order,
+              we don't accept change-of-mind returns.
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary>Do you ship to my country?</summary>
+            <p class="faq-answer">
+              We ship worldwide. Select your country at checkout and the exact
+              shipping cost is calculated before you pay — no surprises, no
+              customs handling fees added by us.
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary>Will there be a second edition?</summary>
+            <p class="faq-answer">
+              This is the first edition, printed as a single deluxe run. Any
+              future edition would be a distinct printing — the first edition
+              will not be reproduced in this form.
+            </p>
+          </details>
+        </div>
       </div>
     </section>
 
-    <!-- CLOSING CTA -->
-    <section class="closing-cta">
-      <div class="kicker">The Reality Manual &middot; First Edition</div>
-      <h2>Own the first edition.</h2>
-      <a class="btn" href="checkout.html">Get Your Copy</a>
-      <p class="secure-note">
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.6"/><path d="M8 11V7a4 4 0 0 1 8 0v4" stroke="currentColor" stroke-width="1.6"/></svg>
-        Secure checkout powered by Stripe
-      </p>
+    <!-- ======================================================= FINAL CTA -->
+    <section class="final-cta">
+      <!-- IMAGE SLOT: closing photograph -->
+      <img class="bg-img" src="img/placeholder/cta-bg.svg" alt="" aria-hidden="true" />
+
+      <div class="wrap">
+        <div class="final-grid">
+
+          <blockquote class="final-quote">
+            "Not a self-help book.<br />A strategy manual."
+          </blockquote>
+
+          <div class="final-main">
+            <p class="eyebrow">There is a better way to play</p>
+            <h2>Get Your Copy Now</h2>
+            <a class="btn btn--lg" href="checkout.html" data-cta="final">Continue to Checkout →</a>
+            <div class="assurance">
+              <div>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                  <rect x="5" y="11" width="14" height="9" rx="1.5" /><path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                </svg>
+                Secure checkout powered by Stripe &nbsp;·&nbsp; Encrypted payment &nbsp;·&nbsp; Ships worldwide
+              </div>
+            </div>
+          </div>
+
+          <blockquote class="final-quote">
+            "Understand the game.<br />Play it better."
+          </blockquote>
+
+        </div>
+      </div>
     </section>
+
   </main>
 
   <footer>
     &copy; <span id="year"></span> The Reality Manual. All rights reserved.
   </footer>
 
-  <div class="mobile-cta-bar">
-    <a class="btn" href="checkout.html">Get Your Copy</a>
-  </div>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Book",
+    "name": "The Reality Manual",
+    "bookFormat": "https://schema.org/Hardcover",
+    "bookEdition": "First Edition",
+    "inLanguage": "en",
+    "description": "A strategy manual for the game of life. A comprehensive framework for constructing the most effective life strategy possible.",
+    "url": "https://realitymanual.com/",
+    "offers": {
+      "@type": "Offer",
+      "price": "65.00",
+      "priceCurrency": "USD",
+      "availability": "https://schema.org/InStock",
+      "url": "https://realitymanual.com/checkout.html"
+    }
+  }
+  </script>
 
   <script>
     document.getElementById('year').textContent = new Date().getFullYear();
 
-    var mainImg = document.getElementById('gallery-main-img');
-    var caption = document.getElementById('stage-caption');
-    document.querySelectorAll('.thumb').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        document.querySelectorAll('.thumb').forEach(function (b) {
-          b.classList.remove('is-active');
-          b.setAttribute('aria-pressed', 'false');
-        });
-        btn.classList.add('is-active');
-        btn.setAttribute('aria-pressed', 'true');
-        mainImg.src = btn.dataset.full;
-        mainImg.alt = 'The Reality Manual — ' + btn.dataset.caption;
-        caption.textContent = btn.dataset.caption;
-      });
+    // Mobile menu
+    var navToggle = document.getElementById('nav-toggle');
+    var siteNav = document.getElementById('site-nav');
+    navToggle.addEventListener('click', function () {
+      var open = siteNav.classList.toggle('is-open');
+      navToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    siteNav.addEventListener('click', function (e) {
+      if (e.target.tagName === 'A') {
+        siteNav.classList.remove('is-open');
+        navToggle.setAttribute('aria-expanded', 'false');
+      }
+    });
+
+    // Video: set VIDEO_EMBED_URL to a YouTube/Vimeo embed URL (or a local .mp4)
+    // and the play button swaps the poster for the real player.
+    var VIDEO_EMBED_URL = '';
+    document.getElementById('play-btn').addEventListener('click', function () {
+      if (!VIDEO_EMBED_URL) return;
+      var card = document.getElementById('video-card');
+      var frame;
+      if (/\.(mp4|webm)$/i.test(VIDEO_EMBED_URL)) {
+        frame = document.createElement('video');
+        frame.src = VIDEO_EMBED_URL;
+        frame.controls = true;
+        frame.autoplay = true;
+        frame.playsInline = true;
+      } else {
+        frame = document.createElement('iframe');
+        frame.src = VIDEO_EMBED_URL + (VIDEO_EMBED_URL.indexOf('?') > -1 ? '&' : '?') + 'autoplay=1';
+        frame.allow = 'autoplay; encrypted-media; picture-in-picture';
+        frame.allowFullscreen = true;
+        frame.title = 'What is The Reality Manual?';
+      }
+      card.appendChild(frame);
     });
   </script>
 </body>

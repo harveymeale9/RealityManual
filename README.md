@@ -1,7 +1,7 @@
 # The Reality Manual
 
-Custom single-product ecommerce site for **The Reality Manual** (First
-Edition Premium Hardcover, $39 USD) — realitymanual.com.
+Custom single-product ecommerce site for **The Reality Manual** (Hardcover,
+Deluxe First Edition, $65 USD) — realitymanual.com.
 
 Full project scope and product/engineering requirements live in
 [`CLAUDE.md`](./CLAUDE.md).

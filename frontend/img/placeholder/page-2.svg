@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 560" role="img" aria-label="Placeholder — interior page, original diagrams">
+  <defs>
+    <linearGradient id="p2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#eee1c2"/>
+      <stop offset="1" stop-color="#d4c299"/>
+    </linearGradient>
+  </defs>
+  <rect width="420" height="560" fill="url(#p2)"/>
+  <text x="210" y="60" text-anchor="middle" font-family="Georgia, serif" font-size="17" fill="#3a2d18" fill-opacity="0.7" letter-spacing="2">THE MIND</text>
+  <g stroke="#3a2d18" stroke-opacity="0.55" fill="none" stroke-width="1.4">
+    <path d="M150 300 c-40 0 -62 -28 -58 -58 c-22 -22 -10 -58 18 -66 c4 -30 42 -44 66 -28 c26 -18 66 -2 68 30 c30 6 40 44 18 64 c6 32 -20 58 -54 58 z"/>
+    <path d="M186 152 V300" stroke-opacity="0.4"/>
+    <path d="M186 190 c-22 6 -30 26 -18 40 M186 232 c24 4 34 26 22 42" stroke-opacity="0.4"/>
+    <circle cx="300" cy="212" r="46" stroke-opacity="0.35"/>
+    <path d="M300 166 V258 M254 212 H346" stroke-opacity="0.3"/>
+  </g>
+  <g stroke="#3a2d18" stroke-opacity="0.3" stroke-width="5" stroke-linecap="round">
+    <path d="M70 372 H350"/><path d="M70 400 H350"/><path d="M70 428 H300"/>
+    <path d="M70 470 H350"/><path d="M70 498 H250"/>
+  </g>
+</svg>

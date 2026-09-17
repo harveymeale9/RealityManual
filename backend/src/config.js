@@ -28,8 +28,8 @@ module.exports = {
   // for now this is the single source of truth for price/currency.
   site: {
     productName: 'The Reality Manual',
-    productDescription: 'First Edition Premium Hardcover',
-    bookPriceCents: 3900,
+    productDescription: 'Hardcover — Deluxe First Edition',
+    bookPriceCents: 6500,
     currency: 'usd',
   },
 };
