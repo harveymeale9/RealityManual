@@ -6,15 +6,26 @@
   const submitButton = document.getElementById('submit-button');
   const errorBanner = document.getElementById('form-error-banner');
   const countrySelect = document.getElementById('country_code');
+  const postalInput = document.getElementById('postal_code');
   const summaryShipping = document.getElementById('summary-shipping');
   const summaryTotal = document.getElementById('summary-total');
+  const summaryHint = document.getElementById('summary-hint');
 
   const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const PHONE_REGEX = /^\+?[\d\s\-.()/]{8,20}$/;
-  const NAME_MAX = 30;
-  const STREET_MAX = 30;
+  const PHONE_REGEX = /^\+?[\d\s\-.()/]{6,35}$/;
+  // Field limits mirror BookVault's OrderAddress schema — see
+  // backend/src/lib/validation.js and CLAUDE.md §64 for the source.
+  const NAME_MAX = 200;
+  const STREET1_MAX = 200;
+  const STREET2_MAX = 250;
+  const CITY_MAX = 99;
+  const STATE_MAX = 200;
+  const POSTAL_MAX = 99;
+  const PHONE_MAX = 35;
 
   let currentTotalCents = BOOK_PRICE_CENTS;
+  let shippingRequestSeq = 0;
+  let postalDebounceTimer = null;
 
   populateCountrySelect();
 
@@ -64,32 +75,52 @@
     countrySelect.appendChild(priorityGroup);
     countrySelect.appendChild(otherGroup);
 
-    countrySelect.addEventListener('change', onCountryChange);
+    countrySelect.addEventListener('change', updateShipping);
+
+    // Shipping is quoted live against BookVault for the exact country +
+    // postcode (see backend/src/services/bookvaultService.js), so a
+    // postcode edit needs to re-trigger it too, not just a country change.
+    // Debounced so we're not firing a request per keystroke.
+    postalInput.addEventListener('input', () => {
+      clearTimeout(postalDebounceTimer);
+      postalDebounceTimer = setTimeout(updateShipping, 500);
+    });
   }
 
-  async function onCountryChange() {
+  async function updateShipping() {
     const countryCode = countrySelect.value;
-    if (!countryCode) return;
+    const postalCode = postalInput.value.trim();
+    if (!countryCode || !postalCode) return;
+
+    const requestId = ++shippingRequestSeq;
+    summaryShipping.textContent = 'Calculating…';
+    summaryTotal.textContent = '—';
 
     try {
       const res = await fetch(`${API_BASE_URL}/api/shipping/calculate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ country_code: countryCode }),
+        body: JSON.stringify({ country_code: countryCode, postal_code: postalCode }),
       });
       if (!res.ok) throw new Error('shipping_unavailable');
       const data = await res.json();
 
+      // A slower request that resolves after a newer one has already
+      // landed would otherwise clobber it with stale numbers.
+      if (requestId !== shippingRequestSeq) return;
+
       currentTotalCents = data.total_price_cents;
       summaryShipping.textContent = formatCents(data.shipping_price_cents);
       summaryTotal.textContent = formatCents(data.total_price_cents);
+      summaryHint.style.display = 'none';
       submitButton.textContent = `Pay ${formatCents(data.total_price_cents)}`;
 
       elements.update({ amount: currentTotalCents });
     } catch (err) {
+      if (requestId !== shippingRequestSeq) return;
       summaryShipping.textContent = 'Unavailable';
       summaryTotal.textContent = '—';
-      showFormError('We could not calculate shipping for that country. Please try again.');
+      showFormError('We could not calculate shipping for that address. Please check the country and postal code.');
     }
   }
 
@@ -130,18 +161,24 @@
 
     if (!EMAIL_REGEX.test(values.email.trim())) errors.email = 'A valid email address is required.';
 
-    if (!PHONE_REGEX.test(values.phone.trim())) errors.phone = 'A valid phone number is required.';
+    if (!PHONE_REGEX.test(values.phone.trim()) || values.phone.trim().length > PHONE_MAX) {
+      errors.phone = 'A valid phone number is required.';
+    }
 
     if (!values.country_code) errors.country_code = 'Please select a country.';
 
     if (!values.street1.trim()) errors.street1 = 'Street address is required.';
-    else if (values.street1.length > STREET_MAX) errors.street1 = `Must be ${STREET_MAX} characters or fewer.`;
+    else if (values.street1.length > STREET1_MAX) errors.street1 = `Must be ${STREET1_MAX} characters or fewer.`;
 
-    if (values.street2 && values.street2.length > STREET_MAX) errors.street2 = `Must be ${STREET_MAX} characters or fewer.`;
+    if (values.street2 && values.street2.length > STREET2_MAX) errors.street2 = `Must be ${STREET2_MAX} characters or fewer.`;
 
     if (!values.city.trim()) errors.city = 'City is required.';
+    else if (values.city.length > CITY_MAX) errors.city = `Must be ${CITY_MAX} characters or fewer.`;
+
+    if (values.state && values.state.length > STATE_MAX) errors.state = `Must be ${STATE_MAX} characters or fewer.`;
 
     if (!values.postal_code.trim()) errors.postal_code = 'Postal/ZIP code is required.';
+    else if (values.postal_code.length > POSTAL_MAX) errors.postal_code = `Must be ${POSTAL_MAX} characters or fewer.`;
 
     return errors;
   }

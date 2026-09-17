@@ -17,11 +17,15 @@ module.exports = {
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
   },
 
-  lulu: {
-    clientId: process.env.LULU_CLIENT_ID || '',
-    clientSecret: process.env.LULU_CLIENT_SECRET || '',
-    apiBaseUrl: process.env.LULU_API_BASE_URL || 'https://api.sandbox.lulu.com',
-    podPackageId: process.env.LULU_POD_PACKAGE_ID || '',
+  // BookVault has no sandbox — this hits their live API even in development.
+  // See CLAUDE.md §26/§64. Never expose bookvault.apiKey to the frontend.
+  bookvault: {
+    apiKey: process.env.BOOKVAULT_API_KEY || '',
+    apiBaseUrl: process.env.BOOKVAULT_API_BASE_URL || 'https://api.bookvault.app/v3',
+    // The 13-digit ISBN BookVault assigned to the print-ready title in their
+    // library. Required on every OrderLine (shipping quotes and real orders
+    // alike) — see CLAUDE.md §64.
+    titleIsbn: process.env.BOOKVAULT_TITLE_ISBN || '',
   },
 
   // Product/site settings. Admin-editable site settings land in a later phase —

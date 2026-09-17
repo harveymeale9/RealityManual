@@ -16,10 +16,11 @@ router.post('/create-payment-intent', async (req, res) => {
   }
 
   const countryCode = body.country_code.trim().toUpperCase();
+  const postalCode = body.postal_code.trim();
 
   let totals;
   try {
-    totals = shippingService.calculateTotal(countryCode);
+    totals = await shippingService.calculateTotal(countryCode, postalCode);
   } catch (err) {
     errorLogService.logError({
       service: 'backend',

@@ -4,9 +4,11 @@ Node/Express API for realitymanual.com: shipping calculation, Stripe
 PaymentIntents, order storage, Stripe webhook handling. SQLite (via
 `better-sqlite3`) is the database — a single file, no server to run.
 
-**Phase status:** this is Phase 1 (core paid flow). Lulu fulfillment,
-first-party analytics, SEO admin, refunds, and the `/admin-dashboard` are
-not built yet — see the "Deferred" note at the bottom.
+**Phase status:** this is Phase 1 (core paid flow), now with live BookVault
+shipping quotes wired into checkout (see CLAUDE.md §64). BookVault order
+submission/fulfillment, first-party analytics, SEO admin, refunds, and the
+`/admin-dashboard` are not built yet — see the "Deferred" note at the
+bottom.
 
 ## Setup
 
@@ -24,7 +26,9 @@ Edit `.env`:
 - `CORS_ORIGIN` — the origin serving `/frontend` locally (e.g.
   `http://localhost:5500` for VS Code Live Server, or whatever
   `npx serve frontend` prints).
-- `LULU_*` — leave blank for now; unused until the fulfillment phase.
+- `BOOKVAULT_API_KEY` / `BOOKVAULT_TITLE_ISBN` — required for live shipping
+  quotes to work (see below). BookVault has no sandbox, so this hits their
+  live API even locally — see CLAUDE.md §26/§64.
 
 ## Database
 
@@ -41,9 +45,12 @@ This creates `backend/data/reality-manual.db`. It's gitignored — don't
 commit it.
 
 **Shipping rates are seeded with a flat $9.99 placeholder for every
-country** (see `src/db/seedShippingRates.js`) purely so checkout is
-testable end-to-end. These are not real Lulu-derived rates — update the
-`shipping_rates` table with real values before going live:
+country** (see `src/db/seedShippingRates.js`), but that table is now only
+a *fallback* — `shippingService.calculateTotal()` calls BookVault's live
+`POST /Dispatch` endpoint first for a real quote against the exact
+country + postcode entered, and only drops to this static table (logging
+an `error_logs` row) if that call fails. Update it with a sane real-world
+number per country anyway, in case BookVault is ever unreachable:
 
 ```bash
 sqlite3 backend/data/reality-manual.db \
@@ -94,11 +101,13 @@ To test a declined payment, use test card `4000 0000 0000 0002`.
 
 ## API surface (this phase)
 
-- `POST /api/shipping/calculate` — `{ country_code }` → server-calculated
-  book price / shipping / total (cents). The browser never sets these.
+- `POST /api/shipping/calculate` — `{ country_code, postal_code }` →
+  server-calculated book price / shipping / total (cents), backed by a
+  live BookVault shipping quote. The browser never sets these.
 - `POST /api/checkout/create-payment-intent` — validates the full shipping
-  form (including Lulu's 30-character name/street limits), creates the
-  order row, creates a Stripe PaymentIntent, returns `client_secret`.
+  form (against BookVault's real OrderAddress field limits — see
+  `src/lib/validation.js`), creates the order row, creates a Stripe
+  PaymentIntent, returns `client_secret`.
 - `POST /api/webhooks/stripe` — Stripe-signed webhook, handles
   `payment_intent.succeeded` / `payment_intent.payment_failed`
   idempotently.
@@ -113,12 +122,12 @@ PAYMENT_RECEIVED  Stripe webhook confirmed payment_intent.succeeded
 FAILED            Stripe webhook reported payment_intent.payment_failed
 ```
 
-`LULU_PENDING`, `COMPLETE`, and `REFUNDED` are added when the Lulu
-integration phase starts — the `orders` table already has the
-`lulu_order_id` column reserved so no migration will be needed then.
+`BOOKVAULT_PENDING`, `COMPLETE`, and `REFUNDED` are added when BookVault
+order submission is built — the `orders` table already has the
+`bookvault_order_id` column reserved so no migration will be needed then.
 
 ## Deferred to later phases
 
-Lulu print job submission + webhook, first-party analytics
-ingestion/reporting, SEO admin, `/admin-dashboard` (auth, orders view,
-shipping editor, site settings, error log viewer), Stripe refunds.
+BookVault order submission + fulfillment confirmation, first-party
+analytics ingestion/reporting, SEO admin, `/admin-dashboard` (auth, orders
+view, shipping editor, site settings, error log viewer), Stripe refunds.

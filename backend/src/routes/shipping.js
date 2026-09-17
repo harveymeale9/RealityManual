@@ -4,15 +4,20 @@ const errorLogService = require('../services/errorLogService');
 
 const router = express.Router();
 
-router.post('/calculate', (req, res) => {
+router.post('/calculate', async (req, res) => {
   const countryCode = String(req.body?.country_code || '').trim().toUpperCase();
+  const postalCode = String(req.body?.postal_code || '').trim();
 
   if (!/^[A-Z]{2}$/.test(countryCode)) {
     return res.status(400).json({ error: 'invalid_country_code', message: 'Please select a valid country.' });
   }
 
+  if (!postalCode) {
+    return res.status(400).json({ error: 'invalid_postal_code', message: 'Please enter a postal/ZIP code.' });
+  }
+
   try {
-    const totals = shippingService.calculateTotal(countryCode);
+    const totals = await shippingService.calculateTotal(countryCode, postalCode);
     res.json({
       book_price_cents: totals.bookPriceCents,
       shipping_price_cents: totals.shippingPriceCents,

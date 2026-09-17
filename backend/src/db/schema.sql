@@ -18,9 +18,10 @@ CREATE TABLE IF NOT EXISTS orders (
   shipping_price_cents      INTEGER NOT NULL,
   total_price_cents         INTEGER NOT NULL,
   currency                  TEXT NOT NULL DEFAULT 'usd',
-  -- lulu_order_id / fulfillment fields are unused until the Lulu integration phase,
-  -- included now so no schema migration is needed when that phase starts.
-  lulu_order_id             TEXT,
+  -- BookVault's PodRef for this order (see CLAUDE.md §25-28/§64). Unused
+  -- until order submission is built — included now so no migration is
+  -- needed when that phase starts.
+  bookvault_order_id       TEXT,
   order_status               TEXT NOT NULL DEFAULT 'PAYMENT_PENDING',
   created_at                 TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   updated_at                 TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))

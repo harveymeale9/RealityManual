@@ -6,7 +6,7 @@ const insertStmt = db.prepare(`
   VALUES (@id, @order_id, @service, @error_type, @error_message, @request_reference, @attempt_number)
 `);
 
-// service: 'stripe' | 'lulu' | 'refund' | 'database' | 'backend'
+// service: 'stripe' | 'bookvault' | 'refund' | 'database' | 'backend'
 function logError({ orderId = null, service, errorType, errorMessage, requestReference = null, attemptNumber = 1 }) {
   console.error(`[${service}] ${errorType}: ${errorMessage}`);
 

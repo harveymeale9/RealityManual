@@ -811,28 +811,21 @@ customers.
 
 Use environment variables.
 
-Required configuration should include (exact names to be confirmed against
-BookVault's docs before implementation):
+Required configuration (confirmed against BookVault's real OpenAPI spec —
+see §64):
 
 ```text
 BOOKVAULT_API_KEY
-BOOKVAULT_API_BASE_URL
-BOOKVAULT_PRODUCT_ID
+BOOKVAULT_API_BASE_URL   = https://api.bookvault.app/v3
+BOOKVAULT_TITLE_ISBN     = 9658364000016
 ```
 
-The BookVault product/package identifier will be supplied later, once
-confirmed against Harvey's uploaded print-ready files.
-
-Do not invent it.
-
-**Status (2026-09-08):** Harvey has uploaded print-ready interior/cover files
-directly through BookVault's own interface and a physical proof copy is on
-the way (expected within a few days). No BookVault API credentials are
-configured in `backend/.env` yet. All prior Lulu configuration (client
-ID/secret, POD package ID, sandbox setup) has been abandoned — Lulu is no
-longer part of this project. Actual API integration work starts once Harvey
-is back from a trip to Samui (leaving 2026-09-09, back roughly one week
-later) and BookVault credentials/product ID are supplied.
+**Status (2026-09-17):** configured in `backend/.env` (gitignored, never
+committed) and live — see §64 for the full integration writeup. All prior
+Lulu configuration (client ID/secret, POD package ID, sandbox setup) has
+been fully removed from the codebase (`backend/.env`, `config.js`,
+`validation.js`, the `orders.lulu_order_id` column) — Lulu is no longer
+part of this project.
 
 ---
 
@@ -1548,9 +1541,11 @@ If a permanent architectural decision changes, update this `CLAUDE.md`.
 
 The following values will be supplied during development:
 
-- BookVault product ID
-- BookVault API credentials
-- Actual BookVault shipping rates
+- ~~BookVault product ID~~ — supplied 2026-09-17 (`BOOKVAULT_TITLE_ISBN`, see §64)
+- ~~BookVault API credentials~~ — supplied 2026-09-17, see §64
+- Real per-country shipping_rates fallback values (the live BookVault quote
+  is now primary — see §64 — but the static table is still the fallback if
+  BookVault is unreachable, and still seeded with the $9.99 placeholder)
 - Stripe test credentials
 - Stripe production credentials
 - Production database credentials
@@ -1873,24 +1868,140 @@ admin-editable delivery estimate later (section 24).
 stays Archivo. Stripe Elements now uses the `night` appearance theme so
 checkout matches the dark site instead of rendering as a white block.
 
-**Real hero photo (added 2026-09-17):** the `hero-bg` and `book-hero`
-placeholders described above are gone from the hero section — replaced by
-a real AI-generated photo (book on a candlelit desk, 1536x1024) at
-`frontend/img/photo/book-desk.png`. It's a single flat photo (not a
-transparent book cutout), so it's used two different ways by breakpoint:
-a contained framed image in normal flow on mobile (`<900px`, between the
-copy and the trust icons — matches the mobile mockup), promoted to the
-full-bleed hero background from `900px` up via a stronger gradient wash
-for text legibility. The `.hero-book` slot/CSS from the original build is
-dead now that the photo carries the book itself.
+**Real hero photo (added 2026-09-17, reworked same day — see §64):** the
+`hero-bg` and `book-hero` SVG placeholders described above are gone from
+the hero section, replaced by two real AI-generated photos of the book on
+a candlelit desk:
 
-Checked at a forced 2x device-scale-factor (retina/4K-scaled displays):
-holds up cleanly because `--wrap` caps content at ~1200px, so even a
-full-bleed desktop render only upscales the source ~1.5x. A plain 4K
-screen at 100% OS scaling needs no upscaling at all — the same width cap
-applies. No urgent need to upscale the source file, but if this section
-ever goes edge-to-edge beyond the content cap, or the file needs a bigger
-`og:image` crop, regenerating at ~3000px wide would add headroom. The
-other placeholder slots (video poster, interior pages, edition thumbnail,
-closing background) are still the hand-drawn SVGs from the initial
-redesign and are unaffected.
+- `frontend/img/photo/book-desk.png` (1536×1024, landscape) — desktop/tablet
+- `frontend/img/photo/book-desk-square.png` (1254×1254, square,
+  tighter/larger crop of the book) — mobile
+
+Both are **normal contained grid items** (`.hero-photo--desktop` /
+`.hero-photo--mobile`, toggled by plain CSS `display` per breakpoint), not
+a full-bleed `position:absolute` background — that was the first attempt
+and it broke: the background's crop was anchored by a fixed
+`object-position` percentage of the whole section while the text columns
+were sized by independent grid `fr` tracks, so the two only lined up by
+coincidence at the exact widths first tested and drifted apart at
+in-between (tablet/small-desktop) widths, crowding or overlapping the
+copy text into the book. Keeping the photo as a real grid item ties it to
+the same track math as the text at every width — verified render-tested
+from 390px through 1440px+ with no overlap. Desktop's `hero-grid` uses
+`minmax(0, …fr)` columns (not bare `…fr`) so a long word in the copy/quote
+column can't blow out its track either.
+
+Mobile's copy is free-bleeding (negative `margin-inline` cancelling
+`.wrap`'s padding) with no border/card frame, matching the mockup's
+"part of the page, not a boxed photo" look. Desktop's copy is a bordered,
+drop-shadowed 4:5 box in the middle grid column, sized like a real product
+photo rather than an atmosphere background.
+
+Crispness: holds up fine at a forced 2x device-scale-factor (retina/4K
+simulation) since neither copy is ever stretched much past its native
+resolution at the sizes each is actually rendered at — see the request
+that raised this for the render-testing methodology. No upscaling needed
+for either file as currently used. The other placeholder slots (video
+poster, interior pages, edition thumbnail, closing background) are still
+the hand-drawn SVGs from the initial redesign and are unaffected.
+
+---
+
+# 64. BookVault Shipping Integration (2026-09-17)
+
+Researched BookVault's actual API (there's no public developer-docs page
+that renders without JS — `https://api.bookvault.app/v3/docs` is a ReDoc
+UI that loads its content from `https://api.bookvault.app/v3/swagger/docs/v3`,
+which is the real OpenAPI/Swagger spec and is directly fetchable). That
+spec is the source of truth for everything below — re-fetch it before
+changing any BookVault integration code, rather than trusting this summary
+or any older example.
+
+**Auth:** `Authorization: basic <api key>` — a literal `"basic "` prefix on
+the raw key (per `https://help.bookvault.app/api-setup`), **not**
+base64-encoded HTTP Basic auth despite the spec labeling the scheme
+`"type": "basic"`. Base URL: `https://api.bookvault.app/v3`. Still no
+sandbox (§26) — every call, including a shipping quote, hits BookVault's
+live system.
+
+**Credentials, supplied 2026-09-17, live in `backend/.env` (gitignored,
+never committed):**
+
+```text
+BOOKVAULT_API_KEY      = bv_OfpCyAuyQU1sKANfEWJE6nSP6DTfA
+BOOKVAULT_API_BASE_URL = https://api.bookvault.app/v3
+BOOKVAULT_TITLE_ISBN   = 9658364000016
+```
+
+`BOOKVAULT_TITLE_ISBN` is the 13-digit ISBN BookVault assigned to the
+title in their library when Harvey uploaded the print-ready files (§26) —
+required on every `OrderLine` for both shipping quotes and real orders.
+
+**What's implemented now — live shipping calculation:**
+`backend/src/services/bookvaultService.js` calls `POST /Dispatch`
+("Loads all the available dispatch services based on the supplied data to
+give you the current prices") with `OrderLines` (ISBN + quantity),
+`CountryCode` (ISO 3166-2, the same 2-letter codes already used
+throughout this project), `AreaCode` (postcode), `ServiceLevel: "Cheapest"`,
+`PartnerID: 0` (let BookVault pick the best print partner), `Currency`,
+and `ShipmentDate`. The response's `Services[]` array is reduced to the
+lowest `DelTotal`, converted to cents. `shippingService.calculateTotal()`
+now takes `(countryCode, postalCode)`, tries this live quote first, and
+falls back to the static `shipping_rates` table (§17, still seeded with
+the $9.99 placeholder) if the BookVault call fails for any reason —
+logging an `error_logs` row (`service: 'bookvault'`) either way so a
+pattern of failures is visible in the admin error log once that exists.
+Both `POST /api/shipping/calculate` and `POST /api/checkout/create-payment-intent`
+now require `postal_code` alongside `country_code`, and
+`frontend/js/checkout.js` re-fires the shipping calculation (debounced
+500ms) on postcode input as well as on country change, not just country
+change alone.
+
+Verified against the real API before considering this done (safe to do
+routinely, unlike order creation — a shipping quote has no side effects):
+US/10001, GB/SW1A 1AA, AU/2000, JP/100-0001, and DE/10115 each returned a
+distinct, plausible cents amount (all different from the $999 fallback,
+confirming they're genuinely live); an invalid country code (`ZZ`)
+correctly fell through to the fallback and wrote an `error_logs` row.
+
+**Real BookVault field limits (replacing Lulu-era placeholders):**
+sourced from the `BookVAULT.OrderAddress` schema in the spec above, these
+are meaningfully looser than what section 14 originally assumed from
+Lulu. Now the actual limits in both
+`backend/src/lib/validation.js` (authoritative) and
+`frontend/checkout.html`/`frontend/js/checkout.js` (UX-only mirrors):
+
+```text
+Addressee (customer_name)  maxLength 200
+Address1  (street1)        maxLength 200
+Address2  (street2)        maxLength 250
+Town      (city)            maxLength 99
+County    (state)           maxLength 200
+Postcode  (postal_code)     maxLength 99
+TelNumber (phone)           maxLength 35
+Email                       maxLength 120
+```
+
+**Also cleaned up while touching this code:** all remaining Lulu
+references removed from the backend — `config.js`'s `lulu` block replaced
+with `bookvault`, the `orders.lulu_order_id` column renamed to
+`bookvault_order_id` (via a safe `ALTER TABLE … RENAME COLUMN` in
+`db/index.js` that no-ops if already renamed or on a fresh DB — no manual
+migration step needed), `error_logs.service` enum value `'lulu'` →
+`'bookvault'`, and the corresponding `backend/README.md` passages.
+
+**Deliberately not built yet** (out of scope for this pass — see §25-30
+for the intended design once it happens): order creation
+(`POST /Order`), fulfillment status polling (`Progress.Status`:
+`Created → Acknowledged → SentToPrint → Batched → Printed → Dispatched →
+Invoiced`), and address/postcode-format validation against
+`GET /Countries`' per-country `PostcodeFormat` regex (right now the
+checkout form only requires a non-empty postcode within the length
+limits above — BookVault's own `/Dispatch` call tolerated a garbage
+postcode in testing rather than rejecting it, so this isn't blocking
+correctness today, just a nice-to-have for tighter UX later). No webhook
+mechanism for order status was found in the spec (only per-platform
+`WebHookURL` fields tied to their prebuilt Shopify/WooCommerce/etc. store
+integrations, not a generic account-level webhook for direct API
+integrations) — polling `GET /Order?PodRef=…` will be the mechanism when
+order submission is built, per §27's "if not, poll" instruction.
