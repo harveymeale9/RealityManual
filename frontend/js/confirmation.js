@@ -14,6 +14,16 @@
 
   let pollCount = 0;
   let timerId = null;
+  let trackedEvent = null;
+
+  // Guards against double-firing if render() were ever called again after
+  // reaching a terminal state (polling stops on both paths below, but this
+  // is cheap insurance against a future change reintroducing a re-render).
+  function trackOnce(eventName, orderIdValue) {
+    if (trackedEvent === eventName) return;
+    trackedEvent = eventName;
+    RMAnalytics.track(eventName, { order_id: orderIdValue });
+  }
 
   if (!orderId) {
     showTerminalState({
@@ -68,10 +78,12 @@
       statusTitle.textContent = 'Payment confirmed';
       statusMessage.textContent = `Thank you for ordering ${order.product_name}. Your order is being prepared for fulfillment — we'll follow up by email once it ships.`;
       orderMeta.textContent = `Order ${order.order_id} · ${order.product_description} · ${formatCents(order.total_price_cents, order.currency)}`;
+      trackOnce('order_complete', order.order_id);
       return;
     }
 
     if (order.order_status === 'FAILED') {
+      trackOnce('order_failed', order.order_id);
       showTerminalState({
         title: "We're sorry, your payment did not go through",
         message: 'No charge was completed. Please try placing your order again.',

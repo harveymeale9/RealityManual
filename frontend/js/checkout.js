@@ -36,6 +36,16 @@
   let currentTotalCents = BOOK_PRICE_CENTS;
   let shippingRequestSeq = 0;
   let postalDebounceTimer = null;
+  let checkoutStartedTracked = false;
+
+  RMAnalytics.track('checkout_view');
+  // Fired once, on the first time the shopper actually touches the form —
+  // distinct from checkout_view (just landing on the page) per CLAUDE.md §31.
+  form.addEventListener('input', function trackCheckoutStarted() {
+    if (checkoutStartedTracked) return;
+    checkoutStartedTracked = true;
+    RMAnalytics.track('checkout_started');
+  }, { once: true });
 
   populateCountrySelect();
 
@@ -320,6 +330,8 @@
       `confirmation.html?order=${orderResponse.order_id}`,
       window.location.href
     ).toString();
+
+    RMAnalytics.track('payment_submitted', { order_id: orderResponse.order_id });
 
     const { error: confirmError } = await stripe.confirmPayment({
       elements,

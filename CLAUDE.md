@@ -2473,3 +2473,103 @@ background. the text should still stand out."**
 Render-verified at mobile / 960 / 1440 / 1757px: photo reads at natural
 brightness with the candle close to the book as composed, text legible
 throughout via the shadow alone, boxing behavior from §71 unchanged.
+
+---
+
+# 73. Hero Gap Root Cause Fixed; Real First-Party Analytics Built (2026-09-17)
+
+**Hero, for real this time.** §68's padding-bottom:0 reduced but didn't
+eliminate the gap below the hero, and Harvey also flagged a matching gap
+above it, below the sticky header. Actual root cause: `.hero .wrap`'s
+`height: 100%` never resolved. A percentage height only resolves against
+an ancestor with a *definite* height, and `.hero`'s height was `auto` —
+`min-height` is a floor on an auto-height box, not a definite height in
+the spec's sense, so `height:100%` silently computed back to `auto`.
+`.wrap` (and the absolutely-positioned photo pinned to its edges via
+`inset:0`) only grew as tall as `.hero-grid`'s own content, leaving
+`.hero`'s min-height-driven extra space (there to hold the photo's
+aspect ratio at wide viewports, §70/§71) as a bare gap below it. Fixed
+by switching `.hero` to `display:flex; flex-direction:column` and
+`.wrap` to `flex:1; min-height:0` — flex sizing stretches a child to the
+container's real content-box height by construction, sidestepping the
+percentage-height rule entirely. Also zeroed `.hero`'s remaining
+`padding-top` (was 6rem) per Harvey's "same above the hero below the
+menu theres a lil black gap" — the photo now runs flush under the
+header too. Mobile (<900px) untouched, as always. Render-verified at
+1920/1440px: zero gap on both sides; 390px mobile unaffected.
+
+**Ops panel polish, same session:** the `earth.png` backdrop (§72-adjacent,
+added when the ops panel was reskinned) was too small relative to
+Harvey's mockup — bumped `background-size` from 44% to 78% auto with
+adjusted position/opacity so it reads as a proportional planet, not a
+corner decoration. Left icon rail buttons/icons enlarged (40px→50px
+buttons, 18px→24px icons, 20px→26px logo, rail width 62px→76px) per
+Harvey circling the whole rail as "make these menu items bigger."
+
+**Real first-party analytics (was fully unbuilt until now)** — the ops
+panel's Website Analytics tab has shown "Not connected yet" since it was
+built (§62: "No fake data — empty until real"), which is correct, but
+Harvey expected to already see his own browsing/checkout activity there
+and there was in fact no tracking pipeline at all: no `analytics_events`
+table, no ingestion endpoint, no frontend tracking script — sections
+31-34 were a spec, not yet an implementation. Built the minimal version
+of what those sections describe:
+
+- `backend/src/db/schema.sql`: `analytics_events` table (session_id,
+  event_name, page, order_id, referrer, utm_*, country, created_at) +
+  indexes on created_at/event_name/session_id/order_id.
+- `backend/src/services/analyticsService.js`: `recordEvent()` (inserts a
+  row, defensively clipping every field to 500 chars — this endpoint has
+  no auth, see below) and `getSummary()` (today + last-30-days page
+  views/unique visitors, a funnel breakdown across whatever event names
+  have actually been sent — deliberately not a hardcoded column list, so
+  a new event added on the frontend shows up here without a backend
+  change — and top UTM sources by unique session).
+- `backend/src/routes/analytics.js`: `POST /api/analytics/event`
+  (ingest — always responds 204, wrapped in try/catch, logs to
+  `error_logs` on failure rather than ever surfacing an error back to
+  the page that called it, per §31 "must never block or interfere") and
+  `GET /api/analytics/summary` (read-only aggregates, no PII, consumed
+  by the ops panel). **Deliberately unauthenticated**, matching §46's
+  "relaxed security, do the basics" — the event endpoint has no
+  meaningful damage a bad actor could do beyond junk rows, and the
+  summary endpoint exposes only counts.
+- `frontend/js/analytics.js` (new, included on all three public pages):
+  a first-touch attribution model — session id and the *first* UTM
+  params/referrer seen are captured once into `localStorage` and reused
+  on every later event, so a purchase two days after an Instagram click
+  still credits Instagram (§33). `RMAnalytics.track(eventName, extra)`
+  posts via `fetch(..., { keepalive: true })`, wrapped so a network
+  failure or unreachable backend can never break the page — fires
+  `page_view` automatically on load.
+- Wired into the funnel: `index.html` fires `landing_page_view` plus
+  `purchase_cta_clicked` (delegated off the existing `data-cta`
+  attributes already on all three CTAs — nav/edition-panel/final-band).
+  `checkout.js` fires `checkout_view` on load, `checkout_started` once
+  on the first form field interaction, and `payment_submitted` right
+  before calling `stripe.confirmPayment`. `confirmation.js` fires
+  `order_complete` or `order_failed` (once each, guarded against
+  re-firing) when polling reaches that terminal `order_status`.
+- `ops-service/public/app.js`: the Website Analytics tab now fetches
+  `https://api.realitymanual.com/api/analytics/summary` directly from
+  the browser (cross-origin — `ops.realitymanual.com` was added to the
+  storefront backend's `CORS_ORIGIN` on the VPS) and renders real
+  numbers — today/30-day page views + unique visitors, the funnel table,
+  top UTM sources — falling back to the original "Not connected yet"
+  placeholder if the fetch fails for any reason (backend down, CORS
+  misconfigured, etc.), so it degrades the same way it always has rather
+  than showing a broken page.
+
+**Not built / explicitly out of scope for this pass:** Sales Analytics
+and Content Analytics stay static placeholders (revenue reporting needs
+Stripe/BookVault order data the backend doesn't aggregate yet; content
+performance needs the platform API keys from §62's Settings tab, still
+unconnected) — only Website Analytics was asked for. Landing/checkout
+conversion-rate math (§35) isn't computed yet, just raw funnel counts —
+worth adding once there's more than a few days of real data to make a
+rate meaningful. `payment_succeeded` (listed in §31) isn't fired
+client-side since Stripe redirects the browser away before any script
+of ours could run on success — `order_complete` on the confirmation page
+(driven by the backend's own `order_status`, not the browser's belief
+about what happened) is the authoritative equivalent and was tracked
+instead.

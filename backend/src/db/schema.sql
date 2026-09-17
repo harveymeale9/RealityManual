@@ -52,3 +52,25 @@ CREATE TABLE IF NOT EXISTS error_logs (
 
 CREATE INDEX IF NOT EXISTS idx_error_logs_created_at ON error_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_error_logs_order_id ON error_logs(order_id);
+
+-- First-party pageview/funnel tracking — see CLAUDE.md §31-34.
+CREATE TABLE IF NOT EXISTS analytics_events (
+  id            TEXT PRIMARY KEY,
+  session_id    TEXT NOT NULL,
+  event_name    TEXT NOT NULL,
+  page          TEXT,
+  order_id      TEXT,
+  referrer      TEXT,
+  utm_source    TEXT,
+  utm_medium    TEXT,
+  utm_campaign  TEXT,
+  utm_term      TEXT,
+  utm_content   TEXT,
+  country       TEXT,
+  created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_analytics_events_created_at ON analytics_events(created_at);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_event_name ON analytics_events(event_name);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_session ON analytics_events(session_id);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_order_id ON analytics_events(order_id);

@@ -144,6 +144,54 @@
       '</div>';
   }
 
+  // The storefront's own backend — separate service, separate domain (see
+  // CLAUDE.md §62/§65). Read-only, unauthenticated aggregate counts, no PII.
+  var STOREFRONT_API_BASE = 'https://api.realitymanual.com';
+
+  function renderWebsiteAnalytics() {
+    panelMain.innerHTML = '<div class="tab-placeholder wide"><div class="eyebrow">Loading…</div><h2>Website Analytics</h2></div>';
+    fetch(STOREFRONT_API_BASE + '/api/analytics/summary')
+      .then(function (res) { if (!res.ok) throw new Error('bad_status'); return res.json(); })
+      .then(function (data) {
+        if (currentTabId() !== 'website-analytics') return; // navigated away before this resolved
+
+        var funnelRows = data.funnel.map(function (f) {
+          return '<div class="funnel-row"><span class="funnel-step">' + escapeHtml(f.step.replace(/_/g, ' ')) + '</span>' +
+            '<span class="funnel-count">' + f.count + '</span><span class="funnel-sessions">' + f.unique_sessions + ' sessions</span></div>';
+        }).join('');
+
+        var utmRows = data.top_utm_sources.length
+          ? data.top_utm_sources.map(function (u) {
+              return '<div class="funnel-row"><span class="funnel-step">' + escapeHtml(u.source) + '</span><span class="funnel-sessions">' + u.sessions + ' sessions</span></div>';
+            }).join('')
+          : '<div class="empty-slot">No UTM-tagged traffic yet</div>';
+
+        panelMain.innerHTML =
+          '<div class="ops-panel">' +
+            '<div class="overview-row">' +
+              '<div class="overview-tile"><div class="overview-tile-head">Today</div>' +
+                '<div class="overview-tile-stat"><span class="n">' + data.today.page_views + '</span> page views</div>' +
+                '<div class="overview-tile-sub">' + data.today.unique_visitors + ' unique visitors</div></div>' +
+              '<div class="overview-tile"><div class="overview-tile-head">Last 30 days</div>' +
+                '<div class="overview-tile-stat"><span class="n">' + data.last_30_days.page_views + '</span> page views</div>' +
+                '<div class="overview-tile-sub">' + data.last_30_days.unique_visitors + ' unique visitors</div></div>' +
+            '</div>' +
+            '<div class="funnel-section">' +
+              '<div class="eyebrow">Funnel — last 30 days</div>' +
+              '<div class="funnel-list">' + funnelRows + '</div>' +
+            '</div>' +
+            '<div class="funnel-section">' +
+              '<div class="eyebrow">Top UTM sources — last 30 days</div>' +
+              '<div class="funnel-list">' + utmRows + '</div>' +
+            '</div>' +
+          '</div>';
+      })
+      .catch(function () {
+        if (currentTabId() !== 'website-analytics') return;
+        renderAnalyticsPlaceholder('website-analytics');
+      });
+  }
+
   function renderActiveTab() {
     var active = currentTabId();
     panelTabs.querySelectorAll('.panel-tab').forEach(function (btn) {
@@ -163,6 +211,8 @@
     } else if (active === 'settings') {
       panelMain.innerHTML = SETTINGS_MARKUP;
       bootSettings();
+    } else if (active === 'website-analytics') {
+      renderWebsiteAnalytics();
     } else {
       renderAnalyticsPlaceholder(active);
     }
