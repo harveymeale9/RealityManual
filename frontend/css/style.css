@@ -463,8 +463,6 @@ img { max-width: 100%; }
     grid-area: photo;
     aspect-ratio: 4 / 5;
     object-position: 50% 45%;
-    border: 1px solid var(--border-warm);
-    box-shadow: 0 30px 70px -25px rgba(0, 0, 0, 0.75);
   }
 
   .hero-grid {
