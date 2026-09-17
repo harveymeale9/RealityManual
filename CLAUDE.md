@@ -2005,3 +2005,96 @@ mechanism for order status was found in the spec (only per-platform
 integrations, not a generic account-level webhook for direct API
 integrations) — polling `GET /Order?PodRef=…` will be the mechanism when
 order submission is built, per §27's "if not, poll" instruction.
+
+---
+
+# 65. Backend Deployed to the VPS (2026-09-17)
+
+The storefront backend (`backend/`) is now a real, always-on service —
+until today it only ran when someone manually started `npm start` on
+their own machine, which is why checkout kept failing for Harvey testing
+the live site (§64's fixes were correct but nothing was actually running
+at `localhost:4000` when he tried). Deployed the same way
+`rm-ops-service` already runs on this VPS (§62) — Docker container, nginx
+reverse proxy, Let's Encrypt — but as a **separate** container/domain,
+per the same "don't merge with the ops panel" instruction that governs
+`rm-ops-service`.
+
+**Live at `https://api.realitymanual.com`.** `frontend/js/config.js`
+`API_BASE_URL` now points there instead of `localhost:4000`.
+
+**On the VPS (Ubuntu, root, same box as n8n and `rm-ops-service` — see
+`project-vps-access-notes` memory for SSH details):**
+- `/root/realitymanual-repo` — a plain `git clone` of this repo (not a
+  deploy-key/webhook setup — redeploying a backend change means pulling
+  again and rebuilding, see below).
+- `backend/Dockerfile` (new, node:24-slim — matches the Node version this
+  project develops against locally; needed for the built-in `node:sqlite`
+  module the backend uses, not a native-compiled dependency like
+  `rm-ops-service`'s `better-sqlite3`) builds to image
+  `rm-storefront-backend`, run as container `rm-storefront-backend`
+  (`--restart unless-stopped`, bound to `127.0.0.1:4000`).
+- `/root/realitymanual-backend-data` bind-mounted to `/data` in the
+  container — holds `reality-manual.db` (`DATABASE_PATH=/data/reality-manual.db`
+  set in the container's `.env`, matching the Dockerfile's `ENV` default).
+  Separate from `rm-ops-service`'s own `/root/ops-service-data` — these
+  two services share nothing.
+- `backend/.env` on the VPS (not the one in this repo checkout locally —
+  a separate copy, written directly on the server, never committed) holds
+  the real Stripe test keys, BookVault credentials, and
+  `CORS_ORIGIN=https://realitymanual.com` (production — no `localhost`
+  entries; add one temporarily only if you need to debug the deployed
+  backend against a local frontend, and remove it again afterward).
+  `NODE_ENV=production`.
+- nginx site `/etc/nginx/sites-available/api` (symlinked into
+  `sites-enabled`), same pattern as the existing `ops` site — proxies
+  `api.realitymanual.com` to `127.0.0.1:4000`. Cert issued via
+  `certbot --nginx -d api.realitymanual.com` (reused the account already
+  registered on this box from the `ops`/n8n certs — no new email prompt
+  needed), auto-renews the same way the others do.
+- DNS: an `api` A record on the `realitymanual.com` Cloudflare zone,
+  proxy OFF, pointing at the VPS IP — Harvey added this one himself
+  directly in the Cloudflare dashboard rather than handing over another
+  scoped API token.
+
+**Two things this fixed that looked unrelated at first:**
+1. **CORS.** `CORS_ORIGIN` used to default to the local-dev origin
+   (`http://localhost:5500`) — the live site at `https://realitymanual.com`
+   is a different origin, so the browser blocked every checkout request
+   outright regardless of country. `config.js`'s `corsOrigins` now parses
+   a comma-separated list (kept for exactly this kind of dual-origin
+   need during local dev — see `.env.example`), and production's is set
+   to just the live domain.
+2. **Private Network Access.** Separately, Chrome-family browsers block a
+   public HTTPS page fetching a private-network address (loopback
+   included) unless the server opts in via
+   `Access-Control-Allow-Private-Network: true` on the preflight
+   response. `server.js` sets that header — it has to run *before* the
+   `cors()` middleware, which ends OPTIONS preflights itself and would
+   otherwise skip anything mounted after it. This only ever mattered
+   while the backend was local; it's harmless now but left in since local
+   debugging against the deployed frontend may still come up.
+
+**Redeploying a backend code change** (no CI/CD yet — manual, same
+category of step as redeploying `rm-ops-service`):
+```bash
+ssh -i ~/.ssh/realitymanual_vps root@187.124.146.235
+cd /root/realitymanual-repo && git pull
+cd backend && docker build -t rm-storefront-backend .
+docker stop rm-storefront-backend && docker rm rm-storefront-backend
+docker run -d --name rm-storefront-backend --restart unless-stopped \
+  -p 127.0.0.1:4000:4000 -v /root/realitymanual-backend-data:/data \
+  --env-file /root/realitymanual-repo/backend/.env rm-storefront-backend
+```
+(A plain `git pull` isn't enough by itself — same "must rebuild the
+container" caveat §62 already notes for `rm-ops-service`.)
+
+**Not done yet:** a real Stripe webhook endpoint pointed at
+`https://api.realitymanual.com/api/webhooks/stripe` — the `.env` on the
+VPS still carries the `whsec_…` value from a local `stripe listen`
+session, which won't verify signatures for events Stripe actually sends
+to the deployed URL. Payment Intents still get created fine (shipping
+calculation and checkout submission don't depend on the webhook), but
+the webhook-driven order-status flip to `PAYMENT_RECEIVED` won't fire
+correctly until a real webhook endpoint is registered in the Stripe
+Dashboard for that URL and its secret swapped in.

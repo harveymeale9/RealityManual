@@ -6,7 +6,12 @@ Node's built-in `node:sqlite` module — no native dependency to compile)
 is the database — a single file, no server to run.
 
 **Phase status:** this is Phase 1 (core paid flow), now with live BookVault
-shipping quotes wired into checkout (see CLAUDE.md §64). BookVault order
+shipping quotes wired into checkout (see CLAUDE.md §64), **and actually
+deployed** — a real, always-on instance runs at `https://api.realitymanual.com`
+(Docker on the VPS, see CLAUDE.md §65 for the full deployment writeup and
+how to redeploy a change). Everything below this point describes running
+a *second*, local instance for development — the live frontend at
+realitymanual.com talks to the deployed one by default. BookVault order
 submission/fulfillment, first-party analytics, SEO admin, refunds, and the
 `/admin-dashboard` are not built yet — see the "Deferred" note at the
 bottom.
@@ -76,9 +81,11 @@ Then serve `/frontend` with any static file server, e.g.:
 npx serve ../frontend
 ```
 
-and make sure `frontend/js/config.js` → `API_BASE_URL` points at your
-backend (`http://localhost:4000` by default) and `CORS_ORIGIN` in
-`backend/.env` points back at wherever that static server is running.
+and point `frontend/js/config.js` → `API_BASE_URL` at your local backend
+(`http://localhost:4000`, instead of the deployed default) and add
+wherever that static server is running (e.g. `http://localhost:5500`) to
+`CORS_ORIGIN` in `backend/.env` — a comma-separated list, so this can sit
+alongside `https://realitymanual.com` rather than replacing it.
 
 ## Testing the Stripe flow locally
 
