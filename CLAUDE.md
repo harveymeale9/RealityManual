@@ -2432,3 +2432,44 @@ Render-verified at mobile (untouched) / 960 / 1440 / 1757 / 2560px:
 below 1200px the image fills the viewport exactly like the header does
 at that width; above it, both freeze at the identical 1200px box,
 matching Harvey's annotated screenshot precisely.
+
+---
+
+# 72. Hero Desktop Photo Back to `book-desk.png`; Vignette Dropped for Text-Shadow
+
+§71's boxing was right, but Harvey's next round of feedback rejected
+`bg.png` itself for the desktop background: the candle sat far enough
+from the book, and the §71 vignette darkened enough, that it read as
+"behind text and darkened" rather than lighting the book. His fix:
+switch to `book-desk.png` — the original §63/§64 photo, candle close to
+the book, already used for social sharing's `og:image` — and drop the
+vignette entirely: **"dont darken the hero bg just because its the
+background. the text should still stand out."**
+
+**Changed:**
+- `hero-bg-desktop`'s `src` → `img/photo/book-desk.png` (1536×1024,
+  1.5:1 — not `bg.png`'s 1672×941). `.hero`'s `min-height` coefficient
+  updated to match: `0.667` (1024/1536) instead of `0.56` (941/1672).
+  Still `calc(min(100vw, 1200px) * …)`, so §71's 1200px cap and
+  everything it fixed still holds.
+- `.hero .wrap::after` (the radial vignette from §69-71) removed
+  entirely. In its place, `text-shadow` directly on `.hero-copy`,
+  `.hero-trust`, `.hero-quote` (inherited by their children) — a soft
+  dark shadow right behind the glyphs gives contrast without touching
+  the photo's own brightness/color at all. This is the actual
+  distinction Harvey drew: darkening the *background* vs. making the
+  *text* stand out are different techniques, and only the text needed
+  the help.
+- `frontend/img/photo/bg.png` and `bg-vertical.png` deleted — Harvey's
+  own instruction ("get rid of my current one as its not working,
+  clean up those files"), now fully unreferenced. `hero-background.png`
+  and `hero-book.png` from §67 remain unreferenced but on disk, as
+  before (out of scope for this instruction, which named the ones he'd
+  just generated, not the earlier §67 pair).
+- Mobile untouched again — still `book-desk-square.png`, free-bleeding
+  in normal flow, never had a vignette to begin with (text there was
+  never overlaid on the photo).
+
+Render-verified at mobile / 960 / 1440 / 1757px: photo reads at natural
+brightness with the candle close to the book as composed, text legible
+throughout via the shadow alone, boxing behavior from §71 unchanged.

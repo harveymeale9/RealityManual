@@ -454,16 +454,16 @@ img { max-width: 100%; }
 @media (min-width: 900px) {
   .hero {
     padding: 6rem 0 6.5rem;
-    /* Keeps the box roughly matched to bg.png's native aspect ratio
-       (1672:941 ≈ 1.78:1) as .wrap approaches its var(--wrap) (1200px)
-       cap. Using min(100vw, 1200px) rather than a bare vw unit means
-       this is automatically bounded the same way .wrap itself is —
+    /* Keeps the box roughly matched to book-desk.png's native aspect
+       ratio (1536:1024 = 1.5:1) as .wrap approaches its var(--wrap)
+       (1200px) cap. Using min(100vw, 1200px) rather than a bare vw unit
+       means this is automatically bounded the same way .wrap itself is —
        past ~1200px viewport, the reference width simply stops growing,
        so this stays capped too instead of needing its own separate max.
        min-height only ever adds space, so narrower desktop widths
        (900-1200px, where content height already exceeds this) are
        unaffected. */
-    min-height: calc(min(100vw, 1200px) * 0.56);
+    min-height: calc(min(100vw, 1200px) * 0.667);
   }
 
   /* Needed so .hero-grid's height:100% (below) actually resolves to
@@ -479,24 +479,15 @@ img { max-width: 100%; }
     object-position: 50% 42%;
   }
 
-  /* Text legibility over the photo. Sits strictly between the image
-     (z-index:0, via .bg-img) and the text (.hero-grid, z-index:2 below)
-     — can't be a .hero::after here the way earlier versions had it,
-     since the image now lives inside .wrap (§71): a pseudo-element of
-     .hero would paint after .wrap in the generated tree, landing on top
-     of the text instead of behind it once both have position set. */
-  .hero .wrap::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    background: radial-gradient(
-      ellipse 50% 55% at 50% 42%,
-      rgba(8, 6, 4, 0.15) 0%,
-      rgba(8, 6, 4, 0.6) 70%,
-      rgba(8, 6, 4, 0.82) 100%
-    );
-    pointer-events: none;
+  /* Text legibility over the photo — a soft shadow directly behind the
+     glyphs, not a darkening overlay across the whole image (Harvey,
+     §72: "dont darken the hero bg just because its the background, the
+     text should still stand out"). Leaves the photo at its natural
+     brightness/color; only the text gets the contrast boost. */
+  .hero-copy,
+  .hero-trust,
+  .hero-quote {
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.85), 0 1px 4px rgba(0, 0, 0, 0.9);
   }
 
   .hero-grid {
