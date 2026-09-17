@@ -24,6 +24,16 @@
   <main class="page-wrap">
     <div class="checkout-grid">
       <div>
+        <div class="qty-field">
+          <label for="quantity">Quantity</label>
+          <div class="qty-stepper">
+            <button type="button" id="qty-decrease" aria-label="Decrease quantity">&minus;</button>
+            <input type="number" id="quantity" name="quantity" value="1" min="1" max="20" step="1" inputmode="numeric" aria-label="Quantity" />
+            <button type="button" id="qty-increase" aria-label="Increase quantity">+</button>
+          </div>
+        </div>
+        <div id="quantity-warning-banner" class="quantity-warning-banner" role="alert" hidden></div>
+
         <h2>Shipping &amp; Payment</h2>
 
         <div id="form-error-banner" class="form-error-banner" role="alert"></div>
@@ -94,9 +104,9 @@
 
       <aside class="order-summary" aria-live="polite">
         <h3>Order Summary</h3>
-        <div class="summary-row">
+        <div class="summary-row summary-row--product">
           <span>The Reality Manual<br /><small style="color:var(--ink-faint)">Hardcover — Deluxe First Edition</small></span>
-          <span>$65.00</span>
+          <span id="summary-book-price">$65.00</span>
         </div>
         <div class="summary-row">
           <span>Shipping</span>

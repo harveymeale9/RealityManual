@@ -1,5 +1,5 @@
 const express = require('express');
-const { validateCheckoutInput } = require('../lib/validation');
+const { validateCheckoutInput, normalizeQuantity } = require('../lib/validation');
 const shippingService = require('../services/shippingService');
 const orderService = require('../services/orderService');
 const stripeService = require('../services/stripeService');
@@ -17,10 +17,11 @@ router.post('/create-payment-intent', async (req, res) => {
 
   const countryCode = body.country_code.trim().toUpperCase();
   const postalCode = body.postal_code.trim();
+  const quantity = normalizeQuantity(body.quantity); // already validated non-null above
 
   let totals;
   try {
-    totals = await shippingService.calculateTotal(countryCode, postalCode);
+    totals = await shippingService.calculateTotal(countryCode, postalCode, quantity);
   } catch (err) {
     errorLogService.logError({
       service: 'backend',
@@ -35,6 +36,7 @@ router.post('/create-payment-intent', async (req, res) => {
   const order = orderService.createOrder({
     ...body,
     country_code: countryCode,
+    quantity,
     bookPriceCents: totals.bookPriceCents,
     shippingPriceCents: totals.shippingPriceCents,
     totalPriceCents: totals.totalPriceCents,
@@ -47,6 +49,7 @@ router.post('/create-payment-intent', async (req, res) => {
       currency: totals.currency,
       orderId: order.id,
       country: countryCode,
+      quantity,
     });
 
     orderService.attachPaymentIntent(order.id, paymentIntent.id);
@@ -55,9 +58,11 @@ router.post('/create-payment-intent', async (req, res) => {
       order_id: order.id,
       client_secret: paymentIntent.client_secret,
       book_price_cents: totals.bookPriceCents,
+      book_subtotal_cents: totals.bookSubtotalCents,
       shipping_price_cents: totals.shippingPriceCents,
       total_price_cents: totals.totalPriceCents,
       currency: totals.currency,
+      quantity,
     });
   } catch (err) {
     errorLogService.logError({

@@ -13,6 +13,10 @@ const STATE_MAX = 200; // OrderAddress.County maxLength 200
 const POSTAL_MAX = 99; // OrderAddress.Postcode maxLength 99
 const PHONE_MAX = 35; // OrderAddress.TelNumber maxLength 35
 const EMAIL_MAX = 120; // OrderAddress.Email maxLength 120
+// Not a BookVault limit — just a sane cap so a typo/abuse can't request an
+// absurd quantity. Revisit if bulk orders become a real use case.
+const QUANTITY_MIN = 1;
+const QUANTITY_MAX = 20;
 
 const PHONE_REGEX = /^\+?[\d\s\-.()/]{6,35}$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -80,7 +84,21 @@ function validateCheckoutInput(body = {}) {
     errors.postal_code = `Postal code must be ${POSTAL_MAX} characters or fewer.`;
   }
 
+  if (body.quantity !== undefined && normalizeQuantity(body.quantity) === null) {
+    errors.quantity = `Quantity must be a whole number between ${QUANTITY_MIN} and ${QUANTITY_MAX}.`;
+  }
+
   return errors;
+}
+
+// Returns a valid integer quantity, or null if the input isn't one within
+// [QUANTITY_MIN, QUANTITY_MAX]. Missing/undefined defaults to 1 (the
+// pre-quantity-selector behavior) rather than failing validation.
+function normalizeQuantity(value) {
+  if (value === undefined || value === null || value === '') return 1;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < QUANTITY_MIN || n > QUANTITY_MAX) return null;
+  return n;
 }
 
 function isNonEmptyString(value) {
@@ -89,6 +107,7 @@ function isNonEmptyString(value) {
 
 module.exports = {
   validateCheckoutInput,
+  normalizeQuantity,
   NAME_MAX,
   STREET1_MAX,
   STREET2_MAX,
@@ -97,4 +116,6 @@ module.exports = {
   EMAIL_MAX,
   CITY_MAX,
   STATE_MAX,
+  QUANTITY_MIN,
+  QUANTITY_MAX,
 };

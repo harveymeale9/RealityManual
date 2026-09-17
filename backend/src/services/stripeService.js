@@ -8,7 +8,7 @@ const stripe = new Stripe(config.stripe.secretKey || 'sk_test_not_configured', {
   apiVersion: '2026-04-22.dahlia',
 });
 
-async function createPaymentIntent({ amountCents, currency, orderId, country }) {
+async function createPaymentIntent({ amountCents, currency, orderId, country, quantity }) {
   return stripe.paymentIntents.create({
     amount: amountCents,
     currency,
@@ -24,6 +24,7 @@ async function createPaymentIntent({ amountCents, currency, orderId, country }) 
       order_id: orderId,
       product: 'reality-manual-first-edition-hardcover',
       country,
+      quantity: String(quantity),
     },
   });
 }

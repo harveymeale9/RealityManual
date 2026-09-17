@@ -22,6 +22,15 @@ try {
   // Already renamed, or the table doesn't exist yet — schema.exec below handles that case.
 }
 
+// One-off add for databases created before quantity support (CLAUDE.md §66)
+// — a no-op once the column already exists, or on a fresh database where
+// schema.exec below creates it from scratch anyway.
+try {
+  db.exec('ALTER TABLE orders ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1');
+} catch {
+  // Already present, or the table doesn't exist yet.
+}
+
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
 db.exec(schema);
 

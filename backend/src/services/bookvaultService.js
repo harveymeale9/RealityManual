@@ -58,16 +58,28 @@ async function request(method, path, body) {
   }
 }
 
-// Get a live shipping quote for one copy of the book to a given
-// country/postcode. Returns { shippingPriceCents, currency, service } or
+// Harvey's explicit instruction (2026-09-17): USPS Consolidator must always
+// be used for US orders when BookVault offers it, not just "whatever happens
+// to be cheapest" — verified by direct API testing that it's already the
+// cheapest US option today (vs. Fedex Priority), but that's a coincidence of
+// current pricing, not a guarantee, and it can disappear from the list
+// entirely for a large enough order (its weight bracket tops out somewhere
+// between qty 3 and qty 5 — see CLAUDE.md §66). Match by name rather than a
+// hardcoded ServID since BookVault doesn't document ServID stability.
+const PREFERRED_SERVICE_NAME = 'USPS Consolidator';
+
+// Get a live shipping quote for the given quantity of books to a
+// country/postcode. Returns { shippingPriceCents, currency, serviceName } or
 // throws — callers decide how to handle a failure (shippingService falls
 // back to the static shipping_rates table).
 //
 // POST /Dispatch — "Loads all the available dispatch services based on the
-// supplied data to give you the current prices". Requesting ServiceLevel
-// "Cheapest" asks BookVault to do the picking; we still defensively take the
-// lowest DelTotal from whatever Services[] comes back in case more than one
-// is returned.
+// supplied data to give you the current prices". ServiceLevel "NotSpecified"
+// asks for every available service rather than letting BookVault pre-filter
+// to just one, so PREFERRED_SERVICE_NAME can be matched by name against the
+// full list; falls back to the lowest DelTotal if that service isn't offered
+// for this destination/weight (e.g. every non-US destination, or a large
+// enough order that USPS Consolidator's weight bracket is exceeded).
 async function getShippingQuote({ countryCode, postalCode, quantity = 1, currency = 'USD' }) {
   if (!config.bookvault.titleIsbn) {
     throw new Error('BOOKVAULT_TITLE_ISBN is not configured.');
@@ -83,7 +95,7 @@ async function getShippingQuote({ countryCode, postalCode, quantity = 1, currenc
     ],
     CountryCode: countryCode,
     AreaCode: postalCode,
-    ServiceLevel: 'Cheapest',
+    ServiceLevel: 'NotSpecified',
     PartnerID: 0, // 0 = let BookVault choose the best print partner for this destination
     Currency: currency,
     ShipmentDate: new Date().toISOString(),
@@ -96,12 +108,13 @@ async function getShippingQuote({ countryCode, postalCode, quantity = 1, currenc
     throw new Error(`BookVault returned no shipping services for ${countryCode}/${postalCode}.`);
   }
 
-  const cheapest = services.reduce((min, s) => (s.DelTotal < min.DelTotal ? s : min), services[0]);
+  const preferred = services.find((s) => s.ServName === PREFERRED_SERVICE_NAME);
+  const chosen = preferred || services.reduce((min, s) => (s.DelTotal < min.DelTotal ? s : min), services[0]);
 
   return {
-    shippingPriceCents: Math.round(cheapest.DelTotal * 100),
+    shippingPriceCents: Math.round(chosen.DelTotal * 100),
     currency,
-    serviceName: cheapest.ServName || null,
+    serviceName: chosen.ServName || null,
   };
 }
 

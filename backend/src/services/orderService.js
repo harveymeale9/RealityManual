@@ -4,10 +4,10 @@ const config = require('../config');
 
 const insertOrderStmt = db.prepare(`
   INSERT INTO orders (
-    id, customer_name, email, phone, country, street1, street2, city, state, postal_code,
+    id, customer_name, email, phone, country, street1, street2, city, state, postal_code, quantity,
     book_price_cents, shipping_price_cents, total_price_cents, currency, order_status
   ) VALUES (
-    @id, @customer_name, @email, @phone, @country, @street1, @street2, @city, @state, @postal_code,
+    @id, @customer_name, @email, @phone, @country, @street1, @street2, @city, @state, @postal_code, @quantity,
     @book_price_cents, @shipping_price_cents, @total_price_cents, @currency, 'PAYMENT_PENDING'
   )
 `);
@@ -38,6 +38,7 @@ function createOrder(input) {
     city: input.city.trim(),
     state: input.state ? input.state.trim() : null,
     postal_code: input.postal_code.trim(),
+    quantity: input.quantity,
     book_price_cents: input.bookPriceCents,
     shipping_price_cents: input.shippingPriceCents,
     total_price_cents: input.totalPriceCents,
@@ -78,6 +79,7 @@ function toPublicStatus(order) {
     order_status: order.order_status,
     product_name: config.site.productName,
     product_description: config.site.productDescription,
+    quantity: order.quantity,
     total_price_cents: order.total_price_cents,
     currency: order.currency,
   };

@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS orders (
   city                      TEXT NOT NULL,
   state                     TEXT,
   postal_code                TEXT NOT NULL,
+  quantity                  INTEGER NOT NULL DEFAULT 1,
   book_price_cents          INTEGER NOT NULL,
   shipping_price_cents      INTEGER NOT NULL,
   total_price_cents         INTEGER NOT NULL,

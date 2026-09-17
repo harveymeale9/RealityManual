@@ -1,12 +1,14 @@
 const express = require('express');
 const shippingService = require('../services/shippingService');
 const errorLogService = require('../services/errorLogService');
+const { normalizeQuantity, QUANTITY_MIN, QUANTITY_MAX } = require('../lib/validation');
 
 const router = express.Router();
 
 router.post('/calculate', async (req, res) => {
   const countryCode = String(req.body?.country_code || '').trim().toUpperCase();
   const postalCode = String(req.body?.postal_code || '').trim();
+  const quantity = normalizeQuantity(req.body?.quantity);
 
   if (!/^[A-Z]{2}$/.test(countryCode)) {
     return res.status(400).json({ error: 'invalid_country_code', message: 'Please select a valid country.' });
@@ -16,13 +18,23 @@ router.post('/calculate', async (req, res) => {
     return res.status(400).json({ error: 'invalid_postal_code', message: 'Please enter a postal/ZIP code.' });
   }
 
+  if (quantity === null) {
+    return res.status(400).json({
+      error: 'invalid_quantity',
+      message: `Quantity must be a whole number between ${QUANTITY_MIN} and ${QUANTITY_MAX}.`,
+    });
+  }
+
   try {
-    const totals = await shippingService.calculateTotal(countryCode, postalCode);
+    const totals = await shippingService.calculateTotal(countryCode, postalCode, quantity);
     res.json({
       book_price_cents: totals.bookPriceCents,
+      book_subtotal_cents: totals.bookSubtotalCents,
       shipping_price_cents: totals.shippingPriceCents,
       total_price_cents: totals.totalPriceCents,
       currency: totals.currency,
+      quantity: totals.quantity,
+      shipping_upgraded: totals.shippingUpgraded,
     });
   } catch (err) {
     errorLogService.logError({

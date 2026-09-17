@@ -2098,3 +2098,86 @@ calculation and checkout submission don't depend on the webhook), but
 the webhook-driven order-status flip to `PAYMENT_RECEIVED` won't fire
 correctly until a real webhook endpoint is registered in the Stripe
 Dashboard for that URL and its secret swapped in.
+
+---
+
+# 66. BookVault Shipping Options, Quantity, and USPS Consolidator (2026-09-17)
+
+Harvey asked exactly what BookVault sends back for shipping, whether
+$10.14 is really flat across the whole US, whether USPS Consolidator is
+guaranteed, and how quantity affects things. Answered by querying the
+real `/Dispatch` endpoint directly (`ServiceLevel: "NotSpecified"` returns
+every available service rather than one pre-filtered choice) rather than
+guessing:
+
+**What comes back, by destination (qty=1):**
+```
+US: Fedex Priority ($25.28), USPS Consolidator ($10.14)
+CA: Fedex Priority, World Post International Tracked/Untracked
+GB: Royal Mail 1st/2nd Class, Delivery Group Tracked (Economy/Priority),
+    DPD Tracked/Pre-10:30/Pre-12:00 — more local carrier options than
+    anywhere else tested
+AU/DE/JP: Fedex (Priority or Economy), World Post International
+    Tracked/Untracked
+```
+USPS Consolidator only exists for US destinations — everywhere else the
+cheap/slow option is "World Post" or a local postal carrier.
+
+**Is $10.14 really flat for the whole US?** Yes, confirmed — tested 7
+very different zips (10001, 90210, 59718 rural Montana, 99501 Anchorage,
+96813 Honolulu, 00901 Puerto Rico, 33101 Miami) at qty=1, and every one
+returned identical services at identical prices. Not a bug; BookVault's
+domestic quote genuinely doesn't vary by postcode at this weight.
+
+**USPS Consolidator "always used when available":** confirmed it already
+is the cheapest option in every US case tested, so relying on
+BookVault's own "Cheapest" service level would have worked in practice —
+Harvey's own read of it ("consolidator will always be cheapest where
+it's an option"). `bookvaultService.js` still matches it explicitly by
+name (`PREFERRED_SERVICE_NAME`) rather than leaning on that as a
+guarantee, since it costs nothing and protects against BookVault's
+pricing changing later.
+
+**Quantity → weight → price**, tested at US/10001:
+```
+qty 1: 1416g  →  USPS Consolidator $10.14 (+ Fedex $25.28)
+qty 2: 2532g  →  USPS Consolidator $15.65 (+ Fedex $30.57)
+qty 3: 3648g  →  USPS Consolidator $20.23 (+ Fedex $33.46)
+qty 5: 5880g  →  USPS Consolidator gone — Fedex Priority $39.31 only
+```
+USPS Consolidator's weight bracket tops out somewhere between qty 3 and
+5 — above that, only the pricier carrier remains. This is real, not
+theoretical, and confirms quantity has to reach BookVault for the price
+to be correct at all — nothing sent it before this pass; every quote was
+implicitly qty=1.
+
+**Built as a result:**
+- **Quantity selector** at the top of the checkout page (Harvey's
+  placement — not in the order summary), a stepper (`-`/`+`/number
+  input, 1-20, matching `QUANTITY_MIN`/`QUANTITY_MAX` in
+  `backend/src/lib/validation.js`). Threaded through shipping
+  calculation, order creation (new `orders.quantity` column, migrated
+  safely like the other recent schema changes — see `db/index.js`), and
+  the Stripe PaymentIntent's amount/metadata.
+- **`bookvaultService.getShippingQuote`** takes `quantity`, sends it as
+  the `OrderLines[0].Quantity`, requests `ServiceLevel: "NotSpecified"`,
+  and picks `PREFERRED_SERVICE_NAME` ("USPS Consolidator") when present,
+  else the lowest `DelTotal` among whatever came back.
+- **Quantity-upgrade warning**: `shippingService.calculateTotal`, when
+  `quantity > 1`, also fetches a real qty=1 quote for the same
+  destination and compares `serviceName` — if the chosen service
+  differs from the qty=1 baseline, `shipping_upgraded: true` comes back
+  from `POST /api/shipping/calculate`, and `checkout.js` shows an amber
+  warning banner (`#quantity-warning-banner`) explaining that this
+  quantity no longer qualifies for the cheapest service. Driven by what
+  BookVault actually returns, not a guessed weight threshold, since
+  BookVault doesn't document its weight brackets and they can differ by
+  country/carrier. Costs one extra live API call, only when quantity > 1
+  — accepted as worth it for correctness over guessing.
+
+Verified against the real API before considering this done (same
+"read-only, safe to test for real" reasoning as §64 — a shipping quote
+has no side effects): qty 1/2/3 all stayed on USPS Consolidator with
+`shipping_upgraded: false`; qty 5 correctly flipped to `true`; quantity 0
+and 999 both rejected with 400; an omitted quantity defaults to 1
+(pre-existing checkout behavior untouched).

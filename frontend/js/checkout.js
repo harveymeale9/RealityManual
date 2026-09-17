@@ -7,9 +7,14 @@
   const errorBanner = document.getElementById('form-error-banner');
   const countrySelect = document.getElementById('country_code');
   const postalInput = document.getElementById('postal_code');
+  const quantityInput = document.getElementById('quantity');
+  const qtyDecreaseButton = document.getElementById('qty-decrease');
+  const qtyIncreaseButton = document.getElementById('qty-increase');
+  const summaryBookPrice = document.getElementById('summary-book-price');
   const summaryShipping = document.getElementById('summary-shipping');
   const summaryTotal = document.getElementById('summary-total');
   const summaryHint = document.getElementById('summary-hint');
+  const quantityWarningBanner = document.getElementById('quantity-warning-banner');
 
   const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const PHONE_REGEX = /^\+?[\d\s\-.()/]{6,35}$/;
@@ -22,6 +27,9 @@
   const STATE_MAX = 200;
   const POSTAL_MAX = 99;
   const PHONE_MAX = 35;
+  // Not a BookVault limit — a sane cap, matching backend/src/lib/validation.js.
+  const QUANTITY_MIN = 1;
+  const QUANTITY_MAX = 20;
 
   let currentTotalCents = BOOK_PRICE_CENTS;
   let shippingRequestSeq = 0;
@@ -82,18 +90,42 @@
     countrySelect.addEventListener('change', updateShipping);
 
     // Shipping is quoted live against BookVault for the exact country +
-    // postcode (see backend/src/services/bookvaultService.js), so a
-    // postcode edit needs to re-trigger it too, not just a country change.
-    // Debounced so we're not firing a request per keystroke.
+    // postcode + quantity (see backend/src/services/bookvaultService.js —
+    // quantity matters here because BookVault's quote is weight-based), so
+    // a postcode edit needs to re-trigger it too, not just a country
+    // change. Debounced so we're not firing a request per keystroke.
     postalInput.addEventListener('input', () => {
       clearTimeout(postalDebounceTimer);
       postalDebounceTimer = setTimeout(updateShipping, 500);
     });
+
+    qtyDecreaseButton.addEventListener('click', () => setQuantity(getQuantity() - 1));
+    qtyIncreaseButton.addEventListener('click', () => setQuantity(getQuantity() + 1));
+    quantityInput.addEventListener('change', () => setQuantity(getQuantity()));
+  }
+
+  function getQuantity() {
+    const n = Math.round(Number(quantityInput.value));
+    if (!Number.isFinite(n)) return QUANTITY_MIN;
+    return Math.min(QUANTITY_MAX, Math.max(QUANTITY_MIN, n));
+  }
+
+  function setQuantity(n) {
+    const clamped = Math.min(QUANTITY_MAX, Math.max(QUANTITY_MIN, Math.round(n) || QUANTITY_MIN));
+    quantityInput.value = clamped;
+    // Immediate client-side estimate — updateShipping() below then confirms
+    // the real (server-authoritative) number once BookVault responds,
+    // including whether this quantity triggers the upgraded-shipping
+    // warning below.
+    summaryBookPrice.textContent = formatCents(BOOK_PRICE_CENTS * clamped);
+    quantityWarningBanner.hidden = true;
+    updateShipping();
   }
 
   async function updateShipping() {
     const countryCode = countrySelect.value;
     const postalCode = postalInput.value.trim();
+    const quantity = getQuantity();
     if (!countryCode || !postalCode) return;
 
     const requestId = ++shippingRequestSeq;
@@ -104,7 +136,7 @@
       const res = await fetch(`${API_BASE_URL}/api/shipping/calculate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ country_code: countryCode, postal_code: postalCode }),
+        body: JSON.stringify({ country_code: countryCode, postal_code: postalCode, quantity }),
       });
       if (!res.ok) throw new Error('shipping_unavailable');
       const data = await res.json();
@@ -114,9 +146,17 @@
       if (requestId !== shippingRequestSeq) return;
 
       currentTotalCents = data.total_price_cents;
+      summaryBookPrice.textContent = formatCents(data.book_subtotal_cents);
       summaryShipping.textContent = formatCents(data.shipping_price_cents);
       summaryTotal.textContent = formatCents(data.total_price_cents);
       summaryHint.style.display = 'none';
+
+      if (data.shipping_upgraded) {
+        quantityWarningBanner.textContent = `Ordering ${quantity} copies no longer qualifies for the cheapest shipping service — a pricier, faster courier is used instead, which is why shipping costs more per copy than a smaller order.`;
+        quantityWarningBanner.hidden = false;
+      } else {
+        quantityWarningBanner.hidden = true;
+      }
       submitButton.textContent = `Pay ${formatCents(data.total_price_cents)}`;
 
       elements.update({ amount: currentTotalCents });
@@ -124,6 +164,7 @@
       if (requestId !== shippingRequestSeq) return;
       summaryShipping.textContent = 'Unavailable';
       summaryTotal.textContent = '—';
+      quantityWarningBanner.hidden = true;
       showFormError('We could not calculate shipping for that address. Please check the country and postal code.');
     }
   }
@@ -202,6 +243,7 @@
       city: form.city.value,
       state: form.state.value,
       postal_code: form.postal_code.value,
+      quantity: getQuantity(),
     };
 
     const clientErrors = validateClientSide(values);
