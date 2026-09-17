@@ -344,10 +344,15 @@ img { max-width: 100%; }
 
 .hero .wrap { position: relative; z-index: 2; }
 
-/* Mobile-first: the photo is a normal framed image sitting in the stack,
-   between the copy and the trust icons (matches the mobile mockup). From
-   900px up it's promoted to a full-bleed background behind everything. */
-.hero-bg-photo {
+/* Two separate <img> elements, not one dual-role element: the desktop copy
+   is a sibling of .wrap (matching every other .bg-img on this page) so it
+   can never collide with .hero-grid's own grid-area bookkeeping. */
+.hero-bg-photo-desktop { display: none; }
+
+/* Mobile-first: a normal framed image sitting in the stack, between the
+   copy and the trust icons (matches the mobile mockup). Hidden again once
+   the desktop background copy takes over at 900px. */
+.hero-bg-photo-mobile {
   grid-area: photo;
   display: block;
   width: 100%;
@@ -455,18 +460,12 @@ img { max-width: 100%; }
     pointer-events: none;
   }
 
-  /* Promoted from an in-flow framed image to the full-bleed hero backdrop. */
-  .hero-bg-photo {
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    width: 100%;
-    height: 100%;
-    aspect-ratio: auto;
+  .hero-bg-photo-desktop {
+    display: block;
     object-position: 52% 42%;
-    border: 0;
-    box-shadow: none;
   }
+
+  .hero-bg-photo-mobile { display: none; }
 
   .hero-grid {
     grid-template-columns: 1.15fr 0.9fr 0.85fr;
