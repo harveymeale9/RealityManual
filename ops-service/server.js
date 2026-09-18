@@ -131,7 +131,24 @@ app.use(function (req, res, next) { res.set('Cache-Control', 'no-store'); next()
 // file with no way to override it from the repo, which caused browsers to
 // silently run a stale build for up to 10 minutes after every deploy —
 // serving it from here instead guarantees no-store on every response.
-app.use(express.static(path.join(__dirname, 'public'), {
+//
+// Served from the live git working tree (CLAUDE_REPO_DIR, bind-mounted at
+// /repo in production — the exact directory the Project Manager's own
+// Claude Code session edits and commits from), not a copy baked into the
+// Docker image at build time. This is deliberate: it means a frontend-only
+// change is visible on next page load the instant it's saved to disk, with
+// no rebuild and no container restart — which otherwise kills whatever
+// voice/chat turn is running mid-task every single time (see CLAUDE.md,
+// "Project Manager kills itself on every ops-service push"). Falls back to
+// the image-baked ./public for any environment without that mount (e.g.
+// running server.js directly outside the container).
+const REPO_PUBLIC_DIR = process.env.CLAUDE_REPO_DIR
+  ? path.join(process.env.CLAUDE_REPO_DIR, 'ops-service', 'public')
+  : null;
+const STATIC_DIR = (REPO_PUBLIC_DIR && fs.existsSync(REPO_PUBLIC_DIR))
+  ? REPO_PUBLIC_DIR
+  : path.join(__dirname, 'public');
+app.use(express.static(STATIC_DIR, {
   etag: false,
   lastModified: false,
   cacheControl: false

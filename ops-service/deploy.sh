@@ -53,13 +53,46 @@ if [ -n "$(git status --porcelain)" ]; then
   echo "local changes present in $REPO_DIR — auto-stashing before pull"
   git stash push -u -m "deploy.sh auto-stash $(date -u +%FT%TZ)" || fail "could not stash local changes in $REPO_DIR"
 fi
+OLD_HEAD="$(git rev-parse HEAD)"
 git pull || fail "git pull failed in $REPO_DIR"
+NEW_HEAD="$(git rev-parse HEAD)"
 
 # The headless voice-app runner's own working tree (bind-mounted into the
 # container at /repo, see CLAUDE.md section 74) does not update itself —
 # forgetting this step is the exact regression that section warns about.
+# This alone is what makes ops-service/public/** changes show up live —
+# server.js now serves that directory straight out of $RUNTIME_REPO_DIR
+# rather than a copy baked into the Docker image (see the section below on
+# skipping the rebuild).
 git -C "$RUNTIME_REPO_DIR" pull || fail "git pull failed in $RUNTIME_REPO_DIR"
 chown -R 1000:1000 "$RUNTIME_REPO_DIR"
+
+# Rebuilding/restarting the container kills whatever Project Manager
+# voice/chat turn is running inside it mid-task (§88/§76 in CLAUDE.md) —
+# real problem, hit repeatedly on 2026-09-18 while the PM burned through a
+# long to-do list of ops-service/public/** tweaks and kept killing its own
+# in-flight turn on every single commit. Since server.js now serves
+# ops-service/public/ live out of $RUNTIME_REPO_DIR (just pulled above, no
+# rebuild needed for it to take effect), the only pushes that genuinely
+# need the Node process to reload code are ones touching the *backend*:
+# server.js itself, src/, the Dockerfile, or the dependency lockfiles. A
+# push that's purely frontend files (or, e.g., a workflow_dispatch re-run
+# with nothing new to pull at all) is already fully live from the git
+# pull above — skip the rebuild/restart entirely rather than pay a ~70s
+# image rebuild and an interruption for no code-level reason.
+NEEDS_REBUILD=1
+if [ "$OLD_HEAD" = "$NEW_HEAD" ]; then
+  NEEDS_REBUILD=0
+elif [ -z "$(git diff --name-only "$OLD_HEAD" "$NEW_HEAD" -- \
+  ops-service/server.js ops-service/src ops-service/package.json \
+  ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh)" ]; then
+  NEEDS_REBUILD=0
+fi
+
+if [ "$NEEDS_REBUILD" = "0" ]; then
+  echo "no backend changes between $OLD_HEAD and $NEW_HEAD — already live via git pull, skipping rebuild/restart"
+  exit 0
+fi
 
 # Snapshot whatever is currently tagged $IMAGE (the build about to be
 # replaced) *before* rebuilding overwrites that tag, so a bad new container

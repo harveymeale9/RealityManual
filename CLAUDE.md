@@ -3663,3 +3663,74 @@ data — so clearing the search box (which already calls `render()` on
 every `input` event, including an emptied box) restores the exact same
 board. Removed the now-fully-unused `.card-dim` CSS rule rather than
 leaving dead code behind.
+
+---
+
+# 93. Project Manager No Longer Kills Itself Mid-Task on Every ops-service Push (2026-09-18)
+
+Harvey's report: while the PM worked through a long (1-2 hour) to-do list
+of small ops-service tweaks, he kept seeing "Service restarted while this
+was in progress... please resend if it still needs doing" repeatedly.
+Root-caused via git log timestamps directly correlated against container
+restart times (not guessed): `deploy-ops-service.yml` triggers on every
+push to `main` touching `ops-service/**`, and the PM — which has real push
+rights to this repo — was committing+pushing after each completed to-do
+item. Each push fired the auto-deploy, which rebuilds the Docker image and
+restarts `rm-ops-service` — the exact container the PM's own session runs
+inside — killing whatever turn was in flight. The self-healing recovery
+from §88 correctly reported this rather than silently losing the task, but
+the underlying trigger just repeated on the next to-do item.
+
+**Harvey's actual priority, stated directly:** he wants each change visible
+as fast as physically possible, not batched to the end of a long list
+(that would mean waiting 1-2 hours to see a 5-minute fix land). So the fix
+had to make things faster, not slower/safer-but-delayed.
+
+**Fix — most of what's on a typical to-do list is frontend-only, and that
+class of change no longer needs a rebuild or restart at all:**
+
+- `ops-service/server.js`'s static file serving no longer serves a copy of
+  `public/` baked into the Docker image at build time. It now serves
+  straight from `${CLAUDE_REPO_DIR}/ops-service/public` — the exact git
+  working tree the PM's own Claude Code session already edits and commits
+  from (bind-mounted at `/repo` in the container, `/srv/realitymanual-repo`
+  on the VPS, per §74/§88) — falling back to the image-baked `./public`
+  only if that path doesn't exist (e.g. running `server.js` directly,
+  outside the container). A frontend file edit is live on next page load
+  the instant it's saved to disk — before it's even committed, let alone
+  deployed.
+- `ops-service/deploy.sh` now captures `OLD_HEAD`/`NEW_HEAD` around its
+  `git pull` in `REPO_DIR`, and — after still unconditionally pulling
+  `RUNTIME_REPO_DIR` (this is what actually makes the frontend-live-serving
+  above correct on every deploy, not just PM-authored ones, e.g. Harvey's
+  own desktop-pushed frontend edits still need this pull to reach the VPS)
+  — diffs those two commits against `server.js`, `src/`, `package.json`,
+  `package-lock.json`, `Dockerfile`, and `deploy.sh` itself. If none of
+  those changed (a pure `ops-service/public/**` push, or nothing new to
+  pull at all), it logs that and exits successfully **without** touching
+  Docker at all — no rebuild, no stop/rm/run, no restart, no interrupted
+  PM turn. Only a genuine backend/logic change still pays the full
+  rebuild+restart cost, because that's the one case where it's actually
+  unavoidable — Node has the old code loaded in memory and there's no way
+  around reloading the process for it to pick up new server-side code.
+- `deploy-ops-service.yml`'s trigger path (`ops-service/**`) was
+  deliberately left broad rather than narrowed to backend-only paths —
+  narrowing it there would also stop Harvey's own desktop-pushed frontend
+  changes from ever reaching `RUNTIME_REPO_DIR` at all, since nothing else
+  pulls that directory. Putting the "is this actually a backend change"
+  decision in `deploy.sh` instead keeps the CI trigger working for every
+  push while making the common case (frontend-only) fast and
+  non-disruptive.
+
+**Net effect:** a to-do list of ops-service UI/behavior fixes — the normal
+case — can now run start to finish without a single container restart,
+each item visible immediately as the PM saves it. Only an item that
+touches actual backend logic (`server.js`/`src/`) still triggers one real
+restart, and only for that item, not the whole list.
+
+Verified via `node --check server.js`, `bash -n deploy.sh`, and a YAML
+parse of the workflow file before pushing — not yet verified against a
+real live to-do-list run on the deployed service; flag this if picked up
+cold and re-verify (does a `public/`-only push really skip the rebuild in
+the real CI log, does a `server.js` change still redeploy correctly) if
+the same complaint resurfaces.
