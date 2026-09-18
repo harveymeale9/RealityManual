@@ -243,7 +243,10 @@
       var queueHintEl = document.getElementById('vQueueHint');
 
       var VOICE_ACK_DELAY_MS = 10000;
-      var RESPOND_ACK_TEXT = 'Got it — I’ll get right on that. I’ll let you know here once it’s done.';
+      // Neutral on purpose — see app.js's identical constant for why: this
+      // plays before CC knows whether the message is a task or a genuine
+      // question, so it can't presume "I'll get to work on that" framing.
+      var RESPOND_ACK_TEXT = 'Still working on that — I’ll have an answer for you in just a moment.';
       var EXECUTE_ACK_TEXT = 'Got it — I’ll take care of that now.';
 
       function showApp() {
@@ -501,7 +504,10 @@
             if (ack) {
               clearTimeout(ack.timer);
               delete voiceAck[row.id];
-              if (!ack.fired) Voice.speak(row.reply_text || '').catch(function () {});
+              // Always speak the real answer, whether or not the "still
+              // working on it" ack already fired — see app.js's identical
+              // comment for why.
+              Voice.speak(row.reply_text || '').catch(function () {});
             }
           },
           onError: function (row) {
@@ -509,7 +515,11 @@
             addMessage('error', row.error_message || 'Something went wrong.', null, null, row.transcript);
             if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
             var ack = voiceAck[row.id];
-            if (ack) { clearTimeout(ack.timer); delete voiceAck[row.id]; }
+            if (ack) {
+              clearTimeout(ack.timer);
+              delete voiceAck[row.id];
+              Voice.speak(row.error_message || 'Something went wrong.').catch(function () {});
+            }
           },
           onTick: function (rows) { renderQueue(rows); pastFirstTick = true; }
         });

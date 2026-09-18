@@ -309,7 +309,12 @@
   // end to end) without making Harvey wait through a task that's
   // genuinely going to take minutes before hearing anything at all.
   var VOICE_ACK_DELAY_MS = 10000;
-  var RESPOND_ACK_TEXT = 'Got it — I’ll get right on that. I’ll let you know here once it’s done.';
+  // Neutral on purpose — this plays before CC knows whether the message
+  // turns out to be a task or an actual question, so it can't presume
+  // "I'll get to work on that" framing (Harvey: that phrasing is only
+  // right for a genuine task, and it was playing for real questions too,
+  // which then never got a spoken answer at all — see onDone below).
+  var RESPOND_ACK_TEXT = 'Still working on that — I’ll have an answer for you in just a moment.';
   var EXECUTE_ACK_TEXT = 'Got it — I’ll take care of that now.';
 
   function bootProjectManager() {
@@ -593,7 +598,12 @@
         if (ack) {
           clearTimeout(ack.timer);
           delete voiceAck[row.id];
-          if (!ack.fired) Voice.speak(row.reply_text || '').catch(function () {});
+          // Always speak the real answer here, whether or not the "still
+          // working on it" ack already fired — a question sent by voice
+          // deserves an actual spoken answer, not silence (text-only)
+          // just because it took over VOICE_ACK_DELAY_MS to investigate.
+          // Only the ack line itself is a throwaway placeholder.
+          Voice.speak(row.reply_text || '').catch(function () {});
         }
       },
       onError: function (row) {
@@ -601,7 +611,11 @@
         addMessage('error', row.error_message || 'Something went wrong.', null, null, row.transcript);
         if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
         var ack = voiceAck[row.id];
-        if (ack) { clearTimeout(ack.timer); delete voiceAck[row.id]; }
+        if (ack) {
+          clearTimeout(ack.timer);
+          delete voiceAck[row.id];
+          Voice.speak(row.error_message || 'Something went wrong.').catch(function () {});
+        }
       },
       onActivity: function (row) { renderActivity(row.activity_log); },
       onTick: function (rows) { renderQueue(rows); pastFirstTick = true; }

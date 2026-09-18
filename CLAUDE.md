@@ -3334,3 +3334,44 @@ unsupported browsers (Safari <16.4, non-secure contexts) rather than an
 error — same defensive pattern as everything else in this file. This is
 what was causing Harvey to lose the stop-recording button entirely if he
 talked past his phone's auto-lock timeout.
+
+---
+
+# 87. Voice Questions Weren't Actually Being Answered Out Loud
+
+Harvey noticed he kept hearing the same generic "Got it — I'll get right
+on that" line for everything, including real questions, and never
+actually heard a spoken answer. Root cause, in both `app.js` and
+`voice-mobile.html`'s `onDone` handler:
+
+```js
+if (!ack.fired) Voice.speak(row.reply_text || '').catch(function () {});
+```
+
+The 10s "still working on it" ack (`VOICE_ACK_DELAY_MS`) was designed
+(§74) so a genuinely slow multi-minute task doesn't get its result
+spoken late out of nowhere — reasonable for a background task. But
+respond-mode ("Ask & Wait for Reply") is specifically the button whose
+whole promise is "hear CC's answer back," and the VOICE_SYSTEM_PROMPT
+(§74/this section's neighbor) explicitly tells CC to investigate
+thoroughly before answering rather than shortcut — which routinely takes
+well over 10 seconds. Combined, that meant most real questions sent by
+voice never got a spoken answer at all: just the generic ack, then
+silence (text-only).
+
+**Fixed:** `onDone` now always calls `Voice.speak(row.reply_text)` once
+an ack exists for that message (i.e. it was sent by voice expecting a
+spoken reply), regardless of whether the ack already fired — the ack is
+just a "still thinking" placeholder now, never a substitute for the real
+answer. `onError` got the same treatment (speaks `row.error_message`),
+since a question that hit an error still deserves to be told something,
+not silence. Also reworded `RESPOND_ACK_TEXT` from "Got it — I'll get
+right on that. I'll let you know here once it's done." (task-presuming
+phrasing, wrong for a plain question) to a neutral "Still working on
+that — I'll have an answer for you in just a moment." — chosen because
+the client can't know in advance whether a given message will turn out
+to be a task or a question, so the ack text itself has to work for
+either. `EXECUTE_ACK_TEXT` ("Got it — I'll take care of that now.") is
+untouched — execute-mode is unambiguously always a task by construction
+(that's the whole distinction the two buttons encode), and it still
+correctly never speaks a final result.
