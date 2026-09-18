@@ -3048,7 +3048,6 @@ had to when it found work here it had no memory of doing.
 
 ---
 
-<<<<<<< HEAD
 # 77. Voice-App Agent: Summarize Todo Items Instead of Pasting Verbatim (2026-09-18)
 
 Harvey noticed that when the headless Project Manager agent (the one
