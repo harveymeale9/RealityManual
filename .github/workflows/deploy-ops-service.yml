@@ -38,7 +38,9 @@ jobs:
           ssh-keyscan -H 187.124.146.235 >> ~/.ssh/known_hosts 2>&1 | tee ci-output.log
           ssh -o ConnectTimeout=10 -i ~/.ssh/deploy_key root@187.124.146.235 \
             'bash /root/realitymanual-repo/ops-service/deploy.sh' 2>&1 | tee -a ci-output.log
-          echo "ssh exit code: ${PIPESTATUS[0]}" | tee -a ci-output.log
+          ssh_exit="${PIPESTATUS[0]}"
+          echo "ssh exit code: ${ssh_exit}" | tee -a ci-output.log
+          exit "${ssh_exit}"
 
       - name: Record CI output back into the repo
         if: always()
