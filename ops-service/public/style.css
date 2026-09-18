@@ -499,6 +499,12 @@ a { color: var(--accent); }
    reference point, rather than guessing which individual paddings/font
    sizes to hand-tune. */
 .ops-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 18px clamp(16px, 3vw, 36px) 0; zoom: 0.75; }
+/* 0.75 was tuned for a laptop-width viewport; on a genuinely large desktop
+   monitor the same shrink made cards too small to read (Harvey) despite
+   solving the original "can't see enough" complaint there — scale back up
+   in steps as more real width is actually available. */
+@media (min-width: 1600px) { .ops-panel { zoom: 0.9; } }
+@media (min-width: 2000px) { .ops-panel { zoom: 1; } }
 
 .ops-toolbar {
   display: flex;
@@ -777,6 +783,7 @@ a { color: var(--accent); }
   gap: 10px;
 }
 .save-flag { color: var(--good); opacity: 0; transition: opacity 0.25s ease; }
+.modal-id { color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 1px 7px; letter-spacing: 0.03em; }
 .save-flag.show { opacity: 1; }
 
 .modal-close {

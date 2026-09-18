@@ -926,7 +926,7 @@
      ============================================================ */
 
   var modalWrap, pieceModal, scrim, fieldTitle, fieldStage, fieldContentType, fieldNotes,
-      platformGrid, metaCreated, metaUpdated, saveFlag, modalEyebrowText, btnDelete,
+      platformGrid, metaCreated, metaUpdated, saveFlag, modalEyebrowText, modalIdBadge, btnDelete,
       videoSection, videoPreview, fieldTranscript, fieldAudioTrack, thumbPreview,
       pickFrameBtn, thumbScrub, scrubRange, captureFrameBtn, captionReadout,
       utmField, fieldUtmLink, copyUtmBtn, scheduleStatus,
@@ -958,6 +958,7 @@
     metaUpdated = document.getElementById('metaUpdated');
     saveFlag = document.getElementById('saveFlag');
     modalEyebrowText = document.getElementById('modalEyebrowText');
+    modalIdBadge = document.getElementById('modalIdBadge');
     btnDelete = document.getElementById('btnDelete');
 
     videoSection = document.getElementById('videoSection');
@@ -1256,6 +1257,19 @@
     ]);
   }
 
+  // Shown in the editor header too, not just the card — per Harvey, so
+  // whatever's open matches the number he'd reference giving voice
+  // feedback ("post 047, change X") without needing to close back to the
+  // board to check which one he's looking at.
+  function showModalIdBadge(piece) {
+    if (typeof piece.seq === 'number') {
+      modalIdBadge.textContent = '#' + String(piece.seq).padStart(3, '0');
+      modalIdBadge.hidden = false;
+    } else {
+      modalIdBadge.hidden = true;
+    }
+  }
+
   function openPiece(id, closedCb) {
     activeId = id;
     isNewUnsaved = false;
@@ -1264,6 +1278,7 @@
     var p = pieces[id];
     if (!p) return;
     modalEyebrowText.textContent = 'Editing piece';
+    showModalIdBadge(p);
     populateFields(p).then(function () {
       metaCreated.textContent = 'Created ' + fmtFull(p.createdAt);
       metaUpdated.textContent = 'Updated ' + fmtFull(p.updatedAt);
@@ -1294,6 +1309,7 @@
     onModalClosed = closedCb || null;
     disarmDelete();
     modalEyebrowText.textContent = 'New piece';
+    showModalIdBadge(pieces[id]);
     populateFields(pieces[id]);
     metaCreated.textContent = 'Not yet saved';
     metaUpdated.textContent = '—';
