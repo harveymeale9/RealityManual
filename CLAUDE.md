@@ -3177,3 +3177,56 @@ existing `<code>` handling. Still fully safe against HTML injection: only
 code-block path. `stripMarkdownForSpeech()` already stripped both bold
 and italic markers before TTS, so spoken replies were never affected —
 this was a text-rendering-only bug.
+
+---
+
+# 82. Deploy Pipeline Was Silently Wedged All Session (2026-09-18)
+
+Harvey said the new Content Ops nav button (§79) wasn't visible on
+mobile. Investigating turned up something bigger: **every single change
+pushed this session — §77 through §81 — had actually failed to deploy**,
+despite each one being reported as "pushed, will go live on the next
+auto-deploy." CI ran and reported (honestly, per §76's earlier fix)
+every time; the failure was one layer deeper, in `ops-service/deploy.sh`
+itself running on the VPS.
+
+**Root cause:** `deploy.sh`'s `REPO_DIR` (`/root/realitymanual-repo`) is
+deliberately dual-purpose — it's both the CI deploy script's build source
+*and* an interactive root session's own working copy (§74 explains why
+`/srv/realitymanual-repo` exists as a separate clone: specifically to
+keep the unattended voice-app runner's tree from colliding with this
+one). Some root session had uncommitted local edits to `CLAUDE.md` and
+`ops-service/server.js` sitting in `REPO_DIR`, and `deploy.sh`'s plain
+`git pull` has aborted on that exact conflict on every run since
+`e678b49` (confirmed via `ops-service/.ci/last-run.log` across five
+consecutive CI runs, all `ssh exit code: 1`) — meaning the live
+container had been stuck on `e678b49` this entire session, unnoticed
+until Harvey caught the missing button.
+
+**Fixed:** `deploy.sh` now checks `git status --porcelain` in `REPO_DIR`
+before pulling and auto-stashes (`git stash push -u`) if dirty, rather
+than aborting — nothing is discarded, just parked in the stash list.
+**This fix can't self-apply**, though: the deploy workflow SSHes in and
+runs whatever copy of `deploy.sh` is *already checked out* on the VPS,
+before that script's own `git pull` has run — so the fix is stuck behind
+the exact problem it solves until someone with root manually clears
+`REPO_DIR`'s local changes once. Full handoff — what to check, why it's
+not safe to blindly discard, how to confirm the unstick worked — written
+to `ops-service/.ci/handoff-notes.md` (gitignored/untracked by design,
+same as the earlier VPS_SSH_KEY handoff note this session found and
+resolved).
+
+**Also queued behind this same blocker:** the §78 (agent-created card
+styling), §79 (mobile nav button), §80 (queue recent-completions), and
+§81 (bold/italic rendering) changes, plus this section's own `deploy.sh`
+fix — none are live yet. Once someone unblocks `REPO_DIR` and a deploy
+completes, re-verify all of the above against the real deployed service,
+not just against this repo's `git log`.
+
+**Process lesson:** "pushed to `main`" and "CI reported success" are not
+the same claim as "the change is live" — this pipeline has two
+independent layers that can each fail silently in a way the other
+doesn't catch (§76 already found and honestly-failed one; this is a
+different one, one layer further in). When a change is reported as
+deployed but the user can't see it, check `ops-service/.ci/last-run.log`
+for the actual outcome before assuming it's a code or caching problem.

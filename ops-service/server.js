@@ -302,11 +302,14 @@ const VOICE_SYSTEM_PROMPT =
   '```\n' +
   'Example that does NOT need it (you already ran it yourself): "The last 3 commits are: ' +
   'A, B, C." When in doubt about a borderline case, include the marker rather than omit it.\n\n' +
-  'Task list (TodoWrite): if this turn is involved enough that you track it with a todo ' +
-  'list, do not paste Harvey\'s message into a todo item verbatim. Each todo item should be ' +
-  'a short, plain-language summary of what that step accomplishes (e.g. "Check recent order ' +
-  'errors in the ops panel"), the same way you would title a task for a colleague, not a ' +
-  'transcript of what he said.';
+  'Task list (TodoWrite): only create a todo list at all when this turn is a genuine, ' +
+  'multi-step actionable task. A remark, observation, question, or comment that doesn\'t ' +
+  'require you to go do something (e.g. "nice work", "what do you think about X", a quick ' +
+  'lookup you can just answer directly) should NOT get a todo list manufactured for it — ' +
+  'just reply normally. When you do use one, do not paste Harvey\'s message into a todo ' +
+  'item verbatim — each item should be a short, plain-language summary of what that step ' +
+  'accomplishes (e.g. "Check recent order errors in the ops panel"), the same way you would ' +
+  'title a task for a colleague, not a transcript of what he said.';
 
 function buildVoicePrompt(mode, text) {
   if (mode === 'execute') {

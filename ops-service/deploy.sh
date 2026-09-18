@@ -39,6 +39,18 @@ RUN_ARGS=(-d --name "$CONTAINER" --restart unless-stopped
 fail() { echo "DEPLOY FAILED: $*"; exit 1; }
 
 cd "$REPO_DIR" || fail "cannot cd into $REPO_DIR"
+# REPO_DIR doubles as an interactive root session's own working copy (see
+# CLAUDE.md section on the voice app), so it can legitimately have
+# uncommitted local edits sitting in it when this script runs unattended
+# from CI. A plain `git pull` aborts outright when that happens, which
+# silently wedges every single auto-deploy until someone notices and
+# manually intervenes — auto-stash instead so the deploy always proceeds;
+# nothing is discarded, just parked in the stash list for whoever left it
+# there to recover with `git stash pop` later.
+if [ -n "$(git status --porcelain)" ]; then
+  echo "local changes present in $REPO_DIR — auto-stashing before pull"
+  git stash push -u -m "deploy.sh auto-stash $(date -u +%FT%TZ)" || fail "could not stash local changes in $REPO_DIR"
+fi
 git pull || fail "git pull failed in $REPO_DIR"
 
 # The headless voice-app runner's own working tree (bind-mounted into the
