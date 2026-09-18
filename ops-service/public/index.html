@@ -75,8 +75,13 @@
            hidden on phones and the horizontal-scrolling top tab row is easy
            to miss as the way back (Harvey couldn't find it) — a dedicated
            button removes any doubt. Hidden on the Project Manager tab
-           itself via app.js's renderActiveTab(). -->
-      <a href="#project-manager" class="pm-back-fab" id="pmBackFab" title="Back to Project Manager" aria-label="Back to Project Manager">
+           itself via app.js's renderActiveTab(). Points at voice-mobile.html
+           (the actual phone PWA Harvey uses), not the in-SPA #project-manager
+           tab — those are two different UIs (§74), and this button only
+           shows up here on mobile, i.e. exactly when he came from the PWA
+           in the first place and wants to go back to it, not to this SPA's
+           own desktop-style chat tab. -->
+      <a href="voice-mobile.html" class="pm-back-fab" id="pmBackFab" title="Back to Project Manager" aria-label="Back to Project Manager">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
       </a>
     </div>

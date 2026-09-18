@@ -3885,3 +3885,24 @@ prefix via `::before`. The Play button itself also now reads directly
 off `Voice.currentlySpeaking() === msgId` rather than its own flag, so
 its label/stop-click behavior is correct regardless of what started the
 audio.
+
+---
+
+# 98. §96's Back-to-PM Button Pointed at the Wrong "Project Manager"
+
+§96's mobile `.pm-back-fab` linked to `#project-manager` — the desktop-
+style chat tab rendered inside `index.html`'s own SPA. Harvey pointed
+out that's the wrong target: on mobile he actually lives in
+`voice-mobile.html`, a deliberately separate standalone page (§74) with
+its own layout (the two big Ask/Execute buttons, etc.), not the same UI
+as the in-SPA tab. Tapping the FAB was taking him to a different,
+desktop-shaped Project Manager instead of back to the app he'd actually
+come from.
+
+Fixed by pointing `href` straight at `voice-mobile.html` instead of the
+hash route — same plain same-tab navigation pattern `voice-mobile.html`'s
+own outbound button to Content Ops already uses (`<a
+href="index.html#content-ops">`, no `target`), just the reverse
+direction. `renderActiveTab()`'s show/hide logic (visible on every tab
+except the in-SPA project-manager one) didn't need to change — it's
+still correct regardless of where the link actually points.
