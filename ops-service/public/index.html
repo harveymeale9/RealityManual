@@ -5,11 +5,71 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="dark" />
   <meta name="robots" content="noindex, nofollow" />
-  <title>Control Panel — The Reality Manual</title>
+  <title>Project Manager — The Reality Manual</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,400&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
+  <style>
+    body { display: flex; }
+    .cc-app { width: 100%; min-height: 100vh; display: flex; flex-direction: column; }
+    .cc-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 22px; border-bottom: 1px solid var(--border-soft);
+    }
+    .cc-header-left { display: flex; align-items: center; gap: 12px; }
+    .cc-back { color: var(--ink-faint); text-decoration: none; font-size: 0.85rem; }
+    .cc-back:hover { color: var(--accent); }
+    .cc-title { font-family: var(--font-display); font-size: 1.15rem; margin: 0; }
+    .cc-header-right { display: flex; align-items: center; gap: 10px; }
+    .cc-reset-btn {
+      background: none; border: 1px solid var(--border); color: var(--ink-soft);
+      border-radius: 6px; padding: 6px 12px; font-size: 0.8rem; cursor: pointer;
+    }
+    .cc-reset-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    .cc-body { flex: 1; display: flex; flex-direction: column; max-width: 780px; width: 100%; margin: 0 auto; padding: 0 18px; min-height: 0; }
+    .cc-thread { flex: 1; overflow-y: auto; padding: 22px 4px; display: flex; flex-direction: column; gap: 16px; }
+    .cc-empty { color: var(--ink-faint); text-align: center; margin-top: 60px; font-size: 0.95rem; }
+
+    .cc-msg { max-width: 82%; padding: 12px 15px; border-radius: 10px; line-height: 1.55; font-size: 0.95rem; white-space: pre-wrap; }
+    .cc-msg-user { align-self: flex-end; background: var(--accent-soft); border: 1px solid var(--accent-soft-strong); color: var(--ink); }
+    .cc-msg-assistant { align-self: flex-start; background: var(--surface-2); border: 1px solid var(--border); color: var(--ink); }
+    .cc-msg-system { align-self: center; color: var(--ink-faint); font-size: 0.82rem; background: none; border: none; padding: 4px; }
+    .cc-msg-error { align-self: flex-start; background: var(--error-soft); border: 1px solid var(--error); color: var(--ink); }
+    .cc-msg-meta { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+    .cc-msg-tag { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-faint); }
+    .cc-play-btn {
+      background: none; border: 1px solid var(--border); color: var(--accent);
+      border-radius: 6px; padding: 3px 9px; font-size: 0.75rem; cursor: pointer;
+    }
+    .cc-play-btn:hover { border-color: var(--accent); }
+    .cc-typing { align-self: flex-start; color: var(--ink-faint); font-size: 0.85rem; font-style: italic; }
+
+    .cc-inputbar { border-top: 1px solid var(--border-soft); padding: 14px 4px 20px; }
+    .cc-execute-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .cc-execute-row label { font-size: 0.82rem; color: var(--ink-soft); display: flex; align-items: center; gap: 6px; cursor: pointer; }
+    .cc-input-row { display: flex; align-items: flex-end; gap: 10px; }
+    .cc-textarea {
+      flex: 1; resize: none; background: var(--surface); border: 1px solid var(--border);
+      color: var(--ink); font-family: var(--font-body); font-size: 0.95rem; line-height: 1.5;
+      padding: 12px 14px; border-radius: 8px; max-height: 160px;
+    }
+    .cc-textarea:focus { outline: none; border-color: var(--accent); }
+    .cc-mic-btn, .cc-send-btn {
+      width: 46px; height: 46px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--surface-2); color: var(--ink-soft); display: flex; align-items: center; justify-content: center;
+      cursor: pointer; flex-shrink: 0;
+    }
+    .cc-mic-btn.recording { background: var(--error-soft); border-color: var(--error); color: var(--error); animation: cc-rec-pulse 1.2s ease-in-out infinite; }
+    @keyframes cc-rec-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+    .cc-send-btn {
+      background: linear-gradient(135deg, var(--accent-2) 0%, var(--accent) 55%, var(--accent-3) 100%);
+      color: var(--accent-ink); border: none;
+    }
+    .cc-send-btn:disabled { opacity: 0.5; cursor: default; }
+    .cc-hint { color: var(--ink-faint); font-size: 0.72rem; margin-top: 8px; }
+  </style>
 </head>
 <body>
 
@@ -18,7 +78,7 @@
   <div id="loginGate" class="login-gate" hidden>
     <form id="loginForm" class="login-card" autocomplete="off">
       <div class="login-kicker">The Reality Manual</div>
-      <h1 class="login-title">Control Panel</h1>
+      <h1 class="login-title">Project Manager</h1>
       <div class="field">
         <label for="loginPassword">Password</label>
         <input type="password" id="loginPassword" name="password" autocomplete="current-password" />
@@ -28,149 +88,192 @@
     </form>
   </div>
 
-  <div id="appShell" class="panel-app" hidden>
-    <nav class="side-rail" id="sideRail" aria-label="Sections">
-      <span class="side-rail-logo" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 2 L22 12 L12 22 L2 12 Z" /></svg>
-      </span>
-      <a class="side-rail-btn" href="voice.html" title="Talk to CC" aria-label="Talk to CC">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/></svg>
-      </a>
-      <button type="button" class="side-rail-btn" data-tab="content-ops" title="Content Ops" aria-label="Content Ops">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-      </button>
-      <button type="button" class="side-rail-btn" data-tab="upload-files" title="Upload Files" aria-label="Upload Files">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 16V4M12 4l-5 5M12 4l5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
-      </button>
-      <button type="button" class="side-rail-btn" data-tab="sales-analytics" title="Sales Analytics" aria-label="Sales Analytics">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2v20M17 6.5c0-1.9-2.2-3.5-5-3.5s-5 1.4-5 3.5S9.2 10 12 10s5 1.6 5 3.5-2.2 3.5-5 3.5-5-1.6-5-3.5"/></svg>
-      </button>
-      <button type="button" class="side-rail-btn" data-tab="website-analytics" title="Website Analytics" aria-label="Website Analytics">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 2.5 14.4 0 17M12 3c-2.5 2.6-2.5 14.4 0 17"/></svg>
-      </button>
-      <button type="button" class="side-rail-btn" data-tab="settings" title="Settings" aria-label="Settings">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.96 19a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.04H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1.04-1.56V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15.4 4.6c.6.25 1.3.14 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9c.25.6.83 1.02 1.56 1.04H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1.04Z"/></svg>
-      </button>
-    </nav>
-    <div class="panel-body">
-      <header class="panel-header">
-        <div class="panel-brand">
-          <span class="brand-mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2 L22 12 L12 22 L2 12 Z" /></svg>
-          </span>
-          <div class="panel-brand-text">
-            <span class="wordmark-sm">The Reality Manual</span>
-            <span class="panel-sub">Control Panel</span>
-          </div>
-        </div>
-        <nav class="panel-tabs" id="panelTabs"></nav>
-        <div class="panel-actions">
-          <a class="link-btn" id="quickAddLink" href="quick-add.html" target="_blank" rel="noopener">Quick add ↗</a>
-          <button class="avatar-btn" id="logoutBtn" title="Log out" aria-label="Log out">H</button>
-        </div>
-      </header>
-      <main class="panel-main" id="panelMain"></main>
-      <footer class="panel-footer">The Reality Manual // Control Panel v1.0</footer>
-    </div>
-  </div>
-
-  <div class="scrim" id="scrim"></div>
-  <div class="modal-wrap" id="modalWrap">
-    <div class="modal" id="pieceModal" role="dialog" aria-modal="true" aria-hidden="true">
-      <div class="modal-head">
-        <div class="modal-eyebrow"><span id="modalEyebrowText">Piece</span><span class="save-flag" id="saveFlag">Saved</span></div>
-        <button class="modal-close" id="modalClose" aria-label="Close">&times;</button>
+  <div id="ccApp" class="cc-app" hidden>
+    <header class="cc-header">
+      <div class="cc-header-left">
+        <a class="cc-back" href="content-ops.html">&larr; Content Ops</a>
+        <h1 class="cc-title">Project Manager</h1>
       </div>
-      <div class="modal-body">
-        <div class="field">
-          <input class="title-input" id="fieldTitle" placeholder="Untitled piece" maxlength="200" />
-        </div>
-        <div class="toolbar-row">
-          <div class="field" id="stageField">
-            <label for="fieldStage">Stage</label>
-            <select class="stage-select" id="fieldStage"></select>
-          </div>
-          <div class="field" id="stageReadoutField" hidden>
-            <div class="field-label">Stage <span class="field-hint">— automatic once uploaded</span></div>
-            <div class="stage-readout" id="stageReadout">—</div>
-          </div>
-          <div class="field">
-            <label for="fieldContentType">Content type</label>
-            <select class="format-select" id="fieldContentType"></select>
-          </div>
-          <div class="field grow">
-            <div class="field-label">Platform</div>
-            <div class="platform-grid" id="platformGrid"></div>
-          </div>
-        </div>
-        <div class="field">
-          <label for="fieldNotes">Notes <span class="field-hint">— paste a screenshot to drop it in</span></label>
-          <div class="notes-input" id="fieldNotes" contenteditable="true" data-placeholder="Hook, talking points, script beats, edit notes..."></div>
-        </div>
-
-        <div class="video-section" id="videoSection" hidden>
-          <div class="video-section-head">Video</div>
-
-          <div class="field">
-            <video class="video-preview" id="videoPreview" controls playsinline></video>
-          </div>
-
-          <div class="field">
-            <label for="fieldTranscript">Transcript</label>
-            <textarea class="transcript-input" id="fieldTranscript" placeholder="Paste or type the transcript..."></textarea>
-            <button type="button" class="btn-secondary btn-tiny" id="autoTranscribeBtn" disabled title="Wire up a transcription API key in Settings, then this will run automatically — not built yet">Auto-transcribe (coming soon)</button>
-          </div>
-
-          <div class="toolbar-row">
-            <div class="field">
-              <label for="fieldAudioTrack">Backing audio</label>
-              <select class="stage-select" id="fieldAudioTrack">
-                <option value="">No audio track selected</option>
-              </select>
-            </div>
-            <div class="field grow">
-              <div class="field-label">Thumbnail</div>
-              <div class="thumb-picker">
-                <div class="thumb-preview" id="thumbPreview"><span class="thumb-empty">No thumbnail yet</span></div>
-                <button type="button" class="btn-secondary btn-tiny" id="pickFrameBtn">Pick frame</button>
-              </div>
-              <div class="thumb-scrub" id="thumbScrub" hidden>
-                <input type="range" id="scrubRange" min="0" max="100" value="0" step="0.1" />
-                <button type="button" class="btn-secondary btn-tiny" id="captureFrameBtn">Use this frame</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="field" id="captionField">
-            <label>Caption <span class="field-hint">— shared across all uploads, edit in Settings</span></label>
-            <div class="caption-readout" id="captionReadout">—</div>
-          </div>
-
-          <div class="field" id="utmField" hidden>
-            <label for="fieldUtmLink">Longform link (with UTM tracking)</label>
-            <div class="utm-row">
-              <input class="title-input utm-input" id="fieldUtmLink" readonly />
-              <button type="button" class="btn-secondary btn-tiny" id="copyUtmBtn">Copy</button>
-            </div>
-          </div>
-
-          <div class="schedule-row" id="scheduleRow">
-            <span id="scheduleStatus">Not scheduled yet — move this to the Scheduled stage above to queue it.</span>
-          </div>
-        </div>
+      <div class="cc-header-right">
+        <a class="cc-back" href="voice-mobile.html">Mobile view</a>
+        <button type="button" class="cc-reset-btn" id="resetBtn">New conversation</button>
       </div>
-      <div class="modal-foot">
-        <div class="meta-row">
-          <span id="metaCreated">—</span>
-          <span id="metaUpdated">—</span>
+    </header>
+    <div class="cc-body">
+      <div class="cc-thread" id="thread">
+        <div class="cc-empty">Type or speak to Claude Code — same project, same tools, full memory of RealityManual.</div>
+      </div>
+      <div class="cc-inputbar">
+        <div class="cc-execute-row">
+          <label><input type="checkbox" id="executeOnly" /> Execute only — don't wait for a reply</label>
         </div>
-        <button class="btn-delete" id="btnDelete">Delete piece</button>
+        <div class="cc-input-row">
+          <button type="button" class="cc-mic-btn" id="micBtn" title="Record voice message" aria-label="Record voice message">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/></svg>
+          </button>
+          <textarea id="textInput" class="cc-textarea" rows="1" placeholder="Message Claude Code…"></textarea>
+          <button type="button" class="cc-send-btn" id="sendBtn" title="Send" aria-label="Send">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4Z"/></svg>
+          </button>
+        </div>
+        <div class="cc-hint">Voice replies are spoken automatically. Typed replies show as text — tap ▶ to hear one.</div>
       </div>
     </div>
   </div>
 
   <script src="lib/store.js"></script>
   <script src="lib/auth.js"></script>
-  <script src="app.js"></script>
+  <script src="lib/voiceClient.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      var Auth = window.RMAuth;
+      var Voice = window.RMVoice;
+
+      var authChecking = document.getElementById('authChecking');
+      var loginGate = document.getElementById('loginGate');
+      var loginForm = document.getElementById('loginForm');
+      var loginPassword = document.getElementById('loginPassword');
+      var loginError = document.getElementById('loginError');
+      var ccApp = document.getElementById('ccApp');
+      var thread = document.getElementById('thread');
+      var textInput = document.getElementById('textInput');
+      var sendBtn = document.getElementById('sendBtn');
+      var micBtn = document.getElementById('micBtn');
+      var executeOnly = document.getElementById('executeOnly');
+      var resetBtn = document.getElementById('resetBtn');
+
+      function showApp() { authChecking.hidden = true; loginGate.hidden = true; ccApp.hidden = false; textInput.focus(); }
+      function showLogin() { authChecking.hidden = true; ccApp.hidden = true; loginGate.hidden = false; setTimeout(function () { loginPassword.focus(); }, 50); }
+
+      loginForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        Auth.checkPassword(loginPassword.value).then(function (ok) {
+          if (ok) { loginError.hidden = true; loginForm.reset(); showApp(); }
+          else { loginError.hidden = false; loginPassword.value = ''; loginPassword.focus(); }
+        });
+      });
+      Auth.checkSession().then(function (ok) { if (ok) showApp(); else showLogin(); });
+
+      var emptyNote = thread.querySelector('.cc-empty');
+      function clearEmptyNote() { if (emptyNote && emptyNote.parentNode) { emptyNote.parentNode.removeChild(emptyNote); emptyNote = null; } }
+
+      function addMessage(kind, text) {
+        clearEmptyNote();
+        var el = document.createElement('div');
+        el.className = 'cc-msg cc-msg-' + kind;
+        el.textContent = text;
+        thread.appendChild(el);
+        thread.scrollTop = thread.scrollHeight;
+        return el;
+      }
+
+      function addAssistantMessage(text) {
+        clearEmptyNote();
+        var wrap = document.createElement('div');
+        wrap.className = 'cc-msg cc-msg-assistant';
+        var body = document.createElement('div');
+        body.textContent = text;
+        wrap.appendChild(body);
+        var meta = document.createElement('div');
+        meta.className = 'cc-msg-meta';
+        var playBtn = document.createElement('button');
+        playBtn.type = 'button';
+        playBtn.className = 'cc-play-btn';
+        playBtn.textContent = '▶ Play';
+        playBtn.addEventListener('click', function () { Voice.speak(text).catch(function () {}); });
+        meta.appendChild(playBtn);
+        wrap.appendChild(meta);
+        thread.appendChild(wrap);
+        thread.scrollTop = thread.scrollHeight;
+        return wrap;
+      }
+
+      function addTyping() {
+        clearEmptyNote();
+        var el = document.createElement('div');
+        el.className = 'cc-typing';
+        el.textContent = 'CC is working on it…';
+        thread.appendChild(el);
+        thread.scrollTop = thread.scrollHeight;
+        return el;
+      }
+
+      function sendText(text, mode, opts) {
+        opts = opts || {};
+        var autoSpeak = !!opts.autoSpeak;
+        if (!text.trim()) return;
+        addMessage('user', text);
+        var typingEl = addTyping();
+        Voice.sendMessage(text.trim(), mode).then(function (created) {
+          if (mode === 'execute') {
+            typingEl.textContent = 'Instruction sent — no reply expected.';
+            return null;
+          }
+          return Voice.pollMessage(created.id);
+        }).then(function (row) {
+          if (typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
+          if (!row) return;
+          if (row.status === 'error') {
+            addMessage('error', row.error_message || 'Something went wrong.');
+            return;
+          }
+          addAssistantMessage(row.reply_text || '');
+          if (autoSpeak) Voice.speak(row.reply_text || '').catch(function () {});
+        }).catch(function (err) {
+          if (typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
+          addMessage('error', (err && err.message) || 'Something went wrong.');
+        });
+      }
+
+      function currentMode() { return executeOnly.checked ? 'execute' : 'respond'; }
+
+      sendBtn.addEventListener('click', function () {
+        var text = textInput.value;
+        textInput.value = '';
+        textInput.style.height = 'auto';
+        sendText(text, currentMode(), { autoSpeak: false });
+      });
+      textInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendBtn.click();
+        }
+      });
+      textInput.addEventListener('input', function () {
+        textInput.style.height = 'auto';
+        textInput.style.height = Math.min(textInput.scrollHeight, 160) + 'px';
+      });
+
+      var activeRecorder = null;
+      micBtn.addEventListener('click', function () {
+        if (activeRecorder) {
+          var rec = activeRecorder;
+          activeRecorder = null;
+          micBtn.classList.remove('recording');
+          rec.stop().then(function (blob) { return Voice.transcribe(blob); })
+            .then(function (text) {
+              if (!text) return;
+              sendText(text, currentMode(), { autoSpeak: true });
+            })
+            .catch(function (err) { addMessage('error', (err && err.message) || 'Could not transcribe audio.'); });
+          return;
+        }
+        Voice.startRecording().then(function (rec) {
+          activeRecorder = rec;
+          micBtn.classList.add('recording');
+        }).catch(function () {
+          alert('Could not access the microphone. Check the browser has mic permission.');
+        });
+      });
+
+      resetBtn.addEventListener('click', function () {
+        if (!confirm('Start a new conversation? CC will lose context from this one.')) return;
+        Voice.resetSession().then(function () {
+          addMessage('system', 'New conversation started.');
+        });
+      });
+    })();
+  </script>
 </body>
 </html>
