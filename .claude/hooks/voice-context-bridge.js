@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // UserPromptSubmit hook: whenever Harvey talks to Claude Code through the
-// separate voice/chat app (ops.realitymanual.com/voice.html or
+// separate voice/chat app (ops.realitymanual.com — "Project Manager" — or
 // voice-mobile.html) — a different, headless Claude Code session entirely —
 // this surfaces a summary of anything new since the last time an
 // interactive session on this VPS checked, so "yo I'm back" here already

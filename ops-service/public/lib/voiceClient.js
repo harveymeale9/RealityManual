@@ -1,4 +1,4 @@
-// Shared client for the voice/chat app (voice-mobile.html + voice.html):
+// Shared client for the voice/chat app (voice-mobile.html + index.html):
 // mic recording, transcription, sending messages to the headless Claude
 // agent, polling for a reply, and playing it back via TTS.
 window.RMVoice = (function () {

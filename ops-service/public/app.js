@@ -77,10 +77,11 @@
   }
 
   function renderTabs() {
-    // "Talk to CC" is a real page (voice.html), not one of this SPA's
-    // in-page tabs — prepended as a plain link, first in the menu, per
-    // Harvey. [data-tab] below excludes it from the hash-routing handler.
-    var talkToCcLink = '<a class="panel-tab" href="voice.html">Talk to CC</a>';
+    // "Project Manager" is a real page (index.html — the site's default
+    // landing page, not this content-ops.html board), not one of this
+    // SPA's in-page tabs — prepended as a plain link, first in the menu,
+    // per Harvey. [data-tab] below excludes it from the hash-routing handler.
+    var talkToCcLink = '<a class="panel-tab" href="index.html">Project Manager</a>';
     panelTabs.innerHTML = talkToCcLink + TABS.map(function (t) {
       return '<button class="panel-tab" data-tab="' + t.id + '">' + t.label + '</button>';
     }).join('');
@@ -94,8 +95,8 @@
      location.hash routing so the two navs can never disagree. */
   function bindSideRail() {
     if (!sideRail) return;
-    // [data-tab] excludes the "Talk to CC" link, which is a real page
-    // navigation (voice.html), not one of this SPA's in-page tabs.
+    // [data-tab] excludes the "Project Manager" link, which is a real page
+    // navigation (index.html), not one of this SPA's in-page tabs.
     sideRail.querySelectorAll('.side-rail-btn[data-tab]').forEach(function (btn) {
       btn.addEventListener('click', function () { location.hash = btn.dataset.tab; });
     });
