@@ -74,6 +74,11 @@ db.exec(
 // won't retrofit it onto an existing DB file — ALTER TABLE, no-op if the
 // column is already there (fresh DB or already migrated).
 try { db.exec('ALTER TABLE voice_messages ADD COLUMN activity_log TEXT'); } catch (e) { /* already exists */ }
+// early_ack: the first genuinely contextual sentence CC produces for a
+// turn (see claudeRunner.js's handleEvent) — spoken to Harvey immediately
+// instead of a hardcoded filler phrase while the real work is still in
+// progress. Same safe-ALTER pattern as activity_log above.
+try { db.exec('ALTER TABLE voice_messages ADD COLUMN early_ack TEXT'); } catch (e) { /* already exists */ }
 
 const stmts = {
   getAll: db.prepare('SELECT data FROM records WHERE store_name = ? ORDER BY updated_at ASC'),
@@ -90,6 +95,7 @@ const stmts = {
   insertVoiceMessage: db.prepare('INSERT INTO voice_messages (id, mode, transcript, status, created_at) VALUES (?, ?, ?, ?, ?)'),
   setVoiceMessageStatus: db.prepare('UPDATE voice_messages SET status = ? WHERE id = ?'),
   setVoiceActivityLog: db.prepare('UPDATE voice_messages SET activity_log = ? WHERE id = ?'),
+  setVoiceEarlyAck: db.prepare('UPDATE voice_messages SET early_ack = ? WHERE id = ?'),
   finishVoiceMessage: db.prepare('UPDATE voice_messages SET status = ?, reply_text = ?, error_message = ?, completed_at = ? WHERE id = ?'),
   getVoiceMessage: db.prepare('SELECT * FROM voice_messages WHERE id = ?'),
   listVoiceMessages: db.prepare('SELECT * FROM voice_messages ORDER BY created_at DESC LIMIT ?'),
@@ -302,6 +308,20 @@ const VOICE_SYSTEM_PROMPT =
   '```\n' +
   'Example that does NOT need it (you already ran it yourself): "The last 3 commits are: ' +
   'A, B, C." When in doubt about a borderline case, include the marker rather than omit it.\n\n' +
+  'Quick verbal acknowledgment: if a turn needs real work (checking code/logs, running ' +
+  'commands, multiple steps) before you can give a real answer, the very first thing you say ' +
+  '— before touching any tool — gets spoken to Harvey immediately, well before your final ' +
+  'answer is ready, so he is not left hearing a hardcoded filler phrase or dead silence. Make ' +
+  'that first sentence genuinely reflect his specific message: a short, plain-language ' +
+  'restatement that proves you understood what he actually said (not a generic "I understand" ' +
+  'or "got it"), plus — when it is not obvious — a brief note of what you are about to check ' +
+  'or do. E.g. if he asks "did the deploy actually go through," a good first line is "Checking ' +
+  'the deploy log now to confirm it actually completed" — NOT "Got it, I\'ll get right on ' +
+  'that." Keep it to one short sentence; the real, complete answer still follows later as your ' +
+  'normal final response once you actually have it, exactly as described above — this is only ' +
+  'the immediate, spoken-first acknowledgment, not a substitute for it. Skip this entirely for ' +
+  'a turn you can just answer directly with no tool use at all — there, your one real response ' +
+  'is both the acknowledgment and the answer, so there is nothing separate to say first.\n\n' +
   'Task list (TodoWrite): only create a todo list at all when this turn is a genuine, ' +
   'multi-step actionable task. A remark, observation, question, or comment that doesn\'t ' +
   'require you to go do something (e.g. "nice work", "what do you think about X", a quick ' +
@@ -398,12 +418,19 @@ async function processVoiceMessage(id, mode, text, imageBlock) {
     activity.push(line);
     stmts.setVoiceActivityLog.run(JSON.stringify(activity.slice(-200)), id);
   }
+  // Written the instant it's available (well before the turn finishes) so
+  // the client can speak it immediately instead of a hardcoded filler —
+  // see claudeRunner.js's handleEvent for where this actually comes from.
+  function onEarlyAck(ackText) {
+    stmts.setVoiceEarlyAck.run(ackText.slice(0, 2000), id);
+  }
 
   let result = await claudeRunner.runClaude({
     prompt: prompt,
     sessionId: sessionId,
     appendSystemPrompt: buildSystemPromptForSession(sessionId),
     onActivity: onActivity,
+    onEarlyAck: onEarlyAck,
     imageBlock: imageBlock
   });
   // The resumed session id can go stale (e.g. the CLI's local session store
@@ -419,6 +446,7 @@ async function processVoiceMessage(id, mode, text, imageBlock) {
       sessionId: null,
       appendSystemPrompt: buildSystemPromptForSession(null),
       onActivity: onActivity,
+      onEarlyAck: onEarlyAck,
       imageBlock: imageBlock
     });
   }

@@ -277,6 +277,7 @@ window.RMVoice = (function () {
   //            onPending(row)    — row is now queued/running (fires once per
   //                                pending->running transition too, since both
   //                                bucket to "inflight" — treat as idempotent)
+  //            onEarlyAck(row)   — row.early_ack just appeared, fires once
   //            onDone(row)       — row finished successfully
   //            onError(row)      — row finished with an error
   //            onActivity(row)   — row's activity_log grew
@@ -299,8 +300,15 @@ window.RMVoice = (function () {
     function applyRow(row) {
       var seen = known[row.id];
       if (!seen) {
-        known[row.id] = seen = { bucket: null, activityLen: 0 };
+        known[row.id] = seen = { bucket: null, activityLen: 0, hadEarlyAck: false };
         if (callbacks.onNewMessage) callbacks.onNewMessage(row);
+      }
+      // Fires once, the moment early_ack first appears — well before the
+      // row's bucket transitions to done/error, since it's written mid-turn
+      // (see server.js's onEarlyAck / claudeRunner.js's handleEvent).
+      if (!seen.hadEarlyAck && row.early_ack) {
+        seen.hadEarlyAck = true;
+        if (callbacks.onEarlyAck) callbacks.onEarlyAck(row);
       }
       var bucket = bucketOf(row.status);
       if (bucket !== seen.bucket) {

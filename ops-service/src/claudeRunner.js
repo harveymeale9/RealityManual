@@ -156,6 +156,24 @@ function handleEvent(sess, evt) {
     }
     return;
   }
+  // Early ack: the first non-empty plain-text block a turn emits, before
+  // the final `result` — Claude Code's own convention is to say in one
+  // sentence what it's about to do before acting (see the top-level
+  // system instructions), which doubles as a genuine, contextual
+  // "I understood you and here's my plan" the voice app can speak
+  // immediately, instead of a hardcoded filler phrase (Harvey flagged
+  // that filler as unacceptable — see VOICE_SYSTEM_PROMPT). Fired once
+  // per turn only; later text blocks are left for the final reply.
+  if (evt.type === 'assistant' && evt.message && Array.isArray(evt.message.content) && sess.pending.size) {
+    const turn = sess.pending.values().next().value;
+    if (turn && !turn.earlyAckSent) {
+      const textBlock = evt.message.content.filter(function (b) { return b.type === 'text' && b.text && b.text.trim(); })[0];
+      if (textBlock) {
+        turn.earlyAckSent = true;
+        turn.onEarlyAck(textBlock.text.trim());
+      }
+    }
+  }
   const lines = describeEvent(evt);
   if (lines && sess.pending.size) {
     const turn = sess.pending.values().next().value;
@@ -249,7 +267,7 @@ function buildMessageContent(prompt, imageBlock) {
   ];
 }
 
-function runTurn(sess, prompt, timeoutMs, onActivity, imageBlock) {
+function runTurn(sess, prompt, timeoutMs, onActivity, imageBlock, onEarlyAck) {
   const uuid = crypto.randomUUID();
   return new Promise(function (resolvePromise) {
     let settled = false;
@@ -266,6 +284,8 @@ function runTurn(sess, prompt, timeoutMs, onActivity, imageBlock) {
     sess.pending.set(uuid, {
       uuid: uuid,
       onActivity: onActivity,
+      onEarlyAck: onEarlyAck || function () {},
+      earlyAckSent: false,
       resolve: function (result) {
         if (settled) return;
         settled = true;
@@ -287,6 +307,7 @@ async function runClaude(opts) {
   const prompt = opts.prompt;
   const timeoutMs = opts.timeoutMs || DEFAULT_TIMEOUT_MS;
   const onActivity = typeof opts.onActivity === 'function' ? opts.onActivity : function () {};
+  const onEarlyAck = typeof opts.onEarlyAck === 'function' ? opts.onEarlyAck : function () {};
   const appendSystemPrompt = opts.appendSystemPrompt;
 
   // ensureSession() itself no longer rejects in the normal case (see its
@@ -303,7 +324,7 @@ async function runClaude(opts) {
     }
   }
 
-  return runTurn(sess, prompt, timeoutMs, onActivity, opts.imageBlock);
+  return runTurn(sess, prompt, timeoutMs, onActivity, opts.imageBlock, onEarlyAck);
 }
 
 // Tears down the live in-process session (if any) so the next runClaude()

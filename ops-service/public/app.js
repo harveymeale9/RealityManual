@@ -587,6 +587,19 @@
     pmSync = Voice.syncThread({
       onNewMessage: function (row) { addMessage('user', row.transcript, row.id); },
       onPending: function (row) { addTyping(row.id); },
+      onEarlyAck: function (row) {
+        // Swap the generic "CC is working on it…" placeholder for CC's own
+        // real, contextual first line the moment it's available — visible
+        // even for a typed/no-speech send, not just spoken.
+        var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
+        if (typingEl) typingEl.textContent = row.early_ack;
+        var ack = voiceAck[row.id];
+        if (!ack || ack.fired) return;
+        ack.fired = true;
+        ack.spokenText = row.early_ack;
+        clearTimeout(ack.timer);
+        Voice.speak(row.early_ack).catch(function () {});
+      },
       onDone: function (row) {
         removeTyping(row.id);
         // Execute-mode replies are a real completion summary now (see
@@ -598,12 +611,16 @@
         if (ack) {
           clearTimeout(ack.timer);
           delete voiceAck[row.id];
-          // Always speak the real answer here, whether or not the "still
-          // working on it" ack already fired — a question sent by voice
-          // deserves an actual spoken answer, not silence (text-only)
-          // just because it took over VOICE_ACK_DELAY_MS to investigate.
-          // Only the ack line itself is a throwaway placeholder.
-          Voice.speak(row.reply_text || '').catch(function () {});
+          // Always speak the real answer here, whether or not an ack
+          // already fired — a question sent by voice deserves an actual
+          // spoken answer, not silence (text-only) just because it took a
+          // while to investigate. Skip only if the early ack we already
+          // spoke turned out to BE the complete final answer verbatim (a
+          // turn with no tool calls) — otherwise this would say the exact
+          // same sentence twice in a row.
+          var replyText = row.reply_text || '';
+          var alreadySaidIt = ack.spokenText && replyText.trim() === ack.spokenText.trim();
+          if (!alreadySaidIt) Voice.speak(replyText).catch(function () {});
         }
       },
       onError: function (row) {
@@ -621,11 +638,17 @@
       onTick: function (rows) { renderQueue(rows); pastFirstTick = true; }
     });
 
+    // fired/spokenText: whichever comes first — CC's own real early_ack
+    // (onEarlyAck above, the common case) or this timeout's generic
+    // fallback phrase (only if early_ack somehow never showed up in time)
+    // — claims the "something has now been said" slot so the other path
+    // never also speaks on top of it.
     function scheduleVoiceAck(id, mode) {
-      var entry = { fired: false, timer: null };
+      var entry = { fired: false, timer: null, spokenText: null };
       entry.timer = setTimeout(function () {
         entry.fired = true;
-        Voice.speak(mode === 'execute' ? EXECUTE_ACK_TEXT : RESPOND_ACK_TEXT).catch(function () {});
+        entry.spokenText = mode === 'execute' ? EXECUTE_ACK_TEXT : RESPOND_ACK_TEXT;
+        Voice.speak(entry.spokenText).catch(function () {});
       }, VOICE_ACK_DELAY_MS);
       voiceAck[id] = entry;
     }
