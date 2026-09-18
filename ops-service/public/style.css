@@ -413,6 +413,13 @@ a { color: var(--accent); }
 .pm-play-btn:hover, .pm-stop-btn:hover { border-color: var(--accent); }
 .pm-stop-btn { color: var(--error); border-color: var(--error); }
 .pm-typing { align-self: flex-start; color: var(--ink-faint); font-size: 0.85rem; font-style: italic; padding: 0 clamp(16px, 3vw, 36px); }
+/* Whichever message's audio is currently playing — auto-spoken or via the
+   Play button, doesn't matter, both go through the same voiceClient.js
+   speaking-state tracking — gets a visible highlight so it's obvious at a
+   glance which reply the voice is coming from, not just a button label. */
+.pm-msg.pm-speaking { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-soft-strong), 0 0 18px -6px var(--accent-soft-strong); }
+.pm-typing.pm-speaking { color: var(--accent); }
+.pm-typing.pm-speaking::before { content: '🔊 '; }
 
 /* Markdown-lite rendering (lib/voiceClient.js renderMarkdownLite) — only
    fenced code blocks and inline code, the two things Harvey actually

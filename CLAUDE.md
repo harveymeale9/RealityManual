@@ -3829,3 +3829,59 @@ href="#project-manager">` (same real-anchor pattern as §91, not a
 tab" behavior for free. `renderActiveTab()` in `app.js` toggles its
 `.show` class alongside the existing side-rail/top-tab active-state
 logic — one extra line, no new routing.
+
+---
+
+# 97. Stop-While-Speaking: Fixed on Desktop, Made Visible Everywhere
+
+Harvey wanted a way to interrupt long auto-spoken replies mid-playback,
+and separately flagged that the existing Play/Stop button worked on
+mobile but not desktop, plus wanted a clearer visual cue for which
+message is currently being read.
+
+**Root cause of the desktop bug:** each `addAssistantMessage()` bubble's
+Play/Stop button tracked "am I playing" with its own local `playing`
+variable, set to `true` only inside that button's own click handler.
+Auto-speak (`onEarlyAck`/`onDone`/the fallback ack) calls
+`Voice.speak()` directly, bypassing that handler entirely — so the
+button never learned playback had started. Clicking it during auto-speak
+didn't stop anything; it called `Voice.speak()` again, which restarted
+the exact same text from a fresh TTS round-trip. Mobile happened to work
+only because its blocking record/transcribe overlay flow made this
+particular interaction less likely to come up, not because the
+underlying logic was actually different — the same bug was latent there
+too.
+
+**Fix — single source of truth in `voiceClient.js`, not per-bubble
+state:** `speak(text, msgId)` now takes an optional message id and
+maintains one module-level `speakingMsgId`, notified through a new
+`Voice.onSpeakingChange(fn)` pub/sub (`fn(msgId)` on start, `fn(null)` on
+stop/end) and read via `Voice.currentlySpeaking()`. `stopSpeaking()`
+clears it and notifies too. `onSpeakingChange` returns an unsubscribe
+function specifically because `app.js`'s `bootProjectManager()` re-runs
+every time the Project Manager tab is revisited — re-registering without
+unsubscribing the previous run would leak one listener per visit for the
+life of the page (mirrors the existing `pmSync` stop-before-restart
+pattern right above it). `voice-mobile.html`'s equivalent registration
+only ever runs once (guarded by `startSync()`'s own `if (sync) return`),
+so no unsubscribe is needed there.
+
+**Every `Voice.speak()` call site in both `app.js` and
+`voice-mobile.html`** (the per-bubble Play button, `onEarlyAck`,
+`onDone`, `onError`, the `scheduleVoiceAck` fallback, and
+`voice-mobile.html`'s immediate execute-mode ack) now passes the
+relevant `voice_messages` row id, so playback started from *any* of
+those paths is attributable to the right message. Each page registers
+one shared `onSpeakingChange` listener (not one per bubble, which would
+also leak) that resets any previously-`.pm-speaking` element and
+highlights whichever `[data-msg-id]` element matches the new active id
+— matches either a real reply bubble (`.pm-msg-assistant`) or, during
+the brief early-ack window before that bubble exists yet, the typing
+placeholder (`.pm-typing`, already carried `data-msg-id` since it was
+first built). `.pm-msg.pm-speaking` gets an accent-colored border/glow
+(also covers error bubbles, which have no Play button but can still be
+auto-spoken); `.pm-typing.pm-speaking` gets an accent color plus a 🔊
+prefix via `::before`. The Play button itself also now reads directly
+off `Voice.currentlySpeaking() === msgId` rather than its own flag, so
+its label/stop-click behavior is correct regardless of what started the
+audio.

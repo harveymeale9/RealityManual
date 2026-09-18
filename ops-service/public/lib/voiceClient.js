@@ -200,14 +200,49 @@ window.RMVoice = (function () {
   }
 
   var currentAudio = null;
+  // Which message a currently-playing (or about-to-play) audio belongs to,
+  // and a tiny pub-sub so any page can keep its UI (a per-message Play/Stop
+  // button, a "speaking" highlight) in sync regardless of whether playback
+  // was triggered by that exact button or started automatically elsewhere
+  // (the early-ack/final-answer auto-speak paths) — a desktop bug Harvey
+  // hit was the per-bubble button's own "am I playing" state only ever
+  // being set from its own click handler, so auto-speak starting audio
+  // behind its back left the button stuck showing "Play" while audio was
+  // actually going, and clicking it then restarted the same text from
+  // scratch instead of stopping it.
+  var speakingMsgId = null;
+  var speakingListeners = [];
+  // Returns an unsubscribe function — callers that re-register on every
+  // tab visit (e.g. bootProjectManager running again each time Project
+  // Manager is reopened) should call it before registering again, or the
+  // listener list grows once per visit for the lifetime of the page.
+  function onSpeakingChange(fn) {
+    speakingListeners.push(fn);
+    return function unsubscribe() {
+      var idx = speakingListeners.indexOf(fn);
+      if (idx !== -1) speakingListeners.splice(idx, 1);
+    };
+  }
+  function notifySpeakingChange() {
+    speakingListeners.forEach(function (fn) { try { fn(speakingMsgId); } catch (e) { /* ignore */ } });
+  }
+  function currentlySpeaking() { return speakingMsgId; }
+
   function stopSpeaking() {
     if (currentAudio) {
       try { currentAudio.pause(); } catch (e) { /* ignore */ }
       currentAudio = null;
     }
+    if (speakingMsgId !== null) {
+      speakingMsgId = null;
+      notifySpeakingChange();
+    }
   }
 
-  function speak(text) {
+  // msgId (optional): the voice_messages row id this audio belongs to, so
+  // listeners registered via onSpeakingChange can highlight/un-highlight
+  // the right UI element as playback starts and stops.
+  function speak(text, msgId) {
     var clean = stripMarkdownForSpeech(text);
     if (!clean) return Promise.resolve(null);
     stopSpeaking();
@@ -221,8 +256,14 @@ window.RMVoice = (function () {
         var url = URL.createObjectURL(blob);
         var audio = new Audio(url);
         currentAudio = audio;
+        speakingMsgId = (typeof msgId !== 'undefined') ? msgId : null;
+        notifySpeakingChange();
         audio.addEventListener('ended', function () {
-          if (currentAudio === audio) currentAudio = null;
+          if (currentAudio === audio) {
+            currentAudio = null;
+            speakingMsgId = null;
+            notifySpeakingChange();
+          }
           URL.revokeObjectURL(url);
         });
         return audio.play().then(function () { return audio; });
@@ -363,6 +404,8 @@ window.RMVoice = (function () {
     pollMessage: pollMessage,
     speak: speak,
     stopSpeaking: stopSpeaking,
+    onSpeakingChange: onSpeakingChange,
+    currentlySpeaking: currentlySpeaking,
     playPing: playPing,
     isActiveHere: isActiveHere,
     stripMarkdownForSpeech: stripMarkdownForSpeech,

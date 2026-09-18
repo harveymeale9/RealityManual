@@ -309,11 +309,12 @@
         return el;
       }
 
-      function addAssistantMessage(text, replyToText) {
+      function addAssistantMessage(text, replyToText, msgId) {
         clearEmptyNote();
         var isAction = /^\[NEEDS_ACTION\]/i.test(text || '');
         var wrap = document.createElement('div');
         wrap.className = 'pm-msg pm-msg-assistant' + (isAction ? ' pm-msg-assistant--action' : '');
+        if (msgId) wrap.dataset.msgId = msgId;
         if (replyToText) {
           var replyTo = document.createElement('div');
           replyTo.className = 'pm-msg-replyto';
@@ -329,17 +330,13 @@
         playBtn.type = 'button';
         playBtn.className = 'pm-play-btn';
         playBtn.textContent = '▶ Play';
-        var playing = false;
-        function resetPlayBtn() { playing = false; playBtn.textContent = '▶ Play'; playBtn.classList.remove('pm-stop-btn'); }
+        // Button state is driven by the shared onSpeakingChange listener
+        // (registered once in startSync) rather than a local flag here —
+        // see app.js's identical comment for why (desktop bug: auto-speak
+        // starting playback never updated a button-local flag).
         playBtn.addEventListener('click', function () {
-          if (playing) { Voice.stopSpeaking(); resetPlayBtn(); return; }
-          Voice.speak(text).then(function (audio) {
-            if (!audio) return;
-            playing = true;
-            playBtn.textContent = '■ Stop';
-            playBtn.classList.add('pm-stop-btn');
-            audio.addEventListener('ended', resetPlayBtn);
-          }).catch(function () {});
+          if (Voice.currentlySpeaking() === msgId) { Voice.stopSpeaking(); return; }
+          Voice.speak(text, msgId).catch(function () {});
         });
         meta.appendChild(playBtn);
         wrap.appendChild(meta);
@@ -477,7 +474,7 @@
         entry.timer = setTimeout(function () {
           entry.fired = true;
           entry.spokenText = mode === 'execute' ? EXECUTE_ACK_TEXT : RESPOND_ACK_TEXT;
-          Voice.speak(entry.spokenText).catch(function () {});
+          Voice.speak(entry.spokenText, id).catch(function () {});
         }, VOICE_ACK_DELAY_MS);
         voiceAck[id] = entry;
       }
@@ -496,6 +493,24 @@
         // history through onDone/onError, so this suppresses pinging for
         // that replay — only completions noticed on a later tick chime.
         var pastFirstTick = false;
+        // One shared listener drives the "speaking" highlight/button state
+        // for whichever message is currently playing — startSync() only
+        // ever runs once per page load (guarded above), so no repeated-
+        // registration leak to worry about here the way app.js's
+        // per-tab-visit bootProjectManager needs to guard against.
+        Voice.onSpeakingChange(function (activeId) {
+          thread.querySelectorAll('.pm-speaking').forEach(function (el) {
+            el.classList.remove('pm-speaking');
+            var btn = el.querySelector('.pm-play-btn');
+            if (btn) { btn.textContent = '▶ Play'; btn.classList.remove('pm-stop-btn'); }
+          });
+          if (activeId === null || typeof activeId === 'undefined') return;
+          var active = thread.querySelector('[data-msg-id="' + activeId + '"]');
+          if (!active) return;
+          active.classList.add('pm-speaking');
+          var btn = active.querySelector('.pm-play-btn');
+          if (btn) { btn.textContent = '■ Stop'; btn.classList.add('pm-stop-btn'); }
+        });
         sync = Voice.syncThread({
           onNewMessage: function (row) { addMessage('user', row.transcript, row.id); },
           onPending: function (row) { addTyping(row.id); },
@@ -510,14 +525,14 @@
             ack.fired = true;
             ack.spokenText = row.early_ack;
             clearTimeout(ack.timer);
-            Voice.speak(row.early_ack).catch(function () {});
+            Voice.speak(row.early_ack, row.id).catch(function () {});
           },
           onDone: function (row) {
             removeTyping(row.id);
             // Execute-mode replies are a real completion summary now (see
             // server.js buildVoicePrompt), not a throwaway line — show it
             // like any other reply instead of a generic "Done" placeholder.
-            addAssistantMessage(row.reply_text || '', row.transcript);
+            addAssistantMessage(row.reply_text || '', row.transcript, row.id);
             if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
             var ack = voiceAck[row.id];
             if (ack) {
@@ -529,18 +544,18 @@
               // early ack already was the complete final answer.
               var replyText = row.reply_text || '';
               var alreadySaidIt = ack.spokenText && replyText.trim() === ack.spokenText.trim();
-              if (!alreadySaidIt) Voice.speak(replyText).catch(function () {});
+              if (!alreadySaidIt) Voice.speak(replyText, row.id).catch(function () {});
             }
           },
           onError: function (row) {
             removeTyping(row.id);
-            addMessage('error', row.error_message || 'Something went wrong.', null, null, row.transcript);
+            addMessage('error', row.error_message || 'Something went wrong.', row.id, null, row.transcript);
             if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
             var ack = voiceAck[row.id];
             if (ack) {
               clearTimeout(ack.timer);
               delete voiceAck[row.id];
-              Voice.speak(row.error_message || 'Something went wrong.').catch(function () {});
+              Voice.speak(row.error_message || 'Something went wrong.', row.id).catch(function () {});
             }
           },
           onTick: function (rows) { renderQueue(rows); pastFirstTick = true; }
@@ -642,7 +657,7 @@
               if (mode === 'execute') {
                 // Execute never speaks the real result either way, so there's
                 // no "redundant double-speak" risk — ack immediately.
-                Voice.speak(EXECUTE_ACK_TEXT).catch(function () {});
+                Voice.speak(EXECUTE_ACK_TEXT, created.id).catch(function () {});
               } else {
                 // Same delayed/cancelable ack as desktop: a quick question
                 // just gets its real answer spoken directly (ack never

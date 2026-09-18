@@ -25,6 +25,10 @@
   // rebuilt every time this tab is (re)entered, which would otherwise leak
   // one extra setTimeout chain per visit.
   var pmSync = null;
+  // Same leak-avoidance reasoning as pmSync above — unsubscribe the
+  // previous tab visit's speaking-state listener before registering a new
+  // one in bootProjectManager().
+  var pmSpeakingUnsub = null;
 
   var TABS = [
     { id: 'project-manager', label: 'Project Manager' },
@@ -341,6 +345,27 @@
 
     if (pmSync) { pmSync.stop(); pmSync = null; }
 
+    // One shared listener drives the "speaking" highlight/button state for
+    // every bubble in the thread, whichever one is currently playing —
+    // covers both a manual Play-button click and auto-speak starting
+    // playback on its own, which is what desktop was missing before (the
+    // button's own local "am I playing" flag never got set when playback
+    // started from outside its own click handler).
+    if (pmSpeakingUnsub) pmSpeakingUnsub();
+    pmSpeakingUnsub = Voice.onSpeakingChange(function (activeId) {
+      thread.querySelectorAll('.pm-speaking').forEach(function (el) {
+        el.classList.remove('pm-speaking');
+        var btn = el.querySelector('.pm-play-btn');
+        if (btn) { btn.textContent = '▶ Play'; btn.classList.remove('pm-stop-btn'); }
+      });
+      if (activeId === null || typeof activeId === 'undefined') return;
+      var active = thread.querySelector('[data-msg-id="' + activeId + '"]');
+      if (!active) return;
+      active.classList.add('pm-speaking');
+      var btn = active.querySelector('.pm-play-btn');
+      if (btn) { btn.textContent = '■ Stop'; btn.classList.add('pm-stop-btn'); }
+    });
+
     var emptyNote = thread.querySelector('.pm-empty');
     function clearEmptyNote() { if (emptyNote && emptyNote.parentNode) { emptyNote.parentNode.removeChild(emptyNote); emptyNote = null; } }
 
@@ -383,11 +408,12 @@
       return el;
     }
 
-    function addAssistantMessage(text, replyToText) {
+    function addAssistantMessage(text, replyToText, msgId) {
       clearEmptyNote();
       var isAction = /^\[NEEDS_ACTION\]/i.test(text || '');
       var wrap = document.createElement('div');
       wrap.className = 'pm-msg pm-msg-assistant' + (isAction ? ' pm-msg-assistant--action' : '');
+      if (msgId) wrap.dataset.msgId = msgId;
       if (replyToText) {
         var replyTo = document.createElement('div');
         replyTo.className = 'pm-msg-replyto';
@@ -403,17 +429,16 @@
       playBtn.type = 'button';
       playBtn.className = 'pm-play-btn';
       playBtn.textContent = '▶ Play';
-      var playing = false;
-      function resetPlayBtn() { playing = false; playBtn.textContent = '▶ Play'; playBtn.classList.remove('pm-stop-btn'); }
+      // Button state is driven entirely by the shared onSpeakingChange
+      // listener (registered once in bootProjectManager) rather than a
+      // local "am I playing" flag here — that flag used to only ever get
+      // set from this button's own click, so audio started elsewhere
+      // (auto-speak) left the button stuck showing "Play" while audio was
+      // actually going, and clicking it then restarted the same text
+      // instead of stopping it.
       playBtn.addEventListener('click', function () {
-        if (playing) { Voice.stopSpeaking(); resetPlayBtn(); return; }
-        Voice.speak(text).then(function (audio) {
-          if (!audio) return;
-          playing = true;
-          playBtn.textContent = '■ Stop';
-          playBtn.classList.add('pm-stop-btn');
-          audio.addEventListener('ended', resetPlayBtn);
-        }).catch(function () {});
+        if (Voice.currentlySpeaking() === msgId) { Voice.stopSpeaking(); return; }
+        Voice.speak(text, msgId).catch(function () {});
       });
       meta.appendChild(playBtn);
       wrap.appendChild(meta);
@@ -607,14 +632,14 @@
         ack.fired = true;
         ack.spokenText = row.early_ack;
         clearTimeout(ack.timer);
-        Voice.speak(row.early_ack).catch(function () {});
+        Voice.speak(row.early_ack, row.id).catch(function () {});
       },
       onDone: function (row) {
         removeTyping(row.id);
         // Execute-mode replies are a real completion summary now (see
         // server.js buildVoicePrompt), not a throwaway line — show it like
         // any other reply instead of a generic "Done" placeholder.
-        addAssistantMessage(row.reply_text || '', row.transcript);
+        addAssistantMessage(row.reply_text || '', row.transcript, row.id);
         if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
         var ack = voiceAck[row.id];
         if (ack) {
@@ -629,18 +654,18 @@
           // same sentence twice in a row.
           var replyText = row.reply_text || '';
           var alreadySaidIt = ack.spokenText && replyText.trim() === ack.spokenText.trim();
-          if (!alreadySaidIt) Voice.speak(replyText).catch(function () {});
+          if (!alreadySaidIt) Voice.speak(replyText, row.id).catch(function () {});
         }
       },
       onError: function (row) {
         removeTyping(row.id);
-        addMessage('error', row.error_message || 'Something went wrong.', null, null, row.transcript);
+        addMessage('error', row.error_message || 'Something went wrong.', row.id, null, row.transcript);
         if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
         var ack = voiceAck[row.id];
         if (ack) {
           clearTimeout(ack.timer);
           delete voiceAck[row.id];
-          Voice.speak(row.error_message || 'Something went wrong.').catch(function () {});
+          Voice.speak(row.error_message || 'Something went wrong.', row.id).catch(function () {});
         }
       },
       onActivity: function (row) { renderActivity(row.activity_log); },
@@ -657,7 +682,7 @@
       entry.timer = setTimeout(function () {
         entry.fired = true;
         entry.spokenText = mode === 'execute' ? EXECUTE_ACK_TEXT : RESPOND_ACK_TEXT;
-        Voice.speak(entry.spokenText).catch(function () {});
+        Voice.speak(entry.spokenText, id).catch(function () {});
       }, VOICE_ACK_DELAY_MS);
       voiceAck[id] = entry;
     }
