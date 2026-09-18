@@ -4,13 +4,16 @@
 Already up to date.
 + git -C /srv/realitymanual-repo pull
 From https://github.com/harveymeale9/RealityManual
-   4f52bd4..66c9ef3  main       -> origin/main
-Updating 4f52bd4..66c9ef3
+   66c9ef3..cae50fc  main       -> origin/main
+Updating 66c9ef3..cae50fc
 Fast-forward
- ops-service/.ci/last-run.log         | 66 +++++++++++++++++-------------------
- ops-service/public/app.js            | 14 ++++++--
- ops-service/public/voice-mobile.html | 10 ++++--
- 3 files changed, 50 insertions(+), 40 deletions(-)
+ ops-service/.ci/last-run.log      |  67 +++++----
+ ops-service/public/app.js         | 280 +++++++++++++++++++++++++++++++++-----
+ ops-service/public/index.html     |  13 +-
+ ops-service/public/lib/store.js   |  52 ++++++-
+ ops-service/public/quick-add.html |  36 +++--
+ ops-service/public/style.css      |  27 +++-
+ 6 files changed, 389 insertions(+), 86 deletions(-)
 + chown -R 1000:1000 /srv/realitymanual-repo
 + docker tag rm-ops-service rm-ops-service:previous
 + docker build -t rm-ops-service ./ops-service
@@ -24,63 +27,62 @@ Fast-forward
 #2 DONE 0.2s
 
 #3 [internal] load .dockerignore
-#3 transferring context: 136B 0.0s done
-#3 DONE 0.1s
+#3 transferring context: 136B done
+#3 DONE 0.0s
 
 #4 [ 1/10] FROM docker.io/library/node:22-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5
 #4 resolve docker.io/library/node:22-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 0.0s done
-#4 DONE 0.1s
+#4 DONE 0.0s
 
 #5 [internal] load build context
-#5 transferring context: 107.08kB 0.0s done
-#5 DONE 0.1s
+#5 transferring context: 160.13kB 0.0s done
+#5 DONE 0.0s
 
-#6 [ 5/10] COPY package.json ./
+#6 [ 3/10] RUN npm install -g @anthropic-ai/claude-code@2.1.276
 #6 CACHED
 
-#7 [ 6/10] RUN npm install --omit=dev
+#7 [ 5/10] COPY package.json ./
 #7 CACHED
 
-#8 [ 7/10] COPY server.js ./
+#8 [ 6/10] RUN npm install --omit=dev
 #8 CACHED
 
-#9 [ 2/10] RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates     && update-ca-certificates     && rm -rf /var/lib/apt/lists/*
+#9 [ 4/10] WORKDIR /app
 #9 CACHED
 
-#10 [ 3/10] RUN npm install -g @anthropic-ai/claude-code@2.1.276
+#10 [ 2/10] RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates     && update-ca-certificates     && rm -rf /var/lib/apt/lists/*
 #10 CACHED
 
-#11 [ 4/10] WORKDIR /app
+#11 [ 7/10] COPY server.js ./
 #11 CACHED
 
 #12 [ 8/10] COPY src ./src
 #12 CACHED
 
 #13 [ 9/10] COPY public ./public
-#13 DONE 0.2s
+#13 DONE 0.1s
 
 #14 [10/10] RUN mkdir -p /data /repo && chown -R node:node /app /data /repo
-#14 DONE 23.9s
+#14 DONE 27.8s
 
 #15 exporting to image
 #15 exporting layers
-#15 exporting layers 13.4s done
-#15 exporting manifest sha256:6bec92ddb547d3e3c81850fb1db3f14c26876227750a147943cd77100c4d5efc
-#15 exporting manifest sha256:6bec92ddb547d3e3c81850fb1db3f14c26876227750a147943cd77100c4d5efc 0.0s done
-#15 exporting config sha256:fe1fde5b746e32c8b91658db171428a8a1033961093e7a045520b1f8e19a1f96 done
-#15 exporting attestation manifest sha256:23b55a00694a11165b44047bd4d380a4eeb2db2a812463eddd4cdcc98505acab 0.0s done
-#15 exporting manifest list sha256:f72ba6162353b6837c2313c366e3d9d89975a77a582248afe714a42adc465f4f 0.0s done
+#15 exporting layers 10.9s done
+#15 exporting manifest sha256:b3b286e780e43bf006ea004f024c97fce661f8e39229bc15c06c7218f7f881e7 0.0s done
+#15 exporting config sha256:7164556d00afc93a4606afd41261e229599506f20cde11efb5ea037c8a110d55 0.0s done
+#15 exporting attestation manifest sha256:b241db4005ec83dc95f3e95ce116a12d8ac31b2ce809051128648287896a9c9c 0.0s done
+#15 exporting manifest list sha256:e344d8800f1a0901091aca540a324643f766114ef7f3ed5198bfe747d3280418 0.0s done
 #15 naming to docker.io/library/rm-ops-service:latest done
 #15 unpacking to docker.io/library/rm-ops-service:latest
-#15 unpacking to docker.io/library/rm-ops-service:latest 3.5s done
-#15 DONE 17.0s
+#15 unpacking to docker.io/library/rm-ops-service:latest 2.6s done
+#15 DONE 13.7s
 + docker stop rm-ops-service
 rm-ops-service
 + docker rm rm-ops-service
 rm-ops-service
 + docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 -v /root/ops-service-claude-home/claude-dir:/home/node/.claude -v /root/ops-service-claude-home/claude.json:/home/node/.claude.json -v /root/ops-service-data:/data -v /srv/realitymanual-repo:/repo --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
-7f27047f8bc323b8b50d63a27916fc1a68e610ddbb76267e54842d2332b1d191
+a4796f70b20fa93d545bf024a9950d9f36937cc5cc4ab03f91428cd560f68c79
 ++ git -C /root/realitymanual-repo rev-parse --short HEAD
-+ echo 'rm-ops-service redeployed at 66c9ef3'
-rm-ops-service redeployed at 66c9ef3
++ echo 'rm-ops-service redeployed at cae50fc'
+rm-ops-service redeployed at cae50fc
 ssh exit code: 0
