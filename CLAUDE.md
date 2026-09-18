@@ -2852,3 +2852,70 @@ above) is completely unaffected by this, it's a pure file-rename +
 relabel. Deployed via the normal `rm-ops-service` rebuild+recreate cycle
 (§62/§65's pattern) and verified live: `/` serves the chat page,
 `/content-ops.html` serves the board, `/voice.html` correctly 404s.
+
+**Correction, same day: the two-page split above was wrong, reverted.**
+Splitting Project Manager into its own page (`index.html`) with Content
+Ops moved to `content-ops.html` broke real things Harvey caught within
+minutes of testing: `#content-ops` hash links/bookmarks landed on the
+chat page (which ignores hashes entirely) with no obvious way back, and
+the chat page's only nav was one small text link — no side-rail, no top
+tabs. **Project Manager is now `TABS[0]`** in the single SPA shell
+(`ops-service/public/index.html`, `app.js`) — a real hash-routed tab
+(`#project-manager`, default when the hash is empty) rendered into
+`panelMain` exactly like Content Ops/Settings/etc., so it automatically
+gets the same side-rail + top-tabs nav, and `#content-ops` (or any other
+tab hash) works correctly again. `content-ops.html` is gone;
+`voice-mobile.html` (the phone PWA entry point) is untouched — still a
+deliberately separate, minimal standalone page, not part of this SPA.
+
+**Same pass, an actual bug (not a design call): Claude Code session
+transcripts live in `/home/node/.claude` inside the `rm-ops-service`
+container — not on any bind-mounted volume.** The two container
+rebuilds done for the (bad) two-page split above silently wiped that
+directory both times, orphaning the `claude_session_id` stored in
+`voice_session` and breaking every subsequent message with "No
+conversation found with session ID: ...". Fixed two ways: `/home/node/.claude`
+and `/home/node/.claude.json` are now bind-mounted to
+**`/root/ops-service-claude-home`** on the VPS (same pattern as
+`/root/ops-service-data`), so a rebuild no longer wipes conversation
+history — **whoever runs the container's `docker run` must include both
+`-v` flags** (see the full command near the top of §75-adjacent redeploy
+notes, or just `docker inspect rm-ops-service` on a working instance and
+copy its mounts) or this regresses again. Defense in depth on top of
+that: `processVoiceMessage()` in `server.js` now detects this specific
+failure (`/no conversation found/i` in the error) and retries once with
+a fresh session instead of leaving the conversation permanently stuck —
+so even if the mount is ever missing again, one message is wasted
+instead of the whole voice app going dark until someone manually clears
+`voice_session`.
+
+**New feature, same pass: the Project Manager tab is now two columns.**
+Left = the existing clean thread (user messages + final replies,
+unchanged). Right = a live "Activity" pane showing tool calls and
+thinking as they happen — deliberately *never* the final reply text
+(that stays exclusive to the left, no duplication) — per Harvey: "I want
+on the right side the code-like outputs... on the left the clean
+output/result... so I can basically ignore the stuff on the right."
+Required switching `claudeRunner.js` from `--output-format json`
+(blocks until the whole run completes, one lump result) to
+`--output-format stream-json --verbose`, parsing each JSONL event as it
+arrives and turning `tool_use`/`thinking` content blocks into short
+lines via an `onActivity` callback — plain `text` blocks are skipped on
+purpose, since that's the reply content the left column already owns.
+Persisted incrementally to a new `voice_messages.activity_log` column
+(JSON array, safe `ALTER TABLE` that no-ops if already migrated) rather
+than kept only in memory, so `GET /api/voice/messages/:id` — the same
+endpoint the frontend already polled for the reply — now also carries
+the growing activity trail; `voiceClient.js`'s `pollMessage()` gained an
+`onTick` callback so the UI can render it live without a second
+endpoint or a websocket. Verified event shapes against the real CLI
+before wiring the parser (`assistant` messages with `tool_use`/`thinking`
+blocks, `user` messages with `tool_result`, a final `result` event) —
+this is why plain-text stripping and the `tool_result` content-can-be-
+string-or-array handling are both there, not guessed.
+
+Both fixes and the new pane were verified against the real deployed API
+end-to-end, not just locally: stale session cleared → next message
+created a fresh one and got a correct reply; `activity_log` present and
+correctly parsed on the wire; `/`, `#content-ops`, `#settings` etc. all
+route correctly with the side-rail/top-tabs visible throughout.
