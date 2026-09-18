@@ -328,8 +328,22 @@ a { color: var(--accent); }
    reads to find the answer. */
 .pm-columns { flex: 1; min-height: 0; display: flex; }
 .pm-col { min-width: 0; display: flex; flex-direction: column; min-height: 0; }
-.pm-col-clean { flex: 1 1 56%; }
-.pm-col-activity { flex: 1 1 44%; border-left: 1px solid var(--border-soft); background: var(--surface); }
+/* Translucent "glass" panel rather than the app's usual opaque surface —
+   Harvey wants the earth backdrop (body::before, see top of this file)
+   visible through the chat panel itself, not just in the gaps around it. */
+.pm-col-clean {
+  flex: 1 1 56%;
+  background: rgba(10, 15, 12, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.pm-col-activity {
+  flex: 1 1 44%;
+  border-left: 1px solid var(--border-soft);
+  background: rgba(10, 15, 12, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
 
 .pm-thread {
   flex: 1; min-height: 0; overflow-y: auto;
@@ -349,8 +363,6 @@ a { color: var(--accent); }
 .pm-typing { align-self: flex-start; color: var(--ink-faint); font-size: 0.85rem; font-style: italic; padding: 0 clamp(16px, 3vw, 36px); }
 
 .pm-inputbar { flex-shrink: 0; border-top: 1px solid var(--border-soft); padding: 14px clamp(16px, 3vw, 36px) 20px; max-width: 780px; width: 100%; margin: 0 auto; }
-.pm-execute-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-.pm-execute-row label { font-size: 0.82rem; color: var(--ink-soft); display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .pm-input-row { display: flex; align-items: flex-end; gap: 10px; }
 .pm-textarea {
   flex: 1; resize: none; background: var(--surface); border: 1px solid var(--border);

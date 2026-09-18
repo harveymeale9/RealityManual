@@ -255,9 +255,6 @@
             '<div class="pm-empty">Type or speak to Claude Code — same project, same tools, full memory of RealityManual.</div>' +
           '</div>' +
           '<div class="pm-inputbar">' +
-            '<div class="pm-execute-row">' +
-              '<label><input type="checkbox" id="pmExecuteOnly" /> Execute only — don\'t wait for a reply</label>' +
-            '</div>' +
             '<div class="pm-input-row">' +
               '<button type="button" class="pm-mic-btn" id="pmMicBtn" title="Record voice message" aria-label="Record voice message">' +
                 '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/></svg>' +
@@ -284,7 +281,6 @@
     var textInput = document.getElementById('pmTextInput');
     var sendBtn = document.getElementById('pmSendBtn');
     var micBtn = document.getElementById('pmMicBtn');
-    var executeOnly = document.getElementById('pmExecuteOnly');
     var resetBtn = document.getElementById('pmResetBtn');
 
     var emptyNote = thread.querySelector('.pm-empty');
@@ -381,13 +377,11 @@
       });
     }
 
-    function currentMode() { return executeOnly.checked ? 'execute' : 'respond'; }
-
     sendBtn.addEventListener('click', function () {
       var text = textInput.value;
       textInput.value = '';
       textInput.style.height = 'auto';
-      sendText(text, currentMode(), { autoSpeak: false });
+      sendText(text, 'respond', { autoSpeak: false });
     });
     textInput.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -395,31 +389,95 @@
         sendBtn.click();
       }
     });
-    textInput.addEventListener('input', function () {
+    function autoresize() {
       textInput.style.height = 'auto';
       textInput.style.height = Math.min(textInput.scrollHeight, 160) + 'px';
-    });
+    }
+    textInput.addEventListener('input', autoresize);
 
+    // Recording state: exactly one obvious action while recording — click
+    // the (now pulsing) mic again to finish. Hiding Send removes the
+    // "mic again or Send?" ambiguity Harvey flagged; showing it again the
+    // moment recording stops means there's still a way to fix a stray word
+    // before it goes out.
+    function setRecordingUI(isRecording) {
+      micBtn.classList.toggle('recording', isRecording);
+      micBtn.title = isRecording ? 'Stop recording and send' : 'Record voice message';
+      micBtn.setAttribute('aria-label', micBtn.title);
+      sendBtn.hidden = isRecording;
+    }
+
+    var SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    var activeRecognition = null;
     var activeRecorder = null;
+
+    // Preferred path: the browser's own live speech recognition (Chrome/
+    // Edge) writes into the textarea as Harvey talks, same as him typing —
+    // no separate "transcribing…" wait, and what he sees live is exactly
+    // what gets sent, so there's no surprise mismatch against a second,
+    // server-side transcription pass.
+    function startLiveRecognition() {
+      var recognition = new SpeechRecognitionCtor();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      var finalTranscript = '';
+      recognition.addEventListener('result', function (e) {
+        var interim = '';
+        for (var i = e.resultIndex; i < e.results.length; i++) {
+          var chunk = e.results[i][0].transcript;
+          if (e.results[i].isFinal) finalTranscript += chunk + ' ';
+          else interim += chunk;
+        }
+        textInput.value = (finalTranscript + interim).trim();
+        autoresize();
+      });
+      recognition.addEventListener('end', function () {
+        activeRecognition = null;
+        setRecordingUI(false);
+        var text = textInput.value;
+        textInput.value = '';
+        textInput.style.height = 'auto';
+        if (text.trim()) sendText(text, 'respond', { autoSpeak: true });
+      });
+      recognition.addEventListener('error', function (e) {
+        activeRecognition = null;
+        setRecordingUI(false);
+        if (e.error !== 'aborted' && e.error !== 'no-speech') {
+          addMessage('error', 'Voice recognition error: ' + e.error);
+        }
+      });
+      activeRecognition = recognition;
+      setRecordingUI(true);
+      recognition.start();
+    }
+
+    // Fallback for browsers without live recognition (e.g. Firefox): the
+    // original record-then-upload-then-transcribe flow, no live preview.
+    function startRecordAndUpload() {
+      Voice.startRecording().then(function (rec) {
+        activeRecorder = rec;
+        setRecordingUI(true);
+      }).catch(function () {
+        alert('Could not access the microphone. Check the browser has mic permission.');
+      });
+    }
+
     micBtn.addEventListener('click', function () {
+      if (activeRecognition) { activeRecognition.stop(); return; }
       if (activeRecorder) {
         var rec = activeRecorder;
         activeRecorder = null;
-        micBtn.classList.remove('recording');
+        setRecordingUI(false);
         rec.stop().then(function (blob) { return Voice.transcribe(blob); })
           .then(function (text) {
             if (!text) return;
-            sendText(text, currentMode(), { autoSpeak: true });
+            sendText(text, 'respond', { autoSpeak: true });
           })
           .catch(function (err) { addMessage('error', (err && err.message) || 'Could not transcribe audio.'); });
         return;
       }
-      Voice.startRecording().then(function (rec) {
-        activeRecorder = rec;
-        micBtn.classList.add('recording');
-      }).catch(function () {
-        alert('Could not access the microphone. Check the browser has mic permission.');
-      });
+      if (SpeechRecognitionCtor) startLiveRecognition();
+      else startRecordAndUpload();
     });
 
     resetBtn.addEventListener('click', function () {
