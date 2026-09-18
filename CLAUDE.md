@@ -2919,3 +2919,66 @@ end-to-end, not just locally: stale session cleared → next message
 created a fresh one and got a correct reply; `activity_log` present and
 correctly parsed on the wire; `/`, `#content-ops`, `#settings` etc. all
 route correctly with the side-rail/top-tabs visible throughout.
+
+---
+
+# 75. Project Manager: Cross-Device Thread Sync (2026-09-18)
+
+Harvey's ask: desktop and mobile should mirror each other as "one very long
+chat thread" — sending an instruction from his phone at a coffee shop should
+show up on the desktop panel too, and opening Project Manager on either
+device should resume the last conversation instead of a blank slate, not
+just replay whatever that one device itself sent.
+
+**What was actually missing:** the backend already stored every message in
+one shared `voice_messages` table and `claude --resume`d one shared
+`voice_session` row (§74 — cross-device *conversation continuity* already
+worked), and `GET /api/voice/messages` already returned full history. The
+gap was purely client-side: the desktop Project Manager tab never called it
+at all (always opened blank), and `voice-mobile.html` called it exactly
+once on load and only rendered already-finished rows, then never checked
+again — so neither UI reflected anything the *other* device did afterward.
+
+**Fix — no websocket needed, polling is enough for a single-admin panel:**
+`ops-service/public/lib/voiceClient.js` gained `RMVoice.syncThread(callbacks,
+opts)`, a small shared engine both pages now use. It calls
+`GET /api/voice/messages` on an interval (2.5s default, 60-row window) and
+diffs each row against what it's seen before by id: a never-seen id fires
+`onNewMessage`; a status transition into pending/running (bucketed together
+as `"inflight"`) fires `onPending` once; a transition to `done`/`error`
+fires `onDone`/`onError`; growth in `activity_log` fires `onActivity`. Its
+first tick against an already-populated table *is* the history load — there
+is no separate one-shot fetch to keep in sync with the recurring one, which
+is what guarantees the two can never drift apart.
+
+Both `app.js`'s `bootProjectManager()` and `voice-mobile.html` wire up a
+`syncThread` instance to their own existing render functions
+(`addMessage`/`addAssistantMessage`/`addTyping`), so opening either page now
+replays the full recent thread on load and keeps receiving anything sent
+from the other device while it sits open. A message this device sends
+itself is still rendered optimistically and instantly (unchanged
+responsiveness) — right after `POST /api/voice/messages` returns, the code
+calls `sync.markKnown(created)` so the engine's next tick treats that row as
+already-rendered rather than duplicating it, and later calls
+`sync.markKnown(row)` again with the terminal status once known locally
+(mobile's blocking voice-overlay flow does this explicitly; desktop's
+always-visible thread just lets the shared engine's own `onDone`/`onError`
+render the completion). `autoSpeakIds` (per-page, not persisted) tracks
+which in-flight ids this device itself started by voice, so only those get
+spoken aloud when they complete — a reply that appears because the *other*
+device triggered it is shown as text only, never auto-played.
+
+Desktop's poller is started/stopped alongside the tab itself
+(`renderActiveTab` stops it when leaving `#project-manager`,
+`bootProjectManager` stops any prior instance before starting a new one) so
+switching tabs repeatedly can't leak multiple concurrent pollers. Mobile's
+starts once, from `showApp()`, only after login is confirmed — never
+eagerly at script-load time, which would otherwise hit the authenticated
+messages endpoint before a session cookie exists.
+
+**Deliberately not built:** a real WebSocket/SSE push channel. Two devices
+polling every 2.5s each is negligible load for a single-admin internal
+tool, and it sidesteps an entire class of reconnect/backoff complexity a
+socket would need — consistent with §6's "avoid unnecessary complexity"
+philosophy. Worth revisiting only if the polling interval itself ever
+becomes the complaint (it hasn't been).

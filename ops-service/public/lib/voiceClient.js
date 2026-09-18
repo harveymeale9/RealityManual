@@ -91,6 +91,82 @@ window.RMVoice = (function () {
       .then(function (r) { return r.ok; });
   }
 
+  // Shared cross-device thread engine used by both index.html's Project
+  // Manager tab and voice-mobile.html, so "one very long chat thread" is
+  // literally true rather than two independent UIs reading the same table.
+  // A single polling loop does double duty as both "load history on open"
+  // (its first tick, against whatever's already in the table) and "notice
+  // what another device just did" (every tick after) — there's no separate
+  // one-shot history fetch to keep in sync with the recurring one.
+  //
+  // callbacks: onNewMessage(row) — a row never seen before, fires once per id
+  //            onPending(row)    — row is now queued/running (fires once per
+  //                                pending->running transition too, since both
+  //                                bucket to "inflight" — treat as idempotent)
+  //            onDone(row)       — row finished successfully
+  //            onError(row)      — row finished with an error
+  //            onActivity(row)   — row's activity_log grew
+  function syncThread(callbacks, opts) {
+    opts = opts || {};
+    var intervalMs = opts.intervalMs || 2500;
+    var limit = opts.limit || 60;
+    var known = {}; // id -> { bucket, activityLen }
+    var stopped = false;
+    var timer = null;
+
+    function bucketOf(status) {
+      return (status === 'pending' || status === 'running') ? 'inflight' : status;
+    }
+
+    function applyRow(row) {
+      var seen = known[row.id];
+      if (!seen) {
+        known[row.id] = seen = { bucket: null, activityLen: 0 };
+        if (callbacks.onNewMessage) callbacks.onNewMessage(row);
+      }
+      var bucket = bucketOf(row.status);
+      if (bucket !== seen.bucket) {
+        seen.bucket = bucket;
+        if (bucket === 'inflight' && callbacks.onPending) callbacks.onPending(row);
+        else if (bucket === 'done' && callbacks.onDone) callbacks.onDone(row);
+        else if (bucket === 'error' && callbacks.onError) callbacks.onError(row);
+      }
+      var activityLen = (row.activity_log && row.activity_log.length) || 0;
+      if (activityLen !== seen.activityLen) {
+        seen.activityLen = activityLen;
+        if (callbacks.onActivity) callbacks.onActivity(row);
+      }
+    }
+
+    function tick() {
+      if (stopped) return;
+      listMessages(limit).then(function (rows) {
+        rows.slice().reverse().forEach(applyRow);
+      }).catch(function () {
+        // transient network hiccup or backend hiccup — just try again next
+        // tick, same "never break the page" spirit as the analytics client.
+      }).then(function () {
+        if (!stopped) timer = setTimeout(tick, intervalMs);
+      });
+    }
+
+    tick();
+
+    return {
+      stop: function () {
+        stopped = true;
+        if (timer) clearTimeout(timer);
+      },
+      // Call right after this device's own POST /api/voice/messages succeeds,
+      // once it's already rendered the user bubble + typing state itself for
+      // instant feedback — marks the row known so the next tick updates that
+      // same message in place instead of rendering a duplicate from scratch.
+      markKnown: function (row) {
+        known[row.id] = { bucket: bucketOf(row.status || 'pending'), activityLen: 0 };
+      }
+    };
+  }
+
   return {
     startRecording: startRecording,
     transcribe: transcribe,
@@ -99,6 +175,7 @@ window.RMVoice = (function () {
     listMessages: listMessages,
     pollMessage: pollMessage,
     speak: speak,
-    resetSession: resetSession
+    resetSession: resetSession,
+    syncThread: syncThread
   };
 })();

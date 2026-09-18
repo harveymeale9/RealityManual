@@ -8,6 +8,12 @@
   var MANUAL_STAGE_IDS = window.RMStore.STAGES.slice(0, UPLOADED_INDEX + 1).map(function (s) { return s.id; });
   var AUTO_STAGE_IDS = window.RMStore.STAGES.slice(UPLOADED_INDEX + 1).map(function (s) { return s.id; });
 
+  // Live across tab (re)activations so bootProjectManager can stop a prior
+  // poller before starting a new one — panelMain.innerHTML gets wiped and
+  // rebuilt every time this tab is (re)entered, which would otherwise leak
+  // one extra setTimeout chain per visit.
+  var pmSync = null;
+
   var TABS = [
     { id: 'project-manager', label: 'Project Manager' },
     { id: 'content-ops', label: 'Content Ops' },
@@ -203,6 +209,7 @@
         btn.classList.toggle('active', btn.dataset.tab === active);
       });
     }
+    if (active !== 'project-manager' && pmSync) { pmSync.stop(); pmSync = null; }
     if (active === 'project-manager') {
       panelMain.innerHTML = PM_MARKUP;
       bootProjectManager();
@@ -283,13 +290,16 @@
     var micBtn = document.getElementById('pmMicBtn');
     var resetBtn = document.getElementById('pmResetBtn');
 
+    if (pmSync) { pmSync.stop(); pmSync = null; }
+
     var emptyNote = thread.querySelector('.pm-empty');
     function clearEmptyNote() { if (emptyNote && emptyNote.parentNode) { emptyNote.parentNode.removeChild(emptyNote); emptyNote = null; } }
 
-    function addMessage(kind, text) {
+    function addMessage(kind, text, msgId) {
       clearEmptyNote();
       var el = document.createElement('div');
       el.className = 'pm-msg pm-msg-' + kind;
+      if (msgId) el.dataset.msgId = msgId;
       el.textContent = text;
       thread.appendChild(el);
       thread.scrollTop = thread.scrollHeight;
@@ -317,14 +327,20 @@
       return wrap;
     }
 
-    function addTyping() {
+    function addTyping(msgId) {
       clearEmptyNote();
       var el = document.createElement('div');
       el.className = 'pm-typing';
+      if (msgId) el.dataset.msgId = msgId;
       el.textContent = 'CC is working on it…';
       thread.appendChild(el);
       thread.scrollTop = thread.scrollHeight;
       return el;
+    }
+
+    function removeTyping(msgId) {
+      var el = thread.querySelector('.pm-typing[data-msg-id="' + msgId + '"]');
+      if (el && el.parentNode) el.parentNode.removeChild(el);
     }
 
     // Right-hand "code-like" pane — the raw tool-call/thinking trail, kept
@@ -348,6 +364,40 @@
       activityEl.scrollTop = activityEl.scrollHeight;
     }
 
+    // Ids this device sent via voice on itself and wants spoken aloud once
+    // the reply lands — never applied to a reply that shows up because
+    // another device (or an earlier page load) triggered it.
+    var autoSpeakIds = {};
+
+    // The single source of truth for the thread: on first tick it loads
+    // whatever's already in the table (so opening this tab resumes the last
+    // conversation instead of a blank slate), and on every tick after it
+    // picks up anything new — including messages sent from the phone app
+    // while this tab just sits open. Locally-sent messages are rendered
+    // optimistically by sendText() below and handed to markKnown() so this
+    // loop updates them in place instead of duplicating them.
+    pmSync = Voice.syncThread({
+      onNewMessage: function (row) { addMessage('user', row.transcript, row.id); },
+      onPending: function (row) { addTyping(row.id); },
+      onDone: function (row) {
+        removeTyping(row.id);
+        if (row.mode === 'execute') {
+          addMessage('system', 'Done — no reply expected.');
+          return;
+        }
+        addAssistantMessage(row.reply_text || '');
+        if (autoSpeakIds[row.id]) {
+          delete autoSpeakIds[row.id];
+          Voice.speak(row.reply_text || '').catch(function () {});
+        }
+      },
+      onError: function (row) {
+        removeTyping(row.id);
+        addMessage('error', row.error_message || 'Something went wrong.');
+      },
+      onActivity: function (row) { renderActivity(row.activity_log); }
+    });
+
     function sendText(text, mode, opts) {
       opts = opts || {};
       var autoSpeak = !!opts.autoSpeak;
@@ -356,21 +406,9 @@
       var typingEl = addTyping();
       renderActivity(null);
       Voice.sendMessage(text.trim(), mode).then(function (created) {
-        return Voice.pollMessage(created.id, {
-          onTick: function (row) { renderActivity(row.activity_log); }
-        });
-      }).then(function (row) {
-        if (typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
-        if (row.status === 'error') {
-          addMessage('error', row.error_message || 'Something went wrong.');
-          return;
-        }
-        if (mode === 'execute') {
-          addMessage('system', 'Done — no reply expected.');
-          return;
-        }
-        addAssistantMessage(row.reply_text || '');
-        if (autoSpeak) Voice.speak(row.reply_text || '').catch(function () {});
+        typingEl.dataset.msgId = created.id;
+        if (autoSpeak) autoSpeakIds[created.id] = true;
+        pmSync.markKnown(created);
       }).catch(function (err) {
         if (typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
         addMessage('error', (err && err.message) || 'Something went wrong.');

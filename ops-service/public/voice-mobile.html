@@ -179,7 +179,7 @@
 
       function showApp() {
         authChecking.hidden = true; loginGate.hidden = true; vApp.hidden = false;
-        loadHistory();
+        startSync();
       }
       function showLogin() { authChecking.hidden = true; vApp.hidden = true; loginGate.hidden = false; setTimeout(function () { loginPassword.focus(); }, 50); }
 
@@ -198,10 +198,11 @@
       var emptyNote = thread.querySelector('.pm-empty');
       function clearEmptyNote() { if (emptyNote && emptyNote.parentNode) { emptyNote.parentNode.removeChild(emptyNote); emptyNote = null; } }
 
-      function addMessage(kind, text) {
+      function addMessage(kind, text, msgId) {
         clearEmptyNote();
         var el = document.createElement('div');
         el.className = 'pm-msg pm-msg-' + kind;
+        if (msgId) el.dataset.msgId = msgId;
         el.textContent = text;
         thread.appendChild(el);
         thread.scrollTop = thread.scrollHeight;
@@ -229,26 +230,51 @@
         return wrap;
       }
 
-      function addTyping() {
+      function addTyping(msgId) {
         clearEmptyNote();
         var el = document.createElement('div');
         el.className = 'pm-typing';
+        if (msgId) el.dataset.msgId = msgId;
         el.textContent = 'CC is working on it…';
         thread.appendChild(el);
         thread.scrollTop = thread.scrollHeight;
         return el;
       }
 
-      function loadHistory() {
-        Voice.listMessages(30).then(function (rows) {
-          rows.slice().reverse().forEach(function (row) {
-            if (row.status !== 'done' && row.status !== 'error') return;
-            addMessage('user', row.transcript);
-            if (row.status === 'error') addMessage('error', row.error_message || 'Something went wrong.');
-            else if (row.mode === 'execute') addMessage('system', 'Done — no reply expected.');
-            else addAssistantMessage(row.reply_text || '');
-          });
-        }).catch(function () { /* thread just starts empty — not worth blocking the page over */ });
+      function removeTyping(msgId) {
+        var el = thread.querySelector('.pm-typing[data-msg-id="' + msgId + '"]');
+        if (el && el.parentNode) el.parentNode.removeChild(el);
+      }
+
+      // Ids this device itself sent by voice and wants spoken aloud once the
+      // reply lands — never applied to a reply that shows up because it was
+      // sent from the desktop panel instead.
+      var autoSpeakIds = {};
+
+      // Same shared engine the desktop Project Manager tab uses (see
+      // lib/voiceClient.js): first tick loads whatever's already in the
+      // table (so opening the app resumes the last conversation instead of
+      // a blank slate), every tick after picks up anything new — including
+      // messages sent from the desktop panel while this app just sits open.
+      // Started from showApp() (not eagerly here) so it never polls the
+      // authenticated messages endpoint before login is confirmed.
+      var sync = null;
+      function startSync() {
+        if (sync) return;
+        sync = Voice.syncThread({
+          onNewMessage: function (row) { addMessage('user', row.transcript, row.id); },
+          onPending: function (row) { addTyping(row.id); },
+          onDone: function (row) {
+            removeTyping(row.id);
+            if (row.mode === 'execute') { addMessage('system', 'Done — no reply expected.'); return; }
+            addAssistantMessage(row.reply_text || '');
+            if (autoSpeakIds[row.id]) { delete autoSpeakIds[row.id]; Voice.speak(row.reply_text || '').catch(function () {}); }
+          },
+          onError: function (row) {
+            removeTyping(row.id);
+            addMessage('error', row.error_message || 'Something went wrong.');
+          }
+        });
       }
 
       // --- Type bar: the "can't speak" fallback, always sends respond mode ---
@@ -257,11 +283,8 @@
         addMessage('user', text);
         var typingEl = addTyping();
         Voice.sendMessage(text.trim(), 'respond').then(function (created) {
-          return Voice.pollMessage(created.id);
-        }).then(function (row) {
-          if (typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
-          if (row.status === 'error') { addMessage('error', row.error_message || 'Something went wrong.'); return; }
-          addAssistantMessage(row.reply_text || '');
+          typingEl.dataset.msgId = created.id;
+          sync.markKnown(created);
         }).catch(function (err) {
           if (typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
           addMessage('error', (err && err.message) || 'Something went wrong.');
@@ -332,16 +355,28 @@
             addMessage('user', text);
             var typingEl = mode === 'execute' ? null : addTyping();
             return Voice.sendMessage(text, mode).then(function (created) {
+              // Mark it known on the shared sync engine right away so its
+              // next tick doesn't treat this same row as new (duplicate user
+              // bubble/typing indicator) once it catches up to it.
+              if (typingEl) typingEl.dataset.msgId = created.id;
+              sync.markKnown(created);
               if (mode === 'execute') {
                 setTimeout(function () {
                   hideAllOverlays();
                 }, 1200);
                 waitStatus.textContent = 'Got it — working on it.';
-                addMessage('system', 'Done — no reply expected.');
+                // Fire-and-forget by design — don't wait for real completion.
+                // The shared sync engine's onDone will render "Done — no
+                // reply expected." into the thread whenever this message
+                // genuinely finishes server-side, same as if another device
+                // had sent it.
                 return null;
               }
               return Voice.pollMessage(created.id).then(function (row) {
                 if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
+                // Terminal status now known locally — tell the shared engine
+                // so its later tick doesn't also render this same reply.
+                sync.markKnown(row);
                 return row;
               });
             });
