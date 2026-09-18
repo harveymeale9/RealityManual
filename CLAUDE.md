@@ -2573,3 +2573,139 @@ of ours could run on success — `order_complete` on the confirmation page
 (driven by the backend's own `order_status`, not the browser's belief
 about what happened) is the authoritative equivalent and was tracked
 instead.
+
+---
+
+# 74. Voice/Chat App for Talking to Claude Code Remotely (IN PROGRESS, 2026-09-18)
+
+**Status: mid-build, blocked on one decision — read this section fully before
+continuing if you're a new session picking this up.** Harvey wants a way to
+talk to Claude Code by voice or text from his phone (installed as a
+home-screen PWA) or desktop, while away from a terminal — not a toy chatbot,
+an actual headless Claude Code agent with the same tools/repo access as any
+interactive session. Two modes: "ask and wait for a reply" (spoken back via
+TTS) and "just execute, don't reply" (fire-and-forget autonomous instruction).
+Lives on `ops.realitymanual.com` (`rm-ops-service`), deliberately separate
+from the storefront backend, same pattern as the content-ops panel (§62).
+
+**Built so far (all committed to this repo, not yet deployed to the VPS
+container):**
+- `ops-service/src/claudeRunner.js` — spawns the real `claude` CLI in print
+  mode (`-p`, `--output-format json`) with `--resume`/`--session-id` for
+  conversation continuity, `cwd` set to the repo so it gets full CLAUDE.md
+  context automatically, same as any other session.
+- `ops-service/src/elevenlabs.js` — ElevenLabs for both STT (Scribe) and TTS,
+  one provider. **Harvey's ElevenLabs key is already in hand** — do not ask
+  him for it again, it just needs to land in the real `backend/.env`-style
+  secrets file on the VPS (`ELEVENLABS_API_KEY`), never committed.
+- `server.js` — new `voice_messages`/`voice_session` tables, a small
+  in-process queue (processes one voice message at a time — concurrent
+  `--resume` on the same session would corrupt it), and routes:
+  `POST/GET /api/voice/messages[/:id]`, `POST /api/voice/transcribe`,
+  `POST /api/voice/tts`, `POST /api/voice/session/reset`,
+  `GET /api/voice/worklog`. All behind the existing password-session auth.
+- `public/voice-mobile.html` + `voice-manifest.json` — fullscreen two-button
+  PWA (top = ask & wait, bottom = just execute), install-to-home-screen like
+  quick-add.html (§62's lesson about `start_url` applies here too).
+- `public/voice.html` — desktop chat UI, text input + mic button, execute-only
+  checkbox, per-message "▶ Play" for typed replies, auto-speaks voice-originated
+  replies. Linked from `index.html`'s header ("Talk to CC ↗").
+- `public/lib/voiceClient.js` — shared recording/API/polling helper used by
+  both pages.
+- `Dockerfile` — bumped to `node:22-slim`, installs
+  `@anthropic-ai/claude-code@2.1.276` (pinned to match the VPS host's CLI
+  version — bump both together), copies `src/`.
+- Persistent memory design (Harvey asked for "massive memory... like a human
+  project manager"): deliberately NOT a new bespoke system. Long-term/durable
+  facts ride on this CLAUDE.md file + Claude Code's own auto-memory (both
+  already load automatically for any session in this repo, headless or not).
+  Recent/same-day continuity rides on `claude --resume` against one stored
+  session id (`voice_session` table; "New conversation" button clears it).
+  A plain running journal ("what did you do and when") is maintained by the
+  agent itself: every voice-app invocation gets an appended system prompt
+  instructing it to append one line to `<DATA_DIR>/work-log.md` after
+  finishing, readable via `GET /api/voice/worklog`.
+
+**BLOCKING ISSUE, found during smoke testing (2026-09-18): the `claude` CLI
+refuses `--dangerously-skip-permissions` / `--permission-mode bypassPermissions`
+outright when the process's EUID is 0 (root) — "cannot be used with
+root/sudo privileges for security reasons". Confirmed directly on the VPS:**
+
+```text
+$ claude -p "..." --permission-mode bypassPermissions
+--dangerously-skip-permissions cannot be used with root/sudo privileges for security reasons
+```
+
+**Everything on this VPS runs as root** (this interactive session, and where
+the `rm-ops-service` Docker container would run `claude` headlessly). Two
+separate consequences:
+
+1. **Harvey's own interactive sessions on the VPS can never get true
+   zero-prompt bypass** — the `.claude/settings.json` project setting
+   (`permissions.defaultMode: "bypassPermissions"`, added 2026-09-18) silently
+   downgrades to "Auto Mode" instead (a classifier that auto-allows most
+   actions but still gates genuinely risky ones) rather than erroring, which
+   is why his fresh session showed "Auto Mode Active" rather than zero
+   prompts. This is very likely as good as it gets while running as root —
+   don't keep fighting it; it's an intentional product safety rail, not a
+   bug. If Harvey pushes on this again, the only real fix is running Claude
+   Code as a non-root user for his interactive VPS sessions too, which is a
+   bigger change to how he logs in (currently `tmux new-session ... claude`
+   as root — see the `claude-login` tmux session) than has been explicitly
+   asked for; don't do it without checking with him first.
+
+2. **The voice app's headless runner is the more serious case** — "just
+   execute" mode is *only* useful if it can run fully unattended, and it
+   currently can't get bypass permissions at all as designed. Fix in
+   progress: give the headless runner its own non-root Linux user
+   (e.g. `claudeworker`) on the VPS, so `claudeRunner.js`'s spawned `claude`
+   process runs as that user instead of root and can actually use bypass
+   mode. This requires, regardless of the auth question below:
+   - Creating the user, and granting it scoped access to
+     `/root/realitymanual-repo` despite it living under `/root` (default
+     `/root` perms block traversal for non-root entirely) — plan: `chmod o+x
+     /root` (traversal only, not listing) plus a dedicated group owning just
+     the repo subtree with setgid so new files inherit group-writability.
+     Do NOT loosen `/root` further than `o+x` — that would expose every
+     other file directly under `/root` (SSH keys, `.env` files elsewhere) to
+     the new user by path if it ever learned the name.
+   - This is Docker-container work really (the runner lives in
+     `rm-ops-service`'s container) — inside the container it's simpler:
+     just don't run the container's `claude` invocation as root, no `/root`
+     traversal issue at all if the container's own filesystem layout puts
+     the mounted repo somewhere normal. **Reconsider the bind-mount paths
+     before implementing** — mounting host `/root/realitymanual-repo` and
+     `/root/.claude` into the container can land at any in-container path
+     regardless of the host being `/root`, so the in-container non-root user
+     just needs ordinary ownership/permissions on the in-container mount
+     point, which is much simpler than solving `/root` traversal on the
+     host directly. Only solve the host-side `/root` traversal problem if
+     Harvey also wants non-root headless runs directly on the host (e.g. for
+     his own interactive sessions per point 1) — the containerized voice
+     app doesn't need it.
+
+**PENDING DECISION — asked Harvey, awaiting answer:** should the headless
+voice-app runner authenticate as a copy of Harvey's own OAuth login
+(`~/.claude/.credentials.json`, same Claude subscription/usage pool as his
+interactive sessions), or as a separate `ANTHROPIC_API_KEY` (pay-as-you-go,
+fully decoupled)? Leaning toward recommending a separate API key:
+- OAuth refresh tokens commonly rotate on use — copying root's credentials
+  into `claudeworker`'s home at setup time risks the two copies silently
+  invalidating each other the first time either one refreshes, breaking
+  headless auth unpredictably days/weeks later.
+- A dedicated API key is the standard, supported pattern for unattended
+  automation (see `--bare` mode's own docs: "Anthropic auth is strictly
+  ANTHROPIC_API_KEY or apiKeyHelper"), and keeps the voice app's usage/cost
+  and rate limits separate from Harvey's personal interactive usage.
+- Trade-off: separate billing (pay-per-token on the API key) instead of
+  riding his existing subscription.
+
+**Not yet done once the above is resolved:** actually create the
+`claudeworker` setup (or container-internal non-root user) on the VPS, wire
+the chosen auth method into the container, build+run the updated
+`rm-ops-service` image (§62's normal redeploy steps, now also needs
+`ELEVENLABS_API_KEY` and either the copied/mounted credentials or
+`ANTHROPIC_API_KEY` in its env), and do one real end-to-end test (voice
+input on a phone, not just the curl smoke test already run against a local
+throwaway instance on port 4099 during this session — that confirmed the
+whole plumbing works except for the root/bypass issue above).

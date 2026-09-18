@@ -1,0 +1,12 @@
+{
+  "name": "Reality Manual — Talk to CC",
+  "short_name": "Talk to CC",
+  "start_url": "/voice-mobile.html",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#04170c",
+  "theme_color": "#04170c",
+  "icons": [
+    { "src": "icon.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

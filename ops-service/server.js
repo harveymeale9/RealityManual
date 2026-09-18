@@ -9,10 +9,13 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
+const claudeRunner = require('./src/claudeRunner');
+const elevenlabs = require('./src/elevenlabs');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 const DB_PATH = path.join(DATA_DIR, 'db.sqlite');
+const WORK_LOG_PATH = path.join(DATA_DIR, 'work-log.md');
 const PORT = process.env.PORT || 4001;
 const PANEL_PASSWORD = process.env.PANEL_PASSWORD || 'ormiston';
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://realitymanual.com,https://www.realitymanual.com')
@@ -44,6 +47,22 @@ db.exec(
   '  token TEXT PRIMARY KEY,' +
   '  created_at TEXT NOT NULL,' +
   '  expires_at TEXT NOT NULL' +
+  ');' +
+  'CREATE TABLE IF NOT EXISTS voice_messages (' +
+  '  id TEXT PRIMARY KEY,' +
+  '  mode TEXT NOT NULL,' +
+  '  transcript TEXT NOT NULL,' +
+  '  status TEXT NOT NULL,' +
+  '  reply_text TEXT,' +
+  '  error_message TEXT,' +
+  '  created_at TEXT NOT NULL,' +
+  '  completed_at TEXT' +
+  ');' +
+  'CREATE INDEX IF NOT EXISTS idx_voice_messages_created ON voice_messages(created_at);' +
+  'CREATE TABLE IF NOT EXISTS voice_session (' +
+  '  id INTEGER PRIMARY KEY CHECK (id = 1),' +
+  '  claude_session_id TEXT,' +
+  '  updated_at TEXT NOT NULL' +
   ');'
 );
 
@@ -58,7 +77,18 @@ const stmts = {
   insertSession: db.prepare('INSERT INTO sessions (token, created_at, expires_at) VALUES (?, ?, ?)'),
   getSession: db.prepare('SELECT * FROM sessions WHERE token = ?'),
   delSession: db.prepare('DELETE FROM sessions WHERE token = ?'),
-  purgeSessions: db.prepare('DELETE FROM sessions WHERE expires_at < ?')
+  purgeSessions: db.prepare('DELETE FROM sessions WHERE expires_at < ?'),
+  insertVoiceMessage: db.prepare('INSERT INTO voice_messages (id, mode, transcript, status, created_at) VALUES (?, ?, ?, ?, ?)'),
+  setVoiceMessageStatus: db.prepare('UPDATE voice_messages SET status = ? WHERE id = ?'),
+  finishVoiceMessage: db.prepare('UPDATE voice_messages SET status = ?, reply_text = ?, error_message = ?, completed_at = ? WHERE id = ?'),
+  getVoiceMessage: db.prepare('SELECT * FROM voice_messages WHERE id = ?'),
+  listVoiceMessages: db.prepare('SELECT * FROM voice_messages ORDER BY created_at DESC LIMIT ?'),
+  getVoiceSession: db.prepare('SELECT claude_session_id FROM voice_session WHERE id = 1'),
+  upsertVoiceSession: db.prepare(
+    'INSERT INTO voice_session (id, claude_session_id, updated_at) VALUES (1, ?, ?) ' +
+    'ON CONFLICT(id) DO UPDATE SET claude_session_id = excluded.claude_session_id, updated_at = excluded.updated_at'
+  ),
+  clearVoiceSession: db.prepare('DELETE FROM voice_session WHERE id = 1')
 };
 
 setInterval(function () { stmts.purgeSessions.run(new Date().toISOString()); }, 60 * 60 * 1000);
@@ -145,6 +175,7 @@ app.get('/robots.txt', function (req, res) { res.type('text/plain').send('User-a
 
 app.use('/api/store', requireAuth);
 app.use('/api/files', requireAuth);
+app.use('/api/voice', requireAuth);
 
 app.get('/api/store/:storeName', function (req, res) {
   if (!isValidStore(req.params.storeName)) return res.status(400).json({ error: 'invalid_store' });
@@ -219,6 +250,134 @@ app.get('/api/files/:storeName/:id', function (req, res) {
   const meta = row ? JSON.parse(row.data) : {};
   res.setHeader('Content-Type', meta.mimeType || 'application/octet-stream');
   fs.createReadStream(filePath).pipe(res);
+});
+
+// --- Voice app: talk to a real headless Claude Code agent by voice or text ---
+// Separate concern again (own tables, own routes) from the content-ops
+// board above — see CLAUDE.md section on the voice app for the full design.
+const VOICE_SYSTEM_PROMPT =
+  'This session may also be reached through Harvey\'s voice/chat assistant app, in ' +
+  'addition to normal interactive sessions. A user message that starts with a bracketed ' +
+  'tag like "[Voice message ...]" or "[Voice instruction ...]" is framing added by that ' +
+  'app, not something Harvey actually said — follow its instruction but do not quote it ' +
+  'back or mention the tag. After finishing a turn that came through the voice app, ' +
+  'append one line to ' + WORK_LOG_PATH + ' recording what was asked and what you did, ' +
+  'formatted as "- [ISO timestamp] <one-line summary>". Create the file if it does not exist.';
+
+function buildVoicePrompt(mode, text) {
+  if (mode === 'execute') {
+    return '[Voice instruction from Harvey, sent while away from his desk — he expects no reply ' +
+      'and will not be watching. Proceed with full autonomy using your normal judgement and this ' +
+      'project\'s CLAUDE.md conventions. Do not ask clarifying questions — make the most reasonable ' +
+      'assumption, note it briefly in your final summary, and carry out the task fully.] ' + text;
+  }
+  return '[Voice message from Harvey, sent from his phone or desktop — he expects a reply. If it ' +
+    'will be read aloud by text-to-speech, keep your final answer short and conversational: no ' +
+    'markdown, no bullet points, no headers, no code blocks, just plain spoken sentences. If it ' +
+    'needs you to check code, logs, git history, or run commands to answer accurately, do that ' +
+    'first.] ' + text;
+}
+
+let voiceQueue = [];
+let voiceProcessing = false;
+
+function drainVoiceQueue() {
+  if (voiceProcessing) return;
+  const next = voiceQueue.shift();
+  if (!next) return;
+  voiceProcessing = true;
+  processVoiceMessage(next.id, next.mode, next.text)
+    .catch(function (err) {
+      stmts.finishVoiceMessage.run('error', null, String((err && err.message) || err).slice(0, 2000), new Date().toISOString(), next.id);
+    })
+    .finally(function () {
+      voiceProcessing = false;
+      drainVoiceQueue();
+    });
+}
+
+async function processVoiceMessage(id, mode, text) {
+  stmts.setVoiceMessageStatus.run('running', id);
+  const sessionRow = stmts.getVoiceSession.get();
+  const sessionId = sessionRow && sessionRow.claude_session_id;
+  const prompt = buildVoicePrompt(mode, text);
+  const result = await claudeRunner.runClaude({
+    prompt: prompt,
+    sessionId: sessionId,
+    appendSystemPrompt: VOICE_SYSTEM_PROMPT
+  });
+  const now = new Date().toISOString();
+  if (result.sessionId) stmts.upsertVoiceSession.run(result.sessionId, now);
+  if (!result.ok) {
+    stmts.finishVoiceMessage.run('error', null, String(result.error || 'unknown error').slice(0, 2000), now, id);
+    console.error('voice claude run failed:', result.error);
+    return;
+  }
+  stmts.finishVoiceMessage.run('done', (result.replyText || '').slice(0, 8000), null, now, id);
+}
+
+app.post('/api/voice/messages', function (req, res) {
+  const text = req.body && req.body.text;
+  const mode = req.body && req.body.mode;
+  if (typeof text !== 'string' || !text.trim()) return res.status(400).json({ error: 'invalid_text' });
+  if (mode !== 'respond' && mode !== 'execute') return res.status(400).json({ error: 'invalid_mode' });
+  const id = crypto.randomBytes(16).toString('hex');
+  const now = new Date().toISOString();
+  const trimmed = text.trim().slice(0, 4000);
+  stmts.insertVoiceMessage.run(id, mode, trimmed, 'pending', now);
+  res.json({ id: id, status: 'pending' });
+  voiceQueue.push({ id: id, mode: mode, text: trimmed });
+  drainVoiceQueue();
+});
+
+app.get('/api/voice/messages', function (req, res) {
+  const limit = Math.min(parseInt(req.query.limit, 10) || 30, 100);
+  res.json(stmts.listVoiceMessages.all(limit));
+});
+
+app.get('/api/voice/messages/:id', function (req, res) {
+  const row = stmts.getVoiceMessage.get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'not_found' });
+  res.json(row);
+});
+
+app.post('/api/voice/session/reset', function (req, res) {
+  stmts.clearVoiceSession.run();
+  res.json({ ok: true });
+});
+
+app.get('/api/voice/worklog', function (req, res) {
+  fs.readFile(WORK_LOG_PATH, 'utf8', function (err, data) {
+    if (err) return res.json({ text: '' });
+    const lines = data.split('\n').filter(Boolean);
+    res.json({ text: lines.slice(-100).join('\n') });
+  });
+});
+
+const voiceUpload = multer({ dest: path.join(DATA_DIR, 'tmp'), limits: { fileSize: 25 * 1024 * 1024 } });
+
+app.post('/api/voice/transcribe', voiceUpload.single('audio'), function (req, res) {
+  if (!req.file) return res.status(400).json({ error: 'missing_audio' });
+  const filePath = req.file.path;
+  const mimeType = req.file.mimetype;
+  fs.readFile(filePath, function (err, buf) {
+    fs.rm(filePath, { force: true }, function () {});
+    if (err) return res.status(500).json({ error: 'read_failed' });
+    elevenlabs.transcribeAudio(buf, mimeType)
+      .then(function (text) { res.json({ text: text }); })
+      .catch(function (e) { console.error('transcribe failed:', e.message); res.status(502).json({ error: 'transcription_failed' }); });
+  });
+});
+
+app.post('/api/voice/tts', function (req, res) {
+  const text = req.body && req.body.text;
+  if (typeof text !== 'string' || !text.trim()) return res.status(400).json({ error: 'invalid_text' });
+  elevenlabs.synthesizeSpeech(text.trim().slice(0, 4000))
+    .then(function (audio) {
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.send(audio);
+    })
+    .catch(function (e) { console.error('tts failed:', e.message); res.status(502).json({ error: 'tts_failed' }); });
 });
 
 app.use(function (err, req, res, next) {
