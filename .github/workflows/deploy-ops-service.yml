@@ -25,7 +25,15 @@ jobs:
         run: |
           set -x
           mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
+          # VPS_SSH_KEY is stored base64-encoded (a single line, no
+          # whitespace/newlines to mangle) specifically because a raw
+          # multi-line PEM block pasted into a GitHub secret is an easy way
+          # to silently introduce CRLF line endings or a dropped line —
+          # that's exactly what caused "error in libcrypto" / permission
+          # denied on the first real attempt at this. Decoding back to the
+          # real key file here is the fix, not asking for a more careful
+          # paste.
+          echo "${{ secrets.VPS_SSH_KEY }}" | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H 187.124.146.235 >> ~/.ssh/known_hosts 2>&1 | tee ci-output.log
           ssh -o ConnectTimeout=10 -i ~/.ssh/deploy_key root@187.124.146.235 \
