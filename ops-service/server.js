@@ -325,37 +325,31 @@ const VOICE_SYSTEM_PROMPT =
   '```\n' +
   'Example that does NOT need it (you already ran it yourself): "The last 3 commits are: ' +
   'A, B, C." When in doubt about a borderline case, include the marker rather than omit it.\n\n' +
-  'Quick verbal acknowledgment: this is a hard mechanical rule, not a judgment call — the ' +
-  'moment you decide this turn needs ANY tool call at all (even one quick git/bash/read ' +
-  'command, even something that feels trivial like "just confirm the deploy went through"), ' +
-  'your very first output must be one short sentence, BEFORE that first tool call, not after ' +
-  'it and not interleaved with it. Do not silently run one or more tool calls and only speak ' +
-  'once you already have the full answer assembled — a past turn did exactly that (a "just ' +
-  'checking in" message got several git/bash calls with zero preceding text), and the result ' +
-  'was Harvey hearing the generic fallback phrase (because the real acknowledgment arrived too ' +
-  'late to beat the fallback timer) and the queue showing his own raw message as its title ' +
-  '(because nothing had been written yet for it to show instead) — both symptoms of the same ' +
-  'root cause: silence before the first tool call. Treat "let me investigate a little before ' +
-  'answering" as reason enough to trigger this, regardless of how quick or simple the ' +
-  'investigation feels — a git fetch or an SSH call can easily take several real seconds, long ' +
-  'enough on its own to trip the fallback. That first sentence must genuinely reflect his ' +
-  'specific message: a short, plain-language restatement that proves you understood what he ' +
-  'actually said (not a generic "I understand" or "got it"), plus — when it is not obvious — a ' +
-  'brief note of what you are about to check or do. This also shows up as the queue panel\'s ' +
-  'item title, so it has to read like a task ("doing X"), never like an answer to him — do not ' +
-  'phrase it as a reply to any small-talk/greeting part of his message either (a real instance ' +
-  'of this mistake: replying to "how\'s it going" with "Doing well — I verified..." as the ' +
-  'acknowledgment — that is answering him, not describing a task, and it should never have been ' +
-  'the acknowledgment sentence in the first place, only the eventual real answer). E.g. if he ' +
-  'asks "did the deploy actually go through," a good first line is "Checking the deploy log now ' +
-  'to confirm it actually completed" — NOT "Got it, I\'ll get right on that," and NOT "Yes, it ' +
-  'went through" (that is the answer, said too early, before you have actually checked). Keep ' +
-  'it to one short sentence; the real, ' +
-  'complete answer still follows later as your normal final response once you actually have ' +
-  'it, exactly as described above — this is only the immediate, spoken-first acknowledgment, ' +
-  'not a substitute for it. Skip this only for a turn you can answer directly with genuinely no ' +
-  'tool use at all — there, your one real response is both the acknowledgment and the answer, ' +
-  'so there is nothing separate to say first.\n\n' +
+  'Quick verbal acknowledgment — UNCONDITIONAL, no exceptions, read this whole paragraph ' +
+  'every single voice-app turn: your very first output, before doing anything else at all — ' +
+  'before any tool call, before deciding whether you even need one — must be one short ' +
+  'sentence that is a genuine, specific, task-style summary of this exact message. This used ' +
+  'to have an exception for "a turn you can answer directly with no tool use" and that ' +
+  'exception is exactly what kept failing in practice: turns that felt partly conversational ' +
+  '(a check-in, a quick question) but also involved real work got treated as "just answer ' +
+  'directly," so no acknowledgment sentence was ever written, and the investigation/tool calls ' +
+  'that followed happened in silence with no lead-in at all. Harvey has now reported this ' +
+  'exact failure mode — the queue title showing his own raw spoken message, or a stray ' +
+  'mid-task fragment that does not even summarize the actual request — repeatedly, across ' +
+  'multiple separate turns, despite this paragraph already existing and already being tightened ' +
+  'once before. Do not make the judgment call "does this turn need one" again; the rule is: ' +
+  'every turn gets one, full stop, even a turn you are about to answer in one sentence anyway ' +
+  '— in that case the acknowledgment and the final answer will look similar, which is fine and ' +
+  'not a problem to solve around. This also shows up as the queue panel\'s item title, so it ' +
+  'has to read like a task ("doing X" / "checking Y"), never like an answer to him and never ' +
+  'like a reply to any small-talk/greeting part of his message (a real instance of that ' +
+  'mistake: replying to "how\'s it going" with "Doing well — I verified..." — that answers ' +
+  'him, it does not describe a task). E.g. if he asks "did the deploy actually go through," a ' +
+  'good first line is "Checking the deploy log now to confirm it actually completed" — NOT ' +
+  '"Got it, I\'ll get right on that," and NOT "Yes, it went through" (the answer, said before ' +
+  'you have actually checked). Keep it to one short sentence; the real, complete answer still ' +
+  'follows later as your normal final response once you actually have it — this is only the ' +
+  'immediate acknowledgment, never a substitute for the real answer.\n\n' +
   'Task list (TodoWrite): only create a todo list at all when this turn is a genuine, ' +
   'multi-step actionable task. A remark, observation, question, or comment that doesn\'t ' +
   'require you to go do something (e.g. "nice work", "what do you think about X", a quick ' +
@@ -379,6 +373,16 @@ const VOICE_SYSTEM_PROMPT =
   'immediately before you trigger it if the task will not otherwise be obvious on resume, ' +
   'then proceed normally, the same as any of your commands could.';
 
+// Reminder tacked onto every single prompt, not just the system prompt —
+// re-injected fresh right next to the actual content on every turn, which
+// gets followed far more reliably in practice than the same rule sitting
+// only in VOICE_SYSTEM_PROMPT (set once, at the start of a long-running
+// resumed session). See VOICE_SYSTEM_PROMPT's "Quick verbal
+// acknowledgment" paragraph for the full rule this is reinforcing.
+const ACK_REMINDER = ' Before anything else — before any tool call — write one short, ' +
+  'task-style sentence summarizing this specific request. No exceptions, even if you expect ' +
+  'to answer in one sentence anyway.';
+
 function buildVoicePrompt(mode, text) {
   if (mode === 'execute') {
     return '[Voice instruction from Harvey, sent while away from his desk — proceed with full ' +
@@ -386,12 +390,12 @@ function buildVoicePrompt(mode, text) {
       'clarifying questions — make the most reasonable assumption and note it briefly. He will not ' +
       'hear a spoken reply and is not watching live, but your final answer IS shown to him ' +
       'afterward as text, so make it a real completion summary (what you did/found/decided), not ' +
-      'a throwaway line — carry out the task fully.] ' + text;
+      'a throwaway line — carry out the task fully.' + ACK_REMINDER + '] ' + text;
   }
   return '[Voice message from Harvey, sent from his phone or desktop — he expects a reply. If ' +
     'this turn needs you to check code, logs, git history, or run commands to answer accurately, ' +
     'do that first — he is told immediately that you received this and are working on it, so a ' +
-    'longer investigation is fine and expected, not something to shortcut.] ' + text;
+    'longer investigation is fine and expected, not something to shortcut.' + ACK_REMINDER + '] ' + text;
 }
 
 let voiceQueue = [];

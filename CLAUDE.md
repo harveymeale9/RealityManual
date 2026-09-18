@@ -3936,3 +3936,59 @@ enqueue time, before the model has even looked at it. The renamed label
 addresses the actual stated problem (ambiguity about what the list
 represents), not a claim that every entry in it is formally a "task" in
 the TodoWrite sense (§94/95).
+
+---
+
+# 100. §94's Fix Still Wasn't Reliable — Escalated, Honestly
+
+Harvey, verbatim: **"ive asked u like 7 times."** §94 tightened the
+acknowledgment rule from a judgment call to a "hard mechanical rule" and
+it *still* failed on the very next few turns — checked the live DB
+again, same method as §94: the "just checking in" message's `early_ack`
+wasn't null this time, it was `"Let's update both the header labels and
+the aria-label:"` — a real sentence, but a stray mid-task narration
+fragment from deep inside the actual rename work, not anything
+summarizing "checking in on recent changes." §94's rule still had an
+escape hatch ("skip this only for a turn you can answer directly with
+no tool use") and this turn — part conversational check-in, part a real
+small edit — evidently got mentally filed under that exception, so no
+acknowledgment was ever written before the tool calls started, and
+whatever text came out first was just whatever the model happened to
+narrate mid-task.
+
+**Honest framing for whoever reads this next:** this is now three
+attempts at the same underlying reliability problem (§90 built the
+mechanism, §94 tightened it once, this is the second tightening), and
+prompt wording alone clearly has a real ceiling — this is a genuine
+model-behavior-consistency issue, not a bug with one findable root
+cause. Two changes went in this round, not just a re-word:
+
+1. `VOICE_SYSTEM_PROMPT`'s acknowledgment paragraph **removed the "skip
+   for no tool use" exception entirely** — it's now unconditional, every
+   single voice-app turn, no judgment call. The exception is exactly
+   what kept getting mis-applied to mixed conversational-plus-work
+   turns, so removing the judgment call entirely (rather than trying to
+   word it more precisely again) is the actual change, not just tone.
+2. **New: a per-message reminder, not just a system-prompt paragraph.**
+   `buildVoicePrompt()` now appends a short `ACK_REMINDER` sentence
+   directly onto the bracketed framing wrapped around *every single*
+   message (both respond and execute mode) — re-injected fresh on every
+   turn, immediately adjacent to the actual content, rather than relying
+   solely on a paragraph set once in the system prompt at the start of a
+   long-running resumed session. Instructions placed right next to what
+   they're modifying tend to get followed more reliably than the same
+   instruction sitting further back in context — worth trying as a
+   second, independent lever alongside the system-prompt rule, not a
+   replacement for it.
+
+**If this happens again despite both of these**, the honest next step
+is not a third wording pass — it's a structural fix: a dedicated,
+separate short-title generation step decoupled from the main
+conversational turn entirely (so a title exists deterministically,
+never contingent on how the main turn happens to narrate itself),
+rather than continuing to extract a title from the main turn's own
+incidental first text block. Not built this round because it's a real
+architecture change (a second model call per message, latency/cost
+tradeoffs, and needs to avoid reintroducing the cold-start problem §74
+already solved by moving to a persistent session) — worth doing only
+once it's clear prompt-based fixes genuinely can't close this gap.
