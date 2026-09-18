@@ -4,23 +4,25 @@
 + '[' -n '' ']'
 + git pull
 From https://github.com/harveymeale9/RealityManual
-   04a6a00..10d4d12  main       -> origin/main
-Updating 04a6a00..10d4d12
+   10d4d12..2c5c256  main       -> origin/main
+Updating 10d4d12..2c5c256
 Fast-forward
- CLAUDE.md                             |  82 +++++
- ops-service/.ci/last-run.log          | 615 +++++++++++++++++++++++++++++++++-
- ops-service/public/app.js             |  39 ++-
- ops-service/public/lib/voiceClient.js |  10 +-
- ops-service/public/voice-mobile.html  |  34 +-
- ops-service/server.js                 |  28 ++
- ops-service/src/claudeRunner.js       |  25 +-
- 7 files changed, 802 insertions(+), 31 deletions(-)
+ CLAUDE.md                            |  57 ++++
+ ops-service/.ci/last-run.log         | 625 ++++-------------------------------
+ ops-service/public/app.js            |  15 +-
+ ops-service/public/index.html        |  24 +-
+ ops-service/public/style.css         |   2 +
+ ops-service/public/voice-mobile.html |   4 +-
+ 6 files changed, 142 insertions(+), 585 deletions(-)
 + git -C /srv/realitymanual-repo pull
 Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
 + docker tag rm-ops-service rm-ops-service:previous
 + docker build -t rm-ops-service ./ops-service
 #0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 DONE 0.0s
 
 #1 [internal] load build definition from Dockerfile
 #1 transferring dockerfile: 2.59kB done
@@ -34,62 +36,62 @@ Already up to date.
 #3 DONE 0.0s
 
 #4 [ 1/11] FROM docker.io/library/node:22-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5
-#4 resolve docker.io/library/node:22-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 0.0s done
-#4 DONE 0.0s
+#4 resolve docker.io/library/node:22-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 0.1s done
+#4 DONE 0.1s
 
 #5 [internal] load build context
-#5 transferring context: 191.00kB done
-#5 DONE 0.0s
+#5 transferring context: 185.36kB 0.0s done
+#5 DONE 0.1s
 
-#6 [ 2/11] RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates openssh-client     && update-ca-certificates     && rm -rf /var/lib/apt/lists/*
+#6 [ 6/11] RUN npm install --omit=dev
 #6 CACHED
 
-#7 [ 3/11] RUN npm install -g @anthropic-ai/claude-code@2.1.276
+#7 [ 7/11] COPY server.js ./
 #7 CACHED
 
-#8 [ 5/11] COPY package.json ./
+#8 [ 2/11] RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates openssh-client     && update-ca-certificates     && rm -rf /var/lib/apt/lists/*
 #8 CACHED
 
-#9 [ 4/11] WORKDIR /app
+#9 [ 3/11] RUN npm install -g @anthropic-ai/claude-code@2.1.276
 #9 CACHED
 
-#10 [ 6/11] RUN npm install --omit=dev
+#10 [ 4/11] WORKDIR /app
 #10 CACHED
 
-#11 [ 7/11] COPY server.js ./
-#11 DONE 0.0s
+#11 [ 5/11] COPY package.json ./
+#11 CACHED
 
 #12 [ 8/11] COPY src ./src
-#12 DONE 0.0s
+#12 CACHED
 
 #13 [ 9/11] COPY public ./public
-#13 DONE 0.0s
+#13 DONE 0.4s
 
 #14 [10/11] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
-#14 DONE 28.6s
+#14 DONE 29.0s
 
 #15 [11/11] RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
-#15 DONE 0.6s
+#15 DONE 0.3s
 
 #16 exporting to image
 #16 exporting layers
-#16 exporting layers 13.8s done
-#16 exporting manifest sha256:6fd26581ad708be3de007f195f4d24a1f8328d784396c3969e05cacb9301d344
-#16 exporting manifest sha256:6fd26581ad708be3de007f195f4d24a1f8328d784396c3969e05cacb9301d344 0.1s done
-#16 exporting config sha256:54212a8fe55fba9c8380fcc34fcfbb9b27df54899dbb9bbc1488f00348406fd9 0.0s done
-#16 exporting attestation manifest sha256:97e680a02e2262e69b0e3c8bac8324e162191e1a7a04f52b0d31388cb2ca1619 0.1s done
-#16 exporting manifest list sha256:97bae663a55fb442f3b7b03a4f347a5cfc4aeb7ac9355296b5011f80436ddbf8 0.0s done
+#16 exporting layers 11.9s done
+#16 exporting manifest sha256:d0417e1c6fc3fa4f5a51b4d4b069c5d3e759df7c1f5168ab951be326b38ed4b1 0.0s done
+#16 exporting config sha256:a4315ddb66378153f67edd19d85a186d247c00c52ea94b35ae3d8a97702a084d 0.0s done
+#16 exporting attestation manifest sha256:a4cc7a21242d193f3611fef1639d0420d6bfa60fcab25d44820e73c750751feb
+#16 exporting attestation manifest sha256:a4cc7a21242d193f3611fef1639d0420d6bfa60fcab25d44820e73c750751feb 0.1s done
+#16 exporting manifest list sha256:1c6dc47bd2075813b15b47dcf8ad09a1b5373ee553c33f7cbc8edb84da8dbf4b 0.0s done
 #16 naming to docker.io/library/rm-ops-service:latest done
 #16 unpacking to docker.io/library/rm-ops-service:latest
-#16 unpacking to docker.io/library/rm-ops-service:latest 3.0s done
-#16 DONE 17.0s
+#16 unpacking to docker.io/library/rm-ops-service:latest 2.8s done
+#16 DONE 14.9s
 + docker stop rm-ops-service
 rm-ops-service
 + docker rm rm-ops-service
 rm-ops-service
 + docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-claude-home/claude-dir:/home/node/.claude -v /root/ops-service-claude-home/claude.json:/home/node/.claude.json -v /root/ops-service-data:/data -v /srv/realitymanual-repo:/repo -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
-1c2dfab8086a51ec307faac8a6e26fbf5b28e63a95b2fd6310a72b9387317760
+913e711dfdde5fb8389792185d9bef455123b26a0311d889f50bbd2a92c61295
 ++ git -C /root/realitymanual-repo rev-parse --short HEAD
-+ echo 'rm-ops-service redeployed at 10d4d12'
-rm-ops-service redeployed at 10d4d12
++ echo 'rm-ops-service redeployed at 2c5c256'
+rm-ops-service redeployed at 2c5c256
 ssh exit code: 0
