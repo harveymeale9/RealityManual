@@ -2982,3 +2982,66 @@ tool, and it sidesteps an entire class of reconnect/backoff complexity a
 socket would need — consistent with §6's "avoid unnecessary complexity"
 philosophy. Worth revisiting only if the polling interval itself ever
 becomes the complaint (it hasn't been).
+
+---
+
+# 76. Fixed: Persistent-Session Deadlock (2026-09-18)
+
+The persistent Agent SDK session work from §75's neighboring commit
+("Project Manager: persistent Agent SDK session instead of per-message CLI
+spawn") shipped with a deadlock that made **every single Project
+Manager/voice message hang forever** — found and fixed by a different
+session than the one that wrote it, right after Harvey got disconnected
+mid-task and a peer session asked this one to check in. Worth reading in
+full if touching `claudeRunner.js` again.
+
+**The bug:** `ensureSession()` awaited `sess.ready` — resolved only once a
+`system`/`init` event came back from the SDK's `query()` iterator — before
+returning the session to its caller. But in streaming-input mode, the
+underlying CLI process doesn't emit that event until it has received the
+*first* pushed message, and that first message is only ever pushed from
+inside `runTurn()`, which callers only reach *after* `ensureSession()`
+returns. Nothing could ever become ready. Confirmed empirically, not just
+reasoned about: a fresh brand-new session hung identically to a resumed
+one (ruling out "bad resume id" as the cause), with an empty `activity_log`
+in both cases (confirming nothing was ever even sent to the CLI).
+
+**The fix:** `ensureSession()` no longer awaits `sess.ready` — it returns
+the session immediately after creating it. The background `pump()` loop is
+already running independently by that point and processes events as soon
+as the first real message (pushed by the caller's subsequent `runTurn()`
+call) unblocks the underlying process. A stale/dead resume id still
+self-heals, just one turn later than the original fail-fast attempt
+intended: the pump's `catch` rejects the pending turn via
+`failAllPending()` once the process actually errors out, and its `finally`
+clears `currentSession`, so the *next* message after a bad resume
+automatically gets a fresh session.
+
+**How this was found:** a peer Claude Code session messaged this one
+asking for a status check on Harvey's behalf after he got disconnected
+mid-task. This session had no memory of that work at all (confirming via
+git log it was a *different* session that built it), but rather than just
+saying "not me," it ran a real test against the live deployed service —
+sent an actual message through `POST /api/voice/messages` and watched it
+sit on `status: "running"` for minutes with zero output. That's what
+turned "let me check" into "this is actually broken right now," which
+mattered: because the SDK session is a single module-level
+`currentSession`, one hung turn doesn't just fail its own request — it
+wedges the shared in-process queue (`server.js`'s `voiceQueue` processes
+one message at a time) so *every subsequent* Project Manager message would
+have queued behind it forever too. `docker restart rm-ops-service` cleared
+the immediate wedge while the real fix was found and deployed.
+
+**Verified after the fix**, against the real deployed service: sequential
+messages complete in ~5-6s each (not hung), `activity_log` populates
+correctly with real tool-call summaries, and a message sent right after
+clearing the stored session (`POST /api/voice/session/reset`) also
+completes normally — both the resume and fresh-session paths work.
+
+**Process note for future sessions:** this repo is now being actively
+worked on by multiple concurrent Claude Code sessions (this interactive
+one, a non-root `ubuntu` Remote Control session doing most day-to-day
+work, and CI's own automated deploy). Don't assume a `git log` entry you
+don't recognize is wrong or stale — `git fetch`/`pull` and re-read this
+file before assuming you have the full picture, the same way this session
+had to when it found work here it had no memory of doing.
