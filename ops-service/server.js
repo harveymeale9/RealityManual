@@ -301,7 +301,12 @@ const VOICE_SYSTEM_PROMPT =
   'git log -3\n' +
   '```\n' +
   'Example that does NOT need it (you already ran it yourself): "The last 3 commits are: ' +
-  'A, B, C." When in doubt about a borderline case, include the marker rather than omit it.';
+  'A, B, C." When in doubt about a borderline case, include the marker rather than omit it.\n\n' +
+  'Task list (TodoWrite): if this turn is involved enough that you track it with a todo ' +
+  'list, do not paste Harvey\'s message into a todo item verbatim. Each todo item should be ' +
+  'a short, plain-language summary of what that step accomplishes (e.g. "Check recent order ' +
+  'errors in the ops panel"), the same way you would title a task for a colleague, not a ' +
+  'transcript of what he said.';
 
 function buildVoicePrompt(mode, text) {
   if (mode === 'execute') {

@@ -3045,3 +3045,25 @@ work, and CI's own automated deploy). Don't assume a `git log` entry you
 don't recognize is wrong or stale — `git fetch`/`pull` and re-read this
 file before assuming you have the full picture, the same way this session
 had to when it found work here it had no memory of doing.
+
+---
+
+# 77. Voice-App Agent: Summarize Todo Items Instead of Pasting Verbatim (2026-09-18)
+
+Harvey noticed that when the headless Project Manager agent (the one
+`claudeRunner.js`/`server.js` spawns for voice/chat messages, §74) uses
+its own internal TodoWrite task list while working on a multi-step
+instruction, the todo item text was his entire raw message rather than a
+short description of the step. Fixed by adding a paragraph to
+`VOICE_SYSTEM_PROMPT` in `ops-service/server.js`: when this agent tracks
+a turn with a todo list, each item should be a short plain-language
+summary of that step (how you'd title a task for a colleague), never a
+verbatim paste of what Harvey said. Applies only to the voice-app agent
+(this is injected via `appendSystemPrompt`, §74) — normal interactive
+sessions are unaffected.
+
+Takes effect the next time `rm-ops-service` is rebuilt/redeployed (§62's
+normal redeploy cycle, or the `deploy-ops-service.yml` CI workflow if
+it's picked this commit up automatically — check
+`ops-service/.ci/last-run.log` for the most recently deployed commit
+hash before assuming this is already live).
