@@ -3243,3 +3243,37 @@ Added a `document` click listener that closes `#queueDrawer` when it's
 open and the click landed outside both the drawer and the pull-tab
 itself. Desktop's queue panel (`app.js`) isn't a toggleable drawer — it's
 a static always-visible column — so this only applies to the mobile PWA.
+
+---
+
+# 84. Sent Images Weren't Shown in the Chat Bubble
+
+Harvey attached an image to a message and couldn't see it in the chat
+after sending — confirmed: `addMessage('user', text || '(image)')` (both
+`app.js` and `voice-mobile.html`) only ever rendered a text placeholder,
+never the actual picture. The uploaded file itself is genuinely
+transient server-side too — `POST /api/voice/messages` reads it into a
+base64 block for that one Claude Code turn and never persists it (no
+`image_path` column, no file kept under `DATA_DIR`, nothing served back
+by any route) — so there was truly no image data anywhere to display
+after the fact, on any device, ever.
+
+**Fixed, scoped narrowly:** `addMessage()` in both files now takes an
+optional `imageFile` argument; when present it renders an actual `<img>`
+thumbnail (via `FileReader.readAsDataURL`, same technique already used
+by the existing pre-send preview) inside the sender's own chat bubble,
+with any typed caption underneath. `sendTyped()` (mobile) / `sendText()`
+(desktop) now pass the pending `File` object through instead of falling
+back to the literal string `'(image)'`.
+
+**Deliberately not fixed in this pass:** this only helps the sending
+device see its own image at send time, using the in-memory `File`
+object the browser already has — it does not persist the image
+anywhere. A page reload, `GET /api/voice/messages`, or the other device
+via `syncThread` (§75) still has no image data to show, only whatever
+transcript text was stored (`'(image attached, no caption)'` if there
+was no caption — see `server.js`'s `finalText` fallback). Making an
+attached image durably visible everywhere would need actual server-side
+storage (a file under `DATA_DIR`, a serving route, a `voice_messages`
+column) — a real feature, not this bug fix; worth doing if Harvey asks
+for cross-device/reload image history specifically.

@@ -330,12 +330,27 @@
     var emptyNote = thread.querySelector('.pm-empty');
     function clearEmptyNote() { if (emptyNote && emptyNote.parentNode) { emptyNote.parentNode.removeChild(emptyNote); emptyNote = null; } }
 
-    function addMessage(kind, text, msgId) {
+    function addMessage(kind, text, msgId, imageFile) {
       clearEmptyNote();
       var el = document.createElement('div');
       el.className = 'pm-msg pm-msg-' + kind;
       if (msgId) el.dataset.msgId = msgId;
-      el.textContent = text;
+      if (imageFile) {
+        var img = document.createElement('img');
+        img.className = 'pm-msg-image';
+        var reader = new FileReader();
+        reader.onload = function () { img.src = reader.result; };
+        reader.readAsDataURL(imageFile);
+        el.appendChild(img);
+        if (text) {
+          var caption = document.createElement('div');
+          caption.className = 'pm-msg-caption';
+          caption.textContent = text;
+          el.appendChild(caption);
+        }
+      } else {
+        el.textContent = text;
+      }
       thread.appendChild(el);
       thread.scrollTop = thread.scrollHeight;
       return el;
@@ -587,7 +602,7 @@
       var autoSpeak = !!opts.autoSpeak;
       var image = opts.image || null;
       if (!text.trim() && !image) return;
-      addMessage('user', text || '(image)');
+      addMessage('user', text.trim(), null, image);
       var typingEl = addTyping();
       renderActivity(null);
       Voice.sendMessage(text.trim(), mode, image).then(function (created) {
