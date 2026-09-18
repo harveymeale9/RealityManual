@@ -77,10 +77,14 @@
   }
 
   function renderTabs() {
-    panelTabs.innerHTML = TABS.map(function (t) {
+    // "Talk to CC" is a real page (voice.html), not one of this SPA's
+    // in-page tabs — prepended as a plain link, first in the menu, per
+    // Harvey. [data-tab] below excludes it from the hash-routing handler.
+    var talkToCcLink = '<a class="panel-tab" href="voice.html">Talk to CC</a>';
+    panelTabs.innerHTML = talkToCcLink + TABS.map(function (t) {
       return '<button class="panel-tab" data-tab="' + t.id + '">' + t.label + '</button>';
     }).join('');
-    panelTabs.querySelectorAll('.panel-tab').forEach(function (btn) {
+    panelTabs.querySelectorAll('.panel-tab[data-tab]').forEach(function (btn) {
       btn.addEventListener('click', function () { location.hash = btn.dataset.tab; });
     });
   }
