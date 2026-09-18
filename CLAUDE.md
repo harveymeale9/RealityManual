@@ -3906,3 +3906,33 @@ href="index.html#content-ops">`, no `target`), just the reverse
 direction. `renderActiveTab()`'s show/hide logic (visible on every tab
 except the in-SPA project-manager one) didn't need to change — it's
 still correct regardless of where the link actually points.
+
+---
+
+# 99. "Queue" Renamed to "Task List" — Ambiguous Label, Not a Behavior Change
+
+Harvey: "queue is kind of ambiguous, whereas task list actually tells us
+that it's a list of things you're working away through." Pure copy
+change — every user-visible occurrence of "Queue" in `app.js` and
+`voice-mobile.html` (`.pm-activity-head` label in both files, and
+`voice-mobile.html`'s pull-tab `aria-label`, "Show queue" →
+"Show task list") is now "Task List," and the empty-state copy changed
+to match ("Nothing queued." → "No tasks right now."). Internal
+identifiers (`renderQueue()`, `pmQueueList`/`vQueueList`,
+`.pm-queue-item`, `voiceQueue` server-side, etc.) were deliberately left
+alone — renaming those would be a much larger, purely-cosmetic diff with
+no user-visible benefit, and this project's convention throughout this
+whole voice-app build has been to change display text/markup without
+chasing internal names to match (see §90's `card-ai`/`early_ack`
+naming, unrelated to what either actually displays as, for the same
+reason).
+
+Deliberately did not attempt to filter which messages appear in the
+list (e.g. excluding a plain conversational check-in like the one that
+prompted this) — every message that's actually `pending`/`running`
+genuinely is mid-processing, which is what this widget exists to show,
+and there's no reliable signal to classify "was this really a task" at
+enqueue time, before the model has even looked at it. The renamed label
+addresses the actual stated problem (ambiguity about what the list
+represents), not a claim that every entry in it is formally a "task" in
+the TodoWrite sense (§94/95).

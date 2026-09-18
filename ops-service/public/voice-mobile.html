@@ -181,12 +181,12 @@
       </button>
     </div>
 
-    <button type="button" class="v-queue-tab" id="queueTab" aria-label="Show queue">
+    <button type="button" class="v-queue-tab" id="queueTab" aria-label="Show task list">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg>
     </button>
     <div class="v-queue-drawer" id="queueDrawer">
-      <div class="pm-activity-head">Queue <span class="pm-activity-hint" id="vQueueHint"></span></div>
-      <div class="pm-queue-list" id="vQueueList"><div class="pm-queue-empty">Nothing queued.</div></div>
+      <div class="pm-activity-head">Task List <span class="pm-activity-hint" id="vQueueHint"></span></div>
+      <div class="pm-queue-list" id="vQueueList"><div class="pm-queue-empty">No tasks right now.</div></div>
     </div>
   </div>
 
@@ -368,7 +368,7 @@
           queueHintEl.textContent = '';
           var empty = document.createElement('div');
           empty.className = 'pm-queue-empty';
-          empty.textContent = 'Nothing queued.';
+          empty.textContent = 'No tasks right now.';
           queueListEl.appendChild(empty);
           return;
         }

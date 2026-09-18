@@ -302,8 +302,8 @@
         '</div>' +
         '<div class="pm-col pm-col-activity">' +
           '<div class="pm-queue-section">' +
-            '<div class="pm-activity-head">Queue <span class="pm-activity-hint" id="pmQueueHint"></span></div>' +
-            '<div class="pm-queue-list" id="pmQueueList"><div class="pm-queue-empty">Nothing queued.</div></div>' +
+            '<div class="pm-activity-head">Task List <span class="pm-activity-hint" id="pmQueueHint"></span></div>' +
+            '<div class="pm-queue-list" id="pmQueueList"><div class="pm-queue-empty">No tasks right now.</div></div>' +
           '</div>' +
           '<div class="pm-activity-section">' +
             '<div class="pm-activity-head">Activity <span class="pm-activity-hint">— what CC is doing, live</span></div>' +
@@ -516,7 +516,7 @@
         queueHintEl.textContent = '';
         var empty = document.createElement('div');
         empty.className = 'pm-queue-empty';
-        empty.textContent = 'Nothing queued.';
+        empty.textContent = 'No tasks right now.';
         queueListEl.appendChild(empty);
         return;
       }
