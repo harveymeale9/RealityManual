@@ -2832,3 +2832,23 @@ whole plumbing works except for the root/bypass issue above).
   the non-root migration — don't re-litigate this if Harvey asks again;
   the voice app's headless path is the one that gets true bypass, and it
   already has it.
+
+**Update (2026-09-18): renamed to "Project Manager", made the default
+landing page.** Harvey's framing: `ops.realitymanual.com` should open
+straight into the CC chat, not the Content Ops board — the chat *is* the
+primary interface now, everything else is secondary. Concretely:
+`ops-service/public/index.html` and `voice.html` were swapped — the old
+Content Ops SPA now lives at **`content-ops.html`**, and the chat page
+(old `voice.html`) is now **`index.html`**, so the site root loads it by
+default. Every "Talk to CC" label (page titles, login headers, the
+top-menu/side-rail entry in `content-ops.html`+`app.js`, the mobile PWA
+page/manifest) was renamed to **"Project Manager"**, and the side-rail's
+mic icon (misleading now — it's text+voice, not voice-only) was replaced
+with a message-bubble icon. The top-menu/side-rail entry stays first, in
+front of "Content Ops", pointing at `index.html`. `voice-mobile.html`
+keeps its filename (no rename requested there, just label text) and
+still works exactly as before — the PWA/session/backend plumbing (§74
+above) is completely unaffected by this, it's a pure file-rename +
+relabel. Deployed via the normal `rm-ops-service` rebuild+recreate cycle
+(§62/§65's pattern) and verified live: `/` serves the chat page,
+`/content-ops.html` serves the board, `/voice.html` correctly 404s.
