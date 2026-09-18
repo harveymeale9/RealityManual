@@ -330,11 +330,26 @@
     var emptyNote = thread.querySelector('.pm-empty');
     function clearEmptyNote() { if (emptyNote && emptyNote.parentNode) { emptyNote.parentNode.removeChild(emptyNote); emptyNote = null; } }
 
-    function addMessage(kind, text, msgId, imageFile) {
+    function replyToSnippet(replyToText) {
+      return 'Re: ' + (replyToText.length > 80 ? replyToText.slice(0, 80) + '…' : replyToText);
+    }
+    function addMessage(kind, text, msgId, imageFile, replyToText) {
       clearEmptyNote();
       var el = document.createElement('div');
       el.className = 'pm-msg pm-msg-' + kind;
       if (msgId) el.dataset.msgId = msgId;
+      if (!imageFile && !replyToText) {
+        el.textContent = text;
+        thread.appendChild(el);
+        thread.scrollTop = thread.scrollHeight;
+        return el;
+      }
+      if (replyToText) {
+        var replyTo = document.createElement('div');
+        replyTo.className = 'pm-msg-replyto';
+        replyTo.textContent = replyToSnippet(replyToText);
+        el.appendChild(replyTo);
+      }
       if (imageFile) {
         var img = document.createElement('img');
         img.className = 'pm-msg-image';
@@ -342,25 +357,29 @@
         reader.onload = function () { img.src = reader.result; };
         reader.readAsDataURL(imageFile);
         el.appendChild(img);
-        if (text) {
-          var caption = document.createElement('div');
-          caption.className = 'pm-msg-caption';
-          caption.textContent = text;
-          el.appendChild(caption);
-        }
-      } else {
-        el.textContent = text;
+      }
+      if (text) {
+        var textEl = document.createElement('div');
+        if (imageFile) textEl.className = 'pm-msg-caption';
+        textEl.textContent = text;
+        el.appendChild(textEl);
       }
       thread.appendChild(el);
       thread.scrollTop = thread.scrollHeight;
       return el;
     }
 
-    function addAssistantMessage(text) {
+    function addAssistantMessage(text, replyToText) {
       clearEmptyNote();
       var isAction = /^\[NEEDS_ACTION\]/i.test(text || '');
       var wrap = document.createElement('div');
       wrap.className = 'pm-msg pm-msg-assistant' + (isAction ? ' pm-msg-assistant--action' : '');
+      if (replyToText) {
+        var replyTo = document.createElement('div');
+        replyTo.className = 'pm-msg-replyto';
+        replyTo.textContent = replyToSnippet(replyToText);
+        wrap.appendChild(replyTo);
+      }
       var body = document.createElement('div');
       body.appendChild(Voice.renderMarkdownLite(text || ''));
       wrap.appendChild(body);
@@ -568,7 +587,7 @@
         // Execute-mode replies are a real completion summary now (see
         // server.js buildVoicePrompt), not a throwaway line — show it like
         // any other reply instead of a generic "Done" placeholder.
-        addAssistantMessage(row.reply_text || '');
+        addAssistantMessage(row.reply_text || '', row.transcript);
         if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
         var ack = voiceAck[row.id];
         if (ack) {
@@ -579,7 +598,7 @@
       },
       onError: function (row) {
         removeTyping(row.id);
-        addMessage('error', row.error_message || 'Something went wrong.');
+        addMessage('error', row.error_message || 'Something went wrong.', null, null, row.transcript);
         if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
         var ack = voiceAck[row.id];
         if (ack) { clearTimeout(ack.timer); delete voiceAck[row.id]; }

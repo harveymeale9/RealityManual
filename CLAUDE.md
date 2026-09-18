@@ -3277,3 +3277,26 @@ attached image durably visible everywhere would need actual server-side
 storage (a file under `DATA_DIR`, a serving route, a `voice_messages`
 column) — a real feature, not this bug fix; worth doing if Harvey asks
 for cross-device/reload image history specifically.
+
+---
+
+# 85. Replies Now Show Which Message They're Answering
+
+A reply can land well after Harvey's sent it — sometimes minutes, per
+§74's whole ack/delay design — and he may well have sent other messages
+in the meantime (from either device, since the thread is shared, §75).
+With nothing marking which question a given reply answers, a late reply
+was ambiguous once more than one exchange was in flight or scrollback.
+
+Both `app.js` and `voice-mobile.html`: `addAssistantMessage()` and
+`addMessage()` now take an optional `replyToText` argument. When
+present, a small muted "Re: <snippet of the original message>" line
+(`.pm-msg-replyto`, truncated to 80 chars) renders above the reply body.
+`onDone`/`onError` in both files' `syncThread` wiring pass `row.transcript`
+— the shared `voice_messages` row already stores the question and answer
+together (`transcript`/`reply_text` on the same row), so no schema change
+or new data was needed, this is pure rendering. Applies to error replies
+too, not just successful ones, for the same reason. A small
+`replyToSnippet()` helper is duplicated between the two files rather than
+factored into `voiceClient.js`, matching this codebase's existing
+precedent of small page-specific render helpers not being shared (§80).

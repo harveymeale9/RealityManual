@@ -398,6 +398,14 @@ a { color: var(--accent); }
    actual picture, so there was no way to confirm what was sent. */
 .pm-msg-image { display: block; max-width: 100%; max-height: 260px; border-radius: 7px; object-fit: contain; }
 .pm-msg-caption { margin-top: 8px; }
+/* Quoted reference to the user message a reply answers — a reply can land
+   well after Harvey has sent other messages in the meantime, so it's not
+   always obvious at a glance which question it's actually answering. */
+.pm-msg-replyto {
+  font-size: 0.76rem; color: var(--ink-faint); margin-bottom: 6px;
+  padding-bottom: 6px; border-bottom: 1px solid var(--border-soft);
+  overflow-wrap: anywhere;
+}
 .pm-msg-meta { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 .pm-play-btn, .pm-stop-btn { background: none; border: 1px solid var(--border); color: var(--accent); border-radius: 6px; padding: 3px 9px; font-size: 0.75rem; cursor: pointer; }
 .pm-play-btn:hover, .pm-stop-btn:hover { border-color: var(--accent); }
