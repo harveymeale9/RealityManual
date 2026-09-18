@@ -2789,3 +2789,46 @@ whole plumbing works except for the root/bypass issue above).
   bypass permissions as a non-root user → correct, complete spoken-style
   answer. **Not yet done:** a real test from Harvey's phone through the
   actual PWA UI (only the HTTP API has been tested directly so far).
+- **Cross-device continuity confirmed by design, not just intent:**
+  `voice_session` is a single row (`id=1`) shared by every device/browser
+  that hits the ops-panel API, so `voice.html` (desktop) and
+  `voice-mobile.html` (phone PWA) both `claude --resume` the *same*
+  underlying session — switching devices mid-conversation already works,
+  it doesn't need to be built.
+- **`.claude/hooks/voice-context-bridge.js`** (landed same day, see git
+  log): a `UserPromptSubmit` hook, one-way, that surfaces recent
+  voice-app exchanges as context into a *terminal-based* interactive
+  session when Harvey opens one — so hopping into a terminal after using
+  the phone app doesn't lose continuity either. Confirmed working as the
+  non-root `ubuntu` VPS user (2026-09-18): `/root` has `o+x` (traversal
+  only) as planned, so `cat`-ing a specific file under
+  `/root/ops-service-data/` succeeds even though `ls /root/` itself
+  correctly still doesn't.
+- **Gotcha caught and fixed live (2026-09-18):** `/srv/realitymanual-repo`
+  (the headless runner's actual working tree) was 2 commits behind
+  `origin/main` — the "Talk to CC nav" commits had been pushed but never
+  pulled there. This is the exact failure mode this section already
+  warned about ("whoever redeploys this container must remember to also
+  `git pull` inside `/srv/realitymanual-repo`") happening for real, not
+  hypothetically. Pulled and fast-forwarded; nothing else needed since it
+  was a clean ff.
+- **Attended-session zero-prompt bypass: confirmed not possible, by
+  design, independent of root.** Harvey asked for the interactive
+  session (terminal, whether root tmux or a non-root
+  `claude --remote-control` login like this one) to also always skip
+  permissions. Tested directly: a non-root **headless** `claude -p
+  --permission-mode bypassPermissions` invocation on this VPS returns
+  zero permission denials — so the earlier root/EUID restriction really
+  is specific to headless mode and really is fixed by the
+  `/srv`+non-root setup above. But per Claude Code's own docs
+  (`docs/permissions`, `docs/permission-modes`), full bypass in any
+  session a human isn't actively watching keystroke-by-keystroke is
+  gated behind explicitly accepting the bypass disclaimer once
+  interactively — and *attended* interactive sessions retain "Auto Mode"
+  (auto-allows routine actions, still gates genuinely risky ones) as a
+  deliberate, separate safety rail, not a fallback bug and not something
+  project-level `settings.json` can turn off. This confirms (rather than
+  just repeats) the same conclusion this section already reached before
+  the non-root migration — don't re-litigate this if Harvey asks again;
+  the voice app's headless path is the one that gets true bypass, and it
+  already has it.
