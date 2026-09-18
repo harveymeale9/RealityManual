@@ -381,10 +381,9 @@
       onPending: function (row) { addTyping(row.id); },
       onDone: function (row) {
         removeTyping(row.id);
-        if (row.mode === 'execute') {
-          addMessage('system', 'Done — no reply expected.');
-          return;
-        }
+        // Execute-mode replies are a real completion summary now (see
+        // server.js buildVoicePrompt), not a throwaway line — show it like
+        // any other reply instead of a generic "Done" placeholder.
         addAssistantMessage(row.reply_text || '');
         if (autoSpeakIds[row.id]) {
           delete autoSpeakIds[row.id];

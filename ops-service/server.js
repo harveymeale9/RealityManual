@@ -281,10 +281,12 @@ const VOICE_SYSTEM_PROMPT =
 
 function buildVoicePrompt(mode, text) {
   if (mode === 'execute') {
-    return '[Voice instruction from Harvey, sent while away from his desk — he expects no reply ' +
-      'and will not be watching. Proceed with full autonomy using your normal judgement and this ' +
-      'project\'s CLAUDE.md conventions. Do not ask clarifying questions — make the most reasonable ' +
-      'assumption, note it briefly in your final summary, and carry out the task fully.] ' + text;
+    return '[Voice instruction from Harvey, sent while away from his desk — proceed with full ' +
+      'autonomy using your normal judgement and this project\'s CLAUDE.md conventions. Do not ask ' +
+      'clarifying questions — make the most reasonable assumption and note it briefly. He will not ' +
+      'hear a spoken reply and is not watching live, but your final answer IS shown to him ' +
+      'afterward as text, so make it a real completion summary (what you did/found/decided), not ' +
+      'a throwaway line — carry out the task fully.] ' + text;
   }
   return '[Voice message from Harvey, sent from his phone or desktop — he expects a reply. If it ' +
     'will be read aloud by text-to-speech, keep your final answer short and conversational: no ' +

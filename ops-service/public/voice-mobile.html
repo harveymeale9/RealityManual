@@ -127,7 +127,7 @@
 
       <button type="button" class="v-btn v-btn-execute" id="executeBtn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg>
-        <span class="v-btn-text"><span class="v-btn-label">Just Execute</span><span class="v-btn-sub">Speak — no reply needed</span></span>
+        <span class="v-btn-text"><span class="v-btn-label">Just Execute</span><span class="v-btn-sub">Speak — text reply only, not read aloud</span></span>
       </button>
     </div>
   </div>
@@ -266,7 +266,9 @@
           onPending: function (row) { addTyping(row.id); },
           onDone: function (row) {
             removeTyping(row.id);
-            if (row.mode === 'execute') { addMessage('system', 'Done — no reply expected.'); return; }
+            // Execute-mode replies are a real completion summary now (see
+            // server.js buildVoicePrompt), not a throwaway line — show it
+            // like any other reply instead of a generic "Done" placeholder.
             addAssistantMessage(row.reply_text || '');
             if (autoSpeakIds[row.id]) { delete autoSpeakIds[row.id]; Voice.speak(row.reply_text || '').catch(function () {}); }
           },
