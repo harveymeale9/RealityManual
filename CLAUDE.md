@@ -3640,3 +3640,26 @@ router already reads `location.hash` unconditionally on init
 hash was already set, confirmed in §79's writeup of the same behavior)
 — and the session cookie is shared automatically across tabs on the same
 origin, so no separate login is needed in the new tab.
+
+---
+
+# 92. Content Ops Search: Hide Non-Matches Instead of Dimming Them
+
+Search in the Kanban board used to keep every card visible and just dim
+non-matches to 28% opacity (`.card-dim`) — a deliberate choice at the
+time (see the comment that used to sit above `render()`) specifically so
+drag order/column placement was never disturbed by a search. Harvey
+wants the opposite: typing a search term should actually remove
+non-matching cards from view, the same way the content-type filter
+already works, and clearing the box brings everything back.
+
+Fixed in `render()`: the search query now filters each column's `ids`
+array before building card HTML (`if (query) ids = ids.filter(...)`),
+mirroring the existing `activeTypeFilter` line right above it, instead of
+tagging non-matches with `.card-dim` afterward. Nothing about drag
+order/column placement actually changes underneath — filtering only
+affects what a given `render()` call outputs, never the stored piece
+data — so clearing the search box (which already calls `render()` on
+every `input` event, including an emptied box) restores the exact same
+board. Removed the now-fully-unused `.card-dim` CSS rule rather than
+leaving dead code behind.

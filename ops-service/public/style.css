@@ -685,9 +685,6 @@ a { color: var(--accent); }
    the board's green accent, so it reads at a glance without shouting. */
 .card.card-ai { background: linear-gradient(rgba(139, 124, 246, 0.09), rgba(139, 124, 246, 0.09)), var(--surface-2); border-color: rgba(139, 124, 246, 0.35); }
 .card.card-ai:hover { border-color: #8b7cf6; }
-/* Search dims non-matches in place rather than removing them, so a hit
-   visually "comes forward" without disturbing column/drag order. */
-.card.card-dim { opacity: 0.28; }
 
 .card-id {
   font-family: var(--font-mono);

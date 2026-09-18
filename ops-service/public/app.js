@@ -1695,12 +1695,13 @@
       '</div>';
   }
 
-  // Type filter actually removes non-matching cards from each column
-  // (conventional filter semantics); the search box instead dims
-  // non-matches in place (see .card-dim in style.css) so relevant cards
-  // visually "come forward" without disturbing drag order or which column
-  // something's in — a search hit that's the only thing you want to see
-  // right now is still exactly where you'd reach for it once you clear it.
+  // Both the type filter and the search box remove non-matching cards
+  // from each column outright (conventional filter semantics) — search
+  // used to just dim non-matches in place instead, but Harvey wants
+  // actual hide/show: type something, only real hits stay visible; clear
+  // the box and everything comes back exactly as it was (nothing here
+  // touches drag order or which column a card is in, since filtering only
+  // affects what render() outputs, never the underlying piece data).
   var activeTypeFilter = '';
   var activeSearchQuery = '';
 
@@ -1718,12 +1719,9 @@
     board.innerHTML = Store.STAGES.map(function (s, idx) {
       var ids = orderedIds(s.id);
       if (activeTypeFilter) ids = ids.filter(function (id) { return pieces[id].contentType === activeTypeFilter; });
+      if (query) ids = ids.filter(function (id) { return pieceMatchesSearch(pieces[id], query); });
       var isAutoCol = AUTO_STAGE_IDS.indexOf(s.id) !== -1;
-      var cards = ids.map(function (id) {
-        var matches = pieceMatchesSearch(pieces[id], query);
-        var html = cardHtml(id, pieces[id]);
-        return query && !matches ? html.replace('class="card', 'class="card card-dim') : html;
-      }).join('');
+      var cards = ids.map(function (id) { return cardHtml(id, pieces[id]); }).join('');
       if (!cards) cards = '<div class="empty-slot">' + (isAutoCol ? 'Nothing here yet' : 'Nothing here yet') + '</div>';
       var num = String(idx + 1).padStart(2, '0');
       return '' +
