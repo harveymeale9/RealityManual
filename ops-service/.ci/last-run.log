@@ -2,14 +2,14 @@
 + cd /root/realitymanual-repo
 + git pull
 From https://github.com/harveymeale9/RealityManual
-   b50a65d..5ee5c00  main       -> origin/main
+   5ee5c00..4144552  main       -> origin/main
 error: Your local changes to the following files would be overwritten by merge:
 	CLAUDE.md
 	ops-service/deploy.sh
 	ops-service/server.js
 Please commit your changes or stash them before you merge.
 Aborting
-Updating e678b49..5ee5c00
+Updating e678b49..4144552
 + fail 'git pull failed in /root/realitymanual-repo'
 + echo 'DEPLOY FAILED: git pull failed in /root/realitymanual-repo'
 DEPLOY FAILED: git pull failed in /root/realitymanual-repo
