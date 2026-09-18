@@ -4,7 +4,9 @@
 # policy confirmed live via `docker inspect rm-ops-service` on 2026-09-18.
 # Run this directly on the VPS as root (or let .github/workflows/
 # deploy-ops-service.yml run it automatically via SSH on every push to
-# main that touches ops-service/**).
+# main that touches ops-service/**, or via its workflow_dispatch button).
+# Auto-deploy went live 2026-09-18 once VPS_SSH_KEY was added as a repo
+# secret.
 set -euo pipefail
 
 REPO_DIR=/root/realitymanual-repo
