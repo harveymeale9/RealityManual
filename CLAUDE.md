@@ -3734,3 +3734,49 @@ real live to-do-list run on the deployed service; flag this if picked up
 cold and re-verify (does a `public/`-only push really skip the rebuild in
 the real CI log, does a `server.js` change still redeploy correctly) if
 the same complaint resurfaces.
+
+---
+
+# 94. §89/§90's Fixes Have a Real Gap: Silent Tool Calls Before Any Text
+
+Harvey reported both §89 (real spoken ack) and §90 (real queue title)
+regressing on the same message — a simple "how's it going, checking in"
+check-in got the generic fallback phrase spoken out loud, and the queue
+showed his raw transcript as the title. Diagnosed against the live
+`voice_messages` rows directly (`GET /api/voice/messages`, not
+guessed): `early_ack` for that row was **not null** — it was present,
+but it was the model's *entire final answer*, not a short lead-in
+sentence. Comparing against rows where `early_ack` genuinely was a short
+mid-task line (e.g. "Now let's confirm the search input wiring near
+line ~1858...") showed the real pattern: those turns narrated *before*
+each tool call, as instructed; the "how's it going" turn instead ran
+several tool calls (`git fetch`, `git log`, a live ping) with zero
+preceding text, then wrote its whole answer as one block at the very
+end. `claudeRunner.js`'s `handleEvent` correctly captures "the first
+text block," but if a turn's actual first text happens to be its last
+too, that's what gets captured — arriving too late to beat the 10s
+fallback timer, and leaving the queue showing the raw transcript for
+however long the silent tool-call phase took.
+
+So this isn't a new bug in the §89/§90 mechanism itself — it's the
+model (this agent) not consistently following the "narrate before
+tools" instruction for turns that feel like a quick status check but
+still involve tool calls (which can each individually take several real
+seconds — a `git fetch` or `ssh` call is not instant). `VOICE_SYSTEM_PROMPT`'s
+"Quick verbal acknowledgment" paragraph in `server.js` was loosened from
+a judgment call ("if a turn needs real work... skip for a turn you can
+just answer directly") to a hard mechanical rule: the instant you decide
+a turn needs *any* tool call at all, however small it feels, your first
+output token must be the one-sentence acknowledgment, before that first
+tool call — not interleaved with it, not after it. The rewritten
+paragraph explicitly names this exact failure mode (silent tool calls →
+late/duplicate final-answer-as-ack → fallback phrase + raw-transcript
+queue title) so future instances of this agent have the actual failure
+story, not just an abstract rule, to calibrate against.
+
+Deliberately did not add a second code-level fallback (e.g. a
+generic placeholder written to the queue after N seconds of silence) —
+Harvey's stance from §89 is no canned filler at all, anywhere, and a
+quieter written-not-spoken version of the same thing would still
+violate that. The fix is behavioral discipline, enforced by prompt
+wording, not a second synthetic layer papering over it.

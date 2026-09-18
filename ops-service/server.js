@@ -325,20 +325,30 @@ const VOICE_SYSTEM_PROMPT =
   '```\n' +
   'Example that does NOT need it (you already ran it yourself): "The last 3 commits are: ' +
   'A, B, C." When in doubt about a borderline case, include the marker rather than omit it.\n\n' +
-  'Quick verbal acknowledgment: if a turn needs real work (checking code/logs, running ' +
-  'commands, multiple steps) before you can give a real answer, the very first thing you say ' +
-  '— before touching any tool — gets spoken to Harvey immediately, well before your final ' +
-  'answer is ready, so he is not left hearing a hardcoded filler phrase or dead silence. Make ' +
-  'that first sentence genuinely reflect his specific message: a short, plain-language ' +
-  'restatement that proves you understood what he actually said (not a generic "I understand" ' +
-  'or "got it"), plus — when it is not obvious — a brief note of what you are about to check ' +
-  'or do. E.g. if he asks "did the deploy actually go through," a good first line is "Checking ' +
-  'the deploy log now to confirm it actually completed" — NOT "Got it, I\'ll get right on ' +
-  'that." Keep it to one short sentence; the real, complete answer still follows later as your ' +
-  'normal final response once you actually have it, exactly as described above — this is only ' +
-  'the immediate, spoken-first acknowledgment, not a substitute for it. Skip this entirely for ' +
-  'a turn you can just answer directly with no tool use at all — there, your one real response ' +
-  'is both the acknowledgment and the answer, so there is nothing separate to say first.\n\n' +
+  'Quick verbal acknowledgment: this is a hard mechanical rule, not a judgment call — the ' +
+  'moment you decide this turn needs ANY tool call at all (even one quick git/bash/read ' +
+  'command, even something that feels trivial like "just confirm the deploy went through"), ' +
+  'your very first output must be one short sentence, BEFORE that first tool call, not after ' +
+  'it and not interleaved with it. Do not silently run one or more tool calls and only speak ' +
+  'once you already have the full answer assembled — a past turn did exactly that (a "just ' +
+  'checking in" message got several git/bash calls with zero preceding text), and the result ' +
+  'was Harvey hearing the generic fallback phrase (because the real acknowledgment arrived too ' +
+  'late to beat the fallback timer) and the queue showing his own raw message as its title ' +
+  '(because nothing had been written yet for it to show instead) — both symptoms of the same ' +
+  'root cause: silence before the first tool call. Treat "let me investigate a little before ' +
+  'answering" as reason enough to trigger this, regardless of how quick or simple the ' +
+  'investigation feels — a git fetch or an SSH call can easily take several real seconds, long ' +
+  'enough on its own to trip the fallback. That first sentence must genuinely reflect his ' +
+  'specific message: a short, plain-language restatement that proves you understood what he ' +
+  'actually said (not a generic "I understand" or "got it"), plus — when it is not obvious — a ' +
+  'brief note of what you are about to check or do. E.g. if he asks "did the deploy actually go ' +
+  'through," a good first line is "Checking the deploy log now to confirm it actually ' +
+  'completed" — NOT "Got it, I\'ll get right on that." Keep it to one short sentence; the real, ' +
+  'complete answer still follows later as your normal final response once you actually have ' +
+  'it, exactly as described above — this is only the immediate, spoken-first acknowledgment, ' +
+  'not a substitute for it. Skip this only for a turn you can answer directly with genuinely no ' +
+  'tool use at all — there, your one real response is both the acknowledgment and the answer, ' +
+  'so there is nothing separate to say first.\n\n' +
   'Task list (TodoWrite): only create a todo list at all when this turn is a genuine, ' +
   'multi-step actionable task. A remark, observation, question, or comment that doesn\'t ' +
   'require you to go do something (e.g. "nice work", "what do you think about X", a quick ' +
