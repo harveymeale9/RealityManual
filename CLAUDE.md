@@ -3048,6 +3048,7 @@ had to when it found work here it had no memory of doing.
 
 ---
 
+<<<<<<< HEAD
 # 77. Voice-App Agent: Summarize Todo Items Instead of Pasting Verbatim (2026-09-18)
 
 Harvey noticed that when the headless Project Manager agent (the one
@@ -3375,3 +3376,129 @@ either. `EXECUTE_ACK_TEXT` ("Got it — I'll take care of that now.") is
 untouched — execute-mode is unambiguously always a task by construction
 (that's the whole distinction the two buttons encode), and it still
 correctly never speaks a final result.
+
+---
+
+# 88. PM Host Access, Self-Healing Queue, and Session-Loss Context (2026-09-18)
+
+Harvey's ask: he wants the Project Manager (the voice/chat app's headless
+agent, running inside `rm-ops-service`) to work "identically" to an
+interactive Claude Code terminal session on the VPS — same reach, same
+reliability — with the explicit instruction to give it as much access as
+possible now and layer on safeguards later rather than the reverse.
+Three real gaps closed here; a fourth (proactive push notification when
+blocked) only partially.
+
+**1. Host access, via SSH — not a Docker socket mount.** The container has
+no access to anything outside itself by default: no other containers,
+no nginx/systemd, no host filesystem beyond its explicit bind mounts. Two
+ways to fix that were considered:
+- Mount `/var/run/docker.sock` into the container. Rejected: that's
+  equivalent to full host root (a container with the socket can launch a
+  new container with `-v /:/host`), and the escalation path is opaque —
+  nothing about *why* a given docker command ran is visible unless you
+  separately go inspect what got launched.
+- **SSH to the host itself, as `ubuntu`** (the non-root account already
+  set up for interactive sessions — see §74/75) — what's actually built.
+  Equivalent end capability (ubuntu has passwordless sudo, so this is
+  still full root, functionally), but every single thing the PM does
+  outside its container is one explicit, individually-readable `ssh
+  ubuntu@host.docker.internal '<command>'` call — auditable the same way
+  any of its other tool calls already are, rather than a single opaque
+  socket grant. Simplicity/auditability tradeoff, not a security
+  strength — Harvey's own framing ("safeguards later") is the right way
+  to think about this, not "this is already safe."
+
+**What changed to support it:**
+- `Dockerfile`: installs `openssh-client`; creates `/home/node/.ssh`
+  (mode 700, owned by `node`) with a static `config` pinning
+  `StrictHostKeyChecking no` / `UserKnownHostsFile /dev/null` for
+  `host.docker.internal` specifically — acceptable here because that
+  hostname always resolves to the one fixed, known machine the container
+  itself runs on; there's no real "is this who I think it is" question
+  for an unknown-host warning to protect against.
+- `deploy.sh` (CI's own deploy script, so this survives every future
+  automated redeploy, not just a one-off manual run): added
+  `--add-host=host.docker.internal:host-gateway` and
+  `-v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro` to
+  `RUN_ARGS`.
+- `server.js`'s `VOICE_SYSTEM_PROMPT`: tells the agent this exists, how
+  to use it (`ssh ubuntu@host.docker.internal '<command>'`, `sudo` inline
+  for anything privileged), and the one real caveat — rebuilding/
+  restarting `rm-ops-service` *itself* over that connection kills its own
+  current process mid-command, so that specific step never reports
+  success back in the same turn. Told to treat this as routine, not a
+  reason to avoid the capability, and to log state to the work log first
+  when the next resume wouldn't otherwise make the situation obvious
+  (feeds into section 2 below).
+
+**The actual credential setup (keypair, `authorized_keys`, passwordless
+sudo, chown-for-the-container's-uid) all had to be done by Harvey
+directly on the VPS** — every attempt at any piece of this from an
+interactive Claude Code session, including read-only checks like `sudo
+-l -U ubuntu`, was refused by Claude Code's own safety classifier
+(reasons given: "Containment Escape", "Unauthorized Persistence") —
+consistent with, not a bug in, the same safety model this whole project
+already relies on elsewhere (see §74/75's "generating or writing any raw
+credential is a you-not-me action" note). The commands actually run are
+whatever Harvey's own session log shows for this date; regenerate a
+fresh keypair rather than trying to recover the old one if it's ever
+lost, same as the GitHub PAT/OAuth token pattern established earlier.
+
+**2. Self-healing: the queue.** Reported bug, root-caused and fixed:
+Harvey saw the Project Manager's queue panel stuck showing old test
+messages ("1/2 Say only the word OK", "2/2 say only the word ok")
+forever. Cause: `voiceQueue` (the in-process array of not-yet-started
+messages) and `currentSession` (the live Agent SDK session) are both
+plain in-memory state — every container restart loses them completely,
+but the `voice_messages` DB rows survive, so anything that was
+`pending`/`running` at the moment of a restart stayed stuck at that
+status forever with nothing left alive to ever pick it back up. This
+isn't a rare edge case — it happens on *every* redeploy, including the
+routine ones CI runs on every push.
+
+Fix: `recoverInflightVoiceMessages()` in `server.js` runs once, every
+time the process starts. A `pending` row never actually reached Claude,
+so it's simply re-queued and processed normally. A `running` row's real
+completion state is unknown (the process could have died a moment before
+or after actually finishing the work), so it's marked as an error
+instead of blindly re-run — silently duplicating a git push or a file
+edit would be worse than asking Harvey to resend it. Either way, a
+`SERVICE RESTARTED` line goes into the work log so there's a visible
+trail. Verified directly against the two real rows Harvey's screenshot
+showed, still stuck from testing earlier in this same session, before
+writing the fix and again after.
+
+**3. Self-healing: session-loss context.** A resumed Agent SDK session
+(the normal case — `--resume` against the persisted `.claude` volume)
+already carries full conversation memory across a restart on its own;
+this only matters when there's genuinely no session to resume — first
+message ever, "New conversation" was hit, or the previous session was
+lost (the CLI's local session store can still get pruned independently
+of the persisted volume). `buildSystemPromptForSession()` checks for
+exactly that condition and, when it's true, appends the last 15 lines of
+the work log to the system prompt — so a session starting with zero
+conversation memory isn't *also* blind to what it was recently doing.
+
+**4. "Message me if you're stuck" — partially built, not fully solved.**
+Harvey wants the PM to proactively notify him when it can't proceed
+without his input, not just wait for him to happen to check the app.
+What's real today: the existing `[NEEDS_ACTION]` marker (§76) already
+gets a visibly distinct bubble color and — since it's a normal `done`
+completion — triggers the completion ping (§75) the next time either
+device's tab is open and focused. What's NOT built: a true push
+notification that reaches Harvey when neither app is open at all. That
+needs either a registered PWA push subscription (real infrastructure:
+service worker, push keys, a subscription store) or a different channel
+entirely (SMS/email via a new provider). Worth doing if the in-app
+signal proves insufficient in practice — not built yet because it's a
+meaningfully bigger lift than everything else in this section, not
+because it was overlooked.
+
+**"New conversation" button, for the record (Harvey asked why he'd ever
+use it):** it force-resets to a session with zero memory, on purpose —
+for on the rare occasion the accumulated context itself becomes the
+problem (e.g. a long confused back-and-forth Harvey wants to cut cleanly
+away from) rather than something to reach for normally. The default
+persistent-thread behavior (§74/75) is correct for ordinary use; this is
+the deliberate escape hatch, not the common path.

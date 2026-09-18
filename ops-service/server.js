@@ -309,7 +309,21 @@ const VOICE_SYSTEM_PROMPT =
   'just reply normally. When you do use one, do not paste Harvey\'s message into a todo ' +
   'item verbatim — each item should be a short, plain-language summary of what that step ' +
   'accomplishes (e.g. "Check recent order errors in the ops panel"), the same way you would ' +
-  'title a task for a colleague, not a transcript of what he said.';
+  'title a task for a colleague, not a transcript of what he said.\n\n' +
+  'Host access: you are running inside the rm-ops-service Docker container, which only ' +
+  'contains this one service — for anything outside it (managing other Docker containers ' +
+  'including rebuilding/redeploying this very one, nginx, systemd, or anything else on the ' +
+  'actual VPS), reach the host directly: ' +
+  '`ssh ubuntu@host.docker.internal \'<command>\'` (passwordless sudo is available there — ' +
+  'use `sudo <command>` inside the ssh call for anything privileged). This is the same VPS ' +
+  'this container itself runs on, reached the same way an interactive Claude Code terminal ' +
+  'session on that machine would operate — use it freely for real infrastructure work, not ' +
+  'just as a last resort. One real caveat: rebuilding/restarting rm-ops-service itself over ' +
+  'that connection kills your own current process mid-command, so that specific final step ' +
+  'never gets to report success back to you in the same turn — it is not a distinguished ' +
+  'context you should decline to enter, just: log the actual state clearly in the work log ' +
+  'immediately before you trigger it if the task will not otherwise be obvious on resume, ' +
+  'then proceed normally, the same as any of your commands could.';
 
 function buildVoicePrompt(mode, text) {
   if (mode === 'execute') {

@@ -30,10 +30,12 @@ set -x
 
 RUN_ARGS=(-d --name "$CONTAINER" --restart unless-stopped
   -p 127.0.0.1:4001:4001
+  --add-host=host.docker.internal:host-gateway
   -v /root/ops-service-claude-home/claude-dir:/home/node/.claude
   -v /root/ops-service-claude-home/claude.json:/home/node/.claude.json
   -v "$DATA_DIR:/data"
   -v "$RUNTIME_REPO_DIR:/repo"
+  -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro
   --env-file "$ENV_FILE")
 
 fail() { echo "DEPLOY FAILED: $*"; exit 1; }
