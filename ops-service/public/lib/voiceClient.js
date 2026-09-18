@@ -106,9 +106,9 @@ window.RMVoice = (function () {
 
   // Very small, safe markdown-lite renderer — NOT a general markdown
   // library. Escapes HTML first (never trusts the content), then only
-  // recognizes fenced code blocks (with a copy button) and inline code —
-  // the two things Harvey actually asked for (commands/keys rendering
-  // properly instead of running outside the bubble as prose). Returns a
+  // recognizes fenced code blocks (with a copy button), inline code,
+  // **bold**, and *italic* — Harvey flagged bold showing up as literal
+  // asterisks in the chat bubble rather than actually bold. Returns a
   // DOM fragment ready to append, not an HTML string, so there is no
   // innerHTML injection point at all.
   function renderMarkdownLite(text) {
@@ -117,8 +117,12 @@ window.RMVoice = (function () {
     var re = /```([a-zA-Z0-9]*)\n?([\s\S]*?)```/g;
     var lastIndex = 0;
     var match;
+    // Order matters: try inline code, then **bold** (two asterisks), then
+    // *italic* (one) — bold has to be attempted before italic or a "**"
+    // pair would first get eaten as two separate unmatched single
+    // asterisks instead of one bold span.
     function appendTextWithInlineCode(str) {
-      var parts = str.split(/(`[^`]+`)/g);
+      var parts = str.split(/(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g);
       parts.forEach(function (part) {
         if (!part) return;
         if (part.charAt(0) === '`' && part.charAt(part.length - 1) === '`' && part.length > 1) {
@@ -126,6 +130,14 @@ window.RMVoice = (function () {
           code.className = 'pm-inline-code';
           code.textContent = part.slice(1, -1);
           frag.appendChild(code);
+        } else if (part.length > 4 && part.slice(0, 2) === '**' && part.slice(-2) === '**') {
+          var strong = document.createElement('strong');
+          strong.textContent = part.slice(2, -2);
+          frag.appendChild(strong);
+        } else if (part.length > 2 && part.charAt(0) === '*' && part.charAt(part.length - 1) === '*') {
+          var em = document.createElement('em');
+          em.textContent = part.slice(1, -1);
+          frag.appendChild(em);
         } else {
           frag.appendChild(document.createTextNode(part));
         }

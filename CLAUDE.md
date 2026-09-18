@@ -3152,3 +3152,28 @@ muted/receded grey (`opacity: 0.72`, plain `--surface-2` background) and
 `.pm-queue-failed` uses the existing `--error`/`--error-soft` tokens —
 both clearly different from `.pm-queue-active`'s green accent fill, so
 "still working" vs. "already finished" reads at a glance.
+
+---
+
+# 81. Project Manager Chat: Bold/Italic Weren't Rendering (2026-09-18)
+
+Harvey flagged that `**bold**` text in a reply showed up in the Project
+Manager chat bubble as literal asterisks instead of actually bold.
+Root cause: `renderMarkdownLite()` in `ops-service/public/lib/voiceClient.js`
+(shared by `app.js` and `voice-mobile.html`) only ever recognized fenced
+code blocks and inline `` `code` `` — its own comment said as much
+("NOT a general markdown library... the two things Harvey actually asked
+for"), but the model's replies routinely use `**bold**`/`*italic*` in
+normal prose, so those were landing as raw asterisks in every reply, not
+just the one Harvey happened to notice.
+
+Fixed by extending the same text-splitting approach already used for
+inline code — `appendTextWithInlineCode`'s split regex now also matches
+`\*\*[^*]+\*\*` (bold, tried first) and `\*[^*]+\*` (italic, tried
+second so a `**` pair isn't misread as two stray single asterisks) —
+rendering `<strong>`/`<em>` elements via `textContent` alongside the
+existing `<code>` handling. Still fully safe against HTML injection: only
+`textContent` is ever set, never `innerHTML`, same as the pre-existing
+code-block path. `stripMarkdownForSpeech()` already stripped both bold
+and italic markers before TTS, so spoken replies were never affected —
+this was a text-rendering-only bug.
