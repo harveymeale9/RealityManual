@@ -1,85 +1,16 @@
-+ RUN_ARGS=(-d --name "$CONTAINER" --restart unless-stopped -p 127.0.0.1:4001:4001 -v /root/ops-service-claude-home/claude-dir:/home/node/.claude -v /root/ops-service-claude-home/claude.json:/home/node/.claude.json -v "$DATA_DIR:/data" -v "$RUNTIME_REPO_DIR:/repo" --env-file "$ENV_FILE")
++ RUN_ARGS=(-d --name "$CONTAINER" --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-claude-home/claude-dir:/home/node/.claude -v /root/ops-service-claude-home/claude.json:/home/node/.claude.json -v "$DATA_DIR:/data" -v "$RUNTIME_REPO_DIR:/repo" -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file "$ENV_FILE")
 + cd /root/realitymanual-repo
 + git pull
-Already up to date.
-+ git -C /srv/realitymanual-repo pull
 From https://github.com/harveymeale9/RealityManual
-   0eb2696..e678b49  main       -> origin/main
-Updating 0eb2696..e678b49
-Fast-forward
- ops-service/.ci/last-run.log | 62 +++++++++++++++++++------------------
- ops-service/server.js        | 73 ++++++++++++++++++++++++++++++++++++++++++--
- 2 files changed, 102 insertions(+), 33 deletions(-)
-+ chown -R 1000:1000 /srv/realitymanual-repo
-+ docker tag rm-ops-service rm-ops-service:previous
-+ docker build -t rm-ops-service ./ops-service
-#0 building with "default" instance using docker driver
-
-#1 [internal] load build definition from Dockerfile
-#1 transferring dockerfile: 1.80kB done
-#1 DONE 0.0s
-
-#2 [internal] load metadata for docker.io/library/node:22-slim
-#2 DONE 0.3s
-
-#3 [internal] load .dockerignore
-#3 transferring context: 136B done
-#3 DONE 0.0s
-
-#4 [ 1/10] FROM docker.io/library/node:22-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5
-#4 resolve docker.io/library/node:22-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 0.0s done
-#4 DONE 0.0s
-
-#5 [internal] load build context
-#5 transferring context: 28.44kB 0.0s done
-#5 DONE 0.0s
-
-#6 [ 5/10] COPY package.json ./
-#6 CACHED
-
-#7 [ 3/10] RUN npm install -g @anthropic-ai/claude-code@2.1.276
-#7 CACHED
-
-#8 [ 4/10] WORKDIR /app
-#8 CACHED
-
-#9 [ 2/10] RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates     && update-ca-certificates     && rm -rf /var/lib/apt/lists/*
-#9 CACHED
-
-#10 [ 6/10] RUN npm install --omit=dev
-#10 CACHED
-
-#11 [ 7/10] COPY server.js ./
-#11 DONE 0.1s
-
-#12 [ 8/10] COPY src ./src
-#12 DONE 0.1s
-
-#13 [ 9/10] COPY public ./public
-#13 DONE 0.1s
-
-#14 [10/10] RUN mkdir -p /data /repo && chown -R node:node /app /data /repo
-#14 DONE 36.0s
-
-#15 exporting to image
-#15 exporting layers
-#15 exporting layers 16.0s done
-#15 exporting manifest sha256:45abf266a312b7487f1ff9d14135abbf499baf5f793a04196266a71d5df3b357 0.0s done
-#15 exporting config sha256:06167b8d8db9ddd4ef3a80cd8b5866678cc00691342268a9378068278a469ce2 0.0s done
-#15 exporting attestation manifest sha256:0890cdff8d476b713f3875d70f90aa718e3be2d08dba23b529f43f0ca6e31f06 0.1s done
-#15 exporting manifest list sha256:aa84154a9dcc90a782e8f0002214bfa7c7718a72d9a7e184dfaa8aa28bd915f1
-#15 exporting manifest list sha256:aa84154a9dcc90a782e8f0002214bfa7c7718a72d9a7e184dfaa8aa28bd915f1 0.0s done
-#15 naming to docker.io/library/rm-ops-service:latest done
-#15 unpacking to docker.io/library/rm-ops-service:latest
-#15 unpacking to docker.io/library/rm-ops-service:latest 5.1s done
-#15 DONE 21.4s
-+ docker stop rm-ops-service
-rm-ops-service
-+ docker rm rm-ops-service
-rm-ops-service
-+ docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 -v /root/ops-service-claude-home/claude-dir:/home/node/.claude -v /root/ops-service-claude-home/claude.json:/home/node/.claude.json -v /root/ops-service-data:/data -v /srv/realitymanual-repo:/repo --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
-383863dbce4740b8bd8e28502329717dd71daa92f3a6f7f61d13d66cba639685
-++ git -C /root/realitymanual-repo rev-parse --short HEAD
-+ echo 'rm-ops-service redeployed at e678b49'
-rm-ops-service redeployed at e678b49
-ssh exit code: 0
+   8c75d8a..8c47504  main       -> origin/main
+error: Your local changes to the following files would be overwritten by merge:
+	CLAUDE.md
+	ops-service/server.js
+Please commit your changes or stash them before you merge.
+Aborting
+Updating e678b49..8c47504
++ fail 'git pull failed in /root/realitymanual-repo'
++ echo 'DEPLOY FAILED: git pull failed in /root/realitymanual-repo'
+DEPLOY FAILED: git pull failed in /root/realitymanual-repo
++ exit 1
+ssh exit code: 1
