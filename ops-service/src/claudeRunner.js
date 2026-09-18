@@ -214,14 +214,27 @@ function createSession(resumeId, appendSystemPrompt) {
 }
 
 // Returns the live session, starting one (resuming `resumeId` if given) if
-// none is currently alive. A dead/unresolvable `resumeId` (e.g. the CLI's
-// local session store got wiped by a container rebuild) rejects here rather
-// than hanging — the caller falls back to a brand-new session.
+// none is currently alive.
+//
+// Deliberately does NOT await `sess.ready` here — that used to be a
+// deadlock: the underlying CLI process (in streaming-input mode) doesn't
+// emit its own system/init event until it has received the *first* pushed
+// message, but that first message is only ever pushed from inside
+// `runTurn()`, which callers only reach after `ensureSession()` returns.
+// Awaiting readiness before returning meant nothing could ever become
+// ready — every single turn hung forever, resumed session or brand new one
+// (confirmed directly against the real deployed service, not just reasoned
+// about). A dead/unresolvable `resumeId` (e.g. the CLI's local session
+// store got wiped) still self-heals: `createSession`'s pump() rejects the
+// pending turn via `failAllPending` once the underlying process actually
+// errors out, and its `finally` clears `currentSession`, so the turn after
+// a bad resume gets a fresh session automatically — just one turn later
+// than the old (broken) fail-fast attempt aimed for, not silently within
+// the same turn.
 async function ensureSession(resumeId, appendSystemPrompt) {
   if (currentSession && !currentSession.broken) return currentSession;
   const sess = createSession(resumeId, appendSystemPrompt);
   currentSession = sess;
-  await sess.ready;
   return sess;
 }
 
@@ -265,13 +278,13 @@ async function runClaude(opts) {
   const onActivity = typeof opts.onActivity === 'function' ? opts.onActivity : function () {};
   const appendSystemPrompt = opts.appendSystemPrompt;
 
+  // ensureSession() itself no longer rejects in the normal case (see its
+  // comment) — this only guards a synchronous throw from query() setup
+  // (e.g. a bad executable path), which a bad resumeId is not.
   let sess;
   try {
     sess = await ensureSession(opts.sessionId, appendSystemPrompt);
   } catch (err) {
-    // The requested resume target is gone (e.g. session store wiped by a
-    // rebuild) — retry once as a brand-new session instead of failing the
-    // whole message outright.
     try {
       sess = await ensureSession(null, appendSystemPrompt);
     } catch (err2) {
