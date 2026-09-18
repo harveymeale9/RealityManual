@@ -651,6 +651,12 @@ a { color: var(--accent); }
 .card:active { cursor: grabbing; }
 .card.dragging { opacity: 0.35; }
 .card.card-auto { cursor: pointer; }
+/* Pieces created by a Claude Code session (voice/chat agent or an
+   interactive session acting on Harvey's behalf) rather than by Harvey
+   himself directly in the board UI — a subtle indigo tint distinct from
+   the board's green accent, so it reads at a glance without shouting. */
+.card.card-ai { background: linear-gradient(rgba(139, 124, 246, 0.09), rgba(139, 124, 246, 0.09)), var(--surface-2); border-color: rgba(139, 124, 246, 0.35); }
+.card.card-ai:hover { border-color: #8b7cf6; }
 /* Search dims non-matches in place rather than removing them, so a hit
    visually "comes forward" without disturbing column/drag order. */
 .card.card-dim { opacity: 0.28; }

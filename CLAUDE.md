@@ -3067,3 +3067,37 @@ normal redeploy cycle, or the `deploy-ops-service.yml` CI workflow if
 it's picked this commit up automatically — check
 `ops-service/.ci/last-run.log` for the most recently deployed commit
 hash before assuming this is already live).
+
+---
+
+# 78. Content Ops: Visually Mark Pieces Created By an Agent (2026-09-18)
+
+Harvey wants to be able to tell, at a glance on the Kanban board, which
+pieces he came up with himself versus which ones a Claude Code session
+(voice/chat agent or an interactive session, acting on its own initiative
+rather than typing up something Harvey dictated) created from scratch —
+whether it's currently sitting in Ideation or has already moved to
+Outline Started.
+
+**Convention (any Claude Code session creating a `pieces` record via the
+API, from now on):** set `createdBy: 'agent'` on the record. Nothing
+sets this automatically server-side — `ops-service/server.js`'s
+`PUT /api/store/:storeName/:id` just stores whatever body it's given
+(see §62), and the normal UI creation paths (`createDraft()` in
+`app.js`, `quick-add.html`'s save handler) deliberately don't set it,
+since those are always Harvey's own ideas even when quick-add was
+dictated by voice. Only set it when *you* are the one originating the
+idea/content, not just typing on Harvey's behalf.
+
+**Rendering:** `ops-service/public/app.js`'s `cardHtml()` adds a
+`card-ai` class when `piece.createdBy === 'agent'` (plus a
+`title="Created by Claude Code"` tooltip). `style.css` gives `.card-ai` a
+subtle indigo background tint and border (`#8b7cf6`-ish, distinct from
+the board's green accent) rather than a loud badge — Harvey specifically
+asked for a background difference, not new UI chrome. Applies at every
+stage the card passes through, not just Ideation/Outline Started (no
+reason to strip the marker once it progresses further).
+
+This is a data-driven flag, not a stage/column-based inference — a piece
+keeps its `card-ai` styling for its entire lifetime on the board unless
+someone removes the field.

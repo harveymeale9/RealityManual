@@ -1565,6 +1565,7 @@
     var titleHtml = title ? escapeHtml(title) : 'Untitled piece';
     var titleClass = title ? 'card-title' : 'card-title untitled';
     var isAuto = !!piece.hasVideo;
+    var isAi = piece.createdBy === 'agent';
     var moveControl = isAuto
       ? '<span class="auto-stage-badge">Auto · ' + stageLabelOf(piece.stage) + '</span>'
       : (function () {
@@ -1575,7 +1576,7 @@
         })();
     var idBadge = typeof piece.seq === 'number' ? '<span class="card-id">#' + String(piece.seq).padStart(3, '0') + '</span>' : '';
     return '' +
-      '<div class="card' + (isAuto ? ' card-auto' : '') + '" draggable="' + (isAuto ? 'false' : 'true') + '" data-id="' + id + '">' +
+      '<div class="card' + (isAuto ? ' card-auto' : '') + (isAi ? ' card-ai' : '') + '" draggable="' + (isAuto ? 'false' : 'true') + '" data-id="' + id + '"' + (isAi ? ' title="Created by Claude Code"' : '') + '>' +
         (isAuto ? '' : '<span class="card-grip">⋮⋮</span>') +
         idBadge +
         '<div class="' + titleClass + '">' + titleHtml + '</div>' +
