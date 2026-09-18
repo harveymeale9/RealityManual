@@ -3126,3 +3126,29 @@ mobile view already keeps its horizontal-scrolling top tab row visible
 with Project Manager as `TABS[0]` (§74's SPA merge), so that's already
 one tap away; `voice-mobile.html` itself is also always reachable again
 directly from its own home-screen icon.
+
+---
+
+# 80. Project Manager: Queue Shows Recent Completions Too (2026-09-18)
+
+The queue panel (desktop `app.js` and `voice-mobile.html`, both with their
+own `renderQueue(rows)` — this widget predates any shared-helper
+abstraction between the two pages and the fix kept that existing
+duplication pattern rather than introducing a new one) only ever showed
+`pending`/`running` rows, so it went completely empty the instant nothing
+was actively running — no trail of what had just finished. Harvey wanted
+the last handful of completed items to stay visible, visually distinct
+from what's currently in progress, capped rather than growing forever.
+
+`renderQueue` now also derives `recentDone` — rows with `status: 'done'`
+or `'error'`, sorted by `completed_at` (falling back to `created_at`),
+capped to `RECENT_DONE_LIMIT = 5` — and renders them below a "Recently
+completed" divider under the existing in-progress list. Older completions
+just fall out of the top-5 window each tick; nothing is deleted from the
+`voice_messages` table itself, this is a display-only cap on the queue
+widget (full history still lives in the chat thread and
+`GET /api/voice/messages`). Styling (`style.css`): `.pm-queue-done` is a
+muted/receded grey (`opacity: 0.72`, plain `--surface-2` background) and
+`.pm-queue-failed` uses the existing `--error`/`--error-soft` tokens —
+both clearly different from `.pm-queue-active`'s green accent fill, so
+"still working" vs. "already finished" reads at a glance.

@@ -425,11 +425,21 @@
 
     // --- Queue panel: every poll gets the full current window of rows
     // (see lib/voiceClient.js syncThread's onTick), so this just re-derives
-    // the in-flight list from scratch each tick rather than diffing.
+    // the in-flight + recently-completed lists from scratch each tick
+    // rather than diffing. Completed items are shown too (not just
+    // pending/running) so Harvey has a short trail of what CC just
+    // finished, capped at RECENT_DONE_LIMIT and visually distinct from
+    // what's actively running — older completions just fall off the
+    // bottom rather than piling up.
+    var RECENT_DONE_LIMIT = 5;
     function renderQueue(rows) {
       var inflight = rows.filter(function (r) { return r.status === 'pending' || r.status === 'running'; }).slice().reverse();
+      var recentDone = rows.filter(function (r) { return r.status === 'done' || r.status === 'error'; })
+        .slice()
+        .sort(function (a, b) { return new Date(b.completed_at || b.created_at) - new Date(a.completed_at || a.created_at); })
+        .slice(0, RECENT_DONE_LIMIT);
       queueListEl.innerHTML = '';
-      if (!inflight.length) {
+      if (!inflight.length && !recentDone.length) {
         queueHintEl.textContent = '';
         var empty = document.createElement('div');
         empty.className = 'pm-queue-empty';
@@ -437,7 +447,7 @@
         queueListEl.appendChild(empty);
         return;
       }
-      queueHintEl.textContent = '— ' + inflight.length + ' in progress';
+      queueHintEl.textContent = inflight.length ? '— ' + inflight.length + ' in progress' : '';
       inflight.forEach(function (row, idx) {
         var item = document.createElement('div');
         item.className = 'pm-queue-item' + (row.status === 'running' ? ' pm-queue-active' : '');
@@ -451,6 +461,25 @@
         item.appendChild(textEl);
         queueListEl.appendChild(item);
       });
+      if (recentDone.length) {
+        var divider = document.createElement('div');
+        divider.className = 'pm-queue-divider';
+        divider.textContent = 'Recently completed';
+        queueListEl.appendChild(divider);
+        recentDone.forEach(function (row) {
+          var item = document.createElement('div');
+          item.className = 'pm-queue-item ' + (row.status === 'error' ? 'pm-queue-failed' : 'pm-queue-done');
+          var mark = document.createElement('span');
+          mark.className = 'pm-queue-num';
+          mark.textContent = row.status === 'error' ? '✕' : '✓';
+          var textEl = document.createElement('span');
+          textEl.className = 'pm-queue-text';
+          textEl.textContent = row.transcript;
+          item.appendChild(mark);
+          item.appendChild(textEl);
+          queueListEl.appendChild(item);
+        });
+      }
     }
 
     function addTyping(msgId) {

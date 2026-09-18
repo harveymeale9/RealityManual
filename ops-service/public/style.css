@@ -362,6 +362,19 @@ a { color: var(--accent); }
 .pm-queue-item .pm-queue-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pm-queue-item.pm-queue-active { background: var(--accent-soft); border-color: var(--accent-soft-strong); color: var(--ink); }
 .pm-queue-item.pm-queue-active .pm-queue-num { color: var(--accent); }
+.pm-queue-divider {
+  font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--ink-faint); padding: 8px 10px 2px; margin-top: 2px;
+  border-top: 1px solid var(--border-soft);
+}
+/* Recently-completed items sit below the divider, visually receded (muted
+   grey, not the active green) so it's obvious at a glance which items are
+   still running vs. already done — capped to a handful in app.js/
+   voice-mobile.html's renderQueue, so this never grows unbounded. */
+.pm-queue-item.pm-queue-done { background: var(--surface-2); opacity: 0.72; }
+.pm-queue-item.pm-queue-done .pm-queue-num { color: var(--ink-faint); }
+.pm-queue-item.pm-queue-failed { background: var(--error-soft); border-color: var(--error); opacity: 0.85; }
+.pm-queue-item.pm-queue-failed .pm-queue-num { color: var(--error); }
 
 .pm-thread {
   flex: 1; min-height: 0; overflow-y: auto;
