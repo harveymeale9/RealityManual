@@ -11,31 +11,64 @@ set -euo pipefail
 
 REPO_DIR=/root/realitymanual-repo
 RUNTIME_REPO_DIR=/srv/realitymanual-repo
+DATA_DIR=/root/ops-service-data
 IMAGE=rm-ops-service
 CONTAINER=rm-ops-service
 ENV_FILE="$REPO_DIR/ops-service/.env"
 
-cd "$REPO_DIR"
-git pull
+# Everything below is tee'd into a log file on the host, which is also the
+# bind-mounted /data directory of whatever rm-ops-service container ends up
+# running (old or new) — so a later Claude Code session (this script's own
+# CI step included) can just read /data/last-deploy.log directly off the
+# live filesystem instead of needing GitHub's Actions log-download API,
+# which requires an "Administration" repo permission this token may or may
+# not have and isn't worth fighting with for something this simple.
+mkdir -p "$DATA_DIR"
+LOG_FILE="$DATA_DIR/last-deploy.log"
+exec > >(tee "$LOG_FILE") 2>&1
+set -x
+
+RUN_ARGS=(-d --name "$CONTAINER" --restart unless-stopped
+  -p 127.0.0.1:4001:4001
+  -v /root/ops-service-claude-home/claude-dir:/home/node/.claude
+  -v /root/ops-service-claude-home/claude.json:/home/node/.claude.json
+  -v "$DATA_DIR:/data"
+  -v "$RUNTIME_REPO_DIR:/repo"
+  --env-file "$ENV_FILE")
+
+fail() { echo "DEPLOY FAILED: $*"; exit 1; }
+
+cd "$REPO_DIR" || fail "cannot cd into $REPO_DIR"
+git pull || fail "git pull failed in $REPO_DIR"
 
 # The headless voice-app runner's own working tree (bind-mounted into the
 # container at /repo, see CLAUDE.md section 74) does not update itself —
 # forgetting this step is the exact regression that section warns about.
-git -C "$RUNTIME_REPO_DIR" pull
+git -C "$RUNTIME_REPO_DIR" pull || fail "git pull failed in $RUNTIME_REPO_DIR"
 chown -R 1000:1000 "$RUNTIME_REPO_DIR"
 
-docker build -t "$IMAGE" ./ops-service
+# Snapshot whatever is currently tagged $IMAGE (the build about to be
+# replaced) *before* rebuilding overwrites that tag, so a bad new container
+# can be rolled back automatically instead of leaving the site (and this
+# very runner) down until someone notices.
+docker tag "$IMAGE" "${IMAGE}:previous" 2>/dev/null || true
+
+docker build -t "$IMAGE" ./ops-service || fail "docker build failed — old container left untouched"
 
 docker stop "$CONTAINER" 2>/dev/null || true
 docker rm "$CONTAINER" 2>/dev/null || true
 
-docker run -d --name "$CONTAINER" --restart unless-stopped \
-  -p 127.0.0.1:4001:4001 \
-  -v /root/ops-service-claude-home/claude-dir:/home/node/.claude \
-  -v /root/ops-service-claude-home/claude.json:/home/node/.claude.json \
-  -v /root/ops-service-data:/data \
-  -v "$RUNTIME_REPO_DIR:/repo" \
-  --env-file "$ENV_FILE" \
-  "$IMAGE"
-
-echo "rm-ops-service redeployed at $(git -C "$REPO_DIR" rev-parse --short HEAD)"
+if docker run "${RUN_ARGS[@]}" "$IMAGE"; then
+  echo "rm-ops-service redeployed at $(git -C "$REPO_DIR" rev-parse --short HEAD)"
+else
+  echo "docker run failed on the new image — rolling back to the previous one"
+  docker rm -f "$CONTAINER" 2>/dev/null || true
+  if docker image inspect "${IMAGE}:previous" >/dev/null 2>&1; then
+    docker run "${RUN_ARGS[@]}" "${IMAGE}:previous" \
+      && echo "rolled back successfully — service is back up on the previous build" \
+      || echo "ROLLBACK ALSO FAILED — service is down, needs manual attention"
+  else
+    echo "no previous image to roll back to — service is down, needs manual attention"
+  fi
+  fail "new container failed to start; see rollback outcome above"
+fi
