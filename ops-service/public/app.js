@@ -90,7 +90,9 @@
      location.hash routing so the two navs can never disagree. */
   function bindSideRail() {
     if (!sideRail) return;
-    sideRail.querySelectorAll('.side-rail-btn').forEach(function (btn) {
+    // [data-tab] excludes the "Talk to CC" link, which is a real page
+    // navigation (voice.html), not one of this SPA's in-page tabs.
+    sideRail.querySelectorAll('.side-rail-btn[data-tab]').forEach(function (btn) {
       btn.addEventListener('click', function () { location.hash = btn.dataset.tab; });
     });
   }

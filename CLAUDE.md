@@ -2709,3 +2709,83 @@ the chosen auth method into the container, build+run the updated
 input on a phone, not just the curl smoke test already run against a local
 throwaway instance on port 4099 during this session — that confirmed the
 whole plumbing works except for the root/bypass issue above).
+
+**Update, same day — root/bypass issue resolved, live in production:**
+
+- **Repo access:** rather than loosen `/root`'s permissions (blocked by
+  Claude Code's own safety classifier as a "Security Weaken" action, rightly
+  — it would affect the whole VPS, not just this container), the headless
+  runner gets its own dedicated clone at **`/srv/realitymanual-repo`**,
+  owned by uid/gid 1000 (the "node" user baked into the `node:22-slim` base
+  image). This is bind-mounted into the container at `/repo`
+  (`CLAUDE_REPO_DIR=/repo`). Deliberately separate from
+  `/root/realitymanual-repo` (Harvey's/interactive sessions' own checkout)
+  — keeps the unattended voice agent's working tree from ever stepping on
+  uncommitted interactive work. **Whoever redeploys this container must
+  remember to also `git pull` inside `/srv/realitymanual-repo`** (as the
+  owning uid, or just `chown` again after) — it does not update itself.
+- **Non-root container:** `Dockerfile` now ends with `USER node` (after
+  root-level apt/npm installs). `/root/ops-service-data` (the bind-mounted
+  `DATA_DIR`) was `chown -R 1000:1000` for the same reason. `/root` itself
+  was never touched — bind mounts don't need host-path traversal
+  permissions for the container's user, only correct ownership on the
+  mounted directory itself; this was confirmed working, not just assumed.
+- **Auth: `CLAUDE_CODE_OAUTH_TOKEN`**, generated via `claude setup-token`
+  on the VPS host directly (never through an automated command — the
+  classifier blocks capturing a freshly-generated credential that way, for
+  good reason). **Gotcha that cost real time:** `claude setup-token`'s
+  browser-approval flow prints a confirmation code that must be pasted
+  back into the terminal to actually finalize the token server-side —
+  exiting right after the token is *printed* (before that confirmation
+  step) yields a syntactically-plausible but dead token that fails with
+  `401 Invalid bearer token` on every real use, even though `claude auth
+  status` inside the container happily reports the env var is configured
+  (it doesn't do a live check). A genuinely finalized token has the
+  `sk-ant-oat01-...` prefix — the two dead ones Harvey generated first did
+  not, which in hindsight was the tell. Stored in `ops-service/.env` on
+  the VPS (gitignored, never committed) as `CLAUDE_CODE_OAUTH_TOKEN=...`.
+- **Git push from the VPS at all** turned out to be a separate,
+  previously-unsolved gap — this was apparently the first session to
+  author+push directly from the VPS itself (prior work here was pulled
+  after being pushed from Harvey's desktop). Fixed with a GitHub
+  fine-grained PAT (contents read/write on this repo only): `root`'s own
+  pushes use `credential.helper store` (`~/.git-credentials`); the `/srv`
+  clone has the token embedded directly in its `origin` remote URL instead
+  (simpler than a separate credential store for a non-root/non-interactive
+  user with no conventional `$HOME`). Both credential-writing steps were
+  also blocked by the classifier when attempted via an automated command
+  and had to be run by Harvey directly in the hPanel web console — a
+  recurring pattern this build surfaced: **generating or writing any raw
+  credential is a "you, not me" action**, full stop, regardless of how
+  routine the surrounding task is.
+- **Real bug found via the first genuine end-to-end test** (not a
+  synthetic smoke test): asked "what git branch are we on and what was the
+  last commit" through the real deployed API. The agent correctly found
+  the answer but only put it in the work-log line, replying to Harvey with
+  a useless "Done — logged that in the work log too." Root cause: the
+  original `VOICE_SYSTEM_PROMPT` wording let the model conflate "keep your
+  reply short" with "a completion confirmation is enough, details belong
+  in the log." Fixed by making the two things explicitly separate and
+  ordered in the prompt (answer fully first; the log entry is a
+  never-a-substitute housekeeping side-effect) — verified with a direct
+  `docker exec` test before touching the real deploy. **Also note for
+  future prompt-iteration:** an earlier debugging attempt at this exact
+  fix appeared to fail, but that was a red herring from mangled nested
+  shell-quoting in a manual test command (an apostrophe inside a `bash -c
+  '...'` string), not the prompt itself — writing test prompts to a file
+  or a shell variable (`"$(cat file)"`) sidesteps this; the real
+  `claudeRunner.js` code path was never actually at risk since
+  `child_process.spawn` with an args array never goes through a shell.
+- **Nav:** "Talk to CC" moved from a small header link to the first icon
+  in the ops panel's left side-rail (before Content Ops), per Harvey — a
+  plain `<a href="voice.html">` reusing the `.side-rail-btn` visual class
+  but deliberately with no `data-tab` attribute, so `app.js`'s
+  `bindSideRail()` (now scoped to `.side-rail-btn[data-tab]`) leaves it as
+  an ordinary navigation link instead of trying to route it through the
+  in-page tab system.
+- **Deployed and confirmed working end-to-end** through the real
+  `ops.realitymanual.com` API (not just a direct CLI test): login →
+  `POST /api/voice/messages` → real headless Claude Code run with actual
+  bypass permissions as a non-root user → correct, complete spoken-style
+  answer. **Not yet done:** a real test from Harvey's phone through the
+  actual PWA UI (only the HTTP API has been tested directly so far).

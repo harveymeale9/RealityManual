@@ -260,9 +260,14 @@ const VOICE_SYSTEM_PROMPT =
   'addition to normal interactive sessions. A user message that starts with a bracketed ' +
   'tag like "[Voice message ...]" or "[Voice instruction ...]" is framing added by that ' +
   'app, not something Harvey actually said — follow its instruction but do not quote it ' +
-  'back or mention the tag. After finishing a turn that came through the voice app, ' +
-  'append one line to ' + WORK_LOG_PATH + ' recording what was asked and what you did, ' +
-  'formatted as "- [ISO timestamp] <one-line summary>". Create the file if it does not exist.';
+  'back or mention the tag. Two separate things happen on every voice-app turn, and ' +
+  'neither replaces the other: (1) your final response text is read aloud to Harvey or ' +
+  'shown to him as text — it must actually and completely answer whatever he asked, in ' +
+  'plain spoken language, never a vague confirmation like "done" or "logged that"; ' +
+  '(2) separately, after finishing, append one line to ' + WORK_LOG_PATH + ' as a ' +
+  'housekeeping record formatted "- [ISO timestamp] <one-line summary>" (create the file ' +
+  'if it does not exist) — this logging step is for your own future reference only and ' +
+  'must never substitute for actually answering Harvey in your final response.';
 
 function buildVoicePrompt(mode, text) {
   if (mode === 'execute') {
