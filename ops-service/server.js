@@ -271,13 +271,26 @@ const VOICE_SYSTEM_PROMPT =
   'tag like "[Voice message ...]" or "[Voice instruction ...]" is framing added by that ' +
   'app, not something Harvey actually said — follow its instruction but do not quote it ' +
   'back or mention the tag. Two separate things happen on every voice-app turn, and ' +
-  'neither replaces the other: (1) your final response text is read aloud to Harvey or ' +
-  'shown to him as text — it must actually and completely answer whatever he asked, in ' +
-  'plain spoken language, never a vague confirmation like "done" or "logged that"; ' +
-  '(2) separately, after finishing, append one line to ' + WORK_LOG_PATH + ' as a ' +
-  'housekeeping record formatted "- [ISO timestamp] <one-line summary>" (create the file ' +
-  'if it does not exist) — this logging step is for your own future reference only and ' +
-  'must never substitute for actually answering Harvey in your final response.';
+  'neither replaces the other: (1) your final response text is shown to Harvey as text in ' +
+  'the chat, and — for a quick turn only, see below — may also be read aloud; it must ' +
+  'actually and completely answer whatever he asked, never a vague confirmation like ' +
+  '"done" or "logged that"; (2) separately, after finishing, append one line to ' +
+  WORK_LOG_PATH + ' as a housekeeping record formatted "- [ISO timestamp] <one-line ' +
+  'summary>" (create the file if it does not exist) — this logging step is for your own ' +
+  'future reference only and must never substitute for actually answering Harvey in your ' +
+  'final response.\n\n' +
+  'Formatting: the chat renders proper markdown (including fenced code blocks with a copy ' +
+  'button), and the app itself strips markdown down to plain spoken text before anything is ' +
+  'converted to speech — so use markdown normally, especially a fenced code block for any ' +
+  'shell command, config, or anything Harvey would copy-paste. Never spell out or verbally ' +
+  'narrate a command in prose (e.g. do not write "run ssh dash i tilde slash..." as ' +
+  'sentences) — put it in a code block instead and just refer to it in your own words ' +
+  '("run the command below").\n\n' +
+  'If your final response requires Harvey to personally do something — run a command, make ' +
+  'a decision, approve an action, or supply missing information — rather than simply ' +
+  'reporting something already done, begin the response with the exact literal marker ' +
+  '"[NEEDS_ACTION]" on its own line before anything else. Omit it entirely for a plain ' +
+  'status update or completed-task report — most responses should NOT have it.';
 
 function buildVoicePrompt(mode, text) {
   if (mode === 'execute') {
@@ -288,11 +301,10 @@ function buildVoicePrompt(mode, text) {
       'afterward as text, so make it a real completion summary (what you did/found/decided), not ' +
       'a throwaway line — carry out the task fully.] ' + text;
   }
-  return '[Voice message from Harvey, sent from his phone or desktop — he expects a reply. If it ' +
-    'will be read aloud by text-to-speech, keep your final answer short and conversational: no ' +
-    'markdown, no bullet points, no headers, no code blocks, just plain spoken sentences. If it ' +
-    'needs you to check code, logs, git history, or run commands to answer accurately, do that ' +
-    'first.] ' + text;
+  return '[Voice message from Harvey, sent from his phone or desktop — he expects a reply. If ' +
+    'this turn needs you to check code, logs, git history, or run commands to answer accurately, ' +
+    'do that first — he is told immediately that you received this and are working on it, so a ' +
+    'longer investigation is fine and expected, not something to shortcut.] ' + text;
 }
 
 let voiceQueue = [];
@@ -303,7 +315,7 @@ function drainVoiceQueue() {
   const next = voiceQueue.shift();
   if (!next) return;
   voiceProcessing = true;
-  processVoiceMessage(next.id, next.mode, next.text)
+  processVoiceMessage(next.id, next.mode, next.text, next.imageBlock)
     .catch(function (err) {
       stmts.finishVoiceMessage.run('error', null, String((err && err.message) || err).slice(0, 2000), new Date().toISOString(), next.id);
     })
@@ -313,7 +325,7 @@ function drainVoiceQueue() {
     });
 }
 
-async function processVoiceMessage(id, mode, text) {
+async function processVoiceMessage(id, mode, text, imageBlock) {
   stmts.setVoiceMessageStatus.run('running', id);
   const sessionRow = stmts.getVoiceSession.get();
   const sessionId = sessionRow && sessionRow.claude_session_id;
@@ -332,7 +344,8 @@ async function processVoiceMessage(id, mode, text) {
     prompt: prompt,
     sessionId: sessionId,
     appendSystemPrompt: VOICE_SYSTEM_PROMPT,
-    onActivity: onActivity
+    onActivity: onActivity,
+    imageBlock: imageBlock
   });
   // The resumed session id can go stale (e.g. the CLI's local session store
   // living outside the persisted volume, wiped by a container rebuild) —
@@ -346,7 +359,8 @@ async function processVoiceMessage(id, mode, text) {
       prompt: prompt,
       sessionId: null,
       appendSystemPrompt: VOICE_SYSTEM_PROMPT,
-      onActivity: onActivity
+      onActivity: onActivity,
+      imageBlock: imageBlock
     });
   }
   const now = new Date().toISOString();
@@ -359,17 +373,37 @@ async function processVoiceMessage(id, mode, text) {
   stmts.finishVoiceMessage.run('done', (result.replyText || '').slice(0, 8000), null, now, id);
 }
 
-app.post('/api/voice/messages', function (req, res) {
-  const text = req.body && req.body.text;
+// Images pasted/dropped/attached into the chat (desktop paste-and-drop,
+// mobile's attach button) — multipart so a text field and an optional
+// file can arrive together in one request.
+const voiceMessageUpload = multer({ dest: path.join(DATA_DIR, 'tmp'), limits: { fileSize: 15 * 1024 * 1024 } });
+
+app.post('/api/voice/messages', voiceMessageUpload.single('image'), function (req, res) {
+  const rawText = (req.body && req.body.text) || '';
   const mode = req.body && req.body.mode;
-  if (typeof text !== 'string' || !text.trim()) return res.status(400).json({ error: 'invalid_text' });
-  if (mode !== 'respond' && mode !== 'execute') return res.status(400).json({ error: 'invalid_mode' });
+  const trimmed = rawText.trim().slice(0, 4000);
+  function cleanupUpload() { if (req.file) fs.rm(req.file.path, { force: true }, function () {}); }
+  if (!trimmed && !req.file) { cleanupUpload(); return res.status(400).json({ error: 'invalid_text' }); }
+  if (mode !== 'respond' && mode !== 'execute') { cleanupUpload(); return res.status(400).json({ error: 'invalid_mode' }); }
+
   const id = crypto.randomBytes(16).toString('hex');
   const now = new Date().toISOString();
-  const trimmed = text.trim().slice(0, 4000);
-  stmts.insertVoiceMessage.run(id, mode, trimmed, 'pending', now);
+  const finalText = trimmed || '(image attached, no caption)';
+  stmts.insertVoiceMessage.run(id, mode, finalText, 'pending', now);
   res.json({ id: id, status: 'pending' });
-  voiceQueue.push({ id: id, mode: mode, text: trimmed });
+
+  const SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+  let imageBlock = null;
+  if (req.file && SUPPORTED_IMAGE_TYPES.indexOf(req.file.mimetype) !== -1) {
+    try {
+      imageBlock = { mediaType: req.file.mimetype, base64: fs.readFileSync(req.file.path).toString('base64') };
+    } catch (e) { console.error('failed to read attached image:', e.message); }
+  } else if (req.file) {
+    console.error('unsupported attached image type: ' + req.file.mimetype);
+  }
+  cleanupUpload();
+
+  voiceQueue.push({ id: id, mode: mode, text: finalText, imageBlock: imageBlock });
   drainVoiceQueue();
 });
 

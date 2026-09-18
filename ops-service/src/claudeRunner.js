@@ -238,7 +238,18 @@ async function ensureSession(resumeId, appendSystemPrompt) {
   return sess;
 }
 
-function runTurn(sess, prompt, timeoutMs, onActivity) {
+// A plain string when there's no attachment (unchanged from before), or an
+// Anthropic Messages API content-block array — [text, image] — when the
+// voice app forwarded a pasted/dropped/attached image alongside the text.
+function buildMessageContent(prompt, imageBlock) {
+  if (!imageBlock) return prompt;
+  return [
+    { type: 'text', text: prompt },
+    { type: 'image', source: { type: 'base64', media_type: imageBlock.mediaType, data: imageBlock.base64 } }
+  ];
+}
+
+function runTurn(sess, prompt, timeoutMs, onActivity, imageBlock) {
   const uuid = crypto.randomUUID();
   return new Promise(function (resolvePromise) {
     let settled = false;
@@ -265,7 +276,7 @@ function runTurn(sess, prompt, timeoutMs, onActivity) {
 
     sess.push({
       type: 'user',
-      message: { role: 'user', content: prompt },
+      message: { role: 'user', content: buildMessageContent(prompt, imageBlock) },
       parent_tool_use_id: null,
       uuid: uuid
     });
@@ -292,7 +303,7 @@ async function runClaude(opts) {
     }
   }
 
-  return runTurn(sess, prompt, timeoutMs, onActivity);
+  return runTurn(sess, prompt, timeoutMs, onActivity, opts.imageBlock);
 }
 
 module.exports = { runClaude };

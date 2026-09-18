@@ -6,6 +6,7 @@ const ELEVEN_API_KEY = process.env.ELEVENLABS_API_KEY;
 const ELEVEN_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM'; // "Rachel" — default premade voice on every account
 const STT_MODEL = 'scribe_v1';
 const TTS_MODEL = process.env.ELEVENLABS_TTS_MODEL || 'eleven_turbo_v2_5';
+const TTS_SPEED = 1.2; // Harvey: default pace felt slow
 
 async function transcribeAudio(buffer, mimeType) {
   if (!ELEVEN_API_KEY) throw new Error('ELEVENLABS_API_KEY not configured');
@@ -27,7 +28,7 @@ async function synthesizeSpeech(text) {
   const res = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + ELEVEN_VOICE_ID, {
     method: 'POST',
     headers: { 'xi-api-key': ELEVEN_API_KEY, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
-    body: JSON.stringify({ text: text, model_id: TTS_MODEL })
+    body: JSON.stringify({ text: text, model_id: TTS_MODEL, voice_settings: { speed: TTS_SPEED } })
   });
   if (!res.ok) throw new Error('tts_failed_' + res.status + ': ' + (await res.text()).slice(0, 500));
   const arrayBuffer = await res.arrayBuffer();
