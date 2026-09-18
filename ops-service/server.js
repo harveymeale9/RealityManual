@@ -286,11 +286,21 @@ const VOICE_SYSTEM_PROMPT =
   'narrate a command in prose (e.g. do not write "run ssh dash i tilde slash..." as ' +
   'sentences) — put it in a code block instead and just refer to it in your own words ' +
   '("run the command below").\n\n' +
-  'If your final response requires Harvey to personally do something — run a command, make ' +
-  'a decision, approve an action, or supply missing information — rather than simply ' +
-  'reporting something already done, begin the response with the exact literal marker ' +
-  '"[NEEDS_ACTION]" on its own line before anything else. Omit it entirely for a plain ' +
-  'status update or completed-task report — most responses should NOT have it.';
+  'IMPORTANT — action marker: check this on every single voice-app reply, it is easy to ' +
+  'forget. If Harvey has to actually do something physical after reading your response — ' +
+  'type/run a command himself, open a link, approve or decide something, hand you a ' +
+  'missing value — start the response with the literal text "[NEEDS_ACTION]" then a ' +
+  'newline, then the real content. This includes something as small as "here is a command ' +
+  'for you to run" — giving him a command to run himself always qualifies, every time, no ' +
+  'exceptions, even a short one-liner. It does NOT apply when you already ran the command ' +
+  'yourself and are just reporting the result. Examples of a reply that NEEDS the marker:\n' +
+  '[NEEDS_ACTION]\n' +
+  'Run this to see the last 3 commits:\n' +
+  '```\n' +
+  'git log -3\n' +
+  '```\n' +
+  'Example that does NOT need it (you already ran it yourself): "The last 3 commits are: ' +
+  'A, B, C." When in doubt about a borderline case, include the marker rather than omit it.';
 
 function buildVoicePrompt(mode, text) {
   if (mode === 'execute') {
@@ -426,6 +436,7 @@ app.get('/api/voice/messages/:id', function (req, res) {
 
 app.post('/api/voice/session/reset', function (req, res) {
   stmts.clearVoiceSession.run();
+  claudeRunner.resetSession();
   res.json({ ok: true });
 });
 

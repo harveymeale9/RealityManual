@@ -33,7 +33,18 @@ window.RMVoice = (function () {
       .then(function (data) { return data.text || ''; });
   }
 
-  function sendMessage(text, mode) {
+  // imageFile (optional): a File/Blob — sent as multipart alongside text/mode
+  // when present. The endpoint accepts both plain JSON (text-only, as
+  // before) and multipart (image attached) — see server.js.
+  function sendMessage(text, mode, imageFile) {
+    if (imageFile) {
+      var form = new FormData();
+      form.append('text', text || '');
+      form.append('mode', mode);
+      form.append('image', imageFile, imageFile.name || 'pasted-image.png');
+      return fetch(API_BASE + '/api/voice/messages', { method: 'POST', credentials: 'include', body: form })
+        .then(function (r) { if (!r.ok) throw new Error('Could not send message'); return r.json(); });
+    }
     return fetch(API_BASE + '/api/voice/messages', {
       method: 'POST',
       credentials: 'include',
@@ -70,20 +81,140 @@ window.RMVoice = (function () {
     });
   }
 
+  // Strips the app's own [NEEDS_ACTION] marker and common markdown syntax
+  // down to plain spoken text before anything reaches TTS — the chat still
+  // renders the original markdown (see renderMarkdownLite); this only
+  // affects what gets spoken. A fenced code block becomes a short spoken
+  // pointer rather than being read character-by-character (that produced
+  // exactly the unusable "ssh dash i tilde slash..." Harvey flagged).
+  function stripMarkdownForSpeech(text) {
+    if (!text) return '';
+    var codeBlocks = 0;
+    var out = String(text).replace(/^\[NEEDS_ACTION\]\s*/i, '');
+    out = out.replace(/```[a-zA-Z0-9]*\n?[\s\S]*?```/g, function () {
+      codeBlocks++;
+      return codeBlocks === 1 ? ' I’ve put it in the chat for you to copy.' : ' Another one is in the chat too.';
+    });
+    out = out.replace(/`([^`]+)`/g, '$1');
+    out = out.replace(/^#{1,6}\s+/gm, '');
+    out = out.replace(/\*\*([^*]+)\*\*/g, '$1');
+    out = out.replace(/\*([^*]+)\*/g, '$1');
+    out = out.replace(/^\s*[-*+]\s+/gm, '');
+    out = out.replace(/^\s*\d+\.\s+/gm, '');
+    return out.replace(/\n{2,}/g, '. ').replace(/\n/g, ' ').trim();
+  }
+
+  // Very small, safe markdown-lite renderer — NOT a general markdown
+  // library. Escapes HTML first (never trusts the content), then only
+  // recognizes fenced code blocks (with a copy button) and inline code —
+  // the two things Harvey actually asked for (commands/keys rendering
+  // properly instead of running outside the bubble as prose). Returns a
+  // DOM fragment ready to append, not an HTML string, so there is no
+  // innerHTML injection point at all.
+  function renderMarkdownLite(text) {
+    var frag = document.createDocumentFragment();
+    var src = String(text).replace(/^\[NEEDS_ACTION\]\s*/i, '');
+    var re = /```([a-zA-Z0-9]*)\n?([\s\S]*?)```/g;
+    var lastIndex = 0;
+    var match;
+    function appendTextWithInlineCode(str) {
+      var parts = str.split(/(`[^`]+`)/g);
+      parts.forEach(function (part) {
+        if (!part) return;
+        if (part.charAt(0) === '`' && part.charAt(part.length - 1) === '`' && part.length > 1) {
+          var code = document.createElement('code');
+          code.className = 'pm-inline-code';
+          code.textContent = part.slice(1, -1);
+          frag.appendChild(code);
+        } else {
+          frag.appendChild(document.createTextNode(part));
+        }
+      });
+    }
+    while ((match = re.exec(src))) {
+      if (match.index > lastIndex) appendTextWithInlineCode(src.slice(lastIndex, match.index));
+      var pre = document.createElement('pre');
+      pre.className = 'pm-code-block';
+      var codeEl = document.createElement('code');
+      codeEl.textContent = match[2].replace(/\n$/, '');
+      pre.appendChild(codeEl);
+      var copyBtn = document.createElement('button');
+      copyBtn.type = 'button';
+      copyBtn.className = 'pm-code-copy';
+      copyBtn.textContent = 'Copy';
+      copyBtn.addEventListener('click', function () {
+        var text2 = codeEl.textContent;
+        (navigator.clipboard ? navigator.clipboard.writeText(text2) : Promise.reject())
+          .then(function () { copyBtn.textContent = 'Copied'; setTimeout(function () { copyBtn.textContent = 'Copy'; }, 1500); })
+          .catch(function () {});
+      });
+      pre.appendChild(copyBtn);
+      frag.appendChild(pre);
+      lastIndex = re.lastIndex;
+    }
+    if (lastIndex < src.length) appendTextWithInlineCode(src.slice(lastIndex));
+    return frag;
+  }
+
+  var currentAudio = null;
+  function stopSpeaking() {
+    if (currentAudio) {
+      try { currentAudio.pause(); } catch (e) { /* ignore */ }
+      currentAudio = null;
+    }
+  }
+
   function speak(text) {
-    if (!text) return Promise.resolve(null);
+    var clean = stripMarkdownForSpeech(text);
+    if (!clean) return Promise.resolve(null);
+    stopSpeaking();
     return fetch(API_BASE + '/api/voice/tts', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: text })
+      body: JSON.stringify({ text: clean })
     }).then(function (r) { if (!r.ok) throw new Error('Could not synthesize speech'); return r.blob(); })
       .then(function (blob) {
         var url = URL.createObjectURL(blob);
         var audio = new Audio(url);
-        audio.addEventListener('ended', function () { URL.revokeObjectURL(url); });
+        currentAudio = audio;
+        audio.addEventListener('ended', function () {
+          if (currentAudio === audio) currentAudio = null;
+          URL.revokeObjectURL(url);
+        });
         return audio.play().then(function () { return audio; });
       });
+  }
+
+  // Whether this device/tab looks like the one Harvey is actually looking
+  // at right now — used to gate the completion ping so both an open phone
+  // and an open desktop tab don't both chime for the same message.
+  function isActiveHere() {
+    try { return document.visibilityState === 'visible' && document.hasFocus(); } catch (e) { return true; }
+  }
+
+  // Short synthesized chime (no audio asset needed) for "a response is
+  // ready" — distinct from the spoken reply itself, and safe to call even
+  // when this tab isn't the active one (isActiveHere() gates it there).
+  function playPing() {
+    if (!isActiveHere()) return;
+    try {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      var ctx = new Ctx();
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.32);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.34);
+      osc.addEventListener('ended', function () { ctx.close().catch(function () {}); });
+    } catch (e) { /* never let a chime failure affect anything else */ }
   }
 
   function resetSession() {
@@ -106,6 +237,10 @@ window.RMVoice = (function () {
   //            onDone(row)       — row finished successfully
   //            onError(row)      — row finished with an error
   //            onActivity(row)   — row's activity_log grew
+  //            onTick(rows)      — every poll, the raw current window of rows
+  //                                (oldest-last, as the API returns them) —
+  //                                for a "queue" view that needs the whole
+  //                                current picture rather than per-row deltas
   function syncThread(callbacks, opts) {
     opts = opts || {};
     var intervalMs = opts.intervalMs || 2500;
@@ -142,6 +277,7 @@ window.RMVoice = (function () {
       if (stopped) return;
       listMessages(limit).then(function (rows) {
         rows.slice().reverse().forEach(applyRow);
+        if (callbacks.onTick) callbacks.onTick(rows);
       }).catch(function () {
         // transient network hiccup or backend hiccup — just try again next
         // tick, same "never break the page" spirit as the analytics client.
@@ -175,6 +311,11 @@ window.RMVoice = (function () {
     listMessages: listMessages,
     pollMessage: pollMessage,
     speak: speak,
+    stopSpeaking: stopSpeaking,
+    playPing: playPing,
+    isActiveHere: isActiveHere,
+    stripMarkdownForSpeech: stripMarkdownForSpeech,
+    renderMarkdownLite: renderMarkdownLite,
     resetSession: resetSession,
     syncThread: syncThread
   };

@@ -262,11 +262,12 @@
             '<div class="pm-empty">Type or speak to Claude Code — same project, same tools, full memory of RealityManual.</div>' +
           '</div>' +
           '<div class="pm-inputbar">' +
+            '<div class="pm-image-preview" id="pmImagePreview" hidden></div>' +
             '<div class="pm-input-row">' +
               '<button type="button" class="pm-mic-btn" id="pmMicBtn" title="Record voice message" aria-label="Record voice message">' +
                 '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/></svg>' +
               '</button>' +
-              '<textarea id="pmTextInput" class="pm-textarea" rows="1" placeholder="Message Claude Code…"></textarea>' +
+              '<textarea id="pmTextInput" class="pm-textarea" rows="1" placeholder="Message Claude Code… (paste or drop an image too)"></textarea>' +
               '<button type="button" class="pm-send-btn" id="pmSendBtn" title="Send" aria-label="Send">' +
                 '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4Z"/></svg>' +
               '</button>' +
@@ -275,20 +276,42 @@
           '</div>' +
         '</div>' +
         '<div class="pm-col pm-col-activity">' +
-          '<div class="pm-activity-head">Activity <span class="pm-activity-hint">— what CC is doing, live</span></div>' +
-          '<div class="pm-activity" id="pmActivity"><div class="pm-activity-empty" id="pmActivityEmpty">Nothing happening yet.</div></div>' +
+          '<div class="pm-queue-section">' +
+            '<div class="pm-activity-head">Queue <span class="pm-activity-hint" id="pmQueueHint"></span></div>' +
+            '<div class="pm-queue-list" id="pmQueueList"><div class="pm-queue-empty">Nothing queued.</div></div>' +
+          '</div>' +
+          '<div class="pm-activity-section">' +
+            '<div class="pm-activity-head">Activity <span class="pm-activity-hint">— what CC is doing, live</span></div>' +
+            '<div class="pm-activity" id="pmActivity"><div class="pm-activity-empty" id="pmActivityEmpty">Nothing happening yet.</div></div>' +
+          '</div>' +
         '</div>' +
       '</div>' +
     '</div>';
+
+  // How long to wait after sending a voice-originated question before
+  // speaking a "got it, working on it" ack — canceled if the real reply
+  // beats it (the common case: a quick question just gets its answer
+  // spoken directly, no redundant ack first). If the ack does fire, the
+  // real reply lands as text only, never spoken late — see onDone below.
+  // 10s comfortably clears normal quick-question latency (observed ~5-6s
+  // end to end) without making Harvey wait through a task that's
+  // genuinely going to take minutes before hearing anything at all.
+  var VOICE_ACK_DELAY_MS = 10000;
+  var RESPOND_ACK_TEXT = 'Got it — I’ll get right on that. I’ll let you know here once it’s done.';
+  var EXECUTE_ACK_TEXT = 'Got it — I’ll take care of that now.';
 
   function bootProjectManager() {
     var Voice = window.RMVoice;
     var thread = document.getElementById('pmThread');
     var activityEl = document.getElementById('pmActivity');
+    var queueListEl = document.getElementById('pmQueueList');
+    var queueHintEl = document.getElementById('pmQueueHint');
     var textInput = document.getElementById('pmTextInput');
     var sendBtn = document.getElementById('pmSendBtn');
     var micBtn = document.getElementById('pmMicBtn');
     var resetBtn = document.getElementById('pmResetBtn');
+    var imagePreviewEl = document.getElementById('pmImagePreview');
+    var inputRow = textInput.closest('.pm-input-row');
 
     if (pmSync) { pmSync.stop(); pmSync = null; }
 
@@ -308,10 +331,11 @@
 
     function addAssistantMessage(text) {
       clearEmptyNote();
+      var isAction = /^\[NEEDS_ACTION\]/i.test(text || '');
       var wrap = document.createElement('div');
-      wrap.className = 'pm-msg pm-msg-assistant';
+      wrap.className = 'pm-msg pm-msg-assistant' + (isAction ? ' pm-msg-assistant--action' : '');
       var body = document.createElement('div');
-      body.textContent = text;
+      body.appendChild(Voice.renderMarkdownLite(text || ''));
       wrap.appendChild(body);
       var meta = document.createElement('div');
       meta.className = 'pm-msg-meta';
@@ -319,12 +343,102 @@
       playBtn.type = 'button';
       playBtn.className = 'pm-play-btn';
       playBtn.textContent = '▶ Play';
-      playBtn.addEventListener('click', function () { Voice.speak(text).catch(function () {}); });
+      var playing = false;
+      function resetPlayBtn() { playing = false; playBtn.textContent = '▶ Play'; playBtn.classList.remove('pm-stop-btn'); }
+      playBtn.addEventListener('click', function () {
+        if (playing) { Voice.stopSpeaking(); resetPlayBtn(); return; }
+        Voice.speak(text).then(function (audio) {
+          if (!audio) return;
+          playing = true;
+          playBtn.textContent = '■ Stop';
+          playBtn.classList.add('pm-stop-btn');
+          audio.addEventListener('ended', resetPlayBtn);
+        }).catch(function () {});
+      });
       meta.appendChild(playBtn);
       wrap.appendChild(meta);
       thread.appendChild(wrap);
       thread.scrollTop = thread.scrollHeight;
       return wrap;
+    }
+
+    // --- Image attach: paste into the textarea or drop onto the input row.
+    // Desktop only needs these two per Harvey (no dedicated button) — a
+    // visible attach button is the mobile-specific gap (no paste gesture
+    // there), added in voice-mobile.html instead.
+    var pendingImage = null;
+    function clearPendingImage() {
+      pendingImage = null;
+      imagePreviewEl.hidden = true;
+      imagePreviewEl.innerHTML = '';
+    }
+    function setPendingImage(file) {
+      pendingImage = file;
+      var reader = new FileReader();
+      reader.onload = function () {
+        imagePreviewEl.innerHTML = '';
+        var img = document.createElement('img');
+        img.src = reader.result;
+        imagePreviewEl.appendChild(img);
+        var removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'pm-image-preview-remove';
+        removeBtn.textContent = 'Remove image';
+        removeBtn.addEventListener('click', clearPendingImage);
+        imagePreviewEl.appendChild(removeBtn);
+        imagePreviewEl.hidden = false;
+      };
+      reader.readAsDataURL(file);
+    }
+    textInput.addEventListener('paste', function (e) {
+      var items = (e.clipboardData && e.clipboardData.items) || [];
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].type && items[i].type.indexOf('image/') === 0) {
+          var file = items[i].getAsFile();
+          if (file) { setPendingImage(file); e.preventDefault(); }
+          break;
+        }
+      }
+    });
+    if (inputRow) {
+      inputRow.addEventListener('dragover', function (e) { e.preventDefault(); inputRow.classList.add('pm-drag-over'); });
+      inputRow.addEventListener('dragleave', function () { inputRow.classList.remove('pm-drag-over'); });
+      inputRow.addEventListener('drop', function (e) {
+        e.preventDefault();
+        inputRow.classList.remove('pm-drag-over');
+        var files = e.dataTransfer && e.dataTransfer.files;
+        if (files && files.length && files[0].type.indexOf('image/') === 0) setPendingImage(files[0]);
+      });
+    }
+
+    // --- Queue panel: every poll gets the full current window of rows
+    // (see lib/voiceClient.js syncThread's onTick), so this just re-derives
+    // the in-flight list from scratch each tick rather than diffing.
+    function renderQueue(rows) {
+      var inflight = rows.filter(function (r) { return r.status === 'pending' || r.status === 'running'; }).slice().reverse();
+      queueListEl.innerHTML = '';
+      if (!inflight.length) {
+        queueHintEl.textContent = '';
+        var empty = document.createElement('div');
+        empty.className = 'pm-queue-empty';
+        empty.textContent = 'Nothing queued.';
+        queueListEl.appendChild(empty);
+        return;
+      }
+      queueHintEl.textContent = '— ' + inflight.length + ' in progress';
+      inflight.forEach(function (row, idx) {
+        var item = document.createElement('div');
+        item.className = 'pm-queue-item' + (row.status === 'running' ? ' pm-queue-active' : '');
+        var num = document.createElement('span');
+        num.className = 'pm-queue-num';
+        num.textContent = (idx + 1) + '/' + inflight.length;
+        var textEl = document.createElement('span');
+        textEl.className = 'pm-queue-text';
+        textEl.textContent = row.transcript;
+        item.appendChild(num);
+        item.appendChild(textEl);
+        queueListEl.appendChild(item);
+      });
     }
 
     function addTyping(msgId) {
@@ -366,8 +480,14 @@
 
     // Ids this device sent via voice on itself and wants spoken aloud once
     // the reply lands — never applied to a reply that shows up because
-    // another device (or an earlier page load) triggered it.
-    var autoSpeakIds = {};
+    // another device (or an earlier page load) triggered it. Each entry's
+    // ackTimer speaks a "got it, working on it" ack if the real reply
+    // hasn't landed within VOICE_ACK_DELAY_MS; ackFired records whether
+    // that happened, so onDone knows whether the real reply should still
+    // be spoken (fast turn, ack never fired) or stay text-only (ack
+    // already covered it — speaking the real answer too, possibly minutes
+    // later, is exactly what Harvey asked NOT to happen).
+    var voiceAck = {};
 
     // The single source of truth for the thread: on first tick it loads
     // whatever's already in the table (so opening this tab resumes the last
@@ -385,28 +505,45 @@
         // server.js buildVoicePrompt), not a throwaway line — show it like
         // any other reply instead of a generic "Done" placeholder.
         addAssistantMessage(row.reply_text || '');
-        if (autoSpeakIds[row.id]) {
-          delete autoSpeakIds[row.id];
-          Voice.speak(row.reply_text || '').catch(function () {});
+        if (Voice.isActiveHere()) Voice.playPing();
+        var ack = voiceAck[row.id];
+        if (ack) {
+          clearTimeout(ack.timer);
+          delete voiceAck[row.id];
+          if (!ack.fired) Voice.speak(row.reply_text || '').catch(function () {});
         }
       },
       onError: function (row) {
         removeTyping(row.id);
         addMessage('error', row.error_message || 'Something went wrong.');
+        if (Voice.isActiveHere()) Voice.playPing();
+        var ack = voiceAck[row.id];
+        if (ack) { clearTimeout(ack.timer); delete voiceAck[row.id]; }
       },
-      onActivity: function (row) { renderActivity(row.activity_log); }
+      onActivity: function (row) { renderActivity(row.activity_log); },
+      onTick: renderQueue
     });
+
+    function scheduleVoiceAck(id, mode) {
+      var entry = { fired: false, timer: null };
+      entry.timer = setTimeout(function () {
+        entry.fired = true;
+        Voice.speak(mode === 'execute' ? EXECUTE_ACK_TEXT : RESPOND_ACK_TEXT).catch(function () {});
+      }, VOICE_ACK_DELAY_MS);
+      voiceAck[id] = entry;
+    }
 
     function sendText(text, mode, opts) {
       opts = opts || {};
       var autoSpeak = !!opts.autoSpeak;
-      if (!text.trim()) return;
-      addMessage('user', text);
+      var image = opts.image || null;
+      if (!text.trim() && !image) return;
+      addMessage('user', text || '(image)');
       var typingEl = addTyping();
       renderActivity(null);
-      Voice.sendMessage(text.trim(), mode).then(function (created) {
+      Voice.sendMessage(text.trim(), mode, image).then(function (created) {
         typingEl.dataset.msgId = created.id;
-        if (autoSpeak) autoSpeakIds[created.id] = true;
+        if (autoSpeak) scheduleVoiceAck(created.id, mode);
         pmSync.markKnown(created);
       }).catch(function (err) {
         if (typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
@@ -414,11 +551,23 @@
       });
     }
 
+    // Typing means "reply in text" by default — voice is only for when
+    // Harvey actually spoke. Exception per Harvey: if his immediately
+    // preceding message was itself sent by voice, a quick typed follow-up
+    // (e.g. fixing a misheard word) still gets a spoken reply too, so the
+    // conversation doesn't abruptly go silent mid-voice-exchange. One-shot:
+    // this resets to text-only after the typed message, not sticky forever.
+    var lastSendWasVoice = false;
+
     sendBtn.addEventListener('click', function () {
       var text = textInput.value;
+      var image = pendingImage;
       textInput.value = '';
       textInput.style.height = 'auto';
-      sendText(text, 'respond', { autoSpeak: false });
+      var carryVoice = lastSendWasVoice;
+      lastSendWasVoice = false;
+      clearPendingImage();
+      sendText(text, 'respond', { autoSpeak: carryVoice, image: image });
     });
     textInput.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -474,7 +623,7 @@
         var text = textInput.value;
         textInput.value = '';
         textInput.style.height = 'auto';
-        if (text.trim()) sendText(text, 'respond', { autoSpeak: true });
+        if (text.trim()) { lastSendWasVoice = true; sendText(text, 'respond', { autoSpeak: true }); }
       });
       recognition.addEventListener('error', function (e) {
         activeRecognition = null;
@@ -508,6 +657,7 @@
         rec.stop().then(function (blob) { return Voice.transcribe(blob); })
           .then(function (text) {
             if (!text) return;
+            lastSendWasVoice = true;
             sendText(text, 'respond', { autoSpeak: true });
           })
           .catch(function (err) { addMessage('error', (err && err.message) || 'Could not transcribe audio.'); });

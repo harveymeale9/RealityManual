@@ -306,4 +306,24 @@ async function runClaude(opts) {
   return runTurn(sess, prompt, timeoutMs, onActivity, opts.imageBlock);
 }
 
-module.exports = { runClaude };
+// Tears down the live in-process session (if any) so the next runClaude()
+// call starts genuinely fresh. This matters because currentSession is a
+// module-level singleton that outlives any single HTTP request — clearing
+// the DB's stored claude_session_id (server.js's /api/voice/session/reset)
+// on its own does nothing to a session that's already alive in this
+// process's memory; ensureSession() checks the live singleton before it
+// ever looks at a passed-in resumeId. Found via a real test: resetting the
+// session and immediately resending the same prompt still produced the
+// old (pre-fix) reply, because the live session never actually changed.
+function resetSession() {
+  if (currentSession) {
+    try {
+      if (typeof currentSession.iterator.interrupt === 'function') {
+        currentSession.iterator.interrupt().catch(function () {});
+      }
+    } catch (e) { /* best-effort teardown only */ }
+    currentSession = null;
+  }
+}
+
+module.exports = { runClaude, resetSession };
