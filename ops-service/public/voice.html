@@ -149,11 +149,11 @@
       loginForm.addEventListener('submit', function (e) {
         e.preventDefault();
         Auth.checkPassword(loginPassword.value).then(function (ok) {
-          if (ok) { loginError.hidden = true; loginForm.reset(); showApp(); }
+          if (ok) { loginError.hidden = true; loginForm.reset(); showApp(); hydrateHistory(); }
           else { loginError.hidden = false; loginPassword.value = ''; loginPassword.focus(); }
         });
       });
-      Auth.checkSession().then(function (ok) { if (ok) showApp(); else showLogin(); });
+      Auth.checkSession().then(function (ok) { if (ok) { showApp(); hydrateHistory(); } else showLogin(); });
 
       var emptyNote = thread.querySelector('.cc-empty');
       function clearEmptyNote() { if (emptyNote && emptyNote.parentNode) { emptyNote.parentNode.removeChild(emptyNote); emptyNote = null; } }
@@ -197,6 +197,28 @@
         thread.appendChild(el);
         thread.scrollTop = thread.scrollHeight;
         return el;
+      }
+
+      // Conversation continuity lives server-side (one shared session, resumed
+      // regardless of which device sent the last message) — but the thread view
+      // itself only ever held whatever this tab sent since it loaded. Hydrate it
+      // from the shared history so switching devices (or just reloading) shows
+      // what already happened, not a blank thread.
+      function renderHistoryRow(row) {
+        addMessage('user', row.transcript);
+        if (row.status === 'error') {
+          addMessage('error', row.error_message || 'Something went wrong.');
+        } else if (row.status === 'done') {
+          addAssistantMessage(row.reply_text || '');
+        } else {
+          addTyping();
+        }
+      }
+
+      function hydrateHistory() {
+        Voice.listMessages(50).then(function (rows) {
+          rows.slice().reverse().forEach(renderHistoryRow);
+        }).catch(function () {});
       }
 
       function sendText(text, mode, opts) {
