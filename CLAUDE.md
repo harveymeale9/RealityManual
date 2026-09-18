@@ -3101,3 +3101,28 @@ reason to strip the marker once it progresses further).
 This is a data-driven flag, not a stage/column-based inference — a piece
 keeps its `card-ai` styling for its entire lifetime on the board unless
 someone removes the field.
+
+---
+
+# 79. Voice-Mobile PWA: Quick Link to Content Ops (2026-09-18)
+
+`ops-service/public/voice-mobile.html` (the phone home-screen PWA
+shortcut, §74) had zero navigation to anything else on the panel — it's
+a deliberately standalone page, so there was no way to jump from it to
+the Content Ops board to check on ideas without leaving the PWA for the
+browser and typing in `ops.realitymanual.com` manually. Harvey asked for
+a quick way to move between the two.
+
+Added a small fixed pull-tab-style button (`.v-nav-btn`, reusing the
+exact Content Ops kanban icon from `index.html`'s side-rail) on the left
+edge at mid-screen, mirroring the existing queue pull-tab already on the
+right edge — deliberately not a top-corner button, which was tried first
+and overlapped the "Ask & Wait for Reply" button's own icon/label. It
+links straight to `index.html#content-ops`; the SPA's hash router
+(`app.js`, `renderActiveTab`) already lands directly on that tab without
+needing to pass through Project Manager first. The reverse direction
+(Content Ops → Project Manager) needed no new code — `index.html`'s
+mobile view already keeps its horizontal-scrolling top tab row visible
+with Project Manager as `TABS[0]` (§74's SPA merge), so that's already
+one tap away; `voice-mobile.html` itself is also always reachable again
+directly from its own home-screen icon.

@@ -113,6 +113,20 @@
     .v-queue-drawer.open { transform: translateX(0); }
     .v-queue-drawer .pm-queue-list { flex: 1; }
 
+    /* Quick way to the Content Ops board without leaving this PWA shortcut
+       for the browser/home screen. Mirrors the queue-tab pull-tab above —
+       fixed on the edge at mid-screen, next to the chat panel rather than
+       the top-left corner, which overlaps the "Ask & Wait" button's own
+       icon/label. */
+    .v-nav-btn {
+      position: fixed; left: 0; top: 50%; transform: translateY(-50%);
+      width: 30px; height: 44px; border-radius: 0 10px 10px 0;
+      background: var(--surface-2); border: 1px solid var(--border); border-left: none;
+      color: var(--ink-soft); display: flex; align-items: center; justify-content: center;
+      z-index: 15; -webkit-tap-highlight-color: transparent; text-decoration: none;
+    }
+    .v-nav-btn svg { width: 17px; height: 17px; }
+
   </style>
 </head>
 <body>
@@ -133,6 +147,9 @@
   </div>
 
   <div id="vApp" class="v-app" hidden>
+    <a href="index.html#content-ops" class="v-nav-btn" title="Content Ops" aria-label="Content Ops">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    </a>
     <div class="v-home">
       <button type="button" class="v-btn v-btn-ask" id="askBtn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/></svg>
