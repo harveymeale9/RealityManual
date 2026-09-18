@@ -384,7 +384,7 @@
           num.textContent = (idx + 1) + '/' + inflight.length;
           var textEl = document.createElement('span');
           textEl.className = 'pm-queue-text';
-          textEl.textContent = row.transcript;
+          textEl.textContent = row.early_ack || row.transcript;
           item.appendChild(num);
           item.appendChild(textEl);
           queueListEl.appendChild(item);
@@ -402,7 +402,7 @@
             mark.textContent = row.status === 'error' ? '✕' : '✓';
             var textEl = document.createElement('span');
             textEl.className = 'pm-queue-text';
-            textEl.textContent = row.transcript;
+            textEl.textContent = row.early_ack || row.transcript;
             item.appendChild(mark);
             item.appendChild(textEl);
             queueListEl.appendChild(item);

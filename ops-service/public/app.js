@@ -96,8 +96,13 @@
   }
 
   function renderTabs() {
+    // Real <a href="#tab"> rather than a <button> with a click handler —
+    // a button has no URL, so middle-click/ctrl+click "open in new tab"
+    // silently does nothing on it (Harvey's report). An anchor gets that
+    // for free from the browser; the click listener below still runs for
+    // an ordinary left-click, same behavior as before.
     panelTabs.innerHTML = TABS.map(function (t) {
-      return '<button class="panel-tab" data-tab="' + t.id + '">' + t.label + '</button>';
+      return '<a href="#' + t.id + '" class="panel-tab" data-tab="' + t.id + '">' + t.label + '</a>';
     }).join('');
     panelTabs.querySelectorAll('.panel-tab[data-tab]').forEach(function (btn) {
       btn.addEventListener('click', function () { location.hash = btn.dataset.tab; });
@@ -106,7 +111,9 @@
 
   /* The left icon rail is a second entry point into the same tabs above —
      it doesn't have its own state, just mirrors panelTabs via the same
-     location.hash routing so the two navs can never disagree. */
+     location.hash routing so the two navs can never disagree. Its buttons
+     are real <a href="#tab"> in index.html for the same middle-click/
+     new-tab reason as renderTabs() above. */
   function bindSideRail() {
     if (!sideRail) return;
     sideRail.querySelectorAll('.side-rail-btn[data-tab]').forEach(function (btn) {
@@ -495,7 +502,7 @@
         num.textContent = (idx + 1) + '/' + inflight.length;
         var textEl = document.createElement('span');
         textEl.className = 'pm-queue-text';
-        textEl.textContent = row.transcript;
+        textEl.textContent = row.early_ack || row.transcript;
         item.appendChild(num);
         item.appendChild(textEl);
         queueListEl.appendChild(item);
@@ -513,7 +520,7 @@
           mark.textContent = row.status === 'error' ? '✕' : '✓';
           var textEl = document.createElement('span');
           textEl.className = 'pm-queue-text';
-          textEl.textContent = row.transcript;
+          textEl.textContent = row.early_ack || row.transcript;
           item.appendChild(mark);
           item.appendChild(textEl);
           queueListEl.appendChild(item);

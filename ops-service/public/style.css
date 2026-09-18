@@ -235,6 +235,7 @@ a { color: var(--accent); }
   border-radius: var(--radius);
   color: var(--ink-faint);
   cursor: pointer;
+  text-decoration: none;
 }
 .side-rail-btn svg { width: 24px; height: 24px; }
 .side-rail-btn:hover { color: var(--ink-soft); background: var(--surface-2); }
@@ -284,6 +285,7 @@ a { color: var(--accent); }
   padding: 6px 1px 14px;
   border-radius: 0;
   cursor: pointer;
+  text-decoration: none;
 }
 .panel-tab:hover { color: var(--ink-soft); background: none; }
 .panel-tab.active { color: var(--accent); background: none; border-bottom-color: var(--accent); }

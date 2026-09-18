@@ -3583,3 +3583,60 @@ does the dedupe actually prevent a double-speak on a real no-tool-call
 question) still needs a genuine voice test against the deployed service —
 flag this explicitly if picking this up cold, don't assume it's
 confirmed working just because it's merged.
+
+---
+
+# 90. Queue Items Also Get a Real Title, Not Raw Speech-to-Text
+
+Same complaint as §77/§89, one more surface that had the same problem:
+the Queue panel's item text (`renderQueue` in `app.js`/`voice-mobile.html`)
+was always `row.transcript` — Harvey's raw spoken message, unshortened —
+even though §77 already established the principle (there, for the
+internal TodoWrite list) that a queue-style list should show a real task
+title, not a transcript dump. The Queue panel is a different UI surface
+that §77's fix never touched.
+
+Fixed by reusing §89's `early_ack` field rather than building a second
+title-generation mechanism: both the in-progress and "Recently completed"
+render loops now show `row.early_ack || row.transcript` — falling back to
+the raw transcript only in the brief window before a message has started
+processing and produced its first real sentence yet. `early_ack` is
+already instructed (§89's VOICE_SYSTEM_PROMPT addition) to be a short,
+specific one-sentence statement of what's being done, which is exactly
+the "proper title... one sentence or a few words" Harvey asked for here —
+no new backend work needed, just displaying data that already existed
+for a different reason.
+
+---
+
+# 91. Nav (Side-Rail + Top Tabs): Middle-Click / Open in New Tab
+
+Harvey wanted middle-click (or ctrl/cmd-click) on a nav item — e.g. the
+side-rail's Content Ops icon — to open it in a new browser tab, the
+normal way that gesture works on any link. It didn't do anything at all.
+Root cause: every tab-navigation element (`index.html`'s side-rail icons,
+and `app.js`'s `renderTabs()`-generated top tab row) was a plain
+`<button>` with a `click` listener that sets `location.hash` — a button
+has no URL for the browser to open elsewhere, so middle-click/ctrl-click
+"open in new tab" silently has nothing to act on. This is a real browser
+mechanism, not something a `click` handler can add on its own.
+
+**Fixed:** both nav surfaces are now real `<a href="#tab-id">` elements
+instead of buttons — `index.html`'s 6 side-rail icons directly, and
+`app.js`'s `renderTabs()` template string. The existing `click` listeners
+that set `location.hash` are left in place (harmless no-op redundancy on
+an ordinary left click, since the anchor's own default navigation
+already sets the same hash) — this was a markup change, not a routing
+rewrite. `style.css` gained `text-decoration: none` on `.side-rail-btn`/
+`.panel-tab` since anchors underline by default and nothing already
+overrode that. No JS logic (`renderActiveTab`'s active-class toggling,
+`currentTabId()`, the hash router) needed to change — all of it already
+worked purely off `.dataset.tab`/`classList`, with zero assumptions
+about the underlying element being a `<button>`.
+
+Opening a tab this way lands directly on the right panel on load — the
+router already reads `location.hash` unconditionally on init
+(`renderActiveTab()` runs right after setup regardless of whether the
+hash was already set, confirmed in §79's writeup of the same behavior)
+— and the session cookie is shared automatically across tabs on the same
+origin, so no separate login is needed in the new tab.
