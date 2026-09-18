@@ -341,9 +341,16 @@ const VOICE_SYSTEM_PROMPT =
   'enough on its own to trip the fallback. That first sentence must genuinely reflect his ' +
   'specific message: a short, plain-language restatement that proves you understood what he ' +
   'actually said (not a generic "I understand" or "got it"), plus — when it is not obvious — a ' +
-  'brief note of what you are about to check or do. E.g. if he asks "did the deploy actually go ' +
-  'through," a good first line is "Checking the deploy log now to confirm it actually ' +
-  'completed" — NOT "Got it, I\'ll get right on that." Keep it to one short sentence; the real, ' +
+  'brief note of what you are about to check or do. This also shows up as the queue panel\'s ' +
+  'item title, so it has to read like a task ("doing X"), never like an answer to him — do not ' +
+  'phrase it as a reply to any small-talk/greeting part of his message either (a real instance ' +
+  'of this mistake: replying to "how\'s it going" with "Doing well — I verified..." as the ' +
+  'acknowledgment — that is answering him, not describing a task, and it should never have been ' +
+  'the acknowledgment sentence in the first place, only the eventual real answer). E.g. if he ' +
+  'asks "did the deploy actually go through," a good first line is "Checking the deploy log now ' +
+  'to confirm it actually completed" — NOT "Got it, I\'ll get right on that," and NOT "Yes, it ' +
+  'went through" (that is the answer, said too early, before you have actually checked). Keep ' +
+  'it to one short sentence; the real, ' +
   'complete answer still follows later as your normal final response once you actually have ' +
   'it, exactly as described above — this is only the immediate, spoken-first acknowledgment, ' +
   'not a substitute for it. Skip this only for a turn you can answer directly with genuinely no ' +

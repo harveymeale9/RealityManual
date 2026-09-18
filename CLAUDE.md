@@ -3780,3 +3780,29 @@ Harvey's stance from §89 is no canned filler at all, anywhere, and a
 quieter written-not-spoken version of the same thing would still
 violate that. The fix is behavioral discipline, enforced by prompt
 wording, not a second synthetic layer papering over it.
+
+---
+
+# 95. Acknowledgment Sentence Must Read as a Task, Not a Reply
+
+Same incident as §94, one more angle on it Harvey called out separately:
+the "Recently completed" queue item for that turn read "Doing well —
+actually verified this just now, n..." — literally the opening of the
+final answer to "how's it going." Harvey's point, stated directly:
+**"tasks are actual things you're DOING, not just responses."** A queue
+item has to describe an action, never read like a reply to him.
+
+This is the same root cause §94 already fixed (the acknowledgment
+sentence arrived too late — as the whole final answer — because tool
+calls ran silently first), but it's worth its own explicit rule rather
+than assuming the timing fix alone guarantees the right phrasing: added
+a paragraph to `VOICE_SYSTEM_PROMPT` spelling out that the acknowledgment
+must read as "doing X," never as an answer to him — including never
+answering the small-talk/greeting part of his message ("how's it
+going" → "Doing well..." is answering him, not describing a task) — with
+this exact incident named as the concrete example of the mistake, the
+same way §94 named its own. Both rules reinforce each other: if the
+sentence genuinely comes before any tool call (§94), there usually
+isn't an answer to give yet anyway, which naturally forces action-style
+phrasing — but stating the phrasing rule explicitly closes the gap for
+any case where that isn't automatically true.
