@@ -8,6 +8,18 @@
   var MANUAL_STAGE_IDS = window.RMStore.STAGES.slice(0, UPLOADED_INDEX + 1).map(function (s) { return s.id; });
   var AUTO_STAGE_IDS = window.RMStore.STAGES.slice(UPLOADED_INDEX + 1).map(function (s) { return s.id; });
 
+  // Platform preset applied when the content-type dropdown changes in the
+  // editor, per Harvey: shorts default to everywhere except YT Longform,
+  // longform defaults to just YT Longform + Facebook. Only fires on an
+  // actual change during editing (see fieldContentType's change listener),
+  // never on populateFields() for an already-saved piece.
+  var PLATFORM_PRESET_BY_TYPE = {
+    ultra_short: ['ytshort', 'tiktok', 'instagram', 'facebook'],
+    short: ['ytshort', 'tiktok', 'instagram', 'facebook'],
+    long_short: ['ytshort', 'tiktok', 'instagram', 'facebook'],
+    longform: ['ytlong', 'facebook']
+  };
+
   // Live across tab (re)activations so bootProjectManager can stop a prior
   // poller before starting a new one — panelMain.innerHTML gets wiped and
   // rebuilt every time this tab is (re)entered, which would otherwise leak
@@ -693,10 +705,26 @@
   var pieces = {};
   var piecesLoadedPromise = null;
 
+  // One-time backfill for pieces that predate the sequential-ID feature
+  // (Harvey: "post 047" needs to mean something stable he can say out loud
+  // to the Project Manager) — assigned in creation order so older pieces
+  // keep lower numbers, continuing on from any already-numbered ones.
+  function backfillMissingSeqs(rows) {
+    var missing = rows.filter(function (r) { return typeof r.seq !== 'number'; })
+      .sort(function (a, b) { return new Date(a.createdAt || 0) - new Date(b.createdAt || 0); });
+    if (!missing.length) return;
+    var next = Store.nextSeq(rows);
+    missing.forEach(function (r) {
+      r.seq = next++;
+      Store.put('pieces', r);
+    });
+  }
+
   function ensurePiecesLoaded() {
     if (!piecesLoadedPromise) {
       piecesLoadedPromise = Store.getAll('pieces').then(function (rows) {
         rows.forEach(function (r) { pieces[r.id] = r; });
+        backfillMissingSeqs(rows);
         return maybeSeedExamples();
       });
     }
@@ -772,15 +800,66 @@
     p.stage = target;
   }
 
+  // Fills as many consecutive shorts slots as there are ready pieces for,
+  // rotating ultra_short -> short -> long_short -> repeat and skipping any
+  // type with nothing ready right now (falls back to alternating between
+  // whichever types DO have something, per Harvey). Runs the full pass
+  // (not just "schedule this one piece") every time anything becomes ready,
+  // since finishing several pieces in a row should fill several slots in
+  // the correct rotation order, not just bump the one just finished to the
+  // front. Schedules and persists every piece it touches itself (including
+  // deriving its board stage) — a caller doesn't need to do that
+  // separately for pieces other than the one it already knows about.
+  function scheduleShorts(settings) {
+    var ms = Store.cadenceMs(settings.cadence.shorts || Store.DEFAULT_CADENCE.shorts);
+    var tail = 0;
+    Object.keys(pieces).forEach(function (id) {
+      var o = pieces[id];
+      if (Store.SHORT_TYPES.indexOf(o.contentType) !== -1 && o.scheduledAt && (o.stage === 'scheduled' || o.stage === 'live')) {
+        var t = new Date(o.scheduledAt).getTime();
+        if (t > tail) tail = t;
+      }
+    });
+    if (!tail) tail = Date.now();
+
+    var pointer = Store.SHORT_TYPES.indexOf(settings.lastShortType);
+    var settingsDirty = false;
+    for (var guard = 0; guard < 200; guard++) {
+      var found = null;
+      for (var attempt = 1; attempt <= Store.SHORT_TYPES.length; attempt++) {
+        var candidateIdx = (pointer + attempt) % Store.SHORT_TYPES.length;
+        var candidateType = Store.SHORT_TYPES[candidateIdx];
+        var ready = Object.keys(pieces).map(function (id) { return pieces[id]; })
+          .filter(function (o) { return o.contentType === candidateType && o.hasVideo && o.audioTrackId && o.thumbnailDataUrl && !o.scheduledAt; })
+          .sort(function (a, b) { return new Date(a.updatedAt) - new Date(b.updatedAt); });
+        if (ready.length) { found = { piece: ready[0], idx: candidateIdx, type: candidateType }; break; }
+      }
+      if (!found) break;
+      tail += ms;
+      found.piece.scheduledAt = new Date(tail).toISOString();
+      found.piece.updatedAt = nowIso();
+      deriveAndApplyStage(found.piece);
+      Store.put('pieces', found.piece);
+      pointer = found.idx;
+      settings.lastShortType = found.type;
+      settingsDirty = true;
+    }
+    if (settingsDirty) Store.saveSettings(settings);
+  }
+
   function maybeAutoSchedule(p) {
     if (!(p.hasVideo && p.audioTrackId && p.thumbnailDataUrl && !p.scheduledAt)) return Promise.resolve();
     return Store.getSettings().then(function (settings) {
-      var cfg = settings.cadence[p.contentType] || Store.DEFAULT_CADENCE[p.contentType] || { every: 1, unit: 'days' };
+      if (Store.SHORT_TYPES.indexOf(p.contentType) !== -1) {
+        scheduleShorts(settings);
+        return;
+      }
+      var cfg = settings.cadence.longform || Store.DEFAULT_CADENCE.longform;
       var ms = Store.cadenceMs(cfg);
       var latest = null;
       Object.keys(pieces).forEach(function (id) {
         var o = pieces[id];
-        if (o.id !== p.id && o.contentType === p.contentType && o.scheduledAt && (o.stage === 'scheduled' || o.stage === 'live')) {
+        if (o.id !== p.id && o.contentType === 'longform' && o.scheduledAt && (o.stage === 'scheduled' || o.stage === 'live')) {
           var t = new Date(o.scheduledAt).getTime();
           if (!latest || t > latest) latest = t;
         }
@@ -828,6 +907,7 @@
     ];
     examples.forEach(function (ex, i) {
       ex.id = Store.genId();
+      ex.seq = i;
       ex.order = 10;
       ex.hasVideo = false;
       ex.notesHtml = ex.notesHtml || '';
@@ -850,7 +930,8 @@
       videoSection, videoPreview, fieldTranscript, fieldAudioTrack, thumbPreview,
       pickFrameBtn, thumbScrub, scrubRange, captureFrameBtn, captionReadout,
       utmField, fieldUtmLink, copyUtmBtn, scheduleStatus,
-      stageField, stageReadoutField, stageReadout;
+      stageField, stageReadoutField, stageReadout,
+      ytTitlesField, fieldYtTitle1, fieldYtTitle2, fieldYtTitle3;
 
   var activeId = null;
   var isNewUnsaved = false;
@@ -891,6 +972,10 @@
     captionReadout = document.getElementById('captionReadout');
     utmField = document.getElementById('utmField');
     fieldUtmLink = document.getElementById('fieldUtmLink');
+    ytTitlesField = document.getElementById('ytTitlesField');
+    fieldYtTitle1 = document.getElementById('fieldYtTitle1');
+    fieldYtTitle2 = document.getElementById('fieldYtTitle2');
+    fieldYtTitle3 = document.getElementById('fieldYtTitle3');
     copyUtmBtn = document.getElementById('copyUtmBtn');
     scheduleStatus = document.getElementById('scheduleStatus');
     stageField = document.getElementById('stageField');
@@ -925,8 +1010,24 @@
     fieldNotes.addEventListener('blur', function () { clearTimeout(saveTimer); syncFromForm(); });
     fieldTranscript.addEventListener('input', debounceSync);
     fieldTranscript.addEventListener('blur', function () { clearTimeout(saveTimer); syncFromForm(); });
+    [fieldYtTitle1, fieldYtTitle2, fieldYtTitle3].forEach(function (el) {
+      el.addEventListener('input', debounceSync);
+      el.addEventListener('blur', function () { clearTimeout(saveTimer); syncFromForm(); });
+    });
     fieldStage.addEventListener('change', function () { clearTimeout(saveTimer); syncFromForm(); });
-    fieldContentType.addEventListener('change', function () { clearTimeout(saveTimer); syncFromForm(); });
+    fieldContentType.addEventListener('change', function () {
+      var preset = PLATFORM_PRESET_BY_TYPE[fieldContentType.value];
+      if (preset) {
+        platformGrid.querySelectorAll('.platform-toggle').forEach(function (t) {
+          var checked = preset.indexOf(t.dataset.platform) !== -1;
+          t.classList.toggle('checked', checked);
+          t.querySelector('input').checked = checked;
+        });
+      }
+      ytTitlesField.hidden = fieldContentType.value !== 'longform';
+      clearTimeout(saveTimer);
+      syncFromForm();
+    });
     fieldAudioTrack.addEventListener('change', function () { clearTimeout(saveTimer); syncFromForm(); });
     platformGrid.addEventListener('click', function (e) {
       var toggle = e.target.closest('.platform-toggle');
@@ -1006,9 +1107,29 @@
       notifyPiecesChanged();
     });
 
+    // Closing on a click "outside" the editor used to fire on the native
+    // click event's own target — but a click event's target is computed
+    // from where the mouse *released*, not where the drag started. Highlighting
+    // a line of text (mousedown inside the editor) and dragging past its edge
+    // before releasing landed the mouseup on the scrim, which read as an
+    // outside click and closed the editor — annoying and not what "clicking
+    // out" means. Fix: only close when BOTH the mousedown and the click
+    // itself targeted the overlay — a drag that started inside never sets
+    // mouseDownOnOverlay, so it can't trigger a close no matter where the
+    // release lands. A genuine click outside still closes normally.
+    var mouseDownOnOverlay = false;
+    function markOverlayMouseDown(e) { mouseDownOnOverlay = (e.target === scrim || e.target === modalWrap); }
+    scrim.addEventListener('mousedown', markOverlayMouseDown);
+    modalWrap.addEventListener('mousedown', markOverlayMouseDown);
+    function maybeCloseFromOverlayClick(e) {
+      var wasOutsideMouseDown = mouseDownOnOverlay;
+      mouseDownOnOverlay = false;
+      if (wasOutsideMouseDown && (e.target === scrim || e.target === modalWrap)) closeModal();
+    }
+    scrim.addEventListener('click', maybeCloseFromOverlayClick);
+    modalWrap.addEventListener('click', maybeCloseFromOverlayClick);
+
     document.getElementById('modalClose').addEventListener('click', closeModal);
-    scrim.addEventListener('click', closeModal);
-    modalWrap.addEventListener('click', function (e) { if (e.target === modalWrap) closeModal(); });
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && modalWrap.classList.contains('open')) closeModal();
     });
@@ -1046,7 +1167,26 @@
     var base = (settings.baseLinkUrl || 'https://realitymanual.com').trim() || 'https://realitymanual.com';
     var source = (p.platforms || []).indexOf('facebook') !== -1 && (p.platforms || []).indexOf('ytlong') === -1 ? 'facebook' : 'youtube';
     var sep = base.indexOf('?') === -1 ? '?' : '&';
-    return base + sep + 'utm_source=' + encodeURIComponent(source) + '&utm_medium=video&utm_campaign=' + encodeURIComponent(p.contentType || 'longform') + '&utm_content=' + encodeURIComponent(p.id);
+    // utm_content uses the human-friendly #047 id, not the internal uuid —
+    // it's what shows up in analytics, so it should be the same number
+    // Harvey actually refers to the piece by.
+    var contentId = typeof p.seq === 'number' ? String(p.seq).padStart(3, '0') : p.id;
+    return base + sep + 'utm_source=' + encodeURIComponent(source) + '&utm_medium=video&utm_campaign=' + encodeURIComponent(p.contentType || 'longform') + '&utm_content=' + encodeURIComponent(contentId);
+  }
+
+  // Every content type now gets its own tracked link inserted into the
+  // caption via a "[LINK]" shortcode (Harvey realized Shorts can carry
+  // tracking links too, not just longform) — shorts and longform pull from
+  // separate caption templates since longform's needs a real per-video
+  // link every time while shorts can reuse the same wording.
+  function captionTemplateFor(settings, contentType) {
+    return contentType === 'longform' ? settings.captions.longform : settings.captions.shorts;
+  }
+
+  function renderCaptionText(p, settings) {
+    var template = captionTemplateFor(settings, p.contentType);
+    if (!template || !template.trim()) return 'No caption set for this type yet — add one in Settings.';
+    return Store.applyCaptionLink(template, buildUtmLink(p, settings));
   }
 
   function updateStageAndScheduleUI(p) {
@@ -1080,6 +1220,12 @@
 
     if (currentVideoObjectUrl) { URL.revokeObjectURL(currentVideoObjectUrl); currentVideoObjectUrl = null; }
 
+    ytTitlesField.hidden = p.contentType !== 'longform';
+    var ytTitles = p.ytTitles || [];
+    fieldYtTitle1.value = ytTitles[0] || '';
+    fieldYtTitle2.value = ytTitles[1] || '';
+    fieldYtTitle3.value = ytTitles[2] || '';
+
     if (!p.hasVideo) {
       videoSection.hidden = true;
       videoPreview.removeAttribute('src');
@@ -1090,7 +1236,6 @@
     thumbScrub.hidden = true;
     fieldTranscript.value = p.transcript || '';
     thumbPreview.innerHTML = p.thumbnailDataUrl ? ('<img src="' + p.thumbnailDataUrl + '" alt="" />') : '<span class="thumb-empty">No thumbnail yet</span>';
-    utmField.hidden = p.contentType !== 'longform';
     updateStageAndScheduleUI(p);
 
     return Promise.all([
@@ -1105,7 +1250,7 @@
           tracks.map(function (t) { return '<option value="' + t.id + '"' + (t.id === p.audioTrackId ? ' selected' : '') + '>' + escapeHtml(t.name) + '</option>'; }).join('');
       }),
       Store.getSettings().then(function (settings) {
-        captionReadout.textContent = settings.sharedCaption && settings.sharedCaption.trim() ? settings.sharedCaption : 'No shared caption set yet — add one in Settings.';
+        captionReadout.textContent = renderCaptionText(p, settings);
         fieldUtmLink.value = buildUtmLink(p, settings);
       })
     ]);
@@ -1134,10 +1279,12 @@
     });
   }
 
+  function allPiecesArray() { return Object.keys(pieces).map(function (k) { return pieces[k]; }); }
+
   function createDraft(stageId, closedCb) {
     var id = Store.genId();
     pieces[id] = {
-      id: id, title: '', stage: stageId, platforms: [], contentType: 'short', notesHtml: '', hasVideo: false,
+      id: id, seq: Store.nextSeq(allPiecesArray()), title: '', stage: stageId, platforms: [], contentType: 'short', notesHtml: '', hasVideo: false,
       order: minOrder(stageId) - 10,
       createdAt: nowIso(),
       updatedAt: nowIso()
@@ -1180,7 +1327,8 @@
       title: fieldTitle.value,
       contentType: fieldContentType.value,
       notesHtml: fieldNotes.innerHTML,
-      platforms: platforms
+      platforms: platforms,
+      ytTitles: [fieldYtTitle1.value, fieldYtTitle2.value, fieldYtTitle3.value].filter(function (t) { return t.trim(); })
     };
     if (p && p.hasVideo) {
       vals.transcript = fieldTranscript.value;
@@ -1226,10 +1374,10 @@
     }
 
     if (p.hasVideo) {
-      utmField.hidden = p.contentType !== 'longform';
-      if (!utmField.hidden) {
-        Store.getSettings().then(function (settings) { fieldUtmLink.value = buildUtmLink(p, settings); });
-      }
+      Store.getSettings().then(function (settings) {
+        fieldUtmLink.value = buildUtmLink(p, settings);
+        captionReadout.textContent = renderCaptionText(p, settings);
+      });
     }
 
     maybeAutoSchedule(p).then(function () {
@@ -1331,6 +1479,12 @@
     '<div class="ops-panel">' +
       '<div class="ops-toolbar">' +
         '<div class="ops-stats" id="statStrip"></div>' +
+        '<div class="ops-filters">' +
+          '<input type="search" class="ops-search" id="opsSearch" placeholder="Search ideas…" />' +
+          '<select class="ops-type-filter" id="opsTypeFilter"><option value="">All types</option>' +
+            Store.CONTENT_TYPES.map(function (c) { return '<option value="' + c.id + '">' + c.label + '</option>'; }).join('') +
+          '</select>' +
+        '</div>' +
         '<button class="btn-primary" id="btnNew">+ New Piece</button>' +
       '</div>' +
       '<div class="overview-row" id="overviewRow"></div>' +
@@ -1403,9 +1557,11 @@
           }).join('');
           return '<select class="card-move" data-id="' + id + '">' + stageOpts + '</select>';
         })();
+    var idBadge = typeof piece.seq === 'number' ? '<span class="card-id">#' + String(piece.seq).padStart(3, '0') + '</span>' : '';
     return '' +
       '<div class="card' + (isAuto ? ' card-auto' : '') + '" draggable="' + (isAuto ? 'false' : 'true') + '" data-id="' + id + '">' +
         (isAuto ? '' : '<span class="card-grip">⋮⋮</span>') +
+        idBadge +
         '<div class="' + titleClass + '">' + titleHtml + '</div>' +
         '<div class="chip-row">' + chipHtml(piece) + '</div>' +
         '<div class="card-foot">' +
@@ -1415,12 +1571,35 @@
       '</div>';
   }
 
+  // Type filter actually removes non-matching cards from each column
+  // (conventional filter semantics); the search box instead dims
+  // non-matches in place (see .card-dim in style.css) so relevant cards
+  // visually "come forward" without disturbing drag order or which column
+  // something's in — a search hit that's the only thing you want to see
+  // right now is still exactly where you'd reach for it once you clear it.
+  var activeTypeFilter = '';
+  var activeSearchQuery = '';
+
+  function pieceMatchesSearch(piece, query) {
+    if (!query) return true;
+    var probe = document.createElement('div');
+    probe.innerHTML = piece.notesHtml || '';
+    var haystack = ((piece.title || '') + ' ' + probe.textContent + ' ' + (piece.transcript || '')).toLowerCase();
+    return haystack.indexOf(query) !== -1;
+  }
+
   function render() {
     var scrollLeft = boardWrap.scrollLeft;
+    var query = activeSearchQuery.trim().toLowerCase();
     board.innerHTML = Store.STAGES.map(function (s, idx) {
       var ids = orderedIds(s.id);
+      if (activeTypeFilter) ids = ids.filter(function (id) { return pieces[id].contentType === activeTypeFilter; });
       var isAutoCol = AUTO_STAGE_IDS.indexOf(s.id) !== -1;
-      var cards = ids.map(function (id) { return cardHtml(id, pieces[id]); }).join('');
+      var cards = ids.map(function (id) {
+        var matches = pieceMatchesSearch(pieces[id], query);
+        var html = cardHtml(id, pieces[id]);
+        return query && !matches ? html.replace('class="card', 'class="card card-dim') : html;
+      }).join('');
       if (!cards) cards = '<div class="empty-slot">' + (isAutoCol ? 'Nothing here yet' : 'Nothing here yet') + '</div>';
       var num = String(idx + 1).padStart(2, '0');
       return '' +
@@ -1552,6 +1731,17 @@
     bindPanning();
     document.getElementById('btnNew').addEventListener('click', function () { createDraft('ideation', render); });
 
+    activeTypeFilter = '';
+    activeSearchQuery = '';
+    document.getElementById('opsSearch').addEventListener('input', function (e) {
+      activeSearchQuery = e.target.value;
+      render();
+    });
+    document.getElementById('opsTypeFilter').addEventListener('change', function (e) {
+      activeTypeFilter = e.target.value;
+      render();
+    });
+
     window.__rmOnPiecesChanged = render;
     ensurePiecesLoaded().then(render);
     render();
@@ -1611,6 +1801,7 @@
       var id = Store.genId();
       var piece = {
         id: id,
+        seq: Store.nextSeq(allPiecesArray()),
         title: file.name.replace(/\.[^.]+$/, ''),
         stage: 'processed', // "Processing" — a brand-new opportunity, not the same thing as any plan in "Uploaded"
         platforms: [],
@@ -1663,7 +1854,9 @@
     '<div class="settings-panel">' +
       '<section class="settings-section">' +
         '<h3>Publishing cadence</h3>' +
-        '<p class="settings-hint">How often each content type gets scheduled. A new piece queues up after whatever’s already scheduled for that type.</p>' +
+        '<p class="settings-hint">Just two cadences — Shorts covers ultra-short/short/long-short together, rotating ' +
+          'through whichever of the three has something ready (ultra-short → short → long-short → repeat, skipping ' +
+          'any type with nothing queued). Longform is its own timeline.</p>' +
         '<div class="cadence-grid" id="cadenceGrid"></div>' +
       '</section>' +
       '<section class="settings-section">' +
@@ -1673,18 +1866,25 @@
         '<div class="audio-list" id="audioList"></div>' +
       '</section>' +
       '<section class="settings-section">' +
-        '<h3>Shared caption</h3>' +
-        '<p class="settings-hint">Applied to every upload — shown read-only on each piece, edited here.</p>' +
-        '<textarea class="notes-input settings-textarea" id="captionInput" placeholder="Caption text..."></textarea>' +
+        '<h3>Captions</h3>' +
+        '<p class="settings-hint">Separate template per type — Shorts can stay the same every time, Longform (or any ' +
+          'type) usually wants a fresh link each time. Use the shortcode <code>[LINK]</code> anywhere in the text and ' +
+          'it\'s replaced with that piece\'s own UTM-tracked link when the caption is shown or copied.</p>' +
+        '<label class="field-label">Shorts caption <span class="field-hint">(ultra-short / short / long-short)</span></label>' +
+        '<textarea class="notes-input settings-textarea" id="captionShortsInput" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
+        '<label class="field-label" style="margin-top:14px;display:block;">YouTube Longform caption</label>' +
+        '<textarea class="notes-input settings-textarea" id="captionLongformInput" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
       '</section>' +
       '<section class="settings-section">' +
-        '<h3>Longform link</h3>' +
-        '<p class="settings-hint">Base URL used to build the UTM-tracked link for longform descriptions.</p>' +
+        '<h3>Tracked link</h3>' +
+        '<p class="settings-hint">Base URL used to build the UTM-tracked [LINK] for every piece, any type.</p>' +
         '<input class="title-input settings-input" id="baseLinkInput" />' +
       '</section>' +
       '<section class="settings-section">' +
         '<h3>API keys</h3>' +
-        '<p class="settings-hint warn">Stored only in this browser’s local storage, never sent anywhere — there’s no backend wired up to use them yet. TikTok access still needs approving; the field is here for when it does.</p>' +
+        '<p class="settings-hint">Stored on the ops-service backend (same place as everything else here — the ' +
+          'shared `settings` record), not just this browser, so any Claude Code session with server access can read ' +
+          'them when it needs to. TikTok access still needs approving; the field is here for when it does.</p>' +
         '<div class="key-grid" id="keyGrid"></div>' +
       '</section>' +
     '</div>';
@@ -1706,24 +1906,29 @@
     settingsSaveTimer = setTimeout(function () { Store.saveSettings(settingsCache); }, 400);
   }
 
+  var CADENCE_ROWS = [
+    { key: 'shorts', label: 'Shorts', hint: 'ultra-short / short / long-short, rotated' },
+    { key: 'longform', label: 'Longform', hint: 'YT / FB' }
+  ];
+
   function renderCadenceGrid() {
     var grid = document.getElementById('cadenceGrid');
-    grid.innerHTML = Store.CONTENT_TYPES.map(function (ct) {
-      var cfg = settingsCache.cadence[ct.id];
-      return '<div class="cadence-row" data-type="' + ct.id + '">' +
-        '<span class="cadence-label"><span class="dot" style="background:' + ct.color + '"></span>' + ct.label + ' <span class="ink-faint">(' + ct.hint + ')</span></span>' +
+    grid.innerHTML = CADENCE_ROWS.map(function (row) {
+      var cfg = settingsCache.cadence[row.key];
+      return '<div class="cadence-row" data-key="' + row.key + '">' +
+        '<span class="cadence-label">' + row.label + ' <span class="ink-faint">(' + row.hint + ')</span></span>' +
         '<span class="cadence-inputs">1 every <input type="number" min="1" step="1" class="cadence-every" value="' + cfg.every + '" /> ' +
         '<select class="cadence-unit"><option value="hours"' + (cfg.unit === 'hours' ? ' selected' : '') + '>hours</option><option value="days"' + (cfg.unit === 'days' ? ' selected' : '') + '>days</option></select></span>' +
       '</div>';
     }).join('');
     grid.querySelectorAll('.cadence-row').forEach(function (row) {
-      var type = row.dataset.type;
+      var key = row.dataset.key;
       row.querySelector('.cadence-every').addEventListener('input', function (e) {
-        settingsCache.cadence[type].every = Math.max(1, parseInt(e.target.value, 10) || 1);
+        settingsCache.cadence[key].every = Math.max(1, parseInt(e.target.value, 10) || 1);
         saveSettingsDebounced();
       });
       row.querySelector('.cadence-unit').addEventListener('change', function (e) {
-        settingsCache.cadence[type].unit = e.target.value;
+        settingsCache.cadence[key].unit = e.target.value;
         saveSettingsDebounced();
       });
     });
@@ -1779,10 +1984,17 @@
       renderAudioList();
       renderKeyGrid();
 
-      var captionInput = document.getElementById('captionInput');
-      captionInput.value = settings.sharedCaption || '';
-      captionInput.addEventListener('input', function () {
-        settingsCache.sharedCaption = captionInput.value;
+      var captionShortsInput = document.getElementById('captionShortsInput');
+      captionShortsInput.value = settings.captions.shorts || '';
+      captionShortsInput.addEventListener('input', function () {
+        settingsCache.captions.shorts = captionShortsInput.value;
+        saveSettingsDebounced();
+      });
+
+      var captionLongformInput = document.getElementById('captionLongformInput');
+      captionLongformInput.value = settings.captions.longform || '';
+      captionLongformInput.addEventListener('input', function () {
+        settingsCache.captions.longform = captionLongformInput.value;
         saveSettingsDebounced();
       });
 

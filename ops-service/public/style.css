@@ -492,7 +492,13 @@ a { color: var(--accent); }
 
 /* ---------- content ops ---------- */
 
-.ops-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 18px clamp(16px, 3vw, 36px) 0; }
+/* zoom (not a formal spec property, but supported by every browser Harvey
+   actually uses — Chrome/Edge/Safari, plus Firefox 126+) makes the whole
+   board render the way a real 75% browser zoom does: denser cards, more
+   visible per column without scrolling, exactly what he asked for as the
+   reference point, rather than guessing which individual paddings/font
+   sizes to hand-tune. */
+.ops-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 18px clamp(16px, 3vw, 36px) 0; zoom: 0.75; }
 
 .ops-toolbar {
   display: flex;
@@ -505,6 +511,15 @@ a { color: var(--accent); }
 
 .ops-stats { display: flex; gap: 18px; font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); }
 .ops-stats .n { color: var(--accent); font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 600; margin-right: 4px; }
+
+.ops-filters { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 200px; max-width: 420px; }
+.ops-search, .ops-type-filter {
+  background: var(--surface); border: 1px solid var(--border); color: var(--ink);
+  border-radius: 6px; padding: 7px 10px; font-family: var(--font-body); font-size: 0.85rem;
+}
+.ops-search { flex: 1; min-width: 0; }
+.ops-search::placeholder { color: var(--ink-faint); }
+.ops-search:focus, .ops-type-filter:focus { outline: none; border-color: var(--accent); }
 
 .board-wrap {
   flex: 1;
@@ -630,6 +645,16 @@ a { color: var(--accent); }
 .card:active { cursor: grabbing; }
 .card.dragging { opacity: 0.35; }
 .card.card-auto { cursor: pointer; }
+/* Search dims non-matches in place rather than removing them, so a hit
+   visually "comes forward" without disturbing column/drag order. */
+.card.card-dim { opacity: 0.28; }
+
+.card-id {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--ink-faint);
+  letter-spacing: 0.03em;
+}
 
 .auto-stage-badge {
   font-size: 0.68rem;

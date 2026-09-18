@@ -48,15 +48,24 @@
     .qa-actions { display: flex; gap: 10px; align-items: center; }
     .qa-save { flex: 1; padding: 16px; font-size: 1.05rem; }
     .qa-toast {
-      text-align: center;
-      font-size: 0.85rem;
-      color: var(--good, #8ea373);
-      min-height: 1.4em;
-      margin-top: 10px;
-      opacity: 0;
+      position: fixed; inset: 0; z-index: 30;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(6, 10, 8, 0.88);
+      opacity: 0; pointer-events: none;
       transition: opacity 0.2s ease;
     }
     .qa-toast.show { opacity: 1; }
+    .qa-toast-card {
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+      text-align: center; padding: 28px 34px; border-radius: 12px;
+      background: var(--surface); border: 1px solid var(--accent-soft-strong);
+    }
+    .qa-toast-check {
+      width: 52px; height: 52px; border-radius: 50%;
+      background: var(--accent-soft); color: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .qa-toast-text { font-family: var(--font-display); font-size: 1.15rem; color: var(--ink); }
     .qa-links { text-align: center; margin-top: 14px; }
   </style>
 </head>
@@ -86,7 +95,14 @@
     <div class="qa-actions">
       <button type="button" class="btn-primary qa-save" id="saveBtn">Save to Ideation</button>
     </div>
-    <div class="qa-toast" id="toast">Saved to Ideation ✓</div>
+    <div class="qa-toast" id="toast">
+      <div class="qa-toast-card">
+        <div class="qa-toast-check" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 13l4 4L19 7"/></svg>
+        </div>
+        <div class="qa-toast-text" id="toastText">Saved to Ideation</div>
+      </div>
+    </div>
     <div class="qa-links"><a class="link-btn" href="index.html#content-ops">Open full pipeline →</a></div>
   </div>
 
@@ -107,6 +123,7 @@
       var ideaText = document.getElementById('ideaText');
       var saveBtn = document.getElementById('saveBtn');
       var toast = document.getElementById('toast');
+      var toastText = document.getElementById('toastText');
 
       function showApp() {
         authChecking.hidden = true;
@@ -157,16 +174,18 @@
         var firstLine = text.split('\n')[0].trim();
         var title = firstLine.length > 80 ? firstLine.slice(0, 80).trim() + '…' : firstLine;
 
+        var newSeq = 0;
         Store.getAll('pieces').then(function (rows) {
           var minOrder = 0;
           var seen = false;
           rows.forEach(function (p) {
             if (p.stage === 'ideation' && (!seen || (p.order || 0) < minOrder)) { minOrder = p.order || 0; seen = true; }
           });
+          newSeq = Store.nextSeq(rows);
           var id = Store.genId();
           var now = Store.nowIso();
           var piece = {
-            id: id, title: title, stage: 'ideation', platforms: [], contentType: 'short',
+            id: id, seq: newSeq, title: title, stage: 'ideation', platforms: [], contentType: 'short',
             notesHtml: textToNotesHtml(text), hasVideo: false,
             order: minOrder - 10, createdAt: now, updatedAt: now
           };
@@ -179,6 +198,7 @@
             return;
           }
           ideaText.value = '';
+          toastText.textContent = 'Saved as #' + String(newSeq).padStart(3, '0');
           toast.classList.add('show');
           setTimeout(function () { toast.classList.remove('show'); }, 2200);
           ideaText.focus();

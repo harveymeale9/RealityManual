@@ -76,6 +76,7 @@ window.RMStore = (function () {
   function nowIso() { return new Date().toISOString(); }
 
   var STAGES = [
+    { id: 'archived', label: 'Archived Ideas' },
     { id: 'ideation', label: 'Ideation' },
     { id: 'outline_started', label: 'Outline Started' },
     { id: 'outline_completed', label: 'Outline Completed' },
@@ -103,10 +104,12 @@ window.RMStore = (function () {
     { id: 'facebook', label: 'Facebook', color: '#5b80b0' }
   ];
 
+  // Only two cadences now, per Harvey — "shorts" covers ultra_short/short/
+  // long_short collectively (app.js rotates which of the three gets the
+  // next slot; see scheduleShorts), "longform" is its own timeline.
+  var SHORT_TYPES = ['ultra_short', 'short', 'long_short'];
   var DEFAULT_CADENCE = {
-    ultra_short: { every: 8, unit: 'hours' },
-    short: { every: 1, unit: 'days' },
-    long_short: { every: 3, unit: 'days' },
+    shorts: { every: 8, unit: 'hours' },
     longform: { every: 7, unit: 'days' }
   };
 
@@ -116,7 +119,12 @@ window.RMStore = (function () {
     return {
       id: SETTINGS_ID,
       cadence: JSON.parse(JSON.stringify(DEFAULT_CADENCE)),
-      sharedCaption: '',
+      lastShortType: '',
+      // Separate templates per Harvey: shorts reuse the same caption every
+      // time, longform needs a fresh per-video tracked link. Both support
+      // a "[LINK]" placeholder (see app.js buildUtmLink/applyCaptionLink)
+      // since he later realized Shorts can carry tracking links too.
+      captions: { shorts: '', longform: '' },
       baseLinkUrl: 'https://realitymanual.com',
       apiKeys: { youtube: '', instagram: '', facebook: '', tiktok: '', transcriptionProvider: '', transcriptionKey: '' }
     };
@@ -126,10 +134,22 @@ window.RMStore = (function () {
     return get('settings', SETTINGS_ID).then(function (s) {
       if (!s) return defaultSettings();
       var d = defaultSettings();
+      // Migrate the old per-content-type cadence/single-caption shape
+      // (four cadence keys, one sharedCaption string) if this settings row
+      // predates today's restructure — best-effort, not a precise mapping.
+      if (s.cadence && (s.cadence.ultra_short || s.cadence.short || s.cadence.long_short) && !s.cadence.shorts) {
+        s.cadence = { shorts: s.cadence.ultra_short || d.cadence.shorts, longform: s.cadence.longform || d.cadence.longform };
+      }
       s.cadence = Object.assign(d.cadence, s.cadence || {});
       s.apiKeys = Object.assign(d.apiKeys, s.apiKeys || {});
-      if (typeof s.sharedCaption !== 'string') s.sharedCaption = '';
+      if (!s.captions) s.captions = {};
+      if (typeof s.sharedCaption === 'string' && !s.captions.shorts && !s.captions.longform) {
+        s.captions.shorts = s.sharedCaption;
+        s.captions.longform = s.sharedCaption;
+      }
+      s.captions = Object.assign(d.captions, s.captions);
       if (typeof s.baseLinkUrl !== 'string') s.baseLinkUrl = d.baseLinkUrl;
+      if (typeof s.lastShortType !== 'string') s.lastShortType = '';
       return s;
     });
   }
@@ -145,8 +165,30 @@ window.RMStore = (function () {
     return unit === 'hours' ? n * 3600000 : n * 86400000;
   }
 
+  // Sequential, human-friendly card IDs ("047", not the internal uuid) —
+  // computed from whatever's already loaded rather than a separate
+  // persisted counter, so quick-add.html (which already fetches all
+  // pieces to compute ordering) and app.js both get the same next number
+  // without a shared counter to keep in sync. Never reused after a
+  // deletion (always max+1), so a number Harvey references by voice stays
+  // meaningful even if an earlier piece is later removed.
+  function nextSeq(rows) {
+    var max = -1;
+    (rows || []).forEach(function (r) { if (typeof r.seq === 'number' && r.seq > max) max = r.seq; });
+    return max + 1;
+  }
+
+  // Substitutes the "[LINK]" shortcode in a caption template with a real
+  // per-piece link (case-insensitive, e.g. "[link]" also matches).
+  function applyCaptionLink(template, link) {
+    return (template || '').replace(/\[LINK\]/gi, link);
+  }
+
   return {
     API_BASE: API_BASE,
+    SHORT_TYPES: SHORT_TYPES,
+    nextSeq: nextSeq,
+    applyCaptionLink: applyCaptionLink,
     getAll: getAll, get: get, put: put, del: del,
     genId: genId, nowIso: nowIso,
     STAGES: STAGES, CONTENT_TYPES: CONTENT_TYPES, PLATFORMS: PLATFORMS,

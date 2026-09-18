@@ -141,13 +141,20 @@
             </div>
           </div>
 
+          <div class="field" id="ytTitlesField" hidden>
+            <label>YouTube title options <span class="field-hint">— up to 3, rotate through if you've got a few</span></label>
+            <input class="title-input" id="fieldYtTitle1" placeholder="Title option 1" maxlength="100" />
+            <input class="title-input" id="fieldYtTitle2" placeholder="Title option 2 (optional)" maxlength="100" />
+            <input class="title-input" id="fieldYtTitle3" placeholder="Title option 3 (optional)" maxlength="100" />
+          </div>
+
           <div class="field" id="captionField">
-            <label>Caption <span class="field-hint">— shared across all uploads, edit in Settings</span></label>
+            <label>Caption <span class="field-hint">— per-type template with a tracked link inserted, edit templates in Settings</span></label>
             <div class="caption-readout" id="captionReadout">—</div>
           </div>
 
-          <div class="field" id="utmField" hidden>
-            <label for="fieldUtmLink">Longform link (with UTM tracking)</label>
+          <div class="field" id="utmField">
+            <label for="fieldUtmLink">Tracked link for this piece</label>
             <div class="utm-row">
               <input class="title-input utm-input" id="fieldUtmLink" readonly />
               <button type="button" class="btn-secondary btn-tiny" id="copyUtmBtn">Copy</button>
