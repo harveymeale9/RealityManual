@@ -6,14 +6,39 @@ on:
       - 'ops-service/**'
   workflow_dispatch: {}
 
+permissions:
+  contents: write
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: SSH in and run the redeploy script
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: 187.124.146.235
-          username: root
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: bash /root/realitymanual-repo/ops-service/deploy.sh
+      - uses: actions/checkout@v4
+
+      # Plain ssh instead of a third-party action, specifically so the raw
+      # output is ours to capture — GitHub's own job-log-download API
+      # requires an Administration repo permission that's been unreliable
+      # to depend on (see ops-service/deploy.sh's own notes), so the next
+      # step commits this output straight into the repo instead, which is
+      # always readable with nothing more than normal git access.
+      - name: Redeploy over SSH
+        run: |
+          set -x
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H 187.124.146.235 >> ~/.ssh/known_hosts 2>&1 | tee ci-output.log
+          ssh -o ConnectTimeout=10 -i ~/.ssh/deploy_key root@187.124.146.235 \
+            'bash /root/realitymanual-repo/ops-service/deploy.sh' 2>&1 | tee -a ci-output.log
+          echo "ssh exit code: ${PIPESTATUS[0]}" | tee -a ci-output.log
+
+      - name: Record CI output back into the repo
+        if: always()
+        run: |
+          mkdir -p ops-service/.ci
+          cp ci-output.log ops-service/.ci/last-run.log 2>/dev/null || echo "no output captured" > ops-service/.ci/last-run.log
+          git config user.email "actions@github.com"
+          git config user.name "github-actions[bot]"
+          git add ops-service/.ci/last-run.log
+          git diff --cached --quiet || git commit -m "CI: record last ops-service deploy output [skip ci]"
+          git push || (git pull --rebase && git push)
