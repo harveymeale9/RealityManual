@@ -242,11 +242,11 @@
       var queueListEl = document.getElementById('vQueueList');
       var queueHintEl = document.getElementById('vQueueHint');
 
-      var VOICE_ACK_DELAY_MS = 10000;
-      // Neutral on purpose — see app.js's identical constant for why: this
-      // plays before CC knows whether the message is a task or a genuine
-      // question, so it can't presume "I'll get to work on that" framing.
-      var RESPOND_ACK_TEXT = 'Still working on that — I’ll have an answer for you in just a moment.';
+      // Still used for the immediate, synchronous ack spoken the instant an
+      // execute-mode message is sent from the mic-recording flow below —
+      // that one is unambiguously always a task by construction (that's the
+      // whole distinction the two buttons encode), so it doesn't need to
+      // wait on a real early_ack the way respond-mode now does.
       var EXECUTE_ACK_TEXT = 'Got it — I’ll take care of that now.';
 
       function showApp() {
@@ -456,28 +456,14 @@
         if (el && el.parentNode) el.parentNode.removeChild(el);
       }
 
-      // Ids this device itself sent by voice and wants spoken aloud once the
-      // reply lands — never applied to a reply that shows up because it was
-      // sent from the desktop panel instead. Same ack-delay pattern as the
-      // desktop Project Manager tab (see app.js for the full rationale):
-      // scheduleVoiceAck speaks a "got it" only if the real reply doesn't
-      // land within VOICE_ACK_DELAY_MS, and onDone below only speaks the
-      // real reply itself when that ack never fired.
-      var voiceAck = {};
-      // fired/spokenText: whichever comes first — CC's own real early_ack
-      // (onEarlyAck below, the common case) or this timeout's generic
-      // fallback (only if early_ack somehow never showed up in time) —
-      // claims the "something has now been said" slot so the other path
-      // never also speaks on top of it.
-      function scheduleVoiceAck(id, mode) {
-        var entry = { fired: false, timer: null, spokenText: null };
-        entry.timer = setTimeout(function () {
-          entry.fired = true;
-          entry.spokenText = mode === 'execute' ? EXECUTE_ACK_TEXT : RESPOND_ACK_TEXT;
-          Voice.speak(entry.spokenText, id).catch(function () {});
-        }, VOICE_ACK_DELAY_MS);
-        voiceAck[id] = entry;
-      }
+      // Ids this device itself sent by voice (respond mode, via the mic) and
+      // wants spoken aloud — never applied to a reply that shows up because
+      // it was sent from the desktop panel instead. Same design as the
+      // desktop Project Manager tab (see app.js for the full rationale): no
+      // fallback timer/canned phrase — CC's own real early_ack is spoken the
+      // moment it arrives, and onDone decides whether the final reply is
+      // also worth speaking on top of it.
+      var voiceAutoSpeak = {};
 
       // Same shared engine the desktop Project Manager tab uses (see
       // lib/voiceClient.js): first tick loads whatever's already in the
@@ -520,11 +506,7 @@
             // visible even for a typed/no-speech send, not just spoken.
             var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
             if (typingEl) typingEl.textContent = row.early_ack;
-            var ack = voiceAck[row.id];
-            if (!ack || ack.fired) return;
-            ack.fired = true;
-            ack.spokenText = row.early_ack;
-            clearTimeout(ack.timer);
+            if (!voiceAutoSpeak[row.id]) return;
             Voice.speak(row.early_ack, row.id).catch(function () {});
           },
           onDone: function (row) {
@@ -534,27 +516,26 @@
             // like any other reply instead of a generic "Done" placeholder.
             addAssistantMessage(row.reply_text || '', row.transcript, row.id);
             if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
-            var ack = voiceAck[row.id];
-            if (ack) {
-              clearTimeout(ack.timer);
-              delete voiceAck[row.id];
-              // Always speak the real answer, whether or not an ack already
-              // fired — see app.js's identical comment for why, including
-              // the dedupe against a turn with no tool calls where the
-              // early ack already was the complete final answer.
+            if (voiceAutoSpeak[row.id]) {
+              delete voiceAutoSpeak[row.id];
+              // See app.js's identical comment: only speak the final reply
+              // too when this turn was genuinely quick/no-tool-calls — a
+              // turn that did real work only gets the one spoken
+              // acknowledgment, with the actual answer landing as text.
+              var usedTools = !!(row.activity_log && row.activity_log.length);
               var replyText = row.reply_text || '';
-              var alreadySaidIt = ack.spokenText && replyText.trim() === ack.spokenText.trim();
-              if (!alreadySaidIt) Voice.speak(replyText, row.id).catch(function () {});
+              var alreadySaidIt = row.early_ack && replyText.trim() === row.early_ack.trim();
+              if (!usedTools && !alreadySaidIt && row.mode !== 'execute') {
+                Voice.speak(replyText, row.id).catch(function () {});
+              }
             }
           },
           onError: function (row) {
             removeTyping(row.id);
             addMessage('error', row.error_message || 'Something went wrong.', row.id, null, row.transcript);
             if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
-            var ack = voiceAck[row.id];
-            if (ack) {
-              clearTimeout(ack.timer);
-              delete voiceAck[row.id];
+            if (voiceAutoSpeak[row.id]) {
+              delete voiceAutoSpeak[row.id];
               Voice.speak(row.error_message || 'Something went wrong.', row.id).catch(function () {});
             }
           },
@@ -655,15 +636,18 @@
               // sync engine's onDone (above) renders the real reply and
               // decides whether it's still worth speaking once it lands.
               if (mode === 'execute') {
-                // Execute never speaks the real result either way, so there's
-                // no "redundant double-speak" risk — ack immediately.
+                // Execute is unambiguously always a task by construction, so
+                // it always gets this immediate "I'll take care of that"
+                // ack — no need to wait on a real early_ack the way respond
+                // mode does, and execute never speaks the real result either
+                // way, so there's no "redundant double-speak" risk.
                 Voice.speak(EXECUTE_ACK_TEXT, created.id).catch(function () {});
               } else {
-                // Same delayed/cancelable ack as desktop: a quick question
-                // just gets its real answer spoken directly (ack never
-                // fires); only a genuinely slow turn gets the ack, and then
-                // stays text-only when it finishes (see onDone above).
-                scheduleVoiceAck(created.id, mode);
+                // Same as desktop: mark it eligible for auto-speak and let
+                // the shared sync engine's onEarlyAck/onDone (above) decide
+                // what actually gets spoken and when — no fallback timer,
+                // no canned phrase.
+                voiceAutoSpeak[created.id] = true;
               }
             });
           }).then(function () {

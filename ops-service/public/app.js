@@ -313,23 +313,6 @@
       '</div>' +
     '</div>';
 
-  // How long to wait after sending a voice-originated question before
-  // speaking a "got it, working on it" ack — canceled if the real reply
-  // beats it (the common case: a quick question just gets its answer
-  // spoken directly, no redundant ack first). If the ack does fire, the
-  // real reply lands as text only, never spoken late — see onDone below.
-  // 10s comfortably clears normal quick-question latency (observed ~5-6s
-  // end to end) without making Harvey wait through a task that's
-  // genuinely going to take minutes before hearing anything at all.
-  var VOICE_ACK_DELAY_MS = 10000;
-  // Neutral on purpose — this plays before CC knows whether the message
-  // turns out to be a task or an actual question, so it can't presume
-  // "I'll get to work on that" framing (Harvey: that phrasing is only
-  // right for a genuine task, and it was playing for real questions too,
-  // which then never got a spoken answer at all — see onDone below).
-  var RESPOND_ACK_TEXT = 'Still working on that — I’ll have an answer for you in just a moment.';
-  var EXECUTE_ACK_TEXT = 'Got it — I’ll take care of that now.';
-
   function bootProjectManager() {
     var Voice = window.RMVoice;
     var thread = document.getElementById('pmThread');
@@ -592,16 +575,19 @@
       activityEl.scrollTop = activityEl.scrollHeight;
     }
 
-    // Ids this device sent via voice on itself and wants spoken aloud once
-    // the reply lands — never applied to a reply that shows up because
-    // another device (or an earlier page load) triggered it. Each entry's
-    // ackTimer speaks a "got it, working on it" ack if the real reply
-    // hasn't landed within VOICE_ACK_DELAY_MS; ackFired records whether
-    // that happened, so onDone knows whether the real reply should still
-    // be spoken (fast turn, ack never fired) or stay text-only (ack
-    // already covered it — speaking the real answer too, possibly minutes
-    // later, is exactly what Harvey asked NOT to happen).
-    var voiceAck = {};
+    // Ids this device sent via voice on itself and wants spoken aloud —
+    // never applied to a reply that shows up because another device (or an
+    // earlier page load) triggered it. No fallback timer/canned phrase
+    // anymore (removed per Harvey: the repeated generic line was worse than
+    // the problem it solved) — CC's own real early_ack (server.js's
+    // unconditional acknowledgment rule) is spoken the moment it arrives,
+    // full stop, no race against a timeout. Whether the final reply is
+    // *also* spoken depends on whether the turn actually did any work: a
+    // quick, no-tool-call turn's early_ack more or less IS its answer, so
+    // onDone speaks the real reply too (the common case, feels instant); a
+    // turn that used tools only gets the one spoken acknowledgment, with
+    // the real answer landing as text — see onDone below.
+    var voiceAutoSpeak = {};
 
     // The single source of truth for the thread: on first tick it loads
     // whatever's already in the table (so opening this tab resumes the last
@@ -627,11 +613,7 @@
         // even for a typed/no-speech send, not just spoken.
         var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
         if (typingEl) typingEl.textContent = row.early_ack;
-        var ack = voiceAck[row.id];
-        if (!ack || ack.fired) return;
-        ack.fired = true;
-        ack.spokenText = row.early_ack;
-        clearTimeout(ack.timer);
+        if (!voiceAutoSpeak[row.id]) return;
         Voice.speak(row.early_ack, row.id).catch(function () {});
       },
       onDone: function (row) {
@@ -641,51 +623,39 @@
         // any other reply instead of a generic "Done" placeholder.
         addAssistantMessage(row.reply_text || '', row.transcript, row.id);
         if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
-        var ack = voiceAck[row.id];
-        if (ack) {
-          clearTimeout(ack.timer);
-          delete voiceAck[row.id];
-          // Always speak the real answer here, whether or not an ack
-          // already fired — a question sent by voice deserves an actual
-          // spoken answer, not silence (text-only) just because it took a
-          // while to investigate. Skip only if the early ack we already
-          // spoke turned out to BE the complete final answer verbatim (a
-          // turn with no tool calls) — otherwise this would say the exact
-          // same sentence twice in a row.
+        if (voiceAutoSpeak[row.id]) {
+          delete voiceAutoSpeak[row.id];
+          // Whether the final answer also gets spoken, on top of the
+          // acknowledgment already spoken by onEarlyAck, depends on
+          // whether this turn actually needed real work — Harvey's own
+          // instruction: a quick/easy turn should just get its answer
+          // spoken directly (no separate ack needed, and this is exactly
+          // that case, since a turn with no tool calls has nothing left
+          // to add beyond what the acknowledgment already said); a turn
+          // that needed real thinking/execution should only get the
+          // spoken acknowledgment ("I'll look into it"), with the actual
+          // answer landing as text, not a second spoken message stacked
+          // on top of the first.
+          var usedTools = !!(row.activity_log && row.activity_log.length);
           var replyText = row.reply_text || '';
-          var alreadySaidIt = ack.spokenText && replyText.trim() === ack.spokenText.trim();
-          if (!alreadySaidIt) Voice.speak(replyText, row.id).catch(function () {});
+          var alreadySaidIt = row.early_ack && replyText.trim() === row.early_ack.trim();
+          if (!usedTools && !alreadySaidIt && row.mode !== 'execute') {
+            Voice.speak(replyText, row.id).catch(function () {});
+          }
         }
       },
       onError: function (row) {
         removeTyping(row.id);
         addMessage('error', row.error_message || 'Something went wrong.', row.id, null, row.transcript);
         if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
-        var ack = voiceAck[row.id];
-        if (ack) {
-          clearTimeout(ack.timer);
-          delete voiceAck[row.id];
+        if (voiceAutoSpeak[row.id]) {
+          delete voiceAutoSpeak[row.id];
           Voice.speak(row.error_message || 'Something went wrong.', row.id).catch(function () {});
         }
       },
       onActivity: function (row) { renderActivity(row.activity_log); },
       onTick: function (rows) { renderQueue(rows); pastFirstTick = true; }
     });
-
-    // fired/spokenText: whichever comes first — CC's own real early_ack
-    // (onEarlyAck above, the common case) or this timeout's generic
-    // fallback phrase (only if early_ack somehow never showed up in time)
-    // — claims the "something has now been said" slot so the other path
-    // never also speaks on top of it.
-    function scheduleVoiceAck(id, mode) {
-      var entry = { fired: false, timer: null, spokenText: null };
-      entry.timer = setTimeout(function () {
-        entry.fired = true;
-        entry.spokenText = mode === 'execute' ? EXECUTE_ACK_TEXT : RESPOND_ACK_TEXT;
-        Voice.speak(entry.spokenText, id).catch(function () {});
-      }, VOICE_ACK_DELAY_MS);
-      voiceAck[id] = entry;
-    }
 
     function sendText(text, mode, opts) {
       opts = opts || {};
@@ -697,7 +667,7 @@
       renderActivity(null);
       Voice.sendMessage(text.trim(), mode, image).then(function (created) {
         typingEl.dataset.msgId = created.id;
-        if (autoSpeak) scheduleVoiceAck(created.id, mode);
+        if (autoSpeak) voiceAutoSpeak[created.id] = true;
         pmSync.markKnown(created);
       }).catch(function (err) {
         if (typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);

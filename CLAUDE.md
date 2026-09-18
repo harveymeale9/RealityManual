@@ -3992,3 +3992,86 @@ architecture change (a second model call per message, latency/cost
 tradeoffs, and needs to avoid reintroducing the cold-start problem §74
 already solved by moving to a persistent session) — worth doing only
 once it's clear prompt-based fixes genuinely can't close this gap.
+
+---
+
+# 101. Voice Ack: Fallback Timer Removed Entirely — No More Canned Phrase, Ever
+
+§100's fix (unconditional acknowledgment rule + per-message reminder) did
+make `early_ack` reliably good — but it exposed a different, structural
+problem underneath, which is what this section fixes.
+
+**What actually happened, diagnosed against the live DB (not guessed):**
+a "just checking in" message got a genuinely good `early_ack`, but the
+full turn took 11.44 seconds — and the client's `VOICE_ACK_DELAY_MS`
+fallback timer (§74/89) was still set to fire at 10s if the real
+`early_ack` hadn't shown up yet. The fallback fired first, spoke the old
+canned `RESPOND_ACK_TEXT` ("Still working on that — I'll have an answer
+for you in just a moment"), and then the real (good) `early_ack`/reply
+landed a beat later — Harvey heard the generic line even though the
+mechanism built to replace it was working correctly underneath it. A
+timing race, not a content bug.
+
+**Harvey's response was a full rebuild instruction, not another prompt
+tweak**, given verbatim: respond as quickly as possible with something
+"made up each time... completely different... based on what I've said";
+a quick/easy message should just get answered; a message needing real
+thinking/execution should get told "I'm going to go think about it and
+text you a reply" — and, critically, **not both** a spoken ack and then
+a spoken final answer stacked on top of it ("you keep sending this same
+canned message over and over and then you keep sending another one").
+This is a deliberate reversal of §87's original "always speak the real
+answer regardless" stance, made after Harvey directly experienced why
+that produces a double-message feeling on any turn that also gets a
+spoken acknowledgment.
+
+**Rebuilt in `ops-service/public/app.js` and `ops-service/public/voice-mobile.html`
+(client-side only — no `server.js` change; `early_ack`/`activity_log`/
+`mode` were already reliably present on every row):**
+
+- **Fallback timer deleted outright.** `VOICE_ACK_DELAY_MS`,
+  `RESPOND_ACK_TEXT`, and `scheduleVoiceAck()` are gone from both files —
+  there is no longer any canned phrase anywhere in the respond-mode path,
+  and therefore no race for a slow-but-correct `early_ack` to lose. The
+  old `voiceAck` map (`{fired, timer, spokenText}`) is replaced by a
+  plain `voiceAutoSpeak` map (`{id: true}`) — just an eligibility flag,
+  set at send time, with no timer bookkeeping at all.
+- **`onEarlyAck`** speaks `row.early_ack` the instant it arrives, if the
+  message is voice-auto-speak-eligible — unconditionally now, no
+  fired-flag race to manage, since `syncThread`'s own per-row tracking
+  already guarantees this fires at most once per row.
+- **`onDone`** now decides whether the *final* reply is also worth
+  speaking, based on whether the turn actually did any work:
+  `usedTools = !!(row.activity_log && row.activity_log.length)`. If the
+  turn used no tools at all (a quick, directly-answerable message), the
+  final reply is spoken too — for that class of turn the early_ack is
+  essentially the whole answer already, so this reads as one immediate
+  spoken response, not two. If the turn used tools (real thinking/
+  execution, per Harvey's own framing) or was sent in execute mode, the
+  final reply is text-only — the one spoken acknowledgment from
+  `onEarlyAck` is the only thing that gets spoken for that turn. The
+  exact-match dedupe against `row.early_ack` (§89) is kept as a second
+  safety net for the edge case where a no-tool turn's early_ack somehow
+  was itself the complete final answer verbatim.
+- **`EXECUTE_ACK_TEXT`** stays canned and immediate in
+  `voice-mobile.html`'s mic-send flow only (removed from `app.js`,
+  which never used it directly) — execute mode is unambiguously always a
+  task by construction, so there's no ambiguity to wait on a real
+  `early_ack` for, and it still never speaks the real result afterward,
+  so there's no double-speak risk there either. This one instance of
+  canned text was deliberately left alone; Harvey's complaint was about
+  the respond-mode fallback specifically racing against/duplicating a
+  real answer, not about this one.
+
+**Net effect:** a quick conversational check-in gets one spoken
+response, spoken as soon as it's ready, made up fresh by the model each
+time (via `early_ack`) — never the old canned line, never twice. A turn
+that genuinely needs tool calls gets one spoken "here's what I'm about
+to do," with the real answer delivered as text once it's ready, per
+Harvey's explicit instruction. Frontend-only change (`app.js`,
+`voice-mobile.html`), so per §93 this should deploy via the fast path —
+no Docker rebuild/restart, no killed session — unlike §100's fix.
+
+Verified via `node --check` on `app.js` and on the extracted inline
+`<script>` of `voice-mobile.html`; not yet verified against a real live
+voice exchange on the deployed service — flag this if picked up cold.
