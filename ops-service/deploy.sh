@@ -53,7 +53,6 @@ if [ -n "$(git status --porcelain)" ]; then
   echo "local changes present in $REPO_DIR — auto-stashing before pull"
   git stash push -u -m "deploy.sh auto-stash $(date -u +%FT%TZ)" || fail "could not stash local changes in $REPO_DIR"
 fi
-OLD_HEAD="$(git rev-parse HEAD)"
 git pull || fail "git pull failed in $REPO_DIR"
 NEW_HEAD="$(git rev-parse HEAD)"
 
@@ -75,22 +74,30 @@ chown -R 1000:1000 "$RUNTIME_REPO_DIR"
 # ops-service/public/ live out of $RUNTIME_REPO_DIR (just pulled above, no
 # rebuild needed for it to take effect), the only pushes that genuinely
 # need the Node process to reload code are ones touching the *backend*:
-# server.js itself, src/, the Dockerfile, or the dependency lockfiles. A
-# push that's purely frontend files (or, e.g., a workflow_dispatch re-run
-# with nothing new to pull at all) is already fully live from the git
-# pull above — skip the rebuild/restart entirely rather than pay a ~70s
-# image rebuild and an interruption for no code-level reason.
+# server.js itself, src/, the Dockerfile, or the dependency lockfiles.
+#
+# Compared against the commit the *currently running image was actually
+# built from* (recorded below after every real rebuild), not against
+# whatever this particular `git pull` happened to change — REPO_DIR
+# doubles as an interactive session's own working copy (see above), so it
+# can already be sitting ahead of the last deploy before this script's
+# pull even runs (e.g. a session committed+pushed directly from this same
+# checkout), which would make an old-HEAD/new-HEAD comparison see "no
+# change" and wrongly skip a rebuild that's actually still owed. This file
+# lives in $DATA_DIR so it survives every container recreation.
+LAST_BUILD_FILE="$DATA_DIR/last-image-commit.txt"
+LAST_BUILD_COMMIT="$(cat "$LAST_BUILD_FILE" 2>/dev/null || true)"
 NEEDS_REBUILD=1
-if [ "$OLD_HEAD" = "$NEW_HEAD" ]; then
-  NEEDS_REBUILD=0
-elif [ -z "$(git diff --name-only "$OLD_HEAD" "$NEW_HEAD" -- \
-  ops-service/server.js ops-service/src ops-service/package.json \
-  ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh)" ]; then
-  NEEDS_REBUILD=0
+if [ -n "$LAST_BUILD_COMMIT" ] && git cat-file -e "${LAST_BUILD_COMMIT}^{commit}" 2>/dev/null; then
+  if [ -z "$(git diff --name-only "$LAST_BUILD_COMMIT" "$NEW_HEAD" -- \
+    ops-service/server.js ops-service/src ops-service/package.json \
+    ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh)" ]; then
+    NEEDS_REBUILD=0
+  fi
 fi
 
 if [ "$NEEDS_REBUILD" = "0" ]; then
-  echo "no backend changes between $OLD_HEAD and $NEW_HEAD — already live via git pull, skipping rebuild/restart"
+  echo "no backend changes between $LAST_BUILD_COMMIT and $NEW_HEAD — already live via git pull, skipping rebuild/restart"
   exit 0
 fi
 
@@ -106,6 +113,7 @@ docker stop "$CONTAINER" 2>/dev/null || true
 docker rm "$CONTAINER" 2>/dev/null || true
 
 if docker run "${RUN_ARGS[@]}" "$IMAGE"; then
+  echo "$NEW_HEAD" > "$LAST_BUILD_FILE"
   echo "rm-ops-service redeployed at $(git -C "$REPO_DIR" rev-parse --short HEAD)"
 else
   echo "docker run failed on the new image — rolling back to the previous one"
