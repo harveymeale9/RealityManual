@@ -4075,3 +4075,50 @@ no Docker rebuild/restart, no killed session — unlike §100's fix.
 Verified via `node --check` on `app.js` and on the extracted inline
 `<script>` of `voice-mobile.html`; not yet verified against a real live
 voice exchange on the deployed service — flag this if picked up cold.
+
+---
+
+# 102. Voice Ack Content: "I'll Confirm in Chat" Framing for Task Turns
+
+Harvey's follow-up to §101, given by voice: confirmed the timing/dedupe
+rebuild is the right shape, but wanted the *wording* of the acknowledgment
+to make the distinction explicit rather than leaving it implicit in
+client-side gating alone. In his words: if it's a question/quick lookup,
+just answer it; if it's an instruction to go do something, the spoken
+reply should be "Okay, I'm gonna go and do the task, and I'll send
+confirmation in the chat once I'm done" — not a literal canned line, but
+that framing, made up fresh each time based on what the task actually is.
+
+**What was already true (§101, client-side, unchanged here):** a turn
+with no tool calls gets its full final answer spoken automatically; a
+turn that used tools only ever gets the one spoken acknowledgment, with
+the real result landing as text in the chat. That mechanical behavior
+was already correct — what was missing was that `VOICE_SYSTEM_PROMPT`
+never told the model *why* that matters or what the acknowledgment
+sentence should therefore actually say for a task-shaped turn. Its
+existing examples ("Checking the deploy log now...") are lead-ins to an
+investigation, not an explicit "I'll tell you in the chat" framing.
+
+**Fix:** added a new paragraph to `VOICE_SYSTEM_PROMPT` in
+`ops-service/server.js`, right after the existing "Quick verbal
+acknowledgment" paragraph, spelling out the two reply shapes directly:
+a question/lookup just gets answered (the app already speaks the whole
+answer for a no-tool-call turn, so nothing extra is needed); an
+instruction to do something gets an acknowledgment that explicitly says
+the work is starting and the result will follow in the chat — worded
+fresh each time, never the same phrase twice, never a vague "I'll get
+right on that."
+
+**This is a `server.js` change**, unlike §101's purely frontend rebuild —
+per §93 it will trigger a full Docker rebuild+restart of `rm-ops-service`
+on the next deploy, which (per §74/§88's standing caveat) kills this
+agent's own current process mid-task, since this session *is* the
+headless Project Manager agent running inside that container. Logged to
+the work log immediately before pushing so the state is clear on resume,
+per the Host Access paragraph's own instruction for exactly this
+situation.
+
+Verified via `node --check server.js` only — not yet verified against a
+real live voice exchange on the deployed service (same caveat as §101);
+confirm both the "quick answer" and "task, confirm in chat" phrasing
+sound right in practice once this is live.
