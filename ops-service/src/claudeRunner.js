@@ -1,27 +1,45 @@
-// Invokes the real `claude` CLI headlessly (non-interactive print mode) so
-// the voice app talks to an actual Claude Code agent with full tool access
-// to the realitymanual-repo project — not a separate chat API. Requires the
-// same ~/.claude OAuth credentials and the repo itself to be available in
-// this process's filesystem (see Dockerfile / VPS run command: both are
-// bind-mounted from the host).
+// Invokes the real Claude Code agent for the voice app — not a separate chat
+// API, an actual Claude Code session with full tool access to
+// realitymanual-repo. Previously this spawned a brand-new `claude -p --resume
+// <id>` process on every single voice message: every message paid a full CLI
+// cold-start (reloading CLAUDE.md, skills, hooks, MCP servers) before any
+// model work even began, which is most of what made the Project Manager tab
+// feel slow. This version keeps ONE Claude Agent SDK session alive across
+// many messages (the SDK's documented "streaming input mode" — an
+// AsyncIterable prompt fed by a push queue keeps a single underlying process
+// running indefinitely) and just pushes each new voice message into it, so
+// only the very first message after a (re)start pays the cold-start cost.
+//
+// Auth is unchanged: this still runs as the non-root `node` user with
+// CLAUDE_CODE_OAUTH_TOKEN in the environment (see CLAUDE.md section 74), and
+// the SDK is pointed at the same pinned `claude` CLI binary the Dockerfile
+// already installs (via pathToClaudeCodeExecutable) rather than whatever
+// binary the SDK package would otherwise bundle, so this is the exact same
+// auth path that was already proven working, just invoked differently.
 'use strict';
-const { spawn } = require('child_process');
+const { query } = require('@anthropic-ai/claude-agent-sdk');
 const crypto = require('crypto');
+const { execFileSync } = require('child_process');
 
-const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
 const CLAUDE_REPO_DIR = process.env.CLAUDE_REPO_DIR || '/root/realitymanual-repo';
 const DEFAULT_TIMEOUT_MS = 20 * 60 * 1000;
 
-// Turns one stream-json event into short, human-readable activity line(s)
-// for the Project Manager tab's live "what CC is doing" pane — a glance at
-// tool calls and intermediate text, never the full tool input/output.
+const CLAUDE_BIN_PATH = (function resolveClaudeBin() {
+  try {
+    return execFileSync('which', [process.env.CLAUDE_BIN || 'claude']).toString().trim() || undefined;
+  } catch (e) {
+    // Fall back to the SDK's own bundled binary rather than fail startup.
+    return undefined;
+  }
+})();
+
+// Turns one SDK message into short, human-readable activity line(s) for the
+// Project Manager tab's live "what CC is doing" pane — a glance at tool
+// calls and intermediate thinking, never the final reply text (that's the
+// clean left-column result, owned exclusively by the `result` message).
 function describeEvent(evt) {
   if (!evt || typeof evt !== 'object') return null;
   if (evt.type === 'assistant' && evt.message && Array.isArray(evt.message.content)) {
-    // Deliberately skips plain `text` blocks: that's the model's actual
-    // reply content, which the Project Manager tab already shows as the
-    // clean result on the left — this feed is only the "how" (thinking +
-    // tool calls), never a duplicate of the "what".
     const lines = [];
     evt.message.content.forEach(function (block) {
       if (block.type === 'thinking' && block.thinking && block.thinking.trim()) {
@@ -70,91 +88,198 @@ function extractToolResultText(block) {
   return text.replace(/\s+/g, ' ').trim().slice(0, 300);
 }
 
-function runClaude(opts) {
-  const prompt = opts.prompt;
-  const sessionId = opts.sessionId;
-  const appendSystemPrompt = opts.appendSystemPrompt;
-  const timeoutMs = opts.timeoutMs || DEFAULT_TIMEOUT_MS;
-  const onActivity = typeof opts.onActivity === 'function' ? opts.onActivity : function () {};
-  const newSessionId = crypto.randomUUID();
+function describeErr(err) {
+  return (err && err.message) || String(err);
+}
 
-  const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose', '--dangerously-skip-permissions'];
-  if (sessionId) args.push('--resume', sessionId);
-  else args.push('--session-id', newSessionId);
-  if (appendSystemPrompt) args.push('--append-system-prompt', appendSystemPrompt);
-
-  return new Promise(function (resolve) {
-    let child;
-    try {
-      child = spawn(CLAUDE_BIN, args, { cwd: CLAUDE_REPO_DIR, env: process.env });
-    } catch (err) {
-      return resolve({ ok: false, error: 'spawn_failed: ' + err.message });
+// A push queue exposed as an async generator: query()'s streaming-input mode
+// reads this continuously, and it simply waits (without ending the session)
+// whenever nothing new has been pushed yet — this is what lets one session
+// span many HTTP requests instead of one process per request.
+function createMessageQueue() {
+  const buffer = [];
+  let waiter = null;
+  function push(msg) {
+    if (waiter) {
+      const resolve = waiter;
+      waiter = null;
+      resolve(msg);
+    } else {
+      buffer.push(msg);
     }
+  }
+  async function* generator() {
+    for (;;) {
+      if (buffer.length) {
+        yield buffer.shift();
+        continue;
+      }
+      yield await new Promise(function (resolve) { waiter = resolve; });
+    }
+  }
+  return { push: push, generator: generator() };
+}
 
-    let buffer = '';
-    let stderr = '';
+let currentSession = null;
+
+// Resolves any turns still waiting on this session once it dies (crash,
+// unexpected end, or a failed resume at startup) so a caller never hangs
+// past its own per-turn timeout.
+function failAllPending(sess, err) {
+  const message = 'session_broken: ' + describeErr(err);
+  sess.pending.forEach(function (turn) { turn.resolve({ ok: false, error: message }); });
+  sess.pending.clear();
+}
+
+function handleEvent(sess, evt) {
+  if (evt.type === 'system' && evt.subtype === 'init') {
+    sess.sessionId = evt.session_id;
+    return;
+  }
+  if (evt.type === 'result') {
+    // Only one turn is ever in flight at a time (server.js's voiceQueue
+    // serializes messages), so the sole pending entry is always this
+    // result's turn — user_message_uuid is read first where present as the
+    // documented join key, with that single-entry fallback covering older
+    // producers that omit it.
+    const turn = (evt.user_message_uuid && sess.pending.get(evt.user_message_uuid)) ||
+      sess.pending.values().next().value;
+    if (!turn) return;
+    sess.pending.delete(turn.uuid);
+    if (evt.is_error) {
+      const detail = evt.result ||
+        (Array.isArray(evt.errors) && evt.errors.join('; ')) ||
+        (evt.subtype || 'error');
+      turn.resolve({ ok: false, error: String(detail), sessionId: evt.session_id });
+    } else {
+      turn.resolve({ ok: true, replyText: evt.result || '', sessionId: evt.session_id });
+    }
+    return;
+  }
+  const lines = describeEvent(evt);
+  if (lines && sess.pending.size) {
+    const turn = sess.pending.values().next().value;
+    lines.forEach(turn.onActivity);
+  }
+}
+
+function createSession(resumeId, appendSystemPrompt) {
+  const queue = createMessageQueue();
+  const iterator = query({
+    prompt: queue.generator,
+    options: {
+      cwd: CLAUDE_REPO_DIR,
+      resume: resumeId || undefined,
+      permissionMode: 'bypassPermissions',
+      allowDangerouslySkipPermissions: true,
+      pathToClaudeCodeExecutable: CLAUDE_BIN_PATH,
+      systemPrompt: appendSystemPrompt
+        ? { type: 'preset', preset: 'claude_code', append: appendSystemPrompt, snapshot: true }
+        : undefined
+    }
+  });
+
+  const sess = {
+    push: queue.push,
+    iterator: iterator,
+    pending: new Map(),
+    broken: false,
+    sessionId: resumeId || null
+  };
+
+  let readySettled = false;
+  let readyResolve, readyReject;
+  sess.ready = new Promise(function (resolve, reject) { readyResolve = resolve; readyReject = reject; });
+
+  (async function pump() {
+    try {
+      for await (const evt of iterator) {
+        if (!readySettled && evt.type === 'system' && evt.subtype === 'init') {
+          readySettled = true;
+          readyResolve();
+        }
+        handleEvent(sess, evt);
+      }
+      throw new Error('session_ended_unexpectedly');
+    } catch (err) {
+      sess.broken = true;
+      if (!readySettled) { readySettled = true; readyReject(err); }
+      failAllPending(sess, err);
+    } finally {
+      if (currentSession === sess) currentSession = null;
+    }
+  })();
+
+  return sess;
+}
+
+// Returns the live session, starting one (resuming `resumeId` if given) if
+// none is currently alive. A dead/unresolvable `resumeId` (e.g. the CLI's
+// local session store got wiped by a container rebuild) rejects here rather
+// than hanging — the caller falls back to a brand-new session.
+async function ensureSession(resumeId, appendSystemPrompt) {
+  if (currentSession && !currentSession.broken) return currentSession;
+  const sess = createSession(resumeId, appendSystemPrompt);
+  currentSession = sess;
+  await sess.ready;
+  return sess;
+}
+
+function runTurn(sess, prompt, timeoutMs, onActivity) {
+  const uuid = crypto.randomUUID();
+  return new Promise(function (resolvePromise) {
     let settled = false;
-    let finalResult = null;
-
-    const killTimer = setTimeout(function () {
+    const timeoutHandle = setTimeout(function () {
       if (settled) return;
       settled = true;
-      child.kill('SIGKILL');
-      resolve({ ok: false, error: 'timed_out after ' + Math.round(timeoutMs / 1000) + 's' });
+      sess.pending.delete(uuid);
+      if (typeof sess.iterator.interrupt === 'function') {
+        sess.iterator.interrupt().catch(function () {});
+      }
+      resolvePromise({ ok: false, error: 'timed_out after ' + Math.round(timeoutMs / 1000) + 's' });
     }, timeoutMs);
 
-    function handleLine(line) {
-      line = line.trim();
-      if (!line) return;
-      let evt;
-      try { evt = JSON.parse(line); } catch (e) { return; }
-      if (evt.type === 'result') {
-        finalResult = evt;
-        return;
-      }
-      try {
-        const lines = describeEvent(evt);
-        if (lines) lines.forEach(onActivity);
-      } catch (e) { /* a malformed/unexpected event should never break the run */ }
-    }
-
-    child.stdout.on('data', function (d) {
-      buffer += d;
-      let idx;
-      while ((idx = buffer.indexOf('\n')) !== -1) {
-        handleLine(buffer.slice(0, idx));
-        buffer = buffer.slice(idx + 1);
+    sess.pending.set(uuid, {
+      uuid: uuid,
+      onActivity: onActivity,
+      resolve: function (result) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutHandle);
+        resolvePromise(result);
       }
     });
-    child.stderr.on('data', function (d) { stderr += d; });
 
-    child.on('error', function (err) {
-      if (settled) return;
-      settled = true;
-      clearTimeout(killTimer);
-      resolve({ ok: false, error: 'process_error: ' + err.message });
-    });
-
-    child.on('close', function (code) {
-      if (settled) return;
-      settled = true;
-      clearTimeout(killTimer);
-      if (buffer.trim()) handleLine(buffer);
-      if (code !== 0) {
-        return resolve({ ok: false, error: 'exit_code_' + code + ': ' + stderr.slice(-2000), sessionId: finalResult && finalResult.session_id });
-      }
-      if (!finalResult) {
-        return resolve({ ok: false, error: 'no_result_event: ' + stderr.slice(-2000) });
-      }
-      if (finalResult.is_error) {
-        const detail = finalResult.result ||
-          (Array.isArray(finalResult.errors) && finalResult.errors.join('; ')) ||
-          stderr.slice(-2000);
-        return resolve({ ok: false, error: (finalResult.subtype || 'error') + ': ' + detail, sessionId: finalResult.session_id });
-      }
-      resolve({ ok: true, replyText: finalResult.result || '', sessionId: finalResult.session_id || sessionId || newSessionId });
+    sess.push({
+      type: 'user',
+      message: { role: 'user', content: prompt },
+      parent_tool_use_id: null,
+      uuid: uuid
     });
   });
+}
+
+async function runClaude(opts) {
+  const prompt = opts.prompt;
+  const timeoutMs = opts.timeoutMs || DEFAULT_TIMEOUT_MS;
+  const onActivity = typeof opts.onActivity === 'function' ? opts.onActivity : function () {};
+  const appendSystemPrompt = opts.appendSystemPrompt;
+
+  let sess;
+  try {
+    sess = await ensureSession(opts.sessionId, appendSystemPrompt);
+  } catch (err) {
+    // The requested resume target is gone (e.g. session store wiped by a
+    // rebuild) — retry once as a brand-new session instead of failing the
+    // whole message outright.
+    try {
+      sess = await ensureSession(null, appendSystemPrompt);
+    } catch (err2) {
+      return { ok: false, error: 'session_start_failed: ' + describeErr(err2) };
+    }
+  }
+
+  return runTurn(sess, prompt, timeoutMs, onActivity);
 }
 
 module.exports = { runClaude };
