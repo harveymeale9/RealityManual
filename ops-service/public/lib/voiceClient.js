@@ -4,8 +4,38 @@
 window.RMVoice = (function () {
   var API_BASE = window.RMStore ? window.RMStore.API_BASE : '';
 
+  // Screen Wake Lock: held for the duration of a recording so the phone
+  // doesn't auto-lock mid-sentence (Harvey couldn't find the stop button
+  // again once the screen went dark). Feature-detected — Safari <16.4 and
+  // any non-secure context just silently skip it, same "never break the
+  // page over this" spirit as the rest of this file.
+  var wakeLock = null;
+  function requestWakeLock() {
+    if (!('wakeLock' in navigator)) return;
+    navigator.wakeLock.request('screen').then(function (lock) { wakeLock = lock; }).catch(function () {});
+  }
+  function releaseWakeLock() {
+    if (!wakeLock) return;
+    var lock = wakeLock;
+    wakeLock = null;
+    lock.release().catch(function () {});
+  }
+
   function startRecording() {
-    return navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+    // echoCancellation/noiseSuppression/autoGainControl explicitly off:
+    // Chrome's default "voice processing" audio path is the same one used
+    // for an actual phone call, so on Android it forces a connected
+    // Bluetooth headset to switch from its music (A2DP) profile to the
+    // call (HFP) profile — which is what plays the "call connected"/"call
+    // ended" tone Harvey was hearing. Turning processing off lets Chrome
+    // capture the mic without needing that switch. Trade-off: slightly
+    // lower mic quality (no echo cancellation), acceptable for short
+    // dictation; this is the only lever available from a web page — there
+    // is no API to directly block the Bluetooth profile switch itself.
+    return navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    }).then(function (stream) {
+      requestWakeLock();
       var mimeType = (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/webm')) ? 'audio/webm' : '';
       var recorder = mimeType ? new MediaRecorder(stream, { mimeType: mimeType }) : new MediaRecorder(stream);
       var chunks = [];
@@ -16,6 +46,7 @@ window.RMVoice = (function () {
           return new Promise(function (resolve) {
             recorder.addEventListener('stop', function () {
               stream.getTracks().forEach(function (t) { t.stop(); });
+              releaseWakeLock();
               resolve(new Blob(chunks, { type: recorder.mimeType || 'audio/webm' }));
             });
             recorder.stop();

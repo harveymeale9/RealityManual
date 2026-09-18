@@ -3300,3 +3300,37 @@ too, not just successful ones, for the same reason. A small
 `replyToSnippet()` helper is duplicated between the two files rather than
 factored into `voiceClient.js`, matching this codebase's existing
 precedent of small page-specific render helpers not being shared (§80).
+
+---
+
+# 86. Recording: No More "Call Connected" Bluetooth Tone, Screen Stays Awake
+
+Two mic-recording complaints, both fixed in `startRecording()` in the
+shared `ops-service/public/lib/voiceClient.js` (used by both `app.js` and
+`voice-mobile.html`, so both pages get both fixes):
+
+**"Call started"/"call ended" tone on Bluetooth.** Chrome's default
+`getUserMedia({ audio: true })` applies voice-processing (echo
+cancellation, noise suppression, AGC) to the captured audio — the same
+processing path used for an actual phone call. On Android, when a
+Bluetooth headset is connected, requesting that path forces the headset
+to switch from its music profile (A2DP) to the call profile (HFP), which
+is what plays the connect/disconnect tone Harvey was hearing (ChatGPT's
+native app doesn't hit this because it isn't a web page going through
+Chrome's `getUserMedia` voice-processing path). Fixed by requesting
+`{ audio: { echoCancellation: false, noiseSuppression: false,
+autoGainControl: false } }` instead — this is genuinely the only lever
+available from web content; there's no API to block the Bluetooth
+profile switch directly, and the fix trades slightly lower mic quality
+(no echo cancellation) for avoiding it, which is an acceptable trade for
+short dictation.
+
+**Screen going to sleep mid-recording.** Added a Screen Wake Lock
+(`navigator.wakeLock.request('screen')`), acquired right after the mic
+stream is granted and released when the recorder actually stops (covers
+both a normal finish and a cancel, since both paths call `.stop()`).
+Feature-detected (`'wakeLock' in navigator`) so it's a silent no-op on
+unsupported browsers (Safari <16.4, non-secure contexts) rather than an
+error — same defensive pattern as everything else in this file. This is
+what was causing Harvey to lose the stop-recording button entirely if he
+talked past his phone's auto-lock timeout.
