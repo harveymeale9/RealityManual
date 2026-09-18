@@ -400,6 +400,10 @@
       var sync = null;
       function startSync() {
         if (sync) return;
+        // See app.js's identical comment: the first tick replays existing
+        // history through onDone/onError, so this suppresses pinging for
+        // that replay — only completions noticed on a later tick chime.
+        var pastFirstTick = false;
         sync = Voice.syncThread({
           onNewMessage: function (row) { addMessage('user', row.transcript, row.id); },
           onPending: function (row) { addTyping(row.id); },
@@ -409,7 +413,7 @@
             // server.js buildVoicePrompt), not a throwaway line — show it
             // like any other reply instead of a generic "Done" placeholder.
             addAssistantMessage(row.reply_text || '');
-            if (Voice.isActiveHere()) Voice.playPing();
+            if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
             var ack = voiceAck[row.id];
             if (ack) {
               clearTimeout(ack.timer);
@@ -420,11 +424,11 @@
           onError: function (row) {
             removeTyping(row.id);
             addMessage('error', row.error_message || 'Something went wrong.');
-            if (Voice.isActiveHere()) Voice.playPing();
+            if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
             var ack = voiceAck[row.id];
             if (ack) { clearTimeout(ack.timer); delete voiceAck[row.id]; }
           },
-          onTick: renderQueue
+          onTick: function (rows) { renderQueue(rows); pastFirstTick = true; }
         });
       }
 

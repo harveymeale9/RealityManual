@@ -496,6 +496,14 @@
     // while this tab just sits open. Locally-sent messages are rendered
     // optimistically by sendText() below and handed to markKnown() so this
     // loop updates them in place instead of duplicating them.
+    // The very first tick replays the whole existing history through
+    // onDone/onError (that's what makes opening this tab resume the last
+    // conversation) — pinging for every one of those on load would be a
+    // burst of chimes, not a notification. onTick fires once per tick,
+    // after that tick's onDone/onError calls, so flipping this true there
+    // suppresses exactly (and only) the first tick's replay.
+    var pastFirstTick = false;
+
     pmSync = Voice.syncThread({
       onNewMessage: function (row) { addMessage('user', row.transcript, row.id); },
       onPending: function (row) { addTyping(row.id); },
@@ -505,7 +513,7 @@
         // server.js buildVoicePrompt), not a throwaway line — show it like
         // any other reply instead of a generic "Done" placeholder.
         addAssistantMessage(row.reply_text || '');
-        if (Voice.isActiveHere()) Voice.playPing();
+        if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
         var ack = voiceAck[row.id];
         if (ack) {
           clearTimeout(ack.timer);
@@ -516,12 +524,12 @@
       onError: function (row) {
         removeTyping(row.id);
         addMessage('error', row.error_message || 'Something went wrong.');
-        if (Voice.isActiveHere()) Voice.playPing();
+        if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
         var ack = voiceAck[row.id];
         if (ack) { clearTimeout(ack.timer); delete voiceAck[row.id]; }
       },
       onActivity: function (row) { renderActivity(row.activity_log); },
-      onTick: renderQueue
+      onTick: function (rows) { renderQueue(rows); pastFirstTick = true; }
     });
 
     function scheduleVoiceAck(id, mode) {
