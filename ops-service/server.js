@@ -93,6 +93,7 @@ const stmts = {
   finishVoiceMessage: db.prepare('UPDATE voice_messages SET status = ?, reply_text = ?, error_message = ?, completed_at = ? WHERE id = ?'),
   getVoiceMessage: db.prepare('SELECT * FROM voice_messages WHERE id = ?'),
   listVoiceMessages: db.prepare('SELECT * FROM voice_messages ORDER BY created_at DESC LIMIT ?'),
+  getInflightVoiceMessages: db.prepare("SELECT * FROM voice_messages WHERE status IN ('pending','running') ORDER BY created_at ASC"),
   getVoiceSession: db.prepare('SELECT claude_session_id FROM voice_session WHERE id = 1'),
   upsertVoiceSession: db.prepare(
     'INSERT INTO voice_session (id, claude_session_id, updated_at) VALUES (1, ?, ?) ' +
@@ -335,6 +336,32 @@ function drainVoiceQueue() {
     });
 }
 
+// Read on every fresh-session start (see buildSystemPromptForSession below)
+// so a session with zero memory of anything Harvey said before — first
+// message ever, "New conversation" was hit, or the previous session was
+// lost — isn't starting completely blind, especially right after an
+// unplanned restart (see recoverInflightVoiceMessages). This is the
+// "self-healing" half of that: the *queue* recovers itself mechanically,
+// this is what lets the *agent* understand what it was doing when it gets
+// a fresh start rather than silently losing that thread.
+function readRecentWorkLog(maxLines) {
+  try {
+    const lines = fs.readFileSync(WORK_LOG_PATH, 'utf8').split('\n').filter(Boolean);
+    return lines.slice(-(maxLines || 15)).join('\n');
+  } catch (e) {
+    return '';
+  }
+}
+
+function buildSystemPromptForSession(sessionId) {
+  if (sessionId) return VOICE_SYSTEM_PROMPT;
+  const recentLog = readRecentWorkLog(15);
+  if (!recentLog) return VOICE_SYSTEM_PROMPT;
+  return VOICE_SYSTEM_PROMPT + '\n\nThis is a fresh session with no memory of anything before this message ' +
+    '(the previous one ended, was reset, or was lost — e.g. a redeploy). Recent entries from your own work ' +
+    'log, for context on what you and Harvey were doing recently:\n' + recentLog;
+}
+
 async function processVoiceMessage(id, mode, text, imageBlock) {
   stmts.setVoiceMessageStatus.run('running', id);
   const sessionRow = stmts.getVoiceSession.get();
@@ -353,7 +380,7 @@ async function processVoiceMessage(id, mode, text, imageBlock) {
   let result = await claudeRunner.runClaude({
     prompt: prompt,
     sessionId: sessionId,
-    appendSystemPrompt: VOICE_SYSTEM_PROMPT,
+    appendSystemPrompt: buildSystemPromptForSession(sessionId),
     onActivity: onActivity,
     imageBlock: imageBlock
   });
@@ -368,7 +395,7 @@ async function processVoiceMessage(id, mode, text, imageBlock) {
     result = await claudeRunner.runClaude({
       prompt: prompt,
       sessionId: null,
-      appendSystemPrompt: VOICE_SYSTEM_PROMPT,
+      appendSystemPrompt: buildSystemPromptForSession(null),
       onActivity: onActivity,
       imageBlock: imageBlock
     });
@@ -479,4 +506,44 @@ app.use(function (err, req, res, next) {
   res.status(500).json({ error: 'internal_error' });
 });
 
-app.listen(PORT, function () { console.log('rm-ops-service listening on ' + PORT); });
+// Recovers the voice queue after any restart (a normal redeploy included —
+// this runs every single time the process starts, not just after a crash).
+// The in-memory voiceQueue array and currentSession are always lost on
+// restart even though the DB rows survive it: a 'pending' row never
+// actually reached Claude, so it's simply safe to run from scratch: a
+// 'running' row's actual completion state is unknown (the process could
+// have died a moment before or after finishing the real work), so it's
+// marked as an error instead of silently re-run — duplicating a git push
+// or a file edit would be worse than asking Harvey to resend it. Without
+// this, a message caught mid-flight by a redeploy sat in "running" forever
+// and cluttered the Project Manager's queue view indefinitely — exactly
+// what Harvey saw and flagged.
+function recoverInflightVoiceMessages() {
+  const rows = stmts.getInflightVoiceMessages.all();
+  if (!rows.length) return;
+  const now = new Date().toISOString();
+  let requeued = 0;
+  let errored = 0;
+  rows.forEach(function (row) {
+    if (row.status === 'pending') {
+      voiceQueue.push({ id: row.id, mode: row.mode, text: row.transcript, imageBlock: null });
+      requeued++;
+    } else {
+      stmts.finishVoiceMessage.run('error', null,
+        'Service restarted while this was in progress (redeploy or crash) — completion status unknown, please resend if it still needs doing.',
+        now, row.id);
+      errored++;
+    }
+  });
+  console.log('voice queue recovery: requeued ' + requeued + ', errored ' + errored);
+  fs.appendFile(WORK_LOG_PATH,
+    '- [' + now + '] SERVICE RESTARTED — recovered voice queue: ' + requeued + ' pending message(s) requeued, ' +
+    errored + ' interrupted message(s) marked as error.\n',
+    function () {});
+  if (requeued) drainVoiceQueue();
+}
+
+app.listen(PORT, function () {
+  console.log('rm-ops-service listening on ' + PORT);
+  recoverInflightVoiceMessages();
+});
