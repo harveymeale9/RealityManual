@@ -314,6 +314,14 @@
       // --- Queue drawer: tap the edge tab to pull it in, tap again (or the
       // tab) to put it away. Filled from the same sync tick as the thread.
       queueTab.addEventListener('click', function () { queueDrawer.classList.toggle('open'); });
+      // Tapping back into the rest of the app (the ask/execute buttons, the
+      // chat thread, anywhere outside the drawer) should also dismiss it,
+      // not just tapping the pull-tab a second time, per Harvey.
+      document.addEventListener('click', function (e) {
+        if (!queueDrawer.classList.contains('open')) return;
+        if (queueDrawer.contains(e.target) || queueTab.contains(e.target)) return;
+        queueDrawer.classList.remove('open');
+      });
       var RECENT_DONE_LIMIT = 5;
       function renderQueue(rows) {
         var inflight = rows.filter(function (r) { return r.status === 'pending' || r.status === 'running'; }).slice().reverse();

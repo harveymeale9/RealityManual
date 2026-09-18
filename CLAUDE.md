@@ -3230,3 +3230,16 @@ doesn't catch (§76 already found and honestly-failed one; this is a
 different one, one layer further in). When a change is reported as
 deployed but the user can't see it, check `ops-service/.ci/last-run.log`
 for the actual outcome before assuming it's a code or caching problem.
+
+---
+
+# 83. Voice-Mobile Queue Drawer: Tap Outside to Dismiss
+
+The §80 queue drawer in `voice-mobile.html` only ever closed by tapping
+the same pull-tab that opened it. Harvey wanted tapping back into the
+rest of the app (the ask/execute buttons, the chat thread — anything
+outside the drawer) to dismiss it too, not just the one specific tab.
+Added a `document` click listener that closes `#queueDrawer` when it's
+open and the click landed outside both the drawer and the pull-tab
+itself. Desktop's queue panel (`app.js`) isn't a toggleable drawer — it's
+a static always-visible column — so this only applies to the mobile PWA.
