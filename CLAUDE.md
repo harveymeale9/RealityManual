@@ -3806,3 +3806,26 @@ sentence genuinely comes before any tool call (§94), there usually
 isn't an answer to give yet anyway, which naturally forces action-style
 phrasing — but stating the phrasing rule explicitly closes the gap for
 any case where that isn't automatically true.
+
+---
+
+# 96. Mobile: No Way Back to Project Manager From the Ops Panel
+
+§79 gave `voice-mobile.html` a dedicated button into Content Ops and
+assumed the reverse direction was already covered — `index.html`'s
+horizontal-scrolling top tab row keeps Project Manager as its first
+entry even on mobile (side-rail is hidden below 640px, per the earlier
+mobile-responsive pass). Harvey confirmed that isn't good enough in
+practice: he could get *to* the ops panel from the PM's button, but
+found no way back once there.
+
+Added a dedicated fixed circular button (`.pm-back-fab`, mobile-only —
+plain `display: none` outside the `max-width: 640px` breakpoint, so
+desktop is untouched since it always has the side-rail) bottom-right on
+every tab except Project Manager itself, reusing the same message-bubble
+icon already used for Project Manager elsewhere in the nav. `<a
+href="#project-manager">` (same real-anchor pattern as §91, not a
+`<button>`), so it also gets native middle-click/ctrl-click "open in new
+tab" behavior for free. `renderActiveTab()` in `app.js` toggles its
+`.show` class alongside the existing side-rail/top-tab active-state
+logic — one extra line, no new routing.

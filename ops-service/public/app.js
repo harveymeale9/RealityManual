@@ -228,6 +228,8 @@
         btn.classList.toggle('active', btn.dataset.tab === active);
       });
     }
+    var backFab = document.getElementById('pmBackFab');
+    if (backFab) backFab.classList.toggle('show', active !== 'project-manager');
     if (active !== 'project-manager' && pmSync) { pmSync.stop(); pmSync = null; }
     if (active === 'project-manager') {
       panelMain.innerHTML = PM_MARKUP;
