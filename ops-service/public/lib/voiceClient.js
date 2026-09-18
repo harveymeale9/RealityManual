@@ -54,12 +54,14 @@ window.RMVoice = (function () {
 
   function pollMessage(id, opts) {
     opts = opts || {};
-    var intervalMs = opts.intervalMs || 2000;
+    var intervalMs = opts.intervalMs || 1200;
     var timeoutMs = opts.timeoutMs || 20 * 60 * 1000;
+    var onTick = opts.onTick; // called with every row, including the final one — lets a caller render activity_log live as it grows
     var started = Date.now();
     return new Promise(function (resolve, reject) {
       (function tick() {
         getMessage(id).then(function (row) {
+          if (onTick) onTick(row);
           if (row.status === 'done' || row.status === 'error') return resolve(row);
           if (Date.now() - started > timeoutMs) return reject(new Error('Timed out waiting for a reply'));
           setTimeout(tick, intervalMs);

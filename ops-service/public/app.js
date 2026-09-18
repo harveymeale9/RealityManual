@@ -9,6 +9,7 @@
   var AUTO_STAGE_IDS = window.RMStore.STAGES.slice(UPLOADED_INDEX + 1).map(function (s) { return s.id; });
 
   var TABS = [
+    { id: 'project-manager', label: 'Project Manager' },
     { id: 'content-ops', label: 'Content Ops' },
     { id: 'upload-files', label: 'Upload Files' },
     { id: 'content-analytics', label: 'Content Analytics' },
@@ -77,12 +78,7 @@
   }
 
   function renderTabs() {
-    // "Project Manager" is a real page (index.html — the site's default
-    // landing page, not this content-ops.html board), not one of this
-    // SPA's in-page tabs — prepended as a plain link, first in the menu,
-    // per Harvey. [data-tab] below excludes it from the hash-routing handler.
-    var talkToCcLink = '<a class="panel-tab" href="index.html">Project Manager</a>';
-    panelTabs.innerHTML = talkToCcLink + TABS.map(function (t) {
+    panelTabs.innerHTML = TABS.map(function (t) {
       return '<button class="panel-tab" data-tab="' + t.id + '">' + t.label + '</button>';
     }).join('');
     panelTabs.querySelectorAll('.panel-tab[data-tab]').forEach(function (btn) {
@@ -95,8 +91,6 @@
      location.hash routing so the two navs can never disagree. */
   function bindSideRail() {
     if (!sideRail) return;
-    // [data-tab] excludes the "Project Manager" link, which is a real page
-    // navigation (index.html), not one of this SPA's in-page tabs.
     sideRail.querySelectorAll('.side-rail-btn[data-tab]').forEach(function (btn) {
       btn.addEventListener('click', function () { location.hash = btn.dataset.tab; });
     });
@@ -209,7 +203,10 @@
         btn.classList.toggle('active', btn.dataset.tab === active);
       });
     }
-    if (active === 'content-ops') {
+    if (active === 'project-manager') {
+      panelMain.innerHTML = PM_MARKUP;
+      bootProjectManager();
+    } else if (active === 'content-ops') {
       panelMain.innerHTML = OPS_MARKUP;
       bootContentOps();
     } else if (active === 'upload-files') {
@@ -234,6 +231,205 @@
     window.addEventListener('hashchange', renderActiveTab);
     if (!location.hash) location.hash = TABS[0].id;
     renderActiveTab();
+  }
+
+  /* ============================================================
+     PROJECT MANAGER (chat with CC) — the default tab. Talks to the same
+     backend voice/chat endpoints as voice-mobile.html, via the shared
+     lib/voiceClient.js client. panelMain is rebuilt fresh every time this
+     tab is (re)activated, same as every other tab here, so the visible
+     thread only shows messages sent during the current activation — the
+     conversation itself is never lost, it lives server-side (see
+     CLAUDE.md §74/§75).
+     ============================================================ */
+
+  var PM_MARKUP =
+    '<div class="pm-app">' +
+      '<div class="pm-toolbar">' +
+        '<a class="link-btn" id="pmMobileLink" href="voice-mobile.html" target="_blank" rel="noopener">Mobile view ↗</a>' +
+        '<button type="button" class="pm-reset-btn" id="pmResetBtn">New conversation</button>' +
+      '</div>' +
+      '<div class="pm-columns">' +
+        '<div class="pm-col pm-col-clean">' +
+          '<div class="pm-thread" id="pmThread">' +
+            '<div class="pm-empty">Type or speak to Claude Code — same project, same tools, full memory of RealityManual.</div>' +
+          '</div>' +
+          '<div class="pm-inputbar">' +
+            '<div class="pm-execute-row">' +
+              '<label><input type="checkbox" id="pmExecuteOnly" /> Execute only — don\'t wait for a reply</label>' +
+            '</div>' +
+            '<div class="pm-input-row">' +
+              '<button type="button" class="pm-mic-btn" id="pmMicBtn" title="Record voice message" aria-label="Record voice message">' +
+                '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/></svg>' +
+              '</button>' +
+              '<textarea id="pmTextInput" class="pm-textarea" rows="1" placeholder="Message Claude Code…"></textarea>' +
+              '<button type="button" class="pm-send-btn" id="pmSendBtn" title="Send" aria-label="Send">' +
+                '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4Z"/></svg>' +
+              '</button>' +
+            '</div>' +
+            '<div class="pm-hint">Voice replies are spoken automatically. Typed replies show as text — tap ▶ to hear one.</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="pm-col pm-col-activity">' +
+          '<div class="pm-activity-head">Activity <span class="pm-activity-hint">— what CC is doing, live</span></div>' +
+          '<div class="pm-activity" id="pmActivity"><div class="pm-activity-empty" id="pmActivityEmpty">Nothing happening yet.</div></div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  function bootProjectManager() {
+    var Voice = window.RMVoice;
+    var thread = document.getElementById('pmThread');
+    var activityEl = document.getElementById('pmActivity');
+    var textInput = document.getElementById('pmTextInput');
+    var sendBtn = document.getElementById('pmSendBtn');
+    var micBtn = document.getElementById('pmMicBtn');
+    var executeOnly = document.getElementById('pmExecuteOnly');
+    var resetBtn = document.getElementById('pmResetBtn');
+
+    var emptyNote = thread.querySelector('.pm-empty');
+    function clearEmptyNote() { if (emptyNote && emptyNote.parentNode) { emptyNote.parentNode.removeChild(emptyNote); emptyNote = null; } }
+
+    function addMessage(kind, text) {
+      clearEmptyNote();
+      var el = document.createElement('div');
+      el.className = 'pm-msg pm-msg-' + kind;
+      el.textContent = text;
+      thread.appendChild(el);
+      thread.scrollTop = thread.scrollHeight;
+      return el;
+    }
+
+    function addAssistantMessage(text) {
+      clearEmptyNote();
+      var wrap = document.createElement('div');
+      wrap.className = 'pm-msg pm-msg-assistant';
+      var body = document.createElement('div');
+      body.textContent = text;
+      wrap.appendChild(body);
+      var meta = document.createElement('div');
+      meta.className = 'pm-msg-meta';
+      var playBtn = document.createElement('button');
+      playBtn.type = 'button';
+      playBtn.className = 'pm-play-btn';
+      playBtn.textContent = '▶ Play';
+      playBtn.addEventListener('click', function () { Voice.speak(text).catch(function () {}); });
+      meta.appendChild(playBtn);
+      wrap.appendChild(meta);
+      thread.appendChild(wrap);
+      thread.scrollTop = thread.scrollHeight;
+      return wrap;
+    }
+
+    function addTyping() {
+      clearEmptyNote();
+      var el = document.createElement('div');
+      el.className = 'pm-typing';
+      el.textContent = 'CC is working on it…';
+      thread.appendChild(el);
+      thread.scrollTop = thread.scrollHeight;
+      return el;
+    }
+
+    // Right-hand "code-like" pane — the raw tool-call/thinking trail, kept
+    // deliberately separate from the clean thread on the left per Harvey:
+    // this is the stuff he'll mostly ignore, not the stuff he reads.
+    function renderActivity(lines) {
+      activityEl.innerHTML = '';
+      if (!lines || !lines.length) {
+        var empty = document.createElement('div');
+        empty.className = 'pm-activity-empty';
+        empty.textContent = 'Nothing happening yet.';
+        activityEl.appendChild(empty);
+        return;
+      }
+      lines.forEach(function (line) {
+        var el = document.createElement('div');
+        el.className = 'pm-activity-line';
+        el.textContent = line;
+        activityEl.appendChild(el);
+      });
+      activityEl.scrollTop = activityEl.scrollHeight;
+    }
+
+    function sendText(text, mode, opts) {
+      opts = opts || {};
+      var autoSpeak = !!opts.autoSpeak;
+      if (!text.trim()) return;
+      addMessage('user', text);
+      var typingEl = addTyping();
+      renderActivity(null);
+      Voice.sendMessage(text.trim(), mode).then(function (created) {
+        return Voice.pollMessage(created.id, {
+          onTick: function (row) { renderActivity(row.activity_log); }
+        });
+      }).then(function (row) {
+        if (typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
+        if (row.status === 'error') {
+          addMessage('error', row.error_message || 'Something went wrong.');
+          return;
+        }
+        if (mode === 'execute') {
+          addMessage('system', 'Done — no reply expected.');
+          return;
+        }
+        addAssistantMessage(row.reply_text || '');
+        if (autoSpeak) Voice.speak(row.reply_text || '').catch(function () {});
+      }).catch(function (err) {
+        if (typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
+        addMessage('error', (err && err.message) || 'Something went wrong.');
+      });
+    }
+
+    function currentMode() { return executeOnly.checked ? 'execute' : 'respond'; }
+
+    sendBtn.addEventListener('click', function () {
+      var text = textInput.value;
+      textInput.value = '';
+      textInput.style.height = 'auto';
+      sendText(text, currentMode(), { autoSpeak: false });
+    });
+    textInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendBtn.click();
+      }
+    });
+    textInput.addEventListener('input', function () {
+      textInput.style.height = 'auto';
+      textInput.style.height = Math.min(textInput.scrollHeight, 160) + 'px';
+    });
+
+    var activeRecorder = null;
+    micBtn.addEventListener('click', function () {
+      if (activeRecorder) {
+        var rec = activeRecorder;
+        activeRecorder = null;
+        micBtn.classList.remove('recording');
+        rec.stop().then(function (blob) { return Voice.transcribe(blob); })
+          .then(function (text) {
+            if (!text) return;
+            sendText(text, currentMode(), { autoSpeak: true });
+          })
+          .catch(function (err) { addMessage('error', (err && err.message) || 'Could not transcribe audio.'); });
+        return;
+      }
+      Voice.startRecording().then(function (rec) {
+        activeRecorder = rec;
+        micBtn.classList.add('recording');
+      }).catch(function () {
+        alert('Could not access the microphone. Check the browser has mic permission.');
+      });
+    });
+
+    resetBtn.addEventListener('click', function () {
+      if (!confirm('Start a new conversation? CC will lose context from this one.')) return;
+      Voice.resetSession().then(function () {
+        addMessage('system', 'New conversation started.');
+      });
+    });
+
+    textInput.focus();
   }
 
   /* ============================================================

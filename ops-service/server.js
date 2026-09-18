@@ -66,6 +66,15 @@ db.exec(
   ');'
 );
 
+// activity_log: JSON array of short strings describing what CC is doing
+// while a message is in flight (tool calls, intermediate text) — powers
+// the "code-like" live activity pane in the Project Manager tab, separate
+// from the clean final reply_text. Added after voice_messages already
+// existed in production, so a plain CREATE TABLE IF NOT EXISTS above
+// won't retrofit it onto an existing DB file — ALTER TABLE, no-op if the
+// column is already there (fresh DB or already migrated).
+try { db.exec('ALTER TABLE voice_messages ADD COLUMN activity_log TEXT'); } catch (e) { /* already exists */ }
+
 const stmts = {
   getAll: db.prepare('SELECT data FROM records WHERE store_name = ? ORDER BY updated_at ASC'),
   getOne: db.prepare('SELECT data FROM records WHERE store_name = ? AND id = ?'),
@@ -80,6 +89,7 @@ const stmts = {
   purgeSessions: db.prepare('DELETE FROM sessions WHERE expires_at < ?'),
   insertVoiceMessage: db.prepare('INSERT INTO voice_messages (id, mode, transcript, status, created_at) VALUES (?, ?, ?, ?, ?)'),
   setVoiceMessageStatus: db.prepare('UPDATE voice_messages SET status = ? WHERE id = ?'),
+  setVoiceActivityLog: db.prepare('UPDATE voice_messages SET activity_log = ? WHERE id = ?'),
   finishVoiceMessage: db.prepare('UPDATE voice_messages SET status = ?, reply_text = ?, error_message = ?, completed_at = ? WHERE id = ?'),
   getVoiceMessage: db.prepare('SELECT * FROM voice_messages WHERE id = ?'),
   listVoiceMessages: db.prepare('SELECT * FROM voice_messages ORDER BY created_at DESC LIMIT ?'),
@@ -306,11 +316,37 @@ async function processVoiceMessage(id, mode, text) {
   const sessionRow = stmts.getVoiceSession.get();
   const sessionId = sessionRow && sessionRow.claude_session_id;
   const prompt = buildVoicePrompt(mode, text);
-  const result = await claudeRunner.runClaude({
+
+  // Streamed into the DB as it grows (not held until the run finishes) so
+  // the Project Manager tab's right-hand activity pane can poll the same
+  // /api/voice/messages/:id row and watch it fill in live.
+  let activity = [];
+  function onActivity(line) {
+    activity.push(line);
+    stmts.setVoiceActivityLog.run(JSON.stringify(activity.slice(-200)), id);
+  }
+
+  let result = await claudeRunner.runClaude({
     prompt: prompt,
     sessionId: sessionId,
-    appendSystemPrompt: VOICE_SYSTEM_PROMPT
+    appendSystemPrompt: VOICE_SYSTEM_PROMPT,
+    onActivity: onActivity
   });
+  // The resumed session id can go stale (e.g. the CLI's local session store
+  // living outside the persisted volume, wiped by a container rebuild) —
+  // rather than leave every future message stuck repeating the same
+  // failure forever, drop the dead session and retry once as a fresh one.
+  if (!result.ok && sessionId && /no conversation found/i.test(result.error || '')) {
+    console.error('voice claude session ' + sessionId + ' is gone, starting fresh:', result.error);
+    stmts.clearVoiceSession.run();
+    activity.push('— previous session was lost, starting a new one —');
+    result = await claudeRunner.runClaude({
+      prompt: prompt,
+      sessionId: null,
+      appendSystemPrompt: VOICE_SYSTEM_PROMPT,
+      onActivity: onActivity
+    });
+  }
   const now = new Date().toISOString();
   if (result.sessionId) stmts.upsertVoiceSession.run(result.sessionId, now);
   if (!result.ok) {
@@ -335,15 +371,21 @@ app.post('/api/voice/messages', function (req, res) {
   drainVoiceQueue();
 });
 
+function parseActivityLog(row) {
+  if (!row) return row;
+  try { row.activity_log = row.activity_log ? JSON.parse(row.activity_log) : []; } catch (e) { row.activity_log = []; }
+  return row;
+}
+
 app.get('/api/voice/messages', function (req, res) {
   const limit = Math.min(parseInt(req.query.limit, 10) || 30, 100);
-  res.json(stmts.listVoiceMessages.all(limit));
+  res.json(stmts.listVoiceMessages.all(limit).map(parseActivityLog));
 });
 
 app.get('/api/voice/messages/:id', function (req, res) {
   const row = stmts.getVoiceMessage.get(req.params.id);
   if (!row) return res.status(404).json({ error: 'not_found' });
-  res.json(row);
+  res.json(parseActivityLog(row));
 });
 
 app.post('/api/voice/session/reset', function (req, res) {

@@ -308,6 +308,88 @@ a { color: var(--accent); }
 
 .panel-main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
+/* ---------- project manager (chat) tab ---------- */
+
+.pm-app { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+.pm-toolbar {
+  display: flex; align-items: center; justify-content: flex-end; gap: 14px;
+  padding: 10px clamp(16px, 3vw, 36px) 0;
+}
+.pm-reset-btn {
+  background: none; border: 1px solid var(--border); color: var(--ink-soft);
+  border-radius: 6px; padding: 6px 12px; font-size: 0.8rem; cursor: pointer;
+}
+.pm-reset-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Left = clean thread, right = the raw tool-call/thinking trail — kept as
+   two genuinely separate columns (not a collapsible drawer) per Harvey:
+   the right side is meant to be glanced at or ignored, not the thing he
+   reads to find the answer. */
+.pm-columns { flex: 1; min-height: 0; display: flex; }
+.pm-col { min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+.pm-col-clean { flex: 1 1 56%; }
+.pm-col-activity { flex: 1 1 44%; border-left: 1px solid var(--border-soft); background: var(--surface); }
+
+.pm-thread {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: 18px clamp(16px, 3vw, 36px); display: flex; flex-direction: column; gap: 16px;
+  max-width: 780px; width: 100%; margin: 0 auto;
+}
+.pm-empty { color: var(--ink-faint); text-align: center; margin-top: 60px; font-size: 0.95rem; }
+
+.pm-msg { max-width: 88%; padding: 12px 15px; border-radius: 10px; line-height: 1.55; font-size: 0.95rem; white-space: pre-wrap; }
+.pm-msg-user { align-self: flex-end; background: var(--accent-soft); border: 1px solid var(--accent-soft-strong); color: var(--ink); }
+.pm-msg-assistant { align-self: flex-start; background: var(--surface-2); border: 1px solid var(--border); color: var(--ink); }
+.pm-msg-system { align-self: center; color: var(--ink-faint); font-size: 0.82rem; background: none; border: none; padding: 4px; }
+.pm-msg-error { align-self: flex-start; background: var(--error-soft); border: 1px solid var(--error); color: var(--ink); }
+.pm-msg-meta { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.pm-play-btn { background: none; border: 1px solid var(--border); color: var(--accent); border-radius: 6px; padding: 3px 9px; font-size: 0.75rem; cursor: pointer; }
+.pm-play-btn:hover { border-color: var(--accent); }
+.pm-typing { align-self: flex-start; color: var(--ink-faint); font-size: 0.85rem; font-style: italic; padding: 0 clamp(16px, 3vw, 36px); }
+
+.pm-inputbar { flex-shrink: 0; border-top: 1px solid var(--border-soft); padding: 14px clamp(16px, 3vw, 36px) 20px; max-width: 780px; width: 100%; margin: 0 auto; }
+.pm-execute-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.pm-execute-row label { font-size: 0.82rem; color: var(--ink-soft); display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.pm-input-row { display: flex; align-items: flex-end; gap: 10px; }
+.pm-textarea {
+  flex: 1; resize: none; background: var(--surface); border: 1px solid var(--border);
+  color: var(--ink); font-family: var(--font-body); font-size: 0.95rem; line-height: 1.5;
+  padding: 12px 14px; border-radius: 8px; max-height: 160px;
+}
+.pm-textarea:focus { outline: none; border-color: var(--accent); }
+.pm-mic-btn, .pm-send-btn {
+  width: 46px; height: 46px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--ink-soft); display: flex; align-items: center; justify-content: center;
+  cursor: pointer; flex-shrink: 0;
+}
+.pm-mic-btn.recording { background: var(--error-soft); border-color: var(--error); color: var(--error); animation: pm-rec-pulse 1.2s ease-in-out infinite; }
+@keyframes pm-rec-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+.pm-send-btn {
+  background: linear-gradient(135deg, var(--accent-2) 0%, var(--accent) 55%, var(--accent-3) 100%);
+  color: var(--accent-ink); border: none;
+}
+.pm-hint { color: var(--ink-faint); font-size: 0.72rem; margin-top: 8px; }
+
+.pm-activity-head {
+  flex-shrink: 0; padding: 14px 18px 10px; font-family: var(--font-mono);
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-faint);
+  border-bottom: 1px solid var(--border-soft);
+}
+.pm-activity-hint { text-transform: none; letter-spacing: 0; opacity: 0.7; }
+.pm-activity {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 12px 18px 24px;
+  font-family: var(--font-mono); font-size: 0.78rem; line-height: 1.6; color: var(--ink-soft);
+}
+.pm-activity-empty { color: var(--ink-faint); font-style: italic; }
+.pm-activity-line { white-space: pre-wrap; word-break: break-word; padding: 3px 0; border-bottom: 1px dashed var(--border-soft); }
+.pm-activity-line:last-child { border-bottom: none; }
+
+@media (max-width: 860px) {
+  .pm-columns { flex-direction: column; }
+  .pm-col-activity { flex: 0 0 240px; border-left: none; border-top: 1px solid var(--border-soft); }
+}
+
 .panel-footer {
   flex-shrink: 0;
   padding: 9px clamp(16px, 3vw, 36px);
