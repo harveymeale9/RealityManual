@@ -886,11 +886,27 @@
     });
   }
 
+  // One-time migration for the removed "Thumbnail Selected" stage (§ see
+  // CLAUDE.md uploader-tool section) — anything still sitting there moves
+  // back to Processing and picks up the "thumbnail selected" tag that
+  // replaces it, so nothing gets silently stranded on a stage id that no
+  // longer exists in Store.STAGES.
+  function migrateThumbnailStage(rows) {
+    var stragglers = rows.filter(function (r) { return r.stage === 'thumbnail'; });
+    stragglers.forEach(function (r) {
+      r.stage = 'processed';
+      syncTags(r);
+      r.updatedAt = nowIso();
+      Store.put('pieces', r);
+    });
+  }
+
   function ensurePiecesLoaded() {
     if (!piecesLoadedPromise) {
       piecesLoadedPromise = Store.getAll('pieces').then(function (rows) {
         rows.forEach(function (r) { pieces[r.id] = r; });
         backfillMissingSeqs(rows);
+        migrateThumbnailStage(rows);
         return maybeSeedExamples();
       });
     }
@@ -952,30 +968,35 @@
     return s ? s.label : id;
   }
 
-  /* ---------- auto-scheduling ---------- */
+  /* ---------- tags + scheduling ---------- */
 
-  /* Once a piece has a video attached, its stage is no longer something
-     Harvey drags around on the board — it's derived entirely from what's
-     been done to it (audio picked, thumbnail picked, scheduled), and
-     "live" is reserved for when real posting confirmation exists. */
-  function deriveAndApplyStage(p) {
-    if (!p.hasVideo || p.stage === 'live') return;
-    var target = 'processed'; // "Processing" — a video piece never sits at "Uploaded", that column is the plan archive
-    if (p.thumbnailDataUrl) target = 'thumbnail';
-    if (p.scheduledAt) target = 'scheduled';
-    p.stage = target;
+  // Replaces the old "Thumbnail Selected" stage-derivation (deriveAndApplyStage) —
+  // a video piece's *stage* is now fully explicit (Processing -> Final Check
+  // -> Scheduled -> Live, moved only by Harvey hitting "Send to final
+  // check" / "Approve," never automatically), but these three tags still
+  // want to reflect field state automatically, recomputed from scratch
+  // every time rather than tracked incrementally — so unpicking a
+  // thumbnail/audio/title also correctly drops its tag again.
+  function syncTags(p) {
+    var tags = {};
+    (p.tags || []).forEach(function (t) { tags[t] = true; });
+    if (p.thumbnailDataUrl) tags.thumbnail_selected = true; else delete tags.thumbnail_selected;
+    if ((p.ytTitles || []).length) tags.titles_selected = true; else delete tags.titles_selected;
+    if (p.audioTrackId) tags.music_added = true; else delete tags.music_added;
+    p.tags = Object.keys(tags);
   }
 
-  // Fills as many consecutive shorts slots as there are ready pieces for,
-  // rotating ultra_short -> short -> long_short -> repeat and skipping any
-  // type with nothing ready right now (falls back to alternating between
-  // whichever types DO have something, per Harvey). Runs the full pass
-  // (not just "schedule this one piece") every time anything becomes ready,
-  // since finishing several pieces in a row should fill several slots in
-  // the correct rotation order, not just bump the one just finished to the
-  // front. Schedules and persists every piece it touches itself (including
-  // deriving its board stage) — a caller doesn't need to do that
-  // separately for pieces other than the one it already knows about.
+  // Fills as many consecutive shorts slots as there are approved pieces
+  // for, rotating ultra_short -> short -> long_short -> repeat and
+  // skipping any type with nothing ready right now (falls back to
+  // alternating between whichever types DO have something, per Harvey).
+  // Runs the full pass (not just "schedule this one piece") every time
+  // something's approved, since approving several in a row should fill
+  // several slots in the correct rotation order, not just bump the one
+  // just approved to the front. "Ready" now means Harvey has explicitly
+  // approved it out of Final Check — this used to fire automatically the
+  // instant a piece had both audio and a thumbnail, with no review step
+  // at all; approveAndSchedule below is the only caller now.
   function scheduleShorts(settings) {
     var ms = Store.cadenceMs(settings.cadence.shorts || Store.DEFAULT_CADENCE.shorts);
     var tail = 0;
@@ -996,7 +1017,7 @@
         var candidateIdx = (pointer + attempt) % Store.SHORT_TYPES.length;
         var candidateType = Store.SHORT_TYPES[candidateIdx];
         var ready = Object.keys(pieces).map(function (id) { return pieces[id]; })
-          .filter(function (o) { return o.contentType === candidateType && o.hasVideo && o.audioTrackId && o.thumbnailDataUrl && !o.scheduledAt; })
+          .filter(function (o) { return o.contentType === candidateType && o.hasVideo && o.stage === 'final_check' && !o.scheduledAt; })
           .sort(function (a, b) { return new Date(a.updatedAt) - new Date(b.updatedAt); });
         if (ready.length) { found = { piece: ready[0], idx: candidateIdx, type: candidateType }; break; }
       }
@@ -1004,7 +1025,7 @@
       tail += ms;
       found.piece.scheduledAt = new Date(tail).toISOString();
       found.piece.updatedAt = nowIso();
-      deriveAndApplyStage(found.piece);
+      found.piece.stage = 'scheduled';
       Store.put('pieces', found.piece);
       pointer = found.idx;
       settings.lastShortType = found.type;
@@ -1013,8 +1034,11 @@
     if (settingsDirty) Store.saveSettings(settings);
   }
 
-  function maybeAutoSchedule(p) {
-    if (!(p.hasVideo && p.audioTrackId && p.thumbnailDataUrl && !p.scheduledAt)) return Promise.resolve();
+  // Called only by the "Approve" action in Final Check (see below) — no
+  // longer fires automatically just because audio+thumbnail are set. A
+  // piece not currently in Final Check is left alone (nothing to approve).
+  function approveAndSchedule(p) {
+    if (!(p.hasVideo && p.stage === 'final_check' && !p.scheduledAt)) return Promise.resolve();
     return Store.getSettings().then(function (settings) {
       if (Store.SHORT_TYPES.indexOf(p.contentType) !== -1) {
         scheduleShorts(settings);
@@ -1032,13 +1056,14 @@
       });
       var base = latest || Date.now();
       p.scheduledAt = new Date(base + ms).toISOString();
+      p.stage = 'scheduled';
     });
   }
 
   function setPieceStage(p, newStage, cb) {
     p.stage = newStage;
     p.updatedAt = nowIso();
-    maybeAutoSchedule(p).then(function () {
+    approveAndSchedule(p).then(function () {
       return Store.put('pieces', p);
     }).then(function () {
       if (cb) cb();
@@ -1095,7 +1120,7 @@
       platformGrid, metaCreated, metaUpdated, saveFlag, modalEyebrowText, modalIdBadge, btnDelete,
       videoSection, videoPreview, fieldTranscript, fieldAudioTrack, thumbPreview,
       pickFrameBtn, thumbScrub, scrubRange, captureFrameBtn, captionReadout,
-      utmField, fieldUtmLink, copyUtmBtn, scheduleStatus,
+      utmField, fieldUtmLink, copyUtmBtn, scheduleStatus, approveBtn,
       stageField, stageReadoutField, stageReadout,
       ytTitlesField, fieldYtTitle1, fieldYtTitle2, fieldYtTitle3;
 
@@ -1145,6 +1170,7 @@
     fieldYtTitle3 = document.getElementById('fieldYtTitle3');
     copyUtmBtn = document.getElementById('copyUtmBtn');
     scheduleStatus = document.getElementById('scheduleStatus');
+    approveBtn = document.getElementById('approveBtn');
     stageField = document.getElementById('stageField');
     stageReadoutField = document.getElementById('stageReadoutField');
     stageReadout = document.getElementById('stageReadout');
@@ -1191,7 +1217,6 @@
           t.querySelector('input').checked = checked;
         });
       }
-      ytTitlesField.hidden = fieldContentType.value !== 'longform';
       clearTimeout(saveTimer);
       syncFromForm();
     });
@@ -1231,10 +1256,8 @@
       if (p) {
         p.thumbnailDataUrl = dataUrl;
         p.updatedAt = nowIso();
-        maybeAutoSchedule(p).then(function () {
-          deriveAndApplyStage(p);
-          return Store.put('pieces', p);
-        }).then(function () {
+        syncTags(p);
+        Store.put('pieces', p).then(function () {
           updateStageAndScheduleUI(p);
           flashSaved();
           notifyPiecesChanged();
@@ -1244,6 +1267,18 @@
     copyUtmBtn.addEventListener('click', function () {
       fieldUtmLink.select();
       try { document.execCommand('copy'); } catch (e) {}
+    });
+    approveBtn.addEventListener('click', function () {
+      if (!activeId) return;
+      var p = pieces[activeId];
+      if (!p) return;
+      approveAndSchedule(p).then(function () {
+        return Store.put('pieces', p);
+      }).then(function () {
+        updateStageAndScheduleUI(p);
+        flashSaved();
+        notifyPiecesChanged();
+      });
     });
 
     btnDelete.addEventListener('click', function () {
@@ -1362,13 +1397,16 @@
       scheduleStatus.textContent = 'Scheduled for ' + fmtFull(p.scheduledAt);
     } else if (p.stage === 'live') {
       scheduleStatus.textContent = p.scheduledAt ? ('Posted ' + fmtFull(p.scheduledAt)) : 'Posted — connect an API in Settings to confirm.';
+    } else if (p.stage === 'final_check') {
+      scheduleStatus.textContent = 'In Final Check — review the video, then approve to schedule it.';
     } else if (!p.audioTrackId) {
-      scheduleStatus.textContent = 'Pick a backing audio track, then a thumbnail, and this schedules itself.';
+      scheduleStatus.textContent = 'Pick a backing audio track and a thumbnail, then send it to Final Check.';
     } else if (!p.thumbnailDataUrl) {
-      scheduleStatus.textContent = 'Audio picked — pick a thumbnail frame and this schedules itself.';
+      scheduleStatus.textContent = 'Audio picked — pick a thumbnail frame, then send it to Final Check.';
     } else {
-      scheduleStatus.textContent = 'Ready — this will schedule itself shortly.';
+      scheduleStatus.textContent = 'Ready — head to the Upload Files list to send this to Final Check.';
     }
+    approveBtn.hidden = p.stage !== 'final_check';
   }
 
   function populateFields(p) {
@@ -1387,7 +1425,6 @@
 
     if (currentVideoObjectUrl) { URL.revokeObjectURL(currentVideoObjectUrl); currentVideoObjectUrl = null; }
 
-    ytTitlesField.hidden = p.contentType !== 'longform';
     var ytTitles = p.ytTitles || [];
     fieldYtTitle1.value = ytTitles[0] || '';
     fieldYtTitle2.value = ytTitles[1] || '';
@@ -1556,16 +1593,14 @@
     }
 
     if (p.hasVideo) {
+      syncTags(p);
       Store.getSettings().then(function (settings) {
         fieldUtmLink.value = buildUtmLink(p, settings);
         captionReadout.textContent = renderCaptionText(p, settings);
       });
     }
 
-    maybeAutoSchedule(p).then(function () {
-      deriveAndApplyStage(p);
-      return Store.put('pieces', p);
-    }).then(function () {
+    Store.put('pieces', p).then(function () {
       if (p.hasVideo) updateStageAndScheduleUI(p);
       flashSaved();
       notifyPiecesChanged();
@@ -1741,12 +1776,22 @@
           return '<select class="card-move" data-id="' + id + '">' + stageOpts + '</select>';
         })();
     var idBadge = typeof piece.seq === 'number' ? '<span class="card-id">#' + String(piece.seq).padStart(3, '0') + '</span>' : '';
+    // Replaces the old "Thumbnail Selected" stage column — same auto-set
+    // tags rendered as small chips wherever a video piece's card shows up
+    // (this board and the upload list), see syncTags.
+    var tagsHtml = (piece.tags || []).length
+      ? '<div class="card-tags">' + piece.tags.map(function (tagId) {
+          var def = Store.TAGS.filter(function (t) { return t.id === tagId; })[0];
+          return def ? '<span class="tag-chip">' + def.label + '</span>' : '';
+        }).join('') + '</div>'
+      : '';
     return '' +
       '<div class="card' + (isAuto ? ' card-auto' : '') + (isAi ? ' card-ai' : '') + '" draggable="' + (isAuto ? 'false' : 'true') + '" data-id="' + id + '"' + (isAi ? ' title="Created by Claude Code"' : '') + '>' +
         (isAuto ? '' : '<span class="card-grip">⋮⋮</span>') +
         idBadge +
         '<div class="' + titleClass + '">' + titleHtml + '</div>' +
         '<div class="chip-row">' + chipHtml(piece) + '</div>' +
+        tagsHtml +
         '<div class="card-foot">' +
           '<span class="card-time">' + fmtTime(piece.updatedAt) + '</span>' +
           moveControl +
@@ -1940,12 +1985,13 @@
         '<input type="file" id="fileInput" accept="video/*" multiple hidden />' +
       '</div>' +
       '<h3 class="upload-heading">In production</h3>' +
-      '<div class="upload-grid" id="uploadGrid"></div>' +
+      '<div class="upload-rows" id="uploadRows"></div>' +
       '<h3 class="upload-heading">Posted</h3>' +
       '<div class="upload-grid" id="postedGrid"></div>' +
     '</div>';
 
-  var dropzone, fileInput, uploadGrid, postedGrid;
+  var dropzone, fileInput, uploadRows, postedGrid;
+  var uploadRowObjectUrls = {}; // pieceId -> object URL, revoked/rebuilt on each render pass
 
   function videoCardHtml(id, p) {
     var thumb = p.thumbnailDataUrl ? '<img src="' + p.thumbnailDataUrl + '" alt="" />' : '<span class="video-card-noThumb">No thumbnail</span>';
@@ -1961,19 +2007,237 @@
     '</div>';
   }
 
+  // One row per in-production video, everything Harvey needs inline —
+  // thumbnail/title/id, a real scrubbable frame picker, the backing-audio
+  // dropdown, the (up to 3) title fields, and "Send to final check" — no
+  // modal click-through needed for the normal upload workflow anymore
+  // (the shared modal still exists and still works, for anything this row
+  // doesn't cover directly, e.g. notes/platforms/content type).
+  function buildUploadRow(p, audioTracks) {
+    var row = document.createElement('div');
+    row.className = 'upload-row';
+    row.dataset.id = p.id;
+
+    var head = document.createElement('div');
+    head.className = 'upload-row-head';
+    var thumbEl = document.createElement('div');
+    thumbEl.className = 'upload-row-thumb';
+    thumbEl.innerHTML = p.thumbnailDataUrl ? ('<img src="' + p.thumbnailDataUrl + '" alt="" />') : '<span class="thumb-empty">No thumbnail</span>';
+    var titleId = document.createElement('div');
+    titleId.className = 'upload-row-title-id';
+    var titleLine = document.createElement('div');
+    titleLine.className = 'upload-row-title';
+    titleLine.textContent = p.title || 'Untitled';
+    var idLine = document.createElement('div');
+    idLine.className = 'upload-row-idline';
+    idLine.textContent = '#' + String(p.seq || 0).padStart(3, '0');
+    titleId.appendChild(titleLine);
+    titleId.appendChild(idLine);
+    if ((p.tags || []).length) {
+      var tagsLine = document.createElement('div');
+      tagsLine.className = 'upload-row-tags';
+      p.tags.forEach(function (tagId) {
+        var def = Store.TAGS.filter(function (t) { return t.id === tagId; })[0];
+        if (!def) return;
+        var chip = document.createElement('span');
+        chip.className = 'tag-chip';
+        chip.textContent = def.label;
+        tagsLine.appendChild(chip);
+      });
+      titleId.appendChild(tagsLine);
+    }
+    if (p.analysisStatus === 'running' || p.analysisStatus === 'pending') {
+      var busy = document.createElement('div');
+      busy.className = 'upload-row-status';
+      busy.textContent = 'Transcribing & matching to an outline…';
+      titleId.appendChild(busy);
+    } else if (p.analysisStatus === 'error') {
+      var errEl = document.createElement('div');
+      errEl.className = 'upload-row-status upload-row-status-error';
+      errEl.textContent = 'Auto-analysis failed (' + (p.analysisError || 'unknown error') + ') — fill in titles manually below.';
+      titleId.appendChild(errEl);
+    } else if (p.analysisMatchedPieceId) {
+      var matched = pieces[p.analysisMatchedPieceId];
+      var matchEl = document.createElement('div');
+      matchEl.className = 'upload-row-status';
+      matchEl.textContent = matched ? ('Matched to #' + String(matched.seq || 0).padStart(3, '0') + ' — ' + matched.title) : 'Matched to an outline.';
+      titleId.appendChild(matchEl);
+    }
+    head.appendChild(thumbEl);
+    head.appendChild(titleId);
+
+    // --- Frame picker: a real, playable, scrubbable copy of the video —
+    // same canvas-capture technique as the shared modal's pick-frame flow,
+    // just inline instead of behind a click-to-open.
+    var frameSection = document.createElement('div');
+    frameSection.className = 'upload-row-section upload-row-frame';
+    var videoEl = document.createElement('video');
+    videoEl.className = 'upload-row-video';
+    videoEl.playsInline = true;
+    videoEl.muted = true;
+    var scrub = document.createElement('input');
+    scrub.type = 'range';
+    scrub.min = '0';
+    scrub.max = '100';
+    scrub.step = '0.1';
+    scrub.value = '0';
+    videoEl.addEventListener('loadedmetadata', function () { if (videoEl.duration) scrub.max = videoEl.duration; });
+    scrub.addEventListener('input', function () { try { videoEl.currentTime = parseFloat(scrub.value); } catch (e) {} });
+    var captureBtn = document.createElement('button');
+    captureBtn.type = 'button';
+    captureBtn.className = 'btn-secondary btn-tiny';
+    captureBtn.textContent = 'Use this frame';
+    captureBtn.addEventListener('click', function () {
+      var canvas = document.createElement('canvas');
+      canvas.width = videoEl.videoWidth || 640;
+      canvas.height = videoEl.videoHeight || 360;
+      var ctx = canvas.getContext('2d');
+      try { ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height); } catch (e) { return; }
+      var dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      p.thumbnailDataUrl = dataUrl;
+      p.updatedAt = nowIso();
+      syncTags(p);
+      Store.put('pieces', p).then(renderUploadLists);
+    });
+    frameSection.appendChild(videoEl);
+    frameSection.appendChild(scrub);
+    frameSection.appendChild(captureBtn);
+    Store.get('videos', p.id).then(function (v) {
+      if (!v || !v.blob) return;
+      if (uploadRowObjectUrls[p.id]) URL.revokeObjectURL(uploadRowObjectUrls[p.id]);
+      var url = URL.createObjectURL(v.blob);
+      uploadRowObjectUrls[p.id] = url;
+      videoEl.src = url;
+    });
+
+    // --- Audio dropdown
+    var audioSection = document.createElement('div');
+    audioSection.className = 'upload-row-section upload-row-audio';
+    var audioLabel = document.createElement('label');
+    audioLabel.textContent = 'Backing audio';
+    var audioSelect = document.createElement('select');
+    audioSelect.className = 'stage-select';
+    audioSelect.innerHTML = '<option value="">Not yet chosen</option><option value="__none__">No ambient music</option>' +
+      audioTracks.map(function (t) { return '<option value="' + t.id + '">' + escapeHtml(t.name) + '</option>'; }).join('');
+    audioSelect.value = p.audioTrackId || '';
+    audioSelect.addEventListener('change', function () {
+      p.audioTrackId = audioSelect.value;
+      p.updatedAt = nowIso();
+      syncTags(p);
+      Store.put('pieces', p).then(renderUploadLists);
+    });
+    audioSection.appendChild(audioLabel);
+    audioSection.appendChild(audioSelect);
+
+    // --- Title picker (up to 3 — auto-populated from the matched outline
+    // once analysis finishes, freely editable either way)
+    var titlesSection = document.createElement('div');
+    titlesSection.className = 'upload-row-section upload-row-titles';
+    var titlesLabel = document.createElement('label');
+    titlesLabel.textContent = 'Title options';
+    titlesSection.appendChild(titlesLabel);
+    var titleInputs = [0, 1, 2].map(function (i) {
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'title-input';
+      input.maxLength = 100;
+      input.placeholder = 'Title option ' + (i + 1) + (i > 0 ? ' (optional)' : '');
+      input.value = (p.ytTitles || [])[i] || '';
+      input.addEventListener('input', function () {
+        var vals = titleInputs.map(function (el) { return el.value; }).filter(function (v) { return v.trim(); });
+        p.ytTitles = vals;
+        p.updatedAt = nowIso();
+        syncTags(p);
+        saveSettingsDebouncedForPiece(p);
+      });
+      titlesSection.appendChild(input);
+      return input;
+    });
+
+    // --- Send to final check
+    var actionSection = document.createElement('div');
+    actionSection.className = 'upload-row-section upload-row-action';
+    var sendBtn = document.createElement('button');
+    sendBtn.type = 'button';
+    sendBtn.className = 'btn-primary btn-tiny';
+    sendBtn.textContent = 'Send to final check';
+    sendBtn.addEventListener('click', function () {
+      p.stage = 'final_check';
+      p.updatedAt = nowIso();
+      syncTags(p);
+      Store.put('pieces', p).then(renderUploadLists);
+    });
+    var openBtn = document.createElement('button');
+    openBtn.type = 'button';
+    openBtn.className = 'btn-secondary btn-tiny';
+    openBtn.textContent = 'Full editor…';
+    openBtn.addEventListener('click', function () { openPiece(p.id, renderUploadLists); });
+    actionSection.appendChild(sendBtn);
+    actionSection.appendChild(openBtn);
+
+    row.appendChild(head);
+    row.appendChild(frameSection);
+    row.appendChild(audioSection);
+    row.appendChild(titlesSection);
+    row.appendChild(actionSection);
+    return row;
+  }
+
+  // Per-piece debounce so typing in a title field doesn't fire a save on
+  // every keystroke — separate timer per row (keyed by id) rather than one
+  // shared timer, since editing two rows' titles close together shouldn't
+  // cancel each other's pending save.
+  var uploadRowSaveTimers = {};
+  function saveSettingsDebouncedForPiece(p) {
+    clearTimeout(uploadRowSaveTimers[p.id]);
+    uploadRowSaveTimers[p.id] = setTimeout(function () { Store.put('pieces', p); }, 500);
+  }
+
   function renderUploadLists() {
     var items = Object.keys(pieces).map(function (k) { return pieces[k]; }).filter(function (p) { return p.hasVideo; });
     var inProgress = items.filter(function (p) { return p.stage !== 'live'; }).sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
     var posted = items.filter(function (p) { return p.stage === 'live'; }).sort(function (a, b) { return new Date(b.updatedAt) - new Date(a.updatedAt); });
 
-    uploadGrid.innerHTML = inProgress.length ? inProgress.map(function (p) { return videoCardHtml(p.id, p); }).join('') : '<div class="empty-slot wide">Nothing uploaded yet — drop a video above.</div>';
-    postedGrid.innerHTML = posted.length ? posted.map(function (p) { return videoCardHtml(p.id, p); }).join('') : '<div class="empty-slot wide">Nothing posted yet.</div>';
-
-    [uploadGrid, postedGrid].forEach(function (grid) {
-      grid.querySelectorAll('.video-card').forEach(function (el) {
-        el.addEventListener('click', function () { openPiece(el.dataset.id, renderUploadLists); });
+    Object.keys(uploadRowObjectUrls).forEach(function (id) { URL.revokeObjectURL(uploadRowObjectUrls[id]); });
+    uploadRowObjectUrls = {};
+    uploadRows.innerHTML = '';
+    if (!inProgress.length) {
+      uploadRows.innerHTML = '<div class="empty-slot wide">Nothing uploaded yet — drop a video above.</div>';
+    } else {
+      Store.getAll('audioTracks').then(function (audioTracks) {
+        inProgress.forEach(function (p) { uploadRows.appendChild(buildUploadRow(p, audioTracks)); });
       });
+    }
+
+    postedGrid.innerHTML = posted.length ? posted.map(function (p) { return videoCardHtml(p.id, p); }).join('') : '<div class="empty-slot wide">Nothing posted yet.</div>';
+    postedGrid.querySelectorAll('.video-card').forEach(function (el) {
+      el.addEventListener('click', function () { openPiece(el.dataset.id, renderUploadLists); });
     });
+
+    maybeStartAnalysisPolling();
+  }
+
+  // Analysis (transcribe + match + title extraction) runs server-side in
+  // the background — this just polls the handful of pieces still waiting
+  // on it and re-renders once their analysisStatus moves past
+  // pending/running, so Harvey sees the real transcript/title/tags land
+  // without needing to refresh the page. Stops itself once nothing's
+  // waiting, rather than polling forever in the background.
+  var analysisPollTimer = null;
+  function maybeStartAnalysisPolling() {
+    var waiting = Object.keys(pieces).filter(function (id) {
+      var p = pieces[id];
+      return p.hasVideo && (p.analysisStatus === 'pending' || p.analysisStatus === 'running');
+    });
+    if (!waiting.length) { clearTimeout(analysisPollTimer); analysisPollTimer = null; return; }
+    if (analysisPollTimer) return;
+    analysisPollTimer = setTimeout(function () {
+      analysisPollTimer = null;
+      Promise.all(waiting.map(function (id) { return Store.get('pieces', id); })).then(function (rows) {
+        rows.forEach(function (r) { if (r) pieces[r.id] = r; });
+        renderUploadLists();
+      });
+    }, 3000);
   }
 
   function handleFiles(fileList) {
@@ -1992,14 +2256,26 @@
         transcript: '',
         audioTrackId: '',
         thumbnailDataUrl: '',
+        ytTitles: [],
+        tags: [],
+        analysisStatus: 'pending',
         scheduledAt: '',
         order: maxOrder('processed') + 10,
         createdAt: nowIso(),
         updatedAt: nowIso()
       };
       pieces[id] = piece;
-      Store.put('videos', { id: id, fileName: file.name, blob: file, sizeBytes: file.size, createdAt: nowIso() });
-      Store.put('pieces', piece).then(renderUploadLists);
+      // Piece record first, then the video blob, then kick off analysis —
+      // in that order and awaited, not fired in parallel — so the server's
+      // analysis route (which looks up the piece by the same id) never
+      // races ahead of the piece actually existing yet.
+      Store.put('pieces', piece)
+        .then(function () { return Store.put('videos', { id: id, fileName: file.name, blob: file, sizeBytes: file.size, createdAt: nowIso() }); })
+        .then(function () {
+          return fetch('/api/videos/' + encodeURIComponent(id) + '/analyze', { method: 'POST', credentials: 'include' });
+        })
+        .then(renderUploadLists)
+        .catch(function () { renderUploadLists(); });
     });
     renderUploadLists();
   }
@@ -2007,7 +2283,7 @@
   function bootUploadFiles() {
     dropzone = document.getElementById('dropzone');
     fileInput = document.getElementById('fileInput');
-    uploadGrid = document.getElementById('uploadGrid');
+    uploadRows = document.getElementById('uploadRows');
     postedGrid = document.getElementById('postedGrid');
 
     dropzone.addEventListener('click', function () { fileInput.click(); });

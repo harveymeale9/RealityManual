@@ -138,7 +138,8 @@
             <div class="field">
               <label for="fieldAudioTrack">Backing audio</label>
               <select class="stage-select" id="fieldAudioTrack">
-                <option value="">No audio track selected</option>
+                <option value="">Not yet chosen</option>
+                <option value="__none__">No ambient music</option>
               </select>
             </div>
             <div class="field grow">
@@ -154,8 +155,8 @@
             </div>
           </div>
 
-          <div class="field" id="ytTitlesField" hidden>
-            <label>YouTube title options <span class="field-hint">— up to 3, rotate through if you've got a few</span></label>
+          <div class="field" id="ytTitlesField">
+            <label>Title options <span class="field-hint">— up to 3, YouTube can rotate through them</span></label>
             <input class="title-input" id="fieldYtTitle1" placeholder="Title option 1" maxlength="100" />
             <input class="title-input" id="fieldYtTitle2" placeholder="Title option 2 (optional)" maxlength="100" />
             <input class="title-input" id="fieldYtTitle3" placeholder="Title option 3 (optional)" maxlength="100" />
@@ -176,6 +177,7 @@
 
           <div class="schedule-row" id="scheduleRow">
             <span id="scheduleStatus">Not scheduled yet — move this to the Scheduled stage above to queue it.</span>
+            <button type="button" class="btn-primary btn-tiny" id="approveBtn" hidden>Approve → Scheduled</button>
           </div>
         </div>
       </div>

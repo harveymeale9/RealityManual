@@ -347,4 +347,36 @@ function resetSession() {
   }
 }
 
-module.exports = { runClaude, resetSession };
+// A completely separate, single-turn Claude Code invocation — no resume,
+// no queue, never touches `currentSession` above. Used by the video
+// uploader's title/outline-matching step (see server.js's analyzeVideo):
+// a one-shot structured task ("here's a transcript and some candidate
+// outlines, pick the best match and extract titles"), not a conversation,
+// so it's deliberately kept off the voice app's shared persistent session
+// — mixing that in would pollute Harvey's actual Project Manager chat
+// history with unrelated video-analysis turns. Safe to run concurrently
+// with the voice app or with other one-shot calls: each is its own
+// independent `query()` call/process, nothing shared between them.
+async function runOneShot(prompt, timeoutMs) {
+  const iterator = query({
+    prompt: prompt,
+    options: {
+      cwd: CLAUDE_REPO_DIR,
+      permissionMode: 'bypassPermissions',
+      allowDangerouslySkipPermissions: true,
+      pathToClaudeCodeExecutable: CLAUDE_BIN_PATH
+    }
+  });
+  const consume = (async function () {
+    for await (const evt of iterator) {
+      if (evt.type === 'result') return evt.result;
+    }
+    throw new Error('claude ended without a result');
+  })();
+  const timeout = new Promise(function (resolve, reject) {
+    setTimeout(function () { reject(new Error('one-shot Claude call timed out')); }, timeoutMs || 120000);
+  });
+  return Promise.race([consume, timeout]);
+}
+
+module.exports = { runClaude, resetSession, runOneShot };

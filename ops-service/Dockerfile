@@ -5,7 +5,7 @@ FROM node:22-slim
 # "server certificate verification failed: CAfile: none CRLfile: none"
 # rather than pushing insecurely, since git (correctly) refuses to fall
 # back to an unverified connection on its own.
-RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates openssh-client \
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates openssh-client ffmpeg \
     && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 # The voice app shells out to the real `claude` CLI (see src/claudeRunner.js) so

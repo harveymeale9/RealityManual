@@ -75,6 +75,15 @@ window.RMStore = (function () {
 
   function nowIso() { return new Date().toISOString(); }
 
+  // "Thumbnail Selected" used to be its own stage — replaced (Harvey's
+  // call) with a "thumbnail selected" tag shown on the card instead (see
+  // TAGS below and app.js's cardHtml/tagsFor), since it was really a
+  // sub-state of "Processing," not a genuinely separate stage worth its
+  // own kanban column. "Final Check" is new — a video sits here after
+  // Harvey explicitly sends it for review (thumbnail/audio/titles all
+  // picked) and before he approves it into "Scheduled"; approving is what
+  // actually assigns its scheduledAt now, not picking a thumbnail/audio
+  // combination automatically the way it used to.
   var STAGES = [
     { id: 'archived', label: 'Archived Ideas' },
     { id: 'ideation', label: 'Ideation' },
@@ -84,9 +93,18 @@ window.RMStore = (function () {
     { id: 'edited', label: 'Edited' },
     { id: 'uploaded', label: 'Uploaded' },
     { id: 'processed', label: 'Processing' },
-    { id: 'thumbnail', label: 'Thumbnail Selected' },
+    { id: 'final_check', label: 'Final Check' },
     { id: 'scheduled', label: 'Scheduled' },
     { id: 'live', label: 'Posted / Live' }
+  ];
+
+  // Replaces the old "Thumbnail Selected" stage — set automatically by the
+  // app the moment each corresponding action happens (never something
+  // Harvey picks manually), shown as small chips on a video card.
+  var TAGS = [
+    { id: 'thumbnail_selected', label: 'Thumbnail selected' },
+    { id: 'titles_selected', label: 'Titles selected' },
+    { id: 'music_added', label: 'Music added' }
   ];
 
   var CONTENT_TYPES = [
@@ -191,7 +209,7 @@ window.RMStore = (function () {
     applyCaptionLink: applyCaptionLink,
     getAll: getAll, get: get, put: put, del: del,
     genId: genId, nowIso: nowIso,
-    STAGES: STAGES, CONTENT_TYPES: CONTENT_TYPES, PLATFORMS: PLATFORMS,
+    STAGES: STAGES, TAGS: TAGS, CONTENT_TYPES: CONTENT_TYPES, PLATFORMS: PLATFORMS,
     DEFAULT_CADENCE: DEFAULT_CADENCE,
     getSettings: getSettings, saveSettings: saveSettings, cadenceMs: cadenceMs
   };

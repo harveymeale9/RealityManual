@@ -11,6 +11,7 @@ const path = require('path');
 const Database = require('better-sqlite3');
 const claudeRunner = require('./src/claudeRunner');
 const elevenlabs = require('./src/elevenlabs');
+const videoAnalysis = require('./src/videoAnalysis');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
@@ -290,6 +291,79 @@ app.get('/api/files/:storeName/:id', function (req, res) {
   const meta = row ? JSON.parse(row.data) : {};
   res.setHeader('Content-Type', meta.mimeType || 'application/octet-stream');
   fs.createReadStream(filePath).pipe(res);
+});
+
+// --- Uploader tool: transcribe a freshly-uploaded video, match it to the
+// right "Uploaded"-stage outline, and pull title candidates from it. See
+// src/videoAnalysis.js for the actual work; this route just validates,
+// responds immediately (the same "kick off the real work, respond 202,
+// let the client poll the piece record" pattern the voice app already
+// uses for its own long-running turns), and owns the one place that
+// touches the `pieces` DB record before/during/after.
+function getPieceRecord(id) {
+  const row = stmts.getOne.get('pieces', id);
+  return row ? JSON.parse(row.data) : null;
+}
+function savePieceRecord(piece) {
+  stmts.upsert.run('pieces', piece.id, JSON.stringify(piece), new Date().toISOString());
+}
+
+async function runVideoAnalysis(id) {
+  const piece = getPieceRecord(id);
+  if (!piece) return; // deleted before analysis started — nothing to do
+  piece.analysisStatus = 'running';
+  savePieceRecord(piece);
+
+  let transcript = '';
+  try {
+    const videoPath = path.join(UPLOADS_DIR, 'videos', id);
+    const tmpDir = path.join(DATA_DIR, 'tmp');
+    fs.mkdirSync(tmpDir, { recursive: true });
+    transcript = await videoAnalysis.transcribeVideo(videoPath, tmpDir);
+  } catch (e) {
+    console.error('video transcription failed for ' + id + ':', e.message);
+  }
+
+  try {
+    const candidates = stmts.getAll.all('pieces')
+      .map(function (r) { try { return JSON.parse(r.data); } catch (e) { return null; } })
+      .filter(function (p) { return p && p.stage === 'uploaded'; })
+      .map(function (p) {
+        const probe = (p.notesHtml || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        return { id: p.id, seq: p.seq, title: p.title, notesSnippet: probe.slice(0, 400) };
+      });
+    const result = await videoAnalysis.matchAndGenerateTitles(transcript, candidates);
+
+    const latest = getPieceRecord(id);
+    if (!latest) return; // deleted while this was running
+    latest.transcript = transcript;
+    latest.analysisStatus = 'done';
+    latest.analysisMatchedPieceId = result.matchedPieceId || '';
+    if (result.titleOptions.length) latest.ytTitles = result.titleOptions;
+    if (result.workingTitle) latest.title = result.workingTitle;
+    latest.updatedAt = new Date().toISOString();
+    savePieceRecord(latest);
+  } catch (e) {
+    console.error('video title/outline matching failed for ' + id + ':', e.message);
+    const latest = getPieceRecord(id);
+    if (!latest) return;
+    latest.transcript = transcript;
+    latest.analysisStatus = 'error';
+    latest.analysisError = String(e.message || e).slice(0, 500);
+    latest.updatedAt = new Date().toISOString();
+    savePieceRecord(latest);
+  }
+}
+
+app.post('/api/videos/:id/analyze', function (req, res) {
+  const { id } = req.params;
+  if (!isValidId(id)) return res.status(400).json({ error: 'invalid_params' });
+  const filePath = path.join(UPLOADS_DIR, 'videos', id);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'video_not_found' });
+  const piece = getPieceRecord(id);
+  if (!piece) return res.status(404).json({ error: 'piece_not_found' });
+  res.json({ ok: true, status: 'running' });
+  runVideoAnalysis(id).catch(function (e) { console.error('unhandled video analysis error for ' + id + ':', e.message); });
 });
 
 // --- Voice app: talk to a real headless Claude Code agent by voice or text ---

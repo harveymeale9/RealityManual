@@ -978,6 +978,7 @@ a { color: var(--accent); }
 }
 .btn-secondary:hover { color: var(--ink); border-color: var(--accent); }
 .btn-secondary.btn-tiny { font-size: 0.75rem; padding: 6px 10px; }
+.btn-primary.btn-tiny { font-size: 0.75rem; padding: 6px 12px; }
 .btn-secondary:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn-secondary:disabled:hover { color: var(--ink-soft); border-color: var(--border); }
 
@@ -1162,6 +1163,50 @@ a { color: var(--accent); }
 .video-card-meta { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .video-card-stage { font-size: 0.7rem; color: var(--ink-faint); }
 .video-card-sched { font-size: 0.72rem; color: var(--accent-2); }
+
+/* Small status chips replacing the old "Thumbnail Selected" stage — set
+   automatically (see app.js's syncTags), shown both on kanban cards and
+   in the upload-tool rows below. */
+.tag-chip {
+  display: inline-block; font-size: 0.68rem; padding: 2px 7px; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--border-soft); color: var(--ink-soft);
+  margin-right: 4px;
+}
+.card-tags { margin-top: 2px; }
+
+/* ---------- upload tool: inline per-video rows ---------- */
+
+.upload-rows { display: flex; flex-direction: column; gap: 14px; }
+.upload-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(200px, 1.3fr) minmax(160px, 0.9fr) minmax(220px, 1.3fr) auto;
+  gap: 16px;
+  align-items: start;
+  border: 1px solid var(--border-soft);
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+@media (max-width: 1100px) {
+  .upload-row { grid-template-columns: 1fr 1fr; }
+}
+.upload-row-head { display: flex; flex-direction: column; gap: 6px; }
+.upload-row-thumb {
+  aspect-ratio: 16/9; width: 100%; background: var(--surface-2); border-radius: 6px;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.upload-row-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.upload-row-title { font-size: 0.9rem; color: var(--ink); font-weight: 500; }
+.upload-row-idline { font-size: 0.75rem; color: var(--ink-faint); }
+.upload-row-tags { margin-top: 2px; }
+.upload-row-status { font-size: 0.75rem; color: var(--ink-faint); font-style: italic; }
+.upload-row-status-error { color: var(--error); font-style: normal; }
+.upload-row-section { display: flex; flex-direction: column; gap: 6px; }
+.upload-row-section label { font-size: 0.72rem; color: var(--ink-faint); }
+.upload-row-video { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 6px; }
+.upload-row-frame input[type="range"] { width: 100%; accent-color: var(--accent); }
+.upload-row-titles .title-input { margin-bottom: 4px; }
+.upload-row-action { display: flex; flex-direction: column; gap: 8px; align-self: stretch; justify-content: center; }
 
 /* ---------- settings ---------- */
 
