@@ -119,7 +119,9 @@ window.RMVoice = (function () {
   // renders the original markdown (see renderMarkdownLite); this only
   // affects what gets spoken. A fenced code block becomes a short spoken
   // pointer rather than being read character-by-character (that produced
-  // exactly the unusable "ssh dash i tilde slash..." Harvey flagged).
+  // exactly the unusable "ssh dash i tilde slash..." Harvey flagged) — a
+  // link gets the same treatment for the same reason (reading a raw URL
+  // aloud is unusable/"sounds ridiculous," his words).
   function stripMarkdownForSpeech(text) {
     if (!text) return '';
     var codeBlocks = 0;
@@ -128,6 +130,12 @@ window.RMVoice = (function () {
       codeBlocks++;
       return codeBlocks === 1 ? ' I’ve put it in the chat for you to copy.' : ' Another one is in the chat too.';
     });
+    // Markdown links first (so their url doesn't also get caught by the
+    // bare-url pass below), keeping the human-readable label but dropping
+    // the actual url in favor of a short spoken pointer to it.
+    out = out.replace(/\[([^\]]+)\]\(https?:\/\/[^\s)]+\)/g, '$1 (link below)');
+    // Any remaining bare url (not part of markdown link syntax).
+    out = out.replace(/https?:\/\/\S+/g, 'link below');
     out = out.replace(/`([^`]+)`/g, '$1');
     out = out.replace(/^#{1,6}\s+/gm, '');
     out = out.replace(/\*\*([^*]+)\*\*/g, '$1');

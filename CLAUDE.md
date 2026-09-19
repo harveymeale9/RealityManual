@@ -5538,3 +5538,34 @@ confirmed against the live deployed service for any of these four —
 worth a look before considering this fully settled, particularly the
 book-icon overlap (never rendered outside of reasoning about the CSS)
 and whether the new caption fields save/reload correctly in Settings.
+
+---
+
+# 125. Voice Replies No Longer Read Raw URLs Out Loud
+
+Harvey: links in a spoken reply were being read character-by-character
+("h-t-t-p-s colon slash slash...") — same class of problem §89's fenced
+code block handling already solved for shell commands ("sounds
+ridiculous," his words this time, about links specifically).
+
+**Fix, `ops-service/public/lib/voiceClient.js`'s `stripMarkdownForSpeech()`**
+(shared by both `app.js` and `voice-mobile.html`, so this applies
+everywhere TTS is used): two new regex passes, right after the existing
+fenced-code-block handling and before inline-code/bold/italic stripping —
+- Markdown-style `[label](https://...)` links keep the human-readable
+  label and drop the url, becoming `label (link below)`.
+- Any remaining bare `https://...`/`http://...` url (not part of
+  markdown link syntax) becomes the plain phrase `link below`.
+
+Both run before the fenced-code-block regex's own output could
+interfere, and markdown links are handled before the bare-url pass
+specifically so a link's own url text isn't caught twice. The chat
+bubble's own rendering (`renderMarkdownLite`) is untouched — this only
+changes what gets spoken, the visible text (and the real clickable link)
+is exactly as the model wrote it.
+
+Frontend-only (`voiceClient.js`), so per §93 this is already live — no
+deploy/restart needed. Verified via `node --check` and a direct regex
+test against a string containing both a markdown link and a bare url;
+not yet heard on a real device — confirm a reply containing a link
+actually says "link below" instead of the raw url next time one comes up.
