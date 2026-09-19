@@ -36,21 +36,47 @@
       <a href="#project-manager" class="side-rail-btn" data-tab="project-manager" title="Project Manager" aria-label="Project Manager">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
       </a>
-      <a href="#content-ops" class="side-rail-btn" data-tab="content-ops" title="Content Ops" aria-label="Content Ops">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-      </a>
-      <a href="#upload-files" class="side-rail-btn" data-tab="upload-files" title="Content Production" aria-label="Content Production">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 16V4M12 4l-5 5M12 4l5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
-      </a>
-      <a href="#sales-analytics" class="side-rail-btn" data-tab="sales-analytics" title="Sales Analytics" aria-label="Sales Analytics">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2v20M17 6.5c0-1.9-2.2-3.5-5-3.5s-5 1.4-5 3.5S9.2 10 12 10s5 1.6 5 3.5-2.2 3.5-5 3.5-5-1.6-5-3.5"/></svg>
-      </a>
-      <a href="#website-analytics" class="side-rail-btn" data-tab="website-analytics" title="Website Analytics" aria-label="Website Analytics">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 2.5 14.4 0 17M12 3c-2.5 2.6-2.5 14.4 0 17"/></svg>
-      </a>
-      <a href="#settings" class="side-rail-btn" data-tab="settings" title="Settings" aria-label="Settings">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.96 19a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.04H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1.04-1.56V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15.4 4.6c.6.25 1.3.14 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9c.25.6.83 1.02 1.56 1.04H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1.04Z"/></svg>
-      </a>
+      <!-- Content Ops group: parent icon (a generic "layers" mark, distinct
+           from its own default child's icon below) links to the group's
+           default leaf, Content Pipeline. Its 3 real leaf tabs are nested
+           beneath it, smaller, under a divider — Harvey's "nested sub-icons"
+           request (2026-09-19). data-tab on every link is a real leaf id
+           app.js's renderActiveTab()/bindSideRail() already handle
+           generically; no JS needed to know about this grouping. -->
+      <div class="side-rail-group">
+        <a href="#content-ops" class="side-rail-btn" data-tab="content-ops" title="Content Ops" aria-label="Content Ops">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="M2 12l10 5 10-5"/><path d="M2 16l10 5 10-5"/></svg>
+        </a>
+        <div class="side-rail-sub">
+          <a href="#content-ops" class="side-rail-btn side-rail-btn-sub" data-tab="content-ops" title="Content Pipeline" aria-label="Content Pipeline">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          </a>
+          <a href="#upload-files" class="side-rail-btn side-rail-btn-sub" data-tab="upload-files" title="Content Production" aria-label="Content Production">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 16V4M12 4l-5 5M12 4l5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+          </a>
+          <a href="#settings" class="side-rail-btn side-rail-btn-sub" data-tab="settings" title="Content Settings" aria-label="Content Settings">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.96 19a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.04H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1.04-1.56V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15.4 4.6c.6.25 1.3.14 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9c.25.6.83 1.02 1.56 1.04H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1.04Z"/></svg>
+          </a>
+        </div>
+      </div>
+      <!-- Analytics group: same pattern, parent is a "trending up" mark,
+           3 real leaf tabs nested beneath it. -->
+      <div class="side-rail-group">
+        <a href="#content-analytics" class="side-rail-btn" data-tab="content-analytics" title="Analytics" aria-label="Analytics">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>
+        </a>
+        <div class="side-rail-sub">
+          <a href="#content-analytics" class="side-rail-btn side-rail-btn-sub" data-tab="content-analytics" title="Content Analytics" aria-label="Content Analytics">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M10 8l6 4-6 4V8Z"/></svg>
+          </a>
+          <a href="#sales-analytics" class="side-rail-btn side-rail-btn-sub" data-tab="sales-analytics" title="Sales Analytics" aria-label="Sales Analytics">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2v20M17 6.5c0-1.9-2.2-3.5-5-3.5s-5 1.4-5 3.5S9.2 10 12 10s5 1.6 5 3.5-2.2 3.5-5 3.5-5-1.6-5-3.5"/></svg>
+          </a>
+          <a href="#website-analytics" class="side-rail-btn side-rail-btn-sub" data-tab="website-analytics" title="Website Analytics" aria-label="Website Analytics">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 2.5 14.4 0 17M12 3c-2.5 2.6-2.5 14.4 0 17"/></svg>
+          </a>
+        </div>
+      </div>
     </nav>
     <div class="panel-body">
       <header class="panel-header">
@@ -69,6 +95,12 @@
           <button class="avatar-btn" id="logoutBtn" title="Log out" aria-label="Log out">H</button>
         </div>
       </header>
+      <!-- Secondary tab strip for whichever group is active (Content Ops:
+           Pipeline/Production/Settings, Analytics: Content/Sales/Website) —
+           app.js's renderSubtabs() fills this in and leaves it empty (so it
+           collapses via CSS :empty) for single-leaf groups like Project
+           Manager. -->
+      <nav class="panel-subtabs" id="panelSubtabs"></nav>
       <main class="panel-main" id="panelMain"></main>
       <footer class="panel-footer">The Reality Manual // Control Panel v1.0</footer>
       <!-- Mobile-only fixed way back to Project Manager: the side-rail is

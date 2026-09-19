@@ -241,6 +241,24 @@ a { color: var(--accent); }
 .side-rail-btn:hover { color: var(--ink-soft); background: var(--surface-2); }
 .side-rail-btn.active { color: var(--accent); background: var(--accent-soft); }
 
+/* Content Ops / Analytics groups: a full-size parent icon, then its real
+   leaf tabs nested underneath — smaller, under a thin divider, per
+   Harvey's "nested sub-icons" request. Deliberately not indented
+   sideways (the rail is only 76px wide, not much room), so the nesting
+   reads through size + the divider + proximity instead. */
+.side-rail-group { display: flex; flex-direction: column; align-items: center; }
+.side-rail-sub {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin-top: 2px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-soft);
+}
+.side-rail-btn-sub { width: 34px; height: 34px; }
+.side-rail-btn-sub svg { width: 16px; height: 16px; }
+
 .panel-body { flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100%; }
 
 .panel-header {
@@ -289,6 +307,37 @@ a { color: var(--accent); }
 }
 .panel-tab:hover { color: var(--ink-soft); background: none; }
 .panel-tab.active { color: var(--accent); background: none; border-bottom-color: var(--accent); }
+
+/* Second-level nav for whichever group is active (Content Ops's 3 panels,
+   Analytics's 3 tabs) — app.js's renderSubtabs() fills this in, or leaves
+   it empty for a single-leaf group like Project Manager, in which case
+   the :empty rule collapses it entirely so it doesn't reserve a bar of
+   dead space. Pill-style, deliberately distinct from .panel-tab's
+   underline treatment so it reads as a second tier, not a sibling row. */
+.panel-subtabs {
+  display: flex;
+  gap: 10px;
+  padding: 10px clamp(16px, 3vw, 36px);
+  border-bottom: 1px solid var(--border-soft);
+  flex-wrap: wrap;
+}
+.panel-subtabs:empty { display: none; padding: 0; border: none; }
+.panel-subtab {
+  background: none;
+  border: 1px solid var(--border-soft);
+  color: var(--ink-faint);
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  text-decoration: none;
+}
+.panel-subtab:hover { color: var(--ink-soft); border-color: var(--accent-3); }
+.panel-subtab.active { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
 
 .panel-actions { margin-left: auto; display: flex; align-items: center; gap: 16px; }
 
@@ -1390,6 +1439,8 @@ a { color: var(--accent); }
      compact line. */
   .panel-tabs { flex-wrap: nowrap; overflow-x: auto; }
   .panel-tab { flex-shrink: 0; }
+  .panel-subtabs { flex-wrap: nowrap; overflow-x: auto; padding: 8px 16px; }
+  .panel-subtab { flex-shrink: 0; }
   .panel-actions { flex-shrink: 0; }
   .column { width: 86vw; }
   .modal-wrap { padding: 0; }
