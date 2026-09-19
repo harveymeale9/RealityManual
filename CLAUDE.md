@@ -4977,3 +4977,31 @@ app itself** — confirm after the restart that clicking "Send to final
 check" genuinely builds the file, the piece stays in Processing with a
 live status line while it does, and the Final Check card's video
 actually has the spliced audio audible when played.
+
+---
+
+# 116. Final Check Card: No Editor Escape Hatch, Added Post Locations + Type
+
+Harvey's follow-up on §113/§115: drop the "Full editor…" button entirely
+— Final Check should be a closed review surface with no way to open the
+shared editor modal at all — and add the platform (post locations:
+FB/IG/etc) and content-type chips directly onto the card, alongside
+what's already there.
+
+**`ops-service/public/app.js`:** `finalCheckCardHtml()`'s "Full
+editor…" button is gone, and its `bindBoardEvents()` click handler
+(`.fc-edit-btn`) removed along with it — since `.final-check-card` was
+already deliberately its own class rather than `.card` (§113, to keep
+it out of the generic click-to-open-modal binding), removing this one
+button closes the only remaining way to reach the editor from this
+card. Added `'<div class="chip-row">' + chipHtml(piece) + '</div>'`
+right under the title — `chipHtml()` is the exact same helper the
+normal kanban cards already use for platform + content-type chips, so
+no new rendering logic was needed, just reusing what already existed.
+
+Final Check cards now show exactly Harvey's list: title(s), video
+preview, post-location/type chips, caption, and one Approve button —
+nothing else clickable.
+
+Frontend-only, so per §93 this is already live — no deploy/restart
+needed. Verified via `node --check` and a CSS brace-balance check.

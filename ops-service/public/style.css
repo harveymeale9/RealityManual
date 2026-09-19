@@ -645,7 +645,7 @@ a { color: var(--accent); }
 }
 .fc-titles { margin: 0; padding-left: 1.2em; font-size: 0.85rem; color: var(--ink); display: flex; flex-direction: column; gap: 3px; }
 .fc-titles-empty { font-size: 0.8rem; color: var(--ink-faint); font-style: italic; }
-.fc-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 4px; }
+.fc-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 4px; }
 
 .column-head {
   display: flex;

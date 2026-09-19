@@ -1837,16 +1837,24 @@
     // so this always points at the real "<id>-final" file, never the raw
     // upload, matching Harvey's whole point of this stage: what's playing
     // here is what actually gets published.
+    //
+    // Deliberately no way to open the shared editor modal from here —
+    // Harvey's explicit ask: Final Check should be a closed, complete
+    // review surface (title(s), video, caption, post locations/type,
+    // approve), no click-through to anything else. chipHtml() reuses the
+    // exact same platform/content-type chips the normal kanban cards
+    // already show, so "post locations, type" needs no new rendering
+    // logic of its own.
     return '' +
       '<div class="final-check-card" data-id="' + id + '">' +
         '<video class="fc-video" data-id="' + id + '" playsinline preload="metadata"' +
           (piece.thumbnailDataUrl ? ' poster="' + piece.thumbnailDataUrl + '"' : '') +
           ' controls src="/api/files/videos/' + encodeURIComponent(id) + '-final"></video>' +
         '<div class="fc-title">' + idBadge + escapeHtml(piece.title || 'Untitled') + '</div>' +
+        '<div class="chip-row">' + chipHtml(piece) + '</div>' +
         '<div class="fc-caption">' + escapeHtml(captionText) + '</div>' +
         titlesHtml +
         '<div class="fc-actions">' +
-          '<button type="button" class="btn-secondary btn-tiny fc-edit-btn" data-id="' + id + '">Full editor…</button>' +
           '<button type="button" class="btn-primary fc-approve-btn" data-id="' + id + '">Approve → Scheduled</button>' +
         '</div>' +
       '</div>';
@@ -1944,9 +1952,6 @@
           return Store.put('pieces', p);
         }).then(render);
       });
-    });
-    board.querySelectorAll('.fc-edit-btn').forEach(function (btn) {
-      btn.addEventListener('click', function () { openPiece(btn.dataset.id, render); });
     });
 
     board.querySelectorAll('.card-move').forEach(function (sel) {
