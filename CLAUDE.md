@@ -4265,3 +4265,65 @@ button appears, the preview bar shows/cancels correctly, the quote
 renders on both the sending and receiving device, and a reply actually
 disambiguates correctly in a real multi-topic conversation before
 considering this fully done.
+
+---
+
+# 105. Bluetooth Call-Tone: §103's Fix Wasn't Enough Either — Different Lever
+
+Harvey tested §103 live and reported the tone is still happening on every
+"Start Recording" press — the deviceId-selection fix didn't close it.
+
+**Re-researched rather than guessing again**: no source found actually
+confirms that Android's Bluetooth SCO/HFP negotiation is gated on *which*
+`deviceId` Chrome resolves to at all. It's plausible (not confirmed) that
+Chrome's WebRTC audio backend on Android sets up a voice-communication
+audio session — and Android's AudioManager decides to grab any connected
+Bluetooth headset into SCO — the moment *any* mic stream opens, regardless
+of which physical device was actually requested. If that's the real
+mechanism, §103's deviceId selection was solving a problem that wasn't
+actually the (whole) cause.
+
+**Different, additive fix — target "every time" directly, even if the
+open/close negotiation itself can't be avoided:** `voiceClient.js` used to
+call `getUserMedia` fresh on every single "Start Recording" press and
+immediately `stream.getTracks().forEach(t => t.stop())` at the end of
+every recording — meaning if the tone comes from Chrome opening *and*
+closing an audio session (matching Harvey's exact description: a tone on
+both start and end), that negotiation was happening once per recording,
+every recording, by construction. Now the stream is cached and reused for
+the lifetime of the page (`cachedStream`, `getMicStream()`): the first
+"Start Recording" press still acquires the mic (and may still trigger one
+profile-switch tone — that part may be genuinely unavoidable from web
+content), but every recording after that, within the same page session,
+reuses the already-open stream instead of tearing it down and reopening
+it — no new negotiation, so no repeated tone. The stream is only actually
+released (`releaseMic()`) on `pagehide` (leaving/closing the page) or if a
+track ends on its own (permission revoked, device unplugged).
+
+**Real, honestly-stated trade-off, not yet confirmed either way:** keeping
+the mic stream open for the whole session likely means the Bluetooth
+headset stays in the lower-quality HFP mode for that entire time, not just
+during an actual recording — which could mean CC's spoken replies sound
+worse over Bluetooth for the rest of the session, not just during
+dictation. Whether that actually happens depends on how Harvey's specific
+phone/Android version routes simultaneous media playback vs. voice input
+audio, which isn't something this session can verify without a real
+device test. Ship first, verify against Harvey's actual hardware, and
+revisit (e.g., release the stream after a short idle period instead of
+holding it for the whole session) if the playback-quality trade-off turns
+out to be worse than the repeated tone was.
+
+Frontend-only (`voiceClient.js`), so per §93 this is already live —
+served straight from disk, no deploy/restart needed; just needs a page
+reload on Harvey's end to pick up the new script. §103's deviceId logic
+is left in place (harmless, and may still help reduce which device gets
+used on the one negotiation that does happen).
+
+**Honest framing if this still isn't enough:** two real attempts now
+(§103's device selection, this session's stream-reuse) haven't been
+confirmed to fully close this — if Harvey reports it's still happening on
+literally every press even after this, the next step isn't a third
+in-the-dark guess, it's asking him for the exact device/Android/Chrome
+version and headset model so the actual behavior can be looked up
+specifically, since this class of bug is known to vary significantly by
+OEM audio stack rather than being uniform across "Android" as a whole.

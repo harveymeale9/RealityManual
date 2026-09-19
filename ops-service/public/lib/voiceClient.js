@@ -59,7 +59,34 @@ window.RMVoice = (function () {
     }).catch(function () { return null; });
   }
 
-  function startRecording() {
+  // §103's deviceId fix apparently still isn't enough on its own (Harvey
+  // still hears the tone on every press even with it live) — research
+  // turned up no confirmation that Android's Bluetooth SCO negotiation is
+  // actually gated on *which* deviceId Chrome ends up using at all; it may
+  // well be triggered by Chrome/WebRTC's own audio-session setup on
+  // Android the moment any mic stream is opened, independent of device
+  // choice. Rather than guess a third device-selection trick, this closes
+  // a different, genuinely separate gap: acquiring a *fresh* mic stream
+  // (and therefore a fresh negotiation) on every single "Start Recording"
+  // press, because startRecording()/stop() used to call getUserMedia and
+  // then immediately stop() every track once each recording finished.
+  // Whatever negotiation happens on open (and, per Harvey's report, on
+  // close too — "call started"/"call ended") was happening once per
+  // recording. Caching and reusing one stream for the lifetime of the
+  // page means that negotiation — if it's unavoidable at all — happens at
+  // most once per page session (first Start Recording press), not on
+  // every single one, which is what Harvey actually complained about
+  // ("I don't wanna be calling this thing every time"). Trade-off,
+  // stated plainly: the mic stays "hot" (browser's recording indicator
+  // stays on, Bluetooth link if any stays active) for as long as the tab
+  // is open, not just during an actual recording — released on
+  // `pagehide` (see releaseMic below), or immediately if a track ends on
+  // its own (device unplugged, permission revoked).
+  var cachedStream = null;
+  function streamIsLive(stream) {
+    return !!stream && stream.getTracks().some(function (t) { return t.readyState === 'live'; });
+  }
+  function acquireMicStream() {
     return resolvePreferredMicDeviceId().then(function (deviceId) {
       var audioConstraints = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
       if (deviceId) audioConstraints.deviceId = { exact: deviceId };
@@ -77,6 +104,30 @@ window.RMVoice = (function () {
         throw err;
       });
     }).then(function (stream) {
+      stream.getTracks().forEach(function (t) {
+        t.addEventListener('ended', function () { if (cachedStream === stream) cachedStream = null; });
+      });
+      cachedStream = stream;
+      return stream;
+    });
+  }
+  function getMicStream() {
+    if (streamIsLive(cachedStream)) return Promise.resolve(cachedStream);
+    return acquireMicStream();
+  }
+  // Actually releases the mic (and, if applicable, lets Bluetooth drop
+  // back out of HFP) — called on pagehide so a stream cached for reuse
+  // doesn't just stay open forever once Harvey's actually done with the
+  // app for that session.
+  function releaseMic() {
+    if (!cachedStream) return;
+    cachedStream.getTracks().forEach(function (t) { t.stop(); });
+    cachedStream = null;
+  }
+  window.addEventListener('pagehide', releaseMic);
+
+  function startRecording() {
+    return getMicStream().then(function (stream) {
       requestWakeLock();
       var mimeType = (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/webm')) ? 'audio/webm' : '';
       var recorder = mimeType ? new MediaRecorder(stream, { mimeType: mimeType }) : new MediaRecorder(stream);
@@ -87,7 +138,10 @@ window.RMVoice = (function () {
         stop: function () {
           return new Promise(function (resolve) {
             recorder.addEventListener('stop', function () {
-              stream.getTracks().forEach(function (t) { t.stop(); });
+              // Deliberately NOT stopping the stream's tracks here anymore
+              // — see the comment above cachedStream for why: that used to
+              // tear down and re-negotiate the mic on every single
+              // recording. The stream is released later, on pagehide.
               releaseWakeLock();
               resolve(new Blob(chunks, { type: recorder.mimeType || 'audio/webm' }));
             });
