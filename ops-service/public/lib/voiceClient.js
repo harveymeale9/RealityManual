@@ -230,7 +230,21 @@ window.RMVoice = (function () {
   }
   function currentlySpeaking() { return speakingMsgId; }
 
+  // Bumped on every stopSpeaking() (including the one speak() itself does
+  // before firing off a new TTS request) — a speak() call that's still
+  // waiting on its fetch when a *newer* speak()/stopSpeaking() happens
+  // checks this before ever creating an Audio element, so a slow/stale
+  // request can't start playing after the fact. Without this, pressing
+  // Play a second time while the first request was still in flight (TTS
+  // synthesis takes a beat — Harvey's exact report: "I pressed play again
+  // because I didn't hear anything yet") let both requests eventually
+  // resolve and both start playing, since stopSpeaking() could only ever
+  // stop an Audio element that already existed, not one still being
+  // fetched.
+  var playToken = 0;
+
   function stopSpeaking() {
+    playToken++;
     if (currentAudio) {
       try { currentAudio.pause(); } catch (e) { /* ignore */ }
       currentAudio = null;
@@ -248,6 +262,7 @@ window.RMVoice = (function () {
     var clean = stripMarkdownForSpeech(text);
     if (!clean) return Promise.resolve(null);
     stopSpeaking();
+    var myToken = playToken;
     return fetch(API_BASE + '/api/voice/tts', {
       method: 'POST',
       credentials: 'include',
@@ -255,6 +270,11 @@ window.RMVoice = (function () {
       body: JSON.stringify({ text: clean })
     }).then(function (r) { if (!r.ok) throw new Error('Could not synthesize speech'); return r.blob(); })
       .then(function (blob) {
+        // Superseded by a newer speak()/stopSpeaking() call while this
+        // fetch was still in flight — never even create the Audio element
+        // for it, so it can't ever start playing on top of whatever's
+        // current now.
+        if (myToken !== playToken) return null;
         var url = URL.createObjectURL(blob);
         var audio = new Audio(url);
         currentAudio = audio;

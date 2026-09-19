@@ -4367,3 +4367,43 @@ phone/Android/Chrome version and headset model) to work from.
 Frontend-only revert, already live (no deploy/restart needed) — verified
 via `node --check` and a grep confirming no leftover references to any
 of the removed functions/variables.
+
+---
+
+# 107. Fixed: Pressing Play Twice Could Start Two Overlapping Audio Tracks
+
+Harvey reported that clicking a message's Play button while audio was
+already (about to be) playing could start a second track talking over
+the first, rather than either stopping or cleanly replacing it.
+
+**Root cause:** `speak()` (`ops-service/public/lib/voiceClient.js`) called
+`stopSpeaking()` up front, but that function could only stop an `Audio`
+element that had *already been created* — it had nothing to invalidate a
+TTS request still in flight. ElevenLabs synthesis takes a beat, and
+Harvey's own description matched exactly: he pressed Play, didn't hear
+anything yet (still fetching), and pressed Play again — during that
+window `speakingMsgId` hadn't been set yet either, so the Play button's
+own "am I already speaking this one" check didn't catch it. Both
+`speak()` calls' fetches eventually resolved, both created their own
+`Audio` element, and both called `.play()` — the second call's
+`stopSpeaking()` had nothing yet to stop when it ran, since the first
+request's `Audio` object didn't exist until its fetch resolved *after*
+that point.
+
+**Fix:** a module-level `playToken` counter, bumped on every
+`stopSpeaking()` call (including the one `speak()` itself makes before
+firing its fetch). Each `speak()` call captures the token's value at the
+moment it starts (`myToken`); when its fetch resolves, it only actually
+creates the `Audio` element and plays if `myToken` still matches the
+current `playToken` — if a newer `speak()`/`stopSpeaking()` happened in
+the meantime, the token has moved on and the stale response is dropped
+before ever touching the DOM/audio pipeline, so it can never start
+playing on top of whatever's current. Net effect: pressing Play any
+number of times in a row, at any timing, still only ever results in at
+most one audio track playing.
+
+Frontend-only (`voiceClient.js`), so per §93 this is already live —
+served straight from disk, no deploy/restart needed. Verified via
+`node --check`; not yet tested against the live deployed service with a
+real fast double-tap — worth a real test to confirm the race is actually
+closed, not just reasoned about.
