@@ -2376,44 +2376,90 @@
     }, 3000);
   }
 
+  // Reads duration + dimensions straight from the local file via a
+  // throwaway <video> element and an object URL — no upload/ffmpeg round
+  // trip needed, this is just the browser parsing the file's own
+  // metadata, and it's local so it's fast. Resolves null (never rejects)
+  // if metadata can't be read for any reason, so a weird/corrupt file
+  // still uploads — it just falls back to a sane default content type
+  // below instead of blocking the upload entirely.
+  function probeVideoMeta(file) {
+    return new Promise(function (resolve) {
+      var url = URL.createObjectURL(file);
+      var v = document.createElement('video');
+      v.preload = 'metadata';
+      v.muted = true;
+      var settled = false;
+      function finish(meta) {
+        if (settled) return;
+        settled = true;
+        URL.revokeObjectURL(url);
+        resolve(meta);
+      }
+      v.addEventListener('loadedmetadata', function () {
+        finish({ duration: v.duration || 0, width: v.videoWidth || 0, height: v.videoHeight || 0 });
+      });
+      v.addEventListener('error', function () { finish(null); });
+      setTimeout(function () { finish(null); }, 8000); // safety net, shouldn't normally fire for a local blob
+      v.src = url;
+    });
+  }
+
+  // Harvey's rule: orientation is what separates "this is basically
+  // Longform" from everything else — landscape *and* long means Longform
+  // (matches how that type is actually used: YT/FB, not a vertical
+  // platform). Everything else (vertical, or landscape but short) gets
+  // bucketed purely by length against the same durations the content
+  // types are already named for (10-20s / ~1min / up to 3min).
+  function detectContentType(meta) {
+    if (!meta || !meta.duration) return 'short'; // couldn't read metadata — same default as before this feature existed
+    var isLandscape = meta.width >= meta.height;
+    if (isLandscape && meta.duration > 180) return 'longform';
+    if (meta.duration <= 20) return 'ultra_short';
+    if (meta.duration <= 75) return 'short';
+    return 'long_short';
+  }
+
   function handleFiles(fileList) {
     Array.prototype.slice.call(fileList).forEach(function (file) {
       if (file.type.indexOf('video') !== 0) return;
       var id = Store.genId();
-      var piece = {
-        id: id,
-        seq: Store.nextSeq(allPiecesArray()),
-        title: file.name.replace(/\.[^.]+$/, ''),
-        stage: 'processed', // "Processing" — a brand-new opportunity, not the same thing as any plan in "Uploaded"
-        platforms: [],
-        contentType: 'short',
-        notesHtml: '',
-        hasVideo: true,
-        transcript: '',
-        audioTrackId: '',
-        thumbnailDataUrl: '',
-        ytTitles: [],
-        tags: [],
-        analysisStatus: 'pending',
-        scheduledAt: '',
-        order: maxOrder('processed') + 10,
-        createdAt: nowIso(),
-        updatedAt: nowIso()
-      };
-      pieces[id] = piece;
-      // Piece record first, then the video blob, then kick off analysis —
-      // in that order and awaited, not fired in parallel — so the server's
-      // analysis route (which looks up the piece by the same id) never
-      // races ahead of the piece actually existing yet.
-      Store.put('pieces', piece)
-        .then(function () { return Store.put('videos', { id: id, fileName: file.name, blob: file, sizeBytes: file.size, createdAt: nowIso() }); })
-        .then(function () {
-          return fetch('/api/videos/' + encodeURIComponent(id) + '/analyze', { method: 'POST', credentials: 'include' });
-        })
-        .then(renderUploadLists)
-        .catch(function () { renderUploadLists(); });
+      probeVideoMeta(file).then(function (meta) {
+        var piece = {
+          id: id,
+          seq: Store.nextSeq(allPiecesArray()),
+          title: file.name.replace(/\.[^.]+$/, ''),
+          stage: 'processed', // "Processing" — a brand-new opportunity, not the same thing as any plan in "Uploaded"
+          platforms: [],
+          contentType: detectContentType(meta),
+          notesHtml: '',
+          hasVideo: true,
+          transcript: '',
+          audioTrackId: '',
+          thumbnailDataUrl: '',
+          ytTitles: [],
+          tags: [],
+          analysisStatus: 'pending',
+          scheduledAt: '',
+          order: maxOrder('processed') + 10,
+          createdAt: nowIso(),
+          updatedAt: nowIso()
+        };
+        pieces[id] = piece;
+        renderUploadLists();
+        // Piece record first, then the video blob, then kick off analysis —
+        // in that order and awaited, not fired in parallel — so the server's
+        // analysis route (which looks up the piece by the same id) never
+        // races ahead of the piece actually existing yet.
+        return Store.put('pieces', piece)
+          .then(function () { return Store.put('videos', { id: id, fileName: file.name, blob: file, sizeBytes: file.size, createdAt: nowIso() }); })
+          .then(function () {
+            return fetch('/api/videos/' + encodeURIComponent(id) + '/analyze', { method: 'POST', credentials: 'include' });
+          })
+          .then(renderUploadLists)
+          .catch(function () { renderUploadLists(); });
+      });
     });
-    renderUploadLists();
   }
 
   function bootUploadFiles() {

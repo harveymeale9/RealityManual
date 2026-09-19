@@ -4839,3 +4839,52 @@ deployed service with a real Final Check video — worth confirming the
 video actually streams/plays from the direct `/api/files/videos/:id`
 URL, the click-to-play boundary feels right, and the caption renders
 correctly once a real piece sits in this stage.
+
+---
+
+# 114. Uploader: Auto-Detect Content Type from Video Duration + Orientation
+
+Harvey wants the content type (ultra-short / short / long-short /
+longform) picked automatically on upload instead of always defaulting to
+"Short" — his rule: check orientation first (does landscape/vertical
+help distinguish it), then use length.
+
+**`ops-service/public/app.js`, `handleFiles()`:** added
+`probeVideoMeta(file)` — reads `duration`/`videoWidth`/`videoHeight`
+straight off the local file via a throwaway `<video>` + object URL, no
+upload or ffmpeg round trip needed (this is just the browser parsing the
+file's own metadata locally, fast, and resolves `null` rather than
+rejecting if it ever fails, so a weird/corrupt file still uploads —
+it just falls back to the same "Short" default that was hardcoded
+everywhere before this feature existed).
+
+**The actual rule** (`detectContentType(meta)`), matching Harvey's own
+framing — orientation is specifically what separates "this is basically
+Longform" from everything else, since Longform is inherently a
+landscape format (YT/FB), not a vertical one:
+```text
+landscape (width >= height) AND duration > 180s  →  longform
+duration <= 20s                                   →  ultra_short
+duration <= 75s                                    →  short
+otherwise                                           →  long_short
+```
+A short landscape clip still gets bucketed by length like everything
+else (only *long* landscape content reads as Longform); a very long
+vertical video still caps out at `long_short` rather than ever being
+called Longform, since that type doesn't really exist as a vertical
+format in practice.
+
+`handleFiles()` now awaits the metadata probe (typically sub-second for
+a local blob) before creating the piece record at all, so
+`contentType` is set correctly from the very first save — no
+after-the-fact correction pass needed. Each file's row still appears
+independently as soon as *its own* probe resolves, not gated on other
+files uploaded in the same batch.
+
+Frontend-only, so per §93 this is already live — no deploy/restart
+needed. Verified via `node --check`; not yet tested against a real
+mixed batch of vertical/horizontal, short/long clips on the deployed
+service — worth confirming the thresholds actually feel right in
+practice (they're reasonable first-pass numbers based on how each type
+is already described in `Store.CONTENT_TYPES`, not something Harvey
+specified precisely) and adjusting if a real upload gets miscategorized.
