@@ -4454,3 +4454,48 @@ Frontend-only (`voiceClient.js`, `app.js`, `voice-mobile.html`), so per
 `node --check` on all three files (the third via the usual extract-inline-
 script technique for `voice-mobile.html`); not yet tested against the
 live deployed service with a real overlapping-recording scenario.
+
+---
+
+# 109. Fixed: Overlapping In-Flight Replies Could Render Out of Order
+
+Harvey sent a screenshot showing a reply bubble ("Re: Well, there's a
+small bug though when I click on the play button...") appearing *below*
+a newer message he'd sent afterward, instead of above it — confusing,
+looked like the wrong reply was surfacing late.
+
+**Root cause, confirmed against the live `voice_messages` rows (not
+guessed):** the "play button" bug's reply (queued/created 00:29:04,
+completed 00:30:12) was still processing when Harvey sent the next
+message (created 00:30:07, "Another bug... while I'm recording...") —
+exactly the overlapping-recording scenario §108 was built for. Both
+`addAssistantMessage()` and `addMessage()` (`app.js`,
+`voice-mobile.html`) always called `thread.appendChild(...)`
+unconditionally, regardless of where that row's typing placeholder had
+been sitting. So when the older, slower reply finally finished, its
+placeholder (positioned *above* the newer message, since it was created
+first) got removed from its original spot, but the real reply bubble
+that replaced it was appended at the thread's *current* end — landing
+below the newer message's own placeholder instead of back where it
+belonged.
+
+**Fix:** both message-rendering functions gained an optional trailing
+`insertBeforeEl` parameter, and a shared `insertMessageEl(el,
+insertBeforeEl)` helper that does `thread.insertBefore(el,
+insertBeforeEl)` when that anchor still exists in the DOM, falling back
+to a plain `appendChild` otherwise (covers the normal, common case where
+nothing else was in flight). `syncThread`'s `onDone`/`onError` callbacks
+now look up the row's typing placeholder *before* building the
+replacement bubble, pass it through as the insertion anchor, and only
+remove it after the new bubble has taken its place — so a reply always
+renders in its own chronological slot, never at whatever position the
+thread happens to be at by the time it completes. The now-fully-unused
+`removeTyping()` helper was deleted from both files rather than left as
+dead code.
+
+Frontend-only (`app.js`, `voice-mobile.html`), so per §93 this is
+already live — no deploy/restart needed. Verified via `node --check` on
+both files; not yet re-tested against a real overlapping-message
+scenario on the deployed service — the original repro (send a message,
+start another before the first's reply lands) is the way to confirm
+this actually holds.

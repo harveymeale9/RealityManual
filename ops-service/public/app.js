@@ -386,15 +386,31 @@
     function replyToSnippet(replyToText) {
       return 'Re: ' + (replyToText.length > 80 ? replyToText.slice(0, 80) + '…' : replyToText);
     }
-    function addMessage(kind, text, msgId, imageFile, replyToText) {
+    // Two messages can genuinely be in flight at once (Harvey can start
+    // recording a second one before the first's reply lands — §108), and
+    // each one's own typing placeholder sits wherever it was appended when
+    // that message was sent. Without this, a delayed reply always landed
+    // at the thread's current end regardless of where its placeholder was,
+    // so a slower older reply could render visually *below* a newer
+    // message sent while it was still working — confusing, out-of-order
+    // bubbles. Inserting in the placeholder's original slot (when it still
+    // exists) keeps replies in the order they actually correspond to.
+    function insertMessageEl(el, insertBeforeEl) {
+      if (insertBeforeEl && insertBeforeEl.parentNode === thread) {
+        thread.insertBefore(el, insertBeforeEl);
+      } else {
+        thread.appendChild(el);
+      }
+      thread.scrollTop = thread.scrollHeight;
+    }
+    function addMessage(kind, text, msgId, imageFile, replyToText, insertBeforeEl) {
       clearEmptyNote();
       var el = document.createElement('div');
       el.className = 'pm-msg pm-msg-' + kind;
       if (msgId) el.dataset.msgId = msgId;
       if (!imageFile && !replyToText) {
         el.textContent = text;
-        thread.appendChild(el);
-        thread.scrollTop = thread.scrollHeight;
+        insertMessageEl(el, insertBeforeEl);
         return el;
       }
       if (replyToText) {
@@ -417,12 +433,11 @@
         textEl.textContent = text;
         el.appendChild(textEl);
       }
-      thread.appendChild(el);
-      thread.scrollTop = thread.scrollHeight;
+      insertMessageEl(el, insertBeforeEl);
       return el;
     }
 
-    function addAssistantMessage(text, replyToText, msgId) {
+    function addAssistantMessage(text, replyToText, msgId, insertBeforeEl) {
       clearEmptyNote();
       var isAction = /^\[NEEDS_ACTION\]/i.test(text || '');
       var wrap = document.createElement('div');
@@ -464,8 +479,7 @@
         meta.appendChild(replyBtn);
       }
       wrap.appendChild(meta);
-      thread.appendChild(wrap);
-      thread.scrollTop = thread.scrollHeight;
+      insertMessageEl(wrap, insertBeforeEl);
       return wrap;
     }
 
@@ -588,11 +602,6 @@
       return el;
     }
 
-    function removeTyping(msgId) {
-      var el = thread.querySelector('.pm-typing[data-msg-id="' + msgId + '"]');
-      if (el && el.parentNode) el.parentNode.removeChild(el);
-    }
-
     // Right-hand "code-like" pane — the raw tool-call/thinking trail, kept
     // deliberately separate from the clean thread on the left per Harvey:
     // this is the stuff he'll mostly ignore, not the stuff he reads.
@@ -656,11 +665,17 @@
         Voice.speak(row.early_ack, row.id).catch(function () {});
       },
       onDone: function (row) {
-        removeTyping(row.id);
+        // Look the placeholder up (rather than just removeTyping()) so its
+        // position can be handed to addAssistantMessage as an insertion
+        // anchor — see insertMessageEl's comment for why: this message may
+        // not be the most recently-sent one anymore if Harvey started
+        // another before this reply landed.
+        var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
         // Execute-mode replies are a real completion summary now (see
         // server.js buildVoicePrompt), not a throwaway line — show it like
         // any other reply instead of a generic "Done" placeholder.
-        addAssistantMessage(row.reply_text || '', row.transcript, row.id);
+        addAssistantMessage(row.reply_text || '', row.transcript, row.id, typingEl);
+        if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
         if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
         if (voiceAutoSpeak[row.id]) {
           delete voiceAutoSpeak[row.id];
@@ -684,8 +699,9 @@
         }
       },
       onError: function (row) {
-        removeTyping(row.id);
-        addMessage('error', row.error_message || 'Something went wrong.', row.id, null, row.transcript);
+        var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
+        addMessage('error', row.error_message || 'Something went wrong.', row.id, null, row.transcript, typingEl);
+        if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
         if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
         if (voiceAutoSpeak[row.id]) {
           delete voiceAutoSpeak[row.id];
