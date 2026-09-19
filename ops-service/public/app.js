@@ -2101,7 +2101,7 @@
     var isPanning = false, startX = 0, startScroll = 0;
     boardWrap.addEventListener('pointerdown', function (e) {
       if (e.button !== 0) return;
-      if (e.target.closest('.card, .card-move, button, select, input, textarea, [contenteditable]')) return;
+      if (e.target.closest('.card, .card-move, .final-check-card, button, select, input, textarea, [contenteditable]')) return;
       isPanning = true;
       startX = e.clientX;
       startScroll = boardWrap.scrollLeft;
