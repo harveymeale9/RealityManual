@@ -615,6 +615,37 @@ a { color: var(--accent); }
   text-transform: uppercase;
   color: var(--ink-faint);
 }
+/* Final Check needs real room for a playable video + caption + titles —
+   Harvey's ask, "about twice as thick on desktop." Desktop-only (a plain
+   min-width query, not nested inside the existing max-width:640px mobile
+   block) so it can't fight that block's own `.column { width: 86vw; }`
+   override — an attribute-selector rule has higher specificity than a
+   bare class one regardless of source order, so without scoping this to
+   desktop it would've stayed 800px on mobile too. */
+@media (min-width: 641px) {
+  .column[data-stage="final_check"] { width: 800px; }
+}
+
+/* ---------- Final Check card: full review right on the board, no
+   click-through to the editor needed ---------- */
+.final-check-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fc-video { width: 100%; border-radius: 6px; background: #000; cursor: pointer; display: block; }
+.fc-title { font-size: 1.02rem; font-weight: 600; color: var(--ink); }
+.fc-caption {
+  font-size: 0.85rem; color: var(--ink-soft); white-space: pre-wrap;
+  background: var(--surface); border: 1px solid var(--border-soft); border-radius: 6px; padding: 8px 10px;
+}
+.fc-titles { margin: 0; padding-left: 1.2em; font-size: 0.85rem; color: var(--ink); display: flex; flex-direction: column; gap: 3px; }
+.fc-titles-empty { font-size: 0.8rem; color: var(--ink-faint); font-style: italic; }
+.fc-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 4px; }
 
 .column-head {
   display: flex;

@@ -1709,6 +1709,7 @@
     '</div>';
 
   var board, statStrip, overviewRow, boardWrap, draggingId = null;
+  var boardSettingsCache = null;
 
   function renderStats() {
     var total = Object.keys(pieces).length;
@@ -1799,6 +1800,35 @@
       '</div>';
   }
 
+  // Final Check gets a fundamentally different, much bigger card — per
+  // Harvey, the whole point of this stage is a quick final review (play
+  // the actual video, read the caption, check the 3 titles, approve) done
+  // right there on the board, not a click-through into the editor. Not a
+  // variant of cardHtml(): deliberately its own class (`.final-check-card`,
+  // not `.card`) so it's excluded from the generic click-to-open-modal and
+  // drag-start bindings in bindBoardEvents() below.
+  function finalCheckCardHtml(id, piece) {
+    var captionText = boardSettingsCache ? renderCaptionText(piece, boardSettingsCache) : 'Loading caption…';
+    var titles = piece.ytTitles || [];
+    var titlesHtml = titles.length
+      ? '<ol class="fc-titles">' + titles.map(function (t) { return '<li>' + escapeHtml(t) + '</li>'; }).join('') + '</ol>'
+      : '<div class="fc-titles-empty">No title options set.</div>';
+    var idBadge = typeof piece.seq === 'number' ? '#' + String(piece.seq).padStart(3, '0') + ' — ' : '';
+    return '' +
+      '<div class="final-check-card" data-id="' + id + '">' +
+        '<video class="fc-video" data-id="' + id + '" playsinline preload="metadata"' +
+          (piece.thumbnailDataUrl ? ' poster="' + piece.thumbnailDataUrl + '"' : '') +
+          ' controls src="/api/files/videos/' + encodeURIComponent(id) + '"></video>' +
+        '<div class="fc-title">' + idBadge + escapeHtml(piece.title || 'Untitled') + '</div>' +
+        '<div class="fc-caption">' + escapeHtml(captionText) + '</div>' +
+        titlesHtml +
+        '<div class="fc-actions">' +
+          '<button type="button" class="btn-secondary btn-tiny fc-edit-btn" data-id="' + id + '">Full editor…</button>' +
+          '<button type="button" class="btn-primary fc-approve-btn" data-id="' + id + '">Approve → Scheduled</button>' +
+        '</div>' +
+      '</div>';
+  }
+
   // Both the type filter and the search box remove non-matching cards
   // from each column outright (conventional filter semantics) — search
   // used to just dim non-matches in place instead, but Harvey wants
@@ -1825,7 +1855,8 @@
       if (activeTypeFilter) ids = ids.filter(function (id) { return pieces[id].contentType === activeTypeFilter; });
       if (query) ids = ids.filter(function (id) { return pieceMatchesSearch(pieces[id], query); });
       var isAutoCol = AUTO_STAGE_IDS.indexOf(s.id) !== -1;
-      var cards = ids.map(function (id) { return cardHtml(id, pieces[id]); }).join('');
+      var isFinalCheck = s.id === 'final_check';
+      var cards = ids.map(function (id) { return isFinalCheck ? finalCheckCardHtml(id, pieces[id]) : cardHtml(id, pieces[id]); }).join('');
       if (!cards) cards = '<div class="empty-slot">' + (isAutoCol ? 'Nothing here yet' : 'Nothing here yet') + '</div>';
       var num = String(idx + 1).padStart(2, '0');
       return '' +
@@ -1863,6 +1894,36 @@
         draggingId = null;
         board.querySelectorAll('.column').forEach(function (c) { c.classList.remove('drag-target'); });
       });
+    });
+
+    // Final Check cards — deliberately not `.card`, so none of the
+    // click-to-open-modal/drag bindings above apply to them at all.
+    board.querySelectorAll('.fc-video').forEach(function (v) {
+      // Native <video controls> only toggles play/pause when its own
+      // control bar is clicked, not the video frame itself — Harvey
+      // wants clicking anywhere on the preview to start it. Restricted
+      // to roughly the frame above the control bar (bottom ~40px) so
+      // this doesn't fight with the native controls' own click handling
+      // (double-toggling play/pause back off again).
+      v.addEventListener('click', function (e) {
+        var rect = v.getBoundingClientRect();
+        if (e.clientY - rect.top > rect.height - 40) return;
+        if (v.paused) v.play().catch(function () {}); else v.pause();
+      });
+    });
+    board.querySelectorAll('.fc-approve-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var p = pieces[btn.dataset.id];
+        if (!p) return;
+        btn.disabled = true;
+        btn.textContent = 'Approving…';
+        approveAndSchedule(p).then(function () {
+          return Store.put('pieces', p);
+        }).then(render);
+      });
+    });
+    board.querySelectorAll('.fc-edit-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () { openPiece(btn.dataset.id, render); });
     });
 
     board.querySelectorAll('.card-move').forEach(function (sel) {
@@ -1970,6 +2031,12 @@
 
     window.__rmOnPiecesChanged = render;
     ensurePiecesLoaded().then(render);
+    // Final Check cards (see finalCheckCardHtml below) show the real
+    // rendered caption inline, which needs Settings' caption templates —
+    // fetched once here rather than only when Harvey happens to visit
+    // the Settings tab. Re-renders once loaded so a caption isn't stuck
+    // on its "Loading…" fallback for the rest of the session.
+    Store.getSettings().then(function (s) { boardSettingsCache = s; render(); });
     render();
   }
 

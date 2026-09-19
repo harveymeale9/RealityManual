@@ -4776,3 +4776,66 @@ brace-balance check on the CSS; not yet re-tested against the live
 deployed service with a real upload — worth confirming the flash is
 actually gone and the tick/collapse animation reads the way Harvey
 wants before considering this fully settled.
+
+---
+
+# 113. Final Check: Full Review Right on the Kanban Card, No Click-Through
+
+Harvey's ask, with an annotated screenshot: pieces in Final Check
+shouldn't need a click into the editor at all — he wants the actual
+video playable right there on the card, title underneath, the real
+caption/description underneath that, the 3 title options, and a button
+to push straight to Scheduled. The column itself should be roughly
+twice as wide on desktop so there's actually room for all of that.
+
+**`ops-service/public/app.js`:** `render()` now special-cases the
+`final_check` column — instead of the normal compact `cardHtml()`, its
+cards go through a new `finalCheckCardHtml(id, piece)`: a real `<video
+controls>` (served directly from `/api/files/videos/:id`, no blob-fetch
+needed — same-origin, so the session cookie rides along automatically
+on a plain `src`), the title, the actual rendered caption (reusing the
+same `renderCaptionText(p, settings)` the shared modal already uses —
+Settings' caption templates are fetched once in `bootContentOps()` into
+a new `boardSettingsCache`, since the board needed access to Settings
+data it never previously required), the title options as a numbered
+list, and "Approve → Scheduled" / "Full editor…" buttons. Deliberately
+its own `.final-check-card` class, not `.card` — completely excluded
+from the generic click-to-open-modal and drag-start bindings in
+`bindBoardEvents()`, since Harvey explicitly doesn't want a click on
+this card doing anything but what its own buttons/video do.
+
+**"Click the video preview and it just starts playing":** native
+`<video controls>` only toggles play/pause when its own control bar is
+clicked, not the video frame — so a delegated click handler on
+`.fc-video` calls `play()`/`pause()` directly, restricted to clicks
+landing above roughly the bottom 40px of the video (where the native
+control bar actually sits), so it doesn't fight with — and
+double-toggle against — the control bar's own native click handling.
+
+**"Approve → Scheduled"** calls the same `approveAndSchedule()` built
+for the modal's own Approve button in §111, then a plain `Store.put` +
+`render()` — the kanban board's `render()` is a single synchronous
+`board.innerHTML = ...` rebuild (unlike the Upload Files list's old
+bug, §112), so there's no blank-gap flash risk in reusing it here.
+
+**Column width:** `.column[data-stage="final_check"] { width: 800px; }`
+(double the normal 400px), scoped inside a `@media (min-width: 641px)`
+block — deliberately a *separate* desktop-only media query rather than
+folding it into the existing rule, because an attribute-selector rule
+has higher CSS specificity than the existing mobile breakpoint's plain
+`.column { width: 86vw; }` override regardless of source order; without
+scoping it explicitly to desktop, the wider column would have stayed
+800px on mobile too, overriding the intentional mobile-responsive
+behavior. Per Harvey's own phrasing ("twice as thick on desktop"),
+mobile keeps the normal `86vw` column width — the rich card content
+(video/caption/titles) still shows there too, just without the extra
+desktop-only column width, since he didn't ask for it to be
+mobile-specific, only the width doubling.
+
+Frontend-only (`app.js`, `style.css`), so per §93 this is already live —
+no deploy/restart needed. Verified via `node --check` and a Python
+brace-balance check on the CSS; not yet tested against the live
+deployed service with a real Final Check video — worth confirming the
+video actually streams/plays from the direct `/api/files/videos/:id`
+URL, the click-to-play boundary feels right, and the caption renders
+correctly once a real piece sits in this stage.
