@@ -4327,3 +4327,43 @@ in-the-dark guess, it's asking him for the exact device/Android/Chrome
 version and headset model so the actual behavior can be looked up
 specifically, since this class of bug is known to vary significantly by
 OEM audio stack rather than being uniform across "Android" as a whole.
+
+---
+
+# 106. Bluetooth Call-Tone: Reverted — Not Worth Further Time
+
+Harvey tested §105's stream-reuse fix and still heard the tone on every
+recording — the third attempt (§86, §103, §105) to fix this from the web
+platform, none of which worked on his real hardware. His own call: "not
+a big enough deal for us to waste too much more time on," and explicitly
+asked for the attempted code to be cleaned up since it didn't work.
+
+**Reverted `ops-service/public/lib/voiceClient.js`'s `startRecording()`**
+back to the plain, original form — a bare `getUserMedia({ audio: true })`
+call, no device enumeration/filtering, no cached/reused stream, no
+`pagehide` listener. All of §86's audio-constraint logic, §103's
+device-selection logic, and §105's stream-caching logic are gone;
+nothing from any of those three attempts remains in the code. The
+**screen Wake Lock feature** (also introduced in §86, but a genuinely
+separate, working fix for an unrelated complaint — the phone locking
+mid-recording) was kept, since Harvey's "clean up the mic thing" request
+was specifically about the ineffective Bluetooth-tone attempts, not the
+wake lock.
+
+**Status: accepted as a known limitation, not being pursued further.**
+Per the same conversation, Harvey and this session discussed building a
+native Android app instead (which would have more reliable low-level
+audio-routing control than the web platform exposes) — worth reading
+that reasoning if this comes up again, but the conclusion was that the
+cost (separate codebase, APK packaging/distribution, losing the
+instant-push-to-live PWA iteration loop this whole project depends on,
+no other-platform coverage) isn't justified by one low-priority audio
+annoyance. §86/§103/§105 are left in CLAUDE.md as the historical record
+of what was tried and why each attempt didn't hold up — don't repeat any
+of those three specific approaches if this is revisited later without a
+genuinely new idea or real device-specific diagnostic info (exact
+phone/Android/Chrome version and headset model) to work from.
+
+Frontend-only revert, already live (no deploy/restart needed) — verified
+via `node --check` and a grep confirming no leftover references to any
+of the removed functions/variables.

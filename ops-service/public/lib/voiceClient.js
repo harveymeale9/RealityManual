@@ -21,113 +21,16 @@ window.RMVoice = (function () {
     lock.release().catch(function () {});
   }
 
-  // The §86 fix (disabling echoCancellation/noiseSuppression/
-  // autoGainControl) turned out not to be the real fix — it stops Chrome
-  // from using its "voice processing" pipeline, but that pipeline isn't
-  // what triggers the Bluetooth profile switch. The actual cause: A2DP
-  // (the high-quality profile a Bluetooth headset streams music over) has
-  // no microphone channel at all — it's output-only — so the instant a web
-  // page's getUserMedia call needs *any* audio input from a Bluetooth
-  // device, Android has no choice but to switch that device to HFP (the
-  // profile that supports a mic), and that switch is what plays the
-  // connect/disconnect tone. This happens regardless of media constraints,
-  // which is why Harvey kept hearing it even with the §86 fix in place.
-  //
-  // The real fix is to not ask the Bluetooth device for input at all: once
-  // the browser has mic permission, enumerateDevices() exposes labeled
-  // input devices, and we can explicitly request the phone's own built-in
-  // mic by deviceId instead of leaving the choice to "default" (which
-  // Android resolves to the connected Bluetooth headset). With input
-  // coming from the phone mic, the headset never needs to leave A2DP, so
-  // there's no profile switch and no tone. First-ever recording on a
-  // device still won't have labels yet (labels are empty until permission
-  // is granted at least once), so it may still switch that one time; every
-  // recording after that — which is what Harvey actually complained about
-  // ("every time I have to give instructions") — uses the resolved device
-  // and stays silent.
-  var preferredMicDeviceId = null;
-  var BT_LABEL_RE = /bluetooth|hands.?free|hfp|headset|airpod|buds|wireless/i;
-  function resolvePreferredMicDeviceId() {
-    if (preferredMicDeviceId || !navigator.mediaDevices.enumerateDevices) {
-      return Promise.resolve(preferredMicDeviceId);
-    }
-    return navigator.mediaDevices.enumerateDevices().then(function (devices) {
-      var mics = devices.filter(function (d) { return d.kind === 'audioinput' && d.label; });
-      var nonBluetooth = mics.filter(function (d) { return !BT_LABEL_RE.test(d.label); });
-      if (nonBluetooth.length) preferredMicDeviceId = nonBluetooth[0].deviceId;
-      return preferredMicDeviceId;
-    }).catch(function () { return null; });
-  }
-
-  // §103's deviceId fix apparently still isn't enough on its own (Harvey
-  // still hears the tone on every press even with it live) — research
-  // turned up no confirmation that Android's Bluetooth SCO negotiation is
-  // actually gated on *which* deviceId Chrome ends up using at all; it may
-  // well be triggered by Chrome/WebRTC's own audio-session setup on
-  // Android the moment any mic stream is opened, independent of device
-  // choice. Rather than guess a third device-selection trick, this closes
-  // a different, genuinely separate gap: acquiring a *fresh* mic stream
-  // (and therefore a fresh negotiation) on every single "Start Recording"
-  // press, because startRecording()/stop() used to call getUserMedia and
-  // then immediately stop() every track once each recording finished.
-  // Whatever negotiation happens on open (and, per Harvey's report, on
-  // close too — "call started"/"call ended") was happening once per
-  // recording. Caching and reusing one stream for the lifetime of the
-  // page means that negotiation — if it's unavoidable at all — happens at
-  // most once per page session (first Start Recording press), not on
-  // every single one, which is what Harvey actually complained about
-  // ("I don't wanna be calling this thing every time"). Trade-off,
-  // stated plainly: the mic stays "hot" (browser's recording indicator
-  // stays on, Bluetooth link if any stays active) for as long as the tab
-  // is open, not just during an actual recording — released on
-  // `pagehide` (see releaseMic below), or immediately if a track ends on
-  // its own (device unplugged, permission revoked).
-  var cachedStream = null;
-  function streamIsLive(stream) {
-    return !!stream && stream.getTracks().some(function (t) { return t.readyState === 'live'; });
-  }
-  function acquireMicStream() {
-    return resolvePreferredMicDeviceId().then(function (deviceId) {
-      var audioConstraints = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
-      if (deviceId) audioConstraints.deviceId = { exact: deviceId };
-      return navigator.mediaDevices.getUserMedia({ audio: audioConstraints }).catch(function (err) {
-        // Cached device id went stale (e.g. the phone mic was unplugged, or
-        // Bluetooth reconnected under a new device id) — forget it and fall
-        // back to whatever the browser picks by default rather than
-        // breaking recording entirely.
-        if (deviceId) {
-          preferredMicDeviceId = null;
-          return navigator.mediaDevices.getUserMedia({
-            audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
-          });
-        }
-        throw err;
-      });
-    }).then(function (stream) {
-      stream.getTracks().forEach(function (t) {
-        t.addEventListener('ended', function () { if (cachedStream === stream) cachedStream = null; });
-      });
-      cachedStream = stream;
-      return stream;
-    });
-  }
-  function getMicStream() {
-    if (streamIsLive(cachedStream)) return Promise.resolve(cachedStream);
-    return acquireMicStream();
-  }
-  // Actually releases the mic (and, if applicable, lets Bluetooth drop
-  // back out of HFP) — called on pagehide so a stream cached for reuse
-  // doesn't just stay open forever once Harvey's actually done with the
-  // app for that session.
-  function releaseMic() {
-    if (!cachedStream) return;
-    cachedStream.getTracks().forEach(function (t) { t.stop(); });
-    cachedStream = null;
-  }
-  window.addEventListener('pagehide', releaseMic);
-
+  // Three attempts at killing the Bluetooth "call started"/"call ended"
+  // tone (§86, §103, §105) were all tried and none of them actually fixed
+  // it on Harvey's real hardware — see CLAUDE.md §106 for the full
+  // history and why this was reverted to the plain, simple version below
+  // rather than keeping any of that added complexity around for no
+  // measurable benefit. Accepted as a known, low-priority platform
+  // limitation per Harvey's own call ("not a big enough deal to waste
+  // more time on").
   function startRecording() {
-    return getMicStream().then(function (stream) {
+    return navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
       requestWakeLock();
       var mimeType = (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/webm')) ? 'audio/webm' : '';
       var recorder = mimeType ? new MediaRecorder(stream, { mimeType: mimeType }) : new MediaRecorder(stream);
@@ -138,10 +41,7 @@ window.RMVoice = (function () {
         stop: function () {
           return new Promise(function (resolve) {
             recorder.addEventListener('stop', function () {
-              // Deliberately NOT stopping the stream's tracks here anymore
-              // — see the comment above cachedStream for why: that used to
-              // tear down and re-negotiate the mic on every single
-              // recording. The stream is released later, on pagehide.
+              stream.getTracks().forEach(function (t) { t.stop(); });
               releaseWakeLock();
               resolve(new Blob(chunks, { type: recorder.mimeType || 'audio/webm' }));
             });
