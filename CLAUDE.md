@@ -4713,3 +4713,66 @@ change, so per §93 it needs a full rebuild+restart, which (per §74/§88's
 standing caveat) will kill this session's own process mid-task — test
 this for real once it's back up, ideally with at least one real piece
 sitting in "Uploaded" so there's something genuine to match against.
+
+---
+
+# 112. Uploader Tool: Fixed the Whole-Panel Flash on Every Click
+
+Harvey tested §111 live and reported the panel flashing/disappearing
+briefly on nearly every interaction — after upload, picking an audio
+track, using "Use this frame," and "Send to final check" (which also
+visibly needed two clicks and gave no real feedback that it had worked,
+even though the piece *did* move correctly on the kanban board
+underneath).
+
+**Root cause, both parts:**
+1. Every single per-row action (`captureBtn`, `audioSelect`,
+   originally also `sendBtn`) saved the piece and then called the
+   *entire panel's* `renderUploadLists()` — which tore down every row
+   in the list (not just the one that changed) and rebuilt all of them
+   from scratch, re-fetching every other row's video blob over again in
+   the process. One click on one row's audio dropdown was silently
+   re-loading every video preview in the whole list.
+2. `renderUploadLists()` itself made this worse independent of the
+   above: it cleared `uploadRows.innerHTML` *synchronously*, then only
+   refilled it once `Store.getAll('audioTracks')` resolved — a real
+   blank gap between clearing and refilling, which is what actually
+   read as the panel "flashing/disappearing," not just a slow update.
+
+**Fix, `ops-service/public/app.js`:**
+- `renderUploadLists()` now builds the new rows in a detached
+  `DocumentFragment` first (waiting on `Store.getAll('audioTracks')`
+  before touching the DOM at all) and swaps it in with one
+  `uploadRows.appendChild(frag)` — no more clear-then-wait-then-fill
+  gap. Still used for the cases that genuinely need every row rebuilt:
+  initial load, a new upload landing, analysis finishing, or the full
+  editor modal closing.
+- `buildUploadRow()`'s head section (thumbnail/title/#id/tags/analysis
+  status) was factored out into `buildUploadRowHead(p)`, with a
+  `refreshHead()` closure that swaps just that one row's head for a
+  freshly-built one. `captureBtn` and `audioSelect`'s change handlers
+  now call `Store.put('pieces', p).then(refreshHead)` instead of the
+  full `renderUploadLists()` — only that row's own thumbnail/tags
+  actually change, nothing else in the list is touched or re-fetched.
+  The title inputs now also call `refreshHead()` synchronously on every
+  keystroke (cheap — it only rebuilds the head, never the input the
+  user is actively typing in, so focus/cursor position is never
+  disturbed) so the "titles selected" tag appears/disappears live too.
+- **"Send to final check"** no longer touches `renderUploadLists()` at
+  all: the button immediately disables and shows "✓ Sent" (Harvey's
+  requested instant tick), then once the save resolves the row itself
+  gets a `.upload-row-removing` class and is removed from the DOM
+  ~400ms later (`style.css`: opacity/scale/max-height/margin/padding
+  all transition to zero, a clean collapse regardless of the row's
+  actual height, which varies with content). This also fixes the
+  "had to click it twice" complaint — that was never actually a second
+  submission going through, it was the first click's full-panel
+  re-render flash making it look like nothing had happened, so Harvey
+  clicked again.
+
+Frontend-only (`app.js`, `style.css`), so per §93 this is already live —
+no deploy/restart needed. Verified via `node --check` and a Python
+brace-balance check on the CSS; not yet re-tested against the live
+deployed service with a real upload — worth confirming the flash is
+actually gone and the tick/collapse animation reads the way Harvey
+wants before considering this fully settled.

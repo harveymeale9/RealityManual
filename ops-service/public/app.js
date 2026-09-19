@@ -2013,11 +2013,14 @@
   // modal click-through needed for the normal upload workflow anymore
   // (the shared modal still exists and still works, for anything this row
   // doesn't cover directly, e.g. notes/platforms/content type).
-  function buildUploadRow(p, audioTracks) {
-    var row = document.createElement('div');
-    row.className = 'upload-row';
-    row.dataset.id = p.id;
-
+  // Rebuilding this row's own "head" (thumbnail/title/#id/tags/analysis
+  // status) in place — rather than routing every small change through a
+  // full renderUploadLists() — is what stops the whole list from
+  // flashing/reloading (every other row's video blob getting re-fetched,
+  // a real blank gap while the list was torn down and rebuilt) just
+  // because Harvey clicked one audio dropdown or picked one thumbnail
+  // frame. See buildUploadRow's callers below (captureBtn, audioSelect).
+  function buildUploadRowHead(p) {
     var head = document.createElement('div');
     head.className = 'upload-row-head';
     var thumbEl = document.createElement('div');
@@ -2065,6 +2068,23 @@
     }
     head.appendChild(thumbEl);
     head.appendChild(titleId);
+    return head;
+  }
+
+  function buildUploadRow(p, audioTracks) {
+    var row = document.createElement('div');
+    row.className = 'upload-row';
+    row.dataset.id = p.id;
+
+    var head = buildUploadRowHead(p);
+    // Swaps the head for a freshly-built one reflecting p's current
+    // state — used instead of a full list rebuild whenever only this
+    // row's own thumbnail/tags/status actually changed.
+    function refreshHead() {
+      var fresh = buildUploadRowHead(p);
+      head.replaceWith(fresh);
+      head = fresh;
+    }
 
     // --- Frame picker: a real, playable, scrubbable copy of the video —
     // same canvas-capture technique as the shared modal's pick-frame flow,
@@ -2097,7 +2117,12 @@
       p.thumbnailDataUrl = dataUrl;
       p.updatedAt = nowIso();
       syncTags(p);
-      Store.put('pieces', p).then(renderUploadLists);
+      // Only this row's own thumbnail/tags need to update — routing this
+      // through a full renderUploadLists() used to tear down and rebuild
+      // every row in the list (re-fetching every other row's video blob
+      // in the process), which is what looked like the whole panel
+      // flashing/disappearing for a moment on every single click.
+      Store.put('pieces', p).then(refreshHead);
     });
     frameSection.appendChild(videoEl);
     frameSection.appendChild(scrub);
@@ -2124,7 +2149,7 @@
       p.audioTrackId = audioSelect.value;
       p.updatedAt = nowIso();
       syncTags(p);
-      Store.put('pieces', p).then(renderUploadLists);
+      Store.put('pieces', p).then(refreshHead);
     });
     audioSection.appendChild(audioLabel);
     audioSection.appendChild(audioSelect);
@@ -2148,6 +2173,7 @@
         p.ytTitles = vals;
         p.updatedAt = nowIso();
         syncTags(p);
+        refreshHead(); // just the "titles selected" tag — titleInputs itself is untouched, so typing focus is never disrupted
         saveSettingsDebouncedForPiece(p);
       });
       titlesSection.appendChild(input);
@@ -2162,10 +2188,31 @@
     sendBtn.className = 'btn-primary btn-tiny';
     sendBtn.textContent = 'Send to final check';
     sendBtn.addEventListener('click', function () {
+      // Harvey's ask: this is "my part here is done" — the row should
+      // give an instant tick and get out of the way, not make the whole
+      // list flash through a full rebuild (which is what routing this
+      // through renderUploadLists() used to do, and also meant clicking
+      // it twice looked like nothing happened the first time).
+      if (sendBtn.disabled) return;
+      sendBtn.disabled = true;
+      sendBtn.textContent = '✓ Sent';
+      openBtn.disabled = true;
       p.stage = 'final_check';
       p.updatedAt = nowIso();
       syncTags(p);
-      Store.put('pieces', p).then(renderUploadLists);
+      Store.put('pieces', p).then(function () {
+        row.classList.add('upload-row-removing');
+        setTimeout(function () {
+          if (uploadRowObjectUrls[p.id]) {
+            URL.revokeObjectURL(uploadRowObjectUrls[p.id]);
+            delete uploadRowObjectUrls[p.id];
+          }
+          if (row.parentNode) row.parentNode.removeChild(row);
+          if (!uploadRows.querySelector('.upload-row')) {
+            uploadRows.innerHTML = '<div class="empty-slot wide">Nothing uploaded yet — drop a video above.</div>';
+          }
+        }, 400);
+      });
     });
     var openBtn = document.createElement('button');
     openBtn.type = 'button';
@@ -2193,20 +2240,42 @@
     uploadRowSaveTimers[p.id] = setTimeout(function () { Store.put('pieces', p); }, 500);
   }
 
+  // Only for cases that genuinely need every row rebuilt from scratch
+  // (initial load, a new file just landed, analysis just finished, the
+  // full editor modal closed) — anything that only changes one row's own
+  // state (thumbnail/audio/titles/send-to-final-check) goes through
+  // refreshHead()/direct row removal above instead, specifically to avoid
+  // this. Builds the new rows in memory *before* touching the live DOM
+  // at all, then swaps in one shot — the old version cleared
+  // uploadRows.innerHTML synchronously and only refilled it once
+  // Store.getAll('audioTracks') resolved, which left a real blank gap in
+  // between (what Harvey saw as the whole panel flashing/disappearing).
   function renderUploadLists() {
     var items = Object.keys(pieces).map(function (k) { return pieces[k]; }).filter(function (p) { return p.hasVideo; });
     var inProgress = items.filter(function (p) { return p.stage !== 'live'; }).sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
     var posted = items.filter(function (p) { return p.stage === 'live'; }).sort(function (a, b) { return new Date(b.updatedAt) - new Date(a.updatedAt); });
 
-    Object.keys(uploadRowObjectUrls).forEach(function (id) { URL.revokeObjectURL(uploadRowObjectUrls[id]); });
-    uploadRowObjectUrls = {};
-    uploadRows.innerHTML = '';
+    function swapIn(audioTracks) {
+      var oldObjectUrls = uploadRowObjectUrls;
+      uploadRowObjectUrls = {};
+      var frag = document.createDocumentFragment();
+      if (!inProgress.length) {
+        var empty = document.createElement('div');
+        empty.className = 'empty-slot wide';
+        empty.textContent = 'Nothing uploaded yet — drop a video above.';
+        frag.appendChild(empty);
+      } else {
+        inProgress.forEach(function (p) { frag.appendChild(buildUploadRow(p, audioTracks)); });
+      }
+      uploadRows.innerHTML = '';
+      uploadRows.appendChild(frag);
+      Object.keys(oldObjectUrls).forEach(function (id) { URL.revokeObjectURL(oldObjectUrls[id]); });
+    }
+
     if (!inProgress.length) {
-      uploadRows.innerHTML = '<div class="empty-slot wide">Nothing uploaded yet — drop a video above.</div>';
+      swapIn([]);
     } else {
-      Store.getAll('audioTracks').then(function (audioTracks) {
-        inProgress.forEach(function (p) { uploadRows.appendChild(buildUploadRow(p, audioTracks)); });
-      });
+      Store.getAll('audioTracks').then(swapIn);
     }
 
     postedGrid.innerHTML = posted.length ? posted.map(function (p) { return videoCardHtml(p.id, p); }).join('') : '<div class="empty-slot wide">Nothing posted yet.</div>';
