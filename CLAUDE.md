@@ -5473,3 +5473,68 @@ Nothing else from §121 needed to change — the direct-video-element click list
 **Verified end-to-end against the live deployed service** (not reasoned about): a real mouse click via the test rig now produces the full `pointerdown → mousedown → pointerup → mouseup → click` sequence on the video, toggles play/pause correctly in both directions, and — confirmed separately — dragging on empty board space (not on a card) still pans the board normally, so the fix doesn't regress the feature it's touching. This is a `ops-service/public/app.js`-only change (frontend-only), so per §93 it was already live on save, no rebuild/restart, and the live `app.js` was directly re-fetched mid-session to confirm the edit had actually propagated before re-testing.
 
 **Process lesson for this file:** three prior attempts (§113, §119, §120/§121) shipped "verified via `node --check`" — true, but `node --check` only proves the JS parses, it says nothing about runtime behavior. This is the first attempt in this whole thread of fixes actually confirmed against real click events in a real browser against the real deployed service, and it's the one that turned out to have found the actual bug. Building the test rig cost real setup effort, but far less than a fifth guess-and-ship round would have — worth doing again for any future "I clicked it and nothing happened" report before touching code.
+
+---
+
+# 124. Legal Page Punctuation/Content Fixes, Checkout Legibility, Content Settings: Per-Platform Captions
+
+Four smaller Harvey requests in one pass.
+
+**Legal pages (`frontend/privacy.html`, `frontend/terms.html`,
+`ops-service/public/privacy.html`, `ops-service/public/terms.html`):**
+all em/en dashes removed (rewritten as commas, semicolons, colons, or
+separate sentences depending on what actually read best in each spot —
+not a blind find-replace to a hyphen). Both storefront pages now name
+BookVault as based in the United Kingdom (§64/§65 already established
+this is our real fulfillment partner; this is the first place the site
+itself says where they're located). `terms.html`'s Returns & Refunds
+section now states the support email directly inline
+(`support@realitymanual.com`), not just in the page's closing Contact
+section — Harvey's ask was specifically to have it right there in the
+refund paragraph itself, not just findable elsewhere on the page.
+
+**Checkout page legibility (`frontend/css/style.css`):**
+- `.qty-gift-note` ("Know someone who'd appreciate a copy...") was
+  serif italic at 0.92rem — Harvey found it hard to read. Switched to
+  upright sans-serif at 0.95rem with slightly taller line-height;
+  same muted color, just no longer italic/serif at a small size, which
+  was the actual legibility problem, not the color.
+- `.qty-book-icon` (the small per-copy book icons next to the quantity
+  stepper): the accent-colored border from §68 is gone, and the icons
+  now overlap into a fanned stack (`margin-left: -1.1rem` on all but
+  the first) instead of sitting in an evenly-gapped row, per Harvey's
+  "imagined the books overlapping slightly." A subtle drop shadow
+  replaces the border for separation between overlapping icons — the
+  placeholder SVG's own near-black background needed *some* visual
+  edge (§68's original reasoning still holds), just not a colored
+  outline now that they overlap and read as a stack rather than
+  individual tiles.
+
+**Content Settings: TikTok and Instagram/Facebook caption panels**
+(`ops-service/public/app.js`, `lib/store.js`) — two new fields
+alongside the existing Shorts/Longform caption templates (§62's
+original "shared caption" design). `defaultSettings().captions` gained
+`tiktok`/`igfb` keys (empty by default; `getSettings()`'s existing
+`Object.assign(d.captions, s.captions)` merge backfills them for any
+settings record saved before this change, no migration code needed).
+`captionTemplateFor(settings, p)` (signature changed from taking just
+`contentType` to taking the whole piece, its one call site updated)
+now checks the piece's tagged platforms first: a piece tagged `tiktok`
+uses the TikTok caption if one's set; a piece tagged `instagram` or
+`facebook` uses the Instagram/Facebook caption if set; otherwise it
+falls back to the existing Shorts/Longform split exactly as before.
+This means a piece with no TikTok/IG/FB platform tag, or one where the
+new fields are left blank, behaves completely unchanged — the new
+fields are additive, not a replacement for the existing two. Rendering
+(`renderCaptionText`, used by both the shared modal's caption readout
+and the Final Check card) needed no changes beyond the one call-site
+update, since both already just call `renderCaptionText(p, settings)`.
+
+Frontend-only across both repos (no `server.js`/backend change), so per
+§93 this is already live — no deploy/restart needed. Verified via
+`node --check` on both touched JS files, a CSS brace-balance check, and
+an HTML tag-balance check on the four legal pages; not yet visually
+confirmed against the live deployed service for any of these four —
+worth a look before considering this fully settled, particularly the
+book-icon overlap (never rendered outside of reasoning about the CSS)
+and whether the new caption fields save/reload correctly in Settings.

@@ -1429,15 +1429,29 @@
 
   // Every content type now gets its own tracked link inserted into the
   // caption via a "[LINK]" shortcode (Harvey realized Shorts can carry
-  // tracking links too, not just longform) — shorts and longform pull from
-  // separate caption templates since longform's needs a real per-video
-  // link every time while shorts can reuse the same wording.
-  function captionTemplateFor(settings, contentType) {
-    return contentType === 'longform' ? settings.captions.longform : settings.captions.shorts;
+  // tracking links too, not just longform). Platform-specific captions
+  // (TikTok, Instagram/Facebook) take priority over the shorts/longform
+  // ones when set and the piece is actually tagged for that platform —
+  // added per Harvey's ask for dedicated TikTok/IG-FB caption panels in
+  // Settings, since TikTok and Instagram captions conventionally read
+  // very differently from a YouTube Shorts one (hashtag-heavy vs. not,
+  // etc.). Falls back to the existing shorts/longform split for any
+  // piece not tagged with either platform, or when the platform-specific
+  // field is left blank.
+  function captionTemplateFor(settings, p) {
+    var platforms = p.platforms || [];
+    if (platforms.indexOf('tiktok') !== -1 && settings.captions.tiktok && settings.captions.tiktok.trim()) {
+      return settings.captions.tiktok;
+    }
+    if ((platforms.indexOf('instagram') !== -1 || platforms.indexOf('facebook') !== -1) &&
+        settings.captions.igfb && settings.captions.igfb.trim()) {
+      return settings.captions.igfb;
+    }
+    return p.contentType === 'longform' ? settings.captions.longform : settings.captions.shorts;
   }
 
   function renderCaptionText(p, settings) {
-    var template = captionTemplateFor(settings, p.contentType);
+    var template = captionTemplateFor(settings, p);
     if (!template || !template.trim()) return 'No caption set for this type yet — add one in Settings.';
     return Store.applyCaptionLink(template, buildUtmLink(p, settings));
   }
@@ -2698,6 +2712,10 @@
         '<textarea class="notes-input settings-textarea" id="captionShortsInput" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
         '<label class="field-label" style="margin-top:14px;display:block;">YouTube Longform caption</label>' +
         '<textarea class="notes-input settings-textarea" id="captionLongformInput" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
+        '<label class="field-label" style="margin-top:14px;display:block;">TikTok caption <span class="field-hint">(overrides Shorts/Longform above when a piece is tagged TikTok)</span></label>' +
+        '<textarea class="notes-input settings-textarea" id="captionTiktokInput" placeholder="e.g. Grab your copy of the book here [LINK]! #booktok"></textarea>' +
+        '<label class="field-label" style="margin-top:14px;display:block;">Instagram / Facebook caption <span class="field-hint">(overrides Shorts/Longform above when a piece is tagged Instagram or Facebook)</span></label>' +
+        '<textarea class="notes-input settings-textarea" id="captionIgfbInput" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
       '</section>' +
       '<section class="settings-section">' +
         '<h3>Tracked link</h3>' +
@@ -2850,6 +2868,20 @@
       captionLongformInput.value = settings.captions.longform || '';
       captionLongformInput.addEventListener('input', function () {
         settingsCache.captions.longform = captionLongformInput.value;
+        saveSettingsDebounced();
+      });
+
+      var captionTiktokInput = document.getElementById('captionTiktokInput');
+      captionTiktokInput.value = settings.captions.tiktok || '';
+      captionTiktokInput.addEventListener('input', function () {
+        settingsCache.captions.tiktok = captionTiktokInput.value;
+        saveSettingsDebounced();
+      });
+
+      var captionIgfbInput = document.getElementById('captionIgfbInput');
+      captionIgfbInput.value = settings.captions.igfb || '';
+      captionIgfbInput.addEventListener('input', function () {
+        settingsCache.captions.igfb = captionIgfbInput.value;
         saveSettingsDebounced();
       });
 

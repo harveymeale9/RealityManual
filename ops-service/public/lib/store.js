@@ -142,7 +142,11 @@ window.RMStore = (function () {
       // time, longform needs a fresh per-video tracked link. Both support
       // a "[LINK]" placeholder (see app.js buildUtmLink/applyCaptionLink)
       // since he later realized Shorts can carry tracking links too.
-      captions: { shorts: '', longform: '' },
+      // tiktok/igfb (added later) are optional platform-specific overrides
+      // — used instead of shorts/longform when a piece is tagged for that
+      // platform and the field isn't left blank (see app.js
+      // captionTemplateFor).
+      captions: { shorts: '', longform: '', tiktok: '', igfb: '' },
       baseLinkUrl: 'https://realitymanual.com',
       apiKeys: { youtube: '', instagram: '', facebook: '', tiktok: '', transcriptionProvider: '', transcriptionKey: '' }
     };
