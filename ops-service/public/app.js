@@ -8,9 +8,32 @@
   var MANUAL_STAGE_IDS = window.RMStore.STAGES.slice(0, UPLOADED_INDEX + 1).map(function (s) { return s.id; });
   var AUTO_STAGE_IDS = window.RMStore.STAGES.slice(UPLOADED_INDEX + 1).map(function (s) { return s.id; });
 
+  // Platform preset applied when the content-type dropdown changes in the
+  // editor, per Harvey: shorts default to everywhere except YT Longform,
+  // longform defaults to just YT Longform + Facebook. Only fires on an
+  // actual change during editing (see fieldContentType's change listener),
+  // never on populateFields() for an already-saved piece.
+  var PLATFORM_PRESET_BY_TYPE = {
+    ultra_short: ['ytshort', 'tiktok', 'instagram', 'facebook'],
+    short: ['ytshort', 'tiktok', 'instagram', 'facebook'],
+    long_short: ['ytshort', 'tiktok', 'instagram', 'facebook'],
+    longform: ['ytlong', 'facebook']
+  };
+
+  // Live across tab (re)activations so bootProjectManager can stop a prior
+  // poller before starting a new one — panelMain.innerHTML gets wiped and
+  // rebuilt every time this tab is (re)entered, which would otherwise leak
+  // one extra setTimeout chain per visit.
+  var pmSync = null;
+  // Same leak-avoidance reasoning as pmSync above — unsubscribe the
+  // previous tab visit's speaking-state listener before registering a new
+  // one in bootProjectManager().
+  var pmSpeakingUnsub = null;
+
   var TABS = [
+    { id: 'project-manager', label: 'Project Manager' },
     { id: 'content-ops', label: 'Content Ops' },
-    { id: 'upload-files', label: 'Upload Files' },
+    { id: 'upload-files', label: 'Content Production' },
     { id: 'content-analytics', label: 'Content Analytics' },
     { id: 'sales-analytics', label: 'Sales Analytics' },
     { id: 'website-analytics', label: 'Website Analytics' },
@@ -77,20 +100,27 @@
   }
 
   function renderTabs() {
+    // Real <a href="#tab"> rather than a <button> with a click handler —
+    // a button has no URL, so middle-click/ctrl+click "open in new tab"
+    // silently does nothing on it (Harvey's report). An anchor gets that
+    // for free from the browser; the click listener below still runs for
+    // an ordinary left-click, same behavior as before.
     panelTabs.innerHTML = TABS.map(function (t) {
-      return '<button class="panel-tab" data-tab="' + t.id + '">' + t.label + '</button>';
+      return '<a href="#' + t.id + '" class="panel-tab" data-tab="' + t.id + '">' + t.label + '</a>';
     }).join('');
-    panelTabs.querySelectorAll('.panel-tab').forEach(function (btn) {
+    panelTabs.querySelectorAll('.panel-tab[data-tab]').forEach(function (btn) {
       btn.addEventListener('click', function () { location.hash = btn.dataset.tab; });
     });
   }
 
   /* The left icon rail is a second entry point into the same tabs above —
      it doesn't have its own state, just mirrors panelTabs via the same
-     location.hash routing so the two navs can never disagree. */
+     location.hash routing so the two navs can never disagree. Its buttons
+     are real <a href="#tab"> in index.html for the same middle-click/
+     new-tab reason as renderTabs() above. */
   function bindSideRail() {
     if (!sideRail) return;
-    sideRail.querySelectorAll('.side-rail-btn').forEach(function (btn) {
+    sideRail.querySelectorAll('.side-rail-btn[data-tab]').forEach(function (btn) {
       btn.addEventListener('click', function () { location.hash = btn.dataset.tab; });
     });
   }
@@ -202,7 +232,13 @@
         btn.classList.toggle('active', btn.dataset.tab === active);
       });
     }
-    if (active === 'content-ops') {
+    var backFab = document.getElementById('pmBackFab');
+    if (backFab) backFab.classList.toggle('show', active !== 'project-manager');
+    if (active !== 'project-manager' && pmSync) { pmSync.stop(); pmSync = null; }
+    if (active === 'project-manager') {
+      panelMain.innerHTML = PM_MARKUP;
+      bootProjectManager();
+    } else if (active === 'content-ops') {
       panelMain.innerHTML = OPS_MARKUP;
       bootContentOps();
     } else if (active === 'upload-files') {
@@ -230,6 +266,604 @@
   }
 
   /* ============================================================
+     PROJECT MANAGER (chat with CC) — the default tab. Talks to the same
+     backend voice/chat endpoints as voice-mobile.html, via the shared
+     lib/voiceClient.js client. panelMain is rebuilt fresh every time this
+     tab is (re)activated, same as every other tab here, so the visible
+     thread only shows messages sent during the current activation — the
+     conversation itself is never lost, it lives server-side (see
+     CLAUDE.md §74/§75).
+     ============================================================ */
+
+  var PM_MARKUP =
+    '<div class="pm-app">' +
+      '<div class="pm-toolbar">' +
+        '<a class="link-btn" id="pmMobileLink" href="voice-mobile.html" target="_blank" rel="noopener">Mobile view ↗</a>' +
+        '<button type="button" class="pm-reset-btn" id="pmResetBtn">New conversation</button>' +
+      '</div>' +
+      '<div class="pm-columns">' +
+        '<div class="pm-col pm-col-clean">' +
+          '<div class="pm-thread" id="pmThread">' +
+            '<div class="pm-empty">Type or speak to Claude Code — same project, same tools, full memory of RealityManual.</div>' +
+          '</div>' +
+          '<div class="pm-inputbar">' +
+            '<div class="pm-reply-preview" id="pmReplyPreview" hidden>' +
+              '<span class="pm-reply-preview-label">Replying to:</span>' +
+              '<span class="pm-reply-preview-text" id="pmReplyPreviewText"></span>' +
+              '<button type="button" class="pm-reply-preview-cancel" id="pmReplyPreviewCancel" aria-label="Cancel reply">✕</button>' +
+            '</div>' +
+            '<div class="pm-image-preview" id="pmImagePreview" hidden></div>' +
+            '<div class="pm-input-row">' +
+              '<button type="button" class="pm-mic-btn" id="pmMicBtn" title="Record voice message" aria-label="Record voice message">' +
+                '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/></svg>' +
+              '</button>' +
+              '<textarea id="pmTextInput" class="pm-textarea" rows="1" placeholder="Message Claude Code… (paste or drop an image too)"></textarea>' +
+              '<button type="button" class="pm-send-btn" id="pmSendBtn" title="Send" aria-label="Send">' +
+                '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4Z"/></svg>' +
+              '</button>' +
+            '</div>' +
+            '<div class="pm-hint">Voice replies are spoken automatically. Typed replies show as text — tap ▶ to hear one.</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="pm-col pm-col-activity">' +
+          '<div class="pm-queue-section">' +
+            '<div class="pm-activity-head">Task List <span class="pm-activity-hint" id="pmQueueHint"></span></div>' +
+            '<div class="pm-queue-list" id="pmQueueList"><div class="pm-queue-empty">No tasks right now.</div></div>' +
+          '</div>' +
+          '<div class="pm-activity-section">' +
+            '<div class="pm-activity-head">Activity <span class="pm-activity-hint">— what CC is doing, live</span></div>' +
+            '<div class="pm-activity" id="pmActivity"><div class="pm-activity-empty" id="pmActivityEmpty">Nothing happening yet.</div></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  function bootProjectManager() {
+    var Voice = window.RMVoice;
+    var thread = document.getElementById('pmThread');
+    var activityEl = document.getElementById('pmActivity');
+    var queueListEl = document.getElementById('pmQueueList');
+    var queueHintEl = document.getElementById('pmQueueHint');
+    var textInput = document.getElementById('pmTextInput');
+    var sendBtn = document.getElementById('pmSendBtn');
+    var micBtn = document.getElementById('pmMicBtn');
+    var resetBtn = document.getElementById('pmResetBtn');
+    var imagePreviewEl = document.getElementById('pmImagePreview');
+    var inputRow = textInput.closest('.pm-input-row');
+    var replyPreviewEl = document.getElementById('pmReplyPreview');
+    var replyPreviewTextEl = document.getElementById('pmReplyPreviewText');
+    var replyPreviewCancelBtn = document.getElementById('pmReplyPreviewCancel');
+
+    // Tap-to-reply: selecting one of CC's earlier messages (via the Reply
+    // button added in addAssistantMessage below) sets this, shows the
+    // preview strip above the compose box, and gets threaded into the next
+    // send — both as an optimistic "Re:" quote on Harvey's own bubble and
+    // as reply_to_id sent to the backend, which weaves it into the actual
+    // prompt CC sees (server.js) so a short follow-up like "yes do that"
+    // stays unambiguous even after several things have been discussed.
+    var pendingReplyTo = null;
+    function setPendingReplyTo(msgId, text) {
+      if (!msgId) return;
+      var snippet = (text || '').trim();
+      if (!snippet) return;
+      pendingReplyTo = { id: msgId, snippet: snippet };
+      replyPreviewTextEl.textContent = snippet.length > 80 ? snippet.slice(0, 80) + '…' : snippet;
+      replyPreviewEl.hidden = false;
+      textInput.focus();
+    }
+    function clearPendingReplyTo() {
+      pendingReplyTo = null;
+      replyPreviewEl.hidden = true;
+    }
+    replyPreviewCancelBtn.addEventListener('click', clearPendingReplyTo);
+
+    if (pmSync) { pmSync.stop(); pmSync = null; }
+
+    // One shared listener drives the "speaking" highlight/button state for
+    // every bubble in the thread, whichever one is currently playing —
+    // covers both a manual Play-button click and auto-speak starting
+    // playback on its own, which is what desktop was missing before (the
+    // button's own local "am I playing" flag never got set when playback
+    // started from outside its own click handler).
+    if (pmSpeakingUnsub) pmSpeakingUnsub();
+    pmSpeakingUnsub = Voice.onSpeakingChange(function (activeId) {
+      thread.querySelectorAll('.pm-speaking').forEach(function (el) {
+        el.classList.remove('pm-speaking');
+        var btn = el.querySelector('.pm-play-btn');
+        if (btn) { btn.textContent = '▶ Play'; btn.classList.remove('pm-stop-btn'); }
+      });
+      if (activeId === null || typeof activeId === 'undefined') return;
+      var active = thread.querySelector('[data-msg-id="' + activeId + '"]');
+      if (!active) return;
+      active.classList.add('pm-speaking');
+      var btn = active.querySelector('.pm-play-btn');
+      if (btn) { btn.textContent = '■ Stop'; btn.classList.add('pm-stop-btn'); }
+    });
+
+    var emptyNote = thread.querySelector('.pm-empty');
+    function clearEmptyNote() { if (emptyNote && emptyNote.parentNode) { emptyNote.parentNode.removeChild(emptyNote); emptyNote = null; } }
+
+    function replyToSnippet(replyToText) {
+      return 'Re: ' + (replyToText.length > 80 ? replyToText.slice(0, 80) + '…' : replyToText);
+    }
+    // Two messages can genuinely be in flight at once (Harvey can start
+    // recording a second one before the first's reply lands — §108), and
+    // each one's own typing placeholder sits wherever it was appended when
+    // that message was sent. Without this, a delayed reply always landed
+    // at the thread's current end regardless of where its placeholder was,
+    // so a slower older reply could render visually *below* a newer
+    // message sent while it was still working — confusing, out-of-order
+    // bubbles. Inserting in the placeholder's original slot (when it still
+    // exists) keeps replies in the order they actually correspond to.
+    function insertMessageEl(el, insertBeforeEl) {
+      if (insertBeforeEl && insertBeforeEl.parentNode === thread) {
+        thread.insertBefore(el, insertBeforeEl);
+      } else {
+        thread.appendChild(el);
+      }
+      thread.scrollTop = thread.scrollHeight;
+    }
+    function addMessage(kind, text, msgId, imageFile, replyToText, insertBeforeEl) {
+      clearEmptyNote();
+      var el = document.createElement('div');
+      el.className = 'pm-msg pm-msg-' + kind;
+      if (msgId) el.dataset.msgId = msgId;
+      if (!imageFile && !replyToText) {
+        el.textContent = text;
+        insertMessageEl(el, insertBeforeEl);
+        return el;
+      }
+      if (replyToText) {
+        var replyTo = document.createElement('div');
+        replyTo.className = 'pm-msg-replyto';
+        replyTo.textContent = replyToSnippet(replyToText);
+        el.appendChild(replyTo);
+      }
+      if (imageFile) {
+        var img = document.createElement('img');
+        img.className = 'pm-msg-image';
+        var reader = new FileReader();
+        reader.onload = function () { img.src = reader.result; };
+        reader.readAsDataURL(imageFile);
+        el.appendChild(img);
+      }
+      if (text) {
+        var textEl = document.createElement('div');
+        if (imageFile) textEl.className = 'pm-msg-caption';
+        textEl.textContent = text;
+        el.appendChild(textEl);
+      }
+      insertMessageEl(el, insertBeforeEl);
+      return el;
+    }
+
+    function addAssistantMessage(text, replyToText, msgId, insertBeforeEl) {
+      clearEmptyNote();
+      var isAction = /^\[NEEDS_ACTION\]/i.test(text || '');
+      var wrap = document.createElement('div');
+      wrap.className = 'pm-msg pm-msg-assistant' + (isAction ? ' pm-msg-assistant--action' : '');
+      if (msgId) wrap.dataset.msgId = msgId;
+      if (replyToText) {
+        var replyTo = document.createElement('div');
+        replyTo.className = 'pm-msg-replyto';
+        replyTo.textContent = replyToSnippet(replyToText);
+        wrap.appendChild(replyTo);
+      }
+      var body = document.createElement('div');
+      body.appendChild(Voice.renderMarkdownLite(text || ''));
+      wrap.appendChild(body);
+      var meta = document.createElement('div');
+      meta.className = 'pm-msg-meta';
+      var playBtn = document.createElement('button');
+      playBtn.type = 'button';
+      playBtn.className = 'pm-play-btn';
+      playBtn.textContent = '▶ Play';
+      // Button state is driven entirely by the shared onSpeakingChange
+      // listener (registered once in bootProjectManager) rather than a
+      // local "am I playing" flag here — that flag used to only ever get
+      // set from this button's own click, so audio started elsewhere
+      // (auto-speak) left the button stuck showing "Play" while audio was
+      // actually going, and clicking it then restarted the same text
+      // instead of stopping it.
+      playBtn.addEventListener('click', function () {
+        if (Voice.currentlySpeaking() === msgId) { Voice.stopSpeaking(); return; }
+        Voice.speak(text, msgId).catch(function () {});
+      });
+      meta.appendChild(playBtn);
+      if (msgId) {
+        var replyBtn = document.createElement('button');
+        replyBtn.type = 'button';
+        replyBtn.className = 'pm-reply-btn';
+        replyBtn.textContent = '↩ Reply';
+        replyBtn.addEventListener('click', function () { setPendingReplyTo(msgId, text); });
+        meta.appendChild(replyBtn);
+      }
+      wrap.appendChild(meta);
+      insertMessageEl(wrap, insertBeforeEl);
+      return wrap;
+    }
+
+    // --- Image attach: paste into the textarea or drop onto the input row.
+    // Desktop only needs these two per Harvey (no dedicated button) — a
+    // visible attach button is the mobile-specific gap (no paste gesture
+    // there), added in voice-mobile.html instead.
+    var pendingImage = null;
+    function clearPendingImage() {
+      pendingImage = null;
+      imagePreviewEl.hidden = true;
+      imagePreviewEl.innerHTML = '';
+    }
+    function setPendingImage(file) {
+      pendingImage = file;
+      var reader = new FileReader();
+      reader.onload = function () {
+        imagePreviewEl.innerHTML = '';
+        var img = document.createElement('img');
+        img.src = reader.result;
+        imagePreviewEl.appendChild(img);
+        var removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'pm-image-preview-remove';
+        removeBtn.textContent = 'Remove image';
+        removeBtn.addEventListener('click', clearPendingImage);
+        imagePreviewEl.appendChild(removeBtn);
+        imagePreviewEl.hidden = false;
+      };
+      reader.readAsDataURL(file);
+    }
+    textInput.addEventListener('paste', function (e) {
+      var items = (e.clipboardData && e.clipboardData.items) || [];
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].type && items[i].type.indexOf('image/') === 0) {
+          var file = items[i].getAsFile();
+          if (file) { setPendingImage(file); e.preventDefault(); }
+          break;
+        }
+      }
+    });
+    if (inputRow) {
+      inputRow.addEventListener('dragover', function (e) { e.preventDefault(); inputRow.classList.add('pm-drag-over'); });
+      inputRow.addEventListener('dragleave', function () { inputRow.classList.remove('pm-drag-over'); });
+      inputRow.addEventListener('drop', function (e) {
+        e.preventDefault();
+        inputRow.classList.remove('pm-drag-over');
+        var files = e.dataTransfer && e.dataTransfer.files;
+        if (files && files.length && files[0].type.indexOf('image/') === 0) setPendingImage(files[0]);
+      });
+    }
+
+    // --- Queue panel: every poll gets the full current window of rows
+    // (see lib/voiceClient.js syncThread's onTick), so this just re-derives
+    // the in-flight + recently-completed lists from scratch each tick
+    // rather than diffing. Completed items are shown too (not just
+    // pending/running) so Harvey has a short trail of what CC just
+    // finished, capped at RECENT_DONE_LIMIT and visually distinct from
+    // what's actively running — older completions just fall off the
+    // bottom rather than piling up.
+    var RECENT_DONE_LIMIT = 5;
+    function renderQueue(rows) {
+      var inflight = rows.filter(function (r) { return r.status === 'pending' || r.status === 'running'; }).slice().reverse();
+      var recentDone = rows.filter(function (r) { return r.status === 'done' || r.status === 'error'; })
+        .slice()
+        .sort(function (a, b) { return new Date(b.completed_at || b.created_at) - new Date(a.completed_at || a.created_at); })
+        .slice(0, RECENT_DONE_LIMIT);
+      queueListEl.innerHTML = '';
+      if (!inflight.length && !recentDone.length) {
+        queueHintEl.textContent = '';
+        var empty = document.createElement('div');
+        empty.className = 'pm-queue-empty';
+        empty.textContent = 'No tasks right now.';
+        queueListEl.appendChild(empty);
+        return;
+      }
+      queueHintEl.textContent = inflight.length ? '— ' + inflight.length + ' in progress' : '';
+      inflight.forEach(function (row, idx) {
+        var item = document.createElement('div');
+        item.className = 'pm-queue-item' + (row.status === 'running' ? ' pm-queue-active' : '');
+        var num = document.createElement('span');
+        num.className = 'pm-queue-num';
+        num.textContent = (idx + 1) + '/' + inflight.length;
+        var textEl = document.createElement('span');
+        textEl.className = 'pm-queue-text';
+        textEl.textContent = row.early_ack || row.transcript;
+        item.appendChild(num);
+        item.appendChild(textEl);
+        queueListEl.appendChild(item);
+      });
+      if (recentDone.length) {
+        var divider = document.createElement('div');
+        divider.className = 'pm-queue-divider';
+        divider.textContent = 'Recently completed';
+        queueListEl.appendChild(divider);
+        recentDone.forEach(function (row) {
+          var item = document.createElement('div');
+          item.className = 'pm-queue-item ' + (row.status === 'error' ? 'pm-queue-failed' : 'pm-queue-done');
+          var mark = document.createElement('span');
+          mark.className = 'pm-queue-num';
+          mark.textContent = row.status === 'error' ? '✕' : '✓';
+          var textEl = document.createElement('span');
+          textEl.className = 'pm-queue-text';
+          textEl.textContent = row.early_ack || row.transcript;
+          item.appendChild(mark);
+          item.appendChild(textEl);
+          queueListEl.appendChild(item);
+        });
+      }
+    }
+
+    function addTyping(msgId) {
+      clearEmptyNote();
+      var el = document.createElement('div');
+      el.className = 'pm-typing';
+      if (msgId) el.dataset.msgId = msgId;
+      el.textContent = 'CC is working on it…';
+      thread.appendChild(el);
+      thread.scrollTop = thread.scrollHeight;
+      return el;
+    }
+
+    // Right-hand "code-like" pane — the raw tool-call/thinking trail, kept
+    // deliberately separate from the clean thread on the left per Harvey:
+    // this is the stuff he'll mostly ignore, not the stuff he reads.
+    function renderActivity(lines) {
+      activityEl.innerHTML = '';
+      if (!lines || !lines.length) {
+        var empty = document.createElement('div');
+        empty.className = 'pm-activity-empty';
+        empty.textContent = 'Nothing happening yet.';
+        activityEl.appendChild(empty);
+        return;
+      }
+      lines.forEach(function (line) {
+        var el = document.createElement('div');
+        el.className = 'pm-activity-line';
+        el.textContent = line;
+        activityEl.appendChild(el);
+      });
+      activityEl.scrollTop = activityEl.scrollHeight;
+    }
+
+    // Ids this device sent via voice on itself and wants spoken aloud —
+    // never applied to a reply that shows up because another device (or an
+    // earlier page load) triggered it. No fallback timer/canned phrase
+    // anymore (removed per Harvey: the repeated generic line was worse than
+    // the problem it solved) — CC's own real early_ack (server.js's
+    // unconditional acknowledgment rule) is spoken the moment it arrives,
+    // full stop, no race against a timeout. Whether the final reply is
+    // *also* spoken depends on whether the turn actually did any work: a
+    // quick, no-tool-call turn's early_ack more or less IS its answer, so
+    // onDone speaks the real reply too (the common case, feels instant); a
+    // turn that used tools only gets the one spoken acknowledgment, with
+    // the real answer landing as text — see onDone below.
+    var voiceAutoSpeak = {};
+
+    // The single source of truth for the thread: on first tick it loads
+    // whatever's already in the table (so opening this tab resumes the last
+    // conversation instead of a blank slate), and on every tick after it
+    // picks up anything new — including messages sent from the phone app
+    // while this tab just sits open. Locally-sent messages are rendered
+    // optimistically by sendText() below and handed to markKnown() so this
+    // loop updates them in place instead of duplicating them.
+    // The very first tick replays the whole existing history through
+    // onDone/onError (that's what makes opening this tab resume the last
+    // conversation) — pinging for every one of those on load would be a
+    // burst of chimes, not a notification. onTick fires once per tick,
+    // after that tick's onDone/onError calls, so flipping this true there
+    // suppresses exactly (and only) the first tick's replay.
+    var pastFirstTick = false;
+
+    pmSync = Voice.syncThread({
+      onNewMessage: function (row) { addMessage('user', row.transcript, row.id, null, row.reply_to_snippet); },
+      onPending: function (row) { addTyping(row.id); },
+      onEarlyAck: function (row) {
+        // Swap the generic "CC is working on it…" placeholder for CC's own
+        // real, contextual first line the moment it's available — visible
+        // even for a typed/no-speech send, not just spoken.
+        var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
+        if (typingEl) typingEl.textContent = row.early_ack;
+        if (!voiceAutoSpeak[row.id]) return;
+        Voice.speak(row.early_ack, row.id).catch(function () {});
+      },
+      onDone: function (row) {
+        // Look the placeholder up (rather than just removeTyping()) so its
+        // position can be handed to addAssistantMessage as an insertion
+        // anchor — see insertMessageEl's comment for why: this message may
+        // not be the most recently-sent one anymore if Harvey started
+        // another before this reply landed.
+        var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
+        // Execute-mode replies are a real completion summary now (see
+        // server.js buildVoicePrompt), not a throwaway line — show it like
+        // any other reply instead of a generic "Done" placeholder.
+        addAssistantMessage(row.reply_text || '', row.transcript, row.id, typingEl);
+        if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
+        if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
+        if (voiceAutoSpeak[row.id]) {
+          delete voiceAutoSpeak[row.id];
+          // Whether the final answer also gets spoken, on top of the
+          // acknowledgment already spoken by onEarlyAck, depends on
+          // whether this turn actually needed real work — Harvey's own
+          // instruction: a quick/easy turn should just get its answer
+          // spoken directly (no separate ack needed, and this is exactly
+          // that case, since a turn with no tool calls has nothing left
+          // to add beyond what the acknowledgment already said); a turn
+          // that needed real thinking/execution should only get the
+          // spoken acknowledgment ("I'll look into it"), with the actual
+          // answer landing as text, not a second spoken message stacked
+          // on top of the first.
+          var usedTools = !!(row.activity_log && row.activity_log.length);
+          var replyText = row.reply_text || '';
+          var alreadySaidIt = row.early_ack && replyText.trim() === row.early_ack.trim();
+          if (!usedTools && !alreadySaidIt && row.mode !== 'execute') {
+            Voice.speak(replyText, row.id).catch(function () {});
+          }
+        }
+      },
+      onError: function (row) {
+        var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
+        addMessage('error', row.error_message || 'Something went wrong.', row.id, null, row.transcript, typingEl);
+        if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
+        if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
+        if (voiceAutoSpeak[row.id]) {
+          delete voiceAutoSpeak[row.id];
+          Voice.speak(row.error_message || 'Something went wrong.', row.id).catch(function () {});
+        }
+      },
+      onActivity: function (row) { renderActivity(row.activity_log); },
+      onTick: function (rows) { renderQueue(rows); pastFirstTick = true; }
+    });
+
+    function sendText(text, mode, opts) {
+      opts = opts || {};
+      var autoSpeak = !!opts.autoSpeak;
+      var image = opts.image || null;
+      if (!text.trim() && !image) return;
+      var replyTo = pendingReplyTo;
+      clearPendingReplyTo();
+      addMessage('user', text.trim(), null, image, replyTo ? replyTo.snippet : null);
+      var typingEl = addTyping();
+      renderActivity(null);
+      Voice.sendMessage(text.trim(), mode, image, replyTo ? replyTo.id : null).then(function (created) {
+        typingEl.dataset.msgId = created.id;
+        if (autoSpeak) voiceAutoSpeak[created.id] = true;
+        pmSync.markKnown(created);
+      }).catch(function (err) {
+        if (typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
+        addMessage('error', (err && err.message) || 'Something went wrong.');
+      });
+    }
+
+    // Typing means "reply in text" by default — voice is only for when
+    // Harvey actually spoke. Exception per Harvey: if his immediately
+    // preceding message was itself sent by voice, a quick typed follow-up
+    // (e.g. fixing a misheard word) still gets a spoken reply too, so the
+    // conversation doesn't abruptly go silent mid-voice-exchange. One-shot:
+    // this resets to text-only after the typed message, not sticky forever.
+    var lastSendWasVoice = false;
+
+    sendBtn.addEventListener('click', function () {
+      var text = textInput.value;
+      var image = pendingImage;
+      textInput.value = '';
+      textInput.style.height = 'auto';
+      var carryVoice = lastSendWasVoice;
+      lastSendWasVoice = false;
+      clearPendingImage();
+      sendText(text, 'respond', { autoSpeak: carryVoice, image: image });
+    });
+    textInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendBtn.click();
+      }
+    });
+    function autoresize() {
+      textInput.style.height = 'auto';
+      textInput.style.height = Math.min(textInput.scrollHeight, 160) + 'px';
+    }
+    textInput.addEventListener('input', autoresize);
+
+    // Recording state: exactly one obvious action while recording — click
+    // the (now pulsing) mic again to finish. Hiding Send removes the
+    // "mic again or Send?" ambiguity Harvey flagged; showing it again the
+    // moment recording stops means there's still a way to fix a stray word
+    // before it goes out.
+    function setRecordingUI(isRecording) {
+      micBtn.classList.toggle('recording', isRecording);
+      micBtn.title = isRecording ? 'Stop recording and send' : 'Record voice message';
+      micBtn.setAttribute('aria-label', micBtn.title);
+      sendBtn.hidden = isRecording;
+      // Don't talk over Harvey while he's dictating a new message — both
+      // recording paths below (live recognition and record-and-upload)
+      // funnel through this one function on every start/stop, so this is
+      // the single place to gate it.
+      Voice.setRecordingActive(isRecording);
+    }
+
+    var SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    var activeRecognition = null;
+    var activeRecorder = null;
+
+    // Preferred path: the browser's own live speech recognition (Chrome/
+    // Edge) writes into the textarea as Harvey talks, same as him typing —
+    // no separate "transcribing…" wait, and what he sees live is exactly
+    // what gets sent, so there's no surprise mismatch against a second,
+    // server-side transcription pass.
+    function startLiveRecognition() {
+      var recognition = new SpeechRecognitionCtor();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      var finalTranscript = '';
+      recognition.addEventListener('result', function (e) {
+        var interim = '';
+        for (var i = e.resultIndex; i < e.results.length; i++) {
+          var chunk = e.results[i][0].transcript;
+          if (e.results[i].isFinal) finalTranscript += chunk + ' ';
+          else interim += chunk;
+        }
+        textInput.value = (finalTranscript + interim).trim();
+        autoresize();
+      });
+      recognition.addEventListener('end', function () {
+        activeRecognition = null;
+        setRecordingUI(false);
+        var text = textInput.value;
+        textInput.value = '';
+        textInput.style.height = 'auto';
+        if (text.trim()) { lastSendWasVoice = true; sendText(text, 'respond', { autoSpeak: true }); }
+      });
+      recognition.addEventListener('error', function (e) {
+        activeRecognition = null;
+        setRecordingUI(false);
+        if (e.error !== 'aborted' && e.error !== 'no-speech') {
+          addMessage('error', 'Voice recognition error: ' + e.error);
+        }
+      });
+      activeRecognition = recognition;
+      setRecordingUI(true);
+      recognition.start();
+    }
+
+    // Fallback for browsers without live recognition (e.g. Firefox): the
+    // original record-then-upload-then-transcribe flow, no live preview.
+    function startRecordAndUpload() {
+      Voice.startRecording().then(function (rec) {
+        activeRecorder = rec;
+        setRecordingUI(true);
+      }).catch(function () {
+        alert('Could not access the microphone. Check the browser has mic permission.');
+      });
+    }
+
+    micBtn.addEventListener('click', function () {
+      if (activeRecognition) { activeRecognition.stop(); return; }
+      if (activeRecorder) {
+        var rec = activeRecorder;
+        activeRecorder = null;
+        setRecordingUI(false);
+        rec.stop().then(function (blob) { return Voice.transcribe(blob); })
+          .then(function (text) {
+            if (!text) return;
+            lastSendWasVoice = true;
+            sendText(text, 'respond', { autoSpeak: true });
+          })
+          .catch(function (err) { addMessage('error', (err && err.message) || 'Could not transcribe audio.'); });
+        return;
+      }
+      if (SpeechRecognitionCtor) startLiveRecognition();
+      else startRecordAndUpload();
+    });
+
+    resetBtn.addEventListener('click', function () {
+      if (!confirm('Start a new conversation? CC will lose context from this one.')) return;
+      Voice.resetSession().then(function () {
+        addMessage('system', 'New conversation started.');
+      });
+    });
+
+    textInput.focus();
+  }
+
+  /* ============================================================
      SHARED PIECE STATE (Content Ops + Upload Files read/write the
      same underlying `pieces` store — one board, two views onto it)
      ============================================================ */
@@ -237,10 +871,59 @@
   var pieces = {};
   var piecesLoadedPromise = null;
 
+  // One-time backfill for pieces that predate the sequential-ID feature
+  // (Harvey: "post 047" needs to mean something stable he can say out loud
+  // to the Project Manager) — assigned in creation order so older pieces
+  // keep lower numbers, continuing on from any already-numbered ones.
+  function backfillMissingSeqs(rows) {
+    var missing = rows.filter(function (r) { return typeof r.seq !== 'number'; })
+      .sort(function (a, b) { return new Date(a.createdAt || 0) - new Date(b.createdAt || 0); });
+    if (!missing.length) return;
+    var next = Store.nextSeq(rows);
+    missing.forEach(function (r) {
+      r.seq = next++;
+      Store.put('pieces', r);
+    });
+  }
+
+  // One-time migration for the removed "Thumbnail Selected" stage (§ see
+  // CLAUDE.md uploader-tool section) — anything still sitting there moves
+  // back to Processing and picks up the "thumbnail selected" tag that
+  // replaces it, so nothing gets silently stranded on a stage id that no
+  // longer exists in Store.STAGES.
+  function migrateThumbnailStage(rows) {
+    var stragglers = rows.filter(function (r) { return r.stage === 'thumbnail'; });
+    stragglers.forEach(function (r) {
+      r.stage = 'processed';
+      syncTags(r);
+      r.updatedAt = nowIso();
+      Store.put('pieces', r);
+    });
+  }
+
+  // A piece could only reach Final Check under the *old* flow by having
+  // its stage set directly (no separate audio-spliced video ever built —
+  // that pipeline didn't exist yet). Its Final Check card would now try
+  // to play a "<id>-final" file that was never created. Sending it back
+  // to Processing means it goes through the real build the next time
+  // Harvey hits "Send to final check," same as any new upload — rather
+  // than leaving a stale entry with a broken/missing video preview.
+  function migrateUnbuiltFinalChecks(rows) {
+    var stragglers = rows.filter(function (r) { return r.stage === 'final_check' && r.finalBuildStatus !== 'done'; });
+    stragglers.forEach(function (r) {
+      r.stage = 'processed';
+      r.updatedAt = nowIso();
+      Store.put('pieces', r);
+    });
+  }
+
   function ensurePiecesLoaded() {
     if (!piecesLoadedPromise) {
       piecesLoadedPromise = Store.getAll('pieces').then(function (rows) {
         rows.forEach(function (r) { pieces[r.id] = r; });
+        backfillMissingSeqs(rows);
+        migrateThumbnailStage(rows);
+        migrateUnbuiltFinalChecks(rows);
         return maybeSeedExamples();
       });
     }
@@ -302,42 +985,102 @@
     return s ? s.label : id;
   }
 
-  /* ---------- auto-scheduling ---------- */
+  /* ---------- tags + scheduling ---------- */
 
-  /* Once a piece has a video attached, its stage is no longer something
-     Harvey drags around on the board — it's derived entirely from what's
-     been done to it (audio picked, thumbnail picked, scheduled), and
-     "live" is reserved for when real posting confirmation exists. */
-  function deriveAndApplyStage(p) {
-    if (!p.hasVideo || p.stage === 'live') return;
-    var target = 'processed'; // "Processing" — a video piece never sits at "Uploaded", that column is the plan archive
-    if (p.thumbnailDataUrl) target = 'thumbnail';
-    if (p.scheduledAt) target = 'scheduled';
-    p.stage = target;
+  // Replaces the old "Thumbnail Selected" stage-derivation (deriveAndApplyStage) —
+  // a video piece's *stage* is now fully explicit (Processing -> Final Check
+  // -> Scheduled -> Live, moved only by Harvey hitting "Send to final
+  // check" / "Approve," never automatically), but these three tags still
+  // want to reflect field state automatically, recomputed from scratch
+  // every time rather than tracked incrementally — so unpicking a
+  // thumbnail/audio/title also correctly drops its tag again.
+  function syncTags(p) {
+    var tags = {};
+    (p.tags || []).forEach(function (t) { tags[t] = true; });
+    if (p.thumbnailDataUrl) tags.thumbnail_selected = true; else delete tags.thumbnail_selected;
+    if ((p.ytTitles || []).length) tags.titles_selected = true; else delete tags.titles_selected;
+    if (p.audioTrackId) tags.music_added = true; else delete tags.music_added;
+    p.tags = Object.keys(tags);
   }
 
-  function maybeAutoSchedule(p) {
-    if (!(p.hasVideo && p.audioTrackId && p.thumbnailDataUrl && !p.scheduledAt)) return Promise.resolve();
+  // Fills as many consecutive shorts slots as there are approved pieces
+  // for, rotating ultra_short -> short -> long_short -> repeat and
+  // skipping any type with nothing ready right now (falls back to
+  // alternating between whichever types DO have something, per Harvey).
+  // Runs the full pass (not just "schedule this one piece") every time
+  // something's approved, since approving several in a row should fill
+  // several slots in the correct rotation order, not just bump the one
+  // just approved to the front. "Ready" now means Harvey has explicitly
+  // approved it out of Final Check — this used to fire automatically the
+  // instant a piece had both audio and a thumbnail, with no review step
+  // at all; approveAndSchedule below is the only caller now.
+  function scheduleShorts(settings) {
+    var ms = Store.cadenceMs(settings.cadence.shorts || Store.DEFAULT_CADENCE.shorts);
+    var tail = 0;
+    Object.keys(pieces).forEach(function (id) {
+      var o = pieces[id];
+      if (Store.SHORT_TYPES.indexOf(o.contentType) !== -1 && o.scheduledAt && (o.stage === 'scheduled' || o.stage === 'live')) {
+        var t = new Date(o.scheduledAt).getTime();
+        if (t > tail) tail = t;
+      }
+    });
+    if (!tail) tail = Date.now();
+
+    var pointer = Store.SHORT_TYPES.indexOf(settings.lastShortType);
+    var settingsDirty = false;
+    for (var guard = 0; guard < 200; guard++) {
+      var found = null;
+      for (var attempt = 1; attempt <= Store.SHORT_TYPES.length; attempt++) {
+        var candidateIdx = (pointer + attempt) % Store.SHORT_TYPES.length;
+        var candidateType = Store.SHORT_TYPES[candidateIdx];
+        var ready = Object.keys(pieces).map(function (id) { return pieces[id]; })
+          .filter(function (o) { return o.contentType === candidateType && o.hasVideo && o.stage === 'final_check' && !o.scheduledAt; })
+          .sort(function (a, b) { return new Date(a.updatedAt) - new Date(b.updatedAt); });
+        if (ready.length) { found = { piece: ready[0], idx: candidateIdx, type: candidateType }; break; }
+      }
+      if (!found) break;
+      tail += ms;
+      found.piece.scheduledAt = new Date(tail).toISOString();
+      found.piece.updatedAt = nowIso();
+      found.piece.stage = 'scheduled';
+      Store.put('pieces', found.piece);
+      pointer = found.idx;
+      settings.lastShortType = found.type;
+      settingsDirty = true;
+    }
+    if (settingsDirty) Store.saveSettings(settings);
+  }
+
+  // Called only by the "Approve" action in Final Check (see below) — no
+  // longer fires automatically just because audio+thumbnail are set. A
+  // piece not currently in Final Check is left alone (nothing to approve).
+  function approveAndSchedule(p) {
+    if (!(p.hasVideo && p.stage === 'final_check' && !p.scheduledAt)) return Promise.resolve();
     return Store.getSettings().then(function (settings) {
-      var cfg = settings.cadence[p.contentType] || Store.DEFAULT_CADENCE[p.contentType] || { every: 1, unit: 'days' };
+      if (Store.SHORT_TYPES.indexOf(p.contentType) !== -1) {
+        scheduleShorts(settings);
+        return;
+      }
+      var cfg = settings.cadence.longform || Store.DEFAULT_CADENCE.longform;
       var ms = Store.cadenceMs(cfg);
       var latest = null;
       Object.keys(pieces).forEach(function (id) {
         var o = pieces[id];
-        if (o.id !== p.id && o.contentType === p.contentType && o.scheduledAt && (o.stage === 'scheduled' || o.stage === 'live')) {
+        if (o.id !== p.id && o.contentType === 'longform' && o.scheduledAt && (o.stage === 'scheduled' || o.stage === 'live')) {
           var t = new Date(o.scheduledAt).getTime();
           if (!latest || t > latest) latest = t;
         }
       });
       var base = latest || Date.now();
       p.scheduledAt = new Date(base + ms).toISOString();
+      p.stage = 'scheduled';
     });
   }
 
   function setPieceStage(p, newStage, cb) {
     p.stage = newStage;
     p.updatedAt = nowIso();
-    maybeAutoSchedule(p).then(function () {
+    approveAndSchedule(p).then(function () {
       return Store.put('pieces', p);
     }).then(function () {
       if (cb) cb();
@@ -372,6 +1115,7 @@
     ];
     examples.forEach(function (ex, i) {
       ex.id = Store.genId();
+      ex.seq = i;
       ex.order = 10;
       ex.hasVideo = false;
       ex.notesHtml = ex.notesHtml || '';
@@ -390,11 +1134,12 @@
      ============================================================ */
 
   var modalWrap, pieceModal, scrim, fieldTitle, fieldStage, fieldContentType, fieldNotes,
-      platformGrid, metaCreated, metaUpdated, saveFlag, modalEyebrowText, btnDelete,
+      platformGrid, metaCreated, metaUpdated, saveFlag, modalEyebrowText, modalIdBadge, btnDelete,
       videoSection, videoPreview, fieldTranscript, fieldAudioTrack, thumbPreview,
       pickFrameBtn, thumbScrub, scrubRange, captureFrameBtn, captionReadout,
-      utmField, fieldUtmLink, copyUtmBtn, scheduleStatus,
-      stageField, stageReadoutField, stageReadout;
+      utmField, fieldUtmLink, copyUtmBtn, scheduleStatus, approveBtn,
+      stageField, stageReadoutField, stageReadout,
+      ytTitlesField, fieldYtTitle1, fieldYtTitle2, fieldYtTitle3;
 
   var activeId = null;
   var isNewUnsaved = false;
@@ -421,6 +1166,7 @@
     metaUpdated = document.getElementById('metaUpdated');
     saveFlag = document.getElementById('saveFlag');
     modalEyebrowText = document.getElementById('modalEyebrowText');
+    modalIdBadge = document.getElementById('modalIdBadge');
     btnDelete = document.getElementById('btnDelete');
 
     videoSection = document.getElementById('videoSection');
@@ -435,8 +1181,13 @@
     captionReadout = document.getElementById('captionReadout');
     utmField = document.getElementById('utmField');
     fieldUtmLink = document.getElementById('fieldUtmLink');
+    ytTitlesField = document.getElementById('ytTitlesField');
+    fieldYtTitle1 = document.getElementById('fieldYtTitle1');
+    fieldYtTitle2 = document.getElementById('fieldYtTitle2');
+    fieldYtTitle3 = document.getElementById('fieldYtTitle3');
     copyUtmBtn = document.getElementById('copyUtmBtn');
     scheduleStatus = document.getElementById('scheduleStatus');
+    approveBtn = document.getElementById('approveBtn');
     stageField = document.getElementById('stageField');
     stageReadoutField = document.getElementById('stageReadoutField');
     stageReadout = document.getElementById('stageReadout');
@@ -469,8 +1220,23 @@
     fieldNotes.addEventListener('blur', function () { clearTimeout(saveTimer); syncFromForm(); });
     fieldTranscript.addEventListener('input', debounceSync);
     fieldTranscript.addEventListener('blur', function () { clearTimeout(saveTimer); syncFromForm(); });
+    [fieldYtTitle1, fieldYtTitle2, fieldYtTitle3].forEach(function (el) {
+      el.addEventListener('input', debounceSync);
+      el.addEventListener('blur', function () { clearTimeout(saveTimer); syncFromForm(); });
+    });
     fieldStage.addEventListener('change', function () { clearTimeout(saveTimer); syncFromForm(); });
-    fieldContentType.addEventListener('change', function () { clearTimeout(saveTimer); syncFromForm(); });
+    fieldContentType.addEventListener('change', function () {
+      var preset = PLATFORM_PRESET_BY_TYPE[fieldContentType.value];
+      if (preset) {
+        platformGrid.querySelectorAll('.platform-toggle').forEach(function (t) {
+          var checked = preset.indexOf(t.dataset.platform) !== -1;
+          t.classList.toggle('checked', checked);
+          t.querySelector('input').checked = checked;
+        });
+      }
+      clearTimeout(saveTimer);
+      syncFromForm();
+    });
     fieldAudioTrack.addEventListener('change', function () { clearTimeout(saveTimer); syncFromForm(); });
     platformGrid.addEventListener('click', function (e) {
       var toggle = e.target.closest('.platform-toggle');
@@ -507,10 +1273,8 @@
       if (p) {
         p.thumbnailDataUrl = dataUrl;
         p.updatedAt = nowIso();
-        maybeAutoSchedule(p).then(function () {
-          deriveAndApplyStage(p);
-          return Store.put('pieces', p);
-        }).then(function () {
+        syncTags(p);
+        Store.put('pieces', p).then(function () {
           updateStageAndScheduleUI(p);
           flashSaved();
           notifyPiecesChanged();
@@ -520,6 +1284,18 @@
     copyUtmBtn.addEventListener('click', function () {
       fieldUtmLink.select();
       try { document.execCommand('copy'); } catch (e) {}
+    });
+    approveBtn.addEventListener('click', function () {
+      if (!activeId) return;
+      var p = pieces[activeId];
+      if (!p) return;
+      approveAndSchedule(p).then(function () {
+        return Store.put('pieces', p);
+      }).then(function () {
+        updateStageAndScheduleUI(p);
+        flashSaved();
+        notifyPiecesChanged();
+      });
     });
 
     btnDelete.addEventListener('click', function () {
@@ -550,9 +1326,29 @@
       notifyPiecesChanged();
     });
 
+    // Closing on a click "outside" the editor used to fire on the native
+    // click event's own target — but a click event's target is computed
+    // from where the mouse *released*, not where the drag started. Highlighting
+    // a line of text (mousedown inside the editor) and dragging past its edge
+    // before releasing landed the mouseup on the scrim, which read as an
+    // outside click and closed the editor — annoying and not what "clicking
+    // out" means. Fix: only close when BOTH the mousedown and the click
+    // itself targeted the overlay — a drag that started inside never sets
+    // mouseDownOnOverlay, so it can't trigger a close no matter where the
+    // release lands. A genuine click outside still closes normally.
+    var mouseDownOnOverlay = false;
+    function markOverlayMouseDown(e) { mouseDownOnOverlay = (e.target === scrim || e.target === modalWrap); }
+    scrim.addEventListener('mousedown', markOverlayMouseDown);
+    modalWrap.addEventListener('mousedown', markOverlayMouseDown);
+    function maybeCloseFromOverlayClick(e) {
+      var wasOutsideMouseDown = mouseDownOnOverlay;
+      mouseDownOnOverlay = false;
+      if (wasOutsideMouseDown && (e.target === scrim || e.target === modalWrap)) closeModal();
+    }
+    scrim.addEventListener('click', maybeCloseFromOverlayClick);
+    modalWrap.addEventListener('click', maybeCloseFromOverlayClick);
+
     document.getElementById('modalClose').addEventListener('click', closeModal);
-    scrim.addEventListener('click', closeModal);
-    modalWrap.addEventListener('click', function (e) { if (e.target === modalWrap) closeModal(); });
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && modalWrap.classList.contains('open')) closeModal();
     });
@@ -590,7 +1386,26 @@
     var base = (settings.baseLinkUrl || 'https://realitymanual.com').trim() || 'https://realitymanual.com';
     var source = (p.platforms || []).indexOf('facebook') !== -1 && (p.platforms || []).indexOf('ytlong') === -1 ? 'facebook' : 'youtube';
     var sep = base.indexOf('?') === -1 ? '?' : '&';
-    return base + sep + 'utm_source=' + encodeURIComponent(source) + '&utm_medium=video&utm_campaign=' + encodeURIComponent(p.contentType || 'longform') + '&utm_content=' + encodeURIComponent(p.id);
+    // utm_content uses the human-friendly #047 id, not the internal uuid —
+    // it's what shows up in analytics, so it should be the same number
+    // Harvey actually refers to the piece by.
+    var contentId = typeof p.seq === 'number' ? String(p.seq).padStart(3, '0') : p.id;
+    return base + sep + 'utm_source=' + encodeURIComponent(source) + '&utm_medium=video&utm_campaign=' + encodeURIComponent(p.contentType || 'longform') + '&utm_content=' + encodeURIComponent(contentId);
+  }
+
+  // Every content type now gets its own tracked link inserted into the
+  // caption via a "[LINK]" shortcode (Harvey realized Shorts can carry
+  // tracking links too, not just longform) — shorts and longform pull from
+  // separate caption templates since longform's needs a real per-video
+  // link every time while shorts can reuse the same wording.
+  function captionTemplateFor(settings, contentType) {
+    return contentType === 'longform' ? settings.captions.longform : settings.captions.shorts;
+  }
+
+  function renderCaptionText(p, settings) {
+    var template = captionTemplateFor(settings, p.contentType);
+    if (!template || !template.trim()) return 'No caption set for this type yet — add one in Settings.';
+    return Store.applyCaptionLink(template, buildUtmLink(p, settings));
   }
 
   function updateStageAndScheduleUI(p) {
@@ -599,13 +1414,16 @@
       scheduleStatus.textContent = 'Scheduled for ' + fmtFull(p.scheduledAt);
     } else if (p.stage === 'live') {
       scheduleStatus.textContent = p.scheduledAt ? ('Posted ' + fmtFull(p.scheduledAt)) : 'Posted — connect an API in Settings to confirm.';
+    } else if (p.stage === 'final_check') {
+      scheduleStatus.textContent = 'In Final Check — review the video, then approve to schedule it.';
     } else if (!p.audioTrackId) {
-      scheduleStatus.textContent = 'Pick a backing audio track, then a thumbnail, and this schedules itself.';
+      scheduleStatus.textContent = 'Pick a backing audio track and a thumbnail, then send it to Final Check.';
     } else if (!p.thumbnailDataUrl) {
-      scheduleStatus.textContent = 'Audio picked — pick a thumbnail frame and this schedules itself.';
+      scheduleStatus.textContent = 'Audio picked — pick a thumbnail frame, then send it to Final Check.';
     } else {
-      scheduleStatus.textContent = 'Ready — this will schedule itself shortly.';
+      scheduleStatus.textContent = 'Ready — head to the Upload Files list to send this to Final Check.';
     }
+    approveBtn.hidden = p.stage !== 'final_check';
   }
 
   function populateFields(p) {
@@ -624,6 +1442,11 @@
 
     if (currentVideoObjectUrl) { URL.revokeObjectURL(currentVideoObjectUrl); currentVideoObjectUrl = null; }
 
+    var ytTitles = p.ytTitles || [];
+    fieldYtTitle1.value = ytTitles[0] || '';
+    fieldYtTitle2.value = ytTitles[1] || '';
+    fieldYtTitle3.value = ytTitles[2] || '';
+
     if (!p.hasVideo) {
       videoSection.hidden = true;
       videoPreview.removeAttribute('src');
@@ -634,7 +1457,6 @@
     thumbScrub.hidden = true;
     fieldTranscript.value = p.transcript || '';
     thumbPreview.innerHTML = p.thumbnailDataUrl ? ('<img src="' + p.thumbnailDataUrl + '" alt="" />') : '<span class="thumb-empty">No thumbnail yet</span>';
-    utmField.hidden = p.contentType !== 'longform';
     updateStageAndScheduleUI(p);
 
     return Promise.all([
@@ -649,10 +1471,23 @@
           tracks.map(function (t) { return '<option value="' + t.id + '"' + (t.id === p.audioTrackId ? ' selected' : '') + '>' + escapeHtml(t.name) + '</option>'; }).join('');
       }),
       Store.getSettings().then(function (settings) {
-        captionReadout.textContent = settings.sharedCaption && settings.sharedCaption.trim() ? settings.sharedCaption : 'No shared caption set yet — add one in Settings.';
+        captionReadout.textContent = renderCaptionText(p, settings);
         fieldUtmLink.value = buildUtmLink(p, settings);
       })
     ]);
+  }
+
+  // Shown in the editor header too, not just the card — per Harvey, so
+  // whatever's open matches the number he'd reference giving voice
+  // feedback ("post 047, change X") without needing to close back to the
+  // board to check which one he's looking at.
+  function showModalIdBadge(piece) {
+    if (typeof piece.seq === 'number') {
+      modalIdBadge.textContent = '#' + String(piece.seq).padStart(3, '0');
+      modalIdBadge.hidden = false;
+    } else {
+      modalIdBadge.hidden = true;
+    }
   }
 
   function openPiece(id, closedCb) {
@@ -663,6 +1498,7 @@
     var p = pieces[id];
     if (!p) return;
     modalEyebrowText.textContent = 'Editing piece';
+    showModalIdBadge(p);
     populateFields(p).then(function () {
       metaCreated.textContent = 'Created ' + fmtFull(p.createdAt);
       metaUpdated.textContent = 'Updated ' + fmtFull(p.updatedAt);
@@ -678,10 +1514,12 @@
     });
   }
 
+  function allPiecesArray() { return Object.keys(pieces).map(function (k) { return pieces[k]; }); }
+
   function createDraft(stageId, closedCb) {
     var id = Store.genId();
     pieces[id] = {
-      id: id, title: '', stage: stageId, platforms: [], contentType: 'short', notesHtml: '', hasVideo: false,
+      id: id, seq: Store.nextSeq(allPiecesArray()), title: '', stage: stageId, platforms: [], contentType: 'short', notesHtml: '', hasVideo: false,
       order: minOrder(stageId) - 10,
       createdAt: nowIso(),
       updatedAt: nowIso()
@@ -691,6 +1529,7 @@
     onModalClosed = closedCb || null;
     disarmDelete();
     modalEyebrowText.textContent = 'New piece';
+    showModalIdBadge(pieces[id]);
     populateFields(pieces[id]);
     metaCreated.textContent = 'Not yet saved';
     metaUpdated.textContent = '—';
@@ -724,7 +1563,8 @@
       title: fieldTitle.value,
       contentType: fieldContentType.value,
       notesHtml: fieldNotes.innerHTML,
-      platforms: platforms
+      platforms: platforms,
+      ytTitles: [fieldYtTitle1.value, fieldYtTitle2.value, fieldYtTitle3.value].filter(function (t) { return t.trim(); })
     };
     if (p && p.hasVideo) {
       vals.transcript = fieldTranscript.value;
@@ -770,16 +1610,14 @@
     }
 
     if (p.hasVideo) {
-      utmField.hidden = p.contentType !== 'longform';
-      if (!utmField.hidden) {
-        Store.getSettings().then(function (settings) { fieldUtmLink.value = buildUtmLink(p, settings); });
-      }
+      syncTags(p);
+      Store.getSettings().then(function (settings) {
+        fieldUtmLink.value = buildUtmLink(p, settings);
+        captionReadout.textContent = renderCaptionText(p, settings);
+      });
     }
 
-    maybeAutoSchedule(p).then(function () {
-      deriveAndApplyStage(p);
-      return Store.put('pieces', p);
-    }).then(function () {
+    Store.put('pieces', p).then(function () {
       if (p.hasVideo) updateStageAndScheduleUI(p);
       flashSaved();
       notifyPiecesChanged();
@@ -875,6 +1713,12 @@
     '<div class="ops-panel">' +
       '<div class="ops-toolbar">' +
         '<div class="ops-stats" id="statStrip"></div>' +
+        '<div class="ops-filters">' +
+          '<input type="search" class="ops-search" id="opsSearch" placeholder="Search ideas…" />' +
+          '<select class="ops-type-filter" id="opsTypeFilter"><option value="">All types</option>' +
+            Store.CONTENT_TYPES.map(function (c) { return '<option value="' + c.id + '">' + c.label + '</option>'; }).join('') +
+          '</select>' +
+        '</div>' +
         '<button class="btn-primary" id="btnNew">+ New Piece</button>' +
       '</div>' +
       '<div class="overview-row" id="overviewRow"></div>' +
@@ -882,6 +1726,7 @@
     '</div>';
 
   var board, statStrip, overviewRow, boardWrap, draggingId = null;
+  var boardSettingsCache = null;
 
   function renderStats() {
     var total = Object.keys(pieces).length;
@@ -939,6 +1784,7 @@
     var titleHtml = title ? escapeHtml(title) : 'Untitled piece';
     var titleClass = title ? 'card-title' : 'card-title untitled';
     var isAuto = !!piece.hasVideo;
+    var isAi = piece.createdBy === 'agent';
     var moveControl = isAuto
       ? '<span class="auto-stage-badge">Auto · ' + stageLabelOf(piece.stage) + '</span>'
       : (function () {
@@ -947,11 +1793,23 @@
           }).join('');
           return '<select class="card-move" data-id="' + id + '">' + stageOpts + '</select>';
         })();
+    var idBadge = typeof piece.seq === 'number' ? '<span class="card-id">#' + String(piece.seq).padStart(3, '0') + '</span>' : '';
+    // Replaces the old "Thumbnail Selected" stage column — same auto-set
+    // tags rendered as small chips wherever a video piece's card shows up
+    // (this board and the upload list), see syncTags.
+    var tagsHtml = (piece.tags || []).length
+      ? '<div class="card-tags">' + piece.tags.map(function (tagId) {
+          var def = Store.TAGS.filter(function (t) { return t.id === tagId; })[0];
+          return def ? '<span class="tag-chip">' + def.label + '</span>' : '';
+        }).join('') + '</div>'
+      : '';
     return '' +
-      '<div class="card' + (isAuto ? ' card-auto' : '') + '" draggable="' + (isAuto ? 'false' : 'true') + '" data-id="' + id + '">' +
+      '<div class="card' + (isAuto ? ' card-auto' : '') + (isAi ? ' card-ai' : '') + '" draggable="' + (isAuto ? 'false' : 'true') + '" data-id="' + id + '"' + (isAi ? ' title="Created by Claude Code"' : '') + '>' +
         (isAuto ? '' : '<span class="card-grip">⋮⋮</span>') +
+        idBadge +
         '<div class="' + titleClass + '">' + titleHtml + '</div>' +
         '<div class="chip-row">' + chipHtml(piece) + '</div>' +
+        tagsHtml +
         '<div class="card-foot">' +
           '<span class="card-time">' + fmtTime(piece.updatedAt) + '</span>' +
           moveControl +
@@ -959,12 +1817,77 @@
       '</div>';
   }
 
+  // Final Check gets a fundamentally different, much bigger card — per
+  // Harvey, the whole point of this stage is a quick final review (play
+  // the actual video, read the caption, check the 3 titles, approve) done
+  // right there on the board, not a click-through into the editor. Not a
+  // variant of cardHtml(): deliberately its own class (`.final-check-card`,
+  // not `.card`) so it's excluded from the generic click-to-open-modal and
+  // drag-start bindings in bindBoardEvents() below.
+  function finalCheckCardHtml(id, piece) {
+    var captionText = boardSettingsCache ? renderCaptionText(piece, boardSettingsCache) : 'Loading caption…';
+    var titles = piece.ytTitles || [];
+    var titlesHtml = titles.length
+      ? '<ol class="fc-titles">' + titles.map(function (t) { return '<li>' + escapeHtml(t) + '</li>'; }).join('') + '</ol>'
+      : '<div class="fc-titles-empty">No title options set.</div>';
+    var idBadge = typeof piece.seq === 'number' ? '#' + String(piece.seq).padStart(3, '0') + ' — ' : '';
+    // A piece never reaches this stage without its final (audio-spliced)
+    // video already having been built — server.js's runBuildFinalVideo
+    // only flips the stage to final_check once that's genuinely done —
+    // so this always points at the real "<id>-final" file, never the raw
+    // upload, matching Harvey's whole point of this stage: what's playing
+    // here is what actually gets published.
+    //
+    // Deliberately no way to open the shared editor modal from here —
+    // Harvey's explicit ask: Final Check should be a closed, complete
+    // review surface (title(s), video, caption, post locations/type,
+    // approve), no click-through to anything else. chipHtml() reuses the
+    // exact same platform/content-type chips the normal kanban cards
+    // already show, so "post locations, type" needs no new rendering
+    // logic of its own.
+    return '' +
+      '<div class="final-check-card" data-id="' + id + '">' +
+        '<video class="fc-video" data-id="' + id + '" playsinline preload="metadata"' +
+          (piece.thumbnailDataUrl ? ' poster="' + piece.thumbnailDataUrl + '"' : '') +
+          ' controls src="/api/files/videos/' + encodeURIComponent(id) + '-final"></video>' +
+        '<div class="fc-title">' + idBadge + escapeHtml(piece.title || 'Untitled') + '</div>' +
+        '<div class="chip-row">' + chipHtml(piece) + '</div>' +
+        '<div class="fc-caption">' + escapeHtml(captionText) + '</div>' +
+        titlesHtml +
+        '<div class="fc-actions">' +
+          '<button type="button" class="btn-primary fc-approve-btn" data-id="' + id + '">Approve → Scheduled</button>' +
+        '</div>' +
+      '</div>';
+  }
+
+  // Both the type filter and the search box remove non-matching cards
+  // from each column outright (conventional filter semantics) — search
+  // used to just dim non-matches in place instead, but Harvey wants
+  // actual hide/show: type something, only real hits stay visible; clear
+  // the box and everything comes back exactly as it was (nothing here
+  // touches drag order or which column a card is in, since filtering only
+  // affects what render() outputs, never the underlying piece data).
+  var activeTypeFilter = '';
+  var activeSearchQuery = '';
+
+  function pieceMatchesSearch(piece, query) {
+    if (!query) return true;
+    var probe = document.createElement('div');
+    probe.innerHTML = piece.notesHtml || '';
+    var haystack = ((piece.title || '') + ' ' + probe.textContent + ' ' + (piece.transcript || '')).toLowerCase();
+    return haystack.indexOf(query) !== -1;
+  }
+
   function render() {
     var scrollLeft = boardWrap.scrollLeft;
+    var query = activeSearchQuery.trim().toLowerCase();
     board.innerHTML = Store.STAGES.map(function (s, idx) {
       var ids = orderedIds(s.id);
+      if (activeTypeFilter) ids = ids.filter(function (id) { return pieces[id].contentType === activeTypeFilter; });
+      if (query) ids = ids.filter(function (id) { return pieceMatchesSearch(pieces[id], query); });
       var isAutoCol = AUTO_STAGE_IDS.indexOf(s.id) !== -1;
-      var cards = ids.map(function (id) { return cardHtml(id, pieces[id]); }).join('');
+      var isFinalCheck = s.id === 'final_check';
+      var cards = ids.map(function (id) { return isFinalCheck ? finalCheckCardHtml(id, pieces[id]) : cardHtml(id, pieces[id]); }).join('');
       if (!cards) cards = '<div class="empty-slot">' + (isAutoCol ? 'Nothing here yet' : 'Nothing here yet') + '</div>';
       var num = String(idx + 1).padStart(2, '0');
       return '' +
@@ -1001,6 +1924,33 @@
         el.classList.remove('dragging');
         draggingId = null;
         board.querySelectorAll('.column').forEach(function (c) { c.classList.remove('drag-target'); });
+      });
+    });
+
+    // Final Check cards — deliberately not `.card`, so none of the
+    // click-to-open-modal/drag bindings above apply to them at all.
+    board.querySelectorAll('.fc-video').forEach(function (v) {
+      // Native <video controls> only toggles play/pause when its own
+      // control bar is clicked, not the video frame itself — Harvey
+      // wants clicking anywhere on the preview to start it. Restricted
+      // to roughly the frame above the control bar (bottom ~40px) so
+      // this doesn't fight with the native controls' own click handling
+      // (double-toggling play/pause back off again).
+      v.addEventListener('click', function (e) {
+        var rect = v.getBoundingClientRect();
+        if (e.clientY - rect.top > rect.height - 40) return;
+        if (v.paused) v.play().catch(function () {}); else v.pause();
+      });
+    });
+    board.querySelectorAll('.fc-approve-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var p = pieces[btn.dataset.id];
+        if (!p) return;
+        btn.disabled = true;
+        btn.textContent = 'Approving…';
+        approveAndSchedule(p).then(function () {
+          return Store.put('pieces', p);
+        }).then(render);
       });
     });
 
@@ -1096,8 +2046,25 @@
     bindPanning();
     document.getElementById('btnNew').addEventListener('click', function () { createDraft('ideation', render); });
 
+    activeTypeFilter = '';
+    activeSearchQuery = '';
+    document.getElementById('opsSearch').addEventListener('input', function (e) {
+      activeSearchQuery = e.target.value;
+      render();
+    });
+    document.getElementById('opsTypeFilter').addEventListener('change', function (e) {
+      activeTypeFilter = e.target.value;
+      render();
+    });
+
     window.__rmOnPiecesChanged = render;
     ensurePiecesLoaded().then(render);
+    // Final Check cards (see finalCheckCardHtml below) show the real
+    // rendered caption inline, which needs Settings' caption templates —
+    // fetched once here rather than only when Harvey happens to visit
+    // the Settings tab. Re-renders once loaded so a caption isn't stuck
+    // on its "Loading…" fallback for the rest of the session.
+    Store.getSettings().then(function (s) { boardSettingsCache = s; render(); });
     render();
   }
 
@@ -1113,12 +2080,13 @@
         '<input type="file" id="fileInput" accept="video/*" multiple hidden />' +
       '</div>' +
       '<h3 class="upload-heading">In production</h3>' +
-      '<div class="upload-grid" id="uploadGrid"></div>' +
+      '<div class="upload-rows" id="uploadRows"></div>' +
       '<h3 class="upload-heading">Posted</h3>' +
       '<div class="upload-grid" id="postedGrid"></div>' +
     '</div>';
 
-  var dropzone, fileInput, uploadGrid, postedGrid;
+  var dropzone, fileInput, uploadRows, postedGrid;
+  var uploadRowObjectUrls = {}; // pieceId -> object URL, revoked/rebuilt on each render pass
 
   function videoCardHtml(id, p) {
     var thumb = p.thumbnailDataUrl ? '<img src="' + p.thumbnailDataUrl + '" alt="" />' : '<span class="video-card-noThumb">No thumbnail</span>';
@@ -1134,52 +2102,474 @@
     '</div>';
   }
 
-  function renderUploadLists() {
-    var items = Object.keys(pieces).map(function (k) { return pieces[k]; }).filter(function (p) { return p.hasVideo; });
-    var inProgress = items.filter(function (p) { return p.stage !== 'live'; }).sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
-    var posted = items.filter(function (p) { return p.stage === 'live'; }).sort(function (a, b) { return new Date(b.updatedAt) - new Date(a.updatedAt); });
+  // One row per in-production video, everything Harvey needs inline —
+  // thumbnail/title/id, a real scrubbable frame picker, the backing-audio
+  // dropdown, the (up to 3) title fields, and "Send to final check" — no
+  // modal click-through needed for the normal upload workflow anymore
+  // (the shared modal still exists and still works, for anything this row
+  // doesn't cover directly, e.g. notes/platforms/content type).
+  // Rebuilding this row's own "head" (thumbnail/title/#id/tags/analysis
+  // status) in place — rather than routing every small change through a
+  // full renderUploadLists() — is what stops the whole list from
+  // flashing/reloading (every other row's video blob getting re-fetched,
+  // a real blank gap while the list was torn down and rebuilt) just
+  // because Harvey clicked one audio dropdown or picked one thumbnail
+  // frame. See buildUploadRow's callers below (captureBtn, audioSelect).
+  function buildUploadRowHead(p) {
+    var head = document.createElement('div');
+    head.className = 'upload-row-head';
+    var thumbEl = document.createElement('div');
+    thumbEl.className = 'upload-row-thumb';
+    thumbEl.innerHTML = p.thumbnailDataUrl ? ('<img src="' + p.thumbnailDataUrl + '" alt="" />') : '<span class="thumb-empty">No thumbnail</span>';
+    var titleId = document.createElement('div');
+    titleId.className = 'upload-row-title-id';
+    var titleLine = document.createElement('div');
+    titleLine.className = 'upload-row-title';
+    titleLine.textContent = p.title || 'Untitled';
+    var idLine = document.createElement('div');
+    idLine.className = 'upload-row-idline';
+    idLine.textContent = '#' + String(p.seq || 0).padStart(3, '0');
+    titleId.appendChild(titleLine);
+    titleId.appendChild(idLine);
+    if ((p.tags || []).length) {
+      var tagsLine = document.createElement('div');
+      tagsLine.className = 'upload-row-tags';
+      p.tags.forEach(function (tagId) {
+        var def = Store.TAGS.filter(function (t) { return t.id === tagId; })[0];
+        if (!def) return;
+        var chip = document.createElement('span');
+        chip.className = 'tag-chip';
+        chip.textContent = def.label;
+        tagsLine.appendChild(chip);
+      });
+      titleId.appendChild(tagsLine);
+    }
+    if (p.analysisStatus === 'running' || p.analysisStatus === 'pending') {
+      var busy = document.createElement('div');
+      busy.className = 'upload-row-status';
+      busy.textContent = 'Transcribing & matching to an outline…';
+      titleId.appendChild(busy);
+    } else if (p.analysisStatus === 'error') {
+      var errEl = document.createElement('div');
+      errEl.className = 'upload-row-status upload-row-status-error';
+      errEl.textContent = 'Auto-analysis failed (' + (p.analysisError || 'unknown error') + ') — fill in titles manually below.';
+      titleId.appendChild(errEl);
+    } else if (p.analysisMatchedPieceId) {
+      var matched = pieces[p.analysisMatchedPieceId];
+      var matchEl = document.createElement('div');
+      matchEl.className = 'upload-row-status';
+      matchEl.textContent = matched ? ('Matched to #' + String(matched.seq || 0).padStart(3, '0') + ' — ' + matched.title) : 'Matched to an outline.';
+      titleId.appendChild(matchEl);
+    }
+    // The real, audio-spliced video Final Check reviews — has to exist
+    // before the piece is allowed to leave Processing (see CLAUDE.md's
+    // uploader-tool section on why), so this status line is what Harvey
+    // actually watches after clicking "Send to final check."
+    if (p.finalBuildStatus === 'running' || p.finalBuildStatus === 'pending') {
+      var building = document.createElement('div');
+      building.className = 'upload-row-status';
+      building.textContent = 'Building final video (splicing in audio)…';
+      titleId.appendChild(building);
+    } else if (p.finalBuildStatus === 'error') {
+      var buildErr = document.createElement('div');
+      buildErr.className = 'upload-row-status upload-row-status-error';
+      buildErr.textContent = 'Final video build failed (' + (p.finalBuildError || 'unknown error') + ') — try Send to final check again.';
+      titleId.appendChild(buildErr);
+    }
+    head.appendChild(thumbEl);
+    head.appendChild(titleId);
+    return head;
+  }
 
-    uploadGrid.innerHTML = inProgress.length ? inProgress.map(function (p) { return videoCardHtml(p.id, p); }).join('') : '<div class="empty-slot wide">Nothing uploaded yet — drop a video above.</div>';
-    postedGrid.innerHTML = posted.length ? posted.map(function (p) { return videoCardHtml(p.id, p); }).join('') : '<div class="empty-slot wide">Nothing posted yet.</div>';
+  function buildUploadRow(p, audioTracks) {
+    var row = document.createElement('div');
+    row.className = 'upload-row';
+    row.dataset.id = p.id;
 
-    [uploadGrid, postedGrid].forEach(function (grid) {
-      grid.querySelectorAll('.video-card').forEach(function (el) {
-        el.addEventListener('click', function () { openPiece(el.dataset.id, renderUploadLists); });
+    var head = buildUploadRowHead(p);
+    // Swaps the head for a freshly-built one reflecting p's current
+    // state — used instead of a full list rebuild whenever only this
+    // row's own thumbnail/tags/status actually changed.
+    function refreshHead() {
+      var fresh = buildUploadRowHead(p);
+      head.replaceWith(fresh);
+      head = fresh;
+    }
+
+    // --- Frame picker: a real, playable, scrubbable copy of the video —
+    // same canvas-capture technique as the shared modal's pick-frame flow,
+    // just inline instead of behind a click-to-open.
+    var frameSection = document.createElement('div');
+    frameSection.className = 'upload-row-section upload-row-frame';
+    var videoEl = document.createElement('video');
+    videoEl.className = 'upload-row-video';
+    videoEl.playsInline = true;
+    videoEl.muted = true;
+    var scrub = document.createElement('input');
+    scrub.type = 'range';
+    scrub.min = '0';
+    scrub.max = '100';
+    scrub.step = '0.1';
+    scrub.value = '0';
+    videoEl.addEventListener('loadedmetadata', function () { if (videoEl.duration) scrub.max = videoEl.duration; });
+    scrub.addEventListener('input', function () { try { videoEl.currentTime = parseFloat(scrub.value); } catch (e) {} });
+    var captureBtn = document.createElement('button');
+    captureBtn.type = 'button';
+    captureBtn.className = 'btn-secondary btn-tiny';
+    captureBtn.textContent = 'Use this frame';
+    captureBtn.addEventListener('click', function () {
+      var canvas = document.createElement('canvas');
+      canvas.width = videoEl.videoWidth || 640;
+      canvas.height = videoEl.videoHeight || 360;
+      var ctx = canvas.getContext('2d');
+      try { ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height); } catch (e) { return; }
+      var dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      p.thumbnailDataUrl = dataUrl;
+      p.updatedAt = nowIso();
+      syncTags(p);
+      // Only this row's own thumbnail/tags need to update — routing this
+      // through a full renderUploadLists() used to tear down and rebuild
+      // every row in the list (re-fetching every other row's video blob
+      // in the process), which is what looked like the whole panel
+      // flashing/disappearing for a moment on every single click.
+      Store.put('pieces', p).then(refreshHead);
+    });
+    frameSection.appendChild(videoEl);
+    frameSection.appendChild(scrub);
+    frameSection.appendChild(captureBtn);
+    Store.get('videos', p.id).then(function (v) {
+      if (!v || !v.blob) return;
+      if (uploadRowObjectUrls[p.id]) URL.revokeObjectURL(uploadRowObjectUrls[p.id]);
+      var url = URL.createObjectURL(v.blob);
+      uploadRowObjectUrls[p.id] = url;
+      videoEl.src = url;
+    });
+
+    // --- Audio dropdown
+    var audioSection = document.createElement('div');
+    audioSection.className = 'upload-row-section upload-row-audio';
+    var audioLabel = document.createElement('label');
+    audioLabel.textContent = 'Backing audio';
+    var audioSelect = document.createElement('select');
+    audioSelect.className = 'stage-select';
+    audioSelect.innerHTML = '<option value="">Not yet chosen</option><option value="__none__">No ambient music</option>' +
+      audioTracks.map(function (t) { return '<option value="' + t.id + '">' + escapeHtml(t.name) + '</option>'; }).join('');
+    audioSelect.value = p.audioTrackId || '';
+    audioSelect.addEventListener('change', function () {
+      p.audioTrackId = audioSelect.value;
+      p.updatedAt = nowIso();
+      syncTags(p);
+      Store.put('pieces', p).then(refreshHead);
+    });
+    audioSection.appendChild(audioLabel);
+    audioSection.appendChild(audioSelect);
+
+    // --- Title picker (up to 3 — auto-populated from the matched outline
+    // once analysis finishes, freely editable either way)
+    var titlesSection = document.createElement('div');
+    titlesSection.className = 'upload-row-section upload-row-titles';
+    var titlesLabel = document.createElement('label');
+    titlesLabel.textContent = 'Title options';
+    titlesSection.appendChild(titlesLabel);
+    var titleInputs = [0, 1, 2].map(function (i) {
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'title-input';
+      input.maxLength = 100;
+      input.placeholder = 'Title option ' + (i + 1) + (i > 0 ? ' (optional)' : '');
+      input.value = (p.ytTitles || [])[i] || '';
+      input.addEventListener('input', function () {
+        var vals = titleInputs.map(function (el) { return el.value; }).filter(function (v) { return v.trim(); });
+        p.ytTitles = vals;
+        p.updatedAt = nowIso();
+        syncTags(p);
+        refreshHead(); // just the "titles selected" tag — titleInputs itself is untouched, so typing focus is never disrupted
+        saveSettingsDebouncedForPiece(p);
+      });
+      titlesSection.appendChild(input);
+      return input;
+    });
+
+    // --- Send to final check
+    var actionSection = document.createElement('div');
+    actionSection.className = 'upload-row-section upload-row-action';
+    var sendBtn = document.createElement('button');
+    sendBtn.type = 'button';
+    sendBtn.className = 'btn-primary btn-tiny';
+    sendBtn.textContent = 'Send to final check';
+    sendBtn.addEventListener('click', function () {
+      // Doesn't move the piece to Final Check itself — Harvey's rule:
+      // Final Check's preview has to already be the *real* video (audio
+      // spliced in), not the raw upload, so this only kicks off that
+      // build server-side, which flips the stage itself once it actually
+      // finishes (server.js's runBuildFinalVideo). But the row itself
+      // shoots off the instant this click fires rather than sitting
+      // around showing a "Building…" state — the fetch to kick off the
+      // build is fire-and-forget (not awaited), so the row's own
+      // instant-tick-and-remove animation plays immediately, not once the
+      // real ffmpeg job (which can take a while) eventually finishes. If
+      // the build later fails, the poller below (which keeps tracking
+      // this piece's finalBuildStatus regardless of whether its row is
+      // still on screen) brings the row back via a full list rebuild so
+      // the failure isn't silently lost.
+      if (sendBtn.disabled) return;
+      sendBtn.disabled = true;
+      sendBtn.textContent = '✓ Sent';
+      openBtn.disabled = true;
+      p.finalBuildStatus = 'pending';
+      p.updatedAt = nowIso();
+      Store.put('pieces', p).then(function () {
+        fetch('/api/videos/' + encodeURIComponent(p.id) + '/build-final', { method: 'POST', credentials: 'include' }).catch(function () {});
+        maybeStartAnalysisPolling();
+        removeUploadRowAnimated(p.id);
+      }).catch(function () {
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Send to final check';
+        openBtn.disabled = false;
       });
     });
+    var openBtn = document.createElement('button');
+    openBtn.type = 'button';
+    openBtn.className = 'btn-secondary btn-tiny';
+    openBtn.textContent = 'Full editor…';
+    openBtn.addEventListener('click', function () { openPiece(p.id, renderUploadLists); });
+    actionSection.appendChild(sendBtn);
+    actionSection.appendChild(openBtn);
+
+    row.appendChild(head);
+    row.appendChild(frameSection);
+    row.appendChild(audioSection);
+    row.appendChild(titlesSection);
+    row.appendChild(actionSection);
+    return row;
+  }
+
+  // Per-piece debounce so typing in a title field doesn't fire a save on
+  // every keystroke — separate timer per row (keyed by id) rather than one
+  // shared timer, since editing two rows' titles close together shouldn't
+  // cancel each other's pending save.
+  var uploadRowSaveTimers = {};
+  function saveSettingsDebouncedForPiece(p) {
+    clearTimeout(uploadRowSaveTimers[p.id]);
+    uploadRowSaveTimers[p.id] = setTimeout(function () { Store.put('pieces', p); }, 500);
+  }
+
+  // Both used by the polling loop below (maybeStartAnalysisPolling) so a
+  // background completion — final video build finishing, analysis
+  // landing — can update a single row without the flash a full
+  // renderUploadLists() causes (§112). Standalone (not closures inside
+  // buildUploadRow) specifically so the poller, which has no access to
+  // any one row's own internal refreshHead(), can still target a
+  // specific row from the outside by id.
+  function refreshUploadRowHeadById(id) {
+    var row = uploadRows.querySelector('.upload-row[data-id="' + id + '"]');
+    if (!row) return;
+    var oldHead = row.querySelector('.upload-row-head');
+    if (!oldHead) return;
+    oldHead.replaceWith(buildUploadRowHead(pieces[id]));
+  }
+  function removeUploadRowAnimated(id) {
+    var row = uploadRows.querySelector('.upload-row[data-id="' + id + '"]');
+    if (!row) return;
+    row.classList.add('upload-row-removing');
+    setTimeout(function () {
+      if (uploadRowObjectUrls[id]) { URL.revokeObjectURL(uploadRowObjectUrls[id]); delete uploadRowObjectUrls[id]; }
+      if (row.parentNode) row.parentNode.removeChild(row);
+      if (!uploadRows.querySelector('.upload-row')) {
+        uploadRows.innerHTML = '<div class="empty-slot wide">Nothing uploaded yet — drop a video above.</div>';
+      }
+    }, 400);
+  }
+
+  // Only for cases that genuinely need every row rebuilt from scratch
+  // (initial load, a new file just landed, analysis just finished, the
+  // full editor modal closed) — anything that only changes one row's own
+  // state (thumbnail/audio/titles/send-to-final-check) goes through
+  // refreshHead()/direct row removal above instead, specifically to avoid
+  // this. Builds the new rows in memory *before* touching the live DOM
+  // at all, then swaps in one shot — the old version cleared
+  // uploadRows.innerHTML synchronously and only refilled it once
+  // Store.getAll('audioTracks') resolved, which left a real blank gap in
+  // between (what Harvey saw as the whole panel flashing/disappearing).
+  function renderUploadLists() {
+    var items = Object.keys(pieces).map(function (k) { return pieces[k]; }).filter(function (p) { return p.hasVideo; });
+    // Only still-in-Processing pieces get the editable row treatment here
+    // — once a piece reaches Final Check it has its own dedicated review
+    // card on the kanban board instead (§113), so showing it here too
+    // would just be a redundant, stale-looking duplicate of the same
+    // piece in two places.
+    var inProgress = items.filter(function (p) { return p.stage === 'processed'; }).sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
+    var posted = items.filter(function (p) { return p.stage === 'live'; }).sort(function (a, b) { return new Date(b.updatedAt) - new Date(a.updatedAt); });
+
+    function swapIn(audioTracks) {
+      var oldObjectUrls = uploadRowObjectUrls;
+      uploadRowObjectUrls = {};
+      var frag = document.createDocumentFragment();
+      if (!inProgress.length) {
+        var empty = document.createElement('div');
+        empty.className = 'empty-slot wide';
+        empty.textContent = 'Nothing uploaded yet — drop a video above.';
+        frag.appendChild(empty);
+      } else {
+        inProgress.forEach(function (p) { frag.appendChild(buildUploadRow(p, audioTracks)); });
+      }
+      uploadRows.innerHTML = '';
+      uploadRows.appendChild(frag);
+      Object.keys(oldObjectUrls).forEach(function (id) { URL.revokeObjectURL(oldObjectUrls[id]); });
+    }
+
+    if (!inProgress.length) {
+      swapIn([]);
+    } else {
+      Store.getAll('audioTracks').then(swapIn);
+    }
+
+    postedGrid.innerHTML = posted.length ? posted.map(function (p) { return videoCardHtml(p.id, p); }).join('') : '<div class="empty-slot wide">Nothing posted yet.</div>';
+    postedGrid.querySelectorAll('.video-card').forEach(function (el) {
+      el.addEventListener('click', function () { openPiece(el.dataset.id, renderUploadLists); });
+    });
+
+    maybeStartAnalysisPolling();
+  }
+
+  // Two server-side background jobs land here: transcribe+match analysis
+  // (§111) and the final audio-splice video build (§115) — this polls
+  // the handful of pieces still waiting on either and updates just their
+  // own row once something changes, rather than a full
+  // renderUploadLists() (which would re-fetch every other row's video
+  // blob and flash the whole panel, §112). A piece whose build finished
+  // (stage moved off 'processed') gets the same instant-tick removal
+  // animation the button itself used to fake instantly; one still in
+  // Processing with a changed status (analysis landed, or a build
+  // failed) just gets its own head refreshed in place. Stops itself once
+  // nothing's waiting, rather than polling forever in the background.
+  var analysisPollTimer = null;
+  function maybeStartAnalysisPolling() {
+    var waiting = Object.keys(pieces).filter(function (id) {
+      var p = pieces[id];
+      return p.hasVideo && (
+        p.analysisStatus === 'pending' || p.analysisStatus === 'running' ||
+        p.finalBuildStatus === 'pending' || p.finalBuildStatus === 'running'
+      );
+    });
+    if (!waiting.length) { clearTimeout(analysisPollTimer); analysisPollTimer = null; return; }
+    if (analysisPollTimer) return;
+    analysisPollTimer = setTimeout(function () {
+      analysisPollTimer = null;
+      Promise.all(waiting.map(function (id) { return Store.get('pieces', id); })).then(function (rows) {
+        var needsFullRebuild = false;
+        rows.forEach(function (r) {
+          if (!r) return;
+          var wasProcessed = pieces[r.id] && pieces[r.id].stage === 'processed';
+          pieces[r.id] = r;
+          if (wasProcessed && r.stage !== 'processed') {
+            removeUploadRowAnimated(r.id);
+          } else if (r.finalBuildStatus === 'error' && !uploadRows.querySelector('.upload-row[data-id="' + r.id + '"]')) {
+            // The row was already removed by "Send to final check"'s own
+            // instant-tick animation (it doesn't wait for the build to
+            // finish) — if the build then actually failed, bring the row
+            // back so the failure isn't silently lost off-screen.
+            needsFullRebuild = true;
+          } else {
+            refreshUploadRowHeadById(r.id);
+          }
+        });
+        if (needsFullRebuild) renderUploadLists();
+        else maybeStartAnalysisPolling();
+      });
+    }, 3000);
+  }
+
+  // Reads duration + dimensions straight from the local file via a
+  // throwaway <video> element and an object URL — no upload/ffmpeg round
+  // trip needed, this is just the browser parsing the file's own
+  // metadata, and it's local so it's fast. Resolves null (never rejects)
+  // if metadata can't be read for any reason, so a weird/corrupt file
+  // still uploads — it just falls back to a sane default content type
+  // below instead of blocking the upload entirely.
+  function probeVideoMeta(file) {
+    return new Promise(function (resolve) {
+      var url = URL.createObjectURL(file);
+      var v = document.createElement('video');
+      v.preload = 'metadata';
+      v.muted = true;
+      var settled = false;
+      function finish(meta) {
+        if (settled) return;
+        settled = true;
+        URL.revokeObjectURL(url);
+        resolve(meta);
+      }
+      v.addEventListener('loadedmetadata', function () {
+        finish({ duration: v.duration || 0, width: v.videoWidth || 0, height: v.videoHeight || 0 });
+      });
+      v.addEventListener('error', function () { finish(null); });
+      setTimeout(function () { finish(null); }, 8000); // safety net, shouldn't normally fire for a local blob
+      v.src = url;
+    });
+  }
+
+  // Harvey's rule: orientation is what separates "this is basically
+  // Longform" from everything else — landscape *and* long means Longform
+  // (matches how that type is actually used: YT/FB, not a vertical
+  // platform). Everything else (vertical, or landscape but short) gets
+  // bucketed purely by length against the same durations the content
+  // types are already named for (10-20s / ~1min / up to 3min).
+  function detectContentType(meta) {
+    if (!meta || !meta.duration) return 'short'; // couldn't read metadata — same default as before this feature existed
+    var isLandscape = meta.width >= meta.height;
+    if (isLandscape && meta.duration > 180) return 'longform';
+    if (meta.duration <= 20) return 'ultra_short';
+    if (meta.duration <= 75) return 'short';
+    return 'long_short';
   }
 
   function handleFiles(fileList) {
     Array.prototype.slice.call(fileList).forEach(function (file) {
       if (file.type.indexOf('video') !== 0) return;
       var id = Store.genId();
-      var piece = {
-        id: id,
-        title: file.name.replace(/\.[^.]+$/, ''),
-        stage: 'processed', // "Processing" — a brand-new opportunity, not the same thing as any plan in "Uploaded"
-        platforms: [],
-        contentType: 'short',
-        notesHtml: '',
-        hasVideo: true,
-        transcript: '',
-        audioTrackId: '',
-        thumbnailDataUrl: '',
-        scheduledAt: '',
-        order: maxOrder('processed') + 10,
-        createdAt: nowIso(),
-        updatedAt: nowIso()
-      };
-      pieces[id] = piece;
-      Store.put('videos', { id: id, fileName: file.name, blob: file, sizeBytes: file.size, createdAt: nowIso() });
-      Store.put('pieces', piece).then(renderUploadLists);
+      probeVideoMeta(file).then(function (meta) {
+        var piece = {
+          id: id,
+          seq: Store.nextSeq(allPiecesArray()),
+          title: file.name.replace(/\.[^.]+$/, ''),
+          stage: 'processed', // "Processing" — a brand-new opportunity, not the same thing as any plan in "Uploaded"
+          platforms: [],
+          contentType: detectContentType(meta),
+          notesHtml: '',
+          hasVideo: true,
+          transcript: '',
+          audioTrackId: '',
+          thumbnailDataUrl: '',
+          ytTitles: [],
+          tags: [],
+          analysisStatus: 'pending',
+          scheduledAt: '',
+          order: maxOrder('processed') + 10,
+          createdAt: nowIso(),
+          updatedAt: nowIso()
+        };
+        pieces[id] = piece;
+        renderUploadLists();
+        // Piece record first, then the video blob, then kick off analysis —
+        // in that order and awaited, not fired in parallel — so the server's
+        // analysis route (which looks up the piece by the same id) never
+        // races ahead of the piece actually existing yet.
+        return Store.put('pieces', piece)
+          .then(function () { return Store.put('videos', { id: id, fileName: file.name, blob: file, sizeBytes: file.size, createdAt: nowIso() }); })
+          .then(function () {
+            return fetch('/api/videos/' + encodeURIComponent(id) + '/analyze', { method: 'POST', credentials: 'include' });
+          })
+          .then(renderUploadLists)
+          .catch(function () { renderUploadLists(); });
+      });
     });
-    renderUploadLists();
   }
 
   function bootUploadFiles() {
     dropzone = document.getElementById('dropzone');
     fileInput = document.getElementById('fileInput');
-    uploadGrid = document.getElementById('uploadGrid');
+    uploadRows = document.getElementById('uploadRows');
     postedGrid = document.getElementById('postedGrid');
 
     dropzone.addEventListener('click', function () { fileInput.click(); });
@@ -1207,28 +2597,38 @@
     '<div class="settings-panel">' +
       '<section class="settings-section">' +
         '<h3>Publishing cadence</h3>' +
-        '<p class="settings-hint">How often each content type gets scheduled. A new piece queues up after whatever’s already scheduled for that type.</p>' +
+        '<p class="settings-hint">Just two cadences — Shorts covers ultra-short/short/long-short together, rotating ' +
+          'through whichever of the three has something ready (ultra-short → short → long-short → repeat, skipping ' +
+          'any type with nothing queued). Longform is its own timeline.</p>' +
         '<div class="cadence-grid" id="cadenceGrid"></div>' +
       '</section>' +
       '<section class="settings-section">' +
         '<h3>Ambient audio library</h3>' +
         '<p class="settings-hint">Backing tracks offered in the audio dropdown when editing an uploaded video.</p>' +
         '<label class="btn-secondary file-btn">Upload audio<input type="file" id="audioUpload" accept="audio/*" multiple hidden /></label>' +
+        '<div class="audio-upload-progress" id="audioUploadProgress"></div>' +
         '<div class="audio-list" id="audioList"></div>' +
       '</section>' +
       '<section class="settings-section">' +
-        '<h3>Shared caption</h3>' +
-        '<p class="settings-hint">Applied to every upload — shown read-only on each piece, edited here.</p>' +
-        '<textarea class="notes-input settings-textarea" id="captionInput" placeholder="Caption text..."></textarea>' +
+        '<h3>Captions</h3>' +
+        '<p class="settings-hint">Separate template per type — Shorts can stay the same every time, Longform (or any ' +
+          'type) usually wants a fresh link each time. Use the shortcode <code>[LINK]</code> anywhere in the text and ' +
+          'it\'s replaced with that piece\'s own UTM-tracked link when the caption is shown or copied.</p>' +
+        '<label class="field-label">Shorts caption <span class="field-hint">(ultra-short / short / long-short)</span></label>' +
+        '<textarea class="notes-input settings-textarea" id="captionShortsInput" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
+        '<label class="field-label" style="margin-top:14px;display:block;">YouTube Longform caption</label>' +
+        '<textarea class="notes-input settings-textarea" id="captionLongformInput" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
       '</section>' +
       '<section class="settings-section">' +
-        '<h3>Longform link</h3>' +
-        '<p class="settings-hint">Base URL used to build the UTM-tracked link for longform descriptions.</p>' +
+        '<h3>Tracked link</h3>' +
+        '<p class="settings-hint">Base URL used to build the UTM-tracked [LINK] for every piece, any type.</p>' +
         '<input class="title-input settings-input" id="baseLinkInput" />' +
       '</section>' +
       '<section class="settings-section">' +
         '<h3>API keys</h3>' +
-        '<p class="settings-hint warn">Stored only in this browser’s local storage, never sent anywhere — there’s no backend wired up to use them yet. TikTok access still needs approving; the field is here for when it does.</p>' +
+        '<p class="settings-hint">Stored on the ops-service backend (same place as everything else here — the ' +
+          'shared `settings` record), not just this browser, so any Claude Code session with server access can read ' +
+          'them when it needs to. TikTok access still needs approving; the field is here for when it does.</p>' +
         '<div class="key-grid" id="keyGrid"></div>' +
       '</section>' +
     '</div>';
@@ -1250,30 +2650,66 @@
     settingsSaveTimer = setTimeout(function () { Store.saveSettings(settingsCache); }, 400);
   }
 
+  var CADENCE_ROWS = [
+    { key: 'shorts', label: 'Shorts', hint: 'ultra-short / short / long-short, rotated' },
+    { key: 'longform', label: 'Longform', hint: 'YT / FB' }
+  ];
+
   function renderCadenceGrid() {
     var grid = document.getElementById('cadenceGrid');
-    grid.innerHTML = Store.CONTENT_TYPES.map(function (ct) {
-      var cfg = settingsCache.cadence[ct.id];
-      return '<div class="cadence-row" data-type="' + ct.id + '">' +
-        '<span class="cadence-label"><span class="dot" style="background:' + ct.color + '"></span>' + ct.label + ' <span class="ink-faint">(' + ct.hint + ')</span></span>' +
+    grid.innerHTML = CADENCE_ROWS.map(function (row) {
+      var cfg = settingsCache.cadence[row.key];
+      return '<div class="cadence-row" data-key="' + row.key + '">' +
+        '<span class="cadence-label">' + row.label + ' <span class="ink-faint">(' + row.hint + ')</span></span>' +
         '<span class="cadence-inputs">1 every <input type="number" min="1" step="1" class="cadence-every" value="' + cfg.every + '" /> ' +
         '<select class="cadence-unit"><option value="hours"' + (cfg.unit === 'hours' ? ' selected' : '') + '>hours</option><option value="days"' + (cfg.unit === 'days' ? ' selected' : '') + '>days</option></select></span>' +
       '</div>';
     }).join('');
     grid.querySelectorAll('.cadence-row').forEach(function (row) {
-      var type = row.dataset.type;
+      var key = row.dataset.key;
       row.querySelector('.cadence-every').addEventListener('input', function (e) {
-        settingsCache.cadence[type].every = Math.max(1, parseInt(e.target.value, 10) || 1);
+        settingsCache.cadence[key].every = Math.max(1, parseInt(e.target.value, 10) || 1);
         saveSettingsDebounced();
       });
       row.querySelector('.cadence-unit').addEventListener('change', function (e) {
-        settingsCache.cadence[type].unit = e.target.value;
+        settingsCache.cadence[key].unit = e.target.value;
         saveSettingsDebounced();
       });
     });
   }
 
   var audioListObjectUrls = [];
+
+  // Store.put() goes through fetch(), which has no upload-progress event at
+  // all — the only way to get real byte-level progress in a browser is
+  // XMLHttpRequest's upload.onprogress, so this talks to the same
+  // /api/files/audioTracks/:id endpoint store.js's put() would use, built
+  // the same way (a "file" field plus a "meta" JSON field), but over XHR
+  // instead. Scoped to just this one upload path rather than rebuilding
+  // store.js's shared put() — the video-upload flow (Upload Files tab)
+  // doesn't have this problem in the same way, since it renders each new
+  // piece's card immediately from local state rather than waiting on a
+  // server round-trip, so it wasn't touched here.
+  function uploadAudioTrackWithProgress(file, onProgress) {
+    return new Promise(function (resolve, reject) {
+      var id = Store.genId();
+      var fd = new FormData();
+      fd.append('file', file, file.name);
+      fd.append('meta', JSON.stringify({ id: id, name: file.name, createdAt: nowIso() }));
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/files/audioTracks/' + encodeURIComponent(id));
+      xhr.withCredentials = true;
+      xhr.upload.addEventListener('progress', function (e) {
+        if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);
+      });
+      xhr.addEventListener('load', function () {
+        if (xhr.status >= 200 && xhr.status < 300) resolve();
+        else reject(new Error('upload failed (' + xhr.status + ')'));
+      });
+      xhr.addEventListener('error', function () { reject(new Error('upload failed')); });
+      xhr.send(fd);
+    });
+  }
 
   function renderAudioList() {
     var list = document.getElementById('audioList');
@@ -1323,10 +2759,17 @@
       renderAudioList();
       renderKeyGrid();
 
-      var captionInput = document.getElementById('captionInput');
-      captionInput.value = settings.sharedCaption || '';
-      captionInput.addEventListener('input', function () {
-        settingsCache.sharedCaption = captionInput.value;
+      var captionShortsInput = document.getElementById('captionShortsInput');
+      captionShortsInput.value = settings.captions.shorts || '';
+      captionShortsInput.addEventListener('input', function () {
+        settingsCache.captions.shorts = captionShortsInput.value;
+        saveSettingsDebounced();
+      });
+
+      var captionLongformInput = document.getElementById('captionLongformInput');
+      captionLongformInput.value = settings.captions.longform || '';
+      captionLongformInput.addEventListener('input', function () {
+        settingsCache.captions.longform = captionLongformInput.value;
         saveSettingsDebounced();
       });
 
@@ -1337,13 +2780,46 @@
         saveSettingsDebounced();
       });
 
+      // Used to silently fire every Store.put() and guess renderAudioList()
+      // could run 200ms later — no feedback while a real upload was still
+      // in flight, and the list often hadn't actually landed by the time
+      // that timeout fired, so Harvey had to refresh the page to see it.
+      // Now each file gets its own real progress bar (XHR upload.progress,
+      // see uploadAudioTrackWithProgress above) and the list only
+      // refreshes once every upload has genuinely finished.
       var audioUpload = document.getElementById('audioUpload');
+      var audioUploadProgressEl = document.getElementById('audioUploadProgress');
       audioUpload.addEventListener('change', function () {
-        Array.prototype.slice.call(audioUpload.files).forEach(function (file) {
-          Store.put('audioTracks', { id: Store.genId(), name: file.name, blob: file, createdAt: nowIso() });
-        });
+        var files = Array.prototype.slice.call(audioUpload.files);
         audioUpload.value = '';
-        setTimeout(renderAudioList, 200);
+        if (!files.length) return;
+        var rows = files.map(function (file) {
+          var row = document.createElement('div');
+          row.className = 'audio-upload-row';
+          var label = document.createElement('span');
+          label.className = 'audio-upload-name';
+          label.textContent = file.name;
+          var bar = document.createElement('progress');
+          bar.max = 1;
+          bar.value = 0;
+          row.appendChild(label);
+          row.appendChild(bar);
+          audioUploadProgressEl.appendChild(row);
+          return { row: row, bar: bar, file: file };
+        });
+        Promise.all(rows.map(function (r) {
+          return uploadAudioTrackWithProgress(r.file, function (frac) { r.bar.value = frac; })
+            .then(function () {
+              if (r.row.parentNode) r.row.parentNode.removeChild(r.row);
+            })
+            .catch(function (err) {
+              r.bar.remove();
+              var errEl = document.createElement('span');
+              errEl.className = 'audio-upload-error';
+              errEl.textContent = 'Failed: ' + ((err && err.message) || 'unknown error');
+              r.row.appendChild(errEl);
+            });
+        })).then(renderAudioList);
       });
     });
   }

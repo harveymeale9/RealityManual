@@ -1,0 +1,34 @@
++ RUN_ARGS=(-d --name "$CONTAINER" --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-claude-home/claude-dir:/home/node/.claude -v /root/ops-service-claude-home/claude.json:/home/node/.claude.json -v "$DATA_DIR:/data" -v "$RUNTIME_REPO_DIR:/repo" -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file "$ENV_FILE")
++ cd /root/realitymanual-repo
+++ git status --porcelain
++ '[' -n '' ']'
++ git pull
+From https://github.com/harveymeale9/RealityManual
+   34ebcc2..d6a1a7b  main       -> origin/main
+Updating 34ebcc2..d6a1a7b
+Fast-forward
+ CLAUDE.md                     |  67 ++++++++++++++++++++++++++
+ ops-service/.ci/last-run.log  | 108 +++++++++++++++++++++++++++++++++++++++++-
+ ops-service/public/app.js     |  50 ++++++++++++-------
+ ops-service/public/index.html |   2 +-
+ ops-service/public/style.css  |  36 ++++++++++----
+ 5 files changed, 233 insertions(+), 30 deletions(-)
+++ git rev-parse HEAD
++ NEW_HEAD=d6a1a7bd8d3d55b61d298319d6aca24de1a1d40c
++ git -C /srv/realitymanual-repo pull
+Already up to date.
++ chown -R 1000:1000 /srv/realitymanual-repo
++ LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
+++ cat /root/ops-service-data/last-image-commit.txt
++ LAST_BUILD_COMMIT=34ebcc2aa9971422812abb3086eccb4ef506f43b
++ NEEDS_REBUILD=1
++ '[' -n 34ebcc2aa9971422812abb3086eccb4ef506f43b ']'
++ git cat-file -e '34ebcc2aa9971422812abb3086eccb4ef506f43b^{commit}'
+++ git diff --name-only 34ebcc2aa9971422812abb3086eccb4ef506f43b d6a1a7bd8d3d55b61d298319d6aca24de1a1d40c -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -z '' ']'
++ NEEDS_REBUILD=0
++ '[' 0 = 0 ']'
++ echo 'no backend changes between 34ebcc2aa9971422812abb3086eccb4ef506f43b and d6a1a7bd8d3d55b61d298319d6aca24de1a1d40c — already live via git pull, skipping rebuild/restart'
+no backend changes between 34ebcc2aa9971422812abb3086eccb4ef506f43b and d6a1a7bd8d3d55b61d298319d6aca24de1a1d40c — already live via git pull, skipping rebuild/restart
++ exit 0
+ssh exit code: 0

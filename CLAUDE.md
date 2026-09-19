@@ -2573,3 +2573,2502 @@ of ours could run on success — `order_complete` on the confirmation page
 (driven by the backend's own `order_status`, not the browser's belief
 about what happened) is the authoritative equivalent and was tracked
 instead.
+
+---
+
+# 74. Voice/Chat App for Talking to Claude Code Remotely (IN PROGRESS, 2026-09-18)
+
+**Status: mid-build, blocked on one decision — read this section fully before
+continuing if you're a new session picking this up.** Harvey wants a way to
+talk to Claude Code by voice or text from his phone (installed as a
+home-screen PWA) or desktop, while away from a terminal — not a toy chatbot,
+an actual headless Claude Code agent with the same tools/repo access as any
+interactive session. Two modes: "ask and wait for a reply" (spoken back via
+TTS) and "just execute, don't reply" (fire-and-forget autonomous instruction).
+Lives on `ops.realitymanual.com` (`rm-ops-service`), deliberately separate
+from the storefront backend, same pattern as the content-ops panel (§62).
+
+**Built so far (all committed to this repo, not yet deployed to the VPS
+container):**
+- `ops-service/src/claudeRunner.js` — spawns the real `claude` CLI in print
+  mode (`-p`, `--output-format json`) with `--resume`/`--session-id` for
+  conversation continuity, `cwd` set to the repo so it gets full CLAUDE.md
+  context automatically, same as any other session.
+- `ops-service/src/elevenlabs.js` — ElevenLabs for both STT (Scribe) and TTS,
+  one provider. **Harvey's ElevenLabs key is already in hand** — do not ask
+  him for it again, it just needs to land in the real `backend/.env`-style
+  secrets file on the VPS (`ELEVENLABS_API_KEY`), never committed.
+- `server.js` — new `voice_messages`/`voice_session` tables, a small
+  in-process queue (processes one voice message at a time — concurrent
+  `--resume` on the same session would corrupt it), and routes:
+  `POST/GET /api/voice/messages[/:id]`, `POST /api/voice/transcribe`,
+  `POST /api/voice/tts`, `POST /api/voice/session/reset`,
+  `GET /api/voice/worklog`. All behind the existing password-session auth.
+- `public/voice-mobile.html` + `voice-manifest.json` — fullscreen two-button
+  PWA (top = ask & wait, bottom = just execute), install-to-home-screen like
+  quick-add.html (§62's lesson about `start_url` applies here too).
+- `public/voice.html` — desktop chat UI, text input + mic button, execute-only
+  checkbox, per-message "▶ Play" for typed replies, auto-speaks voice-originated
+  replies. Linked from `index.html`'s header ("Talk to CC ↗").
+- `public/lib/voiceClient.js` — shared recording/API/polling helper used by
+  both pages.
+- `Dockerfile` — bumped to `node:22-slim`, installs
+  `@anthropic-ai/claude-code@2.1.276` (pinned to match the VPS host's CLI
+  version — bump both together), copies `src/`.
+- Persistent memory design (Harvey asked for "massive memory... like a human
+  project manager"): deliberately NOT a new bespoke system. Long-term/durable
+  facts ride on this CLAUDE.md file + Claude Code's own auto-memory (both
+  already load automatically for any session in this repo, headless or not).
+  Recent/same-day continuity rides on `claude --resume` against one stored
+  session id (`voice_session` table; "New conversation" button clears it).
+  A plain running journal ("what did you do and when") is maintained by the
+  agent itself: every voice-app invocation gets an appended system prompt
+  instructing it to append one line to `<DATA_DIR>/work-log.md` after
+  finishing, readable via `GET /api/voice/worklog`.
+
+**BLOCKING ISSUE, found during smoke testing (2026-09-18): the `claude` CLI
+refuses `--dangerously-skip-permissions` / `--permission-mode bypassPermissions`
+outright when the process's EUID is 0 (root) — "cannot be used with
+root/sudo privileges for security reasons". Confirmed directly on the VPS:**
+
+```text
+$ claude -p "..." --permission-mode bypassPermissions
+--dangerously-skip-permissions cannot be used with root/sudo privileges for security reasons
+```
+
+**Everything on this VPS runs as root** (this interactive session, and where
+the `rm-ops-service` Docker container would run `claude` headlessly). Two
+separate consequences:
+
+1. **Harvey's own interactive sessions on the VPS can never get true
+   zero-prompt bypass** — the `.claude/settings.json` project setting
+   (`permissions.defaultMode: "bypassPermissions"`, added 2026-09-18) silently
+   downgrades to "Auto Mode" instead (a classifier that auto-allows most
+   actions but still gates genuinely risky ones) rather than erroring, which
+   is why his fresh session showed "Auto Mode Active" rather than zero
+   prompts. This is very likely as good as it gets while running as root —
+   don't keep fighting it; it's an intentional product safety rail, not a
+   bug. If Harvey pushes on this again, the only real fix is running Claude
+   Code as a non-root user for his interactive VPS sessions too, which is a
+   bigger change to how he logs in (currently `tmux new-session ... claude`
+   as root — see the `claude-login` tmux session) than has been explicitly
+   asked for; don't do it without checking with him first.
+
+2. **The voice app's headless runner is the more serious case** — "just
+   execute" mode is *only* useful if it can run fully unattended, and it
+   currently can't get bypass permissions at all as designed. Fix in
+   progress: give the headless runner its own non-root Linux user
+   (e.g. `claudeworker`) on the VPS, so `claudeRunner.js`'s spawned `claude`
+   process runs as that user instead of root and can actually use bypass
+   mode. This requires, regardless of the auth question below:
+   - Creating the user, and granting it scoped access to
+     `/root/realitymanual-repo` despite it living under `/root` (default
+     `/root` perms block traversal for non-root entirely) — plan: `chmod o+x
+     /root` (traversal only, not listing) plus a dedicated group owning just
+     the repo subtree with setgid so new files inherit group-writability.
+     Do NOT loosen `/root` further than `o+x` — that would expose every
+     other file directly under `/root` (SSH keys, `.env` files elsewhere) to
+     the new user by path if it ever learned the name.
+   - This is Docker-container work really (the runner lives in
+     `rm-ops-service`'s container) — inside the container it's simpler:
+     just don't run the container's `claude` invocation as root, no `/root`
+     traversal issue at all if the container's own filesystem layout puts
+     the mounted repo somewhere normal. **Reconsider the bind-mount paths
+     before implementing** — mounting host `/root/realitymanual-repo` and
+     `/root/.claude` into the container can land at any in-container path
+     regardless of the host being `/root`, so the in-container non-root user
+     just needs ordinary ownership/permissions on the in-container mount
+     point, which is much simpler than solving `/root` traversal on the
+     host directly. Only solve the host-side `/root` traversal problem if
+     Harvey also wants non-root headless runs directly on the host (e.g. for
+     his own interactive sessions per point 1) — the containerized voice
+     app doesn't need it.
+
+**PENDING DECISION — asked Harvey, awaiting answer:** should the headless
+voice-app runner authenticate as a copy of Harvey's own OAuth login
+(`~/.claude/.credentials.json`, same Claude subscription/usage pool as his
+interactive sessions), or as a separate `ANTHROPIC_API_KEY` (pay-as-you-go,
+fully decoupled)? Leaning toward recommending a separate API key:
+- OAuth refresh tokens commonly rotate on use — copying root's credentials
+  into `claudeworker`'s home at setup time risks the two copies silently
+  invalidating each other the first time either one refreshes, breaking
+  headless auth unpredictably days/weeks later.
+- A dedicated API key is the standard, supported pattern for unattended
+  automation (see `--bare` mode's own docs: "Anthropic auth is strictly
+  ANTHROPIC_API_KEY or apiKeyHelper"), and keeps the voice app's usage/cost
+  and rate limits separate from Harvey's personal interactive usage.
+- Trade-off: separate billing (pay-per-token on the API key) instead of
+  riding his existing subscription.
+
+**Not yet done once the above is resolved:** actually create the
+`claudeworker` setup (or container-internal non-root user) on the VPS, wire
+the chosen auth method into the container, build+run the updated
+`rm-ops-service` image (§62's normal redeploy steps, now also needs
+`ELEVENLABS_API_KEY` and either the copied/mounted credentials or
+`ANTHROPIC_API_KEY` in its env), and do one real end-to-end test (voice
+input on a phone, not just the curl smoke test already run against a local
+throwaway instance on port 4099 during this session — that confirmed the
+whole plumbing works except for the root/bypass issue above).
+
+**Update, same day — root/bypass issue resolved, live in production:**
+
+- **Repo access:** rather than loosen `/root`'s permissions (blocked by
+  Claude Code's own safety classifier as a "Security Weaken" action, rightly
+  — it would affect the whole VPS, not just this container), the headless
+  runner gets its own dedicated clone at **`/srv/realitymanual-repo`**,
+  owned by uid/gid 1000 (the "node" user baked into the `node:22-slim` base
+  image). This is bind-mounted into the container at `/repo`
+  (`CLAUDE_REPO_DIR=/repo`). Deliberately separate from
+  `/root/realitymanual-repo` (Harvey's/interactive sessions' own checkout)
+  — keeps the unattended voice agent's working tree from ever stepping on
+  uncommitted interactive work. **Whoever redeploys this container must
+  remember to also `git pull` inside `/srv/realitymanual-repo`** (as the
+  owning uid, or just `chown` again after) — it does not update itself.
+- **Non-root container:** `Dockerfile` now ends with `USER node` (after
+  root-level apt/npm installs). `/root/ops-service-data` (the bind-mounted
+  `DATA_DIR`) was `chown -R 1000:1000` for the same reason. `/root` itself
+  was never touched — bind mounts don't need host-path traversal
+  permissions for the container's user, only correct ownership on the
+  mounted directory itself; this was confirmed working, not just assumed.
+- **Auth: `CLAUDE_CODE_OAUTH_TOKEN`**, generated via `claude setup-token`
+  on the VPS host directly (never through an automated command — the
+  classifier blocks capturing a freshly-generated credential that way, for
+  good reason). **Gotcha that cost real time:** `claude setup-token`'s
+  browser-approval flow prints a confirmation code that must be pasted
+  back into the terminal to actually finalize the token server-side —
+  exiting right after the token is *printed* (before that confirmation
+  step) yields a syntactically-plausible but dead token that fails with
+  `401 Invalid bearer token` on every real use, even though `claude auth
+  status` inside the container happily reports the env var is configured
+  (it doesn't do a live check). A genuinely finalized token has the
+  `sk-ant-oat01-...` prefix — the two dead ones Harvey generated first did
+  not, which in hindsight was the tell. Stored in `ops-service/.env` on
+  the VPS (gitignored, never committed) as `CLAUDE_CODE_OAUTH_TOKEN=...`.
+- **Git push from the VPS at all** turned out to be a separate,
+  previously-unsolved gap — this was apparently the first session to
+  author+push directly from the VPS itself (prior work here was pulled
+  after being pushed from Harvey's desktop). Fixed with a GitHub
+  fine-grained PAT (contents read/write on this repo only): `root`'s own
+  pushes use `credential.helper store` (`~/.git-credentials`); the `/srv`
+  clone has the token embedded directly in its `origin` remote URL instead
+  (simpler than a separate credential store for a non-root/non-interactive
+  user with no conventional `$HOME`). Both credential-writing steps were
+  also blocked by the classifier when attempted via an automated command
+  and had to be run by Harvey directly in the hPanel web console — a
+  recurring pattern this build surfaced: **generating or writing any raw
+  credential is a "you, not me" action**, full stop, regardless of how
+  routine the surrounding task is.
+- **Real bug found via the first genuine end-to-end test** (not a
+  synthetic smoke test): asked "what git branch are we on and what was the
+  last commit" through the real deployed API. The agent correctly found
+  the answer but only put it in the work-log line, replying to Harvey with
+  a useless "Done — logged that in the work log too." Root cause: the
+  original `VOICE_SYSTEM_PROMPT` wording let the model conflate "keep your
+  reply short" with "a completion confirmation is enough, details belong
+  in the log." Fixed by making the two things explicitly separate and
+  ordered in the prompt (answer fully first; the log entry is a
+  never-a-substitute housekeeping side-effect) — verified with a direct
+  `docker exec` test before touching the real deploy. **Also note for
+  future prompt-iteration:** an earlier debugging attempt at this exact
+  fix appeared to fail, but that was a red herring from mangled nested
+  shell-quoting in a manual test command (an apostrophe inside a `bash -c
+  '...'` string), not the prompt itself — writing test prompts to a file
+  or a shell variable (`"$(cat file)"`) sidesteps this; the real
+  `claudeRunner.js` code path was never actually at risk since
+  `child_process.spawn` with an args array never goes through a shell.
+- **Nav:** "Talk to CC" moved from a small header link to the first icon
+  in the ops panel's left side-rail (before Content Ops), per Harvey — a
+  plain `<a href="voice.html">` reusing the `.side-rail-btn` visual class
+  but deliberately with no `data-tab` attribute, so `app.js`'s
+  `bindSideRail()` (now scoped to `.side-rail-btn[data-tab]`) leaves it as
+  an ordinary navigation link instead of trying to route it through the
+  in-page tab system.
+- **Deployed and confirmed working end-to-end** through the real
+  `ops.realitymanual.com` API (not just a direct CLI test): login →
+  `POST /api/voice/messages` → real headless Claude Code run with actual
+  bypass permissions as a non-root user → correct, complete spoken-style
+  answer. **Not yet done:** a real test from Harvey's phone through the
+  actual PWA UI (only the HTTP API has been tested directly so far).
+- **Cross-device continuity confirmed by design, not just intent:**
+  `voice_session` is a single row (`id=1`) shared by every device/browser
+  that hits the ops-panel API, so `voice.html` (desktop) and
+  `voice-mobile.html` (phone PWA) both `claude --resume` the *same*
+  underlying session — switching devices mid-conversation already works,
+  it doesn't need to be built.
+- **`.claude/hooks/voice-context-bridge.js`** (landed same day, see git
+  log): a `UserPromptSubmit` hook, one-way, that surfaces recent
+  voice-app exchanges as context into a *terminal-based* interactive
+  session when Harvey opens one — so hopping into a terminal after using
+  the phone app doesn't lose continuity either. Confirmed working as the
+  non-root `ubuntu` VPS user (2026-09-18): `/root` has `o+x` (traversal
+  only) as planned, so `cat`-ing a specific file under
+  `/root/ops-service-data/` succeeds even though `ls /root/` itself
+  correctly still doesn't.
+- **Gotcha caught and fixed live (2026-09-18):** `/srv/realitymanual-repo`
+  (the headless runner's actual working tree) was 2 commits behind
+  `origin/main` — the "Talk to CC nav" commits had been pushed but never
+  pulled there. This is the exact failure mode this section already
+  warned about ("whoever redeploys this container must remember to also
+  `git pull` inside `/srv/realitymanual-repo`") happening for real, not
+  hypothetically. Pulled and fast-forwarded; nothing else needed since it
+  was a clean ff.
+- **Attended-session zero-prompt bypass: confirmed not possible, by
+  design, independent of root.** Harvey asked for the interactive
+  session (terminal, whether root tmux or a non-root
+  `claude --remote-control` login like this one) to also always skip
+  permissions. Tested directly: a non-root **headless** `claude -p
+  --permission-mode bypassPermissions` invocation on this VPS returns
+  zero permission denials — so the earlier root/EUID restriction really
+  is specific to headless mode and really is fixed by the
+  `/srv`+non-root setup above. But per Claude Code's own docs
+  (`docs/permissions`, `docs/permission-modes`), full bypass in any
+  session a human isn't actively watching keystroke-by-keystroke is
+  gated behind explicitly accepting the bypass disclaimer once
+  interactively — and *attended* interactive sessions retain "Auto Mode"
+  (auto-allows routine actions, still gates genuinely risky ones) as a
+  deliberate, separate safety rail, not a fallback bug and not something
+  project-level `settings.json` can turn off. This confirms (rather than
+  just repeats) the same conclusion this section already reached before
+  the non-root migration — don't re-litigate this if Harvey asks again;
+  the voice app's headless path is the one that gets true bypass, and it
+  already has it.
+
+**Update (2026-09-18): renamed to "Project Manager", made the default
+landing page.** Harvey's framing: `ops.realitymanual.com` should open
+straight into the CC chat, not the Content Ops board — the chat *is* the
+primary interface now, everything else is secondary. Concretely:
+`ops-service/public/index.html` and `voice.html` were swapped — the old
+Content Ops SPA now lives at **`content-ops.html`**, and the chat page
+(old `voice.html`) is now **`index.html`**, so the site root loads it by
+default. Every "Talk to CC" label (page titles, login headers, the
+top-menu/side-rail entry in `content-ops.html`+`app.js`, the mobile PWA
+page/manifest) was renamed to **"Project Manager"**, and the side-rail's
+mic icon (misleading now — it's text+voice, not voice-only) was replaced
+with a message-bubble icon. The top-menu/side-rail entry stays first, in
+front of "Content Ops", pointing at `index.html`. `voice-mobile.html`
+keeps its filename (no rename requested there, just label text) and
+still works exactly as before — the PWA/session/backend plumbing (§74
+above) is completely unaffected by this, it's a pure file-rename +
+relabel. Deployed via the normal `rm-ops-service` rebuild+recreate cycle
+(§62/§65's pattern) and verified live: `/` serves the chat page,
+`/content-ops.html` serves the board, `/voice.html` correctly 404s.
+
+**Correction, same day: the two-page split above was wrong, reverted.**
+Splitting Project Manager into its own page (`index.html`) with Content
+Ops moved to `content-ops.html` broke real things Harvey caught within
+minutes of testing: `#content-ops` hash links/bookmarks landed on the
+chat page (which ignores hashes entirely) with no obvious way back, and
+the chat page's only nav was one small text link — no side-rail, no top
+tabs. **Project Manager is now `TABS[0]`** in the single SPA shell
+(`ops-service/public/index.html`, `app.js`) — a real hash-routed tab
+(`#project-manager`, default when the hash is empty) rendered into
+`panelMain` exactly like Content Ops/Settings/etc., so it automatically
+gets the same side-rail + top-tabs nav, and `#content-ops` (or any other
+tab hash) works correctly again. `content-ops.html` is gone;
+`voice-mobile.html` (the phone PWA entry point) is untouched — still a
+deliberately separate, minimal standalone page, not part of this SPA.
+
+**Same pass, an actual bug (not a design call): Claude Code session
+transcripts live in `/home/node/.claude` inside the `rm-ops-service`
+container — not on any bind-mounted volume.** The two container
+rebuilds done for the (bad) two-page split above silently wiped that
+directory both times, orphaning the `claude_session_id` stored in
+`voice_session` and breaking every subsequent message with "No
+conversation found with session ID: ...". Fixed two ways: `/home/node/.claude`
+and `/home/node/.claude.json` are now bind-mounted to
+**`/root/ops-service-claude-home`** on the VPS (same pattern as
+`/root/ops-service-data`), so a rebuild no longer wipes conversation
+history — **whoever runs the container's `docker run` must include both
+`-v` flags** (see the full command near the top of §75-adjacent redeploy
+notes, or just `docker inspect rm-ops-service` on a working instance and
+copy its mounts) or this regresses again. Defense in depth on top of
+that: `processVoiceMessage()` in `server.js` now detects this specific
+failure (`/no conversation found/i` in the error) and retries once with
+a fresh session instead of leaving the conversation permanently stuck —
+so even if the mount is ever missing again, one message is wasted
+instead of the whole voice app going dark until someone manually clears
+`voice_session`.
+
+**New feature, same pass: the Project Manager tab is now two columns.**
+Left = the existing clean thread (user messages + final replies,
+unchanged). Right = a live "Activity" pane showing tool calls and
+thinking as they happen — deliberately *never* the final reply text
+(that stays exclusive to the left, no duplication) — per Harvey: "I want
+on the right side the code-like outputs... on the left the clean
+output/result... so I can basically ignore the stuff on the right."
+Required switching `claudeRunner.js` from `--output-format json`
+(blocks until the whole run completes, one lump result) to
+`--output-format stream-json --verbose`, parsing each JSONL event as it
+arrives and turning `tool_use`/`thinking` content blocks into short
+lines via an `onActivity` callback — plain `text` blocks are skipped on
+purpose, since that's the reply content the left column already owns.
+Persisted incrementally to a new `voice_messages.activity_log` column
+(JSON array, safe `ALTER TABLE` that no-ops if already migrated) rather
+than kept only in memory, so `GET /api/voice/messages/:id` — the same
+endpoint the frontend already polled for the reply — now also carries
+the growing activity trail; `voiceClient.js`'s `pollMessage()` gained an
+`onTick` callback so the UI can render it live without a second
+endpoint or a websocket. Verified event shapes against the real CLI
+before wiring the parser (`assistant` messages with `tool_use`/`thinking`
+blocks, `user` messages with `tool_result`, a final `result` event) —
+this is why plain-text stripping and the `tool_result` content-can-be-
+string-or-array handling are both there, not guessed.
+
+Both fixes and the new pane were verified against the real deployed API
+end-to-end, not just locally: stale session cleared → next message
+created a fresh one and got a correct reply; `activity_log` present and
+correctly parsed on the wire; `/`, `#content-ops`, `#settings` etc. all
+route correctly with the side-rail/top-tabs visible throughout.
+
+---
+
+# 75. Project Manager: Cross-Device Thread Sync (2026-09-18)
+
+Harvey's ask: desktop and mobile should mirror each other as "one very long
+chat thread" — sending an instruction from his phone at a coffee shop should
+show up on the desktop panel too, and opening Project Manager on either
+device should resume the last conversation instead of a blank slate, not
+just replay whatever that one device itself sent.
+
+**What was actually missing:** the backend already stored every message in
+one shared `voice_messages` table and `claude --resume`d one shared
+`voice_session` row (§74 — cross-device *conversation continuity* already
+worked), and `GET /api/voice/messages` already returned full history. The
+gap was purely client-side: the desktop Project Manager tab never called it
+at all (always opened blank), and `voice-mobile.html` called it exactly
+once on load and only rendered already-finished rows, then never checked
+again — so neither UI reflected anything the *other* device did afterward.
+
+**Fix — no websocket needed, polling is enough for a single-admin panel:**
+`ops-service/public/lib/voiceClient.js` gained `RMVoice.syncThread(callbacks,
+opts)`, a small shared engine both pages now use. It calls
+`GET /api/voice/messages` on an interval (2.5s default, 60-row window) and
+diffs each row against what it's seen before by id: a never-seen id fires
+`onNewMessage`; a status transition into pending/running (bucketed together
+as `"inflight"`) fires `onPending` once; a transition to `done`/`error`
+fires `onDone`/`onError`; growth in `activity_log` fires `onActivity`. Its
+first tick against an already-populated table *is* the history load — there
+is no separate one-shot fetch to keep in sync with the recurring one, which
+is what guarantees the two can never drift apart.
+
+Both `app.js`'s `bootProjectManager()` and `voice-mobile.html` wire up a
+`syncThread` instance to their own existing render functions
+(`addMessage`/`addAssistantMessage`/`addTyping`), so opening either page now
+replays the full recent thread on load and keeps receiving anything sent
+from the other device while it sits open. A message this device sends
+itself is still rendered optimistically and instantly (unchanged
+responsiveness) — right after `POST /api/voice/messages` returns, the code
+calls `sync.markKnown(created)` so the engine's next tick treats that row as
+already-rendered rather than duplicating it, and later calls
+`sync.markKnown(row)` again with the terminal status once known locally
+(mobile's blocking voice-overlay flow does this explicitly; desktop's
+always-visible thread just lets the shared engine's own `onDone`/`onError`
+render the completion). `autoSpeakIds` (per-page, not persisted) tracks
+which in-flight ids this device itself started by voice, so only those get
+spoken aloud when they complete — a reply that appears because the *other*
+device triggered it is shown as text only, never auto-played.
+
+Desktop's poller is started/stopped alongside the tab itself
+(`renderActiveTab` stops it when leaving `#project-manager`,
+`bootProjectManager` stops any prior instance before starting a new one) so
+switching tabs repeatedly can't leak multiple concurrent pollers. Mobile's
+starts once, from `showApp()`, only after login is confirmed — never
+eagerly at script-load time, which would otherwise hit the authenticated
+messages endpoint before a session cookie exists.
+
+**Deliberately not built:** a real WebSocket/SSE push channel. Two devices
+polling every 2.5s each is negligible load for a single-admin internal
+tool, and it sidesteps an entire class of reconnect/backoff complexity a
+socket would need — consistent with §6's "avoid unnecessary complexity"
+philosophy. Worth revisiting only if the polling interval itself ever
+becomes the complaint (it hasn't been).
+
+---
+
+# 76. Fixed: Persistent-Session Deadlock (2026-09-18)
+
+The persistent Agent SDK session work from §75's neighboring commit
+("Project Manager: persistent Agent SDK session instead of per-message CLI
+spawn") shipped with a deadlock that made **every single Project
+Manager/voice message hang forever** — found and fixed by a different
+session than the one that wrote it, right after Harvey got disconnected
+mid-task and a peer session asked this one to check in. Worth reading in
+full if touching `claudeRunner.js` again.
+
+**The bug:** `ensureSession()` awaited `sess.ready` — resolved only once a
+`system`/`init` event came back from the SDK's `query()` iterator — before
+returning the session to its caller. But in streaming-input mode, the
+underlying CLI process doesn't emit that event until it has received the
+*first* pushed message, and that first message is only ever pushed from
+inside `runTurn()`, which callers only reach *after* `ensureSession()`
+returns. Nothing could ever become ready. Confirmed empirically, not just
+reasoned about: a fresh brand-new session hung identically to a resumed
+one (ruling out "bad resume id" as the cause), with an empty `activity_log`
+in both cases (confirming nothing was ever even sent to the CLI).
+
+**The fix:** `ensureSession()` no longer awaits `sess.ready` — it returns
+the session immediately after creating it. The background `pump()` loop is
+already running independently by that point and processes events as soon
+as the first real message (pushed by the caller's subsequent `runTurn()`
+call) unblocks the underlying process. A stale/dead resume id still
+self-heals, just one turn later than the original fail-fast attempt
+intended: the pump's `catch` rejects the pending turn via
+`failAllPending()` once the process actually errors out, and its `finally`
+clears `currentSession`, so the *next* message after a bad resume
+automatically gets a fresh session.
+
+**How this was found:** a peer Claude Code session messaged this one
+asking for a status check on Harvey's behalf after he got disconnected
+mid-task. This session had no memory of that work at all (confirming via
+git log it was a *different* session that built it), but rather than just
+saying "not me," it ran a real test against the live deployed service —
+sent an actual message through `POST /api/voice/messages` and watched it
+sit on `status: "running"` for minutes with zero output. That's what
+turned "let me check" into "this is actually broken right now," which
+mattered: because the SDK session is a single module-level
+`currentSession`, one hung turn doesn't just fail its own request — it
+wedges the shared in-process queue (`server.js`'s `voiceQueue` processes
+one message at a time) so *every subsequent* Project Manager message would
+have queued behind it forever too. `docker restart rm-ops-service` cleared
+the immediate wedge while the real fix was found and deployed.
+
+**Verified after the fix**, against the real deployed service: sequential
+messages complete in ~5-6s each (not hung), `activity_log` populates
+correctly with real tool-call summaries, and a message sent right after
+clearing the stored session (`POST /api/voice/session/reset`) also
+completes normally — both the resume and fresh-session paths work.
+
+**Process note for future sessions:** this repo is now being actively
+worked on by multiple concurrent Claude Code sessions (this interactive
+one, a non-root `ubuntu` Remote Control session doing most day-to-day
+work, and CI's own automated deploy). Don't assume a `git log` entry you
+don't recognize is wrong or stale — `git fetch`/`pull` and re-read this
+file before assuming you have the full picture, the same way this session
+had to when it found work here it had no memory of doing.
+
+---
+
+# 77. Voice-App Agent: Summarize Todo Items Instead of Pasting Verbatim (2026-09-18)
+
+Harvey noticed that when the headless Project Manager agent (the one
+`claudeRunner.js`/`server.js` spawns for voice/chat messages, §74) uses
+its own internal TodoWrite task list while working on a multi-step
+instruction, the todo item text was his entire raw message rather than a
+short description of the step. Fixed by adding a paragraph to
+`VOICE_SYSTEM_PROMPT` in `ops-service/server.js`: when this agent tracks
+a turn with a todo list, each item should be a short plain-language
+summary of that step (how you'd title a task for a colleague), never a
+verbatim paste of what Harvey said. Applies only to the voice-app agent
+(this is injected via `appendSystemPrompt`, §74) — normal interactive
+sessions are unaffected.
+
+Takes effect the next time `rm-ops-service` is rebuilt/redeployed (§62's
+normal redeploy cycle, or the `deploy-ops-service.yml` CI workflow if
+it's picked this commit up automatically — check
+`ops-service/.ci/last-run.log` for the most recently deployed commit
+hash before assuming this is already live).
+
+---
+
+# 78. Content Ops: Visually Mark Pieces Created By an Agent (2026-09-18)
+
+Harvey wants to be able to tell, at a glance on the Kanban board, which
+pieces he came up with himself versus which ones a Claude Code session
+(voice/chat agent or an interactive session, acting on its own initiative
+rather than typing up something Harvey dictated) created from scratch —
+whether it's currently sitting in Ideation or has already moved to
+Outline Started.
+
+**Convention (any Claude Code session creating a `pieces` record via the
+API, from now on):** set `createdBy: 'agent'` on the record. Nothing
+sets this automatically server-side — `ops-service/server.js`'s
+`PUT /api/store/:storeName/:id` just stores whatever body it's given
+(see §62), and the normal UI creation paths (`createDraft()` in
+`app.js`, `quick-add.html`'s save handler) deliberately don't set it,
+since those are always Harvey's own ideas even when quick-add was
+dictated by voice. Only set it when *you* are the one originating the
+idea/content, not just typing on Harvey's behalf.
+
+**Rendering:** `ops-service/public/app.js`'s `cardHtml()` adds a
+`card-ai` class when `piece.createdBy === 'agent'` (plus a
+`title="Created by Claude Code"` tooltip). `style.css` gives `.card-ai` a
+subtle indigo background tint and border (`#8b7cf6`-ish, distinct from
+the board's green accent) rather than a loud badge — Harvey specifically
+asked for a background difference, not new UI chrome. Applies at every
+stage the card passes through, not just Ideation/Outline Started (no
+reason to strip the marker once it progresses further).
+
+This is a data-driven flag, not a stage/column-based inference — a piece
+keeps its `card-ai` styling for its entire lifetime on the board unless
+someone removes the field.
+
+---
+
+# 79. Voice-Mobile PWA: Quick Link to Content Ops (2026-09-18)
+
+`ops-service/public/voice-mobile.html` (the phone home-screen PWA
+shortcut, §74) had zero navigation to anything else on the panel — it's
+a deliberately standalone page, so there was no way to jump from it to
+the Content Ops board to check on ideas without leaving the PWA for the
+browser and typing in `ops.realitymanual.com` manually. Harvey asked for
+a quick way to move between the two.
+
+Added a small fixed pull-tab-style button (`.v-nav-btn`, reusing the
+exact Content Ops kanban icon from `index.html`'s side-rail) on the left
+edge at mid-screen, mirroring the existing queue pull-tab already on the
+right edge — deliberately not a top-corner button, which was tried first
+and overlapped the "Ask & Wait for Reply" button's own icon/label. It
+links straight to `index.html#content-ops`; the SPA's hash router
+(`app.js`, `renderActiveTab`) already lands directly on that tab without
+needing to pass through Project Manager first. The reverse direction
+(Content Ops → Project Manager) needed no new code — `index.html`'s
+mobile view already keeps its horizontal-scrolling top tab row visible
+with Project Manager as `TABS[0]` (§74's SPA merge), so that's already
+one tap away; `voice-mobile.html` itself is also always reachable again
+directly from its own home-screen icon.
+
+---
+
+# 80. Project Manager: Queue Shows Recent Completions Too (2026-09-18)
+
+The queue panel (desktop `app.js` and `voice-mobile.html`, both with their
+own `renderQueue(rows)` — this widget predates any shared-helper
+abstraction between the two pages and the fix kept that existing
+duplication pattern rather than introducing a new one) only ever showed
+`pending`/`running` rows, so it went completely empty the instant nothing
+was actively running — no trail of what had just finished. Harvey wanted
+the last handful of completed items to stay visible, visually distinct
+from what's currently in progress, capped rather than growing forever.
+
+`renderQueue` now also derives `recentDone` — rows with `status: 'done'`
+or `'error'`, sorted by `completed_at` (falling back to `created_at`),
+capped to `RECENT_DONE_LIMIT = 5` — and renders them below a "Recently
+completed" divider under the existing in-progress list. Older completions
+just fall out of the top-5 window each tick; nothing is deleted from the
+`voice_messages` table itself, this is a display-only cap on the queue
+widget (full history still lives in the chat thread and
+`GET /api/voice/messages`). Styling (`style.css`): `.pm-queue-done` is a
+muted/receded grey (`opacity: 0.72`, plain `--surface-2` background) and
+`.pm-queue-failed` uses the existing `--error`/`--error-soft` tokens —
+both clearly different from `.pm-queue-active`'s green accent fill, so
+"still working" vs. "already finished" reads at a glance.
+
+---
+
+# 81. Project Manager Chat: Bold/Italic Weren't Rendering (2026-09-18)
+
+Harvey flagged that `**bold**` text in a reply showed up in the Project
+Manager chat bubble as literal asterisks instead of actually bold.
+Root cause: `renderMarkdownLite()` in `ops-service/public/lib/voiceClient.js`
+(shared by `app.js` and `voice-mobile.html`) only ever recognized fenced
+code blocks and inline `` `code` `` — its own comment said as much
+("NOT a general markdown library... the two things Harvey actually asked
+for"), but the model's replies routinely use `**bold**`/`*italic*` in
+normal prose, so those were landing as raw asterisks in every reply, not
+just the one Harvey happened to notice.
+
+Fixed by extending the same text-splitting approach already used for
+inline code — `appendTextWithInlineCode`'s split regex now also matches
+`\*\*[^*]+\*\*` (bold, tried first) and `\*[^*]+\*` (italic, tried
+second so a `**` pair isn't misread as two stray single asterisks) —
+rendering `<strong>`/`<em>` elements via `textContent` alongside the
+existing `<code>` handling. Still fully safe against HTML injection: only
+`textContent` is ever set, never `innerHTML`, same as the pre-existing
+code-block path. `stripMarkdownForSpeech()` already stripped both bold
+and italic markers before TTS, so spoken replies were never affected —
+this was a text-rendering-only bug.
+
+---
+
+# 82. Deploy Pipeline Was Silently Wedged All Session (2026-09-18)
+
+Harvey said the new Content Ops nav button (§79) wasn't visible on
+mobile. Investigating turned up something bigger: **every single change
+pushed this session — §77 through §81 — had actually failed to deploy**,
+despite each one being reported as "pushed, will go live on the next
+auto-deploy." CI ran and reported (honestly, per §76's earlier fix)
+every time; the failure was one layer deeper, in `ops-service/deploy.sh`
+itself running on the VPS.
+
+**Root cause:** `deploy.sh`'s `REPO_DIR` (`/root/realitymanual-repo`) is
+deliberately dual-purpose — it's both the CI deploy script's build source
+*and* an interactive root session's own working copy (§74 explains why
+`/srv/realitymanual-repo` exists as a separate clone: specifically to
+keep the unattended voice-app runner's tree from colliding with this
+one). Some root session had uncommitted local edits to `CLAUDE.md` and
+`ops-service/server.js` sitting in `REPO_DIR`, and `deploy.sh`'s plain
+`git pull` has aborted on that exact conflict on every run since
+`e678b49` (confirmed via `ops-service/.ci/last-run.log` across five
+consecutive CI runs, all `ssh exit code: 1`) — meaning the live
+container had been stuck on `e678b49` this entire session, unnoticed
+until Harvey caught the missing button.
+
+**Fixed:** `deploy.sh` now checks `git status --porcelain` in `REPO_DIR`
+before pulling and auto-stashes (`git stash push -u`) if dirty, rather
+than aborting — nothing is discarded, just parked in the stash list.
+**This fix can't self-apply**, though: the deploy workflow SSHes in and
+runs whatever copy of `deploy.sh` is *already checked out* on the VPS,
+before that script's own `git pull` has run — so the fix is stuck behind
+the exact problem it solves until someone with root manually clears
+`REPO_DIR`'s local changes once. Full handoff — what to check, why it's
+not safe to blindly discard, how to confirm the unstick worked — written
+to `ops-service/.ci/handoff-notes.md` (gitignored/untracked by design,
+same as the earlier VPS_SSH_KEY handoff note this session found and
+resolved).
+
+**Also queued behind this same blocker:** the §78 (agent-created card
+styling), §79 (mobile nav button), §80 (queue recent-completions), and
+§81 (bold/italic rendering) changes, plus this section's own `deploy.sh`
+fix — none are live yet. Once someone unblocks `REPO_DIR` and a deploy
+completes, re-verify all of the above against the real deployed service,
+not just against this repo's `git log`.
+
+**Process lesson:** "pushed to `main`" and "CI reported success" are not
+the same claim as "the change is live" — this pipeline has two
+independent layers that can each fail silently in a way the other
+doesn't catch (§76 already found and honestly-failed one; this is a
+different one, one layer further in). When a change is reported as
+deployed but the user can't see it, check `ops-service/.ci/last-run.log`
+for the actual outcome before assuming it's a code or caching problem.
+
+---
+
+# 83. Voice-Mobile Queue Drawer: Tap Outside to Dismiss
+
+The §80 queue drawer in `voice-mobile.html` only ever closed by tapping
+the same pull-tab that opened it. Harvey wanted tapping back into the
+rest of the app (the ask/execute buttons, the chat thread — anything
+outside the drawer) to dismiss it too, not just the one specific tab.
+Added a `document` click listener that closes `#queueDrawer` when it's
+open and the click landed outside both the drawer and the pull-tab
+itself. Desktop's queue panel (`app.js`) isn't a toggleable drawer — it's
+a static always-visible column — so this only applies to the mobile PWA.
+
+---
+
+# 84. Sent Images Weren't Shown in the Chat Bubble
+
+Harvey attached an image to a message and couldn't see it in the chat
+after sending — confirmed: `addMessage('user', text || '(image)')` (both
+`app.js` and `voice-mobile.html`) only ever rendered a text placeholder,
+never the actual picture. The uploaded file itself is genuinely
+transient server-side too — `POST /api/voice/messages` reads it into a
+base64 block for that one Claude Code turn and never persists it (no
+`image_path` column, no file kept under `DATA_DIR`, nothing served back
+by any route) — so there was truly no image data anywhere to display
+after the fact, on any device, ever.
+
+**Fixed, scoped narrowly:** `addMessage()` in both files now takes an
+optional `imageFile` argument; when present it renders an actual `<img>`
+thumbnail (via `FileReader.readAsDataURL`, same technique already used
+by the existing pre-send preview) inside the sender's own chat bubble,
+with any typed caption underneath. `sendTyped()` (mobile) / `sendText()`
+(desktop) now pass the pending `File` object through instead of falling
+back to the literal string `'(image)'`.
+
+**Deliberately not fixed in this pass:** this only helps the sending
+device see its own image at send time, using the in-memory `File`
+object the browser already has — it does not persist the image
+anywhere. A page reload, `GET /api/voice/messages`, or the other device
+via `syncThread` (§75) still has no image data to show, only whatever
+transcript text was stored (`'(image attached, no caption)'` if there
+was no caption — see `server.js`'s `finalText` fallback). Making an
+attached image durably visible everywhere would need actual server-side
+storage (a file under `DATA_DIR`, a serving route, a `voice_messages`
+column) — a real feature, not this bug fix; worth doing if Harvey asks
+for cross-device/reload image history specifically.
+
+---
+
+# 85. Replies Now Show Which Message They're Answering
+
+A reply can land well after Harvey's sent it — sometimes minutes, per
+§74's whole ack/delay design — and he may well have sent other messages
+in the meantime (from either device, since the thread is shared, §75).
+With nothing marking which question a given reply answers, a late reply
+was ambiguous once more than one exchange was in flight or scrollback.
+
+Both `app.js` and `voice-mobile.html`: `addAssistantMessage()` and
+`addMessage()` now take an optional `replyToText` argument. When
+present, a small muted "Re: <snippet of the original message>" line
+(`.pm-msg-replyto`, truncated to 80 chars) renders above the reply body.
+`onDone`/`onError` in both files' `syncThread` wiring pass `row.transcript`
+— the shared `voice_messages` row already stores the question and answer
+together (`transcript`/`reply_text` on the same row), so no schema change
+or new data was needed, this is pure rendering. Applies to error replies
+too, not just successful ones, for the same reason. A small
+`replyToSnippet()` helper is duplicated between the two files rather than
+factored into `voiceClient.js`, matching this codebase's existing
+precedent of small page-specific render helpers not being shared (§80).
+
+---
+
+# 86. Recording: No More "Call Connected" Bluetooth Tone, Screen Stays Awake
+
+Two mic-recording complaints, both fixed in `startRecording()` in the
+shared `ops-service/public/lib/voiceClient.js` (used by both `app.js` and
+`voice-mobile.html`, so both pages get both fixes):
+
+**"Call started"/"call ended" tone on Bluetooth.** Chrome's default
+`getUserMedia({ audio: true })` applies voice-processing (echo
+cancellation, noise suppression, AGC) to the captured audio — the same
+processing path used for an actual phone call. On Android, when a
+Bluetooth headset is connected, requesting that path forces the headset
+to switch from its music profile (A2DP) to the call profile (HFP), which
+is what plays the connect/disconnect tone Harvey was hearing (ChatGPT's
+native app doesn't hit this because it isn't a web page going through
+Chrome's `getUserMedia` voice-processing path). Fixed by requesting
+`{ audio: { echoCancellation: false, noiseSuppression: false,
+autoGainControl: false } }` instead — this is genuinely the only lever
+available from web content; there's no API to block the Bluetooth
+profile switch directly, and the fix trades slightly lower mic quality
+(no echo cancellation) for avoiding it, which is an acceptable trade for
+short dictation.
+
+**Screen going to sleep mid-recording.** Added a Screen Wake Lock
+(`navigator.wakeLock.request('screen')`), acquired right after the mic
+stream is granted and released when the recorder actually stops (covers
+both a normal finish and a cancel, since both paths call `.stop()`).
+Feature-detected (`'wakeLock' in navigator`) so it's a silent no-op on
+unsupported browsers (Safari <16.4, non-secure contexts) rather than an
+error — same defensive pattern as everything else in this file. This is
+what was causing Harvey to lose the stop-recording button entirely if he
+talked past his phone's auto-lock timeout.
+
+---
+
+# 87. Voice Questions Weren't Actually Being Answered Out Loud
+
+Harvey noticed he kept hearing the same generic "Got it — I'll get right
+on that" line for everything, including real questions, and never
+actually heard a spoken answer. Root cause, in both `app.js` and
+`voice-mobile.html`'s `onDone` handler:
+
+```js
+if (!ack.fired) Voice.speak(row.reply_text || '').catch(function () {});
+```
+
+The 10s "still working on it" ack (`VOICE_ACK_DELAY_MS`) was designed
+(§74) so a genuinely slow multi-minute task doesn't get its result
+spoken late out of nowhere — reasonable for a background task. But
+respond-mode ("Ask & Wait for Reply") is specifically the button whose
+whole promise is "hear CC's answer back," and the VOICE_SYSTEM_PROMPT
+(§74/this section's neighbor) explicitly tells CC to investigate
+thoroughly before answering rather than shortcut — which routinely takes
+well over 10 seconds. Combined, that meant most real questions sent by
+voice never got a spoken answer at all: just the generic ack, then
+silence (text-only).
+
+**Fixed:** `onDone` now always calls `Voice.speak(row.reply_text)` once
+an ack exists for that message (i.e. it was sent by voice expecting a
+spoken reply), regardless of whether the ack already fired — the ack is
+just a "still thinking" placeholder now, never a substitute for the real
+answer. `onError` got the same treatment (speaks `row.error_message`),
+since a question that hit an error still deserves to be told something,
+not silence. Also reworded `RESPOND_ACK_TEXT` from "Got it — I'll get
+right on that. I'll let you know here once it's done." (task-presuming
+phrasing, wrong for a plain question) to a neutral "Still working on
+that — I'll have an answer for you in just a moment." — chosen because
+the client can't know in advance whether a given message will turn out
+to be a task or a question, so the ack text itself has to work for
+either. `EXECUTE_ACK_TEXT` ("Got it — I'll take care of that now.") is
+untouched — execute-mode is unambiguously always a task by construction
+(that's the whole distinction the two buttons encode), and it still
+correctly never speaks a final result.
+
+---
+
+# 88. PM Host Access, Self-Healing Queue, and Session-Loss Context (2026-09-18)
+
+Harvey's ask: he wants the Project Manager (the voice/chat app's headless
+agent, running inside `rm-ops-service`) to work "identically" to an
+interactive Claude Code terminal session on the VPS — same reach, same
+reliability — with the explicit instruction to give it as much access as
+possible now and layer on safeguards later rather than the reverse.
+Three real gaps closed here; a fourth (proactive push notification when
+blocked) only partially.
+
+**1. Host access, via SSH — not a Docker socket mount.** The container has
+no access to anything outside itself by default: no other containers,
+no nginx/systemd, no host filesystem beyond its explicit bind mounts. Two
+ways to fix that were considered:
+- Mount `/var/run/docker.sock` into the container. Rejected: that's
+  equivalent to full host root (a container with the socket can launch a
+  new container with `-v /:/host`), and the escalation path is opaque —
+  nothing about *why* a given docker command ran is visible unless you
+  separately go inspect what got launched.
+- **SSH to the host itself, as `ubuntu`** (the non-root account already
+  set up for interactive sessions — see §74/75) — what's actually built.
+  Equivalent end capability (ubuntu has passwordless sudo, so this is
+  still full root, functionally), but every single thing the PM does
+  outside its container is one explicit, individually-readable `ssh
+  ubuntu@host.docker.internal '<command>'` call — auditable the same way
+  any of its other tool calls already are, rather than a single opaque
+  socket grant. Simplicity/auditability tradeoff, not a security
+  strength — Harvey's own framing ("safeguards later") is the right way
+  to think about this, not "this is already safe."
+
+**What changed to support it:**
+- `Dockerfile`: installs `openssh-client`; creates `/home/node/.ssh`
+  (mode 700, owned by `node`) with a static `config` pinning
+  `StrictHostKeyChecking no` / `UserKnownHostsFile /dev/null` for
+  `host.docker.internal` specifically — acceptable here because that
+  hostname always resolves to the one fixed, known machine the container
+  itself runs on; there's no real "is this who I think it is" question
+  for an unknown-host warning to protect against.
+- `deploy.sh` (CI's own deploy script, so this survives every future
+  automated redeploy, not just a one-off manual run): added
+  `--add-host=host.docker.internal:host-gateway` and
+  `-v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro` to
+  `RUN_ARGS`.
+- `server.js`'s `VOICE_SYSTEM_PROMPT`: tells the agent this exists, how
+  to use it (`ssh ubuntu@host.docker.internal '<command>'`, `sudo` inline
+  for anything privileged), and the one real caveat — rebuilding/
+  restarting `rm-ops-service` *itself* over that connection kills its own
+  current process mid-command, so that specific step never reports
+  success back in the same turn. Told to treat this as routine, not a
+  reason to avoid the capability, and to log state to the work log first
+  when the next resume wouldn't otherwise make the situation obvious
+  (feeds into section 2 below).
+
+**The actual credential setup (keypair, `authorized_keys`, passwordless
+sudo, chown-for-the-container's-uid) all had to be done by Harvey
+directly on the VPS** — every attempt at any piece of this from an
+interactive Claude Code session, including read-only checks like `sudo
+-l -U ubuntu`, was refused by Claude Code's own safety classifier
+(reasons given: "Containment Escape", "Unauthorized Persistence") —
+consistent with, not a bug in, the same safety model this whole project
+already relies on elsewhere (see §74/75's "generating or writing any raw
+credential is a you-not-me action" note). The commands actually run are
+whatever Harvey's own session log shows for this date; regenerate a
+fresh keypair rather than trying to recover the old one if it's ever
+lost, same as the GitHub PAT/OAuth token pattern established earlier.
+
+**2. Self-healing: the queue.** Reported bug, root-caused and fixed:
+Harvey saw the Project Manager's queue panel stuck showing old test
+messages ("1/2 Say only the word OK", "2/2 say only the word ok")
+forever. Cause: `voiceQueue` (the in-process array of not-yet-started
+messages) and `currentSession` (the live Agent SDK session) are both
+plain in-memory state — every container restart loses them completely,
+but the `voice_messages` DB rows survive, so anything that was
+`pending`/`running` at the moment of a restart stayed stuck at that
+status forever with nothing left alive to ever pick it back up. This
+isn't a rare edge case — it happens on *every* redeploy, including the
+routine ones CI runs on every push.
+
+Fix: `recoverInflightVoiceMessages()` in `server.js` runs once, every
+time the process starts. A `pending` row never actually reached Claude,
+so it's simply re-queued and processed normally. A `running` row's real
+completion state is unknown (the process could have died a moment before
+or after actually finishing the work), so it's marked as an error
+instead of blindly re-run — silently duplicating a git push or a file
+edit would be worse than asking Harvey to resend it. Either way, a
+`SERVICE RESTARTED` line goes into the work log so there's a visible
+trail. Verified directly against the two real rows Harvey's screenshot
+showed, still stuck from testing earlier in this same session, before
+writing the fix and again after.
+
+**3. Self-healing: session-loss context.** A resumed Agent SDK session
+(the normal case — `--resume` against the persisted `.claude` volume)
+already carries full conversation memory across a restart on its own;
+this only matters when there's genuinely no session to resume — first
+message ever, "New conversation" was hit, or the previous session was
+lost (the CLI's local session store can still get pruned independently
+of the persisted volume). `buildSystemPromptForSession()` checks for
+exactly that condition and, when it's true, appends the last 15 lines of
+the work log to the system prompt — so a session starting with zero
+conversation memory isn't *also* blind to what it was recently doing.
+
+**4. "Message me if you're stuck" — partially built, not fully solved.**
+Harvey wants the PM to proactively notify him when it can't proceed
+without his input, not just wait for him to happen to check the app.
+What's real today: the existing `[NEEDS_ACTION]` marker (§76) already
+gets a visibly distinct bubble color and — since it's a normal `done`
+completion — triggers the completion ping (§75) the next time either
+device's tab is open and focused. What's NOT built: a true push
+notification that reaches Harvey when neither app is open at all. That
+needs either a registered PWA push subscription (real infrastructure:
+service worker, push keys, a subscription store) or a different channel
+entirely (SMS/email via a new provider). Worth doing if the in-app
+signal proves insufficient in practice — not built yet because it's a
+meaningfully bigger lift than everything else in this section, not
+because it was overlooked.
+
+**"New conversation" button, for the record (Harvey asked why he'd ever
+use it):** it force-resets to a session with zero memory, on purpose —
+for on the rare occasion the accumulated context itself becomes the
+problem (e.g. a long confused back-and-forth Harvey wants to cut cleanly
+away from) rather than something to reach for normally. The default
+persistent-thread behavior (§74/75) is correct for ordinary use; this is
+the deliberate escape hatch, not the common path.
+
+---
+
+# 89. Replaced the Hardcoded "Still Working On That" Ack With a Real One
+
+§87 fixed voice questions not being spoken at all; Harvey's very next
+complaint was about the thing that fixed replaced it with — hearing the
+literal phrase "Still working on that — I'll have an answer for you in
+just a moment" over and over, whatever he'd actually asked. His ask: no
+canned filler at all, ever — the immediate spoken acknowledgment should
+be genuinely contextual, prove real understanding of that specific
+message, and briefly note the plan, with the full answer following once
+it's actually ready (unchanged from §87).
+
+**The mechanism:** Claude Code's own convention (see this file's own
+top-level system instructions) is to say one short sentence about what
+it's about to do before the first tool call of a turn — for an
+interactive terminal session that's just a UX nicety, but for the voice
+app it's exactly the contextual acknowledgment Harvey wants, genuinely
+generated by the model from the actual message, not a template. The fix
+wires that existing behavior through as real-time spoken feedback
+instead of discarding it (which is what happened before — see
+`claudeRunner.js`'s `describeEvent` comment: plain text blocks were
+skipped on purpose, on the assumption they'd only ever duplicate the
+final reply).
+
+**`ops-service/src/claudeRunner.js`:** `handleEvent` now also watches for
+the first non-empty `text` block in any `assistant` stream event for the
+current turn (tracked via a per-turn `earlyAckSent` flag, so it only
+fires once) and calls a new `onEarlyAck(text)` callback — threaded
+through `runTurn`/`runClaude` as a plain optional callback, same pattern
+as the existing `onActivity`.
+
+**`server.js`:** new `voice_messages.early_ack` column (same safe-ALTER
+pattern as `activity_log`). `processVoiceMessage`'s `onEarlyAck` callback
+writes it to the DB the instant it fires — well before the turn
+completes — on both the normal and session-retry `runClaude` calls.
+`VOICE_SYSTEM_PROMPT` gained an explicit "Quick verbal acknowledgment"
+paragraph spelling out *why* this matters and what makes a good one (a
+short, specific restatement proving understanding — e.g. "Checking the
+deploy log now to confirm it actually completed," never "Got it, I'll
+get right on that") — relying on the model's own incidental narration
+without this instruction risked exactly the kind of generic phrasing
+Harvey was already complaining about, just model-generated generic
+instead of hardcoded generic.
+
+**Client (`voiceClient.js`, shared by both pages):** `syncThread`'s
+per-row tracking gained `hadEarlyAck`, firing a new `onEarlyAck(row)`
+callback once per row the moment `row.early_ack` first appears —
+mirrors the existing `activityLen`-growth pattern for `onActivity`.
+
+**`app.js` / `voice-mobile.html`:** `onEarlyAck` does two things: swaps
+the generic "CC is working on it…" typing placeholder for the real
+early-ack text (visible even on a typed, non-spoken send), and — if this
+message has a pending voice ack scheduled (`voiceAck[row.id]`, meaning
+it was sent by voice and is awaiting spoken feedback) — speaks it
+immediately and cancels the old `VOICE_ACK_DELAY_MS` fallback timer.
+That timer still exists as a last-resort safety net (renamed in comments
+to reflect its now-secondary role) in case the model somehow jumps
+straight into a tool call with no preceding text at all — rare, but not
+impossible. Whichever one fires first (real early_ack, virtually always,
+or the generic fallback phrase) marks the ack as claimed so the other
+path never also speaks on top of it.
+
+**One real duplicate-speech risk, handled:** a turn with *no tool calls
+at all* (a quick, directly-answerable message) can have its first —
+and only — text block be the complete final answer itself, not a
+preview of one. Speaking that immediately as the "early ack" and then
+speaking `reply_text` again at `onDone` would say the identical sentence
+twice in a row. Fixed with an exact-match dedupe: `onDone` only speaks
+the final reply if it differs from whatever text was already spoken as
+the ack for that message.
+
+Verified locally (not yet against the live deployed service, same
+deploy-pipeline caveat as everything else in this session) via
+`node --check` on all four touched files and a plain string-splitting
+test of the underlying regex/logic patterns reused from §81. Real
+end-to-end verification (does the spoken ack actually sound contextual,
+does the dedupe actually prevent a double-speak on a real no-tool-call
+question) still needs a genuine voice test against the deployed service —
+flag this explicitly if picking this up cold, don't assume it's
+confirmed working just because it's merged.
+
+---
+
+# 90. Queue Items Also Get a Real Title, Not Raw Speech-to-Text
+
+Same complaint as §77/§89, one more surface that had the same problem:
+the Queue panel's item text (`renderQueue` in `app.js`/`voice-mobile.html`)
+was always `row.transcript` — Harvey's raw spoken message, unshortened —
+even though §77 already established the principle (there, for the
+internal TodoWrite list) that a queue-style list should show a real task
+title, not a transcript dump. The Queue panel is a different UI surface
+that §77's fix never touched.
+
+Fixed by reusing §89's `early_ack` field rather than building a second
+title-generation mechanism: both the in-progress and "Recently completed"
+render loops now show `row.early_ack || row.transcript` — falling back to
+the raw transcript only in the brief window before a message has started
+processing and produced its first real sentence yet. `early_ack` is
+already instructed (§89's VOICE_SYSTEM_PROMPT addition) to be a short,
+specific one-sentence statement of what's being done, which is exactly
+the "proper title... one sentence or a few words" Harvey asked for here —
+no new backend work needed, just displaying data that already existed
+for a different reason.
+
+---
+
+# 91. Nav (Side-Rail + Top Tabs): Middle-Click / Open in New Tab
+
+Harvey wanted middle-click (or ctrl/cmd-click) on a nav item — e.g. the
+side-rail's Content Ops icon — to open it in a new browser tab, the
+normal way that gesture works on any link. It didn't do anything at all.
+Root cause: every tab-navigation element (`index.html`'s side-rail icons,
+and `app.js`'s `renderTabs()`-generated top tab row) was a plain
+`<button>` with a `click` listener that sets `location.hash` — a button
+has no URL for the browser to open elsewhere, so middle-click/ctrl-click
+"open in new tab" silently has nothing to act on. This is a real browser
+mechanism, not something a `click` handler can add on its own.
+
+**Fixed:** both nav surfaces are now real `<a href="#tab-id">` elements
+instead of buttons — `index.html`'s 6 side-rail icons directly, and
+`app.js`'s `renderTabs()` template string. The existing `click` listeners
+that set `location.hash` are left in place (harmless no-op redundancy on
+an ordinary left click, since the anchor's own default navigation
+already sets the same hash) — this was a markup change, not a routing
+rewrite. `style.css` gained `text-decoration: none` on `.side-rail-btn`/
+`.panel-tab` since anchors underline by default and nothing already
+overrode that. No JS logic (`renderActiveTab`'s active-class toggling,
+`currentTabId()`, the hash router) needed to change — all of it already
+worked purely off `.dataset.tab`/`classList`, with zero assumptions
+about the underlying element being a `<button>`.
+
+Opening a tab this way lands directly on the right panel on load — the
+router already reads `location.hash` unconditionally on init
+(`renderActiveTab()` runs right after setup regardless of whether the
+hash was already set, confirmed in §79's writeup of the same behavior)
+— and the session cookie is shared automatically across tabs on the same
+origin, so no separate login is needed in the new tab.
+
+---
+
+# 92. Content Ops Search: Hide Non-Matches Instead of Dimming Them
+
+Search in the Kanban board used to keep every card visible and just dim
+non-matches to 28% opacity (`.card-dim`) — a deliberate choice at the
+time (see the comment that used to sit above `render()`) specifically so
+drag order/column placement was never disturbed by a search. Harvey
+wants the opposite: typing a search term should actually remove
+non-matching cards from view, the same way the content-type filter
+already works, and clearing the box brings everything back.
+
+Fixed in `render()`: the search query now filters each column's `ids`
+array before building card HTML (`if (query) ids = ids.filter(...)`),
+mirroring the existing `activeTypeFilter` line right above it, instead of
+tagging non-matches with `.card-dim` afterward. Nothing about drag
+order/column placement actually changes underneath — filtering only
+affects what a given `render()` call outputs, never the stored piece
+data — so clearing the search box (which already calls `render()` on
+every `input` event, including an emptied box) restores the exact same
+board. Removed the now-fully-unused `.card-dim` CSS rule rather than
+leaving dead code behind.
+
+---
+
+# 93. Project Manager No Longer Kills Itself Mid-Task on Every ops-service Push (2026-09-18)
+
+Harvey's report: while the PM worked through a long (1-2 hour) to-do list
+of small ops-service tweaks, he kept seeing "Service restarted while this
+was in progress... please resend if it still needs doing" repeatedly.
+Root-caused via git log timestamps directly correlated against container
+restart times (not guessed): `deploy-ops-service.yml` triggers on every
+push to `main` touching `ops-service/**`, and the PM — which has real push
+rights to this repo — was committing+pushing after each completed to-do
+item. Each push fired the auto-deploy, which rebuilds the Docker image and
+restarts `rm-ops-service` — the exact container the PM's own session runs
+inside — killing whatever turn was in flight. The self-healing recovery
+from §88 correctly reported this rather than silently losing the task, but
+the underlying trigger just repeated on the next to-do item.
+
+**Harvey's actual priority, stated directly:** he wants each change visible
+as fast as physically possible, not batched to the end of a long list
+(that would mean waiting 1-2 hours to see a 5-minute fix land). So the fix
+had to make things faster, not slower/safer-but-delayed.
+
+**Fix — most of what's on a typical to-do list is frontend-only, and that
+class of change no longer needs a rebuild or restart at all:**
+
+- `ops-service/server.js`'s static file serving no longer serves a copy of
+  `public/` baked into the Docker image at build time. It now serves
+  straight from `${CLAUDE_REPO_DIR}/ops-service/public` — the exact git
+  working tree the PM's own Claude Code session already edits and commits
+  from (bind-mounted at `/repo` in the container, `/srv/realitymanual-repo`
+  on the VPS, per §74/§88) — falling back to the image-baked `./public`
+  only if that path doesn't exist (e.g. running `server.js` directly,
+  outside the container). A frontend file edit is live on next page load
+  the instant it's saved to disk — before it's even committed, let alone
+  deployed.
+- `ops-service/deploy.sh` now captures `OLD_HEAD`/`NEW_HEAD` around its
+  `git pull` in `REPO_DIR`, and — after still unconditionally pulling
+  `RUNTIME_REPO_DIR` (this is what actually makes the frontend-live-serving
+  above correct on every deploy, not just PM-authored ones, e.g. Harvey's
+  own desktop-pushed frontend edits still need this pull to reach the VPS)
+  — diffs those two commits against `server.js`, `src/`, `package.json`,
+  `package-lock.json`, `Dockerfile`, and `deploy.sh` itself. If none of
+  those changed (a pure `ops-service/public/**` push, or nothing new to
+  pull at all), it logs that and exits successfully **without** touching
+  Docker at all — no rebuild, no stop/rm/run, no restart, no interrupted
+  PM turn. Only a genuine backend/logic change still pays the full
+  rebuild+restart cost, because that's the one case where it's actually
+  unavoidable — Node has the old code loaded in memory and there's no way
+  around reloading the process for it to pick up new server-side code.
+- `deploy-ops-service.yml`'s trigger path (`ops-service/**`) was
+  deliberately left broad rather than narrowed to backend-only paths —
+  narrowing it there would also stop Harvey's own desktop-pushed frontend
+  changes from ever reaching `RUNTIME_REPO_DIR` at all, since nothing else
+  pulls that directory. Putting the "is this actually a backend change"
+  decision in `deploy.sh` instead keeps the CI trigger working for every
+  push while making the common case (frontend-only) fast and
+  non-disruptive.
+
+**Net effect:** a to-do list of ops-service UI/behavior fixes — the normal
+case — can now run start to finish without a single container restart,
+each item visible immediately as the PM saves it. Only an item that
+touches actual backend logic (`server.js`/`src/`) still triggers one real
+restart, and only for that item, not the whole list.
+
+Verified via `node --check server.js`, `bash -n deploy.sh`, and a YAML
+parse of the workflow file before pushing — not yet verified against a
+real live to-do-list run on the deployed service; flag this if picked up
+cold and re-verify (does a `public/`-only push really skip the rebuild in
+the real CI log, does a `server.js` change still redeploy correctly) if
+the same complaint resurfaces.
+
+---
+
+# 94. §89/§90's Fixes Have a Real Gap: Silent Tool Calls Before Any Text
+
+Harvey reported both §89 (real spoken ack) and §90 (real queue title)
+regressing on the same message — a simple "how's it going, checking in"
+check-in got the generic fallback phrase spoken out loud, and the queue
+showed his raw transcript as the title. Diagnosed against the live
+`voice_messages` rows directly (`GET /api/voice/messages`, not
+guessed): `early_ack` for that row was **not null** — it was present,
+but it was the model's *entire final answer*, not a short lead-in
+sentence. Comparing against rows where `early_ack` genuinely was a short
+mid-task line (e.g. "Now let's confirm the search input wiring near
+line ~1858...") showed the real pattern: those turns narrated *before*
+each tool call, as instructed; the "how's it going" turn instead ran
+several tool calls (`git fetch`, `git log`, a live ping) with zero
+preceding text, then wrote its whole answer as one block at the very
+end. `claudeRunner.js`'s `handleEvent` correctly captures "the first
+text block," but if a turn's actual first text happens to be its last
+too, that's what gets captured — arriving too late to beat the 10s
+fallback timer, and leaving the queue showing the raw transcript for
+however long the silent tool-call phase took.
+
+So this isn't a new bug in the §89/§90 mechanism itself — it's the
+model (this agent) not consistently following the "narrate before
+tools" instruction for turns that feel like a quick status check but
+still involve tool calls (which can each individually take several real
+seconds — a `git fetch` or `ssh` call is not instant). `VOICE_SYSTEM_PROMPT`'s
+"Quick verbal acknowledgment" paragraph in `server.js` was loosened from
+a judgment call ("if a turn needs real work... skip for a turn you can
+just answer directly") to a hard mechanical rule: the instant you decide
+a turn needs *any* tool call at all, however small it feels, your first
+output token must be the one-sentence acknowledgment, before that first
+tool call — not interleaved with it, not after it. The rewritten
+paragraph explicitly names this exact failure mode (silent tool calls →
+late/duplicate final-answer-as-ack → fallback phrase + raw-transcript
+queue title) so future instances of this agent have the actual failure
+story, not just an abstract rule, to calibrate against.
+
+Deliberately did not add a second code-level fallback (e.g. a
+generic placeholder written to the queue after N seconds of silence) —
+Harvey's stance from §89 is no canned filler at all, anywhere, and a
+quieter written-not-spoken version of the same thing would still
+violate that. The fix is behavioral discipline, enforced by prompt
+wording, not a second synthetic layer papering over it.
+
+---
+
+# 95. Acknowledgment Sentence Must Read as a Task, Not a Reply
+
+Same incident as §94, one more angle on it Harvey called out separately:
+the "Recently completed" queue item for that turn read "Doing well —
+actually verified this just now, n..." — literally the opening of the
+final answer to "how's it going." Harvey's point, stated directly:
+**"tasks are actual things you're DOING, not just responses."** A queue
+item has to describe an action, never read like a reply to him.
+
+This is the same root cause §94 already fixed (the acknowledgment
+sentence arrived too late — as the whole final answer — because tool
+calls ran silently first), but it's worth its own explicit rule rather
+than assuming the timing fix alone guarantees the right phrasing: added
+a paragraph to `VOICE_SYSTEM_PROMPT` spelling out that the acknowledgment
+must read as "doing X," never as an answer to him — including never
+answering the small-talk/greeting part of his message ("how's it
+going" → "Doing well..." is answering him, not describing a task) — with
+this exact incident named as the concrete example of the mistake, the
+same way §94 named its own. Both rules reinforce each other: if the
+sentence genuinely comes before any tool call (§94), there usually
+isn't an answer to give yet anyway, which naturally forces action-style
+phrasing — but stating the phrasing rule explicitly closes the gap for
+any case where that isn't automatically true.
+
+---
+
+# 96. Mobile: No Way Back to Project Manager From the Ops Panel
+
+§79 gave `voice-mobile.html` a dedicated button into Content Ops and
+assumed the reverse direction was already covered — `index.html`'s
+horizontal-scrolling top tab row keeps Project Manager as its first
+entry even on mobile (side-rail is hidden below 640px, per the earlier
+mobile-responsive pass). Harvey confirmed that isn't good enough in
+practice: he could get *to* the ops panel from the PM's button, but
+found no way back once there.
+
+Added a dedicated fixed circular button (`.pm-back-fab`, mobile-only —
+plain `display: none` outside the `max-width: 640px` breakpoint, so
+desktop is untouched since it always has the side-rail) bottom-right on
+every tab except Project Manager itself, reusing the same message-bubble
+icon already used for Project Manager elsewhere in the nav. `<a
+href="#project-manager">` (same real-anchor pattern as §91, not a
+`<button>`), so it also gets native middle-click/ctrl-click "open in new
+tab" behavior for free. `renderActiveTab()` in `app.js` toggles its
+`.show` class alongside the existing side-rail/top-tab active-state
+logic — one extra line, no new routing.
+
+---
+
+# 97. Stop-While-Speaking: Fixed on Desktop, Made Visible Everywhere
+
+Harvey wanted a way to interrupt long auto-spoken replies mid-playback,
+and separately flagged that the existing Play/Stop button worked on
+mobile but not desktop, plus wanted a clearer visual cue for which
+message is currently being read.
+
+**Root cause of the desktop bug:** each `addAssistantMessage()` bubble's
+Play/Stop button tracked "am I playing" with its own local `playing`
+variable, set to `true` only inside that button's own click handler.
+Auto-speak (`onEarlyAck`/`onDone`/the fallback ack) calls
+`Voice.speak()` directly, bypassing that handler entirely — so the
+button never learned playback had started. Clicking it during auto-speak
+didn't stop anything; it called `Voice.speak()` again, which restarted
+the exact same text from a fresh TTS round-trip. Mobile happened to work
+only because its blocking record/transcribe overlay flow made this
+particular interaction less likely to come up, not because the
+underlying logic was actually different — the same bug was latent there
+too.
+
+**Fix — single source of truth in `voiceClient.js`, not per-bubble
+state:** `speak(text, msgId)` now takes an optional message id and
+maintains one module-level `speakingMsgId`, notified through a new
+`Voice.onSpeakingChange(fn)` pub/sub (`fn(msgId)` on start, `fn(null)` on
+stop/end) and read via `Voice.currentlySpeaking()`. `stopSpeaking()`
+clears it and notifies too. `onSpeakingChange` returns an unsubscribe
+function specifically because `app.js`'s `bootProjectManager()` re-runs
+every time the Project Manager tab is revisited — re-registering without
+unsubscribing the previous run would leak one listener per visit for the
+life of the page (mirrors the existing `pmSync` stop-before-restart
+pattern right above it). `voice-mobile.html`'s equivalent registration
+only ever runs once (guarded by `startSync()`'s own `if (sync) return`),
+so no unsubscribe is needed there.
+
+**Every `Voice.speak()` call site in both `app.js` and
+`voice-mobile.html`** (the per-bubble Play button, `onEarlyAck`,
+`onDone`, `onError`, the `scheduleVoiceAck` fallback, and
+`voice-mobile.html`'s immediate execute-mode ack) now passes the
+relevant `voice_messages` row id, so playback started from *any* of
+those paths is attributable to the right message. Each page registers
+one shared `onSpeakingChange` listener (not one per bubble, which would
+also leak) that resets any previously-`.pm-speaking` element and
+highlights whichever `[data-msg-id]` element matches the new active id
+— matches either a real reply bubble (`.pm-msg-assistant`) or, during
+the brief early-ack window before that bubble exists yet, the typing
+placeholder (`.pm-typing`, already carried `data-msg-id` since it was
+first built). `.pm-msg.pm-speaking` gets an accent-colored border/glow
+(also covers error bubbles, which have no Play button but can still be
+auto-spoken); `.pm-typing.pm-speaking` gets an accent color plus a 🔊
+prefix via `::before`. The Play button itself also now reads directly
+off `Voice.currentlySpeaking() === msgId` rather than its own flag, so
+its label/stop-click behavior is correct regardless of what started the
+audio.
+
+---
+
+# 98. §96's Back-to-PM Button Pointed at the Wrong "Project Manager"
+
+§96's mobile `.pm-back-fab` linked to `#project-manager` — the desktop-
+style chat tab rendered inside `index.html`'s own SPA. Harvey pointed
+out that's the wrong target: on mobile he actually lives in
+`voice-mobile.html`, a deliberately separate standalone page (§74) with
+its own layout (the two big Ask/Execute buttons, etc.), not the same UI
+as the in-SPA tab. Tapping the FAB was taking him to a different,
+desktop-shaped Project Manager instead of back to the app he'd actually
+come from.
+
+Fixed by pointing `href` straight at `voice-mobile.html` instead of the
+hash route — same plain same-tab navigation pattern `voice-mobile.html`'s
+own outbound button to Content Ops already uses (`<a
+href="index.html#content-ops">`, no `target`), just the reverse
+direction. `renderActiveTab()`'s show/hide logic (visible on every tab
+except the in-SPA project-manager one) didn't need to change — it's
+still correct regardless of where the link actually points.
+
+---
+
+# 99. "Queue" Renamed to "Task List" — Ambiguous Label, Not a Behavior Change
+
+Harvey: "queue is kind of ambiguous, whereas task list actually tells us
+that it's a list of things you're working away through." Pure copy
+change — every user-visible occurrence of "Queue" in `app.js` and
+`voice-mobile.html` (`.pm-activity-head` label in both files, and
+`voice-mobile.html`'s pull-tab `aria-label`, "Show queue" →
+"Show task list") is now "Task List," and the empty-state copy changed
+to match ("Nothing queued." → "No tasks right now."). Internal
+identifiers (`renderQueue()`, `pmQueueList`/`vQueueList`,
+`.pm-queue-item`, `voiceQueue` server-side, etc.) were deliberately left
+alone — renaming those would be a much larger, purely-cosmetic diff with
+no user-visible benefit, and this project's convention throughout this
+whole voice-app build has been to change display text/markup without
+chasing internal names to match (see §90's `card-ai`/`early_ack`
+naming, unrelated to what either actually displays as, for the same
+reason).
+
+Deliberately did not attempt to filter which messages appear in the
+list (e.g. excluding a plain conversational check-in like the one that
+prompted this) — every message that's actually `pending`/`running`
+genuinely is mid-processing, which is what this widget exists to show,
+and there's no reliable signal to classify "was this really a task" at
+enqueue time, before the model has even looked at it. The renamed label
+addresses the actual stated problem (ambiguity about what the list
+represents), not a claim that every entry in it is formally a "task" in
+the TodoWrite sense (§94/95).
+
+---
+
+# 100. §94's Fix Still Wasn't Reliable — Escalated, Honestly
+
+Harvey, verbatim: **"ive asked u like 7 times."** §94 tightened the
+acknowledgment rule from a judgment call to a "hard mechanical rule" and
+it *still* failed on the very next few turns — checked the live DB
+again, same method as §94: the "just checking in" message's `early_ack`
+wasn't null this time, it was `"Let's update both the header labels and
+the aria-label:"` — a real sentence, but a stray mid-task narration
+fragment from deep inside the actual rename work, not anything
+summarizing "checking in on recent changes." §94's rule still had an
+escape hatch ("skip this only for a turn you can answer directly with
+no tool use") and this turn — part conversational check-in, part a real
+small edit — evidently got mentally filed under that exception, so no
+acknowledgment was ever written before the tool calls started, and
+whatever text came out first was just whatever the model happened to
+narrate mid-task.
+
+**Honest framing for whoever reads this next:** this is now three
+attempts at the same underlying reliability problem (§90 built the
+mechanism, §94 tightened it once, this is the second tightening), and
+prompt wording alone clearly has a real ceiling — this is a genuine
+model-behavior-consistency issue, not a bug with one findable root
+cause. Two changes went in this round, not just a re-word:
+
+1. `VOICE_SYSTEM_PROMPT`'s acknowledgment paragraph **removed the "skip
+   for no tool use" exception entirely** — it's now unconditional, every
+   single voice-app turn, no judgment call. The exception is exactly
+   what kept getting mis-applied to mixed conversational-plus-work
+   turns, so removing the judgment call entirely (rather than trying to
+   word it more precisely again) is the actual change, not just tone.
+2. **New: a per-message reminder, not just a system-prompt paragraph.**
+   `buildVoicePrompt()` now appends a short `ACK_REMINDER` sentence
+   directly onto the bracketed framing wrapped around *every single*
+   message (both respond and execute mode) — re-injected fresh on every
+   turn, immediately adjacent to the actual content, rather than relying
+   solely on a paragraph set once in the system prompt at the start of a
+   long-running resumed session. Instructions placed right next to what
+   they're modifying tend to get followed more reliably than the same
+   instruction sitting further back in context — worth trying as a
+   second, independent lever alongside the system-prompt rule, not a
+   replacement for it.
+
+**If this happens again despite both of these**, the honest next step
+is not a third wording pass — it's a structural fix: a dedicated,
+separate short-title generation step decoupled from the main
+conversational turn entirely (so a title exists deterministically,
+never contingent on how the main turn happens to narrate itself),
+rather than continuing to extract a title from the main turn's own
+incidental first text block. Not built this round because it's a real
+architecture change (a second model call per message, latency/cost
+tradeoffs, and needs to avoid reintroducing the cold-start problem §74
+already solved by moving to a persistent session) — worth doing only
+once it's clear prompt-based fixes genuinely can't close this gap.
+
+---
+
+# 101. Voice Ack: Fallback Timer Removed Entirely — No More Canned Phrase, Ever
+
+§100's fix (unconditional acknowledgment rule + per-message reminder) did
+make `early_ack` reliably good — but it exposed a different, structural
+problem underneath, which is what this section fixes.
+
+**What actually happened, diagnosed against the live DB (not guessed):**
+a "just checking in" message got a genuinely good `early_ack`, but the
+full turn took 11.44 seconds — and the client's `VOICE_ACK_DELAY_MS`
+fallback timer (§74/89) was still set to fire at 10s if the real
+`early_ack` hadn't shown up yet. The fallback fired first, spoke the old
+canned `RESPOND_ACK_TEXT` ("Still working on that — I'll have an answer
+for you in just a moment"), and then the real (good) `early_ack`/reply
+landed a beat later — Harvey heard the generic line even though the
+mechanism built to replace it was working correctly underneath it. A
+timing race, not a content bug.
+
+**Harvey's response was a full rebuild instruction, not another prompt
+tweak**, given verbatim: respond as quickly as possible with something
+"made up each time... completely different... based on what I've said";
+a quick/easy message should just get answered; a message needing real
+thinking/execution should get told "I'm going to go think about it and
+text you a reply" — and, critically, **not both** a spoken ack and then
+a spoken final answer stacked on top of it ("you keep sending this same
+canned message over and over and then you keep sending another one").
+This is a deliberate reversal of §87's original "always speak the real
+answer regardless" stance, made after Harvey directly experienced why
+that produces a double-message feeling on any turn that also gets a
+spoken acknowledgment.
+
+**Rebuilt in `ops-service/public/app.js` and `ops-service/public/voice-mobile.html`
+(client-side only — no `server.js` change; `early_ack`/`activity_log`/
+`mode` were already reliably present on every row):**
+
+- **Fallback timer deleted outright.** `VOICE_ACK_DELAY_MS`,
+  `RESPOND_ACK_TEXT`, and `scheduleVoiceAck()` are gone from both files —
+  there is no longer any canned phrase anywhere in the respond-mode path,
+  and therefore no race for a slow-but-correct `early_ack` to lose. The
+  old `voiceAck` map (`{fired, timer, spokenText}`) is replaced by a
+  plain `voiceAutoSpeak` map (`{id: true}`) — just an eligibility flag,
+  set at send time, with no timer bookkeeping at all.
+- **`onEarlyAck`** speaks `row.early_ack` the instant it arrives, if the
+  message is voice-auto-speak-eligible — unconditionally now, no
+  fired-flag race to manage, since `syncThread`'s own per-row tracking
+  already guarantees this fires at most once per row.
+- **`onDone`** now decides whether the *final* reply is also worth
+  speaking, based on whether the turn actually did any work:
+  `usedTools = !!(row.activity_log && row.activity_log.length)`. If the
+  turn used no tools at all (a quick, directly-answerable message), the
+  final reply is spoken too — for that class of turn the early_ack is
+  essentially the whole answer already, so this reads as one immediate
+  spoken response, not two. If the turn used tools (real thinking/
+  execution, per Harvey's own framing) or was sent in execute mode, the
+  final reply is text-only — the one spoken acknowledgment from
+  `onEarlyAck` is the only thing that gets spoken for that turn. The
+  exact-match dedupe against `row.early_ack` (§89) is kept as a second
+  safety net for the edge case where a no-tool turn's early_ack somehow
+  was itself the complete final answer verbatim.
+- **`EXECUTE_ACK_TEXT`** stays canned and immediate in
+  `voice-mobile.html`'s mic-send flow only (removed from `app.js`,
+  which never used it directly) — execute mode is unambiguously always a
+  task by construction, so there's no ambiguity to wait on a real
+  `early_ack` for, and it still never speaks the real result afterward,
+  so there's no double-speak risk there either. This one instance of
+  canned text was deliberately left alone; Harvey's complaint was about
+  the respond-mode fallback specifically racing against/duplicating a
+  real answer, not about this one.
+
+**Net effect:** a quick conversational check-in gets one spoken
+response, spoken as soon as it's ready, made up fresh by the model each
+time (via `early_ack`) — never the old canned line, never twice. A turn
+that genuinely needs tool calls gets one spoken "here's what I'm about
+to do," with the real answer delivered as text once it's ready, per
+Harvey's explicit instruction. Frontend-only change (`app.js`,
+`voice-mobile.html`), so per §93 this should deploy via the fast path —
+no Docker rebuild/restart, no killed session — unlike §100's fix.
+
+Verified via `node --check` on `app.js` and on the extracted inline
+`<script>` of `voice-mobile.html`; not yet verified against a real live
+voice exchange on the deployed service — flag this if picked up cold.
+
+---
+
+# 102. Voice Ack Content: "I'll Confirm in Chat" Framing for Task Turns
+
+Harvey's follow-up to §101, given by voice: confirmed the timing/dedupe
+rebuild is the right shape, but wanted the *wording* of the acknowledgment
+to make the distinction explicit rather than leaving it implicit in
+client-side gating alone. In his words: if it's a question/quick lookup,
+just answer it; if it's an instruction to go do something, the spoken
+reply should be "Okay, I'm gonna go and do the task, and I'll send
+confirmation in the chat once I'm done" — not a literal canned line, but
+that framing, made up fresh each time based on what the task actually is.
+
+**What was already true (§101, client-side, unchanged here):** a turn
+with no tool calls gets its full final answer spoken automatically; a
+turn that used tools only ever gets the one spoken acknowledgment, with
+the real result landing as text in the chat. That mechanical behavior
+was already correct — what was missing was that `VOICE_SYSTEM_PROMPT`
+never told the model *why* that matters or what the acknowledgment
+sentence should therefore actually say for a task-shaped turn. Its
+existing examples ("Checking the deploy log now...") are lead-ins to an
+investigation, not an explicit "I'll tell you in the chat" framing.
+
+**Fix:** added a new paragraph to `VOICE_SYSTEM_PROMPT` in
+`ops-service/server.js`, right after the existing "Quick verbal
+acknowledgment" paragraph, spelling out the two reply shapes directly:
+a question/lookup just gets answered (the app already speaks the whole
+answer for a no-tool-call turn, so nothing extra is needed); an
+instruction to do something gets an acknowledgment that explicitly says
+the work is starting and the result will follow in the chat — worded
+fresh each time, never the same phrase twice, never a vague "I'll get
+right on that."
+
+**This is a `server.js` change**, unlike §101's purely frontend rebuild —
+per §93 it will trigger a full Docker rebuild+restart of `rm-ops-service`
+on the next deploy, which (per §74/§88's standing caveat) kills this
+agent's own current process mid-task, since this session *is* the
+headless Project Manager agent running inside that container. Logged to
+the work log immediately before pushing so the state is clear on resume,
+per the Host Access paragraph's own instruction for exactly this
+situation.
+
+Verified via `node --check server.js` only — not yet verified against a
+real live voice exchange on the deployed service (same caveat as §101);
+confirm both the "quick answer" and "task, confirm in chat" phrasing
+sound right in practice once this is live.
+
+---
+
+# 103. Bluetooth Call-Tone: §86's Fix Was Treating the Wrong Cause
+
+Harvey reported the Bluetooth "call started"/"call ended" tone (§86) is
+still happening on every recording, distorting the audio badly enough
+that he can barely hear replies, and asked for real research into a fix
+rather than another guess.
+
+**§86 was fixing the wrong mechanism.** Confirmed via research (see
+Sources below): disabling `echoCancellation`/`noiseSuppression`/
+`autoGainControl` stops Chrome's "voice processing" pipeline, but that
+pipeline isn't what forces the Bluetooth profile switch. The real cause
+is structural — **A2DP (the high-quality profile a Bluetooth headset
+streams music over) has no microphone channel at all; it's output-only.**
+The instant a web page's `getUserMedia` call needs *any* audio input
+from a Bluetooth device, Android has no choice but to switch that device
+to HFP (the profile that supports a mic return channel), and that
+profile switch is exactly what plays the connect/disconnect tone. This
+happens regardless of any media constraint passed to `getUserMedia` —
+constraints only affect signal processing on whichever device ends up
+providing input, not which device gets chosen.
+
+**Real fix: stop asking the Bluetooth device for input at all.**
+`startRecording()` in `ops-service/public/lib/voiceClient.js` now calls
+`enumerateDevices()` once mic permission exists, filters for an
+audio-input device whose label does *not* look like a Bluetooth/wireless
+headset (regex against "bluetooth", "hands-free"/"hfp", "headset",
+"airpod", "buds", "wireless"), and — if a non-Bluetooth device is
+found — explicitly requests it by `deviceId: { exact: ... }` instead of
+leaving device selection to "default" (which Android resolves to the
+connected Bluetooth headset whenever one's connected). With mic input
+coming from the phone's own built-in microphone, the headset never
+needs to leave A2DP for output, so there's no profile switch and no
+tone. The resolved device id is cached in a module variable
+(`preferredMicDeviceId`) so this is one enumeration per page load, not
+per recording; a stale cached id (e.g. Bluetooth reconnects under a new
+device id) is caught via a `getUserMedia` failure and falls back to the
+unconstrained default rather than breaking recording outright.
+
+**One real limitation, stated honestly:** device labels are empty until
+mic permission has been granted at least once on that origin/device, so
+the very first recording ever made still can't be told apart from the
+Bluetooth device and may still trigger one profile-switch tone. Every
+recording after that — which is what Harvey actually complained about
+("I don't wanna be calling this thing every time") — resolves a labeled
+non-Bluetooth device and should stay silent. This can't be fully closed
+from a web page; it's the same "web content can't override Android's
+Bluetooth stack" ceiling §86 already ran into, just moved one step back
+(from "every single time" to "once, on first-ever use").
+
+Applies to both `app.js` and `voice-mobile.html` automatically since
+both go through this shared `voiceClient.js` function — no changes
+needed in either page. Verified via `node --check` only; not yet tested
+against a real Bluetooth headset on the deployed service — the actual
+fix depends on Android correctly reporting a distinguishable label for
+the phone's built-in mic on Harvey's specific device, which needs a real
+device test to confirm, not just code review.
+
+Sources:
+- [Bluetooth headset - ArchWiki](https://wiki.archlinux.org/title/Bluetooth_headset) — A2DP has no input/microphone mode; HSP/HFP is required for bidirectional (mic) audio.
+- [Trouble with bluetooth headphones on Chrome - Google Chrome Community](https://support.google.com/chrome/thread/21533239/trouble-with-bluetooth-headphones-on-chrome-no-audio-for-any-tabs?hl=en) — Chrome/Android Bluetooth audio routing behavior and known limitations.
+
+---
+
+# 104. Project Manager: Tap-to-Reply on CC's Messages
+
+Harvey asked for a way to reply to a specific earlier message from CC in
+the Project Manager chat — tap on one of CC's previous bubbles and reply
+directly to it, so it's unambiguous which message a short follow-up (e.g.
+"yes do that") is actually about, especially once several different
+topics have come up in the same long-running resumed session.
+
+**Backend (`ops-service/server.js`):**
+- New `voice_messages.reply_to_id` column (safe `ALTER TABLE`, same
+  no-op-if-already-migrated pattern as `activity_log`/`early_ack`) —
+  stores the id of the earlier row a message is explicitly replying to.
+- `insertVoiceMessage` extended to take it; `POST /api/voice/messages`
+  reads an optional `replyToId` field (works for both the plain-JSON and
+  multipart/image-attached request bodies, since multer parses non-file
+  fields into `req.body` either way).
+- **The stored `transcript` stays exactly what Harvey typed** — the
+  quoted context is woven into a separate `promptText` built just before
+  the message is pushed onto `voiceQueue`, not persisted. When
+  `replyToId` resolves to a real row, `promptText` becomes "Harvey is
+  replying directly to your specific earlier message quoted below...
+  Your earlier message: "..." His reply: ...", so the actual model turn
+  sees unambiguous context without permanently mutating what's shown in
+  the UI as Harvey's own message.
+- `GET /api/voice/messages` and `GET /api/voice/messages/:id` (via a
+  renamed `hydrateVoiceMessageRow`, was `parseActivityLog`) now also
+  resolve `reply_to_snippet` server-side whenever `reply_to_id` is set —
+  looked up per-row from the same tiny local SQLite table (no join
+  needed, N+1 is a non-issue at this table's size). Resolving it
+  server-side rather than leaving the client to cross-reference its own
+  already-fetched messages means the quoted preview still renders
+  correctly after a page reload, on a device that never saw the original
+  message, or once the original has scrolled outside the client's fetch
+  window — none of which a purely client-side lookup could handle.
+
+**Frontend (`ops-service/public/app.js` + `voice-mobile.html`, both via
+the same pattern, plus a shared `sendMessage()` change in
+`lib/voiceClient.js`):**
+- Each assistant message bubble's meta row (`addAssistantMessage()`)
+  gains a small "↩ Reply" button alongside the existing Play button.
+  Clicking it calls `setPendingReplyTo(msgId, text)`, which shows a
+  preview strip (`.pm-reply-preview`) above the compose box — "Replying
+  to: <snippet>" with a ✕ to cancel — and focuses the text input.
+- `Voice.sendMessage(text, mode, imageFile, replyToId)` gained a 4th
+  optional argument, included in the request body/form when set.
+- `sendText()` (desktop) / `sendTyped()` (mobile) read the pending
+  reply-to state, clear it, render the outgoing message with a "Re: ..."
+  quote via `addMessage()`'s existing `replyToText` parameter (built for
+  §85's opposite case — CC's replies quoting Harvey's question — and
+  reused here unchanged), and pass `replyToId` through to
+  `Voice.sendMessage()`.
+- `onNewMessage` in both files' `syncThread` wiring now passes
+  `row.reply_to_snippet` through to `addMessage()` too, so a reply sent
+  from the *other* device (or replayed on page load) renders its quote
+  correctly as well — not just ones sent from the device currently open.
+
+**Deliberately scoped to the text/type-bar send paths only**, per
+Harvey's own phrasing ("reply... via text") — the reply button only
+appears on assistant bubbles (not on Harvey's own messages or error
+bubbles), and the two big voice buttons (mobile's Ask/Execute, desktop's
+mic) aren't wired to a reply-target picker; a reply is always composed
+by typing (or live-transcribed speech landing in the text box on
+desktop, which reuses the same `sendText()` path and therefore also
+picks up a pending reply-to for free) rather than the record-and-upload
+voice flow.
+
+This is a `server.js` change (the new column + endpoint behavior), so
+per §93 it triggers a full rebuild/restart on the next deploy — same
+standing caveat as §102, since this session is the headless agent
+running inside the container being restarted.
+
+Verified via `node --check` on all four touched JS files/inline script;
+not yet tested against the live deployed service — confirm the reply
+button appears, the preview bar shows/cancels correctly, the quote
+renders on both the sending and receiving device, and a reply actually
+disambiguates correctly in a real multi-topic conversation before
+considering this fully done.
+
+---
+
+# 105. Bluetooth Call-Tone: §103's Fix Wasn't Enough Either — Different Lever
+
+Harvey tested §103 live and reported the tone is still happening on every
+"Start Recording" press — the deviceId-selection fix didn't close it.
+
+**Re-researched rather than guessing again**: no source found actually
+confirms that Android's Bluetooth SCO/HFP negotiation is gated on *which*
+`deviceId` Chrome resolves to at all. It's plausible (not confirmed) that
+Chrome's WebRTC audio backend on Android sets up a voice-communication
+audio session — and Android's AudioManager decides to grab any connected
+Bluetooth headset into SCO — the moment *any* mic stream opens, regardless
+of which physical device was actually requested. If that's the real
+mechanism, §103's deviceId selection was solving a problem that wasn't
+actually the (whole) cause.
+
+**Different, additive fix — target "every time" directly, even if the
+open/close negotiation itself can't be avoided:** `voiceClient.js` used to
+call `getUserMedia` fresh on every single "Start Recording" press and
+immediately `stream.getTracks().forEach(t => t.stop())` at the end of
+every recording — meaning if the tone comes from Chrome opening *and*
+closing an audio session (matching Harvey's exact description: a tone on
+both start and end), that negotiation was happening once per recording,
+every recording, by construction. Now the stream is cached and reused for
+the lifetime of the page (`cachedStream`, `getMicStream()`): the first
+"Start Recording" press still acquires the mic (and may still trigger one
+profile-switch tone — that part may be genuinely unavoidable from web
+content), but every recording after that, within the same page session,
+reuses the already-open stream instead of tearing it down and reopening
+it — no new negotiation, so no repeated tone. The stream is only actually
+released (`releaseMic()`) on `pagehide` (leaving/closing the page) or if a
+track ends on its own (permission revoked, device unplugged).
+
+**Real, honestly-stated trade-off, not yet confirmed either way:** keeping
+the mic stream open for the whole session likely means the Bluetooth
+headset stays in the lower-quality HFP mode for that entire time, not just
+during an actual recording — which could mean CC's spoken replies sound
+worse over Bluetooth for the rest of the session, not just during
+dictation. Whether that actually happens depends on how Harvey's specific
+phone/Android version routes simultaneous media playback vs. voice input
+audio, which isn't something this session can verify without a real
+device test. Ship first, verify against Harvey's actual hardware, and
+revisit (e.g., release the stream after a short idle period instead of
+holding it for the whole session) if the playback-quality trade-off turns
+out to be worse than the repeated tone was.
+
+Frontend-only (`voiceClient.js`), so per §93 this is already live —
+served straight from disk, no deploy/restart needed; just needs a page
+reload on Harvey's end to pick up the new script. §103's deviceId logic
+is left in place (harmless, and may still help reduce which device gets
+used on the one negotiation that does happen).
+
+**Honest framing if this still isn't enough:** two real attempts now
+(§103's device selection, this session's stream-reuse) haven't been
+confirmed to fully close this — if Harvey reports it's still happening on
+literally every press even after this, the next step isn't a third
+in-the-dark guess, it's asking him for the exact device/Android/Chrome
+version and headset model so the actual behavior can be looked up
+specifically, since this class of bug is known to vary significantly by
+OEM audio stack rather than being uniform across "Android" as a whole.
+
+---
+
+# 106. Bluetooth Call-Tone: Reverted — Not Worth Further Time
+
+Harvey tested §105's stream-reuse fix and still heard the tone on every
+recording — the third attempt (§86, §103, §105) to fix this from the web
+platform, none of which worked on his real hardware. His own call: "not
+a big enough deal for us to waste too much more time on," and explicitly
+asked for the attempted code to be cleaned up since it didn't work.
+
+**Reverted `ops-service/public/lib/voiceClient.js`'s `startRecording()`**
+back to the plain, original form — a bare `getUserMedia({ audio: true })`
+call, no device enumeration/filtering, no cached/reused stream, no
+`pagehide` listener. All of §86's audio-constraint logic, §103's
+device-selection logic, and §105's stream-caching logic are gone;
+nothing from any of those three attempts remains in the code. The
+**screen Wake Lock feature** (also introduced in §86, but a genuinely
+separate, working fix for an unrelated complaint — the phone locking
+mid-recording) was kept, since Harvey's "clean up the mic thing" request
+was specifically about the ineffective Bluetooth-tone attempts, not the
+wake lock.
+
+**Status: accepted as a known limitation, not being pursued further.**
+Per the same conversation, Harvey and this session discussed building a
+native Android app instead (which would have more reliable low-level
+audio-routing control than the web platform exposes) — worth reading
+that reasoning if this comes up again, but the conclusion was that the
+cost (separate codebase, APK packaging/distribution, losing the
+instant-push-to-live PWA iteration loop this whole project depends on,
+no other-platform coverage) isn't justified by one low-priority audio
+annoyance. §86/§103/§105 are left in CLAUDE.md as the historical record
+of what was tried and why each attempt didn't hold up — don't repeat any
+of those three specific approaches if this is revisited later without a
+genuinely new idea or real device-specific diagnostic info (exact
+phone/Android/Chrome version and headset model) to work from.
+
+Frontend-only revert, already live (no deploy/restart needed) — verified
+via `node --check` and a grep confirming no leftover references to any
+of the removed functions/variables.
+
+---
+
+# 107. Fixed: Pressing Play Twice Could Start Two Overlapping Audio Tracks
+
+Harvey reported that clicking a message's Play button while audio was
+already (about to be) playing could start a second track talking over
+the first, rather than either stopping or cleanly replacing it.
+
+**Root cause:** `speak()` (`ops-service/public/lib/voiceClient.js`) called
+`stopSpeaking()` up front, but that function could only stop an `Audio`
+element that had *already been created* — it had nothing to invalidate a
+TTS request still in flight. ElevenLabs synthesis takes a beat, and
+Harvey's own description matched exactly: he pressed Play, didn't hear
+anything yet (still fetching), and pressed Play again — during that
+window `speakingMsgId` hadn't been set yet either, so the Play button's
+own "am I already speaking this one" check didn't catch it. Both
+`speak()` calls' fetches eventually resolved, both created their own
+`Audio` element, and both called `.play()` — the second call's
+`stopSpeaking()` had nothing yet to stop when it ran, since the first
+request's `Audio` object didn't exist until its fetch resolved *after*
+that point.
+
+**Fix:** a module-level `playToken` counter, bumped on every
+`stopSpeaking()` call (including the one `speak()` itself makes before
+firing its fetch). Each `speak()` call captures the token's value at the
+moment it starts (`myToken`); when its fetch resolves, it only actually
+creates the `Audio` element and plays if `myToken` still matches the
+current `playToken` — if a newer `speak()`/`stopSpeaking()` happened in
+the meantime, the token has moved on and the stale response is dropped
+before ever touching the DOM/audio pipeline, so it can never start
+playing on top of whatever's current. Net effect: pressing Play any
+number of times in a row, at any timing, still only ever results in at
+most one audio track playing.
+
+Frontend-only (`voiceClient.js`), so per §93 this is already live —
+served straight from disk, no deploy/restart needed. Verified via
+`node --check`; not yet tested against the live deployed service with a
+real fast double-tap — worth a real test to confirm the race is actually
+closed, not just reasoned about.
+
+---
+
+# 108. Don't Speak a Reply While Harvey Is Recording a New Message
+
+Harvey's scenario: he sends a voice message, then starts recording a
+second one before hearing the first reply — the auto-spoken reply to
+message 1 would then play right on top of him dictating message 2.
+Asked for the reply to simply not play while he has the mic open.
+
+**Fix — one new piece of shared state in `voiceClient.js`:**
+`setRecordingActive(active)` sets a module-level `recordingActive` flag
+and, when turned on, immediately calls `stopSpeaking()` — so opening the
+mic cuts off anything already playing, not just blocks new playback.
+`speak()` now refuses to start at all while `recordingActive` is true —
+checked both up front (before even firing the TTS fetch) and again once
+the fetch resolves (covers the case where recording starts *during* an
+in-flight synthesis request, reusing the same `playToken` mechanism from
+§107 so a stale response never sneaks through).
+
+**Wiring — one choke point per page, no new call sites needed:**
+- `app.js`: both recording paths (live speech recognition and the
+  record-and-upload fallback) already funnel every start/stop through
+  the single `setRecordingUI(isRecording)` function — added
+  `Voice.setRecordingActive(isRecording)` there once, covering both
+  paths for free.
+- `voice-mobile.html`: `startFlow(mode)` (recording start, called by
+  both the Ask and Execute buttons) and `cleanup()` (recording end,
+  called from both the cancel and finish buttons) are the two existing
+  choke points — `setRecordingActive(true)` added at the top of
+  `startFlow`, `setRecordingActive(false)` added inside `cleanup`, plus
+  the mic-permission-denied error path also clears it so a failed
+  recording attempt can't leave replies muted indefinitely.
+
+**Deliberately not auto-resumed:** once recording stops, the reply that
+got skipped is *not* automatically spoken afterward — it's still fully
+present as text in the thread (rendering was never gated, only the
+audio), and Harvey can tap Play on it manually anytime. Auto-resuming
+felt like the wrong call: the natural next thing after he finishes
+dictating a second message is sending it, not being interrupted by an
+old reply starting to talk right as he's reviewing what he just said.
+
+Frontend-only (`voiceClient.js`, `app.js`, `voice-mobile.html`), so per
+§93 this is already live — no deploy/restart needed. Verified via
+`node --check` on all three files (the third via the usual extract-inline-
+script technique for `voice-mobile.html`); not yet tested against the
+live deployed service with a real overlapping-recording scenario.
+
+---
+
+# 109. Fixed: Overlapping In-Flight Replies Could Render Out of Order
+
+Harvey sent a screenshot showing a reply bubble ("Re: Well, there's a
+small bug though when I click on the play button...") appearing *below*
+a newer message he'd sent afterward, instead of above it — confusing,
+looked like the wrong reply was surfacing late.
+
+**Root cause, confirmed against the live `voice_messages` rows (not
+guessed):** the "play button" bug's reply (queued/created 00:29:04,
+completed 00:30:12) was still processing when Harvey sent the next
+message (created 00:30:07, "Another bug... while I'm recording...") —
+exactly the overlapping-recording scenario §108 was built for. Both
+`addAssistantMessage()` and `addMessage()` (`app.js`,
+`voice-mobile.html`) always called `thread.appendChild(...)`
+unconditionally, regardless of where that row's typing placeholder had
+been sitting. So when the older, slower reply finally finished, its
+placeholder (positioned *above* the newer message, since it was created
+first) got removed from its original spot, but the real reply bubble
+that replaced it was appended at the thread's *current* end — landing
+below the newer message's own placeholder instead of back where it
+belonged.
+
+**Fix:** both message-rendering functions gained an optional trailing
+`insertBeforeEl` parameter, and a shared `insertMessageEl(el,
+insertBeforeEl)` helper that does `thread.insertBefore(el,
+insertBeforeEl)` when that anchor still exists in the DOM, falling back
+to a plain `appendChild` otherwise (covers the normal, common case where
+nothing else was in flight). `syncThread`'s `onDone`/`onError` callbacks
+now look up the row's typing placeholder *before* building the
+replacement bubble, pass it through as the insertion anchor, and only
+remove it after the new bubble has taken its place — so a reply always
+renders in its own chronological slot, never at whatever position the
+thread happens to be at by the time it completes. The now-fully-unused
+`removeTyping()` helper was deleted from both files rather than left as
+dead code.
+
+Frontend-only (`app.js`, `voice-mobile.html`), so per §93 this is
+already live — no deploy/restart needed. Verified via `node --check` on
+both files; not yet re-tested against a real overlapping-message
+scenario on the deployed service — the original repro (send a message,
+start another before the first's reply lands) is the way to confirm
+this actually holds.
+
+---
+
+# 110. Ambient Audio Upload: Real Progress Bars, No More Silent/Stale List
+
+Harvey reported dragging/selecting files to upload into the Settings
+tab's ambient audio library gave zero feedback, and the list only
+reflected what actually uploaded after a manual page refresh.
+
+**Root cause:** the `change` handler (`ops-service/public/app.js`,
+Settings tab) fired every `Store.put('audioTracks', ...)` without ever
+waiting on the returned promise, then called `renderAudioList()` (a full
+`Store.getAll('audioTracks')` re-fetch from the server) via a blind
+`setTimeout(..., 200)` — a guess that the upload(s) would be done in
+200ms, which doesn't hold for a real network upload of any real size.
+No visual feedback existed at all while an upload was actually in
+flight, and the eventual re-fetch could easily run before the upload had
+actually landed server-side, so the list looked stale until Harvey
+manually reloaded the page.
+
+**Fix — a real per-file progress bar, not just a spinner:**
+`fetch()` (what `store.js`'s shared `put()` uses) has no upload-progress
+event at all; only `XMLHttpRequest`'s `upload.onprogress` exposes real
+byte-level progress in a browser. Added
+`uploadAudioTrackWithProgress(file, onProgress)` — talks to the exact
+same `POST /api/files/audioTracks/:id` endpoint and request shape
+(`file` field + JSON `meta` field) `store.js`'s `put()` already uses for
+file-backed stores, just over XHR instead of fetch, so nothing on the
+server changed. Deliberately scoped to just this one upload path rather
+than rebuilding the shared `store.js` `put()` for every store — the
+video-upload flow (Upload Files tab) doesn't have the same problem,
+since it renders each new piece's card immediately from local state
+rather than waiting on a server round-trip, so it was left alone.
+
+The `change` handler now creates one row per selected file (filename +
+a real `<progress>` element, updated live from `upload.onprogress`),
+appended to a new `#audioUploadProgress` container above the track
+list. A row disappears on success; on failure it keeps the filename and
+shows "Failed: <reason>" instead of silently vanishing (the old
+`Store.put()` path swallowed all upload errors via a bare `.catch(() =>
+{})`, so a failed upload previously looked identical to nothing having
+happened at all). `renderAudioList()` — the real list refresh — now only
+runs once every file's `Promise` has genuinely resolved, via
+`Promise.all(...).then(renderAudioList)`, replacing the old fixed-delay
+guess entirely.
+
+Frontend-only (`app.js`, `style.css`), so per §93 this is already live —
+no deploy/restart needed. Verified via `node --check`; not yet tested
+against the live deployed service with a real audio file upload — worth
+confirming the progress bar actually animates and the list updates
+without a manual refresh.
+
+---
+
+# 111. Uploader Tool Built End-to-End: Auto-Transcribe, Outline Matching, Inline Row UI, Final Check Gate
+
+Harvey's full spec for the real uploader workflow (replacing the old
+"drop a video, click it to open a modal" flow with everything visible
+inline, plus a real review gate before scheduling). Confirmed with him
+first on two load-bearing decisions before building (see the preceding
+conversation): (1) OK to add ffmpeg as a real backend dependency and
+reuse the existing Claude Code mechanism (no new API key) for the
+transcript→title/outline-matching step; (2) picking thumbnail/audio/
+titles no longer auto-schedules anything — scheduling only happens when
+Harvey explicitly approves out of a new Final Check stage.
+
+**Stage model (`ops-service/public/lib/store.js`):** "Thumbnail Selected"
+removed as a stage; **"Final Check"** added between Processing and
+Scheduled. New `Store.TAGS` — `thumbnail_selected` / `titles_selected` /
+`music_added` — replacing what that stage used to communicate, now shown
+as small chips instead of a whole kanban column. A one-time migration
+(`app.js`'s `migrateThumbnailStage`, runs inside `ensurePiecesLoaded`,
+same pattern as the existing `backfillMissingSeqs`) moves any piece still
+sitting on the old `thumbnail` stage id back to `processed` and tags it,
+so nothing is silently stranded on a stage id that no longer exists.
+
+**Tags are fully derived, never manually set** — `app.js`'s `syncTags(p)`
+recomputes all three from scratch (thumbnail present → tagged, `ytTitles`
+non-empty → tagged, `audioTrackId` set → tagged) every time a piece is
+saved, rather than being tracked incrementally, so un-picking something
+correctly drops its tag again too. Rendered both on kanban cards
+(`cardHtml`) and in the new upload rows (below).
+
+**Scheduling is now fully explicit, not automatic.** The old
+`maybeAutoSchedule()` fired the instant a piece had both `audioTrackId`
+and `thumbnailDataUrl` set — no review step existed at all. Renamed to
+`approveAndSchedule()` and re-gated on `stage === 'final_check'`; it's
+now called from exactly one place, the modal's new "Approve → Scheduled"
+button (shown only when `p.stage === 'final_check'`, next to the
+existing schedule-status readout). `scheduleShorts()`'s "ready" filter
+changed the same way (`hasVideo && audioTrackId && thumbnailDataUrl` →
+`hasVideo && stage === 'final_check'`), preserving its existing
+multi-slot-fill-in-rotation-order behavior — approving several pieces in
+a row (or several becoming ready at once) still fills consecutive
+cadence slots correctly, it just only runs when Harvey approves
+something now, never automatically. The old `deriveAndApplyStage()`
+(auto-advanced a video piece's stage from field presence) is gone
+entirely — a video piece's stage is now moved only by three explicit
+actions: upload (→ Processing), "Send to final check" (→ Final Check),
+Approve (→ Scheduled).
+
+**New Upload Files tab UI** (`app.js`'s `buildUploadRow`, replacing the
+old click-a-card-to-open-a-modal flow with everything inline, per
+Harvey's spec): each in-production video is a row — thumbnail/title/#id/
+tags/analysis-status on the left, then a real scrubbable frame picker
+(same canvas-capture technique the shared modal's pick-frame flow
+already used, just inline instead of behind a click), then the backing-
+audio dropdown, then up to 3 title fields, then "Send to final check" (a
+"Full editor…" button still opens the existing shared modal too, for
+anything the row doesn't cover — notes, platforms, content type).
+Already-posted videos keep the old simple card+modal treatment
+(`postedGrid`/`videoCardHtml`, unchanged) since they don't need active
+editing tools anymore.
+
+**Audio dropdown gained an explicit "No ambient music" option**
+(`__none__` sentinel, distinct from empty-string "not yet chosen") — the
+`music_added` tag only fires for a real track pick, not this deliberate
+opt-out, matching what the tag's name actually claims.
+
+**The "3 title fields" storage/UI already existed** (`ytTitles`,
+`fieldYtTitle1/2/3` in the shared modal) but was previously shown only
+for `contentType === 'longform'` — removed that restriction (both in
+`index.html`'s markup and the two JS toggle sites) since Harvey wants
+title rotation for every uploaded video, not just longform.
+
+**Auto-transcribe + outline-matching pipeline — the genuinely new
+backend work:**
+- `Dockerfile`: added `ffmpeg` to the existing apt-get install line.
+- `ops-service/src/videoAnalysis.js` (new): `transcribeVideo(videoPath,
+  tmpDir)` extracts the audio track via `ffmpeg -vn -acodec libmp3lame`
+  into a scratch mp3, feeds it to the existing `elevenlabs.transcribeAudio`
+  (already used for voice messages — no new transcription integration
+  needed), then deletes the scratch file either way.
+  `matchAndGenerateTitles(transcript, candidates)` builds a prompt
+  containing the transcript and every "Uploaded"-stage piece's title +
+  first ~400 chars of its outline (stripped to plain text — that's
+  where Harvey's own alternate titles typically sit, per his example:
+  piece #035's outline opening with three headline variants), asks for
+  a single strict-JSON response (`matchedPieceId`, up to 3
+  `titleOptions`, one `workingTitle`), and parses it (with a defensive
+  markdown-fence strip in case the model wraps it despite being told
+  not to).
+- `ops-service/src/claudeRunner.js` gained `runOneShot(prompt,
+  timeoutMs)` — a **completely separate, single-turn Claude Code call**,
+  deliberately not reusing the voice app's persistent `currentSession`
+  singleton (that's a real conversation with Harvey; mixing unrelated
+  per-video analysis turns into it would pollute his actual Project
+  Manager chat history). Same `query()` SDK call, same `cwd`/
+  `pathToClaudeCodeExecutable` as the proven voice-app session, just
+  without the resume/streaming-queue machinery — safe to run
+  concurrently with the voice app or with other one-shot calls, since
+  nothing is shared between them.
+- `server.js`: `POST /api/videos/:id/analyze` validates the video file
+  and piece both exist, responds immediately (`{ok:true, status:
+  'running'}` — same "kick off real work, let the client poll" pattern
+  as the voice app), then runs `runVideoAnalysis(id)` in the background:
+  transcribe (logged, not fatal, if it fails — matching still attempts
+  with an empty transcript rather than aborting the whole piece),
+  candidate-fetch (`stmts.getAll.all('pieces')` filtered to
+  `stage === 'uploaded'` — the whole table, not a SQL filter, since
+  `pieces` are opaque JSON blobs in the generic `records` table with no
+  queryable columns; fine at this table's tiny scale), match+generate,
+  then **re-fetches the piece fresh** before writing results back
+  (`transcript`, `analysisStatus`, `analysisMatchedPieceId`, `ytTitles`,
+  `title`) so a concurrent edit Harvey made while analysis was running
+  (e.g. to notes/platforms) isn't clobbered — only the analysis-owned
+  fields are overwritten.
+- Client side: `handleFiles()` now chains strictly — piece record saved
+  first, *then* the video blob, *then* the analyze call — all awaited in
+  order rather than fired in parallel, specifically so the server's
+  by-id piece lookup inside `/analyze` can never race ahead of the piece
+  actually existing yet. `maybeStartAnalysisPolling()` polls (3s) only
+  the specific pieces still `pending`/`running`, stopping itself once
+  nothing's waiting, so a row's "Transcribing & matching…" status
+  updates to the real transcript/title/match without a page reload —
+  same spirit as the voice app's `syncThread`, much smaller since it's
+  scoped to at most a handful of concurrently-uploading rows rather than
+  a whole conversation.
+
+**Known limitation, stated honestly:** if Harvey edits a video's title
+by hand in the *very* narrow window while its analysis is still running
+(realistically a handful of seconds to under a minute), the analysis
+completing afterward will overwrite that edit — the background job
+doesn't currently check whether the title was touched in the meantime.
+Not fixed this pass since the window is small and the fields are all
+freely re-editable afterward anyway; worth a "don't overwrite if
+Harvey's already changed it" guard if this turns out to bite in
+practice.
+
+**What's verified vs. not, honestly:** `node --check` passes on every
+touched JS file. The one-shot Claude matching call
+(`videoAnalysis.matchAndGenerateTitles` → `claudeRunner.runOneShot`) was
+dry-run tested directly against real synthetic candidate data in an
+isolated scratch environment (confirmed the SDK call, prompt, and
+`query()`/`pathToClaudeCodeExecutable` wiring all execute correctly end
+to end) — but that test ran under *this interactive session's* own
+auth context, which doesn't carry `CLAUDE_CODE_OAUTH_TOKEN` (this
+session authenticates differently), so the call correctly reached
+Claude but got an unauthenticated "Not logged in" response rather than
+a real one. This is not a bug in the new code — the actual deployed
+`server.js` process has `CLAUDE_CODE_OAUTH_TOKEN` in its own environment
+(the same one the already-proven-working voice app uses), so
+`runOneShot` should authenticate correctly once this is actually
+running as the container's own server process. **Genuinely not yet
+verified**: a real end-to-end run (drop a real video, watch ffmpeg
+extract + ElevenLabs transcribe + Claude match + the row update itself
+live) against the deployed service, and matching against a *real*
+"Uploaded"-stage candidate (none currently exist in the live data —
+Harvey hasn't moved any outlines to that stage yet, so the matcher has
+never had a real candidate to find). This is a `server.js`/`Dockerfile`
+change, so per §93 it needs a full rebuild+restart, which (per §74/§88's
+standing caveat) will kill this session's own process mid-task — test
+this for real once it's back up, ideally with at least one real piece
+sitting in "Uploaded" so there's something genuine to match against.
+
+---
+
+# 112. Uploader Tool: Fixed the Whole-Panel Flash on Every Click
+
+Harvey tested §111 live and reported the panel flashing/disappearing
+briefly on nearly every interaction — after upload, picking an audio
+track, using "Use this frame," and "Send to final check" (which also
+visibly needed two clicks and gave no real feedback that it had worked,
+even though the piece *did* move correctly on the kanban board
+underneath).
+
+**Root cause, both parts:**
+1. Every single per-row action (`captureBtn`, `audioSelect`,
+   originally also `sendBtn`) saved the piece and then called the
+   *entire panel's* `renderUploadLists()` — which tore down every row
+   in the list (not just the one that changed) and rebuilt all of them
+   from scratch, re-fetching every other row's video blob over again in
+   the process. One click on one row's audio dropdown was silently
+   re-loading every video preview in the whole list.
+2. `renderUploadLists()` itself made this worse independent of the
+   above: it cleared `uploadRows.innerHTML` *synchronously*, then only
+   refilled it once `Store.getAll('audioTracks')` resolved — a real
+   blank gap between clearing and refilling, which is what actually
+   read as the panel "flashing/disappearing," not just a slow update.
+
+**Fix, `ops-service/public/app.js`:**
+- `renderUploadLists()` now builds the new rows in a detached
+  `DocumentFragment` first (waiting on `Store.getAll('audioTracks')`
+  before touching the DOM at all) and swaps it in with one
+  `uploadRows.appendChild(frag)` — no more clear-then-wait-then-fill
+  gap. Still used for the cases that genuinely need every row rebuilt:
+  initial load, a new upload landing, analysis finishing, or the full
+  editor modal closing.
+- `buildUploadRow()`'s head section (thumbnail/title/#id/tags/analysis
+  status) was factored out into `buildUploadRowHead(p)`, with a
+  `refreshHead()` closure that swaps just that one row's head for a
+  freshly-built one. `captureBtn` and `audioSelect`'s change handlers
+  now call `Store.put('pieces', p).then(refreshHead)` instead of the
+  full `renderUploadLists()` — only that row's own thumbnail/tags
+  actually change, nothing else in the list is touched or re-fetched.
+  The title inputs now also call `refreshHead()` synchronously on every
+  keystroke (cheap — it only rebuilds the head, never the input the
+  user is actively typing in, so focus/cursor position is never
+  disturbed) so the "titles selected" tag appears/disappears live too.
+- **"Send to final check"** no longer touches `renderUploadLists()` at
+  all: the button immediately disables and shows "✓ Sent" (Harvey's
+  requested instant tick), then once the save resolves the row itself
+  gets a `.upload-row-removing` class and is removed from the DOM
+  ~400ms later (`style.css`: opacity/scale/max-height/margin/padding
+  all transition to zero, a clean collapse regardless of the row's
+  actual height, which varies with content). This also fixes the
+  "had to click it twice" complaint — that was never actually a second
+  submission going through, it was the first click's full-panel
+  re-render flash making it look like nothing had happened, so Harvey
+  clicked again.
+
+Frontend-only (`app.js`, `style.css`), so per §93 this is already live —
+no deploy/restart needed. Verified via `node --check` and a Python
+brace-balance check on the CSS; not yet re-tested against the live
+deployed service with a real upload — worth confirming the flash is
+actually gone and the tick/collapse animation reads the way Harvey
+wants before considering this fully settled.
+
+---
+
+# 113. Final Check: Full Review Right on the Kanban Card, No Click-Through
+
+Harvey's ask, with an annotated screenshot: pieces in Final Check
+shouldn't need a click into the editor at all — he wants the actual
+video playable right there on the card, title underneath, the real
+caption/description underneath that, the 3 title options, and a button
+to push straight to Scheduled. The column itself should be roughly
+twice as wide on desktop so there's actually room for all of that.
+
+**`ops-service/public/app.js`:** `render()` now special-cases the
+`final_check` column — instead of the normal compact `cardHtml()`, its
+cards go through a new `finalCheckCardHtml(id, piece)`: a real `<video
+controls>` (served directly from `/api/files/videos/:id`, no blob-fetch
+needed — same-origin, so the session cookie rides along automatically
+on a plain `src`), the title, the actual rendered caption (reusing the
+same `renderCaptionText(p, settings)` the shared modal already uses —
+Settings' caption templates are fetched once in `bootContentOps()` into
+a new `boardSettingsCache`, since the board needed access to Settings
+data it never previously required), the title options as a numbered
+list, and "Approve → Scheduled" / "Full editor…" buttons. Deliberately
+its own `.final-check-card` class, not `.card` — completely excluded
+from the generic click-to-open-modal and drag-start bindings in
+`bindBoardEvents()`, since Harvey explicitly doesn't want a click on
+this card doing anything but what its own buttons/video do.
+
+**"Click the video preview and it just starts playing":** native
+`<video controls>` only toggles play/pause when its own control bar is
+clicked, not the video frame — so a delegated click handler on
+`.fc-video` calls `play()`/`pause()` directly, restricted to clicks
+landing above roughly the bottom 40px of the video (where the native
+control bar actually sits), so it doesn't fight with — and
+double-toggle against — the control bar's own native click handling.
+
+**"Approve → Scheduled"** calls the same `approveAndSchedule()` built
+for the modal's own Approve button in §111, then a plain `Store.put` +
+`render()` — the kanban board's `render()` is a single synchronous
+`board.innerHTML = ...` rebuild (unlike the Upload Files list's old
+bug, §112), so there's no blank-gap flash risk in reusing it here.
+
+**Column width:** `.column[data-stage="final_check"] { width: 800px; }`
+(double the normal 400px), scoped inside a `@media (min-width: 641px)`
+block — deliberately a *separate* desktop-only media query rather than
+folding it into the existing rule, because an attribute-selector rule
+has higher CSS specificity than the existing mobile breakpoint's plain
+`.column { width: 86vw; }` override regardless of source order; without
+scoping it explicitly to desktop, the wider column would have stayed
+800px on mobile too, overriding the intentional mobile-responsive
+behavior. Per Harvey's own phrasing ("twice as thick on desktop"),
+mobile keeps the normal `86vw` column width — the rich card content
+(video/caption/titles) still shows there too, just without the extra
+desktop-only column width, since he didn't ask for it to be
+mobile-specific, only the width doubling.
+
+Frontend-only (`app.js`, `style.css`), so per §93 this is already live —
+no deploy/restart needed. Verified via `node --check` and a Python
+brace-balance check on the CSS; not yet tested against the live
+deployed service with a real Final Check video — worth confirming the
+video actually streams/plays from the direct `/api/files/videos/:id`
+URL, the click-to-play boundary feels right, and the caption renders
+correctly once a real piece sits in this stage.
+
+---
+
+# 114. Uploader: Auto-Detect Content Type from Video Duration + Orientation
+
+Harvey wants the content type (ultra-short / short / long-short /
+longform) picked automatically on upload instead of always defaulting to
+"Short" — his rule: check orientation first (does landscape/vertical
+help distinguish it), then use length.
+
+**`ops-service/public/app.js`, `handleFiles()`:** added
+`probeVideoMeta(file)` — reads `duration`/`videoWidth`/`videoHeight`
+straight off the local file via a throwaway `<video>` + object URL, no
+upload or ffmpeg round trip needed (this is just the browser parsing the
+file's own metadata locally, fast, and resolves `null` rather than
+rejecting if it ever fails, so a weird/corrupt file still uploads —
+it just falls back to the same "Short" default that was hardcoded
+everywhere before this feature existed).
+
+**The actual rule** (`detectContentType(meta)`), matching Harvey's own
+framing — orientation is specifically what separates "this is basically
+Longform" from everything else, since Longform is inherently a
+landscape format (YT/FB), not a vertical one:
+```text
+landscape (width >= height) AND duration > 180s  →  longform
+duration <= 20s                                   →  ultra_short
+duration <= 75s                                    →  short
+otherwise                                           →  long_short
+```
+A short landscape clip still gets bucketed by length like everything
+else (only *long* landscape content reads as Longform); a very long
+vertical video still caps out at `long_short` rather than ever being
+called Longform, since that type doesn't really exist as a vertical
+format in practice.
+
+`handleFiles()` now awaits the metadata probe (typically sub-second for
+a local blob) before creating the piece record at all, so
+`contentType` is set correctly from the very first save — no
+after-the-fact correction pass needed. Each file's row still appears
+independently as soon as *its own* probe resolves, not gated on other
+files uploaded in the same batch.
+
+Frontend-only, so per §93 this is already live — no deploy/restart
+needed. Verified via `node --check`; not yet tested against a real
+mixed batch of vertical/horizontal, short/long clips on the deployed
+service — worth confirming the thresholds actually feel right in
+practice (they're reasonable first-pass numbers based on how each type
+is already described in `Store.CONTENT_TYPES`, not something Harvey
+specified precisely) and adjusting if a real upload gets miscategorized.
+
+---
+
+# 115. Final Check Now Actually Shows the Final (Audio-Spliced) Video
+
+Harvey's report matched exactly what §113's card was missing: the Final
+Check preview was still the raw uploaded video, no ambient audio
+spliced in at all. His rule: build the *real* final video before a
+piece is ever allowed into Final Check — it stays in Processing until
+that's genuinely done.
+
+**`ops-service/src/videoAnalysis.js`: `buildFinalVideo(videoPath,
+audioPath, outPath)`** — the same 20%-under-original mix Harvey already
+manually reviewed and approved back when this was first tested by hand
+("that's actually perfect. well done!"), now wired into the real
+pipeline. One addition beyond that original manual test: `-stream_loop
+-1` on the audio input, so a shorter ambient track loops for the video's
+full length instead of playing once and going silent — matches Harvey's
+own uploader spec ("all music is simply to loop/repeat until the video
+ends"). `amix`'s `duration=first` still cuts the whole output off once
+the video's own original audio ends, so the loop doesn't run past the
+video. Verified for real against the live test video before wiring it
+in (same "safe to test, no side effects" reasoning as the shipping-quote
+checks elsewhere) — confirmed the command runs cleanly and produces an
+output whose duration exactly matches the source video's; not
+separately re-verified with a track *shorter* than the video (the one
+available for testing happens to already be longer), so the actual
+looping behavior itself is unconfirmed on real output, just standard,
+well-documented ffmpeg mechanics. When no audio track is chosen (or
+`"__none__"`, Harvey's explicit "No ambient music" pick), this just
+remuxes the original video untouched via `-c copy` rather than skipping
+the step — so Final Check always plays from the same `<id>-final` file
+regardless of whether music was actually added, one code path instead
+of two.
+
+**`server.js`: `POST /api/videos/:id/build-final`** — same
+immediate-response-then-background-job pattern as the existing
+`/analyze` route. Builds into a **separate** `<id>-final` id in the same
+`videos` store (never overwriting the raw upload) specifically so
+picking a different audio track later and sending it again always
+splices from the untouched original, not from a previous splice.
+Registers a normal `videos` DB record for the new file (so it serves
+through the existing, unchanged `/api/files/videos/:id` route — no new
+serving code needed) and, **only once the build genuinely succeeds**,
+sets `piece.stage = 'final_check'` itself, server-side — the client
+never flips the stage directly anymore. On failure the piece stays in
+Processing with `finalBuildStatus: 'error'` so Harvey can just try
+again (e.g. after picking a different track) instead of getting stuck.
+
+**Frontend (`app.js`):** "Send to final check" no longer moves the
+piece itself — it sets `finalBuildStatus: 'pending'`, calls the new
+route, and the row shows "Building final video (splicing in audio)…"
+live. The row's own instant-tick-and-remove animation from §112 still
+happens, just triggered by the *real* completion landing via the
+polling loop (generalized — same poller now also watches
+`finalBuildStatus`, and a piece whose stage actually changed gets the
+animated removal, while one still in Processing with just a changed
+status gets its own row refreshed in place) rather than faked the
+moment the button is clicked. Also narrowed the Upload Files "in
+production" list to `stage === 'processed'` only (was `stage !==
+'live'`, which included final_check) — once a piece has its own review
+card on the kanban board (§113) it shouldn't also still show as an
+editable row here, which used to be a harmless-looking but real
+inconsistency (a full page reload would have brought a final_check
+piece right back into this list, undoing §112's removal animation).
+
+**One-time migration** (`migrateUnbuiltFinalChecks`, same pattern as
+the existing `migrateThumbnailStage`): any piece already sitting in
+`final_check` without `finalBuildStatus: 'done'` — which, before this
+fix, was *every* piece that ever reached that stage, since the build
+step didn't exist yet — gets sent back to Processing so it goes through
+the real build the next time Harvey sends it. Confirmed directly
+against the live data before writing this: piece #094 (from Harvey's
+own screenshot) is exactly this case, `finalBuildStatus: undefined`,
+and will correctly migrate back to Processing on next load.
+
+This is a `server.js`/`videoAnalysis.js` change (real backend logic,
+not just frontend), so per §93 it triggers a full rebuild+restart on
+the next deploy — same standing caveat as §102/§104/§111, since this
+session is the headless agent running inside the container being
+restarted.
+
+Verified via `node --check` on all touched files and a direct ffmpeg
+test of the actual splice+loop command against the real uploaded test
+video on the VPS; **not yet verified end-to-end through the deployed
+app itself** — confirm after the restart that clicking "Send to final
+check" genuinely builds the file, the piece stays in Processing with a
+live status line while it does, and the Final Check card's video
+actually has the spliced audio audible when played.
+
+---
+
+# 116. Final Check Card: No Editor Escape Hatch, Added Post Locations + Type
+
+Harvey's follow-up on §113/§115: drop the "Full editor…" button entirely
+— Final Check should be a closed review surface with no way to open the
+shared editor modal at all — and add the platform (post locations:
+FB/IG/etc) and content-type chips directly onto the card, alongside
+what's already there.
+
+**`ops-service/public/app.js`:** `finalCheckCardHtml()`'s "Full
+editor…" button is gone, and its `bindBoardEvents()` click handler
+(`.fc-edit-btn`) removed along with it — since `.final-check-card` was
+already deliberately its own class rather than `.card` (§113, to keep
+it out of the generic click-to-open-modal binding), removing this one
+button closes the only remaining way to reach the editor from this
+card. Added `'<div class="chip-row">' + chipHtml(piece) + '</div>'`
+right under the title — `chipHtml()` is the exact same helper the
+normal kanban cards already use for platform + content-type chips, so
+no new rendering logic was needed, just reusing what already existed.
+
+Final Check cards now show exactly Harvey's list: title(s), video
+preview, post-location/type chips, caption, and one Approve button —
+nothing else clickable.
+
+Frontend-only, so per §93 this is already live — no deploy/restart
+needed. Verified via `node --check` and a CSS brace-balance check.
+
+---
+
+# 117. "Upload Files" Renamed to "Content Production"; Instant Send-to-Final-Check; Glassy Panels
+
+Three small Harvey asks in one pass, all `ops-service/public/` only.
+
+**Rename.** The `upload-files` tab's display label changed from "Upload
+Files" to "Content Production" in `app.js`'s `TABS` array and the
+side-rail icon's `title`/`aria-label` in `index.html`. Per this
+codebase's established convention (see §90/§99), the internal tab id
+(`upload-files`), hash route (`#upload-files`), and every JS identifier
+(`renderUploadLists`, `buildUploadRow`, `UPLOAD_MARKUP`, etc.) were
+deliberately left alone — only the user-visible text changed.
+
+**"Send to final check" now shoots off instantly.** §115 made this
+button kick off a real ffmpeg audio-splice build server-side and wait
+(showing "Building…"/a live "Building final video…" status line) for
+that job to actually finish before the row disappeared — correct
+architecturally, but Harvey found the wait itself annoying ("I don't
+want it to hang, I want it to shoot off immediately"). Fixed in
+`buildUploadRow`'s `sendBtn` click handler: it still saves
+`finalBuildStatus: 'pending'` and still fires
+`POST /api/videos/:id/build-final`, but the fetch is no longer awaited
+before the row's tick-and-collapse animation runs — `removeUploadRowAnimated`
+now fires immediately after the (fast, local) `Store.put` resolves,
+not after the (slow, real ffmpeg) build completes. The actual build,
+and the server-side stage flip to Final Check on success (§115,
+unchanged), still happen in the background exactly as before — this is
+a UI-perception fix, not an architecture change.
+
+**Failure visibility, preserved despite the row being gone already:**
+`maybeStartAnalysisPolling`'s poll loop still tracks
+`finalBuildStatus` for every such piece regardless of whether its row
+is still on screen. If a build later fails (`finalBuildStatus ===
+'error'`) and the row was already removed by the instant-tick
+animation, the poller now calls a full `renderUploadLists()` instead of
+silently no-op'ing (the old `refreshUploadRowHeadById`/
+`removeUploadRowAnimated` pair both just early-return if the row isn't
+in the DOM) — so a real failure still resurfaces the row with its error
+status and a "try again" path, it just takes one extra rebuild rather
+than updating in place. A successful build still never triggers a
+visible change here at all, since the row is already gone by the time
+it completes — exactly what Harvey asked for.
+
+**Glassy/translucent panels instead of flat green-black.** Harvey: "the
+green is super boring." The ops panel already renders a fixed
+Earth-from-space backdrop behind everything (`body::before`, `img/earth.png`)
+but every panel surface used an opaque `var(--surface)` background, so
+it never actually showed through. `.dropzone`, `.video-card` (the
+Posted grid), and `.upload-row` (the main per-video Content Production
+panels) now use a translucent aurora-tinted gradient (green → violet →
+cyan, all low-opacity) plus `backdrop-filter: blur(…) saturate(150%)`
+instead — a frosted-glass look that lets the Earth backdrop bleed
+through with a soft blur, with a subtle green glow on hover instead of
+a flat border-color swap. Deliberately scoped to just this tab's three
+panel types, not the kanban's `.card`/`.final-check-card` or anything
+outside Content Production — Harvey's complaint was specifically about
+this section.
+
+Frontend-only (`app.js`, `index.html`, `style.css`), so per §93 this is
+already live — no deploy/restart needed. Verified via `node --check`
+and a CSS brace-balance check; not yet tested against the live deployed
+service with a real upload — worth confirming the instant-collapse
+feels right in practice and a deliberately-forced build failure (e.g.
+picking a corrupt file) actually resurfaces the row via the poller
+rather than silently vanishing.

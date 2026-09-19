@@ -25,6 +25,8 @@
   --accent-ink: #04170c;
   --error: #ff6259;
   --error-soft: rgba(255, 98, 89, 0.14);
+  --action: #ffb454;
+  --action-soft: rgba(255, 180, 84, 0.14);
   --good: #3cff89;
   --scrollbar-thumb: #23402f;
   --radius: 8px;
@@ -233,6 +235,7 @@ a { color: var(--accent); }
   border-radius: var(--radius);
   color: var(--ink-faint);
   cursor: pointer;
+  text-decoration: none;
 }
 .side-rail-btn svg { width: 24px; height: 24px; }
 .side-rail-btn:hover { color: var(--ink-soft); background: var(--surface-2); }
@@ -282,6 +285,7 @@ a { color: var(--accent); }
   padding: 6px 1px 14px;
   border-radius: 0;
   cursor: pointer;
+  text-decoration: none;
 }
 .panel-tab:hover { color: var(--ink-soft); background: none; }
 .panel-tab.active { color: var(--accent); background: none; border-bottom-color: var(--accent); }
@@ -307,6 +311,202 @@ a { color: var(--accent); }
 .avatar-btn:hover { border-color: var(--accent); }
 
 .panel-main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+/* ---------- project manager (chat) tab ---------- */
+
+.pm-app { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+.pm-toolbar {
+  display: flex; align-items: center; justify-content: flex-end; gap: 14px;
+  padding: 10px clamp(16px, 3vw, 36px) 0;
+}
+.pm-reset-btn {
+  background: none; border: 1px solid var(--border); color: var(--ink-soft);
+  border-radius: 6px; padding: 6px 12px; font-size: 0.8rem; cursor: pointer;
+}
+.pm-reset-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Left = clean thread, right = the raw tool-call/thinking trail — kept as
+   two genuinely separate columns (not a collapsible drawer) per Harvey:
+   the right side is meant to be glanced at or ignored, not the thing he
+   reads to find the answer. */
+.pm-columns { flex: 1; min-height: 0; display: flex; }
+.pm-col { min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+/* Translucent "glass" panel rather than the app's usual opaque surface —
+   Harvey wants the earth backdrop (body::before, see top of this file)
+   visible through the chat panel itself, not just in the gaps around it. */
+.pm-col-clean {
+  flex: 1 1 56%;
+  background: rgba(10, 15, 12, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.pm-col-activity {
+  flex: 1 1 44%;
+  border-left: 1px solid var(--border-soft);
+  background: rgba(10, 15, 12, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* Right column is itself split: queue/to-do list on top (bounded height,
+   scrolls internally once it's got more than a handful of items), the
+   existing activity/execution trail underneath gets the rest. */
+.pm-queue-section { flex: 0 1 38%; min-height: 88px; display: flex; flex-direction: column; border-bottom: 1px solid var(--border-soft); }
+.pm-activity-section { flex: 1 1 62%; min-height: 0; display: flex; flex-direction: column; }
+.pm-queue-list { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 18px 14px; display: flex; flex-direction: column; gap: 6px; }
+.pm-queue-empty { color: var(--ink-faint); font-style: italic; padding: 4px 0; }
+.pm-queue-item {
+  display: flex; align-items: baseline; gap: 8px; padding: 7px 10px; border-radius: 6px;
+  font-size: 0.82rem; color: var(--ink-soft); border: 1px solid transparent;
+}
+.pm-queue-item .pm-queue-num { font-family: var(--font-mono); color: var(--ink-faint); flex-shrink: 0; }
+.pm-queue-item .pm-queue-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-queue-item.pm-queue-active { background: var(--accent-soft); border-color: var(--accent-soft-strong); color: var(--ink); }
+.pm-queue-item.pm-queue-active .pm-queue-num { color: var(--accent); }
+.pm-queue-divider {
+  font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--ink-faint); padding: 8px 10px 2px; margin-top: 2px;
+  border-top: 1px solid var(--border-soft);
+}
+/* Recently-completed items sit below the divider, visually receded (muted
+   grey, not the active green) so it's obvious at a glance which items are
+   still running vs. already done — capped to a handful in app.js/
+   voice-mobile.html's renderQueue, so this never grows unbounded. */
+.pm-queue-item.pm-queue-done { background: var(--surface-2); opacity: 0.72; }
+.pm-queue-item.pm-queue-done .pm-queue-num { color: var(--ink-faint); }
+.pm-queue-item.pm-queue-failed { background: var(--error-soft); border-color: var(--error); opacity: 0.85; }
+.pm-queue-item.pm-queue-failed .pm-queue-num { color: var(--error); }
+
+.pm-thread {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: 18px clamp(16px, 3vw, 36px); display: flex; flex-direction: column; gap: 16px;
+  max-width: 780px; width: 100%; margin: 0 auto;
+}
+.pm-empty { color: var(--ink-faint); text-align: center; margin-top: 60px; font-size: 0.95rem; }
+
+.pm-msg { max-width: 88%; padding: 12px 15px; border-radius: 10px; line-height: 1.55; font-size: 0.95rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pm-msg-user { align-self: flex-end; background: var(--accent-soft); border: 1px solid var(--accent-soft-strong); color: var(--ink); }
+.pm-msg-assistant { align-self: flex-start; background: var(--surface-2); border: 1px solid var(--border); color: var(--ink); }
+/* Distinct color specifically when Claude's reply needs Harvey to actually
+   do something (run a command, decide, approve) — see the [NEEDS_ACTION]
+   marker convention in server.js's VOICE_SYSTEM_PROMPT. A plain status/
+   completion report stays the ordinary .pm-msg-assistant color. */
+.pm-msg-assistant--action { background: var(--action-soft); border: 1px solid var(--action); }
+.pm-msg-system { align-self: center; color: var(--ink-faint); font-size: 0.82rem; background: none; border: none; padding: 4px; }
+.pm-msg-error { align-self: flex-start; background: var(--error-soft); border: 1px solid var(--error); color: var(--ink); }
+/* Thumbnail for a user message that attached an image — sent messages
+   were previously rendered as a bare "(image)" placeholder with no
+   actual picture, so there was no way to confirm what was sent. */
+.pm-msg-image { display: block; max-width: 100%; max-height: 260px; border-radius: 7px; object-fit: contain; }
+.pm-msg-caption { margin-top: 8px; }
+/* Quoted reference to the user message a reply answers — a reply can land
+   well after Harvey has sent other messages in the meantime, so it's not
+   always obvious at a glance which question it's actually answering. */
+.pm-msg-replyto {
+  font-size: 0.76rem; color: var(--ink-faint); margin-bottom: 6px;
+  padding-bottom: 6px; border-bottom: 1px solid var(--border-soft);
+  overflow-wrap: anywhere;
+}
+.pm-msg-meta { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.pm-play-btn, .pm-stop-btn, .pm-reply-btn { background: none; border: 1px solid var(--border); color: var(--accent); border-radius: 6px; padding: 3px 9px; font-size: 0.75rem; cursor: pointer; }
+.pm-play-btn:hover, .pm-stop-btn:hover, .pm-reply-btn:hover { border-color: var(--accent); }
+.pm-stop-btn { color: var(--error); border-color: var(--error); }
+.pm-reply-btn { color: var(--ink-soft); }
+.pm-typing { align-self: flex-start; color: var(--ink-faint); font-size: 0.85rem; font-style: italic; padding: 0 clamp(16px, 3vw, 36px); }
+/* Whichever message's audio is currently playing — auto-spoken or via the
+   Play button, doesn't matter, both go through the same voiceClient.js
+   speaking-state tracking — gets a visible highlight so it's obvious at a
+   glance which reply the voice is coming from, not just a button label. */
+.pm-msg.pm-speaking { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-soft-strong), 0 0 18px -6px var(--accent-soft-strong); }
+.pm-typing.pm-speaking { color: var(--accent); }
+.pm-typing.pm-speaking::before { content: '🔊 '; }
+
+/* Markdown-lite rendering (lib/voiceClient.js renderMarkdownLite) — only
+   fenced code blocks and inline code, the two things Harvey actually
+   asked for (commands/keys rendering properly instead of running outside
+   the bubble as prose). */
+.pm-code-block {
+  position: relative; margin: 8px 0; padding: 10px 12px; padding-right: 56px;
+  background: var(--ivory-dim); border: 1px solid var(--border); border-radius: 8px;
+  overflow-x: auto; font-family: var(--font-mono); font-size: 0.82rem; line-height: 1.5;
+}
+.pm-code-block code { white-space: pre; }
+.pm-code-copy {
+  position: absolute; top: 6px; right: 6px; background: var(--surface-2);
+  border: 1px solid var(--border); color: var(--ink-soft); border-radius: 5px;
+  padding: 3px 8px; font-size: 0.68rem; cursor: pointer;
+}
+.pm-code-copy:hover { border-color: var(--accent); color: var(--accent); }
+.pm-inline-code {
+  background: var(--ivory-dim); border: 1px solid var(--border-soft); border-radius: 4px;
+  padding: 1px 5px; font-family: var(--font-mono); font-size: 0.88em;
+}
+
+.pm-inputbar { flex-shrink: 0; border-top: 1px solid var(--border-soft); padding: 14px clamp(16px, 3vw, 36px) 20px; max-width: 780px; width: 100%; margin: 0 auto; }
+.pm-input-row { display: flex; align-items: flex-end; gap: 10px; }
+.pm-textarea {
+  flex: 1; resize: none; background: var(--surface); border: 1px solid var(--border);
+  color: var(--ink); font-family: var(--font-body); font-size: 0.95rem; line-height: 1.5;
+  padding: 12px 14px; border-radius: 8px; max-height: 160px;
+}
+.pm-textarea:focus { outline: none; border-color: var(--accent); }
+.pm-mic-btn, .pm-send-btn {
+  width: 46px; height: 46px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--ink-soft); display: flex; align-items: center; justify-content: center;
+  cursor: pointer; flex-shrink: 0;
+}
+.pm-mic-btn.recording { background: var(--error-soft); border-color: var(--error); color: var(--error); animation: pm-rec-pulse 1.2s ease-in-out infinite; }
+@keyframes pm-rec-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+.pm-send-btn {
+  background: linear-gradient(135deg, var(--accent-2) 0%, var(--accent) 55%, var(--accent-3) 100%);
+  color: var(--accent-ink); border: none;
+}
+.pm-hint { color: var(--ink-faint); font-size: 0.72rem; margin-top: 8px; }
+
+/* Reply-to preview: shown above the compose box once Harvey taps "Reply"
+   on one of CC's messages, so it's clear which one the next send will be
+   tagged against before he actually sends it. */
+.pm-reply-preview {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  padding: 6px 10px; background: var(--surface-2); border: 1px solid var(--border);
+  border-left: 3px solid var(--accent); border-radius: 6px; font-size: 0.78rem;
+}
+.pm-reply-preview-label { color: var(--ink-faint); flex-shrink: 0; }
+.pm-reply-preview-text { color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.pm-reply-preview-cancel {
+  background: none; border: none; color: var(--ink-faint); cursor: pointer;
+  font-size: 0.9rem; line-height: 1; padding: 2px 4px; flex-shrink: 0;
+}
+.pm-reply-preview-cancel:hover { color: var(--error); }
+
+.pm-image-preview { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.pm-image-preview img { height: 56px; width: 56px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); }
+.pm-image-preview-remove {
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--ink-soft);
+  border-radius: 6px; padding: 4px 10px; font-size: 0.75rem; cursor: pointer;
+}
+.pm-image-preview-remove:hover { border-color: var(--error); color: var(--error); }
+.pm-input-row.pm-drag-over .pm-textarea { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+
+.pm-activity-head {
+  flex-shrink: 0; padding: 14px 18px 10px; font-family: var(--font-mono);
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-faint);
+  border-bottom: 1px solid var(--border-soft);
+}
+.pm-activity-hint { text-transform: none; letter-spacing: 0; opacity: 0.7; }
+.pm-activity {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 12px 18px 24px;
+  font-family: var(--font-mono); font-size: 0.78rem; line-height: 1.6; color: var(--ink-soft);
+}
+.pm-activity-empty { color: var(--ink-faint); font-style: italic; }
+.pm-activity-line { white-space: pre-wrap; word-break: break-word; padding: 3px 0; border-bottom: 1px dashed var(--border-soft); }
+.pm-activity-line:last-child { border-bottom: none; }
+
+@media (max-width: 860px) {
+  .pm-columns { flex-direction: column; }
+  .pm-col-activity { flex: 0 0 240px; border-left: none; border-top: 1px solid var(--border-soft); }
+}
 
 .panel-footer {
   flex-shrink: 0;
@@ -344,7 +544,19 @@ a { color: var(--accent); }
 
 /* ---------- content ops ---------- */
 
-.ops-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 18px clamp(16px, 3vw, 36px) 0; }
+/* zoom (not a formal spec property, but supported by every browser Harvey
+   actually uses — Chrome/Edge/Safari, plus Firefox 126+) makes the whole
+   board render the way a real 75% browser zoom does: denser cards, more
+   visible per column without scrolling, exactly what he asked for as the
+   reference point, rather than guessing which individual paddings/font
+   sizes to hand-tune. */
+.ops-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 18px clamp(16px, 3vw, 36px) 0; zoom: 0.75; }
+/* 0.75 was tuned for a laptop-width viewport; on a genuinely large desktop
+   monitor the same shrink made cards too small to read (Harvey) despite
+   solving the original "can't see enough" complaint there — scale back up
+   in steps as more real width is actually available. */
+@media (min-width: 1600px) { .ops-panel { zoom: 0.9; } }
+@media (min-width: 2000px) { .ops-panel { zoom: 1; } }
 
 .ops-toolbar {
   display: flex;
@@ -357,6 +569,15 @@ a { color: var(--accent); }
 
 .ops-stats { display: flex; gap: 18px; font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); }
 .ops-stats .n { color: var(--accent); font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 600; margin-right: 4px; }
+
+.ops-filters { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 200px; max-width: 420px; }
+.ops-search, .ops-type-filter {
+  background: var(--surface); border: 1px solid var(--border); color: var(--ink);
+  border-radius: 6px; padding: 7px 10px; font-family: var(--font-body); font-size: 0.85rem;
+}
+.ops-search { flex: 1; min-width: 0; }
+.ops-search::placeholder { color: var(--ink-faint); }
+.ops-search:focus, .ops-type-filter:focus { outline: none; border-color: var(--accent); }
 
 .board-wrap {
   flex: 1;
@@ -394,6 +615,37 @@ a { color: var(--accent); }
   text-transform: uppercase;
   color: var(--ink-faint);
 }
+/* Final Check needs real room for a playable video + caption + titles —
+   Harvey's ask, "about twice as thick on desktop." Desktop-only (a plain
+   min-width query, not nested inside the existing max-width:640px mobile
+   block) so it can't fight that block's own `.column { width: 86vw; }`
+   override — an attribute-selector rule has higher specificity than a
+   bare class one regardless of source order, so without scoping this to
+   desktop it would've stayed 800px on mobile too. */
+@media (min-width: 641px) {
+  .column[data-stage="final_check"] { width: 800px; }
+}
+
+/* ---------- Final Check card: full review right on the board, no
+   click-through to the editor needed ---------- */
+.final-check-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fc-video { width: 100%; border-radius: 6px; background: #000; cursor: pointer; display: block; }
+.fc-title { font-size: 1.02rem; font-weight: 600; color: var(--ink); }
+.fc-caption {
+  font-size: 0.85rem; color: var(--ink-soft); white-space: pre-wrap;
+  background: var(--surface); border: 1px solid var(--border-soft); border-radius: 6px; padding: 8px 10px;
+}
+.fc-titles { margin: 0; padding-left: 1.2em; font-size: 0.85rem; color: var(--ink); display: flex; flex-direction: column; gap: 3px; }
+.fc-titles-empty { font-size: 0.8rem; color: var(--ink-faint); font-style: italic; }
+.fc-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 4px; }
 
 .column-head {
   display: flex;
@@ -482,6 +734,19 @@ a { color: var(--accent); }
 .card:active { cursor: grabbing; }
 .card.dragging { opacity: 0.35; }
 .card.card-auto { cursor: pointer; }
+/* Pieces created by a Claude Code session (voice/chat agent or an
+   interactive session acting on Harvey's behalf) rather than by Harvey
+   himself directly in the board UI — a subtle indigo tint distinct from
+   the board's green accent, so it reads at a glance without shouting. */
+.card.card-ai { background: linear-gradient(rgba(139, 124, 246, 0.09), rgba(139, 124, 246, 0.09)), var(--surface-2); border-color: rgba(139, 124, 246, 0.35); }
+.card.card-ai:hover { border-color: #8b7cf6; }
+
+.card-id {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--ink-faint);
+  letter-spacing: 0.03em;
+}
 
 .auto-stage-badge {
   font-size: 0.68rem;
@@ -604,6 +869,7 @@ a { color: var(--accent); }
   gap: 10px;
 }
 .save-flag { color: var(--good); opacity: 0; transition: opacity 0.25s ease; }
+.modal-id { color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 1px 7px; letter-spacing: 0.03em; }
 .save-flag.show { opacity: 1; }
 
 .modal-close {
@@ -743,6 +1009,7 @@ a { color: var(--accent); }
 }
 .btn-secondary:hover { color: var(--ink); border-color: var(--accent); }
 .btn-secondary.btn-tiny { font-size: 0.75rem; padding: 6px 10px; }
+.btn-primary.btn-tiny { font-size: 0.75rem; padding: 6px 12px; }
 .btn-secondary:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn-secondary:disabled:hover { color: var(--ink-soft); border-color: var(--border); }
 
@@ -877,15 +1144,18 @@ a { color: var(--accent); }
 .upload-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; padding: 18px clamp(16px, 3vw, 36px) 32px; gap: 8px; }
 
 .dropzone {
-  border: 1.5px dashed var(--border);
-  border-radius: 6px;
+  border: 1.5px dashed rgba(140, 255, 210, 0.28);
+  border-radius: 10px;
   padding: 36px 20px;
   text-align: center;
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease;
   margin-bottom: 8px;
+  background: linear-gradient(150deg, rgba(60, 255, 168, 0.08), rgba(120, 110, 255, 0.06) 55%, rgba(60, 210, 255, 0.05));
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
 }
-.dropzone:hover, .dropzone.drag-over { border-color: var(--accent); background: var(--accent-soft); }
+.dropzone:hover, .dropzone.drag-over { border-color: var(--accent); background: linear-gradient(150deg, rgba(60, 255, 168, 0.16), rgba(120, 110, 255, 0.1) 55%, rgba(60, 210, 255, 0.08)); }
 .dropzone-title { font-family: var(--font-display); font-size: 1.2rem; margin-bottom: 4px; }
 .dropzone-sub { font-size: 0.82rem; color: var(--ink-faint); }
 
@@ -904,14 +1174,17 @@ a { color: var(--accent); }
 }
 
 .video-card {
-  border: 1px solid var(--border-soft);
-  background: var(--surface);
+  border: 1px solid rgba(140, 255, 210, 0.16);
+  background: linear-gradient(160deg, rgba(30, 46, 38, 0.5), rgba(10, 15, 12, 0.32) 60%, rgba(90, 80, 200, 0.08));
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
   border-radius: var(--radius);
   overflow: hidden;
   cursor: pointer;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 18px 40px -28px rgba(0, 0, 0, 0.7);
 }
-.video-card:hover { border-color: var(--accent); }
+.video-card:hover { border-color: var(--accent); box-shadow: 0 18px 40px -22px rgba(60, 255, 137, 0.22); }
 .video-card-thumb {
   aspect-ratio: 16/9;
   background: var(--surface-2);
@@ -927,6 +1200,76 @@ a { color: var(--accent); }
 .video-card-meta { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .video-card-stage { font-size: 0.7rem; color: var(--ink-faint); }
 .video-card-sched { font-size: 0.72rem; color: var(--accent-2); }
+
+/* Small status chips replacing the old "Thumbnail Selected" stage — set
+   automatically (see app.js's syncTags), shown both on kanban cards and
+   in the upload-tool rows below. */
+.tag-chip {
+  display: inline-block; font-size: 0.68rem; padding: 2px 7px; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--border-soft); color: var(--ink-soft);
+  margin-right: 4px;
+}
+.card-tags { margin-top: 2px; }
+
+/* ---------- upload tool: inline per-video rows ---------- */
+
+.upload-rows { display: flex; flex-direction: column; gap: 14px; }
+/* Glassy/aurora treatment instead of the flat solid green-black surface
+   every other panel uses — translucent enough that the fixed Earth
+   backdrop (body::before) actually shows through with a soft blur,
+   per Harvey ("the green is super boring"). Scoped to just this tab's
+   panels (.upload-row/.video-card/.dropzone), not the kanban's .card. */
+.upload-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(200px, 1.3fr) minmax(160px, 0.9fr) minmax(220px, 1.3fr) auto;
+  gap: 16px;
+  align-items: start;
+  border: 1px solid rgba(140, 255, 210, 0.16);
+  background: linear-gradient(155deg, rgba(30, 46, 38, 0.52), rgba(10, 15, 12, 0.3) 55%, rgba(100, 90, 220, 0.09));
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  box-shadow: 0 20px 50px -32px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+.upload-row:hover { border-color: rgba(60, 255, 137, 0.4); box-shadow: 0 20px 50px -26px rgba(60, 255, 137, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.04); }
+@media (max-width: 1100px) {
+  .upload-row { grid-template-columns: 1fr 1fr; }
+}
+.upload-row-head { display: flex; flex-direction: column; gap: 6px; }
+.upload-row-thumb {
+  aspect-ratio: 16/9; width: 100%; background: var(--surface-2); border-radius: 6px;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.upload-row-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.upload-row-title { font-size: 0.9rem; color: var(--ink); font-weight: 500; }
+.upload-row-idline { font-size: 0.75rem; color: var(--ink-faint); }
+.upload-row-tags { margin-top: 2px; }
+.upload-row-status { font-size: 0.75rem; color: var(--ink-faint); font-style: italic; }
+.upload-row-status-error { color: var(--error); font-style: normal; }
+.upload-row-section { display: flex; flex-direction: column; gap: 6px; }
+.upload-row-section label { font-size: 0.72rem; color: var(--ink-faint); }
+.upload-row-video { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 6px; }
+.upload-row-frame input[type="range"] { width: 100%; accent-color: var(--accent); }
+.upload-row-titles .title-input { margin-bottom: 4px; }
+.upload-row-action { display: flex; flex-direction: column; gap: 8px; align-self: stretch; justify-content: center; }
+
+/* "Send to final check" — Harvey wants an instant tick + the row gone,
+   not the whole list flashing through a rebuild. Collapses cleanly
+   regardless of the row's actual height (varies with video aspect
+   ratio/content) since max-height just needs to start above whatever
+   that real height could plausibly be. */
+.upload-row {
+  transition: opacity 0.35s ease, transform 0.35s ease, max-height 0.4s ease,
+    margin 0.4s ease, padding 0.4s ease, border-width 0.4s ease,
+    border-color 0.15s ease, box-shadow 0.15s ease;
+  max-height: 600px;
+  overflow: hidden;
+}
+.upload-row-removing {
+  opacity: 0; transform: scale(0.97); max-height: 0;
+  margin: 0; padding-top: 0; padding-bottom: 0; border-width: 0;
+}
 
 /* ---------- settings ---------- */
 
@@ -966,6 +1309,14 @@ a { color: var(--accent); }
 .audio-row { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border: 1px solid var(--border-soft); border-radius: var(--radius); background: var(--surface); flex-wrap: wrap; }
 .audio-name { font-size: 0.85rem; color: var(--ink-soft); min-width: 120px; }
 .audio-row audio { height: 32px; flex: 1; min-width: 160px; }
+
+/* Real per-file upload feedback (§109-adjacent fix) — was previously
+   silent with no indication an upload was even happening. */
+.audio-upload-progress { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.audio-upload-row { display: flex; align-items: center; gap: 12px; padding: 6px 10px; border: 1px solid var(--border-soft); border-radius: var(--radius); background: var(--surface); flex-wrap: wrap; }
+.audio-upload-name { font-size: 0.85rem; color: var(--ink-soft); min-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.audio-upload-row progress { flex: 1; min-width: 120px; height: 8px; accent-color: var(--accent); }
+.audio-upload-error { font-size: 0.8rem; color: var(--error); }
 
 .key-grid { display: flex; flex-direction: column; gap: 14px; }
 .key-row label { display: block; font-size: 0.8rem; color: var(--ink-soft); margin-bottom: 4px; }
@@ -1011,11 +1362,24 @@ a { color: var(--accent); }
 .funnel-count { font-family: var(--font-mono); color: var(--accent); font-variant-numeric: tabular-nums; }
 .funnel-sessions { color: var(--ink-faint); font-size: 0.76rem; min-width: 9ch; text-align: right; }
 
+/* Fixed way back to Project Manager, mobile only (see index.html for why).
+   Desktop always has the side-rail, so this stays hidden there. */
+.pm-back-fab { display: none; }
+
 @media (max-width: 640px) {
   /* Same space problem as everything else below: the icon rail is a
      bonus nav, not the only way to reach a tab (the top tab row still
      works), so it's the first thing to go on a phone. */
   .side-rail { display: none; }
+  .pm-back-fab.show {
+    display: flex; align-items: center; justify-content: center;
+    position: fixed; right: 16px; bottom: 16px; z-index: 20;
+    width: 52px; height: 52px; border-radius: 50%;
+    background: var(--accent); color: var(--accent-ink);
+    box-shadow: 0 6px 18px -4px rgba(0,0,0,0.55);
+    text-decoration: none;
+  }
+  .pm-back-fab.show svg { width: 24px; height: 24px; }
   .panel-footer { display: none; }
   .panel-header { gap: 14px; padding: 12px 16px; flex-wrap: nowrap; }
   .ops-stats { display: none; }

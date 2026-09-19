@@ -9,10 +9,14 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
+const claudeRunner = require('./src/claudeRunner');
+const elevenlabs = require('./src/elevenlabs');
+const videoAnalysis = require('./src/videoAnalysis');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 const DB_PATH = path.join(DATA_DIR, 'db.sqlite');
+const WORK_LOG_PATH = path.join(DATA_DIR, 'work-log.md');
 const PORT = process.env.PORT || 4001;
 const PANEL_PASSWORD = process.env.PANEL_PASSWORD || 'ormiston';
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://realitymanual.com,https://www.realitymanual.com')
@@ -44,8 +48,44 @@ db.exec(
   '  token TEXT PRIMARY KEY,' +
   '  created_at TEXT NOT NULL,' +
   '  expires_at TEXT NOT NULL' +
+  ');' +
+  'CREATE TABLE IF NOT EXISTS voice_messages (' +
+  '  id TEXT PRIMARY KEY,' +
+  '  mode TEXT NOT NULL,' +
+  '  transcript TEXT NOT NULL,' +
+  '  status TEXT NOT NULL,' +
+  '  reply_text TEXT,' +
+  '  error_message TEXT,' +
+  '  created_at TEXT NOT NULL,' +
+  '  completed_at TEXT' +
+  ');' +
+  'CREATE INDEX IF NOT EXISTS idx_voice_messages_created ON voice_messages(created_at);' +
+  'CREATE TABLE IF NOT EXISTS voice_session (' +
+  '  id INTEGER PRIMARY KEY CHECK (id = 1),' +
+  '  claude_session_id TEXT,' +
+  '  updated_at TEXT NOT NULL' +
   ');'
 );
+
+// activity_log: JSON array of short strings describing what CC is doing
+// while a message is in flight (tool calls, intermediate text) — powers
+// the "code-like" live activity pane in the Project Manager tab, separate
+// from the clean final reply_text. Added after voice_messages already
+// existed in production, so a plain CREATE TABLE IF NOT EXISTS above
+// won't retrofit it onto an existing DB file — ALTER TABLE, no-op if the
+// column is already there (fresh DB or already migrated).
+try { db.exec('ALTER TABLE voice_messages ADD COLUMN activity_log TEXT'); } catch (e) { /* already exists */ }
+// early_ack: the first genuinely contextual sentence CC produces for a
+// turn (see claudeRunner.js's handleEvent) — spoken to Harvey immediately
+// instead of a hardcoded filler phrase while the real work is still in
+// progress. Same safe-ALTER pattern as activity_log above.
+try { db.exec('ALTER TABLE voice_messages ADD COLUMN early_ack TEXT'); } catch (e) { /* already exists */ }
+// reply_to_id: an earlier voice_messages.id this message is explicitly
+// replying to — set when Harvey taps "Reply" on one of CC's messages in
+// the UI, so a short follow-up ("yes do that") is unambiguous even after
+// several different things have been discussed in the same thread. Same
+// safe-ALTER pattern as the columns above.
+try { db.exec('ALTER TABLE voice_messages ADD COLUMN reply_to_id TEXT'); } catch (e) { /* already exists */ }
 
 const stmts = {
   getAll: db.prepare('SELECT data FROM records WHERE store_name = ? ORDER BY updated_at ASC'),
@@ -58,7 +98,21 @@ const stmts = {
   insertSession: db.prepare('INSERT INTO sessions (token, created_at, expires_at) VALUES (?, ?, ?)'),
   getSession: db.prepare('SELECT * FROM sessions WHERE token = ?'),
   delSession: db.prepare('DELETE FROM sessions WHERE token = ?'),
-  purgeSessions: db.prepare('DELETE FROM sessions WHERE expires_at < ?')
+  purgeSessions: db.prepare('DELETE FROM sessions WHERE expires_at < ?'),
+  insertVoiceMessage: db.prepare('INSERT INTO voice_messages (id, mode, transcript, status, created_at, reply_to_id) VALUES (?, ?, ?, ?, ?, ?)'),
+  setVoiceMessageStatus: db.prepare('UPDATE voice_messages SET status = ? WHERE id = ?'),
+  setVoiceActivityLog: db.prepare('UPDATE voice_messages SET activity_log = ? WHERE id = ?'),
+  setVoiceEarlyAck: db.prepare('UPDATE voice_messages SET early_ack = ? WHERE id = ?'),
+  finishVoiceMessage: db.prepare('UPDATE voice_messages SET status = ?, reply_text = ?, error_message = ?, completed_at = ? WHERE id = ?'),
+  getVoiceMessage: db.prepare('SELECT * FROM voice_messages WHERE id = ?'),
+  listVoiceMessages: db.prepare('SELECT * FROM voice_messages ORDER BY created_at DESC LIMIT ?'),
+  getInflightVoiceMessages: db.prepare("SELECT * FROM voice_messages WHERE status IN ('pending','running') ORDER BY created_at ASC"),
+  getVoiceSession: db.prepare('SELECT claude_session_id FROM voice_session WHERE id = 1'),
+  upsertVoiceSession: db.prepare(
+    'INSERT INTO voice_session (id, claude_session_id, updated_at) VALUES (1, ?, ?) ' +
+    'ON CONFLICT(id) DO UPDATE SET claude_session_id = excluded.claude_session_id, updated_at = excluded.updated_at'
+  ),
+  clearVoiceSession: db.prepare('DELETE FROM voice_session WHERE id = 1')
 };
 
 setInterval(function () { stmts.purgeSessions.run(new Date().toISOString()); }, 60 * 60 * 1000);
@@ -84,7 +138,24 @@ app.use(function (req, res, next) { res.set('Cache-Control', 'no-store'); next()
 // file with no way to override it from the repo, which caused browsers to
 // silently run a stale build for up to 10 minutes after every deploy —
 // serving it from here instead guarantees no-store on every response.
-app.use(express.static(path.join(__dirname, 'public'), {
+//
+// Served from the live git working tree (CLAUDE_REPO_DIR, bind-mounted at
+// /repo in production — the exact directory the Project Manager's own
+// Claude Code session edits and commits from), not a copy baked into the
+// Docker image at build time. This is deliberate: it means a frontend-only
+// change is visible on next page load the instant it's saved to disk, with
+// no rebuild and no container restart — which otherwise kills whatever
+// voice/chat turn is running mid-task every single time (see CLAUDE.md,
+// "Project Manager kills itself on every ops-service push"). Falls back to
+// the image-baked ./public for any environment without that mount (e.g.
+// running server.js directly outside the container).
+const REPO_PUBLIC_DIR = process.env.CLAUDE_REPO_DIR
+  ? path.join(process.env.CLAUDE_REPO_DIR, 'ops-service', 'public')
+  : null;
+const STATIC_DIR = (REPO_PUBLIC_DIR && fs.existsSync(REPO_PUBLIC_DIR))
+  ? REPO_PUBLIC_DIR
+  : path.join(__dirname, 'public');
+app.use(express.static(STATIC_DIR, {
   etag: false,
   lastModified: false,
   cacheControl: false
@@ -145,6 +216,7 @@ app.get('/robots.txt', function (req, res) { res.type('text/plain').send('User-a
 
 app.use('/api/store', requireAuth);
 app.use('/api/files', requireAuth);
+app.use('/api/voice', requireAuth);
 
 app.get('/api/store/:storeName', function (req, res) {
   if (!isValidStore(req.params.storeName)) return res.status(400).json({ error: 'invalid_store' });
@@ -221,9 +293,532 @@ app.get('/api/files/:storeName/:id', function (req, res) {
   fs.createReadStream(filePath).pipe(res);
 });
 
+// --- Uploader tool: transcribe a freshly-uploaded video, match it to the
+// right "Uploaded"-stage outline, and pull title candidates from it. See
+// src/videoAnalysis.js for the actual work; this route just validates,
+// responds immediately (the same "kick off the real work, respond 202,
+// let the client poll the piece record" pattern the voice app already
+// uses for its own long-running turns), and owns the one place that
+// touches the `pieces` DB record before/during/after.
+function getPieceRecord(id) {
+  const row = stmts.getOne.get('pieces', id);
+  return row ? JSON.parse(row.data) : null;
+}
+function savePieceRecord(piece) {
+  stmts.upsert.run('pieces', piece.id, JSON.stringify(piece), new Date().toISOString());
+}
+
+async function runVideoAnalysis(id) {
+  const piece = getPieceRecord(id);
+  if (!piece) return; // deleted before analysis started — nothing to do
+  piece.analysisStatus = 'running';
+  savePieceRecord(piece);
+
+  let transcript = '';
+  try {
+    const videoPath = path.join(UPLOADS_DIR, 'videos', id);
+    const tmpDir = path.join(DATA_DIR, 'tmp');
+    fs.mkdirSync(tmpDir, { recursive: true });
+    transcript = await videoAnalysis.transcribeVideo(videoPath, tmpDir);
+  } catch (e) {
+    console.error('video transcription failed for ' + id + ':', e.message);
+  }
+
+  try {
+    const candidates = stmts.getAll.all('pieces')
+      .map(function (r) { try { return JSON.parse(r.data); } catch (e) { return null; } })
+      .filter(function (p) { return p && p.stage === 'uploaded'; })
+      .map(function (p) {
+        const probe = (p.notesHtml || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        return { id: p.id, seq: p.seq, title: p.title, notesSnippet: probe.slice(0, 400) };
+      });
+    const result = await videoAnalysis.matchAndGenerateTitles(transcript, candidates);
+
+    const latest = getPieceRecord(id);
+    if (!latest) return; // deleted while this was running
+    latest.transcript = transcript;
+    latest.analysisStatus = 'done';
+    latest.analysisMatchedPieceId = result.matchedPieceId || '';
+    if (result.titleOptions.length) latest.ytTitles = result.titleOptions;
+    if (result.workingTitle) latest.title = result.workingTitle;
+    latest.updatedAt = new Date().toISOString();
+    savePieceRecord(latest);
+  } catch (e) {
+    console.error('video title/outline matching failed for ' + id + ':', e.message);
+    const latest = getPieceRecord(id);
+    if (!latest) return;
+    latest.transcript = transcript;
+    latest.analysisStatus = 'error';
+    latest.analysisError = String(e.message || e).slice(0, 500);
+    latest.updatedAt = new Date().toISOString();
+    savePieceRecord(latest);
+  }
+}
+
+app.post('/api/videos/:id/analyze', function (req, res) {
+  const { id } = req.params;
+  if (!isValidId(id)) return res.status(400).json({ error: 'invalid_params' });
+  const filePath = path.join(UPLOADS_DIR, 'videos', id);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'video_not_found' });
+  const piece = getPieceRecord(id);
+  if (!piece) return res.status(404).json({ error: 'piece_not_found' });
+  res.json({ ok: true, status: 'running' });
+  runVideoAnalysis(id).catch(function (e) { console.error('unhandled video analysis error for ' + id + ':', e.message); });
+});
+
+// --- Building the actual final video (audio spliced in) before a piece
+// is allowed into Final Check — Harvey's rule: the Final Check preview
+// has to already be the real thing, audio and all, not the raw upload,
+// so the piece stays in Processing until this finishes. The output lives
+// at a separate `<id>-final` id in the same `videos` store (never
+// overwriting the raw upload) specifically so re-running this later
+// (Harvey picks a different audio track and sends it again) always
+// splices from the untouched original, not from a previous splice.
+const FINAL_VIDEO_SUFFIX = '-final';
+
+async function runBuildFinalVideo(id) {
+  const piece = getPieceRecord(id);
+  if (!piece) return; // deleted before this started — nothing to do
+  piece.finalBuildStatus = 'running';
+  savePieceRecord(piece);
+
+  try {
+    const videoPath = path.join(UPLOADS_DIR, 'videos', id);
+    let audioPath = null;
+    if (piece.audioTrackId && piece.audioTrackId !== '__none__') {
+      const candidate = path.join(UPLOADS_DIR, 'audioTracks', piece.audioTrackId);
+      if (fs.existsSync(candidate)) audioPath = candidate;
+      // A missing/deleted track just falls back to no-music (remux only)
+      // rather than failing the whole build over it.
+    }
+    const finalId = id + FINAL_VIDEO_SUFFIX;
+    const outPath = path.join(UPLOADS_DIR, 'videos', finalId);
+    await videoAnalysis.buildFinalVideo(videoPath, audioPath, outPath);
+
+    const stat = fs.statSync(outPath);
+    const finalRecord = { id: finalId, fileName: 'final.mp4', sizeBytes: stat.size, mimeType: 'video/mp4', createdAt: new Date().toISOString() };
+    stmts.upsert.run('videos', finalId, JSON.stringify(finalRecord), new Date().toISOString());
+
+    const latest = getPieceRecord(id);
+    if (!latest) return; // deleted while this was running
+    latest.finalBuildStatus = 'done';
+    latest.stage = 'final_check';
+    latest.updatedAt = new Date().toISOString();
+    savePieceRecord(latest);
+  } catch (e) {
+    console.error('final video build failed for ' + id + ':', e.message);
+    const latest = getPieceRecord(id);
+    if (!latest) return;
+    latest.finalBuildStatus = 'error';
+    latest.finalBuildError = String(e.message || e).slice(0, 500);
+    // Deliberately NOT touching stage here — it stays in Processing so
+    // Harvey can just try again (e.g. pick a different track) rather
+    // than getting stuck on a stage that doesn't have a real video yet.
+    latest.updatedAt = new Date().toISOString();
+    savePieceRecord(latest);
+  }
+}
+
+app.post('/api/videos/:id/build-final', function (req, res) {
+  const { id } = req.params;
+  if (!isValidId(id)) return res.status(400).json({ error: 'invalid_params' });
+  const filePath = path.join(UPLOADS_DIR, 'videos', id);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'video_not_found' });
+  const piece = getPieceRecord(id);
+  if (!piece) return res.status(404).json({ error: 'piece_not_found' });
+  res.json({ ok: true, status: 'running' });
+  runBuildFinalVideo(id).catch(function (e) { console.error('unhandled final-build error for ' + id + ':', e.message); });
+});
+
+// --- Voice app: talk to a real headless Claude Code agent by voice or text ---
+// Separate concern again (own tables, own routes) from the content-ops
+// board above — see CLAUDE.md section on the voice app for the full design.
+const VOICE_SYSTEM_PROMPT =
+  'This session may also be reached through Harvey\'s voice/chat assistant app, in ' +
+  'addition to normal interactive sessions. A user message that starts with a bracketed ' +
+  'tag like "[Voice message ...]" or "[Voice instruction ...]" is framing added by that ' +
+  'app, not something Harvey actually said — follow its instruction but do not quote it ' +
+  'back or mention the tag. Two separate things happen on every voice-app turn, and ' +
+  'neither replaces the other: (1) your final response text is shown to Harvey as text in ' +
+  'the chat, and — for a quick turn only, see below — may also be read aloud; it must ' +
+  'actually and completely answer whatever he asked, never a vague confirmation like ' +
+  '"done" or "logged that"; (2) separately, after finishing, append one line to ' +
+  WORK_LOG_PATH + ' as a housekeeping record formatted "- [ISO timestamp] <one-line ' +
+  'summary>" (create the file if it does not exist) — this logging step is for your own ' +
+  'future reference only and must never substitute for actually answering Harvey in your ' +
+  'final response.\n\n' +
+  'Formatting: the chat renders proper markdown (including fenced code blocks with a copy ' +
+  'button), and the app itself strips markdown down to plain spoken text before anything is ' +
+  'converted to speech — so use markdown normally, especially a fenced code block for any ' +
+  'shell command, config, or anything Harvey would copy-paste. Never spell out or verbally ' +
+  'narrate a command in prose (e.g. do not write "run ssh dash i tilde slash..." as ' +
+  'sentences) — put it in a code block instead and just refer to it in your own words ' +
+  '("run the command below").\n\n' +
+  'IMPORTANT — action marker: check this on every single voice-app reply, it is easy to ' +
+  'forget. If Harvey has to actually do something physical after reading your response — ' +
+  'type/run a command himself, open a link, approve or decide something, hand you a ' +
+  'missing value — start the response with the literal text "[NEEDS_ACTION]" then a ' +
+  'newline, then the real content. This includes something as small as "here is a command ' +
+  'for you to run" — giving him a command to run himself always qualifies, every time, no ' +
+  'exceptions, even a short one-liner. It does NOT apply when you already ran the command ' +
+  'yourself and are just reporting the result. Examples of a reply that NEEDS the marker:\n' +
+  '[NEEDS_ACTION]\n' +
+  'Run this to see the last 3 commits:\n' +
+  '```\n' +
+  'git log -3\n' +
+  '```\n' +
+  'Example that does NOT need it (you already ran it yourself): "The last 3 commits are: ' +
+  'A, B, C." When in doubt about a borderline case, include the marker rather than omit it.\n\n' +
+  'Quick verbal acknowledgment — UNCONDITIONAL, no exceptions, read this whole paragraph ' +
+  'every single voice-app turn: your very first output, before doing anything else at all — ' +
+  'before any tool call, before deciding whether you even need one — must be one short ' +
+  'sentence that is a genuine, specific, task-style summary of this exact message. This used ' +
+  'to have an exception for "a turn you can answer directly with no tool use" and that ' +
+  'exception is exactly what kept failing in practice: turns that felt partly conversational ' +
+  '(a check-in, a quick question) but also involved real work got treated as "just answer ' +
+  'directly," so no acknowledgment sentence was ever written, and the investigation/tool calls ' +
+  'that followed happened in silence with no lead-in at all. Harvey has now reported this ' +
+  'exact failure mode — the queue title showing his own raw spoken message, or a stray ' +
+  'mid-task fragment that does not even summarize the actual request — repeatedly, across ' +
+  'multiple separate turns, despite this paragraph already existing and already being tightened ' +
+  'once before. Do not make the judgment call "does this turn need one" again; the rule is: ' +
+  'every turn gets one, full stop, even a turn you are about to answer in one sentence anyway ' +
+  '— in that case the acknowledgment and the final answer will look similar, which is fine and ' +
+  'not a problem to solve around. This also shows up as the queue panel\'s item title, so it ' +
+  'has to read like a task ("doing X" / "checking Y"), never like an answer to him and never ' +
+  'like a reply to any small-talk/greeting part of his message (a real instance of that ' +
+  'mistake: replying to "how\'s it going" with "Doing well — I verified..." — that answers ' +
+  'him, it does not describe a task). E.g. if he asks "did the deploy actually go through," a ' +
+  'good first line is "Checking the deploy log now to confirm it actually completed" — NOT ' +
+  '"Got it, I\'ll get right on that," and NOT "Yes, it went through" (the answer, said before ' +
+  'you have actually checked). Keep it to one short sentence; the real, complete answer still ' +
+  'follows later as your normal final response once you actually have it — this is only the ' +
+  'immediate acknowledgment, never a substitute for the real answer.\n\n' +
+  'Two different reply shapes, depending on what Harvey actually said — decide which one ' +
+  'this turn is and shape the acknowledgment accordingly: (1) He asked a question or wants ' +
+  'you to look something up/check something — once you have the real answer, just give it ' +
+  'to him plainly; if the turn genuinely needed no tool calls at all, the app speaks your ' +
+  'whole final answer out loud automatically, so there is nothing extra to add on top of the ' +
+  'acknowledgment sentence. (2) He gave you an instruction to go do something (fix a bug, ' +
+  'edit a file, deploy, change a setting, etc.) — for this kind, the app only ever speaks ' +
+  'your one acknowledgment sentence out loud, never the full result, so that sentence has to ' +
+  'actually say you are going to go do the work and will report back in the chat once it is ' +
+  'done — worded fresh each time, in your own words, based on what the task actually is (for ' +
+  'example "I\'ll get that deploy script fixed and let you know here once it\'s live" or ' +
+  '"Going to update the shipping rates now — I\'ll confirm in the chat once that\'s saved"), ' +
+  'never the same phrase twice, and never a vague "I\'ll get right on that." Your real, full ' +
+  'completion summary still gets written as the normal final response either way — that part ' +
+  'is unchanged — this paragraph is only about what the one spoken acknowledgment sentence ' +
+  'should say.\n\n' +
+  'Task list (TodoWrite): only create a todo list at all when this turn is a genuine, ' +
+  'multi-step actionable task. A remark, observation, question, or comment that doesn\'t ' +
+  'require you to go do something (e.g. "nice work", "what do you think about X", a quick ' +
+  'lookup you can just answer directly) should NOT get a todo list manufactured for it — ' +
+  'just reply normally. When you do use one, do not paste Harvey\'s message into a todo ' +
+  'item verbatim — each item should be a short, plain-language summary of what that step ' +
+  'accomplishes (e.g. "Check recent order errors in the ops panel"), the same way you would ' +
+  'title a task for a colleague, not a transcript of what he said.\n\n' +
+  'Host access: you are running inside the rm-ops-service Docker container, which only ' +
+  'contains this one service — for anything outside it (managing other Docker containers ' +
+  'including rebuilding/redeploying this very one, nginx, systemd, or anything else on the ' +
+  'actual VPS), reach the host directly: ' +
+  '`ssh ubuntu@host.docker.internal \'<command>\'` (passwordless sudo is available there — ' +
+  'use `sudo <command>` inside the ssh call for anything privileged). This is the same VPS ' +
+  'this container itself runs on, reached the same way an interactive Claude Code terminal ' +
+  'session on that machine would operate — use it freely for real infrastructure work, not ' +
+  'just as a last resort. One real caveat: rebuilding/restarting rm-ops-service itself over ' +
+  'that connection kills your own current process mid-command, so that specific final step ' +
+  'never gets to report success back to you in the same turn — it is not a distinguished ' +
+  'context you should decline to enter, just: log the actual state clearly in the work log ' +
+  'immediately before you trigger it if the task will not otherwise be obvious on resume, ' +
+  'then proceed normally, the same as any of your commands could.';
+
+// Reminder tacked onto every single prompt, not just the system prompt —
+// re-injected fresh right next to the actual content on every turn, which
+// gets followed far more reliably in practice than the same rule sitting
+// only in VOICE_SYSTEM_PROMPT (set once, at the start of a long-running
+// resumed session). See VOICE_SYSTEM_PROMPT's "Quick verbal
+// acknowledgment" paragraph for the full rule this is reinforcing.
+const ACK_REMINDER = ' Before anything else — before any tool call — write one short, ' +
+  'task-style sentence summarizing this specific request. No exceptions, even if you expect ' +
+  'to answer in one sentence anyway.';
+
+function buildVoicePrompt(mode, text) {
+  if (mode === 'execute') {
+    return '[Voice instruction from Harvey, sent while away from his desk — proceed with full ' +
+      'autonomy using your normal judgement and this project\'s CLAUDE.md conventions. Do not ask ' +
+      'clarifying questions — make the most reasonable assumption and note it briefly. He will not ' +
+      'hear a spoken reply and is not watching live, but your final answer IS shown to him ' +
+      'afterward as text, so make it a real completion summary (what you did/found/decided), not ' +
+      'a throwaway line — carry out the task fully.' + ACK_REMINDER + '] ' + text;
+  }
+  return '[Voice message from Harvey, sent from his phone or desktop — he expects a reply. If ' +
+    'this turn needs you to check code, logs, git history, or run commands to answer accurately, ' +
+    'do that first — he is told immediately that you received this and are working on it, so a ' +
+    'longer investigation is fine and expected, not something to shortcut.' + ACK_REMINDER + '] ' + text;
+}
+
+let voiceQueue = [];
+let voiceProcessing = false;
+
+function drainVoiceQueue() {
+  if (voiceProcessing) return;
+  const next = voiceQueue.shift();
+  if (!next) return;
+  voiceProcessing = true;
+  processVoiceMessage(next.id, next.mode, next.text, next.imageBlock)
+    .catch(function (err) {
+      stmts.finishVoiceMessage.run('error', null, String((err && err.message) || err).slice(0, 2000), new Date().toISOString(), next.id);
+    })
+    .finally(function () {
+      voiceProcessing = false;
+      drainVoiceQueue();
+    });
+}
+
+// Read on every fresh-session start (see buildSystemPromptForSession below)
+// so a session with zero memory of anything Harvey said before — first
+// message ever, "New conversation" was hit, or the previous session was
+// lost — isn't starting completely blind, especially right after an
+// unplanned restart (see recoverInflightVoiceMessages). This is the
+// "self-healing" half of that: the *queue* recovers itself mechanically,
+// this is what lets the *agent* understand what it was doing when it gets
+// a fresh start rather than silently losing that thread.
+function readRecentWorkLog(maxLines) {
+  try {
+    const lines = fs.readFileSync(WORK_LOG_PATH, 'utf8').split('\n').filter(Boolean);
+    return lines.slice(-(maxLines || 15)).join('\n');
+  } catch (e) {
+    return '';
+  }
+}
+
+function buildSystemPromptForSession(sessionId) {
+  if (sessionId) return VOICE_SYSTEM_PROMPT;
+  const recentLog = readRecentWorkLog(15);
+  if (!recentLog) return VOICE_SYSTEM_PROMPT;
+  return VOICE_SYSTEM_PROMPT + '\n\nThis is a fresh session with no memory of anything before this message ' +
+    '(the previous one ended, was reset, or was lost — e.g. a redeploy). Recent entries from your own work ' +
+    'log, for context on what you and Harvey were doing recently:\n' + recentLog;
+}
+
+async function processVoiceMessage(id, mode, text, imageBlock) {
+  stmts.setVoiceMessageStatus.run('running', id);
+  const sessionRow = stmts.getVoiceSession.get();
+  const sessionId = sessionRow && sessionRow.claude_session_id;
+  const prompt = buildVoicePrompt(mode, text);
+
+  // Streamed into the DB as it grows (not held until the run finishes) so
+  // the Project Manager tab's right-hand activity pane can poll the same
+  // /api/voice/messages/:id row and watch it fill in live.
+  let activity = [];
+  function onActivity(line) {
+    activity.push(line);
+    stmts.setVoiceActivityLog.run(JSON.stringify(activity.slice(-200)), id);
+  }
+  // Written the instant it's available (well before the turn finishes) so
+  // the client can speak it immediately instead of a hardcoded filler —
+  // see claudeRunner.js's handleEvent for where this actually comes from.
+  function onEarlyAck(ackText) {
+    stmts.setVoiceEarlyAck.run(ackText.slice(0, 2000), id);
+  }
+
+  let result = await claudeRunner.runClaude({
+    prompt: prompt,
+    sessionId: sessionId,
+    appendSystemPrompt: buildSystemPromptForSession(sessionId),
+    onActivity: onActivity,
+    onEarlyAck: onEarlyAck,
+    imageBlock: imageBlock
+  });
+  // The resumed session id can go stale (e.g. the CLI's local session store
+  // living outside the persisted volume, wiped by a container rebuild) —
+  // rather than leave every future message stuck repeating the same
+  // failure forever, drop the dead session and retry once as a fresh one.
+  if (!result.ok && sessionId && /no conversation found/i.test(result.error || '')) {
+    console.error('voice claude session ' + sessionId + ' is gone, starting fresh:', result.error);
+    stmts.clearVoiceSession.run();
+    activity.push('— previous session was lost, starting a new one —');
+    result = await claudeRunner.runClaude({
+      prompt: prompt,
+      sessionId: null,
+      appendSystemPrompt: buildSystemPromptForSession(null),
+      onActivity: onActivity,
+      onEarlyAck: onEarlyAck,
+      imageBlock: imageBlock
+    });
+  }
+  const now = new Date().toISOString();
+  if (result.sessionId) stmts.upsertVoiceSession.run(result.sessionId, now);
+  if (!result.ok) {
+    stmts.finishVoiceMessage.run('error', null, String(result.error || 'unknown error').slice(0, 2000), now, id);
+    console.error('voice claude run failed:', result.error);
+    return;
+  }
+  stmts.finishVoiceMessage.run('done', (result.replyText || '').slice(0, 8000), null, now, id);
+}
+
+// Images pasted/dropped/attached into the chat (desktop paste-and-drop,
+// mobile's attach button) — multipart so a text field and an optional
+// file can arrive together in one request.
+const voiceMessageUpload = multer({ dest: path.join(DATA_DIR, 'tmp'), limits: { fileSize: 15 * 1024 * 1024 } });
+
+app.post('/api/voice/messages', voiceMessageUpload.single('image'), function (req, res) {
+  const rawText = (req.body && req.body.text) || '';
+  const mode = req.body && req.body.mode;
+  const trimmed = rawText.trim().slice(0, 4000);
+  const rawReplyToId = (req.body && req.body.replyToId) || null;
+  const replyToId = (typeof rawReplyToId === 'string' && rawReplyToId.trim()) ? rawReplyToId.trim().slice(0, 64) : null;
+  function cleanupUpload() { if (req.file) fs.rm(req.file.path, { force: true }, function () {}); }
+  if (!trimmed && !req.file) { cleanupUpload(); return res.status(400).json({ error: 'invalid_text' }); }
+  if (mode !== 'respond' && mode !== 'execute') { cleanupUpload(); return res.status(400).json({ error: 'invalid_mode' }); }
+
+  const id = crypto.randomBytes(16).toString('hex');
+  const now = new Date().toISOString();
+  const finalText = trimmed || '(image attached, no caption)';
+  stmts.insertVoiceMessage.run(id, mode, finalText, 'pending', now, replyToId);
+  res.json({ id: id, status: 'pending', reply_to_id: replyToId });
+
+  const SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+  let imageBlock = null;
+  if (req.file && SUPPORTED_IMAGE_TYPES.indexOf(req.file.mimetype) !== -1) {
+    try {
+      imageBlock = { mediaType: req.file.mimetype, base64: fs.readFileSync(req.file.path).toString('base64') };
+    } catch (e) { console.error('failed to read attached image:', e.message); }
+  } else if (req.file) {
+    console.error('unsupported attached image type: ' + req.file.mimetype);
+  }
+  cleanupUpload();
+
+  // Reply-to context is woven into the prompt CC actually sees (not into
+  // the stored transcript — that stays exactly what Harvey typed/said, for
+  // the chat UI) so a short follow-up like "yes do that" is unambiguous
+  // even after several different things have come up in the same thread.
+  let promptText = finalText;
+  if (replyToId) {
+    const replyTarget = stmts.getVoiceMessage.get(replyToId);
+    if (replyTarget) {
+      const quoted = (replyTarget.reply_text || replyTarget.transcript || '').slice(0, 500);
+      promptText = 'Harvey is replying directly to your specific earlier message quoted below — treat his new message as being about that one, not necessarily whatever was discussed most recently. Your earlier message: "' +
+        quoted + '"\n\nHis reply: ' + finalText;
+    }
+  }
+
+  voiceQueue.push({ id: id, mode: mode, text: promptText, imageBlock: imageBlock });
+  drainVoiceQueue();
+});
+
+function hydrateVoiceMessageRow(row) {
+  if (!row) return row;
+  try { row.activity_log = row.activity_log ? JSON.parse(row.activity_log) : []; } catch (e) { row.activity_log = []; }
+  // reply_to_snippet: resolved server-side (rather than left for the client
+  // to cross-reference against whatever it happens to already have loaded)
+  // so the quoted preview renders correctly even after a page reload, on a
+  // device that never saw the original message, or once it's scrolled out
+  // of the client's fetch window.
+  if (row.reply_to_id) {
+    const target = stmts.getVoiceMessage.get(row.reply_to_id);
+    row.reply_to_snippet = target ? (target.reply_text || target.transcript || '').slice(0, 200) : null;
+  } else {
+    row.reply_to_snippet = null;
+  }
+  return row;
+}
+
+app.get('/api/voice/messages', function (req, res) {
+  const limit = Math.min(parseInt(req.query.limit, 10) || 30, 100);
+  res.json(stmts.listVoiceMessages.all(limit).map(hydrateVoiceMessageRow));
+});
+
+app.get('/api/voice/messages/:id', function (req, res) {
+  const row = stmts.getVoiceMessage.get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'not_found' });
+  res.json(hydrateVoiceMessageRow(row));
+});
+
+app.post('/api/voice/session/reset', function (req, res) {
+  stmts.clearVoiceSession.run();
+  claudeRunner.resetSession();
+  res.json({ ok: true });
+});
+
+app.get('/api/voice/worklog', function (req, res) {
+  fs.readFile(WORK_LOG_PATH, 'utf8', function (err, data) {
+    if (err) return res.json({ text: '' });
+    const lines = data.split('\n').filter(Boolean);
+    res.json({ text: lines.slice(-100).join('\n') });
+  });
+});
+
+const voiceUpload = multer({ dest: path.join(DATA_DIR, 'tmp'), limits: { fileSize: 25 * 1024 * 1024 } });
+
+app.post('/api/voice/transcribe', voiceUpload.single('audio'), function (req, res) {
+  if (!req.file) return res.status(400).json({ error: 'missing_audio' });
+  const filePath = req.file.path;
+  const mimeType = req.file.mimetype;
+  fs.readFile(filePath, function (err, buf) {
+    fs.rm(filePath, { force: true }, function () {});
+    if (err) return res.status(500).json({ error: 'read_failed' });
+    elevenlabs.transcribeAudio(buf, mimeType)
+      .then(function (text) { res.json({ text: text }); })
+      .catch(function (e) { console.error('transcribe failed:', e.message); res.status(502).json({ error: 'transcription_failed' }); });
+  });
+});
+
+app.post('/api/voice/tts', function (req, res) {
+  const text = req.body && req.body.text;
+  if (typeof text !== 'string' || !text.trim()) return res.status(400).json({ error: 'invalid_text' });
+  elevenlabs.synthesizeSpeech(text.trim().slice(0, 4000))
+    .then(function (audio) {
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.send(audio);
+    })
+    .catch(function (e) { console.error('tts failed:', e.message); res.status(502).json({ error: 'tts_failed' }); });
+});
+
 app.use(function (err, req, res, next) {
   console.error(err.message);
   res.status(500).json({ error: 'internal_error' });
 });
 
-app.listen(PORT, function () { console.log('rm-ops-service listening on ' + PORT); });
+// Recovers the voice queue after any restart (a normal redeploy included —
+// this runs every single time the process starts, not just after a crash).
+// The in-memory voiceQueue array and currentSession are always lost on
+// restart even though the DB rows survive it: a 'pending' row never
+// actually reached Claude, so it's simply safe to run from scratch: a
+// 'running' row's actual completion state is unknown (the process could
+// have died a moment before or after finishing the real work), so it's
+// marked as an error instead of silently re-run — duplicating a git push
+// or a file edit would be worse than asking Harvey to resend it. Without
+// this, a message caught mid-flight by a redeploy sat in "running" forever
+// and cluttered the Project Manager's queue view indefinitely — exactly
+// what Harvey saw and flagged.
+function recoverInflightVoiceMessages() {
+  const rows = stmts.getInflightVoiceMessages.all();
+  if (!rows.length) return;
+  const now = new Date().toISOString();
+  let requeued = 0;
+  let errored = 0;
+  rows.forEach(function (row) {
+    if (row.status === 'pending') {
+      voiceQueue.push({ id: row.id, mode: row.mode, text: row.transcript, imageBlock: null });
+      requeued++;
+    } else {
+      stmts.finishVoiceMessage.run('error', null,
+        'Service restarted while this was in progress (redeploy or crash) — completion status unknown, please resend if it still needs doing.',
+        now, row.id);
+      errored++;
+    }
+  });
+  console.log('voice queue recovery: requeued ' + requeued + ', errored ' + errored);
+  fs.appendFile(WORK_LOG_PATH,
+    '- [' + now + '] SERVICE RESTARTED — recovered voice queue: ' + requeued + ' pending message(s) requeued, ' +
+    errored + ' interrupted message(s) marked as error.\n',
+    function () {});
+  if (requeued) drainVoiceQueue();
+}
+
+app.listen(PORT, function () {
+  console.log('rm-ops-service listening on ' + PORT);
+  recoverInflightVoiceMessages();
+});

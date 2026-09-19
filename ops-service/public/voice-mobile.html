@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#04170c" />
+  <link rel="manifest" href="voice-manifest.json" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <title>Project Manager — The Reality Manual</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    html, body { height: 100%; overflow: hidden; }
+    body { display: flex; }
+    .v-app {
+      width: 100%; height: 100dvh;
+      display: flex; flex-direction: column; min-height: 0;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+    .v-home { flex: 1; display: flex; flex-direction: column; gap: 8px; padding: 8px; min-height: 0; }
+
+    /* Compact top/bottom action buttons — fixed height (not flex:1, which
+       used to split the whole screen in half between them and pushed the
+       bottom one past the safe area on some phones), with the chat thread
+       taking whatever's left. min-height doubled to 128px per Harvey. */
+    .v-btn {
+      flex-shrink: 0; border: none; border-radius: 14px; min-height: 128px;
+      display: flex; align-items: center; justify-content: center; gap: 14px; padding: 10px 18px;
+      font-family: var(--font-body); font-weight: 600; letter-spacing: 0.01em;
+      cursor: pointer; -webkit-tap-highlight-color: transparent;
+    }
+    .v-btn svg { width: 34px; height: 34px; flex-shrink: 0; }
+    .v-btn .v-btn-text { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+    .v-btn .v-btn-label { font-size: 1.2rem; }
+    .v-btn .v-btn-sub { font-size: 0.82rem; font-weight: 400; opacity: 0.85; text-align: left; }
+    .v-btn-ask {
+      color: var(--accent-ink);
+      background: linear-gradient(135deg, var(--accent-2) 0%, var(--accent) 55%, var(--accent-3) 100%);
+    }
+    .v-btn-execute {
+      color: var(--ink);
+      background: var(--surface-2);
+      border: 1.5px solid var(--error);
+    }
+    .v-btn-execute svg { stroke: var(--error); }
+    .v-btn:active { transform: scale(0.98); }
+
+    /* The always-visible chat, sandwiched between the two buttons — no more
+       history hidden behind a separate icon/overlay. */
+    .v-chat { flex: 1; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--border-soft); border-radius: 14px; overflow: hidden; }
+    .v-chat .pm-thread { padding: 14px; max-width: none; }
+    .v-chat .pm-inputbar { max-width: none; padding: 10px; }
+
+    .v-overlay {
+      position: fixed; inset: 0; z-index: 20; background: var(--ivory);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 22px; padding: 24px; text-align: center;
+    }
+    .v-pulse {
+      width: 90px; height: 90px; border-radius: 50%;
+      background: var(--accent-soft); display: flex; align-items: center; justify-content: center;
+      animation: v-pulse 1.4s ease-in-out infinite;
+    }
+    .v-pulse.execute { background: var(--error-soft); }
+    .v-pulse svg { width: 42px; height: 42px; color: var(--accent); }
+    .v-pulse.execute svg { color: var(--error); }
+    @keyframes v-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 var(--accent-soft-strong); }
+      50% { box-shadow: 0 0 0 22px rgba(0,0,0,0); }
+    }
+    .v-status { font-family: var(--font-display); font-size: 1.3rem; color: var(--ink); }
+    .v-status-sub { color: var(--ink-faint); font-size: 0.9rem; max-width: 320px; }
+    .v-overlay .btn-secondary {
+      padding: 14px 26px; border-radius: 8px; font-size: 1rem; border: 1px solid var(--border);
+      background: var(--surface-2); color: var(--ink); cursor: pointer;
+    }
+    .v-finish-btn {
+      padding: 16px 34px; border-radius: 999px; font-size: 1.05rem; font-weight: 600;
+      background: var(--error); color: #fff; border: none; cursor: pointer;
+    }
+
+    .v-attach-btn {
+      width: 46px; height: 46px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--surface-2); color: var(--ink-soft); display: flex; align-items: center; justify-content: center;
+      cursor: pointer; flex-shrink: 0;
+    }
+
+    /* Pull-tab + drawer for the queue/to-do list, per Harvey: a fixed handle
+       midway down the screen, tap to slide the queue in from the right,
+       tap again (or the handle) to hide it. Plain tap-toggle rather than a
+       real drag gesture — simpler and more reliable than tracking touch
+       deltas, and gets the same result (show it, then put it away). */
+    .v-queue-tab {
+      position: fixed; right: 0; top: 50%; transform: translateY(-50%);
+      width: 30px; height: 64px; border-radius: 10px 0 0 10px;
+      background: var(--surface-2); border: 1px solid var(--border); border-right: none;
+      color: var(--ink-soft); display: flex; align-items: center; justify-content: center;
+      z-index: 15; -webkit-tap-highlight-color: transparent;
+    }
+    .v-queue-drawer {
+      position: fixed; top: 0; right: 0; bottom: 0; width: min(78vw, 320px);
+      background: var(--ivory); border-left: 1px solid var(--border-soft);
+      display: flex; flex-direction: column; z-index: 14;
+      transform: translateX(100%); transition: transform 0.25s ease;
+      padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom);
+    }
+    .v-queue-drawer.open { transform: translateX(0); }
+    .v-queue-drawer .pm-queue-list { flex: 1; }
+
+    /* Quick way to the Content Ops board without leaving this PWA shortcut
+       for the browser/home screen. Mirrors the queue-tab pull-tab above —
+       fixed on the edge at mid-screen, next to the chat panel rather than
+       the top-left corner, which overlaps the "Ask & Wait" button's own
+       icon/label. */
+    .v-nav-btn {
+      position: fixed; left: 0; top: 50%; transform: translateY(-50%);
+      width: 30px; height: 44px; border-radius: 0 10px 10px 0;
+      background: var(--surface-2); border: 1px solid var(--border); border-left: none;
+      color: var(--ink-soft); display: flex; align-items: center; justify-content: center;
+      z-index: 15; -webkit-tap-highlight-color: transparent; text-decoration: none;
+    }
+    .v-nav-btn svg { width: 17px; height: 17px; }
+
+  </style>
+</head>
+<body>
+
+  <div id="authChecking" class="auth-checking"><div class="spinner" aria-hidden="true"></div></div>
+
+  <div id="loginGate" class="login-gate" hidden>
+    <form id="loginForm" class="login-card" autocomplete="off">
+      <div class="login-kicker">The Reality Manual</div>
+      <h1 class="login-title">Project Manager</h1>
+      <div class="field">
+        <label for="loginPassword">Password</label>
+        <input type="password" id="loginPassword" name="password" autocomplete="current-password" />
+      </div>
+      <button type="submit" class="btn-primary btn-block">Enter</button>
+      <p class="login-error" id="loginError" hidden>Incorrect password.</p>
+    </form>
+  </div>
+
+  <div id="vApp" class="v-app" hidden>
+    <a href="index.html#content-ops" class="v-nav-btn" title="Content Ops" aria-label="Content Ops">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    </a>
+    <div class="v-home">
+      <button type="button" class="v-btn v-btn-ask" id="askBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/></svg>
+        <span class="v-btn-text"><span class="v-btn-label">Ask &amp; Wait for Reply</span><span class="v-btn-sub">Speak — hear CC's answer back</span></span>
+      </button>
+
+      <div class="v-chat">
+        <div class="pm-thread" id="vThread">
+          <div class="pm-empty">Type or speak to Claude Code — same project, same tools, full memory of RealityManual.</div>
+        </div>
+        <div class="pm-inputbar">
+          <div class="pm-reply-preview" id="vReplyPreview" hidden>
+            <span class="pm-reply-preview-label">Replying to:</span>
+            <span class="pm-reply-preview-text" id="vReplyPreviewText"></span>
+            <button type="button" class="pm-reply-preview-cancel" id="vReplyPreviewCancel" aria-label="Cancel reply">✕</button>
+          </div>
+          <div class="pm-image-preview" id="vImagePreview" hidden></div>
+          <div class="pm-input-row">
+            <button type="button" class="v-attach-btn" id="vAttachBtn" title="Attach an image" aria-label="Attach an image">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21.44 11.05 12.25 20.24a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95L9.83 18.5a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            </button>
+            <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" id="vImageInput" hidden />
+            <textarea id="vTextInput" class="pm-textarea" rows="1" placeholder="Can't speak? Type here…"></textarea>
+            <button type="button" class="pm-send-btn" id="vSendBtn" title="Send" aria-label="Send">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4Z"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <button type="button" class="v-btn v-btn-execute" id="executeBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg>
+        <span class="v-btn-text"><span class="v-btn-label">Just Execute</span><span class="v-btn-sub">Speak — text reply only, not read aloud</span></span>
+      </button>
+    </div>
+
+    <button type="button" class="v-queue-tab" id="queueTab" aria-label="Show task list">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg>
+    </button>
+    <div class="v-queue-drawer" id="queueDrawer">
+      <div class="pm-activity-head">Task List <span class="pm-activity-hint" id="vQueueHint"></span></div>
+      <div class="pm-queue-list" id="vQueueList"><div class="pm-queue-empty">No tasks right now.</div></div>
+    </div>
+  </div>
+
+  <div id="recordOverlay" class="v-overlay" hidden>
+    <div class="v-pulse" id="recordPulse">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/></svg>
+    </div>
+    <div class="v-status" id="recordStatus">Listening…</div>
+    <button type="button" class="v-finish-btn" id="finishBtn">Finish Recording</button>
+    <button type="button" class="btn-secondary" id="cancelRecordBtn" style="background:none;border:none;color:var(--ink-faint);">Cancel</button>
+  </div>
+
+  <div id="waitOverlay" class="v-overlay" hidden>
+    <div class="v-status" id="waitStatus">Transcribing…</div>
+    <div class="v-status-sub" id="waitSub"></div>
+  </div>
+
+  <script src="lib/store.js"></script>
+  <script src="lib/auth.js"></script>
+  <script src="lib/voiceClient.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      var Auth = window.RMAuth;
+      var Voice = window.RMVoice;
+
+      var authChecking = document.getElementById('authChecking');
+      var loginGate = document.getElementById('loginGate');
+      var loginForm = document.getElementById('loginForm');
+      var loginPassword = document.getElementById('loginPassword');
+      var loginError = document.getElementById('loginError');
+      var vApp = document.getElementById('vApp');
+
+      var askBtn = document.getElementById('askBtn');
+      var executeBtn = document.getElementById('executeBtn');
+      var recordOverlay = document.getElementById('recordOverlay');
+      var recordPulse = document.getElementById('recordPulse');
+      var recordStatus = document.getElementById('recordStatus');
+      var finishBtn = document.getElementById('finishBtn');
+      var cancelRecordBtn = document.getElementById('cancelRecordBtn');
+      var waitOverlay = document.getElementById('waitOverlay');
+      var waitStatus = document.getElementById('waitStatus');
+      var waitSub = document.getElementById('waitSub');
+
+      var thread = document.getElementById('vThread');
+      var textInput = document.getElementById('vTextInput');
+      var sendBtn = document.getElementById('vSendBtn');
+      var attachBtn = document.getElementById('vAttachBtn');
+      var imageInput = document.getElementById('vImageInput');
+      var imagePreviewEl = document.getElementById('vImagePreview');
+      var queueTab = document.getElementById('queueTab');
+      var queueDrawer = document.getElementById('queueDrawer');
+      var queueListEl = document.getElementById('vQueueList');
+      var queueHintEl = document.getElementById('vQueueHint');
+      var replyPreviewEl = document.getElementById('vReplyPreview');
+      var replyPreviewTextEl = document.getElementById('vReplyPreviewText');
+      var replyPreviewCancelBtn = document.getElementById('vReplyPreviewCancel');
+
+      // Tap-to-reply — same mechanism and purpose as app.js's identical
+      // block: selecting one of CC's earlier messages (Reply button in
+      // addAssistantMessage below) threads reply_to_id into the next typed
+      // send, so a short follow-up stays unambiguous. Scoped to the type
+      // bar per Harvey's request ("reply... via text") — the two big
+      // voice buttons don't offer a reply-target picker.
+      var pendingReplyTo = null;
+      function setPendingReplyTo(msgId, text) {
+        if (!msgId) return;
+        var snippet = (text || '').trim();
+        if (!snippet) return;
+        pendingReplyTo = { id: msgId, snippet: snippet };
+        replyPreviewTextEl.textContent = snippet.length > 80 ? snippet.slice(0, 80) + '…' : snippet;
+        replyPreviewEl.hidden = false;
+        textInput.focus();
+      }
+      function clearPendingReplyTo() {
+        pendingReplyTo = null;
+        replyPreviewEl.hidden = true;
+      }
+      replyPreviewCancelBtn.addEventListener('click', clearPendingReplyTo);
+
+      // Still used for the immediate, synchronous ack spoken the instant an
+      // execute-mode message is sent from the mic-recording flow below —
+      // that one is unambiguously always a task by construction (that's the
+      // whole distinction the two buttons encode), so it doesn't need to
+      // wait on a real early_ack the way respond-mode now does.
+      var EXECUTE_ACK_TEXT = 'Got it — I’ll take care of that now.';
+
+      function showApp() {
+        authChecking.hidden = true; loginGate.hidden = true; vApp.hidden = false;
+        startSync();
+      }
+      function showLogin() { authChecking.hidden = true; vApp.hidden = true; loginGate.hidden = false; setTimeout(function () { loginPassword.focus(); }, 50); }
+
+      loginForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        Auth.checkPassword(loginPassword.value).then(function (ok) {
+          if (ok) { loginError.hidden = true; loginForm.reset(); showApp(); }
+          else { loginError.hidden = false; loginPassword.value = ''; loginPassword.focus(); }
+        });
+      });
+      Auth.checkSession().then(function (ok) { if (ok) showApp(); else showLogin(); });
+
+      // --- Always-visible thread, shared by the voice buttons below and the
+      // type bar — no more history hidden behind a separate icon/overlay
+      // (see CLAUDE.md for why: it was invisible and easy to forget existed).
+      var emptyNote = thread.querySelector('.pm-empty');
+      function clearEmptyNote() { if (emptyNote && emptyNote.parentNode) { emptyNote.parentNode.removeChild(emptyNote); emptyNote = null; } }
+
+      function replyToSnippet(replyToText) {
+        return 'Re: ' + (replyToText.length > 80 ? replyToText.slice(0, 80) + '…' : replyToText);
+      }
+      // Two messages can genuinely be in flight at once (Harvey can start
+      // recording a second one before the first's reply lands — §108), and
+      // each one's own typing placeholder sits wherever it was appended
+      // when that message was sent. Without this, a delayed reply always
+      // landed at the thread's current end regardless of where its
+      // placeholder was, so a slower older reply could render visually
+      // *below* a newer message sent while it was still working —
+      // confusing, out-of-order bubbles. Inserting in the placeholder's
+      // original slot (when it still exists) keeps replies in the order
+      // they actually correspond to. Same fix as app.js's identical
+      // insertMessageEl.
+      function insertMessageEl(el, insertBeforeEl) {
+        if (insertBeforeEl && insertBeforeEl.parentNode === thread) {
+          thread.insertBefore(el, insertBeforeEl);
+        } else {
+          thread.appendChild(el);
+        }
+        thread.scrollTop = thread.scrollHeight;
+      }
+      function addMessage(kind, text, msgId, imageFile, replyToText, insertBeforeEl) {
+        clearEmptyNote();
+        var el = document.createElement('div');
+        el.className = 'pm-msg pm-msg-' + kind;
+        if (msgId) el.dataset.msgId = msgId;
+        if (!imageFile && !replyToText) {
+          el.textContent = text;
+          insertMessageEl(el, insertBeforeEl);
+          return el;
+        }
+        if (replyToText) {
+          var replyTo = document.createElement('div');
+          replyTo.className = 'pm-msg-replyto';
+          replyTo.textContent = replyToSnippet(replyToText);
+          el.appendChild(replyTo);
+        }
+        if (imageFile) {
+          var img = document.createElement('img');
+          img.className = 'pm-msg-image';
+          var reader = new FileReader();
+          reader.onload = function () { img.src = reader.result; };
+          reader.readAsDataURL(imageFile);
+          el.appendChild(img);
+        }
+        if (text) {
+          var textEl = document.createElement('div');
+          if (imageFile) textEl.className = 'pm-msg-caption';
+          textEl.textContent = text;
+          el.appendChild(textEl);
+        }
+        insertMessageEl(el, insertBeforeEl);
+        return el;
+      }
+
+      function addAssistantMessage(text, replyToText, msgId, insertBeforeEl) {
+        clearEmptyNote();
+        var isAction = /^\[NEEDS_ACTION\]/i.test(text || '');
+        var wrap = document.createElement('div');
+        wrap.className = 'pm-msg pm-msg-assistant' + (isAction ? ' pm-msg-assistant--action' : '');
+        if (msgId) wrap.dataset.msgId = msgId;
+        if (replyToText) {
+          var replyTo = document.createElement('div');
+          replyTo.className = 'pm-msg-replyto';
+          replyTo.textContent = replyToSnippet(replyToText);
+          wrap.appendChild(replyTo);
+        }
+        var body = document.createElement('div');
+        body.appendChild(Voice.renderMarkdownLite(text || ''));
+        wrap.appendChild(body);
+        var meta = document.createElement('div');
+        meta.className = 'pm-msg-meta';
+        var playBtn = document.createElement('button');
+        playBtn.type = 'button';
+        playBtn.className = 'pm-play-btn';
+        playBtn.textContent = '▶ Play';
+        // Button state is driven by the shared onSpeakingChange listener
+        // (registered once in startSync) rather than a local flag here —
+        // see app.js's identical comment for why (desktop bug: auto-speak
+        // starting playback never updated a button-local flag).
+        playBtn.addEventListener('click', function () {
+          if (Voice.currentlySpeaking() === msgId) { Voice.stopSpeaking(); return; }
+          Voice.speak(text, msgId).catch(function () {});
+        });
+        meta.appendChild(playBtn);
+        if (msgId) {
+          var replyBtn = document.createElement('button');
+          replyBtn.type = 'button';
+          replyBtn.className = 'pm-reply-btn';
+          replyBtn.textContent = '↩ Reply';
+          replyBtn.addEventListener('click', function () { setPendingReplyTo(msgId, text); });
+          meta.appendChild(replyBtn);
+        }
+        wrap.appendChild(meta);
+        insertMessageEl(wrap, insertBeforeEl);
+        return wrap;
+      }
+
+      // --- Queue drawer: tap the edge tab to pull it in, tap again (or the
+      // tab) to put it away. Filled from the same sync tick as the thread.
+      queueTab.addEventListener('click', function () { queueDrawer.classList.toggle('open'); });
+      // Tapping back into the rest of the app (the ask/execute buttons, the
+      // chat thread, anywhere outside the drawer) should also dismiss it,
+      // not just tapping the pull-tab a second time, per Harvey.
+      document.addEventListener('click', function (e) {
+        if (!queueDrawer.classList.contains('open')) return;
+        if (queueDrawer.contains(e.target) || queueTab.contains(e.target)) return;
+        queueDrawer.classList.remove('open');
+      });
+      var RECENT_DONE_LIMIT = 5;
+      function renderQueue(rows) {
+        var inflight = rows.filter(function (r) { return r.status === 'pending' || r.status === 'running'; }).slice().reverse();
+        var recentDone = rows.filter(function (r) { return r.status === 'done' || r.status === 'error'; })
+          .slice()
+          .sort(function (a, b) { return new Date(b.completed_at || b.created_at) - new Date(a.completed_at || a.created_at); })
+          .slice(0, RECENT_DONE_LIMIT);
+        queueListEl.innerHTML = '';
+        if (!inflight.length && !recentDone.length) {
+          queueHintEl.textContent = '';
+          var empty = document.createElement('div');
+          empty.className = 'pm-queue-empty';
+          empty.textContent = 'No tasks right now.';
+          queueListEl.appendChild(empty);
+          return;
+        }
+        queueHintEl.textContent = inflight.length ? '— ' + inflight.length + ' in progress' : '';
+        inflight.forEach(function (row, idx) {
+          var item = document.createElement('div');
+          item.className = 'pm-queue-item' + (row.status === 'running' ? ' pm-queue-active' : '');
+          var num = document.createElement('span');
+          num.className = 'pm-queue-num';
+          num.textContent = (idx + 1) + '/' + inflight.length;
+          var textEl = document.createElement('span');
+          textEl.className = 'pm-queue-text';
+          textEl.textContent = row.early_ack || row.transcript;
+          item.appendChild(num);
+          item.appendChild(textEl);
+          queueListEl.appendChild(item);
+        });
+        if (recentDone.length) {
+          var divider = document.createElement('div');
+          divider.className = 'pm-queue-divider';
+          divider.textContent = 'Recently completed';
+          queueListEl.appendChild(divider);
+          recentDone.forEach(function (row) {
+            var item = document.createElement('div');
+            item.className = 'pm-queue-item ' + (row.status === 'error' ? 'pm-queue-failed' : 'pm-queue-done');
+            var mark = document.createElement('span');
+            mark.className = 'pm-queue-num';
+            mark.textContent = row.status === 'error' ? '✕' : '✓';
+            var textEl = document.createElement('span');
+            textEl.className = 'pm-queue-text';
+            textEl.textContent = row.early_ack || row.transcript;
+            item.appendChild(mark);
+            item.appendChild(textEl);
+            queueListEl.appendChild(item);
+          });
+        }
+      }
+
+      // --- Image attach: no paste/drop gesture on mobile, so a dedicated
+      // button + file picker (works for both camera roll and, on most
+      // browsers, the camera itself).
+      var pendingImage = null;
+      function clearPendingImage() {
+        pendingImage = null;
+        imagePreviewEl.hidden = true;
+        imagePreviewEl.innerHTML = '';
+        imageInput.value = '';
+      }
+      function setPendingImage(file) {
+        pendingImage = file;
+        var reader = new FileReader();
+        reader.onload = function () {
+          imagePreviewEl.innerHTML = '';
+          var img = document.createElement('img');
+          img.src = reader.result;
+          imagePreviewEl.appendChild(img);
+          var removeBtn = document.createElement('button');
+          removeBtn.type = 'button';
+          removeBtn.className = 'pm-image-preview-remove';
+          removeBtn.textContent = 'Remove';
+          removeBtn.addEventListener('click', clearPendingImage);
+          imagePreviewEl.appendChild(removeBtn);
+          imagePreviewEl.hidden = false;
+        };
+        reader.readAsDataURL(file);
+      }
+      attachBtn.addEventListener('click', function () { imageInput.click(); });
+      imageInput.addEventListener('change', function () {
+        if (imageInput.files && imageInput.files[0]) setPendingImage(imageInput.files[0]);
+      });
+
+      function addTyping(msgId) {
+        clearEmptyNote();
+        var el = document.createElement('div');
+        el.className = 'pm-typing';
+        if (msgId) el.dataset.msgId = msgId;
+        el.textContent = 'CC is working on it…';
+        thread.appendChild(el);
+        thread.scrollTop = thread.scrollHeight;
+        return el;
+      }
+
+      // Ids this device itself sent by voice (respond mode, via the mic) and
+      // wants spoken aloud — never applied to a reply that shows up because
+      // it was sent from the desktop panel instead. Same design as the
+      // desktop Project Manager tab (see app.js for the full rationale): no
+      // fallback timer/canned phrase — CC's own real early_ack is spoken the
+      // moment it arrives, and onDone decides whether the final reply is
+      // also worth speaking on top of it.
+      var voiceAutoSpeak = {};
+
+      // Same shared engine the desktop Project Manager tab uses (see
+      // lib/voiceClient.js): first tick loads whatever's already in the
+      // table (so opening the app resumes the last conversation instead of
+      // a blank slate), every tick after picks up anything new — including
+      // messages sent from the desktop panel while this app just sits open.
+      // Started from showApp() (not eagerly here) so it never polls the
+      // authenticated messages endpoint before login is confirmed.
+      var sync = null;
+      function startSync() {
+        if (sync) return;
+        // See app.js's identical comment: the first tick replays existing
+        // history through onDone/onError, so this suppresses pinging for
+        // that replay — only completions noticed on a later tick chime.
+        var pastFirstTick = false;
+        // One shared listener drives the "speaking" highlight/button state
+        // for whichever message is currently playing — startSync() only
+        // ever runs once per page load (guarded above), so no repeated-
+        // registration leak to worry about here the way app.js's
+        // per-tab-visit bootProjectManager needs to guard against.
+        Voice.onSpeakingChange(function (activeId) {
+          thread.querySelectorAll('.pm-speaking').forEach(function (el) {
+            el.classList.remove('pm-speaking');
+            var btn = el.querySelector('.pm-play-btn');
+            if (btn) { btn.textContent = '▶ Play'; btn.classList.remove('pm-stop-btn'); }
+          });
+          if (activeId === null || typeof activeId === 'undefined') return;
+          var active = thread.querySelector('[data-msg-id="' + activeId + '"]');
+          if (!active) return;
+          active.classList.add('pm-speaking');
+          var btn = active.querySelector('.pm-play-btn');
+          if (btn) { btn.textContent = '■ Stop'; btn.classList.add('pm-stop-btn'); }
+        });
+        sync = Voice.syncThread({
+          onNewMessage: function (row) { addMessage('user', row.transcript, row.id, null, row.reply_to_snippet); },
+          onPending: function (row) { addTyping(row.id); },
+          onEarlyAck: function (row) {
+            // Swap the generic "CC is working on it…" placeholder for CC's
+            // own real, contextual first line the moment it's available —
+            // visible even for a typed/no-speech send, not just spoken.
+            var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
+            if (typingEl) typingEl.textContent = row.early_ack;
+            if (!voiceAutoSpeak[row.id]) return;
+            Voice.speak(row.early_ack, row.id).catch(function () {});
+          },
+          onDone: function (row) {
+            // Look the placeholder up (rather than just removeTyping()) so
+            // its position can be handed to addAssistantMessage as an
+            // insertion anchor — see insertMessageEl's comment for why.
+            var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
+            // Execute-mode replies are a real completion summary now (see
+            // server.js buildVoicePrompt), not a throwaway line — show it
+            // like any other reply instead of a generic "Done" placeholder.
+            addAssistantMessage(row.reply_text || '', row.transcript, row.id, typingEl);
+            if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
+            if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
+            if (voiceAutoSpeak[row.id]) {
+              delete voiceAutoSpeak[row.id];
+              // See app.js's identical comment: only speak the final reply
+              // too when this turn was genuinely quick/no-tool-calls — a
+              // turn that did real work only gets the one spoken
+              // acknowledgment, with the actual answer landing as text.
+              var usedTools = !!(row.activity_log && row.activity_log.length);
+              var replyText = row.reply_text || '';
+              var alreadySaidIt = row.early_ack && replyText.trim() === row.early_ack.trim();
+              if (!usedTools && !alreadySaidIt && row.mode !== 'execute') {
+                Voice.speak(replyText, row.id).catch(function () {});
+              }
+            }
+          },
+          onError: function (row) {
+            var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
+            addMessage('error', row.error_message || 'Something went wrong.', row.id, null, row.transcript, typingEl);
+            if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
+            if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
+            if (voiceAutoSpeak[row.id]) {
+              delete voiceAutoSpeak[row.id];
+              Voice.speak(row.error_message || 'Something went wrong.', row.id).catch(function () {});
+            }
+          },
+          onTick: function (rows) { renderQueue(rows); pastFirstTick = true; }
+        });
+      }
+
+      // --- Type bar: the "can't speak" fallback, always sends respond mode,
+      // text-only reply (mobile's typed field is a minor fallback, not the
+      // primary interaction the way desktop's chat is — no voice-carryover
+      // rule here). Can still carry an attached image.
+      function sendTyped(text) {
+        var image = pendingImage;
+        if (!text.trim() && !image) return;
+        var replyTo = pendingReplyTo;
+        clearPendingReplyTo();
+        addMessage('user', text.trim(), null, image, replyTo ? replyTo.snippet : null);
+        var typingEl = addTyping();
+        clearPendingImage();
+        Voice.sendMessage(text.trim(), 'respond', image, replyTo ? replyTo.id : null).then(function (created) {
+          typingEl.dataset.msgId = created.id;
+          sync.markKnown(created);
+        }).catch(function (err) {
+          if (typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
+          addMessage('error', (err && err.message) || 'Something went wrong.');
+        });
+      }
+      sendBtn.addEventListener('click', function () {
+        var text = textInput.value;
+        textInput.value = '';
+        textInput.style.height = 'auto';
+        sendTyped(text);
+      });
+      textInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendBtn.click(); }
+      });
+      textInput.addEventListener('input', function () {
+        textInput.style.height = 'auto';
+        textInput.style.height = Math.min(textInput.scrollHeight, 120) + 'px';
+      });
+
+      // --- Voice buttons: unchanged record/transcribe/send mechanics, now
+      // also mirrored into the persistent thread above so it reflects every
+      // interaction regardless of which entry point was used. ---
+      function hideAllOverlays() {
+        recordOverlay.hidden = true;
+        waitOverlay.hidden = true;
+      }
+
+      var activeRecorder = null;
+
+      function startFlow(mode) {
+        recordPulse.className = 'v-pulse' + (mode === 'execute' ? ' execute' : '');
+        recordStatus.textContent = 'Listening…';
+        hideAllOverlays();
+        recordOverlay.hidden = false;
+        // Don't talk over Harvey while he's dictating — see app.js's
+        // identical comment. Set as soon as the mic overlay opens, not
+        // only once Voice.startRecording() actually resolves, so there's
+        // no gap where a reply could still start playing right as he
+        // opens the listener.
+        Voice.setRecordingActive(true);
+        Voice.startRecording().then(function (rec) {
+          activeRecorder = rec;
+        }).catch(function () {
+          hideAllOverlays();
+          Voice.setRecordingActive(false);
+          alert('Could not access the microphone. Check the browser has mic permission.');
+        });
+
+        function cleanup() {
+          activeRecorder = null;
+          finishBtn.onclick = null;
+          cancelRecordBtn.onclick = null;
+          Voice.setRecordingActive(false);
+        }
+
+        cancelRecordBtn.onclick = function () {
+          if (activeRecorder) activeRecorder.stop();
+          cleanup();
+          hideAllOverlays();
+        };
+
+        finishBtn.onclick = function () {
+          if (!activeRecorder) return;
+          var rec = activeRecorder;
+          cleanup();
+          hideAllOverlays();
+          waitStatus.textContent = 'Transcribing…';
+          waitSub.textContent = '';
+          waitOverlay.hidden = false;
+          rec.stop().then(function (blob) {
+            return Voice.transcribe(blob);
+          }).then(function (text) {
+            if (!text) throw new Error('empty_transcript');
+            waitSub.textContent = '"' + text + '"';
+            addMessage('user', text);
+            var typingEl = addTyping();
+            return Voice.sendMessage(text, mode).then(function (created) {
+              // Mark it known on the shared sync engine right away so its
+              // next tick doesn't treat this same row as new (duplicate user
+              // bubble/typing indicator) once it catches up to it.
+              typingEl.dataset.msgId = created.id;
+              sync.markKnown(created);
+              // Never block this screen on the real completion (that's what
+              // made a 5-10 minute task feel broken, per Harvey) — speak an
+              // immediate ack and let it run in the background. The shared
+              // sync engine's onDone (above) renders the real reply and
+              // decides whether it's still worth speaking once it lands.
+              if (mode === 'execute') {
+                // Execute is unambiguously always a task by construction, so
+                // it always gets this immediate "I'll take care of that"
+                // ack — no need to wait on a real early_ack the way respond
+                // mode does, and execute never speaks the real result either
+                // way, so there's no "redundant double-speak" risk.
+                Voice.speak(EXECUTE_ACK_TEXT, created.id).catch(function () {});
+              } else {
+                // Same as desktop: mark it eligible for auto-speak and let
+                // the shared sync engine's onEarlyAck/onDone (above) decide
+                // what actually gets spoken and when — no fallback timer,
+                // no canned phrase.
+                voiceAutoSpeak[created.id] = true;
+              }
+            });
+          }).then(function () {
+            hideAllOverlays();
+          }).catch(function (err) {
+            hideAllOverlays();
+            addMessage('error', (err && err.message) || 'Could not send that.');
+          });
+        };
+      }
+
+      askBtn.addEventListener('click', function () { startFlow('respond'); });
+      executeBtn.addEventListener('click', function () { startFlow('execute'); });
+    })();
+  </script>
+</body>
+</html>
