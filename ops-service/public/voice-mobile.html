@@ -161,6 +161,11 @@
           <div class="pm-empty">Type or speak to Claude Code — same project, same tools, full memory of RealityManual.</div>
         </div>
         <div class="pm-inputbar">
+          <div class="pm-reply-preview" id="vReplyPreview" hidden>
+            <span class="pm-reply-preview-label">Replying to:</span>
+            <span class="pm-reply-preview-text" id="vReplyPreviewText"></span>
+            <button type="button" class="pm-reply-preview-cancel" id="vReplyPreviewCancel" aria-label="Cancel reply">✕</button>
+          </div>
           <div class="pm-image-preview" id="vImagePreview" hidden></div>
           <div class="pm-input-row">
             <button type="button" class="v-attach-btn" id="vAttachBtn" title="Attach an image" aria-label="Attach an image">
@@ -241,6 +246,31 @@
       var queueDrawer = document.getElementById('queueDrawer');
       var queueListEl = document.getElementById('vQueueList');
       var queueHintEl = document.getElementById('vQueueHint');
+      var replyPreviewEl = document.getElementById('vReplyPreview');
+      var replyPreviewTextEl = document.getElementById('vReplyPreviewText');
+      var replyPreviewCancelBtn = document.getElementById('vReplyPreviewCancel');
+
+      // Tap-to-reply — same mechanism and purpose as app.js's identical
+      // block: selecting one of CC's earlier messages (Reply button in
+      // addAssistantMessage below) threads reply_to_id into the next typed
+      // send, so a short follow-up stays unambiguous. Scoped to the type
+      // bar per Harvey's request ("reply... via text") — the two big
+      // voice buttons don't offer a reply-target picker.
+      var pendingReplyTo = null;
+      function setPendingReplyTo(msgId, text) {
+        if (!msgId) return;
+        var snippet = (text || '').trim();
+        if (!snippet) return;
+        pendingReplyTo = { id: msgId, snippet: snippet };
+        replyPreviewTextEl.textContent = snippet.length > 80 ? snippet.slice(0, 80) + '…' : snippet;
+        replyPreviewEl.hidden = false;
+        textInput.focus();
+      }
+      function clearPendingReplyTo() {
+        pendingReplyTo = null;
+        replyPreviewEl.hidden = true;
+      }
+      replyPreviewCancelBtn.addEventListener('click', clearPendingReplyTo);
 
       // Still used for the immediate, synchronous ack spoken the instant an
       // execute-mode message is sent from the mic-recording flow below —
@@ -339,6 +369,14 @@
           Voice.speak(text, msgId).catch(function () {});
         });
         meta.appendChild(playBtn);
+        if (msgId) {
+          var replyBtn = document.createElement('button');
+          replyBtn.type = 'button';
+          replyBtn.className = 'pm-reply-btn';
+          replyBtn.textContent = '↩ Reply';
+          replyBtn.addEventListener('click', function () { setPendingReplyTo(msgId, text); });
+          meta.appendChild(replyBtn);
+        }
         wrap.appendChild(meta);
         thread.appendChild(wrap);
         thread.scrollTop = thread.scrollHeight;
@@ -498,7 +536,7 @@
           if (btn) { btn.textContent = '■ Stop'; btn.classList.add('pm-stop-btn'); }
         });
         sync = Voice.syncThread({
-          onNewMessage: function (row) { addMessage('user', row.transcript, row.id); },
+          onNewMessage: function (row) { addMessage('user', row.transcript, row.id, null, row.reply_to_snippet); },
           onPending: function (row) { addTyping(row.id); },
           onEarlyAck: function (row) {
             // Swap the generic "CC is working on it…" placeholder for CC's
@@ -550,10 +588,12 @@
       function sendTyped(text) {
         var image = pendingImage;
         if (!text.trim() && !image) return;
-        addMessage('user', text.trim(), null, image);
+        var replyTo = pendingReplyTo;
+        clearPendingReplyTo();
+        addMessage('user', text.trim(), null, image, replyTo ? replyTo.snippet : null);
         var typingEl = addTyping();
         clearPendingImage();
-        Voice.sendMessage(text.trim(), 'respond', image).then(function (created) {
+        Voice.sendMessage(text.trim(), 'respond', image, replyTo ? replyTo.id : null).then(function (created) {
           typingEl.dataset.msgId = created.id;
           sync.markKnown(created);
         }).catch(function (err) {

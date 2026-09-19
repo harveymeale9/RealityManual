@@ -409,9 +409,10 @@ a { color: var(--accent); }
   overflow-wrap: anywhere;
 }
 .pm-msg-meta { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-.pm-play-btn, .pm-stop-btn { background: none; border: 1px solid var(--border); color: var(--accent); border-radius: 6px; padding: 3px 9px; font-size: 0.75rem; cursor: pointer; }
-.pm-play-btn:hover, .pm-stop-btn:hover { border-color: var(--accent); }
+.pm-play-btn, .pm-stop-btn, .pm-reply-btn { background: none; border: 1px solid var(--border); color: var(--accent); border-radius: 6px; padding: 3px 9px; font-size: 0.75rem; cursor: pointer; }
+.pm-play-btn:hover, .pm-stop-btn:hover, .pm-reply-btn:hover { border-color: var(--accent); }
 .pm-stop-btn { color: var(--error); border-color: var(--error); }
+.pm-reply-btn { color: var(--ink-soft); }
 .pm-typing { align-self: flex-start; color: var(--ink-faint); font-size: 0.85rem; font-style: italic; padding: 0 clamp(16px, 3vw, 36px); }
 /* Whichever message's audio is currently playing — auto-spoken or via the
    Play button, doesn't matter, both go through the same voiceClient.js
@@ -462,6 +463,22 @@ a { color: var(--accent); }
   color: var(--accent-ink); border: none;
 }
 .pm-hint { color: var(--ink-faint); font-size: 0.72rem; margin-top: 8px; }
+
+/* Reply-to preview: shown above the compose box once Harvey taps "Reply"
+   on one of CC's messages, so it's clear which one the next send will be
+   tagged against before he actually sends it. */
+.pm-reply-preview {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  padding: 6px 10px; background: var(--surface-2); border: 1px solid var(--border);
+  border-left: 3px solid var(--accent); border-radius: 6px; font-size: 0.78rem;
+}
+.pm-reply-preview-label { color: var(--ink-faint); flex-shrink: 0; }
+.pm-reply-preview-text { color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.pm-reply-preview-cancel {
+  background: none; border: none; color: var(--ink-faint); cursor: pointer;
+  font-size: 0.9rem; line-height: 1; padding: 2px 4px; flex-shrink: 0;
+}
+.pm-reply-preview-cancel:hover { color: var(--error); }
 
 .pm-image-preview { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .pm-image-preview img { height: 56px; width: 56px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); }

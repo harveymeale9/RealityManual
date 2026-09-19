@@ -287,6 +287,11 @@
             '<div class="pm-empty">Type or speak to Claude Code — same project, same tools, full memory of RealityManual.</div>' +
           '</div>' +
           '<div class="pm-inputbar">' +
+            '<div class="pm-reply-preview" id="pmReplyPreview" hidden>' +
+              '<span class="pm-reply-preview-label">Replying to:</span>' +
+              '<span class="pm-reply-preview-text" id="pmReplyPreviewText"></span>' +
+              '<button type="button" class="pm-reply-preview-cancel" id="pmReplyPreviewCancel" aria-label="Cancel reply">✕</button>' +
+            '</div>' +
             '<div class="pm-image-preview" id="pmImagePreview" hidden></div>' +
             '<div class="pm-input-row">' +
               '<button type="button" class="pm-mic-btn" id="pmMicBtn" title="Record voice message" aria-label="Record voice message">' +
@@ -325,6 +330,32 @@
     var resetBtn = document.getElementById('pmResetBtn');
     var imagePreviewEl = document.getElementById('pmImagePreview');
     var inputRow = textInput.closest('.pm-input-row');
+    var replyPreviewEl = document.getElementById('pmReplyPreview');
+    var replyPreviewTextEl = document.getElementById('pmReplyPreviewText');
+    var replyPreviewCancelBtn = document.getElementById('pmReplyPreviewCancel');
+
+    // Tap-to-reply: selecting one of CC's earlier messages (via the Reply
+    // button added in addAssistantMessage below) sets this, shows the
+    // preview strip above the compose box, and gets threaded into the next
+    // send — both as an optimistic "Re:" quote on Harvey's own bubble and
+    // as reply_to_id sent to the backend, which weaves it into the actual
+    // prompt CC sees (server.js) so a short follow-up like "yes do that"
+    // stays unambiguous even after several things have been discussed.
+    var pendingReplyTo = null;
+    function setPendingReplyTo(msgId, text) {
+      if (!msgId) return;
+      var snippet = (text || '').trim();
+      if (!snippet) return;
+      pendingReplyTo = { id: msgId, snippet: snippet };
+      replyPreviewTextEl.textContent = snippet.length > 80 ? snippet.slice(0, 80) + '…' : snippet;
+      replyPreviewEl.hidden = false;
+      textInput.focus();
+    }
+    function clearPendingReplyTo() {
+      pendingReplyTo = null;
+      replyPreviewEl.hidden = true;
+    }
+    replyPreviewCancelBtn.addEventListener('click', clearPendingReplyTo);
 
     if (pmSync) { pmSync.stop(); pmSync = null; }
 
@@ -424,6 +455,14 @@
         Voice.speak(text, msgId).catch(function () {});
       });
       meta.appendChild(playBtn);
+      if (msgId) {
+        var replyBtn = document.createElement('button');
+        replyBtn.type = 'button';
+        replyBtn.className = 'pm-reply-btn';
+        replyBtn.textContent = '↩ Reply';
+        replyBtn.addEventListener('click', function () { setPendingReplyTo(msgId, text); });
+        meta.appendChild(replyBtn);
+      }
       wrap.appendChild(meta);
       thread.appendChild(wrap);
       thread.scrollTop = thread.scrollHeight;
@@ -605,7 +644,7 @@
     var pastFirstTick = false;
 
     pmSync = Voice.syncThread({
-      onNewMessage: function (row) { addMessage('user', row.transcript, row.id); },
+      onNewMessage: function (row) { addMessage('user', row.transcript, row.id, null, row.reply_to_snippet); },
       onPending: function (row) { addTyping(row.id); },
       onEarlyAck: function (row) {
         // Swap the generic "CC is working on it…" placeholder for CC's own
@@ -662,10 +701,12 @@
       var autoSpeak = !!opts.autoSpeak;
       var image = opts.image || null;
       if (!text.trim() && !image) return;
-      addMessage('user', text.trim(), null, image);
+      var replyTo = pendingReplyTo;
+      clearPendingReplyTo();
+      addMessage('user', text.trim(), null, image, replyTo ? replyTo.snippet : null);
       var typingEl = addTyping();
       renderActivity(null);
-      Voice.sendMessage(text.trim(), mode, image).then(function (created) {
+      Voice.sendMessage(text.trim(), mode, image, replyTo ? replyTo.id : null).then(function (created) {
         typingEl.dataset.msgId = created.id;
         if (autoSpeak) voiceAutoSpeak[created.id] = true;
         pmSync.markKnown(created);

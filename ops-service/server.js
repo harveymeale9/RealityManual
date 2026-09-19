@@ -79,6 +79,12 @@ try { db.exec('ALTER TABLE voice_messages ADD COLUMN activity_log TEXT'); } catc
 // instead of a hardcoded filler phrase while the real work is still in
 // progress. Same safe-ALTER pattern as activity_log above.
 try { db.exec('ALTER TABLE voice_messages ADD COLUMN early_ack TEXT'); } catch (e) { /* already exists */ }
+// reply_to_id: an earlier voice_messages.id this message is explicitly
+// replying to — set when Harvey taps "Reply" on one of CC's messages in
+// the UI, so a short follow-up ("yes do that") is unambiguous even after
+// several different things have been discussed in the same thread. Same
+// safe-ALTER pattern as the columns above.
+try { db.exec('ALTER TABLE voice_messages ADD COLUMN reply_to_id TEXT'); } catch (e) { /* already exists */ }
 
 const stmts = {
   getAll: db.prepare('SELECT data FROM records WHERE store_name = ? ORDER BY updated_at ASC'),
@@ -92,7 +98,7 @@ const stmts = {
   getSession: db.prepare('SELECT * FROM sessions WHERE token = ?'),
   delSession: db.prepare('DELETE FROM sessions WHERE token = ?'),
   purgeSessions: db.prepare('DELETE FROM sessions WHERE expires_at < ?'),
-  insertVoiceMessage: db.prepare('INSERT INTO voice_messages (id, mode, transcript, status, created_at) VALUES (?, ?, ?, ?, ?)'),
+  insertVoiceMessage: db.prepare('INSERT INTO voice_messages (id, mode, transcript, status, created_at, reply_to_id) VALUES (?, ?, ?, ?, ?, ?)'),
   setVoiceMessageStatus: db.prepare('UPDATE voice_messages SET status = ? WHERE id = ?'),
   setVoiceActivityLog: db.prepare('UPDATE voice_messages SET activity_log = ? WHERE id = ?'),
   setVoiceEarlyAck: db.prepare('UPDATE voice_messages SET early_ack = ? WHERE id = ?'),
@@ -523,6 +529,8 @@ app.post('/api/voice/messages', voiceMessageUpload.single('image'), function (re
   const rawText = (req.body && req.body.text) || '';
   const mode = req.body && req.body.mode;
   const trimmed = rawText.trim().slice(0, 4000);
+  const rawReplyToId = (req.body && req.body.replyToId) || null;
+  const replyToId = (typeof rawReplyToId === 'string' && rawReplyToId.trim()) ? rawReplyToId.trim().slice(0, 64) : null;
   function cleanupUpload() { if (req.file) fs.rm(req.file.path, { force: true }, function () {}); }
   if (!trimmed && !req.file) { cleanupUpload(); return res.status(400).json({ error: 'invalid_text' }); }
   if (mode !== 'respond' && mode !== 'execute') { cleanupUpload(); return res.status(400).json({ error: 'invalid_mode' }); }
@@ -530,8 +538,8 @@ app.post('/api/voice/messages', voiceMessageUpload.single('image'), function (re
   const id = crypto.randomBytes(16).toString('hex');
   const now = new Date().toISOString();
   const finalText = trimmed || '(image attached, no caption)';
-  stmts.insertVoiceMessage.run(id, mode, finalText, 'pending', now);
-  res.json({ id: id, status: 'pending' });
+  stmts.insertVoiceMessage.run(id, mode, finalText, 'pending', now, replyToId);
+  res.json({ id: id, status: 'pending', reply_to_id: replyToId });
 
   const SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
   let imageBlock = null;
@@ -544,25 +552,50 @@ app.post('/api/voice/messages', voiceMessageUpload.single('image'), function (re
   }
   cleanupUpload();
 
-  voiceQueue.push({ id: id, mode: mode, text: finalText, imageBlock: imageBlock });
+  // Reply-to context is woven into the prompt CC actually sees (not into
+  // the stored transcript — that stays exactly what Harvey typed/said, for
+  // the chat UI) so a short follow-up like "yes do that" is unambiguous
+  // even after several different things have come up in the same thread.
+  let promptText = finalText;
+  if (replyToId) {
+    const replyTarget = stmts.getVoiceMessage.get(replyToId);
+    if (replyTarget) {
+      const quoted = (replyTarget.reply_text || replyTarget.transcript || '').slice(0, 500);
+      promptText = 'Harvey is replying directly to your specific earlier message quoted below — treat his new message as being about that one, not necessarily whatever was discussed most recently. Your earlier message: "' +
+        quoted + '"\n\nHis reply: ' + finalText;
+    }
+  }
+
+  voiceQueue.push({ id: id, mode: mode, text: promptText, imageBlock: imageBlock });
   drainVoiceQueue();
 });
 
-function parseActivityLog(row) {
+function hydrateVoiceMessageRow(row) {
   if (!row) return row;
   try { row.activity_log = row.activity_log ? JSON.parse(row.activity_log) : []; } catch (e) { row.activity_log = []; }
+  // reply_to_snippet: resolved server-side (rather than left for the client
+  // to cross-reference against whatever it happens to already have loaded)
+  // so the quoted preview renders correctly even after a page reload, on a
+  // device that never saw the original message, or once it's scrolled out
+  // of the client's fetch window.
+  if (row.reply_to_id) {
+    const target = stmts.getVoiceMessage.get(row.reply_to_id);
+    row.reply_to_snippet = target ? (target.reply_text || target.transcript || '').slice(0, 200) : null;
+  } else {
+    row.reply_to_snippet = null;
+  }
   return row;
 }
 
 app.get('/api/voice/messages', function (req, res) {
   const limit = Math.min(parseInt(req.query.limit, 10) || 30, 100);
-  res.json(stmts.listVoiceMessages.all(limit).map(parseActivityLog));
+  res.json(stmts.listVoiceMessages.all(limit).map(hydrateVoiceMessageRow));
 });
 
 app.get('/api/voice/messages/:id', function (req, res) {
   const row = stmts.getVoiceMessage.get(req.params.id);
   if (!row) return res.status(404).json({ error: 'not_found' });
-  res.json(parseActivityLog(row));
+  res.json(hydrateVoiceMessageRow(row));
 });
 
 app.post('/api/voice/session/reset', function (req, res) {

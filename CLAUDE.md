@@ -4185,3 +4185,83 @@ device test to confirm, not just code review.
 Sources:
 - [Bluetooth headset - ArchWiki](https://wiki.archlinux.org/title/Bluetooth_headset) — A2DP has no input/microphone mode; HSP/HFP is required for bidirectional (mic) audio.
 - [Trouble with bluetooth headphones on Chrome - Google Chrome Community](https://support.google.com/chrome/thread/21533239/trouble-with-bluetooth-headphones-on-chrome-no-audio-for-any-tabs?hl=en) — Chrome/Android Bluetooth audio routing behavior and known limitations.
+
+---
+
+# 104. Project Manager: Tap-to-Reply on CC's Messages
+
+Harvey asked for a way to reply to a specific earlier message from CC in
+the Project Manager chat — tap on one of CC's previous bubbles and reply
+directly to it, so it's unambiguous which message a short follow-up (e.g.
+"yes do that") is actually about, especially once several different
+topics have come up in the same long-running resumed session.
+
+**Backend (`ops-service/server.js`):**
+- New `voice_messages.reply_to_id` column (safe `ALTER TABLE`, same
+  no-op-if-already-migrated pattern as `activity_log`/`early_ack`) —
+  stores the id of the earlier row a message is explicitly replying to.
+- `insertVoiceMessage` extended to take it; `POST /api/voice/messages`
+  reads an optional `replyToId` field (works for both the plain-JSON and
+  multipart/image-attached request bodies, since multer parses non-file
+  fields into `req.body` either way).
+- **The stored `transcript` stays exactly what Harvey typed** — the
+  quoted context is woven into a separate `promptText` built just before
+  the message is pushed onto `voiceQueue`, not persisted. When
+  `replyToId` resolves to a real row, `promptText` becomes "Harvey is
+  replying directly to your specific earlier message quoted below...
+  Your earlier message: "..." His reply: ...", so the actual model turn
+  sees unambiguous context without permanently mutating what's shown in
+  the UI as Harvey's own message.
+- `GET /api/voice/messages` and `GET /api/voice/messages/:id` (via a
+  renamed `hydrateVoiceMessageRow`, was `parseActivityLog`) now also
+  resolve `reply_to_snippet` server-side whenever `reply_to_id` is set —
+  looked up per-row from the same tiny local SQLite table (no join
+  needed, N+1 is a non-issue at this table's size). Resolving it
+  server-side rather than leaving the client to cross-reference its own
+  already-fetched messages means the quoted preview still renders
+  correctly after a page reload, on a device that never saw the original
+  message, or once the original has scrolled outside the client's fetch
+  window — none of which a purely client-side lookup could handle.
+
+**Frontend (`ops-service/public/app.js` + `voice-mobile.html`, both via
+the same pattern, plus a shared `sendMessage()` change in
+`lib/voiceClient.js`):**
+- Each assistant message bubble's meta row (`addAssistantMessage()`)
+  gains a small "↩ Reply" button alongside the existing Play button.
+  Clicking it calls `setPendingReplyTo(msgId, text)`, which shows a
+  preview strip (`.pm-reply-preview`) above the compose box — "Replying
+  to: <snippet>" with a ✕ to cancel — and focuses the text input.
+- `Voice.sendMessage(text, mode, imageFile, replyToId)` gained a 4th
+  optional argument, included in the request body/form when set.
+- `sendText()` (desktop) / `sendTyped()` (mobile) read the pending
+  reply-to state, clear it, render the outgoing message with a "Re: ..."
+  quote via `addMessage()`'s existing `replyToText` parameter (built for
+  §85's opposite case — CC's replies quoting Harvey's question — and
+  reused here unchanged), and pass `replyToId` through to
+  `Voice.sendMessage()`.
+- `onNewMessage` in both files' `syncThread` wiring now passes
+  `row.reply_to_snippet` through to `addMessage()` too, so a reply sent
+  from the *other* device (or replayed on page load) renders its quote
+  correctly as well — not just ones sent from the device currently open.
+
+**Deliberately scoped to the text/type-bar send paths only**, per
+Harvey's own phrasing ("reply... via text") — the reply button only
+appears on assistant bubbles (not on Harvey's own messages or error
+bubbles), and the two big voice buttons (mobile's Ask/Execute, desktop's
+mic) aren't wired to a reply-target picker; a reply is always composed
+by typing (or live-transcribed speech landing in the text box on
+desktop, which reuses the same `sendText()` path and therefore also
+picks up a pending reply-to for free) rather than the record-and-upload
+voice flow.
+
+This is a `server.js` change (the new column + endpoint behavior), so
+per §93 it triggers a full rebuild/restart on the next deploy — same
+standing caveat as §102, since this session is the headless agent
+running inside the container being restarted.
+
+Verified via `node --check` on all four touched JS files/inline script;
+not yet tested against the live deployed service — confirm the reply
+button appears, the preview bar shows/cancels correctly, the quote
+renders on both the sending and receiving device, and a reply actually
+disambiguates correctly in a real multi-topic conversation before
+considering this fully done.

@@ -109,20 +109,26 @@ window.RMVoice = (function () {
   // imageFile (optional): a File/Blob — sent as multipart alongside text/mode
   // when present. The endpoint accepts both plain JSON (text-only, as
   // before) and multipart (image attached) — see server.js.
-  function sendMessage(text, mode, imageFile) {
+  // replyToId (optional): the id of an earlier voice_messages row this
+  // message is a tap-to-reply response to — see server.js's promptText
+  // wiring for how it's used.
+  function sendMessage(text, mode, imageFile, replyToId) {
     if (imageFile) {
       var form = new FormData();
       form.append('text', text || '');
       form.append('mode', mode);
+      if (replyToId) form.append('replyToId', replyToId);
       form.append('image', imageFile, imageFile.name || 'pasted-image.png');
       return fetch(API_BASE + '/api/voice/messages', { method: 'POST', credentials: 'include', body: form })
         .then(function (r) { if (!r.ok) throw new Error('Could not send message'); return r.json(); });
     }
+    var body = { text: text, mode: mode };
+    if (replyToId) body.replyToId = replyToId;
     return fetch(API_BASE + '/api/voice/messages', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: text, mode: mode })
+      body: JSON.stringify(body)
     }).then(function (r) { if (!r.ok) throw new Error('Could not send message'); return r.json(); });
   }
 
