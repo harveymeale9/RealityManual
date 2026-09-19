@@ -4888,3 +4888,92 @@ service — worth confirming the thresholds actually feel right in
 practice (they're reasonable first-pass numbers based on how each type
 is already described in `Store.CONTENT_TYPES`, not something Harvey
 specified precisely) and adjusting if a real upload gets miscategorized.
+
+---
+
+# 115. Final Check Now Actually Shows the Final (Audio-Spliced) Video
+
+Harvey's report matched exactly what §113's card was missing: the Final
+Check preview was still the raw uploaded video, no ambient audio
+spliced in at all. His rule: build the *real* final video before a
+piece is ever allowed into Final Check — it stays in Processing until
+that's genuinely done.
+
+**`ops-service/src/videoAnalysis.js`: `buildFinalVideo(videoPath,
+audioPath, outPath)`** — the same 20%-under-original mix Harvey already
+manually reviewed and approved back when this was first tested by hand
+("that's actually perfect. well done!"), now wired into the real
+pipeline. One addition beyond that original manual test: `-stream_loop
+-1` on the audio input, so a shorter ambient track loops for the video's
+full length instead of playing once and going silent — matches Harvey's
+own uploader spec ("all music is simply to loop/repeat until the video
+ends"). `amix`'s `duration=first` still cuts the whole output off once
+the video's own original audio ends, so the loop doesn't run past the
+video. Verified for real against the live test video before wiring it
+in (same "safe to test, no side effects" reasoning as the shipping-quote
+checks elsewhere) — confirmed the command runs cleanly and produces an
+output whose duration exactly matches the source video's; not
+separately re-verified with a track *shorter* than the video (the one
+available for testing happens to already be longer), so the actual
+looping behavior itself is unconfirmed on real output, just standard,
+well-documented ffmpeg mechanics. When no audio track is chosen (or
+`"__none__"`, Harvey's explicit "No ambient music" pick), this just
+remuxes the original video untouched via `-c copy` rather than skipping
+the step — so Final Check always plays from the same `<id>-final` file
+regardless of whether music was actually added, one code path instead
+of two.
+
+**`server.js`: `POST /api/videos/:id/build-final`** — same
+immediate-response-then-background-job pattern as the existing
+`/analyze` route. Builds into a **separate** `<id>-final` id in the same
+`videos` store (never overwriting the raw upload) specifically so
+picking a different audio track later and sending it again always
+splices from the untouched original, not from a previous splice.
+Registers a normal `videos` DB record for the new file (so it serves
+through the existing, unchanged `/api/files/videos/:id` route — no new
+serving code needed) and, **only once the build genuinely succeeds**,
+sets `piece.stage = 'final_check'` itself, server-side — the client
+never flips the stage directly anymore. On failure the piece stays in
+Processing with `finalBuildStatus: 'error'` so Harvey can just try
+again (e.g. after picking a different track) instead of getting stuck.
+
+**Frontend (`app.js`):** "Send to final check" no longer moves the
+piece itself — it sets `finalBuildStatus: 'pending'`, calls the new
+route, and the row shows "Building final video (splicing in audio)…"
+live. The row's own instant-tick-and-remove animation from §112 still
+happens, just triggered by the *real* completion landing via the
+polling loop (generalized — same poller now also watches
+`finalBuildStatus`, and a piece whose stage actually changed gets the
+animated removal, while one still in Processing with just a changed
+status gets its own row refreshed in place) rather than faked the
+moment the button is clicked. Also narrowed the Upload Files "in
+production" list to `stage === 'processed'` only (was `stage !==
+'live'`, which included final_check) — once a piece has its own review
+card on the kanban board (§113) it shouldn't also still show as an
+editable row here, which used to be a harmless-looking but real
+inconsistency (a full page reload would have brought a final_check
+piece right back into this list, undoing §112's removal animation).
+
+**One-time migration** (`migrateUnbuiltFinalChecks`, same pattern as
+the existing `migrateThumbnailStage`): any piece already sitting in
+`final_check` without `finalBuildStatus: 'done'` — which, before this
+fix, was *every* piece that ever reached that stage, since the build
+step didn't exist yet — gets sent back to Processing so it goes through
+the real build the next time Harvey sends it. Confirmed directly
+against the live data before writing this: piece #094 (from Harvey's
+own screenshot) is exactly this case, `finalBuildStatus: undefined`,
+and will correctly migrate back to Processing on next load.
+
+This is a `server.js`/`videoAnalysis.js` change (real backend logic,
+not just frontend), so per §93 it triggers a full rebuild+restart on
+the next deploy — same standing caveat as §102/§104/§111, since this
+session is the headless agent running inside the container being
+restarted.
+
+Verified via `node --check` on all touched files and a direct ffmpeg
+test of the actual splice+loop command against the real uploaded test
+video on the VPS; **not yet verified end-to-end through the deployed
+app itself** — confirm after the restart that clicking "Send to final
+check" genuinely builds the file, the piece stays in Processing with a
+live status line while it does, and the Final Check card's video
+actually has the spliced audio audible when played.

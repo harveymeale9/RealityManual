@@ -23,6 +23,35 @@ function extractAudioMp3(videoPath, outPath) {
   });
 }
 
+// The actual "final" video Harvey reviews in Final Check and (eventually)
+// schedules — audio spliced in at a fixed 20% under the original track,
+// the exact mix Harvey manually reviewed and approved ("that's actually
+// perfect. well done!") before this was wired into the automatic
+// pipeline. `-stream_loop -1` on the audio input loops it indefinitely at
+// the demuxer level (per Harvey's own uploader spec: "all music is simply
+// to loop/repeat until the video ends") — amix's `duration=first` still
+// cuts the whole output off once the video's own original audio track
+// ends, so a short ambient track loops for the full video length instead
+// of playing once and going silent partway through. audioPath is
+// optional — when Harvey picked "No ambient music" (or hasn't picked
+// anything yet), this just remuxes the original video/audio untouched
+// rather than skipping the step and leaving two different code paths for
+// "what Final Check actually shows" to keep in sync.
+function buildFinalVideo(videoPath, audioPath, outPath) {
+  return new Promise(function (resolve, reject) {
+    const args = audioPath
+      ? ['-y', '-i', videoPath, '-stream_loop', '-1', '-i', audioPath,
+        '-filter_complex', '[1:a]volume=0.2[bg];[0:a][bg]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]',
+        '-map', '0:v', '-map', '[aout]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k',
+        '-movflags', '+faststart', '-f', 'mp4', outPath]
+      : ['-y', '-i', videoPath, '-c', 'copy', '-movflags', '+faststart', '-f', 'mp4', outPath];
+    execFile('ffmpeg', args, { maxBuffer: 20 * 1024 * 1024 }, function (err) {
+      if (err) return reject(new Error('ffmpeg final-video build failed: ' + err.message));
+      resolve();
+    });
+  });
+}
+
 // videoPath: the uploaded video file on disk. tmpDir: scratch space to
 // extract the audio into (caller's responsibility to have created it;
 // this cleans up its own temp file either way).
@@ -90,4 +119,4 @@ async function matchAndGenerateTitles(transcript, candidates) {
   return parseMatchResult(raw);
 }
 
-module.exports = { transcribeVideo, matchAndGenerateTitles };
+module.exports = { transcribeVideo, matchAndGenerateTitles, buildFinalVideo };

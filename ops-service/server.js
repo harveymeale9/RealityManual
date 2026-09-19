@@ -366,6 +366,70 @@ app.post('/api/videos/:id/analyze', function (req, res) {
   runVideoAnalysis(id).catch(function (e) { console.error('unhandled video analysis error for ' + id + ':', e.message); });
 });
 
+// --- Building the actual final video (audio spliced in) before a piece
+// is allowed into Final Check — Harvey's rule: the Final Check preview
+// has to already be the real thing, audio and all, not the raw upload,
+// so the piece stays in Processing until this finishes. The output lives
+// at a separate `<id>-final` id in the same `videos` store (never
+// overwriting the raw upload) specifically so re-running this later
+// (Harvey picks a different audio track and sends it again) always
+// splices from the untouched original, not from a previous splice.
+const FINAL_VIDEO_SUFFIX = '-final';
+
+async function runBuildFinalVideo(id) {
+  const piece = getPieceRecord(id);
+  if (!piece) return; // deleted before this started — nothing to do
+  piece.finalBuildStatus = 'running';
+  savePieceRecord(piece);
+
+  try {
+    const videoPath = path.join(UPLOADS_DIR, 'videos', id);
+    let audioPath = null;
+    if (piece.audioTrackId && piece.audioTrackId !== '__none__') {
+      const candidate = path.join(UPLOADS_DIR, 'audioTracks', piece.audioTrackId);
+      if (fs.existsSync(candidate)) audioPath = candidate;
+      // A missing/deleted track just falls back to no-music (remux only)
+      // rather than failing the whole build over it.
+    }
+    const finalId = id + FINAL_VIDEO_SUFFIX;
+    const outPath = path.join(UPLOADS_DIR, 'videos', finalId);
+    await videoAnalysis.buildFinalVideo(videoPath, audioPath, outPath);
+
+    const stat = fs.statSync(outPath);
+    const finalRecord = { id: finalId, fileName: 'final.mp4', sizeBytes: stat.size, mimeType: 'video/mp4', createdAt: new Date().toISOString() };
+    stmts.upsert.run('videos', finalId, JSON.stringify(finalRecord), new Date().toISOString());
+
+    const latest = getPieceRecord(id);
+    if (!latest) return; // deleted while this was running
+    latest.finalBuildStatus = 'done';
+    latest.stage = 'final_check';
+    latest.updatedAt = new Date().toISOString();
+    savePieceRecord(latest);
+  } catch (e) {
+    console.error('final video build failed for ' + id + ':', e.message);
+    const latest = getPieceRecord(id);
+    if (!latest) return;
+    latest.finalBuildStatus = 'error';
+    latest.finalBuildError = String(e.message || e).slice(0, 500);
+    // Deliberately NOT touching stage here — it stays in Processing so
+    // Harvey can just try again (e.g. pick a different track) rather
+    // than getting stuck on a stage that doesn't have a real video yet.
+    latest.updatedAt = new Date().toISOString();
+    savePieceRecord(latest);
+  }
+}
+
+app.post('/api/videos/:id/build-final', function (req, res) {
+  const { id } = req.params;
+  if (!isValidId(id)) return res.status(400).json({ error: 'invalid_params' });
+  const filePath = path.join(UPLOADS_DIR, 'videos', id);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'video_not_found' });
+  const piece = getPieceRecord(id);
+  if (!piece) return res.status(404).json({ error: 'piece_not_found' });
+  res.json({ ok: true, status: 'running' });
+  runBuildFinalVideo(id).catch(function (e) { console.error('unhandled final-build error for ' + id + ':', e.message); });
+});
+
 // --- Voice app: talk to a real headless Claude Code agent by voice or text ---
 // Separate concern again (own tables, own routes) from the content-ops
 // board above — see CLAUDE.md section on the voice app for the full design.

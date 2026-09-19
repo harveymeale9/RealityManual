@@ -901,12 +901,29 @@
     });
   }
 
+  // A piece could only reach Final Check under the *old* flow by having
+  // its stage set directly (no separate audio-spliced video ever built —
+  // that pipeline didn't exist yet). Its Final Check card would now try
+  // to play a "<id>-final" file that was never created. Sending it back
+  // to Processing means it goes through the real build the next time
+  // Harvey hits "Send to final check," same as any new upload — rather
+  // than leaving a stale entry with a broken/missing video preview.
+  function migrateUnbuiltFinalChecks(rows) {
+    var stragglers = rows.filter(function (r) { return r.stage === 'final_check' && r.finalBuildStatus !== 'done'; });
+    stragglers.forEach(function (r) {
+      r.stage = 'processed';
+      r.updatedAt = nowIso();
+      Store.put('pieces', r);
+    });
+  }
+
   function ensurePiecesLoaded() {
     if (!piecesLoadedPromise) {
       piecesLoadedPromise = Store.getAll('pieces').then(function (rows) {
         rows.forEach(function (r) { pieces[r.id] = r; });
         backfillMissingSeqs(rows);
         migrateThumbnailStage(rows);
+        migrateUnbuiltFinalChecks(rows);
         return maybeSeedExamples();
       });
     }
@@ -1814,11 +1831,17 @@
       ? '<ol class="fc-titles">' + titles.map(function (t) { return '<li>' + escapeHtml(t) + '</li>'; }).join('') + '</ol>'
       : '<div class="fc-titles-empty">No title options set.</div>';
     var idBadge = typeof piece.seq === 'number' ? '#' + String(piece.seq).padStart(3, '0') + ' — ' : '';
+    // A piece never reaches this stage without its final (audio-spliced)
+    // video already having been built — server.js's runBuildFinalVideo
+    // only flips the stage to final_check once that's genuinely done —
+    // so this always points at the real "<id>-final" file, never the raw
+    // upload, matching Harvey's whole point of this stage: what's playing
+    // here is what actually gets published.
     return '' +
       '<div class="final-check-card" data-id="' + id + '">' +
         '<video class="fc-video" data-id="' + id + '" playsinline preload="metadata"' +
           (piece.thumbnailDataUrl ? ' poster="' + piece.thumbnailDataUrl + '"' : '') +
-          ' controls src="/api/files/videos/' + encodeURIComponent(id) + '"></video>' +
+          ' controls src="/api/files/videos/' + encodeURIComponent(id) + '-final"></video>' +
         '<div class="fc-title">' + idBadge + escapeHtml(piece.title || 'Untitled') + '</div>' +
         '<div class="fc-caption">' + escapeHtml(captionText) + '</div>' +
         titlesHtml +
@@ -2133,6 +2156,21 @@
       matchEl.textContent = matched ? ('Matched to #' + String(matched.seq || 0).padStart(3, '0') + ' — ' + matched.title) : 'Matched to an outline.';
       titleId.appendChild(matchEl);
     }
+    // The real, audio-spliced video Final Check reviews — has to exist
+    // before the piece is allowed to leave Processing (see CLAUDE.md's
+    // uploader-tool section on why), so this status line is what Harvey
+    // actually watches after clicking "Send to final check."
+    if (p.finalBuildStatus === 'running' || p.finalBuildStatus === 'pending') {
+      var building = document.createElement('div');
+      building.className = 'upload-row-status';
+      building.textContent = 'Building final video (splicing in audio)…';
+      titleId.appendChild(building);
+    } else if (p.finalBuildStatus === 'error') {
+      var buildErr = document.createElement('div');
+      buildErr.className = 'upload-row-status upload-row-status-error';
+      buildErr.textContent = 'Final video build failed (' + (p.finalBuildError || 'unknown error') + ') — try Send to final check again.';
+      titleId.appendChild(buildErr);
+    }
     head.appendChild(thumbEl);
     head.appendChild(titleId);
     return head;
@@ -2255,30 +2293,29 @@
     sendBtn.className = 'btn-primary btn-tiny';
     sendBtn.textContent = 'Send to final check';
     sendBtn.addEventListener('click', function () {
-      // Harvey's ask: this is "my part here is done" — the row should
-      // give an instant tick and get out of the way, not make the whole
-      // list flash through a full rebuild (which is what routing this
-      // through renderUploadLists() used to do, and also meant clicking
-      // it twice looked like nothing happened the first time).
+      // Doesn't move the piece to Final Check itself anymore — Harvey's
+      // rule: Final Check's preview has to already be the *real* video
+      // (audio spliced in), not the raw upload, so this only kicks off
+      // that build and stays in Processing (with a live status line, see
+      // buildUploadRowHead) until the server actually finishes it and
+      // flips the stage itself (server.js's runBuildFinalVideo). The
+      // row's own instant-tick-and-remove animation still happens, just
+      // once that real completion lands via the poller below instead of
+      // pretending it's done the moment this button is clicked.
       if (sendBtn.disabled) return;
       sendBtn.disabled = true;
-      sendBtn.textContent = '✓ Sent';
+      sendBtn.textContent = 'Building…';
       openBtn.disabled = true;
-      p.stage = 'final_check';
+      p.finalBuildStatus = 'pending';
       p.updatedAt = nowIso();
-      syncTags(p);
-      Store.put('pieces', p).then(function () {
-        row.classList.add('upload-row-removing');
-        setTimeout(function () {
-          if (uploadRowObjectUrls[p.id]) {
-            URL.revokeObjectURL(uploadRowObjectUrls[p.id]);
-            delete uploadRowObjectUrls[p.id];
-          }
-          if (row.parentNode) row.parentNode.removeChild(row);
-          if (!uploadRows.querySelector('.upload-row')) {
-            uploadRows.innerHTML = '<div class="empty-slot wide">Nothing uploaded yet — drop a video above.</div>';
-          }
-        }, 400);
+      Store.put('pieces', p).then(refreshHead).then(function () {
+        return fetch('/api/videos/' + encodeURIComponent(p.id) + '/build-final', { method: 'POST', credentials: 'include' });
+      }).then(function () {
+        maybeStartAnalysisPolling();
+      }).catch(function () {
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Send to final check';
+        openBtn.disabled = false;
       });
     });
     var openBtn = document.createElement('button');
@@ -2307,6 +2344,33 @@
     uploadRowSaveTimers[p.id] = setTimeout(function () { Store.put('pieces', p); }, 500);
   }
 
+  // Both used by the polling loop below (maybeStartAnalysisPolling) so a
+  // background completion — final video build finishing, analysis
+  // landing — can update a single row without the flash a full
+  // renderUploadLists() causes (§112). Standalone (not closures inside
+  // buildUploadRow) specifically so the poller, which has no access to
+  // any one row's own internal refreshHead(), can still target a
+  // specific row from the outside by id.
+  function refreshUploadRowHeadById(id) {
+    var row = uploadRows.querySelector('.upload-row[data-id="' + id + '"]');
+    if (!row) return;
+    var oldHead = row.querySelector('.upload-row-head');
+    if (!oldHead) return;
+    oldHead.replaceWith(buildUploadRowHead(pieces[id]));
+  }
+  function removeUploadRowAnimated(id) {
+    var row = uploadRows.querySelector('.upload-row[data-id="' + id + '"]');
+    if (!row) return;
+    row.classList.add('upload-row-removing');
+    setTimeout(function () {
+      if (uploadRowObjectUrls[id]) { URL.revokeObjectURL(uploadRowObjectUrls[id]); delete uploadRowObjectUrls[id]; }
+      if (row.parentNode) row.parentNode.removeChild(row);
+      if (!uploadRows.querySelector('.upload-row')) {
+        uploadRows.innerHTML = '<div class="empty-slot wide">Nothing uploaded yet — drop a video above.</div>';
+      }
+    }, 400);
+  }
+
   // Only for cases that genuinely need every row rebuilt from scratch
   // (initial load, a new file just landed, analysis just finished, the
   // full editor modal closed) — anything that only changes one row's own
@@ -2319,7 +2383,12 @@
   // between (what Harvey saw as the whole panel flashing/disappearing).
   function renderUploadLists() {
     var items = Object.keys(pieces).map(function (k) { return pieces[k]; }).filter(function (p) { return p.hasVideo; });
-    var inProgress = items.filter(function (p) { return p.stage !== 'live'; }).sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
+    // Only still-in-Processing pieces get the editable row treatment here
+    // — once a piece reaches Final Check it has its own dedicated review
+    // card on the kanban board instead (§113), so showing it here too
+    // would just be a redundant, stale-looking duplicate of the same
+    // piece in two places.
+    var inProgress = items.filter(function (p) { return p.stage === 'processed'; }).sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
     var posted = items.filter(function (p) { return p.stage === 'live'; }).sort(function (a, b) { return new Date(b.updatedAt) - new Date(a.updatedAt); });
 
     function swapIn(audioTracks) {
@@ -2353,25 +2422,39 @@
     maybeStartAnalysisPolling();
   }
 
-  // Analysis (transcribe + match + title extraction) runs server-side in
-  // the background — this just polls the handful of pieces still waiting
-  // on it and re-renders once their analysisStatus moves past
-  // pending/running, so Harvey sees the real transcript/title/tags land
-  // without needing to refresh the page. Stops itself once nothing's
-  // waiting, rather than polling forever in the background.
+  // Two server-side background jobs land here: transcribe+match analysis
+  // (§111) and the final audio-splice video build (§115) — this polls
+  // the handful of pieces still waiting on either and updates just their
+  // own row once something changes, rather than a full
+  // renderUploadLists() (which would re-fetch every other row's video
+  // blob and flash the whole panel, §112). A piece whose build finished
+  // (stage moved off 'processed') gets the same instant-tick removal
+  // animation the button itself used to fake instantly; one still in
+  // Processing with a changed status (analysis landed, or a build
+  // failed) just gets its own head refreshed in place. Stops itself once
+  // nothing's waiting, rather than polling forever in the background.
   var analysisPollTimer = null;
   function maybeStartAnalysisPolling() {
     var waiting = Object.keys(pieces).filter(function (id) {
       var p = pieces[id];
-      return p.hasVideo && (p.analysisStatus === 'pending' || p.analysisStatus === 'running');
+      return p.hasVideo && (
+        p.analysisStatus === 'pending' || p.analysisStatus === 'running' ||
+        p.finalBuildStatus === 'pending' || p.finalBuildStatus === 'running'
+      );
     });
     if (!waiting.length) { clearTimeout(analysisPollTimer); analysisPollTimer = null; return; }
     if (analysisPollTimer) return;
     analysisPollTimer = setTimeout(function () {
       analysisPollTimer = null;
       Promise.all(waiting.map(function (id) { return Store.get('pieces', id); })).then(function (rows) {
-        rows.forEach(function (r) { if (r) pieces[r.id] = r; });
-        renderUploadLists();
+        rows.forEach(function (r) {
+          if (!r) return;
+          var wasProcessed = pieces[r.id] && pieces[r.id].stage === 'processed';
+          pieces[r.id] = r;
+          if (wasProcessed && r.stage !== 'processed') removeUploadRowAnimated(r.id);
+          else refreshUploadRowHeadById(r.id);
+        });
+        maybeStartAnalysisPolling();
       });
     }, 3000);
   }
