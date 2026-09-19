@@ -33,7 +33,7 @@
   var TABS = [
     { id: 'project-manager', label: 'Project Manager' },
     { id: 'content-ops', label: 'Content Ops' },
-    { id: 'upload-files', label: 'Upload Files' },
+    { id: 'upload-files', label: 'Content Production' },
     { id: 'content-analytics', label: 'Content Analytics' },
     { id: 'sales-analytics', label: 'Sales Analytics' },
     { id: 'website-analytics', label: 'Website Analytics' },
@@ -2298,25 +2298,30 @@
     sendBtn.className = 'btn-primary btn-tiny';
     sendBtn.textContent = 'Send to final check';
     sendBtn.addEventListener('click', function () {
-      // Doesn't move the piece to Final Check itself anymore — Harvey's
-      // rule: Final Check's preview has to already be the *real* video
-      // (audio spliced in), not the raw upload, so this only kicks off
-      // that build and stays in Processing (with a live status line, see
-      // buildUploadRowHead) until the server actually finishes it and
-      // flips the stage itself (server.js's runBuildFinalVideo). The
-      // row's own instant-tick-and-remove animation still happens, just
-      // once that real completion lands via the poller below instead of
-      // pretending it's done the moment this button is clicked.
+      // Doesn't move the piece to Final Check itself — Harvey's rule:
+      // Final Check's preview has to already be the *real* video (audio
+      // spliced in), not the raw upload, so this only kicks off that
+      // build server-side, which flips the stage itself once it actually
+      // finishes (server.js's runBuildFinalVideo). But the row itself
+      // shoots off the instant this click fires rather than sitting
+      // around showing a "Building…" state — the fetch to kick off the
+      // build is fire-and-forget (not awaited), so the row's own
+      // instant-tick-and-remove animation plays immediately, not once the
+      // real ffmpeg job (which can take a while) eventually finishes. If
+      // the build later fails, the poller below (which keeps tracking
+      // this piece's finalBuildStatus regardless of whether its row is
+      // still on screen) brings the row back via a full list rebuild so
+      // the failure isn't silently lost.
       if (sendBtn.disabled) return;
       sendBtn.disabled = true;
-      sendBtn.textContent = 'Building…';
+      sendBtn.textContent = '✓ Sent';
       openBtn.disabled = true;
       p.finalBuildStatus = 'pending';
       p.updatedAt = nowIso();
-      Store.put('pieces', p).then(refreshHead).then(function () {
-        return fetch('/api/videos/' + encodeURIComponent(p.id) + '/build-final', { method: 'POST', credentials: 'include' });
-      }).then(function () {
+      Store.put('pieces', p).then(function () {
+        fetch('/api/videos/' + encodeURIComponent(p.id) + '/build-final', { method: 'POST', credentials: 'include' }).catch(function () {});
         maybeStartAnalysisPolling();
+        removeUploadRowAnimated(p.id);
       }).catch(function () {
         sendBtn.disabled = false;
         sendBtn.textContent = 'Send to final check';
@@ -2452,14 +2457,25 @@
     analysisPollTimer = setTimeout(function () {
       analysisPollTimer = null;
       Promise.all(waiting.map(function (id) { return Store.get('pieces', id); })).then(function (rows) {
+        var needsFullRebuild = false;
         rows.forEach(function (r) {
           if (!r) return;
           var wasProcessed = pieces[r.id] && pieces[r.id].stage === 'processed';
           pieces[r.id] = r;
-          if (wasProcessed && r.stage !== 'processed') removeUploadRowAnimated(r.id);
-          else refreshUploadRowHeadById(r.id);
+          if (wasProcessed && r.stage !== 'processed') {
+            removeUploadRowAnimated(r.id);
+          } else if (r.finalBuildStatus === 'error' && !uploadRows.querySelector('.upload-row[data-id="' + r.id + '"]')) {
+            // The row was already removed by "Send to final check"'s own
+            // instant-tick animation (it doesn't wait for the build to
+            // finish) — if the build then actually failed, bring the row
+            // back so the failure isn't silently lost off-screen.
+            needsFullRebuild = true;
+          } else {
+            refreshUploadRowHeadById(r.id);
+          }
         });
-        maybeStartAnalysisPolling();
+        if (needsFullRebuild) renderUploadLists();
+        else maybeStartAnalysisPolling();
       });
     }, 3000);
   }

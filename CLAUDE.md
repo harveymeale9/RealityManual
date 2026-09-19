@@ -5005,3 +5005,70 @@ nothing else clickable.
 
 Frontend-only, so per §93 this is already live — no deploy/restart
 needed. Verified via `node --check` and a CSS brace-balance check.
+
+---
+
+# 117. "Upload Files" Renamed to "Content Production"; Instant Send-to-Final-Check; Glassy Panels
+
+Three small Harvey asks in one pass, all `ops-service/public/` only.
+
+**Rename.** The `upload-files` tab's display label changed from "Upload
+Files" to "Content Production" in `app.js`'s `TABS` array and the
+side-rail icon's `title`/`aria-label` in `index.html`. Per this
+codebase's established convention (see §90/§99), the internal tab id
+(`upload-files`), hash route (`#upload-files`), and every JS identifier
+(`renderUploadLists`, `buildUploadRow`, `UPLOAD_MARKUP`, etc.) were
+deliberately left alone — only the user-visible text changed.
+
+**"Send to final check" now shoots off instantly.** §115 made this
+button kick off a real ffmpeg audio-splice build server-side and wait
+(showing "Building…"/a live "Building final video…" status line) for
+that job to actually finish before the row disappeared — correct
+architecturally, but Harvey found the wait itself annoying ("I don't
+want it to hang, I want it to shoot off immediately"). Fixed in
+`buildUploadRow`'s `sendBtn` click handler: it still saves
+`finalBuildStatus: 'pending'` and still fires
+`POST /api/videos/:id/build-final`, but the fetch is no longer awaited
+before the row's tick-and-collapse animation runs — `removeUploadRowAnimated`
+now fires immediately after the (fast, local) `Store.put` resolves,
+not after the (slow, real ffmpeg) build completes. The actual build,
+and the server-side stage flip to Final Check on success (§115,
+unchanged), still happen in the background exactly as before — this is
+a UI-perception fix, not an architecture change.
+
+**Failure visibility, preserved despite the row being gone already:**
+`maybeStartAnalysisPolling`'s poll loop still tracks
+`finalBuildStatus` for every such piece regardless of whether its row
+is still on screen. If a build later fails (`finalBuildStatus ===
+'error'`) and the row was already removed by the instant-tick
+animation, the poller now calls a full `renderUploadLists()` instead of
+silently no-op'ing (the old `refreshUploadRowHeadById`/
+`removeUploadRowAnimated` pair both just early-return if the row isn't
+in the DOM) — so a real failure still resurfaces the row with its error
+status and a "try again" path, it just takes one extra rebuild rather
+than updating in place. A successful build still never triggers a
+visible change here at all, since the row is already gone by the time
+it completes — exactly what Harvey asked for.
+
+**Glassy/translucent panels instead of flat green-black.** Harvey: "the
+green is super boring." The ops panel already renders a fixed
+Earth-from-space backdrop behind everything (`body::before`, `img/earth.png`)
+but every panel surface used an opaque `var(--surface)` background, so
+it never actually showed through. `.dropzone`, `.video-card` (the
+Posted grid), and `.upload-row` (the main per-video Content Production
+panels) now use a translucent aurora-tinted gradient (green → violet →
+cyan, all low-opacity) plus `backdrop-filter: blur(…) saturate(150%)`
+instead — a frosted-glass look that lets the Earth backdrop bleed
+through with a soft blur, with a subtle green glow on hover instead of
+a flat border-color swap. Deliberately scoped to just this tab's three
+panel types, not the kanban's `.card`/`.final-check-card` or anything
+outside Content Production — Harvey's complaint was specifically about
+this section.
+
+Frontend-only (`app.js`, `index.html`, `style.css`), so per §93 this is
+already live — no deploy/restart needed. Verified via `node --check`
+and a CSS brace-balance check; not yet tested against the live deployed
+service with a real upload — worth confirming the instant-collapse
+feels right in practice and a deliberately-forced build failure (e.g.
+picking a corrupt file) actually resurfaces the row via the poller
+rather than silently vanishing.
