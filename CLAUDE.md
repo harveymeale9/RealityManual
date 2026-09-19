@@ -4407,3 +4407,50 @@ served straight from disk, no deploy/restart needed. Verified via
 `node --check`; not yet tested against the live deployed service with a
 real fast double-tap — worth a real test to confirm the race is actually
 closed, not just reasoned about.
+
+---
+
+# 108. Don't Speak a Reply While Harvey Is Recording a New Message
+
+Harvey's scenario: he sends a voice message, then starts recording a
+second one before hearing the first reply — the auto-spoken reply to
+message 1 would then play right on top of him dictating message 2.
+Asked for the reply to simply not play while he has the mic open.
+
+**Fix — one new piece of shared state in `voiceClient.js`:**
+`setRecordingActive(active)` sets a module-level `recordingActive` flag
+and, when turned on, immediately calls `stopSpeaking()` — so opening the
+mic cuts off anything already playing, not just blocks new playback.
+`speak()` now refuses to start at all while `recordingActive` is true —
+checked both up front (before even firing the TTS fetch) and again once
+the fetch resolves (covers the case where recording starts *during* an
+in-flight synthesis request, reusing the same `playToken` mechanism from
+§107 so a stale response never sneaks through).
+
+**Wiring — one choke point per page, no new call sites needed:**
+- `app.js`: both recording paths (live speech recognition and the
+  record-and-upload fallback) already funnel every start/stop through
+  the single `setRecordingUI(isRecording)` function — added
+  `Voice.setRecordingActive(isRecording)` there once, covering both
+  paths for free.
+- `voice-mobile.html`: `startFlow(mode)` (recording start, called by
+  both the Ask and Execute buttons) and `cleanup()` (recording end,
+  called from both the cancel and finish buttons) are the two existing
+  choke points — `setRecordingActive(true)` added at the top of
+  `startFlow`, `setRecordingActive(false)` added inside `cleanup`, plus
+  the mic-permission-denied error path also clears it so a failed
+  recording attempt can't leave replies muted indefinitely.
+
+**Deliberately not auto-resumed:** once recording stops, the reply that
+got skipped is *not* automatically spoken afterward — it's still fully
+present as text in the thread (rendering was never gated, only the
+audio), and Harvey can tap Play on it manually anytime. Auto-resuming
+felt like the wrong call: the natural next thing after he finishes
+dictating a second message is sending it, not being interrupted by an
+old reply starting to talk right as he's reviewing what he just said.
+
+Frontend-only (`voiceClient.js`, `app.js`, `voice-mobile.html`), so per
+§93 this is already live — no deploy/restart needed. Verified via
+`node --check` on all three files (the third via the usual extract-inline-
+script technique for `voice-mobile.html`); not yet tested against the
+live deployed service with a real overlapping-recording scenario.

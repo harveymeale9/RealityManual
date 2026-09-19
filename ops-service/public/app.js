@@ -756,6 +756,11 @@
       micBtn.title = isRecording ? 'Stop recording and send' : 'Record voice message';
       micBtn.setAttribute('aria-label', micBtn.title);
       sendBtn.hidden = isRecording;
+      // Don't talk over Harvey while he's dictating a new message — both
+      // recording paths below (live recognition and record-and-upload)
+      // funnel through this one function on every start/stop, so this is
+      // the single place to gate it.
+      Voice.setRecordingActive(isRecording);
     }
 
     var SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;

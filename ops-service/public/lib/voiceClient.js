@@ -243,6 +243,20 @@ window.RMVoice = (function () {
   // fetched.
   var playToken = 0;
 
+  // Set true for the exact duration Harvey has a mic open (either page's
+  // recording flow — desktop's setRecordingUI, mobile's startFlow/cleanup —
+  // calls this on every start/stop, both live-recognition and
+  // record-and-upload). Per Harvey: if he's recording a second message
+  // while a reply to an earlier one is still due to be spoken, he doesn't
+  // want to hear it talking over what he's saying. speak() below refuses
+  // to start any new playback while this is true, and starting a
+  // recording immediately stops whatever's already playing.
+  var recordingActive = false;
+  function setRecordingActive(active) {
+    recordingActive = !!active;
+    if (recordingActive) stopSpeaking();
+  }
+
   function stopSpeaking() {
     playToken++;
     if (currentAudio) {
@@ -260,7 +274,7 @@ window.RMVoice = (function () {
   // the right UI element as playback starts and stops.
   function speak(text, msgId) {
     var clean = stripMarkdownForSpeech(text);
-    if (!clean) return Promise.resolve(null);
+    if (!clean || recordingActive) return Promise.resolve(null);
     stopSpeaking();
     var myToken = playToken;
     return fetch(API_BASE + '/api/voice/tts', {
@@ -271,10 +285,11 @@ window.RMVoice = (function () {
     }).then(function (r) { if (!r.ok) throw new Error('Could not synthesize speech'); return r.blob(); })
       .then(function (blob) {
         // Superseded by a newer speak()/stopSpeaking() call while this
-        // fetch was still in flight — never even create the Audio element
-        // for it, so it can't ever start playing on top of whatever's
-        // current now.
-        if (myToken !== playToken) return null;
+        // fetch was still in flight, OR Harvey started recording a new
+        // message before this one's synthesis came back — either way,
+        // never create the Audio element for it, so it can't ever start
+        // playing on top of whatever's current now (or talk over him).
+        if (myToken !== playToken || recordingActive) return null;
         var url = URL.createObjectURL(blob);
         var audio = new Audio(url);
         currentAudio = audio;
@@ -428,6 +443,7 @@ window.RMVoice = (function () {
     stopSpeaking: stopSpeaking,
     onSpeakingChange: onSpeakingChange,
     currentlySpeaking: currentlySpeaking,
+    setRecordingActive: setRecordingActive,
     playPing: playPing,
     isActiveHere: isActiveHere,
     stripMarkdownForSpeech: stripMarkdownForSpeech,

@@ -630,10 +630,17 @@
         recordStatus.textContent = 'Listening…';
         hideAllOverlays();
         recordOverlay.hidden = false;
+        // Don't talk over Harvey while he's dictating — see app.js's
+        // identical comment. Set as soon as the mic overlay opens, not
+        // only once Voice.startRecording() actually resolves, so there's
+        // no gap where a reply could still start playing right as he
+        // opens the listener.
+        Voice.setRecordingActive(true);
         Voice.startRecording().then(function (rec) {
           activeRecorder = rec;
         }).catch(function () {
           hideAllOverlays();
+          Voice.setRecordingActive(false);
           alert('Could not access the microphone. Check the browser has mic permission.');
         });
 
@@ -641,6 +648,7 @@
           activeRecorder = null;
           finishBtn.onclick = null;
           cancelRecordBtn.onclick = null;
+          Voice.setRecordingActive(false);
         }
 
         cancelRecordBtn.onclick = function () {
