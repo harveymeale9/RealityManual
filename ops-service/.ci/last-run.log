@@ -4,16 +4,30 @@
 + '[' -n '' ']'
 + git pull
 From https://github.com/harveymeale9/RealityManual
-   8d190f6..83645b3  main       -> origin/main
-Updating 8d190f6..83645b3
+   83645b3..4e4cd99  main       -> origin/main
+Updating 83645b3..4e4cd99
 Fast-forward
- CLAUDE.md                    | 48 ++++++++++++++++++++++++++++++++++++++++++
- ops-service/.ci/last-run.log | 23 ++++++++++----------
- ops-service/public/app.js    | 50 +++++++++++++++++++++++++-------------------
- ops-service/public/style.css | 15 ++++++-------
- 4 files changed, 96 insertions(+), 40 deletions(-)
+ CLAUDE.md                                 | 140 +++++++++++++++++
+ frontend/checkout.html                    |   4 +
+ frontend/confirmation.html                |   4 +
+ frontend/css/style.css                    |  37 +++++
+ frontend/index.html                       |   4 +
+ frontend/privacy.html                     | 153 +++++++++++++++++++
+ frontend/terms.html                       | 126 ++++++++++++++++
+ ops-service/.ci/last-run.log              |  22 +--
+ ops-service/public/index.html             |   4 +
+ ops-service/public/privacy.html           | 115 ++++++++++++++
+ ops-service/public/style.css              |   9 ++
+ ops-service/public/terms.html             | 102 +++++++++++++
+ ops-service/public/tiktok-app-review.html | 243 ++++++++++++++++++++++++++++++
+ 13 files changed, 952 insertions(+), 11 deletions(-)
+ create mode 100644 frontend/privacy.html
+ create mode 100644 frontend/terms.html
+ create mode 100644 ops-service/public/privacy.html
+ create mode 100644 ops-service/public/terms.html
+ create mode 100644 ops-service/public/tiktok-app-review.html
 ++ git rev-parse HEAD
-+ NEW_HEAD=83645b39d44d7bc1ade104eb3bace4693a0af9ff
++ NEW_HEAD=4e4cd99621fa88fb53c3cd679b8e34913f94d1c8
 + git -C /srv/realitymanual-repo pull
 Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
@@ -23,11 +37,11 @@ Already up to date.
 + NEEDS_REBUILD=1
 + '[' -n 34ebcc2aa9971422812abb3086eccb4ef506f43b ']'
 + git cat-file -e '34ebcc2aa9971422812abb3086eccb4ef506f43b^{commit}'
-++ git diff --name-only 34ebcc2aa9971422812abb3086eccb4ef506f43b 83645b39d44d7bc1ade104eb3bace4693a0af9ff -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
+++ git diff --name-only 34ebcc2aa9971422812abb3086eccb4ef506f43b 4e4cd99621fa88fb53c3cd679b8e34913f94d1c8 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z '' ']'
 + NEEDS_REBUILD=0
 + '[' 0 = 0 ']'
-+ echo 'no backend changes between 34ebcc2aa9971422812abb3086eccb4ef506f43b and 83645b39d44d7bc1ade104eb3bace4693a0af9ff — already live via git pull, skipping rebuild/restart'
-no backend changes between 34ebcc2aa9971422812abb3086eccb4ef506f43b and 83645b39d44d7bc1ade104eb3bace4693a0af9ff — already live via git pull, skipping rebuild/restart
++ echo 'no backend changes between 34ebcc2aa9971422812abb3086eccb4ef506f43b and 4e4cd99621fa88fb53c3cd679b8e34913f94d1c8 — already live via git pull, skipping rebuild/restart'
+no backend changes between 34ebcc2aa9971422812abb3086eccb4ef506f43b and 4e4cd99621fa88fb53c3cd679b8e34913f94d1c8 — already live via git pull, skipping rebuild/restart
 + exit 0
 ssh exit code: 0
