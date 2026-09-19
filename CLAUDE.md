@@ -4499,3 +4499,54 @@ both files; not yet re-tested against a real overlapping-message
 scenario on the deployed service — the original repro (send a message,
 start another before the first's reply lands) is the way to confirm
 this actually holds.
+
+---
+
+# 110. Ambient Audio Upload: Real Progress Bars, No More Silent/Stale List
+
+Harvey reported dragging/selecting files to upload into the Settings
+tab's ambient audio library gave zero feedback, and the list only
+reflected what actually uploaded after a manual page refresh.
+
+**Root cause:** the `change` handler (`ops-service/public/app.js`,
+Settings tab) fired every `Store.put('audioTracks', ...)` without ever
+waiting on the returned promise, then called `renderAudioList()` (a full
+`Store.getAll('audioTracks')` re-fetch from the server) via a blind
+`setTimeout(..., 200)` — a guess that the upload(s) would be done in
+200ms, which doesn't hold for a real network upload of any real size.
+No visual feedback existed at all while an upload was actually in
+flight, and the eventual re-fetch could easily run before the upload had
+actually landed server-side, so the list looked stale until Harvey
+manually reloaded the page.
+
+**Fix — a real per-file progress bar, not just a spinner:**
+`fetch()` (what `store.js`'s shared `put()` uses) has no upload-progress
+event at all; only `XMLHttpRequest`'s `upload.onprogress` exposes real
+byte-level progress in a browser. Added
+`uploadAudioTrackWithProgress(file, onProgress)` — talks to the exact
+same `POST /api/files/audioTracks/:id` endpoint and request shape
+(`file` field + JSON `meta` field) `store.js`'s `put()` already uses for
+file-backed stores, just over XHR instead of fetch, so nothing on the
+server changed. Deliberately scoped to just this one upload path rather
+than rebuilding the shared `store.js` `put()` for every store — the
+video-upload flow (Upload Files tab) doesn't have the same problem,
+since it renders each new piece's card immediately from local state
+rather than waiting on a server round-trip, so it was left alone.
+
+The `change` handler now creates one row per selected file (filename +
+a real `<progress>` element, updated live from `upload.onprogress`),
+appended to a new `#audioUploadProgress` container above the track
+list. A row disappears on success; on failure it keeps the filename and
+shows "Failed: <reason>" instead of silently vanishing (the old
+`Store.put()` path swallowed all upload errors via a bare `.catch(() =>
+{})`, so a failed upload previously looked identical to nothing having
+happened at all). `renderAudioList()` — the real list refresh — now only
+runs once every file's `Promise` has genuinely resolved, via
+`Promise.all(...).then(renderAudioList)`, replacing the old fixed-delay
+guess entirely.
+
+Frontend-only (`app.js`, `style.css`), so per §93 this is already live —
+no deploy/restart needed. Verified via `node --check`; not yet tested
+against the live deployed service with a real audio file upload — worth
+confirming the progress bar actually animates and the list updates
+without a manual refresh.

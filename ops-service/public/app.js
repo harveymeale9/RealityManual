@@ -2044,6 +2044,7 @@
         '<h3>Ambient audio library</h3>' +
         '<p class="settings-hint">Backing tracks offered in the audio dropdown when editing an uploaded video.</p>' +
         '<label class="btn-secondary file-btn">Upload audio<input type="file" id="audioUpload" accept="audio/*" multiple hidden /></label>' +
+        '<div class="audio-upload-progress" id="audioUploadProgress"></div>' +
         '<div class="audio-list" id="audioList"></div>' +
       '</section>' +
       '<section class="settings-section">' +
@@ -2117,6 +2118,37 @@
 
   var audioListObjectUrls = [];
 
+  // Store.put() goes through fetch(), which has no upload-progress event at
+  // all — the only way to get real byte-level progress in a browser is
+  // XMLHttpRequest's upload.onprogress, so this talks to the same
+  // /api/files/audioTracks/:id endpoint store.js's put() would use, built
+  // the same way (a "file" field plus a "meta" JSON field), but over XHR
+  // instead. Scoped to just this one upload path rather than rebuilding
+  // store.js's shared put() — the video-upload flow (Upload Files tab)
+  // doesn't have this problem in the same way, since it renders each new
+  // piece's card immediately from local state rather than waiting on a
+  // server round-trip, so it wasn't touched here.
+  function uploadAudioTrackWithProgress(file, onProgress) {
+    return new Promise(function (resolve, reject) {
+      var id = Store.genId();
+      var fd = new FormData();
+      fd.append('file', file, file.name);
+      fd.append('meta', JSON.stringify({ id: id, name: file.name, createdAt: nowIso() }));
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/files/audioTracks/' + encodeURIComponent(id));
+      xhr.withCredentials = true;
+      xhr.upload.addEventListener('progress', function (e) {
+        if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);
+      });
+      xhr.addEventListener('load', function () {
+        if (xhr.status >= 200 && xhr.status < 300) resolve();
+        else reject(new Error('upload failed (' + xhr.status + ')'));
+      });
+      xhr.addEventListener('error', function () { reject(new Error('upload failed')); });
+      xhr.send(fd);
+    });
+  }
+
   function renderAudioList() {
     var list = document.getElementById('audioList');
     audioListObjectUrls.forEach(function (u) { URL.revokeObjectURL(u); });
@@ -2186,13 +2218,46 @@
         saveSettingsDebounced();
       });
 
+      // Used to silently fire every Store.put() and guess renderAudioList()
+      // could run 200ms later — no feedback while a real upload was still
+      // in flight, and the list often hadn't actually landed by the time
+      // that timeout fired, so Harvey had to refresh the page to see it.
+      // Now each file gets its own real progress bar (XHR upload.progress,
+      // see uploadAudioTrackWithProgress above) and the list only
+      // refreshes once every upload has genuinely finished.
       var audioUpload = document.getElementById('audioUpload');
+      var audioUploadProgressEl = document.getElementById('audioUploadProgress');
       audioUpload.addEventListener('change', function () {
-        Array.prototype.slice.call(audioUpload.files).forEach(function (file) {
-          Store.put('audioTracks', { id: Store.genId(), name: file.name, blob: file, createdAt: nowIso() });
-        });
+        var files = Array.prototype.slice.call(audioUpload.files);
         audioUpload.value = '';
-        setTimeout(renderAudioList, 200);
+        if (!files.length) return;
+        var rows = files.map(function (file) {
+          var row = document.createElement('div');
+          row.className = 'audio-upload-row';
+          var label = document.createElement('span');
+          label.className = 'audio-upload-name';
+          label.textContent = file.name;
+          var bar = document.createElement('progress');
+          bar.max = 1;
+          bar.value = 0;
+          row.appendChild(label);
+          row.appendChild(bar);
+          audioUploadProgressEl.appendChild(row);
+          return { row: row, bar: bar, file: file };
+        });
+        Promise.all(rows.map(function (r) {
+          return uploadAudioTrackWithProgress(r.file, function (frac) { r.bar.value = frac; })
+            .then(function () {
+              if (r.row.parentNode) r.row.parentNode.removeChild(r.row);
+            })
+            .catch(function (err) {
+              r.bar.remove();
+              var errEl = document.createElement('span');
+              errEl.className = 'audio-upload-error';
+              errEl.textContent = 'Failed: ' + ((err && err.message) || 'unknown error');
+              r.row.appendChild(errEl);
+            });
+        })).then(renderAudioList);
       });
     });
   }

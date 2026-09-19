@@ -1202,6 +1202,14 @@ a { color: var(--accent); }
 .audio-name { font-size: 0.85rem; color: var(--ink-soft); min-width: 120px; }
 .audio-row audio { height: 32px; flex: 1; min-width: 160px; }
 
+/* Real per-file upload feedback (§109-adjacent fix) — was previously
+   silent with no indication an upload was even happening. */
+.audio-upload-progress { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.audio-upload-row { display: flex; align-items: center; gap: 12px; padding: 6px 10px; border: 1px solid var(--border-soft); border-radius: var(--radius); background: var(--surface); flex-wrap: wrap; }
+.audio-upload-name { font-size: 0.85rem; color: var(--ink-soft); min-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.audio-upload-row progress { flex: 1; min-width: 120px; height: 8px; accent-color: var(--accent); }
+.audio-upload-error { font-size: 0.8rem; color: var(--error); }
+
 .key-grid { display: flex; flex-direction: column; gap: 14px; }
 .key-row label { display: block; font-size: 0.8rem; color: var(--ink-soft); margin-bottom: 4px; }
 .key-row input {
