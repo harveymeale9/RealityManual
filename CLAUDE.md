@@ -5150,3 +5150,50 @@ restructured side-rail markup; not yet visually verified against the
 live deployed service — worth confirming the nested rail icons and the
 pill-style sub-tab strip actually render/align the way Harvey pictured
 before considering this fully settled.
+
+---
+
+# 119. Final Check Card: Real Click-to-Play, Description Under Title, Titles Reformatted
+
+Harvey tested §116's Final Check card for real and sent a screenshot with
+three fixes: the video still wasn't click-to-toggle despite §113's fix,
+the caption ("the description of the YT vid") should show directly under
+the main title rather than after the chip row, and the title-options list
+should be plain "Title 1: x" / "Title 2: y" lines placed once, directly
+under the video — not a numbered list, and not repeated again near the
+description.
+
+**Video click-to-play, root-caused rather than re-patched.** §113's fix
+compared the click's Y coordinate against a guessed 40px control-bar
+height on the `<video>` element itself, to tell a frame click from a
+native-control-bar click. That's fragile — Chrome's native controls live
+in a UA shadow root, and a click anywhere inside it still retargets to
+the host `<video>` for a plain `click` listener, so there's no reliable
+way to distinguish "clicked the frame" from "clicked the control bar"
+purely from where the event says it landed once you're relying on
+coordinate math on the same element both regions share. Replaced with a
+structural fix instead: `<video>` is now wrapped in `.fc-video-wrap`,
+with a transparent `.fc-video-overlay` (`position:absolute; inset:0;
+bottom:44px`) covering only the frame — clicks in that region can only
+ever hit the overlay (toggles play/pause directly), and the uncovered
+44px strip at the bottom is never touched by anything but the native
+control bar, so there's no shared element and no coordinate ambiguity
+left to get wrong.
+
+**Reordered the card.** New order: video → title options ("Title 1: x"
+/ "Title 2: y", one `<div>` line each via a new `.fc-title-line`,
+replacing the old `<ol><li>` numbered list) → main title (`.fc-title`,
+unchanged content: `#094 — <piece.title>`) → caption/description
+(`.fc-caption`, unchanged rendering via `renderCaptionText` — captions
+*are* this codebase's "YT description" field, per §62's Settings spec;
+no new field was needed, Harvey had just saved one) → platform/type
+chips → Approve button. Nothing about `renderCaptionText`/the Settings
+caption templates changed — this was purely a layout/positioning fix.
+
+Frontend-only (`app.js`, `style.css`), so per §93 this is already live —
+no deploy/restart needed. Verified via `node --check` and a CSS
+brace-balance check; not yet re-tested against the live deployed service
+with a real Final Check card — worth confirming the overlay actually
+makes the whole frame clickable without interfering with the native
+scrub bar/volume/fullscreen controls, and that the reordered layout
+reads correctly with a real saved caption now that Harvey has one set.

@@ -686,13 +686,21 @@ a { color: var(--accent); }
   flex-direction: column;
   gap: 10px;
 }
-.fc-video { width: 100%; border-radius: 6px; background: #000; cursor: pointer; display: block; }
+.fc-video-wrap { position: relative; }
+.fc-video { width: 100%; border-radius: 6px; background: #000; display: block; }
+/* Covers the video frame only, not the native control bar strip at the
+   bottom (~44px, generous enough for the real control bar height) — see
+   finalCheckCardHtml()'s comment in app.js for why this replaced an
+   earlier coordinate-math approach. */
+.fc-video-overlay { position: absolute; inset: 0; bottom: 44px; cursor: pointer; }
 .fc-title { font-size: 1.02rem; font-weight: 600; color: var(--ink); }
 .fc-caption {
   font-size: 0.85rem; color: var(--ink-soft); white-space: pre-wrap;
   background: var(--surface); border: 1px solid var(--border-soft); border-radius: 6px; padding: 8px 10px;
 }
-.fc-titles { margin: 0; padding-left: 1.2em; font-size: 0.85rem; color: var(--ink); display: flex; flex-direction: column; gap: 3px; }
+.fc-titles { display: flex; flex-direction: column; gap: 3px; }
+.fc-title-line { font-size: 0.85rem; color: var(--ink); }
+.fc-title-line strong { color: var(--ink-soft); font-weight: 600; }
 .fc-titles-empty { font-size: 0.8rem; color: var(--ink-faint); font-style: italic; }
 .fc-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 4px; }
 
