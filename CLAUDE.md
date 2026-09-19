@@ -5072,3 +5072,81 @@ service with a real upload — worth confirming the instant-collapse
 feels right in practice and a deliberately-forced build failure (e.g.
 picking a corrupt file) actually resurfaces the row via the poller
 rather than silently vanishing.
+
+---
+
+# 118. Manuscript Landed; Ops Panel Nav Restructured Into Groups
+
+**Manuscript:** Harvey committed `THE_REALITY_MANUAL_COMPLETE_MANUSCRIPT.txt`
+(2529 lines, page-delimited with `==PAGE N==`/`==END PAGE N==` markers) to
+the repo root locally but hadn't pushed it — committing and pushing are
+separate steps in GitHub Desktop, and only the latter reaches GitHub. Once
+he pushed, `git fetch`/`merge` pulled it into this session's checkout
+cleanly (pure addition, no conflicts) and it's readable. Nothing else
+required — this isn't wired into any feature yet (see the deferred
+manuscript-driven-idea-generation discussion from earlier the same day);
+it's just sitting in the repo for now.
+
+**Nav restructure (`ops-service/public/`, Harvey's spec):** the ops panel
+had 7 flat top-level destinations (Project Manager, Content Ops, Content
+Production, Content Analytics, Sales Analytics, Website Analytics,
+Settings). Reorganized into 3 top-level entries, two of which are groups:
+
+```text
+Project Manager
+Content Ops
+  Content Pipeline   (was the "Content Ops" kanban board — same leaf id)
+  Content Production (was "Upload Files"/§117 — same leaf id)
+  Content Settings   (was "Settings" — same leaf id)
+Analytics
+  Content Analytics
+  Sales Analytics
+  Website Analytics
+```
+
+**Implementation, `app.js`:** `TABS` (a flat array) is now derived from a
+new `GROUPS` array (`TABS = GROUPS.reduce(...)`) — every leaf tab id is
+completely unchanged from before (`content-ops`, `upload-files`,
+`settings`, `content-analytics`, `sales-analytics`, `website-analytics`),
+only labels and grouping changed, so `renderActiveTab()`'s routing
+(`if (active === 'content-ops') { ... }` etc.), `bootContentOps`/
+`bootUploadFiles`/`bootSettings`, and everything else that keys off a
+leaf id needed zero changes. `groupForTab(id)` looks up which group a
+leaf belongs to.
+
+- `renderTabs()` (top strip) now renders one link per **group** (3
+  links), each pointing at its group's first leaf as the default
+  destination, marked active if the current leaf is *any* member of
+  that group.
+- New `renderSubtabs(active)` renders a second-tier pill-style strip
+  (`#panelSubtabs`, new nav element in `index.html` between
+  `.panel-header` and `.panel-main`) listing the active group's own
+  leaves — this is the only way to reach a group's non-default leaf
+  (e.g. Content Production, Sales Analytics) from the top nav now that
+  the top strip itself collapses each group to one link. Empty (and
+  CSS-collapsed via `:empty`) for the single-leaf Project Manager
+  "group". Called from `renderActiveTab()` on every hash change.
+- Side-rail (`index.html`): Content Ops and Analytics are now each a
+  `.side-rail-group` — a full-size parent icon (a new distinct icon per
+  group: layered-diamonds for Content Ops, trending-line for Analytics,
+  chosen deliberately different from any child's icon to avoid visual
+  duplication) linking to the group's default leaf, with its 3 real
+  leaf icons nested beneath under a thin divider, smaller (34px vs the
+  parent's 50px) — Harvey's "nested sub-icons" request. Not indented
+  sideways (the rail is only 76px wide); the nesting reads through
+  size + the divider + grouping instead. `bindSideRail()`/
+  `renderActiveTab()`'s existing generic `.side-rail-btn[data-tab]`
+  handling needed no changes — every new nested icon just carries a
+  real leaf `data-tab`, same as before.
+- New icon for the Content Analytics leaf (a play-circle, previously had
+  no side-rail icon at all — the old rail's comment noted "Content
+  Analytics stays reachable from the top tab row only," which is no
+  longer true now that it's nested under the Analytics parent).
+
+Frontend-only (`app.js`, `index.html`, `style.css`), so per §93 this is
+already live — no deploy/restart needed. Verified via `node --check`, a
+CSS brace-balance check, and an HTML open/close tag-count check on the
+restructured side-rail markup; not yet visually verified against the
+live deployed service — worth confirming the nested rail icons and the
+pill-style sub-tab strip actually render/align the way Harvey pictured
+before considering this fully settled.

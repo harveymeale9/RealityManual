@@ -30,15 +30,31 @@
   // one in bootProjectManager().
   var pmSpeakingUnsub = null;
 
-  var TABS = [
-    { id: 'project-manager', label: 'Project Manager' },
-    { id: 'content-ops', label: 'Content Ops' },
-    { id: 'upload-files', label: 'Content Production' },
-    { id: 'content-analytics', label: 'Content Analytics' },
-    { id: 'sales-analytics', label: 'Sales Analytics' },
-    { id: 'website-analytics', label: 'Website Analytics' },
-    { id: 'settings', label: 'Settings' }
+  // Nav hierarchy (Harvey's restructure, 2026-09-19): top level is just
+  // Project Manager / Content Ops / Analytics — each of the latter two is
+  // a group of real leaf tabs, not a routable panel itself. Leaf tab ids
+  // are unchanged from before this restructure (only labels/grouping
+  // changed) so nothing downstream that already keys off e.g.
+  // active === 'content-ops' needed to change.
+  var GROUPS = [
+    { label: 'Project Manager', tabs: [
+        { id: 'project-manager', label: 'Project Manager' }
+      ] },
+    { label: 'Content Ops', tabs: [
+        { id: 'content-ops', label: 'Content Pipeline' },
+        { id: 'upload-files', label: 'Content Production' },
+        { id: 'settings', label: 'Content Settings' }
+      ] },
+    { label: 'Analytics', tabs: [
+        { id: 'content-analytics', label: 'Content Analytics' },
+        { id: 'sales-analytics', label: 'Sales Analytics' },
+        { id: 'website-analytics', label: 'Website Analytics' }
+      ] }
   ];
+  var TABS = GROUPS.reduce(function (acc, g) { return acc.concat(g.tabs); }, []);
+  function groupForTab(tabId) {
+    return GROUPS.filter(function (g) { return g.tabs.some(function (t) { return t.id === tabId; }); })[0] || GROUPS[0];
+  }
 
   /* ============================================================
      LOGIN GATE
@@ -90,6 +106,7 @@
 
   var appInitialized = false;
   var panelTabs = document.getElementById('panelTabs');
+  var panelSubtabs = document.getElementById('panelSubtabs');
   var panelMain = document.getElementById('panelMain');
   var sideRail = document.getElementById('sideRail');
 
@@ -99,18 +116,33 @@
     return match ? match.id : TABS[0].id;
   }
 
+  // One link per GROUP now, not per leaf tab — each links to its group's
+  // first leaf (e.g. "Content Ops" -> #content-ops, which is the Content
+  // Pipeline leaf), and is marked active whenever the current leaf is any
+  // member of that group (data-tabs carries the whole member list for
+  // renderActiveTab to check against). Real <a href="#tab">, not a
+  // <button>, so middle-click/ctrl+click "open in new tab" still works.
   function renderTabs() {
-    // Real <a href="#tab"> rather than a <button> with a click handler —
-    // a button has no URL, so middle-click/ctrl+click "open in new tab"
-    // silently does nothing on it (Harvey's report). An anchor gets that
-    // for free from the browser; the click listener below still runs for
-    // an ordinary left-click, same behavior as before.
-    panelTabs.innerHTML = TABS.map(function (t) {
-      return '<a href="#' + t.id + '" class="panel-tab" data-tab="' + t.id + '">' + t.label + '</a>';
+    panelTabs.innerHTML = GROUPS.map(function (g) {
+      var ids = g.tabs.map(function (t) { return t.id; });
+      return '<a href="#' + ids[0] + '" class="panel-tab" data-tabs="' + ids.join(',') + '">' + g.label + '</a>';
     }).join('');
-    panelTabs.querySelectorAll('.panel-tab[data-tab]').forEach(function (btn) {
-      btn.addEventListener('click', function () { location.hash = btn.dataset.tab; });
-    });
+  }
+
+  // Secondary strip shown under the top tabs whenever the active group has
+  // more than one leaf (Content Ops, Analytics) — this is the only way to
+  // reach a group's non-default leaf (e.g. Content Production, Sales
+  // Analytics) from the top nav now that renderTabs() above collapses each
+  // group to one link. Rebuilt on every renderActiveTab() call rather than
+  // once at init, since which group is active (and therefore what belongs
+  // in this strip) changes as Harvey navigates.
+  function renderSubtabs(active) {
+    if (!panelSubtabs) return;
+    var group = groupForTab(active);
+    if (group.tabs.length < 2) { panelSubtabs.innerHTML = ''; return; }
+    panelSubtabs.innerHTML = group.tabs.map(function (t) {
+      return '<a href="#' + t.id + '" class="panel-subtab' + (t.id === active ? ' active' : '') + '">' + t.label + '</a>';
+    }).join('');
   }
 
   /* The left icon rail is a second entry point into the same tabs above —
@@ -225,8 +257,10 @@
   function renderActiveTab() {
     var active = currentTabId();
     panelTabs.querySelectorAll('.panel-tab').forEach(function (btn) {
-      btn.classList.toggle('active', btn.dataset.tab === active);
+      var ids = (btn.dataset.tabs || '').split(',');
+      btn.classList.toggle('active', ids.indexOf(active) !== -1);
     });
+    renderSubtabs(active);
     if (sideRail) {
       sideRail.querySelectorAll('.side-rail-btn').forEach(function (btn) {
         btn.classList.toggle('active', btn.dataset.tab === active);
