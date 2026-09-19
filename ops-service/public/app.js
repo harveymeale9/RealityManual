@@ -1861,15 +1861,15 @@
   function finalCheckCardHtml(id, piece) {
     var captionText = boardSettingsCache ? renderCaptionText(piece, boardSettingsCache) : 'Loading caption…';
     var titles = piece.ytTitles || [];
-    // "Title 1: x" / "Title 2: y" plain lines, not a numbered list — and
-    // shown once, directly under the video, not repeated again near the
-    // description (Harvey's correction, 2026-09-19).
+    // "Title 1: x" / "Title 2: y" plain lines, not a numbered list, sized
+    // to match the main-title heading this replaced (Harvey: "remove
+    // bottom one [the #094 — <title> heading, redundant with Title 1],
+    // make these a bit larger, same size as [that removed heading]").
     var titlesHtml = titles.length
       ? '<div class="fc-titles">' + titles.map(function (t, i) {
           return '<div class="fc-title-line"><strong>Title ' + (i + 1) + ':</strong> ' + escapeHtml(t) + '</div>';
         }).join('') + '</div>'
       : '<div class="fc-titles-empty">No title options set.</div>';
-    var idBadge = typeof piece.seq === 'number' ? '#' + String(piece.seq).padStart(3, '0') + ' — ' : '';
     // A piece never reaches this stage without its final (audio-spliced)
     // video already having been built — server.js's runBuildFinalVideo
     // only flips the stage to final_check once that's genuinely done —
@@ -1885,27 +1885,28 @@
     // already show, so "post locations, type" needs no new rendering
     // logic of its own.
     //
-    // .fc-video-wrap / .fc-video-overlay (2026-09-19 fix): native
-    // <video controls> only toggles play/pause when its own shadow-DOM
-    // control bar is clicked, not the video frame — the previous fix
-    // tried to detect that by comparing the click's Y coordinate against
-    // a guessed control-bar height, which Harvey reported still wasn't
-    // reliably clickable. A transparent overlay sized to cover only the
-    // frame (`bottom: 44px`, see CSS) is more robust: clicks on the frame
-    // hit the overlay and toggle play/pause directly, clicks on the
-    // uncovered strip at the bottom go straight to the native controls —
-    // no coordinate math, no ambiguity about which element a click
-    // "really" landed on.
+    // No native `controls` at all (2026-09-19, second attempt at this —
+    // see bindBoardEvents()'s comment on the .fc-video-wrap loop for why
+    // the first attempt, a partial overlay that left the native control
+    // bar strip uncovered, still wasn't reliably clickable on Harvey's
+    // real device). Fully custom now: the whole frame is one click
+    // target, and a big green play-button glyph (`.fc-play-icon`, hidden
+    // once playing) doubles as both "click anywhere to play" affordance
+    // and the placeholder Harvey asked for. Losing native scrub/volume/
+    // fullscreen is the real trade-off — acceptable for a quick review
+    // clip; worth adding a minimal custom scrub bar later if that's
+    // missed in practice.
     return '' +
       '<div class="final-check-card" data-id="' + id + '">' +
         '<div class="fc-video-wrap">' +
           '<video class="fc-video" data-id="' + id + '" playsinline preload="metadata"' +
             (piece.thumbnailDataUrl ? ' poster="' + piece.thumbnailDataUrl + '"' : '') +
-            ' controls src="/api/files/videos/' + encodeURIComponent(id) + '-final"></video>' +
-          '<div class="fc-video-overlay" data-id="' + id + '"></div>' +
+            ' src="/api/files/videos/' + encodeURIComponent(id) + '-final"></video>' +
+          '<div class="fc-video-overlay" data-id="' + id + '">' +
+            '<span class="fc-play-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 6l10 6-10 6V6Z"/></svg></span>' +
+          '</div>' +
         '</div>' +
         titlesHtml +
-        '<div class="fc-title">' + idBadge + escapeHtml(piece.title || 'Untitled') + '</div>' +
         '<div class="fc-caption">' + escapeHtml(captionText) + '</div>' +
         '<div class="chip-row">' + chipHtml(piece) + '</div>' +
         '<div class="fc-actions">' +
@@ -1984,22 +1985,34 @@
     // Final Check cards — deliberately not `.card`, so none of the
     // click-to-open-modal/drag bindings above apply to them at all.
     //
-    // A transparent overlay covering just the video frame (not the native
-    // control bar strip at the bottom, see .fc-video-overlay in CSS) —
-    // replaces an earlier attempt that tried to tell "frame click" from
-    // "control-bar click" via Y-coordinate math on the video element
-    // itself, which Harvey reported still wasn't reliably clickable.
-    // Structurally separating the two clickable regions with real DOM
-    // elements sidesteps that fragility entirely: a click here can only
-    // ever land on the overlay, and the native controls are never
-    // covered, so there's no ambiguity to compute.
-    board.querySelectorAll('.fc-video-overlay').forEach(function (ov) {
+    // Second attempt at click-to-play (2026-09-19). The first attempt
+    // (a transparent overlay covering the frame but leaving a bottom
+    // strip uncovered for the native <video controls> bar) was more
+    // robust than the original Y-coordinate hack, but Harvey reported it
+    // still wasn't reliably clickable on his real device — plausibly
+    // because native video controls on some platforms (iOS Safari in
+    // particular) render via the OS's own media-player chrome rather
+    // than ordinary shadow-DOM content, which can intercept taps in ways
+    // no HTML overlay can reliably out-position. Fixed by dropping
+    // native `controls` entirely (see finalCheckCardHtml()) — with no
+    // native chrome left to conflict with, the overlay can cover the
+    // *entire* video and is guaranteed to receive every click, no
+    // platform-specific guessing involved. The overlay also holds the
+    // green `.fc-play-icon` placeholder; `.is-playing` toggles it
+    // hidden/shown in sync with the video's real play state (covers
+    // pause via the icon-click path, and the video reaching its own
+    // natural end, which also fires a `pause` event).
+    board.querySelectorAll('.fc-video-wrap').forEach(function (wrap) {
+      var v = wrap.querySelector('video');
+      var ov = wrap.querySelector('.fc-video-overlay');
+      if (!v || !ov) return;
+      function syncPlayState() { wrap.classList.toggle('is-playing', !v.paused); }
       ov.addEventListener('click', function () {
-        var wrap = ov.closest('.fc-video-wrap');
-        var v = wrap && wrap.querySelector('video');
-        if (!v) return;
         if (v.paused) v.play().catch(function () {}); else v.pause();
       });
+      v.addEventListener('play', syncPlayState);
+      v.addEventListener('pause', syncPlayState);
+      syncPlayState();
     });
     board.querySelectorAll('.fc-approve-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {

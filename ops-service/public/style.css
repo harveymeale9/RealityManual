@@ -688,19 +688,41 @@ a { color: var(--accent); }
 }
 .fc-video-wrap { position: relative; }
 .fc-video { width: 100%; border-radius: 6px; background: #000; display: block; }
-/* Covers the video frame only, not the native control bar strip at the
-   bottom (~44px, generous enough for the real control bar height) — see
-   finalCheckCardHtml()'s comment in app.js for why this replaced an
-   earlier coordinate-math approach. */
-.fc-video-overlay { position: absolute; inset: 0; bottom: 44px; cursor: pointer; }
-.fc-title { font-size: 1.02rem; font-weight: 600; color: var(--ink); }
+/* No native <video controls> at all (2026-09-19, second attempt — see
+   bindBoardEvents()'s comment in app.js) so this covers the *entire*
+   frame, not just a partial region: nothing native left to conflict
+   with, so every click is guaranteed to land here regardless of
+   platform. Also hosts the green play-icon placeholder. */
+.fc-video-overlay {
+  position: absolute; inset: 0; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.fc-play-icon {
+  width: 60px; height: 60px; border-radius: 50%;
+  background: var(--accent-soft-strong);
+  border: 2px solid var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--accent);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  pointer-events: none; /* the overlay itself is the click target, not this icon */
+}
+.fc-play-icon svg { width: 26px; height: 26px; margin-left: 3px; }
+.fc-video-overlay:hover .fc-play-icon { transform: scale(1.08); }
+/* Hidden once actually playing — wrap.classList gets `is-playing` from
+   the video's own play/pause events, so this stays correct even if
+   playback starts/stops/ends by means other than clicking the icon
+   itself. */
+.fc-video-wrap.is-playing .fc-play-icon { opacity: 0; transform: scale(0.85); }
 .fc-caption {
   font-size: 0.85rem; color: var(--ink-soft); white-space: pre-wrap;
   background: var(--surface); border: 1px solid var(--border-soft); border-radius: 6px; padding: 8px 10px;
 }
 .fc-titles { display: flex; flex-direction: column; gap: 3px; }
-.fc-title-line { font-size: 0.85rem; color: var(--ink); }
-.fc-title-line strong { color: var(--ink-soft); font-weight: 600; }
+/* Sized to match the main-title heading these replaced (Harvey,
+   2026-09-19: "remove bottom one, make these a bit larger, same size as
+   [that]") — see finalCheckCardHtml() in app.js. */
+.fc-title-line { font-size: 1.02rem; font-weight: 600; color: var(--ink); }
+.fc-title-line strong { color: var(--ink-soft); }
 .fc-titles-empty { font-size: 0.8rem; color: var(--ink-faint); font-style: italic; }
 .fc-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 4px; }
 

@@ -5197,3 +5197,68 @@ with a real Final Check card — worth confirming the overlay actually
 makes the whole frame clickable without interfering with the native
 scrub bar/volume/fullscreen controls, and that the reordered layout
 reads correctly with a real saved caption now that Harvey has one set.
+
+---
+
+# 120. Final Check: Click-to-Play Fixed for Real (Dropped Native Controls); Removed Redundant Title; Green Play Icon
+
+Harvey tested §119 on his real device and reported the frame still
+wasn't clickable — he had to hit the tiny native play icon in the
+control bar specifically. He also sent a screenshot showing 3 separate
+"titles" on the card (Title 1, Title 2, and a large `#094 — <title>`
+heading below them, which duplicates Title 1) and asked to drop the
+redundant heading, enlarge Title 1/Title 2 to that heading's size, and
+add a green accent placeholder play-button over the video.
+
+**Root cause, honestly reasoned rather than re-guessed a third time:**
+§119's partial overlay (covering the frame, leaving a bottom strip
+uncovered for the native `<video controls>` bar) is a sound pattern in
+an ordinary desktop browser, but native video controls on some
+platforms — iOS Safari in particular — render through the OS's own
+media-player chrome rather than plain shadow-DOM content the page can
+reliably out-layer with a positioned `<div>`, especially before first
+play. There's no further CSS/JS tuning that reliably fixes this from
+inside the constraint of "keep native `controls`" — the two real device
+tests (§113's coordinate hack, §119's partial overlay) both failing in
+the same direction (frame doesn't respond, only the literal native
+button does) supports this rather than pointing at a fixable typo.
+
+**Fix: drop `controls` entirely.** `finalCheckCardHtml()`'s `<video>`
+no longer has the `controls` attribute at all. With no native chrome
+left to protect or conflict with, `.fc-video-overlay` now covers the
+*whole* frame (not just the region above a guessed control-bar height)
+and is guaranteed to receive every click on every platform — there's
+nothing else in the video's box that could intercept it. This also
+naturally supplies Harvey's second ask: the overlay hosts a centered
+`.fc-play-icon` (a green-accent circle + triangle, `var(--accent)`
+border/color) that's the click-anywhere-to-play affordance *and* the
+placeholder he asked for, in one element. `bindBoardEvents()`'s
+`.fc-video-wrap` loop wires `play`/`pause` events on the real `<video>`
+to toggle a `.is-playing` class on the wrap, which CSS uses to hide the
+icon while actually playing (and it correctly reappears if the video
+pauses for any reason, including reaching its natural end, since
+`pause` fires there too — not just on an icon click).
+
+**Real trade-off, stated honestly:** losing native `controls` also
+means losing the scrub bar, volume, and fullscreen button — Final Check
+is now play/pause-anywhere only, no seeking. Acceptable for a quick
+review of a short clip; worth adding a minimal custom scrub bar later
+if that turns out to be missed in practice, but not built now since
+Harvey's ask was specifically about reliable click-to-play, not seeking.
+
+**Titles:** the large `#094 — <piece.title>` heading (`.fc-title`) is
+gone entirely — it was always just a duplicate of Title 1 in practice.
+`.fc-title-line` (the "Title 1: x" / "Title 2: y" lines from §119) is
+now sized to match what that heading used to be (`font-size: 1.02rem;
+font-weight: 600`, was `0.85rem`). The `.fc-title` CSS rule was deleted
+outright (confirmed nothing else referenced it) rather than left as
+dead code.
+
+Frontend-only (`app.js`, `style.css`), so per §93 this is already live —
+no deploy/restart needed. Verified via `node --check` and a CSS
+brace-balance check; **genuinely not yet confirmed against Harvey's real
+device** — this is the third attempt at reliable click-to-play on this
+card (§113, §119, this one), and the first two both looked correct on
+inspection and failed in practice, so don't assume this one is settled
+just because the reasoning holds up — ask Harvey to actually test it
+before treating this as closed.
