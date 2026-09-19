@@ -111,10 +111,19 @@ a { color: var(--accent); }
 .login-gate {
   min-height: 100vh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 16px;
   padding: 24px;
 }
+.login-legal-links {
+  display: flex;
+  gap: 18px;
+  font-size: 0.74rem;
+}
+.login-legal-links a { color: var(--ink-faint); text-decoration: none; }
+.login-legal-links a:hover { color: var(--ink-soft); }
 
 .login-card {
   width: min(360px, 100%);

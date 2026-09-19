@@ -5310,3 +5310,143 @@ console (Safari: Settings → Advanced → Web Inspector, then inspect from
 a Mac; Chrome Android: `chrome://inspect` from a desktop Chrome on the
 same network) so a real error, if any, can be read directly instead of
 guessed at from static code review.
+
+---
+
+# 122. Storefront Privacy Policy / Terms, and a TikTok App-Review Package for Content Studio
+
+Two related deliverables, both from the same request: (1) `realitymanual.com`
+needed a Privacy Policy and Terms of Service, styled to match; (2) Harvey
+wants TikTok Content Posting API access for Content Studio (the ops-panel
+uploader tool, §111+) and asked for everything needed to get approved on
+the first submission — researched TikTok's actual current requirements
+first (see Sources below) rather than guessing.
+
+## What TikTok actually requires (researched, not assumed)
+
+- **App registration** in TikTok's developer portal needs: a custom app
+  name matching the real product, an app icon, a description, a **valid,
+  fully-developed official website** (not a bare landing/login page), and
+  **Privacy Policy + Terms of Service links that are prominently visible
+  on that website's homepage**, not hidden behind menus.
+- **Demo material**: at least one demo video (up to 5, 50MB each)
+  showing the complete end-to-end integration, all requested scopes
+  actually demonstrated, and — for a first-time (unaudited) submission —
+  a sandbox environment. Screenshots reinforce this but video is the
+  primary artifact TikTok's own guidelines describe.
+- **Scopes**: Login Kit (OAuth account connection) + `video.publish`
+  (Content Posting API, direct post) are the two we actually need; only
+  request scopes actually used.
+- **Unaudited restriction**: until TikTok audits the app for compliance,
+  every post made through the Content Posting API is forced to
+  `SELF_ONLY` visibility regardless of what the API request asks for,
+  capped at 5 posting users per 24h. Public posting requires passing a
+  separate compliance audit afterward.
+- **Required UX** (from TikTok's Content Sharing Guidelines): show a
+  content preview and the confirmed creator account before posting,
+  collect a Music Usage confirmation and a Branded Content disclosure
+  toggle, and provide posting-status feedback (poll `Get Post Status`
+  after publishing) rather than claiming success just because a request
+  was sent.
+
+## What was built
+
+**Storefront (`frontend/`)** — `privacy.html` and `terms.html`, styled
+with the existing dark/gold design system (`.legal-page` class added to
+`css/style.css`, reusing `--serif`/`--accent`/`--wrap` etc., no new
+fonts or frameworks). Both linked from the footer of `index.html`,
+`checkout.html`, and `confirmation.html` via a new `.footer-links` row.
+Content is grounded in how this site actually operates (per this file's
+own §13-34, §64-66) — real data flows (Stripe for payment, BookVault for
+fulfillment, first-party analytics with a localStorage session id, no
+third-party ad/analytics scripts, no data sold) rather than generic
+boilerplate. **Placeholders that need Harvey's confirmation, flagged
+explicitly rather than silently invented:**
+- Contact email `support@realitymanual.com` — used throughout; needs to
+  actually exist (a real inbox), or swap in whatever address should be
+  used instead.
+- The returns/refunds clause in `terms.html` describes only what the
+  system actually does today (automatic refund if fulfillment fails) —
+  there's no defined "change of mind" return window anywhere in this
+  project, so none was invented; confirm this matches what Harvey
+  actually wants to offer.
+- No specific governing-law jurisdiction was named (none was known) —
+  add one if that matters, or leave general.
+- **This is a solid working draft, not a substitute for actual legal
+  review** — reasonable for getting the site/TikTok submission
+  unblocked, but flag to Harvey that a lawyer pass is worth it before
+  this is truly final, especially the liability/returns sections.
+
+**Ops-service (`ops-service/public/`, all pure static additions — no
+`server.js` change, so per §93 this is served instantly, no
+rebuild/restart)**:
+- `privacy.html` / `terms.html` — a matching pair for Content Studio
+  itself (the internal tool), written to accurately describe what it
+  actually is: a password-gated internal team tool with no public
+  signup, what it stores (content/video/audio/scheduling data, platform
+  OAuth tokens once connected), and that platform integrations only ever
+  post content the team itself authored to accounts the team itself
+  controls — never third-party data. This is the privacy policy TikTok's
+  registration form itself needs a URL for.
+- `tiktok-app-review.html` — the demo/showcase page for reviewers. Walks
+  through the real integration end-to-end (connect account via Login
+  Kit → produce/review video in the existing Final Check gate → the two
+  new TikTok-specific consent checkboxes (Music Usage, Branded Content)
+  → scheduled-post confirmation with a dummy future date and "this is
+  when it goes live" note, exactly as Harvey described) using inline
+  mockups built from **this app's real CSS classes** (`.chip`,
+  `.final-check-card`-style layout, `.btn-primary`, etc.) populated with
+  clearly-labeled demo data — a genuine rendering of the actual design
+  system, not a photograph, and explicitly captioned as such so nothing
+  here misrepresents what is/isn't live yet. Explicitly states which
+  parts already exist in the shipped product (upload, transcribe,
+  splice, human-approval gate) versus what's net-new for TikTok
+  specifically (the two consent checkboxes, the actual `video.publish`
+  API call, status polling) — honesty here matters for a compliance
+  review.
+- All three pages cross-link to each other and are reachable from the
+  Content Studio login screen's own footer (`.login-legal-links`, new),
+  so the privacy/terms links are genuinely discoverable, not just
+  privately known URLs — the same "must be visible, not hidden" bar
+  TikTok holds the storefront to.
+- `noindex, nofollow` on all three (matches this whole origin's existing
+  `Disallow: /` `robots.txt`, §62) — irrelevant to TikTok review, which
+  reaches these via a direct URL, not search discovery.
+
+## What is NOT built, and what Harvey has to do himself
+
+- **The actual TikTok app registration and submission** — requires
+  Harvey's own TikTok developer/business login; nothing here can do that
+  step. Register the app, set the official website to
+  `https://realitymanual.com`, fill in the Privacy Policy / Terms of
+  Service fields with the two new storefront pages built above, request
+  Login Kit + `video.publish`, and point reviewers at
+  `https://ops.realitymanual.com/tiktok-app-review.html` for the
+  integration walkthrough.
+- **A real demo video.** TikTok's own guidance treats video as the
+  primary review artifact, not just screenshots — this session can't
+  record narrated video. Worth deciding: either Harvey screen-records a
+  short walkthrough of `tiktok-app-review.html` himself (the page is
+  built specifically to make that easy — it's a single scrollable
+  narrative), or this gets revisited once there's a way to capture one.
+- **The actual `video.publish` integration code** (OAuth callback
+  handling, token storage, the real `POST` to Content Posting API, the
+  `Get Post Status` poll) is not built — TikTok credentials don't exist
+  yet, and per this project's own established pattern (§62's TikTok
+  Settings field, still empty, "the field is there for when it is"),
+  building the real integration is properly sequenced *after* getting
+  approved, not before. The demo page describes the intended design
+  faithfully but isn't a claim that it's live.
+- A working `support@realitymanual.com` inbox, if that placeholder
+  address is kept.
+
+Verified: `node --check` on all touched JS, brace-balance checks on
+touched CSS, and an HTML tag-balance check on all five new HTML files.
+Not yet reviewed by Harvey for tone/accuracy, and not yet submitted to
+TikTok by him — flag both if this comes up again.
+
+Sources (TikTok for Developers, fetched 2026-09-19):
+- [App Review Guidelines](https://developers.tiktok.com/docs/en/app-review-guidelines)
+- [Content Sharing Guidelines](https://developers.tiktok.com/docs/en/content-sharing-guidelines)
+- [Get Started - Direct Post](https://developers.tiktok.com/docs/en/content-posting-api-get-started)
+- [App Review FAQ](https://developers.tiktok.com/docs/en/getting-started-faq)

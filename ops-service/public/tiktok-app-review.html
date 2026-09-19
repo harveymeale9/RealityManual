@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>TikTok Integration Overview — The Reality Manual Content Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    body { overflow-x: hidden; }
+    .rv-shell { max-width: 920px; margin: 0 auto; padding: 48px 24px 110px; }
+    .rv-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 36px; }
+    .rv-nav .mark { color: var(--accent); display: flex; }
+    .rv-nav .mark svg { width: 22px; height: 22px; }
+    .rv-nav .name { font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; font-size: 0.8rem; }
+    .rv-nav .sub { color: var(--ink-faint); font-size: 0.78rem; }
+    .rv-eyebrow { font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-faint); margin: 0 0 10px; }
+    .rv-shell h1 { font-family: var(--font-display); font-weight: 500; font-size: clamp(1.9rem, 4.4vw, 2.6rem); margin: 0 0 14px; max-width: 20ch; }
+    .rv-lede { color: var(--ink-soft); font-size: 1.02rem; line-height: 1.65; max-width: 68ch; margin: 0 0 40px; }
+    .rv-shell h2 {
+      font-family: var(--font-display); font-weight: 500; font-size: 1.35rem;
+      margin: 52px 0 10px;
+    }
+    .rv-shell h2 .num { color: var(--accent); font-family: var(--font-mono); font-size: 0.85rem; margin-right: 10px; }
+    .rv-shell p, .rv-shell li { color: var(--ink-soft); line-height: 1.65; }
+    .rv-shell ul { padding-left: 1.2em; }
+    .rv-shell li { margin-bottom: 0.4em; }
+    .rv-shell strong { color: var(--ink); }
+    .rv-shell a { color: var(--accent); }
+    .rv-note {
+      font-size: 0.82rem; color: var(--ink-faint); background: var(--surface-2);
+      border: 1px solid var(--border-soft); border-radius: 6px; padding: 10px 14px; margin: 14px 0;
+    }
+
+    /* ---- mockup shell: a labeled frame around each illustrative UI
+       snippet below, reusing this app's own real CSS classes (.chip,
+       .btn-primary, .final-check-card, .upload-row, etc.) with clearly
+       fictional demo data — not photographs, but the actual live design
+       system, rendered inline. ---- */
+    .mockup {
+      border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--ivory); padding: 18px; margin: 18px 0 28px;
+    }
+    .mockup-label {
+      font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--ink-faint); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+    }
+    .mockup-label::before {
+      content: 'DEMO DATA'; background: var(--accent-soft); color: var(--accent);
+      padding: 2px 7px; border-radius: 3px; font-weight: 700; letter-spacing: 0.06em;
+    }
+    .demo-video-box {
+      width: 220px; aspect-ratio: 9/16; background: linear-gradient(160deg, #182a20, #0a0f0c);
+      border-radius: 8px; display: flex; align-items: center; justify-content: center;
+      color: var(--ink-faint); font-size: 0.72rem; text-align: center; flex-direction: column; gap: 10px;
+    }
+    .demo-play {
+      width: 46px; height: 46px; border-radius: 50%; background: var(--accent-soft-strong);
+      border: 2px solid var(--accent); display: flex; align-items: center; justify-content: center; color: var(--accent);
+    }
+    .demo-play svg { width: 20px; height: 20px; margin-left: 2px; }
+    .mockup-consent { display: flex; align-items: flex-start; gap: 8px; font-size: 0.8rem; color: var(--ink-soft); margin: 8px 0; }
+    .mockup-consent input { margin-top: 3px; }
+    .mockup-scheduled {
+      display: flex; align-items: center; gap: 12px; background: var(--surface-2);
+      border: 1px solid var(--border-soft); border-radius: 6px; padding: 12px 14px;
+    }
+    .mockup-scheduled .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+    .mockup-note { font-size: 0.78rem; color: var(--ink-faint); font-style: italic; margin-top: 6px; }
+    .rv-links { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border-soft); display: flex; gap: 20px; font-size: 0.82rem; }
+
+    @media (max-width: 640px) {
+      .mockup-row { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="rv-shell">
+    <div class="rv-nav">
+      <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 2 L22 12 L12 22 L2 12 Z" /></svg></span>
+      <div>
+        <div class="name">The Reality Manual</div>
+        <div class="sub">Content Studio &mdash; internal team tool</div>
+      </div>
+    </div>
+
+    <p class="rv-eyebrow">TikTok for Developers &mdash; App Review</p>
+    <h1>How Content Studio uses the TikTok Content Posting API</h1>
+    <p class="rv-lede">
+      This page walks through exactly how our app, <strong>The Reality
+      Manual &mdash; Content Studio</strong>, integrates with TikTok. It's
+      an internal production tool used by our own small team to prepare
+      and schedule short-form video content, and to publish that content
+      to our own TikTok account once we've reviewed and approved it. Every
+      screen below is our real product's actual design system, shown here
+      with clearly-labeled example data so this page doesn't require a
+      login or expose any of our real content pipeline.
+    </p>
+
+    <h2><span class="num">01</span>Who we are &amp; what the app does</h2>
+    <p>
+      The Reality Manual is a small publishing business (book sold at
+      <a href="https://realitymanual.com">realitymanual.com</a>). Content
+      Studio is our own in-house tool for planning, producing, and
+      cross-posting the short-form video content that promotes the book
+      &mdash; think a lightweight, purpose-built alternative to a generic
+      social scheduling SaaS, built for our own workflow. It already
+      supports a full production pipeline (drag-and-drop video upload,
+      automatic audio transcription, ambient-audio splicing, thumbnail
+      selection, and a human review/approval gate) publishing to
+      YouTube, Instagram, and Facebook. We're requesting TikTok Content
+      Posting API access to add TikTok as a fourth destination in that
+      same, already-built pipeline.
+    </p>
+
+    <h2><span class="num">02</span>Connecting our TikTok account</h2>
+    <p>
+      A team member connects our own TikTok account once, from Content
+      Studio's Settings panel, via TikTok's Login Kit OAuth flow. We only
+      ever connect an account that The Reality Manual itself owns or has
+      been explicitly authorized to post on behalf of &mdash; this tool
+      has no concept of a third-party or end user at all.
+    </p>
+    <div class="mockup">
+      <div class="mockup-label">Settings &rsaquo; Platform connections</div>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div style="width:34px;height:34px;border-radius:50%;background:var(--surface-3);display:flex;align-items:center;justify-content:center;font-size:0.7rem;color:var(--ink-soft);">TT</div>
+          <div>
+            <div style="color:var(--ink); font-weight:600; font-size:0.9rem;">TikTok</div>
+            <div style="color:var(--accent-2); font-size:0.78rem;">Connected as @therealitymanual</div>
+          </div>
+        </div>
+        <button type="button" class="btn-secondary btn-tiny" disabled>Disconnect</button>
+      </div>
+    </div>
+
+    <h2><span class="num">03</span>Producing &amp; reviewing the video (already built, platform-agnostic)</h2>
+    <p>
+      This is the part of Content Studio that already exists today for
+      YouTube/Instagram/Facebook, and that TikTok posting will plug
+      straight into. A team member drops a finished video into the tool;
+      it's automatically transcribed, matched to a title, and spliced
+      with backing audio. Nothing is ever posted anywhere until a human
+      reviews it on our <strong>Final Check</strong> screen and explicitly
+      approves it &mdash; there is no auto-posting path in this product.
+    </p>
+    <div class="mockup">
+      <div class="mockup-label">Final Check &mdash; human review &amp; approval gate</div>
+      <div style="display:flex; gap:20px; flex-wrap:wrap;">
+        <div class="demo-video-box">
+          <div class="demo-play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 6l10 6-10 6V6Z"/></svg></div>
+          <span>Reviewed video<br />(example placeholder)</span>
+        </div>
+        <div style="flex:1; min-width:220px;">
+          <div style="font-weight:600; color:var(--ink); font-size:0.95rem; margin-bottom:6px;">Title 1: I Tried The 5-Minute Morning Routine</div>
+          <div style="color:var(--ink-soft); font-size:0.9rem; margin-bottom:10px;">Title 2: This 5-Minute Habit Changed My Mornings</div>
+          <div class="chip-row" style="margin-bottom:10px;">
+            <span class="chip format"><span class="dot" style="background:#ff5c8a"></span>TikTok</span>
+            <span class="chip format"><span class="dot" style="background:#5c9dff"></span>Instagram</span>
+            <span class="chip">Ultra-short</span>
+          </div>
+          <div style="font-size:0.82rem; color:var(--ink-soft); background:var(--surface); border:1px solid var(--border-soft); border-radius:6px; padding:8px 10px; margin-bottom:12px;">
+            One habit changed how I start every day. Full framework in The Reality Manual &mdash; link in bio.
+          </div>
+          <div class="mockup-consent"><input type="checkbox" disabled checked /> I confirm this content complies with TikTok's Music Usage Confirmation</div>
+          <div class="mockup-consent"><input type="checkbox" disabled /> This is branded content (toggles TikTok's Branded Content disclosure)</div>
+          <button type="button" class="btn-primary" disabled style="margin-top:8px;">Approve &amp; Schedule</button>
+        </div>
+      </div>
+    </div>
+    <p class="rv-note">
+      The Music Usage and Branded Content confirmations above are the two
+      pieces of this screen we'd add specifically to satisfy TikTok's
+      Content Sharing Guidelines &mdash; everything else on this screen
+      (video review, title, caption, platform targeting, human approval)
+      already exists in the shipped product today.
+    </p>
+
+    <h2><span class="num">04</span>Scheduling &amp; confirming the post is live</h2>
+    <p>
+      Once approved, the post moves to our existing scheduling queue,
+      which already assigns a publish time per platform's posting
+      cadence. At the scheduled time, our backend calls TikTok's Content
+      Posting API to publish the video, then polls the
+      <strong>Get Post Status</strong> endpoint and updates our own
+      dashboard once TikTok confirms the post is live &mdash; the same
+      "submit, then poll for confirmation before ever telling anyone it
+      succeeded" pattern our storefront already uses for order
+      fulfillment elsewhere in this codebase.
+    </p>
+    <div class="mockup">
+      <div class="mockup-label">Content Pipeline &mdash; scheduled item</div>
+      <div class="mockup-scheduled">
+        <span class="dot"></span>
+        <div>
+          <div style="color:var(--ink); font-size:0.88rem;">Scheduled for Sept 26, 2026 &middot; 9:00 AM PT</div>
+          <div class="mockup-note">This is when it goes live on TikTok.</div>
+        </div>
+      </div>
+    </div>
+
+    <h2><span class="num">05</span>Scopes we're requesting, and why</h2>
+    <ul>
+      <li><strong>Login Kit (user.info.basic)</strong> &mdash; to authenticate our own TikTok account and confirm which account we're about to post to before every publish, per TikTok's own "show the creator's confirmed account" requirement.</li>
+      <li><strong>video.publish</strong> &mdash; to publish an approved video directly to our TikTok account on the schedule our team sets.</li>
+    </ul>
+    <p>
+      We understand that until our app passes TikTok's compliance audit,
+      every post made through the Content Posting API will be restricted
+      to <code>SELF_ONLY</code> visibility, and we're building and testing
+      against that constraint from day one &mdash; we're not requesting
+      or expecting public posting ability before an audit.
+    </p>
+
+    <h2><span class="num">06</span>Compliance commitments</h2>
+    <ul>
+      <li>Every post is created and approved by a human member of our own team &mdash; there is no automated content generation or auto-posting.</li>
+      <li>We only ever post to our own connected TikTok account, never on behalf of a third party.</li>
+      <li>We display the connected account and a full content preview before every post, and require explicit approval each time.</li>
+      <li>We respect TikTok's per-account posting caps and will not attempt to exceed them.</li>
+      <li>We will not request scopes beyond Login Kit and video.publish unless our use of the product genuinely expands to need them.</li>
+    </ul>
+
+    <h2><span class="num">07</span>Legal</h2>
+    <p>
+      This app's <a href="privacy.html">Privacy Policy</a> and
+      <a href="terms.html">Terms of Service</a> are linked below and cover
+      how Content Studio handles data, including platform connections
+      like this one.
+    </p>
+
+    <div class="rv-links">
+      <a href="privacy.html">Privacy Policy</a>
+      <a href="terms.html">Terms of Service</a>
+    </div>
+  </div>
+</body>
+</html>
