@@ -4122,3 +4122,66 @@ Verified via `node --check server.js` only — not yet verified against a
 real live voice exchange on the deployed service (same caveat as §101);
 confirm both the "quick answer" and "task, confirm in chat" phrasing
 sound right in practice once this is live.
+
+---
+
+# 103. Bluetooth Call-Tone: §86's Fix Was Treating the Wrong Cause
+
+Harvey reported the Bluetooth "call started"/"call ended" tone (§86) is
+still happening on every recording, distorting the audio badly enough
+that he can barely hear replies, and asked for real research into a fix
+rather than another guess.
+
+**§86 was fixing the wrong mechanism.** Confirmed via research (see
+Sources below): disabling `echoCancellation`/`noiseSuppression`/
+`autoGainControl` stops Chrome's "voice processing" pipeline, but that
+pipeline isn't what forces the Bluetooth profile switch. The real cause
+is structural — **A2DP (the high-quality profile a Bluetooth headset
+streams music over) has no microphone channel at all; it's output-only.**
+The instant a web page's `getUserMedia` call needs *any* audio input
+from a Bluetooth device, Android has no choice but to switch that device
+to HFP (the profile that supports a mic return channel), and that
+profile switch is exactly what plays the connect/disconnect tone. This
+happens regardless of any media constraint passed to `getUserMedia` —
+constraints only affect signal processing on whichever device ends up
+providing input, not which device gets chosen.
+
+**Real fix: stop asking the Bluetooth device for input at all.**
+`startRecording()` in `ops-service/public/lib/voiceClient.js` now calls
+`enumerateDevices()` once mic permission exists, filters for an
+audio-input device whose label does *not* look like a Bluetooth/wireless
+headset (regex against "bluetooth", "hands-free"/"hfp", "headset",
+"airpod", "buds", "wireless"), and — if a non-Bluetooth device is
+found — explicitly requests it by `deviceId: { exact: ... }` instead of
+leaving device selection to "default" (which Android resolves to the
+connected Bluetooth headset whenever one's connected). With mic input
+coming from the phone's own built-in microphone, the headset never
+needs to leave A2DP for output, so there's no profile switch and no
+tone. The resolved device id is cached in a module variable
+(`preferredMicDeviceId`) so this is one enumeration per page load, not
+per recording; a stale cached id (e.g. Bluetooth reconnects under a new
+device id) is caught via a `getUserMedia` failure and falls back to the
+unconstrained default rather than breaking recording outright.
+
+**One real limitation, stated honestly:** device labels are empty until
+mic permission has been granted at least once on that origin/device, so
+the very first recording ever made still can't be told apart from the
+Bluetooth device and may still trigger one profile-switch tone. Every
+recording after that — which is what Harvey actually complained about
+("I don't wanna be calling this thing every time") — resolves a labeled
+non-Bluetooth device and should stay silent. This can't be fully closed
+from a web page; it's the same "web content can't override Android's
+Bluetooth stack" ceiling §86 already ran into, just moved one step back
+(from "every single time" to "once, on first-ever use").
+
+Applies to both `app.js` and `voice-mobile.html` automatically since
+both go through this shared `voiceClient.js` function — no changes
+needed in either page. Verified via `node --check` only; not yet tested
+against a real Bluetooth headset on the deployed service — the actual
+fix depends on Android correctly reporting a distinguishable label for
+the phone's built-in mic on Harvey's specific device, which needs a real
+device test to confirm, not just code review.
+
+Sources:
+- [Bluetooth headset - ArchWiki](https://wiki.archlinux.org/title/Bluetooth_headset) — A2DP has no input/microphone mode; HSP/HFP is required for bidirectional (mic) audio.
+- [Trouble with bluetooth headphones on Chrome - Google Chrome Community](https://support.google.com/chrome/thread/21533239/trouble-with-bluetooth-headphones-on-chrome-no-audio-for-any-tabs?hl=en) — Chrome/Android Bluetooth audio routing behavior and known limitations.

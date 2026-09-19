@@ -21,19 +21,61 @@ window.RMVoice = (function () {
     lock.release().catch(function () {});
   }
 
+  // The §86 fix (disabling echoCancellation/noiseSuppression/
+  // autoGainControl) turned out not to be the real fix — it stops Chrome
+  // from using its "voice processing" pipeline, but that pipeline isn't
+  // what triggers the Bluetooth profile switch. The actual cause: A2DP
+  // (the high-quality profile a Bluetooth headset streams music over) has
+  // no microphone channel at all — it's output-only — so the instant a web
+  // page's getUserMedia call needs *any* audio input from a Bluetooth
+  // device, Android has no choice but to switch that device to HFP (the
+  // profile that supports a mic), and that switch is what plays the
+  // connect/disconnect tone. This happens regardless of media constraints,
+  // which is why Harvey kept hearing it even with the §86 fix in place.
+  //
+  // The real fix is to not ask the Bluetooth device for input at all: once
+  // the browser has mic permission, enumerateDevices() exposes labeled
+  // input devices, and we can explicitly request the phone's own built-in
+  // mic by deviceId instead of leaving the choice to "default" (which
+  // Android resolves to the connected Bluetooth headset). With input
+  // coming from the phone mic, the headset never needs to leave A2DP, so
+  // there's no profile switch and no tone. First-ever recording on a
+  // device still won't have labels yet (labels are empty until permission
+  // is granted at least once), so it may still switch that one time; every
+  // recording after that — which is what Harvey actually complained about
+  // ("every time I have to give instructions") — uses the resolved device
+  // and stays silent.
+  var preferredMicDeviceId = null;
+  var BT_LABEL_RE = /bluetooth|hands.?free|hfp|headset|airpod|buds|wireless/i;
+  function resolvePreferredMicDeviceId() {
+    if (preferredMicDeviceId || !navigator.mediaDevices.enumerateDevices) {
+      return Promise.resolve(preferredMicDeviceId);
+    }
+    return navigator.mediaDevices.enumerateDevices().then(function (devices) {
+      var mics = devices.filter(function (d) { return d.kind === 'audioinput' && d.label; });
+      var nonBluetooth = mics.filter(function (d) { return !BT_LABEL_RE.test(d.label); });
+      if (nonBluetooth.length) preferredMicDeviceId = nonBluetooth[0].deviceId;
+      return preferredMicDeviceId;
+    }).catch(function () { return null; });
+  }
+
   function startRecording() {
-    // echoCancellation/noiseSuppression/autoGainControl explicitly off:
-    // Chrome's default "voice processing" audio path is the same one used
-    // for an actual phone call, so on Android it forces a connected
-    // Bluetooth headset to switch from its music (A2DP) profile to the
-    // call (HFP) profile — which is what plays the "call connected"/"call
-    // ended" tone Harvey was hearing. Turning processing off lets Chrome
-    // capture the mic without needing that switch. Trade-off: slightly
-    // lower mic quality (no echo cancellation), acceptable for short
-    // dictation; this is the only lever available from a web page — there
-    // is no API to directly block the Bluetooth profile switch itself.
-    return navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    return resolvePreferredMicDeviceId().then(function (deviceId) {
+      var audioConstraints = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+      if (deviceId) audioConstraints.deviceId = { exact: deviceId };
+      return navigator.mediaDevices.getUserMedia({ audio: audioConstraints }).catch(function (err) {
+        // Cached device id went stale (e.g. the phone mic was unplugged, or
+        // Bluetooth reconnected under a new device id) — forget it and fall
+        // back to whatever the browser picks by default rather than
+        // breaking recording entirely.
+        if (deviceId) {
+          preferredMicDeviceId = null;
+          return navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+          });
+        }
+        throw err;
+      });
     }).then(function (stream) {
       requestWakeLock();
       var mimeType = (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/webm')) ? 'audio/webm' : '';
