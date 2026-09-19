@@ -1896,13 +1896,30 @@
     // fullscreen is the real trade-off — acceptable for a quick review
     // clip; worth adding a minimal custom scrub bar later if that's
     // missed in practice.
+    //
+    // Third attempt at click-to-play (2026-09-19, same day): Harvey
+    // reported this version played *nothing at all* on click, worse than
+    // §119's partial fix. Root cause, on reflection: a separate overlay
+    // `<div>` sitting on top of the video as the actual click target
+    // (needed in §119 to avoid the native control bar, which no longer
+    // exists now that `controls` is gone) was unnecessary indirection —
+    // and indirection through a sibling element is exactly where a
+    // cross-browser/mobile hit-testing quirk could hide. Simplified to
+    // the most direct possible binding: the click listener now lives on
+    // the bare `<video>` itself (see bindBoardEvents()), which — with no
+    // `controls` and therefore no shadow-DOM native chrome at all — is
+    // just an ordinary interactive element with nothing standing between
+    // a tap and the listener. `.fc-video-overlay` is now purely
+    // decorative (`pointer-events: none` in CSS): it only paints the
+    // green play icon, it can no longer be a place for clicks to go
+    // missing.
     return '' +
       '<div class="final-check-card" data-id="' + id + '">' +
         '<div class="fc-video-wrap">' +
           '<video class="fc-video" data-id="' + id + '" playsinline preload="metadata"' +
             (piece.thumbnailDataUrl ? ' poster="' + piece.thumbnailDataUrl + '"' : '') +
             ' src="/api/files/videos/' + encodeURIComponent(id) + '-final"></video>' +
-          '<div class="fc-video-overlay" data-id="' + id + '">' +
+          '<div class="fc-video-overlay">' +
             '<span class="fc-play-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 6l10 6-10 6V6Z"/></svg></span>' +
           '</div>' +
         '</div>' +
@@ -1985,29 +2002,20 @@
     // Final Check cards — deliberately not `.card`, so none of the
     // click-to-open-modal/drag bindings above apply to them at all.
     //
-    // Second attempt at click-to-play (2026-09-19). The first attempt
-    // (a transparent overlay covering the frame but leaving a bottom
-    // strip uncovered for the native <video controls> bar) was more
-    // robust than the original Y-coordinate hack, but Harvey reported it
-    // still wasn't reliably clickable on his real device — plausibly
-    // because native video controls on some platforms (iOS Safari in
-    // particular) render via the OS's own media-player chrome rather
-    // than ordinary shadow-DOM content, which can intercept taps in ways
-    // no HTML overlay can reliably out-position. Fixed by dropping
-    // native `controls` entirely (see finalCheckCardHtml()) — with no
-    // native chrome left to conflict with, the overlay can cover the
-    // *entire* video and is guaranteed to receive every click, no
-    // platform-specific guessing involved. The overlay also holds the
-    // green `.fc-play-icon` placeholder; `.is-playing` toggles it
-    // hidden/shown in sync with the video's real play state (covers
-    // pause via the icon-click path, and the video reaching its own
-    // natural end, which also fires a `pause` event).
+    // Third attempt at click-to-play (2026-09-19, see finalCheckCardHtml()
+    // for the fuller history). This time the click listener binds
+    // directly to the bare `<video>` element — no overlay `<div>` in the
+    // way at all, since there's no native `controls` chrome left to route
+    // around and an overlay was only ever needed to dodge that. Removing
+    // the indirection removes the one remaining place a hit-testing quirk
+    // could hide. `.fc-video-overlay` (still in the markup) is now
+    // `pointer-events: none` in CSS — purely decorative, paints the green
+    // play icon and nothing else.
     board.querySelectorAll('.fc-video-wrap').forEach(function (wrap) {
       var v = wrap.querySelector('video');
-      var ov = wrap.querySelector('.fc-video-overlay');
-      if (!v || !ov) return;
+      if (!v) return;
       function syncPlayState() { wrap.classList.toggle('is-playing', !v.paused); }
-      ov.addEventListener('click', function () {
+      v.addEventListener('click', function () {
         if (v.paused) v.play().catch(function () {}); else v.pause();
       });
       v.addEventListener('play', syncPlayState);

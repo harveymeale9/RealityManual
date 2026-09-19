@@ -687,14 +687,15 @@ a { color: var(--accent); }
   gap: 10px;
 }
 .fc-video-wrap { position: relative; }
-.fc-video { width: 100%; border-radius: 6px; background: #000; display: block; }
-/* No native <video controls> at all (2026-09-19, second attempt — see
-   bindBoardEvents()'s comment in app.js) so this covers the *entire*
-   frame, not just a partial region: nothing native left to conflict
-   with, so every click is guaranteed to land here regardless of
-   platform. Also hosts the green play-icon placeholder. */
+/* Click target is the bare video itself now (see bindBoardEvents()'s
+   comment in app.js, third attempt at this) — no controls chrome to
+   route around, so no overlay needed in the click path at all. */
+.fc-video { width: 100%; border-radius: 6px; background: #000; display: block; cursor: pointer; }
+/* Purely decorative now: paints the green play icon, `pointer-events:
+   none` so it can never intercept a click meant for the video beneath
+   it. */
 .fc-video-overlay {
-  position: absolute; inset: 0; cursor: pointer;
+  position: absolute; inset: 0; pointer-events: none;
   display: flex; align-items: center; justify-content: center;
 }
 .fc-play-icon {

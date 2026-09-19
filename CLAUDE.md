@@ -5262,3 +5262,51 @@ card (§113, §119, this one), and the first two both looked correct on
 inspection and failed in practice, so don't assume this one is settled
 just because the reasoning holds up — ask Harvey to actually test it
 before treating this as closed.
+
+---
+
+# 121. Final Check Click-to-Play: Third Attempt — Bind Directly to `<video>`, Drop the Overlay Indirection
+
+§120 made things worse, not better — Harvey reported clicking anywhere,
+including the green play icon, did nothing at all. Confirmed via a
+direct fetch of the live `ops.realitymanual.com/app.js` that what's
+deployed is byte-identical to this repo (ruling out a stale-deploy
+explanation), so the bug is real, not a caching artifact.
+
+**Reasoning through it once more, in full:** §120 kept a separate
+`.fc-video-overlay` `<div>` as the actual click target, sized to cover
+the whole video. That made sense in §119, where the overlay's whole job
+was covering the frame *without* covering the native control bar. But
+§120 already removed `controls` — at which point there is no native
+chrome left to route around, and the overlay had no remaining reason to
+exist as a click target. Keeping it anyway introduced exactly the kind
+of indirection (a sibling element sitting on top of the real interactive
+element) that's a known source of mobile/cross-browser hit-testing
+quirks — and with no way to reproduce the failure directly in this
+environment (no headless browser available here), removing that
+indirection entirely is the most defensible fix available: it doesn't
+just patch around a guessed cause, it eliminates the one remaining
+structural difference between this and "the simplest possible thing
+that could work."
+
+**Fix:** the click/`play()`/`pause()` listener now binds directly to the
+bare `<video>` element (`bindBoardEvents()`'s `.fc-video-wrap` loop).
+`.fc-video-overlay` is still in the markup and still renders the green
+`.fc-play-icon`, but is now `pointer-events: none` in CSS — purely
+decorative, structurally incapable of intercepting a click meant for the
+video. This is about as direct as a click-to-toggle binding can get:
+one element, one listener, no controls attribute, nothing layered on
+top of it that could ever eat the event.
+
+Frontend-only (`app.js`, `style.css`), so per §93 this is already live —
+no deploy/restart needed; confirmed via a direct fetch that the live
+`app.js` matches this commit. Verified via `node --check` and a CSS
+brace-balance check. **Third attempt at the same underlying problem
+(§113, §119, §120, now this) — flag this prominently if Harvey reports
+it's still broken.** If so, the honest next step is not a fourth blind
+code change: it's asking him for the exact device/browser (e.g. "iPhone
+15, Safari" vs. "Pixel 8, Chrome") and, ideally, to open the page's
+console (Safari: Settings → Advanced → Web Inspector, then inspect from
+a Mac; Chrome Android: `chrome://inspect` from a desktop Chrome on the
+same network) so a real error, if any, can be read directly instead of
+guessed at from static code review.
