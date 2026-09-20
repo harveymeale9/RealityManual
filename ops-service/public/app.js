@@ -1330,7 +1330,7 @@
       }).then(function () {
         updateStageAndScheduleUI(p);
         flashSaved();
-        notifyPiecesChanged();
+        notifyPieceMoved(p.id);
       });
     });
 
@@ -1392,6 +1392,20 @@
 
   function notifyPiecesChanged() {
     if (typeof window.__rmOnPiecesChanged === 'function') window.__rmOnPiecesChanged();
+  }
+
+  // Same idea as notifyPiecesChanged, but for the specific case of one
+  // piece's *stage* changing — prefers the real move animation
+  // (window.__rmOnPieceMoved, only set while Content Ops is booted, see
+  // animateBoardMove) so any stage-changing action anywhere in the app
+  // gets the same live "it moved" feedback, not just the two poller
+  // paths this originally shipped with. Falls back to a plain re-render
+  // if Content Ops isn't the currently booted tab (e.g. a save landing
+  // from the shared modal while Content Production is active) — animate
+  // has nothing useful to animate against then anyway.
+  function notifyPieceMoved(id) {
+    if (typeof window.__rmOnPieceMoved === 'function') window.__rmOnPieceMoved(id);
+    else notifyPiecesChanged();
   }
 
   function disarmDelete() {
@@ -1683,6 +1697,7 @@
     if (!activeId) return;
     var p = pieces[activeId];
     if (!p) return;
+    var prevStage = p.stage;
     var vals = currentFormValues();
     Object.assign(p, vals);
     p.updatedAt = nowIso();
@@ -1711,7 +1726,8 @@
     Store.put('pieces', p).then(function () {
       if (p.hasVideo) updateStageAndScheduleUI(p);
       flashSaved();
-      notifyPiecesChanged();
+      if (p.stage !== prevStage) notifyPieceMoved(p.id);
+      else notifyPiecesChanged();
     });
   }
 
@@ -2142,12 +2158,31 @@
           '<option value="public">Public</option>' +
         '</select>'
       : '';
+    // TikTok's Content Sharing Guidelines require showing a Music Usage
+    // Confirmation and a Branded Content disclosure before every post —
+    // added 2026-09-20 after these were flagged as a real gap between the
+    // TikTok app-review demo page's mockup (§122) and the actual shipped
+    // product. Music Usage has no real API field to send (it's a
+    // developer-side compliance gate, per TikTok's docs, not a post
+    // parameter) — enforced client-side, blocking the click if unchecked,
+    // right below. Branded Content is real: `brand_content_toggle` is
+    // threaded through to TikTok's own API (tiktokAuth.js). Only shown
+    // when TikTok is actually a wired-and-tagged platform for this piece —
+    // YouTube has no equivalent requirement.
+    var tiktokConsentHtml = wired.indexOf('tiktok') !== -1
+      ? '' +
+        '<div class="fc-tiktok-consent">' +
+          '<label><input type="checkbox" class="fc-music-usage" data-id="' + id + '" /> I confirm this content complies with TikTok’s Music Usage Confirmation</label>' +
+          '<label><input type="checkbox" class="fc-branded-content" data-id="' + id + '" /> This is branded content</label>' +
+        '</div>'
+      : '';
     return '' +
       '<div class="fc-yt-publish">' +
         privacySelectHtml +
         '<button type="button" class="btn-secondary fc-yt-publish-btn" data-id="' + id + '"' + disabledAttr + '>' +
           (erroredPlatforms.length ? 'Retry' : 'Schedule Video') +
         '</button>' +
+        tiktokConsentHtml +
         notWiredNote +
         errorHtml +
       '</div>';
@@ -2201,17 +2236,20 @@
     bindBoardEvents();
   }
 
-  // A real move animation for the one case Harvey actually asked for
-  // (2026-09-20): a card's *stage* changing because a background job
-  // finished — Processing -> Final Check once a video build completes,
-  // Final Check -> Posted/Live once a publish succeeds — while he's
-  // actually looking at the board. Plain FLIP technique: read the card's
-  // current on-screen position, let the normal full render() happen, then
-  // read its new position and animate the visual gap between them rather
-  // than letting it just teleport into the new column. Deliberately not
-  // hooked into every render() call — search/filter/drag already work
-  // fine without this and don't need it; this is only ever called from
-  // the specific places that know a piece's stage genuinely just changed.
+  // A real move animation, originally built (2026-09-20) for just one
+  // case — a card's *stage* changing because a background job finished
+  // (Processing -> Final Check once a video build completes, Final Check
+  // -> Posted/Live once a publish succeeds) — then generalized the same
+  // day to every other stage-changing action too: manual drag-and-drop,
+  // the .card-move dropdown, and the shared modal's Approve button /
+  // Stage field (via notifyPieceMoved). Plain FLIP technique: read the
+  // card's current on-screen position, let the normal full render()
+  // happen, then read its new position and animate the visual gap
+  // between them rather than letting it just teleport into the new
+  // column/position. Deliberately not hooked into every render() call —
+  // search/filter/type-filter changes don't move any single card in a
+  // way worth animating and aren't routed through this; only genuine
+  // stage/position-changing actions call it.
   function animateBoardMove(id) {
     var oldEl = board.querySelector('[data-id="' + id + '"]');
     var oldRect = oldEl ? oldEl.getBoundingClientRect() : null;
@@ -2319,12 +2357,33 @@
         var wrap = btn.closest('.fc-yt-publish');
         var select = wrap ? wrap.querySelector('.fc-yt-privacy') : null;
         var privacyStatus = select ? select.value : 'private';
+
+        var existingWarn = wrap ? wrap.querySelector('.fc-tiktok-consent-warn') : null;
+        if (existingWarn) existingWarn.remove();
+
+        // TikTok's Content Sharing Guidelines require confirming Music
+        // Usage before every post — gate the whole click on it (rather
+        // than silently skipping just the TikTok half) so it's obvious
+        // why nothing went out, instead of Harvey wondering later.
+        var musicCheckbox = wrap ? wrap.querySelector('.fc-music-usage') : null;
+        var brandedCheckbox = wrap ? wrap.querySelector('.fc-branded-content') : null;
+        if (platforms.indexOf('tiktok') !== -1 && musicCheckbox && !musicCheckbox.checked) {
+          var warn = document.createElement('div');
+          warn.className = 'fc-yt-error fc-tiktok-consent-warn';
+          warn.textContent = 'Confirm the Music Usage checkbox above before scheduling to TikTok.';
+          wrap.appendChild(warn);
+          return;
+        }
+        var brandedContent = !!(brandedCheckbox && brandedCheckbox.checked);
+
         var captions = boardSettingsCache ? captionsForPiece(boardSettingsCache, p) : [];
         var title = (p.ytTitles && p.ytTitles[0]) || p.title || 'Untitled';
 
         btn.disabled = true;
         btn.textContent = 'Publishing…';
         if (select) select.disabled = true;
+        if (musicCheckbox) musicCheckbox.disabled = true;
+        if (brandedCheckbox) brandedCheckbox.disabled = true;
         platforms.forEach(function (platform) { p[publishStatusFieldFor(platform)] = 'pending'; });
         pieces[id] = p;
 
@@ -2337,7 +2396,7 @@
           // set, falling back to the plain title otherwise.
           var body = platform === 'ytlong'
             ? { title: title, description: description, privacyStatus: privacyStatus }
-            : { title: description || title };
+            : { title: description || title, brandedContent: brandedContent };
           fetch(publishEndpointFor(platform) + encodeURIComponent(id), {
             method: 'POST',
             credentials: 'include',
@@ -2372,7 +2431,7 @@
         var p = pieces[sel.dataset.id];
         if (!p) return;
         p.order = maxOrder(sel.value) + 10;
-        setPieceStage(p, sel.value, render);
+        setPieceStage(p, sel.value, function () { animateBoardMove(p.id); });
       });
     });
 
@@ -2413,14 +2472,14 @@
           var newOrder = (i + 1) * 10;
           if (id === draggingId) {
             p.order = newOrder;
-            setPieceStage(p, stageId, render);
+            setPieceStage(p, stageId);
           } else if (p.order !== newOrder) {
             p.order = newOrder;
             p.updatedAt = nowIso();
             Store.put('pieces', p);
           }
         });
-        render();
+        animateBoardMove(draggingId);
       });
     });
 
@@ -3169,10 +3228,11 @@
           if (!r) return;
           var existing = pieces[r.id];
           var wasProcessed = existing && existing.stage === 'processed';
-          // Real bug Harvey hit (2026-09-20): this poll tick's own GET can
-          // easily be a snapshot taken from *before* an in-progress local
-          // edit's own (debounced) save has landed — analysis/build jobs
-          // routinely take several real seconds, plenty of time for
+          var prevStage = existing && existing.stage;
+          // Real bug Harvey hit (2026-09-20, §142): this poll tick's own
+          // GET can easily be a snapshot taken from *before* an in-progress
+          // local edit's own (debounced) save has landed — analysis/build
+          // jobs routinely take several real seconds, plenty of time for
           // Harvey to uncheck platform boxes or pick a different audio
           // track while a row is still processing. Blindly replacing
           // `pieces[r.id]` wholesale with `r` clobbered whatever he'd just
@@ -3183,15 +3243,38 @@
           // re-fetch the piece before writing back, §111/§115) — anything
           // else (platforms, thumbnail, audio track, content type, ...)
           // stays whatever's currently in the browser's own memory.
-          var merged = existing ? Object.assign({}, existing) : r;
+          //
+          // Second, independent bug from the SAME fix (found 2026-09-20,
+          // still reverting platforms after §142 shipped): the merge above
+          // used to build a brand-new object (`Object.assign({}, existing)`)
+          // and reassign `pieces[r.id]` to it. That broke object identity —
+          // buildUploadRow()'s "Send to final check" button closes over the
+          // exact `p` reference it was built with, which stays the *original*
+          // object forever; only refreshUploadRowHeadById() re-reads the
+          // live `pieces[id]`. Every poll tick (every 3s, for as long as
+          // analysis/build is pending — routinely several ticks) silently
+          // swapped `pieces[id]` to a new object and rebuilt the head against
+          // it, while "Send to final check" kept holding the stale original.
+          // Any platform Harvey unchecked *after* even one tick had already
+          // fired (a near-certainty over a several-second job) landed only on
+          // the new object the checkboxes were rebuilt against — invisible
+          // to the send button, which shipped whatever the stale original
+          // still had (the full preset) the moment he clicked it. Fixed by
+          // mutating `existing` in place instead of replacing it, so
+          // `pieces[id]` never changes identity for a piece's whole
+          // lifetime — every closure that captured it, however long ago,
+          // keeps seeing live updates with no rebuild required for
+          // correctness (refreshUploadRowHeadById is now purely a visual
+          // refresh, not a consistency fix).
           if (existing) {
             ['analysisStatus', 'analysisError', 'analysisMatchedPieceId', 'transcript',
              'ytTitles', 'title', 'finalBuildStatus', 'finalBuildError', 'stage', 'updatedAt'
-            ].forEach(function (k) { if (k in r) merged[k] = r[k]; });
+            ].forEach(function (k) { if (k in r) existing[k] = r[k]; });
+            r = existing;
+          } else {
+            pieces[r.id] = r;
           }
-          if (existing && existing.stage !== merged.stage) movedIds.push(r.id);
-          pieces[r.id] = merged;
-          r = merged;
+          if (prevStage && prevStage !== r.stage) movedIds.push(r.id);
           // Real bug Harvey hit (2026-09-20): these targeted DOM updates
           // only ever mean anything while Content Production is the
           // actual visible tab — `uploadRows` is that tab's own DOM

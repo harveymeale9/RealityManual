@@ -7046,3 +7046,223 @@ verified end-to-end** that `recoverInflightVideoJobs()` actually fires
 and behaves correctly on a real restart — worth confirming after this
 deploy that the work log gets the expected recovery line if any piece is
 genuinely mid-analysis/build when it happens next.
+
+---
+
+# 147. Kanban Move Animation Generalized to Every Stage-Change Path; Real Demo Videos Embedded on Both App-Review Pages (2026-09-20)
+
+**Animation.** §145's `animateBoardMove()` FLIP animation only fired from
+two places — the analysis-poller (Processing → Final Check) and the
+publish-poller (Final Check → Live). Harvey asked for it to work "for all
+pipeline stages when a piece moves," so it's now wired into every other
+place a piece's `stage` actually changes:
+
+- **Manual drag-and-drop** (`bindBoardEvents()`'s column `drop` handler):
+  the dragged piece's `setPieceStage(p, stageId)` call no longer passes
+  `render` as its callback (that would double-render, wiping the
+  animation's transform mid-flight); the trailing `render()` call after
+  the reorder loop is now `animateBoardMove(draggingId)` instead.
+- **The `.card-move` dropdown** on each card: `setPieceStage(p, sel.value,
+  render)` → `setPieceStage(p, sel.value, function () {
+  animateBoardMove(p.id); })`.
+- **The shared editor modal's Approve button and Stage field**: both
+  used to call the plain `notifyPiecesChanged()` hook. Added a new
+  `notifyPieceMoved(id)` helper right next to it — prefers
+  `window.__rmOnPieceMoved` (the real animation, only set while Content
+  Ops is booted) and falls back to a plain re-render otherwise (e.g. a
+  save landing while Content Production is the active tab, which has
+  nothing to animate against). `syncFromForm()` now captures `prevStage`
+  before applying form values and calls `notifyPieceMoved` only if the
+  stage actually changed; the Approve button always calls it, matching
+  its own guaranteed stage change.
+
+**Verified for real, not just reasoned about** — this exact board has a
+documented history (§113/119/120/121) of reasoning-only fixes failing in
+practice, so a Playwright rig was rebuilt from scratch (same
+manually-extracted-Debian-.deb-packages workaround as §123/§145) and run
+directly against the live deployed service: created a synthetic test
+piece, drove a real `.card-move` dropdown `change` event and a real
+synthetic `DragEvent` sequence (dragstart/dragover/drop) against the
+actual DOM, and polled `getComputedStyle` every 100ms. Both paths
+genuinely applied `.card-just-moved` with the real accent-green
+`box-shadow` and (for the drag case) a real CSS `transform` mid-transition,
+correctly landing in the target column and cleaning up after ~900ms in
+both cases. All synthetic test pieces were deleted afterward via the
+app's own DELETE endpoint.
+
+**Demo videos.** Harvey recorded and pushed two real screen-recordings
+directly to the repo root (`ContentStudioTikTokDemo.mp4`,
+`YouTubeContentStudioDemo.mp4`, ~16MB each). Moved into
+`ops-service/public/media/` (`tiktok-demo.mp4` / `youtube-demo.mp4`) so
+they're served as ordinary static files from the same origin as the two
+review pages, and embedded via a plain `<video controls>` element:
+
+- `youtube-app-review.html`'s `rv-video-slot` placeholder (added §136,
+  "coming soon") is replaced with the real embed; the now-unused
+  `.rv-video-slot`/`.rv-video-icon`/`.rv-video-title`/`.rv-video-hint`
+  CSS was deleted rather than left dead.
+- `tiktok-app-review.html` never had a video slot at all (§122's page
+  only had an illustrative static mockup, `.demo-video-box`, labeled
+  "DEMO DATA") — added a new `.rv-video-embed` block in the same
+  position as the YouTube page's (right after the intro paragraph,
+  before section 01), left the illustrative Final Check mockup
+  in section 03 as supplementary written context since it's still
+  honestly labeled as demo data, not a claim that it's the real video.
+
+Both are plain frontend/static-file changes (no `server.js`/`src/*`
+touched), so per §93 this deploys via the fast path — no Docker
+rebuild/restart, no interrupted session.
+
+**Known gap flagged to Harvey, not fixed this pass:** the real
+"Schedule Video" flow on Final Check does not yet show TikTok's own
+required pre-post UX — a Music Usage confirmation checkbox and a
+Branded Content disclosure toggle, both explicitly required by TikTok's
+Content Sharing Guidelines (already noted as *planned but not built* in
+§122's own mockup caption: "the two pieces of this screen we'd add
+specifically"). The real demo video therefore shows a real publish
+without these prompts. Worth building for real before relying on this
+video alone to carry a review, though TikTok's guidelines describe this
+requirement less strictly than an automatic rejection trigger — Harvey's
+call whether to submit as-is or wait for these to be built first.
+
+---
+
+# 148. TikTok Music Usage + Branded Content Checkboxes Actually Built (2026-09-20)
+
+Closed §147's flagged gap — Harvey asked for the least invasive
+addition, to refilm the demo video afterward.
+
+**`ops-service/public/app.js` — `fcScheduleVideoHtml()`:** when `tiktok`
+is a wired-and-tagged platform for a Final Check piece, two checkboxes
+now render above the "Schedule Video" button — "I confirm this content
+complies with TikTok's Music Usage Confirmation" and "This is branded
+content" — matching the exact copy already used in `tiktok-app-review.html`'s
+illustrative mockup (§122), now real. Music Usage has no actual TikTok
+API field to send; per TikTok's own docs it's a developer-side
+compliance gate shown in the app's own UI, not a post parameter — so
+it's enforced purely client-side: the click handler for
+`.fc-yt-publish-btn` now checks the box's state before firing anything,
+and if TikTok is among the platforms being published to and it's
+unchecked, blocks the *entire* click (not just TikTok's half) with an
+inline warning (`.fc-tiktok-consent-warn`, reusing the existing
+`.fc-yt-error` styling) rather than silently skipping TikTok — so it's
+obvious why nothing went out rather than a delayed "why isn't this on
+TikTok" moment later.
+
+**Branded Content is real** — TikTok's Content Posting API genuinely has
+a `brand_content_toggle` field on `post_info`. Threaded end to end:
+checkbox state → `brandedContent` in the request body → `server.js`'s
+`POST /api/tiktok/publish/:id` route → `runTiktokPublish`'s call to
+`tiktokAuth.publishVideo` → `initPublish`'s `post_info.brand_content_toggle`.
+Defaults to `false`/unchecked, matching the mockup.
+
+**Known limitation, noted in a code comment rather than solved:** per
+TikTok's own documentation, a branded-content post cannot use
+`SELF_ONLY` privacy — and every TikTok post from this app is currently
+forced to `SELF_ONLY` while unaudited (§143). Not handled, since
+Harvey's real content is never actually branded content in practice;
+worth revisiting if that combination is ever genuinely hit and TikTok's
+API rejects it.
+
+This is a `server.js`/`src/tiktokAuth.js` change (real backend logic),
+so per §93 it triggers a full rebuild+restart on the next deploy — same
+standing caveat as every other backend change in this file, since this
+session is the headless agent running inside the container being
+restarted. Logged to the work log immediately before pushing.
+
+Verified via `node --check` on all three touched JS files and a CSS
+brace-balance check. **Not yet verified against the live deployed
+service** — once it's back up, confirm: the two checkboxes render on a
+Final Check card tagged for TikTok (and don't render for a
+YouTube-only card), clicking Schedule Video with Music Usage unchecked
+shows the inline warning and genuinely fires nothing, checking it and
+clicking again actually publishes, and a checked Branded Content box
+results in `brand_content_toggle: true` reaching TikTok's real API (a
+deliberate real test would need TikTok to actually accept or reject
+that combination against the still-SELF_ONLY-forced account — the
+error path, if any, should surface via the existing `tiktokPublishError`
+mechanism, not fail silently).
+
+---
+
+# 149. §142's Own Fix Had a Second Bug: Object-Identity Break Let Platforms Keep Reverting
+
+Harvey re-tested §148 by refilming with only TikTok selected and hit the
+exact same symptom §142 was supposed to have closed: all 4 platforms
+came back on Final Check despite selecting only TikTok. Root-caused
+against the live piece and server logs rather than guessed again.
+
+**Confirmed via the live API and VPS docker logs, not assumed:** the
+piece (`08762a6c-...`, filename "verticalvideodemo," same test filename
+reused) was created at 12:57:55Z and never touched again after
+12:58:24Z — `analysisStatus` stuck at `'pending'` forever (its analysis
+job genuinely hung partway through, per §146's still-standing gap, since
+the server log shows only the HEVC-normalization line and nothing
+past it), while `finalBuildStatus` reached `'done'` and `stage` reached
+`final_check` — meaning "Send to final check" fired and completed
+successfully using data that still disagreed with what the analysis
+poller's own view of the piece had already moved on to.
+
+**Real root cause — a second, independent bug introduced by §142's own
+fix, not a repeat of the first one:** §142 correctly stopped the poller
+from blindly overwriting the whole piece object, but its actual
+implementation —
+```js
+var merged = existing ? Object.assign({}, existing) : r;
+...
+pieces[r.id] = merged;
+```
+— builds a **brand-new object** on every single poll tick and reassigns
+`pieces[id]` to point at it. That breaks object *identity*, and
+`buildUploadRow()`'s "Send to final check" button closes over the exact
+`p` reference it was originally built with — it never re-reads
+`pieces[id]` again after that. Only `refreshUploadRowHeadById()` (the
+poller's own per-tick DOM update) reads the live `pieces[id]` and
+rebuilds the head's checkboxes against whatever the *current* object
+is. Since analysis/build jobs routinely take several real seconds — one
+poll tick every 3s for the whole duration — it only takes a single tick
+firing while Harvey is mid-edit for `pieces[id]` to get silently swapped
+to a new object: any platform he unchecks *after* that tick lands only
+on the new object the checkboxes now point at, invisibly to the send
+button, which is still holding the original, pre-edit object (the full
+preset) and ships exactly that the moment it's clicked. §142's own fix
+correctly stopped the *read* side from clobbering local edits with stale
+server data, but introduced this new way for a *local* edit to get
+silently split across two different objects instead.
+
+**Fix, `ops-service/public/app.js`'s `maybeStartAnalysisPolling()`:**
+mutate `existing` in place rather than building a copy — `pieces[id]`
+now keeps the exact same object identity for a piece's entire lifetime
+once created, so every closure that ever captured it (however long ago,
+including a stale "Send to final check" button) always sees live
+updates with zero risk of drifting apart. `refreshUploadRowHeadById()`
+is now purely a visual refresh (so status text/tags redraw), not load-
+bearing for correctness the way it accidentally became.
+
+**Piece #097 fixed directly against the live data again** so Harvey has
+something to retest: `platforms` reset to `['tiktok']`, `analysisStatus`
+set to `'error'` with an honest message (its own analysis job is
+genuinely hung, not just delayed — matches §146's still-open gap: no
+job actually times out server-side yet, only the client's 5-minute
+polling-timeout stops re-rendering around it; a real server-side timeout
+for a hung `transcribeVideo`/`matchAndGenerateTitles` call is still
+worth adding if this keeps happening).
+
+**Also answered, Harvey's question about "This is branded content"
+(§148's checkbox):** it's TikTok's own required disclosure for actual
+paid partnerships / sponsored content — check it only when a video is a
+paid collaboration with a brand. For his own organic book-marketing
+videos this should stay unchecked essentially always. Also worth
+knowing: per §143's research, TikTok won't even allow a branded-content
+post while this app's postings are forced `SELF_ONLY` (unaudited/
+sandboxed) — not a practical blocker right now since he won't be
+checking it, but relevant if that ever changes.
+
+Frontend-only (`app.js`), so per §93 this is already live — no deploy/
+restart needed. Verified via `node --check`; the piece #097 data fix was
+confirmed applied via a direct re-fetch. **Not yet re-tested against the
+live deployed service with a fresh upload** — the real test is: upload a
+video, uncheck platforms down to one, wait long enough for at least one
+3s poll tick to fire (trivial — analysis always takes some time), then
+send to Final Check and confirm the platform selection survives all the
+way through this time.

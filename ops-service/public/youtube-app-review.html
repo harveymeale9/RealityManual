@@ -47,19 +47,7 @@
       content: 'DEMO DATA'; background: var(--accent-soft); color: var(--accent);
       padding: 2px 7px; border-radius: 3px; font-weight: 700; letter-spacing: 0.06em;
     }
-    .rv-video-slot {
-      border: 1px dashed var(--border); border-radius: var(--radius);
-      background: var(--surface-2); padding: 40px 24px; margin: 0 0 40px;
-      text-align: center; color: var(--ink-faint);
-    }
-    .rv-video-slot .rv-video-icon {
-      width: 54px; height: 54px; border-radius: 50%; margin: 0 auto 14px;
-      background: var(--accent-soft-strong); border: 2px solid var(--accent);
-      display: flex; align-items: center; justify-content: center; color: var(--accent);
-    }
-    .rv-video-slot .rv-video-icon svg { width: 22px; height: 22px; margin-left: 2px; }
-    .rv-video-slot .rv-video-title { color: var(--ink-soft); font-weight: 600; font-size: 0.95rem; margin-bottom: 6px; }
-    .rv-video-slot .rv-video-hint { font-size: 0.82rem; max-width: 46ch; margin: 0 auto; }
+    .rv-video-embed { margin: 0 0 40px; }
     .rv-links { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border-soft); display: flex; gap: 20px; font-size: 0.82rem; flex-wrap: wrap; }
     .scope-table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 0.88rem; }
     .scope-table th, .scope-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
@@ -92,29 +80,19 @@
       system, illustrated with clearly-labeled example data.
     </p>
 
-    <!-- VIDEO SLOT: verification demo video. Not yet recorded — replace
-         this whole <div class="rv-video-slot">...</div> block with a real
-         embed once it exists, e.g.:
-         <div class="rv-video-embed"><iframe width="100%" height="480"
-           src="https://www.youtube.com/embed/VIDEO_ID" title="Content
-           Studio YouTube integration demo" frameborder="0"
-           allowfullscreen></iframe></div>
-         The video itself should show, in order: logging into Content
-         Studio, opening Settings and connecting the YouTube account via
-         the real Google consent screen (address bar visible), then
+    <!-- VIDEO SLOT: verification demo video. Recorded 2026-09-20, served
+         directly as a static file from this same origin (media/youtube-demo.mp4)
+         rather than a YouTube embed, since it's a raw screen recording, not
+         something we've published anywhere. Shows, in order: logging into
+         Content Studio, opening Settings and connecting the YouTube account
+         via the real Google consent screen (address bar visible), then
          producing/approving a real video through Final Check and
          publishing it live via the real "Publish to YouTube" action. -->
-    <div class="rv-video-slot" id="demo-video-slot">
-      <div class="rv-video-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 6l10 6-10 6V6Z"/></svg>
-      </div>
-      <div class="rv-video-title">Verification demo video &mdash; coming soon</div>
-      <p class="rv-video-hint">
-        This slot will hold our walkthrough video for Google's review:
-        connecting our YouTube channel through the real OAuth consent
-        screen, then producing, approving, and publishing a real video
-        through Content Studio end to end.
-      </p>
+    <div class="rv-video-embed">
+      <video controls preload="metadata" playsinline style="width:100%; border-radius: var(--radius); border: 1px solid var(--border); display: block;">
+        <source src="media/youtube-demo.mp4" type="video/mp4" />
+        Your browser doesn't support embedded video. Download it directly: <a href="media/youtube-demo.mp4">media/youtube-demo.mp4</a>.
+      </video>
     </div>
 
     <h2><span class="num">01</span>Who we are &amp; what the app does</h2>

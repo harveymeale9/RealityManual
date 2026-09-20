@@ -120,7 +120,16 @@ async function initPublish(accessToken, opts) {
     body: JSON.stringify({
       post_info: {
         title: (opts.title || 'Untitled').slice(0, 2200),
-        privacy_level: opts.privacyLevel
+        privacy_level: opts.privacyLevel,
+        // Branded Content disclosure toggle, per TikTok's Content Sharing
+        // Guidelines (2026-09-20) — sourced from a checkbox on the Final
+        // Check card, not guessed. Note for later: TikTok's own docs say a
+        // branded-content post cannot use SELF_ONLY privacy, which is what
+        // this app is forced to while unaudited (§143) — not handled here
+        // since Harvey's real content is never actually branded content,
+        // but worth knowing if that combination ever gets hit and TikTok
+        // rejects it.
+        brand_content_toggle: !!opts.brandedContent
       },
       source_info: {
         source: 'FILE_UPLOAD',
@@ -209,7 +218,8 @@ async function publishVideo(accessToken, filePath, mimeType, metadata) {
     privacyLevel: privacyLevel,
     videoSize: stat.size,
     chunkSize: plan.chunkSize,
-    totalChunkCount: plan.totalChunkCount
+    totalChunkCount: plan.totalChunkCount,
+    brandedContent: !!metadata.brandedContent
   });
 
   await uploadVideoChunks(init.uploadUrl, filePath, stat.size, mimeType, plan.chunkSize, plan.totalChunkCount);
