@@ -4,15 +4,15 @@
 + '[' -n '' ']'
 + git pull
 From https://github.com/harveymeale9/RealityManual
-   4765762..38b7fe2  main       -> origin/main
-Updating 4765762..38b7fe2
+   38b7fe2..759c541  main       -> origin/main
+Updating 38b7fe2..759c541
 Fast-forward
- CLAUDE.md                    | 71 ++++++++++++++++++++++++++++++++++++++++++++
- ops-service/.ci/last-run.log | 21 +++++++------
- ops-service/public/app.js    | 26 ++++++++++++++--
- 3 files changed, 105 insertions(+), 13 deletions(-)
+ CLAUDE.md                    | 105 +++++++++++++++++++++++++++++++++++++++++++
+ ops-service/.ci/last-run.log |  20 ++++-----
+ ops-service/public/app.js    |  22 ++++++++-
+ 3 files changed, 135 insertions(+), 12 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=38b7fe2fb9b56d3845f5aa9e63d2cf4ab841e5c0
++ NEW_HEAD=759c541560e47d206e404751176e3246f7737804
 + git -C /srv/realitymanual-repo pull
 Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
@@ -22,11 +22,11 @@ Already up to date.
 + NEEDS_REBUILD=1
 + '[' -n 37b65f5011403363897fc23785ef8e52f545b17c ']'
 + git cat-file -e '37b65f5011403363897fc23785ef8e52f545b17c^{commit}'
-++ git diff --name-only 37b65f5011403363897fc23785ef8e52f545b17c 38b7fe2fb9b56d3845f5aa9e63d2cf4ab841e5c0 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
+++ git diff --name-only 37b65f5011403363897fc23785ef8e52f545b17c 759c541560e47d206e404751176e3246f7737804 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z '' ']'
 + NEEDS_REBUILD=0
 + '[' 0 = 0 ']'
-+ echo 'no backend changes between 37b65f5011403363897fc23785ef8e52f545b17c and 38b7fe2fb9b56d3845f5aa9e63d2cf4ab841e5c0 — already live via git pull, skipping rebuild/restart'
-no backend changes between 37b65f5011403363897fc23785ef8e52f545b17c and 38b7fe2fb9b56d3845f5aa9e63d2cf4ab841e5c0 — already live via git pull, skipping rebuild/restart
++ echo 'no backend changes between 37b65f5011403363897fc23785ef8e52f545b17c and 759c541560e47d206e404751176e3246f7737804 — already live via git pull, skipping rebuild/restart'
+no backend changes between 37b65f5011403363897fc23785ef8e52f545b17c and 759c541560e47d206e404751176e3246f7737804 — already live via git pull, skipping rebuild/restart
 + exit 0
 ssh exit code: 0
