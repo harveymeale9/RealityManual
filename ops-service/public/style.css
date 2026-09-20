@@ -700,6 +700,15 @@ a { color: var(--accent); }
    comment in app.js, third attempt at this) — no controls chrome to
    route around, so no overlay needed in the click path at all. */
 .fc-video { width: 100%; border-radius: 6px; background: #000; display: block; cursor: pointer; }
+/* A vertical piece (piece.videoIsVertical, §130) was rendering at the
+   full ~800px card width with no height cap — since the card itself
+   doesn't constrain height, a 9:16 video at that width came out
+   roughly 1400px tall, blowing the card out (Harvey, 2026-09-20: "the
+   size is way too big in the final check for vertical ones"). Capped
+   to a real review size instead of the full column width — bigger than
+   Content Production's 220px cap (§130) since this card is the actual
+   review surface, not an inline thumbnail picker, but still bounded. */
+.fc-video-wrap.is-vertical { max-width: 360px; margin: 0 auto; }
 /* Purely decorative now: paints the green play icon, `pointer-events:
    none` so it can never intercept a click meant for the video beneath
    it. */
@@ -733,10 +742,19 @@ a { color: var(--accent); }
    Facebook) — lets Harvey flip between each platform's own description
    instead of only ever seeing one (2026-09-20). */
 .fc-caption-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+/* Every tab here represents a platform this piece is genuinely tagged
+   for (§129's captionsForPiece already filters to just those) — a
+   muted/faint default read as "only the active one is actually
+   selected," which isn't true (Harvey, 2026-09-20: "the video should
+   have all four platform pills selected by default, currently only YT
+   shorts is"). All tabs now use a real accent border/text by default;
+   only the *active* (currently-displayed-caption) one gets the solid
+   fill, so the distinction is "which one you're viewing," not "which
+   ones apply." */
 .fc-caption-tab {
   background: none;
-  border: 1px solid var(--border-soft);
-  color: var(--ink-faint);
+  border: 1px solid var(--accent-3);
+  color: var(--ink-soft);
   font-family: var(--font-body);
   font-weight: 500;
   font-size: 0.7rem;
@@ -746,7 +764,7 @@ a { color: var(--accent); }
   border-radius: 999px;
   cursor: pointer;
 }
-.fc-caption-tab:hover { color: var(--ink-soft); border-color: var(--accent-3); }
+.fc-caption-tab:hover { color: var(--ink); border-color: var(--accent); }
 .fc-caption-tab.active { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
 .fc-titles { display: flex; flex-direction: column; gap: 3px; }
 /* Sized to match the main-title heading these replaced (Harvey,

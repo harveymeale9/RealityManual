@@ -1861,7 +1861,14 @@
     });
   }
 
-  function chipHtml(piece) {
+  // opts.hideVideoChip: Final Check cards (finalCheckCardHtml) only ever
+  // show a piece that already has a video (§115's whole point of the
+  // stage), so the "▶ video" chip there is pure noise — Harvey,
+  // 2026-09-20: "theyre lit4erally all videos." Left on for the normal
+  // kanban card (cardHtml), where it still usefully distinguishes an
+  // uploaded video piece from a plain planning card.
+  function chipHtml(piece, opts) {
+    opts = opts || {};
     var out = '';
     (piece.platforms || []).forEach(function (pid) {
       var p = Store.PLATFORMS.filter(function (x) { return x.id === pid; })[0];
@@ -1870,7 +1877,7 @@
     });
     var ct = contentTypeOf(piece.contentType);
     out += '<span class="chip format"><span class="dot" style="background:' + ct.color + '"></span>' + ct.label + '</span>';
-    if (piece.hasVideo) out += '<span class="chip video-chip">▶ video</span>';
+    if (piece.hasVideo && !opts.hideVideoChip) out += '<span class="chip video-chip">▶ video</span>';
     return out;
   }
 
@@ -1964,9 +1971,16 @@
     // to match the main-title heading this replaced (Harvey: "remove
     // bottom one [the #094 — <title> heading, redundant with Title 1],
     // make these a bit larger, same size as [that removed heading]").
+    // A shortform piece only ever has one title slot now (§131 — no
+    // rotation/testing for a short, so Content Production only collects
+    // one), so numbering it "Title 1:" implied a second option that
+    // doesn't exist — just "Title:" when there's exactly one (Harvey,
+    // 2026-09-20). Longform still numbers, since it genuinely can have
+    // up to 3.
     var titlesHtml = titles.length
       ? '<div class="fc-titles">' + titles.map(function (t, i) {
-          return '<div class="fc-title-line"><strong>Title ' + (i + 1) + ':</strong> ' + escapeHtml(t) + '</div>';
+          var label = titles.length === 1 ? 'Title' : ('Title ' + (i + 1));
+          return '<div class="fc-title-line"><strong>' + label + ':</strong> ' + escapeHtml(t) + '</div>';
         }).join('') + '</div>'
       : '<div class="fc-titles-empty">No title options set.</div>';
     // A piece never reaches this stage without its final (audio-spliced)
@@ -2014,7 +2028,7 @@
     // missing.
     return '' +
       '<div class="final-check-card" data-id="' + id + '">' +
-        '<div class="fc-video-wrap">' +
+        '<div class="fc-video-wrap' + (piece.videoIsVertical ? ' is-vertical' : '') + '">' +
           '<video class="fc-video" data-id="' + id + '" playsinline preload="metadata"' +
             (piece.thumbnailDataUrl ? ' poster="' + piece.thumbnailDataUrl + '"' : '') +
             ' src="/api/files/videos/' + encodeURIComponent(id) + '-final"></video>' +
@@ -2024,7 +2038,7 @@
         '</div>' +
         titlesHtml +
         fcCaptionSectionHtml(id, piece, boardSettingsCache) +
-        '<div class="chip-row">' + chipHtml(piece) + '</div>' +
+        '<div class="chip-row">' + chipHtml(piece, { hideVideoChip: true }) + '</div>' +
         '<div class="fc-actions">' +
           '<button type="button" class="btn-primary fc-approve-btn" data-id="' + id + '">Approve → Scheduled</button>' +
         '</div>' +
@@ -2605,11 +2619,29 @@
     var captureBtn = document.createElement('button');
     captureBtn.type = 'button';
     captureBtn.className = 'btn-secondary btn-tiny';
-    captureBtn.textContent = 'Use this frame';
     captureBtn.addEventListener('click', function () { captureCurrentFrame(); });
     frameSection.appendChild(videoEl);
     frameSection.appendChild(scrub);
     frameSection.appendChild(captureBtn);
+    // Disabled with a "Loading video…" label until the video actually has
+    // a frame to give — found live (2026-09-20, headless-browser test
+    // against a throttled connection) that with several rows in the list
+    // at once, a later row's (often multi-MB) video blob can take a real
+    // while to fetch, and clicking "Use this frame" during that window
+    // silently no-op'd via captureCurrentFrame()'s own early-return guard
+    // with zero feedback — looked exactly like a dead button, especially
+    // on a slower real connection than this container's own fast link to
+    // the VPS. `loadeddata` (readyState >= HAVE_CURRENT_DATA) is the same
+    // event the auto-pick-thumbnail listener below already waits for, so
+    // "the button becomes usable" and "a frame is actually capturable"
+    // are now driven by the identical signal.
+    function setFrameControlsReady(ready) {
+      captureBtn.disabled = !ready;
+      captureBtn.textContent = ready ? 'Use this frame' : 'Loading video…';
+      scrub.disabled = !ready;
+    }
+    setFrameControlsReady(videoEl.readyState >= 2);
+    videoEl.addEventListener('loadeddata', function () { setFrameControlsReady(true); });
     // Auto-pick a starting thumbnail (the very first frame) the moment
     // the video has one to give, so a row never sits at "No thumbnail"
     // by default — Harvey still freely overrides it via the scrub bar +

@@ -6112,3 +6112,114 @@ them, confirm `/api/youtube/oauth/start` actually reaches Google's
 consent screen, the callback correctly stores tokens and shows
 "Connected as &lt;channel&gt;" in Settings, and Disconnect actually
 clears the stored tokens.
+
+---
+
+# 134. Content Production: "Use This Frame" Was Silently Dead on a Still-Loading Row
+
+Harvey: "the 2nd row isn't interactable when theres multiple rows...
+nothing happens... i need to be able to make changes to any video i
+upload here." Confirmed and root-caused with a real headless-browser
+test rig against the live service (same technique as §123/§127/§128)
+rather than guessing from code review — reproducing it required real
+network throttling, since the container's own link to the VPS is fast
+enough that a small test video loads near-instantly and never actually
+exercises the failure window.
+
+**Root cause:** each upload row's video element fetches its own blob
+independently (`Store.get('videos', p.id)`, §128's already-documented
+comment on `captureCurrentFrame()`: "videoWidth/videoHeight being 0
+here should only mean 'hasn't loaded far enough yet.'"). Real uploaded
+videos run 10MB+; on an ordinary (non-container-fast) connection, a
+second or third row's blob can still be mid-fetch for a genuinely long
+time after the row itself is visible and its button looks clickable.
+Clicking "Use this frame" during that window hit
+`captureCurrentFrame()`'s early-return guard and did nothing at all —
+no error, no state change, the exact "dead button" Harvey described.
+Verified directly: under a throttled connection, `videoWidth`/
+`videoHeight` stayed `0` for **27 real seconds** after the row appeared
+before the video actually finished loading.
+
+**Fix, `ops-service/public/app.js`'s `buildUploadRow()`:** the button
+now starts `disabled`, reading "Loading video…", and the scrub range is
+disabled too — both flip to enabled/"Use this frame" the moment the
+video's `loadeddata` event fires (`readyState >= HAVE_CURRENT_DATA`),
+the same signal the existing auto-pick-first-frame listener already
+waited on. A disabled button can't be clicked at all (browser-enforced,
+not just a JS check), so the failure mode changes from "looks
+clickable, silently does nothing" to "honestly shows it isn't ready
+yet" — the actual capability was never missing, just unannounced.
+
+**Verified end-to-end against the live deployed service**, not just
+reasoned about: reproduced the original bug under throttled bandwidth
+(button correctly showed disabled + "Loading video…"; a scripted click
+attempt on the disabled button correctly timed out, proving the browser
+itself now blocks it); confirmed the button becomes enabled once
+`loadeddata` fires; confirmed a real scrub-then-click afterward
+produces a genuinely new, different captured frame and a real
+`PUT /api/store/pieces/:id` save (checked both via the DOM and a fresh
+server-side re-fetch of the piece). All synthetic test pieces created
+for this were cleaned up via the app's own delete endpoints afterward,
+leaving Harvey's real data untouched.
+
+Frontend-only (`app.js`, no new CSS needed — reused the existing
+`.btn-secondary:disabled` rule), so per §93 this is already live — no
+deploy/restart needed.
+
+---
+
+# 135. Final Check Card: Vertical Video Size Cap, Caption-Tab Styling, Title Label, Video Chip
+
+Four related Final Check polish items from the same round of feedback
+on a real vertical piece.
+
+**Vertical video was enormous.** `.fc-video` had no size cap beyond
+`width: 100%` of the ~800px desktop column — fine for the landscape
+case it was designed around, but a 9:16 vertical piece rendered at
+roughly 800×1420px, blowing the card out (Harvey: "the size is way too
+big in the final check for vertical ones," with a screenshot showing
+exactly that). Fixed by giving `.fc-video-wrap` an `is-vertical`
+variant (`max-width: 360px; margin: 0 auto`), toggled from
+`piece.videoIsVertical` (the same flag §130 already computes/persists
+for Content Production's own vertical-box handling) — bigger than
+Content Production's 220px cap since this is the actual review
+surface, not an inline picker, but still bounded rather than filling
+the column.
+
+**Caption tabs looked like only one platform was selected.** The
+`.fc-caption-tab` pill strip (§129) used a muted/faint default style
+for every tab except the currently-active one, which read as "3 of the
+4 platforms aren't selected" even though all 4 genuinely apply to the
+piece (Harvey: "the video should have all four platform pills selected
+by default, currently only YT shorts is" — he was looking at this tab
+strip, not the separate platform-checkbox chips lower on the card,
+which were already correctly showing all 4). Fixed by giving every tab
+a real accent border/text color by default (`border: 1px solid
+var(--accent-3); color: var(--ink-soft)`); only the active tab keeps
+the solid fill. The distinction now reads as "which one you're
+currently viewing," not "which ones are turned on."
+
+**"Title 1:" implied a second option that doesn't exist for a
+short.** Since §131, a shortform piece only ever collects one title
+(no rotation/testing for something posted once), so
+`finalCheckCardHtml()`'s hardcoded "Title 1:" numbering was misleading
+there — fixed to just "Title:" when `ytTitles.length === 1`, still
+numbered ("Title 1:"/"Title 2:"/"Title 3:") for a longform piece with
+genuinely multiple options.
+
+**Redundant "▶ video" chip.** `chipHtml()` — shared between the normal
+kanban card and Final Check — always appended a "video" chip whenever
+`piece.hasVideo`, which is meaningful on a planning-stage kanban card
+(distinguishes an uploaded video from a plain idea) but pure noise on
+Final Check, where every single card is necessarily a video (Harvey:
+"theyre lit4erally all videos"). `chipHtml(piece, opts)` gained a
+`hideVideoChip` option, passed `true` only from
+`finalCheckCardHtml()`'s call site — the normal kanban card's own call
+is unchanged, so it still shows the chip there.
+
+Frontend-only (`app.js`, `style.css`), so per §93 this is already live
+— no deploy/restart needed. Verified via `node --check` and a CSS
+brace-balance check; not yet visually re-confirmed against the live
+deployed service for these four specifically — worth a look at a real
+vertical Final Check card to confirm the video no longer overflows and
+the caption tabs read correctly.
