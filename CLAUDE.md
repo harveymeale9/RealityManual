@@ -5866,3 +5866,60 @@ tabs actually save/reload each platform's field independently, and that
 a real Final Check card for a piece tagged with two platforms in the
 same group shows a working toggle that correctly narrows to one option
 if a platform is unchecked in Content Production.
+
+---
+
+# 130. Content Production: Vertical-Video Boxes Auto-Orient; Shortform Default Platforms No Longer Include Facebook
+
+Two Harvey asks from a screenshot of piece #097 ("verticalvideodemo"):
+the frame-picker's scrub preview (and the row's own thumbnail box) were
+both hardcoded 16:9 boxes, so a vertical upload showed either heavily
+letterboxed (frame-picker) or cropped down to a sliver via
+`object-fit: cover` (thumbnail) — asked for both to auto-detect and
+switch to a vertical box. Separately: shortform pieces should default
+to YT Shorts + TikTok + Instagram checked (not Facebook); longform
+should default to YT + Facebook (already correct, unchanged).
+
+**Orientation auto-detect (`ops-service/public/app.js`,
+`style.css`):** a new `piece.videoIsVertical` boolean, set two ways —
+at upload time in `handleFiles()` from the real probed
+`width`/`height` (`probeVideoMeta`, already computed there for
+`detectContentType`, just wasn't being kept), and, for any pre-existing
+piece uploaded before this field existed, lazily backfilled the first
+time its row renders: the frame-picker `<video>`'s `loadedmetadata`
+handler compares `videoWidth`/`videoHeight`, and if it disagrees with
+whatever's currently stored (including "never set"), saves the
+corrected value and calls `refreshHead()`. Deliberately computed from
+the actual decoded video, not inferred from `contentType` — a vertical
+video's orientation shouldn't silently flip if Harvey later overrides
+the content type by hand in the full editor.
+
+`buildUploadRowHead()`'s `.upload-row-thumb` and `buildUploadRow()`'s
+`.upload-row-video` both get an `is-vertical` class when the flag is
+set. CSS: `.upload-row-thumb.is-vertical` / `.upload-row-video.is-vertical`
+switch to `aspect-ratio: 9/16` with `max-width: 220px` (so a vertical
+box doesn't stretch to the full grid-column width the way the 16:9
+default does) — the video box also gained `object-fit: contain` on the
+base rule as a defensive no-op for the landscape case, guaranteeing no
+stretching either way regardless of any rounding mismatch between the
+box's aspect-ratio and the actual video's.
+
+**Platform defaults (`PLATFORM_PRESET_BY_TYPE`):** shortform entries
+(`ultra_short`/`short`/`long_short`) changed from `['ytshort', 'tiktok',
+'instagram', 'facebook']` to `['ytshort', 'tiktok', 'instagram']` —
+Facebook is still fully available as a checkbox, just not pre-checked
+for shorts anymore. `longform`'s `['ytlong', 'facebook']` was already
+exactly what Harvey asked for here, so it's unchanged. This preset is
+read at two points that both needed no further changes: `handleFiles()`
+applies it to `platforms` at creation time, and the shared editor
+modal's content-type dropdown re-applies it on an explicit type change
+during editing.
+
+Frontend-only (`app.js`, `style.css`), so per §93 this is already live —
+no deploy/restart needed. Verified via `node --check` and a CSS
+brace-balance check; not yet visually confirmed against the live
+deployed service — worth loading the real #097 piece (the one in
+Harvey's screenshot) to confirm its thumbnail/frame-picker both switch
+to a vertical box on next view (via the lazy-backfill path, since it
+predates this change), and that a fresh vertical upload gets the
+correct box immediately with no letterboxing.

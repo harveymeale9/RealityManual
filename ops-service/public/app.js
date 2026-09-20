@@ -9,14 +9,16 @@
   var AUTO_STAGE_IDS = window.RMStore.STAGES.slice(UPLOADED_INDEX + 1).map(function (s) { return s.id; });
 
   // Platform preset applied when the content-type dropdown changes in the
-  // editor, per Harvey: shorts default to everywhere except YT Longform,
-  // longform defaults to just YT Longform + Facebook. Only fires on an
+  // editor, per Harvey (revised 2026-09-20): any shortform type defaults
+  // to YT Shorts + TikTok + Instagram (Facebook left unchecked — he
+  // unchecks it there deliberately, doesn't want it pre-selected for
+  // shorts), longform defaults to YT Long + Facebook. Only fires on an
   // actual change during editing (see fieldContentType's change listener),
   // never on populateFields() for an already-saved piece.
   var PLATFORM_PRESET_BY_TYPE = {
-    ultra_short: ['ytshort', 'tiktok', 'instagram', 'facebook'],
-    short: ['ytshort', 'tiktok', 'instagram', 'facebook'],
-    long_short: ['ytshort', 'tiktok', 'instagram', 'facebook'],
+    ultra_short: ['ytshort', 'tiktok', 'instagram'],
+    short: ['ytshort', 'tiktok', 'instagram'],
+    long_short: ['ytshort', 'tiktok', 'instagram'],
     longform: ['ytlong', 'facebook']
   };
 
@@ -2427,7 +2429,7 @@
     var head = document.createElement('div');
     head.className = 'upload-row-head';
     var thumbEl = document.createElement('div');
-    thumbEl.className = 'upload-row-thumb';
+    thumbEl.className = 'upload-row-thumb' + (p.videoIsVertical ? ' is-vertical' : '');
     thumbEl.innerHTML = p.thumbnailDataUrl ? ('<img src="' + p.thumbnailDataUrl + '" alt="" />') : '<span class="thumb-empty">No thumbnail</span>';
     var titleId = document.createElement('div');
     titleId.className = 'upload-row-title-id';
@@ -2546,7 +2548,7 @@
     var frameSection = document.createElement('div');
     frameSection.className = 'upload-row-section upload-row-frame';
     var videoEl = document.createElement('video');
-    videoEl.className = 'upload-row-video';
+    videoEl.className = 'upload-row-video' + (p.videoIsVertical ? ' is-vertical' : '');
     videoEl.playsInline = true;
     videoEl.muted = true;
     var scrub = document.createElement('input');
@@ -2555,7 +2557,23 @@
     scrub.max = '100';
     scrub.step = '0.1';
     scrub.value = '0';
-    videoEl.addEventListener('loadedmetadata', function () { if (videoEl.duration) scrub.max = videoEl.duration; });
+    videoEl.addEventListener('loadedmetadata', function () {
+      if (videoEl.duration) scrub.max = videoEl.duration;
+      // Real orientation, read straight off the decoded video — covers
+      // both a fresh upload (already stored at creation time, see
+      // handleFiles) and a legacy piece uploaded before this field
+      // existed, which gets backfilled here the first time its row is
+      // shown so the box only needs computing once, not every render.
+      if (videoEl.videoWidth && videoEl.videoHeight) {
+        var vertical = videoEl.videoHeight > videoEl.videoWidth;
+        if (p.videoIsVertical !== vertical) {
+          p.videoIsVertical = vertical;
+          Store.put('pieces', p);
+          refreshHead();
+        }
+        videoEl.classList.toggle('is-vertical', vertical);
+      }
+    });
     scrub.addEventListener('input', function () { try { videoEl.currentTime = parseFloat(scrub.value); } catch (e) {} });
     // Shared by the button and the auto-pick-on-load below, so there's
     // one capture implementation, not two. Returns false (does nothing
@@ -2911,6 +2929,12 @@
           // mutate the shared preset array itself.
           platforms: (PLATFORM_PRESET_BY_TYPE[detectedType] || []).slice(),
           contentType: detectedType,
+          // Drives the frame-picker/thumbnail box orientation in the
+          // upload row (see buildUploadRowHead/buildUploadRow) — read
+          // straight from the real probed dimensions, independent of
+          // contentType, so it still reflects reality even if Harvey
+          // later overrides the content type by hand.
+          videoIsVertical: !!(meta && meta.width && meta.height && meta.height > meta.width),
           notesHtml: '',
           hasVideo: true,
           transcript: '',

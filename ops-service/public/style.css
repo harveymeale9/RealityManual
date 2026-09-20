@@ -1389,6 +1389,11 @@ a { color: var(--accent); }
   aspect-ratio: 16/9; width: 100%; background: var(--surface-2); border-radius: 6px;
   display: flex; align-items: center; justify-content: center; overflow: hidden;
 }
+/* Auto-detected from the real video's own dimensions (see
+   handleFiles/buildUploadRow's loadedmetadata backfill in app.js) — a
+   vertical upload gets a vertical box instead of being cropped down to
+   a 16:9 sliver via object-fit: cover. */
+.upload-row-thumb.is-vertical { aspect-ratio: 9/16; max-width: 220px; }
 .upload-row-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .upload-row-title { font-size: 0.9rem; color: var(--ink); font-weight: 500; }
 .upload-row-idline { font-size: 0.75rem; color: var(--ink-faint); }
@@ -1414,7 +1419,8 @@ a { color: var(--accent); }
 .platform-toggle-sm.checked { color: var(--ink-soft); }
 .upload-row-section { display: flex; flex-direction: column; gap: 6px; }
 .upload-row-section label { font-size: 0.72rem; color: var(--ink-faint); }
-.upload-row-video { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 6px; }
+.upload-row-video { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 6px; object-fit: contain; }
+.upload-row-video.is-vertical { aspect-ratio: 9/16; max-width: 220px; margin: 0 auto; }
 .upload-row-frame input[type="range"] { width: 100%; accent-color: var(--accent); }
 .upload-row-titles .title-input { margin-bottom: 4px; }
 .upload-row-action { display: flex; flex-direction: column; gap: 8px; align-self: stretch; justify-content: center; }
