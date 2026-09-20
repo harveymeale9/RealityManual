@@ -823,6 +823,44 @@ a { color: var(--accent); }
 .card:active { cursor: grabbing; }
 .card.dragging { opacity: 0.35; }
 .card.card-auto { cursor: pointer; }
+
+/* Right-click delete menu — works on both .card and .final-check-card,
+   see bindKanbanContextMenu() in app.js. Fixed-position, appended to
+   body, positioned at the click point (clamped on-screen there). */
+.kanban-ctx-menu {
+  position: fixed;
+  z-index: 60;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.7);
+}
+.kanban-ctx-label {
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  padding: 4px 8px 2px;
+}
+.kanban-ctx-item {
+  background: none;
+  border: none;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  padding: 7px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.kanban-ctx-item:hover { background: var(--surface-3); }
+.kanban-ctx-item.kanban-ctx-delete:hover { color: var(--error); }
+.kanban-ctx-item.kanban-ctx-confirm { color: var(--error); font-weight: 600; }
+.kanban-ctx-item.kanban-ctx-confirm:hover { background: var(--error-soft); }
+.kanban-ctx-item.kanban-ctx-cancel { color: var(--ink-faint); }
 /* Pieces created by a Claude Code session (voice/chat agent or an
    interactive session acting on Harvey's behalf) rather than by Harvey
    himself directly in the board UI — a subtle indigo tint distinct from

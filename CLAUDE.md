@@ -5626,3 +5626,57 @@ declarative description, regardless of exact wording, and restructuring
 the mechanism itself (e.g., style guidance folded into surrounding
 prose rather than a standalone directive sentence) rather than
 continuing to edit word choice within the same structure.
+
+---
+
+# 127. Kanban: Right-Click to Delete, Including Final Check Cards
+
+Harvey asked for right-click delete on any kanban card, Final Check
+cards included, with a confirm step so it can't fire by accident.
+
+**`ops-service/public/app.js`:** a single reusable floating menu
+(`.kanban-ctx-menu`, appended to `document.body`, repositioned per
+invocation rather than one instance per card) opened via a delegated
+`contextmenu` listener on `board` (`bindKanbanContextMenu()`, called
+once from `bootContentOps()` — safe to bind directly on `board` rather
+than `document`, since `board` is a fresh DOM node every time the tab
+is (re-)booted, so there's no listener leak across visits, same
+reasoning as the existing `bindPanning()` right above it). Matches on
+`e.target.closest('.card, .final-check-card')` — both listed explicitly
+since `.final-check-card` is deliberately not `.card` (§113, to keep it
+out of the generic click-to-open-modal/drag bindings) — the exact same
+"forgot to also list `.final-check-card` in an unrelated selector"
+gotcha §123's pan-capture fix already hit once, avoided here by
+remembering it up front.
+
+**Two-step confirm**, same spirit as the shared modal's own existing
+delete button (arm, then confirm) but as an explicit second menu state
+rather than a timed re-arm: clicking "Delete" swaps the menu's content
+to a "Delete this piece?" label with "Confirm delete" (styled in
+`--error`) and "Cancel" buttons, rather than deleting immediately.
+Confirming calls `Store.del('pieces', id)` and, for a piece with
+`hasVideo`, also `Store.del('videos', id)` **and** `Store.del('videos',
+id + '-final')` — the latter is new (the shared modal's own delete
+button, `btnDelete`, only ever cleaned up the raw upload, never the
+`-final` audio-spliced copy §115 introduced, so deleting a piece that
+had reached Final Check would have left its final video file orphaned
+on disk; worth fixing there too, not just in this new code, but out of
+scope for this specific ask so left as a known gap). `stmts.del`/the
+`DELETE /api/store/:storeName/:id` route already handles a
+non-existent id gracefully (`fs.rm(..., { force: true })`), so calling
+it for a `-final` file that was never built (piece never reached Final
+Check) is a safe no-op, not an error.
+
+Menu closes on an outside click, Escape, or right-clicking a different
+card (opens a fresh menu for the new target instead of leaving the old
+one stuck open) — the outside-click/contextmenu listeners are added via
+a deferred `setTimeout(..., 0)` specifically so the very click that
+opened the menu doesn't immediately close it again in the same tick.
+
+Frontend-only (`app.js`, `style.css`), so per §93 this is already live —
+no deploy/restart needed. Verified via `node --check` and a CSS
+brace-balance check; not yet tested against the live deployed service —
+worth confirming right-click actually opens the menu (not the native
+browser context menu) on both a normal card and a Final Check card, the
+confirm step genuinely requires the second click, and a deleted Final
+Check piece's `-final` video file is actually gone from disk afterward.

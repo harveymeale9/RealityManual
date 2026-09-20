@@ -2111,6 +2111,96 @@
     });
   }
 
+  // Right-click delete on any kanban card, including Final Check ones
+  // (`.final-check-card` is deliberately not `.card`, per §113, so it
+  // needs listing explicitly here too — same gotcha §123's pan-capture
+  // fix hit). One small floating menu, reused across invocations rather
+  // than one per card, with an explicit arm/confirm step so a stray
+  // right-click can't delete anything by accident — same two-step
+  // pattern the shared modal's own delete button already uses.
+  var kanbanCtxMenu = null;
+  function closeKanbanCtxMenu() {
+    if (!kanbanCtxMenu) return;
+    kanbanCtxMenu.remove();
+    kanbanCtxMenu = null;
+    document.removeEventListener('click', closeKanbanCtxMenu, true);
+    document.removeEventListener('contextmenu', closeKanbanCtxMenuOnOutside, true);
+    document.removeEventListener('keydown', closeKanbanCtxMenuOnEscape, true);
+  }
+  function closeKanbanCtxMenuOnOutside(e) {
+    if (kanbanCtxMenu && !kanbanCtxMenu.contains(e.target)) closeKanbanCtxMenu();
+  }
+  function closeKanbanCtxMenuOnEscape(e) {
+    if (e.key === 'Escape') closeKanbanCtxMenu();
+  }
+  function openKanbanCtxMenu(id, x, y) {
+    closeKanbanCtxMenu();
+    var menu = document.createElement('div');
+    menu.className = 'kanban-ctx-menu';
+
+    function renderInitial() {
+      menu.innerHTML = '';
+      var delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'kanban-ctx-item kanban-ctx-delete';
+      delBtn.textContent = 'Delete';
+      delBtn.addEventListener('click', function (e) { e.stopPropagation(); renderConfirm(); });
+      menu.appendChild(delBtn);
+    }
+    function renderConfirm() {
+      menu.innerHTML = '';
+      var label = document.createElement('div');
+      label.className = 'kanban-ctx-label';
+      label.textContent = 'Delete this piece?';
+      var confirmBtn = document.createElement('button');
+      confirmBtn.type = 'button';
+      confirmBtn.className = 'kanban-ctx-item kanban-ctx-confirm';
+      confirmBtn.textContent = 'Confirm delete';
+      confirmBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var p = pieces[id];
+        delete pieces[id];
+        Store.del('pieces', id);
+        if (p && p.hasVideo) { Store.del('videos', id); Store.del('videos', id + '-final'); }
+        closeKanbanCtxMenu();
+        render();
+      });
+      var cancelBtn = document.createElement('button');
+      cancelBtn.type = 'button';
+      cancelBtn.className = 'kanban-ctx-item kanban-ctx-cancel';
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.addEventListener('click', function (e) { e.stopPropagation(); closeKanbanCtxMenu(); });
+      menu.appendChild(label);
+      menu.appendChild(confirmBtn);
+      menu.appendChild(cancelBtn);
+    }
+    renderInitial();
+
+    document.body.appendChild(menu);
+    var rect = menu.getBoundingClientRect();
+    var left = Math.max(4, Math.min(x, window.innerWidth - rect.width - 8));
+    var top = Math.max(4, Math.min(y, window.innerHeight - rect.height - 8));
+    menu.style.left = left + 'px';
+    menu.style.top = top + 'px';
+    kanbanCtxMenu = menu;
+    // Deferred so the contextmenu event that opened this menu doesn't
+    // immediately bubble into the same-tick outside-click listener and
+    // close it before it's even visible.
+    setTimeout(function () {
+      document.addEventListener('click', closeKanbanCtxMenu, true);
+      document.addEventListener('contextmenu', closeKanbanCtxMenuOnOutside, true);
+      document.addEventListener('keydown', closeKanbanCtxMenuOnEscape, true);
+    }, 0);
+  }
+  function bindKanbanContextMenu() {
+    board.addEventListener('contextmenu', function (e) {
+      var cardEl = e.target.closest('.card, .final-check-card');
+      if (!cardEl || !cardEl.dataset.id) return;
+      e.preventDefault();
+      openKanbanCtxMenu(cardEl.dataset.id, e.clientX, e.clientY);
+    });
+  }
+
   function bindPanning() {
     var isPanning = false, startX = 0, startScroll = 0;
     boardWrap.addEventListener('pointerdown', function (e) {
@@ -2138,6 +2228,7 @@
     boardWrap = document.getElementById('boardWrap');
 
     bindPanning();
+    bindKanbanContextMenu();
     document.getElementById('btnNew').addEventListener('click', function () { createDraft('ideation', render); });
 
     activeTypeFilter = '';
