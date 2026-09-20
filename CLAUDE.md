@@ -5972,3 +5972,31 @@ needed. Verified via `node --check`; not yet visually confirmed against
 the live deployed service — worth checking that a real shortform
 upload row shows exactly one "Title" input (not three) and that a
 longform upload's row is unaffected.
+
+---
+
+# 132. Content Production: "Full editor…" Button Removed
+
+Harvey: "remove the 'full editor' button in general for all vids in the
+content production panel, ill nevver use this." Everything he actually
+touches for an in-production video already lives inline in the row
+itself (thumbnail/frame-picker, backing audio, title(s), platform
+checkboxes, send-to-final-check) — the modal it opened was a leftover
+escape hatch from before that inline UI existed (§111), same category
+of thing already removed from Final Check cards for the same reason in
+§116.
+
+**`ops-service/public/app.js`, `buildUploadRow()`:** the `openBtn`
+button ("Full editor…", called `openPiece(p.id, renderUploadLists)`)
+and both places that referenced it (`appendChild`, and the
+disable/re-enable pairing inside `sendBtn`'s click handler) are gone.
+`openPiece()`/the shared modal itself are untouched — Content Ops (the
+planning kanban) still opens it the normal way on a card click, and the
+Posted grid (already-posted videos) still opens it too, per its own
+existing, separate treatment (§111) — this only removes the one entry
+point into it from the in-production upload row.
+
+Frontend-only, so per §93 this is already live — no deploy/restart
+needed. Verified via `node --check` and a grep confirming no leftover
+`openBtn` references; not yet visually confirmed against the live
+deployed service.

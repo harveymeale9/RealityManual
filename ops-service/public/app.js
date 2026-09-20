@@ -2710,7 +2710,6 @@
       if (sendBtn.disabled) return;
       sendBtn.disabled = true;
       sendBtn.textContent = '✓ Sent';
-      openBtn.disabled = true;
       p.finalBuildStatus = 'pending';
       p.updatedAt = nowIso();
       Store.put('pieces', p).then(function () {
@@ -2720,16 +2719,17 @@
       }).catch(function () {
         sendBtn.disabled = false;
         sendBtn.textContent = 'Send to final check';
-        openBtn.disabled = false;
       });
     });
-    var openBtn = document.createElement('button');
-    openBtn.type = 'button';
-    openBtn.className = 'btn-secondary btn-tiny';
-    openBtn.textContent = 'Full editor…';
-    openBtn.addEventListener('click', function () { openPiece(p.id, renderUploadLists); });
+    // "Full editor…" button removed 2026-09-20 per Harvey ("ill nevver
+    // use this") — everything he actually needs to touch for an
+    // in-production video already lives inline in this row (thumbnail,
+    // audio, title(s), platforms), matching the same "closed review
+    // surface, no editor escape hatch" call already made for Final
+    // Check cards in §116. `openPiece`/the shared modal itself are left
+    // intact — Content Ops (the planning kanban) still opens it the
+    // normal way; only this one entry point into it is gone.
     actionSection.appendChild(sendBtn);
-    actionSection.appendChild(openBtn);
 
     row.appendChild(head);
     row.appendChild(frameSection);
