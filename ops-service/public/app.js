@@ -2739,9 +2739,16 @@
         rows.forEach(function (r) {
           if (!r) return;
           var prev = pieces[r.id];
-          if (prev && WIRED_PUBLISH_PLATFORMS.some(function (platform) { return prev[publishStatusFieldFor(platform)] !== r[publishStatusFieldFor(platform)]; })) changed = true;
-          if (prev && prev.stage !== r.stage) movedIds.push(r.id);
-          pieces[r.id] = r;
+          if (!prev) { pieces[r.id] = r; return; }
+          var prevStage = prev.stage;
+          if (WIRED_PUBLISH_PLATFORMS.some(function (platform) { return prev[publishStatusFieldFor(platform)] !== r[publishStatusFieldFor(platform)]; })) changed = true;
+          // Mutate in place rather than reassigning pieces[r.id] to a new
+          // object — same object-identity bug §149 already found and
+          // fixed in the analysis poller (a brand-new object here would
+          // silently diverge from whatever any other closure/card still
+          // holds a reference to the old one).
+          Object.assign(prev, r);
+          if (prevStage !== prev.stage) movedIds.push(r.id);
         });
         // Real move animation (2026-09-20) for Final Check -> Posted/Live
         // once a publish actually succeeds — same animateBoardMove used by
@@ -2756,6 +2763,30 @@
     }, 3000);
   }
 
+  // A backgrounded/inactive browser tab throttles setTimeout heavily
+  // (Chrome can stretch it to once a minute or longer) — a real TikTok/
+  // YouTube publish that actually finished while Harvey had switched away
+  // (e.g. mid screen-recording, tabbing over to check something else)
+  // could sit done server-side for a long time before the throttled timer
+  // got around to checking again, which is exactly what reads as "never
+  // updates automatically, I had to refresh the page." Coming back into
+  // view forces an immediate check instead of waiting out whatever's left
+  // of the throttled interval. Bound once (bootContentOps() re-runs every
+  // time this tab is revisited, but document-level listeners aren't
+  // cleaned up when its DOM is torn down, so re-adding one each time would
+  // leak a duplicate).
+  var visibilityRepollBound = false;
+  function bindVisibilityRepoll() {
+    if (visibilityRepollBound) return;
+    visibilityRepollBound = true;
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState !== 'visible' || !youtubePublishPollTimer) return;
+      clearTimeout(youtubePublishPollTimer);
+      youtubePublishPollTimer = null;
+      maybeStartYoutubePublishPoll();
+    });
+  }
+
   function bootContentOps() {
     board = document.getElementById('board');
     statStrip = document.getElementById('statStrip');
@@ -2764,6 +2795,7 @@
 
     bindPanning();
     bindKanbanContextMenu();
+    bindVisibilityRepoll();
     document.getElementById('btnNew').addEventListener('click', function () { createDraft('ideation', render); });
 
     activeTypeFilter = '';
