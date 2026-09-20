@@ -4,15 +4,15 @@
 + '[' -n '' ']'
 + git pull
 From https://github.com/harveymeale9/RealityManual
-   2bef9c0..19dad9a  main       -> origin/main
-Updating 2bef9c0..19dad9a
+   19dad9a..7c6adef  main       -> origin/main
+Updating 19dad9a..7c6adef
 Fast-forward
- CLAUDE.md                    | 46 ++++++++++++++++++++++++++++++++++++++++++++
- ops-service/.ci/last-run.log | 21 ++++++++++----------
- ops-service/public/app.js    | 20 ++++++++++++++-----
- 3 files changed, 71 insertions(+), 16 deletions(-)
+ CLAUDE.md                    | 28 ++++++++++++++++++++++++++++
+ ops-service/.ci/last-run.log | 20 ++++++++++----------
+ ops-service/public/app.js    | 16 ++++++++--------
+ 3 files changed, 46 insertions(+), 18 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=19dad9a5e72d57f22b1b40120bdd4dae07913ab5
++ NEW_HEAD=7c6adef0773740374d3c096ded085f76bf80614e
 + git -C /srv/realitymanual-repo pull
 Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
@@ -22,11 +22,11 @@ Already up to date.
 + NEEDS_REBUILD=1
 + '[' -n ea188b3fbeecb871b3b2f1a12549ec9e33c4a32e ']'
 + git cat-file -e 'ea188b3fbeecb871b3b2f1a12549ec9e33c4a32e^{commit}'
-++ git diff --name-only ea188b3fbeecb871b3b2f1a12549ec9e33c4a32e 19dad9a5e72d57f22b1b40120bdd4dae07913ab5 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
+++ git diff --name-only ea188b3fbeecb871b3b2f1a12549ec9e33c4a32e 7c6adef0773740374d3c096ded085f76bf80614e -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z '' ']'
 + NEEDS_REBUILD=0
 + '[' 0 = 0 ']'
-+ echo 'no backend changes between ea188b3fbeecb871b3b2f1a12549ec9e33c4a32e and 19dad9a5e72d57f22b1b40120bdd4dae07913ab5 — already live via git pull, skipping rebuild/restart'
-no backend changes between ea188b3fbeecb871b3b2f1a12549ec9e33c4a32e and 19dad9a5e72d57f22b1b40120bdd4dae07913ab5 — already live via git pull, skipping rebuild/restart
++ echo 'no backend changes between ea188b3fbeecb871b3b2f1a12549ec9e33c4a32e and 7c6adef0773740374d3c096ded085f76bf80614e — already live via git pull, skipping rebuild/restart'
+no backend changes between ea188b3fbeecb871b3b2f1a12549ec9e33c4a32e and 7c6adef0773740374d3c096ded085f76bf80614e — already live via git pull, skipping rebuild/restart
 + exit 0
 ssh exit code: 0
