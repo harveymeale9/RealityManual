@@ -6661,3 +6661,53 @@ push. Verified via `node --check` and a CSS brace-balance check; not
 yet re-confirmed against the live deployed service that clicking the
 now-sole "Schedule Video" button on #097 actually reaches TikTok for
 real — that's the next thing to check once Harvey retries it.
+
+---
+
+# 141. Fixed: Unchecking Multiple Platform Boxes in Content Production Could Silently Resurrect One
+
+Harvey's report immediately after §140: unchecking platform checkboxes
+in Content Production was "a bit buggy" — some came back on. Real race
+condition, not a UI glitch — traced end to end rather than guessed.
+
+**Root cause:** each platform checkbox's `change` handler
+(`buildUploadRowHead()` in `ops-service/public/app.js`) mutated
+`p.platforms` in memory and immediately fired its own `Store.put('pieces',
+p)`. `lib/store.js`'s `put()` calls `JSON.stringify(body)` synchronously
+at the moment each request is *sent* — a correct snapshot at that
+instant — but `PUT /api/store/:storeName/:id` on the server does a full-
+record overwrite with no merge logic, so whichever request's response
+happens to *arrive* last simply wins outright, regardless of which one
+was sent last or which one carries the more complete change. Unchecking
+two boxes within the same few hundred milliseconds fires two concurrent
+PUTs; ordinary network timing variance can easily let the earlier
+request (missing only the first uncheck) land on the server *after* the
+later one (missing both) — silently persisting the earlier, incomplete
+state and making the second uncheck look like it "came back on," even
+though the in-memory `p.platforms` and the checkboxes' own visual state
+were correct the whole time. This is a classic fire-a-request-per-
+keystroke/click race, not anything specific to checkboxes or platforms.
+
+**Fix:** debounce the actual save, same pattern already used for
+Settings (`saveSettingsDebounced`/`settingsSaveTimer`) — a new
+module-level `platformSaveTimers` map (keyed by piece id, alongside the
+existing `uploadRowObjectUrls`). The checkbox handler still mutates
+`p.platforms` and updates that one checkbox's own `.checked` visual
+class immediately/synchronously (instant feedback, no behavior change
+there), but the `Store.put()` call itself is deferred 400ms and reset on
+every subsequent toggle for the same piece — so a rapid burst of clicks
+results in exactly one PUT, built from whatever `p.platforms` looks like
+once the user actually stops clicking, with nothing left to race against.
+Also dropped the old `.then(refreshUploadRowHeadById)` full-head-rebuild
+after each save — unnecessary now (nothing else on the row's head
+visually depends on which platforms are checked besides the checkboxes
+themselves, which are already updated directly) and it was itself a
+minor source of DOM churn during rapid interaction.
+
+Frontend-only (`app.js`), so per §93 this is already live — no deploy/
+restart needed. Verified via `node --check`; not yet re-tested against
+the live deployed service with a real rapid multi-uncheck — worth
+confirming a fast burst of unchecks now reliably persists all of them
+after a page reload, which is the only way this race actually surfaced
+before (the in-memory/visual state was never wrong, only what
+eventually landed on the server).

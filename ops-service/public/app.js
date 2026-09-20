@@ -2605,6 +2605,9 @@
 
   var dropzone, fileInput, uploadRows, postedGrid;
   var uploadRowObjectUrls = {}; // pieceId -> object URL, revoked/rebuilt on each render pass
+  // pieceId -> pending debounce timer for the platform-checkbox save
+  // below — see that handler's own comment for why this exists.
+  var platformSaveTimers = {};
 
   function videoCardHtml(id, p) {
     var thumb = p.thumbnailDataUrl ? '<img src="' + p.thumbnailDataUrl + '" alt="" />' : '<span class="video-card-noThumb">No thumbnail</span>';
@@ -2715,6 +2718,20 @@
       var cb = document.createElement('input');
       cb.type = 'checkbox';
       cb.checked = checked;
+      // Real bug Harvey hit (2026-09-20): a rapid burst of toggles each
+      // fired its own immediate Store.put — since the server does a full-
+      // record overwrite with no merge, and JSON.stringify(body) snapshots
+      // p at the moment each request is *sent* (lib/store.js's put()),
+      // whichever PUT's response happens to arrive at the server last
+      // wins outright, even if it started earlier and carries an older,
+      // already-superseded snapshot. Two boxes unchecked within the same
+      // few hundred ms could easily complete out of order over the
+      // network, silently resurrecting one of them server-side even
+      // though the UI (and p.platforms in memory) already showed both
+      // off. Fixed by debouncing the actual save — the in-memory toggle
+      // and its visual state are still instant, but only one PUT, built
+      // from whatever p.platforms looks like 400ms after the last click,
+      // ever goes out per burst, so there's nothing left to race.
       cb.addEventListener('change', function () {
         var list = (p.platforms || []).slice();
         var idx = list.indexOf(pl.id);
@@ -2722,7 +2739,12 @@
         else if (!cb.checked && idx !== -1) list.splice(idx, 1);
         p.platforms = list;
         p.updatedAt = nowIso();
-        Store.put('pieces', p).then(function () { refreshUploadRowHeadById(p.id); });
+        toggle.classList.toggle('checked', cb.checked);
+        clearTimeout(platformSaveTimers[p.id]);
+        platformSaveTimers[p.id] = setTimeout(function () {
+          delete platformSaveTimers[p.id];
+          Store.put('pieces', p);
+        }, 400);
       });
       toggle.appendChild(cb);
       toggle.appendChild(document.createTextNode(pl.label));
