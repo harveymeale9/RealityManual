@@ -86,4 +86,54 @@ async function fetchChannelInfo(accessToken) {
   return { channelId: item.id, channelTitle: (item.snippet && item.snippet.title) || item.id };
 }
 
-module.exports = { SCOPES, isConfigured, buildAuthUrl, exchangeCode, refreshAccessToken, fetchChannelInfo };
+const UPLOAD_URL = 'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status';
+
+// Real publish, using YouTube's resumable-upload protocol directly (no
+// googleapis SDK — same "plain REST calls" philosophy as the rest of this
+// file). Two requests: (1) POST the metadata to open an upload session and
+// get back a one-time `Location` URL, (2) PUT the actual video bytes,
+// streamed straight off disk rather than buffered into memory, since a
+// longform upload can be a real amount of data — Node's fetch supports a
+// streaming request body as long as `duplex: 'half'` is set.
+async function uploadVideo(accessToken, filePath, mimeType, metadata) {
+  const fs = require('fs');
+  const stat = fs.statSync(filePath);
+  const privacyStatus = ['private', 'unlisted', 'public'].indexOf(metadata.privacyStatus) !== -1
+    ? metadata.privacyStatus : 'private';
+
+  const initRes = await fetch(UPLOAD_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer ' + accessToken,
+      'Content-Type': 'application/json; charset=UTF-8',
+      'X-Upload-Content-Type': mimeType || 'video/mp4',
+      'X-Upload-Content-Length': String(stat.size)
+    },
+    body: JSON.stringify({
+      snippet: {
+        title: (metadata.title || 'Untitled').slice(0, 100),
+        description: (metadata.description || '').slice(0, 5000)
+      },
+      status: { privacyStatus: privacyStatus }
+    })
+  });
+  if (!initRes.ok) throw new Error('YouTube upload session could not be created (' + initRes.status + '): ' + (await initRes.text()));
+  const uploadUrl = initRes.headers.get('location');
+  if (!uploadUrl) throw new Error('YouTube did not return a resumable upload URL');
+
+  const putRes = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': mimeType || 'video/mp4',
+      'Content-Length': String(stat.size)
+    },
+    body: fs.createReadStream(filePath),
+    duplex: 'half'
+  });
+  if (!putRes.ok) throw new Error('YouTube upload failed (' + putRes.status + '): ' + (await putRes.text()));
+  const data = await putRes.json();
+  if (!data.id) throw new Error('YouTube upload response had no video id: ' + JSON.stringify(data).slice(0, 300));
+  return { videoId: data.id };
+}
+
+module.exports = { SCOPES, isConfigured, buildAuthUrl, exchangeCode, refreshAccessToken, fetchChannelInfo, uploadVideo };

@@ -1822,6 +1822,11 @@
   // keyed by piece id — ephemeral (not persisted, resets on page load),
   // just enough to survive re-renders within the same page session.
   var fcCaptionTab = {};
+  // Fetched once in bootContentOps (mirrors boardSettingsCache just above)
+  // so a Final Check card's "Publish to YouTube" button can tell whether
+  // there's actually a connected channel to publish to, without every
+  // card making its own request.
+  var youtubeStatusCache = null;
 
   function renderStats() {
     var total = Object.keys(pieces).length;
@@ -2041,7 +2046,37 @@
         '<div class="chip-row">' + chipHtml(piece, { hideVideoChip: true }) + '</div>' +
         '<div class="fc-actions">' +
           '<button type="button" class="btn-primary fc-approve-btn" data-id="' + id + '">Approve → Scheduled</button>' +
+          fcYoutubePublishHtml(id, piece) +
         '</div>' +
+      '</div>';
+  }
+
+  // Real publish-to-YouTube action, only offered for a piece actually
+  // tagged for the ytlong platform (Harvey unchecks every other platform
+  // for a YouTube-only test upload, per his own instruction — this button
+  // simply doesn't appear at all for a piece that isn't tagged ytlong,
+  // rather than trying to guess which platform he meant).
+  function fcYoutubePublishHtml(id, piece) {
+    if ((piece.platforms || []).indexOf('ytlong') === -1) return '';
+    var status = piece.youtubePublishStatus;
+    if (status === 'pending' || status === 'running') {
+      return '<div class="fc-yt-publish"><button type="button" class="btn-secondary" disabled>Publishing to YouTube…</button></div>';
+    }
+    var errorHtml = (status === 'error' && piece.youtubePublishError)
+      ? '<div class="fc-yt-error">YouTube publish failed: ' + escapeHtml(piece.youtubePublishError) + '</div>'
+      : '';
+    var disabledAttr = (youtubeStatusCache && youtubeStatusCache.connected) ? '' : ' disabled title="Connect YouTube in Content Settings first"';
+    return '' +
+      '<div class="fc-yt-publish">' +
+        '<select class="fc-yt-privacy" data-id="' + id + '">' +
+          '<option value="private" selected>Private</option>' +
+          '<option value="unlisted">Unlisted</option>' +
+          '<option value="public">Public</option>' +
+        '</select>' +
+        '<button type="button" class="btn-secondary fc-yt-publish-btn" data-id="' + id + '"' + disabledAttr + '>' +
+          (status === 'error' ? 'Retry publish to YouTube' : 'Publish to YouTube') +
+        '</button>' +
+        errorHtml +
       '</div>';
   }
 
@@ -2163,6 +2198,50 @@
         approveAndSchedule(p).then(function () {
           return Store.put('pieces', p);
         }).then(render);
+      });
+    });
+
+    // Real YouTube publish — kicks off the background upload
+    // (server.js's runYoutubePublish) and switches this one card into a
+    // disabled "Publishing…" state without a full render(), matching the
+    // same "don't reset the video's playback" reasoning as the caption-tab
+    // toggle. The poller below (maybeStartYoutubePublishPoll) is what
+    // notices the eventual done/error and does the full render() once the
+    // piece's stage/status actually changes.
+    board.querySelectorAll('.fc-yt-publish-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var id = btn.dataset.id;
+        var p = pieces[id];
+        if (!p || btn.disabled) return;
+        var wrap = btn.closest('.fc-yt-publish');
+        var select = wrap ? wrap.querySelector('.fc-yt-privacy') : null;
+        var privacyStatus = select ? select.value : 'private';
+        var captions = boardSettingsCache ? captionsForPiece(boardSettingsCache, p) : [];
+        var ytCaption = captions.filter(function (c) { return c.key === 'ytlong'; })[0];
+        var title = (p.ytTitles && p.ytTitles[0]) || p.title || 'Untitled';
+        var description = (ytCaption && !ytCaption.empty) ? ytCaption.text : '';
+
+        btn.disabled = true;
+        btn.textContent = 'Publishing…';
+        if (select) select.disabled = true;
+        p.youtubePublishStatus = 'pending';
+        pieces[id] = p;
+
+        fetch('/api/youtube/publish/' + encodeURIComponent(id), {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: title, description: description, privacyStatus: privacyStatus })
+        }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (data) { return { ok: r.ok, data: data }; }); })
+          .then(function (result) {
+            if (!result.ok) {
+              p.youtubePublishStatus = 'error';
+              p.youtubePublishError = (result.data && result.data.error) || 'Could not start publish.';
+              render();
+              return;
+            }
+            maybeStartYoutubePublishPoll();
+          });
       });
     });
 
@@ -2360,6 +2439,37 @@
     boardWrap.addEventListener('pointercancel', endPan);
   }
 
+  // Real YouTube publish runs in the background server-side (server.js's
+  // runYoutubePublish) — this polls the handful of pieces currently mid-
+  // publish and does a full render() once one lands on done/error, since
+  // "done" moves the piece out of the Final Check column entirely (a
+  // targeted DOM patch wouldn't make sense there the way the caption-tab
+  // toggle's does). Same shape as maybeStartAnalysisPolling in the Upload
+  // Files tab, kept separate since it watches a different field on a
+  // different view.
+  var youtubePublishPollTimer = null;
+  function maybeStartYoutubePublishPoll() {
+    var waiting = Object.keys(pieces).filter(function (id) {
+      var status = pieces[id].youtubePublishStatus;
+      return status === 'pending' || status === 'running';
+    });
+    if (!waiting.length) { clearTimeout(youtubePublishPollTimer); youtubePublishPollTimer = null; return; }
+    if (youtubePublishPollTimer) return;
+    youtubePublishPollTimer = setTimeout(function () {
+      youtubePublishPollTimer = null;
+      Promise.all(waiting.map(function (id) { return Store.get('pieces', id); })).then(function (rows) {
+        var changed = false;
+        rows.forEach(function (r) {
+          if (!r) return;
+          if (pieces[r.id] && pieces[r.id].youtubePublishStatus !== r.youtubePublishStatus) changed = true;
+          pieces[r.id] = r;
+        });
+        if (changed) render();
+        else maybeStartYoutubePublishPoll();
+      });
+    }, 3000);
+  }
+
   function bootContentOps() {
     board = document.getElementById('board');
     statStrip = document.getElementById('statStrip');
@@ -2389,6 +2499,8 @@
     // the Settings tab. Re-renders once loaded so a caption isn't stuck
     // on its "Loading…" fallback for the rest of the session.
     Store.getSettings().then(function (s) { boardSettingsCache = s; render(); });
+    fetch('/api/youtube/status', { credentials: 'include' }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (s) { youtubeStatusCache = s; render(); }).catch(function () {});
     render();
   }
 

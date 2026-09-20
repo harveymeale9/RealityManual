@@ -6223,3 +6223,108 @@ brace-balance check; not yet visually re-confirmed against the live
 deployed service for these four specifically — worth a look at a real
 vertical Final Check card to confirm the video no longer overflows and
 the caption tabs read correctly.
+
+---
+
+# 136. Real YouTube Video Publish, End to End; Demo-Video Placeholder on the Review Page (2026-09-20)
+
+§133 built the OAuth connect plumbing but deliberately stopped there — no
+actual `videos.insert` call existed yet. Harvey confirmed the Connect flow
+works live and wants to submit for Google's verification review, but
+verification requires a demo video showing each requested scope's real
+functionality — including `youtube.upload` actually publishing something —
+so the missing piece had to be built before there was anything honest to
+film. Harvey's own plan: upload a real longform video, uncheck every
+platform but YouTube (so no other platform's posting needs to exist yet),
+publish it for real, and test it himself before filming.
+
+**`ops-service/src/youtubeAuth.js`: `uploadVideo(accessToken, filePath,
+mimeType, metadata)`** — real publish via YouTube's resumable-upload
+protocol, plain REST (no `googleapis` SDK, same "avoid unnecessary
+dependencies" philosophy as the rest of this file). Two requests: POST the
+metadata (`snippet.title`/`description`, `status.privacyStatus`) to
+`.../upload/youtube/v3/videos?uploadType=resumable` and read the one-time
+`Location` header back, then PUT the actual video bytes to that URL,
+streamed straight off disk via `fs.createReadStream` (not buffered into
+memory — longform files are real size) using Node 22's built-in fetch with
+`duplex: 'half'`, which is required for a streaming request body.
+
+**`ops-service/server.js`:**
+- `getValidYoutubeAccessToken()` — reads the stored `youtube_oauth` row,
+  refreshes proactively via the existing `youtubeAuth.refreshAccessToken`
+  whenever the access token is within a minute of expiring, and persists
+  the new token/expiry (keeping the existing `refresh_token`, since Google
+  doesn't normally rotate it on a plain refresh).
+- `runYoutubePublish(id, opts)` / `POST /api/youtube/publish/:id` — same
+  "validate, respond 202 immediately, do the real work in the background,
+  let the client poll the piece record" pattern already established by
+  `/analyze` (§111) and `/build-final` (§115). Always uploads the built
+  `<id>-final` file (audio already spliced in, per §115's rule that a
+  piece can't reach Final Check without it) if present, falling back to
+  the raw upload only if it somehow isn't. On success: `piece.stage =
+  'live'` (the long-reserved "Posted/Live" stage, §62, now has a real
+  posting confirmation behind it for YouTube), plus
+  `youtubePublishStatus: 'done'`, `youtubeVideoId`, `youtubeUrl`,
+  `postedAt`. On failure: `youtubePublishStatus: 'error'` +
+  `youtubePublishError`, stage left untouched so Harvey can just retry —
+  matching the exact same failure convention `finalBuildStatus`/
+  `finalBuildError` already established.
+
+**`ops-service/public/app.js` — Final Check card:** a piece only shows a
+"Publish to YouTube" control at all if it's actually tagged for the
+`ytlong` platform (`fcYoutubePublishHtml()`) — exactly Harvey's own test
+setup (uncheck every other platform), not a guess about which platform he
+meant. A privacy `<select>` (Private/Unlisted/Public, defaulting to
+Private — the safest choice for the very first real test against his
+actual channel) sits next to the button. Clicking it computes the real
+title (`ytTitles[0]` or the piece title) and description (the real
+`ytlong` entry from `captionsForPiece`, §129 — link-substituted, exactly
+what would actually ship) client-side, disables the button in place
+(`btn.textContent = 'Publishing…'`) without a full `render()` (same
+"don't reset the video's playback position" reasoning as the caption-tab
+toggle, §129), then POSTs to the new endpoint. `maybeStartYoutubePublishPoll()`
+(mirrors `maybeStartAnalysisPolling`, §111/115, kept as its own separate
+poller since it watches a different field on a different view) polls
+every 3s for any piece still `pending`/`running` and triggers a full
+`render()` once one resolves — appropriate here, unlike the caption
+toggle, since "done" moves the card out of the Final Check column
+entirely. `youtubeStatusCache`, fetched once in `bootContentOps()`
+alongside the existing `boardSettingsCache` fetch, disables the button
+with an explanatory tooltip if YouTube isn't actually connected.
+
+**`ops-service/public/youtube-app-review.html`:** added a clearly-marked
+`<div class="rv-video-slot">` placeholder ("Verification demo video —
+coming soon") near the top of the page, with an HTML comment describing
+exactly what to swap it for once Harvey records the real thing (a plain
+`<iframe>` YouTube embed) and what the video needs to show, in order:
+login → Settings → real Google consent screen → producing/approving a
+video through Final Check → the real Publish action landing on the
+actual channel. This was built specifically so the page has an honest,
+obviously-a-placeholder slot to point at right now, rather than either an
+empty gap or a claim that a video already exists.
+
+**Deliberately out of scope for this pass, per Harvey's own instruction**
+("just YouTube... you don't need to wire up any other services"): no
+change to TikTok/Instagram/Facebook, which remain exactly as unbuilt as
+§62/§122 already documented. Also not built: any automatic/scheduled
+posting — this is a manual, on-demand "publish now" action triggered from
+Final Check, not a cron job firing at a piece's `scheduledAt` time; the
+existing Approve→Scheduled flow (§111) is untouched and still available
+as a separate action for pieces not going out immediately.
+
+This is a `server.js`/`youtubeAuth.js` change (real backend logic), so
+per §93 it triggers a full rebuild+restart on the next deploy — same
+standing caveat as every prior backend change in this file, since this
+session is the headless agent running inside the container being
+restarted. Logged to the work log immediately before pushing.
+
+Verified via `node --check` on all touched JS files and a CSS/HTML
+balance check on the touched CSS and the review-page HTML. **Not yet
+verified against the live deployed service** — there's nothing to test
+against until this deploys and Harvey actually uploads his real test
+video; once it's live, confirm: the Publish button appears only when
+`ytlong` is the piece's tagged platform, the upload actually completes
+and produces a real, playable YouTube video at the chosen privacy level,
+the piece correctly moves to "Posted / Live" on success, and a deliberate
+failure (e.g. disconnecting YouTube mid-test) surfaces
+`youtubePublishError` on the card rather than failing silently.

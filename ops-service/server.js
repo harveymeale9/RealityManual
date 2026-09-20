@@ -309,6 +309,20 @@ app.post('/api/youtube/disconnect', function (req, res) {
   res.json({ ok: true });
 });
 
+// access_token is short-lived (~1hr) — refresh proactively whenever it's
+// within a minute of expiring, using the stored refresh_token (which
+// Google doesn't rotate on a normal refresh, so it's kept as-is).
+async function getValidYoutubeAccessToken() {
+  const row = stmts.getYoutubeAuth.get();
+  if (!row || !row.refresh_token) throw new Error('YouTube is not connected — connect it in Content Settings first.');
+  const expiresAtMs = row.expires_at ? new Date(row.expires_at).getTime() : 0;
+  if (row.access_token && expiresAtMs > Date.now() + 60000) return row.access_token;
+  const tokens = await youtubeAuth.refreshAccessToken(row.refresh_token);
+  const newExpiresAt = new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString();
+  stmts.upsertYoutubeAuth.run(row.channel_id, row.channel_title, tokens.access_token, row.refresh_token, newExpiresAt, new Date().toISOString());
+  return tokens.access_token;
+}
+
 app.get('/api/store/:storeName', function (req, res) {
   if (!isValidStore(req.params.storeName)) return res.status(400).json({ error: 'invalid_store' });
   const rows = stmts.getAll.all(req.params.storeName);
@@ -541,6 +555,80 @@ app.post('/api/videos/:id/build-final', function (req, res) {
   if (!piece) return res.status(404).json({ error: 'piece_not_found' });
   res.json({ ok: true, status: 'running' });
   runBuildFinalVideo(id).catch(function (e) { console.error('unhandled final-build error for ' + id + ':', e.message); });
+});
+
+// --- Real YouTube publish: the actual videos.insert-equivalent, using the
+// token stored by the OAuth connect flow above (src/youtubeAuth.js). Same
+// "respond immediately, run the real work in the background, let the
+// client poll the piece record" pattern as analyze/build-final — a real
+// upload can take a while and there's no reason to hold the HTTP request
+// open for it. Always uploads the built final video (`<id>-final`, audio
+// already spliced in per Harvey's Final Check rule) if it exists, falling
+// back to the raw upload only if it somehow doesn't — a piece can't
+// actually reach Final Check without the final build having succeeded, so
+// this fallback should never really trigger in practice.
+async function runYoutubePublish(id, opts) {
+  const piece = getPieceRecord(id);
+  if (!piece) return; // deleted before this started
+  piece.youtubePublishStatus = 'running';
+  piece.youtubePublishError = '';
+  savePieceRecord(piece);
+
+  try {
+    const finalPath = path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX);
+    const rawPath = path.join(UPLOADS_DIR, 'videos', id);
+    const useFinal = fs.existsSync(finalPath);
+    const videoPath = useFinal ? finalPath : rawPath;
+    if (!fs.existsSync(videoPath)) throw new Error('video file not found on disk');
+
+    const videoRow = stmts.getOne.get('videos', useFinal ? (id + FINAL_VIDEO_SUFFIX) : id);
+    const videoMeta = videoRow ? JSON.parse(videoRow.data) : {};
+    const mimeType = videoMeta.mimeType || 'video/mp4';
+
+    const accessToken = await getValidYoutubeAccessToken();
+    const result = await youtubeAuth.uploadVideo(accessToken, videoPath, mimeType, {
+      title: opts.title || piece.title || 'Untitled',
+      description: opts.description || '',
+      privacyStatus: opts.privacyStatus
+    });
+
+    const latest = getPieceRecord(id);
+    if (!latest) return; // deleted while this was running
+    latest.stage = 'live';
+    latest.youtubePublishStatus = 'done';
+    latest.youtubeVideoId = result.videoId;
+    latest.youtubeUrl = 'https://www.youtube.com/watch?v=' + result.videoId;
+    latest.postedAt = new Date().toISOString();
+    latest.updatedAt = new Date().toISOString();
+    savePieceRecord(latest);
+  } catch (e) {
+    console.error('YouTube publish failed for ' + id + ':', e.message);
+    const latest = getPieceRecord(id);
+    if (!latest) return;
+    latest.youtubePublishStatus = 'error';
+    latest.youtubePublishError = String(e.message || e).slice(0, 500);
+    // Deliberately not touching stage — stays in Final Check so Harvey can
+    // just try again, same convention as a failed final-video build.
+    latest.updatedAt = new Date().toISOString();
+    savePieceRecord(latest);
+  }
+}
+
+app.post('/api/youtube/publish/:id', function (req, res) {
+  const { id } = req.params;
+  if (!isValidId(id)) return res.status(400).json({ error: 'invalid_params' });
+  const piece = getPieceRecord(id);
+  if (!piece) return res.status(404).json({ error: 'piece_not_found' });
+  const row = stmts.getYoutubeAuth.get();
+  if (!row || !row.refresh_token) return res.status(400).json({ error: 'not_connected' });
+  const body = req.body || {};
+  const opts = {
+    title: typeof body.title === 'string' ? body.title : '',
+    description: typeof body.description === 'string' ? body.description : '',
+    privacyStatus: typeof body.privacyStatus === 'string' ? body.privacyStatus : 'private'
+  };
+  res.json({ ok: true, status: 'running' });
+  runYoutubePublish(id, opts).catch(function (e) { console.error('unhandled youtube publish error for ' + id + ':', e.message); });
 });
 
 // --- Voice app: talk to a real headless Claude Code agent by voice or text ---
