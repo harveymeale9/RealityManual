@@ -5869,16 +5869,17 @@ if a platform is unchecked in Content Production.
 
 ---
 
-# 130. Content Production: Vertical-Video Boxes Auto-Orient; Shortform Default Platforms No Longer Include Facebook
+# 130. Content Production: Vertical-Video Boxes Auto-Orient; Shortform Platform Defaults Revised (Then Corrected Back to Include Facebook)
 
 Two Harvey asks from a screenshot of piece #097 ("verticalvideodemo"):
 the frame-picker's scrub preview (and the row's own thumbnail box) were
 both hardcoded 16:9 boxes, so a vertical upload showed either heavily
 letterboxed (frame-picker) or cropped down to a sliver via
 `object-fit: cover` (thumbnail) — asked for both to auto-detect and
-switch to a vertical box. Separately: shortform pieces should default
-to YT Shorts + TikTok + Instagram checked (not Facebook); longform
-should default to YT + Facebook (already correct, unchanged).
+switch to a vertical box. Separately, shortform platform defaults were
+first changed to drop Facebook, then corrected back within the same
+session ("fb also for shorts") — see the Platform defaults paragraph
+below for the final, actually-correct state.
 
 **Orientation auto-detect (`ops-service/public/app.js`,
 `style.css`):** a new `piece.videoIsVertical` boolean, set two ways —
@@ -5904,16 +5905,18 @@ base rule as a defensive no-op for the landscape case, guaranteeing no
 stretching either way regardless of any rounding mismatch between the
 box's aspect-ratio and the actual video's.
 
-**Platform defaults (`PLATFORM_PRESET_BY_TYPE`):** shortform entries
-(`ultra_short`/`short`/`long_short`) changed from `['ytshort', 'tiktok',
-'instagram', 'facebook']` to `['ytshort', 'tiktok', 'instagram']` —
-Facebook is still fully available as a checkbox, just not pre-checked
-for shorts anymore. `longform`'s `['ytlong', 'facebook']` was already
-exactly what Harvey asked for here, so it's unchanged. This preset is
-read at two points that both needed no further changes: `handleFiles()`
-applies it to `platforms` at creation time, and the shared editor
-modal's content-type dropdown re-applies it on an explicit type change
-during editing.
+**Platform defaults (`PLATFORM_PRESET_BY_TYPE`):** briefly changed
+shortform entries (`ultra_short`/`short`/`long_short`) from `['ytshort',
+'tiktok', 'instagram', 'facebook']` to `['ytshort', 'tiktok',
+'instagram']`, then reverted that same change minutes later per
+Harvey's immediate follow-up ("fb also for shorts") — the **final,
+correct state is all four platforms pre-checked for every shortform
+type**, unchanged from before this whole section started. `longform`'s
+`['ytlong', 'facebook']` was never in question and is unchanged
+throughout. This preset is read at two points that both needed no
+further changes: `handleFiles()` applies it to `platforms` at creation
+time, and the shared editor modal's content-type dropdown re-applies it
+on an explicit type change during editing.
 
 Frontend-only (`app.js`, `style.css`), so per §93 this is already live —
 no deploy/restart needed. Verified via `node --check` and a CSS

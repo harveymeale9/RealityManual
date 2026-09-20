@@ -9,16 +9,16 @@
   var AUTO_STAGE_IDS = window.RMStore.STAGES.slice(UPLOADED_INDEX + 1).map(function (s) { return s.id; });
 
   // Platform preset applied when the content-type dropdown changes in the
-  // editor, per Harvey (revised 2026-09-20): any shortform type defaults
-  // to YT Shorts + TikTok + Instagram (Facebook left unchecked — he
-  // unchecks it there deliberately, doesn't want it pre-selected for
-  // shorts), longform defaults to YT Long + Facebook. Only fires on an
-  // actual change during editing (see fieldContentType's change listener),
-  // never on populateFields() for an already-saved piece.
+  // editor, per Harvey: any shortform type defaults to YT Shorts +
+  // TikTok + Instagram + Facebook (all four — briefly dropped Facebook
+  // from this list on 2026-09-20, corrected back the same day, "fb also
+  // for shorts"), longform defaults to YT Long + Facebook. Only fires on
+  // an actual change during editing (see fieldContentType's change
+  // listener), never on populateFields() for an already-saved piece.
   var PLATFORM_PRESET_BY_TYPE = {
-    ultra_short: ['ytshort', 'tiktok', 'instagram'],
-    short: ['ytshort', 'tiktok', 'instagram'],
-    long_short: ['ytshort', 'tiktok', 'instagram'],
+    ultra_short: ['ytshort', 'tiktok', 'instagram', 'facebook'],
+    short: ['ytshort', 'tiktok', 'instagram', 'facebook'],
+    long_short: ['ytshort', 'tiktok', 'instagram', 'facebook'],
     longform: ['ytlong', 'facebook']
   };
 
