@@ -4,15 +4,19 @@
 + '[' -n '' ']'
 + git pull
 From https://github.com/harveymeale9/RealityManual
-   a3ac8c3..16c0b8b  main       -> origin/main
-Updating a3ac8c3..16c0b8b
+   16c0b8b..8801a47  main       -> origin/main
+Updating 16c0b8b..8801a47
 Fast-forward
- CLAUDE.md                    |  84 +++++++++++++++++++++++++++++++++++
- ops-service/.ci/last-run.log | 102 +++++++++++++++++++++++++++++++++++++------
- ops-service/public/app.js    |  42 ++++++++++++++----
- 3 files changed, 205 insertions(+), 23 deletions(-)
+ CLAUDE.md                                  |  59 ++++++++++++++++
+ ops-service/.ci/last-run.log               | 108 +++++------------------------
+ ops-service/public/img/logo.png            | Bin 0 -> 24699 bytes
+ ops-service/public/index.html              |  13 ++--
+ ops-service/public/style.css               |   1 +
+ ops-service/public/youtube-app-review.html |  10 +--
+ 6 files changed, 89 insertions(+), 102 deletions(-)
+ create mode 100644 ops-service/public/img/logo.png
 ++ git rev-parse HEAD
-+ NEW_HEAD=16c0b8ba7149dfe62d12369b7192579d46f8b996
++ NEW_HEAD=8801a47e336cb8f7b01e6f27a9ad2f4608f38fe6
 + git -C /srv/realitymanual-repo pull
 Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
@@ -22,11 +26,11 @@ Already up to date.
 + NEEDS_REBUILD=1
 + '[' -n a3ac8c330f76053c4eb4af39a8be5e0d2d29ca29 ']'
 + git cat-file -e 'a3ac8c330f76053c4eb4af39a8be5e0d2d29ca29^{commit}'
-++ git diff --name-only a3ac8c330f76053c4eb4af39a8be5e0d2d29ca29 16c0b8ba7149dfe62d12369b7192579d46f8b996 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
+++ git diff --name-only a3ac8c330f76053c4eb4af39a8be5e0d2d29ca29 8801a47e336cb8f7b01e6f27a9ad2f4608f38fe6 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z '' ']'
 + NEEDS_REBUILD=0
 + '[' 0 = 0 ']'
-+ echo 'no backend changes between a3ac8c330f76053c4eb4af39a8be5e0d2d29ca29 and 16c0b8ba7149dfe62d12369b7192579d46f8b996 — already live via git pull, skipping rebuild/restart'
-no backend changes between a3ac8c330f76053c4eb4af39a8be5e0d2d29ca29 and 16c0b8ba7149dfe62d12369b7192579d46f8b996 — already live via git pull, skipping rebuild/restart
++ echo 'no backend changes between a3ac8c330f76053c4eb4af39a8be5e0d2d29ca29 and 8801a47e336cb8f7b01e6f27a9ad2f4608f38fe6 — already live via git pull, skipping rebuild/restart'
+no backend changes between a3ac8c330f76053c4eb4af39a8be5e0d2d29ca29 and 8801a47e336cb8f7b01e6f27a9ad2f4608f38fe6 — already live via git pull, skipping rebuild/restart
 + exit 0
 ssh exit code: 0
