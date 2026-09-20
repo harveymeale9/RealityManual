@@ -6824,3 +6824,66 @@ the same error shows up again.
 
 Sources:
 - [Content Sharing Guidelines](https://developers.tiktok.com/docs/en/content-sharing-guidelines)
+
+---
+
+# 144. Fixed: Kanban Board Went Stale If Harvey Left Content Production Before a Background Job Finished
+
+Harvey's report: click "Send to final check" in Content Production, then
+quickly switch to the Kanban board — the card doesn't actually appear in
+Final Check until a full page reload, even well after the real ffmpeg
+build has genuinely finished server-side. Separately, he asked to add a
+transition animation (Final Check → Scheduled, Processing → Final Check)
+to the to-do list — noted below, not built this pass since he explicitly
+framed that part as a backlog item, not something to fix right now.
+
+**Root cause, in `maybeStartAnalysisPolling()`'s poll tick
+(`ops-service/public/app.js`):** once a piece's `analysisStatus` or
+`finalBuildStatus` actually resolves, this function's per-row DOM update
+(`removeUploadRowAnimated`, `refreshUploadRowHeadById`, or
+`renderUploadLists()` for the error-recovery case) only ever touches
+`uploadRows` — Content Production's own DOM subtree. The moment Harvey
+navigates to a different tab, that subtree is torn down by the SPA's
+tab router; these calls don't error against the detached node, they just
+silently do nothing. `pieces[r.id]` itself was already being correctly
+updated in memory (§142's fix), but nothing told whichever *other* tab
+was actually on screen — the Kanban board, in Harvey's exact scenario —
+to redraw itself with that new data. Only a full page reload re-fetched
+everything fresh and rendered once, which is why that "worked."
+
+**Fix:** the poller now checks `currentTabId() !== 'upload-files'`
+before running any of the Content-Production-specific DOM updates, and
+calls the existing generic `notifyPiecesChanged()` hook instead when
+some other tab is active — the same `window.__rmOnPiecesChanged`
+mechanism already used everywhere else in this file for exactly this
+"a different view needs to know data changed" case (e.g. after quick-
+add saves, or the shared modal's own edits). Since `window.__rmOnPiecesChanged`
+always points at whichever tab most recently booted itself (`render`
+for Content Ops, `renderUploadLists` for Content Production), this
+correctly redraws the Kanban board — or whatever else is actually
+visible — the instant a background job's result lands, without waiting
+for Harvey to switch back to Content Production first or reload the
+page. Confirmed calling a torn-down tab's own render function (e.g. a
+stale `render()` still referencing Content Ops's now-detached `board`
+element, if Harvey's since moved on to a *third* tab like Settings) is
+a harmless no-op, not an error — DOM writes against a disconnected node
+just don't paint anywhere, they don't throw.
+
+**Deferred, per Harvey's own "add to my to-do list" framing — not built
+this pass:** a real move-transition animation when a card changes
+column (Processing → Final Check, Final Check → Scheduled, etc.), so
+the change reads as motion rather than a card just appearing/
+disappearing between renders. Worth scoping properly when picked up —
+`render()` currently does a single full `board.innerHTML = ...` rebuild
+per call (§113/123), which has no concept of "this specific card moved
+from column A to column B" to animate against; doing this properly
+likely means diffing the previous and next render's card-to-column
+mapping and running a FLIP-style transition on whichever cards actually
+moved, not just fading the whole board.
+
+Frontend-only (`app.js`), so per §93 this is already live — no deploy/
+restart needed. Verified via `node --check`; not yet re-tested against
+the live deployed service with the exact repro (send to final check,
+immediately switch to the Kanban tab, wait for the real build to finish
+without touching the page) — worth confirming the card now appears on
+its own once the background build completes.

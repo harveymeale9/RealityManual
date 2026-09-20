@@ -3127,6 +3127,23 @@
           }
           pieces[r.id] = merged;
           r = merged;
+          // Real bug Harvey hit (2026-09-20): these targeted DOM updates
+          // only ever mean anything while Content Production is the
+          // actual visible tab — `uploadRows` is that tab's own DOM
+          // element, which is torn down the moment Harvey navigates
+          // elsewhere (e.g. straight to the Kanban board right after
+          // clicking "Send to final check"). They don't error in that
+          // case, they just silently no-op against a detached node — so
+          // a piece's stage genuinely changes in memory once the build
+          // finishes, but nothing tells whichever *other* tab is actually
+          // on screen to redraw itself, leaving Harvey looking at a stale
+          // Kanban board until a full page reload. Guard on the tab
+          // actually being active, and fall through to the generic
+          // `notifyPiecesChanged()` (already used everywhere else in this
+          // file for exactly this "some other view needs to know" case)
+          // otherwise, so whatever tab Harvey's actually looking at —
+          // most likely the Kanban board — redraws itself for real.
+          if (currentTabId() !== 'upload-files') return;
           if (wasProcessed && r.stage !== 'processed') {
             removeUploadRowAnimated(r.id);
           } else if (r.finalBuildStatus === 'error' && !uploadRows.querySelector('.upload-row[data-id="' + r.id + '"]')) {
@@ -3139,8 +3156,9 @@
             refreshUploadRowHeadById(r.id);
           }
         });
-        if (needsFullRebuild) renderUploadLists();
-        else maybeStartAnalysisPolling();
+        if (currentTabId() !== 'upload-files') notifyPiecesChanged();
+        else if (needsFullRebuild) renderUploadLists();
+        maybeStartAnalysisPolling();
       });
     }, 3000);
   }
