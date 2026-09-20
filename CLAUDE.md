@@ -7182,3 +7182,87 @@ deliberate real test would need TikTok to actually accept or reject
 that combination against the still-SELF_ONLY-forced account — the
 error path, if any, should surface via the existing `tiktokPublishError`
 mechanism, not fail silently).
+
+---
+
+# 149. §142's Own Fix Had a Second Bug: Object-Identity Break Let Platforms Keep Reverting
+
+Harvey re-tested §148 by refilming with only TikTok selected and hit the
+exact same symptom §142 was supposed to have closed: all 4 platforms
+came back on Final Check despite selecting only TikTok. Root-caused
+against the live piece and server logs rather than guessed again.
+
+**Confirmed via the live API and VPS docker logs, not assumed:** the
+piece (`08762a6c-...`, filename "verticalvideodemo," same test filename
+reused) was created at 12:57:55Z and never touched again after
+12:58:24Z — `analysisStatus` stuck at `'pending'` forever (its analysis
+job genuinely hung partway through, per §146's still-standing gap, since
+the server log shows only the HEVC-normalization line and nothing
+past it), while `finalBuildStatus` reached `'done'` and `stage` reached
+`final_check` — meaning "Send to final check" fired and completed
+successfully using data that still disagreed with what the analysis
+poller's own view of the piece had already moved on to.
+
+**Real root cause — a second, independent bug introduced by §142's own
+fix, not a repeat of the first one:** §142 correctly stopped the poller
+from blindly overwriting the whole piece object, but its actual
+implementation —
+```js
+var merged = existing ? Object.assign({}, existing) : r;
+...
+pieces[r.id] = merged;
+```
+— builds a **brand-new object** on every single poll tick and reassigns
+`pieces[id]` to point at it. That breaks object *identity*, and
+`buildUploadRow()`'s "Send to final check" button closes over the exact
+`p` reference it was originally built with — it never re-reads
+`pieces[id]` again after that. Only `refreshUploadRowHeadById()` (the
+poller's own per-tick DOM update) reads the live `pieces[id]` and
+rebuilds the head's checkboxes against whatever the *current* object
+is. Since analysis/build jobs routinely take several real seconds — one
+poll tick every 3s for the whole duration — it only takes a single tick
+firing while Harvey is mid-edit for `pieces[id]` to get silently swapped
+to a new object: any platform he unchecks *after* that tick lands only
+on the new object the checkboxes now point at, invisibly to the send
+button, which is still holding the original, pre-edit object (the full
+preset) and ships exactly that the moment it's clicked. §142's own fix
+correctly stopped the *read* side from clobbering local edits with stale
+server data, but introduced this new way for a *local* edit to get
+silently split across two different objects instead.
+
+**Fix, `ops-service/public/app.js`'s `maybeStartAnalysisPolling()`:**
+mutate `existing` in place rather than building a copy — `pieces[id]`
+now keeps the exact same object identity for a piece's entire lifetime
+once created, so every closure that ever captured it (however long ago,
+including a stale "Send to final check" button) always sees live
+updates with zero risk of drifting apart. `refreshUploadRowHeadById()`
+is now purely a visual refresh (so status text/tags redraw), not load-
+bearing for correctness the way it accidentally became.
+
+**Piece #097 fixed directly against the live data again** so Harvey has
+something to retest: `platforms` reset to `['tiktok']`, `analysisStatus`
+set to `'error'` with an honest message (its own analysis job is
+genuinely hung, not just delayed — matches §146's still-open gap: no
+job actually times out server-side yet, only the client's 5-minute
+polling-timeout stops re-rendering around it; a real server-side timeout
+for a hung `transcribeVideo`/`matchAndGenerateTitles` call is still
+worth adding if this keeps happening).
+
+**Also answered, Harvey's question about "This is branded content"
+(§148's checkbox):** it's TikTok's own required disclosure for actual
+paid partnerships / sponsored content — check it only when a video is a
+paid collaboration with a brand. For his own organic book-marketing
+videos this should stay unchecked essentially always. Also worth
+knowing: per §143's research, TikTok won't even allow a branded-content
+post while this app's postings are forced `SELF_ONLY` (unaudited/
+sandboxed) — not a practical blocker right now since he won't be
+checking it, but relevant if that ever changes.
+
+Frontend-only (`app.js`), so per §93 this is already live — no deploy/
+restart needed. Verified via `node --check`; the piece #097 data fix was
+confirmed applied via a direct re-fetch. **Not yet re-tested against the
+live deployed service with a fresh upload** — the real test is: upload a
+video, uncheck platforms down to one, wait long enough for at least one
+3s poll tick to fire (trivial — analysis always takes some time), then
+send to Final Check and confirm the platform selection survives all the
+way through this time.

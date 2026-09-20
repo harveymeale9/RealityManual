@@ -3228,10 +3228,11 @@
           if (!r) return;
           var existing = pieces[r.id];
           var wasProcessed = existing && existing.stage === 'processed';
-          // Real bug Harvey hit (2026-09-20): this poll tick's own GET can
-          // easily be a snapshot taken from *before* an in-progress local
-          // edit's own (debounced) save has landed — analysis/build jobs
-          // routinely take several real seconds, plenty of time for
+          var prevStage = existing && existing.stage;
+          // Real bug Harvey hit (2026-09-20, §142): this poll tick's own
+          // GET can easily be a snapshot taken from *before* an in-progress
+          // local edit's own (debounced) save has landed — analysis/build
+          // jobs routinely take several real seconds, plenty of time for
           // Harvey to uncheck platform boxes or pick a different audio
           // track while a row is still processing. Blindly replacing
           // `pieces[r.id]` wholesale with `r` clobbered whatever he'd just
@@ -3242,15 +3243,38 @@
           // re-fetch the piece before writing back, §111/§115) — anything
           // else (platforms, thumbnail, audio track, content type, ...)
           // stays whatever's currently in the browser's own memory.
-          var merged = existing ? Object.assign({}, existing) : r;
+          //
+          // Second, independent bug from the SAME fix (found 2026-09-20,
+          // still reverting platforms after §142 shipped): the merge above
+          // used to build a brand-new object (`Object.assign({}, existing)`)
+          // and reassign `pieces[r.id]` to it. That broke object identity —
+          // buildUploadRow()'s "Send to final check" button closes over the
+          // exact `p` reference it was built with, which stays the *original*
+          // object forever; only refreshUploadRowHeadById() re-reads the
+          // live `pieces[id]`. Every poll tick (every 3s, for as long as
+          // analysis/build is pending — routinely several ticks) silently
+          // swapped `pieces[id]` to a new object and rebuilt the head against
+          // it, while "Send to final check" kept holding the stale original.
+          // Any platform Harvey unchecked *after* even one tick had already
+          // fired (a near-certainty over a several-second job) landed only on
+          // the new object the checkboxes were rebuilt against — invisible
+          // to the send button, which shipped whatever the stale original
+          // still had (the full preset) the moment he clicked it. Fixed by
+          // mutating `existing` in place instead of replacing it, so
+          // `pieces[id]` never changes identity for a piece's whole
+          // lifetime — every closure that captured it, however long ago,
+          // keeps seeing live updates with no rebuild required for
+          // correctness (refreshUploadRowHeadById is now purely a visual
+          // refresh, not a consistency fix).
           if (existing) {
             ['analysisStatus', 'analysisError', 'analysisMatchedPieceId', 'transcript',
              'ytTitles', 'title', 'finalBuildStatus', 'finalBuildError', 'stage', 'updatedAt'
-            ].forEach(function (k) { if (k in r) merged[k] = r[k]; });
+            ].forEach(function (k) { if (k in r) existing[k] = r[k]; });
+            r = existing;
+          } else {
+            pieces[r.id] = r;
           }
-          if (existing && existing.stage !== merged.stage) movedIds.push(r.id);
-          pieces[r.id] = merged;
-          r = merged;
+          if (prevStage && prevStage !== r.stage) movedIds.push(r.id);
           // Real bug Harvey hit (2026-09-20): these targeted DOM updates
           // only ever mean anything while Content Production is the
           // actual visible tab — `uploadRows` is that tab's own DOM
