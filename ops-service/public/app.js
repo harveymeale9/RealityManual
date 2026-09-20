@@ -2805,6 +2805,21 @@
       buildErr.className = 'upload-row-status upload-row-status-error';
       buildErr.textContent = 'Final video build failed (' + (p.finalBuildError || 'unknown error') + ') — try Send to final check again.';
       titleId.appendChild(buildErr);
+    } else if (p.finalBuildStatus === 'done' && (p.analysisStatus === 'pending' || p.analysisStatus === 'running')) {
+      // Real bug Harvey hit (2026-09-20): a piece used to move into Final
+      // Check — fully interactive video, playable right away — the moment
+      // the build finished, even if analysis was still running underneath
+      // it. The client's poller re-renders the whole board every 3s for as
+      // long as *either* job is pending, so the video kept getting torn
+      // down and rebuilt mid-interaction, which read as the thumbnail
+      // repeatedly vanishing/reappearing. server.js now holds a piece here
+      // in Processing until analysis also settles (maybeAdvanceToFinalCheck)
+      // — this line is what actually explains the wait to Harvey, rather
+      // than a done-looking row with no visible reason to still be here.
+      var waitingOnAnalysis = document.createElement('div');
+      waitingOnAnalysis.className = 'upload-row-status';
+      waitingOnAnalysis.textContent = 'Final video ready — waiting on transcription/matching to finish before this moves to Final Check…';
+      titleId.appendChild(waitingOnAnalysis);
     }
     // Type + platforms — Harvey's ask: show which type this got auto-
     // categorized as (locked; it's derived purely from orientation/

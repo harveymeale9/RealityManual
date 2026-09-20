@@ -7325,3 +7325,75 @@ service — worth a look to confirm the logo renders correctly at both
 sizes (22px nav mark, 44px login logo) and the login screen's longer
 heading doesn't wrap awkwardly in the 360px card before resubmitting to
 Google for reverification.
+
+---
+
+# 151. Real Bug: A Piece Could Reach Final Check While Analysis Was Still Running Underneath It
+
+Harvey still couldn't film his TikTok demo — the video's thumbnail kept
+disappearing and reappearing while he tried to interact with it. Asked
+for the piece to either not show at all, show a "still preparing"
+placeholder, or just stay in Processing longer until genuinely ready —
+which is exactly the right framing and matches the actual fix.
+
+**Root cause, confirmed against the live piece:** `714d2e6b-...` was
+sitting in `final_check` with `finalBuildStatus: 'done'` (fully built,
+playable) but `analysisStatus: 'pending'` (its transcription/matching
+job never finished). §115 only ever gated the Final Check transition on
+`finalBuildStatus` — analysis (triggered separately, right after
+upload) and the final-video build (triggered by "Send to final check")
+are two completely independent background jobs with no coordination
+between them. Since `maybeStartAnalysisPolling()` re-renders the whole
+board every 3s for as long as *either* job is pending, a piece could
+become fully interactive in Final Check while still being torn down and
+rebuilt on a timer underneath — tearing out the `<video>` element
+(losing playback state) mid-interaction, exactly what Harvey described.
+
+**Fix, `ops-service/server.js`:** a new `maybeAdvanceToFinalCheck(id)`
+only flips `stage` to `'final_check'` once **both** `finalBuildStatus
+=== 'done'` **and** `analysisStatus` is no longer `'pending'`/`'running'`
+(analysis failing is fine — only analysis still *in progress* blocks
+the move). Called from the completion of both jobs, in both their
+success and error paths — whichever job finishes second is the one
+that actually advances the stage. In the common case (analysis already
+resolved by the time Harvey finishes editing and clicks send, which is
+most of the time) this behaves identically to before, zero added delay.
+Also added `withAnalysisTimeout()` — a 90s server-side timeout wrapping
+the transcription and matching calls — so a genuinely hung analysis job
+(confirmed happening for real twice already this session, §146/§149)
+can't block a piece from ever reaching Final Check; it just resolves to
+`analysisStatus: 'error'` instead, which the gating already treats as
+"settled, safe to advance."
+
+**Client-side, `ops-service/public/app.js`:** a piece now sitting in
+Content Production with `finalBuildStatus: 'done'` but analysis still
+running gets a new, honest status line — "Final video ready — waiting
+on transcription/matching to finish before this moves to Final Check…"
+— instead of looking like nothing happened after clicking send.
+
+**Immediate relief, applied directly against the live piece Harvey was
+actively testing with** (`714d2e6b-...`) so he didn't have to wait for
+the redeploy: manually cleared its stuck `analysisStatus: 'pending'` to
+`'error'`, stopping the poller (and the flicker) for that piece right
+away. Its `platforms` currently still shows all four
+(`ytshort`/`tiktok`/`instagram`/`facebook`) — Harvey didn't flag that as
+wrong this specific time (he was focused on the flicker blocking him
+entirely), so this wasn't assumed to be a regression of §149's fix and
+wasn't touched; worth a real check next time he uploads fresh whether
+that fix is holding, since this piece's `createdAt` is after §149
+deployed.
+
+This is a `server.js`/`app.js` change (real backend logic), so per §93
+it triggers a full rebuild+restart on the next deploy — same standing
+caveat as every other backend change in this file, since this session
+is the headless agent running inside the container being restarted.
+Logged to the work log immediately before pushing.
+
+Verified via `node --check` on both touched files. **Not yet verified
+end-to-end against the live deployed service** — once it's back up,
+confirm with a genuinely fresh upload: the piece stays in Content
+Production (with the new "waiting on transcription/matching" status
+line) until analysis actually resolves, only *then* moves to Final
+Check, and the video plays/interacts cleanly with no flicker once
+there — and separately, whether §149's platform fix is holding on this
+same fresh upload.
