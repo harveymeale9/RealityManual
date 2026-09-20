@@ -6887,3 +6887,86 @@ the live deployed service with the exact repro (send to final check,
 immediately switch to the Kanban tab, wait for the real build to finish
 without touching the page) — worth confirming the card now appears on
 its own once the background build completes.
+
+---
+
+# 145. §144 Verified For Real (Not Just Reasoned About) — and the Move Animation Actually Built This Time
+
+Harvey reported §144's fix still wasn't working ("i still dont see any
+movement from processing --> final check"). Given this exact codebase's
+own repeated history of shipping reasoning-only fixes that failed in
+practice on this specific board (§113/§119/§120/§121's four rounds
+before §123 finally built a real test rig), the right response wasn't a
+fifth guess — it was building a real browser test rig again and actually
+watching it happen.
+
+**Test rig rebuilt from scratch this session** (same workaround as
+§123: `playwright-core` + `npx playwright install chromium`, then
+downloading missing shared libs as plain `.deb` files from
+`deb.debian.org`'s `bookworm` pool — this container's actual Debian
+version, confirmed via `/etc/os-release` first rather than guessing,
+which avoided §123's glibc-version mismatch gotcha entirely — and
+extracting them with `dpkg-deb -x` into a scratch dir for
+`LD_LIBRARY_PATH`, no root needed). Logged into the real
+`ops.realitymanual.com`, uploaded a real synthetic video (`ffmpeg
+testsrc` + a real `sine` audio track — a first attempt without an audio
+track produced a real server-side `finalBuildStatus: 'error'`, which
+is correct behavior, not a bug, and was a useful reminder that a failed
+build should never be confused with a stale-render bug), picked a real
+ambient audio track to force the slower `amix` re-encode path, clicked
+"Send to final check," immediately switched to `#content-ops`, and
+polled the live DOM for up to two minutes watching for the card to
+land in Final Check **without ever reloading the page**.
+
+**§144's fix genuinely does work** — confirmed three times: a fast
+build (desktop), a slower realistic build with real audio (desktop,
+~4s), and the same flow under an emulated mobile viewport/Safari user
+agent. All three landed correctly in Final Check with no reload. No
+service worker exists on this origin either (checked and ruled out as
+a possible stale-cache explanation). All five synthetic test pieces
+created during this verification were deleted afterward via the app's
+own delete endpoints, leaving Harvey's real data untouched.
+
+**So what was Harvey actually seeing?** Most likely just this: §144 made
+the *card appearing in the new column* work correctly, but a card that
+was already correctly re-rendered still has no way to visually read as
+"it moved" — it simply materializes in the new column on the next
+redraw, with nothing to distinguish that from having always been there.
+Harvey's *complaint* about "no movement" may have been entirely correct
+about the experience even though the underlying data/render bug was
+already fixed — this section's actual new work (below) is what he
+explicitly escalated to ("i need that movement thing actually done"),
+not a re-litigation of §144.
+
+**Built for real this time — `animateBoardMove(id)` in
+`ops-service/public/app.js`:** a plain FLIP animation. Reads the card's
+current on-screen `getBoundingClientRect()`, lets the normal `render()`
+happen, reads the same card's new position, and animates the visual gap
+between old and new with a CSS `transform: translate(...)` transition
+(480ms) plus a brief accent-glow highlight (`.card-just-moved` in
+`style.css`, 900ms) so the change is genuinely noticeable, not just
+spatially correct. Deliberately not hooked into every `render()` call —
+search, type-filtering, and drag-and-drop reordering already work fine
+today and don't need this; it's only invoked from the specific places
+that know a piece's *stage* (not just some other field) actually
+changed:
+- `maybeStartAnalysisPolling()` (Processing → Final Check, once a video
+  build completes) — via a new optional `window.__rmOnPieceMoved` hook,
+  set only while Content Ops is the currently booted tab (mirrors
+  `window.__rmOnPiecesChanged`'s existing pattern, §144/§75), used
+  instead of the plain notify specifically when exactly one piece's
+  stage changed in that poll tick.
+- `maybeStartYoutubePublishPoll()` (Final Check → Posted/Live, once a
+  real publish succeeds) — calls `animateBoardMove()` directly rather
+  than through the hook indirection, since this poller only ever runs
+  while Content Ops is already the booted tab in the first place (the
+  Publish button that starts it only exists on a Final Check card).
+
+Frontend-only (`app.js`, `style.css`), so per §93 this is already live
+— no deploy/restart needed. Verified via `node --check` and a CSS
+brace-balance check before pushing; the same real browser test rig
+above was then run again against the live deployed result specifically
+to confirm the animation itself actually fires (not just that the code
+parses) — see the follow-up note immediately after this section for
+the outcome, rather than assuming success here the way past attempts
+on this exact board (§113/§119/§120) learned not to.

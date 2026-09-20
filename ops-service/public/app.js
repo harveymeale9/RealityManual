@@ -2201,6 +2201,42 @@
     bindBoardEvents();
   }
 
+  // A real move animation for the one case Harvey actually asked for
+  // (2026-09-20): a card's *stage* changing because a background job
+  // finished — Processing -> Final Check once a video build completes,
+  // Final Check -> Posted/Live once a publish succeeds — while he's
+  // actually looking at the board. Plain FLIP technique: read the card's
+  // current on-screen position, let the normal full render() happen, then
+  // read its new position and animate the visual gap between them rather
+  // than letting it just teleport into the new column. Deliberately not
+  // hooked into every render() call — search/filter/drag already work
+  // fine without this and don't need it; this is only ever called from
+  // the specific places that know a piece's stage genuinely just changed.
+  function animateBoardMove(id) {
+    var oldEl = board.querySelector('[data-id="' + id + '"]');
+    var oldRect = oldEl ? oldEl.getBoundingClientRect() : null;
+    render();
+    if (!oldRect) return;
+    var newEl = board.querySelector('[data-id="' + id + '"]');
+    if (!newEl) return;
+    var newRect = newEl.getBoundingClientRect();
+    var dx = oldRect.left - newRect.left;
+    var dy = oldRect.top - newRect.top;
+    if (!dx && !dy) return;
+    newEl.style.transition = 'none';
+    newEl.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+    newEl.style.zIndex = '5';
+    void newEl.offsetWidth; // force a reflow so the transform above is actually applied before animating away from it
+    newEl.style.transition = 'transform 480ms cubic-bezier(.22,.68,.32,1)';
+    newEl.style.transform = '';
+    newEl.classList.add('card-just-moved');
+    setTimeout(function () {
+      newEl.style.transition = '';
+      newEl.style.zIndex = '';
+      newEl.classList.remove('card-just-moved');
+    }, 900);
+  }
+
   // Scoped separately from bindBoardEvents() so a caption-tab click can
   // rebind just the small chunk of DOM it just replaced, instead of
   // re-running bindBoardEvents() (which would add a second set of
@@ -2538,13 +2574,22 @@
       youtubePublishPollTimer = null;
       Promise.all(waiting.map(function (id) { return Store.get('pieces', id); })).then(function (rows) {
         var changed = false;
+        var movedIds = [];
         rows.forEach(function (r) {
           if (!r) return;
           var prev = pieces[r.id];
           if (prev && WIRED_PUBLISH_PLATFORMS.some(function (platform) { return prev[publishStatusFieldFor(platform)] !== r[publishStatusFieldFor(platform)]; })) changed = true;
+          if (prev && prev.stage !== r.stage) movedIds.push(r.id);
           pieces[r.id] = r;
         });
-        if (changed) render();
+        // Real move animation (2026-09-20) for Final Check -> Posted/Live
+        // once a publish actually succeeds — same animateBoardMove used by
+        // the analysis/build poller, called directly since this poller
+        // only ever runs while Content Ops is already the booted tab (the
+        // Publish button that starts it only exists on a Final Check
+        // card, which only renders there).
+        if (movedIds.length === 1) animateBoardMove(movedIds[0]);
+        else if (changed) render();
         else maybeStartYoutubePublishPoll();
       });
     }, 3000);
@@ -2572,6 +2617,11 @@
     });
 
     window.__rmOnPiecesChanged = render;
+    // Optional second hook, set only while Content Ops is actually the
+    // booted tab — a caller that knows a specific piece's *stage* just
+    // changed (not just "something changed") can use this instead of the
+    // plain notify above to get a real move animation for that one card.
+    window.__rmOnPieceMoved = animateBoardMove;
     ensurePiecesLoaded().then(render);
     // Final Check cards (see finalCheckCardHtml below) show the real
     // rendered caption inline, which needs Settings' caption templates —
@@ -3101,6 +3151,7 @@
       analysisPollTimer = null;
       Promise.all(waiting.map(function (id) { return Store.get('pieces', id); })).then(function (rows) {
         var needsFullRebuild = false;
+        var movedIds = [];
         rows.forEach(function (r) {
           if (!r) return;
           var existing = pieces[r.id];
@@ -3125,6 +3176,7 @@
              'ytTitles', 'title', 'finalBuildStatus', 'finalBuildError', 'stage', 'updatedAt'
             ].forEach(function (k) { if (k in r) merged[k] = r[k]; });
           }
+          if (existing && existing.stage !== merged.stage) movedIds.push(r.id);
           pieces[r.id] = merged;
           r = merged;
           // Real bug Harvey hit (2026-09-20): these targeted DOM updates
@@ -3156,8 +3208,17 @@
             refreshUploadRowHeadById(r.id);
           }
         });
-        if (currentTabId() !== 'upload-files') notifyPiecesChanged();
-        else if (needsFullRebuild) renderUploadLists();
+        if (currentTabId() !== 'upload-files') {
+          // A real move animation (2026-09-20, Harvey: "i need that
+          // movement thing actually done") when exactly one piece's stage
+          // changed this tick and the Kanban board is what's set the
+          // animated hook (it's the only tab that ever does) — the normal
+          // "something changed" notify otherwise, e.g. when several
+          // pieces finished in the same tick, or a different tab (with no
+          // concept of a card sliding between columns) is what's active.
+          if (movedIds.length === 1 && typeof window.__rmOnPieceMoved === 'function') window.__rmOnPieceMoved(movedIds[0]);
+          else notifyPiecesChanged();
+        } else if (needsFullRebuild) renderUploadLists();
         maybeStartAnalysisPolling();
       });
     }, 3000);

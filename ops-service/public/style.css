@@ -879,6 +879,15 @@ a { color: var(--accent); }
 .card:hover .card-grip { opacity: 1; }
 .card:active { cursor: grabbing; }
 .card.dragging { opacity: 0.35; }
+/* Real move animation (2026-09-20) — animateBoardMove() in app.js
+   applies the position-slide transform inline; this just adds a brief
+   accent glow on top so a card that just changed columns is genuinely
+   noticeable, not only spatially moving. Covers both card shapes since
+   a piece can land here fresh out of Final Check either way. */
+.card.card-just-moved, .final-check-card.card-just-moved {
+  box-shadow: 0 0 0 2px var(--accent), 0 16px 40px -14px rgba(0,0,0,0.7);
+  transition: box-shadow 900ms ease;
+}
 .card.card-auto { cursor: pointer; }
 
 /* Right-click delete menu — works on both .card and .final-check-card,
