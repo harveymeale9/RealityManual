@@ -7266,3 +7266,134 @@ video, uncheck platforms down to one, wait long enough for at least one
 3s poll tick to fire (trivial — analysis always takes some time), then
 send to Final Check and confirm the platform selection survives all the
 way through this time.
+
+---
+
+# 150. Real Logo + Exact App Name, to Match Google's OAuth Branding Requirement
+
+Google's OAuth branding verification (§133/§136) came back with 4
+issues, all boiling down to one thing: the app name/logo on the OAuth
+consent screen (App name: "Reality Manual Content Studio") didn't match
+what Google's reviewer actually found on the homepage URL registered as
+the app's "Application home page" — which was still showing a split
+"The Reality Manual" / "Content Studio" wordmark and a plain inline SVG
+diamond outline, neither literally matching the single registered name
+or logo file. Google explicitly flags a generic, wordmark-less icon
+like that as failing to "uniquely identify your brand," separately from
+the mismatch itself.
+
+Harvey supplied the exact PNG he'd already uploaded to Google's OAuth
+Branding page (a solid green layered-diamond mark on black,
+1024×1024) — committed to `ops-service/public/img/logo.png`. Same file,
+used in both places asked for:
+
+- **`ops-service/public/youtube-app-review.html`** (the actual page
+  registered as Google's "Application home page" — the one that
+  actually matters for verification): nav mark swapped from the inline
+  SVG to `<img src="img/logo.png">`, and the name split across `.name`/
+  `.sub` ("The Reality Manual" / "Content Studio — internal team tool")
+  collapsed to a single `.name` reading exactly **"Reality Manual
+  Content Studio"** (matching the OAuth App name field verbatim), with
+  `.sub` now just "Internal team tool." `<title>` updated to match too.
+- **`ops-service/public/index.html`** (the internal control panel
+  itself — not what Google checks, but Harvey asked for the same
+  consistency here): the post-login header's `brand-mark`/`wordmark-sm`
+  got the same image + exact name treatment. The **login screen**
+  (what an unauthenticated visitor, or Google, would actually see if
+  they ever loaded this URL directly) previously had no logo image at
+  all and split "The Reality Manual" (small kicker) / "Control Panel"
+  (large heading) — added the logo image above the form and swapped the
+  roles so the large, primary heading now reads "Reality Manual Content
+  Studio" with "Control Panel" demoted to the small kicker above it, on
+  the theory that whatever's biggest/most prominent is what a reviewer
+  (or Harvey's own future self) reads as "the app name." `<title>` and
+  the footer line updated to match as well.
+
+Deliberately scoped to just these two files, per Harvey's own explicit
+list — didn't touch `privacy.html`/`terms.html`/`tiktok-app-review.html`
+or any of the small decorative diamond icons used elsewhere in the ops
+panel's own UI iconography (side-rail logo, group icons), which are
+ordinary interface icons, not "the app logo" in the sense Google's
+verification cares about.
+
+Frontend/static-only (`index.html`, `youtube-app-review.html`,
+`style.css`, plus the new image), so per §93 this deploys via the fast
+path — no Docker rebuild/restart, no interrupted session. Verified via
+a CSS brace-balance check and a rough HTML tag-balance check on both
+touched pages; not yet visually confirmed against the live deployed
+service — worth a look to confirm the logo renders correctly at both
+sizes (22px nav mark, 44px login logo) and the login screen's longer
+heading doesn't wrap awkwardly in the 360px card before resubmitting to
+Google for reverification.
+
+---
+
+# 151. Real Bug: A Piece Could Reach Final Check While Analysis Was Still Running Underneath It
+
+Harvey still couldn't film his TikTok demo — the video's thumbnail kept
+disappearing and reappearing while he tried to interact with it. Asked
+for the piece to either not show at all, show a "still preparing"
+placeholder, or just stay in Processing longer until genuinely ready —
+which is exactly the right framing and matches the actual fix.
+
+**Root cause, confirmed against the live piece:** `714d2e6b-...` was
+sitting in `final_check` with `finalBuildStatus: 'done'` (fully built,
+playable) but `analysisStatus: 'pending'` (its transcription/matching
+job never finished). §115 only ever gated the Final Check transition on
+`finalBuildStatus` — analysis (triggered separately, right after
+upload) and the final-video build (triggered by "Send to final check")
+are two completely independent background jobs with no coordination
+between them. Since `maybeStartAnalysisPolling()` re-renders the whole
+board every 3s for as long as *either* job is pending, a piece could
+become fully interactive in Final Check while still being torn down and
+rebuilt on a timer underneath — tearing out the `<video>` element
+(losing playback state) mid-interaction, exactly what Harvey described.
+
+**Fix, `ops-service/server.js`:** a new `maybeAdvanceToFinalCheck(id)`
+only flips `stage` to `'final_check'` once **both** `finalBuildStatus
+=== 'done'` **and** `analysisStatus` is no longer `'pending'`/`'running'`
+(analysis failing is fine — only analysis still *in progress* blocks
+the move). Called from the completion of both jobs, in both their
+success and error paths — whichever job finishes second is the one
+that actually advances the stage. In the common case (analysis already
+resolved by the time Harvey finishes editing and clicks send, which is
+most of the time) this behaves identically to before, zero added delay.
+Also added `withAnalysisTimeout()` — a 90s server-side timeout wrapping
+the transcription and matching calls — so a genuinely hung analysis job
+(confirmed happening for real twice already this session, §146/§149)
+can't block a piece from ever reaching Final Check; it just resolves to
+`analysisStatus: 'error'` instead, which the gating already treats as
+"settled, safe to advance."
+
+**Client-side, `ops-service/public/app.js`:** a piece now sitting in
+Content Production with `finalBuildStatus: 'done'` but analysis still
+running gets a new, honest status line — "Final video ready — waiting
+on transcription/matching to finish before this moves to Final Check…"
+— instead of looking like nothing happened after clicking send.
+
+**Immediate relief, applied directly against the live piece Harvey was
+actively testing with** (`714d2e6b-...`) so he didn't have to wait for
+the redeploy: manually cleared its stuck `analysisStatus: 'pending'` to
+`'error'`, stopping the poller (and the flicker) for that piece right
+away. Its `platforms` currently still shows all four
+(`ytshort`/`tiktok`/`instagram`/`facebook`) — Harvey didn't flag that as
+wrong this specific time (he was focused on the flicker blocking him
+entirely), so this wasn't assumed to be a regression of §149's fix and
+wasn't touched; worth a real check next time he uploads fresh whether
+that fix is holding, since this piece's `createdAt` is after §149
+deployed.
+
+This is a `server.js`/`app.js` change (real backend logic), so per §93
+it triggers a full rebuild+restart on the next deploy — same standing
+caveat as every other backend change in this file, since this session
+is the headless agent running inside the container being restarted.
+Logged to the work log immediately before pushing.
+
+Verified via `node --check` on both touched files. **Not yet verified
+end-to-end against the live deployed service** — once it's back up,
+confirm with a genuinely fresh upload: the piece stays in Content
+Production (with the new "waiting on transcription/matching" status
+line) until analysis actually resolves, only *then* moves to Final
+Check, and the video plays/interacts cleanly with no flicker once
+there — and separately, whether §149's platform fix is holding on this
+same fresh upload.

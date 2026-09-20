@@ -510,6 +510,61 @@ function savePieceRecord(piece) {
   stmts.upsert.run('pieces', piece.id, JSON.stringify(piece), new Date().toISOString());
 }
 
+// Analysis (runVideoAnalysis, triggered right after upload) and the final
+// audio-splice build (runBuildFinalVideo, triggered by "Send to final
+// check") are two independent background jobs on the same piece, started
+// at different times, with no coordination between them. Before this,
+// runBuildFinalVideo alone decided when a piece reached Final Check — so
+// if Harvey clicked "Send to final check" before analysis had finished
+// (routine, since analysis/transcription genuinely takes real seconds and
+// he often moves faster than that), the piece became fully interactive
+// (playable video, real UI) in Final Check while analysis kept running
+// underneath it. The client's poller (maybeStartAnalysisPolling) has no
+// way to know a piece is "done enough to touch" vs. "still has a job
+// running" — it just re-renders the whole board every 3s for as long as
+// *either* job is pending, tearing down and rebuilding the <video> element
+// each time. That's what Harvey saw as the thumbnail/video repeatedly
+// vanishing and reappearing while he tried to interact with it — not a
+// stuck job this time (§146), a genuinely still-processing one that
+// simply hadn't been gated from view.
+//
+// Fix: a piece only ever reaches Final Check once *both* jobs have
+// settled — finalBuildStatus is 'done' AND analysisStatus is no longer
+// 'pending'/'running' (i.e. 'done' or 'error' — analysis failing doesn't
+// block Final Check, only analysis still being *in progress* does).
+// Called from the completion of both jobs, in both their success and
+// error paths, so whichever job finishes second is the one that actually
+// flips the stage — the common case (analysis already resolved by the
+// time Harvey finishes editing and clicks send) behaves exactly as
+// before, zero added delay.
+function maybeAdvanceToFinalCheck(id) {
+  const piece = getPieceRecord(id);
+  if (!piece) return;
+  if (piece.stage !== 'processed') return; // already moved on, or never got this far
+  if (piece.finalBuildStatus !== 'done') return;
+  if (piece.analysisStatus === 'pending' || piece.analysisStatus === 'running') return;
+  piece.stage = 'final_check';
+  piece.updatedAt = new Date().toISOString();
+  savePieceRecord(piece);
+}
+
+// A hung analysis job (transcription or the Claude Code matching call
+// never resolving — confirmed happening for real, not hypothetical, see
+// CLAUDE.md §146/§149) would otherwise block a piece from ever reaching
+// Final Check under the new gating above, even though the actual video
+// build succeeded. 90s is comfortably longer than any real transcription/
+// matching call observed so far, short enough that a genuine hang doesn't
+// leave Harvey wondering why a piece won't advance.
+const ANALYSIS_TIMEOUT_MS = 90 * 1000;
+function withAnalysisTimeout(promise) {
+  return Promise.race([
+    promise,
+    new Promise(function (_, reject) {
+      setTimeout(function () { reject(new Error('analysis timed out after ' + (ANALYSIS_TIMEOUT_MS / 1000) + 's')); }, ANALYSIS_TIMEOUT_MS);
+    })
+  ]);
+}
+
 async function runVideoAnalysis(id) {
   const piece = getPieceRecord(id);
   if (!piece) return; // deleted before analysis started — nothing to do
@@ -543,7 +598,7 @@ async function runVideoAnalysis(id) {
   try {
     const tmpDir = path.join(DATA_DIR, 'tmp');
     fs.mkdirSync(tmpDir, { recursive: true });
-    transcript = await videoAnalysis.transcribeVideo(videoPath, tmpDir);
+    transcript = await withAnalysisTimeout(videoAnalysis.transcribeVideo(videoPath, tmpDir));
   } catch (e) {
     console.error('video transcription failed for ' + id + ':', e.message);
   }
@@ -556,7 +611,7 @@ async function runVideoAnalysis(id) {
         const probe = (p.notesHtml || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
         return { id: p.id, seq: p.seq, title: p.title, notesSnippet: probe.slice(0, 400) };
       });
-    const result = await videoAnalysis.matchAndGenerateTitles(transcript, candidates);
+    const result = await withAnalysisTimeout(videoAnalysis.matchAndGenerateTitles(transcript, candidates));
 
     const latest = getPieceRecord(id);
     if (!latest) return; // deleted while this was running
@@ -567,6 +622,7 @@ async function runVideoAnalysis(id) {
     if (result.workingTitle) latest.title = result.workingTitle;
     latest.updatedAt = new Date().toISOString();
     savePieceRecord(latest);
+    maybeAdvanceToFinalCheck(id);
   } catch (e) {
     console.error('video title/outline matching failed for ' + id + ':', e.message);
     const latest = getPieceRecord(id);
@@ -576,6 +632,7 @@ async function runVideoAnalysis(id) {
     latest.analysisError = String(e.message || e).slice(0, 500);
     latest.updatedAt = new Date().toISOString();
     savePieceRecord(latest);
+    maybeAdvanceToFinalCheck(id);
   }
 }
 
@@ -626,9 +683,15 @@ async function runBuildFinalVideo(id) {
     const latest = getPieceRecord(id);
     if (!latest) return; // deleted while this was running
     latest.finalBuildStatus = 'done';
-    latest.stage = 'final_check';
+    // Stage only actually advances once analysis has also settled — see
+    // maybeAdvanceToFinalCheck's own comment. In the common case (analysis
+    // already finished by the time this build completes) this behaves
+    // exactly like the old unconditional `latest.stage = 'final_check'`
+    // did; it only actually holds back the transition when analysis is
+    // still genuinely in progress.
     latest.updatedAt = new Date().toISOString();
     savePieceRecord(latest);
+    maybeAdvanceToFinalCheck(id);
   } catch (e) {
     console.error('final video build failed for ' + id + ':', e.message);
     const latest = getPieceRecord(id);
