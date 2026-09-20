@@ -1,2 +1,32 @@
-ssh: connect to host 187.124.146.235 port 22: Connection timed out
-ssh exit code: 255
++ RUN_ARGS=(-d --name "$CONTAINER" --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-claude-home/claude-dir:/home/node/.claude -v /root/ops-service-claude-home/claude.json:/home/node/.claude.json -v "$DATA_DIR:/data" -v "$RUNTIME_REPO_DIR:/repo" -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file "$ENV_FILE")
++ cd /root/realitymanual-repo
+++ git status --porcelain
++ '[' -n '' ']'
++ git pull
+From https://github.com/harveymeale9/RealityManual
+   53cf464..33c3d71  main       -> origin/main
+Updating 53cf464..33c3d71
+Fast-forward
+ ops-service/.ci/last-run.log     | 109 +--------------------------------------
+ ops-service/public/reviewer.html |  12 +++++
+ ops-service/public/style.css     |   2 +-
+ 3 files changed, 15 insertions(+), 108 deletions(-)
+++ git rev-parse HEAD
++ NEW_HEAD=33c3d7107d02f1a027a2308c77f0199cecac5e8a
++ git -C /srv/realitymanual-repo pull
+Already up to date.
++ chown -R 1000:1000 /srv/realitymanual-repo
++ LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
+++ cat /root/ops-service-data/last-image-commit.txt
++ LAST_BUILD_COMMIT=ec78370208351dba9fc0da68819269cecdf1accb
++ NEEDS_REBUILD=1
++ '[' -n ec78370208351dba9fc0da68819269cecdf1accb ']'
++ git cat-file -e 'ec78370208351dba9fc0da68819269cecdf1accb^{commit}'
+++ git diff --name-only ec78370208351dba9fc0da68819269cecdf1accb 33c3d7107d02f1a027a2308c77f0199cecac5e8a -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -z '' ']'
++ NEEDS_REBUILD=0
++ '[' 0 = 0 ']'
++ echo 'no backend changes between ec78370208351dba9fc0da68819269cecdf1accb and 33c3d7107d02f1a027a2308c77f0199cecac5e8a — already live via git pull, skipping rebuild/restart'
+no backend changes between ec78370208351dba9fc0da68819269cecdf1accb and 33c3d7107d02f1a027a2308c77f0199cecac5e8a — already live via git pull, skipping rebuild/restart
++ exit 0
+ssh exit code: 0
