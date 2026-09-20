@@ -6589,3 +6589,75 @@ deliberate failure surfaces `tiktokPublishError` on the card rather than
 failing silently. Once both platforms are confirmed working for real,
 Harvey can record the TikTok demo video against this genuine sandbox
 integration.
+
+---
+
+# 140. Real Bug: Final Check Had Two Confusingly Similar Buttons — Neither Actually Published
+
+Harvey's first real test of §139's "Schedule Video" button failed
+silently in a specific, diagnosable way: the piece (#097,
+"verticalvideodemo") landed in the **Scheduled** kanban column instead
+of Posted/Live, nothing reached his TikTok account, the card showed all
+4 platforms despite him believing he'd narrowed it to TikTok only, and
+the normal kanban card showed no thumbnail at all.
+
+**Root cause, confirmed by pulling the piece's real stored record**
+(not guessed): `finalCheckCardHtml()` still rendered **two** buttons
+side by side — the old `fc-approve-btn` ("Approve → Scheduled", §111's
+pre-real-publish cadence-only approval) *and* the new `fcScheduleVideoHtml()`
+("Schedule Video", §137-139). Harvey clicked what he read as "the"
+schedule action; it happened to be the old one, which silently just
+sets `stage = 'scheduled'` via the internal cadence scheduler and
+touches no publish API at all — no error, no feedback, nothing to
+suggest the click did anything other than what he expected. That's
+exactly the piece's confirmed state: `stage: "scheduled"`,
+`scheduledAt` set, no `tiktokPublishStatus` field at all.
+
+Two buttons that both plausibly read as "make this go out" was the
+actual bug — not a wording problem to fix with a relabel. **Fix:** the
+old `fc-approve-btn`/"Approve → Scheduled" button and its click handler
+are removed entirely from the Final Check card. `fcScheduleVideoHtml()`'s
+"Schedule Video" is now the only action there, exactly matching
+Harvey's original §137 ask. `approveAndSchedule()` itself and its other
+two call sites (`setPieceStage`'s manual-drag safety net, the shared
+editor modal's own Approve button — unreachable for a Final Check piece
+in practice since §116 already removed all navigation into the modal
+from that card) were left alone; removing only what's actually
+reachable and actually caused this bug.
+
+**The 4-platforms display was not a bug** — pulled straight from the
+piece's real stored `platforms` array, which genuinely still held all
+4. Piece #097 predates Content Production's per-platform checkboxes
+(§128) reaching this specific piece's own edit window, and once a piece
+advances past the `processed` stage there is currently no UI anywhere
+to edit its platform tags — Final Check only ever displays them
+read-only (§116). Harvey's belief that he'd unchecked the other three
+for this piece doesn't match what's stored; most likely he unchecked
+them on a different, still-in-Production piece. Not fixed as a "bug"
+since there wasn't one in the code — flagging the real gap instead:
+there is currently no way to change a piece's tagged platforms once it
+reaches Final Check, which could be worth adding if this keeps causing
+confusion.
+
+**Thumbnail:** confirmed `piece.thumbnailDataUrl` genuinely exists on
+this piece (a real base64 JPEG) — `cardHtml()` (the normal, non-Final-
+Check kanban card) simply never rendered it, unlike `videoCardHtml()`
+(Posted grid) and the shared modal, which both already do. Added a
+`.card-thumb` (16:9, cropped, matching the visual weight of
+`.video-card-thumb`) shown at the top of any card that has one; a plain
+idea with no video/thumbnail renders exactly as before.
+
+**Piece #097 itself, fixed directly against the live data** (not just
+in code) so Harvey has something real to re-test: moved back to
+`stage: 'final_check'` (its `finalBuildStatus: 'done'` final-spliced
+video was still intact and never touched, so the card will render
+correctly), `scheduledAt` cleared, and `platforms` set to `['tiktok']`
+only, matching what Harvey actually said he wanted for this test.
+
+Frontend-only (`app.js`, `style.css`), so per §93 this is already live
+— no deploy/restart needed. The piece #097 data fix was applied
+directly via the live API (login → GET → PUT), separately from the code
+push. Verified via `node --check` and a CSS brace-balance check; not
+yet re-confirmed against the live deployed service that clicking the
+now-sole "Schedule Video" button on #097 actually reaches TikTok for
+real — that's the next thing to check once Harvey retries it.

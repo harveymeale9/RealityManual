@@ -1902,6 +1902,11 @@
           return '<select class="card-move" data-id="' + id + '">' + stageOpts + '</select>';
         })();
     var idBadge = typeof piece.seq === 'number' ? '<span class="card-id">#' + String(piece.seq).padStart(3, '0') + '</span>' : '';
+    // Plain ideas never have one; a video piece almost always does once
+    // it's past Processing (§128's auto-capture) — Harvey asked for this
+    // after noticing a normal (non-Final-Check) kanban card gave no
+    // visual hint at all of which video it actually was.
+    var thumbHtml = piece.thumbnailDataUrl ? '<div class="card-thumb"><img src="' + piece.thumbnailDataUrl + '" alt="" /></div>' : '';
     // Replaces the old "Thumbnail Selected" stage column — same auto-set
     // tags rendered as small chips wherever a video piece's card shows up
     // (this board and the upload list), see syncTags.
@@ -1914,6 +1919,7 @@
     return '' +
       '<div class="card' + (isAuto ? ' card-auto' : '') + (isAi ? ' card-ai' : '') + '" draggable="' + (isAuto ? 'false' : 'true') + '" data-id="' + id + '"' + (isAi ? ' title="Created by Claude Code"' : '') + '>' +
         (isAuto ? '' : '<span class="card-grip">⋮⋮</span>') +
+        thumbHtml +
         idBadge +
         '<div class="' + titleClass + '">' + titleHtml + '</div>' +
         '<div class="chip-row">' + chipHtml(piece) + '</div>' +
@@ -2045,8 +2051,19 @@
         titlesHtml +
         fcCaptionSectionHtml(id, piece, boardSettingsCache) +
         '<div class="chip-row">' + chipHtml(piece, { hideVideoChip: true }) + '</div>' +
+        // "Schedule Video" (below) is the one and only action on this
+        // card now — the old separate "Approve → Scheduled" button
+        // (§111's original cadence-only approval, pre-dating any real
+        // publish integration) used to sit right next to it, which
+        // caused a real, confirmed bug: Harvey clicked what he read as
+        // "the" schedule button and got the old one, which just flips
+        // the piece to the 'scheduled' stage via the cadence scheduler
+        // without publishing anything anywhere — no error, so nothing
+        // looked wrong until he checked TikTok and found nothing there.
+        // Removed outright rather than relabeled, since two buttons that
+        // both plausibly mean "make this go out" is the actual problem,
+        // not just their wording.
         '<div class="fc-actions">' +
-          '<button type="button" class="btn-primary fc-approve-btn" data-id="' + id + '">Approve → Scheduled</button>' +
           fcScheduleVideoHtml(id, piece) +
         '</div>' +
       '</div>';
@@ -2245,18 +2262,6 @@
       v.addEventListener('pause', syncPlayState);
       syncPlayState();
     });
-    board.querySelectorAll('.fc-approve-btn').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var p = pieces[btn.dataset.id];
-        if (!p) return;
-        btn.disabled = true;
-        btn.textContent = 'Approving…';
-        approveAndSchedule(p).then(function () {
-          return Store.put('pieces', p);
-        }).then(render);
-      });
-    });
-
     // Real YouTube publish — kicks off the background upload
     // (server.js's runYoutubePublish) and switches this one card into a
     // disabled "Publishing…" state without a full render(), matching the
