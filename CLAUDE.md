@@ -7266,3 +7266,62 @@ video, uncheck platforms down to one, wait long enough for at least one
 3s poll tick to fire (trivial — analysis always takes some time), then
 send to Final Check and confirm the platform selection survives all the
 way through this time.
+
+---
+
+# 150. Real Logo + Exact App Name, to Match Google's OAuth Branding Requirement
+
+Google's OAuth branding verification (§133/§136) came back with 4
+issues, all boiling down to one thing: the app name/logo on the OAuth
+consent screen (App name: "Reality Manual Content Studio") didn't match
+what Google's reviewer actually found on the homepage URL registered as
+the app's "Application home page" — which was still showing a split
+"The Reality Manual" / "Content Studio" wordmark and a plain inline SVG
+diamond outline, neither literally matching the single registered name
+or logo file. Google explicitly flags a generic, wordmark-less icon
+like that as failing to "uniquely identify your brand," separately from
+the mismatch itself.
+
+Harvey supplied the exact PNG he'd already uploaded to Google's OAuth
+Branding page (a solid green layered-diamond mark on black,
+1024×1024) — committed to `ops-service/public/img/logo.png`. Same file,
+used in both places asked for:
+
+- **`ops-service/public/youtube-app-review.html`** (the actual page
+  registered as Google's "Application home page" — the one that
+  actually matters for verification): nav mark swapped from the inline
+  SVG to `<img src="img/logo.png">`, and the name split across `.name`/
+  `.sub` ("The Reality Manual" / "Content Studio — internal team tool")
+  collapsed to a single `.name` reading exactly **"Reality Manual
+  Content Studio"** (matching the OAuth App name field verbatim), with
+  `.sub` now just "Internal team tool." `<title>` updated to match too.
+- **`ops-service/public/index.html`** (the internal control panel
+  itself — not what Google checks, but Harvey asked for the same
+  consistency here): the post-login header's `brand-mark`/`wordmark-sm`
+  got the same image + exact name treatment. The **login screen**
+  (what an unauthenticated visitor, or Google, would actually see if
+  they ever loaded this URL directly) previously had no logo image at
+  all and split "The Reality Manual" (small kicker) / "Control Panel"
+  (large heading) — added the logo image above the form and swapped the
+  roles so the large, primary heading now reads "Reality Manual Content
+  Studio" with "Control Panel" demoted to the small kicker above it, on
+  the theory that whatever's biggest/most prominent is what a reviewer
+  (or Harvey's own future self) reads as "the app name." `<title>` and
+  the footer line updated to match as well.
+
+Deliberately scoped to just these two files, per Harvey's own explicit
+list — didn't touch `privacy.html`/`terms.html`/`tiktok-app-review.html`
+or any of the small decorative diamond icons used elsewhere in the ops
+panel's own UI iconography (side-rail logo, group icons), which are
+ordinary interface icons, not "the app logo" in the sense Google's
+verification cares about.
+
+Frontend/static-only (`index.html`, `youtube-app-review.html`,
+`style.css`, plus the new image), so per §93 this deploys via the fast
+path — no Docker rebuild/restart, no interrupted session. Verified via
+a CSS brace-balance check and a rough HTML tag-balance check on both
+touched pages; not yet visually confirmed against the live deployed
+service — worth a look to confirm the logo renders correctly at both
+sizes (22px nav mark, 44px login logo) and the login screen's longer
+heading doesn't wrap awkwardly in the 360px card before resubmitting to
+Google for reverification.

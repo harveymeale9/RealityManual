@@ -132,6 +132,7 @@ a { color: var(--accent); }
   padding: 36px 30px;
   text-align: center;
 }
+.login-logo { width: 44px; height: 44px; margin: 0 auto 1rem; display: block; }
 
 .login-kicker {
   font-size: 0.72rem;
