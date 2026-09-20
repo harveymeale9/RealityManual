@@ -7397,3 +7397,87 @@ line) until analysis actually resolves, only *then* moves to Final
 Check, and the video plays/interacts cleanly with no flicker once
 there — and separately, whether §149's platform fix is holding on this
 same fresh upload.
+
+---
+
+# 152. Scoped Reviewer Login for Google's OAuth Verification Team (2026-09-20)
+
+Google's OAuth verification asked for credentials so reviewers could
+test the real connect flow themselves, not just watch the demo video.
+Harvey's real panel password would have handed them Project Manager (a
+live headless agent with real host SSH access, §88) and every piece of
+Content Ops planning data — explicitly not acceptable, so this needed a
+genuinely separate, narrowly-scoped credential, not just a UI that hides
+other tabs (which a reviewer with API access could trivially bypass).
+
+**`ops-service/server.js`:**
+- New `REVIEWER_PASSWORD` env var and a completely separate
+  `reviewer_sessions` table/cookie (`rm_reviewer_session`) — structurally
+  isolated from the real `sessions` table/`rm_session` cookie, so a
+  reviewer token can never be confused with or escalated into real admin
+  access.
+- `POST /api/reviewer-login`, `POST /api/reviewer-logout`,
+  `GET /api/reviewer-me` — mirror the main login routes exactly, just
+  against the new table/password.
+- `requireAuthOrReviewer` — accepts either a real admin session or a
+  reviewer session. Applied **only** to the four YouTube connect-flow
+  routes a reviewer actually needs: `GET /api/youtube/status`,
+  `GET /api/youtube/oauth/{start,callback}`, `POST /api/youtube/disconnect`.
+  Removed the old blanket `app.use('/api/youtube', requireAuth)` that
+  used to cover the whole path, replacing it with this per-route guard
+  on just those four.
+- **Real gap found and fixed while doing this:** `POST
+  /api/youtube/publish/:id` (the route that actually uploads a video to
+  the channel) had been relying on that same old blanket middleware.
+  Removing the blanket without checking would have left this route with
+  **zero auth at all** — anyone could have triggered a real publish.
+  Caught by grepping for every `/api/youtube/*` route before removing
+  the blanket rather than assuming the four connect-flow routes were the
+  only ones; fixed by explicitly adding `requireAuth` (admin-only, never
+  `requireAuthOrReviewer`) directly to this route, since actually
+  publishing is a consequential action a reviewer must never be able to
+  trigger, unlike just viewing/connecting the channel.
+- OAuth callback redirect target is now explicit, not guessed from which
+  cookies happen to be present (which could be ambiguous if a browser
+  holds both a real admin session and a reviewer session at once, e.g.
+  while testing this): `reviewer.html`'s Connect button passes
+  `?from=reviewer` to `/oauth/start`, which stores that choice in a
+  short-lived `yt_oauth_return` cookie the callback reads and clears,
+  redirecting to `/reviewer.html` or `/#settings` accordingly.
+- `/api/tiktok/*` and everything else (`/api/store`, `/api/files`,
+  `/api/voice`) are completely untouched — still gated by `requireAuth`
+  alone, no reviewer path exists for them at all.
+
+**`ops-service/public/reviewer.html`** (new) — a minimal standalone page,
+same pattern as `quick-add.html`: a login form posting to
+`/api/reviewer-login`, and once authenticated, **only** the YouTube
+connect/disconnect card (a small duplicated version of `app.js`'s
+`renderYoutubeConnectCard()`, kept separate rather than shared per this
+codebase's usual convention for small page-specific logic). No side-rail,
+no other tabs, no link to anything else in the panel — the page's own
+simplicity isn't the security boundary though, the server-side route
+gating above is; this page is just what a reviewer session is actually
+able to *do* something with.
+
+**Credential handling:** `REVIEWER_PASSWORD` is a freshly-generated
+app-level password (like the panel password Harvey picked for himself,
+§44/§62's precedent — not an external credential captured from another
+system), added directly to `ops-service/.env` on the VPS via SSH.
+
+This is a `server.js` change (real backend logic, plus route-level auth
+changes worth being especially careful about), so per §93 it triggers a
+full rebuild+restart on the next deploy — same standing caveat as every
+other backend change in this file, since this session is the headless
+agent running inside the container being restarted. Logged to the work
+log immediately before pushing.
+
+Verified via `node --check` and a manual re-grep of every `/api/youtube/*`
+route to confirm each one still has an explicit auth guard after removing
+the blanket middleware, plus an HTML tag-balance check on `reviewer.html`.
+**Not yet verified end-to-end against the live deployed service** — once
+it's back up, confirm: `reviewer.html` actually logs in with the new
+password, the Connect button reaches Google's real consent screen, the
+callback correctly redirects back to `/reviewer.html` (not `/#settings`)
+and shows "Connected as `<channel>`", and — just as important — that the
+reviewer session genuinely gets 401s from `/api/voice/*`, `/api/store/*`,
+and `/api/tiktok/*` rather than silently working.

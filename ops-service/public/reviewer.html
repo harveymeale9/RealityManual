@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Reality Manual Content Studio — Platform Reviewer Access</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    /* This page is deliberately NOT part of the main SPA (index.html) —
+       it's a separate, much more narrowly-scoped login for external
+       platform reviewers (Google/TikTok OAuth verification teams) who
+       need to click through a real connect flow themselves rather than
+       just watch a demo video. It only ever shows the one connect card
+       below — no side-rail, no other tabs, no access to Content Ops
+       data or Project Manager (the real agent with host access). See
+       CLAUDE.md's write-up on requireAuthOrReviewer in server.js for
+       the actual server-side isolation this relies on — this page's own
+       simplicity is not itself the security boundary, the separate
+       reviewer_sessions table + per-route guard is. */
+    body { display: flex; }
+    .rv-gate, .rv-app {
+      min-height: 100vh; width: 100%;
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .rv-card {
+      width: min(420px, 100%);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      padding: 36px 30px;
+      text-align: center;
+    }
+    .rv-logo { width: 72px; height: 72px; margin: 0 auto 1rem; display: block; }
+    .rv-kicker { font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 0.6rem; }
+    .rv-title { font-family: var(--font-display); font-weight: 500; font-size: 1.5rem; margin: 0 0 1.4rem; }
+    .rv-lede { color: var(--ink-soft); font-size: 0.9rem; line-height: 1.55; margin: 0 0 1.6rem; text-align: left; }
+    .rv-status { font-size: 0.92rem; color: var(--ink-soft); margin: 0 0 1.2rem; }
+    .rv-connect-btn { width: 100%; padding: 0.85rem; font-size: 1rem; }
+  </style>
+</head>
+<body>
+
+  <div id="authChecking" class="auth-checking"><div class="spinner" aria-hidden="true"></div></div>
+
+  <div id="loginGate" class="rv-gate" hidden>
+    <form id="loginForm" class="rv-card" autocomplete="off">
+      <img class="rv-logo" src="img/logo.png" alt="Reality Manual Content Studio logo" />
+      <div class="rv-kicker">Content Studio</div>
+      <h1 class="rv-title">Reviewer Access</h1>
+      <div class="field">
+        <label for="loginPassword">Password</label>
+        <input type="password" id="loginPassword" name="password" autocomplete="current-password" />
+      </div>
+      <button type="submit" class="btn-primary btn-block">Enter</button>
+      <p class="login-error" id="loginError" hidden>Incorrect password.</p>
+    </form>
+  </div>
+
+  <div id="reviewerApp" class="rv-app" hidden>
+    <div class="rv-card">
+      <img class="rv-logo" src="img/logo.png" alt="Reality Manual Content Studio logo" />
+      <div class="rv-kicker">Content Studio</div>
+      <h1 class="rv-title">YouTube Connection</h1>
+      <p class="rv-lede">
+        This is a restricted reviewer account — it can only view and
+        manage the YouTube connection below. It has no access to any
+        other part of Content Studio.
+      </p>
+      <p class="rv-status" id="youtubeConnectStatus">Checking status…</p>
+      <button type="button" class="btn-primary rv-connect-btn" id="youtubeConnectBtn" disabled>—</button>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var loginGate = document.getElementById('loginGate');
+      var loginForm = document.getElementById('loginForm');
+      var loginPassword = document.getElementById('loginPassword');
+      var loginError = document.getElementById('loginError');
+      var reviewerApp = document.getElementById('reviewerApp');
+      var authChecking = document.getElementById('authChecking');
+      var statusEl = document.getElementById('youtubeConnectStatus');
+      var btn = document.getElementById('youtubeConnectBtn');
+
+      function showApp() {
+        authChecking.hidden = true;
+        loginGate.hidden = true;
+        reviewerApp.hidden = false;
+        renderConnectCard();
+      }
+      function showLogin() {
+        authChecking.hidden = true;
+        reviewerApp.hidden = true;
+        loginGate.hidden = false;
+        setTimeout(function () { loginPassword.focus(); }, 50);
+      }
+
+      function checkSession() {
+        return fetch('/api/reviewer-me', { credentials: 'include' })
+          .then(function (r) { return r.ok; }).catch(function () { return false; });
+      }
+
+      loginForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        fetch('/api/reviewer-login', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: loginPassword.value })
+        }).then(function (r) { return r.ok; }).catch(function () { return false; })
+          .then(function (ok) {
+            if (ok) { loginError.hidden = true; loginForm.reset(); showApp(); }
+            else { loginError.hidden = false; loginPassword.value = ''; loginPassword.focus(); }
+          });
+      });
+
+      // Mirrors app.js's renderYoutubeConnectCard() — same shape, kept
+      // separate/duplicated rather than shared, since this page has no
+      // other dependency on that file and the logic is small (this
+      // codebase's established convention for small page-specific
+      // helpers, e.g. replyToSnippet() in the Project Manager pages).
+      function renderConnectCard() {
+        fetch('/api/youtube/status', { credentials: 'include' })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (s) {
+            if (!s) { statusEl.textContent = 'Status unavailable.'; btn.disabled = true; btn.textContent = '—'; return; }
+            if (!s.configured) {
+              statusEl.textContent = 'Not configured yet.';
+              btn.disabled = true;
+              btn.textContent = 'Connect';
+              return;
+            }
+            btn.disabled = false;
+            if (s.connected) {
+              statusEl.textContent = 'Connected as ' + (s.channelTitle || 'a YouTube channel') + '.';
+              btn.textContent = 'Disconnect';
+              btn.onclick = function () {
+                btn.disabled = true;
+                fetch('/api/youtube/disconnect', { method: 'POST', credentials: 'include' })
+                  .then(renderConnectCard);
+              };
+            } else {
+              statusEl.textContent = 'Not connected.';
+              btn.textContent = 'Connect';
+              // Real full-page navigation through Google's own consent
+              // screen — ?from=reviewer tells the server to send the
+              // browser back here (not the main app) once it's done.
+              btn.onclick = function () { window.location.href = '/api/youtube/oauth/start?from=reviewer'; };
+            }
+          })
+          .catch(function () { statusEl.textContent = 'Status unavailable.'; });
+      }
+
+      checkSession().then(function (ok) { if (ok) showApp(); else showLogin(); });
+    })();
+  </script>
+</body>
+</html>

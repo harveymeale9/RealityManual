@@ -21,6 +21,13 @@ const DB_PATH = path.join(DATA_DIR, 'db.sqlite');
 const WORK_LOG_PATH = path.join(DATA_DIR, 'work-log.md');
 const PORT = process.env.PORT || 4001;
 const PANEL_PASSWORD = process.env.PANEL_PASSWORD || 'ormiston';
+// A second, much more narrowly-scoped password for external reviewers
+// (Google's OAuth verification team, TikTok's, etc.) who need to actually
+// click through a real connect flow rather than just watch a demo video —
+// but must never get anywhere near Project Manager (a real agent with host
+// SSH access) or any of Harvey's own content/planning data. See
+// requireAuthOrReviewer below and public/reviewer.html.
+const REVIEWER_PASSWORD = process.env.REVIEWER_PASSWORD || '';
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://realitymanual.com,https://www.realitymanual.com')
   .split(',').map(function (s) { return s.trim(); }).filter(Boolean);
 
@@ -47,6 +54,14 @@ db.exec(
   ');' +
   'CREATE INDEX IF NOT EXISTS idx_records_store ON records(store_name);' +
   'CREATE TABLE IF NOT EXISTS sessions (' +
+  '  token TEXT PRIMARY KEY,' +
+  '  created_at TEXT NOT NULL,' +
+  '  expires_at TEXT NOT NULL' +
+  ');' +
+  // Deliberately a completely separate table from sessions above — a
+  // reviewer token must never be checkable against, or confusable with, a
+  // real admin session token. See REVIEWER_PASSWORD/requireAuthOrReviewer.
+  'CREATE TABLE IF NOT EXISTS reviewer_sessions (' +
   '  token TEXT PRIMARY KEY,' +
   '  created_at TEXT NOT NULL,' +
   '  expires_at TEXT NOT NULL' +
@@ -125,6 +140,10 @@ const stmts = {
   getSession: db.prepare('SELECT * FROM sessions WHERE token = ?'),
   delSession: db.prepare('DELETE FROM sessions WHERE token = ?'),
   purgeSessions: db.prepare('DELETE FROM sessions WHERE expires_at < ?'),
+  insertReviewerSession: db.prepare('INSERT INTO reviewer_sessions (token, created_at, expires_at) VALUES (?, ?, ?)'),
+  getReviewerSession: db.prepare('SELECT * FROM reviewer_sessions WHERE token = ?'),
+  delReviewerSession: db.prepare('DELETE FROM reviewer_sessions WHERE token = ?'),
+  purgeReviewerSessions: db.prepare('DELETE FROM reviewer_sessions WHERE expires_at < ?'),
   insertVoiceMessage: db.prepare('INSERT INTO voice_messages (id, mode, transcript, status, created_at, reply_to_id) VALUES (?, ?, ?, ?, ?, ?)'),
   setVoiceMessageStatus: db.prepare('UPDATE voice_messages SET status = ? WHERE id = ?'),
   setVoiceActivityLog: db.prepare('UPDATE voice_messages SET activity_log = ? WHERE id = ?'),
@@ -159,7 +178,10 @@ const stmts = {
   clearTiktokAuth: db.prepare('DELETE FROM tiktok_oauth WHERE id = 1')
 };
 
-setInterval(function () { stmts.purgeSessions.run(new Date().toISOString()); }, 60 * 60 * 1000);
+setInterval(function () {
+  stmts.purgeSessions.run(new Date().toISOString());
+  stmts.purgeReviewerSessions.run(new Date().toISOString());
+}, 60 * 60 * 1000);
 
 // --- App setup ---
 const app = express();
@@ -244,14 +266,73 @@ app.post('/api/logout', function (req, res) {
   res.json({ ok: true });
 });
 
-function requireAuth(req, res, next) {
-  const token = req.cookies && req.cookies.rm_session;
-  if (!token) return res.status(401).json({ error: 'unauthorized' });
-  const session = stmts.getSession.get(token);
-  if (!session || new Date(session.expires_at).getTime() < Date.now()) {
-    return res.status(401).json({ error: 'unauthorized' });
+// --- Reviewer login: a second, separate credential for external platform
+// reviewers (Google/TikTok OAuth verification teams) who need to click
+// through a real connect flow themselves, not just watch a demo video —
+// see public/reviewer.html. Deliberately its own table/cookie/password,
+// never overlapping with the main admin session in any way, so a reviewer
+// token can never be mistaken for (or escalated into) real admin access.
+app.post('/api/reviewer-login', function (req, res) {
+  const ip = req.ip || 'unknown';
+  if (isRateLimited(ip)) return res.status(429).json({ ok: false, error: 'too_many_attempts' });
+  const password = req.body && req.body.password;
+  if (!REVIEWER_PASSWORD || typeof password !== 'string' || password !== REVIEWER_PASSWORD) {
+    return res.status(401).json({ ok: false });
   }
+  const token = crypto.randomBytes(32).toString('hex');
+  const now = new Date();
+  const expires = new Date(now.getTime() + SESSION_TTL_MS);
+  stmts.insertReviewerSession.run(token, now.toISOString(), expires.toISOString());
+  res.cookie('rm_reviewer_session', token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: SESSION_TTL_MS
+  });
+  res.json({ ok: true });
+});
+
+app.post('/api/reviewer-logout', function (req, res) {
+  const token = req.cookies && req.cookies.rm_reviewer_session;
+  if (token) stmts.delReviewerSession.run(token);
+  res.clearCookie('rm_reviewer_session', { path: '/' });
+  res.json({ ok: true });
+});
+
+function hasValidSession(req) {
+  const token = req.cookies && req.cookies.rm_session;
+  if (!token) return false;
+  const session = stmts.getSession.get(token);
+  return !!(session && new Date(session.expires_at).getTime() >= Date.now());
+}
+function hasValidReviewerSession(req) {
+  const token = req.cookies && req.cookies.rm_reviewer_session;
+  if (!token) return false;
+  const session = stmts.getReviewerSession.get(token);
+  return !!(session && new Date(session.expires_at).getTime() >= Date.now());
+}
+
+function requireAuth(req, res, next) {
+  if (!hasValidSession(req)) return res.status(401).json({ error: 'unauthorized' });
   next();
+}
+
+app.get('/api/reviewer-me', function (req, res) {
+  if (!hasValidReviewerSession(req)) return res.status(401).json({ error: 'unauthorized' });
+  res.json({ ok: true });
+});
+
+// Accepts EITHER the real admin session OR a reviewer session — applied
+// only to the handful of YouTube connect-flow routes below that a reviewer
+// genuinely needs (status/start/callback/disconnect). Every other route
+// under /api/youtube, and everything under /api/store, /api/files,
+// /api/voice, /api/tiktok, stays gated by requireAuth alone — a reviewer
+// session can never reach Project Manager, Content Ops data, or anything
+// else in this panel.
+function requireAuthOrReviewer(req, res, next) {
+  if (hasValidSession(req) || hasValidReviewerSession(req)) return next();
+  res.status(401).json({ error: 'unauthorized' });
 }
 
 app.get('/api/me', requireAuth, function (req, res) { res.json({ ok: true }); });
@@ -261,7 +342,6 @@ app.get('/robots.txt', function (req, res) { res.type('text/plain').send('User-a
 app.use('/api/store', requireAuth);
 app.use('/api/files', requireAuth);
 app.use('/api/voice', requireAuth);
-app.use('/api/youtube', requireAuth);
 app.use('/api/tiktok', requireAuth);
 
 // --- YouTube OAuth (Google) — see src/youtubeAuth.js for the token
@@ -270,7 +350,7 @@ app.use('/api/tiktok', requireAuth);
 // them shortly), so /oauth/start correctly 500s with a clear message
 // until then rather than crashing — the "Connect YouTube" button in
 // Settings can exist and be clicked before the real credentials land.
-app.get('/api/youtube/status', function (req, res) {
+app.get('/api/youtube/status', requireAuthOrReviewer, function (req, res) {
   const row = stmts.getYoutubeAuth.get();
   res.json({
     configured: youtubeAuth.isConfigured(),
@@ -279,7 +359,7 @@ app.get('/api/youtube/status', function (req, res) {
   });
 });
 
-app.get('/api/youtube/oauth/start', function (req, res) {
+app.get('/api/youtube/oauth/start', requireAuthOrReviewer, function (req, res) {
   if (!youtubeAuth.isConfigured()) {
     return res.status(500).send('YouTube OAuth is not configured yet — missing YOUTUBE_OAUTH_CLIENT_ID / ' +
       'YOUTUBE_OAUTH_CLIENT_SECRET / YOUTUBE_OAUTH_REDIRECT_URI on the server. Ask Harvey for status.');
@@ -289,20 +369,29 @@ app.get('/api/youtube/oauth/start', function (req, res) {
   // standard OAuth state-parameter pattern, nothing app-specific.
   const state = crypto.randomBytes(16).toString('hex');
   res.cookie('yt_oauth_state', state, { httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 10 * 60 * 1000 });
+  // Where to send the browser back to once the callback below finishes —
+  // reviewer.html explicitly passes ?from=reviewer on its own Connect
+  // button so this doesn't have to guess from cookies (which could be
+  // ambiguous if the same browser happens to hold both a real admin
+  // session and a reviewer session at once, e.g. while testing this).
+  const returnTo = req.query.from === 'reviewer' ? 'reviewer' : 'admin';
+  res.cookie('yt_oauth_return', returnTo, { httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 10 * 60 * 1000 });
   res.redirect(youtubeAuth.buildAuthUrl(state));
 });
 
-app.get('/api/youtube/oauth/callback', function (req, res) {
+app.get('/api/youtube/oauth/callback', requireAuthOrReviewer, function (req, res) {
   if (!youtubeAuth.isConfigured()) {
     return res.status(500).send('YouTube OAuth is not configured yet.');
   }
   const expectedState = req.cookies && req.cookies.yt_oauth_state;
+  const returnTo = (req.cookies && req.cookies.yt_oauth_return === 'reviewer') ? '/reviewer.html' : '/#settings';
   res.clearCookie('yt_oauth_state', { path: '/' });
+  res.clearCookie('yt_oauth_return', { path: '/' });
   if (req.query.error) {
-    return res.redirect('/#settings');
+    return res.redirect(returnTo);
   }
   if (!req.query.state || req.query.state !== expectedState) {
-    return res.status(400).send('OAuth state did not match — please try connecting YouTube again from Content Settings.');
+    return res.status(400).send('OAuth state did not match — please try connecting YouTube again.');
   }
   Promise.resolve()
     .then(function () { return youtubeAuth.exchangeCode(req.query.code); })
@@ -319,14 +408,14 @@ app.get('/api/youtube/oauth/callback', function (req, res) {
         );
       });
     })
-    .then(function () { res.redirect('/#settings'); })
+    .then(function () { res.redirect(returnTo); })
     .catch(function (err) {
       console.error('YouTube OAuth callback failed:', err.message);
       res.status(500).send('YouTube connection failed: ' + err.message);
     });
 });
 
-app.post('/api/youtube/disconnect', function (req, res) {
+app.post('/api/youtube/disconnect', requireAuthOrReviewer, function (req, res) {
   stmts.clearYoutubeAuth.run();
   res.json({ ok: true });
 });
@@ -774,7 +863,14 @@ async function runYoutubePublish(id, opts) {
   }
 }
 
-app.post('/api/youtube/publish/:id', function (req, res) {
+// Deliberately requireAuth only, NOT requireAuthOrReviewer — actually
+// publishing a video is a real, consequential action a reviewer session
+// must never be able to trigger, unlike just connecting/viewing the
+// channel above. This route used to ride on the old blanket
+// `app.use('/api/youtube', requireAuth)`; now that that blanket is gone
+// (replaced by per-route requireAuthOrReviewer on the connect-flow routes
+// only), this needed its own explicit guard so it didn't end up with none.
+app.post('/api/youtube/publish/:id', requireAuth, function (req, res) {
   const { id } = req.params;
   if (!isValidId(id)) return res.status(400).json({ error: 'invalid_params' });
   const piece = getPieceRecord(id);
