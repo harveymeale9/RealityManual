@@ -7397,3 +7397,346 @@ line) until analysis actually resolves, only *then* moves to Final
 Check, and the video plays/interacts cleanly with no flicker once
 there — and separately, whether §149's platform fix is holding on this
 same fresh upload.
+
+---
+
+# 152. Scoped Reviewer Login for Google's OAuth Verification Team (2026-09-20)
+
+Google's OAuth verification asked for credentials so reviewers could
+test the real connect flow themselves, not just watch the demo video.
+Harvey's real panel password would have handed them Project Manager (a
+live headless agent with real host SSH access, §88) and every piece of
+Content Ops planning data — explicitly not acceptable, so this needed a
+genuinely separate, narrowly-scoped credential, not just a UI that hides
+other tabs (which a reviewer with API access could trivially bypass).
+
+**`ops-service/server.js`:**
+- New `REVIEWER_PASSWORD` env var and a completely separate
+  `reviewer_sessions` table/cookie (`rm_reviewer_session`) — structurally
+  isolated from the real `sessions` table/`rm_session` cookie, so a
+  reviewer token can never be confused with or escalated into real admin
+  access.
+- `POST /api/reviewer-login`, `POST /api/reviewer-logout`,
+  `GET /api/reviewer-me` — mirror the main login routes exactly, just
+  against the new table/password.
+- `requireAuthOrReviewer` — accepts either a real admin session or a
+  reviewer session. Applied **only** to the four YouTube connect-flow
+  routes a reviewer actually needs: `GET /api/youtube/status`,
+  `GET /api/youtube/oauth/{start,callback}`, `POST /api/youtube/disconnect`.
+  Removed the old blanket `app.use('/api/youtube', requireAuth)` that
+  used to cover the whole path, replacing it with this per-route guard
+  on just those four.
+- **Real gap found and fixed while doing this:** `POST
+  /api/youtube/publish/:id` (the route that actually uploads a video to
+  the channel) had been relying on that same old blanket middleware.
+  Removing the blanket without checking would have left this route with
+  **zero auth at all** — anyone could have triggered a real publish.
+  Caught by grepping for every `/api/youtube/*` route before removing
+  the blanket rather than assuming the four connect-flow routes were the
+  only ones; fixed by explicitly adding `requireAuth` (admin-only, never
+  `requireAuthOrReviewer`) directly to this route, since actually
+  publishing is a consequential action a reviewer must never be able to
+  trigger, unlike just viewing/connecting the channel.
+- OAuth callback redirect target is now explicit, not guessed from which
+  cookies happen to be present (which could be ambiguous if a browser
+  holds both a real admin session and a reviewer session at once, e.g.
+  while testing this): `reviewer.html`'s Connect button passes
+  `?from=reviewer` to `/oauth/start`, which stores that choice in a
+  short-lived `yt_oauth_return` cookie the callback reads and clears,
+  redirecting to `/reviewer.html` or `/#settings` accordingly.
+- `/api/tiktok/*` and everything else (`/api/store`, `/api/files`,
+  `/api/voice`) are completely untouched — still gated by `requireAuth`
+  alone, no reviewer path exists for them at all.
+
+**`ops-service/public/reviewer.html`** (new) — a minimal standalone page,
+same pattern as `quick-add.html`: a login form posting to
+`/api/reviewer-login`, and once authenticated, **only** the YouTube
+connect/disconnect card (a small duplicated version of `app.js`'s
+`renderYoutubeConnectCard()`, kept separate rather than shared per this
+codebase's usual convention for small page-specific logic). No side-rail,
+no other tabs, no link to anything else in the panel — the page's own
+simplicity isn't the security boundary though, the server-side route
+gating above is; this page is just what a reviewer session is actually
+able to *do* something with.
+
+**Credential handling:** `REVIEWER_PASSWORD` is a freshly-generated
+app-level password (like the panel password Harvey picked for himself,
+§44/§62's precedent — not an external credential captured from another
+system), added directly to `ops-service/.env` on the VPS via SSH.
+
+This is a `server.js` change (real backend logic, plus route-level auth
+changes worth being especially careful about), so per §93 it triggers a
+full rebuild+restart on the next deploy — same standing caveat as every
+other backend change in this file, since this session is the headless
+agent running inside the container being restarted. Logged to the work
+log immediately before pushing.
+
+Verified via `node --check` and a manual re-grep of every `/api/youtube/*`
+route to confirm each one still has an explicit auth guard after removing
+the blanket middleware, plus an HTML tag-balance check on `reviewer.html`.
+**Not yet verified end-to-end against the live deployed service** — once
+it's back up, confirm: `reviewer.html` actually logs in with the new
+password, the Connect button reaches Google's real consent screen, the
+callback correctly redirects back to `/reviewer.html` (not `/#settings`)
+and shows "Connected as `<channel>`", and — just as important — that the
+reviewer session genuinely gets 401s from `/api/voice/*`, `/api/store/*`,
+and `/api/tiktok/*` rather than silently working.
+
+---
+
+# 153. §152 Replaced: Google's Real Demo-Account Requirement Needs Hands-On Access, Not Just a Connect Button (2026-09-20)
+
+§152's narrow reviewer.html (YouTube connect/disconnect only) was built to
+satisfy the OAuth *sensitive-scope verification* review — but Harvey then
+hit a separate, stricter Google requirement for the **YouTube API
+Compliance Audit** (needed to unlock Public/Unlisted uploads, §128's own
+follow-up finding): *"Provide credentials with FULL access to all
+features, including premium/enterprise. The account should have sample
+data."* A connect-only page doesn't satisfy that — Google's reviewer
+needs to actually produce and publish a video through the real product.
+Harvey's explicit instruction: throw out the narrow page, give the
+reviewer password (`youtubeaccess`, set directly on the VPS) full access
+to Content Pipeline/Production/Settings on the *same* main panel, but
+never Project Manager or Analytics, never able to edit/delete Harvey's
+own existing pieces, and with every non-YouTube field disabled.
+
+**Session model, rebuilt:** `reviewer.html` and its dedicated
+`/api/reviewer-login`/`-logout`/`-me` endpoints are gone. The password now
+logs into the exact same login form as the admin password
+(`POST /api/login` tries `PANEL_PASSWORD` first, then `REVIEWER_PASSWORD`,
+and sets whichever session cookie matches) — `GET /api/me` returns
+`{ ok, role }`, and `lib/auth.js`'s `checkSession`/`checkPassword` now
+resolve to that whole object (still truthy, so nothing else needed to
+change) instead of a bare boolean. The two session tables/cookies from
+§152 (`sessions`/`rm_session` for admin, `reviewer_sessions`/
+`rm_reviewer_session` for the reviewer) are kept exactly as they were —
+still structurally separate, so a reviewer token still can never be
+confused with or escalated into a real admin one — just pointed at much
+more surface area now. `requireAuthOrReviewer` attaches `req.sessionRole`
+so every route below can tell which kind of session it's serving.
+
+**Server-side enforcement (the actual security boundary — everything in
+`app.js` below is UX only):**
+- `/api/store` and `/api/files` are no longer `requireAuth`-only; both
+  admit a reviewer session, with fine-grained checks inside each handler:
+  - `errors` store: fully forbidden for a reviewer (GET/PUT/DELETE), not
+    relevant to a YouTube demo and not something to hand an outside party.
+  - `settings`: **GET is redacted** — `redactSettingsForReviewer()` blanks
+    every `apiKeys.*` value before the response ever leaves the server
+    (Instagram/Facebook/transcription keys are real secrets stored in this
+    same JSON blob; client-side "disabled" alone would still have exposed
+    the raw value). **PUT is allowlist-merged**, not overwritten —
+    `mergeReviewerSettingsWrite()` only ever changes
+    `captions.shortform.ytshort` and `captions.longform.ytlong`; every
+    other field in the request body is ignored and the existing stored
+    value is kept, so a raw API call (not just the UI) can never touch
+    another platform's caption text or any API key.
+  - `audioTracks`: read allowed (a reviewer can pick from the existing
+    ambient library when producing its demo video), but PUT/POST/DELETE
+    (library management — add/remove tracks) is admin-only.
+  - `pieces`/`videos`: a reviewer can create freely (`createdBy` is
+    force-set to `'youtube-reviewer'` server-side regardless of what the
+    client sends, so it can never claim an existing record or disguise
+    its own as admin-authored), and can only edit/delete a record it
+    created itself — `pieceOwnedByReviewer()`/`ownerPieceIdFor()` resolve
+    a `videos` id (including the `-final` suffix) back to its owning
+    piece for this check. Reading any piece/video, including Harvey's
+    own, is unrestricted — the whole point is "view everything, edit only
+    what you made."
+- `/api/videos/:id/analyze` and `/api/videos/:id/build-final` (the
+  uploader pipeline) gained `requireAuthOrReviewer` + the same ownership
+  check. **These had no auth guard at all before this pass** — a real
+  pre-existing gap (anyone who knew a valid video id could have triggered
+  ffmpeg/transcription/Claude Code work against it), closed here as a
+  side effect of touching these routes for reviewer access, not a
+  design choice worth keeping.
+- `/api/youtube/publish/:id` changed from `requireAuth`-only (§152's
+  explicit "a reviewer must never publish" stance) to
+  `requireAuthOrReviewer` + ownership — Google's own requirement is that
+  the demo account can genuinely publish, which is a direct reversal of
+  §152's reasoning, made deliberately: a reviewer still can never publish
+  anything Harvey created, only its own piece.
+- `/api/tiktok/*` and `/api/voice/*` are untouched — still `requireAuth`
+  only, full stop, regardless of anything else. TikTok has nothing to do
+  with this account's purpose and Project Manager is the one surface that
+  must never be reachable by an outside credential under any
+  circumstance.
+- The `?from=reviewer`/`yt_oauth_return` cookie dance from §152 (routing
+  the OAuth callback back to `/reviewer.html`) is gone — both roles now
+  land on the same `/#settings` after connecting, since there's only one
+  page to land on anymore.
+
+**Client-side (`app.js`, `index.html`, `style.css`) — all cosmetic/UX,
+matching what the server already enforces, not a second source of
+truth:**
+- `IS_REVIEWER`/`CURRENT_ROLE` set once from the login/session-check
+  response. `body.role-reviewer` (toggled in `initApp()`) drives CSS that
+  hides Project Manager, the whole Analytics group, Quick Add, and the
+  mobile "back to Project Manager" button from every nav surface
+  (`renderTabs()` also drops those groups from the top strip directly).
+  `renderActiveTab()` bounces any hash outside
+  `content-ops`/`upload-files`/`settings` back to `content-ops` — catches
+  a stale bookmark or hand-edited URL, though the real gate is server-side
+  regardless.
+- `canEditPiece(p)` (true for admin always; true for a reviewer only when
+  `p.createdBy === 'youtube-reviewer'`) is threaded through every place a
+  piece can be changed: `cardHtml()` (draggable + stage-select disabled
+  for a foreign piece), `bindKanbanContextMenu()` (no right-click-delete
+  menu at all for one), `fcScheduleVideoHtml()` (Schedule Video disabled,
+  and even on an owned piece only ever offers YouTube — TikTok is never a
+  reviewer option, via a new `effectiveWiredPlatforms()`), and a new
+  `applyReviewerModalGate(p)` (called after `populateFields()` in both
+  `openPiece()`/`createDraft()`) that disables every field in the shared
+  editor modal — including, on the reviewer's *own* piece, every
+  non-YouTube platform checkbox — for anything it doesn't own. The modal's
+  DOM nodes are reused across opens, so this actively re-enables fields
+  too, not just disables them, or a previously-viewed read-only piece
+  would leave the next genuinely-editable one locked.
+- Content Production (`buildUploadRowHead`/`buildUploadRow`): a foreign
+  row is fully locked (frame picker, audio, titles, send button); an
+  owned row still has TikTok/Instagram/Facebook platform checkboxes
+  disabled, YouTube ones left enabled. `handleFiles()` pre-checks only
+  YouTube platforms for a reviewer's own fresh upload, instead of the
+  normal full 4-platform preset, since the others are disabled anyway.
+- Content Settings: TikTok's connect card shows "Not available for this
+  account" outright (its `/api/tiktok/status` fetch would just 401);
+  cadence inputs, the base-link field, every non-YouTube caption
+  textarea, the ambient-audio upload control and each track's Delete
+  button, and the two remaining API-key inputs are all disabled for a
+  reviewer — matching exactly what the server's allowlist/redaction
+  above actually accepts.
+
+**Credential:** `REVIEWER_PASSWORD=youtubeaccess`, set directly in
+`ops-service/.env` on the VPS via SSH (Harvey's own choice of password,
+matching this project's established "relaxed security, simple shared
+password" precedent for internal/demo credentials, §44/§62).
+
+This is a `server.js` change (real backend logic, route-level auth
+changes), so per §93 it triggers a full rebuild+restart on the next
+deploy — same standing caveat as every other backend change in this
+file, since this session is the headless agent running inside the
+container being restarted.
+
+---
+
+# 154. Real Bug: A Client's Own Stale Object Could Silently Revert Server-Computed Analysis Fields
+
+Found while investigating a fresh report of the exact §146/§149/§151
+symptom recurring — a real, unaudited-until-now video (`verticalvideodemo`,
+piece #100) stuck in Processing, `analysisStatus: 'pending'` forever
+despite its final (audio-spliced) video already having built
+successfully. This time root-caused directly against the live VPS docker
+logs rather than assumed to be the same already-fixed cause: the log
+showed `runVideoAnalysis` genuinely started and got past its first real
+step ("normalized video ... from hevc, to h264") — meaning
+`analysisStatus` really was written to `'running'` in the database at
+that point — but nothing else was ever logged for that piece again, and
+the stored value had reverted all the way back to `'pending'`, a value
+`runVideoAnalysis` itself never writes past its very first line.
+
+**Real root cause — a full-record overwrite with no protection for
+server-owned fields:** `PUT /api/store/pieces/:id` has always replaced
+the entire stored record with whatever the client's request body
+contains, no merge against what's actually in the database. The client's
+own `pieces[id]` object is a single shared in-memory value, and
+`maybeStartAnalysisPolling()`'s 3-second interval (§111/§142/§149) is
+what's supposed to keep that local copy in sync with what the server's
+background jobs have actually written — but there's a real window, from
+the instant a video is uploaded until that poller's first tick, during
+which the client's own copy is still whatever it set at creation
+(`analysisStatus: 'pending'`). Harvey picking an audio track or toggling
+a platform checkbox inside that window — completely ordinary, fast
+actions while testing/filming — fires its own `Store.put('pieces', p)`
+using that same stale object, and since the server just blindly replaces
+the whole record, it silently reverted whatever `runVideoAnalysis` had
+already written moments earlier. This is the write-side twin of the
+read-side bug §142 already fixed in the client's own poller (which
+stopped blindly replacing its local copy) — the server-side route had
+the identical class of bug all along, just never triggered in a way
+anyone had traced back this far before.
+
+**Fix, `ops-service/server.js`'s `PUT /api/store/:storeName/:id`:** for
+any update (not creation) to a `pieces` record with `hasVideo: true`, the
+current database value always wins for `analysisStatus`, `analysisError`,
+`analysisMatchedPieceId`, and `stage` — regardless of what the client's
+request body says — since none of these are ever legitimately set by a
+plain client edit once a video piece already exists (only by
+`runVideoAnalysis` itself, or by the client at creation time, when
+there's nothing yet to protect). Deliberately **not** applied to
+`finalBuildStatus`/`finalBuildError`, even though they're also
+server-written: the client legitimately sets `finalBuildStatus: 'pending'`
+itself on every "Send to final check" click, including a deliberate retry
+after a failure, and protecting that field would silently break the
+retry path instead of fixing anything.
+
+**Immediate relief, applied directly against the live piece** so Harvey
+didn't have to wait for the deploy: piece #100 (`a9d36e9a-...`) had its
+stuck `analysisStatus` set to `'error'` (with an honest explanation) and
+`stage` moved straight to `final_check` by hand — its final video was
+confirmed already built and untouched, so the card renders correctly.
+
+This is a `server.js` change, so per §93 it triggers a full
+rebuild+restart on the next deploy, bundled with §153's larger change
+above (both were in flight in the same session).
+
+Verified via `node --check`; the actual fix is reasoned from the log
+evidence (a full local repro of the race would need controlling exact
+request timing against a live upload) — worth confirming after this
+deploys that a fresh upload followed immediately by an audio-track pick
+or platform toggle no longer disturbs `analysisStatus`.
+
+---
+
+# 155. Content Production: Real Title Now Shown Everywhere, Not the Raw Filename; Video Chip Dropped From Normal Kanban Cards Too
+
+Two smaller fixes from the same round of feedback as §154's bug report.
+
+**Title.** Since §132 removed the "Full editor…" button from Content
+Production, there was no remaining way to edit `piece.title` itself for
+an in-production video — the row's own "Title" input (§131) only ever
+wrote to `ytTitles`, so every card/row showing `piece.title` (the normal
+kanban card, the Content Production row's own head) kept displaying the
+raw uploaded filename forever, no matter what Harvey typed. Fixed in
+`buildUploadRow()`'s title-input handler: once a real title's been
+typed, `piece.title` is set to match it (falling back to the
+filename-derived default only while the field is genuinely still
+empty), and `refreshHead()` — already called on every keystroke for the
+"titles selected" tag — now also updates the row's own visible title
+line for free.
+
+**Video chip.** `chipHtml()`'s "▶ video" chip is now hidden on every
+normal kanban card (`cardHtml()`), not just Final Check cards (§135
+already made that same call there — "theyre literally all videos").
+Every card that would show it already has a thumbnail image and an
+"Auto · <stage>" badge making it obviously a video; the chip was pure
+redundant noise once a video piece had progressed off ideation-stage
+manual cards.
+
+Frontend-only (`app.js`), so per §93 this is already live — no
+deploy/restart needed.
+
+---
+
+# 156. Voice/Chat App: TODO — Show Which Turns Ran on Subscription vs. API Usage
+
+Harvey asked, separately from everything else in this session, for the
+Project Manager (voice/chat) UI to make it "unmissable" which turns are
+running on his Claude subscription versus metered API credits. **Not yet
+built** — flagged here so it isn't lost, to be picked up as its own pass
+rather than folded into the reviewer-access/stuck-piece work above.
+
+What's known already: per §74, the headless runner authenticates via
+`CLAUDE_CODE_OAUTH_TOKEN` (Harvey's own subscription, generated via
+`claude setup-token`) — there is currently no `ANTHROPIC_API_KEY` path
+configured at all, so as things stand *every* Project Manager turn runs
+on the subscription, not a mix of the two. Worth confirming this is
+still true (nothing else in the container's env has changed that) before
+building any indicator — if only one auth mode is actually ever in play,
+the "unmissable" UI need might really be a one-line confirmation
+("Running on your Claude subscription") rather than a per-message
+badge distinguishing two modes that don't currently both exist. If a
+mix is ever introduced (e.g. a future fallback to a metered key), the
+`stream-json` event stream `claudeRunner.js` already parses would need
+to be checked for whether Claude Code's own CLI output actually
+surfaces which credential path a given turn used at all — this hasn't
+been researched yet.

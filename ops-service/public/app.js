@@ -4,6 +4,23 @@
   var Store = window.RMStore;
   var Auth = window.RMAuth;
 
+  // Set once login/session-check resolves (see showLogin/showApp wiring
+  // below). A youtube-reviewer session gets the exact same SPA, just with
+  // Project Manager/Analytics hidden and a strict "view everything, edit
+  // only what you created yourself" gate over Content Ops/Production/
+  // Settings — see every IS_REVIEWER check below. This is UX only; the
+  // real enforcement lives server-side (server.js's per-route ownership
+  // checks), so nothing here needs to be airtight against a user editing
+  // this script themselves.
+  var CURRENT_ROLE = 'admin';
+  var IS_REVIEWER = false;
+  var REVIEWER_ALLOWED_TABS = ['content-ops', 'upload-files', 'settings'];
+  function isOwnedByReviewer(p) { return !!(p && p.createdBy === 'youtube-reviewer'); }
+  // True for admin always; true for a reviewer only on a piece it made
+  // itself. Every place in this file that lets Harvey edit/delete/drag/
+  // publish a piece should gate on this, not just IS_REVIEWER alone.
+  function canEditPiece(p) { return !IS_REVIEWER || isOwnedByReviewer(p); }
+
   var UPLOADED_INDEX = window.RMStore.STAGES.map(function (s) { return s.id; }).indexOf('uploaded');
   var MANUAL_STAGE_IDS = window.RMStore.STAGES.slice(0, UPLOADED_INDEX + 1).map(function (s) { return s.id; });
   var AUTO_STAGE_IDS = window.RMStore.STAGES.slice(UPLOADED_INDEX + 1).map(function (s) { return s.id; });
@@ -85,8 +102,10 @@
 
   loginForm.addEventListener('submit', function (e) {
     e.preventDefault();
-    Auth.checkPassword(loginPassword.value).then(function (ok) {
-      if (ok) {
+    Auth.checkPassword(loginPassword.value).then(function (result) {
+      if (result) {
+        CURRENT_ROLE = result.role || 'admin';
+        IS_REVIEWER = CURRENT_ROLE === 'youtube-reviewer';
         loginError.hidden = true;
         loginForm.reset();
         showApp();
@@ -125,7 +144,8 @@
   // renderActiveTab to check against). Real <a href="#tab">, not a
   // <button>, so middle-click/ctrl+click "open in new tab" still works.
   function renderTabs() {
-    panelTabs.innerHTML = GROUPS.map(function (g) {
+    var groups = IS_REVIEWER ? GROUPS.filter(function (g) { return g.label === 'Content Ops'; }) : GROUPS;
+    panelTabs.innerHTML = groups.map(function (g) {
       var ids = g.tabs.map(function (t) { return t.id; });
       return '<a href="#' + ids[0] + '" class="panel-tab" data-tabs="' + ids.join(',') + '">' + g.label + '</a>';
     }).join('');
@@ -258,6 +278,16 @@
 
   function renderActiveTab() {
     var active = currentTabId();
+    // A reviewer session hand-editing the URL hash (or a stale bookmark
+    // to #project-manager/#website-analytics/etc.) gets bounced back to
+    // Content Pipeline rather than ever rendering a tab it shouldn't see —
+    // the real access control is server-side, but there's no reason to
+    // let the UI even try to render something it'll just get 401/403s
+    // back from anyway.
+    if (IS_REVIEWER && REVIEWER_ALLOWED_TABS.indexOf(active) === -1) {
+      location.hash = 'content-ops';
+      return;
+    }
     panelTabs.querySelectorAll('.panel-tab').forEach(function (btn) {
       var ids = (btn.dataset.tabs || '').split(',');
       btn.classList.toggle('active', ids.indexOf(active) !== -1);
@@ -293,11 +323,16 @@
   function initApp() {
     if (appInitialized) { renderActiveTab(); return; }
     appInitialized = true;
+    document.body.classList.toggle('role-reviewer', IS_REVIEWER);
+    if (IS_REVIEWER) {
+      var avatarBtn = document.getElementById('logoutBtn');
+      if (avatarBtn) { avatarBtn.textContent = 'R'; avatarBtn.title = 'Log out (Reviewer account)'; }
+    }
     renderTabs();
     bindSideRail();
     bootModal();
     window.addEventListener('hashchange', renderActiveTab);
-    if (!location.hash) location.hash = TABS[0].id;
+    if (!location.hash) location.hash = IS_REVIEWER ? 'content-ops' : TABS[0].id;
     renderActiveTab();
   }
 
@@ -1595,6 +1630,40 @@
     }
   }
 
+  // Called after populateFields() from both openPiece() and createDraft()
+  // below. For admin, or a reviewer viewing/editing something it created
+  // itself, this is a no-op — everything stays exactly as normal. For a
+  // reviewer viewing an existing piece it didn't create, it locks down
+  // every field (including non-YouTube platform checkboxes even on its
+  // own pieces) so nothing in the modal can silently attempt an edit the
+  // server would reject anyway. The modal's DOM nodes are reused across
+  // opens (bootModal() only builds them once), so this has to actively
+  // restore the editable state too, not just disable it — otherwise a
+  // previously-viewed read-only piece would leave every field disabled
+  // for the next, genuinely-editable one.
+  function applyReviewerModalGate(p) {
+    if (!IS_REVIEWER) return;
+    var editable = isOwnedByReviewer(p);
+    fieldTitle.disabled = !editable;
+    fieldStage.disabled = !editable;
+    fieldContentType.disabled = !editable;
+    fieldNotes.contentEditable = editable ? 'true' : 'false';
+    platformGrid.querySelectorAll('.platform-toggle').forEach(function (t) {
+      var isYoutube = t.dataset.platform === 'ytshort' || t.dataset.platform === 'ytlong';
+      t.querySelector('input').disabled = !editable || !isYoutube;
+    });
+    fieldTranscript.disabled = !editable;
+    fieldAudioTrack.disabled = !editable;
+    pickFrameBtn.disabled = !editable;
+    scrubRange.disabled = !editable;
+    captureFrameBtn.disabled = !editable;
+    fieldYtTitle1.disabled = !editable;
+    fieldYtTitle2.disabled = !editable;
+    fieldYtTitle3.disabled = !editable;
+    if (!editable) approveBtn.hidden = true;
+    btnDelete.hidden = !editable;
+  }
+
   function openPiece(id, closedCb) {
     activeId = id;
     isNewUnsaved = false;
@@ -1605,6 +1674,7 @@
     modalEyebrowText.textContent = 'Editing piece';
     showModalIdBadge(p);
     populateFields(p).then(function () {
+      applyReviewerModalGate(p);
       metaCreated.textContent = 'Created ' + fmtFull(p.createdAt);
       metaUpdated.textContent = 'Updated ' + fmtFull(p.updatedAt);
       showModal();
@@ -1629,6 +1699,10 @@
       createdAt: nowIso(),
       updatedAt: nowIso()
     };
+    // A reviewer session creating a brand-new idea/piece owns it outright —
+    // server.js forces this too on the first save regardless of what's
+    // sent, this just keeps the client's own view consistent immediately.
+    if (IS_REVIEWER) pieces[id].createdBy = 'youtube-reviewer';
     activeId = id;
     isNewUnsaved = true;
     onModalClosed = closedCb || null;
@@ -1636,6 +1710,7 @@
     modalEyebrowText.textContent = 'New piece';
     showModalIdBadge(pieces[id]);
     populateFields(pieces[id]);
+    applyReviewerModalGate(pieces[id]);
     metaCreated.textContent = 'Not yet saved';
     metaUpdated.textContent = '—';
     notifyPiecesChanged();
@@ -1909,13 +1984,19 @@
     var titleClass = title ? 'card-title' : 'card-title untitled';
     var isAuto = !!piece.hasVideo;
     var isAi = piece.createdBy === 'agent';
+    // A reviewer session can view any card but only drag/re-stage ones it
+    // created itself — draggable=false and a disabled stage-select cover
+    // both the drag-and-drop path and the dropdown path (see
+    // bindBoardEvents/openKanbanCtxMenu for the modal + right-click-delete
+    // gates on the same rule).
+    var canEdit = canEditPiece(piece);
     var moveControl = isAuto
       ? '<span class="auto-stage-badge">Auto · ' + stageLabelOf(piece.stage) + '</span>'
       : (function () {
           var stageOpts = Store.STAGES.filter(function (s) { return MANUAL_STAGE_IDS.indexOf(s.id) !== -1; }).map(function (s) {
             return '<option value="' + s.id + '"' + (s.id === piece.stage ? ' selected' : '') + '>' + s.label + '</option>';
           }).join('');
-          return '<select class="card-move" data-id="' + id + '">' + stageOpts + '</select>';
+          return '<select class="card-move" data-id="' + id + '"' + (canEdit ? '' : ' disabled') + '>' + stageOpts + '</select>';
         })();
     var idBadge = typeof piece.seq === 'number' ? '<span class="card-id">#' + String(piece.seq).padStart(3, '0') + '</span>' : '';
     // Plain ideas never have one; a video piece almost always does once
@@ -1933,12 +2014,17 @@
         }).join('') + '</div>'
       : '';
     return '' +
-      '<div class="card' + (isAuto ? ' card-auto' : '') + (isAi ? ' card-ai' : '') + '" draggable="' + (isAuto ? 'false' : 'true') + '" data-id="' + id + '"' + (isAi ? ' title="Created by Claude Code"' : '') + '>' +
+      '<div class="card' + (isAuto ? ' card-auto' : '') + (isAi ? ' card-ai' : '') + '" draggable="' + (isAuto || !canEdit ? 'false' : 'true') + '" data-id="' + id + '"' + (isAi ? ' title="Created by Claude Code"' : '') + '>' +
         (isAuto ? '' : '<span class="card-grip">⋮⋮</span>') +
         thumbHtml +
         idBadge +
         '<div class="' + titleClass + '">' + titleHtml + '</div>' +
-        '<div class="chip-row">' + chipHtml(piece) + '</div>' +
+        // Redundant on any video card — the thumbnail + "Auto · <stage>"
+        // badge already make it obvious this is a video, same reasoning
+        // §135 already applied to Final Check cards ("theyre literally
+        // all videos"); Harvey asked for this to be dropped everywhere,
+        // not just there.
+        '<div class="chip-row">' + chipHtml(piece, { hideVideoChip: true }) + '</div>' +
         tagsHtml +
         '<div class="card-foot">' +
           '<span class="card-time">' + fmtTime(piece.updatedAt) + '</span>' +
@@ -2094,6 +2180,11 @@
   // helpers right below) as other platforms get real integrations.
   var WIRED_PUBLISH_PLATFORMS = ['ytlong', 'tiktok'];
   var PUBLISH_PLATFORM_LABELS = { ytlong: 'YouTube', tiktok: 'TikTok' };
+  // A youtube-reviewer session only ever gets YouTube — TikTok has nothing
+  // to do with why this account exists, and server.js's /api/tiktok
+  // blanket rejects it outright anyway (401), so there's no point ever
+  // offering it here.
+  function effectiveWiredPlatforms() { return IS_REVIEWER ? ['ytlong'] : WIRED_PUBLISH_PLATFORMS; }
 
   function publishStatusFieldFor(platform) { return platform === 'ytlong' ? 'youtubePublishStatus' : 'tiktokPublishStatus'; }
   function publishErrorFieldFor(platform) { return platform === 'ytlong' ? 'youtubePublishError' : 'tiktokPublishError'; }
@@ -2117,9 +2208,16 @@
   // comment on runTiktokPublish in server.js) — fine for Harvey's actual
   // test plan (one platform per piece), not fine if that ever changes.
   function fcScheduleVideoHtml(id, piece) {
+    // A reviewer session can only ever schedule a piece it made itself —
+    // server.js enforces this too (real 403 on the publish routes), this
+    // just avoids offering a button that would fail.
+    if (!canEditPiece(piece)) {
+      return '<div class="fc-yt-publish"><button type="button" class="btn-secondary" disabled title="You can only publish a video you uploaded yourself">Schedule Video</button></div>';
+    }
+    var wiredPlatforms = effectiveWiredPlatforms();
     var platforms = piece.platforms || [];
-    var wired = platforms.filter(function (p) { return WIRED_PUBLISH_PLATFORMS.indexOf(p) !== -1; });
-    var unwired = platforms.filter(function (p) { return WIRED_PUBLISH_PLATFORMS.indexOf(p) === -1; });
+    var wired = platforms.filter(function (p) { return wiredPlatforms.indexOf(p) !== -1; });
+    var unwired = platforms.filter(function (p) { return wiredPlatforms.indexOf(p) === -1; });
 
     var anyPending = wired.some(function (p) {
       var s = piece[publishStatusFieldFor(p)];
@@ -2351,8 +2449,8 @@
       btn.addEventListener('click', function () {
         var id = btn.dataset.id;
         var p = pieces[id];
-        if (!p || btn.disabled) return;
-        var platforms = (p.platforms || []).filter(function (pl) { return WIRED_PUBLISH_PLATFORMS.indexOf(pl) !== -1; });
+        if (!p || btn.disabled || !canEditPiece(p)) return;
+        var platforms = (p.platforms || []).filter(function (pl) { return effectiveWiredPlatforms().indexOf(pl) !== -1; });
         if (!platforms.length) return;
         var wrap = btn.closest('.fc-yt-publish');
         var select = wrap ? wrap.querySelector('.fc-yt-privacy') : null;
@@ -2586,6 +2684,10 @@
       var cardEl = e.target.closest('.card, .final-check-card');
       if (!cardEl || !cardEl.dataset.id) return;
       e.preventDefault();
+      // No delete menu at all for a piece a reviewer session didn't
+      // create — right-clicking an existing idea just does nothing,
+      // rather than showing a menu whose Delete option would 403 anyway.
+      if (!canEditPiece(pieces[cardEl.dataset.id])) return;
       openKanbanCtxMenu(cardEl.dataset.id, e.clientX, e.clientY);
     });
   }
@@ -2833,6 +2935,7 @@
     typeRow.innerHTML = '<span class="chip format"><span class="dot" style="background:' + ct.color + '"></span>' + ct.label + '</span>';
     titleId.appendChild(typeRow);
 
+    var canEditRow = canEditPiece(p);
     var platformsRow = document.createElement('div');
     platformsRow.className = 'upload-row-platforms';
     (Store.PLATFORMS || []).forEach(function (pl) {
@@ -2842,6 +2945,11 @@
       var cb = document.createElement('input');
       cb.type = 'checkbox';
       cb.checked = checked;
+      // A reviewer session (even on its own piece) only ever gets to
+      // toggle the YouTube platforms — TikTok/Instagram/Facebook are
+      // disabled outright, per Harvey's "fields not relevant to youtube
+      // disabled" — and a piece it didn't create is locked entirely.
+      cb.disabled = !canEditRow || (IS_REVIEWER && pl.id !== 'ytshort' && pl.id !== 'ytlong');
       // Real bug Harvey hit (2026-09-20): a rapid burst of toggles each
       // fired its own immediate Store.put — since the server does a full-
       // record overwrite with no merge, and JSON.stringify(body) snapshots
@@ -2885,6 +2993,11 @@
     var row = document.createElement('div');
     row.className = 'upload-row';
     row.dataset.id = p.id;
+    // Whole row is locked (frame picker, audio, titles, send button) for
+    // a piece a reviewer session didn't upload itself — platform
+    // checkboxes are gated separately, inside buildUploadRowHead, since
+    // they're further restricted even on the reviewer's own rows.
+    var canEditRow = canEditPiece(p);
 
     var head = buildUploadRowHead(p);
     // Swaps the head for a freshly-built one reflecting p's current
@@ -2976,9 +3089,9 @@
     // "the button becomes usable" and "a frame is actually capturable"
     // are now driven by the identical signal.
     function setFrameControlsReady(ready) {
-      captureBtn.disabled = !ready;
+      captureBtn.disabled = !ready || !canEditRow;
       captureBtn.textContent = ready ? 'Use this frame' : 'Loading video…';
-      scrub.disabled = !ready;
+      scrub.disabled = !ready || !canEditRow;
     }
     setFrameControlsReady(videoEl.readyState >= 2);
     videoEl.addEventListener('loadeddata', function () { setFrameControlsReady(true); });
@@ -3012,6 +3125,7 @@
     audioSelect.innerHTML = '<option value="">Not yet chosen</option><option value="__none__">No ambient music</option>' +
       audioTracks.map(function (t) { return '<option value="' + t.id + '">' + escapeHtml(t.name) + '</option>'; }).join('');
     audioSelect.value = p.audioTrackId || '';
+    audioSelect.disabled = !canEditRow;
     audioSelect.addEventListener('change', function () {
       p.audioTrackId = audioSelect.value;
       p.updatedAt = nowIso();
@@ -3045,12 +3159,20 @@
       input.maxLength = 100;
       input.placeholder = isLongform ? ('Title option ' + (i + 1) + (i > 0 ? ' (optional)' : '')) : 'Title';
       input.value = (p.ytTitles || [])[i] || '';
+      input.disabled = !canEditRow;
       input.addEventListener('input', function () {
         var vals = titleInputs.map(function (el) { return el.value; }).filter(function (v) { return v.trim(); });
         p.ytTitles = vals;
+        // The kanban card (and everywhere else that shows piece.title)
+        // was still showing the raw uploaded filename forever, since this
+        // field only ever wrote to ytTitles — Harvey's ask: once a real
+        // title's been typed here, that's the title, not the filename.
+        // Falls back to the filename-derived title only while this is
+        // genuinely still empty.
+        if (vals[0]) p.title = vals[0];
         p.updatedAt = nowIso();
         syncTags(p);
-        refreshHead(); // just the "titles selected" tag — titleInputs itself is untouched, so typing focus is never disrupted
+        refreshHead(); // "titles selected" tag + the row's own title line
         saveSettingsDebouncedForPiece(p);
       });
       titlesSection.appendChild(input);
@@ -3064,6 +3186,7 @@
     sendBtn.type = 'button';
     sendBtn.className = 'btn-primary btn-tiny';
     sendBtn.textContent = 'Send to final check';
+    sendBtn.disabled = !canEditRow;
     sendBtn.addEventListener('click', function () {
       // Doesn't move the piece to Final Check itself — Harvey's rule:
       // Final Check's preview has to already be the *real* video (audio
@@ -3397,8 +3520,14 @@
           // default-checked, he just unchecks any that don't apply.
           // .slice() so editing this piece's array later can never
           // mutate the shared preset array itself.
-          platforms: (PLATFORM_PRESET_BY_TYPE[detectedType] || []).slice(),
+          // A reviewer session only ever gets YouTube platforms pre-
+          // checked — the others are disabled in the UI anyway (see
+          // buildUploadRowHead), so pre-checking them here would just be
+          // a confusing default nobody can act on.
+          platforms: (PLATFORM_PRESET_BY_TYPE[detectedType] || []).slice()
+            .filter(function (pl) { return !IS_REVIEWER || pl === 'ytshort' || pl === 'ytlong'; }),
           contentType: detectedType,
+          createdBy: IS_REVIEWER ? 'youtube-reviewer' : undefined,
           // Drives the frame-picker/thumbnail box orientation in the
           // upload row (see buildUploadRowHead/buildUploadRow) — read
           // straight from the real probed dimensions, independent of
@@ -3593,6 +3722,10 @@
     var statusEl = document.getElementById('tiktokConnectStatus');
     var btn = document.getElementById('tiktokConnectBtn');
     if (!statusEl || !btn) return;
+    // /api/tiktok/* is requireAuth-only, always (server.js) — a reviewer
+    // session would just get a 401 from the fetch below, so skip it and
+    // say so plainly instead of a generic "Status unavailable."
+    if (IS_REVIEWER) { statusEl.textContent = 'Not available for this account.'; btn.disabled = true; btn.textContent = 'N/A'; return; }
     fetch('/api/tiktok/status', { credentials: 'include' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (s) {
@@ -3641,10 +3774,11 @@
     var grid = document.getElementById('cadenceGrid');
     grid.innerHTML = CADENCE_ROWS.map(function (row) {
       var cfg = settingsCache.cadence[row.key];
+      var dis = IS_REVIEWER ? ' disabled' : '';
       return '<div class="cadence-row" data-key="' + row.key + '">' +
         '<span class="cadence-label">' + row.label + ' <span class="ink-faint">(' + row.hint + ')</span></span>' +
-        '<span class="cadence-inputs">1 every <input type="number" min="1" step="1" class="cadence-every" value="' + cfg.every + '" /> ' +
-        '<select class="cadence-unit"><option value="hours"' + (cfg.unit === 'hours' ? ' selected' : '') + '>hours</option><option value="days"' + (cfg.unit === 'days' ? ' selected' : '') + '>days</option></select></span>' +
+        '<span class="cadence-inputs">1 every <input type="number" min="1" step="1" class="cadence-every" value="' + cfg.every + '"' + dis + ' /> ' +
+        '<select class="cadence-unit"' + dis + '><option value="hours"' + (cfg.unit === 'hours' ? ' selected' : '') + '>hours</option><option value="days"' + (cfg.unit === 'days' ? ' selected' : '') + '>days</option></select></span>' +
       '</div>';
     }).join('');
     grid.querySelectorAll('.cadence-row').forEach(function (row) {
@@ -3705,7 +3839,11 @@
         return '<div class="audio-row" data-id="' + t.id + '">' +
           '<span class="audio-name">' + escapeHtml(t.name) + '</span>' +
           '<audio controls preload="none" src="' + url + '"></audio>' +
-          '<button type="button" class="link-btn audio-delete" data-id="' + t.id + '">Delete</button>' +
+          // Ambient-library management (add/remove tracks) is admin-only —
+          // a reviewer can still freely pick from existing tracks in
+          // Content Production's audio dropdown, just can't change the
+          // library itself.
+          (IS_REVIEWER ? '' : '<button type="button" class="link-btn audio-delete" data-id="' + t.id + '">Delete</button>') +
         '</div>';
       }).join('');
       list.querySelectorAll('.audio-delete').forEach(function (btn) {
@@ -3726,7 +3864,11 @@
     }).join('');
     KEY_FIELDS.forEach(function (f) {
       var input = document.getElementById('key-' + f.id);
+      // Redacted to '' server-side for a reviewer session regardless (see
+      // redactSettingsForReviewer in server.js) — disabling here too is
+      // just the matching UI treatment, not the actual protection.
       input.value = settingsCache.apiKeys[f.id] || '';
+      input.disabled = IS_REVIEWER;
       input.addEventListener('input', function () {
         settingsCache.apiKeys[f.id] = input.value;
         saveSettingsDebounced();
@@ -3752,6 +3894,11 @@
           var input = document.getElementById('caption-' + groupKey + '-' + o.key);
           if (!input) return;
           input.value = (settings.captions[groupKey] && settings.captions[groupKey][o.key]) || '';
+          // A reviewer session can only ever edit the two YouTube caption
+          // fields — server.js's mergeReviewerSettingsWrite ignores a
+          // write to any other field anyway (even via a raw API call),
+          // this is just the matching UI treatment.
+          input.disabled = IS_REVIEWER && o.key !== 'ytshort' && o.key !== 'ytlong';
           input.addEventListener('input', function () {
             settingsCache.captions[groupKey][o.key] = input.value;
             saveSettingsDebounced();
@@ -3775,6 +3922,7 @@
 
       var baseLinkInput = document.getElementById('baseLinkInput');
       baseLinkInput.value = settings.baseLinkUrl || '';
+      baseLinkInput.disabled = IS_REVIEWER;
       baseLinkInput.addEventListener('input', function () {
         settingsCache.baseLinkUrl = baseLinkInput.value;
         saveSettingsDebounced();
@@ -3789,6 +3937,11 @@
       // refreshes once every upload has genuinely finished.
       var audioUpload = document.getElementById('audioUpload');
       var audioUploadProgressEl = document.getElementById('audioUploadProgress');
+      // Ambient-library management is admin-only (server.js rejects a
+      // reviewer session's upload outright, matching the Delete-button
+      // hide above) — disabling the file input here also stops its
+      // wrapping <label> from opening the file picker on click.
+      audioUpload.disabled = IS_REVIEWER;
       audioUpload.addEventListener('change', function () {
         var files = Array.prototype.slice.call(audioUpload.files);
         audioUpload.value = '';
@@ -3829,5 +3982,13 @@
   // right after the login form wiring) crashes on any visit where the
   // session check below resolves true, since showApp() renders a tab
   // immediately using markup that doesn't exist yet.
-  Auth.checkSession().then(function (ok) { if (ok) showApp(); else showLogin(); });
+  Auth.checkSession().then(function (result) {
+    if (result) {
+      CURRENT_ROLE = result.role || 'admin';
+      IS_REVIEWER = CURRENT_ROLE === 'youtube-reviewer';
+      showApp();
+    } else {
+      showLogin();
+    }
+  });
 })();

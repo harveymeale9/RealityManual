@@ -21,6 +21,22 @@ const DB_PATH = path.join(DATA_DIR, 'db.sqlite');
 const WORK_LOG_PATH = path.join(DATA_DIR, 'work-log.md');
 const PORT = process.env.PORT || 4001;
 const PANEL_PASSWORD = process.env.PANEL_PASSWORD || 'ormiston';
+// A second, much more narrowly-scoped password — for Google's YouTube API
+// Compliance Audit reviewers, who (per Google's own requirement) need a
+// demo account with genuine hands-on access to the actual product, not
+// just a demo video. Logs into the *same* main control panel
+// (ops.realitymanual.com), but the session this password grants is
+// structurally separate from a real admin session (its own table/cookie,
+// see reviewer_sessions/rm_reviewer_session below) and is restricted,
+// route by route and field by field, to exactly the Content Ops surface
+// relevant to producing and publishing a YouTube video: Content Pipeline
+// (read-only for anything they didn't create themselves), Content
+// Production, and Content Settings (YouTube fields only — TikTok/
+// Instagram/Facebook/transcription fields are disabled client-side and
+// redacted/write-blocked server-side). Never reaches Project Manager (a
+// real agent with host SSH access) or TikTok. See requireAuthOrReviewer
+// and every `req.sessionRole === 'youtube-reviewer'` check below.
+const REVIEWER_PASSWORD = process.env.REVIEWER_PASSWORD || '';
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://realitymanual.com,https://www.realitymanual.com')
   .split(',').map(function (s) { return s.trim(); }).filter(Boolean);
 
@@ -47,6 +63,17 @@ db.exec(
   ');' +
   'CREATE INDEX IF NOT EXISTS idx_records_store ON records(store_name);' +
   'CREATE TABLE IF NOT EXISTS sessions (' +
+  '  token TEXT PRIMARY KEY,' +
+  '  created_at TEXT NOT NULL,' +
+  '  expires_at TEXT NOT NULL' +
+  ');' +
+  // Deliberately a completely separate table from sessions above — a
+  // reviewer token must never be checkable against, or confusable with, a
+  // real admin session token, even though (unlike the first version of
+  // this table) it now grants access to real product surface, not just a
+  // handful of YouTube-connect routes. See REVIEWER_PASSWORD/
+  // requireAuthOrReviewer.
+  'CREATE TABLE IF NOT EXISTS reviewer_sessions (' +
   '  token TEXT PRIMARY KEY,' +
   '  created_at TEXT NOT NULL,' +
   '  expires_at TEXT NOT NULL' +
@@ -125,6 +152,10 @@ const stmts = {
   getSession: db.prepare('SELECT * FROM sessions WHERE token = ?'),
   delSession: db.prepare('DELETE FROM sessions WHERE token = ?'),
   purgeSessions: db.prepare('DELETE FROM sessions WHERE expires_at < ?'),
+  insertReviewerSession: db.prepare('INSERT INTO reviewer_sessions (token, created_at, expires_at) VALUES (?, ?, ?)'),
+  getReviewerSession: db.prepare('SELECT * FROM reviewer_sessions WHERE token = ?'),
+  delReviewerSession: db.prepare('DELETE FROM reviewer_sessions WHERE token = ?'),
+  purgeReviewerSessions: db.prepare('DELETE FROM reviewer_sessions WHERE expires_at < ?'),
   insertVoiceMessage: db.prepare('INSERT INTO voice_messages (id, mode, transcript, status, created_at, reply_to_id) VALUES (?, ?, ?, ?, ?, ?)'),
   setVoiceMessageStatus: db.prepare('UPDATE voice_messages SET status = ? WHERE id = ?'),
   setVoiceActivityLog: db.prepare('UPDATE voice_messages SET activity_log = ? WHERE id = ?'),
@@ -159,7 +190,10 @@ const stmts = {
   clearTiktokAuth: db.prepare('DELETE FROM tiktok_oauth WHERE id = 1')
 };
 
-setInterval(function () { stmts.purgeSessions.run(new Date().toISOString()); }, 60 * 60 * 1000);
+setInterval(function () {
+  stmts.purgeSessions.run(new Date().toISOString());
+  stmts.purgeReviewerSessions.run(new Date().toISOString());
+}, 60 * 60 * 1000);
 
 // --- App setup ---
 const app = express();
@@ -216,52 +250,103 @@ function isRateLimited(ip) {
   return rec.count > 10;
 }
 
+// A single login endpoint handling both credentials — the reviewer logs
+// into the exact same ops.realitymanual.com the admin does, not a separate
+// page, so which session type they get is decided purely by which
+// password matched. Whichever branch matches wins outright rather than
+// falling through, so the two passwords can never both apply to the same
+// login attempt.
 app.post('/api/login', function (req, res) {
   const ip = req.ip || 'unknown';
   if (isRateLimited(ip)) return res.status(429).json({ ok: false, error: 'too_many_attempts' });
   const password = req.body && req.body.password;
-  if (typeof password !== 'string' || password !== PANEL_PASSWORD) {
-    return res.status(401).json({ ok: false });
-  }
-  const token = crypto.randomBytes(32).toString('hex');
+  if (typeof password !== 'string') return res.status(401).json({ ok: false });
   const now = new Date();
   const expires = new Date(now.getTime() + SESSION_TTL_MS);
-  stmts.insertSession.run(token, now.toISOString(), expires.toISOString());
-  res.cookie('rm_session', token, {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: SESSION_TTL_MS
-  });
-  res.json({ ok: true });
+  if (password === PANEL_PASSWORD) {
+    const token = crypto.randomBytes(32).toString('hex');
+    stmts.insertSession.run(token, now.toISOString(), expires.toISOString());
+    res.cookie('rm_session', token, { httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: SESSION_TTL_MS });
+    return res.json({ ok: true, role: 'admin' });
+  }
+  if (REVIEWER_PASSWORD && password === REVIEWER_PASSWORD) {
+    const token = crypto.randomBytes(32).toString('hex');
+    stmts.insertReviewerSession.run(token, now.toISOString(), expires.toISOString());
+    res.cookie('rm_reviewer_session', token, { httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: SESSION_TTL_MS });
+    return res.json({ ok: true, role: 'youtube-reviewer' });
+  }
+  res.status(401).json({ ok: false });
 });
 
+// Clears whichever session cookie(s) are actually present — a browser
+// only ever holds one in practice, but clearing both is harmless and
+// avoids needing the client to know which kind of session it has.
 app.post('/api/logout', function (req, res) {
   const token = req.cookies && req.cookies.rm_session;
   if (token) stmts.delSession.run(token);
   res.clearCookie('rm_session', { path: '/' });
+  const reviewerToken = req.cookies && req.cookies.rm_reviewer_session;
+  if (reviewerToken) stmts.delReviewerSession.run(reviewerToken);
+  res.clearCookie('rm_reviewer_session', { path: '/' });
   res.json({ ok: true });
 });
 
-function requireAuth(req, res, next) {
+function hasValidSession(req) {
   const token = req.cookies && req.cookies.rm_session;
-  if (!token) return res.status(401).json({ error: 'unauthorized' });
+  if (!token) return false;
   const session = stmts.getSession.get(token);
-  if (!session || new Date(session.expires_at).getTime() < Date.now()) {
-    return res.status(401).json({ error: 'unauthorized' });
-  }
+  return !!(session && new Date(session.expires_at).getTime() >= Date.now());
+}
+function hasValidReviewerSession(req) {
+  const token = req.cookies && req.cookies.rm_reviewer_session;
+  if (!token) return false;
+  const session = stmts.getReviewerSession.get(token);
+  return !!(session && new Date(session.expires_at).getTime() >= Date.now());
+}
+function getSessionRole(req) {
+  if (hasValidSession(req)) return 'admin';
+  if (hasValidReviewerSession(req)) return 'youtube-reviewer';
+  return null;
+}
+
+function requireAuth(req, res, next) {
+  if (!hasValidSession(req)) return res.status(401).json({ error: 'unauthorized' });
+  req.sessionRole = 'admin';
   next();
 }
 
-app.get('/api/me', requireAuth, function (req, res) { res.json({ ok: true }); });
+// Accepts EITHER a real admin session OR a reviewer session, and attaches
+// req.sessionRole so downstream route handlers can tell which — used on
+// every route a reviewer might legitimately reach (Content Ops/Production/
+// Settings data, the uploader pipeline, YouTube connect+publish). Routes
+// that never check req.sessionRole and just call next() are implicitly
+// admin-only in effect for anything reviewer-sensitive, but the real
+// enforcement for pieces/settings/videos ownership happens inside each
+// handler below, not just at this gate — a reviewer session reaching a
+// route is necessary, not sufficient, for it to be allowed to act.
+function requireAuthOrReviewer(req, res, next) {
+  const role = getSessionRole(req);
+  if (!role) return res.status(401).json({ error: 'unauthorized' });
+  req.sessionRole = role;
+  next();
+}
+
+app.get('/api/me', function (req, res) {
+  const role = getSessionRole(req);
+  if (!role) return res.status(401).json({ error: 'unauthorized' });
+  res.json({ ok: true, role: role });
+});
 app.get('/api/health', function (req, res) { res.json({ ok: true }); });
 app.get('/robots.txt', function (req, res) { res.type('text/plain').send('User-agent: *\nDisallow: /\n'); });
 
-app.use('/api/store', requireAuth);
-app.use('/api/files', requireAuth);
+// /api/store and /api/files now admit a reviewer session too — the fine-
+// grained ownership/field checks are inside each route handler below, not
+// just this gate. /api/voice (Project Manager) and /api/tiktok stay
+// requireAuth-only, full stop — a reviewer session can never reach either,
+// regardless of anything else.
+app.use('/api/store', requireAuthOrReviewer);
+app.use('/api/files', requireAuthOrReviewer);
 app.use('/api/voice', requireAuth);
-app.use('/api/youtube', requireAuth);
 app.use('/api/tiktok', requireAuth);
 
 // --- YouTube OAuth (Google) — see src/youtubeAuth.js for the token
@@ -270,7 +355,7 @@ app.use('/api/tiktok', requireAuth);
 // them shortly), so /oauth/start correctly 500s with a clear message
 // until then rather than crashing — the "Connect YouTube" button in
 // Settings can exist and be clicked before the real credentials land.
-app.get('/api/youtube/status', function (req, res) {
+app.get('/api/youtube/status', requireAuthOrReviewer, function (req, res) {
   const row = stmts.getYoutubeAuth.get();
   res.json({
     configured: youtubeAuth.isConfigured(),
@@ -279,7 +364,7 @@ app.get('/api/youtube/status', function (req, res) {
   });
 });
 
-app.get('/api/youtube/oauth/start', function (req, res) {
+app.get('/api/youtube/oauth/start', requireAuthOrReviewer, function (req, res) {
   if (!youtubeAuth.isConfigured()) {
     return res.status(500).send('YouTube OAuth is not configured yet — missing YOUTUBE_OAUTH_CLIENT_ID / ' +
       'YOUTUBE_OAUTH_CLIENT_SECRET / YOUTUBE_OAUTH_REDIRECT_URI on the server. Ask Harvey for status.');
@@ -292,17 +377,21 @@ app.get('/api/youtube/oauth/start', function (req, res) {
   res.redirect(youtubeAuth.buildAuthUrl(state));
 });
 
-app.get('/api/youtube/oauth/callback', function (req, res) {
+// Both an admin and a reviewer session land back on the same main panel
+// (#settings) once this finishes — there's no separate reviewer page to
+// route back to anymore (see CLAUDE.md on why reviewer.html was retired).
+app.get('/api/youtube/oauth/callback', requireAuthOrReviewer, function (req, res) {
   if (!youtubeAuth.isConfigured()) {
     return res.status(500).send('YouTube OAuth is not configured yet.');
   }
   const expectedState = req.cookies && req.cookies.yt_oauth_state;
+  const returnTo = '/#settings';
   res.clearCookie('yt_oauth_state', { path: '/' });
   if (req.query.error) {
-    return res.redirect('/#settings');
+    return res.redirect(returnTo);
   }
   if (!req.query.state || req.query.state !== expectedState) {
-    return res.status(400).send('OAuth state did not match — please try connecting YouTube again from Content Settings.');
+    return res.status(400).send('OAuth state did not match — please try connecting YouTube again.');
   }
   Promise.resolve()
     .then(function () { return youtubeAuth.exchangeCode(req.query.code); })
@@ -319,14 +408,14 @@ app.get('/api/youtube/oauth/callback', function (req, res) {
         );
       });
     })
-    .then(function () { res.redirect('/#settings'); })
+    .then(function () { res.redirect(returnTo); })
     .catch(function (err) {
       console.error('YouTube OAuth callback failed:', err.message);
       res.status(500).send('YouTube connection failed: ' + err.message);
     });
 });
 
-app.post('/api/youtube/disconnect', function (req, res) {
+app.post('/api/youtube/disconnect', requireAuthOrReviewer, function (req, res) {
   stmts.clearYoutubeAuth.run();
   res.json({ ok: true });
 });
@@ -420,24 +509,151 @@ async function getValidYoutubeAccessToken() {
   return tokens.access_token;
 }
 
+// --- Reviewer access control for /api/store and /api/files. A reviewer
+// session (see requireAuthOrReviewer/req.sessionRole) can read broadly —
+// nothing in `pieces`/`videos`/`audioTracks` is secret — but writes are
+// restricted piece-by-piece to whatever it created itself, `errors` is
+// off-limits entirely (internal error detail, not relevant to a YouTube
+// demo), `audioTracks` writes are admin-only (ambient library management,
+// not something a reviewer needs to do — they can still pick from
+// existing tracks), and `settings` writes are merged through an allowlist
+// so a raw API call can never touch another platform's real caption text
+// or API keys even though the UI already disables those fields for
+// exactly this reason.
+const REVIEWER_FORBIDDEN_STORES = ['errors'];
+// Only these exact dotted paths inside the shared `settings` record can be
+// changed by a reviewer session's PUT — everything else in the request
+// body is silently ignored (the existing value is kept), not merged in.
+const REVIEWER_SETTINGS_WRITE_PATHS = [
+  ['captions', 'shortform', 'ytshort'],
+  ['captions', 'longform', 'ytlong']
+];
+function redactSettingsForReviewer(settings) {
+  const out = JSON.parse(JSON.stringify(settings || {}));
+  if (out.apiKeys && typeof out.apiKeys === 'object') {
+    Object.keys(out.apiKeys).forEach(function (k) { out.apiKeys[k] = ''; });
+  }
+  return out;
+}
+function mergeReviewerSettingsWrite(existing, incoming) {
+  const merged = JSON.parse(JSON.stringify(existing || {}));
+  REVIEWER_SETTINGS_WRITE_PATHS.forEach(function (segPath) {
+    let src = incoming;
+    for (let i = 0; i < segPath.length && src && typeof src === 'object'; i++) src = src[segPath[i]];
+    if (typeof src !== 'string') return;
+    let dst = merged;
+    for (let i = 0; i < segPath.length - 1; i++) {
+      if (!dst[segPath[i]] || typeof dst[segPath[i]] !== 'object') dst[segPath[i]] = {};
+      dst = dst[segPath[i]];
+    }
+    dst[segPath[segPath.length - 1]] = src;
+  });
+  return merged;
+}
+// videos/audioTracks records are keyed by the same id as their owning
+// piece (final-build files use "<pieceId>-final") — this resolves either
+// back to the piece id so ownership can be checked against it.
+function ownerPieceIdFor(storeName, id) {
+  return storeName === 'videos' ? id.replace(/-final$/, '') : id;
+}
+function pieceOwnedByReviewer(pieceId) {
+  const row = stmts.getOne.get('pieces', pieceId);
+  if (!row) return true; // doesn't exist yet — nothing to protect, creation is allowed
+  const piece = JSON.parse(row.data);
+  return piece.createdBy === 'youtube-reviewer';
+}
+
 app.get('/api/store/:storeName', function (req, res) {
   if (!isValidStore(req.params.storeName)) return res.status(400).json({ error: 'invalid_store' });
+  if (req.sessionRole === 'youtube-reviewer' && REVIEWER_FORBIDDEN_STORES.indexOf(req.params.storeName) !== -1) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
   const rows = stmts.getAll.all(req.params.storeName);
-  res.json(rows.map(function (r) { return JSON.parse(r.data); }));
+  let records = rows.map(function (r) { return JSON.parse(r.data); });
+  if (req.sessionRole === 'youtube-reviewer' && req.params.storeName === 'settings') {
+    records = records.map(redactSettingsForReviewer);
+  }
+  res.json(records);
 });
 
 app.get('/api/store/:storeName/:id', function (req, res) {
   const { storeName, id } = req.params;
   if (!isValidStore(storeName) || !isValidId(id)) return res.status(400).json({ error: 'invalid_params' });
+  if (req.sessionRole === 'youtube-reviewer' && REVIEWER_FORBIDDEN_STORES.indexOf(storeName) !== -1) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
   const row = stmts.getOne.get(storeName, id);
   if (!row) return res.status(404).json({ error: 'not_found' });
-  res.json(JSON.parse(row.data));
+  let record = JSON.parse(row.data);
+  if (req.sessionRole === 'youtube-reviewer' && storeName === 'settings') record = redactSettingsForReviewer(record);
+  res.json(record);
 });
 
+// Real bug, confirmed against a live stuck piece (2026-09-20): this route
+// has always been a full-record replace, and the client's own pieces
+// object is a single shared in-memory value it mutates and PUTs whole any
+// time *anything* about that piece changes (an audio-track pick, a
+// platform checkbox, a title edit) — not just when something analysis-
+// related changes. `maybeStartAnalysisPolling()`'s 3-second interval
+// (client, app.js) is what's supposed to keep that local copy in sync
+// with these server-computed fields, but there's a real window — from the
+// moment a video is uploaded until that poller's first tick — where the
+// client's copy is stale. An edit inside that window (an audio pick, a
+// platform toggle) PUTs the piece with the old analysisStatus still
+// attached, silently reverting whatever runVideoAnalysis had already
+// written — which is exactly what left a real piece stuck showing
+// analysisStatus: 'pending' forever despite its analysis having actually
+// run. These fields are never legitimately set by a plain client edit
+// once a piece already exists (only by runVideoAnalysis itself, or by the
+// client at creation time, when there's nothing yet to clobber), so on
+// any update to an existing video piece the current DB value always wins.
+// Deliberately NOT including finalBuildStatus/finalBuildError here even
+// though they're also server-written — the client legitimately sets
+// finalBuildStatus: 'pending' itself on every "Send to final check"
+// click, including a retry after a failure, and protecting it would
+// silently break that reset.
+const SERVER_OWNED_PIECE_FIELDS = [
+  'analysisStatus', 'analysisError', 'analysisMatchedPieceId', 'stage'
+];
 app.put('/api/store/:storeName/:id', function (req, res) {
   const { storeName, id } = req.params;
   if (!isValidStore(storeName) || !isValidId(id)) return res.status(400).json({ error: 'invalid_params' });
   if (!req.body || typeof req.body !== 'object') return res.status(400).json({ error: 'invalid_body' });
+
+  if (storeName === 'pieces') {
+    const existingRow = stmts.getOne.get('pieces', id);
+    if (existingRow) {
+      const existing = JSON.parse(existingRow.data);
+      if (existing.hasVideo) {
+        SERVER_OWNED_PIECE_FIELDS.forEach(function (f) {
+          if (Object.prototype.hasOwnProperty.call(existing, f)) req.body[f] = existing[f];
+          else delete req.body[f];
+        });
+      }
+    }
+  }
+
+  if (req.sessionRole === 'youtube-reviewer') {
+    if (REVIEWER_FORBIDDEN_STORES.indexOf(storeName) !== -1 || storeName === 'audioTracks') {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    if (storeName === 'settings') {
+      const existingRow = stmts.getOne.get(storeName, id);
+      const existing = existingRow ? JSON.parse(existingRow.data) : {};
+      const merged = mergeReviewerSettingsWrite(existing, req.body);
+      merged.id = id;
+      stmts.upsert.run(storeName, id, JSON.stringify(merged), new Date().toISOString());
+      return res.json(redactSettingsForReviewer(merged));
+    }
+    if (storeName === 'pieces' || storeName === 'videos') {
+      if (!pieceOwnedByReviewer(ownerPieceIdFor(storeName, id))) return res.status(403).json({ error: 'forbidden' });
+      // Force this regardless of what the client sent — a reviewer
+      // session can never claim/relabel an existing record as its own,
+      // or hand its own creation off to look admin-authored.
+      if (storeName === 'pieces') req.body.createdBy = 'youtube-reviewer';
+    }
+  }
+
   const record = Object.assign({}, req.body, { id: id });
   stmts.upsert.run(storeName, id, JSON.stringify(record), new Date().toISOString());
   res.json(record);
@@ -446,6 +662,14 @@ app.put('/api/store/:storeName/:id', function (req, res) {
 app.delete('/api/store/:storeName/:id', function (req, res) {
   const { storeName, id } = req.params;
   if (!isValidStore(storeName) || !isValidId(id)) return res.status(400).json({ error: 'invalid_params' });
+  if (req.sessionRole === 'youtube-reviewer') {
+    if (REVIEWER_FORBIDDEN_STORES.indexOf(storeName) !== -1 || storeName === 'settings' || storeName === 'audioTracks') {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    if ((storeName === 'pieces' || storeName === 'videos') && !pieceOwnedByReviewer(ownerPieceIdFor(storeName, id))) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+  }
   stmts.del.run(storeName, id);
   if (FILE_STORES.indexOf(storeName) !== -1) {
     const filePath = path.join(UPLOADS_DIR, storeName, id);
@@ -462,6 +686,12 @@ app.post('/api/files/:storeName/:id', upload.single('file'), function (req, res)
   if (FILE_STORES.indexOf(storeName) === -1 || !isValidId(id)) {
     if (req.file) fs.rm(req.file.path, { force: true }, function () {});
     return res.status(400).json({ error: 'invalid_params' });
+  }
+  if (req.sessionRole === 'youtube-reviewer') {
+    if (storeName === 'audioTracks' || !pieceOwnedByReviewer(ownerPieceIdFor(storeName, id))) {
+      if (req.file) fs.rm(req.file.path, { force: true }, function () {});
+      return res.status(403).json({ error: 'forbidden' });
+    }
   }
   if (!req.file) return res.status(400).json({ error: 'missing_file' });
 
@@ -636,13 +866,20 @@ async function runVideoAnalysis(id) {
   }
 }
 
-app.post('/api/videos/:id/analyze', function (req, res) {
+// requireAuthOrReviewer added here (this route previously had no auth
+// guard at all, relying on nothing — a real pre-existing gap, closed
+// while touching this route for the reviewer-access work rather than a
+// deliberate design choice worth keeping).
+app.post('/api/videos/:id/analyze', requireAuthOrReviewer, function (req, res) {
   const { id } = req.params;
   if (!isValidId(id)) return res.status(400).json({ error: 'invalid_params' });
   const filePath = path.join(UPLOADS_DIR, 'videos', id);
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'video_not_found' });
   const piece = getPieceRecord(id);
   if (!piece) return res.status(404).json({ error: 'piece_not_found' });
+  if (req.sessionRole === 'youtube-reviewer' && piece.createdBy !== 'youtube-reviewer') {
+    return res.status(403).json({ error: 'forbidden' });
+  }
   res.json({ ok: true, status: 'running' });
   runVideoAnalysis(id).catch(function (e) { console.error('unhandled video analysis error for ' + id + ':', e.message); });
 });
@@ -706,13 +943,18 @@ async function runBuildFinalVideo(id) {
   }
 }
 
-app.post('/api/videos/:id/build-final', function (req, res) {
+// Same pre-existing missing-auth gap closed as /api/videos/:id/analyze
+// above.
+app.post('/api/videos/:id/build-final', requireAuthOrReviewer, function (req, res) {
   const { id } = req.params;
   if (!isValidId(id)) return res.status(400).json({ error: 'invalid_params' });
   const filePath = path.join(UPLOADS_DIR, 'videos', id);
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'video_not_found' });
   const piece = getPieceRecord(id);
   if (!piece) return res.status(404).json({ error: 'piece_not_found' });
+  if (req.sessionRole === 'youtube-reviewer' && piece.createdBy !== 'youtube-reviewer') {
+    return res.status(403).json({ error: 'forbidden' });
+  }
   res.json({ ok: true, status: 'running' });
   runBuildFinalVideo(id).catch(function (e) { console.error('unhandled final-build error for ' + id + ':', e.message); });
 });
@@ -774,11 +1016,20 @@ async function runYoutubePublish(id, opts) {
   }
 }
 
-app.post('/api/youtube/publish/:id', function (req, res) {
+// Google's own review requirement for a YouTube API Compliance Audit is
+// that the demo account can genuinely publish, not just watch a video of
+// someone else doing it — so a reviewer session IS allowed to hit this
+// route now, but only for a piece it created itself (checked below,
+// exactly the same ownership rule as writing to /api/store/pieces/:id).
+// A reviewer can never publish anything Harvey made.
+app.post('/api/youtube/publish/:id', requireAuthOrReviewer, function (req, res) {
   const { id } = req.params;
   if (!isValidId(id)) return res.status(400).json({ error: 'invalid_params' });
   const piece = getPieceRecord(id);
   if (!piece) return res.status(404).json({ error: 'piece_not_found' });
+  if (req.sessionRole === 'youtube-reviewer' && piece.createdBy !== 'youtube-reviewer') {
+    return res.status(403).json({ error: 'forbidden' });
+  }
   const row = stmts.getYoutubeAuth.get();
   if (!row || !row.refresh_token) return res.status(400).json({ error: 'not_connected' });
   const body = req.body || {};
