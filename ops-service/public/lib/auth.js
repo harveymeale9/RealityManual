@@ -8,9 +8,15 @@
 window.RMAuth = (function () {
   var API_BASE = window.RMStore ? window.RMStore.API_BASE : 'https://ops.realitymanual.com';
 
+  // Resolves to `{ ok: true, role: 'admin' | 'youtube-reviewer' }` (still
+  // truthy, so existing `if (result)` callers keep working unchanged) or
+  // `false` — the role lets callers that care (app.js) show a genuinely
+  // restricted view for a reviewer session, not just gate on "logged in
+  // or not."
   function checkSession() {
     return fetch(API_BASE + '/api/me', { credentials: 'include' })
-      .then(function (r) { return r.ok; })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) { return data || false; })
       .catch(function () { return false; });
   }
 
@@ -20,7 +26,9 @@ window.RMAuth = (function () {
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password: pw })
-    }).then(function (r) { return r.ok; }).catch(function () { return false; });
+    }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) { return data || false; })
+      .catch(function () { return false; });
   }
 
   function logout() {

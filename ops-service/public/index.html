@@ -65,8 +65,10 @@
         </div>
       </div>
       <!-- Analytics group: same pattern, parent is a "trending up" mark,
-           3 real leaf tabs nested beneath it. -->
-      <div class="side-rail-group">
+           3 real leaf tabs nested beneath it. Hidden entirely for a
+           youtube-reviewer session (app.js sets body.role-reviewer) — see
+           style.css. -->
+      <div class="side-rail-group side-rail-group-analytics">
         <a href="#content-analytics" class="side-rail-btn" data-tab="content-analytics" title="Analytics" aria-label="Analytics">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>
         </a>

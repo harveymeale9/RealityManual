@@ -267,6 +267,21 @@ a { color: var(--accent); }
   border-top: 1px solid var(--border-soft);
 }
 .side-rail-btn-sub { width: 34px; height: 34px; }
+
+/* A youtube-reviewer session (app.js toggles this class on <body> once the
+   role is known — see CLAUDE.md) only ever gets the Content Ops group:
+   Project Manager and the whole Analytics group are hidden from every nav
+   surface. This is a UX nicety, not the security boundary — the real
+   enforcement is server-side (requireAuthOrReviewer + the per-route
+   ownership/redaction checks in server.js); a reviewer navigating here by
+   hand-editing the URL hash is caught separately by app.js's
+   renderActiveTab() redirect guard. */
+body.role-reviewer a[data-tab="project-manager"],
+body.role-reviewer .side-rail-group-analytics,
+body.role-reviewer #quickAddLink,
+body.role-reviewer #pmBackFab {
+  display: none !important;
+}
 .side-rail-btn-sub svg { width: 16px; height: 16px; }
 
 .panel-body { flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100%; }
