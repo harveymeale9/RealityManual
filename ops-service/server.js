@@ -759,7 +759,8 @@ async function runTiktokPublish(id, opts) {
 
     const accessToken = await getValidTiktokAccessToken();
     const result = await tiktokAuth.publishVideo(accessToken, videoPath, mimeType, {
-      title: opts.title || piece.title || 'Untitled'
+      title: opts.title || piece.title || 'Untitled',
+      brandedContent: !!opts.brandedContent
     });
 
     const latest = getPieceRecord(id);
@@ -792,7 +793,10 @@ app.post('/api/tiktok/publish/:id', function (req, res) {
   const row = stmts.getTiktokAuth.get();
   if (!row || !row.refresh_token) return res.status(400).json({ error: 'not_connected' });
   const body = req.body || {};
-  const opts = { title: typeof body.title === 'string' ? body.title : '' };
+  const opts = {
+    title: typeof body.title === 'string' ? body.title : '',
+    brandedContent: !!body.brandedContent
+  };
   res.json({ ok: true, status: 'running' });
   runTiktokPublish(id, opts).catch(function (e) { console.error('unhandled tiktok publish error for ' + id + ':', e.message); });
 });

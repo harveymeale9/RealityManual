@@ -7124,3 +7124,61 @@ without these prompts. Worth building for real before relying on this
 video alone to carry a review, though TikTok's guidelines describe this
 requirement less strictly than an automatic rejection trigger — Harvey's
 call whether to submit as-is or wait for these to be built first.
+
+---
+
+# 148. TikTok Music Usage + Branded Content Checkboxes Actually Built (2026-09-20)
+
+Closed §147's flagged gap — Harvey asked for the least invasive
+addition, to refilm the demo video afterward.
+
+**`ops-service/public/app.js` — `fcScheduleVideoHtml()`:** when `tiktok`
+is a wired-and-tagged platform for a Final Check piece, two checkboxes
+now render above the "Schedule Video" button — "I confirm this content
+complies with TikTok's Music Usage Confirmation" and "This is branded
+content" — matching the exact copy already used in `tiktok-app-review.html`'s
+illustrative mockup (§122), now real. Music Usage has no actual TikTok
+API field to send; per TikTok's own docs it's a developer-side
+compliance gate shown in the app's own UI, not a post parameter — so
+it's enforced purely client-side: the click handler for
+`.fc-yt-publish-btn` now checks the box's state before firing anything,
+and if TikTok is among the platforms being published to and it's
+unchecked, blocks the *entire* click (not just TikTok's half) with an
+inline warning (`.fc-tiktok-consent-warn`, reusing the existing
+`.fc-yt-error` styling) rather than silently skipping TikTok — so it's
+obvious why nothing went out rather than a delayed "why isn't this on
+TikTok" moment later.
+
+**Branded Content is real** — TikTok's Content Posting API genuinely has
+a `brand_content_toggle` field on `post_info`. Threaded end to end:
+checkbox state → `brandedContent` in the request body → `server.js`'s
+`POST /api/tiktok/publish/:id` route → `runTiktokPublish`'s call to
+`tiktokAuth.publishVideo` → `initPublish`'s `post_info.brand_content_toggle`.
+Defaults to `false`/unchecked, matching the mockup.
+
+**Known limitation, noted in a code comment rather than solved:** per
+TikTok's own documentation, a branded-content post cannot use
+`SELF_ONLY` privacy — and every TikTok post from this app is currently
+forced to `SELF_ONLY` while unaudited (§143). Not handled, since
+Harvey's real content is never actually branded content in practice;
+worth revisiting if that combination is ever genuinely hit and TikTok's
+API rejects it.
+
+This is a `server.js`/`src/tiktokAuth.js` change (real backend logic),
+so per §93 it triggers a full rebuild+restart on the next deploy — same
+standing caveat as every other backend change in this file, since this
+session is the headless agent running inside the container being
+restarted. Logged to the work log immediately before pushing.
+
+Verified via `node --check` on all three touched JS files and a CSS
+brace-balance check. **Not yet verified against the live deployed
+service** — once it's back up, confirm: the two checkboxes render on a
+Final Check card tagged for TikTok (and don't render for a
+YouTube-only card), clicking Schedule Video with Music Usage unchecked
+shows the inline warning and genuinely fires nothing, checking it and
+clicking again actually publishes, and a checked Branded Content box
+results in `brand_content_toggle: true` reaching TikTok's real API (a
+deliberate real test would need TikTok to actually accept or reject
+that combination against the still-SELF_ONLY-forced account — the
+error path, if any, should surface via the existing `tiktokPublishError`
+mechanism, not fail silently).

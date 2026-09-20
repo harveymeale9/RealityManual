@@ -2158,12 +2158,31 @@
           '<option value="public">Public</option>' +
         '</select>'
       : '';
+    // TikTok's Content Sharing Guidelines require showing a Music Usage
+    // Confirmation and a Branded Content disclosure before every post —
+    // added 2026-09-20 after these were flagged as a real gap between the
+    // TikTok app-review demo page's mockup (§122) and the actual shipped
+    // product. Music Usage has no real API field to send (it's a
+    // developer-side compliance gate, per TikTok's docs, not a post
+    // parameter) — enforced client-side, blocking the click if unchecked,
+    // right below. Branded Content is real: `brand_content_toggle` is
+    // threaded through to TikTok's own API (tiktokAuth.js). Only shown
+    // when TikTok is actually a wired-and-tagged platform for this piece —
+    // YouTube has no equivalent requirement.
+    var tiktokConsentHtml = wired.indexOf('tiktok') !== -1
+      ? '' +
+        '<div class="fc-tiktok-consent">' +
+          '<label><input type="checkbox" class="fc-music-usage" data-id="' + id + '" /> I confirm this content complies with TikTok’s Music Usage Confirmation</label>' +
+          '<label><input type="checkbox" class="fc-branded-content" data-id="' + id + '" /> This is branded content</label>' +
+        '</div>'
+      : '';
     return '' +
       '<div class="fc-yt-publish">' +
         privacySelectHtml +
         '<button type="button" class="btn-secondary fc-yt-publish-btn" data-id="' + id + '"' + disabledAttr + '>' +
           (erroredPlatforms.length ? 'Retry' : 'Schedule Video') +
         '</button>' +
+        tiktokConsentHtml +
         notWiredNote +
         errorHtml +
       '</div>';
@@ -2338,12 +2357,33 @@
         var wrap = btn.closest('.fc-yt-publish');
         var select = wrap ? wrap.querySelector('.fc-yt-privacy') : null;
         var privacyStatus = select ? select.value : 'private';
+
+        var existingWarn = wrap ? wrap.querySelector('.fc-tiktok-consent-warn') : null;
+        if (existingWarn) existingWarn.remove();
+
+        // TikTok's Content Sharing Guidelines require confirming Music
+        // Usage before every post — gate the whole click on it (rather
+        // than silently skipping just the TikTok half) so it's obvious
+        // why nothing went out, instead of Harvey wondering later.
+        var musicCheckbox = wrap ? wrap.querySelector('.fc-music-usage') : null;
+        var brandedCheckbox = wrap ? wrap.querySelector('.fc-branded-content') : null;
+        if (platforms.indexOf('tiktok') !== -1 && musicCheckbox && !musicCheckbox.checked) {
+          var warn = document.createElement('div');
+          warn.className = 'fc-yt-error fc-tiktok-consent-warn';
+          warn.textContent = 'Confirm the Music Usage checkbox above before scheduling to TikTok.';
+          wrap.appendChild(warn);
+          return;
+        }
+        var brandedContent = !!(brandedCheckbox && brandedCheckbox.checked);
+
         var captions = boardSettingsCache ? captionsForPiece(boardSettingsCache, p) : [];
         var title = (p.ytTitles && p.ytTitles[0]) || p.title || 'Untitled';
 
         btn.disabled = true;
         btn.textContent = 'Publishing…';
         if (select) select.disabled = true;
+        if (musicCheckbox) musicCheckbox.disabled = true;
+        if (brandedCheckbox) brandedCheckbox.disabled = true;
         platforms.forEach(function (platform) { p[publishStatusFieldFor(platform)] = 'pending'; });
         pieces[id] = p;
 
@@ -2356,7 +2396,7 @@
           // set, falling back to the plain title otherwise.
           var body = platform === 'ytlong'
             ? { title: title, description: description, privacyStatus: privacyStatus }
-            : { title: description || title };
+            : { title: description || title, brandedContent: brandedContent };
           fetch(publishEndpointFor(platform) + encodeURIComponent(id), {
             method: 'POST',
             credentials: 'include',
