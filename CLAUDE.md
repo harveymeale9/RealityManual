@@ -5150,3 +5150,1899 @@ restructured side-rail markup; not yet visually verified against the
 live deployed service — worth confirming the nested rail icons and the
 pill-style sub-tab strip actually render/align the way Harvey pictured
 before considering this fully settled.
+
+---
+
+# 119. Final Check Card: Real Click-to-Play, Description Under Title, Titles Reformatted
+
+Harvey tested §116's Final Check card for real and sent a screenshot with
+three fixes: the video still wasn't click-to-toggle despite §113's fix,
+the caption ("the description of the YT vid") should show directly under
+the main title rather than after the chip row, and the title-options list
+should be plain "Title 1: x" / "Title 2: y" lines placed once, directly
+under the video — not a numbered list, and not repeated again near the
+description.
+
+**Video click-to-play, root-caused rather than re-patched.** §113's fix
+compared the click's Y coordinate against a guessed 40px control-bar
+height on the `<video>` element itself, to tell a frame click from a
+native-control-bar click. That's fragile — Chrome's native controls live
+in a UA shadow root, and a click anywhere inside it still retargets to
+the host `<video>` for a plain `click` listener, so there's no reliable
+way to distinguish "clicked the frame" from "clicked the control bar"
+purely from where the event says it landed once you're relying on
+coordinate math on the same element both regions share. Replaced with a
+structural fix instead: `<video>` is now wrapped in `.fc-video-wrap`,
+with a transparent `.fc-video-overlay` (`position:absolute; inset:0;
+bottom:44px`) covering only the frame — clicks in that region can only
+ever hit the overlay (toggles play/pause directly), and the uncovered
+44px strip at the bottom is never touched by anything but the native
+control bar, so there's no shared element and no coordinate ambiguity
+left to get wrong.
+
+**Reordered the card.** New order: video → title options ("Title 1: x"
+/ "Title 2: y", one `<div>` line each via a new `.fc-title-line`,
+replacing the old `<ol><li>` numbered list) → main title (`.fc-title`,
+unchanged content: `#094 — <piece.title>`) → caption/description
+(`.fc-caption`, unchanged rendering via `renderCaptionText` — captions
+*are* this codebase's "YT description" field, per §62's Settings spec;
+no new field was needed, Harvey had just saved one) → platform/type
+chips → Approve button. Nothing about `renderCaptionText`/the Settings
+caption templates changed — this was purely a layout/positioning fix.
+
+Frontend-only (`app.js`, `style.css`), so per §93 this is already live —
+no deploy/restart needed. Verified via `node --check` and a CSS
+brace-balance check; not yet re-tested against the live deployed service
+with a real Final Check card — worth confirming the overlay actually
+makes the whole frame clickable without interfering with the native
+scrub bar/volume/fullscreen controls, and that the reordered layout
+reads correctly with a real saved caption now that Harvey has one set.
+
+---
+
+# 120. Final Check: Click-to-Play Fixed for Real (Dropped Native Controls); Removed Redundant Title; Green Play Icon
+
+Harvey tested §119 on his real device and reported the frame still
+wasn't clickable — he had to hit the tiny native play icon in the
+control bar specifically. He also sent a screenshot showing 3 separate
+"titles" on the card (Title 1, Title 2, and a large `#094 — <title>`
+heading below them, which duplicates Title 1) and asked to drop the
+redundant heading, enlarge Title 1/Title 2 to that heading's size, and
+add a green accent placeholder play-button over the video.
+
+**Root cause, honestly reasoned rather than re-guessed a third time:**
+§119's partial overlay (covering the frame, leaving a bottom strip
+uncovered for the native `<video controls>` bar) is a sound pattern in
+an ordinary desktop browser, but native video controls on some
+platforms — iOS Safari in particular — render through the OS's own
+media-player chrome rather than plain shadow-DOM content the page can
+reliably out-layer with a positioned `<div>`, especially before first
+play. There's no further CSS/JS tuning that reliably fixes this from
+inside the constraint of "keep native `controls`" — the two real device
+tests (§113's coordinate hack, §119's partial overlay) both failing in
+the same direction (frame doesn't respond, only the literal native
+button does) supports this rather than pointing at a fixable typo.
+
+**Fix: drop `controls` entirely.** `finalCheckCardHtml()`'s `<video>`
+no longer has the `controls` attribute at all. With no native chrome
+left to protect or conflict with, `.fc-video-overlay` now covers the
+*whole* frame (not just the region above a guessed control-bar height)
+and is guaranteed to receive every click on every platform — there's
+nothing else in the video's box that could intercept it. This also
+naturally supplies Harvey's second ask: the overlay hosts a centered
+`.fc-play-icon` (a green-accent circle + triangle, `var(--accent)`
+border/color) that's the click-anywhere-to-play affordance *and* the
+placeholder he asked for, in one element. `bindBoardEvents()`'s
+`.fc-video-wrap` loop wires `play`/`pause` events on the real `<video>`
+to toggle a `.is-playing` class on the wrap, which CSS uses to hide the
+icon while actually playing (and it correctly reappears if the video
+pauses for any reason, including reaching its natural end, since
+`pause` fires there too — not just on an icon click).
+
+**Real trade-off, stated honestly:** losing native `controls` also
+means losing the scrub bar, volume, and fullscreen button — Final Check
+is now play/pause-anywhere only, no seeking. Acceptable for a quick
+review of a short clip; worth adding a minimal custom scrub bar later
+if that turns out to be missed in practice, but not built now since
+Harvey's ask was specifically about reliable click-to-play, not seeking.
+
+**Titles:** the large `#094 — <piece.title>` heading (`.fc-title`) is
+gone entirely — it was always just a duplicate of Title 1 in practice.
+`.fc-title-line` (the "Title 1: x" / "Title 2: y" lines from §119) is
+now sized to match what that heading used to be (`font-size: 1.02rem;
+font-weight: 600`, was `0.85rem`). The `.fc-title` CSS rule was deleted
+outright (confirmed nothing else referenced it) rather than left as
+dead code.
+
+Frontend-only (`app.js`, `style.css`), so per §93 this is already live —
+no deploy/restart needed. Verified via `node --check` and a CSS
+brace-balance check; **genuinely not yet confirmed against Harvey's real
+device** — this is the third attempt at reliable click-to-play on this
+card (§113, §119, this one), and the first two both looked correct on
+inspection and failed in practice, so don't assume this one is settled
+just because the reasoning holds up — ask Harvey to actually test it
+before treating this as closed.
+
+---
+
+# 121. Final Check Click-to-Play: Third Attempt — Bind Directly to `<video>`, Drop the Overlay Indirection
+
+§120 made things worse, not better — Harvey reported clicking anywhere,
+including the green play icon, did nothing at all. Confirmed via a
+direct fetch of the live `ops.realitymanual.com/app.js` that what's
+deployed is byte-identical to this repo (ruling out a stale-deploy
+explanation), so the bug is real, not a caching artifact.
+
+**Reasoning through it once more, in full:** §120 kept a separate
+`.fc-video-overlay` `<div>` as the actual click target, sized to cover
+the whole video. That made sense in §119, where the overlay's whole job
+was covering the frame *without* covering the native control bar. But
+§120 already removed `controls` — at which point there is no native
+chrome left to route around, and the overlay had no remaining reason to
+exist as a click target. Keeping it anyway introduced exactly the kind
+of indirection (a sibling element sitting on top of the real interactive
+element) that's a known source of mobile/cross-browser hit-testing
+quirks — and with no way to reproduce the failure directly in this
+environment (no headless browser available here), removing that
+indirection entirely is the most defensible fix available: it doesn't
+just patch around a guessed cause, it eliminates the one remaining
+structural difference between this and "the simplest possible thing
+that could work."
+
+**Fix:** the click/`play()`/`pause()` listener now binds directly to the
+bare `<video>` element (`bindBoardEvents()`'s `.fc-video-wrap` loop).
+`.fc-video-overlay` is still in the markup and still renders the green
+`.fc-play-icon`, but is now `pointer-events: none` in CSS — purely
+decorative, structurally incapable of intercepting a click meant for the
+video. This is about as direct as a click-to-toggle binding can get:
+one element, one listener, no controls attribute, nothing layered on
+top of it that could ever eat the event.
+
+Frontend-only (`app.js`, `style.css`), so per §93 this is already live —
+no deploy/restart needed; confirmed via a direct fetch that the live
+`app.js` matches this commit. Verified via `node --check` and a CSS
+brace-balance check. **Third attempt at the same underlying problem
+(§113, §119, §120, now this) — flag this prominently if Harvey reports
+it's still broken.** If so, the honest next step is not a fourth blind
+code change: it's asking him for the exact device/browser (e.g. "iPhone
+15, Safari" vs. "Pixel 8, Chrome") and, ideally, to open the page's
+console (Safari: Settings → Advanced → Web Inspector, then inspect from
+a Mac; Chrome Android: `chrome://inspect` from a desktop Chrome on the
+same network) so a real error, if any, can be read directly instead of
+guessed at from static code review.
+
+---
+
+# 122. Storefront Privacy Policy / Terms, and a TikTok App-Review Package for Content Studio
+
+Two related deliverables, both from the same request: (1) `realitymanual.com`
+needed a Privacy Policy and Terms of Service, styled to match; (2) Harvey
+wants TikTok Content Posting API access for Content Studio (the ops-panel
+uploader tool, §111+) and asked for everything needed to get approved on
+the first submission — researched TikTok's actual current requirements
+first (see Sources below) rather than guessing.
+
+## What TikTok actually requires (researched, not assumed)
+
+- **App registration** in TikTok's developer portal needs: a custom app
+  name matching the real product, an app icon, a description, a **valid,
+  fully-developed official website** (not a bare landing/login page), and
+  **Privacy Policy + Terms of Service links that are prominently visible
+  on that website's homepage**, not hidden behind menus.
+- **Demo material**: at least one demo video (up to 5, 50MB each)
+  showing the complete end-to-end integration, all requested scopes
+  actually demonstrated, and — for a first-time (unaudited) submission —
+  a sandbox environment. Screenshots reinforce this but video is the
+  primary artifact TikTok's own guidelines describe.
+- **Scopes**: Login Kit (OAuth account connection) + `video.publish`
+  (Content Posting API, direct post) are the two we actually need; only
+  request scopes actually used.
+- **Unaudited restriction**: until TikTok audits the app for compliance,
+  every post made through the Content Posting API is forced to
+  `SELF_ONLY` visibility regardless of what the API request asks for,
+  capped at 5 posting users per 24h. Public posting requires passing a
+  separate compliance audit afterward.
+- **Required UX** (from TikTok's Content Sharing Guidelines): show a
+  content preview and the confirmed creator account before posting,
+  collect a Music Usage confirmation and a Branded Content disclosure
+  toggle, and provide posting-status feedback (poll `Get Post Status`
+  after publishing) rather than claiming success just because a request
+  was sent.
+
+## What was built
+
+**Storefront (`frontend/`)** — `privacy.html` and `terms.html`, styled
+with the existing dark/gold design system (`.legal-page` class added to
+`css/style.css`, reusing `--serif`/`--accent`/`--wrap` etc., no new
+fonts or frameworks). Both linked from the footer of `index.html`,
+`checkout.html`, and `confirmation.html` via a new `.footer-links` row.
+Content is grounded in how this site actually operates (per this file's
+own §13-34, §64-66) — real data flows (Stripe for payment, BookVault for
+fulfillment, first-party analytics with a localStorage session id, no
+third-party ad/analytics scripts, no data sold) rather than generic
+boilerplate. **Placeholders that need Harvey's confirmation, flagged
+explicitly rather than silently invented:**
+- Contact email `support@realitymanual.com` — used throughout; needs to
+  actually exist (a real inbox), or swap in whatever address should be
+  used instead.
+- The returns/refunds clause in `terms.html` describes only what the
+  system actually does today (automatic refund if fulfillment fails) —
+  there's no defined "change of mind" return window anywhere in this
+  project, so none was invented; confirm this matches what Harvey
+  actually wants to offer.
+- No specific governing-law jurisdiction was named (none was known) —
+  add one if that matters, or leave general.
+- **This is a solid working draft, not a substitute for actual legal
+  review** — reasonable for getting the site/TikTok submission
+  unblocked, but flag to Harvey that a lawyer pass is worth it before
+  this is truly final, especially the liability/returns sections.
+
+**Ops-service (`ops-service/public/`, all pure static additions — no
+`server.js` change, so per §93 this is served instantly, no
+rebuild/restart)**:
+- `privacy.html` / `terms.html` — a matching pair for Content Studio
+  itself (the internal tool), written to accurately describe what it
+  actually is: a password-gated internal team tool with no public
+  signup, what it stores (content/video/audio/scheduling data, platform
+  OAuth tokens once connected), and that platform integrations only ever
+  post content the team itself authored to accounts the team itself
+  controls — never third-party data. This is the privacy policy TikTok's
+  registration form itself needs a URL for.
+- `tiktok-app-review.html` — the demo/showcase page for reviewers. Walks
+  through the real integration end-to-end (connect account via Login
+  Kit → produce/review video in the existing Final Check gate → the two
+  new TikTok-specific consent checkboxes (Music Usage, Branded Content)
+  → scheduled-post confirmation with a dummy future date and "this is
+  when it goes live" note, exactly as Harvey described) using inline
+  mockups built from **this app's real CSS classes** (`.chip`,
+  `.final-check-card`-style layout, `.btn-primary`, etc.) populated with
+  clearly-labeled demo data — a genuine rendering of the actual design
+  system, not a photograph, and explicitly captioned as such so nothing
+  here misrepresents what is/isn't live yet. Explicitly states which
+  parts already exist in the shipped product (upload, transcribe,
+  splice, human-approval gate) versus what's net-new for TikTok
+  specifically (the two consent checkboxes, the actual `video.publish`
+  API call, status polling) — honesty here matters for a compliance
+  review.
+- All three pages cross-link to each other and are reachable from the
+  Content Studio login screen's own footer (`.login-legal-links`, new),
+  so the privacy/terms links are genuinely discoverable, not just
+  privately known URLs — the same "must be visible, not hidden" bar
+  TikTok holds the storefront to.
+- `noindex, nofollow` on all three (matches this whole origin's existing
+  `Disallow: /` `robots.txt`, §62) — irrelevant to TikTok review, which
+  reaches these via a direct URL, not search discovery.
+
+## What is NOT built, and what Harvey has to do himself
+
+- **The actual TikTok app registration and submission** — requires
+  Harvey's own TikTok developer/business login; nothing here can do that
+  step. Register the app, set the official website to
+  `https://realitymanual.com`, fill in the Privacy Policy / Terms of
+  Service fields with the two new storefront pages built above, request
+  Login Kit + `video.publish`, and point reviewers at
+  `https://ops.realitymanual.com/tiktok-app-review.html` for the
+  integration walkthrough.
+- **A real demo video.** TikTok's own guidance treats video as the
+  primary review artifact, not just screenshots — this session can't
+  record narrated video. Worth deciding: either Harvey screen-records a
+  short walkthrough of `tiktok-app-review.html` himself (the page is
+  built specifically to make that easy — it's a single scrollable
+  narrative), or this gets revisited once there's a way to capture one.
+- **The actual `video.publish` integration code** (OAuth callback
+  handling, token storage, the real `POST` to Content Posting API, the
+  `Get Post Status` poll) is not built — TikTok credentials don't exist
+  yet, and per this project's own established pattern (§62's TikTok
+  Settings field, still empty, "the field is there for when it is"),
+  building the real integration is properly sequenced *after* getting
+  approved, not before. The demo page describes the intended design
+  faithfully but isn't a claim that it's live.
+- A working `support@realitymanual.com` inbox, if that placeholder
+  address is kept.
+
+Verified: `node --check` on all touched JS, brace-balance checks on
+touched CSS, and an HTML tag-balance check on all five new HTML files.
+Not yet reviewed by Harvey for tone/accuracy, and not yet submitted to
+TikTok by him — flag both if this comes up again.
+
+Sources (TikTok for Developers, fetched 2026-09-19):
+- [App Review Guidelines](https://developers.tiktok.com/docs/en/app-review-guidelines)
+- [Content Sharing Guidelines](https://developers.tiktok.com/docs/en/content-sharing-guidelines)
+- [Get Started - Direct Post](https://developers.tiktok.com/docs/en/content-posting-api-get-started)
+- [App Review FAQ](https://developers.tiktok.com/docs/en/getting-started-faq)
+
+---
+
+# 123. Final Check Video Click-to-Play: Actually Found and Fixed (Real Root Cause, Verified End-to-End)
+
+§113/§119/§120/§121 were all guessing at this from static code review — three theories (Y-coordinate math, native iOS media chrome, overlay-div indirection), none confirmed against a real browser, and Harvey correctly kept reporting it as still broken. This time, before touching any code, a real headless-browser test rig was built specifically to reproduce the bug against the live deployed service.
+
+**How the test rig was built (worth knowing if this is needed again):**
+`playwright-core` installs fine via npm, and `npx playwright install chromium` downloads a working browser binary — but this container is missing several shared libraries Chromium needs (`libnspr4`, `libnss3`, `libatk*`, `libcups2`, `libgtk-3-0`, `libxcomposite1`, `libxdamage1`) and has no root/sudo, so `apt`/`playwright install-deps` can't install them normally. Worked around by downloading the individual `.deb` files directly from `deb.debian.org` (reachable over plain HTTPS even with no configured apt sources) and extracting them with `dpkg-deb -x <file> <dir>` — which, unlike `dpkg -i`, doesn't require root — into a scratch directory, then pointing `LD_LIBRARY_PATH` at it. One real gotcha: the newest `libnspr4` build available required a newer glibc than this container has (`GLIBC_2.38` vs. the container's `2.36`); an older `libnspr4` package version resolved it. Logged into the real `ops.realitymanual.com` with the real password and drove real mouse clicks against the live Content Ops board.
+
+**Root cause, finally confirmed rather than guessed:** `bindPanning()` — the board's click-and-drag-to-pan handler for the horizontally-scrollable kanban, bound to `boardWrap`'s `pointerdown` — excludes real cards from triggering a pan via `e.target.closest('.card, .card-move, button, select, input, textarea, [contenteditable]')`. `.final-check-card` was never in that list (it's deliberately *not* `.card`, per §113, specifically to keep it out of the generic click-to-open-modal/drag bindings — which inadvertently also kept it out of *this* exclusion list, an unrelated handler nobody was thinking about while chasing the video specifically). So every `pointerdown` anywhere inside a Final Check card — including on the video, regardless of which of the three previous click-handling schemes was in place — was captured by `boardWrap.setPointerCapture(e.pointerId)`, which redirects all subsequent pointer events for that gesture to `boardWrap` instead of whatever was actually clicked. The browser never sees a matching mousedown+mouseup pair on the video, so it never synthesizes a `click` event there at all. Confirmed directly: instrumenting `mousedown`/`mouseup`/`pointerdown`/`pointerup`/`click` on the video showed `mousedown`/`pointerdown` firing normally and `mouseup`/`pointerup`/`click` **never firing** — while a purely synthetic `dispatchEvent(new MouseEvent('click'))` (which bypasses real pointer-capture routing) worked fine, and a direct `video.play()` call worked fine. That combination only makes sense if something between mousedown and mouseup was stealing the pointer — which is exactly what `setPointerCapture` does.
+
+This also explains why every earlier attempt failed in the same way regardless of approach: the Y-coordinate hack, the overlay div, and the direct-video-listener version were all fighting the wrong layer — the click was being intercepted one level up, by the *board*, before any of those schemes ever got a chance to matter.
+
+**Fix — one line:** `bindPanning()`'s exclusion selector now includes `.final-check-card`:
+```js
+if (e.target.closest('.card, .card-move, .final-check-card, button, select, input, textarea, [contenteditable]')) return;
+```
+Nothing else from §121 needed to change — the direct-video-element click listener was already correct; it just never had a chance to receive real clicks.
+
+**Verified end-to-end against the live deployed service** (not reasoned about): a real mouse click via the test rig now produces the full `pointerdown → mousedown → pointerup → mouseup → click` sequence on the video, toggles play/pause correctly in both directions, and — confirmed separately — dragging on empty board space (not on a card) still pans the board normally, so the fix doesn't regress the feature it's touching. This is a `ops-service/public/app.js`-only change (frontend-only), so per §93 it was already live on save, no rebuild/restart, and the live `app.js` was directly re-fetched mid-session to confirm the edit had actually propagated before re-testing.
+
+**Process lesson for this file:** three prior attempts (§113, §119, §120/§121) shipped "verified via `node --check`" — true, but `node --check` only proves the JS parses, it says nothing about runtime behavior. This is the first attempt in this whole thread of fixes actually confirmed against real click events in a real browser against the real deployed service, and it's the one that turned out to have found the actual bug. Building the test rig cost real setup effort, but far less than a fifth guess-and-ship round would have — worth doing again for any future "I clicked it and nothing happened" report before touching code.
+
+---
+
+# 124. Legal Page Punctuation/Content Fixes, Checkout Legibility, Content Settings: Per-Platform Captions
+
+Four smaller Harvey requests in one pass.
+
+**Legal pages (`frontend/privacy.html`, `frontend/terms.html`,
+`ops-service/public/privacy.html`, `ops-service/public/terms.html`):**
+all em/en dashes removed (rewritten as commas, semicolons, colons, or
+separate sentences depending on what actually read best in each spot —
+not a blind find-replace to a hyphen). Both storefront pages now name
+BookVault as based in the United Kingdom (§64/§65 already established
+this is our real fulfillment partner; this is the first place the site
+itself says where they're located). `terms.html`'s Returns & Refunds
+section now states the support email directly inline
+(`support@realitymanual.com`), not just in the page's closing Contact
+section — Harvey's ask was specifically to have it right there in the
+refund paragraph itself, not just findable elsewhere on the page.
+
+**Checkout page legibility (`frontend/css/style.css`):**
+- `.qty-gift-note` ("Know someone who'd appreciate a copy...") was
+  serif italic at 0.92rem — Harvey found it hard to read. Switched to
+  upright sans-serif at 0.95rem with slightly taller line-height;
+  same muted color, just no longer italic/serif at a small size, which
+  was the actual legibility problem, not the color.
+- `.qty-book-icon` (the small per-copy book icons next to the quantity
+  stepper): the accent-colored border from §68 is gone, and the icons
+  now overlap into a fanned stack (`margin-left: -1.1rem` on all but
+  the first) instead of sitting in an evenly-gapped row, per Harvey's
+  "imagined the books overlapping slightly." A subtle drop shadow
+  replaces the border for separation between overlapping icons — the
+  placeholder SVG's own near-black background needed *some* visual
+  edge (§68's original reasoning still holds), just not a colored
+  outline now that they overlap and read as a stack rather than
+  individual tiles.
+
+**Content Settings: TikTok and Instagram/Facebook caption panels**
+(`ops-service/public/app.js`, `lib/store.js`) — two new fields
+alongside the existing Shorts/Longform caption templates (§62's
+original "shared caption" design). `defaultSettings().captions` gained
+`tiktok`/`igfb` keys (empty by default; `getSettings()`'s existing
+`Object.assign(d.captions, s.captions)` merge backfills them for any
+settings record saved before this change, no migration code needed).
+`captionTemplateFor(settings, p)` (signature changed from taking just
+`contentType` to taking the whole piece, its one call site updated)
+now checks the piece's tagged platforms first: a piece tagged `tiktok`
+uses the TikTok caption if one's set; a piece tagged `instagram` or
+`facebook` uses the Instagram/Facebook caption if set; otherwise it
+falls back to the existing Shorts/Longform split exactly as before.
+This means a piece with no TikTok/IG/FB platform tag, or one where the
+new fields are left blank, behaves completely unchanged — the new
+fields are additive, not a replacement for the existing two. Rendering
+(`renderCaptionText`, used by both the shared modal's caption readout
+and the Final Check card) needed no changes beyond the one call-site
+update, since both already just call `renderCaptionText(p, settings)`.
+
+Frontend-only across both repos (no `server.js`/backend change), so per
+§93 this is already live — no deploy/restart needed. Verified via
+`node --check` on both touched JS files, a CSS brace-balance check, and
+an HTML tag-balance check on the four legal pages; not yet visually
+confirmed against the live deployed service for any of these four —
+worth a look before considering this fully settled, particularly the
+book-icon overlap (never rendered outside of reasoning about the CSS)
+and whether the new caption fields save/reload correctly in Settings.
+
+---
+
+# 125. Voice Replies No Longer Read Raw URLs Out Loud
+
+Harvey: links in a spoken reply were being read character-by-character
+("h-t-t-p-s colon slash slash...") — same class of problem §89's fenced
+code block handling already solved for shell commands ("sounds
+ridiculous," his words this time, about links specifically).
+
+**Fix, `ops-service/public/lib/voiceClient.js`'s `stripMarkdownForSpeech()`**
+(shared by both `app.js` and `voice-mobile.html`, so this applies
+everywhere TTS is used): two new regex passes, right after the existing
+fenced-code-block handling and before inline-code/bold/italic stripping —
+- Markdown-style `[label](https://...)` links keep the human-readable
+  label and drop the url, becoming `label (link below)`.
+- Any remaining bare `https://...`/`http://...` url (not part of
+  markdown link syntax) becomes the plain phrase `link below`.
+
+Both run before the fenced-code-block regex's own output could
+interfere, and markdown links are handled before the bare-url pass
+specifically so a link's own url text isn't caught twice. The chat
+bubble's own rendering (`renderMarkdownLite`) is untouched — this only
+changes what gets spoken, the visible text (and the real clickable link)
+is exactly as the model wrote it.
+
+Frontend-only (`voiceClient.js`), so per §93 this is already live — no
+deploy/restart needed. Verified via `node --check` and a direct regex
+test against a string containing both a markdown link and a bare url;
+not yet heard on a real device — confirm a reply containing a link
+actually says "link below" instead of the raw url next time one comes up.
+
+---
+
+# 126. Found the Real Source of the Repeated "Task-Style Sentence" Leak
+
+Not a per-turn discipline problem, in the end — a genuine bug in this
+codebase's own prompt text. Harvey caught this agent literally writing
+"One task-style sentence: ..." (or a softened paraphrase of the same
+thing) as a visible prefix, repeatedly, across separate turns, despite
+being told to stop each time and a memory being written after the
+second occurrence. On the fourth occurrence he asked, verbatim, to "go
+in and gut whatever programming" was causing it — which turned out to
+be exactly the right instinct: `ops-service/server.js`'s
+`VOICE_SYSTEM_PROMPT` and the per-message `ACK_REMINDER` (§100 — added
+specifically because "instructions placed right next to what they're
+modifying tend to get followed more reliably," re-injected fresh
+immediately before every single reply) both used the literal phrase
+"task-style sentence" as an imperative instruction ("write one short,
+task-style sentence..."). That phrasing is exactly the kind of thing
+this agent is prone to echo back verbatim as a meta-label rather than
+translating into natural output — and because `ACK_REMINDER` re-injects
+it fresh right before every single reply is generated, it was
+functioning as a standing, repeated trigger for the exact mistake it
+was trying to prevent.
+
+**Fix:** both `VOICE_SYSTEM_PROMPT`'s "Quick verbal acknowledgment"
+paragraph and `ACK_REMINDER` reworded to describe the desired sentence
+by example ("say, in your own words, what you're about to check or
+do... the way you'd say it out loud to a colleague") instead of using
+"task-style sentence" as an instructional label, and both now explicitly
+say not to echo the instruction itself as a prefix, naming the exact
+failure mode by description (though not by the literal trigger phrase,
+deliberately — quoting the bad phrase as "don't write this" risks being
+exactly as echo-prone as using it as a positive instruction was).
+
+This is a `server.js` change, so per §93 it triggers a full
+rebuild+restart on the next deploy — which, per the standing §74/§88
+caveat, kills this session's own process mid-task, since this session
+*is* the headless Project Manager agent running inside the container
+being restarted. Logged to the work log immediately before pushing.
+
+Verified via `node --check` and a grep confirming the only remaining
+occurrences of the literal phrase are inside quoted "don't write this"
+examples, not imperative instruction text. **Not yet confirmed this
+actually stops the leak** — three prior attempts at the *symptom*
+(re-wording, then a memory file, then a stronger memory file) didn't
+hold, and this is a different kind of fix (addressing what's actually
+different is the *prompt content itself*, not just adding more
+instructions on top of it) — genuinely possible this still isn't
+enough. If it recurs after this specific fix, the honest next step
+isn't a fifth wording pass on either of these two strings — it's
+questioning whether an per-message imperative reminder written in
+second person ("write X") is inherently more echo-prone than a
+declarative description, regardless of exact wording, and restructuring
+the mechanism itself (e.g., style guidance folded into surrounding
+prose rather than a standalone directive sentence) rather than
+continuing to edit word choice within the same structure.
+
+---
+
+# 127. Kanban: Right-Click to Delete, Including Final Check Cards
+
+Harvey asked for right-click delete on any kanban card, Final Check
+cards included, with a confirm step so it can't fire by accident.
+
+**`ops-service/public/app.js`:** a single reusable floating menu
+(`.kanban-ctx-menu`, appended to `document.body`, repositioned per
+invocation rather than one instance per card) opened via a delegated
+`contextmenu` listener on `board` (`bindKanbanContextMenu()`, called
+once from `bootContentOps()` — safe to bind directly on `board` rather
+than `document`, since `board` is a fresh DOM node every time the tab
+is (re-)booted, so there's no listener leak across visits, same
+reasoning as the existing `bindPanning()` right above it). Matches on
+`e.target.closest('.card, .final-check-card')` — both listed explicitly
+since `.final-check-card` is deliberately not `.card` (§113, to keep it
+out of the generic click-to-open-modal/drag bindings) — the exact same
+"forgot to also list `.final-check-card` in an unrelated selector"
+gotcha §123's pan-capture fix already hit once, avoided here by
+remembering it up front.
+
+**Two-step confirm**, same spirit as the shared modal's own existing
+delete button (arm, then confirm) but as an explicit second menu state
+rather than a timed re-arm: clicking "Delete" swaps the menu's content
+to a "Delete this piece?" label with "Confirm delete" (styled in
+`--error`) and "Cancel" buttons, rather than deleting immediately.
+Confirming calls `Store.del('pieces', id)` and, for a piece with
+`hasVideo`, also `Store.del('videos', id)` **and** `Store.del('videos',
+id + '-final')` — the latter is new (the shared modal's own delete
+button, `btnDelete`, only ever cleaned up the raw upload, never the
+`-final` audio-spliced copy §115 introduced, so deleting a piece that
+had reached Final Check would have left its final video file orphaned
+on disk; worth fixing there too, not just in this new code, but out of
+scope for this specific ask so left as a known gap). `stmts.del`/the
+`DELETE /api/store/:storeName/:id` route already handles a
+non-existent id gracefully (`fs.rm(..., { force: true })`), so calling
+it for a `-final` file that was never built (piece never reached Final
+Check) is a safe no-op, not an error.
+
+Menu closes on an outside click, Escape, or right-clicking a different
+card (opens a fresh menu for the new target instead of leaving the old
+one stuck open) — the outside-click/contextmenu listeners are added via
+a deferred `setTimeout(..., 0)` specifically so the very click that
+opened the menu doesn't immediately close it again in the same tick.
+
+Frontend-only (`app.js`, `style.css`), so per §93 this is already live —
+no deploy/restart needed. Verified via `node --check` and a CSS
+brace-balance check; not yet tested against the live deployed service —
+worth confirming right-click actually opens the menu (not the native
+browser context menu) on both a normal card and a Final Check card, the
+confirm step genuinely requires the second click, and a deleted Final
+Check piece's `-final` video file is actually gone from disk afterward.
+
+---
+
+# 128. "Use This Frame" Did Nothing for Vertical: Real Root Cause Was the Video Codec, Not Orientation — Plus Auto-Thumbnail, Platform/Type Display
+
+Harvey's report ("clicked 'use this frame' on the vertical vid, nothing
+happened") looked orientation-specific from his two test uploads, but
+wasn't — confirmed with the same real-browser test rig from §123/§127
+rather than guessed.
+
+**Root cause, found by direct testing against the real broken upload:**
+`videoEl.videoWidth`/`videoHeight` were stuck at `0` even though
+`readyState` reported `HAVE_ENOUGH_DATA` and `duration` was correctly
+known — and no amount of seeking or waiting fixed it. `ffprobe` on the
+actual file showed why: it's HEVC (`codec_name=hevc`), the format modern
+iPhones default to for recordings. Chrome/Chromium doesn't support HEVC
+decoding on most desktop/Linux builds (a licensing restriction, not a
+bug) — the browser genuinely cannot decode the video at all, so
+`drawImage(videoEl, ...)` silently no-ops (doesn't throw, just draws
+nothing — confirmed directly: sampled canvas pixel was `[0,0,0,0]`,
+transparent black, both before and after clicking the button) rather
+than erroring in any way JS could catch and report. The working
+"horizontal" test upload was h264, not the exact orientation Harvey's
+theory implied — the two videos just happened to differ in codec, not
+only in orientation.
+
+**Fix — normalize on the server, once, right after upload, not a
+client-side workaround (there isn't one — no JS trick makes a browser
+decode a codec it lacks):** `ops-service/src/videoAnalysis.js` gained
+`ensureBrowserCompatibleVideo(videoPath)` — probes the video stream's
+codec via `ffprobe`, and if it's not one of `h264`/`vp8`/`vp9`/`av1`
+(the ones browsers universally decode), re-encodes it to H.264/AAC via
+`ffmpeg` **in place** (same file path), so every downstream consumer —
+the inline frame picker, Final Check's own preview, the eventual final
+spliced video — gets a decodable file automatically, with zero
+awareness needed anywhere else in the codebase. A no-op (`transcoded:
+false`) for anything already compatible, so safe to call unconditionally
+on every upload. Wired into `server.js`'s existing `runVideoAnalysis(id)`
+— the same background job that already runs transcription/title-matching
+right after upload — as its very first step, before transcription.
+**This would have silently broken Final Check's own video preview too**
+for any HEVC upload, not just this button — a meaningfully bigger deal
+than the original report suggested, since it undermines the actual
+review gate this whole tool exists for.
+
+**Verified for real, not just reasoned about:** manually ran the exact
+same `ffprobe`/`ffmpeg` commands against the real broken upload on the
+VPS, confirmed the output was correctly re-encoded to `h264, 1080x1920`
+(the display-matrix rotation baked correctly into real pixels too, not
+just a metadata flag), swapped it into place, and re-ran the browser
+test — `videoWidth`/`videoHeight` correctly reported `1080x1920`,
+`drawImage` produced a real non-blank pixel, and clicking the real "Use
+this frame" button produced a genuine ~230KB captured JPEG (was a
+~2.8KB blank one). Also verified end-to-end with a **fresh** synthetic
+upload through the real file input (not a pre-existing piece) to
+confirm the whole new-upload path, described next, together.
+
+**Also in this pass, all in `ops-service/public/app.js` (frontend) plus
+the same `videoAnalysis.js`/`server.js` (backend) change above:**
+
+- **Auto-picked starting thumbnail.** `buildUploadRow`'s frame-capture
+  logic was factored into a shared `captureCurrentFrame()` (used by both
+  the button and this), and a one-time `loadeddata` listener now
+  auto-captures frame zero for any piece that doesn't already have a
+  thumbnail — so a row is never stuck at "No thumbnail" waiting for a
+  manual click. Only fires once per row's own listener registration
+  (`removeEventListener` right after), and only when `p.thumbnailDataUrl`
+  is genuinely empty, so it can never clobber a thumbnail Harvey already
+  deliberately picked on a page reload. Still freely overridable via the
+  scrub bar + "Use this frame," same as before.
+- **Content-type thresholds tightened** (`detectContentType`, §114's
+  original version): Harvey's restated rule is simpler than what was
+  built — landscape is *always* Longform now, full stop, no duration
+  gate at all (was: landscape AND >180s). Vertical thresholds also
+  changed: ultra-short ≤25s (was ≤20s), short ≤60s (was ≤75s), otherwise
+  long-short, uncapped (unchanged) — verified against 8 duration/
+  orientation combinations directly in Node before shipping.
+- **Type + platforms shown directly in the upload row.** A read-only
+  content-type chip (`.upload-row-type-row`, reusing `contentTypeOf()`
+  and the same chip styling normal kanban cards use) — deliberately not
+  editable here, since it's purely derived from orientation/duration,
+  not a judgment call; the full editor modal still allows overriding it
+  if that's ever genuinely needed. Below that, a row of small platform
+  checkboxes (`Store.PLATFORMS`, one per platform) pre-checked from
+  `PLATFORM_PRESET_BY_TYPE` — the exact same default the shared modal's
+  content-type dropdown already applies — individually uncheckable.
+  New video pieces now get `platforms` populated with that preset at
+  creation time too (was always `[]` before this, meaning "Send to final
+  check" could go out with zero platforms tagged unless Harvey opened
+  the full editor first). Verified live: a fresh ultra-short vertical
+  test upload correctly pre-checked YT Shorts/TikTok/Instagram/Facebook
+  and left YT Long unchecked, matching the preset exactly; unchecking
+  one and reloading confirmed the change actually persists server-side.
+
+This is a `server.js`/`videoAnalysis.js` change (real backend logic), so
+per §93 it triggers a full rebuild+restart on the next deploy — same
+standing caveat as §102/§104/§111/§115, since this session is the
+headless agent running inside the container being restarted. The
+frontend-only parts (auto-thumbnail, content-type/platform display,
+threshold tightening) are already live independently of that deploy, per
+§93's fast path.
+
+---
+
+# 129. Captions Restructured: Per-Platform, Organized by Short-form/Longform; Final Check Shows All of Them With a Toggle (2026-09-20)
+
+Harvey's ask, in two parts that turned out to be the same underlying
+change: (1) reorganize the Captions section in Content Settings into a
+"Short-form" tab (FB, IG, TT, Shorts — one field each) and a "Longform"
+tab (YT, FB — one field each), each independently editable; (2) when a
+horizontal (longform) video is tagged for both YouTube and Facebook, the
+Final Check card should show *both* descriptions with a toggle between
+them, not just one merged/single caption, and should only offer a
+platform's caption as a toggle option if that platform is actually still
+selected in Content Production.
+
+**Settings (`ops-service/public/lib/store.js`, `app.js`):**
+`defaultSettings().captions` changed from a flat `{ shorts, longform,
+tiktok, instagram, facebook }` shape to a nested one keyed by content
+shape and then platform id, matching `PLATFORM_PRESET_BY_TYPE`/
+`Store.PLATFORMS` exactly:
+```js
+captions: {
+  shortform: { ytshort: '', tiktok: '', instagram: '', facebook: '' },
+  longform: { ytlong: '', facebook: '' }
+}
+```
+Facebook deliberately gets its own field in *both* groups — a piece can
+be shortform-Facebook or longform-Facebook, and those read very
+differently, so they're not the same text. `getSettings()` gained a
+migration (detected by `captions.shortform` not already being an
+object) that maps the old flat shape onto the new one without losing any
+real saved text — verified directly against the live settings row before
+writing it (`longform` → `longform.ytlong`, `tiktok` → `shortform.tiktok`,
+confirmed both survive the migration with a standalone test of the exact
+migration logic against the real live data).
+
+**Settings UI:** the Captions section now has a small "Short-form" /
+"Longform" pill-tab pair (`.caption-group-tabs`/`.caption-group-tab`,
+same visual language as the existing `.panel-subtab`), each revealing a
+panel with one textarea per platform in that group. The wiring in
+`bootSettings()` is driven off a new `CAPTION_GROUPS` constant (platform
+ids/labels/order, reused below) rather than four/six hand-wired inputs,
+so Settings and the Final Check toggle can never drift out of sync on
+which platforms exist in which group.
+
+**`app.js`: `captionsForPiece(settings, p)`** is the new core function —
+given a piece, it looks at its content shape (`shortform` for
+ultra_short/short/long_short, `longform` for `longform`) and returns one
+entry per platform the piece is *actually tagged with* (`p.platforms`,
+Content Production's own checkboxes, §128) that also belongs to that
+caption group, each with its own template/rendered text. Unchecking a
+platform in Content Production removes it from `p.platforms`, which is
+exactly what makes its caption stop showing here too — no separate
+filtering logic needed, this falls out of reusing the same field.
+`captionTemplateFor(settings, p)` (used by the shared editor modal's
+one-line caption readout, which has no room for a toggle) is now a
+thin single-winner wrapper over `captionsForPiece` — first tagged,
+non-empty entry in `CAPTION_GROUPS`' own order.
+
+**Final Check card:** `finalCheckCardHtml()`'s single `.fc-caption` div
+is replaced by `fcCaptionSectionHtml()`, which shows a plain caption (no
+tabs) when the piece has only one relevant platform caption, or a small
+pill-tab strip (`.fc-caption-tabs`/`.fc-caption-tab`) plus the active
+one's text when there's more than one — e.g. a longform piece tagged for
+both `ytlong` and `facebook` shows a "YouTube"/"Facebook" toggle. Which
+tab is selected is tracked ephemerally per piece id
+(`fcCaptionTab`, resets on page reload, not persisted — there was no ask
+to remember it). Clicking a tab calls a new scoped `bindCaptionTabs()`
+that replaces just that card's `.fc-caption-section` innerHTML and
+re-binds only within it, deliberately *not* a full `render()` — a full
+re-render would reset the `<video>`'s playback position/state, which
+would be a jarring side effect of just switching which description is
+showing.
+
+Frontend-only (`app.js`, `lib/store.js`, `style.css`), so per §93 this
+should deploy via the fast path — no Docker rebuild/restart, no
+interrupted session. Verified via `node --check` on both JS files, a
+CSS brace-balance check, and a standalone replay of the exact migration
+logic against the real live settings data (confirmed real longform/
+TikTok caption text survives the shape change). **Not yet verified
+against the live deployed service** — confirm the Short-form/Longform
+tabs actually save/reload each platform's field independently, and that
+a real Final Check card for a piece tagged with two platforms in the
+same group shows a working toggle that correctly narrows to one option
+if a platform is unchecked in Content Production.
+
+---
+
+# 130. Content Production: Vertical-Video Boxes Auto-Orient; Shortform Platform Defaults Revised (Then Corrected Back to Include Facebook)
+
+Two Harvey asks from a screenshot of piece #097 ("verticalvideodemo"):
+the frame-picker's scrub preview (and the row's own thumbnail box) were
+both hardcoded 16:9 boxes, so a vertical upload showed either heavily
+letterboxed (frame-picker) or cropped down to a sliver via
+`object-fit: cover` (thumbnail) — asked for both to auto-detect and
+switch to a vertical box. Separately, shortform platform defaults were
+first changed to drop Facebook, then corrected back within the same
+session ("fb also for shorts") — see the Platform defaults paragraph
+below for the final, actually-correct state.
+
+**Orientation auto-detect (`ops-service/public/app.js`,
+`style.css`):** a new `piece.videoIsVertical` boolean, set two ways —
+at upload time in `handleFiles()` from the real probed
+`width`/`height` (`probeVideoMeta`, already computed there for
+`detectContentType`, just wasn't being kept), and, for any pre-existing
+piece uploaded before this field existed, lazily backfilled the first
+time its row renders: the frame-picker `<video>`'s `loadedmetadata`
+handler compares `videoWidth`/`videoHeight`, and if it disagrees with
+whatever's currently stored (including "never set"), saves the
+corrected value and calls `refreshHead()`. Deliberately computed from
+the actual decoded video, not inferred from `contentType` — a vertical
+video's orientation shouldn't silently flip if Harvey later overrides
+the content type by hand in the full editor.
+
+`buildUploadRowHead()`'s `.upload-row-thumb` and `buildUploadRow()`'s
+`.upload-row-video` both get an `is-vertical` class when the flag is
+set. CSS: `.upload-row-thumb.is-vertical` / `.upload-row-video.is-vertical`
+switch to `aspect-ratio: 9/16` with `max-width: 220px` (so a vertical
+box doesn't stretch to the full grid-column width the way the 16:9
+default does) — the video box also gained `object-fit: contain` on the
+base rule as a defensive no-op for the landscape case, guaranteeing no
+stretching either way regardless of any rounding mismatch between the
+box's aspect-ratio and the actual video's.
+
+**Platform defaults (`PLATFORM_PRESET_BY_TYPE`):** briefly changed
+shortform entries (`ultra_short`/`short`/`long_short`) from `['ytshort',
+'tiktok', 'instagram', 'facebook']` to `['ytshort', 'tiktok',
+'instagram']`, then reverted that same change minutes later per
+Harvey's immediate follow-up ("fb also for shorts") — the **final,
+correct state is all four platforms pre-checked for every shortform
+type**, unchanged from before this whole section started. `longform`'s
+`['ytlong', 'facebook']` was never in question and is unchanged
+throughout. This preset is read at two points that both needed no
+further changes: `handleFiles()` applies it to `platforms` at creation
+time, and the shared editor modal's content-type dropdown re-applies it
+on an explicit type change during editing.
+
+Frontend-only (`app.js`, `style.css`), so per §93 this is already live —
+no deploy/restart needed. Verified via `node --check` and a CSS
+brace-balance check; not yet visually confirmed against the live
+deployed service — worth loading the real #097 piece (the one in
+Harvey's screenshot) to confirm its thumbnail/frame-picker both switch
+to a vertical box on next view (via the lazy-backfill path, since it
+predates this change), and that a fresh vertical upload gets the
+correct box immediately with no letterboxing.
+
+---
+
+# 131. Content Production: Shortform Titles — Just 1 Field, Not 3
+
+Harvey: "when its a shortform video/vertical, remove the '3 title
+options' and put just 1 as theres no way to test/rotate titles" — a
+short gets posted once and is done, unlike a longform upload where
+different titles genuinely can be tried at different times, so
+offering 3 slots for a short was implying a capability (title
+rotation/testing) that doesn't actually exist for that format.
+
+**`ops-service/public/app.js`, `buildUploadRow()`'s title-picker
+section:** now renders 1 plain "Title" input for a shortform piece
+(`p.contentType !== 'longform'`, which — per §128's `detectContentType`
+— is exactly the vertical case in practice) and the existing 3
+"Title option N" inputs for longform, instead of always 3. Backed by
+the same `p.ytTitles` array either way (just fewer input slots writing
+into it), so no data-shape change — a shortform piece's array is simply
+length ≤ 1 now going forward. `finalCheckCardHtml()`'s title-lines
+display needed no change at all: it already renders however many
+entries are actually in `ytTitles`, not a hardcoded 3, so a shortform
+piece already just shows "Title 1: …" there once its array has one
+entry.
+
+**Deliberately scoped to the Content Production upload row only** —
+the shared full-editor modal's `fieldYtTitle1/2/3` (reachable via
+Content Ops, not from Final Check, which has no editor escape hatch per
+§116) still always shows all 3 regardless of content type. Harvey's ask
+was specifically about "the '3 title options'" surface he's been
+iterating on in Content Production screenshots; the modal is a
+secondary/power-user surface this request didn't touch, and per this
+project's "smallest clean change" convention it wasn't extended there
+without being asked. If auto-analysis (`videoAnalysis.js`) had already
+populated a shortform piece's `ytTitles` with more than one entry
+before this change, those extra entries are preserved but not shown or
+editable in the single input — only visible again if the piece's
+content type is later changed to longform, or overwritten the moment
+Harvey types in the one visible field (which then saves just that one
+value, dropping the hidden extras).
+
+Frontend-only, so per §93 this is already live — no deploy/restart
+needed. Verified via `node --check`; not yet visually confirmed against
+the live deployed service — worth checking that a real shortform
+upload row shows exactly one "Title" input (not three) and that a
+longform upload's row is unaffected.
+
+---
+
+# 132. Content Production: "Full editor…" Button Removed
+
+Harvey: "remove the 'full editor' button in general for all vids in the
+content production panel, ill nevver use this." Everything he actually
+touches for an in-production video already lives inline in the row
+itself (thumbnail/frame-picker, backing audio, title(s), platform
+checkboxes, send-to-final-check) — the modal it opened was a leftover
+escape hatch from before that inline UI existed (§111), same category
+of thing already removed from Final Check cards for the same reason in
+§116.
+
+**`ops-service/public/app.js`, `buildUploadRow()`:** the `openBtn`
+button ("Full editor…", called `openPiece(p.id, renderUploadLists)`)
+and both places that referenced it (`appendChild`, and the
+disable/re-enable pairing inside `sendBtn`'s click handler) are gone.
+`openPiece()`/the shared modal itself are untouched — Content Ops (the
+planning kanban) still opens it the normal way on a card click, and the
+Posted grid (already-posted videos) still opens it too, per its own
+existing, separate treatment (§111) — this only removes the one entry
+point into it from the in-production upload row.
+
+Frontend-only, so per §93 this is already live — no deploy/restart
+needed. Verified via `node --check` and a grep confirming no leftover
+`openBtn` references; not yet visually confirmed against the live
+deployed service.
+
+---
+
+# 133. Real YouTube OAuth Connect Flow Built; TikTok Researched Again — No Live Login Area Needed There
+
+Harvey asked to start building the "login area" developers/reviewers
+will need to pass YouTube's and TikTok's platform API review, ahead of
+supplying real OAuth credentials ("in about an hour"), and to figure
+out whether TikTok even needs one. Researched both platforms' actual
+current requirements (WebSearch/WebFetch, not assumed) before building
+anything.
+
+**What Google's YouTube Data API OAuth verification actually
+requires** (per `developers.google.com/identity/protocols/oauth2/
+production-readiness/sensitive-scope-verification` and related pages):
+a **real, live OAuth consent flow** — a genuine "Connect"/"Sign in"
+button that redirects through Google's actual consent screen — plus a
+demo video of that real flow (app name + client ID visible in the
+address bar, the exact functionality each sensitive scope unlocks), a
+detailed written justification per scope, and a publicly-reachable
+homepage (not gated behind our own login) describing the app and
+linking the privacy policy. This is a genuinely different bar than
+TikTok's (§122): Google's video has to show a *real* flow, not an
+illustrative mockup, so the "Connect YouTube" button had to actually
+be built and wired end-to-end now, not just described.
+
+**What TikTok actually requires, re-checked directly against
+`developers.tiktok.com`'s App Review Guidelines and FAQ pages:**
+neither page mentions supplying reviewers with demo accounts or a live
+login area — TikTok's review is a demo-video + sandbox-mode
+submission, exactly as §122 already found and built for
+(`tiktok-app-review.html`). **No new TikTok work was done here** — the
+existing page and app-review package from §122 already covers what
+TikTok's documented process actually asks for; building a live TikTok
+login area now would be speculative work against a requirement that
+doesn't appear to exist, not something to do "just in case" without
+Harvey re-confirming it's actually needed.
+
+**Built for YouTube (all in `ops-service/`):**
+- `src/youtubeAuth.js` (new) — plain REST calls to Google's OAuth
+  endpoints via Node 22's built-in `fetch` (same pattern
+  `elevenlabs.js` already uses server-side; deliberately no
+  `googleapis` SDK dependency, per §6's "avoid unnecessary
+  dependencies"). Requests only `youtube.upload` (publish) and
+  `youtube.readonly` (look up the connected channel's own name for the
+  Settings UI) — the strict minimum per Google's "least privilege"
+  guidance, not the broader `youtube`/`youtube.force-ssl` scopes.
+- `server.js`: a new single-row `youtube_oauth` SQLite table (tokens
+  live here only — the generic `settings` record, which the browser
+  can read in full via `GET /api/store/settings/settings`, never sees
+  them) and four routes, all behind the existing `requireAuth` session
+  gate: `GET /api/youtube/status` (connected?/channel name, no
+  tokens), `GET /api/youtube/oauth/start` (redirects to Google, with a
+  short-lived httpOnly `state`-nonce cookie for CSRF protection),
+  `GET /api/youtube/oauth/callback` (exchanges the code, fetches
+  channel identity, stores tokens, redirects back to `/#settings`),
+  `POST /api/youtube/disconnect`. `/oauth/start` returns a clear 500
+  message rather than crashing while `YOUTUBE_OAUTH_CLIENT_ID/SECRET/
+  REDIRECT_URI` are still unset — the button can exist and be clicked
+  today, it just won't do anything real until Harvey's credentials
+  land in the VPS's `ops-service/.env` (documented in
+  `.env.example`; **still needs manually adding to the real `.env` on
+  the VPS and a container restart once Harvey supplies them** — an
+  env var change needs a restart regardless of any code change).
+- `public/app.js` + `style.css`: Content Settings gained a real
+  "Platform connections" section with a YouTube connect/disconnect
+  card (`renderYoutubeConnectCard()`, polls `/api/youtube/status`,
+  shows "Not configured yet" / "Not connected" / "Connected as
+  <channel>"). The old plain-text "YouTube" entry in the API-keys
+  `KEY_FIELDS` list — never wired to anything — was removed in favor
+  of this real mechanism rather than kept alongside it.
+- `public/youtube-app-review.html` (new, public — not behind the panel
+  password, per Google's homepage-must-be-public requirement) — the
+  written walkthrough + scope justification + compliance commitments
+  Google's review actually asks for, honestly distinguishing what's
+  real today (the connect card, the production/review pipeline) from
+  what publishing itself will do once credentials exist. Cross-linked
+  from `privacy.html`/`terms.html`/`tiktok-app-review.html`'s footers.
+- `public/privacy.html` gained a dedicated "Google user data (YouTube
+  integration)" section spelling out exactly what's accessed/stored/
+  shared, per Google's explicit requirement that the privacy policy
+  disclose this specifically (a generic "we use OAuth" paragraph,
+  which is all it said before, wasn't enough).
+
+**Not done, waiting on Harvey:** the actual Google Cloud Console OAuth
+client setup (client ID/secret, consent screen fields, scope
+verification submission, demo video recording — literally recording
+him clicking "Connect" and going through the real Google screen) is a
+"you, not me" action, same category as every other raw-credential step
+this project has hit (§74/§88). Once he supplies
+`YOUTUBE_OAUTH_CLIENT_ID`/`YOUTUBE_OAUTH_CLIENT_SECRET`, they need to
+land in the VPS's `ops-service/.env` and the container needs a
+restart — nothing here does that automatically. The actual
+`videos.insert` publish call (using the stored token) also isn't built
+yet — this pass only built the connect/auth plumbing, matching this
+project's established "connect first, wire up real posting once
+there's something to post through" sequencing (§62, §122).
+
+This is a `server.js`/new-`src`-file change, so per §93 it triggers a
+full rebuild+restart on the next deploy — same standing caveat as
+every prior backend change in this file, since this session is the
+headless agent running inside the container being restarted. Logged to
+the work log immediately before pushing.
+
+Verified via `node --check` on all three touched/new JS files, a CSS
+brace-balance check, and a div-tag-balance check on all four touched/
+new HTML files. **Not yet verified end-to-end** — there's nothing to
+test against without real Google credentials yet; once Harvey supplies
+them, confirm `/api/youtube/oauth/start` actually reaches Google's
+consent screen, the callback correctly stores tokens and shows
+"Connected as &lt;channel&gt;" in Settings, and Disconnect actually
+clears the stored tokens.
+
+---
+
+# 134. Content Production: "Use This Frame" Was Silently Dead on a Still-Loading Row
+
+Harvey: "the 2nd row isn't interactable when theres multiple rows...
+nothing happens... i need to be able to make changes to any video i
+upload here." Confirmed and root-caused with a real headless-browser
+test rig against the live service (same technique as §123/§127/§128)
+rather than guessing from code review — reproducing it required real
+network throttling, since the container's own link to the VPS is fast
+enough that a small test video loads near-instantly and never actually
+exercises the failure window.
+
+**Root cause:** each upload row's video element fetches its own blob
+independently (`Store.get('videos', p.id)`, §128's already-documented
+comment on `captureCurrentFrame()`: "videoWidth/videoHeight being 0
+here should only mean 'hasn't loaded far enough yet.'"). Real uploaded
+videos run 10MB+; on an ordinary (non-container-fast) connection, a
+second or third row's blob can still be mid-fetch for a genuinely long
+time after the row itself is visible and its button looks clickable.
+Clicking "Use this frame" during that window hit
+`captureCurrentFrame()`'s early-return guard and did nothing at all —
+no error, no state change, the exact "dead button" Harvey described.
+Verified directly: under a throttled connection, `videoWidth`/
+`videoHeight` stayed `0` for **27 real seconds** after the row appeared
+before the video actually finished loading.
+
+**Fix, `ops-service/public/app.js`'s `buildUploadRow()`:** the button
+now starts `disabled`, reading "Loading video…", and the scrub range is
+disabled too — both flip to enabled/"Use this frame" the moment the
+video's `loadeddata` event fires (`readyState >= HAVE_CURRENT_DATA`),
+the same signal the existing auto-pick-first-frame listener already
+waited on. A disabled button can't be clicked at all (browser-enforced,
+not just a JS check), so the failure mode changes from "looks
+clickable, silently does nothing" to "honestly shows it isn't ready
+yet" — the actual capability was never missing, just unannounced.
+
+**Verified end-to-end against the live deployed service**, not just
+reasoned about: reproduced the original bug under throttled bandwidth
+(button correctly showed disabled + "Loading video…"; a scripted click
+attempt on the disabled button correctly timed out, proving the browser
+itself now blocks it); confirmed the button becomes enabled once
+`loadeddata` fires; confirmed a real scrub-then-click afterward
+produces a genuinely new, different captured frame and a real
+`PUT /api/store/pieces/:id` save (checked both via the DOM and a fresh
+server-side re-fetch of the piece). All synthetic test pieces created
+for this were cleaned up via the app's own delete endpoints afterward,
+leaving Harvey's real data untouched.
+
+Frontend-only (`app.js`, no new CSS needed — reused the existing
+`.btn-secondary:disabled` rule), so per §93 this is already live — no
+deploy/restart needed.
+
+---
+
+# 135. Final Check Card: Vertical Video Size Cap, Caption-Tab Styling, Title Label, Video Chip
+
+Four related Final Check polish items from the same round of feedback
+on a real vertical piece.
+
+**Vertical video was enormous.** `.fc-video` had no size cap beyond
+`width: 100%` of the ~800px desktop column — fine for the landscape
+case it was designed around, but a 9:16 vertical piece rendered at
+roughly 800×1420px, blowing the card out (Harvey: "the size is way too
+big in the final check for vertical ones," with a screenshot showing
+exactly that). Fixed by giving `.fc-video-wrap` an `is-vertical`
+variant (`max-width: 360px; margin: 0 auto`), toggled from
+`piece.videoIsVertical` (the same flag §130 already computes/persists
+for Content Production's own vertical-box handling) — bigger than
+Content Production's 220px cap since this is the actual review
+surface, not an inline picker, but still bounded rather than filling
+the column.
+
+**Caption tabs looked like only one platform was selected.** The
+`.fc-caption-tab` pill strip (§129) used a muted/faint default style
+for every tab except the currently-active one, which read as "3 of the
+4 platforms aren't selected" even though all 4 genuinely apply to the
+piece (Harvey: "the video should have all four platform pills selected
+by default, currently only YT shorts is" — he was looking at this tab
+strip, not the separate platform-checkbox chips lower on the card,
+which were already correctly showing all 4). Fixed by giving every tab
+a real accent border/text color by default (`border: 1px solid
+var(--accent-3); color: var(--ink-soft)`); only the active tab keeps
+the solid fill. The distinction now reads as "which one you're
+currently viewing," not "which ones are turned on."
+
+**"Title 1:" implied a second option that doesn't exist for a
+short.** Since §131, a shortform piece only ever collects one title
+(no rotation/testing for something posted once), so
+`finalCheckCardHtml()`'s hardcoded "Title 1:" numbering was misleading
+there — fixed to just "Title:" when `ytTitles.length === 1`, still
+numbered ("Title 1:"/"Title 2:"/"Title 3:") for a longform piece with
+genuinely multiple options.
+
+**Redundant "▶ video" chip.** `chipHtml()` — shared between the normal
+kanban card and Final Check — always appended a "video" chip whenever
+`piece.hasVideo`, which is meaningful on a planning-stage kanban card
+(distinguishes an uploaded video from a plain idea) but pure noise on
+Final Check, where every single card is necessarily a video (Harvey:
+"theyre lit4erally all videos"). `chipHtml(piece, opts)` gained a
+`hideVideoChip` option, passed `true` only from
+`finalCheckCardHtml()`'s call site — the normal kanban card's own call
+is unchanged, so it still shows the chip there.
+
+Frontend-only (`app.js`, `style.css`), so per §93 this is already live
+— no deploy/restart needed. Verified via `node --check` and a CSS
+brace-balance check; not yet visually re-confirmed against the live
+deployed service for these four specifically — worth a look at a real
+vertical Final Check card to confirm the video no longer overflows and
+the caption tabs read correctly.
+
+---
+
+# 136. Real YouTube Video Publish, End to End; Demo-Video Placeholder on the Review Page (2026-09-20)
+
+§133 built the OAuth connect plumbing but deliberately stopped there — no
+actual `videos.insert` call existed yet. Harvey confirmed the Connect flow
+works live and wants to submit for Google's verification review, but
+verification requires a demo video showing each requested scope's real
+functionality — including `youtube.upload` actually publishing something —
+so the missing piece had to be built before there was anything honest to
+film. Harvey's own plan: upload a real longform video, uncheck every
+platform but YouTube (so no other platform's posting needs to exist yet),
+publish it for real, and test it himself before filming.
+
+**`ops-service/src/youtubeAuth.js`: `uploadVideo(accessToken, filePath,
+mimeType, metadata)`** — real publish via YouTube's resumable-upload
+protocol, plain REST (no `googleapis` SDK, same "avoid unnecessary
+dependencies" philosophy as the rest of this file). Two requests: POST the
+metadata (`snippet.title`/`description`, `status.privacyStatus`) to
+`.../upload/youtube/v3/videos?uploadType=resumable` and read the one-time
+`Location` header back, then PUT the actual video bytes to that URL,
+streamed straight off disk via `fs.createReadStream` (not buffered into
+memory — longform files are real size) using Node 22's built-in fetch with
+`duplex: 'half'`, which is required for a streaming request body.
+
+**`ops-service/server.js`:**
+- `getValidYoutubeAccessToken()` — reads the stored `youtube_oauth` row,
+  refreshes proactively via the existing `youtubeAuth.refreshAccessToken`
+  whenever the access token is within a minute of expiring, and persists
+  the new token/expiry (keeping the existing `refresh_token`, since Google
+  doesn't normally rotate it on a plain refresh).
+- `runYoutubePublish(id, opts)` / `POST /api/youtube/publish/:id` — same
+  "validate, respond 202 immediately, do the real work in the background,
+  let the client poll the piece record" pattern already established by
+  `/analyze` (§111) and `/build-final` (§115). Always uploads the built
+  `<id>-final` file (audio already spliced in, per §115's rule that a
+  piece can't reach Final Check without it) if present, falling back to
+  the raw upload only if it somehow isn't. On success: `piece.stage =
+  'live'` (the long-reserved "Posted/Live" stage, §62, now has a real
+  posting confirmation behind it for YouTube), plus
+  `youtubePublishStatus: 'done'`, `youtubeVideoId`, `youtubeUrl`,
+  `postedAt`. On failure: `youtubePublishStatus: 'error'` +
+  `youtubePublishError`, stage left untouched so Harvey can just retry —
+  matching the exact same failure convention `finalBuildStatus`/
+  `finalBuildError` already established.
+
+**`ops-service/public/app.js` — Final Check card:** a piece only shows a
+"Publish to YouTube" control at all if it's actually tagged for the
+`ytlong` platform (`fcYoutubePublishHtml()`) — exactly Harvey's own test
+setup (uncheck every other platform), not a guess about which platform he
+meant. A privacy `<select>` (Private/Unlisted/Public, defaulting to
+Private — the safest choice for the very first real test against his
+actual channel) sits next to the button. Clicking it computes the real
+title (`ytTitles[0]` or the piece title) and description (the real
+`ytlong` entry from `captionsForPiece`, §129 — link-substituted, exactly
+what would actually ship) client-side, disables the button in place
+(`btn.textContent = 'Publishing…'`) without a full `render()` (same
+"don't reset the video's playback position" reasoning as the caption-tab
+toggle, §129), then POSTs to the new endpoint. `maybeStartYoutubePublishPoll()`
+(mirrors `maybeStartAnalysisPolling`, §111/115, kept as its own separate
+poller since it watches a different field on a different view) polls
+every 3s for any piece still `pending`/`running` and triggers a full
+`render()` once one resolves — appropriate here, unlike the caption
+toggle, since "done" moves the card out of the Final Check column
+entirely. `youtubeStatusCache`, fetched once in `bootContentOps()`
+alongside the existing `boardSettingsCache` fetch, disables the button
+with an explanatory tooltip if YouTube isn't actually connected.
+
+**`ops-service/public/youtube-app-review.html`:** added a clearly-marked
+`<div class="rv-video-slot">` placeholder ("Verification demo video —
+coming soon") near the top of the page, with an HTML comment describing
+exactly what to swap it for once Harvey records the real thing (a plain
+`<iframe>` YouTube embed) and what the video needs to show, in order:
+login → Settings → real Google consent screen → producing/approving a
+video through Final Check → the real Publish action landing on the
+actual channel. This was built specifically so the page has an honest,
+obviously-a-placeholder slot to point at right now, rather than either an
+empty gap or a claim that a video already exists.
+
+**Deliberately out of scope for this pass, per Harvey's own instruction**
+("just YouTube... you don't need to wire up any other services"): no
+change to TikTok/Instagram/Facebook, which remain exactly as unbuilt as
+§62/§122 already documented. Also not built: any automatic/scheduled
+posting — this is a manual, on-demand "publish now" action triggered from
+Final Check, not a cron job firing at a piece's `scheduledAt` time; the
+existing Approve→Scheduled flow (§111) is untouched and still available
+as a separate action for pieces not going out immediately.
+
+This is a `server.js`/`youtubeAuth.js` change (real backend logic), so
+per §93 it triggers a full rebuild+restart on the next deploy — same
+standing caveat as every prior backend change in this file, since this
+session is the headless agent running inside the container being
+restarted. Logged to the work log immediately before pushing.
+
+Verified via `node --check` on all touched JS files and a CSS/HTML
+balance check on the touched CSS and the review-page HTML. **Not yet
+verified against the live deployed service** — there's nothing to test
+against until this deploys and Harvey actually uploads his real test
+video; once it's live, confirm: the Publish button appears only when
+`ytlong` is the piece's tagged platform, the upload actually completes
+and produces a real, playable YouTube video at the chosen privacy level,
+the piece correctly moves to "Posted / Live" on success, and a deliberate
+failure (e.g. disconnecting YouTube mid-test) surfaces
+`youtubePublishError` on the card rather than failing silently.
+
+---
+
+# 137. Final Check Button Genericized to "Schedule Video"; TikTok Publish Still Blocked on Missing Credentials (2026-09-20)
+
+Harvey's correction to §136, right after reading it: the Final Check
+button shouldn't be framed as platform-specific ("Publish to YouTube")
+at all — conceptually it's one action that publishes to *every* platform
+a piece is tagged for, and today just happens to only have YouTube
+actually wired underneath. He also asked, separately, whether TikTok
+needs the same real wiring or whether a mockup demo is enough for its
+own app review, so he can shoot two separate test videos (one per
+platform) today if it's worth doing now.
+
+**`ops-service/public/app.js`:** `fcYoutubePublishHtml()` renamed to
+`fcScheduleVideoHtml()` and reworked around a new `WIRED_PUBLISH_PLATFORMS
+= ['ytlong']` constant — the single source of truth for which tagged
+platforms can actually be acted on right now, extend this array (and the
+click handler) as more platforms get real integrations. The section is
+no longer gated on `ytlong` specifically — it renders for any Final
+Check card, buttons "Schedule Video" (or "Retry" after a failure), and
+splits the piece's tagged platforms into `wired` vs `unwired`:
+- Zero wired platforms tagged → button shown disabled, with a note
+  listing which selected platforms aren't wired yet ("tiktok, instagram
+  not wired up yet — won't be published there") rather than hiding the
+  button entirely, so it's visible that scheduling exists but can't do
+  anything real yet for this piece's current platform selection.
+- At least one wired platform (i.e. `ytlong`) tagged → button enabled,
+  same real immediate-publish click handler as §136 (unchanged — it was
+  already YouTube-only under the hood, this only changed what surrounds
+  it), plus the same "not wired yet" note for any other tagged platforms
+  so nothing is silently skipped without saying so.
+
+No scheduled-time delay was added or is planned for this action — per
+Harvey's own "for this test we can publish immediately," clicking it has
+always published right away (§136), which already matches what he
+wants; the only thing that needed fixing was the label/framing implying
+it was YouTube-specific.
+
+**TikTok: genuinely still blocked, not a judgment call.** Checked the
+actual repo state before answering rather than guessing: there is no
+TikTok client key/secret anywhere in this codebase, not even a
+placeholder in `.env.example`, and zero backend code (`src/tiktokAuth.js`
+doesn't exist, no `tiktok_oauth` table, no routes) — §62's original
+"the field is there for when it is" TikTok Settings entry is still just
+an inert text field. This is the same category of blocker as YouTube's
+own credentials were before Harvey supplied them (§133/§136): building
+real TikTok posting needs an actual TikTok developer app registered
+first (client key/secret, Login Kit scopes), which only Harvey can do —
+there's nothing to wire up server-side until that exists.
+
+Separately, on the actual question asked (real integration vs. a
+demo-only mockup for TikTok's own review): re-read §122's own research
+notes on this — TikTok's App Review Guidelines ask for a demo video
+"showing the complete end-to-end integration, all requested scopes
+actually demonstrated," which reads closer to Google's "must be a real,
+live flow" bar than to something a static mockup can honestly satisfy,
+though TikTok's wording is looser than Google's explicit
+address-bar-visible requirement. Also relevant: TikTok's own "unaudited
+app" restriction (posts forced to `SELF_ONLY` visibility, capped at 5
+posting users/24h) exists specifically so a developer *can* test real
+posting against their own account before formal approval — the same
+shape as YouTube's Testing-mode test-user allowance — so once
+credentials exist, real (if self-only) TikTok posting is achievable for
+a demo video the same way YouTube's Private-visibility test was. Net
+recommendation: build it for real once credentials exist, for the same
+honesty reasons §122 already flagged about this page ("honesty here
+matters for a compliance review") — but this is Harvey's call to make
+once he's registered the app, not something blocked on more research.
+
+**Not built this pass:** any TikTok backend code — there's nothing to
+build against yet. If Harvey registers a TikTok developer app and
+supplies a client key/secret, the next step would mirror §133/§136's
+YouTube pattern (`src/tiktokAuth.js`, a `tiktok_oauth` table, connect/
+disconnect routes, then a real `video.publish` call reachable from this
+same `fcScheduleVideoHtml()` section) rather than a new mechanism.
+
+Frontend-only (`app.js`, `style.css`), so per §93 this is already live —
+no deploy/restart needed. Verified via `node --check` and a CSS
+brace-balance check; not yet visually re-confirmed against the live
+deployed service — worth a look to confirm the button reads "Schedule
+Video," the not-wired note appears correctly when e.g. only TikTok is
+checked, and the real YouTube publish still fires correctly when
+`ytlong` is checked (should be unchanged from §136's already-built
+click handler).
+
+---
+
+# 138. Fixed: Copy Buttons on Fenced Code Blocks Copied the Wrong Block
+
+Harvey reported the "Copy" button on code blocks in the Project Manager
+chat "don't work" — and the message he was looking at (this session's own
+previous reply, which happened to contain two separate fenced code
+blocks) is exactly the reproduction case.
+
+**Root cause, `renderMarkdownLite()` in
+`ops-service/public/lib/voiceClient.js`:** the loop that builds each
+fenced code block declared its `pre`/`codeEl`/`copyBtn` elements with
+`var`, which is function-scoped, not per-iteration. A message with more
+than one code block runs this loop more than once, and every click
+handler created inside it — `copyBtn.addEventListener('click', function
+() { ... codeEl ... copyBtn ... })` — closed over those same shared `var`
+bindings rather than the specific element from its own iteration. By the
+time any button was clicked, `codeEl`/`copyBtn` held whatever the *last*
+loop iteration had set them to. Practical effect: clicking an earlier
+block's Copy button silently copied the *last* block's text to the
+clipboard instead of its own, and flipped the *last* button's label to
+"Copied" instead of the one actually clicked — which, on the button
+Harvey actually clicked, looked exactly like nothing happened at all. A
+message with only one code block was never affected (nothing to
+misattribute to), which is presumably why this hadn't been reported
+before now — most replies with code only include one.
+
+**Fix:** the three `var` declarations inside the loop changed to `let`,
+which is block-scoped per iteration — each button's closure now
+correctly captures its own element bindings, not whichever iteration
+happened to run last. Every browser this app targets (Chrome/Safari,
+desktop and mobile) supports `let` natively; no build step or
+transpilation involved.
+
+Frontend-only (`voiceClient.js`), so per §93 this is already live — no
+deploy/restart needed. Verified via `node --check`; the multi-code-block
+repro case (this exact conversation's earlier reply) is the way to
+confirm it in practice — each button should now independently copy and
+label only its own block.
+
+---
+
+# 139. Real TikTok Video Publish Built, Mirroring YouTube (§136); Final Check Button Now Covers Both Platforms (2026-09-20)
+
+Harvey registered a TikTok developer app, created a Sandbox (per §137's
+recommendation — unaudited/sandboxed posting is genuinely testable
+end-to-end before formal review, just forced to `SELF_ONLY` visibility),
+added Login Kit + Content Posting API with the `user.info.basic` and
+`video.publish` scopes, verified domain ownership of
+`ops.realitymanual.com` (via the URL-prefix signature file this session
+hosted directly — see the immediately-preceding exchange), and supplied
+the sandbox's Client Key/Secret. Asked for the real integration to be
+built the same way YouTube's was, so he can test two separate pieces
+(one YouTube-only, one TikTok-only) today.
+
+**Researched TikTok's actual current API shape before writing anything**
+(same discipline as §64's BookVault research) — endpoints, exact
+request/response fields, and chunking rules were fetched directly from
+`developers.tiktok.com`'s live docs, not assumed from general TikTok API
+familiarity, which has genuinely moved between API versions over time:
+
+- Auth: `https://www.tiktok.com/v2/auth/authorize/` (no PKCE for the web
+  flow — `code_verifier` is mobile/desktop-only), token exchange/refresh
+  both at `https://open.tiktokapis.com/v2/oauth/token/`,
+  form-urlencoded, both returning `access_token`/`refresh_token`/
+  `expires_in`/`refresh_expires_in` — TikTok may rotate the refresh token
+  on a plain refresh (Google normally doesn't), so the new value must
+  always be persisted, not assumed unchanged.
+- User info: `GET /v2/user/info/?fields=open_id,display_name`.
+- **Direct Post, FILE_UPLOAD source** — three calls: `POST
+  /v2/post/publish/creator_info/query/` first (required before showing/
+  using posting options per TikTok's Content Sharing Guidelines — also
+  the only way to know which `privacy_level` values this specific
+  account is actually allowed, since an unaudited/sandboxed app is
+  forced to `SELF_ONLY` regardless of what's requested); then `POST
+  /v2/post/publish/video/init/` with `post_info.title` +
+  `source_info.{video_size,chunk_size,total_chunk_count}`, returning a
+  `publish_id` and a one-hour-valid `upload_url`; then one or more `PUT`
+  requests to that URL with `Content-Range: bytes {start}-{end}/{total}`
+  per chunk (5MB-64MB each, final chunk absorbs the remainder up to
+  128MB, 1-1000 chunks total — videos under 64MB go out as a single
+  chunk); then `POST /v2/post/publish/status/fetch/` polled until
+  `PUBLISH_COMPLETE`/`FAILED`, since TikTok processes the upload
+  asynchronously after the last byte lands.
+
+**`ops-service/src/tiktokAuth.js`** (new) — mirrors `youtubeAuth.js`'s
+shape and "no SDK dependency" philosophy: `buildAuthUrl`, `exchangeCode`,
+`refreshAccessToken`, `fetchUserInfo`, `queryCreatorInfo`, and a single
+`publishVideo(accessToken, filePath, mimeType, {title})` that
+orchestrates creator-info → init → chunked upload → status-poll end to
+end, matching `youtubeAuth.uploadVideo`'s one-call shape for `server.js`
+to consume the same way. `computeChunkPlan()`/`uploadVideoChunks()`
+implement the chunking rules above directly against the file on disk
+(`fs.promises.open` + `.read()` per chunk — never buffers the whole file
+into memory, same reasoning as YouTube's streamed upload).
+
+**`ops-service/server.js`:** a `tiktok_oauth` table (same single-row
+shape as `youtube_oauth`) and a parallel route set —
+`GET /api/tiktok/status`, `GET/GET /api/tiktok/oauth/{start,callback}`,
+`POST /api/tiktok/disconnect`, `getValidTiktokAccessToken()` (proactive
+refresh, persists whatever `refresh_token` comes back rather than
+assuming it's unchanged) — plus `runTiktokPublish(id, opts)` /
+`POST /api/tiktok/publish/:id`, the exact same "respond 202 immediately,
+do the real work in the background, let the client poll the piece
+record" pattern as `runYoutubePublish`. Uploads the built `<id>-final`
+file if present, same fallback-to-raw-upload behavior. On success:
+`piece.stage = 'live'`, `tiktokPublishStatus: 'done'`,
+`tiktokPublishId`, `tiktokPrivacyLevel`, `postedAt`. On failure:
+`tiktokPublishStatus: 'error'` + `tiktokPublishError`, stage left
+untouched — identical convention to the YouTube/final-build failure
+paths already established.
+
+**Known, accepted limitation, stated honestly rather than solved:** if a
+single piece were ever tagged for *both* `ytlong` and `tiktok`
+simultaneously, `runYoutubePublish` and `runTiktokPublish` would both
+read-modify-write the same piece record concurrently with no locking
+between them — a real (if narrow) race where one job's write could
+clobber the other's. Not fixed this pass because Harvey's actual stated
+test plan is one platform per piece (two separate test videos), which
+never exercises this path — worth a per-piece lock if simultaneous
+multi-platform publishing from one piece is ever actually used.
+
+**`ops-service/public/app.js` — generalized for two platforms:**
+- `WIRED_PUBLISH_PLATFORMS` (§137) now `['ytlong', 'tiktok']`, with new
+  `publishStatusFieldFor`/`publishErrorFieldFor`/`publishEndpointFor`/
+  `publishPlatformConnected` helpers replacing the YouTube-only field
+  references `fcScheduleVideoHtml()` and its click handler used before.
+  The button aggregates state across whichever wired platforms a piece
+  is tagged for — "Publishing…" while any is pending/running, one error
+  line per platform that failed, a "not wired up yet" note for any
+  tagged-but-unwired platform, same behavior as §137 just no longer
+  hardcoded to one platform.
+- The privacy `<select>` only renders when `ytlong` is among the wired
+  platforms — TikTok has no real choice to offer while sandboxed
+  (`SELF_ONLY` is forced either way), so no TikTok-specific control was
+  added for it.
+- The click handler fires one independent publish request per
+  wired-and-tagged platform. TikTok's request body sends the piece's
+  real `tiktok` caption entry (from `captionsForPiece`, §129) as
+  `title` — Content Posting API has one text field that serves as the
+  on-post caption, not separate title/description fields like YouTube,
+  so the caption text is what actually belongs there, falling back to
+  the piece's plain title if no TikTok caption template is set.
+- `maybeStartYoutubePublishPoll()` (name kept per §90/§99's "don't chase
+  internal names" convention) now watches both platforms' status fields.
+- Content Settings gained a `tiktokConnectCard`/`renderTiktokConnectCard()`
+  mirroring the YouTube one exactly (Connect/Disconnect, "Connected as
+  @handle"), and the old plain-text "TikTok (pending access)" API-key
+  field was removed from `KEY_FIELDS` now that a real mechanism exists —
+  same treatment YouTube's own placeholder field already got in §133.
+
+**Credentials:** `TIKTOK_CLIENT_KEY`/`TIKTOK_CLIENT_SECRET`/
+`TIKTOK_REDIRECT_URI` added directly to `ops-service/.env` on the VPS
+(gitignored, never committed) via SSH — same mechanism already used for
+YouTube's credentials (§136). Placeholder entries added to
+`.env.example` for documentation. `TIKTOK_REDIRECT_URI` is
+`https://ops.realitymanual.com/api/tiktok/oauth/callback`, matching what
+Harvey registered in the TikTok developer portal.
+
+This is a `server.js`/new-`src`-file change (real backend logic), so per
+§93 it triggers a full rebuild+restart on the next deploy — same
+standing caveat as every prior backend change in this file, since this
+session is the headless agent running inside the container being
+restarted. Logged to the work log immediately before pushing.
+
+Verified via `node --check` on all touched/new JS files. **Not yet
+verified end-to-end** — there's nothing to test against until this
+deploys; once it's live, confirm: the TikTok Connect button in Content
+Settings reaches TikTok's real consent screen and shows "Connected as
+@handle" afterward, a real TikTok-only test piece's "Schedule Video"
+button actually uploads and the piece moves to Posted/Live, and a
+deliberate failure surfaces `tiktokPublishError` on the card rather than
+failing silently. Once both platforms are confirmed working for real,
+Harvey can record the TikTok demo video against this genuine sandbox
+integration.
+
+---
+
+# 140. Real Bug: Final Check Had Two Confusingly Similar Buttons — Neither Actually Published
+
+Harvey's first real test of §139's "Schedule Video" button failed
+silently in a specific, diagnosable way: the piece (#097,
+"verticalvideodemo") landed in the **Scheduled** kanban column instead
+of Posted/Live, nothing reached his TikTok account, the card showed all
+4 platforms despite him believing he'd narrowed it to TikTok only, and
+the normal kanban card showed no thumbnail at all.
+
+**Root cause, confirmed by pulling the piece's real stored record**
+(not guessed): `finalCheckCardHtml()` still rendered **two** buttons
+side by side — the old `fc-approve-btn` ("Approve → Scheduled", §111's
+pre-real-publish cadence-only approval) *and* the new `fcScheduleVideoHtml()`
+("Schedule Video", §137-139). Harvey clicked what he read as "the"
+schedule action; it happened to be the old one, which silently just
+sets `stage = 'scheduled'` via the internal cadence scheduler and
+touches no publish API at all — no error, no feedback, nothing to
+suggest the click did anything other than what he expected. That's
+exactly the piece's confirmed state: `stage: "scheduled"`,
+`scheduledAt` set, no `tiktokPublishStatus` field at all.
+
+Two buttons that both plausibly read as "make this go out" was the
+actual bug — not a wording problem to fix with a relabel. **Fix:** the
+old `fc-approve-btn`/"Approve → Scheduled" button and its click handler
+are removed entirely from the Final Check card. `fcScheduleVideoHtml()`'s
+"Schedule Video" is now the only action there, exactly matching
+Harvey's original §137 ask. `approveAndSchedule()` itself and its other
+two call sites (`setPieceStage`'s manual-drag safety net, the shared
+editor modal's own Approve button — unreachable for a Final Check piece
+in practice since §116 already removed all navigation into the modal
+from that card) were left alone; removing only what's actually
+reachable and actually caused this bug.
+
+**The 4-platforms display was not a bug** — pulled straight from the
+piece's real stored `platforms` array, which genuinely still held all
+4. Piece #097 predates Content Production's per-platform checkboxes
+(§128) reaching this specific piece's own edit window, and once a piece
+advances past the `processed` stage there is currently no UI anywhere
+to edit its platform tags — Final Check only ever displays them
+read-only (§116). Harvey's belief that he'd unchecked the other three
+for this piece doesn't match what's stored; most likely he unchecked
+them on a different, still-in-Production piece. Not fixed as a "bug"
+since there wasn't one in the code — flagging the real gap instead:
+there is currently no way to change a piece's tagged platforms once it
+reaches Final Check, which could be worth adding if this keeps causing
+confusion.
+
+**Thumbnail:** confirmed `piece.thumbnailDataUrl` genuinely exists on
+this piece (a real base64 JPEG) — `cardHtml()` (the normal, non-Final-
+Check kanban card) simply never rendered it, unlike `videoCardHtml()`
+(Posted grid) and the shared modal, which both already do. Added a
+`.card-thumb` (16:9, cropped, matching the visual weight of
+`.video-card-thumb`) shown at the top of any card that has one; a plain
+idea with no video/thumbnail renders exactly as before.
+
+**Piece #097 itself, fixed directly against the live data** (not just
+in code) so Harvey has something real to re-test: moved back to
+`stage: 'final_check'` (its `finalBuildStatus: 'done'` final-spliced
+video was still intact and never touched, so the card will render
+correctly), `scheduledAt` cleared, and `platforms` set to `['tiktok']`
+only, matching what Harvey actually said he wanted for this test.
+
+Frontend-only (`app.js`, `style.css`), so per §93 this is already live
+— no deploy/restart needed. The piece #097 data fix was applied
+directly via the live API (login → GET → PUT), separately from the code
+push. Verified via `node --check` and a CSS brace-balance check; not
+yet re-confirmed against the live deployed service that clicking the
+now-sole "Schedule Video" button on #097 actually reaches TikTok for
+real — that's the next thing to check once Harvey retries it.
+
+---
+
+# 141. Fixed: Unchecking Multiple Platform Boxes in Content Production Could Silently Resurrect One
+
+Harvey's report immediately after §140: unchecking platform checkboxes
+in Content Production was "a bit buggy" — some came back on. Real race
+condition, not a UI glitch — traced end to end rather than guessed.
+
+**Root cause:** each platform checkbox's `change` handler
+(`buildUploadRowHead()` in `ops-service/public/app.js`) mutated
+`p.platforms` in memory and immediately fired its own `Store.put('pieces',
+p)`. `lib/store.js`'s `put()` calls `JSON.stringify(body)` synchronously
+at the moment each request is *sent* — a correct snapshot at that
+instant — but `PUT /api/store/:storeName/:id` on the server does a full-
+record overwrite with no merge logic, so whichever request's response
+happens to *arrive* last simply wins outright, regardless of which one
+was sent last or which one carries the more complete change. Unchecking
+two boxes within the same few hundred milliseconds fires two concurrent
+PUTs; ordinary network timing variance can easily let the earlier
+request (missing only the first uncheck) land on the server *after* the
+later one (missing both) — silently persisting the earlier, incomplete
+state and making the second uncheck look like it "came back on," even
+though the in-memory `p.platforms` and the checkboxes' own visual state
+were correct the whole time. This is a classic fire-a-request-per-
+keystroke/click race, not anything specific to checkboxes or platforms.
+
+**Fix:** debounce the actual save, same pattern already used for
+Settings (`saveSettingsDebounced`/`settingsSaveTimer`) — a new
+module-level `platformSaveTimers` map (keyed by piece id, alongside the
+existing `uploadRowObjectUrls`). The checkbox handler still mutates
+`p.platforms` and updates that one checkbox's own `.checked` visual
+class immediately/synchronously (instant feedback, no behavior change
+there), but the `Store.put()` call itself is deferred 400ms and reset on
+every subsequent toggle for the same piece — so a rapid burst of clicks
+results in exactly one PUT, built from whatever `p.platforms` looks like
+once the user actually stops clicking, with nothing left to race against.
+Also dropped the old `.then(refreshUploadRowHeadById)` full-head-rebuild
+after each save — unnecessary now (nothing else on the row's head
+visually depends on which platforms are checked besides the checkboxes
+themselves, which are already updated directly) and it was itself a
+minor source of DOM churn during rapid interaction.
+
+Frontend-only (`app.js`), so per §93 this is already live — no deploy/
+restart needed. Verified via `node --check`; not yet re-tested against
+the live deployed service with a real rapid multi-uncheck — worth
+confirming a fast burst of unchecks now reliably persists all of them
+after a page reload, which is the only way this race actually surfaced
+before (the in-memory/visual state was never wrong, only what
+eventually landed on the server).
+
+---
+
+# 142. §141 Wasn't the Whole Bug: the Analysis Poller Was Also Clobbering Platform Edits
+
+Harvey tested again right after §141 and hit essentially the same
+symptom from a different angle: unchecked everything but TikTok on a
+fresh upload, and by the time it reached Final Check all 4 platforms
+were back, with the caption tab strip also wrongly showing all 4
+platforms' captions instead of just TikTok's.
+
+**That second complaint (captions) isn't a separate bug** — the Final
+Check caption tabs are entirely derived from `piece.platforms`
+(`captionsForPiece()`, §129); once platforms is wrong, the caption
+section is automatically wrong too. Fixing the real cause fixes both
+symptoms from one change.
+
+**Real root cause, found by reading `maybeStartAnalysisPolling()`
+directly:** every 3s while a piece's `analysisStatus` or
+`finalBuildStatus` is `pending`/`running`, this poller does
+`Store.get('pieces', id)` and then **`pieces[r.id] = r`** — a full,
+unconditional replace of the entire in-memory piece object with
+whatever the server happened to return. Analysis (ffmpeg extraction +
+ElevenLabs transcription + a Claude Code matching call) and the final-
+video build routinely take several real seconds — plenty of time for
+Harvey to be actively unchecking platform boxes on that exact row while
+it's still processing. If a poll tick's `GET` reflects a server
+snapshot from *before* that edit's own (now-debounced, per §141) save
+has landed, the wholesale replace overwrites Harvey's in-progress local
+edit with the stale server value the instant `refreshUploadRowHeadById`
+re-renders that row's head — silently reverting it, regardless of
+whether §141's debounce had even fired yet. §141 fixed the write side
+of this row's platform-save race; this was a second, independent bug on
+the *read* side, in a completely different piece of code, that could
+undo the same field by an entirely different mechanism.
+
+The irony: `server.js`'s own background jobs (`runVideoAnalysis`,
+`runBuildFinalVideo`) already do this correctly — both explicitly
+re-fetch the piece and overwrite *only* the fields they own before
+saving (§111/§115's own documented reasoning: "a concurrent edit Harvey
+made while analysis was running isn't clobbered"). The client-side
+poller consuming those same jobs' results never applied that same
+discipline — it just replaced everything.
+
+**Fix, `ops-service/public/app.js`'s `maybeStartAnalysisPolling()`:**
+instead of `pieces[r.id] = r`, merge — start from the current local
+object and copy over only the fields these two background jobs actually
+own (`analysisStatus`, `analysisError`, `analysisMatchedPieceId`,
+`transcript`, `ytTitles`, `title`, `finalBuildStatus`,
+`finalBuildError`, `stage`, `updatedAt`). Everything else — `platforms`,
+`thumbnailDataUrl`, `audioTrackId`, `videoIsVertical`, `contentType`,
+`notesHtml` — now always stays whatever's currently in the browser's
+own memory, since none of these background jobs ever touch those
+fields server-side either. This closes the exact bug reported and, by
+construction, the same latent bug for the other two fields editable
+inline on this same row (audio track, thumbnail) that hadn't been
+reported yet but were equally exposed.
+
+Verified the actual "Test video" piece from Harvey's screenshot no
+longer exists in the live data (`GET /api/store/pieces` — 94 pieces
+total, only #097 has `hasVideo: true`) — he most likely deleted it
+after screenshotting, via the right-click delete from §127, so there
+was nothing left to hand-fix directly this time; he'll need to re-test
+with a fresh upload once this deploys.
+
+Frontend-only (`app.js`), so per §93 this is already live — no deploy/
+restart needed. Verified via `node --check`; not yet re-tested against
+the live deployed service with a real fresh upload — worth confirming
+that unchecking platforms *during* active analysis/build processing
+(the actual failure window) now survives through to Final Check
+correctly, captions included.
+
+---
+
+# 143. First Real TikTok Publish Attempt: Genuine Platform Rule, Not a Bug — Account Must Be Set to Private
+
+Harvey's first real "Schedule Video" click against TikTok reached the
+live API correctly (confirms §139/§142's fixes are all working
+end-to-end — auth, chunked upload, everything up to TikTok's own
+business-logic check) and got back a real, documented TikTok error:
+
+```text
+{"error":{"code":"unaudited_client_can_only_post_to_private_accounts",
+"message":"Please review our integration guidelines at
+https://developers.tiktok.com/doc/content-sharing-guidelines/", ...}}
+```
+
+**Researched rather than guessed:** this is a second, separate
+unaudited-client restriction beyond the post-level `SELF_ONLY`
+`privacy_level` §139 already handles correctly. TikTok additionally
+requires the **target account's own account-level visibility** to be
+set to Private in the TikTok app itself (Settings and privacy → Privacy
+→ Private account) — a completely different setting from the
+per-content privacy level our `queryCreatorInfo`/`initPublish` calls
+already request correctly. Both conditions are required together for an
+unaudited client to post at all; our code was never wrong here, there's
+just nothing it can do about the account's own visibility setting.
+
+**Fix (Harvey, not code):** switch the connected TikTok account
+(whichever real account he added as a Sandbox target user) to Private
+in the TikTok app, then retry Schedule Video. Worth noting for later:
+per the same TikTok documentation, making a previously-private-account
+post publicly visible afterward isn't automatic just from switching the
+account back to public — each individual piece of content's own privacy
+also has to be changed to "Everyone" separately at that point.
+
+No code change this round — nothing to fix on our end. Documented here
+since it's a genuine, verified TikTok platform requirement worth
+knowing before the next real test, not something to re-investigate if
+the same error shows up again.
+
+Sources:
+- [Content Sharing Guidelines](https://developers.tiktok.com/docs/en/content-sharing-guidelines)
+
+---
+
+# 144. Fixed: Kanban Board Went Stale If Harvey Left Content Production Before a Background Job Finished
+
+Harvey's report: click "Send to final check" in Content Production, then
+quickly switch to the Kanban board — the card doesn't actually appear in
+Final Check until a full page reload, even well after the real ffmpeg
+build has genuinely finished server-side. Separately, he asked to add a
+transition animation (Final Check → Scheduled, Processing → Final Check)
+to the to-do list — noted below, not built this pass since he explicitly
+framed that part as a backlog item, not something to fix right now.
+
+**Root cause, in `maybeStartAnalysisPolling()`'s poll tick
+(`ops-service/public/app.js`):** once a piece's `analysisStatus` or
+`finalBuildStatus` actually resolves, this function's per-row DOM update
+(`removeUploadRowAnimated`, `refreshUploadRowHeadById`, or
+`renderUploadLists()` for the error-recovery case) only ever touches
+`uploadRows` — Content Production's own DOM subtree. The moment Harvey
+navigates to a different tab, that subtree is torn down by the SPA's
+tab router; these calls don't error against the detached node, they just
+silently do nothing. `pieces[r.id]` itself was already being correctly
+updated in memory (§142's fix), but nothing told whichever *other* tab
+was actually on screen — the Kanban board, in Harvey's exact scenario —
+to redraw itself with that new data. Only a full page reload re-fetched
+everything fresh and rendered once, which is why that "worked."
+
+**Fix:** the poller now checks `currentTabId() !== 'upload-files'`
+before running any of the Content-Production-specific DOM updates, and
+calls the existing generic `notifyPiecesChanged()` hook instead when
+some other tab is active — the same `window.__rmOnPiecesChanged`
+mechanism already used everywhere else in this file for exactly this
+"a different view needs to know data changed" case (e.g. after quick-
+add saves, or the shared modal's own edits). Since `window.__rmOnPiecesChanged`
+always points at whichever tab most recently booted itself (`render`
+for Content Ops, `renderUploadLists` for Content Production), this
+correctly redraws the Kanban board — or whatever else is actually
+visible — the instant a background job's result lands, without waiting
+for Harvey to switch back to Content Production first or reload the
+page. Confirmed calling a torn-down tab's own render function (e.g. a
+stale `render()` still referencing Content Ops's now-detached `board`
+element, if Harvey's since moved on to a *third* tab like Settings) is
+a harmless no-op, not an error — DOM writes against a disconnected node
+just don't paint anywhere, they don't throw.
+
+**Deferred, per Harvey's own "add to my to-do list" framing — not built
+this pass:** a real move-transition animation when a card changes
+column (Processing → Final Check, Final Check → Scheduled, etc.), so
+the change reads as motion rather than a card just appearing/
+disappearing between renders. Worth scoping properly when picked up —
+`render()` currently does a single full `board.innerHTML = ...` rebuild
+per call (§113/123), which has no concept of "this specific card moved
+from column A to column B" to animate against; doing this properly
+likely means diffing the previous and next render's card-to-column
+mapping and running a FLIP-style transition on whichever cards actually
+moved, not just fading the whole board.
+
+Frontend-only (`app.js`), so per §93 this is already live — no deploy/
+restart needed. Verified via `node --check`; not yet re-tested against
+the live deployed service with the exact repro (send to final check,
+immediately switch to the Kanban tab, wait for the real build to finish
+without touching the page) — worth confirming the card now appears on
+its own once the background build completes.
+
+---
+
+# 145. §144 Verified For Real (Not Just Reasoned About) — and the Move Animation Actually Built This Time
+
+Harvey reported §144's fix still wasn't working ("i still dont see any
+movement from processing --> final check"). Given this exact codebase's
+own repeated history of shipping reasoning-only fixes that failed in
+practice on this specific board (§113/§119/§120/§121's four rounds
+before §123 finally built a real test rig), the right response wasn't a
+fifth guess — it was building a real browser test rig again and actually
+watching it happen.
+
+**Test rig rebuilt from scratch this session** (same workaround as
+§123: `playwright-core` + `npx playwright install chromium`, then
+downloading missing shared libs as plain `.deb` files from
+`deb.debian.org`'s `bookworm` pool — this container's actual Debian
+version, confirmed via `/etc/os-release` first rather than guessing,
+which avoided §123's glibc-version mismatch gotcha entirely — and
+extracting them with `dpkg-deb -x` into a scratch dir for
+`LD_LIBRARY_PATH`, no root needed). Logged into the real
+`ops.realitymanual.com`, uploaded a real synthetic video (`ffmpeg
+testsrc` + a real `sine` audio track — a first attempt without an audio
+track produced a real server-side `finalBuildStatus: 'error'`, which
+is correct behavior, not a bug, and was a useful reminder that a failed
+build should never be confused with a stale-render bug), picked a real
+ambient audio track to force the slower `amix` re-encode path, clicked
+"Send to final check," immediately switched to `#content-ops`, and
+polled the live DOM for up to two minutes watching for the card to
+land in Final Check **without ever reloading the page**.
+
+**§144's fix genuinely does work** — confirmed three times: a fast
+build (desktop), a slower realistic build with real audio (desktop,
+~4s), and the same flow under an emulated mobile viewport/Safari user
+agent. All three landed correctly in Final Check with no reload. No
+service worker exists on this origin either (checked and ruled out as
+a possible stale-cache explanation). All five synthetic test pieces
+created during this verification were deleted afterward via the app's
+own delete endpoints, leaving Harvey's real data untouched.
+
+**So what was Harvey actually seeing?** Most likely just this: §144 made
+the *card appearing in the new column* work correctly, but a card that
+was already correctly re-rendered still has no way to visually read as
+"it moved" — it simply materializes in the new column on the next
+redraw, with nothing to distinguish that from having always been there.
+Harvey's *complaint* about "no movement" may have been entirely correct
+about the experience even though the underlying data/render bug was
+already fixed — this section's actual new work (below) is what he
+explicitly escalated to ("i need that movement thing actually done"),
+not a re-litigation of §144.
+
+**Built for real this time — `animateBoardMove(id)` in
+`ops-service/public/app.js`:** a plain FLIP animation. Reads the card's
+current on-screen `getBoundingClientRect()`, lets the normal `render()`
+happen, reads the same card's new position, and animates the visual gap
+between old and new with a CSS `transform: translate(...)` transition
+(480ms) plus a brief accent-glow highlight (`.card-just-moved` in
+`style.css`, 900ms) so the change is genuinely noticeable, not just
+spatially correct. Deliberately not hooked into every `render()` call —
+search, type-filtering, and drag-and-drop reordering already work fine
+today and don't need this; it's only invoked from the specific places
+that know a piece's *stage* (not just some other field) actually
+changed:
+- `maybeStartAnalysisPolling()` (Processing → Final Check, once a video
+  build completes) — via a new optional `window.__rmOnPieceMoved` hook,
+  set only while Content Ops is the currently booted tab (mirrors
+  `window.__rmOnPiecesChanged`'s existing pattern, §144/§75), used
+  instead of the plain notify specifically when exactly one piece's
+  stage changed in that poll tick.
+- `maybeStartYoutubePublishPoll()` (Final Check → Posted/Live, once a
+  real publish succeeds) — calls `animateBoardMove()` directly rather
+  than through the hook indirection, since this poller only ever runs
+  while Content Ops is already the booted tab in the first place (the
+  Publish button that starts it only exists on a Final Check card).
+
+Frontend-only (`app.js`, `style.css`), so per §93 this is already live
+— no deploy/restart needed. **Confirmed working for real, not just
+`node --check`-clean**: re-ran the same test rig against the live
+deployed result, instrumenting the card itself as it transitioned —
+`.card-just-moved` was genuinely applied and `getComputedStyle` showed
+the real accent-green glow rendering (`rgb(60, 255, 137) 0px 0px 0px
+2px, ...`) at the moment it landed in Final Check, confirming
+`animateBoardMove()` actually ran end to end rather than just existing
+in the deployed source. All synthetic test pieces created during this
+verification pass were deleted afterward via the app's own endpoints.
+
+---
+
+# 146. Real Bug: Stuck Analysis/Build Jobs Poll Forever, Flickering the Whole Board
+
+Harvey's report ("the thumbnail in Final Check disappears then reappears
+then disappears again a few times after I clicked it once") led to a
+more serious underlying bug than the symptom suggested — not anything
+about clicking, and not scoped to just the one card he was looking at.
+
+**Root cause, confirmed against the live data:** piece #97
+(`horizontalvid`, already at `stage: 'live'`, successfully published to
+YouTube days earlier) and piece #98 (`verticalvideodemo`, sitting in
+Processing) both had `analysisStatus: 'pending'` **permanently stuck** —
+never having progressed to `'running'`, `'done'`, or `'error'`. The only
+place that ever updates `analysisStatus` off its initial `'pending'`
+value is `runVideoAnalysis()` in `server.js`, and its very first line is
+`piece.analysisStatus = 'running'; savePieceRecord(piece);` — so a piece
+stuck at `'pending'` means that background job never even started, or
+started and was killed before its first line landed. The most likely
+cause: `rm-ops-service` gets rebuilt/restarted on every backend deploy
+(§93), and this project already solved the exact "a restart abandons an
+in-flight background job forever" problem once before, for voice
+messages (`recoverInflightVoiceMessages()`, §88) — but never applied the
+same fix to video analysis/build jobs, so a video whose analysis was
+queued or running at the moment of a redeploy was left stuck with no
+mechanism to ever notice or recover.
+
+**Why that caused a repeating flicker, unrelated to anything Harvey
+clicked:** `maybeStartAnalysisPolling()` (client, `app.js`) includes any
+piece with `analysisStatus`/`finalBuildStatus` `pending`/`running` in its
+"still waiting" list and polls every 3s until that list is empty. A piece
+stuck at `'pending'` forever means that list is **never** empty — the
+poller runs indefinitely, and every tick (per §144/§145's own fix)
+re-renders whatever tab is actually on screen, since nothing about the
+stuck piece ever changes to make the loop stop. Every 3 seconds, the
+entire Kanban board — including whatever Final Check card Harvey
+happened to be looking at — was being torn down and rebuilt, which reads
+exactly as a video/thumbnail "disappearing and reappearing" repeatedly,
+totally independent of his own click.
+
+**Fixed three ways:**
+1. **`server.js`: `recoverInflightVideoJobs()`**, mirroring
+   `recoverInflightVoiceMessages()`'s exact pattern, now runs on every
+   process start. Any piece found with `analysisStatus`/`finalBuildStatus`
+   still `pending`/`running` gets marked `'error'` with a clear message —
+   same conservative choice §88 already made for voice messages (don't
+   blindly re-run/resume something whose real completion state is
+   unknown), applied to the class of job this project had left
+   unprotected. Logs a `SERVICE RESTARTED` line to the work log, same as
+   the voice-message recovery already does.
+2. **`app.js`: a 5-minute timeout** in `maybeStartAnalysisPolling()`'s own
+   `waiting` filter — defense in depth independent of the server-side
+   fix, since no real analysis/build job takes anywhere close to that
+   long, so anything still pending/running that long later is stuck, not
+   slow. Closes the same failure class even if it ever happens for some
+   other reason a server restart doesn't explain.
+3. **Immediate data fix**, applied directly via the live API so Harvey's
+   flicker stopped right away rather than waiting for this deploy:
+   manually cleared the two actually-stuck pieces (#97, #98) to
+   `analysisStatus/finalBuildStatus: 'error'`.
+
+This is a `server.js` change (real backend logic), so per §93 it
+triggers a full rebuild+restart on the next deploy — same standing
+caveat as every prior backend change in this file, since this session is
+the headless agent running inside the container being restarted. Logged
+to the work log immediately before pushing.
+
+Verified via `node --check` on both files; the immediate data fix was
+confirmed applied via a direct re-fetch of both pieces. **Not yet
+verified end-to-end** that `recoverInflightVideoJobs()` actually fires
+and behaves correctly on a real restart — worth confirming after this
+deploy that the work log gets the expected recovery line if any piece is
+genuinely mid-analysis/build when it happens next.

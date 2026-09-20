@@ -9,10 +9,12 @@
   var AUTO_STAGE_IDS = window.RMStore.STAGES.slice(UPLOADED_INDEX + 1).map(function (s) { return s.id; });
 
   // Platform preset applied when the content-type dropdown changes in the
-  // editor, per Harvey: shorts default to everywhere except YT Longform,
-  // longform defaults to just YT Longform + Facebook. Only fires on an
-  // actual change during editing (see fieldContentType's change listener),
-  // never on populateFields() for an already-saved piece.
+  // editor, per Harvey: any shortform type defaults to YT Shorts +
+  // TikTok + Instagram + Facebook (all four — briefly dropped Facebook
+  // from this list on 2026-09-20, corrected back the same day, "fb also
+  // for shorts"), longform defaults to YT Long + Facebook. Only fires on
+  // an actual change during editing (see fieldContentType's change
+  // listener), never on populateFields() for an already-saved piece.
   var PLATFORM_PRESET_BY_TYPE = {
     ultra_short: ['ytshort', 'tiktok', 'instagram', 'facebook'],
     short: ['ytshort', 'tiktok', 'instagram', 'facebook'],
@@ -1427,17 +1429,72 @@
     return base + sep + 'utm_source=' + encodeURIComponent(source) + '&utm_medium=video&utm_campaign=' + encodeURIComponent(p.contentType || 'longform') + '&utm_content=' + encodeURIComponent(contentId);
   }
 
-  // Every content type now gets its own tracked link inserted into the
-  // caption via a "[LINK]" shortcode (Harvey realized Shorts can carry
-  // tracking links too, not just longform) — shorts and longform pull from
-  // separate caption templates since longform's needs a real per-video
-  // link every time while shorts can reuse the same wording.
-  function captionTemplateFor(settings, contentType) {
-    return contentType === 'longform' ? settings.captions.longform : settings.captions.shorts;
+  // Which platforms each caption "group" covers, and their display
+  // labels/order — mirrors PLATFORM_PRESET_BY_TYPE exactly (a shortform
+  // piece can only ever be tagged ytshort/tiktok/instagram/facebook; a
+  // longform piece only ytlong/facebook), so every platform a piece is
+  // actually tagged with always has a caption field to land in. This is
+  // also the tab order shown both in Settings and on the Final Check
+  // card's toggle (§Captions restructure, 2026-09-20, Harvey's ask —
+  // shortform: FB/IG/TT/Shorts, longform: YT/FB, each independently
+  // editable).
+  var CAPTION_GROUPS = {
+    shortform: [
+      { key: 'ytshort', label: 'YT Shorts' },
+      { key: 'tiktok', label: 'TikTok' },
+      { key: 'instagram', label: 'Instagram' },
+      { key: 'facebook', label: 'Facebook' }
+    ],
+    longform: [
+      { key: 'ytlong', label: 'YouTube' },
+      { key: 'facebook', label: 'Facebook' }
+    ]
+  };
+
+  function captionGroupKeyFor(p) {
+    return p.contentType === 'longform' ? 'longform' : 'shortform';
+  }
+
+  // One entry per platform this piece is actually tagged with (Content
+  // Production's platform checkboxes, §128) that also belongs to its
+  // content-shape's caption group — e.g. a longform piece tagged for
+  // both YouTube and Facebook gets both a YouTube entry and a Facebook
+  // entry, each carrying its own independently-set template, so both
+  // descriptions can be shown side by side (Harvey: "it will show BOTH
+  // the youtube description AND the FB description... if I unselected
+  // FB in production, only the YT description would show"). Unchecking
+  // a platform in Content Production removes it from p.platforms, which
+  // is exactly what makes it disappear from this list too — no separate
+  // filtering needed.
+  function captionsForPiece(settings, p) {
+    var groupKey = captionGroupKeyFor(p);
+    var group = (settings.captions && settings.captions[groupKey]) || {};
+    var platforms = p.platforms || [];
+    return CAPTION_GROUPS[groupKey]
+      .filter(function (o) { return platforms.indexOf(o.key) !== -1; })
+      .map(function (o) {
+        var template = group[o.key] || '';
+        var hasText = !!template.trim();
+        return {
+          key: o.key,
+          label: o.label,
+          template: template,
+          empty: !hasText,
+          text: hasText ? Store.applyCaptionLink(template, buildUtmLink(p, settings)) : ''
+        };
+      });
+  }
+
+  // Single-winner version for the shared editor modal's one-line caption
+  // readout, which has no room for a multi-tab toggle — the first
+  // tagged-and-non-empty caption in CAPTION_GROUPS' own order.
+  function captionTemplateFor(settings, p) {
+    var entries = captionsForPiece(settings, p).filter(function (e) { return !e.empty; });
+    return entries.length ? entries[0].template : '';
   }
 
   function renderCaptionText(p, settings) {
-    var template = captionTemplateFor(settings, p.contentType);
+    var template = captionTemplateFor(settings, p);
     if (!template || !template.trim()) return 'No caption set for this type yet — add one in Settings.';
     return Store.applyCaptionLink(template, buildUtmLink(p, settings));
   }
@@ -1761,6 +1818,16 @@
 
   var board, statStrip, overviewRow, boardWrap, draggingId = null;
   var boardSettingsCache = null;
+  // Which caption tab is currently selected on each Final Check card,
+  // keyed by piece id — ephemeral (not persisted, resets on page load),
+  // just enough to survive re-renders within the same page session.
+  var fcCaptionTab = {};
+  // Fetched once in bootContentOps (mirrors boardSettingsCache just above)
+  // so a Final Check card's "Schedule Video" button can tell whether
+  // there's actually a connected account to publish to, without every
+  // card making its own request.
+  var youtubeStatusCache = null;
+  var tiktokStatusCache = null;
 
   function renderStats() {
     var total = Object.keys(pieces).length;
@@ -1800,7 +1867,14 @@
     });
   }
 
-  function chipHtml(piece) {
+  // opts.hideVideoChip: Final Check cards (finalCheckCardHtml) only ever
+  // show a piece that already has a video (§115's whole point of the
+  // stage), so the "▶ video" chip there is pure noise — Harvey,
+  // 2026-09-20: "theyre lit4erally all videos." Left on for the normal
+  // kanban card (cardHtml), where it still usefully distinguishes an
+  // uploaded video piece from a plain planning card.
+  function chipHtml(piece, opts) {
+    opts = opts || {};
     var out = '';
     (piece.platforms || []).forEach(function (pid) {
       var p = Store.PLATFORMS.filter(function (x) { return x.id === pid; })[0];
@@ -1809,7 +1883,7 @@
     });
     var ct = contentTypeOf(piece.contentType);
     out += '<span class="chip format"><span class="dot" style="background:' + ct.color + '"></span>' + ct.label + '</span>';
-    if (piece.hasVideo) out += '<span class="chip video-chip">▶ video</span>';
+    if (piece.hasVideo && !opts.hideVideoChip) out += '<span class="chip video-chip">▶ video</span>';
     return out;
   }
 
@@ -1828,6 +1902,11 @@
           return '<select class="card-move" data-id="' + id + '">' + stageOpts + '</select>';
         })();
     var idBadge = typeof piece.seq === 'number' ? '<span class="card-id">#' + String(piece.seq).padStart(3, '0') + '</span>' : '';
+    // Plain ideas never have one; a video piece almost always does once
+    // it's past Processing (§128's auto-capture) — Harvey asked for this
+    // after noticing a normal (non-Final-Check) kanban card gave no
+    // visual hint at all of which video it actually was.
+    var thumbHtml = piece.thumbnailDataUrl ? '<div class="card-thumb"><img src="' + piece.thumbnailDataUrl + '" alt="" /></div>' : '';
     // Replaces the old "Thumbnail Selected" stage column — same auto-set
     // tags rendered as small chips wherever a video piece's card shows up
     // (this board and the upload list), see syncTags.
@@ -1840,6 +1919,7 @@
     return '' +
       '<div class="card' + (isAuto ? ' card-auto' : '') + (isAi ? ' card-ai' : '') + '" draggable="' + (isAuto ? 'false' : 'true') + '" data-id="' + id + '"' + (isAi ? ' title="Created by Claude Code"' : '') + '>' +
         (isAuto ? '' : '<span class="card-grip">⋮⋮</span>') +
+        thumbHtml +
         idBadge +
         '<div class="' + titleClass + '">' + titleHtml + '</div>' +
         '<div class="chip-row">' + chipHtml(piece) + '</div>' +
@@ -1858,13 +1938,63 @@
   // variant of cardHtml(): deliberately its own class (`.final-check-card`,
   // not `.card`) so it's excluded from the generic click-to-open-modal and
   // drag-start bindings in bindBoardEvents() below.
+  //
+  // A piece can be tagged for more than one platform in its caption group
+  // (e.g. a longform video going to both YouTube and Facebook) — when
+  // that's the case, show a small tab strip so Harvey can flip between
+  // each platform's own description instead of only ever seeing one
+  // (2026-09-20). A single-platform piece just shows its one caption with
+  // no tabs, same as before this change.
+  function fcCaptionInnerHtml(id, piece, settings) {
+    if (!settings) return '<div class="fc-caption">Loading caption…</div>';
+    var entries = captionsForPiece(settings, piece);
+    if (!entries.length) {
+      return '<div class="fc-caption">No caption set for this type yet — add one in Settings.</div>';
+    }
+    var emptyText = function (e) { return 'No caption set for ' + e.label + ' yet — add one in Settings.'; };
+    if (entries.length === 1) {
+      var only = entries[0];
+      return '<div class="fc-caption">' + escapeHtml(only.empty ? emptyText(only) : only.text) + '</div>';
+    }
+    var savedKey = fcCaptionTab[id];
+    var active = entries.filter(function (e) { return e.key === savedKey; })[0] || entries[0];
+    return '' +
+      '<div class="fc-caption-tabs">' +
+        entries.map(function (e) {
+          return '<button type="button" class="fc-caption-tab' + (e.key === active.key ? ' active' : '') +
+            '" data-id="' + id + '" data-key="' + e.key + '">' + escapeHtml(e.label) + '</button>';
+        }).join('') +
+      '</div>' +
+      '<div class="fc-caption">' + escapeHtml(active.empty ? emptyText(active) : active.text) + '</div>';
+  }
+
+  // Wrapped in one container so a tab click can refresh just this piece's
+  // caption area in place (see bindBoardEvents' .fc-caption-tab handler)
+  // without re-rendering the whole card — re-rendering would reset the
+  // <video>'s playback position/state, which Harvey doesn't want on a
+  // simple caption toggle.
+  function fcCaptionSectionHtml(id, piece, settings) {
+    return '<div class="fc-caption-section" data-id="' + id + '">' + fcCaptionInnerHtml(id, piece, settings) + '</div>';
+  }
+
   function finalCheckCardHtml(id, piece) {
-    var captionText = boardSettingsCache ? renderCaptionText(piece, boardSettingsCache) : 'Loading caption…';
     var titles = piece.ytTitles || [];
+    // "Title 1: x" / "Title 2: y" plain lines, not a numbered list, sized
+    // to match the main-title heading this replaced (Harvey: "remove
+    // bottom one [the #094 — <title> heading, redundant with Title 1],
+    // make these a bit larger, same size as [that removed heading]").
+    // A shortform piece only ever has one title slot now (§131 — no
+    // rotation/testing for a short, so Content Production only collects
+    // one), so numbering it "Title 1:" implied a second option that
+    // doesn't exist — just "Title:" when there's exactly one (Harvey,
+    // 2026-09-20). Longform still numbers, since it genuinely can have
+    // up to 3.
     var titlesHtml = titles.length
-      ? '<ol class="fc-titles">' + titles.map(function (t) { return '<li>' + escapeHtml(t) + '</li>'; }).join('') + '</ol>'
+      ? '<div class="fc-titles">' + titles.map(function (t, i) {
+          var label = titles.length === 1 ? 'Title' : ('Title ' + (i + 1));
+          return '<div class="fc-title-line"><strong>' + label + ':</strong> ' + escapeHtml(t) + '</div>';
+        }).join('') + '</div>'
       : '<div class="fc-titles-empty">No title options set.</div>';
-    var idBadge = typeof piece.seq === 'number' ? '#' + String(piece.seq).padStart(3, '0') + ' — ' : '';
     // A piece never reaches this stage without its final (audio-spliced)
     // video already having been built — server.js's runBuildFinalVideo
     // only flips the stage to final_check once that's genuinely done —
@@ -1879,18 +2009,147 @@
     // exact same platform/content-type chips the normal kanban cards
     // already show, so "post locations, type" needs no new rendering
     // logic of its own.
+    //
+    // No native `controls` at all (2026-09-19, second attempt at this —
+    // see bindBoardEvents()'s comment on the .fc-video-wrap loop for why
+    // the first attempt, a partial overlay that left the native control
+    // bar strip uncovered, still wasn't reliably clickable on Harvey's
+    // real device). Fully custom now: the whole frame is one click
+    // target, and a big green play-button glyph (`.fc-play-icon`, hidden
+    // once playing) doubles as both "click anywhere to play" affordance
+    // and the placeholder Harvey asked for. Losing native scrub/volume/
+    // fullscreen is the real trade-off — acceptable for a quick review
+    // clip; worth adding a minimal custom scrub bar later if that's
+    // missed in practice.
+    //
+    // Third attempt at click-to-play (2026-09-19, same day): Harvey
+    // reported this version played *nothing at all* on click, worse than
+    // §119's partial fix. Root cause, on reflection: a separate overlay
+    // `<div>` sitting on top of the video as the actual click target
+    // (needed in §119 to avoid the native control bar, which no longer
+    // exists now that `controls` is gone) was unnecessary indirection —
+    // and indirection through a sibling element is exactly where a
+    // cross-browser/mobile hit-testing quirk could hide. Simplified to
+    // the most direct possible binding: the click listener now lives on
+    // the bare `<video>` itself (see bindBoardEvents()), which — with no
+    // `controls` and therefore no shadow-DOM native chrome at all — is
+    // just an ordinary interactive element with nothing standing between
+    // a tap and the listener. `.fc-video-overlay` is now purely
+    // decorative (`pointer-events: none` in CSS): it only paints the
+    // green play icon, it can no longer be a place for clicks to go
+    // missing.
     return '' +
       '<div class="final-check-card" data-id="' + id + '">' +
-        '<video class="fc-video" data-id="' + id + '" playsinline preload="metadata"' +
-          (piece.thumbnailDataUrl ? ' poster="' + piece.thumbnailDataUrl + '"' : '') +
-          ' controls src="/api/files/videos/' + encodeURIComponent(id) + '-final"></video>' +
-        '<div class="fc-title">' + idBadge + escapeHtml(piece.title || 'Untitled') + '</div>' +
-        '<div class="chip-row">' + chipHtml(piece) + '</div>' +
-        '<div class="fc-caption">' + escapeHtml(captionText) + '</div>' +
-        titlesHtml +
-        '<div class="fc-actions">' +
-          '<button type="button" class="btn-primary fc-approve-btn" data-id="' + id + '">Approve → Scheduled</button>' +
+        '<div class="fc-video-wrap' + (piece.videoIsVertical ? ' is-vertical' : '') + '">' +
+          '<video class="fc-video" data-id="' + id + '" playsinline preload="metadata"' +
+            (piece.thumbnailDataUrl ? ' poster="' + piece.thumbnailDataUrl + '"' : '') +
+            ' src="/api/files/videos/' + encodeURIComponent(id) + '-final"></video>' +
+          '<div class="fc-video-overlay">' +
+            '<span class="fc-play-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 6l10 6-10 6V6Z"/></svg></span>' +
+          '</div>' +
         '</div>' +
+        titlesHtml +
+        fcCaptionSectionHtml(id, piece, boardSettingsCache) +
+        '<div class="chip-row">' + chipHtml(piece, { hideVideoChip: true }) + '</div>' +
+        // "Schedule Video" (below) is the one and only action on this
+        // card now — the old separate "Approve → Scheduled" button
+        // (§111's original cadence-only approval, pre-dating any real
+        // publish integration) used to sit right next to it, which
+        // caused a real, confirmed bug: Harvey clicked what he read as
+        // "the" schedule button and got the old one, which just flips
+        // the piece to the 'scheduled' stage via the cadence scheduler
+        // without publishing anything anywhere — no error, so nothing
+        // looked wrong until he checked TikTok and found nothing there.
+        // Removed outright rather than relabeled, since two buttons that
+        // both plausibly mean "make this go out" is the actual problem,
+        // not just their wording.
+        '<div class="fc-actions">' +
+          fcScheduleVideoHtml(id, piece) +
+        '</div>' +
+      '</div>';
+  }
+
+  // Platforms that actually have a real backend publish integration wired
+  // up right now — YouTube and TikTok. Harvey's framing (2026-09-20): the
+  // button here should read as one generic scheduling/publish action that
+  // goes out to every platform a piece is tagged for, not "Publish to
+  // <platform>" — it just happens that only these two platforms can
+  // genuinely act on that so far. Extend this list (and the per-platform
+  // helpers right below) as other platforms get real integrations.
+  var WIRED_PUBLISH_PLATFORMS = ['ytlong', 'tiktok'];
+  var PUBLISH_PLATFORM_LABELS = { ytlong: 'YouTube', tiktok: 'TikTok' };
+
+  function publishStatusFieldFor(platform) { return platform === 'ytlong' ? 'youtubePublishStatus' : 'tiktokPublishStatus'; }
+  function publishErrorFieldFor(platform) { return platform === 'ytlong' ? 'youtubePublishError' : 'tiktokPublishError'; }
+  function publishEndpointFor(platform) { return platform === 'ytlong' ? '/api/youtube/publish/' : '/api/tiktok/publish/'; }
+  function publishPlatformConnected(platform) {
+    var cache = platform === 'ytlong' ? youtubeStatusCache : tiktokStatusCache;
+    return !!(cache && cache.connected);
+  }
+
+  // "Schedule Video" — a single action covering every platform a piece is
+  // tagged for. Always shown on a Final Check card (every card here has a
+  // real video), rather than gated to one specific platform, since the
+  // whole point is it's not platform-specific. Whichever tagged platforms
+  // are actually wired get a real, immediate publish on click — no
+  // scheduled-time delay, per Harvey's own "for this test we can publish
+  // immediately" — and any tagged platform that isn't wired yet is called
+  // out honestly rather than silently ignored. Known limitation, not
+  // built: a piece tagged for *both* wired platforms at once fires both
+  // publishes concurrently with no coordination between the two
+  // background jobs writing to the same piece record (see the matching
+  // comment on runTiktokPublish in server.js) — fine for Harvey's actual
+  // test plan (one platform per piece), not fine if that ever changes.
+  function fcScheduleVideoHtml(id, piece) {
+    var platforms = piece.platforms || [];
+    var wired = platforms.filter(function (p) { return WIRED_PUBLISH_PLATFORMS.indexOf(p) !== -1; });
+    var unwired = platforms.filter(function (p) { return WIRED_PUBLISH_PLATFORMS.indexOf(p) === -1; });
+
+    var anyPending = wired.some(function (p) {
+      var s = piece[publishStatusFieldFor(p)];
+      return s === 'pending' || s === 'running';
+    });
+    if (anyPending) {
+      return '<div class="fc-yt-publish"><button type="button" class="btn-secondary" disabled>Publishing…</button></div>';
+    }
+
+    var erroredPlatforms = wired.filter(function (p) { return piece[publishStatusFieldFor(p)] === 'error' && piece[publishErrorFieldFor(p)]; });
+    var errorHtml = erroredPlatforms.map(function (p) {
+      return '<div class="fc-yt-error">' + escapeHtml(PUBLISH_PLATFORM_LABELS[p] || p) + ' publish failed: ' + escapeHtml(piece[publishErrorFieldFor(p)]) + '</div>';
+    }).join('');
+    var notWiredNote = unwired.length
+      ? '<div class="fc-yt-note">' + escapeHtml(unwired.join(', ')) + ' not wired up yet — won\'t be published there.</div>'
+      : '';
+    if (!wired.length) {
+      return '' +
+        '<div class="fc-yt-publish">' +
+          '<button type="button" class="btn-secondary" disabled title="None of this piece\'s selected platforms can be published yet">Schedule Video</button>' +
+          notWiredNote +
+        '</div>';
+    }
+    var disconnected = wired.filter(function (p) { return !publishPlatformConnected(p); });
+    var disabledAttr = disconnected.length
+      ? ' disabled title="Connect ' + disconnected.map(function (p) { return PUBLISH_PLATFORM_LABELS[p] || p; }).join(' / ') + ' in Content Settings first"'
+      : '';
+    // The privacy select only ever affects YouTube — TikTok is forced to
+    // SELF_ONLY (private) regardless while unaudited/sandboxed, so there's
+    // no real choice to offer for it yet.
+    var privacySelectHtml = wired.indexOf('ytlong') !== -1
+      ? '' +
+        '<select class="fc-yt-privacy" data-id="' + id + '" title="YouTube visibility">' +
+          '<option value="private" selected>Private</option>' +
+          '<option value="unlisted">Unlisted</option>' +
+          '<option value="public">Public</option>' +
+        '</select>'
+      : '';
+    return '' +
+      '<div class="fc-yt-publish">' +
+        privacySelectHtml +
+        '<button type="button" class="btn-secondary fc-yt-publish-btn" data-id="' + id + '"' + disabledAttr + '>' +
+          (erroredPlatforms.length ? 'Retry' : 'Schedule Video') +
+        '</button>' +
+        notWiredNote +
+        errorHtml +
       '</div>';
   }
 
@@ -1942,6 +2201,61 @@
     bindBoardEvents();
   }
 
+  // A real move animation for the one case Harvey actually asked for
+  // (2026-09-20): a card's *stage* changing because a background job
+  // finished — Processing -> Final Check once a video build completes,
+  // Final Check -> Posted/Live once a publish succeeds — while he's
+  // actually looking at the board. Plain FLIP technique: read the card's
+  // current on-screen position, let the normal full render() happen, then
+  // read its new position and animate the visual gap between them rather
+  // than letting it just teleport into the new column. Deliberately not
+  // hooked into every render() call — search/filter/drag already work
+  // fine without this and don't need it; this is only ever called from
+  // the specific places that know a piece's stage genuinely just changed.
+  function animateBoardMove(id) {
+    var oldEl = board.querySelector('[data-id="' + id + '"]');
+    var oldRect = oldEl ? oldEl.getBoundingClientRect() : null;
+    render();
+    if (!oldRect) return;
+    var newEl = board.querySelector('[data-id="' + id + '"]');
+    if (!newEl) return;
+    var newRect = newEl.getBoundingClientRect();
+    var dx = oldRect.left - newRect.left;
+    var dy = oldRect.top - newRect.top;
+    if (!dx && !dy) return;
+    newEl.style.transition = 'none';
+    newEl.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+    newEl.style.zIndex = '5';
+    void newEl.offsetWidth; // force a reflow so the transform above is actually applied before animating away from it
+    newEl.style.transition = 'transform 480ms cubic-bezier(.22,.68,.32,1)';
+    newEl.style.transform = '';
+    newEl.classList.add('card-just-moved');
+    setTimeout(function () {
+      newEl.style.transition = '';
+      newEl.style.zIndex = '';
+      newEl.classList.remove('card-just-moved');
+    }, 900);
+  }
+
+  // Scoped separately from bindBoardEvents() so a caption-tab click can
+  // rebind just the small chunk of DOM it just replaced, instead of
+  // re-running bindBoardEvents() (which would add a second set of
+  // listeners on every other card/button already on the board).
+  function bindCaptionTabs(scopeEl) {
+    scopeEl.querySelectorAll('.fc-caption-tab').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var id = btn.dataset.id;
+        var p = pieces[id];
+        if (!p) return;
+        fcCaptionTab[id] = btn.dataset.key;
+        var target = board.querySelector('.fc-caption-section[data-id="' + id + '"]');
+        if (!target) return;
+        target.innerHTML = fcCaptionInnerHtml(id, p, boardSettingsCache);
+        bindCaptionTabs(target);
+      });
+    });
+  }
+
   function bindBoardEvents() {
     board.querySelectorAll('.card').forEach(function (el) {
       el.addEventListener('click', function (e) {
@@ -1963,30 +2277,94 @@
 
     // Final Check cards — deliberately not `.card`, so none of the
     // click-to-open-modal/drag bindings above apply to them at all.
-    board.querySelectorAll('.fc-video').forEach(function (v) {
-      // Native <video controls> only toggles play/pause when its own
-      // control bar is clicked, not the video frame itself — Harvey
-      // wants clicking anywhere on the preview to start it. Restricted
-      // to roughly the frame above the control bar (bottom ~40px) so
-      // this doesn't fight with the native controls' own click handling
-      // (double-toggling play/pause back off again).
-      v.addEventListener('click', function (e) {
-        var rect = v.getBoundingClientRect();
-        if (e.clientY - rect.top > rect.height - 40) return;
+    //
+    // Third attempt at click-to-play (2026-09-19, see finalCheckCardHtml()
+    // for the fuller history). This time the click listener binds
+    // directly to the bare `<video>` element — no overlay `<div>` in the
+    // way at all, since there's no native `controls` chrome left to route
+    // around and an overlay was only ever needed to dodge that. Removing
+    // the indirection removes the one remaining place a hit-testing quirk
+    // could hide. `.fc-video-overlay` (still in the markup) is now
+    // `pointer-events: none` in CSS — purely decorative, paints the green
+    // play icon and nothing else.
+    board.querySelectorAll('.fc-video-wrap').forEach(function (wrap) {
+      var v = wrap.querySelector('video');
+      if (!v) return;
+      function syncPlayState() { wrap.classList.toggle('is-playing', !v.paused); }
+      v.addEventListener('click', function () {
         if (v.paused) v.play().catch(function () {}); else v.pause();
       });
+      v.addEventListener('play', syncPlayState);
+      v.addEventListener('pause', syncPlayState);
+      syncPlayState();
     });
-    board.querySelectorAll('.fc-approve-btn').forEach(function (btn) {
+    // Real YouTube publish — kicks off the background upload
+    // (server.js's runYoutubePublish) and switches this one card into a
+    // disabled "Publishing…" state without a full render(), matching the
+    // same "don't reset the video's playback" reasoning as the caption-tab
+    // toggle. The poller below (maybeStartYoutubePublishPoll) is what
+    // notices the eventual done/error and does the full render() once the
+    // piece's stage/status actually changes.
+    // Fires a real, independent publish request per wired-and-tagged
+    // platform (currently ytlong and/or tiktok) — see fcScheduleVideoHtml's
+    // comment above about the known concurrency limitation if a piece is
+    // ever tagged for both at once.
+    board.querySelectorAll('.fc-yt-publish-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        var p = pieces[btn.dataset.id];
-        if (!p) return;
+        var id = btn.dataset.id;
+        var p = pieces[id];
+        if (!p || btn.disabled) return;
+        var platforms = (p.platforms || []).filter(function (pl) { return WIRED_PUBLISH_PLATFORMS.indexOf(pl) !== -1; });
+        if (!platforms.length) return;
+        var wrap = btn.closest('.fc-yt-publish');
+        var select = wrap ? wrap.querySelector('.fc-yt-privacy') : null;
+        var privacyStatus = select ? select.value : 'private';
+        var captions = boardSettingsCache ? captionsForPiece(boardSettingsCache, p) : [];
+        var title = (p.ytTitles && p.ytTitles[0]) || p.title || 'Untitled';
+
         btn.disabled = true;
-        btn.textContent = 'Approving…';
-        approveAndSchedule(p).then(function () {
-          return Store.put('pieces', p);
-        }).then(render);
+        btn.textContent = 'Publishing…';
+        if (select) select.disabled = true;
+        platforms.forEach(function (platform) { p[publishStatusFieldFor(platform)] = 'pending'; });
+        pieces[id] = p;
+
+        platforms.forEach(function (platform) {
+          var captionEntry = captions.filter(function (c) { return c.key === platform; })[0];
+          var description = (captionEntry && !captionEntry.empty) ? captionEntry.text : '';
+          // TikTok's Content Posting API has one text field ("title",
+          // really the on-post caption) rather than separate title/
+          // description fields — send the real caption there if one's
+          // set, falling back to the plain title otherwise.
+          var body = platform === 'ytlong'
+            ? { title: title, description: description, privacyStatus: privacyStatus }
+            : { title: description || title };
+          fetch(publishEndpointFor(platform) + encodeURIComponent(id), {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (data) { return { ok: r.ok, data: data }; }); })
+            .then(function (result) {
+              if (!result.ok) {
+                p[publishStatusFieldFor(platform)] = 'error';
+                p[publishErrorFieldFor(platform)] = (result.data && result.data.error) || 'Could not start publish.';
+                render();
+                return;
+              }
+              maybeStartYoutubePublishPoll();
+            });
+        });
       });
     });
+
+    // Toggling between platform captions on a Final Check card — swaps
+    // just this one card's caption section in place (see
+    // fcCaptionSectionHtml's comment) rather than calling render(), so
+    // the video already playing/paused isn't reset by the click. Scoped
+    // rebinding (not a fresh bindBoardEvents() call) so a tab click
+    // doesn't pile up duplicate listeners on every other element already
+    // on the board.
+    bindCaptionTabs(board);
 
     board.querySelectorAll('.card-move').forEach(function (sel) {
       sel.addEventListener('click', function (e) { e.stopPropagation(); });
@@ -2051,11 +2429,113 @@
     });
   }
 
+  // Right-click delete on any kanban card, including Final Check ones
+  // (`.final-check-card` is deliberately not `.card`, per §113, so it
+  // needs listing explicitly here too — same gotcha §123's pan-capture
+  // fix hit). One small floating menu, reused across invocations rather
+  // than one per card, with an explicit arm/confirm step so a stray
+  // right-click can't delete anything by accident — same two-step
+  // pattern the shared modal's own delete button already uses.
+  var kanbanCtxMenu = null;
+  function closeKanbanCtxMenu() {
+    if (!kanbanCtxMenu) return;
+    kanbanCtxMenu.remove();
+    kanbanCtxMenu = null;
+    document.removeEventListener('click', closeKanbanCtxMenuOnOutside, true);
+    document.removeEventListener('contextmenu', closeKanbanCtxMenuOnOutside, true);
+    document.removeEventListener('keydown', closeKanbanCtxMenuOnEscape, true);
+  }
+  // Bug found via a real headless-browser test against the live service
+  // (same technique as §123): this used to be registered as a bare
+  // `document.addEventListener('click', closeKanbanCtxMenu, true)` —
+  // capture phase, with no "was the click actually outside the menu"
+  // check. Capture fires top-down *before* the click ever reaches the
+  // Delete button's own bubble-phase handler, so clicking Delete closed
+  // the whole menu (removed it from the DOM) before that handler's
+  // `renderConfirm()` call could do anything visible — the button's own
+  // `e.stopPropagation()` couldn't help, since capture-phase listeners
+  // on an ancestor run before the target's bubble-phase ones regardless.
+  // Reusing this same containment check for both click and contextmenu
+  // fixes it: a click *inside* the menu no longer closes it at all.
+  function closeKanbanCtxMenuOnOutside(e) {
+    if (kanbanCtxMenu && !kanbanCtxMenu.contains(e.target)) closeKanbanCtxMenu();
+  }
+  function closeKanbanCtxMenuOnEscape(e) {
+    if (e.key === 'Escape') closeKanbanCtxMenu();
+  }
+  function openKanbanCtxMenu(id, x, y) {
+    closeKanbanCtxMenu();
+    var menu = document.createElement('div');
+    menu.className = 'kanban-ctx-menu';
+
+    function renderInitial() {
+      menu.innerHTML = '';
+      var delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'kanban-ctx-item kanban-ctx-delete';
+      delBtn.textContent = 'Delete';
+      delBtn.addEventListener('click', function (e) { e.stopPropagation(); renderConfirm(); });
+      menu.appendChild(delBtn);
+    }
+    function renderConfirm() {
+      menu.innerHTML = '';
+      var label = document.createElement('div');
+      label.className = 'kanban-ctx-label';
+      label.textContent = 'Delete this piece?';
+      var confirmBtn = document.createElement('button');
+      confirmBtn.type = 'button';
+      confirmBtn.className = 'kanban-ctx-item kanban-ctx-confirm';
+      confirmBtn.textContent = 'Confirm delete';
+      confirmBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var p = pieces[id];
+        delete pieces[id];
+        Store.del('pieces', id);
+        if (p && p.hasVideo) { Store.del('videos', id); Store.del('videos', id + '-final'); }
+        closeKanbanCtxMenu();
+        render();
+      });
+      var cancelBtn = document.createElement('button');
+      cancelBtn.type = 'button';
+      cancelBtn.className = 'kanban-ctx-item kanban-ctx-cancel';
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.addEventListener('click', function (e) { e.stopPropagation(); closeKanbanCtxMenu(); });
+      menu.appendChild(label);
+      menu.appendChild(confirmBtn);
+      menu.appendChild(cancelBtn);
+    }
+    renderInitial();
+
+    document.body.appendChild(menu);
+    var rect = menu.getBoundingClientRect();
+    var left = Math.max(4, Math.min(x, window.innerWidth - rect.width - 8));
+    var top = Math.max(4, Math.min(y, window.innerHeight - rect.height - 8));
+    menu.style.left = left + 'px';
+    menu.style.top = top + 'px';
+    kanbanCtxMenu = menu;
+    // Deferred so the contextmenu event that opened this menu doesn't
+    // immediately bubble into the same-tick outside-click listener and
+    // close it before it's even visible.
+    setTimeout(function () {
+      document.addEventListener('click', closeKanbanCtxMenuOnOutside, true);
+      document.addEventListener('contextmenu', closeKanbanCtxMenuOnOutside, true);
+      document.addEventListener('keydown', closeKanbanCtxMenuOnEscape, true);
+    }, 0);
+  }
+  function bindKanbanContextMenu() {
+    board.addEventListener('contextmenu', function (e) {
+      var cardEl = e.target.closest('.card, .final-check-card');
+      if (!cardEl || !cardEl.dataset.id) return;
+      e.preventDefault();
+      openKanbanCtxMenu(cardEl.dataset.id, e.clientX, e.clientY);
+    });
+  }
+
   function bindPanning() {
     var isPanning = false, startX = 0, startScroll = 0;
     boardWrap.addEventListener('pointerdown', function (e) {
       if (e.button !== 0) return;
-      if (e.target.closest('.card, .card-move, button, select, input, textarea, [contenteditable]')) return;
+      if (e.target.closest('.card, .card-move, .final-check-card, button, select, input, textarea, [contenteditable]')) return;
       isPanning = true;
       startX = e.clientX;
       startScroll = boardWrap.scrollLeft;
@@ -2071,6 +2551,50 @@
     boardWrap.addEventListener('pointercancel', endPan);
   }
 
+  // Real YouTube/TikTok publish both run in the background server-side
+  // (server.js's runYoutubePublish/runTiktokPublish) — this polls the
+  // handful of pieces currently mid-publish on either platform and does a
+  // full render() once one lands on done/error, since "done" moves the
+  // piece out of the Final Check column entirely (a targeted DOM patch
+  // wouldn't make sense there the way the caption-tab toggle's does).
+  // Same shape as maybeStartAnalysisPolling in the Upload Files tab, kept
+  // separate since it watches different fields on a different view.
+  var youtubePublishPollTimer = null;
+  function maybeStartYoutubePublishPoll() {
+    function isWaiting(piece) {
+      return WIRED_PUBLISH_PLATFORMS.some(function (platform) {
+        var s = piece[publishStatusFieldFor(platform)];
+        return s === 'pending' || s === 'running';
+      });
+    }
+    var waiting = Object.keys(pieces).filter(function (id) { return isWaiting(pieces[id]); });
+    if (!waiting.length) { clearTimeout(youtubePublishPollTimer); youtubePublishPollTimer = null; return; }
+    if (youtubePublishPollTimer) return;
+    youtubePublishPollTimer = setTimeout(function () {
+      youtubePublishPollTimer = null;
+      Promise.all(waiting.map(function (id) { return Store.get('pieces', id); })).then(function (rows) {
+        var changed = false;
+        var movedIds = [];
+        rows.forEach(function (r) {
+          if (!r) return;
+          var prev = pieces[r.id];
+          if (prev && WIRED_PUBLISH_PLATFORMS.some(function (platform) { return prev[publishStatusFieldFor(platform)] !== r[publishStatusFieldFor(platform)]; })) changed = true;
+          if (prev && prev.stage !== r.stage) movedIds.push(r.id);
+          pieces[r.id] = r;
+        });
+        // Real move animation (2026-09-20) for Final Check -> Posted/Live
+        // once a publish actually succeeds — same animateBoardMove used by
+        // the analysis/build poller, called directly since this poller
+        // only ever runs while Content Ops is already the booted tab (the
+        // Publish button that starts it only exists on a Final Check
+        // card, which only renders there).
+        if (movedIds.length === 1) animateBoardMove(movedIds[0]);
+        else if (changed) render();
+        else maybeStartYoutubePublishPoll();
+      });
+    }, 3000);
+  }
+
   function bootContentOps() {
     board = document.getElementById('board');
     statStrip = document.getElementById('statStrip');
@@ -2078,6 +2602,7 @@
     boardWrap = document.getElementById('boardWrap');
 
     bindPanning();
+    bindKanbanContextMenu();
     document.getElementById('btnNew').addEventListener('click', function () { createDraft('ideation', render); });
 
     activeTypeFilter = '';
@@ -2092,6 +2617,11 @@
     });
 
     window.__rmOnPiecesChanged = render;
+    // Optional second hook, set only while Content Ops is actually the
+    // booted tab — a caller that knows a specific piece's *stage* just
+    // changed (not just "something changed") can use this instead of the
+    // plain notify above to get a real move animation for that one card.
+    window.__rmOnPieceMoved = animateBoardMove;
     ensurePiecesLoaded().then(render);
     // Final Check cards (see finalCheckCardHtml below) show the real
     // rendered caption inline, which needs Settings' caption templates —
@@ -2099,6 +2629,10 @@
     // the Settings tab. Re-renders once loaded so a caption isn't stuck
     // on its "Loading…" fallback for the rest of the session.
     Store.getSettings().then(function (s) { boardSettingsCache = s; render(); });
+    fetch('/api/youtube/status', { credentials: 'include' }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (s) { youtubeStatusCache = s; render(); }).catch(function () {});
+    fetch('/api/tiktok/status', { credentials: 'include' }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (s) { tiktokStatusCache = s; render(); }).catch(function () {});
     render();
   }
 
@@ -2121,6 +2655,9 @@
 
   var dropzone, fileInput, uploadRows, postedGrid;
   var uploadRowObjectUrls = {}; // pieceId -> object URL, revoked/rebuilt on each render pass
+  // pieceId -> pending debounce timer for the platform-checkbox save
+  // below — see that handler's own comment for why this exists.
+  var platformSaveTimers = {};
 
   function videoCardHtml(id, p) {
     var thumb = p.thumbnailDataUrl ? '<img src="' + p.thumbnailDataUrl + '" alt="" />' : '<span class="video-card-noThumb">No thumbnail</span>';
@@ -2153,7 +2690,7 @@
     var head = document.createElement('div');
     head.className = 'upload-row-head';
     var thumbEl = document.createElement('div');
-    thumbEl.className = 'upload-row-thumb';
+    thumbEl.className = 'upload-row-thumb' + (p.videoIsVertical ? ' is-vertical' : '');
     thumbEl.innerHTML = p.thumbnailDataUrl ? ('<img src="' + p.thumbnailDataUrl + '" alt="" />') : '<span class="thumb-empty">No thumbnail</span>';
     var titleId = document.createElement('div');
     titleId.className = 'upload-row-title-id';
@@ -2210,6 +2747,61 @@
       buildErr.textContent = 'Final video build failed (' + (p.finalBuildError || 'unknown error') + ') — try Send to final check again.';
       titleId.appendChild(buildErr);
     }
+    // Type + platforms — Harvey's ask: show which type this got auto-
+    // categorized as (locked; it's derived purely from orientation/
+    // duration, see detectContentType, not something to hand-edit here —
+    // the full editor still allows changing it if that's ever genuinely
+    // needed) and which platforms it'll post to, pre-checked from
+    // PLATFORM_PRESET_BY_TYPE, individually uncheckable.
+    var typeRow = document.createElement('div');
+    typeRow.className = 'upload-row-type-row';
+    var ct = contentTypeOf(p.contentType);
+    typeRow.innerHTML = '<span class="chip format"><span class="dot" style="background:' + ct.color + '"></span>' + ct.label + '</span>';
+    titleId.appendChild(typeRow);
+
+    var platformsRow = document.createElement('div');
+    platformsRow.className = 'upload-row-platforms';
+    (Store.PLATFORMS || []).forEach(function (pl) {
+      var checked = (p.platforms || []).indexOf(pl.id) !== -1;
+      var toggle = document.createElement('label');
+      toggle.className = 'platform-toggle-sm' + (checked ? ' checked' : '');
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = checked;
+      // Real bug Harvey hit (2026-09-20): a rapid burst of toggles each
+      // fired its own immediate Store.put — since the server does a full-
+      // record overwrite with no merge, and JSON.stringify(body) snapshots
+      // p at the moment each request is *sent* (lib/store.js's put()),
+      // whichever PUT's response happens to arrive at the server last
+      // wins outright, even if it started earlier and carries an older,
+      // already-superseded snapshot. Two boxes unchecked within the same
+      // few hundred ms could easily complete out of order over the
+      // network, silently resurrecting one of them server-side even
+      // though the UI (and p.platforms in memory) already showed both
+      // off. Fixed by debouncing the actual save — the in-memory toggle
+      // and its visual state are still instant, but only one PUT, built
+      // from whatever p.platforms looks like 400ms after the last click,
+      // ever goes out per burst, so there's nothing left to race.
+      cb.addEventListener('change', function () {
+        var list = (p.platforms || []).slice();
+        var idx = list.indexOf(pl.id);
+        if (cb.checked && idx === -1) list.push(pl.id);
+        else if (!cb.checked && idx !== -1) list.splice(idx, 1);
+        p.platforms = list;
+        p.updatedAt = nowIso();
+        toggle.classList.toggle('checked', cb.checked);
+        clearTimeout(platformSaveTimers[p.id]);
+        platformSaveTimers[p.id] = setTimeout(function () {
+          delete platformSaveTimers[p.id];
+          Store.put('pieces', p);
+        }, 400);
+      });
+      toggle.appendChild(cb);
+      toggle.appendChild(document.createTextNode(pl.label));
+      platformsRow.appendChild(toggle);
+    });
+    titleId.appendChild(platformsRow);
+
     head.appendChild(thumbEl);
     head.appendChild(titleId);
     return head;
@@ -2236,7 +2828,7 @@
     var frameSection = document.createElement('div');
     frameSection.className = 'upload-row-section upload-row-frame';
     var videoEl = document.createElement('video');
-    videoEl.className = 'upload-row-video';
+    videoEl.className = 'upload-row-video' + (p.videoIsVertical ? ' is-vertical' : '');
     videoEl.playsInline = true;
     videoEl.muted = true;
     var scrub = document.createElement('input');
@@ -2245,20 +2837,41 @@
     scrub.max = '100';
     scrub.step = '0.1';
     scrub.value = '0';
-    videoEl.addEventListener('loadedmetadata', function () { if (videoEl.duration) scrub.max = videoEl.duration; });
+    videoEl.addEventListener('loadedmetadata', function () {
+      if (videoEl.duration) scrub.max = videoEl.duration;
+      // Real orientation, read straight off the decoded video — covers
+      // both a fresh upload (already stored at creation time, see
+      // handleFiles) and a legacy piece uploaded before this field
+      // existed, which gets backfilled here the first time its row is
+      // shown so the box only needs computing once, not every render.
+      if (videoEl.videoWidth && videoEl.videoHeight) {
+        var vertical = videoEl.videoHeight > videoEl.videoWidth;
+        if (p.videoIsVertical !== vertical) {
+          p.videoIsVertical = vertical;
+          Store.put('pieces', p);
+          refreshHead();
+        }
+        videoEl.classList.toggle('is-vertical', vertical);
+      }
+    });
     scrub.addEventListener('input', function () { try { videoEl.currentTime = parseFloat(scrub.value); } catch (e) {} });
-    var captureBtn = document.createElement('button');
-    captureBtn.type = 'button';
-    captureBtn.className = 'btn-secondary btn-tiny';
-    captureBtn.textContent = 'Use this frame';
-    captureBtn.addEventListener('click', function () {
+    // Shared by the button and the auto-pick-on-load below, so there's
+    // one capture implementation, not two. Returns false (does nothing
+    // saved) if the video has no real frame data to draw yet — this used
+    // to silently produce a blank image for any video the browser
+    // couldn't decode (HEVC uploads in particular, see
+    // ensureBrowserCompatibleVideo in videoAnalysis.js, the actual fix);
+    // now that server-side normalization guarantees a decodable video,
+    // videoWidth/videoHeight being 0 here should only mean "hasn't
+    // loaded far enough yet," not "never will."
+    function captureCurrentFrame() {
+      if (!videoEl.videoWidth || !videoEl.videoHeight) return false;
       var canvas = document.createElement('canvas');
-      canvas.width = videoEl.videoWidth || 640;
-      canvas.height = videoEl.videoHeight || 360;
+      canvas.width = videoEl.videoWidth;
+      canvas.height = videoEl.videoHeight;
       var ctx = canvas.getContext('2d');
-      try { ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height); } catch (e) { return; }
-      var dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-      p.thumbnailDataUrl = dataUrl;
+      try { ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height); } catch (e) { return false; }
+      p.thumbnailDataUrl = canvas.toDataURL('image/jpeg', 0.85);
       p.updatedAt = nowIso();
       syncTags(p);
       // Only this row's own thumbnail/tags need to update — routing this
@@ -2267,10 +2880,46 @@
       // in the process), which is what looked like the whole panel
       // flashing/disappearing for a moment on every single click.
       Store.put('pieces', p).then(refreshHead);
-    });
+      return true;
+    }
+    var captureBtn = document.createElement('button');
+    captureBtn.type = 'button';
+    captureBtn.className = 'btn-secondary btn-tiny';
+    captureBtn.addEventListener('click', function () { captureCurrentFrame(); });
     frameSection.appendChild(videoEl);
     frameSection.appendChild(scrub);
     frameSection.appendChild(captureBtn);
+    // Disabled with a "Loading video…" label until the video actually has
+    // a frame to give — found live (2026-09-20, headless-browser test
+    // against a throttled connection) that with several rows in the list
+    // at once, a later row's (often multi-MB) video blob can take a real
+    // while to fetch, and clicking "Use this frame" during that window
+    // silently no-op'd via captureCurrentFrame()'s own early-return guard
+    // with zero feedback — looked exactly like a dead button, especially
+    // on a slower real connection than this container's own fast link to
+    // the VPS. `loadeddata` (readyState >= HAVE_CURRENT_DATA) is the same
+    // event the auto-pick-thumbnail listener below already waits for, so
+    // "the button becomes usable" and "a frame is actually capturable"
+    // are now driven by the identical signal.
+    function setFrameControlsReady(ready) {
+      captureBtn.disabled = !ready;
+      captureBtn.textContent = ready ? 'Use this frame' : 'Loading video…';
+      scrub.disabled = !ready;
+    }
+    setFrameControlsReady(videoEl.readyState >= 2);
+    videoEl.addEventListener('loadeddata', function () { setFrameControlsReady(true); });
+    // Auto-pick a starting thumbnail (the very first frame) the moment
+    // the video has one to give, so a row never sits at "No thumbnail"
+    // by default — Harvey still freely overrides it via the scrub bar +
+    // "Use this frame" above. Only for a piece that doesn't already have
+    // a thumbnail (e.g. a page reload of an already-edited row shouldn't
+    // silently reset a deliberate pick back to frame 0).
+    if (!p.thumbnailDataUrl) {
+      videoEl.addEventListener('loadeddata', function onFirstFrame() {
+        videoEl.removeEventListener('loadeddata', onFirstFrame);
+        captureCurrentFrame();
+      });
+    }
     Store.get('videos', p.id).then(function (v) {
       if (!v || !v.blob) return;
       if (uploadRowObjectUrls[p.id]) URL.revokeObjectURL(uploadRowObjectUrls[p.id]);
@@ -2298,19 +2947,29 @@
     audioSection.appendChild(audioLabel);
     audioSection.appendChild(audioSelect);
 
-    // --- Title picker (up to 3 — auto-populated from the matched outline
-    // once analysis finishes, freely editable either way)
+    // --- Title picker. Longform gets up to 3 (auto-populated from the
+    // matched outline once analysis finishes, freely editable either
+    // way) since a longform upload can genuinely be posted under
+    // different titles at different times to see what performs best.
+    // Shortform (ultra-short/short/long-short — practically, vertical)
+    // gets just 1: Harvey, 2026-09-20, "remove the '3 title options' and
+    // put just 1 as theres no way to test/rotate titles" for a short,
+    // which is posted once and done, not re-titled later.
+    var isLongform = p.contentType === 'longform';
+    var titleSlotCount = isLongform ? 3 : 1;
     var titlesSection = document.createElement('div');
     titlesSection.className = 'upload-row-section upload-row-titles';
     var titlesLabel = document.createElement('label');
-    titlesLabel.textContent = 'Title options';
+    titlesLabel.textContent = isLongform ? 'Title options' : 'Title';
     titlesSection.appendChild(titlesLabel);
-    var titleInputs = [0, 1, 2].map(function (i) {
+    var titleSlotIndexes = [];
+    for (var ti = 0; ti < titleSlotCount; ti++) titleSlotIndexes.push(ti);
+    var titleInputs = titleSlotIndexes.map(function (i) {
       var input = document.createElement('input');
       input.type = 'text';
       input.className = 'title-input';
       input.maxLength = 100;
-      input.placeholder = 'Title option ' + (i + 1) + (i > 0 ? ' (optional)' : '');
+      input.placeholder = isLongform ? ('Title option ' + (i + 1) + (i > 0 ? ' (optional)' : '')) : 'Title';
       input.value = (p.ytTitles || [])[i] || '';
       input.addEventListener('input', function () {
         var vals = titleInputs.map(function (el) { return el.value; }).filter(function (v) { return v.trim(); });
@@ -2349,7 +3008,6 @@
       if (sendBtn.disabled) return;
       sendBtn.disabled = true;
       sendBtn.textContent = '✓ Sent';
-      openBtn.disabled = true;
       p.finalBuildStatus = 'pending';
       p.updatedAt = nowIso();
       Store.put('pieces', p).then(function () {
@@ -2359,16 +3017,17 @@
       }).catch(function () {
         sendBtn.disabled = false;
         sendBtn.textContent = 'Send to final check';
-        openBtn.disabled = false;
       });
     });
-    var openBtn = document.createElement('button');
-    openBtn.type = 'button';
-    openBtn.className = 'btn-secondary btn-tiny';
-    openBtn.textContent = 'Full editor…';
-    openBtn.addEventListener('click', function () { openPiece(p.id, renderUploadLists); });
+    // "Full editor…" button removed 2026-09-20 per Harvey ("ill nevver
+    // use this") — everything he actually needs to touch for an
+    // in-production video already lives inline in this row (thumbnail,
+    // audio, title(s), platforms), matching the same "closed review
+    // surface, no editor escape hatch" call already made for Final
+    // Check cards in §116. `openPiece`/the shared modal itself are left
+    // intact — Content Ops (the planning kanban) still opens it the
+    // normal way; only this one entry point into it is gone.
     actionSection.appendChild(sendBtn);
-    actionSection.appendChild(openBtn);
 
     row.appendChild(head);
     row.appendChild(frameSection);
@@ -2478,13 +3137,26 @@
   // failed) just gets its own head refreshed in place. Stops itself once
   // nothing's waiting, rather than polling forever in the background.
   var analysisPollTimer = null;
+  // Defense in depth alongside server.js's own recoverInflightVideoJobs()
+  // (2026-09-20): a piece whose analysisStatus/finalBuildStatus never
+  // resolves (a mid-flight service restart is the known cause, but this
+  // guards against any other way it could happen too) would otherwise sit
+  // in `waiting` forever, polling every 3s indefinitely and re-rendering
+  // the whole board every tick for no reason — which is what Harvey
+  // actually saw as a repeating video/thumbnail flicker on a Final Check
+  // card he hadn't touched. No real analysis/build job takes anywhere
+  // close to this long, so anything still "pending"/"running" this much
+  // later is stuck, not slow.
+  var STUCK_JOB_TIMEOUT_MS = 5 * 60 * 1000;
   function maybeStartAnalysisPolling() {
     var waiting = Object.keys(pieces).filter(function (id) {
       var p = pieces[id];
-      return p.hasVideo && (
-        p.analysisStatus === 'pending' || p.analysisStatus === 'running' ||
-        p.finalBuildStatus === 'pending' || p.finalBuildStatus === 'running'
-      );
+      if (!p.hasVideo) return false;
+      var isPending = p.analysisStatus === 'pending' || p.analysisStatus === 'running' ||
+        p.finalBuildStatus === 'pending' || p.finalBuildStatus === 'running';
+      if (!isPending) return false;
+      var age = Date.now() - new Date(p.updatedAt || p.createdAt || 0).getTime();
+      return age < STUCK_JOB_TIMEOUT_MS;
     });
     if (!waiting.length) { clearTimeout(analysisPollTimer); analysisPollTimer = null; return; }
     if (analysisPollTimer) return;
@@ -2492,10 +3164,51 @@
       analysisPollTimer = null;
       Promise.all(waiting.map(function (id) { return Store.get('pieces', id); })).then(function (rows) {
         var needsFullRebuild = false;
+        var movedIds = [];
         rows.forEach(function (r) {
           if (!r) return;
-          var wasProcessed = pieces[r.id] && pieces[r.id].stage === 'processed';
-          pieces[r.id] = r;
+          var existing = pieces[r.id];
+          var wasProcessed = existing && existing.stage === 'processed';
+          // Real bug Harvey hit (2026-09-20): this poll tick's own GET can
+          // easily be a snapshot taken from *before* an in-progress local
+          // edit's own (debounced) save has landed — analysis/build jobs
+          // routinely take several real seconds, plenty of time for
+          // Harvey to uncheck platform boxes or pick a different audio
+          // track while a row is still processing. Blindly replacing
+          // `pieces[r.id]` wholesale with `r` clobbered whatever he'd just
+          // changed the moment this tick's rebuild ran, silently
+          // reverting it. Only merge in the fields this background job
+          // actually owns (mirrors the same discipline server.js's own
+          // runVideoAnalysis/runBuildFinalVideo already apply when they
+          // re-fetch the piece before writing back, §111/§115) — anything
+          // else (platforms, thumbnail, audio track, content type, ...)
+          // stays whatever's currently in the browser's own memory.
+          var merged = existing ? Object.assign({}, existing) : r;
+          if (existing) {
+            ['analysisStatus', 'analysisError', 'analysisMatchedPieceId', 'transcript',
+             'ytTitles', 'title', 'finalBuildStatus', 'finalBuildError', 'stage', 'updatedAt'
+            ].forEach(function (k) { if (k in r) merged[k] = r[k]; });
+          }
+          if (existing && existing.stage !== merged.stage) movedIds.push(r.id);
+          pieces[r.id] = merged;
+          r = merged;
+          // Real bug Harvey hit (2026-09-20): these targeted DOM updates
+          // only ever mean anything while Content Production is the
+          // actual visible tab — `uploadRows` is that tab's own DOM
+          // element, which is torn down the moment Harvey navigates
+          // elsewhere (e.g. straight to the Kanban board right after
+          // clicking "Send to final check"). They don't error in that
+          // case, they just silently no-op against a detached node — so
+          // a piece's stage genuinely changes in memory once the build
+          // finishes, but nothing tells whichever *other* tab is actually
+          // on screen to redraw itself, leaving Harvey looking at a stale
+          // Kanban board until a full page reload. Guard on the tab
+          // actually being active, and fall through to the generic
+          // `notifyPiecesChanged()` (already used everywhere else in this
+          // file for exactly this "some other view needs to know" case)
+          // otherwise, so whatever tab Harvey's actually looking at —
+          // most likely the Kanban board — redraws itself for real.
+          if (currentTabId() !== 'upload-files') return;
           if (wasProcessed && r.stage !== 'processed') {
             removeUploadRowAnimated(r.id);
           } else if (r.finalBuildStatus === 'error' && !uploadRows.querySelector('.upload-row[data-id="' + r.id + '"]')) {
@@ -2508,8 +3221,18 @@
             refreshUploadRowHeadById(r.id);
           }
         });
-        if (needsFullRebuild) renderUploadLists();
-        else maybeStartAnalysisPolling();
+        if (currentTabId() !== 'upload-files') {
+          // A real move animation (2026-09-20, Harvey: "i need that
+          // movement thing actually done") when exactly one piece's stage
+          // changed this tick and the Kanban board is what's set the
+          // animated hook (it's the only tab that ever does) — the normal
+          // "something changed" notify otherwise, e.g. when several
+          // pieces finished in the same tick, or a different tab (with no
+          // concept of a card sliding between columns) is what's active.
+          if (movedIds.length === 1 && typeof window.__rmOnPieceMoved === 'function') window.__rmOnPieceMoved(movedIds[0]);
+          else notifyPiecesChanged();
+        } else if (needsFullRebuild) renderUploadLists();
+        maybeStartAnalysisPolling();
       });
     }, 3000);
   }
@@ -2543,18 +3266,19 @@
     });
   }
 
-  // Harvey's rule: orientation is what separates "this is basically
-  // Longform" from everything else — landscape *and* long means Longform
-  // (matches how that type is actually used: YT/FB, not a vertical
-  // platform). Everything else (vertical, or landscape but short) gets
-  // bucketed purely by length against the same durations the content
-  // types are already named for (10-20s / ~1min / up to 3min).
+  // Harvey's restated rule (2026-09-20, tightened from the original
+  // §114 version): orientation alone decides Longform vs. not — every
+  // landscape upload is Longform, full stop, no duration check at all
+  // (that's what the type is actually for: YT/FB longform). Every
+  // vertical upload is bucketed purely by length, capping out at
+  // long_short (vertical never becomes Longform, since that format
+  // doesn't really exist there in practice).
   function detectContentType(meta) {
     if (!meta || !meta.duration) return 'short'; // couldn't read metadata — same default as before this feature existed
     var isLandscape = meta.width >= meta.height;
-    if (isLandscape && meta.duration > 180) return 'longform';
-    if (meta.duration <= 20) return 'ultra_short';
-    if (meta.duration <= 75) return 'short';
+    if (isLandscape) return 'longform';
+    if (meta.duration <= 25) return 'ultra_short';
+    if (meta.duration <= 60) return 'short';
     return 'long_short';
   }
 
@@ -2563,13 +3287,26 @@
       if (file.type.indexOf('video') !== 0) return;
       var id = Store.genId();
       probeVideoMeta(file).then(function (meta) {
+        var detectedType = detectContentType(meta);
         var piece = {
           id: id,
           seq: Store.nextSeq(allPiecesArray()),
           title: file.name.replace(/\.[^.]+$/, ''),
           stage: 'processed', // "Processing" — a brand-new opportunity, not the same thing as any plan in "Uploaded"
-          platforms: [],
-          contentType: detectContentType(meta),
+          // Pre-selected per the same type->platform default the shared
+          // modal's content-type dropdown already applies (see
+          // PLATFORM_PRESET_BY_TYPE up top) — Harvey's ask: platforms
+          // default-checked, he just unchecks any that don't apply.
+          // .slice() so editing this piece's array later can never
+          // mutate the shared preset array itself.
+          platforms: (PLATFORM_PRESET_BY_TYPE[detectedType] || []).slice(),
+          contentType: detectedType,
+          // Drives the frame-picker/thumbnail box orientation in the
+          // upload row (see buildUploadRowHead/buildUploadRow) — read
+          // straight from the real probed dimensions, independent of
+          // contentType, so it still reflects reality even if Harvey
+          // later overrides the content type by hand.
+          videoIsVertical: !!(meta && meta.width && meta.height && meta.height > meta.width),
           notesHtml: '',
           hasVideo: true,
           transcript: '',
@@ -2645,18 +3382,55 @@
       '</section>' +
       '<section class="settings-section">' +
         '<h3>Captions</h3>' +
-        '<p class="settings-hint">Separate template per type — Shorts can stay the same every time, Longform (or any ' +
-          'type) usually wants a fresh link each time. Use the shortcode <code>[LINK]</code> anywhere in the text and ' +
-          'it\'s replaced with that piece\'s own UTM-tracked link when the caption is shown or copied.</p>' +
-        '<label class="field-label">Shorts caption <span class="field-hint">(ultra-short / short / long-short)</span></label>' +
-        '<textarea class="notes-input settings-textarea" id="captionShortsInput" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
-        '<label class="field-label" style="margin-top:14px;display:block;">YouTube Longform caption</label>' +
-        '<textarea class="notes-input settings-textarea" id="captionLongformInput" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
+        '<p class="settings-hint">One description per platform, organized by content shape — a piece can be tagged ' +
+          'for several platforms at once, each getting its own independently-set caption (Final Check shows all of ' +
+          'them with a toggle when there\'s more than one). Use the shortcode <code>[LINK]</code> anywhere in the ' +
+          'text and it\'s replaced with that piece\'s own UTM-tracked link when the caption is shown or copied.</p>' +
+        '<div class="caption-group-tabs" id="captionGroupTabs">' +
+          '<button type="button" class="caption-group-tab active" data-group="shortform">Short-form</button>' +
+          '<button type="button" class="caption-group-tab" data-group="longform">Longform</button>' +
+        '</div>' +
+        '<div class="caption-group-panel" data-group="shortform" id="captionPanelShortform">' +
+          '<label class="field-label">YT Shorts caption</label>' +
+          '<textarea class="notes-input settings-textarea" id="caption-shortform-ytshort" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
+          '<label class="field-label" style="margin-top:14px;display:block;">TikTok caption</label>' +
+          '<textarea class="notes-input settings-textarea" id="caption-shortform-tiktok" placeholder="e.g. Grab your copy of the book here [LINK]! #booktok"></textarea>' +
+          '<label class="field-label" style="margin-top:14px;display:block;">Instagram caption</label>' +
+          '<textarea class="notes-input settings-textarea" id="caption-shortform-instagram" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
+          '<label class="field-label" style="margin-top:14px;display:block;">Facebook caption</label>' +
+          '<textarea class="notes-input settings-textarea" id="caption-shortform-facebook" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
+        '</div>' +
+        '<div class="caption-group-panel" data-group="longform" id="captionPanelLongform" hidden>' +
+          '<label class="field-label">YouTube caption</label>' +
+          '<textarea class="notes-input settings-textarea" id="caption-longform-ytlong" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
+          '<label class="field-label" style="margin-top:14px;display:block;">Facebook caption</label>' +
+          '<textarea class="notes-input settings-textarea" id="caption-longform-facebook" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
+        '</div>' +
       '</section>' +
       '<section class="settings-section">' +
         '<h3>Tracked link</h3>' +
         '<p class="settings-hint">Base URL used to build the UTM-tracked [LINK] for every piece, any type.</p>' +
         '<input class="title-input settings-input" id="baseLinkInput" />' +
+      '</section>' +
+      '<section class="settings-section">' +
+        '<h3>Platform connections</h3>' +
+        '<p class="settings-hint">Real OAuth logins used to actually publish on a connected account\'s behalf ' +
+          '(needed for the YouTube/TikTok API review process) — separate from the plain API-key placeholder fields ' +
+          'below, which aren\'t wired to anything yet.</p>' +
+        '<div class="platform-connect-card" id="youtubeConnectCard">' +
+          '<div class="platform-connect-info">' +
+            '<span class="platform-connect-name">YouTube</span>' +
+            '<span class="platform-connect-status" id="youtubeConnectStatus">Checking…</span>' +
+          '</div>' +
+          '<button type="button" class="btn-secondary btn-tiny" id="youtubeConnectBtn" disabled>…</button>' +
+        '</div>' +
+        '<div class="platform-connect-card" id="tiktokConnectCard">' +
+          '<div class="platform-connect-info">' +
+            '<span class="platform-connect-name">TikTok</span>' +
+            '<span class="platform-connect-status" id="tiktokConnectStatus">Checking…</span>' +
+          '</div>' +
+          '<button type="button" class="btn-secondary btn-tiny" id="tiktokConnectBtn" disabled>…</button>' +
+        '</div>' +
       '</section>' +
       '<section class="settings-section">' +
         '<h3>API keys</h3>' +
@@ -2668,13 +3442,89 @@
     '</div>';
 
   var KEY_FIELDS = [
-    { id: 'youtube', label: 'YouTube' },
     { id: 'instagram', label: 'Instagram' },
     { id: 'facebook', label: 'Facebook' },
-    { id: 'tiktok', label: 'TikTok (pending access)' },
     { id: 'transcriptionProvider', label: 'Transcription provider', placeholder: 'e.g. AssemblyAI, Deepgram, Whisper' },
     { id: 'transcriptionKey', label: 'Transcription API key', type: 'password' }
   ];
+
+  // YouTube's and TikTok's own real OAuth connect cards, above — both
+  // have a working login flow now (src/youtubeAuth.js, src/tiktokAuth.js),
+  // so the old plain-text "TikTok (pending access)" API key field (never
+  // wired to anything) was dropped from KEY_FIELDS rather than kept
+  // alongside a second, real mechanism for the same platform — same
+  // reasoning already applied to YouTube's own field.
+  function renderYoutubeConnectCard() {
+    var statusEl = document.getElementById('youtubeConnectStatus');
+    var btn = document.getElementById('youtubeConnectBtn');
+    if (!statusEl || !btn) return;
+    fetch('/api/youtube/status', { credentials: 'include' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (s) {
+        if (!s) { statusEl.textContent = 'Status unavailable.'; btn.disabled = true; btn.textContent = '—'; return; }
+        if (!s.configured) {
+          statusEl.textContent = 'Not configured yet (waiting on Google OAuth credentials).';
+          btn.disabled = true;
+          btn.textContent = 'Connect';
+          return;
+        }
+        btn.disabled = false;
+        if (s.connected) {
+          statusEl.textContent = 'Connected as ' + (s.channelTitle || 'a YouTube channel') + '.';
+          btn.textContent = 'Disconnect';
+          btn.onclick = function () {
+            btn.disabled = true;
+            fetch('/api/youtube/disconnect', { method: 'POST', credentials: 'include' })
+              .then(renderYoutubeConnectCard);
+          };
+        } else {
+          statusEl.textContent = 'Not connected.';
+          btn.textContent = 'Connect';
+          // A real full-page navigation, not fetch() — this has to be an
+          // actual browser redirect through Google's own consent screen,
+          // which is exactly what Google's OAuth verification review
+          // requires (see CLAUDE.md), not something an XHR can drive.
+          btn.onclick = function () { window.location.href = '/api/youtube/oauth/start'; };
+        }
+      })
+      .catch(function () { statusEl.textContent = 'Status unavailable.'; });
+  }
+
+  // Mirrors renderYoutubeConnectCard() exactly, one platform over.
+  function renderTiktokConnectCard() {
+    var statusEl = document.getElementById('tiktokConnectStatus');
+    var btn = document.getElementById('tiktokConnectBtn');
+    if (!statusEl || !btn) return;
+    fetch('/api/tiktok/status', { credentials: 'include' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (s) {
+        if (!s) { statusEl.textContent = 'Status unavailable.'; btn.disabled = true; btn.textContent = '—'; return; }
+        if (!s.configured) {
+          statusEl.textContent = 'Not configured yet (waiting on TikTok OAuth credentials).';
+          btn.disabled = true;
+          btn.textContent = 'Connect';
+          return;
+        }
+        btn.disabled = false;
+        if (s.connected) {
+          statusEl.textContent = 'Connected as ' + (s.displayName || 'a TikTok account') + '.';
+          btn.textContent = 'Disconnect';
+          btn.onclick = function () {
+            btn.disabled = true;
+            fetch('/api/tiktok/disconnect', { method: 'POST', credentials: 'include' })
+              .then(renderTiktokConnectCard);
+          };
+        } else {
+          statusEl.textContent = 'Not connected.';
+          btn.textContent = 'Connect';
+          // Real full-page navigation through TikTok's own consent
+          // screen, same reasoning as YouTube's — not something an XHR
+          // can drive.
+          btn.onclick = function () { window.location.href = '/api/tiktok/oauth/start'; };
+        }
+      })
+      .catch(function () { statusEl.textContent = 'Status unavailable.'; });
+  }
 
   var settingsCache = null;
   var settingsSaveTimer = null;
@@ -2792,20 +3642,38 @@
       renderCadenceGrid();
       renderAudioList();
       renderKeyGrid();
+      renderYoutubeConnectCard();
+      renderTiktokConnectCard();
 
-      var captionShortsInput = document.getElementById('captionShortsInput');
-      captionShortsInput.value = settings.captions.shorts || '';
-      captionShortsInput.addEventListener('input', function () {
-        settingsCache.captions.shorts = captionShortsInput.value;
-        saveSettingsDebounced();
+      // One textarea per platform, ids following "caption-<group>-<key>"
+      // (see SETTINGS_MARKUP) — driven off CAPTION_GROUPS so this list
+      // never drifts out of sync with the Final Check toggle's own set of
+      // platforms/labels.
+      Object.keys(CAPTION_GROUPS).forEach(function (groupKey) {
+        CAPTION_GROUPS[groupKey].forEach(function (o) {
+          var input = document.getElementById('caption-' + groupKey + '-' + o.key);
+          if (!input) return;
+          input.value = (settings.captions[groupKey] && settings.captions[groupKey][o.key]) || '';
+          input.addEventListener('input', function () {
+            settingsCache.captions[groupKey][o.key] = input.value;
+            saveSettingsDebounced();
+          });
+        });
       });
 
-      var captionLongformInput = document.getElementById('captionLongformInput');
-      captionLongformInput.value = settings.captions.longform || '';
-      captionLongformInput.addEventListener('input', function () {
-        settingsCache.captions.longform = captionLongformInput.value;
-        saveSettingsDebounced();
-      });
+      var captionGroupTabs = document.getElementById('captionGroupTabs');
+      if (captionGroupTabs) {
+        captionGroupTabs.querySelectorAll('.caption-group-tab').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            captionGroupTabs.querySelectorAll('.caption-group-tab').forEach(function (b) {
+              b.classList.toggle('active', b === btn);
+            });
+            document.querySelectorAll('.caption-group-panel').forEach(function (panel) {
+              panel.hidden = panel.dataset.group !== btn.dataset.group;
+            });
+          });
+        });
+      }
 
       var baseLinkInput = document.getElementById('baseLinkInput');
       baseLinkInput.value = settings.baseLinkUrl || '';

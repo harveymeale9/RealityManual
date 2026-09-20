@@ -119,7 +119,9 @@ window.RMVoice = (function () {
   // renders the original markdown (see renderMarkdownLite); this only
   // affects what gets spoken. A fenced code block becomes a short spoken
   // pointer rather than being read character-by-character (that produced
-  // exactly the unusable "ssh dash i tilde slash..." Harvey flagged).
+  // exactly the unusable "ssh dash i tilde slash..." Harvey flagged) — a
+  // link gets the same treatment for the same reason (reading a raw URL
+  // aloud is unusable/"sounds ridiculous," his words).
   function stripMarkdownForSpeech(text) {
     if (!text) return '';
     var codeBlocks = 0;
@@ -128,6 +130,12 @@ window.RMVoice = (function () {
       codeBlocks++;
       return codeBlocks === 1 ? ' I’ve put it in the chat for you to copy.' : ' Another one is in the chat too.';
     });
+    // Markdown links first (so their url doesn't also get caught by the
+    // bare-url pass below), keeping the human-readable label but dropping
+    // the actual url in favor of a short spoken pointer to it.
+    out = out.replace(/\[([^\]]+)\]\(https?:\/\/[^\s)]+\)/g, '$1 (link below)');
+    // Any remaining bare url (not part of markdown link syntax).
+    out = out.replace(/https?:\/\/\S+/g, 'link below');
     out = out.replace(/`([^`]+)`/g, '$1');
     out = out.replace(/^#{1,6}\s+/gm, '');
     out = out.replace(/\*\*([^*]+)\*\*/g, '$1');
@@ -178,12 +186,22 @@ window.RMVoice = (function () {
     }
     while ((match = re.exec(src))) {
       if (match.index > lastIndex) appendTextWithInlineCode(src.slice(lastIndex, match.index));
-      var pre = document.createElement('pre');
+      // `let`, not `var`, is load-bearing here: a message can contain more
+      // than one fenced code block, so this loop can run more than once.
+      // `var` is function-scoped, not per-iteration, so every click
+      // handler created below would have closed over the *same* pre/
+      // codeEl/copyBtn bindings — whichever block happened to be the last
+      // one in the message — meaning every earlier copy button in a
+      // multi-block message silently copied the wrong (last) block's text
+      // and updated the wrong (last) button's "Copied" label instead of
+      // its own. `let` gives each iteration its own binding, which is
+      // what makes each button's closure actually refer to itself.
+      let pre = document.createElement('pre');
       pre.className = 'pm-code-block';
-      var codeEl = document.createElement('code');
+      let codeEl = document.createElement('code');
       codeEl.textContent = match[2].replace(/\n$/, '');
       pre.appendChild(codeEl);
-      var copyBtn = document.createElement('button');
+      let copyBtn = document.createElement('button');
       copyBtn.type = 'button';
       copyBtn.className = 'pm-code-copy';
       copyBtn.textContent = 'Copy';

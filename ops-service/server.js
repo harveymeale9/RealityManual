@@ -12,6 +12,8 @@ const Database = require('better-sqlite3');
 const claudeRunner = require('./src/claudeRunner');
 const elevenlabs = require('./src/elevenlabs');
 const videoAnalysis = require('./src/videoAnalysis');
+const youtubeAuth = require('./src/youtubeAuth');
+const tiktokAuth = require('./src/tiktokAuth');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
@@ -64,6 +66,30 @@ db.exec(
   '  id INTEGER PRIMARY KEY CHECK (id = 1),' +
   '  claude_session_id TEXT,' +
   '  updated_at TEXT NOT NULL' +
+  ');' +
+  // Single-row (id=1) — this panel has exactly one admin/one connected
+  // YouTube channel, same "one row" pattern as voice_session above.
+  // Tokens live here and nowhere else — never returned to the browser
+  // (see GET /api/youtube/status, which only exposes connected/channelTitle).
+  'CREATE TABLE IF NOT EXISTS youtube_oauth (' +
+  '  id INTEGER PRIMARY KEY CHECK (id = 1),' +
+  '  channel_id TEXT,' +
+  '  channel_title TEXT,' +
+  '  access_token TEXT,' +
+  '  refresh_token TEXT,' +
+  '  expires_at TEXT,' +
+  '  updated_at TEXT NOT NULL' +
+  ');' +
+  // Same single-row pattern as youtube_oauth above, for the one
+  // connected TikTok account.
+  'CREATE TABLE IF NOT EXISTS tiktok_oauth (' +
+  '  id INTEGER PRIMARY KEY CHECK (id = 1),' +
+  '  open_id TEXT,' +
+  '  display_name TEXT,' +
+  '  access_token TEXT,' +
+  '  refresh_token TEXT,' +
+  '  expires_at TEXT,' +
+  '  updated_at TEXT NOT NULL' +
   ');'
 );
 
@@ -112,7 +138,25 @@ const stmts = {
     'INSERT INTO voice_session (id, claude_session_id, updated_at) VALUES (1, ?, ?) ' +
     'ON CONFLICT(id) DO UPDATE SET claude_session_id = excluded.claude_session_id, updated_at = excluded.updated_at'
   ),
-  clearVoiceSession: db.prepare('DELETE FROM voice_session WHERE id = 1')
+  clearVoiceSession: db.prepare('DELETE FROM voice_session WHERE id = 1'),
+  getYoutubeAuth: db.prepare('SELECT * FROM youtube_oauth WHERE id = 1'),
+  upsertYoutubeAuth: db.prepare(
+    'INSERT INTO youtube_oauth (id, channel_id, channel_title, access_token, refresh_token, expires_at, updated_at) ' +
+    'VALUES (1, ?, ?, ?, ?, ?, ?) ' +
+    'ON CONFLICT(id) DO UPDATE SET channel_id = excluded.channel_id, channel_title = excluded.channel_title, ' +
+    'access_token = excluded.access_token, refresh_token = excluded.refresh_token, ' +
+    'expires_at = excluded.expires_at, updated_at = excluded.updated_at'
+  ),
+  clearYoutubeAuth: db.prepare('DELETE FROM youtube_oauth WHERE id = 1'),
+  getTiktokAuth: db.prepare('SELECT * FROM tiktok_oauth WHERE id = 1'),
+  upsertTiktokAuth: db.prepare(
+    'INSERT INTO tiktok_oauth (id, open_id, display_name, access_token, refresh_token, expires_at, updated_at) ' +
+    'VALUES (1, ?, ?, ?, ?, ?, ?) ' +
+    'ON CONFLICT(id) DO UPDATE SET open_id = excluded.open_id, display_name = excluded.display_name, ' +
+    'access_token = excluded.access_token, refresh_token = excluded.refresh_token, ' +
+    'expires_at = excluded.expires_at, updated_at = excluded.updated_at'
+  ),
+  clearTiktokAuth: db.prepare('DELETE FROM tiktok_oauth WHERE id = 1')
 };
 
 setInterval(function () { stmts.purgeSessions.run(new Date().toISOString()); }, 60 * 60 * 1000);
@@ -217,6 +261,164 @@ app.get('/robots.txt', function (req, res) { res.type('text/plain').send('User-a
 app.use('/api/store', requireAuth);
 app.use('/api/files', requireAuth);
 app.use('/api/voice', requireAuth);
+app.use('/api/youtube', requireAuth);
+app.use('/api/tiktok', requireAuth);
+
+// --- YouTube OAuth (Google) — see src/youtubeAuth.js for the token
+// exchange itself. Placeholder-until-configured: YOUTUBE_OAUTH_CLIENT_ID/
+// SECRET/REDIRECT_URI aren't set yet as of 2026-09-20 (Harvey supplying
+// them shortly), so /oauth/start correctly 500s with a clear message
+// until then rather than crashing — the "Connect YouTube" button in
+// Settings can exist and be clicked before the real credentials land.
+app.get('/api/youtube/status', function (req, res) {
+  const row = stmts.getYoutubeAuth.get();
+  res.json({
+    configured: youtubeAuth.isConfigured(),
+    connected: !!(row && row.refresh_token),
+    channelTitle: row ? row.channel_title : null
+  });
+});
+
+app.get('/api/youtube/oauth/start', function (req, res) {
+  if (!youtubeAuth.isConfigured()) {
+    return res.status(500).send('YouTube OAuth is not configured yet — missing YOUTUBE_OAUTH_CLIENT_ID / ' +
+      'YOUTUBE_OAUTH_CLIENT_SECRET / YOUTUBE_OAUTH_REDIRECT_URI on the server. Ask Harvey for status.');
+  }
+  // CSRF protection: a short-lived httpOnly cookie holding the same nonce
+  // sent in the `state` param, checked back on the callback below —
+  // standard OAuth state-parameter pattern, nothing app-specific.
+  const state = crypto.randomBytes(16).toString('hex');
+  res.cookie('yt_oauth_state', state, { httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 10 * 60 * 1000 });
+  res.redirect(youtubeAuth.buildAuthUrl(state));
+});
+
+app.get('/api/youtube/oauth/callback', function (req, res) {
+  if (!youtubeAuth.isConfigured()) {
+    return res.status(500).send('YouTube OAuth is not configured yet.');
+  }
+  const expectedState = req.cookies && req.cookies.yt_oauth_state;
+  res.clearCookie('yt_oauth_state', { path: '/' });
+  if (req.query.error) {
+    return res.redirect('/#settings');
+  }
+  if (!req.query.state || req.query.state !== expectedState) {
+    return res.status(400).send('OAuth state did not match — please try connecting YouTube again from Content Settings.');
+  }
+  Promise.resolve()
+    .then(function () { return youtubeAuth.exchangeCode(req.query.code); })
+    .then(function (tokens) {
+      return youtubeAuth.fetchChannelInfo(tokens.access_token).then(function (channel) {
+        const expiresAt = new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString();
+        stmts.upsertYoutubeAuth.run(
+          channel ? channel.channelId : null,
+          channel ? channel.channelTitle : null,
+          tokens.access_token,
+          tokens.refresh_token || null,
+          expiresAt,
+          new Date().toISOString()
+        );
+      });
+    })
+    .then(function () { res.redirect('/#settings'); })
+    .catch(function (err) {
+      console.error('YouTube OAuth callback failed:', err.message);
+      res.status(500).send('YouTube connection failed: ' + err.message);
+    });
+});
+
+app.post('/api/youtube/disconnect', function (req, res) {
+  stmts.clearYoutubeAuth.run();
+  res.json({ ok: true });
+});
+
+// --- TikTok OAuth (Login Kit) — see src/tiktokAuth.js for the token
+// exchange/publish calls themselves. Same placeholder-until-configured
+// shape as the YouTube routes above.
+app.get('/api/tiktok/status', function (req, res) {
+  const row = stmts.getTiktokAuth.get();
+  res.json({
+    configured: tiktokAuth.isConfigured(),
+    connected: !!(row && row.refresh_token),
+    displayName: row ? row.display_name : null
+  });
+});
+
+app.get('/api/tiktok/oauth/start', function (req, res) {
+  if (!tiktokAuth.isConfigured()) {
+    return res.status(500).send('TikTok OAuth is not configured yet — missing TIKTOK_CLIENT_KEY / ' +
+      'TIKTOK_CLIENT_SECRET / TIKTOK_REDIRECT_URI on the server. Ask Harvey for status.');
+  }
+  const state = crypto.randomBytes(16).toString('hex');
+  res.cookie('tt_oauth_state', state, { httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 10 * 60 * 1000 });
+  res.redirect(tiktokAuth.buildAuthUrl(state));
+});
+
+app.get('/api/tiktok/oauth/callback', function (req, res) {
+  if (!tiktokAuth.isConfigured()) {
+    return res.status(500).send('TikTok OAuth is not configured yet.');
+  }
+  const expectedState = req.cookies && req.cookies.tt_oauth_state;
+  res.clearCookie('tt_oauth_state', { path: '/' });
+  if (req.query.error) {
+    return res.redirect('/#settings');
+  }
+  if (!req.query.state || req.query.state !== expectedState) {
+    return res.status(400).send('OAuth state did not match — please try connecting TikTok again from Content Settings.');
+  }
+  Promise.resolve()
+    .then(function () { return tiktokAuth.exchangeCode(req.query.code); })
+    .then(function (tokens) {
+      return tiktokAuth.fetchUserInfo(tokens.access_token).then(function (user) {
+        const expiresAt = new Date(Date.now() + (tokens.expires_in || 86400) * 1000).toISOString();
+        stmts.upsertTiktokAuth.run(
+          user ? user.openId : (tokens.open_id || null),
+          user ? user.displayName : null,
+          tokens.access_token,
+          tokens.refresh_token || null,
+          expiresAt,
+          new Date().toISOString()
+        );
+      });
+    })
+    .then(function () { res.redirect('/#settings'); })
+    .catch(function (err) {
+      console.error('TikTok OAuth callback failed:', err.message);
+      res.status(500).send('TikTok connection failed: ' + err.message);
+    });
+});
+
+app.post('/api/tiktok/disconnect', function (req, res) {
+  stmts.clearTiktokAuth.run();
+  res.json({ ok: true });
+});
+
+async function getValidTiktokAccessToken() {
+  const row = stmts.getTiktokAuth.get();
+  if (!row || !row.refresh_token) throw new Error('TikTok is not connected — connect it in Content Settings first.');
+  const expiresAtMs = row.expires_at ? new Date(row.expires_at).getTime() : 0;
+  if (row.access_token && expiresAtMs > Date.now() + 60000) return row.access_token;
+  const tokens = await tiktokAuth.refreshAccessToken(row.refresh_token);
+  const newExpiresAt = new Date(Date.now() + (tokens.expires_in || 86400) * 1000).toISOString();
+  // TikTok may issue a new refresh_token on refresh — persist whatever
+  // came back rather than assuming it's unchanged (unlike Google, which
+  // normally keeps the same one).
+  stmts.upsertTiktokAuth.run(row.open_id, row.display_name, tokens.access_token, tokens.refresh_token || row.refresh_token, newExpiresAt, new Date().toISOString());
+  return tokens.access_token;
+}
+
+// access_token is short-lived (~1hr) — refresh proactively whenever it's
+// within a minute of expiring, using the stored refresh_token (which
+// Google doesn't rotate on a normal refresh, so it's kept as-is).
+async function getValidYoutubeAccessToken() {
+  const row = stmts.getYoutubeAuth.get();
+  if (!row || !row.refresh_token) throw new Error('YouTube is not connected — connect it in Content Settings first.');
+  const expiresAtMs = row.expires_at ? new Date(row.expires_at).getTime() : 0;
+  if (row.access_token && expiresAtMs > Date.now() + 60000) return row.access_token;
+  const tokens = await youtubeAuth.refreshAccessToken(row.refresh_token);
+  const newExpiresAt = new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString();
+  stmts.upsertYoutubeAuth.run(row.channel_id, row.channel_title, tokens.access_token, row.refresh_token, newExpiresAt, new Date().toISOString());
+  return tokens.access_token;
+}
 
 app.get('/api/store/:storeName', function (req, res) {
   if (!isValidStore(req.params.storeName)) return res.status(400).json({ error: 'invalid_store' });
@@ -314,9 +516,31 @@ async function runVideoAnalysis(id) {
   piece.analysisStatus = 'running';
   savePieceRecord(piece);
 
+  const videoPath = path.join(UPLOADS_DIR, 'videos', id);
+
+  // Some uploads (iPhone HEVC recordings in particular) use a video codec
+  // Chrome/Chromium can't decode at all — confirmed directly against a
+  // real HEVC test upload: readyState reports HAVE_ENOUGH_DATA and
+  // duration is known, but videoWidth/videoHeight stay 0 forever (no
+  // amount of seeking/waiting fixes it), so canvas frame capture silently
+  // produces a blank image and native <video> playback is unreliable too
+  // — this is what was actually behind "Use this frame did nothing for
+  // the vertical video," not anything orientation-specific, and it would
+  // have equally broken Final Check's own video preview for the same
+  // upload. Not fixable client-side (no JS trick makes a browser decode a
+  // codec it doesn't support) — normalized to H.264 here, once, right
+  // after upload, so every downstream consumer (inline frame picker,
+  // Final Check preview, the final spliced video) just works without
+  // needing its own codec-awareness.
+  try {
+    const compat = await videoAnalysis.ensureBrowserCompatibleVideo(videoPath);
+    if (compat.transcoded) console.log('normalized video ' + id + ' from ' + compat.codec + ' to h264 for browser compatibility');
+  } catch (e) {
+    console.error('video codec normalization failed for ' + id + ':', e.message);
+  }
+
   let transcript = '';
   try {
-    const videoPath = path.join(UPLOADS_DIR, 'videos', id);
     const tmpDir = path.join(DATA_DIR, 'tmp');
     fs.mkdirSync(tmpDir, { recursive: true });
     transcript = await videoAnalysis.transcribeVideo(videoPath, tmpDir);
@@ -430,6 +654,149 @@ app.post('/api/videos/:id/build-final', function (req, res) {
   runBuildFinalVideo(id).catch(function (e) { console.error('unhandled final-build error for ' + id + ':', e.message); });
 });
 
+// --- Real YouTube publish: the actual videos.insert-equivalent, using the
+// token stored by the OAuth connect flow above (src/youtubeAuth.js). Same
+// "respond immediately, run the real work in the background, let the
+// client poll the piece record" pattern as analyze/build-final — a real
+// upload can take a while and there's no reason to hold the HTTP request
+// open for it. Always uploads the built final video (`<id>-final`, audio
+// already spliced in per Harvey's Final Check rule) if it exists, falling
+// back to the raw upload only if it somehow doesn't — a piece can't
+// actually reach Final Check without the final build having succeeded, so
+// this fallback should never really trigger in practice.
+async function runYoutubePublish(id, opts) {
+  const piece = getPieceRecord(id);
+  if (!piece) return; // deleted before this started
+  piece.youtubePublishStatus = 'running';
+  piece.youtubePublishError = '';
+  savePieceRecord(piece);
+
+  try {
+    const finalPath = path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX);
+    const rawPath = path.join(UPLOADS_DIR, 'videos', id);
+    const useFinal = fs.existsSync(finalPath);
+    const videoPath = useFinal ? finalPath : rawPath;
+    if (!fs.existsSync(videoPath)) throw new Error('video file not found on disk');
+
+    const videoRow = stmts.getOne.get('videos', useFinal ? (id + FINAL_VIDEO_SUFFIX) : id);
+    const videoMeta = videoRow ? JSON.parse(videoRow.data) : {};
+    const mimeType = videoMeta.mimeType || 'video/mp4';
+
+    const accessToken = await getValidYoutubeAccessToken();
+    const result = await youtubeAuth.uploadVideo(accessToken, videoPath, mimeType, {
+      title: opts.title || piece.title || 'Untitled',
+      description: opts.description || '',
+      privacyStatus: opts.privacyStatus
+    });
+
+    const latest = getPieceRecord(id);
+    if (!latest) return; // deleted while this was running
+    latest.stage = 'live';
+    latest.youtubePublishStatus = 'done';
+    latest.youtubeVideoId = result.videoId;
+    latest.youtubeUrl = 'https://www.youtube.com/watch?v=' + result.videoId;
+    latest.postedAt = new Date().toISOString();
+    latest.updatedAt = new Date().toISOString();
+    savePieceRecord(latest);
+  } catch (e) {
+    console.error('YouTube publish failed for ' + id + ':', e.message);
+    const latest = getPieceRecord(id);
+    if (!latest) return;
+    latest.youtubePublishStatus = 'error';
+    latest.youtubePublishError = String(e.message || e).slice(0, 500);
+    // Deliberately not touching stage — stays in Final Check so Harvey can
+    // just try again, same convention as a failed final-video build.
+    latest.updatedAt = new Date().toISOString();
+    savePieceRecord(latest);
+  }
+}
+
+app.post('/api/youtube/publish/:id', function (req, res) {
+  const { id } = req.params;
+  if (!isValidId(id)) return res.status(400).json({ error: 'invalid_params' });
+  const piece = getPieceRecord(id);
+  if (!piece) return res.status(404).json({ error: 'piece_not_found' });
+  const row = stmts.getYoutubeAuth.get();
+  if (!row || !row.refresh_token) return res.status(400).json({ error: 'not_connected' });
+  const body = req.body || {};
+  const opts = {
+    title: typeof body.title === 'string' ? body.title : '',
+    description: typeof body.description === 'string' ? body.description : '',
+    privacyStatus: typeof body.privacyStatus === 'string' ? body.privacyStatus : 'private'
+  };
+  res.json({ ok: true, status: 'running' });
+  runYoutubePublish(id, opts).catch(function (e) { console.error('unhandled youtube publish error for ' + id + ':', e.message); });
+});
+
+// --- Real TikTok publish — same shape as the YouTube job above, using
+// the token stored by the TikTok OAuth connect flow. Always uploads the
+// built final video (`<id>-final`) if it exists, same reasoning as
+// YouTube's version. Known limitation, not built: if a single piece is
+// ever tagged for *both* ytlong and tiktok at once, this job and
+// runYoutubePublish both read-modify-write the same piece record
+// concurrently with no locking between them, so one could clobber the
+// other's fields in a real (if narrow) race. Not fixed here since
+// Harvey's actual test plan is one platform per piece (a separate video
+// for each) — worth adding a per-piece lock if simultaneous multi-
+// platform publishing from one piece is ever actually used.
+async function runTiktokPublish(id, opts) {
+  const piece = getPieceRecord(id);
+  if (!piece) return; // deleted before this started
+  piece.tiktokPublishStatus = 'running';
+  piece.tiktokPublishError = '';
+  savePieceRecord(piece);
+
+  try {
+    const finalPath = path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX);
+    const rawPath = path.join(UPLOADS_DIR, 'videos', id);
+    const useFinal = fs.existsSync(finalPath);
+    const videoPath = useFinal ? finalPath : rawPath;
+    if (!fs.existsSync(videoPath)) throw new Error('video file not found on disk');
+
+    const videoRow = stmts.getOne.get('videos', useFinal ? (id + FINAL_VIDEO_SUFFIX) : id);
+    const videoMeta = videoRow ? JSON.parse(videoRow.data) : {};
+    const mimeType = videoMeta.mimeType || 'video/mp4';
+
+    const accessToken = await getValidTiktokAccessToken();
+    const result = await tiktokAuth.publishVideo(accessToken, videoPath, mimeType, {
+      title: opts.title || piece.title || 'Untitled'
+    });
+
+    const latest = getPieceRecord(id);
+    if (!latest) return; // deleted while this was running
+    latest.stage = 'live';
+    latest.tiktokPublishStatus = 'done';
+    latest.tiktokPublishId = result.publishId;
+    latest.tiktokPrivacyLevel = result.privacyLevel;
+    latest.postedAt = new Date().toISOString();
+    latest.updatedAt = new Date().toISOString();
+    savePieceRecord(latest);
+  } catch (e) {
+    console.error('TikTok publish failed for ' + id + ':', e.message);
+    const latest = getPieceRecord(id);
+    if (!latest) return;
+    latest.tiktokPublishStatus = 'error';
+    latest.tiktokPublishError = String(e.message || e).slice(0, 500);
+    // Deliberately not touching stage — same convention as a failed
+    // YouTube publish or a failed final-video build.
+    latest.updatedAt = new Date().toISOString();
+    savePieceRecord(latest);
+  }
+}
+
+app.post('/api/tiktok/publish/:id', function (req, res) {
+  const { id } = req.params;
+  if (!isValidId(id)) return res.status(400).json({ error: 'invalid_params' });
+  const piece = getPieceRecord(id);
+  if (!piece) return res.status(404).json({ error: 'piece_not_found' });
+  const row = stmts.getTiktokAuth.get();
+  if (!row || !row.refresh_token) return res.status(400).json({ error: 'not_connected' });
+  const body = req.body || {};
+  const opts = { title: typeof body.title === 'string' ? body.title : '' };
+  res.json({ ok: true, status: 'running' });
+  runTiktokPublish(id, opts).catch(function (e) { console.error('unhandled tiktok publish error for ' + id + ':', e.message); });
+});
+
 // --- Voice app: talk to a real headless Claude Code agent by voice or text ---
 // Separate concern again (own tables, own routes) from the content-ops
 // board above — see CLAUDE.md section on the voice app for the full design.
@@ -471,8 +838,16 @@ const VOICE_SYSTEM_PROMPT =
   'A, B, C." When in doubt about a borderline case, include the marker rather than omit it.\n\n' +
   'Quick verbal acknowledgment — UNCONDITIONAL, no exceptions, read this whole paragraph ' +
   'every single voice-app turn: your very first output, before doing anything else at all — ' +
-  'before any tool call, before deciding whether you even need one — must be one short ' +
-  'sentence that is a genuine, specific, task-style summary of this exact message. This used ' +
+  'before any tool call, before deciding whether you even need one — must be one short, ' +
+  'genuine, specific sentence in your own words describing what you are about to go check or ' +
+  'do for this exact message, said the way you would say it out loud to a colleague. Do NOT ' +
+  'write any label, prefix, or meta-commentary describing this instruction itself — never ' +
+  'output words like "task-style sentence," "acknowledgment sentence," or anything similar ' +
+  'before your actual sentence. This exact leak (literally echoing this instruction\'s own ' +
+  'wording back as visible text) has happened repeatedly across separate turns despite being ' +
+  'flagged and supposedly fixed each time — Harvey has explicitly and emphatically asked for ' +
+  'it to stop for good, so treat any urge to describe or label the sentence, rather than just ' +
+  'saying it, as the exact mistake to avoid. This used ' +
   'to have an exception for "a turn you can answer directly with no tool use" and that ' +
   'exception is exactly what kept failing in practice: turns that felt partly conversational ' +
   '(a check-in, a quick question) but also involved real work got treated as "just answer ' +
@@ -539,9 +914,12 @@ const VOICE_SYSTEM_PROMPT =
 // only in VOICE_SYSTEM_PROMPT (set once, at the start of a long-running
 // resumed session). See VOICE_SYSTEM_PROMPT's "Quick verbal
 // acknowledgment" paragraph for the full rule this is reinforcing.
-const ACK_REMINDER = ' Before anything else — before any tool call — write one short, ' +
-  'task-style sentence summarizing this specific request. No exceptions, even if you expect ' +
-  'to answer in one sentence anyway.';
+const ACK_REMINDER = ' Before anything else, before any tool call: say, in one short sentence ' +
+  'and your own words, what you are about to go check or do for this specific message — no ' +
+  'exceptions, even if you expect to answer in one sentence anyway. Output ONLY that sentence ' +
+  'itself. Do not prefix it with any label or description of this instruction (e.g. never write ' +
+  '"task-style sentence" or similar) — that exact leak has happened repeatedly and Harvey has ' +
+  'asked for it to stop for good.';
 
 function buildVoicePrompt(mode, text) {
   if (mode === 'execute') {
@@ -818,7 +1196,56 @@ function recoverInflightVoiceMessages() {
   if (requeued) drainVoiceQueue();
 }
 
+// Same self-healing pattern as recoverInflightVoiceMessages() above, now
+// applied to video analysis/build jobs too (2026-09-20 — Harvey reported
+// a Final Check card's video repeatedly disappearing/reappearing).
+// Real root cause, traced end to end rather than guessed: a piece whose
+// `analysisStatus`/`finalBuildStatus` gets left at 'pending'/'running' by
+// a mid-flight service restart (this container gets rebuilt/restarted
+// for every backend deploy, §93) never gets picked back up by
+// anything — nothing server-side ever resumes it. The client's own
+// `maybeStartAnalysisPolling()` therefore keeps that one piece in its
+// "still waiting" list *forever*, polling it every 3s indefinitely, and
+// every tick re-renders the whole Kanban board (since nothing about the
+// stuck piece ever actually changes to stop the loop) — which is what
+// Harvey was actually seeing as a repeating flicker on whatever card he
+// happened to be looking at, unrelated to anything he'd clicked. Marking
+// these as a clear, terminal error on startup (instead of leaving them
+// stuck) is what actually stops the client from ever polling them again.
+function recoverInflightVideoJobs() {
+  const now = new Date().toISOString();
+  let fixed = 0;
+  stmts.getAll.all('pieces').forEach(function (row) {
+    let piece;
+    try { piece = JSON.parse(row.data); } catch (e) { return; }
+    if (!piece || !piece.hasVideo) return;
+    let changed = false;
+    if (piece.analysisStatus === 'pending' || piece.analysisStatus === 'running') {
+      piece.analysisStatus = 'error';
+      piece.analysisError = 'Service restarted while this was in progress — retry if a transcript/title match is still needed.';
+      changed = true;
+    }
+    if (piece.finalBuildStatus === 'pending' || piece.finalBuildStatus === 'running') {
+      piece.finalBuildStatus = 'error';
+      piece.finalBuildError = 'Service restarted while this was in progress — try "Send to final check" again.';
+      changed = true;
+    }
+    if (changed) {
+      piece.updatedAt = now;
+      stmts.upsert.run('pieces', piece.id, JSON.stringify(piece), now);
+      fixed++;
+    }
+  });
+  if (fixed) {
+    console.log('video job recovery: marked ' + fixed + ' stuck piece(s) as error');
+    fs.appendFile(WORK_LOG_PATH,
+      '- [' + now + '] SERVICE RESTARTED — recovered ' + fixed + ' stuck video analysis/build job(s), marked as error.\n',
+      function () {});
+  }
+}
+
 app.listen(PORT, function () {
   console.log('rm-ops-service listening on ' + PORT);
   recoverInflightVoiceMessages();
+  recoverInflightVideoJobs();
 });

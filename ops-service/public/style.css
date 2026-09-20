@@ -111,10 +111,19 @@ a { color: var(--accent); }
 .login-gate {
   min-height: 100vh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 16px;
   padding: 24px;
 }
+.login-legal-links {
+  display: flex;
+  gap: 18px;
+  font-size: 0.74rem;
+}
+.login-legal-links a { color: var(--ink-faint); text-decoration: none; }
+.login-legal-links a:hover { color: var(--ink-soft); }
 
 .login-card {
   width: min(360px, 100%);
@@ -686,15 +695,98 @@ a { color: var(--accent); }
   flex-direction: column;
   gap: 10px;
 }
-.fc-video { width: 100%; border-radius: 6px; background: #000; cursor: pointer; display: block; }
-.fc-title { font-size: 1.02rem; font-weight: 600; color: var(--ink); }
+.fc-video-wrap { position: relative; }
+/* Click target is the bare video itself now (see bindBoardEvents()'s
+   comment in app.js, third attempt at this) — no controls chrome to
+   route around, so no overlay needed in the click path at all. */
+.fc-video { width: 100%; border-radius: 6px; background: #000; display: block; cursor: pointer; }
+/* A vertical piece (piece.videoIsVertical, §130) was rendering at the
+   full ~800px card width with no height cap — since the card itself
+   doesn't constrain height, a 9:16 video at that width came out
+   roughly 1400px tall, blowing the card out (Harvey, 2026-09-20: "the
+   size is way too big in the final check for vertical ones"). Capped
+   to a real review size instead of the full column width — bigger than
+   Content Production's 220px cap (§130) since this card is the actual
+   review surface, not an inline thumbnail picker, but still bounded. */
+.fc-video-wrap.is-vertical { max-width: 360px; margin: 0 auto; }
+/* Purely decorative now: paints the green play icon, `pointer-events:
+   none` so it can never intercept a click meant for the video beneath
+   it. */
+.fc-video-overlay {
+  position: absolute; inset: 0; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+}
+.fc-play-icon {
+  width: 60px; height: 60px; border-radius: 50%;
+  background: var(--accent-soft-strong);
+  border: 2px solid var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--accent);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  pointer-events: none; /* the overlay itself is the click target, not this icon */
+}
+.fc-play-icon svg { width: 26px; height: 26px; margin-left: 3px; }
+.fc-video-overlay:hover .fc-play-icon { transform: scale(1.08); }
+/* Hidden once actually playing — wrap.classList gets `is-playing` from
+   the video's own play/pause events, so this stays correct even if
+   playback starts/stops/ends by means other than clicking the icon
+   itself. */
+.fc-video-wrap.is-playing .fc-play-icon { opacity: 0; transform: scale(0.85); }
+.fc-caption-section { display: flex; flex-direction: column; gap: 6px; }
 .fc-caption {
   font-size: 0.85rem; color: var(--ink-soft); white-space: pre-wrap;
   background: var(--surface); border: 1px solid var(--border-soft); border-radius: 6px; padding: 8px 10px;
 }
-.fc-titles { margin: 0; padding-left: 1.2em; font-size: 0.85rem; color: var(--ink); display: flex; flex-direction: column; gap: 3px; }
+/* Shown only when a piece is tagged for more than one platform in its
+   caption group (e.g. a longform video going to both YouTube and
+   Facebook) — lets Harvey flip between each platform's own description
+   instead of only ever seeing one (2026-09-20). */
+.fc-caption-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+/* Every tab here represents a platform this piece is genuinely tagged
+   for (§129's captionsForPiece already filters to just those) — a
+   muted/faint default read as "only the active one is actually
+   selected," which isn't true (Harvey, 2026-09-20: "the video should
+   have all four platform pills selected by default, currently only YT
+   shorts is"). All tabs now use a real accent border/text by default;
+   only the *active* (currently-displayed-caption) one gets the solid
+   fill, so the distinction is "which one you're viewing," not "which
+   ones apply." */
+.fc-caption-tab {
+  background: none;
+  border: 1px solid var(--accent-3);
+  color: var(--ink-soft);
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.fc-caption-tab:hover { color: var(--ink); border-color: var(--accent); }
+.fc-caption-tab.active { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+.fc-titles { display: flex; flex-direction: column; gap: 3px; }
+/* Sized to match the main-title heading these replaced (Harvey,
+   2026-09-19: "remove bottom one, make these a bit larger, same size as
+   [that]") — see finalCheckCardHtml() in app.js. */
+.fc-title-line { font-size: 1.02rem; font-weight: 600; color: var(--ink); }
+.fc-title-line strong { color: var(--ink-soft); }
 .fc-titles-empty { font-size: 0.8rem; color: var(--ink-faint); font-style: italic; }
-.fc-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 4px; }
+.fc-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
+.fc-yt-publish { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.fc-yt-privacy {
+  background: var(--surface-2); color: var(--ink-soft); border: 1px solid var(--border);
+  border-radius: 6px; padding: 5px 8px; font-size: 0.78rem; font-family: inherit;
+}
+.fc-yt-note {
+  flex-basis: 100%; text-align: right; font-size: 0.72rem; color: var(--ink-faint);
+}
+.fc-yt-error {
+  flex-basis: 100%; text-align: right; max-width: 100%;
+  font-size: 0.72rem; color: var(--error); background: var(--error-soft);
+  border: 1px solid var(--error); border-radius: 6px; padding: 6px 8px;
+}
 
 .column-head {
   display: flex;
@@ -778,11 +870,63 @@ a { color: var(--accent); }
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
   position: relative;
 }
+.card-thumb {
+  aspect-ratio: 16/9; border-radius: 6px; overflow: hidden;
+  background: var(--surface-3); margin: -2px -2px 0;
+}
+.card-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .card:hover { border-color: var(--accent-3); box-shadow: 0 16px 40px -18px rgba(0,0,0,0.6); }
 .card:hover .card-grip { opacity: 1; }
 .card:active { cursor: grabbing; }
 .card.dragging { opacity: 0.35; }
+/* Real move animation (2026-09-20) — animateBoardMove() in app.js
+   applies the position-slide transform inline; this just adds a brief
+   accent glow on top so a card that just changed columns is genuinely
+   noticeable, not only spatially moving. Covers both card shapes since
+   a piece can land here fresh out of Final Check either way. */
+.card.card-just-moved, .final-check-card.card-just-moved {
+  box-shadow: 0 0 0 2px var(--accent), 0 16px 40px -14px rgba(0,0,0,0.7);
+  transition: box-shadow 900ms ease;
+}
 .card.card-auto { cursor: pointer; }
+
+/* Right-click delete menu — works on both .card and .final-check-card,
+   see bindKanbanContextMenu() in app.js. Fixed-position, appended to
+   body, positioned at the click point (clamped on-screen there). */
+.kanban-ctx-menu {
+  position: fixed;
+  z-index: 60;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.7);
+}
+.kanban-ctx-label {
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  padding: 4px 8px 2px;
+}
+.kanban-ctx-item {
+  background: none;
+  border: none;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  padding: 7px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.kanban-ctx-item:hover { background: var(--surface-3); }
+.kanban-ctx-item.kanban-ctx-delete:hover { color: var(--error); }
+.kanban-ctx-item.kanban-ctx-confirm { color: var(--error); font-weight: 600; }
+.kanban-ctx-item.kanban-ctx-confirm:hover { background: var(--error-soft); }
+.kanban-ctx-item.kanban-ctx-cancel { color: var(--ink-faint); }
 /* Pieces created by a Claude Code session (voice/chat agent or an
    interactive session acting on Harvey's behalf) rather than by Harvey
    himself directly in the board UI — a subtle indigo tint distinct from
@@ -1290,15 +1434,38 @@ a { color: var(--accent); }
   aspect-ratio: 16/9; width: 100%; background: var(--surface-2); border-radius: 6px;
   display: flex; align-items: center; justify-content: center; overflow: hidden;
 }
+/* Auto-detected from the real video's own dimensions (see
+   handleFiles/buildUploadRow's loadedmetadata backfill in app.js) — a
+   vertical upload gets a vertical box instead of being cropped down to
+   a 16:9 sliver via object-fit: cover. */
+.upload-row-thumb.is-vertical { aspect-ratio: 9/16; max-width: 220px; }
 .upload-row-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .upload-row-title { font-size: 0.9rem; color: var(--ink); font-weight: 500; }
 .upload-row-idline { font-size: 0.75rem; color: var(--ink-faint); }
 .upload-row-tags { margin-top: 2px; }
 .upload-row-status { font-size: 0.75rem; color: var(--ink-faint); font-style: italic; }
 .upload-row-status-error { color: var(--error); font-style: normal; }
+.upload-row-type-row { margin-top: 4px; }
+/* Platform selection at a glance in the upload row — pre-checked per
+   PLATFORM_PRESET_BY_TYPE, individually uncheckable. Smaller/lighter
+   than the shared modal's own .platform-toggle pill treatment since
+   there isn't much horizontal room in this column. */
+.upload-row-platforms { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.platform-toggle-sm {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: var(--ink-faint);
+  cursor: pointer;
+  user-select: none;
+}
+.platform-toggle-sm input { accent-color: var(--accent); }
+.platform-toggle-sm.checked { color: var(--ink-soft); }
 .upload-row-section { display: flex; flex-direction: column; gap: 6px; }
 .upload-row-section label { font-size: 0.72rem; color: var(--ink-faint); }
-.upload-row-video { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 6px; }
+.upload-row-video { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 6px; object-fit: contain; }
+.upload-row-video.is-vertical { aspect-ratio: 9/16; max-width: 220px; margin: 0 auto; }
 .upload-row-frame input[type="range"] { width: 100%; accent-color: var(--accent); }
 .upload-row-titles .title-input { margin-bottom: 4px; }
 .upload-row-action { display: flex; flex-direction: column; gap: 8px; align-self: stretch; justify-content: center; }
@@ -1330,6 +1497,27 @@ a { color: var(--accent); }
 .settings-hint.warn { color: var(--error); }
 .settings-textarea { min-height: 100px; }
 .settings-input { font-size: 1rem; }
+
+/* Short-form / Longform caption group tabs (2026-09-20) — same pill
+   treatment as .panel-subtab so it reads as a tab strip, scoped to just
+   this section rather than reusing that class directly. */
+.caption-group-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.caption-group-tab {
+  background: none;
+  border: 1px solid var(--border-soft);
+  color: var(--ink-faint);
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.caption-group-tab:hover { color: var(--ink-soft); border-color: var(--accent-3); }
+.caption-group-tab.active { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+.caption-group-panel[hidden] { display: none; }
 
 .cadence-grid { display: flex; flex-direction: column; gap: 10px; }
 .cadence-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 8px 0; }
@@ -1366,6 +1554,15 @@ a { color: var(--accent); }
 .audio-upload-name { font-size: 0.85rem; color: var(--ink-soft); min-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
 .audio-upload-row progress { flex: 1; min-width: 120px; height: 8px; accent-color: var(--accent); }
 .audio-upload-error { font-size: 0.8rem; color: var(--error); }
+
+.platform-connect-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 14px; border: 1px solid var(--border-soft); border-radius: var(--radius);
+  background: var(--surface);
+}
+.platform-connect-info { display: flex; flex-direction: column; gap: 2px; }
+.platform-connect-name { font-size: 0.9rem; font-weight: 600; color: var(--ink); }
+.platform-connect-status { font-size: 0.78rem; color: var(--ink-faint); }
 
 .key-grid { display: flex; flex-direction: column; gap: 14px; }
 .key-row label { display: block; font-size: 0.8rem; color: var(--ink-soft); margin-bottom: 4px; }

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Privacy Policy - The Reality Manual Content Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .legal-shell { max-width: 760px; margin: 0 auto; padding: 48px 24px 100px; }
+    .legal-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 40px; }
+    .legal-nav .mark { color: var(--accent); display: flex; }
+    .legal-nav .mark svg { width: 22px; height: 22px; }
+    .legal-nav .name { font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; font-size: 0.8rem; }
+    .legal-nav .sub { color: var(--ink-faint); font-size: 0.78rem; }
+    .legal-eyebrow { font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-faint); margin: 0 0 10px; }
+    .legal-shell h1 { font-family: var(--font-display); font-weight: 500; font-size: clamp(1.8rem, 4vw, 2.4rem); margin: 0 0 6px; }
+    .legal-updated { color: var(--ink-faint); font-size: 0.8rem; margin: 0 0 36px; }
+    .legal-shell h2 {
+      font-family: var(--font-display); font-weight: 500; font-size: 1.2rem;
+      margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--border-soft);
+    }
+    .legal-shell h2:first-of-type { margin-top: 0; padding-top: 0; border-top: none; }
+    .legal-shell p, .legal-shell li { color: var(--ink-soft); line-height: 1.65; }
+    .legal-shell ul { padding-left: 1.2em; }
+    .legal-shell li { margin-bottom: 0.4em; }
+    .legal-shell strong { color: var(--ink); }
+    .legal-shell a { color: var(--accent); }
+    .legal-links { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border-soft); display: flex; gap: 20px; font-size: 0.82rem; }
+  </style>
+</head>
+<body>
+  <div class="legal-shell">
+    <div class="legal-nav">
+      <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 2 L22 12 L12 22 L2 12 Z" /></svg></span>
+      <div>
+        <div class="name">The Reality Manual</div>
+        <div class="sub">Content Studio, internal team tool</div>
+      </div>
+    </div>
+
+    <p class="legal-eyebrow">Legal</p>
+    <h1>Privacy Policy</h1>
+    <p class="legal-updated">Last updated: September 19, 2026</p>
+
+    <h2>What this is</h2>
+    <p>
+      "Content Studio" is an internal tool built and operated by The Reality
+      Manual (the publisher of the physical book sold at
+      <a href="https://realitymanual.com">realitymanual.com</a>) for our own
+      small content team to plan, produce, and schedule short- and
+      long-form video content for publishing to YouTube, TikTok, Instagram,
+      and Facebook. It is <strong>not a public product</strong>: it
+      has no public sign-up, is protected by a single shared password known
+      only to our team, and is used exclusively by authorized members of
+      The Reality Manual's own staff.
+    </p>
+
+    <h2>Information we process</h2>
+    <p>Because this tool is for our internal team only, it does not collect personal information from the public. What it does hold:</p>
+    <ul>
+      <li>Content our own team creates or uploads: video files, audio files, transcripts, captions, notes, and scheduling metadata for our own social media posts</li>
+      <li>Basic session information for our team's own login (a single shared password, checked server-side, and a session cookie; no names, emails, or other personal profiles are stored for our internal users)</li>
+      <li>When a team member connects one of our own social accounts (e.g. via TikTok Login Kit), an access token authorizing this tool to publish content to <strong>that account</strong> on our behalf, for as long as the connection remains active</li>
+    </ul>
+
+    <h2>How platform integrations work</h2>
+    <p>
+      Where this tool connects to a third-party platform's official API
+      (for example, TikTok's Content Posting API or the YouTube Data API),
+      it does so only to publish content that a member of our own team
+      has personally created and approved, to an account our own team
+      controls and has explicitly authorized via that platform's own
+      OAuth login flow. We never use these integrations to access, post
+      on behalf of, or process data belonging to any third party or end
+      user, only our own account and our own content.
+    </p>
+
+    <h2>Google user data (YouTube integration)</h2>
+    <p>
+      When a team member connects our YouTube channel via Google's OAuth
+      consent screen, we access and store, on our own backend server
+      only: an OAuth access token and refresh token scoped to
+      <code>youtube.upload</code> and <code>youtube.readonly</code>, and
+      the connected channel's own basic identity (channel ID and name),
+      used to publish a team-approved video to that channel and to show
+      which channel is connected in our Settings panel. These tokens are
+      never sent to, or readable by, any browser; never shared with any
+      third party; and never used for anything other than the two
+      actions above. A connection can be revoked at any time from within
+      this tool or directly from a user's
+      <a href="https://myaccount.google.com/permissions">Google Account
+      permissions</a> page. See our
+      <a href="youtube-app-review.html">YouTube Integration Overview</a>
+      for the full technical walkthrough.
+    </p>
+
+    <h2>What we don't do</h2>
+    <ul>
+      <li>We don't sell, rent, or share any information with advertisers or data brokers.</li>
+      <li>We don't run third-party analytics or advertising scripts on this tool.</li>
+      <li>We don't collect information from the public: there is no public-facing signup or account creation.</li>
+    </ul>
+
+    <h2>Security &amp; retention</h2>
+    <p>
+      Access is restricted by password and session cookie. Uploaded files
+      and content records are retained for as long as they're useful to
+      our own content pipeline, or deleted by our team when no longer
+      needed. Platform access tokens are retained only for as long as the
+      corresponding account connection is active, and can be revoked at
+      any time both from within this tool and directly from the connected
+      platform's own account settings.
+    </p>
+
+    <h2>Contact</h2>
+    <p>
+      Questions about this policy, including from a platform review
+      team, can be sent to
+      <a href="mailto:support@realitymanual.com">support@realitymanual.com</a>.
+    </p>
+
+    <div class="legal-links">
+      <a href="privacy.html">Privacy Policy</a>
+      <a href="terms.html">Terms of Service</a>
+      <a href="tiktok-app-review.html">TikTok Integration Overview</a>
+      <a href="youtube-app-review.html">YouTube Integration Overview</a>
+    </div>
+  </div>
+</body>
+</html>
