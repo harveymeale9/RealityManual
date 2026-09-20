@@ -6328,3 +6328,88 @@ and produces a real, playable YouTube video at the chosen privacy level,
 the piece correctly moves to "Posted / Live" on success, and a deliberate
 failure (e.g. disconnecting YouTube mid-test) surfaces
 `youtubePublishError` on the card rather than failing silently.
+
+---
+
+# 137. Final Check Button Genericized to "Schedule Video"; TikTok Publish Still Blocked on Missing Credentials (2026-09-20)
+
+Harvey's correction to §136, right after reading it: the Final Check
+button shouldn't be framed as platform-specific ("Publish to YouTube")
+at all — conceptually it's one action that publishes to *every* platform
+a piece is tagged for, and today just happens to only have YouTube
+actually wired underneath. He also asked, separately, whether TikTok
+needs the same real wiring or whether a mockup demo is enough for its
+own app review, so he can shoot two separate test videos (one per
+platform) today if it's worth doing now.
+
+**`ops-service/public/app.js`:** `fcYoutubePublishHtml()` renamed to
+`fcScheduleVideoHtml()` and reworked around a new `WIRED_PUBLISH_PLATFORMS
+= ['ytlong']` constant — the single source of truth for which tagged
+platforms can actually be acted on right now, extend this array (and the
+click handler) as more platforms get real integrations. The section is
+no longer gated on `ytlong` specifically — it renders for any Final
+Check card, buttons "Schedule Video" (or "Retry" after a failure), and
+splits the piece's tagged platforms into `wired` vs `unwired`:
+- Zero wired platforms tagged → button shown disabled, with a note
+  listing which selected platforms aren't wired yet ("tiktok, instagram
+  not wired up yet — won't be published there") rather than hiding the
+  button entirely, so it's visible that scheduling exists but can't do
+  anything real yet for this piece's current platform selection.
+- At least one wired platform (i.e. `ytlong`) tagged → button enabled,
+  same real immediate-publish click handler as §136 (unchanged — it was
+  already YouTube-only under the hood, this only changed what surrounds
+  it), plus the same "not wired yet" note for any other tagged platforms
+  so nothing is silently skipped without saying so.
+
+No scheduled-time delay was added or is planned for this action — per
+Harvey's own "for this test we can publish immediately," clicking it has
+always published right away (§136), which already matches what he
+wants; the only thing that needed fixing was the label/framing implying
+it was YouTube-specific.
+
+**TikTok: genuinely still blocked, not a judgment call.** Checked the
+actual repo state before answering rather than guessing: there is no
+TikTok client key/secret anywhere in this codebase, not even a
+placeholder in `.env.example`, and zero backend code (`src/tiktokAuth.js`
+doesn't exist, no `tiktok_oauth` table, no routes) — §62's original
+"the field is there for when it is" TikTok Settings entry is still just
+an inert text field. This is the same category of blocker as YouTube's
+own credentials were before Harvey supplied them (§133/§136): building
+real TikTok posting needs an actual TikTok developer app registered
+first (client key/secret, Login Kit scopes), which only Harvey can do —
+there's nothing to wire up server-side until that exists.
+
+Separately, on the actual question asked (real integration vs. a
+demo-only mockup for TikTok's own review): re-read §122's own research
+notes on this — TikTok's App Review Guidelines ask for a demo video
+"showing the complete end-to-end integration, all requested scopes
+actually demonstrated," which reads closer to Google's "must be a real,
+live flow" bar than to something a static mockup can honestly satisfy,
+though TikTok's wording is looser than Google's explicit
+address-bar-visible requirement. Also relevant: TikTok's own "unaudited
+app" restriction (posts forced to `SELF_ONLY` visibility, capped at 5
+posting users/24h) exists specifically so a developer *can* test real
+posting against their own account before formal approval — the same
+shape as YouTube's Testing-mode test-user allowance — so once
+credentials exist, real (if self-only) TikTok posting is achievable for
+a demo video the same way YouTube's Private-visibility test was. Net
+recommendation: build it for real once credentials exist, for the same
+honesty reasons §122 already flagged about this page ("honesty here
+matters for a compliance review") — but this is Harvey's call to make
+once he's registered the app, not something blocked on more research.
+
+**Not built this pass:** any TikTok backend code — there's nothing to
+build against yet. If Harvey registers a TikTok developer app and
+supplies a client key/secret, the next step would mirror §133/§136's
+YouTube pattern (`src/tiktokAuth.js`, a `tiktok_oauth` table, connect/
+disconnect routes, then a real `video.publish` call reachable from this
+same `fcScheduleVideoHtml()` section) rather than a new mechanism.
+
+Frontend-only (`app.js`, `style.css`), so per §93 this is already live —
+no deploy/restart needed. Verified via `node --check` and a CSS
+brace-balance check; not yet visually re-confirmed against the live
+deployed service — worth a look to confirm the button reads "Schedule
+Video," the not-wired note appears correctly when e.g. only TikTok is
+checked, and the real YouTube publish still fires correctly when
+`ytlong` is checked (should be unchanged from §136's already-built
+click handler).

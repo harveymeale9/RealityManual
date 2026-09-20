@@ -2046,36 +2046,64 @@
         '<div class="chip-row">' + chipHtml(piece, { hideVideoChip: true }) + '</div>' +
         '<div class="fc-actions">' +
           '<button type="button" class="btn-primary fc-approve-btn" data-id="' + id + '">Approve → Scheduled</button>' +
-          fcYoutubePublishHtml(id, piece) +
+          fcScheduleVideoHtml(id, piece) +
         '</div>' +
       '</div>';
   }
 
-  // Real publish-to-YouTube action, only offered for a piece actually
-  // tagged for the ytlong platform (Harvey unchecks every other platform
-  // for a YouTube-only test upload, per his own instruction — this button
-  // simply doesn't appear at all for a piece that isn't tagged ytlong,
-  // rather than trying to guess which platform he meant).
-  function fcYoutubePublishHtml(id, piece) {
-    if ((piece.platforms || []).indexOf('ytlong') === -1) return '';
+  // Platforms that actually have a real backend publish integration wired
+  // up right now — just YouTube. Harvey's framing (2026-09-20): the button
+  // here should read as one generic scheduling/publish action that goes
+  // out to every platform a piece is tagged for, not "Publish to
+  // <platform>" — it just happens that, today, YouTube is the only
+  // platform that can genuinely act on that yet. Extend this list (and
+  // the per-platform branch in the click handler below) as other
+  // platforms get real integrations.
+  var WIRED_PUBLISH_PLATFORMS = ['ytlong'];
+
+  // "Schedule Video" — a single action covering every platform a piece is
+  // tagged for. Always shown on a Final Check card (every card here has a
+  // real video), rather than gated to one specific platform, since the
+  // whole point is it's not youtube-specific. Whichever tagged platforms
+  // are actually wired (currently just ytlong) get a real, immediate
+  // publish on click — no scheduled-time delay, per Harvey's own "for
+  // this test we can publish immediately" — and any tagged platform that
+  // isn't wired yet is called out honestly rather than silently ignored.
+  function fcScheduleVideoHtml(id, piece) {
+    var platforms = piece.platforms || [];
     var status = piece.youtubePublishStatus;
     if (status === 'pending' || status === 'running') {
-      return '<div class="fc-yt-publish"><button type="button" class="btn-secondary" disabled>Publishing to YouTube…</button></div>';
+      return '<div class="fc-yt-publish"><button type="button" class="btn-secondary" disabled>Publishing…</button></div>';
     }
+    var wired = platforms.filter(function (p) { return WIRED_PUBLISH_PLATFORMS.indexOf(p) !== -1; });
+    var unwired = platforms.filter(function (p) { return WIRED_PUBLISH_PLATFORMS.indexOf(p) === -1; });
     var errorHtml = (status === 'error' && piece.youtubePublishError)
-      ? '<div class="fc-yt-error">YouTube publish failed: ' + escapeHtml(piece.youtubePublishError) + '</div>'
+      ? '<div class="fc-yt-error">Publish failed: ' + escapeHtml(piece.youtubePublishError) + '</div>'
       : '';
+    var notWiredNote = unwired.length
+      ? '<div class="fc-yt-note">' + escapeHtml(unwired.join(', ')) + ' not wired up yet — won\'t be published there.</div>'
+      : '';
+    if (!wired.length) {
+      return '' +
+        '<div class="fc-yt-publish">' +
+          '<button type="button" class="btn-secondary" disabled title="None of this piece\'s selected platforms can be published yet">Schedule Video</button>' +
+          notWiredNote +
+        '</div>';
+    }
+    // The privacy select only ever affects YouTube today — kept simple
+    // (not per-platform) since YouTube is the only real destination.
     var disabledAttr = (youtubeStatusCache && youtubeStatusCache.connected) ? '' : ' disabled title="Connect YouTube in Content Settings first"';
     return '' +
       '<div class="fc-yt-publish">' +
-        '<select class="fc-yt-privacy" data-id="' + id + '">' +
+        '<select class="fc-yt-privacy" data-id="' + id + '" title="YouTube visibility">' +
           '<option value="private" selected>Private</option>' +
           '<option value="unlisted">Unlisted</option>' +
           '<option value="public">Public</option>' +
         '</select>' +
         '<button type="button" class="btn-secondary fc-yt-publish-btn" data-id="' + id + '"' + disabledAttr + '>' +
-          (status === 'error' ? 'Retry publish to YouTube' : 'Publish to YouTube') +
+          (status === 'error' ? 'Retry' : 'Schedule Video') +
         '</button>' +
+        notWiredNote +
         errorHtml +
       '</div>';
   }

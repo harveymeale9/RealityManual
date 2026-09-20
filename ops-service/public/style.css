@@ -774,15 +774,18 @@ a { color: var(--accent); }
 .fc-title-line strong { color: var(--ink-soft); }
 .fc-titles-empty { font-size: 0.8rem; color: var(--ink-faint); font-style: italic; }
 .fc-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
-.fc-yt-publish { display: flex; align-items: center; gap: 8px; position: relative; }
+.fc-yt-publish { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .fc-yt-privacy {
   background: var(--surface-2); color: var(--ink-soft); border: 1px solid var(--border);
   border-radius: 6px; padding: 5px 8px; font-size: 0.78rem; font-family: inherit;
 }
+.fc-yt-note {
+  flex-basis: 100%; text-align: right; font-size: 0.72rem; color: var(--ink-faint);
+}
 .fc-yt-error {
-  position: absolute; top: 100%; right: 0; margin-top: 4px; max-width: 260px;
+  flex-basis: 100%; text-align: right; max-width: 100%;
   font-size: 0.72rem; color: var(--error); background: var(--error-soft);
-  border: 1px solid var(--error); border-radius: 6px; padding: 6px 8px; text-align: right;
+  border: 1px solid var(--error); border-radius: 6px; padding: 6px 8px;
 }
 
 .column-head {
