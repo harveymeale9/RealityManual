@@ -7,7 +7,13 @@
    components (side rail, avatar, footer), not a rebuild. */
 
 :root {
-  --ivory: #060a08;
+  /* True black, not just near-black — earth.png's own background fill is
+     pure #000, and body::before composites it at 40% opacity over this
+     color (see body::before below); anything other than an exact match
+     here shows up as a visible seam wherever the image's bounding box
+     ends and the plain body background takes over (most obvious on the
+     login screen, which has a large unobstructed area of each). */
+  --ivory: #000000;
   --ivory-dim: #080d0a;
   --surface: #0a0f0c;
   --surface-2: #0e1712;
