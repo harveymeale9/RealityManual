@@ -6711,3 +6711,74 @@ confirming a fast burst of unchecks now reliably persists all of them
 after a page reload, which is the only way this race actually surfaced
 before (the in-memory/visual state was never wrong, only what
 eventually landed on the server).
+
+---
+
+# 142. §141 Wasn't the Whole Bug: the Analysis Poller Was Also Clobbering Platform Edits
+
+Harvey tested again right after §141 and hit essentially the same
+symptom from a different angle: unchecked everything but TikTok on a
+fresh upload, and by the time it reached Final Check all 4 platforms
+were back, with the caption tab strip also wrongly showing all 4
+platforms' captions instead of just TikTok's.
+
+**That second complaint (captions) isn't a separate bug** — the Final
+Check caption tabs are entirely derived from `piece.platforms`
+(`captionsForPiece()`, §129); once platforms is wrong, the caption
+section is automatically wrong too. Fixing the real cause fixes both
+symptoms from one change.
+
+**Real root cause, found by reading `maybeStartAnalysisPolling()`
+directly:** every 3s while a piece's `analysisStatus` or
+`finalBuildStatus` is `pending`/`running`, this poller does
+`Store.get('pieces', id)` and then **`pieces[r.id] = r`** — a full,
+unconditional replace of the entire in-memory piece object with
+whatever the server happened to return. Analysis (ffmpeg extraction +
+ElevenLabs transcription + a Claude Code matching call) and the final-
+video build routinely take several real seconds — plenty of time for
+Harvey to be actively unchecking platform boxes on that exact row while
+it's still processing. If a poll tick's `GET` reflects a server
+snapshot from *before* that edit's own (now-debounced, per §141) save
+has landed, the wholesale replace overwrites Harvey's in-progress local
+edit with the stale server value the instant `refreshUploadRowHeadById`
+re-renders that row's head — silently reverting it, regardless of
+whether §141's debounce had even fired yet. §141 fixed the write side
+of this row's platform-save race; this was a second, independent bug on
+the *read* side, in a completely different piece of code, that could
+undo the same field by an entirely different mechanism.
+
+The irony: `server.js`'s own background jobs (`runVideoAnalysis`,
+`runBuildFinalVideo`) already do this correctly — both explicitly
+re-fetch the piece and overwrite *only* the fields they own before
+saving (§111/§115's own documented reasoning: "a concurrent edit Harvey
+made while analysis was running isn't clobbered"). The client-side
+poller consuming those same jobs' results never applied that same
+discipline — it just replaced everything.
+
+**Fix, `ops-service/public/app.js`'s `maybeStartAnalysisPolling()`:**
+instead of `pieces[r.id] = r`, merge — start from the current local
+object and copy over only the fields these two background jobs actually
+own (`analysisStatus`, `analysisError`, `analysisMatchedPieceId`,
+`transcript`, `ytTitles`, `title`, `finalBuildStatus`,
+`finalBuildError`, `stage`, `updatedAt`). Everything else — `platforms`,
+`thumbnailDataUrl`, `audioTrackId`, `videoIsVertical`, `contentType`,
+`notesHtml` — now always stays whatever's currently in the browser's
+own memory, since none of these background jobs ever touch those
+fields server-side either. This closes the exact bug reported and, by
+construction, the same latent bug for the other two fields editable
+inline on this same row (audio track, thumbnail) that hadn't been
+reported yet but were equally exposed.
+
+Verified the actual "Test video" piece from Harvey's screenshot no
+longer exists in the live data (`GET /api/store/pieces` — 94 pieces
+total, only #097 has `hasVideo: true`) — he most likely deleted it
+after screenshotting, via the right-click delete from §127, so there
+was nothing left to hand-fix directly this time; he'll need to re-test
+with a fresh upload once this deploys.
+
+Frontend-only (`app.js`), so per §93 this is already live — no deploy/
+restart needed. Verified via `node --check`; not yet re-tested against
+the live deployed service with a real fresh upload — worth confirming
+that unchecking platforms *during* active analysis/build processing
+(the actual failure window) now survives through to Final Check
+correctly, captions included.

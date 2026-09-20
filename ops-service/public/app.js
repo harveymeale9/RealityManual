@@ -3103,8 +3103,30 @@
         var needsFullRebuild = false;
         rows.forEach(function (r) {
           if (!r) return;
-          var wasProcessed = pieces[r.id] && pieces[r.id].stage === 'processed';
-          pieces[r.id] = r;
+          var existing = pieces[r.id];
+          var wasProcessed = existing && existing.stage === 'processed';
+          // Real bug Harvey hit (2026-09-20): this poll tick's own GET can
+          // easily be a snapshot taken from *before* an in-progress local
+          // edit's own (debounced) save has landed — analysis/build jobs
+          // routinely take several real seconds, plenty of time for
+          // Harvey to uncheck platform boxes or pick a different audio
+          // track while a row is still processing. Blindly replacing
+          // `pieces[r.id]` wholesale with `r` clobbered whatever he'd just
+          // changed the moment this tick's rebuild ran, silently
+          // reverting it. Only merge in the fields this background job
+          // actually owns (mirrors the same discipline server.js's own
+          // runVideoAnalysis/runBuildFinalVideo already apply when they
+          // re-fetch the piece before writing back, §111/§115) — anything
+          // else (platforms, thumbnail, audio track, content type, ...)
+          // stays whatever's currently in the browser's own memory.
+          var merged = existing ? Object.assign({}, existing) : r;
+          if (existing) {
+            ['analysisStatus', 'analysisError', 'analysisMatchedPieceId', 'transcript',
+             'ytTitles', 'title', 'finalBuildStatus', 'finalBuildError', 'stage', 'updatedAt'
+            ].forEach(function (k) { if (k in r) merged[k] = r[k]; });
+          }
+          pieces[r.id] = merged;
+          r = merged;
           if (wasProcessed && r.stage !== 'processed') {
             removeUploadRowAnimated(r.id);
           } else if (r.finalBuildStatus === 'error' && !uploadRows.querySelector('.upload-row[data-id="' + r.id + '"]')) {
