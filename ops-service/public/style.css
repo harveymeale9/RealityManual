@@ -1510,6 +1510,15 @@ a { color: var(--accent); }
 .audio-upload-row progress { flex: 1; min-width: 120px; height: 8px; accent-color: var(--accent); }
 .audio-upload-error { font-size: 0.8rem; color: var(--error); }
 
+.platform-connect-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 14px; border: 1px solid var(--border-soft); border-radius: var(--radius);
+  background: var(--surface);
+}
+.platform-connect-info { display: flex; flex-direction: column; gap: 2px; }
+.platform-connect-name { font-size: 0.9rem; font-weight: 600; color: var(--ink); }
+.platform-connect-status { font-size: 0.78rem; color: var(--ink-faint); }
+
 .key-grid { display: flex; flex-direction: column; gap: 14px; }
 .key-row label { display: block; font-size: 0.8rem; color: var(--ink-soft); margin-bottom: 4px; }
 .key-row input {

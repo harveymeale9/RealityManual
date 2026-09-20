@@ -12,6 +12,7 @@ const Database = require('better-sqlite3');
 const claudeRunner = require('./src/claudeRunner');
 const elevenlabs = require('./src/elevenlabs');
 const videoAnalysis = require('./src/videoAnalysis');
+const youtubeAuth = require('./src/youtubeAuth');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
@@ -64,6 +65,19 @@ db.exec(
   '  id INTEGER PRIMARY KEY CHECK (id = 1),' +
   '  claude_session_id TEXT,' +
   '  updated_at TEXT NOT NULL' +
+  ');' +
+  // Single-row (id=1) — this panel has exactly one admin/one connected
+  // YouTube channel, same "one row" pattern as voice_session above.
+  // Tokens live here and nowhere else — never returned to the browser
+  // (see GET /api/youtube/status, which only exposes connected/channelTitle).
+  'CREATE TABLE IF NOT EXISTS youtube_oauth (' +
+  '  id INTEGER PRIMARY KEY CHECK (id = 1),' +
+  '  channel_id TEXT,' +
+  '  channel_title TEXT,' +
+  '  access_token TEXT,' +
+  '  refresh_token TEXT,' +
+  '  expires_at TEXT,' +
+  '  updated_at TEXT NOT NULL' +
   ');'
 );
 
@@ -112,7 +126,16 @@ const stmts = {
     'INSERT INTO voice_session (id, claude_session_id, updated_at) VALUES (1, ?, ?) ' +
     'ON CONFLICT(id) DO UPDATE SET claude_session_id = excluded.claude_session_id, updated_at = excluded.updated_at'
   ),
-  clearVoiceSession: db.prepare('DELETE FROM voice_session WHERE id = 1')
+  clearVoiceSession: db.prepare('DELETE FROM voice_session WHERE id = 1'),
+  getYoutubeAuth: db.prepare('SELECT * FROM youtube_oauth WHERE id = 1'),
+  upsertYoutubeAuth: db.prepare(
+    'INSERT INTO youtube_oauth (id, channel_id, channel_title, access_token, refresh_token, expires_at, updated_at) ' +
+    'VALUES (1, ?, ?, ?, ?, ?, ?) ' +
+    'ON CONFLICT(id) DO UPDATE SET channel_id = excluded.channel_id, channel_title = excluded.channel_title, ' +
+    'access_token = excluded.access_token, refresh_token = excluded.refresh_token, ' +
+    'expires_at = excluded.expires_at, updated_at = excluded.updated_at'
+  ),
+  clearYoutubeAuth: db.prepare('DELETE FROM youtube_oauth WHERE id = 1')
 };
 
 setInterval(function () { stmts.purgeSessions.run(new Date().toISOString()); }, 60 * 60 * 1000);
@@ -217,6 +240,74 @@ app.get('/robots.txt', function (req, res) { res.type('text/plain').send('User-a
 app.use('/api/store', requireAuth);
 app.use('/api/files', requireAuth);
 app.use('/api/voice', requireAuth);
+app.use('/api/youtube', requireAuth);
+
+// --- YouTube OAuth (Google) — see src/youtubeAuth.js for the token
+// exchange itself. Placeholder-until-configured: YOUTUBE_OAUTH_CLIENT_ID/
+// SECRET/REDIRECT_URI aren't set yet as of 2026-09-20 (Harvey supplying
+// them shortly), so /oauth/start correctly 500s with a clear message
+// until then rather than crashing — the "Connect YouTube" button in
+// Settings can exist and be clicked before the real credentials land.
+app.get('/api/youtube/status', function (req, res) {
+  const row = stmts.getYoutubeAuth.get();
+  res.json({
+    configured: youtubeAuth.isConfigured(),
+    connected: !!(row && row.refresh_token),
+    channelTitle: row ? row.channel_title : null
+  });
+});
+
+app.get('/api/youtube/oauth/start', function (req, res) {
+  if (!youtubeAuth.isConfigured()) {
+    return res.status(500).send('YouTube OAuth is not configured yet — missing YOUTUBE_OAUTH_CLIENT_ID / ' +
+      'YOUTUBE_OAUTH_CLIENT_SECRET / YOUTUBE_OAUTH_REDIRECT_URI on the server. Ask Harvey for status.');
+  }
+  // CSRF protection: a short-lived httpOnly cookie holding the same nonce
+  // sent in the `state` param, checked back on the callback below —
+  // standard OAuth state-parameter pattern, nothing app-specific.
+  const state = crypto.randomBytes(16).toString('hex');
+  res.cookie('yt_oauth_state', state, { httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 10 * 60 * 1000 });
+  res.redirect(youtubeAuth.buildAuthUrl(state));
+});
+
+app.get('/api/youtube/oauth/callback', function (req, res) {
+  if (!youtubeAuth.isConfigured()) {
+    return res.status(500).send('YouTube OAuth is not configured yet.');
+  }
+  const expectedState = req.cookies && req.cookies.yt_oauth_state;
+  res.clearCookie('yt_oauth_state', { path: '/' });
+  if (req.query.error) {
+    return res.redirect('/#settings');
+  }
+  if (!req.query.state || req.query.state !== expectedState) {
+    return res.status(400).send('OAuth state did not match — please try connecting YouTube again from Content Settings.');
+  }
+  Promise.resolve()
+    .then(function () { return youtubeAuth.exchangeCode(req.query.code); })
+    .then(function (tokens) {
+      return youtubeAuth.fetchChannelInfo(tokens.access_token).then(function (channel) {
+        const expiresAt = new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString();
+        stmts.upsertYoutubeAuth.run(
+          channel ? channel.channelId : null,
+          channel ? channel.channelTitle : null,
+          tokens.access_token,
+          tokens.refresh_token || null,
+          expiresAt,
+          new Date().toISOString()
+        );
+      });
+    })
+    .then(function () { res.redirect('/#settings'); })
+    .catch(function (err) {
+      console.error('YouTube OAuth callback failed:', err.message);
+      res.status(500).send('YouTube connection failed: ' + err.message);
+    });
+});
+
+app.post('/api/youtube/disconnect', function (req, res) {
+  stmts.clearYoutubeAuth.run();
+  res.json({ ok: true });
+});
 
 app.get('/api/store/:storeName', function (req, res) {
   if (!isValidStore(req.params.storeName)) return res.status(400).json({ error: 'invalid_store' });

@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>YouTube Integration Overview &mdash; The Reality Manual Content Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    body { overflow-x: hidden; }
+    .rv-shell { max-width: 920px; margin: 0 auto; padding: 48px 24px 110px; }
+    .rv-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 36px; }
+    .rv-nav .mark { color: var(--accent); display: flex; }
+    .rv-nav .mark svg { width: 22px; height: 22px; }
+    .rv-nav .name { font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; font-size: 0.8rem; }
+    .rv-nav .sub { color: var(--ink-faint); font-size: 0.78rem; }
+    .rv-eyebrow { font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-faint); margin: 0 0 10px; }
+    .rv-shell h1 { font-family: var(--font-display); font-weight: 500; font-size: clamp(1.9rem, 4.4vw, 2.6rem); margin: 0 0 14px; max-width: 22ch; }
+    .rv-lede { color: var(--ink-soft); font-size: 1.02rem; line-height: 1.65; max-width: 68ch; margin: 0 0 40px; }
+    .rv-shell h2 {
+      font-family: var(--font-display); font-weight: 500; font-size: 1.35rem;
+      margin: 52px 0 10px;
+    }
+    .rv-shell h2 .num { color: var(--accent); font-family: var(--font-mono); font-size: 0.85rem; margin-right: 10px; }
+    .rv-shell p, .rv-shell li { color: var(--ink-soft); line-height: 1.65; }
+    .rv-shell ul { padding-left: 1.2em; }
+    .rv-shell li { margin-bottom: 0.4em; }
+    .rv-shell strong { color: var(--ink); }
+    .rv-shell a { color: var(--accent); }
+    .rv-note {
+      font-size: 0.82rem; color: var(--ink-faint); background: var(--surface-2);
+      border: 1px solid var(--border-soft); border-radius: 6px; padding: 10px 14px; margin: 14px 0;
+    }
+    .mockup {
+      border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--ivory); padding: 18px; margin: 18px 0 28px;
+    }
+    .mockup-label {
+      font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--ink-faint); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+    }
+    .mockup-label::before {
+      content: 'DEMO DATA'; background: var(--accent-soft); color: var(--accent);
+      padding: 2px 7px; border-radius: 3px; font-weight: 700; letter-spacing: 0.06em;
+    }
+    .rv-links { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border-soft); display: flex; gap: 20px; font-size: 0.82rem; flex-wrap: wrap; }
+    .scope-table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 0.88rem; }
+    .scope-table th, .scope-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
+    .scope-table th { color: var(--ink-faint); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+    .scope-table code { color: var(--accent-2); }
+  </style>
+</head>
+<body>
+  <div class="rv-shell">
+    <div class="rv-nav">
+      <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 2 L22 12 L12 22 L2 12 Z" /></svg></span>
+      <div>
+        <div class="name">The Reality Manual</div>
+        <div class="sub">Content Studio &mdash; internal team tool</div>
+      </div>
+    </div>
+
+    <p class="rv-eyebrow">Google OAuth / YouTube Data API &mdash; App Review</p>
+    <h1>How Content Studio uses the YouTube Data API</h1>
+    <p class="rv-lede">
+      This page describes our app, <strong>The Reality Manual &mdash;
+      Content Studio</strong>, for Google's OAuth verification review. It
+      is an internal production tool used by our own small team to
+      prepare and schedule video content, and to publish that content to
+      our own YouTube channel once we've reviewed and approved it. This
+      page is intentionally public (not behind our internal login) so it
+      can serve as the app's homepage on the OAuth consent screen, per
+      Google's requirement that the homepage be reachable without signing
+      in. Every screen shown below is our real product's actual design
+      system, illustrated with clearly-labeled example data.
+    </p>
+
+    <h2><span class="num">01</span>Who we are &amp; what the app does</h2>
+    <p>
+      The Reality Manual is a small publishing business (book sold at
+      <a href="https://realitymanual.com">realitymanual.com</a>). Content
+      Studio is our own in-house tool for planning, producing, and
+      cross-posting the short- and long-form video content that promotes
+      the book. It already supports a full production pipeline
+      (drag-and-drop video upload, automatic audio transcription,
+      ambient-audio splicing, thumbnail selection, and a human
+      review/approval gate). We're requesting YouTube Data API access so
+      our team can publish an approved video directly to our own channel
+      from inside this tool, instead of uploading it manually through
+      YouTube Studio afterward.
+    </p>
+
+    <h2><span class="num">02</span>Connecting our YouTube channel</h2>
+    <p>
+      A team member connects our own YouTube channel once, from Content
+      Studio's Settings panel, via Google's standard OAuth consent
+      screen. We only ever connect a channel The Reality Manual itself
+      owns &mdash; this tool has no concept of a third-party or end user
+      at all, and the connect button lives inside our authenticated
+      internal panel (Content Studio is not a public product; see
+      &sect;07 below), so the OAuth grant itself is always performed by
+      an authorized member of our own team.
+    </p>
+    <div class="mockup">
+      <div class="mockup-label">Settings &rsaquo; Platform connections</div>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div style="width:34px;height:34px;border-radius:50%;background:var(--surface-3);display:flex;align-items:center;justify-content:center;font-size:0.7rem;color:var(--ink-soft);">YT</div>
+          <div>
+            <div style="color:var(--ink); font-weight:600; font-size:0.9rem;">YouTube</div>
+            <div style="color:var(--accent-2); font-size:0.78rem;">Connected as The Reality Manual</div>
+          </div>
+        </div>
+        <button type="button" class="btn-secondary btn-tiny" disabled>Disconnect</button>
+      </div>
+    </div>
+    <p class="rv-note">
+      This connection card is real and live in our shipped product today
+      (not a mockup of a planned feature) &mdash; clicking "Connect" there
+      redirects through Google's own OAuth consent screen and back, which
+      is exactly the flow captured in our verification demo video.
+    </p>
+
+    <h2><span class="num">03</span>Producing &amp; reviewing the video (already built, platform-agnostic)</h2>
+    <p>
+      This is the part of Content Studio that already exists today for
+      TikTok/Instagram/Facebook, and that YouTube posting plugs straight
+      into. A team member drops a finished video into the tool; it's
+      automatically transcribed, matched to a title, and spliced with
+      backing audio. Nothing is ever posted anywhere until a human
+      reviews it on our <strong>Final Check</strong> screen and
+      explicitly approves it &mdash; there is no auto-posting path in
+      this product.
+    </p>
+    <div class="mockup">
+      <div class="mockup-label">Final Check &mdash; human review &amp; approval gate</div>
+      <div style="display:flex; gap:20px; flex-wrap:wrap;">
+        <div style="width:220px; aspect-ratio:16/9; background:linear-gradient(160deg, #182a20, #0a0f0c); border-radius:8px; display:flex; align-items:center; justify-content:center; color:var(--ink-faint); font-size:0.72rem; text-align:center; flex-direction:column; gap:10px;">
+          <div style="width:46px;height:46px;border-radius:50%;background:var(--accent-soft-strong);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;color:var(--accent);"><svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20" style="margin-left:2px;"><path d="M9 6l10 6-10 6V6Z"/></svg></div>
+          <span>Reviewed video<br />(example placeholder)</span>
+        </div>
+        <div style="flex:1; min-width:220px;">
+          <div style="font-weight:600; color:var(--ink); font-size:0.95rem; margin-bottom:6px;">Title 1: We Tested The Book's Core Framework For 30 Days</div>
+          <div style="color:var(--ink-soft); font-size:0.9rem; margin-bottom:10px;">Title 2: 30 Days Living By One Rule From The Reality Manual</div>
+          <div class="chip-row" style="margin-bottom:10px;">
+            <span class="chip format"><span class="dot" style="background:#c9683a"></span>YouTube</span>
+            <span class="chip format"><span class="dot" style="background:#5b80b0"></span>Facebook</span>
+            <span class="chip">Longform</span>
+          </div>
+          <div style="font-size:0.82rem; color:var(--ink-soft); background:var(--surface); border:1px solid var(--border-soft); border-radius:6px; padding:8px 10px; margin-bottom:12px;">
+            One rule, thirty days, real results. Full framework in The Reality Manual &mdash; link below.
+          </div>
+          <button type="button" class="btn-primary" disabled style="margin-top:8px;">Approve &amp; Schedule</button>
+        </div>
+      </div>
+    </div>
+
+    <h2><span class="num">04</span>Scheduling &amp; publishing</h2>
+    <p>
+      Once approved, the post moves to our existing scheduling queue,
+      which already assigns a publish time per platform's posting
+      cadence. At the scheduled time, our backend calls the YouTube Data
+      API's <code>videos.insert</code> endpoint using the connected
+      channel's OAuth token to publish the video &mdash; the same
+      "nothing is claimed successful until the platform actually confirms
+      it" pattern our storefront already uses for order fulfillment
+      elsewhere in this codebase.
+    </p>
+    <div class="mockup">
+      <div class="mockup-label">Content Pipeline &mdash; scheduled item</div>
+      <div style="display:flex; align-items:center; gap:12px; background:var(--surface-2); border:1px solid var(--border-soft); border-radius:6px; padding:12px 14px;">
+        <span style="width:8px;height:8px;border-radius:50%;background:var(--accent); flex-shrink:0;"></span>
+        <div>
+          <div style="color:var(--ink); font-size:0.88rem;">Scheduled for Sept 27, 2026 &middot; 9:00 AM PT</div>
+          <div style="font-size:0.78rem; color:var(--ink-faint); font-style:italic; margin-top:6px;">This is when it goes live on YouTube.</div>
+        </div>
+      </div>
+    </div>
+
+    <h2><span class="num">05</span>Scopes we're requesting, and why</h2>
+    <table class="scope-table">
+      <tr><th>Scope</th><th>Why we need it</th><th>Why not narrower</th></tr>
+      <tr>
+        <td><code>youtube.upload</code></td>
+        <td>To publish an approved video directly to our connected channel on the schedule our team sets, instead of uploading it manually.</td>
+        <td>This is already the narrowest scope the YouTube Data API offers for publishing a video.</td>
+      </tr>
+      <tr>
+        <td><code>youtube.readonly</code></td>
+        <td>To look up the connected channel's own name, so Settings can show which channel is connected ("Connected as &hellip;") before any video is ever published.</td>
+        <td>We only ever read our own channel's basic identity, never any other channel's data, comments, or analytics.</td>
+      </tr>
+    </table>
+    <p>
+      We do not request <code>youtube.force-ssl</code> or the full
+      <code>youtube</code> scope, since neither is needed for what this
+      tool actually does (upload our own videos, show which channel is
+      connected).
+    </p>
+
+    <h2><span class="num">06</span>Compliance commitments</h2>
+    <ul>
+      <li>Every post is created and approved by a human member of our own team &mdash; there is no automated content generation or auto-posting.</li>
+      <li>We only ever post to our own connected YouTube channel, never on behalf of a third party.</li>
+      <li>We display the connected channel and a full content preview before every post, and require explicit approval each time.</li>
+      <li>OAuth tokens are stored server-side only, are never exposed to the browser, and can be revoked at any time both from within this tool and directly from a user's <a href="https://myaccount.google.com/permissions">Google Account permissions</a> page.</li>
+      <li>We will not request scopes beyond <code>youtube.upload</code> and <code>youtube.readonly</code> unless our use of the product genuinely expands to need them.</li>
+    </ul>
+
+    <h2><span class="num">07</span>Access &amp; legal</h2>
+    <p>
+      Content Studio itself is <strong>not a public product</strong>: it
+      has no public sign-up and is used exclusively by authorized members
+      of The Reality Manual's own staff, behind a single shared
+      password. This page, and our <a href="privacy.html">Privacy
+      Policy</a> and <a href="terms.html">Terms of Service</a> (both
+      linked below), are deliberately public so Google's review process
+      can read them without needing our internal credentials. Our
+      Privacy Policy specifically covers how we access, use, store, and
+      share Google user data obtained through this integration.
+    </p>
+
+    <div class="rv-links">
+      <a href="privacy.html">Privacy Policy</a>
+      <a href="terms.html">Terms of Service</a>
+      <a href="tiktok-app-review.html">TikTok Integration Overview</a>
+    </div>
+  </div>
+</body>
+</html>

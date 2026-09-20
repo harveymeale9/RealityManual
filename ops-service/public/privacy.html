@@ -71,13 +71,32 @@
     <h2>How platform integrations work</h2>
     <p>
       Where this tool connects to a third-party platform's official API
-      (for example, TikTok's Content Posting API), it does so only to
-      publish content that a member of our own team has personally created
-      and approved, to an account our own team controls and has explicitly
-      authorized via that platform's own OAuth login flow. We never use
-      these integrations to access, post on behalf of, or process data
-      belonging to any third party or end user, only our own
-      account and our own content.
+      (for example, TikTok's Content Posting API or the YouTube Data API),
+      it does so only to publish content that a member of our own team
+      has personally created and approved, to an account our own team
+      controls and has explicitly authorized via that platform's own
+      OAuth login flow. We never use these integrations to access, post
+      on behalf of, or process data belonging to any third party or end
+      user, only our own account and our own content.
+    </p>
+
+    <h2>Google user data (YouTube integration)</h2>
+    <p>
+      When a team member connects our YouTube channel via Google's OAuth
+      consent screen, we access and store, on our own backend server
+      only: an OAuth access token and refresh token scoped to
+      <code>youtube.upload</code> and <code>youtube.readonly</code>, and
+      the connected channel's own basic identity (channel ID and name),
+      used to publish a team-approved video to that channel and to show
+      which channel is connected in our Settings panel. These tokens are
+      never sent to, or readable by, any browser; never shared with any
+      third party; and never used for anything other than the two
+      actions above. A connection can be revoked at any time from within
+      this tool or directly from a user's
+      <a href="https://myaccount.google.com/permissions">Google Account
+      permissions</a> page. See our
+      <a href="youtube-app-review.html">YouTube Integration Overview</a>
+      for the full technical walkthrough.
     </p>
 
     <h2>What we don't do</h2>
@@ -108,7 +127,8 @@
     <div class="legal-links">
       <a href="privacy.html">Privacy Policy</a>
       <a href="terms.html">Terms of Service</a>
-      <a href="tiktok-app-review.html">Integration Overview</a>
+      <a href="tiktok-app-review.html">TikTok Integration Overview</a>
+      <a href="youtube-app-review.html">YouTube Integration Overview</a>
     </div>
   </div>
 </body>

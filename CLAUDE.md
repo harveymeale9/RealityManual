@@ -6000,3 +6000,115 @@ Frontend-only, so per §93 this is already live — no deploy/restart
 needed. Verified via `node --check` and a grep confirming no leftover
 `openBtn` references; not yet visually confirmed against the live
 deployed service.
+
+---
+
+# 133. Real YouTube OAuth Connect Flow Built; TikTok Researched Again — No Live Login Area Needed There
+
+Harvey asked to start building the "login area" developers/reviewers
+will need to pass YouTube's and TikTok's platform API review, ahead of
+supplying real OAuth credentials ("in about an hour"), and to figure
+out whether TikTok even needs one. Researched both platforms' actual
+current requirements (WebSearch/WebFetch, not assumed) before building
+anything.
+
+**What Google's YouTube Data API OAuth verification actually
+requires** (per `developers.google.com/identity/protocols/oauth2/
+production-readiness/sensitive-scope-verification` and related pages):
+a **real, live OAuth consent flow** — a genuine "Connect"/"Sign in"
+button that redirects through Google's actual consent screen — plus a
+demo video of that real flow (app name + client ID visible in the
+address bar, the exact functionality each sensitive scope unlocks), a
+detailed written justification per scope, and a publicly-reachable
+homepage (not gated behind our own login) describing the app and
+linking the privacy policy. This is a genuinely different bar than
+TikTok's (§122): Google's video has to show a *real* flow, not an
+illustrative mockup, so the "Connect YouTube" button had to actually
+be built and wired end-to-end now, not just described.
+
+**What TikTok actually requires, re-checked directly against
+`developers.tiktok.com`'s App Review Guidelines and FAQ pages:**
+neither page mentions supplying reviewers with demo accounts or a live
+login area — TikTok's review is a demo-video + sandbox-mode
+submission, exactly as §122 already found and built for
+(`tiktok-app-review.html`). **No new TikTok work was done here** — the
+existing page and app-review package from §122 already covers what
+TikTok's documented process actually asks for; building a live TikTok
+login area now would be speculative work against a requirement that
+doesn't appear to exist, not something to do "just in case" without
+Harvey re-confirming it's actually needed.
+
+**Built for YouTube (all in `ops-service/`):**
+- `src/youtubeAuth.js` (new) — plain REST calls to Google's OAuth
+  endpoints via Node 22's built-in `fetch` (same pattern
+  `elevenlabs.js` already uses server-side; deliberately no
+  `googleapis` SDK dependency, per §6's "avoid unnecessary
+  dependencies"). Requests only `youtube.upload` (publish) and
+  `youtube.readonly` (look up the connected channel's own name for the
+  Settings UI) — the strict minimum per Google's "least privilege"
+  guidance, not the broader `youtube`/`youtube.force-ssl` scopes.
+- `server.js`: a new single-row `youtube_oauth` SQLite table (tokens
+  live here only — the generic `settings` record, which the browser
+  can read in full via `GET /api/store/settings/settings`, never sees
+  them) and four routes, all behind the existing `requireAuth` session
+  gate: `GET /api/youtube/status` (connected?/channel name, no
+  tokens), `GET /api/youtube/oauth/start` (redirects to Google, with a
+  short-lived httpOnly `state`-nonce cookie for CSRF protection),
+  `GET /api/youtube/oauth/callback` (exchanges the code, fetches
+  channel identity, stores tokens, redirects back to `/#settings`),
+  `POST /api/youtube/disconnect`. `/oauth/start` returns a clear 500
+  message rather than crashing while `YOUTUBE_OAUTH_CLIENT_ID/SECRET/
+  REDIRECT_URI` are still unset — the button can exist and be clicked
+  today, it just won't do anything real until Harvey's credentials
+  land in the VPS's `ops-service/.env` (documented in
+  `.env.example`; **still needs manually adding to the real `.env` on
+  the VPS and a container restart once Harvey supplies them** — an
+  env var change needs a restart regardless of any code change).
+- `public/app.js` + `style.css`: Content Settings gained a real
+  "Platform connections" section with a YouTube connect/disconnect
+  card (`renderYoutubeConnectCard()`, polls `/api/youtube/status`,
+  shows "Not configured yet" / "Not connected" / "Connected as
+  <channel>"). The old plain-text "YouTube" entry in the API-keys
+  `KEY_FIELDS` list — never wired to anything — was removed in favor
+  of this real mechanism rather than kept alongside it.
+- `public/youtube-app-review.html` (new, public — not behind the panel
+  password, per Google's homepage-must-be-public requirement) — the
+  written walkthrough + scope justification + compliance commitments
+  Google's review actually asks for, honestly distinguishing what's
+  real today (the connect card, the production/review pipeline) from
+  what publishing itself will do once credentials exist. Cross-linked
+  from `privacy.html`/`terms.html`/`tiktok-app-review.html`'s footers.
+- `public/privacy.html` gained a dedicated "Google user data (YouTube
+  integration)" section spelling out exactly what's accessed/stored/
+  shared, per Google's explicit requirement that the privacy policy
+  disclose this specifically (a generic "we use OAuth" paragraph,
+  which is all it said before, wasn't enough).
+
+**Not done, waiting on Harvey:** the actual Google Cloud Console OAuth
+client setup (client ID/secret, consent screen fields, scope
+verification submission, demo video recording — literally recording
+him clicking "Connect" and going through the real Google screen) is a
+"you, not me" action, same category as every other raw-credential step
+this project has hit (§74/§88). Once he supplies
+`YOUTUBE_OAUTH_CLIENT_ID`/`YOUTUBE_OAUTH_CLIENT_SECRET`, they need to
+land in the VPS's `ops-service/.env` and the container needs a
+restart — nothing here does that automatically. The actual
+`videos.insert` publish call (using the stored token) also isn't built
+yet — this pass only built the connect/auth plumbing, matching this
+project's established "connect first, wire up real posting once
+there's something to post through" sequencing (§62, §122).
+
+This is a `server.js`/new-`src`-file change, so per §93 it triggers a
+full rebuild+restart on the next deploy — same standing caveat as
+every prior backend change in this file, since this session is the
+headless agent running inside the container being restarted. Logged to
+the work log immediately before pushing.
+
+Verified via `node --check` on all three touched/new JS files, a CSS
+brace-balance check, and a div-tag-balance check on all four touched/
+new HTML files. **Not yet verified end-to-end** — there's nothing to
+test against without real Google credentials yet; once Harvey supplies
+them, confirm `/api/youtube/oauth/start` actually reaches Google's
+consent screen, the callback correctly stores tokens and shows
+"Connected as &lt;channel&gt;" in Settings, and Disconnect actually
+clears the stored tokens.

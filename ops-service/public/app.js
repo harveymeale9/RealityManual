@@ -3051,6 +3051,19 @@
         '<input class="title-input settings-input" id="baseLinkInput" />' +
       '</section>' +
       '<section class="settings-section">' +
+        '<h3>Platform connections</h3>' +
+        '<p class="settings-hint">Real OAuth logins used to actually publish on a connected account\'s behalf ' +
+          '(needed for the YouTube/TikTok API review process) — separate from the plain API-key placeholder fields ' +
+          'below, which aren\'t wired to anything yet.</p>' +
+        '<div class="platform-connect-card" id="youtubeConnectCard">' +
+          '<div class="platform-connect-info">' +
+            '<span class="platform-connect-name">YouTube</span>' +
+            '<span class="platform-connect-status" id="youtubeConnectStatus">Checking…</span>' +
+          '</div>' +
+          '<button type="button" class="btn-secondary btn-tiny" id="youtubeConnectBtn" disabled>…</button>' +
+        '</div>' +
+      '</section>' +
+      '<section class="settings-section">' +
         '<h3>API keys</h3>' +
         '<p class="settings-hint">Stored on the ops-service backend (same place as everything else here — the ' +
           'shared `settings` record), not just this browser, so any Claude Code session with server access can read ' +
@@ -3060,13 +3073,53 @@
     '</div>';
 
   var KEY_FIELDS = [
-    { id: 'youtube', label: 'YouTube' },
     { id: 'instagram', label: 'Instagram' },
     { id: 'facebook', label: 'Facebook' },
     { id: 'tiktok', label: 'TikTok (pending access)' },
     { id: 'transcriptionProvider', label: 'Transcription provider', placeholder: 'e.g. AssemblyAI, Deepgram, Whisper' },
     { id: 'transcriptionKey', label: 'Transcription API key', type: 'password' }
   ];
+
+  // YouTube's own real OAuth connect card, above — has a working login
+  // flow now (src/youtubeAuth.js), so the old plain-text "YouTube" API
+  // key field (which was never wired to anything) was dropped from
+  // KEY_FIELDS rather than kept alongside a second, real mechanism for
+  // the same platform.
+  function renderYoutubeConnectCard() {
+    var statusEl = document.getElementById('youtubeConnectStatus');
+    var btn = document.getElementById('youtubeConnectBtn');
+    if (!statusEl || !btn) return;
+    fetch('/api/youtube/status', { credentials: 'include' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (s) {
+        if (!s) { statusEl.textContent = 'Status unavailable.'; btn.disabled = true; btn.textContent = '—'; return; }
+        if (!s.configured) {
+          statusEl.textContent = 'Not configured yet (waiting on Google OAuth credentials).';
+          btn.disabled = true;
+          btn.textContent = 'Connect';
+          return;
+        }
+        btn.disabled = false;
+        if (s.connected) {
+          statusEl.textContent = 'Connected as ' + (s.channelTitle || 'a YouTube channel') + '.';
+          btn.textContent = 'Disconnect';
+          btn.onclick = function () {
+            btn.disabled = true;
+            fetch('/api/youtube/disconnect', { method: 'POST', credentials: 'include' })
+              .then(renderYoutubeConnectCard);
+          };
+        } else {
+          statusEl.textContent = 'Not connected.';
+          btn.textContent = 'Connect';
+          // A real full-page navigation, not fetch() — this has to be an
+          // actual browser redirect through Google's own consent screen,
+          // which is exactly what Google's OAuth verification review
+          // requires (see CLAUDE.md), not something an XHR can drive.
+          btn.onclick = function () { window.location.href = '/api/youtube/oauth/start'; };
+        }
+      })
+      .catch(function () { statusEl.textContent = 'Status unavailable.'; });
+  }
 
   var settingsCache = null;
   var settingsSaveTimer = null;
@@ -3184,6 +3237,7 @@
       renderCadenceGrid();
       renderAudioList();
       renderKeyGrid();
+      renderYoutubeConnectCard();
 
       // One textarea per platform, ids following "caption-<group>-<key>"
       // (see SETTINGS_MARKUP) — driven off CAPTION_GROUPS so this list
