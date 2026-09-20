@@ -186,12 +186,22 @@ window.RMVoice = (function () {
     }
     while ((match = re.exec(src))) {
       if (match.index > lastIndex) appendTextWithInlineCode(src.slice(lastIndex, match.index));
-      var pre = document.createElement('pre');
+      // `let`, not `var`, is load-bearing here: a message can contain more
+      // than one fenced code block, so this loop can run more than once.
+      // `var` is function-scoped, not per-iteration, so every click
+      // handler created below would have closed over the *same* pre/
+      // codeEl/copyBtn bindings — whichever block happened to be the last
+      // one in the message — meaning every earlier copy button in a
+      // multi-block message silently copied the wrong (last) block's text
+      // and updated the wrong (last) button's "Copied" label instead of
+      // its own. `let` gives each iteration its own binding, which is
+      // what makes each button's closure actually refer to itself.
+      let pre = document.createElement('pre');
       pre.className = 'pm-code-block';
-      var codeEl = document.createElement('code');
+      let codeEl = document.createElement('code');
       codeEl.textContent = match[2].replace(/\n$/, '');
       pre.appendChild(codeEl);
-      var copyBtn = document.createElement('button');
+      let copyBtn = document.createElement('button');
       copyBtn.type = 'button';
       copyBtn.className = 'pm-code-copy';
       copyBtn.textContent = 'Copy';

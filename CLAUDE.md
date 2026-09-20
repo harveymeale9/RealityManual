@@ -6413,3 +6413,43 @@ Video," the not-wired note appears correctly when e.g. only TikTok is
 checked, and the real YouTube publish still fires correctly when
 `ytlong` is checked (should be unchanged from §136's already-built
 click handler).
+
+---
+
+# 138. Fixed: Copy Buttons on Fenced Code Blocks Copied the Wrong Block
+
+Harvey reported the "Copy" button on code blocks in the Project Manager
+chat "don't work" — and the message he was looking at (this session's own
+previous reply, which happened to contain two separate fenced code
+blocks) is exactly the reproduction case.
+
+**Root cause, `renderMarkdownLite()` in
+`ops-service/public/lib/voiceClient.js`:** the loop that builds each
+fenced code block declared its `pre`/`codeEl`/`copyBtn` elements with
+`var`, which is function-scoped, not per-iteration. A message with more
+than one code block runs this loop more than once, and every click
+handler created inside it — `copyBtn.addEventListener('click', function
+() { ... codeEl ... copyBtn ... })` — closed over those same shared `var`
+bindings rather than the specific element from its own iteration. By the
+time any button was clicked, `codeEl`/`copyBtn` held whatever the *last*
+loop iteration had set them to. Practical effect: clicking an earlier
+block's Copy button silently copied the *last* block's text to the
+clipboard instead of its own, and flipped the *last* button's label to
+"Copied" instead of the one actually clicked — which, on the button
+Harvey actually clicked, looked exactly like nothing happened at all. A
+message with only one code block was never affected (nothing to
+misattribute to), which is presumably why this hadn't been reported
+before now — most replies with code only include one.
+
+**Fix:** the three `var` declarations inside the loop changed to `let`,
+which is block-scoped per iteration — each button's closure now
+correctly captures its own element bindings, not whichever iteration
+happened to run last. Every browser this app targets (Chrome/Safari,
+desktop and mobile) supports `let` natively; no build step or
+transpilation involved.
+
+Frontend-only (`voiceClient.js`), so per §93 this is already live — no
+deploy/restart needed. Verified via `node --check`; the multi-code-block
+repro case (this exact conversation's earlier reply) is the way to
+confirm it in practice — each button should now independently copy and
+label only its own block.
