@@ -1196,7 +1196,56 @@ function recoverInflightVoiceMessages() {
   if (requeued) drainVoiceQueue();
 }
 
+// Same self-healing pattern as recoverInflightVoiceMessages() above, now
+// applied to video analysis/build jobs too (2026-09-20 — Harvey reported
+// a Final Check card's video repeatedly disappearing/reappearing).
+// Real root cause, traced end to end rather than guessed: a piece whose
+// `analysisStatus`/`finalBuildStatus` gets left at 'pending'/'running' by
+// a mid-flight service restart (this container gets rebuilt/restarted
+// for every backend deploy, §93) never gets picked back up by
+// anything — nothing server-side ever resumes it. The client's own
+// `maybeStartAnalysisPolling()` therefore keeps that one piece in its
+// "still waiting" list *forever*, polling it every 3s indefinitely, and
+// every tick re-renders the whole Kanban board (since nothing about the
+// stuck piece ever actually changes to stop the loop) — which is what
+// Harvey was actually seeing as a repeating flicker on whatever card he
+// happened to be looking at, unrelated to anything he'd clicked. Marking
+// these as a clear, terminal error on startup (instead of leaving them
+// stuck) is what actually stops the client from ever polling them again.
+function recoverInflightVideoJobs() {
+  const now = new Date().toISOString();
+  let fixed = 0;
+  stmts.getAll.all('pieces').forEach(function (row) {
+    let piece;
+    try { piece = JSON.parse(row.data); } catch (e) { return; }
+    if (!piece || !piece.hasVideo) return;
+    let changed = false;
+    if (piece.analysisStatus === 'pending' || piece.analysisStatus === 'running') {
+      piece.analysisStatus = 'error';
+      piece.analysisError = 'Service restarted while this was in progress — retry if a transcript/title match is still needed.';
+      changed = true;
+    }
+    if (piece.finalBuildStatus === 'pending' || piece.finalBuildStatus === 'running') {
+      piece.finalBuildStatus = 'error';
+      piece.finalBuildError = 'Service restarted while this was in progress — try "Send to final check" again.';
+      changed = true;
+    }
+    if (changed) {
+      piece.updatedAt = now;
+      stmts.upsert.run('pieces', piece.id, JSON.stringify(piece), now);
+      fixed++;
+    }
+  });
+  if (fixed) {
+    console.log('video job recovery: marked ' + fixed + ' stuck piece(s) as error');
+    fs.appendFile(WORK_LOG_PATH,
+      '- [' + now + '] SERVICE RESTARTED — recovered ' + fixed + ' stuck video analysis/build job(s), marked as error.\n',
+      function () {});
+  }
+}
+
 app.listen(PORT, function () {
   console.log('rm-ops-service listening on ' + PORT);
   recoverInflightVoiceMessages();
+  recoverInflightVideoJobs();
 });

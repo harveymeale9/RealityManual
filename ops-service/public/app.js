@@ -3137,13 +3137,26 @@
   // failed) just gets its own head refreshed in place. Stops itself once
   // nothing's waiting, rather than polling forever in the background.
   var analysisPollTimer = null;
+  // Defense in depth alongside server.js's own recoverInflightVideoJobs()
+  // (2026-09-20): a piece whose analysisStatus/finalBuildStatus never
+  // resolves (a mid-flight service restart is the known cause, but this
+  // guards against any other way it could happen too) would otherwise sit
+  // in `waiting` forever, polling every 3s indefinitely and re-rendering
+  // the whole board every tick for no reason — which is what Harvey
+  // actually saw as a repeating video/thumbnail flicker on a Final Check
+  // card he hadn't touched. No real analysis/build job takes anywhere
+  // close to this long, so anything still "pending"/"running" this much
+  // later is stuck, not slow.
+  var STUCK_JOB_TIMEOUT_MS = 5 * 60 * 1000;
   function maybeStartAnalysisPolling() {
     var waiting = Object.keys(pieces).filter(function (id) {
       var p = pieces[id];
-      return p.hasVideo && (
-        p.analysisStatus === 'pending' || p.analysisStatus === 'running' ||
-        p.finalBuildStatus === 'pending' || p.finalBuildStatus === 'running'
-      );
+      if (!p.hasVideo) return false;
+      var isPending = p.analysisStatus === 'pending' || p.analysisStatus === 'running' ||
+        p.finalBuildStatus === 'pending' || p.finalBuildStatus === 'running';
+      if (!isPending) return false;
+      var age = Date.now() - new Date(p.updatedAt || p.createdAt || 0).getTime();
+      return age < STUCK_JOB_TIMEOUT_MS;
     });
     if (!waiting.length) { clearTimeout(analysisPollTimer); analysisPollTimer = null; return; }
     if (analysisPollTimer) return;

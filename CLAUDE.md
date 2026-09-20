@@ -6972,3 +6972,77 @@ the real accent-green glow rendering (`rgb(60, 255, 137) 0px 0px 0px
 `animateBoardMove()` actually ran end to end rather than just existing
 in the deployed source. All synthetic test pieces created during this
 verification pass were deleted afterward via the app's own endpoints.
+
+---
+
+# 146. Real Bug: Stuck Analysis/Build Jobs Poll Forever, Flickering the Whole Board
+
+Harvey's report ("the thumbnail in Final Check disappears then reappears
+then disappears again a few times after I clicked it once") led to a
+more serious underlying bug than the symptom suggested — not anything
+about clicking, and not scoped to just the one card he was looking at.
+
+**Root cause, confirmed against the live data:** piece #97
+(`horizontalvid`, already at `stage: 'live'`, successfully published to
+YouTube days earlier) and piece #98 (`verticalvideodemo`, sitting in
+Processing) both had `analysisStatus: 'pending'` **permanently stuck** —
+never having progressed to `'running'`, `'done'`, or `'error'`. The only
+place that ever updates `analysisStatus` off its initial `'pending'`
+value is `runVideoAnalysis()` in `server.js`, and its very first line is
+`piece.analysisStatus = 'running'; savePieceRecord(piece);` — so a piece
+stuck at `'pending'` means that background job never even started, or
+started and was killed before its first line landed. The most likely
+cause: `rm-ops-service` gets rebuilt/restarted on every backend deploy
+(§93), and this project already solved the exact "a restart abandons an
+in-flight background job forever" problem once before, for voice
+messages (`recoverInflightVoiceMessages()`, §88) — but never applied the
+same fix to video analysis/build jobs, so a video whose analysis was
+queued or running at the moment of a redeploy was left stuck with no
+mechanism to ever notice or recover.
+
+**Why that caused a repeating flicker, unrelated to anything Harvey
+clicked:** `maybeStartAnalysisPolling()` (client, `app.js`) includes any
+piece with `analysisStatus`/`finalBuildStatus` `pending`/`running` in its
+"still waiting" list and polls every 3s until that list is empty. A piece
+stuck at `'pending'` forever means that list is **never** empty — the
+poller runs indefinitely, and every tick (per §144/§145's own fix)
+re-renders whatever tab is actually on screen, since nothing about the
+stuck piece ever changes to make the loop stop. Every 3 seconds, the
+entire Kanban board — including whatever Final Check card Harvey
+happened to be looking at — was being torn down and rebuilt, which reads
+exactly as a video/thumbnail "disappearing and reappearing" repeatedly,
+totally independent of his own click.
+
+**Fixed three ways:**
+1. **`server.js`: `recoverInflightVideoJobs()`**, mirroring
+   `recoverInflightVoiceMessages()`'s exact pattern, now runs on every
+   process start. Any piece found with `analysisStatus`/`finalBuildStatus`
+   still `pending`/`running` gets marked `'error'` with a clear message —
+   same conservative choice §88 already made for voice messages (don't
+   blindly re-run/resume something whose real completion state is
+   unknown), applied to the class of job this project had left
+   unprotected. Logs a `SERVICE RESTARTED` line to the work log, same as
+   the voice-message recovery already does.
+2. **`app.js`: a 5-minute timeout** in `maybeStartAnalysisPolling()`'s own
+   `waiting` filter — defense in depth independent of the server-side
+   fix, since no real analysis/build job takes anywhere close to that
+   long, so anything still pending/running that long later is stuck, not
+   slow. Closes the same failure class even if it ever happens for some
+   other reason a server restart doesn't explain.
+3. **Immediate data fix**, applied directly via the live API so Harvey's
+   flicker stopped right away rather than waiting for this deploy:
+   manually cleared the two actually-stuck pieces (#97, #98) to
+   `analysisStatus/finalBuildStatus: 'error'`.
+
+This is a `server.js` change (real backend logic), so per §93 it
+triggers a full rebuild+restart on the next deploy — same standing
+caveat as every prior backend change in this file, since this session is
+the headless agent running inside the container being restarted. Logged
+to the work log immediately before pushing.
+
+Verified via `node --check` on both files; the immediate data fix was
+confirmed applied via a direct re-fetch of both pieces. **Not yet
+verified end-to-end** that `recoverInflightVideoJobs()` actually fires
+and behaves correctly on a real restart — worth confirming after this
+deploy that the work log gets the expected recovery line if any piece is
+genuinely mid-analysis/build when it happens next.
