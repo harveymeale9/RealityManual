@@ -6782,3 +6782,45 @@ the live deployed service with a real fresh upload — worth confirming
 that unchecking platforms *during* active analysis/build processing
 (the actual failure window) now survives through to Final Check
 correctly, captions included.
+
+---
+
+# 143. First Real TikTok Publish Attempt: Genuine Platform Rule, Not a Bug — Account Must Be Set to Private
+
+Harvey's first real "Schedule Video" click against TikTok reached the
+live API correctly (confirms §139/§142's fixes are all working
+end-to-end — auth, chunked upload, everything up to TikTok's own
+business-logic check) and got back a real, documented TikTok error:
+
+```text
+{"error":{"code":"unaudited_client_can_only_post_to_private_accounts",
+"message":"Please review our integration guidelines at
+https://developers.tiktok.com/doc/content-sharing-guidelines/", ...}}
+```
+
+**Researched rather than guessed:** this is a second, separate
+unaudited-client restriction beyond the post-level `SELF_ONLY`
+`privacy_level` §139 already handles correctly. TikTok additionally
+requires the **target account's own account-level visibility** to be
+set to Private in the TikTok app itself (Settings and privacy → Privacy
+→ Private account) — a completely different setting from the
+per-content privacy level our `queryCreatorInfo`/`initPublish` calls
+already request correctly. Both conditions are required together for an
+unaudited client to post at all; our code was never wrong here, there's
+just nothing it can do about the account's own visibility setting.
+
+**Fix (Harvey, not code):** switch the connected TikTok account
+(whichever real account he added as a Sandbox target user) to Private
+in the TikTok app, then retry Schedule Video. Worth noting for later:
+per the same TikTok documentation, making a previously-private-account
+post publicly visible afterward isn't automatic just from switching the
+account back to public — each individual piece of content's own privacy
+also has to be changed to "Everyone" separately at that point.
+
+No code change this round — nothing to fix on our end. Documented here
+since it's a genuine, verified TikTok platform requirement worth
+knowing before the next real test, not something to re-investigate if
+the same error shows up again.
+
+Sources:
+- [Content Sharing Guidelines](https://developers.tiktok.com/docs/en/content-sharing-guidelines)
