@@ -2649,19 +2649,29 @@
     audioSection.appendChild(audioLabel);
     audioSection.appendChild(audioSelect);
 
-    // --- Title picker (up to 3 — auto-populated from the matched outline
-    // once analysis finishes, freely editable either way)
+    // --- Title picker. Longform gets up to 3 (auto-populated from the
+    // matched outline once analysis finishes, freely editable either
+    // way) since a longform upload can genuinely be posted under
+    // different titles at different times to see what performs best.
+    // Shortform (ultra-short/short/long-short — practically, vertical)
+    // gets just 1: Harvey, 2026-09-20, "remove the '3 title options' and
+    // put just 1 as theres no way to test/rotate titles" for a short,
+    // which is posted once and done, not re-titled later.
+    var isLongform = p.contentType === 'longform';
+    var titleSlotCount = isLongform ? 3 : 1;
     var titlesSection = document.createElement('div');
     titlesSection.className = 'upload-row-section upload-row-titles';
     var titlesLabel = document.createElement('label');
-    titlesLabel.textContent = 'Title options';
+    titlesLabel.textContent = isLongform ? 'Title options' : 'Title';
     titlesSection.appendChild(titlesLabel);
-    var titleInputs = [0, 1, 2].map(function (i) {
+    var titleSlotIndexes = [];
+    for (var ti = 0; ti < titleSlotCount; ti++) titleSlotIndexes.push(ti);
+    var titleInputs = titleSlotIndexes.map(function (i) {
       var input = document.createElement('input');
       input.type = 'text';
       input.className = 'title-input';
       input.maxLength = 100;
-      input.placeholder = 'Title option ' + (i + 1) + (i > 0 ? ' (optional)' : '');
+      input.placeholder = isLongform ? ('Title option ' + (i + 1) + (i > 0 ? ' (optional)' : '')) : 'Title';
       input.value = (p.ytTitles || [])[i] || '';
       input.addEventListener('input', function () {
         var vals = titleInputs.map(function (el) { return el.value; }).filter(function (v) { return v.trim(); });

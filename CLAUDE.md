@@ -5926,3 +5926,49 @@ Harvey's screenshot) to confirm its thumbnail/frame-picker both switch
 to a vertical box on next view (via the lazy-backfill path, since it
 predates this change), and that a fresh vertical upload gets the
 correct box immediately with no letterboxing.
+
+---
+
+# 131. Content Production: Shortform Titles — Just 1 Field, Not 3
+
+Harvey: "when its a shortform video/vertical, remove the '3 title
+options' and put just 1 as theres no way to test/rotate titles" — a
+short gets posted once and is done, unlike a longform upload where
+different titles genuinely can be tried at different times, so
+offering 3 slots for a short was implying a capability (title
+rotation/testing) that doesn't actually exist for that format.
+
+**`ops-service/public/app.js`, `buildUploadRow()`'s title-picker
+section:** now renders 1 plain "Title" input for a shortform piece
+(`p.contentType !== 'longform'`, which — per §128's `detectContentType`
+— is exactly the vertical case in practice) and the existing 3
+"Title option N" inputs for longform, instead of always 3. Backed by
+the same `p.ytTitles` array either way (just fewer input slots writing
+into it), so no data-shape change — a shortform piece's array is simply
+length ≤ 1 now going forward. `finalCheckCardHtml()`'s title-lines
+display needed no change at all: it already renders however many
+entries are actually in `ytTitles`, not a hardcoded 3, so a shortform
+piece already just shows "Title 1: …" there once its array has one
+entry.
+
+**Deliberately scoped to the Content Production upload row only** —
+the shared full-editor modal's `fieldYtTitle1/2/3` (reachable via
+Content Ops, not from Final Check, which has no editor escape hatch per
+§116) still always shows all 3 regardless of content type. Harvey's ask
+was specifically about "the '3 title options'" surface he's been
+iterating on in Content Production screenshots; the modal is a
+secondary/power-user surface this request didn't touch, and per this
+project's "smallest clean change" convention it wasn't extended there
+without being asked. If auto-analysis (`videoAnalysis.js`) had already
+populated a shortform piece's `ytTitles` with more than one entry
+before this change, those extra entries are preserved but not shown or
+editable in the single input — only visible again if the piece's
+content type is later changed to longform, or overwritten the moment
+Harvey types in the one visible field (which then saves just that one
+value, dropping the hidden extras).
+
+Frontend-only, so per §93 this is already live — no deploy/restart
+needed. Verified via `node --check`; not yet visually confirmed against
+the live deployed service — worth checking that a real shortform
+upload row shows exactly one "Title" input (not three) and that a
+longform upload's row is unaffected.
