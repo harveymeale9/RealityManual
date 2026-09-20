@@ -6963,10 +6963,12 @@ changed:
   Publish button that starts it only exists on a Final Check card).
 
 Frontend-only (`app.js`, `style.css`), so per §93 this is already live
-— no deploy/restart needed. Verified via `node --check` and a CSS
-brace-balance check before pushing; the same real browser test rig
-above was then run again against the live deployed result specifically
-to confirm the animation itself actually fires (not just that the code
-parses) — see the follow-up note immediately after this section for
-the outcome, rather than assuming success here the way past attempts
-on this exact board (§113/§119/§120) learned not to.
+— no deploy/restart needed. **Confirmed working for real, not just
+`node --check`-clean**: re-ran the same test rig against the live
+deployed result, instrumenting the card itself as it transitioned —
+`.card-just-moved` was genuinely applied and `getComputedStyle` showed
+the real accent-green glow rendering (`rgb(60, 255, 137) 0px 0px 0px
+2px, ...`) at the moment it landed in Final Check, confirming
+`animateBoardMove()` actually ran end to end rather than just existing
+in the deployed source. All synthetic test pieces created during this
+verification pass were deleted afterward via the app's own endpoints.
