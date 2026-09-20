@@ -4,21 +4,15 @@
 + '[' -n '' ']'
 + git pull
 From https://github.com/harveymeale9/RealityManual
-   97eea94..247dc69  main       -> origin/main
-Updating 97eea94..247dc69
+   247dc69..3f14e7f  main       -> origin/main
+Updating 247dc69..3f14e7f
 Fast-forward
- CLAUDE.md                                  |  78 ++++++++++++++++++++++
- ops-service/.ci/last-run.log               | 101 ++++++++++++++++++++++++-----
- ops-service/public/app.js                  |  51 ++++++++++-----
- ops-service/public/media/tiktok-demo.mp4   | Bin 0 -> 16028368 bytes
- ops-service/public/media/youtube-demo.mp4  | Bin 0 -> 16432259 bytes
- ops-service/public/tiktok-app-review.html  |  15 +++++
- ops-service/public/youtube-app-review.html |  46 ++++---------
- 7 files changed, 226 insertions(+), 65 deletions(-)
- create mode 100644 ops-service/public/media/tiktok-demo.mp4
- create mode 100644 ops-service/public/media/youtube-demo.mp4
+ ops-service/.ci/last-run.log                       | 112 +++++----------------
+ .../tiktoksVXcjoa3x8NBtMqCTnNRWSY3ZhKYS0mY.txt     |   1 +
+ 2 files changed, 24 insertions(+), 89 deletions(-)
+ create mode 100644 ops-service/public/tiktoksVXcjoa3x8NBtMqCTnNRWSY3ZhKYS0mY.txt
 ++ git rev-parse HEAD
-+ NEW_HEAD=247dc6990ad4206627f14648889f085cef376ab8
++ NEW_HEAD=3f14e7f3d85f2313bebf0f03e2b54f9df5b20f7f
 + git -C /srv/realitymanual-repo pull
 Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
@@ -28,11 +22,11 @@ Already up to date.
 + NEEDS_REBUILD=1
 + '[' -n 97eea94c60f4684c45c939ec6ed31b6f530708df ']'
 + git cat-file -e '97eea94c60f4684c45c939ec6ed31b6f530708df^{commit}'
-++ git diff --name-only 97eea94c60f4684c45c939ec6ed31b6f530708df 247dc6990ad4206627f14648889f085cef376ab8 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
+++ git diff --name-only 97eea94c60f4684c45c939ec6ed31b6f530708df 3f14e7f3d85f2313bebf0f03e2b54f9df5b20f7f -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z '' ']'
 + NEEDS_REBUILD=0
 + '[' 0 = 0 ']'
-+ echo 'no backend changes between 97eea94c60f4684c45c939ec6ed31b6f530708df and 247dc6990ad4206627f14648889f085cef376ab8 — already live via git pull, skipping rebuild/restart'
-no backend changes between 97eea94c60f4684c45c939ec6ed31b6f530708df and 247dc6990ad4206627f14648889f085cef376ab8 — already live via git pull, skipping rebuild/restart
++ echo 'no backend changes between 97eea94c60f4684c45c939ec6ed31b6f530708df and 3f14e7f3d85f2313bebf0f03e2b54f9df5b20f7f — already live via git pull, skipping rebuild/restart'
+no backend changes between 97eea94c60f4684c45c939ec6ed31b6f530708df and 3f14e7f3d85f2313bebf0f03e2b54f9df5b20f7f — already live via git pull, skipping rebuild/restart
 + exit 0
 ssh exit code: 0
