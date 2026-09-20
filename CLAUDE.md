@@ -5680,3 +5680,104 @@ worth confirming right-click actually opens the menu (not the native
 browser context menu) on both a normal card and a Final Check card, the
 confirm step genuinely requires the second click, and a deleted Final
 Check piece's `-final` video file is actually gone from disk afterward.
+
+---
+
+# 128. "Use This Frame" Did Nothing for Vertical: Real Root Cause Was the Video Codec, Not Orientation — Plus Auto-Thumbnail, Platform/Type Display
+
+Harvey's report ("clicked 'use this frame' on the vertical vid, nothing
+happened") looked orientation-specific from his two test uploads, but
+wasn't — confirmed with the same real-browser test rig from §123/§127
+rather than guessed.
+
+**Root cause, found by direct testing against the real broken upload:**
+`videoEl.videoWidth`/`videoHeight` were stuck at `0` even though
+`readyState` reported `HAVE_ENOUGH_DATA` and `duration` was correctly
+known — and no amount of seeking or waiting fixed it. `ffprobe` on the
+actual file showed why: it's HEVC (`codec_name=hevc`), the format modern
+iPhones default to for recordings. Chrome/Chromium doesn't support HEVC
+decoding on most desktop/Linux builds (a licensing restriction, not a
+bug) — the browser genuinely cannot decode the video at all, so
+`drawImage(videoEl, ...)` silently no-ops (doesn't throw, just draws
+nothing — confirmed directly: sampled canvas pixel was `[0,0,0,0]`,
+transparent black, both before and after clicking the button) rather
+than erroring in any way JS could catch and report. The working
+"horizontal" test upload was h264, not the exact orientation Harvey's
+theory implied — the two videos just happened to differ in codec, not
+only in orientation.
+
+**Fix — normalize on the server, once, right after upload, not a
+client-side workaround (there isn't one — no JS trick makes a browser
+decode a codec it lacks):** `ops-service/src/videoAnalysis.js` gained
+`ensureBrowserCompatibleVideo(videoPath)` — probes the video stream's
+codec via `ffprobe`, and if it's not one of `h264`/`vp8`/`vp9`/`av1`
+(the ones browsers universally decode), re-encodes it to H.264/AAC via
+`ffmpeg` **in place** (same file path), so every downstream consumer —
+the inline frame picker, Final Check's own preview, the eventual final
+spliced video — gets a decodable file automatically, with zero
+awareness needed anywhere else in the codebase. A no-op (`transcoded:
+false`) for anything already compatible, so safe to call unconditionally
+on every upload. Wired into `server.js`'s existing `runVideoAnalysis(id)`
+— the same background job that already runs transcription/title-matching
+right after upload — as its very first step, before transcription.
+**This would have silently broken Final Check's own video preview too**
+for any HEVC upload, not just this button — a meaningfully bigger deal
+than the original report suggested, since it undermines the actual
+review gate this whole tool exists for.
+
+**Verified for real, not just reasoned about:** manually ran the exact
+same `ffprobe`/`ffmpeg` commands against the real broken upload on the
+VPS, confirmed the output was correctly re-encoded to `h264, 1080x1920`
+(the display-matrix rotation baked correctly into real pixels too, not
+just a metadata flag), swapped it into place, and re-ran the browser
+test — `videoWidth`/`videoHeight` correctly reported `1080x1920`,
+`drawImage` produced a real non-blank pixel, and clicking the real "Use
+this frame" button produced a genuine ~230KB captured JPEG (was a
+~2.8KB blank one). Also verified end-to-end with a **fresh** synthetic
+upload through the real file input (not a pre-existing piece) to
+confirm the whole new-upload path, described next, together.
+
+**Also in this pass, all in `ops-service/public/app.js` (frontend) plus
+the same `videoAnalysis.js`/`server.js` (backend) change above:**
+
+- **Auto-picked starting thumbnail.** `buildUploadRow`'s frame-capture
+  logic was factored into a shared `captureCurrentFrame()` (used by both
+  the button and this), and a one-time `loadeddata` listener now
+  auto-captures frame zero for any piece that doesn't already have a
+  thumbnail — so a row is never stuck at "No thumbnail" waiting for a
+  manual click. Only fires once per row's own listener registration
+  (`removeEventListener` right after), and only when `p.thumbnailDataUrl`
+  is genuinely empty, so it can never clobber a thumbnail Harvey already
+  deliberately picked on a page reload. Still freely overridable via the
+  scrub bar + "Use this frame," same as before.
+- **Content-type thresholds tightened** (`detectContentType`, §114's
+  original version): Harvey's restated rule is simpler than what was
+  built — landscape is *always* Longform now, full stop, no duration
+  gate at all (was: landscape AND >180s). Vertical thresholds also
+  changed: ultra-short ≤25s (was ≤20s), short ≤60s (was ≤75s), otherwise
+  long-short, uncapped (unchanged) — verified against 8 duration/
+  orientation combinations directly in Node before shipping.
+- **Type + platforms shown directly in the upload row.** A read-only
+  content-type chip (`.upload-row-type-row`, reusing `contentTypeOf()`
+  and the same chip styling normal kanban cards use) — deliberately not
+  editable here, since it's purely derived from orientation/duration,
+  not a judgment call; the full editor modal still allows overriding it
+  if that's ever genuinely needed. Below that, a row of small platform
+  checkboxes (`Store.PLATFORMS`, one per platform) pre-checked from
+  `PLATFORM_PRESET_BY_TYPE` — the exact same default the shared modal's
+  content-type dropdown already applies — individually uncheckable.
+  New video pieces now get `platforms` populated with that preset at
+  creation time too (was always `[]` before this, meaning "Send to final
+  check" could go out with zero platforms tagged unless Harvey opened
+  the full editor first). Verified live: a fresh ultra-short vertical
+  test upload correctly pre-checked YT Shorts/TikTok/Instagram/Facebook
+  and left YT Long unchecked, matching the preset exactly; unchecking
+  one and reloading confirmed the change actually persists server-side.
+
+This is a `server.js`/`videoAnalysis.js` change (real backend logic), so
+per §93 it triggers a full rebuild+restart on the next deploy — same
+standing caveat as §102/§104/§111/§115, since this session is the
+headless agent running inside the container being restarted. The
+frontend-only parts (auto-thumbnail, content-type/platform display,
+threshold tightening) are already live independently of that deploy, per
+§93's fast path.

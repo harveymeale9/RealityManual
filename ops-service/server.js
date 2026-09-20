@@ -314,9 +314,31 @@ async function runVideoAnalysis(id) {
   piece.analysisStatus = 'running';
   savePieceRecord(piece);
 
+  const videoPath = path.join(UPLOADS_DIR, 'videos', id);
+
+  // Some uploads (iPhone HEVC recordings in particular) use a video codec
+  // Chrome/Chromium can't decode at all — confirmed directly against a
+  // real HEVC test upload: readyState reports HAVE_ENOUGH_DATA and
+  // duration is known, but videoWidth/videoHeight stay 0 forever (no
+  // amount of seeking/waiting fixes it), so canvas frame capture silently
+  // produces a blank image and native <video> playback is unreliable too
+  // — this is what was actually behind "Use this frame did nothing for
+  // the vertical video," not anything orientation-specific, and it would
+  // have equally broken Final Check's own video preview for the same
+  // upload. Not fixable client-side (no JS trick makes a browser decode a
+  // codec it doesn't support) — normalized to H.264 here, once, right
+  // after upload, so every downstream consumer (inline frame picker,
+  // Final Check preview, the final spliced video) just works without
+  // needing its own codec-awareness.
+  try {
+    const compat = await videoAnalysis.ensureBrowserCompatibleVideo(videoPath);
+    if (compat.transcoded) console.log('normalized video ' + id + ' from ' + compat.codec + ' to h264 for browser compatibility');
+  } catch (e) {
+    console.error('video codec normalization failed for ' + id + ':', e.message);
+  }
+
   let transcript = '';
   try {
-    const videoPath = path.join(UPLOADS_DIR, 'videos', id);
     const tmpDir = path.join(DATA_DIR, 'tmp');
     fs.mkdirSync(tmpDir, { recursive: true });
     transcript = await videoAnalysis.transcribeVideo(videoPath, tmpDir);

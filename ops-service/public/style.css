@@ -1374,6 +1374,23 @@ a { color: var(--accent); }
 .upload-row-tags { margin-top: 2px; }
 .upload-row-status { font-size: 0.75rem; color: var(--ink-faint); font-style: italic; }
 .upload-row-status-error { color: var(--error); font-style: normal; }
+.upload-row-type-row { margin-top: 4px; }
+/* Platform selection at a glance in the upload row — pre-checked per
+   PLATFORM_PRESET_BY_TYPE, individually uncheckable. Smaller/lighter
+   than the shared modal's own .platform-toggle pill treatment since
+   there isn't much horizontal room in this column. */
+.upload-row-platforms { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.platform-toggle-sm {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: var(--ink-faint);
+  cursor: pointer;
+  user-select: none;
+}
+.platform-toggle-sm input { accent-color: var(--accent); }
+.platform-toggle-sm.checked { color: var(--ink-soft); }
 .upload-row-section { display: flex; flex-direction: column; gap: 6px; }
 .upload-row-section label { font-size: 0.72rem; color: var(--ink-faint); }
 .upload-row-video { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 6px; }

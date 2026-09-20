@@ -2123,10 +2123,22 @@
     if (!kanbanCtxMenu) return;
     kanbanCtxMenu.remove();
     kanbanCtxMenu = null;
-    document.removeEventListener('click', closeKanbanCtxMenu, true);
+    document.removeEventListener('click', closeKanbanCtxMenuOnOutside, true);
     document.removeEventListener('contextmenu', closeKanbanCtxMenuOnOutside, true);
     document.removeEventListener('keydown', closeKanbanCtxMenuOnEscape, true);
   }
+  // Bug found via a real headless-browser test against the live service
+  // (same technique as §123): this used to be registered as a bare
+  // `document.addEventListener('click', closeKanbanCtxMenu, true)` —
+  // capture phase, with no "was the click actually outside the menu"
+  // check. Capture fires top-down *before* the click ever reaches the
+  // Delete button's own bubble-phase handler, so clicking Delete closed
+  // the whole menu (removed it from the DOM) before that handler's
+  // `renderConfirm()` call could do anything visible — the button's own
+  // `e.stopPropagation()` couldn't help, since capture-phase listeners
+  // on an ancestor run before the target's bubble-phase ones regardless.
+  // Reusing this same containment check for both click and contextmenu
+  // fixes it: a click *inside* the menu no longer closes it at all.
   function closeKanbanCtxMenuOnOutside(e) {
     if (kanbanCtxMenu && !kanbanCtxMenu.contains(e.target)) closeKanbanCtxMenu();
   }
@@ -2187,7 +2199,7 @@
     // immediately bubble into the same-tick outside-click listener and
     // close it before it's even visible.
     setTimeout(function () {
-      document.addEventListener('click', closeKanbanCtxMenu, true);
+      document.addEventListener('click', closeKanbanCtxMenuOnOutside, true);
       document.addEventListener('contextmenu', closeKanbanCtxMenuOnOutside, true);
       document.addEventListener('keydown', closeKanbanCtxMenuOnEscape, true);
     }, 0);
@@ -2361,6 +2373,42 @@
       buildErr.textContent = 'Final video build failed (' + (p.finalBuildError || 'unknown error') + ') — try Send to final check again.';
       titleId.appendChild(buildErr);
     }
+    // Type + platforms — Harvey's ask: show which type this got auto-
+    // categorized as (locked; it's derived purely from orientation/
+    // duration, see detectContentType, not something to hand-edit here —
+    // the full editor still allows changing it if that's ever genuinely
+    // needed) and which platforms it'll post to, pre-checked from
+    // PLATFORM_PRESET_BY_TYPE, individually uncheckable.
+    var typeRow = document.createElement('div');
+    typeRow.className = 'upload-row-type-row';
+    var ct = contentTypeOf(p.contentType);
+    typeRow.innerHTML = '<span class="chip format"><span class="dot" style="background:' + ct.color + '"></span>' + ct.label + '</span>';
+    titleId.appendChild(typeRow);
+
+    var platformsRow = document.createElement('div');
+    platformsRow.className = 'upload-row-platforms';
+    (Store.PLATFORMS || []).forEach(function (pl) {
+      var checked = (p.platforms || []).indexOf(pl.id) !== -1;
+      var toggle = document.createElement('label');
+      toggle.className = 'platform-toggle-sm' + (checked ? ' checked' : '');
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = checked;
+      cb.addEventListener('change', function () {
+        var list = (p.platforms || []).slice();
+        var idx = list.indexOf(pl.id);
+        if (cb.checked && idx === -1) list.push(pl.id);
+        else if (!cb.checked && idx !== -1) list.splice(idx, 1);
+        p.platforms = list;
+        p.updatedAt = nowIso();
+        Store.put('pieces', p).then(function () { refreshUploadRowHeadById(p.id); });
+      });
+      toggle.appendChild(cb);
+      toggle.appendChild(document.createTextNode(pl.label));
+      platformsRow.appendChild(toggle);
+    });
+    titleId.appendChild(platformsRow);
+
     head.appendChild(thumbEl);
     head.appendChild(titleId);
     return head;
@@ -2398,18 +2446,23 @@
     scrub.value = '0';
     videoEl.addEventListener('loadedmetadata', function () { if (videoEl.duration) scrub.max = videoEl.duration; });
     scrub.addEventListener('input', function () { try { videoEl.currentTime = parseFloat(scrub.value); } catch (e) {} });
-    var captureBtn = document.createElement('button');
-    captureBtn.type = 'button';
-    captureBtn.className = 'btn-secondary btn-tiny';
-    captureBtn.textContent = 'Use this frame';
-    captureBtn.addEventListener('click', function () {
+    // Shared by the button and the auto-pick-on-load below, so there's
+    // one capture implementation, not two. Returns false (does nothing
+    // saved) if the video has no real frame data to draw yet — this used
+    // to silently produce a blank image for any video the browser
+    // couldn't decode (HEVC uploads in particular, see
+    // ensureBrowserCompatibleVideo in videoAnalysis.js, the actual fix);
+    // now that server-side normalization guarantees a decodable video,
+    // videoWidth/videoHeight being 0 here should only mean "hasn't
+    // loaded far enough yet," not "never will."
+    function captureCurrentFrame() {
+      if (!videoEl.videoWidth || !videoEl.videoHeight) return false;
       var canvas = document.createElement('canvas');
-      canvas.width = videoEl.videoWidth || 640;
-      canvas.height = videoEl.videoHeight || 360;
+      canvas.width = videoEl.videoWidth;
+      canvas.height = videoEl.videoHeight;
       var ctx = canvas.getContext('2d');
-      try { ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height); } catch (e) { return; }
-      var dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-      p.thumbnailDataUrl = dataUrl;
+      try { ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height); } catch (e) { return false; }
+      p.thumbnailDataUrl = canvas.toDataURL('image/jpeg', 0.85);
       p.updatedAt = nowIso();
       syncTags(p);
       // Only this row's own thumbnail/tags need to update — routing this
@@ -2418,10 +2471,28 @@
       // in the process), which is what looked like the whole panel
       // flashing/disappearing for a moment on every single click.
       Store.put('pieces', p).then(refreshHead);
-    });
+      return true;
+    }
+    var captureBtn = document.createElement('button');
+    captureBtn.type = 'button';
+    captureBtn.className = 'btn-secondary btn-tiny';
+    captureBtn.textContent = 'Use this frame';
+    captureBtn.addEventListener('click', function () { captureCurrentFrame(); });
     frameSection.appendChild(videoEl);
     frameSection.appendChild(scrub);
     frameSection.appendChild(captureBtn);
+    // Auto-pick a starting thumbnail (the very first frame) the moment
+    // the video has one to give, so a row never sits at "No thumbnail"
+    // by default — Harvey still freely overrides it via the scrub bar +
+    // "Use this frame" above. Only for a piece that doesn't already have
+    // a thumbnail (e.g. a page reload of an already-edited row shouldn't
+    // silently reset a deliberate pick back to frame 0).
+    if (!p.thumbnailDataUrl) {
+      videoEl.addEventListener('loadeddata', function onFirstFrame() {
+        videoEl.removeEventListener('loadeddata', onFirstFrame);
+        captureCurrentFrame();
+      });
+    }
     Store.get('videos', p.id).then(function (v) {
       if (!v || !v.blob) return;
       if (uploadRowObjectUrls[p.id]) URL.revokeObjectURL(uploadRowObjectUrls[p.id]);
@@ -2694,18 +2765,19 @@
     });
   }
 
-  // Harvey's rule: orientation is what separates "this is basically
-  // Longform" from everything else — landscape *and* long means Longform
-  // (matches how that type is actually used: YT/FB, not a vertical
-  // platform). Everything else (vertical, or landscape but short) gets
-  // bucketed purely by length against the same durations the content
-  // types are already named for (10-20s / ~1min / up to 3min).
+  // Harvey's restated rule (2026-09-20, tightened from the original
+  // §114 version): orientation alone decides Longform vs. not — every
+  // landscape upload is Longform, full stop, no duration check at all
+  // (that's what the type is actually for: YT/FB longform). Every
+  // vertical upload is bucketed purely by length, capping out at
+  // long_short (vertical never becomes Longform, since that format
+  // doesn't really exist there in practice).
   function detectContentType(meta) {
     if (!meta || !meta.duration) return 'short'; // couldn't read metadata — same default as before this feature existed
     var isLandscape = meta.width >= meta.height;
-    if (isLandscape && meta.duration > 180) return 'longform';
-    if (meta.duration <= 20) return 'ultra_short';
-    if (meta.duration <= 75) return 'short';
+    if (isLandscape) return 'longform';
+    if (meta.duration <= 25) return 'ultra_short';
+    if (meta.duration <= 60) return 'short';
     return 'long_short';
   }
 
@@ -2714,13 +2786,20 @@
       if (file.type.indexOf('video') !== 0) return;
       var id = Store.genId();
       probeVideoMeta(file).then(function (meta) {
+        var detectedType = detectContentType(meta);
         var piece = {
           id: id,
           seq: Store.nextSeq(allPiecesArray()),
           title: file.name.replace(/\.[^.]+$/, ''),
           stage: 'processed', // "Processing" — a brand-new opportunity, not the same thing as any plan in "Uploaded"
-          platforms: [],
-          contentType: detectContentType(meta),
+          // Pre-selected per the same type->platform default the shared
+          // modal's content-type dropdown already applies (see
+          // PLATFORM_PRESET_BY_TYPE up top) — Harvey's ask: platforms
+          // default-checked, he just unchecks any that don't apply.
+          // .slice() so editing this piece's array later can never
+          // mutate the shared preset array itself.
+          platforms: (PLATFORM_PRESET_BY_TYPE[detectedType] || []).slice(),
+          contentType: detectedType,
           notesHtml: '',
           hasVideo: true,
           transcript: '',

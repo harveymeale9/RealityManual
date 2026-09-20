@@ -12,6 +12,48 @@ const path = require('path');
 const elevenlabs = require('./elevenlabs');
 const claudeRunner = require('./claudeRunner');
 
+// Browser-native <video>/canvas support is what the frame picker and
+// Final Check preview both rely on — anything outside this list has been
+// confirmed (against a real HEVC upload, 2026-09-20) to leave
+// videoWidth/videoHeight stuck at 0 in Chrome/Chromium even once
+// readyState reports HAVE_ENOUGH_DATA, which silently breaks canvas
+// frame capture (drawImage no-ops rather than throwing) and can't be
+// worked around client-side.
+var BROWSER_SAFE_VIDEO_CODECS = ['h264', 'vp8', 'vp9', 'av1'];
+
+function probeVideoCodec(videoPath) {
+  return new Promise(function (resolve) {
+    execFile('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_name', '-of', 'csv=p=0', videoPath],
+      { maxBuffer: 1024 * 1024 },
+      function (err, stdout) {
+        if (err) return resolve(null);
+        resolve((stdout || '').trim().toLowerCase() || null);
+      });
+  });
+}
+
+// Re-encodes in place (same path) to H.264/AAC when the source codec
+// isn't one browsers universally decode — a no-op (nothing re-encoded,
+// `transcoded: false`) for anything already safe, so this is cheap to
+// call unconditionally on every upload rather than needing the caller
+// to know in advance whether a given file needs it.
+async function ensureBrowserCompatibleVideo(videoPath) {
+  const codec = await probeVideoCodec(videoPath);
+  if (!codec || BROWSER_SAFE_VIDEO_CODECS.indexOf(codec) !== -1) return { transcoded: false, codec: codec };
+  const tmpPath = videoPath + '.transcode-tmp.mp4';
+  await new Promise(function (resolve, reject) {
+    execFile('ffmpeg', ['-y', '-i', videoPath, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20',
+      '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', '-f', 'mp4', tmpPath],
+      { maxBuffer: 20 * 1024 * 1024 },
+      function (err) {
+        if (err) return reject(new Error('ffmpeg codec-normalize failed: ' + err.message));
+        resolve();
+      });
+  });
+  fs.renameSync(tmpPath, videoPath);
+  return { transcoded: true, codec: codec };
+}
+
 function extractAudioMp3(videoPath, outPath) {
   return new Promise(function (resolve, reject) {
     execFile('ffmpeg', ['-y', '-i', videoPath, '-vn', '-acodec', 'libmp3lame', '-b:a', '128k', outPath],
@@ -119,4 +161,4 @@ async function matchAndGenerateTitles(transcript, candidates) {
   return parseMatchResult(raw);
 }
 
-module.exports = { transcribeVideo, matchAndGenerateTitles, buildFinalVideo };
+module.exports = { transcribeVideo, matchAndGenerateTitles, buildFinalVideo, ensureBrowserCompatibleVideo };
