@@ -1823,10 +1823,11 @@
   // just enough to survive re-renders within the same page session.
   var fcCaptionTab = {};
   // Fetched once in bootContentOps (mirrors boardSettingsCache just above)
-  // so a Final Check card's "Publish to YouTube" button can tell whether
-  // there's actually a connected channel to publish to, without every
+  // so a Final Check card's "Schedule Video" button can tell whether
+  // there's actually a connected account to publish to, without every
   // card making its own request.
   var youtubeStatusCache = null;
+  var tiktokStatusCache = null;
 
   function renderStats() {
     var total = Object.keys(pieces).length;
@@ -2052,34 +2053,53 @@
   }
 
   // Platforms that actually have a real backend publish integration wired
-  // up right now — just YouTube. Harvey's framing (2026-09-20): the button
-  // here should read as one generic scheduling/publish action that goes
-  // out to every platform a piece is tagged for, not "Publish to
-  // <platform>" — it just happens that, today, YouTube is the only
-  // platform that can genuinely act on that yet. Extend this list (and
-  // the per-platform branch in the click handler below) as other
-  // platforms get real integrations.
-  var WIRED_PUBLISH_PLATFORMS = ['ytlong'];
+  // up right now — YouTube and TikTok. Harvey's framing (2026-09-20): the
+  // button here should read as one generic scheduling/publish action that
+  // goes out to every platform a piece is tagged for, not "Publish to
+  // <platform>" — it just happens that only these two platforms can
+  // genuinely act on that so far. Extend this list (and the per-platform
+  // helpers right below) as other platforms get real integrations.
+  var WIRED_PUBLISH_PLATFORMS = ['ytlong', 'tiktok'];
+  var PUBLISH_PLATFORM_LABELS = { ytlong: 'YouTube', tiktok: 'TikTok' };
+
+  function publishStatusFieldFor(platform) { return platform === 'ytlong' ? 'youtubePublishStatus' : 'tiktokPublishStatus'; }
+  function publishErrorFieldFor(platform) { return platform === 'ytlong' ? 'youtubePublishError' : 'tiktokPublishError'; }
+  function publishEndpointFor(platform) { return platform === 'ytlong' ? '/api/youtube/publish/' : '/api/tiktok/publish/'; }
+  function publishPlatformConnected(platform) {
+    var cache = platform === 'ytlong' ? youtubeStatusCache : tiktokStatusCache;
+    return !!(cache && cache.connected);
+  }
 
   // "Schedule Video" — a single action covering every platform a piece is
   // tagged for. Always shown on a Final Check card (every card here has a
   // real video), rather than gated to one specific platform, since the
-  // whole point is it's not youtube-specific. Whichever tagged platforms
-  // are actually wired (currently just ytlong) get a real, immediate
-  // publish on click — no scheduled-time delay, per Harvey's own "for
-  // this test we can publish immediately" — and any tagged platform that
-  // isn't wired yet is called out honestly rather than silently ignored.
+  // whole point is it's not platform-specific. Whichever tagged platforms
+  // are actually wired get a real, immediate publish on click — no
+  // scheduled-time delay, per Harvey's own "for this test we can publish
+  // immediately" — and any tagged platform that isn't wired yet is called
+  // out honestly rather than silently ignored. Known limitation, not
+  // built: a piece tagged for *both* wired platforms at once fires both
+  // publishes concurrently with no coordination between the two
+  // background jobs writing to the same piece record (see the matching
+  // comment on runTiktokPublish in server.js) — fine for Harvey's actual
+  // test plan (one platform per piece), not fine if that ever changes.
   function fcScheduleVideoHtml(id, piece) {
     var platforms = piece.platforms || [];
-    var status = piece.youtubePublishStatus;
-    if (status === 'pending' || status === 'running') {
-      return '<div class="fc-yt-publish"><button type="button" class="btn-secondary" disabled>Publishing…</button></div>';
-    }
     var wired = platforms.filter(function (p) { return WIRED_PUBLISH_PLATFORMS.indexOf(p) !== -1; });
     var unwired = platforms.filter(function (p) { return WIRED_PUBLISH_PLATFORMS.indexOf(p) === -1; });
-    var errorHtml = (status === 'error' && piece.youtubePublishError)
-      ? '<div class="fc-yt-error">Publish failed: ' + escapeHtml(piece.youtubePublishError) + '</div>'
-      : '';
+
+    var anyPending = wired.some(function (p) {
+      var s = piece[publishStatusFieldFor(p)];
+      return s === 'pending' || s === 'running';
+    });
+    if (anyPending) {
+      return '<div class="fc-yt-publish"><button type="button" class="btn-secondary" disabled>Publishing…</button></div>';
+    }
+
+    var erroredPlatforms = wired.filter(function (p) { return piece[publishStatusFieldFor(p)] === 'error' && piece[publishErrorFieldFor(p)]; });
+    var errorHtml = erroredPlatforms.map(function (p) {
+      return '<div class="fc-yt-error">' + escapeHtml(PUBLISH_PLATFORM_LABELS[p] || p) + ' publish failed: ' + escapeHtml(piece[publishErrorFieldFor(p)]) + '</div>';
+    }).join('');
     var notWiredNote = unwired.length
       ? '<div class="fc-yt-note">' + escapeHtml(unwired.join(', ')) + ' not wired up yet — won\'t be published there.</div>'
       : '';
@@ -2090,18 +2110,26 @@
           notWiredNote +
         '</div>';
     }
-    // The privacy select only ever affects YouTube today — kept simple
-    // (not per-platform) since YouTube is the only real destination.
-    var disabledAttr = (youtubeStatusCache && youtubeStatusCache.connected) ? '' : ' disabled title="Connect YouTube in Content Settings first"';
-    return '' +
-      '<div class="fc-yt-publish">' +
+    var disconnected = wired.filter(function (p) { return !publishPlatformConnected(p); });
+    var disabledAttr = disconnected.length
+      ? ' disabled title="Connect ' + disconnected.map(function (p) { return PUBLISH_PLATFORM_LABELS[p] || p; }).join(' / ') + ' in Content Settings first"'
+      : '';
+    // The privacy select only ever affects YouTube — TikTok is forced to
+    // SELF_ONLY (private) regardless while unaudited/sandboxed, so there's
+    // no real choice to offer for it yet.
+    var privacySelectHtml = wired.indexOf('ytlong') !== -1
+      ? '' +
         '<select class="fc-yt-privacy" data-id="' + id + '" title="YouTube visibility">' +
           '<option value="private" selected>Private</option>' +
           '<option value="unlisted">Unlisted</option>' +
           '<option value="public">Public</option>' +
-        '</select>' +
+        '</select>'
+      : '';
+    return '' +
+      '<div class="fc-yt-publish">' +
+        privacySelectHtml +
         '<button type="button" class="btn-secondary fc-yt-publish-btn" data-id="' + id + '"' + disabledAttr + '>' +
-          (status === 'error' ? 'Retry' : 'Schedule Video') +
+          (erroredPlatforms.length ? 'Retry' : 'Schedule Video') +
         '</button>' +
         notWiredNote +
         errorHtml +
@@ -2236,40 +2264,55 @@
     // toggle. The poller below (maybeStartYoutubePublishPoll) is what
     // notices the eventual done/error and does the full render() once the
     // piece's stage/status actually changes.
+    // Fires a real, independent publish request per wired-and-tagged
+    // platform (currently ytlong and/or tiktok) — see fcScheduleVideoHtml's
+    // comment above about the known concurrency limitation if a piece is
+    // ever tagged for both at once.
     board.querySelectorAll('.fc-yt-publish-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var id = btn.dataset.id;
         var p = pieces[id];
         if (!p || btn.disabled) return;
+        var platforms = (p.platforms || []).filter(function (pl) { return WIRED_PUBLISH_PLATFORMS.indexOf(pl) !== -1; });
+        if (!platforms.length) return;
         var wrap = btn.closest('.fc-yt-publish');
         var select = wrap ? wrap.querySelector('.fc-yt-privacy') : null;
         var privacyStatus = select ? select.value : 'private';
         var captions = boardSettingsCache ? captionsForPiece(boardSettingsCache, p) : [];
-        var ytCaption = captions.filter(function (c) { return c.key === 'ytlong'; })[0];
         var title = (p.ytTitles && p.ytTitles[0]) || p.title || 'Untitled';
-        var description = (ytCaption && !ytCaption.empty) ? ytCaption.text : '';
 
         btn.disabled = true;
         btn.textContent = 'Publishing…';
         if (select) select.disabled = true;
-        p.youtubePublishStatus = 'pending';
+        platforms.forEach(function (platform) { p[publishStatusFieldFor(platform)] = 'pending'; });
         pieces[id] = p;
 
-        fetch('/api/youtube/publish/' + encodeURIComponent(id), {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: title, description: description, privacyStatus: privacyStatus })
-        }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (data) { return { ok: r.ok, data: data }; }); })
-          .then(function (result) {
-            if (!result.ok) {
-              p.youtubePublishStatus = 'error';
-              p.youtubePublishError = (result.data && result.data.error) || 'Could not start publish.';
-              render();
-              return;
-            }
-            maybeStartYoutubePublishPoll();
-          });
+        platforms.forEach(function (platform) {
+          var captionEntry = captions.filter(function (c) { return c.key === platform; })[0];
+          var description = (captionEntry && !captionEntry.empty) ? captionEntry.text : '';
+          // TikTok's Content Posting API has one text field ("title",
+          // really the on-post caption) rather than separate title/
+          // description fields — send the real caption there if one's
+          // set, falling back to the plain title otherwise.
+          var body = platform === 'ytlong'
+            ? { title: title, description: description, privacyStatus: privacyStatus }
+            : { title: description || title };
+          fetch(publishEndpointFor(platform) + encodeURIComponent(id), {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (data) { return { ok: r.ok, data: data }; }); })
+            .then(function (result) {
+              if (!result.ok) {
+                p[publishStatusFieldFor(platform)] = 'error';
+                p[publishErrorFieldFor(platform)] = (result.data && result.data.error) || 'Could not start publish.';
+                render();
+                return;
+              }
+              maybeStartYoutubePublishPoll();
+            });
+        });
       });
     });
 
@@ -2467,20 +2510,23 @@
     boardWrap.addEventListener('pointercancel', endPan);
   }
 
-  // Real YouTube publish runs in the background server-side (server.js's
-  // runYoutubePublish) — this polls the handful of pieces currently mid-
-  // publish and does a full render() once one lands on done/error, since
-  // "done" moves the piece out of the Final Check column entirely (a
-  // targeted DOM patch wouldn't make sense there the way the caption-tab
-  // toggle's does). Same shape as maybeStartAnalysisPolling in the Upload
-  // Files tab, kept separate since it watches a different field on a
-  // different view.
+  // Real YouTube/TikTok publish both run in the background server-side
+  // (server.js's runYoutubePublish/runTiktokPublish) — this polls the
+  // handful of pieces currently mid-publish on either platform and does a
+  // full render() once one lands on done/error, since "done" moves the
+  // piece out of the Final Check column entirely (a targeted DOM patch
+  // wouldn't make sense there the way the caption-tab toggle's does).
+  // Same shape as maybeStartAnalysisPolling in the Upload Files tab, kept
+  // separate since it watches different fields on a different view.
   var youtubePublishPollTimer = null;
   function maybeStartYoutubePublishPoll() {
-    var waiting = Object.keys(pieces).filter(function (id) {
-      var status = pieces[id].youtubePublishStatus;
-      return status === 'pending' || status === 'running';
-    });
+    function isWaiting(piece) {
+      return WIRED_PUBLISH_PLATFORMS.some(function (platform) {
+        var s = piece[publishStatusFieldFor(platform)];
+        return s === 'pending' || s === 'running';
+      });
+    }
+    var waiting = Object.keys(pieces).filter(function (id) { return isWaiting(pieces[id]); });
     if (!waiting.length) { clearTimeout(youtubePublishPollTimer); youtubePublishPollTimer = null; return; }
     if (youtubePublishPollTimer) return;
     youtubePublishPollTimer = setTimeout(function () {
@@ -2489,7 +2535,8 @@
         var changed = false;
         rows.forEach(function (r) {
           if (!r) return;
-          if (pieces[r.id] && pieces[r.id].youtubePublishStatus !== r.youtubePublishStatus) changed = true;
+          var prev = pieces[r.id];
+          if (prev && WIRED_PUBLISH_PLATFORMS.some(function (platform) { return prev[publishStatusFieldFor(platform)] !== r[publishStatusFieldFor(platform)]; })) changed = true;
           pieces[r.id] = r;
         });
         if (changed) render();
@@ -2529,6 +2576,8 @@
     Store.getSettings().then(function (s) { boardSettingsCache = s; render(); });
     fetch('/api/youtube/status', { credentials: 'include' }).then(function (r) { return r.ok ? r.json() : null; })
       .then(function (s) { youtubeStatusCache = s; render(); }).catch(function () {});
+    fetch('/api/tiktok/status', { credentials: 'include' }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (s) { tiktokStatusCache = s; render(); }).catch(function () {});
     render();
   }
 
@@ -3234,6 +3283,13 @@
           '</div>' +
           '<button type="button" class="btn-secondary btn-tiny" id="youtubeConnectBtn" disabled>…</button>' +
         '</div>' +
+        '<div class="platform-connect-card" id="tiktokConnectCard">' +
+          '<div class="platform-connect-info">' +
+            '<span class="platform-connect-name">TikTok</span>' +
+            '<span class="platform-connect-status" id="tiktokConnectStatus">Checking…</span>' +
+          '</div>' +
+          '<button type="button" class="btn-secondary btn-tiny" id="tiktokConnectBtn" disabled>…</button>' +
+        '</div>' +
       '</section>' +
       '<section class="settings-section">' +
         '<h3>API keys</h3>' +
@@ -3247,16 +3303,16 @@
   var KEY_FIELDS = [
     { id: 'instagram', label: 'Instagram' },
     { id: 'facebook', label: 'Facebook' },
-    { id: 'tiktok', label: 'TikTok (pending access)' },
     { id: 'transcriptionProvider', label: 'Transcription provider', placeholder: 'e.g. AssemblyAI, Deepgram, Whisper' },
     { id: 'transcriptionKey', label: 'Transcription API key', type: 'password' }
   ];
 
-  // YouTube's own real OAuth connect card, above — has a working login
-  // flow now (src/youtubeAuth.js), so the old plain-text "YouTube" API
-  // key field (which was never wired to anything) was dropped from
-  // KEY_FIELDS rather than kept alongside a second, real mechanism for
-  // the same platform.
+  // YouTube's and TikTok's own real OAuth connect cards, above — both
+  // have a working login flow now (src/youtubeAuth.js, src/tiktokAuth.js),
+  // so the old plain-text "TikTok (pending access)" API key field (never
+  // wired to anything) was dropped from KEY_FIELDS rather than kept
+  // alongside a second, real mechanism for the same platform — same
+  // reasoning already applied to YouTube's own field.
   function renderYoutubeConnectCard() {
     var statusEl = document.getElementById('youtubeConnectStatus');
     var btn = document.getElementById('youtubeConnectBtn');
@@ -3288,6 +3344,42 @@
           // which is exactly what Google's OAuth verification review
           // requires (see CLAUDE.md), not something an XHR can drive.
           btn.onclick = function () { window.location.href = '/api/youtube/oauth/start'; };
+        }
+      })
+      .catch(function () { statusEl.textContent = 'Status unavailable.'; });
+  }
+
+  // Mirrors renderYoutubeConnectCard() exactly, one platform over.
+  function renderTiktokConnectCard() {
+    var statusEl = document.getElementById('tiktokConnectStatus');
+    var btn = document.getElementById('tiktokConnectBtn');
+    if (!statusEl || !btn) return;
+    fetch('/api/tiktok/status', { credentials: 'include' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (s) {
+        if (!s) { statusEl.textContent = 'Status unavailable.'; btn.disabled = true; btn.textContent = '—'; return; }
+        if (!s.configured) {
+          statusEl.textContent = 'Not configured yet (waiting on TikTok OAuth credentials).';
+          btn.disabled = true;
+          btn.textContent = 'Connect';
+          return;
+        }
+        btn.disabled = false;
+        if (s.connected) {
+          statusEl.textContent = 'Connected as ' + (s.displayName || 'a TikTok account') + '.';
+          btn.textContent = 'Disconnect';
+          btn.onclick = function () {
+            btn.disabled = true;
+            fetch('/api/tiktok/disconnect', { method: 'POST', credentials: 'include' })
+              .then(renderTiktokConnectCard);
+          };
+        } else {
+          statusEl.textContent = 'Not connected.';
+          btn.textContent = 'Connect';
+          // Real full-page navigation through TikTok's own consent
+          // screen, same reasoning as YouTube's — not something an XHR
+          // can drive.
+          btn.onclick = function () { window.location.href = '/api/tiktok/oauth/start'; };
         }
       })
       .catch(function () { statusEl.textContent = 'Status unavailable.'; });
@@ -3410,6 +3502,7 @@
       renderAudioList();
       renderKeyGrid();
       renderYoutubeConnectCard();
+      renderTiktokConnectCard();
 
       // One textarea per platform, ids following "caption-<group>-<key>"
       // (see SETTINGS_MARKUP) — driven off CAPTION_GROUPS so this list

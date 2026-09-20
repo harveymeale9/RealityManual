@@ -6453,3 +6453,139 @@ deploy/restart needed. Verified via `node --check`; the multi-code-block
 repro case (this exact conversation's earlier reply) is the way to
 confirm it in practice — each button should now independently copy and
 label only its own block.
+
+---
+
+# 139. Real TikTok Video Publish Built, Mirroring YouTube (§136); Final Check Button Now Covers Both Platforms (2026-09-20)
+
+Harvey registered a TikTok developer app, created a Sandbox (per §137's
+recommendation — unaudited/sandboxed posting is genuinely testable
+end-to-end before formal review, just forced to `SELF_ONLY` visibility),
+added Login Kit + Content Posting API with the `user.info.basic` and
+`video.publish` scopes, verified domain ownership of
+`ops.realitymanual.com` (via the URL-prefix signature file this session
+hosted directly — see the immediately-preceding exchange), and supplied
+the sandbox's Client Key/Secret. Asked for the real integration to be
+built the same way YouTube's was, so he can test two separate pieces
+(one YouTube-only, one TikTok-only) today.
+
+**Researched TikTok's actual current API shape before writing anything**
+(same discipline as §64's BookVault research) — endpoints, exact
+request/response fields, and chunking rules were fetched directly from
+`developers.tiktok.com`'s live docs, not assumed from general TikTok API
+familiarity, which has genuinely moved between API versions over time:
+
+- Auth: `https://www.tiktok.com/v2/auth/authorize/` (no PKCE for the web
+  flow — `code_verifier` is mobile/desktop-only), token exchange/refresh
+  both at `https://open.tiktokapis.com/v2/oauth/token/`,
+  form-urlencoded, both returning `access_token`/`refresh_token`/
+  `expires_in`/`refresh_expires_in` — TikTok may rotate the refresh token
+  on a plain refresh (Google normally doesn't), so the new value must
+  always be persisted, not assumed unchanged.
+- User info: `GET /v2/user/info/?fields=open_id,display_name`.
+- **Direct Post, FILE_UPLOAD source** — three calls: `POST
+  /v2/post/publish/creator_info/query/` first (required before showing/
+  using posting options per TikTok's Content Sharing Guidelines — also
+  the only way to know which `privacy_level` values this specific
+  account is actually allowed, since an unaudited/sandboxed app is
+  forced to `SELF_ONLY` regardless of what's requested); then `POST
+  /v2/post/publish/video/init/` with `post_info.title` +
+  `source_info.{video_size,chunk_size,total_chunk_count}`, returning a
+  `publish_id` and a one-hour-valid `upload_url`; then one or more `PUT`
+  requests to that URL with `Content-Range: bytes {start}-{end}/{total}`
+  per chunk (5MB-64MB each, final chunk absorbs the remainder up to
+  128MB, 1-1000 chunks total — videos under 64MB go out as a single
+  chunk); then `POST /v2/post/publish/status/fetch/` polled until
+  `PUBLISH_COMPLETE`/`FAILED`, since TikTok processes the upload
+  asynchronously after the last byte lands.
+
+**`ops-service/src/tiktokAuth.js`** (new) — mirrors `youtubeAuth.js`'s
+shape and "no SDK dependency" philosophy: `buildAuthUrl`, `exchangeCode`,
+`refreshAccessToken`, `fetchUserInfo`, `queryCreatorInfo`, and a single
+`publishVideo(accessToken, filePath, mimeType, {title})` that
+orchestrates creator-info → init → chunked upload → status-poll end to
+end, matching `youtubeAuth.uploadVideo`'s one-call shape for `server.js`
+to consume the same way. `computeChunkPlan()`/`uploadVideoChunks()`
+implement the chunking rules above directly against the file on disk
+(`fs.promises.open` + `.read()` per chunk — never buffers the whole file
+into memory, same reasoning as YouTube's streamed upload).
+
+**`ops-service/server.js`:** a `tiktok_oauth` table (same single-row
+shape as `youtube_oauth`) and a parallel route set —
+`GET /api/tiktok/status`, `GET/GET /api/tiktok/oauth/{start,callback}`,
+`POST /api/tiktok/disconnect`, `getValidTiktokAccessToken()` (proactive
+refresh, persists whatever `refresh_token` comes back rather than
+assuming it's unchanged) — plus `runTiktokPublish(id, opts)` /
+`POST /api/tiktok/publish/:id`, the exact same "respond 202 immediately,
+do the real work in the background, let the client poll the piece
+record" pattern as `runYoutubePublish`. Uploads the built `<id>-final`
+file if present, same fallback-to-raw-upload behavior. On success:
+`piece.stage = 'live'`, `tiktokPublishStatus: 'done'`,
+`tiktokPublishId`, `tiktokPrivacyLevel`, `postedAt`. On failure:
+`tiktokPublishStatus: 'error'` + `tiktokPublishError`, stage left
+untouched — identical convention to the YouTube/final-build failure
+paths already established.
+
+**Known, accepted limitation, stated honestly rather than solved:** if a
+single piece were ever tagged for *both* `ytlong` and `tiktok`
+simultaneously, `runYoutubePublish` and `runTiktokPublish` would both
+read-modify-write the same piece record concurrently with no locking
+between them — a real (if narrow) race where one job's write could
+clobber the other's. Not fixed this pass because Harvey's actual stated
+test plan is one platform per piece (two separate test videos), which
+never exercises this path — worth a per-piece lock if simultaneous
+multi-platform publishing from one piece is ever actually used.
+
+**`ops-service/public/app.js` — generalized for two platforms:**
+- `WIRED_PUBLISH_PLATFORMS` (§137) now `['ytlong', 'tiktok']`, with new
+  `publishStatusFieldFor`/`publishErrorFieldFor`/`publishEndpointFor`/
+  `publishPlatformConnected` helpers replacing the YouTube-only field
+  references `fcScheduleVideoHtml()` and its click handler used before.
+  The button aggregates state across whichever wired platforms a piece
+  is tagged for — "Publishing…" while any is pending/running, one error
+  line per platform that failed, a "not wired up yet" note for any
+  tagged-but-unwired platform, same behavior as §137 just no longer
+  hardcoded to one platform.
+- The privacy `<select>` only renders when `ytlong` is among the wired
+  platforms — TikTok has no real choice to offer while sandboxed
+  (`SELF_ONLY` is forced either way), so no TikTok-specific control was
+  added for it.
+- The click handler fires one independent publish request per
+  wired-and-tagged platform. TikTok's request body sends the piece's
+  real `tiktok` caption entry (from `captionsForPiece`, §129) as
+  `title` — Content Posting API has one text field that serves as the
+  on-post caption, not separate title/description fields like YouTube,
+  so the caption text is what actually belongs there, falling back to
+  the piece's plain title if no TikTok caption template is set.
+- `maybeStartYoutubePublishPoll()` (name kept per §90/§99's "don't chase
+  internal names" convention) now watches both platforms' status fields.
+- Content Settings gained a `tiktokConnectCard`/`renderTiktokConnectCard()`
+  mirroring the YouTube one exactly (Connect/Disconnect, "Connected as
+  @handle"), and the old plain-text "TikTok (pending access)" API-key
+  field was removed from `KEY_FIELDS` now that a real mechanism exists —
+  same treatment YouTube's own placeholder field already got in §133.
+
+**Credentials:** `TIKTOK_CLIENT_KEY`/`TIKTOK_CLIENT_SECRET`/
+`TIKTOK_REDIRECT_URI` added directly to `ops-service/.env` on the VPS
+(gitignored, never committed) via SSH — same mechanism already used for
+YouTube's credentials (§136). Placeholder entries added to
+`.env.example` for documentation. `TIKTOK_REDIRECT_URI` is
+`https://ops.realitymanual.com/api/tiktok/oauth/callback`, matching what
+Harvey registered in the TikTok developer portal.
+
+This is a `server.js`/new-`src`-file change (real backend logic), so per
+§93 it triggers a full rebuild+restart on the next deploy — same
+standing caveat as every prior backend change in this file, since this
+session is the headless agent running inside the container being
+restarted. Logged to the work log immediately before pushing.
+
+Verified via `node --check` on all touched/new JS files. **Not yet
+verified end-to-end** — there's nothing to test against until this
+deploys; once it's live, confirm: the TikTok Connect button in Content
+Settings reaches TikTok's real consent screen and shows "Connected as
+@handle" afterward, a real TikTok-only test piece's "Schedule Video"
+button actually uploads and the piece moves to Posted/Live, and a
+deliberate failure surfaces `tiktokPublishError` on the card rather than
+failing silently. Once both platforms are confirmed working for real,
+Harvey can record the TikTok demo video against this genuine sandbox
+integration.

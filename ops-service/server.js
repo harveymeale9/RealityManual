@@ -13,6 +13,7 @@ const claudeRunner = require('./src/claudeRunner');
 const elevenlabs = require('./src/elevenlabs');
 const videoAnalysis = require('./src/videoAnalysis');
 const youtubeAuth = require('./src/youtubeAuth');
+const tiktokAuth = require('./src/tiktokAuth');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
@@ -78,6 +79,17 @@ db.exec(
   '  refresh_token TEXT,' +
   '  expires_at TEXT,' +
   '  updated_at TEXT NOT NULL' +
+  ');' +
+  // Same single-row pattern as youtube_oauth above, for the one
+  // connected TikTok account.
+  'CREATE TABLE IF NOT EXISTS tiktok_oauth (' +
+  '  id INTEGER PRIMARY KEY CHECK (id = 1),' +
+  '  open_id TEXT,' +
+  '  display_name TEXT,' +
+  '  access_token TEXT,' +
+  '  refresh_token TEXT,' +
+  '  expires_at TEXT,' +
+  '  updated_at TEXT NOT NULL' +
   ');'
 );
 
@@ -135,7 +147,16 @@ const stmts = {
     'access_token = excluded.access_token, refresh_token = excluded.refresh_token, ' +
     'expires_at = excluded.expires_at, updated_at = excluded.updated_at'
   ),
-  clearYoutubeAuth: db.prepare('DELETE FROM youtube_oauth WHERE id = 1')
+  clearYoutubeAuth: db.prepare('DELETE FROM youtube_oauth WHERE id = 1'),
+  getTiktokAuth: db.prepare('SELECT * FROM tiktok_oauth WHERE id = 1'),
+  upsertTiktokAuth: db.prepare(
+    'INSERT INTO tiktok_oauth (id, open_id, display_name, access_token, refresh_token, expires_at, updated_at) ' +
+    'VALUES (1, ?, ?, ?, ?, ?, ?) ' +
+    'ON CONFLICT(id) DO UPDATE SET open_id = excluded.open_id, display_name = excluded.display_name, ' +
+    'access_token = excluded.access_token, refresh_token = excluded.refresh_token, ' +
+    'expires_at = excluded.expires_at, updated_at = excluded.updated_at'
+  ),
+  clearTiktokAuth: db.prepare('DELETE FROM tiktok_oauth WHERE id = 1')
 };
 
 setInterval(function () { stmts.purgeSessions.run(new Date().toISOString()); }, 60 * 60 * 1000);
@@ -241,6 +262,7 @@ app.use('/api/store', requireAuth);
 app.use('/api/files', requireAuth);
 app.use('/api/voice', requireAuth);
 app.use('/api/youtube', requireAuth);
+app.use('/api/tiktok', requireAuth);
 
 // --- YouTube OAuth (Google) — see src/youtubeAuth.js for the token
 // exchange itself. Placeholder-until-configured: YOUTUBE_OAUTH_CLIENT_ID/
@@ -308,6 +330,81 @@ app.post('/api/youtube/disconnect', function (req, res) {
   stmts.clearYoutubeAuth.run();
   res.json({ ok: true });
 });
+
+// --- TikTok OAuth (Login Kit) — see src/tiktokAuth.js for the token
+// exchange/publish calls themselves. Same placeholder-until-configured
+// shape as the YouTube routes above.
+app.get('/api/tiktok/status', function (req, res) {
+  const row = stmts.getTiktokAuth.get();
+  res.json({
+    configured: tiktokAuth.isConfigured(),
+    connected: !!(row && row.refresh_token),
+    displayName: row ? row.display_name : null
+  });
+});
+
+app.get('/api/tiktok/oauth/start', function (req, res) {
+  if (!tiktokAuth.isConfigured()) {
+    return res.status(500).send('TikTok OAuth is not configured yet — missing TIKTOK_CLIENT_KEY / ' +
+      'TIKTOK_CLIENT_SECRET / TIKTOK_REDIRECT_URI on the server. Ask Harvey for status.');
+  }
+  const state = crypto.randomBytes(16).toString('hex');
+  res.cookie('tt_oauth_state', state, { httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 10 * 60 * 1000 });
+  res.redirect(tiktokAuth.buildAuthUrl(state));
+});
+
+app.get('/api/tiktok/oauth/callback', function (req, res) {
+  if (!tiktokAuth.isConfigured()) {
+    return res.status(500).send('TikTok OAuth is not configured yet.');
+  }
+  const expectedState = req.cookies && req.cookies.tt_oauth_state;
+  res.clearCookie('tt_oauth_state', { path: '/' });
+  if (req.query.error) {
+    return res.redirect('/#settings');
+  }
+  if (!req.query.state || req.query.state !== expectedState) {
+    return res.status(400).send('OAuth state did not match — please try connecting TikTok again from Content Settings.');
+  }
+  Promise.resolve()
+    .then(function () { return tiktokAuth.exchangeCode(req.query.code); })
+    .then(function (tokens) {
+      return tiktokAuth.fetchUserInfo(tokens.access_token).then(function (user) {
+        const expiresAt = new Date(Date.now() + (tokens.expires_in || 86400) * 1000).toISOString();
+        stmts.upsertTiktokAuth.run(
+          user ? user.openId : (tokens.open_id || null),
+          user ? user.displayName : null,
+          tokens.access_token,
+          tokens.refresh_token || null,
+          expiresAt,
+          new Date().toISOString()
+        );
+      });
+    })
+    .then(function () { res.redirect('/#settings'); })
+    .catch(function (err) {
+      console.error('TikTok OAuth callback failed:', err.message);
+      res.status(500).send('TikTok connection failed: ' + err.message);
+    });
+});
+
+app.post('/api/tiktok/disconnect', function (req, res) {
+  stmts.clearTiktokAuth.run();
+  res.json({ ok: true });
+});
+
+async function getValidTiktokAccessToken() {
+  const row = stmts.getTiktokAuth.get();
+  if (!row || !row.refresh_token) throw new Error('TikTok is not connected — connect it in Content Settings first.');
+  const expiresAtMs = row.expires_at ? new Date(row.expires_at).getTime() : 0;
+  if (row.access_token && expiresAtMs > Date.now() + 60000) return row.access_token;
+  const tokens = await tiktokAuth.refreshAccessToken(row.refresh_token);
+  const newExpiresAt = new Date(Date.now() + (tokens.expires_in || 86400) * 1000).toISOString();
+  // TikTok may issue a new refresh_token on refresh — persist whatever
+  // came back rather than assuming it's unchanged (unlike Google, which
+  // normally keeps the same one).
+  stmts.upsertTiktokAuth.run(row.open_id, row.display_name, tokens.access_token, tokens.refresh_token || row.refresh_token, newExpiresAt, new Date().toISOString());
+  return tokens.access_token;
+}
 
 // access_token is short-lived (~1hr) — refresh proactively whenever it's
 // within a minute of expiring, using the stored refresh_token (which
@@ -629,6 +726,75 @@ app.post('/api/youtube/publish/:id', function (req, res) {
   };
   res.json({ ok: true, status: 'running' });
   runYoutubePublish(id, opts).catch(function (e) { console.error('unhandled youtube publish error for ' + id + ':', e.message); });
+});
+
+// --- Real TikTok publish — same shape as the YouTube job above, using
+// the token stored by the TikTok OAuth connect flow. Always uploads the
+// built final video (`<id>-final`) if it exists, same reasoning as
+// YouTube's version. Known limitation, not built: if a single piece is
+// ever tagged for *both* ytlong and tiktok at once, this job and
+// runYoutubePublish both read-modify-write the same piece record
+// concurrently with no locking between them, so one could clobber the
+// other's fields in a real (if narrow) race. Not fixed here since
+// Harvey's actual test plan is one platform per piece (a separate video
+// for each) — worth adding a per-piece lock if simultaneous multi-
+// platform publishing from one piece is ever actually used.
+async function runTiktokPublish(id, opts) {
+  const piece = getPieceRecord(id);
+  if (!piece) return; // deleted before this started
+  piece.tiktokPublishStatus = 'running';
+  piece.tiktokPublishError = '';
+  savePieceRecord(piece);
+
+  try {
+    const finalPath = path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX);
+    const rawPath = path.join(UPLOADS_DIR, 'videos', id);
+    const useFinal = fs.existsSync(finalPath);
+    const videoPath = useFinal ? finalPath : rawPath;
+    if (!fs.existsSync(videoPath)) throw new Error('video file not found on disk');
+
+    const videoRow = stmts.getOne.get('videos', useFinal ? (id + FINAL_VIDEO_SUFFIX) : id);
+    const videoMeta = videoRow ? JSON.parse(videoRow.data) : {};
+    const mimeType = videoMeta.mimeType || 'video/mp4';
+
+    const accessToken = await getValidTiktokAccessToken();
+    const result = await tiktokAuth.publishVideo(accessToken, videoPath, mimeType, {
+      title: opts.title || piece.title || 'Untitled'
+    });
+
+    const latest = getPieceRecord(id);
+    if (!latest) return; // deleted while this was running
+    latest.stage = 'live';
+    latest.tiktokPublishStatus = 'done';
+    latest.tiktokPublishId = result.publishId;
+    latest.tiktokPrivacyLevel = result.privacyLevel;
+    latest.postedAt = new Date().toISOString();
+    latest.updatedAt = new Date().toISOString();
+    savePieceRecord(latest);
+  } catch (e) {
+    console.error('TikTok publish failed for ' + id + ':', e.message);
+    const latest = getPieceRecord(id);
+    if (!latest) return;
+    latest.tiktokPublishStatus = 'error';
+    latest.tiktokPublishError = String(e.message || e).slice(0, 500);
+    // Deliberately not touching stage — same convention as a failed
+    // YouTube publish or a failed final-video build.
+    latest.updatedAt = new Date().toISOString();
+    savePieceRecord(latest);
+  }
+}
+
+app.post('/api/tiktok/publish/:id', function (req, res) {
+  const { id } = req.params;
+  if (!isValidId(id)) return res.status(400).json({ error: 'invalid_params' });
+  const piece = getPieceRecord(id);
+  if (!piece) return res.status(404).json({ error: 'piece_not_found' });
+  const row = stmts.getTiktokAuth.get();
+  if (!row || !row.refresh_token) return res.status(400).json({ error: 'not_connected' });
+  const body = req.body || {};
+  const opts = { title: typeof body.title === 'string' ? body.title : '' };
+  res.json({ ok: true, status: 'running' });
+  runTiktokPublish(id, opts).catch(function (e) { console.error('unhandled tiktok publish error for ' + id + ':', e.message); });
 });
 
 // --- Voice app: talk to a real headless Claude Code agent by voice or text ---
