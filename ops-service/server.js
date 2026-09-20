@@ -471,8 +471,16 @@ const VOICE_SYSTEM_PROMPT =
   'A, B, C." When in doubt about a borderline case, include the marker rather than omit it.\n\n' +
   'Quick verbal acknowledgment — UNCONDITIONAL, no exceptions, read this whole paragraph ' +
   'every single voice-app turn: your very first output, before doing anything else at all — ' +
-  'before any tool call, before deciding whether you even need one — must be one short ' +
-  'sentence that is a genuine, specific, task-style summary of this exact message. This used ' +
+  'before any tool call, before deciding whether you even need one — must be one short, ' +
+  'genuine, specific sentence in your own words describing what you are about to go check or ' +
+  'do for this exact message, said the way you would say it out loud to a colleague. Do NOT ' +
+  'write any label, prefix, or meta-commentary describing this instruction itself — never ' +
+  'output words like "task-style sentence," "acknowledgment sentence," or anything similar ' +
+  'before your actual sentence. This exact leak (literally echoing this instruction\'s own ' +
+  'wording back as visible text) has happened repeatedly across separate turns despite being ' +
+  'flagged and supposedly fixed each time — Harvey has explicitly and emphatically asked for ' +
+  'it to stop for good, so treat any urge to describe or label the sentence, rather than just ' +
+  'saying it, as the exact mistake to avoid. This used ' +
   'to have an exception for "a turn you can answer directly with no tool use" and that ' +
   'exception is exactly what kept failing in practice: turns that felt partly conversational ' +
   '(a check-in, a quick question) but also involved real work got treated as "just answer ' +
@@ -539,9 +547,12 @@ const VOICE_SYSTEM_PROMPT =
 // only in VOICE_SYSTEM_PROMPT (set once, at the start of a long-running
 // resumed session). See VOICE_SYSTEM_PROMPT's "Quick verbal
 // acknowledgment" paragraph for the full rule this is reinforcing.
-const ACK_REMINDER = ' Before anything else — before any tool call — write one short, ' +
-  'task-style sentence summarizing this specific request. No exceptions, even if you expect ' +
-  'to answer in one sentence anyway.';
+const ACK_REMINDER = ' Before anything else, before any tool call: say, in one short sentence ' +
+  'and your own words, what you are about to go check or do for this specific message — no ' +
+  'exceptions, even if you expect to answer in one sentence anyway. Output ONLY that sentence ' +
+  'itself. Do not prefix it with any label or description of this instruction (e.g. never write ' +
+  '"task-style sentence" or similar) — that exact leak has happened repeatedly and Harvey has ' +
+  'asked for it to stop for good.';
 
 function buildVoicePrompt(mode, text) {
   if (mode === 'execute') {

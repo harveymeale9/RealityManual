@@ -5569,3 +5569,60 @@ deploy/restart needed. Verified via `node --check` and a direct regex
 test against a string containing both a markdown link and a bare url;
 not yet heard on a real device — confirm a reply containing a link
 actually says "link below" instead of the raw url next time one comes up.
+
+---
+
+# 126. Found the Real Source of the Repeated "Task-Style Sentence" Leak
+
+Not a per-turn discipline problem, in the end — a genuine bug in this
+codebase's own prompt text. Harvey caught this agent literally writing
+"One task-style sentence: ..." (or a softened paraphrase of the same
+thing) as a visible prefix, repeatedly, across separate turns, despite
+being told to stop each time and a memory being written after the
+second occurrence. On the fourth occurrence he asked, verbatim, to "go
+in and gut whatever programming" was causing it — which turned out to
+be exactly the right instinct: `ops-service/server.js`'s
+`VOICE_SYSTEM_PROMPT` and the per-message `ACK_REMINDER` (§100 — added
+specifically because "instructions placed right next to what they're
+modifying tend to get followed more reliably," re-injected fresh
+immediately before every single reply) both used the literal phrase
+"task-style sentence" as an imperative instruction ("write one short,
+task-style sentence..."). That phrasing is exactly the kind of thing
+this agent is prone to echo back verbatim as a meta-label rather than
+translating into natural output — and because `ACK_REMINDER` re-injects
+it fresh right before every single reply is generated, it was
+functioning as a standing, repeated trigger for the exact mistake it
+was trying to prevent.
+
+**Fix:** both `VOICE_SYSTEM_PROMPT`'s "Quick verbal acknowledgment"
+paragraph and `ACK_REMINDER` reworded to describe the desired sentence
+by example ("say, in your own words, what you're about to check or
+do... the way you'd say it out loud to a colleague") instead of using
+"task-style sentence" as an instructional label, and both now explicitly
+say not to echo the instruction itself as a prefix, naming the exact
+failure mode by description (though not by the literal trigger phrase,
+deliberately — quoting the bad phrase as "don't write this" risks being
+exactly as echo-prone as using it as a positive instruction was).
+
+This is a `server.js` change, so per §93 it triggers a full
+rebuild+restart on the next deploy — which, per the standing §74/§88
+caveat, kills this session's own process mid-task, since this session
+*is* the headless Project Manager agent running inside the container
+being restarted. Logged to the work log immediately before pushing.
+
+Verified via `node --check` and a grep confirming the only remaining
+occurrences of the literal phrase are inside quoted "don't write this"
+examples, not imperative instruction text. **Not yet confirmed this
+actually stops the leak** — three prior attempts at the *symptom*
+(re-wording, then a memory file, then a stronger memory file) didn't
+hold, and this is a different kind of fix (addressing what's actually
+different is the *prompt content itself*, not just adding more
+instructions on top of it) — genuinely possible this still isn't
+enough. If it recurs after this specific fix, the honest next step
+isn't a fifth wording pass on either of these two strings — it's
+questioning whether an per-message imperative reminder written in
+second person ("write X") is inherently more echo-prone than a
+declarative description, regardless of exact wording, and restructuring
+the mechanism itself (e.g., style guidance folded into surrounding
+prose rather than a standalone directive sentence) rather than
+continuing to edit word choice within the same structure.
