@@ -35,6 +35,7 @@
       font-size: 0.82rem; color: var(--ink-faint); background: var(--surface-2);
       border: 1px solid var(--border-soft); border-radius: 6px; padding: 10px 14px; margin: 14px 0;
     }
+    .rv-video-embed { margin: 0 0 40px; }
 
     /* ---- mockup shell: a labeled frame around each illustrative UI
        snippet below, reusing this app's own real CSS classes (.chip,
@@ -100,6 +101,20 @@
       with clearly-labeled example data so this page doesn't require a
       login or expose any of our real content pipeline.
     </p>
+
+    <!-- VIDEO SLOT: verification demo video. Recorded 2026-09-20, served
+         directly as a static file from this same origin
+         (media/tiktok-demo.mp4) rather than a hosted embed, since it's a
+         raw screen recording. Shows the complete end-to-end integration:
+         connecting our TikTok account via the real Login Kit consent
+         screen, producing/reviewing a video through Final Check, and
+         publishing it live via the real Content Posting API call. -->
+    <div class="rv-video-embed">
+      <video controls preload="metadata" playsinline style="width:100%; border-radius: var(--radius); border: 1px solid var(--border); display: block;">
+        <source src="media/tiktok-demo.mp4" type="video/mp4" />
+        Your browser doesn't support embedded video. Download it directly: <a href="media/tiktok-demo.mp4">media/tiktok-demo.mp4</a>.
+      </video>
+    </div>
 
     <h2><span class="num">01</span>Who we are &amp; what the app does</h2>
     <p>

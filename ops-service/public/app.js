@@ -1330,7 +1330,7 @@
       }).then(function () {
         updateStageAndScheduleUI(p);
         flashSaved();
-        notifyPiecesChanged();
+        notifyPieceMoved(p.id);
       });
     });
 
@@ -1392,6 +1392,20 @@
 
   function notifyPiecesChanged() {
     if (typeof window.__rmOnPiecesChanged === 'function') window.__rmOnPiecesChanged();
+  }
+
+  // Same idea as notifyPiecesChanged, but for the specific case of one
+  // piece's *stage* changing — prefers the real move animation
+  // (window.__rmOnPieceMoved, only set while Content Ops is booted, see
+  // animateBoardMove) so any stage-changing action anywhere in the app
+  // gets the same live "it moved" feedback, not just the two poller
+  // paths this originally shipped with. Falls back to a plain re-render
+  // if Content Ops isn't the currently booted tab (e.g. a save landing
+  // from the shared modal while Content Production is active) — animate
+  // has nothing useful to animate against then anyway.
+  function notifyPieceMoved(id) {
+    if (typeof window.__rmOnPieceMoved === 'function') window.__rmOnPieceMoved(id);
+    else notifyPiecesChanged();
   }
 
   function disarmDelete() {
@@ -1683,6 +1697,7 @@
     if (!activeId) return;
     var p = pieces[activeId];
     if (!p) return;
+    var prevStage = p.stage;
     var vals = currentFormValues();
     Object.assign(p, vals);
     p.updatedAt = nowIso();
@@ -1711,7 +1726,8 @@
     Store.put('pieces', p).then(function () {
       if (p.hasVideo) updateStageAndScheduleUI(p);
       flashSaved();
-      notifyPiecesChanged();
+      if (p.stage !== prevStage) notifyPieceMoved(p.id);
+      else notifyPiecesChanged();
     });
   }
 
@@ -2201,17 +2217,20 @@
     bindBoardEvents();
   }
 
-  // A real move animation for the one case Harvey actually asked for
-  // (2026-09-20): a card's *stage* changing because a background job
-  // finished — Processing -> Final Check once a video build completes,
-  // Final Check -> Posted/Live once a publish succeeds — while he's
-  // actually looking at the board. Plain FLIP technique: read the card's
-  // current on-screen position, let the normal full render() happen, then
-  // read its new position and animate the visual gap between them rather
-  // than letting it just teleport into the new column. Deliberately not
-  // hooked into every render() call — search/filter/drag already work
-  // fine without this and don't need it; this is only ever called from
-  // the specific places that know a piece's stage genuinely just changed.
+  // A real move animation, originally built (2026-09-20) for just one
+  // case — a card's *stage* changing because a background job finished
+  // (Processing -> Final Check once a video build completes, Final Check
+  // -> Posted/Live once a publish succeeds) — then generalized the same
+  // day to every other stage-changing action too: manual drag-and-drop,
+  // the .card-move dropdown, and the shared modal's Approve button /
+  // Stage field (via notifyPieceMoved). Plain FLIP technique: read the
+  // card's current on-screen position, let the normal full render()
+  // happen, then read its new position and animate the visual gap
+  // between them rather than letting it just teleport into the new
+  // column/position. Deliberately not hooked into every render() call —
+  // search/filter/type-filter changes don't move any single card in a
+  // way worth animating and aren't routed through this; only genuine
+  // stage/position-changing actions call it.
   function animateBoardMove(id) {
     var oldEl = board.querySelector('[data-id="' + id + '"]');
     var oldRect = oldEl ? oldEl.getBoundingClientRect() : null;
@@ -2372,7 +2391,7 @@
         var p = pieces[sel.dataset.id];
         if (!p) return;
         p.order = maxOrder(sel.value) + 10;
-        setPieceStage(p, sel.value, render);
+        setPieceStage(p, sel.value, function () { animateBoardMove(p.id); });
       });
     });
 
@@ -2413,14 +2432,14 @@
           var newOrder = (i + 1) * 10;
           if (id === draggingId) {
             p.order = newOrder;
-            setPieceStage(p, stageId, render);
+            setPieceStage(p, stageId);
           } else if (p.order !== newOrder) {
             p.order = newOrder;
             p.updatedAt = nowIso();
             Store.put('pieces', p);
           }
         });
-        render();
+        animateBoardMove(draggingId);
       });
     });
 

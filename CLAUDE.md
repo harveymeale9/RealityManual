@@ -7046,3 +7046,81 @@ verified end-to-end** that `recoverInflightVideoJobs()` actually fires
 and behaves correctly on a real restart — worth confirming after this
 deploy that the work log gets the expected recovery line if any piece is
 genuinely mid-analysis/build when it happens next.
+
+---
+
+# 147. Kanban Move Animation Generalized to Every Stage-Change Path; Real Demo Videos Embedded on Both App-Review Pages (2026-09-20)
+
+**Animation.** §145's `animateBoardMove()` FLIP animation only fired from
+two places — the analysis-poller (Processing → Final Check) and the
+publish-poller (Final Check → Live). Harvey asked for it to work "for all
+pipeline stages when a piece moves," so it's now wired into every other
+place a piece's `stage` actually changes:
+
+- **Manual drag-and-drop** (`bindBoardEvents()`'s column `drop` handler):
+  the dragged piece's `setPieceStage(p, stageId)` call no longer passes
+  `render` as its callback (that would double-render, wiping the
+  animation's transform mid-flight); the trailing `render()` call after
+  the reorder loop is now `animateBoardMove(draggingId)` instead.
+- **The `.card-move` dropdown** on each card: `setPieceStage(p, sel.value,
+  render)` → `setPieceStage(p, sel.value, function () {
+  animateBoardMove(p.id); })`.
+- **The shared editor modal's Approve button and Stage field**: both
+  used to call the plain `notifyPiecesChanged()` hook. Added a new
+  `notifyPieceMoved(id)` helper right next to it — prefers
+  `window.__rmOnPieceMoved` (the real animation, only set while Content
+  Ops is booted) and falls back to a plain re-render otherwise (e.g. a
+  save landing while Content Production is the active tab, which has
+  nothing to animate against). `syncFromForm()` now captures `prevStage`
+  before applying form values and calls `notifyPieceMoved` only if the
+  stage actually changed; the Approve button always calls it, matching
+  its own guaranteed stage change.
+
+**Verified for real, not just reasoned about** — this exact board has a
+documented history (§113/119/120/121) of reasoning-only fixes failing in
+practice, so a Playwright rig was rebuilt from scratch (same
+manually-extracted-Debian-.deb-packages workaround as §123/§145) and run
+directly against the live deployed service: created a synthetic test
+piece, drove a real `.card-move` dropdown `change` event and a real
+synthetic `DragEvent` sequence (dragstart/dragover/drop) against the
+actual DOM, and polled `getComputedStyle` every 100ms. Both paths
+genuinely applied `.card-just-moved` with the real accent-green
+`box-shadow` and (for the drag case) a real CSS `transform` mid-transition,
+correctly landing in the target column and cleaning up after ~900ms in
+both cases. All synthetic test pieces were deleted afterward via the
+app's own DELETE endpoint.
+
+**Demo videos.** Harvey recorded and pushed two real screen-recordings
+directly to the repo root (`ContentStudioTikTokDemo.mp4`,
+`YouTubeContentStudioDemo.mp4`, ~16MB each). Moved into
+`ops-service/public/media/` (`tiktok-demo.mp4` / `youtube-demo.mp4`) so
+they're served as ordinary static files from the same origin as the two
+review pages, and embedded via a plain `<video controls>` element:
+
+- `youtube-app-review.html`'s `rv-video-slot` placeholder (added §136,
+  "coming soon") is replaced with the real embed; the now-unused
+  `.rv-video-slot`/`.rv-video-icon`/`.rv-video-title`/`.rv-video-hint`
+  CSS was deleted rather than left dead.
+- `tiktok-app-review.html` never had a video slot at all (§122's page
+  only had an illustrative static mockup, `.demo-video-box`, labeled
+  "DEMO DATA") — added a new `.rv-video-embed` block in the same
+  position as the YouTube page's (right after the intro paragraph,
+  before section 01), left the illustrative Final Check mockup
+  in section 03 as supplementary written context since it's still
+  honestly labeled as demo data, not a claim that it's the real video.
+
+Both are plain frontend/static-file changes (no `server.js`/`src/*`
+touched), so per §93 this deploys via the fast path — no Docker
+rebuild/restart, no interrupted session.
+
+**Known gap flagged to Harvey, not fixed this pass:** the real
+"Schedule Video" flow on Final Check does not yet show TikTok's own
+required pre-post UX — a Music Usage confirmation checkbox and a
+Branded Content disclosure toggle, both explicitly required by TikTok's
+Content Sharing Guidelines (already noted as *planned but not built* in
+§122's own mockup caption: "the two pieces of this screen we'd add
+specifically"). The real demo video therefore shows a real publish
+without these prompts. Worth building for real before relying on this
+video alone to carry a review, though TikTok's guidelines describe this
+requirement less strictly than an automatic rejection trigger — Harvey's
+call whether to submit as-is or wait for these to be built first.
