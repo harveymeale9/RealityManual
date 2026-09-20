@@ -1427,27 +1427,68 @@
     return base + sep + 'utm_source=' + encodeURIComponent(source) + '&utm_medium=video&utm_campaign=' + encodeURIComponent(p.contentType || 'longform') + '&utm_content=' + encodeURIComponent(contentId);
   }
 
-  // Every content type now gets its own tracked link inserted into the
-  // caption via a "[LINK]" shortcode (Harvey realized Shorts can carry
-  // tracking links too, not just longform). Platform-specific captions
-  // (TikTok, Instagram/Facebook) take priority over the shorts/longform
-  // ones when set and the piece is actually tagged for that platform —
-  // added per Harvey's ask for dedicated TikTok/IG-FB caption panels in
-  // Settings, since TikTok and Instagram captions conventionally read
-  // very differently from a YouTube Shorts one (hashtag-heavy vs. not,
-  // etc.). Falls back to the existing shorts/longform split for any
-  // piece not tagged with either platform, or when the platform-specific
-  // field is left blank.
-  function captionTemplateFor(settings, p) {
+  // Which platforms each caption "group" covers, and their display
+  // labels/order — mirrors PLATFORM_PRESET_BY_TYPE exactly (a shortform
+  // piece can only ever be tagged ytshort/tiktok/instagram/facebook; a
+  // longform piece only ytlong/facebook), so every platform a piece is
+  // actually tagged with always has a caption field to land in. This is
+  // also the tab order shown both in Settings and on the Final Check
+  // card's toggle (§Captions restructure, 2026-09-20, Harvey's ask —
+  // shortform: FB/IG/TT/Shorts, longform: YT/FB, each independently
+  // editable).
+  var CAPTION_GROUPS = {
+    shortform: [
+      { key: 'ytshort', label: 'YT Shorts' },
+      { key: 'tiktok', label: 'TikTok' },
+      { key: 'instagram', label: 'Instagram' },
+      { key: 'facebook', label: 'Facebook' }
+    ],
+    longform: [
+      { key: 'ytlong', label: 'YouTube' },
+      { key: 'facebook', label: 'Facebook' }
+    ]
+  };
+
+  function captionGroupKeyFor(p) {
+    return p.contentType === 'longform' ? 'longform' : 'shortform';
+  }
+
+  // One entry per platform this piece is actually tagged with (Content
+  // Production's platform checkboxes, §128) that also belongs to its
+  // content-shape's caption group — e.g. a longform piece tagged for
+  // both YouTube and Facebook gets both a YouTube entry and a Facebook
+  // entry, each carrying its own independently-set template, so both
+  // descriptions can be shown side by side (Harvey: "it will show BOTH
+  // the youtube description AND the FB description... if I unselected
+  // FB in production, only the YT description would show"). Unchecking
+  // a platform in Content Production removes it from p.platforms, which
+  // is exactly what makes it disappear from this list too — no separate
+  // filtering needed.
+  function captionsForPiece(settings, p) {
+    var groupKey = captionGroupKeyFor(p);
+    var group = (settings.captions && settings.captions[groupKey]) || {};
     var platforms = p.platforms || [];
-    if (platforms.indexOf('tiktok') !== -1 && settings.captions.tiktok && settings.captions.tiktok.trim()) {
-      return settings.captions.tiktok;
-    }
-    if ((platforms.indexOf('instagram') !== -1 || platforms.indexOf('facebook') !== -1) &&
-        settings.captions.igfb && settings.captions.igfb.trim()) {
-      return settings.captions.igfb;
-    }
-    return p.contentType === 'longform' ? settings.captions.longform : settings.captions.shorts;
+    return CAPTION_GROUPS[groupKey]
+      .filter(function (o) { return platforms.indexOf(o.key) !== -1; })
+      .map(function (o) {
+        var template = group[o.key] || '';
+        var hasText = !!template.trim();
+        return {
+          key: o.key,
+          label: o.label,
+          template: template,
+          empty: !hasText,
+          text: hasText ? Store.applyCaptionLink(template, buildUtmLink(p, settings)) : ''
+        };
+      });
+  }
+
+  // Single-winner version for the shared editor modal's one-line caption
+  // readout, which has no room for a multi-tab toggle — the first
+  // tagged-and-non-empty caption in CAPTION_GROUPS' own order.
+  function captionTemplateFor(settings, p) {
+    var entries = captionsForPiece(settings, p).filter(function (e) { return !e.empty; });
+    return entries.length ? entries[0].template : '';
   }
 
   function renderCaptionText(p, settings) {
@@ -1775,6 +1816,10 @@
 
   var board, statStrip, overviewRow, boardWrap, draggingId = null;
   var boardSettingsCache = null;
+  // Which caption tab is currently selected on each Final Check card,
+  // keyed by piece id — ephemeral (not persisted, resets on page load),
+  // just enough to survive re-renders within the same page session.
+  var fcCaptionTab = {};
 
   function renderStats() {
     var total = Object.keys(pieces).length;
@@ -1872,8 +1917,46 @@
   // variant of cardHtml(): deliberately its own class (`.final-check-card`,
   // not `.card`) so it's excluded from the generic click-to-open-modal and
   // drag-start bindings in bindBoardEvents() below.
+  //
+  // A piece can be tagged for more than one platform in its caption group
+  // (e.g. a longform video going to both YouTube and Facebook) — when
+  // that's the case, show a small tab strip so Harvey can flip between
+  // each platform's own description instead of only ever seeing one
+  // (2026-09-20). A single-platform piece just shows its one caption with
+  // no tabs, same as before this change.
+  function fcCaptionInnerHtml(id, piece, settings) {
+    if (!settings) return '<div class="fc-caption">Loading caption…</div>';
+    var entries = captionsForPiece(settings, piece);
+    if (!entries.length) {
+      return '<div class="fc-caption">No caption set for this type yet — add one in Settings.</div>';
+    }
+    var emptyText = function (e) { return 'No caption set for ' + e.label + ' yet — add one in Settings.'; };
+    if (entries.length === 1) {
+      var only = entries[0];
+      return '<div class="fc-caption">' + escapeHtml(only.empty ? emptyText(only) : only.text) + '</div>';
+    }
+    var savedKey = fcCaptionTab[id];
+    var active = entries.filter(function (e) { return e.key === savedKey; })[0] || entries[0];
+    return '' +
+      '<div class="fc-caption-tabs">' +
+        entries.map(function (e) {
+          return '<button type="button" class="fc-caption-tab' + (e.key === active.key ? ' active' : '') +
+            '" data-id="' + id + '" data-key="' + e.key + '">' + escapeHtml(e.label) + '</button>';
+        }).join('') +
+      '</div>' +
+      '<div class="fc-caption">' + escapeHtml(active.empty ? emptyText(active) : active.text) + '</div>';
+  }
+
+  // Wrapped in one container so a tab click can refresh just this piece's
+  // caption area in place (see bindBoardEvents' .fc-caption-tab handler)
+  // without re-rendering the whole card — re-rendering would reset the
+  // <video>'s playback position/state, which Harvey doesn't want on a
+  // simple caption toggle.
+  function fcCaptionSectionHtml(id, piece, settings) {
+    return '<div class="fc-caption-section" data-id="' + id + '">' + fcCaptionInnerHtml(id, piece, settings) + '</div>';
+  }
+
   function finalCheckCardHtml(id, piece) {
-    var captionText = boardSettingsCache ? renderCaptionText(piece, boardSettingsCache) : 'Loading caption…';
     var titles = piece.ytTitles || [];
     // "Title 1: x" / "Title 2: y" plain lines, not a numbered list, sized
     // to match the main-title heading this replaced (Harvey: "remove
@@ -1938,7 +2021,7 @@
           '</div>' +
         '</div>' +
         titlesHtml +
-        '<div class="fc-caption">' + escapeHtml(captionText) + '</div>' +
+        fcCaptionSectionHtml(id, piece, boardSettingsCache) +
         '<div class="chip-row">' + chipHtml(piece) + '</div>' +
         '<div class="fc-actions">' +
           '<button type="button" class="btn-primary fc-approve-btn" data-id="' + id + '">Approve → Scheduled</button>' +
@@ -1994,6 +2077,25 @@
     bindBoardEvents();
   }
 
+  // Scoped separately from bindBoardEvents() so a caption-tab click can
+  // rebind just the small chunk of DOM it just replaced, instead of
+  // re-running bindBoardEvents() (which would add a second set of
+  // listeners on every other card/button already on the board).
+  function bindCaptionTabs(scopeEl) {
+    scopeEl.querySelectorAll('.fc-caption-tab').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var id = btn.dataset.id;
+        var p = pieces[id];
+        if (!p) return;
+        fcCaptionTab[id] = btn.dataset.key;
+        var target = board.querySelector('.fc-caption-section[data-id="' + id + '"]');
+        if (!target) return;
+        target.innerHTML = fcCaptionInnerHtml(id, p, boardSettingsCache);
+        bindCaptionTabs(target);
+      });
+    });
+  }
+
   function bindBoardEvents() {
     board.querySelectorAll('.card').forEach(function (el) {
       el.addEventListener('click', function (e) {
@@ -2047,6 +2149,15 @@
         }).then(render);
       });
     });
+
+    // Toggling between platform captions on a Final Check card — swaps
+    // just this one card's caption section in place (see
+    // fcCaptionSectionHtml's comment) rather than calling render(), so
+    // the video already playing/paused isn't reset by the click. Scoped
+    // rebinding (not a fresh bindBoardEvents() call) so a tab click
+    // doesn't pile up duplicate listeners on every other element already
+    // on the board.
+    bindCaptionTabs(board);
 
     board.querySelectorAll('.card-move').forEach(function (sel) {
       sel.addEventListener('click', function (e) { e.stopPropagation(); });
@@ -2875,17 +2986,30 @@
       '</section>' +
       '<section class="settings-section">' +
         '<h3>Captions</h3>' +
-        '<p class="settings-hint">Separate template per type — Shorts can stay the same every time, Longform (or any ' +
-          'type) usually wants a fresh link each time. Use the shortcode <code>[LINK]</code> anywhere in the text and ' +
-          'it\'s replaced with that piece\'s own UTM-tracked link when the caption is shown or copied.</p>' +
-        '<label class="field-label">Shorts caption <span class="field-hint">(ultra-short / short / long-short)</span></label>' +
-        '<textarea class="notes-input settings-textarea" id="captionShortsInput" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
-        '<label class="field-label" style="margin-top:14px;display:block;">YouTube Longform caption</label>' +
-        '<textarea class="notes-input settings-textarea" id="captionLongformInput" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
-        '<label class="field-label" style="margin-top:14px;display:block;">TikTok caption <span class="field-hint">(overrides Shorts/Longform above when a piece is tagged TikTok)</span></label>' +
-        '<textarea class="notes-input settings-textarea" id="captionTiktokInput" placeholder="e.g. Grab your copy of the book here [LINK]! #booktok"></textarea>' +
-        '<label class="field-label" style="margin-top:14px;display:block;">Instagram / Facebook caption <span class="field-hint">(overrides Shorts/Longform above when a piece is tagged Instagram or Facebook)</span></label>' +
-        '<textarea class="notes-input settings-textarea" id="captionIgfbInput" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
+        '<p class="settings-hint">One description per platform, organized by content shape — a piece can be tagged ' +
+          'for several platforms at once, each getting its own independently-set caption (Final Check shows all of ' +
+          'them with a toggle when there\'s more than one). Use the shortcode <code>[LINK]</code> anywhere in the ' +
+          'text and it\'s replaced with that piece\'s own UTM-tracked link when the caption is shown or copied.</p>' +
+        '<div class="caption-group-tabs" id="captionGroupTabs">' +
+          '<button type="button" class="caption-group-tab active" data-group="shortform">Short-form</button>' +
+          '<button type="button" class="caption-group-tab" data-group="longform">Longform</button>' +
+        '</div>' +
+        '<div class="caption-group-panel" data-group="shortform" id="captionPanelShortform">' +
+          '<label class="field-label">YT Shorts caption</label>' +
+          '<textarea class="notes-input settings-textarea" id="caption-shortform-ytshort" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
+          '<label class="field-label" style="margin-top:14px;display:block;">TikTok caption</label>' +
+          '<textarea class="notes-input settings-textarea" id="caption-shortform-tiktok" placeholder="e.g. Grab your copy of the book here [LINK]! #booktok"></textarea>' +
+          '<label class="field-label" style="margin-top:14px;display:block;">Instagram caption</label>' +
+          '<textarea class="notes-input settings-textarea" id="caption-shortform-instagram" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
+          '<label class="field-label" style="margin-top:14px;display:block;">Facebook caption</label>' +
+          '<textarea class="notes-input settings-textarea" id="caption-shortform-facebook" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
+        '</div>' +
+        '<div class="caption-group-panel" data-group="longform" id="captionPanelLongform" hidden>' +
+          '<label class="field-label">YouTube caption</label>' +
+          '<textarea class="notes-input settings-textarea" id="caption-longform-ytlong" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
+          '<label class="field-label" style="margin-top:14px;display:block;">Facebook caption</label>' +
+          '<textarea class="notes-input settings-textarea" id="caption-longform-facebook" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
+        '</div>' +
       '</section>' +
       '<section class="settings-section">' +
         '<h3>Tracked link</h3>' +
@@ -3027,33 +3151,35 @@
       renderAudioList();
       renderKeyGrid();
 
-      var captionShortsInput = document.getElementById('captionShortsInput');
-      captionShortsInput.value = settings.captions.shorts || '';
-      captionShortsInput.addEventListener('input', function () {
-        settingsCache.captions.shorts = captionShortsInput.value;
-        saveSettingsDebounced();
+      // One textarea per platform, ids following "caption-<group>-<key>"
+      // (see SETTINGS_MARKUP) — driven off CAPTION_GROUPS so this list
+      // never drifts out of sync with the Final Check toggle's own set of
+      // platforms/labels.
+      Object.keys(CAPTION_GROUPS).forEach(function (groupKey) {
+        CAPTION_GROUPS[groupKey].forEach(function (o) {
+          var input = document.getElementById('caption-' + groupKey + '-' + o.key);
+          if (!input) return;
+          input.value = (settings.captions[groupKey] && settings.captions[groupKey][o.key]) || '';
+          input.addEventListener('input', function () {
+            settingsCache.captions[groupKey][o.key] = input.value;
+            saveSettingsDebounced();
+          });
+        });
       });
 
-      var captionLongformInput = document.getElementById('captionLongformInput');
-      captionLongformInput.value = settings.captions.longform || '';
-      captionLongformInput.addEventListener('input', function () {
-        settingsCache.captions.longform = captionLongformInput.value;
-        saveSettingsDebounced();
-      });
-
-      var captionTiktokInput = document.getElementById('captionTiktokInput');
-      captionTiktokInput.value = settings.captions.tiktok || '';
-      captionTiktokInput.addEventListener('input', function () {
-        settingsCache.captions.tiktok = captionTiktokInput.value;
-        saveSettingsDebounced();
-      });
-
-      var captionIgfbInput = document.getElementById('captionIgfbInput');
-      captionIgfbInput.value = settings.captions.igfb || '';
-      captionIgfbInput.addEventListener('input', function () {
-        settingsCache.captions.igfb = captionIgfbInput.value;
-        saveSettingsDebounced();
-      });
+      var captionGroupTabs = document.getElementById('captionGroupTabs');
+      if (captionGroupTabs) {
+        captionGroupTabs.querySelectorAll('.caption-group-tab').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            captionGroupTabs.querySelectorAll('.caption-group-tab').forEach(function (b) {
+              b.classList.toggle('active', b === btn);
+            });
+            document.querySelectorAll('.caption-group-panel').forEach(function (panel) {
+              panel.hidden = panel.dataset.group !== btn.dataset.group;
+            });
+          });
+        });
+      }
 
       var baseLinkInput = document.getElementById('baseLinkInput');
       baseLinkInput.value = settings.baseLinkUrl || '';

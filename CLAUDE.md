@@ -5781,3 +5781,88 @@ headless agent running inside the container being restarted. The
 frontend-only parts (auto-thumbnail, content-type/platform display,
 threshold tightening) are already live independently of that deploy, per
 §93's fast path.
+
+---
+
+# 129. Captions Restructured: Per-Platform, Organized by Short-form/Longform; Final Check Shows All of Them With a Toggle (2026-09-20)
+
+Harvey's ask, in two parts that turned out to be the same underlying
+change: (1) reorganize the Captions section in Content Settings into a
+"Short-form" tab (FB, IG, TT, Shorts — one field each) and a "Longform"
+tab (YT, FB — one field each), each independently editable; (2) when a
+horizontal (longform) video is tagged for both YouTube and Facebook, the
+Final Check card should show *both* descriptions with a toggle between
+them, not just one merged/single caption, and should only offer a
+platform's caption as a toggle option if that platform is actually still
+selected in Content Production.
+
+**Settings (`ops-service/public/lib/store.js`, `app.js`):**
+`defaultSettings().captions` changed from a flat `{ shorts, longform,
+tiktok, instagram, facebook }` shape to a nested one keyed by content
+shape and then platform id, matching `PLATFORM_PRESET_BY_TYPE`/
+`Store.PLATFORMS` exactly:
+```js
+captions: {
+  shortform: { ytshort: '', tiktok: '', instagram: '', facebook: '' },
+  longform: { ytlong: '', facebook: '' }
+}
+```
+Facebook deliberately gets its own field in *both* groups — a piece can
+be shortform-Facebook or longform-Facebook, and those read very
+differently, so they're not the same text. `getSettings()` gained a
+migration (detected by `captions.shortform` not already being an
+object) that maps the old flat shape onto the new one without losing any
+real saved text — verified directly against the live settings row before
+writing it (`longform` → `longform.ytlong`, `tiktok` → `shortform.tiktok`,
+confirmed both survive the migration with a standalone test of the exact
+migration logic against the real live data).
+
+**Settings UI:** the Captions section now has a small "Short-form" /
+"Longform" pill-tab pair (`.caption-group-tabs`/`.caption-group-tab`,
+same visual language as the existing `.panel-subtab`), each revealing a
+panel with one textarea per platform in that group. The wiring in
+`bootSettings()` is driven off a new `CAPTION_GROUPS` constant (platform
+ids/labels/order, reused below) rather than four/six hand-wired inputs,
+so Settings and the Final Check toggle can never drift out of sync on
+which platforms exist in which group.
+
+**`app.js`: `captionsForPiece(settings, p)`** is the new core function —
+given a piece, it looks at its content shape (`shortform` for
+ultra_short/short/long_short, `longform` for `longform`) and returns one
+entry per platform the piece is *actually tagged with* (`p.platforms`,
+Content Production's own checkboxes, §128) that also belongs to that
+caption group, each with its own template/rendered text. Unchecking a
+platform in Content Production removes it from `p.platforms`, which is
+exactly what makes its caption stop showing here too — no separate
+filtering logic needed, this falls out of reusing the same field.
+`captionTemplateFor(settings, p)` (used by the shared editor modal's
+one-line caption readout, which has no room for a toggle) is now a
+thin single-winner wrapper over `captionsForPiece` — first tagged,
+non-empty entry in `CAPTION_GROUPS`' own order.
+
+**Final Check card:** `finalCheckCardHtml()`'s single `.fc-caption` div
+is replaced by `fcCaptionSectionHtml()`, which shows a plain caption (no
+tabs) when the piece has only one relevant platform caption, or a small
+pill-tab strip (`.fc-caption-tabs`/`.fc-caption-tab`) plus the active
+one's text when there's more than one — e.g. a longform piece tagged for
+both `ytlong` and `facebook` shows a "YouTube"/"Facebook" toggle. Which
+tab is selected is tracked ephemerally per piece id
+(`fcCaptionTab`, resets on page reload, not persisted — there was no ask
+to remember it). Clicking a tab calls a new scoped `bindCaptionTabs()`
+that replaces just that card's `.fc-caption-section` innerHTML and
+re-binds only within it, deliberately *not* a full `render()` — a full
+re-render would reset the `<video>`'s playback position/state, which
+would be a jarring side effect of just switching which description is
+showing.
+
+Frontend-only (`app.js`, `lib/store.js`, `style.css`), so per §93 this
+should deploy via the fast path — no Docker rebuild/restart, no
+interrupted session. Verified via `node --check` on both JS files, a
+CSS brace-balance check, and a standalone replay of the exact migration
+logic against the real live settings data (confirmed real longform/
+TikTok caption text survives the shape change). **Not yet verified
+against the live deployed service** — confirm the Short-form/Longform
+tabs actually save/reload each platform's field independently, and that
+a real Final Check card for a piece tagged with two platforms in the
+same group shows a working toggle that correctly narrows to one option
+if a platform is unchecked in Content Production.

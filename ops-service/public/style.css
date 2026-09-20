@@ -723,10 +723,31 @@ a { color: var(--accent); }
    playback starts/stops/ends by means other than clicking the icon
    itself. */
 .fc-video-wrap.is-playing .fc-play-icon { opacity: 0; transform: scale(0.85); }
+.fc-caption-section { display: flex; flex-direction: column; gap: 6px; }
 .fc-caption {
   font-size: 0.85rem; color: var(--ink-soft); white-space: pre-wrap;
   background: var(--surface); border: 1px solid var(--border-soft); border-radius: 6px; padding: 8px 10px;
 }
+/* Shown only when a piece is tagged for more than one platform in its
+   caption group (e.g. a longform video going to both YouTube and
+   Facebook) — lets Harvey flip between each platform's own description
+   instead of only ever seeing one (2026-09-20). */
+.fc-caption-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.fc-caption-tab {
+  background: none;
+  border: 1px solid var(--border-soft);
+  color: var(--ink-faint);
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.fc-caption-tab:hover { color: var(--ink-soft); border-color: var(--accent-3); }
+.fc-caption-tab.active { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
 .fc-titles { display: flex; flex-direction: column; gap: 3px; }
 /* Sized to match the main-title heading these replaced (Harvey,
    2026-09-19: "remove bottom one, make these a bit larger, same size as
@@ -1425,6 +1446,27 @@ a { color: var(--accent); }
 .settings-hint.warn { color: var(--error); }
 .settings-textarea { min-height: 100px; }
 .settings-input { font-size: 1rem; }
+
+/* Short-form / Longform caption group tabs (2026-09-20) — same pill
+   treatment as .panel-subtab so it reads as a tab strip, scoped to just
+   this section rather than reusing that class directly. */
+.caption-group-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.caption-group-tab {
+  background: none;
+  border: 1px solid var(--border-soft);
+  color: var(--ink-faint);
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.caption-group-tab:hover { color: var(--ink-soft); border-color: var(--accent-3); }
+.caption-group-tab.active { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+.caption-group-panel[hidden] { display: none; }
 
 .cadence-grid { display: flex; flex-direction: column; gap: 10px; }
 .cadence-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 8px 0; }

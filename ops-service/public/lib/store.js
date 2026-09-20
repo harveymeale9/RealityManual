@@ -138,15 +138,25 @@ window.RMStore = (function () {
       id: SETTINGS_ID,
       cadence: JSON.parse(JSON.stringify(DEFAULT_CADENCE)),
       lastShortType: '',
-      // Separate templates per Harvey: shorts reuse the same caption every
-      // time, longform needs a fresh per-video tracked link. Both support
-      // a "[LINK]" placeholder (see app.js buildUtmLink/applyCaptionLink)
-      // since he later realized Shorts can carry tracking links too.
-      // tiktok/igfb (added later) are optional platform-specific overrides
-      // — used instead of shorts/longform when a piece is tagged for that
-      // platform and the field isn't left blank (see app.js
-      // captionTemplateFor).
-      captions: { shorts: '', longform: '', tiktok: '', igfb: '' },
+      // Captions are organized by content shape, per Harvey (2026-09-20) —
+      // one field per platform that shape can actually be tagged with,
+      // mirroring app.js's PLATFORM_PRESET_BY_TYPE exactly: a shortform
+      // piece (ultra-short/short/long-short) can be tagged ytshort/tiktok/
+      // instagram/facebook; a longform piece only ytlong/facebook. Facebook
+      // deliberately gets its own field in *both* groups, since a piece
+      // posted to both YouTube and Facebook (a longform upload going to
+      // both) needs an independently-editable description for each — see
+      // app.js's captionsForPiece, which is what lets the Final Check card
+      // show both at once with a toggle. Every field supports "[LINK]"
+      // (see app.js buildUtmLink/applyCaptionLink). This replaces an older
+      // flat shape (captions.shorts/longform/tiktok/instagram/facebook, and
+      // before that a combined "igfb" field) — see getSettings()'s
+      // migration below, which preserves any real text saved under either
+      // older shape.
+      captions: {
+        shortform: { ytshort: '', tiktok: '', instagram: '', facebook: '' },
+        longform: { ytlong: '', facebook: '' }
+      },
       baseLinkUrl: 'https://realitymanual.com',
       apiKeys: { youtube: '', instagram: '', facebook: '', tiktok: '', transcriptionProvider: '', transcriptionKey: '' }
     };
@@ -169,7 +179,32 @@ window.RMStore = (function () {
         s.captions.shorts = s.sharedCaption;
         s.captions.longform = s.sharedCaption;
       }
-      s.captions = Object.assign(d.captions, s.captions);
+      // Migrate the old flat caption shape (captions.shorts/longform/
+      // tiktok/igfb, or the briefly-split .../instagram/facebook variant)
+      // into the current { shortform: {...}, longform: {...} } shape if
+      // this settings row predates the 2026-09-20 restructure — detected
+      // by captions.shortform not already being an object. Real saved
+      // text (shorts → shortform.ytshort, longform → longform.ytlong,
+      // tiktok → shortform.tiktok, instagram/facebook/igfb → both
+      // groups' facebook/instagram fields) is preserved; nothing is
+      // dropped even if the mapping isn't a perfect 1:1.
+      if (typeof s.captions.shortform !== 'object') {
+        var old = s.captions;
+        s.captions = {
+          shortform: {
+            ytshort: old.shorts || '',
+            tiktok: old.tiktok || '',
+            instagram: old.instagram || '',
+            facebook: old.facebook || old.igfb || ''
+          },
+          longform: {
+            ytlong: old.longform || '',
+            facebook: old.facebook || old.igfb || ''
+          }
+        };
+      }
+      s.captions.shortform = Object.assign({}, d.captions.shortform, s.captions.shortform || {});
+      s.captions.longform = Object.assign({}, d.captions.longform, s.captions.longform || {});
       if (typeof s.baseLinkUrl !== 'string') s.baseLinkUrl = d.baseLinkUrl;
       if (typeof s.lastShortType !== 'string') s.lastShortType = '';
       return s;
