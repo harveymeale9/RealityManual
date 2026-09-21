@@ -1,55 +1,73 @@
 'use strict';
 
-// This method was reverse-engineered from the completed manuscript and all 31
-// Outline Completed cards present on 2026-09-21. It describes the transferable
-// reasoning moves in Harvey's strongest premises without feeding finished
-// scripts back to the provider or encouraging it to imitate their wording.
-const METHOD = `BIG IDEA METHOD — DERIVE, DO NOT SUMMARIZE
+// Harvey's preferred Big Idea method, reverse-engineered from his own concise
+// reductions of completed outlines #022, #028, #034, and #035. Keep this
+// deliberately simple: the previous multi-operator framework encouraged
+// clever micro-applications instead of the broad conceptual reframes he wants.
+const METHOD = `HARVEY'S BIG IDEA METHOD — FIND THE SIMPLE REFRAME
 
-A topic is a subject (procrastination, love, income, enlightenment). A manuscript concept is a teaching (subconscious action, oneness, internal value). Neither is yet a Big Idea. A Big Idea is a defensible editorial claim produced by applying manuscript machinery to a recognizable situation in a way that changes how someone understands or handles it.
+The goal is not to invent a detailed content premise, a niche life scenario, a clever application, or a miniature script. The goal is to extract one simple, powerful thought from the manuscript that changes how people understand something they already care or talk about.
 
-Use this underlying formula:
-RECOGNIZABLE SITUATION + HIDDEN/DEFAULT ASSUMPTION + MANUSCRIPT MECHANISM + NON-OBVIOUS LOGICAL TURN + STRATEGIC CONSEQUENCE + EWB STAKES.
+THE FORMULA
 
-Derive it in this order:
-1. Begin with a live human tension: a worry, desire, repeated failure, culturally accepted piece of advice, philosophical question, current behavior, or concrete decision. It must be specific enough that a person can recognize themselves in it.
-2. State the default model or unnoticed assumption that makes the situation confusing. Do not invent a straw man; use something people plausibly believe or do.
-3. Select the smallest sufficient set of manuscript primitives—usually one Rule, sometimes two or three whose interaction creates the insight. Preserve the manuscript's definitions precisely.
-4. Build an explicit because/therefore chain. Every step must follow from the previous one. The surprising conclusion must be derived, not asserted, and must remain true when the rhetoric is removed.
-5. Cash out the consequence: what should the reader now notice, stop doing, do differently, or optimize? Explain why the old model costs EWB or why the new model improves it.
-6. Express only the premise. Leave hooks, titles, scripts, ordered beats, and production choices to Harvey.
+1. Start with a familiar subject, question, assumption, or public conversation that already has broad human interest: discipline, power, business, selling, success, love, God, suffering, procrastination, UFOs, happiness, motivation, purpose, and so on.
+2. Find the manuscript principle that reveals the conventional understanding of that subject to be incomplete, incorrectly framed, or aimed at the wrong thing.
+3. State the replacement frame in one clean claim: "It is not really X; it is Y," "The wrong question is X; the useful question is Y," or "People assume X, but Rule Y implies Z."
+4. Give only the shortest causal explanation required to make the claim intelligible and defensible.
 
-Use one or more of these proven idea operators:
-- REDEFINE: reveal what a familiar thing actually is in the Manual's model. Examples of the move include product value becoming emotional transformation, a problem becoming its negative emotional output, or freedom becoming the ability to act on desire.
-- INVERT: show why accepted advice or moral framing is strategically backward. Examples of the move include discipline as inefficient force, self-sacrifice as compatible with self-interest through oneness, or suffering as undesirable without being illegitimate.
-- COMPRESS: reduce many apparently different cases to a small causal model. Examples of the move include two reasons action stops, two ways desire ends, or five axes through which life improves.
-- TRANSFER: apply a Rule faithfully to a domain where readers would not expect it—money, sales, dating, social behavior, technology, or a speculative edge case. The connection must reveal a useful implication, not merely decorate the topic with book language.
-- SYNTHESIZE: combine Rules so their interaction yields a conclusion not stated by either alone. The completed enlightenment work, for example, connects desire, motivation, innovation, freedom, expansion, and oneness to predict what an enlightened life would actually look like.
-- EXTREMIZE: test a principle at a boundary case to expose its structure: zero desire, total separation, perfect EWB, death, an alien civilization, or an impossible objective. Bring the result back to ordinary life.
-- DIAGNOSE: reinterpret a visible symptom as the output of a hidden mechanism, then identify the actual leverage point. Procrastination becomes a subconscious desirability/trajectory veto rather than laziness; anxiety becomes costly gameplay before the feared event has even occurred.
-- RESOLVE AN OBJECTION: take the strongest plausible objection to a central claim, identify the category error or hidden premise beneath it, and show why the doctrine still holds. A weak objection produces a weak idea.
+In compact form:
+FAMILIAR SUBJECT OR QUESTION → MANUSCRIPT-BASED REFRAME → MINIMUM NECESSARY REASON.
 
-Patterns demonstrated across the completed outlines:
-- Start in the audience's world, not in the book. The book supplies the explanatory machinery.
-- Prefer a precise mechanism over inspirational advice. Name what causes the behavior or emotional result.
-- Separate outputs from inputs and ends from proxies. Happiness is an output; action and belief are inputs. Money, status, purpose, products, and goals are often proxies for expected emotional change.
-- Look for category errors: confusing physical proximity with oneness, conscious intention with bodily control, unpleasant experience with failed purpose, preference with intense desire, fact with interpretation, or fulfilment with dissolution.
-- Follow implications farther than the manuscript's headline claim. The strongest completed outlines often ask, "If this Rule is true, what else must also be true?"
-- Use concrete examples as proof of the mechanism, not as the premise itself.
-- Preserve nuance and boundary conditions. A sharp claim is not permission to overstate what the Rule establishes.
-- Make the cost of misunderstanding visible across time. The best stakes are often a wasted decade, persistent unmet desire, needless negative emotion, unfreedom, or an entire strategy optimized for the wrong outcome.
-- End at a decision, diagnostic, or strategic lens. Mere surprise is not enough.
+The reframe is the Big Idea. Everything else belongs in the eventual outline.
 
-Silent quality gate for every candidate (0–5 each):
-1. Human relevance: is the entry situation recognizable and consequential?
-2. Non-obviousness: does it make a real logical turn beyond manuscript summary?
-3. Manuscript specificity: could this premise only come from this book's machinery?
-4. Derivational rigor: does every step in the because/therefore chain hold?
-5. Strategic usefulness: does it change a decision, diagnosis, or behavior?
-6. EWB stakes: is the emotional cost or benefit concrete?
-7. Distinctiveness: is it materially different from the existing catalog?
+CANONICAL STYLE EXAMPLES, REDUCED BY HARVEY FROM HIS COMPLETED OUTLINES
 
-Reject any candidate below 4 on non-obviousness, derivational rigor, or strategic usefulness, or below 27/35 overall. Also reject any premise that is merely a Rule restatement, a chapter summary, generic self-help advice, a provocative claim without a mechanism, or an existing outline with different nouns.`;
+#022, The Relevant Question:
+Whenever someone struggles to do what they know they should do, it is never a question of why they lack sufficient discipline. That is the wrong question. The Rule of Subconscious Action tells us it is a physical impossibility to act unless the subconscious holds a compatible belief. The useful question is: what belief in my subconscious is preventing my ability to act?
+
+#035, The Most Powerful People Have Mastered This:
+Power is not the ability to control or influence others. True power is being insusceptible to events in external reality that would normally cause upset.
+
+#034, Understand This & You Can Sell Anything:
+No business is actually selling products or services. Those are proxies for what the customer is truly purchasing: an emotional transformation.
+
+#028, Why A Super-intelligent Alien Race Would Never Invade Or Harm Humanity:
+With all the discussion about UFOs and disclosure, should humanity fear a super-advanced extraterrestrial race? No. A genuinely superintelligent civilization would understand and practice the Rule of Oneness.
+
+WHAT THESE EXAMPLES HAVE IN COMMON
+
+- Each contains ONE idea that can be understood immediately.
+- Each starts from an existing concept or conversation, not a contrived anecdote.
+- Each makes a bold, broadly relevant claim.
+- Each changes the definition, question, or governing frame.
+- The manuscript provides the reason the new frame is true.
+- The explanation stops as soon as the idea clicks. It does not pre-write the outline.
+- The premise leaves Harvey ample room to develop examples, proof, qualifications, and strategy himself.
+
+WHAT NOT TO GENERATE
+
+- Do not hunt for narrow domestic or lifestyle scenarios such as unwanted gifts, one missed workout, an unfinished task list, a pay rise funding subscriptions, guilt while resting, or arguments on social media unless Harvey has explicitly supplied one as the subject.
+- Do not combine six conceptual moves into an intricate thesis.
+- Do not turn the idea into advice, a therapeutic intervention, a list of steps, or an ordered argument.
+- Do not mistake specificity for quality. The desired ideas are often broad and elemental.
+- Do not pad a simple reframe with consequences, caveats, examples, or rhetorical decoration.
+- Do not merely summarize a Rule. The Rule must alter how a familiar subject is understood.
+- Do not imitate the topics above. Imitate their simplicity and type of reasoning.
+
+LENGTH
+
+Most Big Ideas should be one to three concise sentences. A premise that clearly calls for long-form treatment may use up to six sentences, but only when the core reframe genuinely needs a longer logical bridge. Length must come from necessary reasoning, never from outlining the future content.
+
+FINAL TEST
+
+Before returning an idea, ask:
+1. Can the entire idea be repeated accurately in one breath?
+2. Is there one obvious sentence that constitutes the reframe?
+3. Does it concern something broadly recognizable without needing a contrived setup?
+4. Does a specific manuscript principle make the reframe logically defensible?
+5. Have all outline material, examples, advice, and extra cleverness been removed?
+
+If any answer is no, simplify or discard it.`;
 
 function promptText() { return METHOD; }
 

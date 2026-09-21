@@ -8560,3 +8560,55 @@ Verification: syntax checks passed for the new module and changed service, the
 full ops-service Node suite passes (8/8), and the ideation integration test now
 asserts that the derivation formula, operator set, and rejection threshold are
 actually present in the provider prompt.
+
+---
+
+# 178. Big-Idea Method Corrected: Simple Conceptual Reframes, Not Clever Micro-Applications (2026-09-21)
+
+Harvey rejected the first §177-generated batch outright. The earlier method
+mistook detailed specificity for the desired sophistication and produced narrow
+micro-applications (unwanted gifts, missing a workout, unfinished task lists,
+lifestyle inflation, guilt while resting, online arguments). Those were
+defensible applications of the manuscript, but they were not the kind of “Big
+Idea” Harvey means.
+
+Harvey supplied the intended reductions of four of his own completed outlines,
+which were then checked against the full source cards in the production DB:
+
+- **#022, The Relevant Question:** failure to act is not fundamentally a lack
+  of discipline; the useful question is which incompatible subconscious belief
+  is making the action physically unavailable.
+- **#035, The Most Powerful People Have Mastered This:** power is not control
+  over others, but insusceptibility to external events that ordinarily disturb
+  one's internal state.
+- **#034, Understand This & You Can Sell Anything:** businesses do not really
+  sell products or services; those are proxies for the emotional transformation
+  the customer purchases.
+- **#028, Why A Super-intelligent Alien Race Would Never Invade Or Harm
+  Humanity:** a genuinely superintelligent extraterrestrial civilization would
+  understand and practice the Rule of Oneness, so humanity need not fear it.
+
+The common method is substantially simpler than §177's framework:
+
+```text
+familiar subject/question
+  → manuscript-based reframe
+  → minimum necessary reason
+```
+
+The reframe itself is the Big Idea. It should normally fit into one to three
+sentences and be repeatable in one breath. It starts with a broad concept or
+conversation people already care about, uses the manuscript to replace the
+usual definition/question/frame, and stops as soon as the new conception
+clicks. Examples, proof, qualifications, strategy, and development belong in
+the eventual outline, not the Big Idea. A genuinely broader long-form premise
+may take up to six sentences when the causal bridge requires it.
+
+`src/ideationBigIdeaMethod.js` was completely replaced—not amended—with this
+method and Harvey's four canonical examples. It expressly rejects contrived
+domestic/lifestyle scenarios, intricate multi-move theses, advice, therapeutic
+interventions, pre-written outlines, and padding. `ideationService.js`'s own
+surrounding prompt was changed to agree with the new definition and length
+instead of fighting it with §177's previous “specific practical situation”
+framing. The integration test now asserts the new formula, examples, negative
+constraints, and concise length contract. Full Node suite: 8/8 passing.

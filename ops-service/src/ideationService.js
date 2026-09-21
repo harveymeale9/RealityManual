@@ -178,13 +178,13 @@ Read the canonical completed manuscript at THE_REALITY_MANUAL_COMPLETE_MANUSCRIP
 The following permanent doctrine map identifies reusable intellectual anchors:
 ${doctrine.promptText()}
 
-A Big Idea is a unique, intelligent, practical way to get a highly relevant real-world benefit from the book's teaching. It should connect a recognizable human situation to a manuscript principle and make the stakes clear. A representative shape is: anxiety that someone is losing interest is not evidence that they are; if your objective is to feel incredible, every period spent worrying about it is already losing the game of life. This is an example of specificity, logical connection, and practical stakes—not an idea to repeat.
+A Big Idea is one simple, powerful manuscript-derived reframe of a familiar subject, question, assumption, or public conversation. It changes the definition, replaces the conventional question, or reveals what is actually happening beneath the usual description. It is not a detailed application, niche scenario, miniature outline, or piece of generic advice.
 
 ${bigIdeaMethod.promptText()}
 
-Each Big Idea must stand alone in two to five clear sentences. Root it structurally in at least one named Rule, core definition, or recurring pillar, and show the logical chain rather than merely mentioning doctrine. When useful, begin from the objective of maximizing lifetime-average EWB, then show how a Rule diagnoses the ordinary problem and what useful strategic implication follows. Prefer contemporary, recognizable situations and counterintuitive conclusions over abstract book summaries.
+Each Big Idea must stand alone, normally in one to three concise sentences. A broader premise that genuinely requires long-form development may use up to six, but do not pre-write its outline. Root the reframe in at least one named Rule, core definition, or recurring pillar, and include only the minimum reasoning needed to make it click.
 
-For each idea, provide three to six concise concepts or angles Harvey could mention while developing it, plus one to four exact manuscript quotations that directly support it. The concepts are prompts for thought, not an ordered outline. Do not pad them into beats or a script.
+For each idea, provide three to six concise concepts or angles Harvey could mention later while developing it, plus one to four exact manuscript quotations that directly support it. Keep these separate from the Big Idea itself; the Big Idea must remain the clean reframe, not absorb its future outline.
 
 Learned preference profile:
 ${settings.preference_profile}
