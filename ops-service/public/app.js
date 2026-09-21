@@ -69,6 +69,11 @@
         { id: 'content-analytics', label: 'Content Analytics' },
         { id: 'sales-analytics', label: 'Sales Analytics' },
         { id: 'website-analytics', label: 'Website Analytics' }
+      ] },
+    // Rail-only utility: routable like every other leaf, deliberately
+    // omitted from the horizontal product-area navigation.
+    { label: 'Manuscript', railOnly: true, tabs: [
+        { id: 'manuscript', label: 'The Reality Manual' }
       ] }
   ];
   var TABS = GROUPS.reduce(function (acc, g) { return acc.concat(g.tabs); }, []);
@@ -145,7 +150,7 @@
   // renderActiveTab to check against). Real <a href="#tab">, not a
   // <button>, so middle-click/ctrl+click "open in new tab" still works.
   function renderTabs() {
-    var groups = IS_REVIEWER ? GROUPS.filter(function (g) { return g.label === 'Content Ops'; }) : GROUPS;
+    var groups = IS_REVIEWER ? GROUPS.filter(function (g) { return g.label === 'Content Ops'; }) : GROUPS.filter(function (g) { return !g.railOnly; });
     panelTabs.innerHTML = groups.map(function (g) {
       var ids = g.tabs.map(function (t) { return t.id; });
       return '<a href="#' + ids[0] + '" class="panel-tab" data-tabs="' + ids.join(',') + '">' + g.label + '</a>';
@@ -303,6 +308,7 @@
     var backFab = document.getElementById('pmBackFab');
     if (backFab) backFab.classList.toggle('show', active !== 'project-manager');
     panelMain.classList.toggle('panel-main--ideation', active === 'content-ideation');
+    panelMain.classList.toggle('panel-main--manuscript', active === 'manuscript');
     if (active !== 'project-manager' && pmSync) { pmSync.stop(); pmSync = null; }
     if (active === 'project-manager') {
       panelMain.innerHTML = PM_MARKUP;
@@ -312,6 +318,8 @@
       bootContentOps();
     } else if (active === 'content-ideation') {
       window.RMIdeation.mount(panelMain);
+    } else if (active === 'manuscript') {
+      window.RMManuscript.mount(panelMain);
     } else if (active === 'upload-files') {
       panelMain.innerHTML = UPLOAD_MARKUP;
       bootUploadFiles();

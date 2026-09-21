@@ -8612,3 +8612,44 @@ surrounding prompt was changed to agree with the new definition and length
 instead of fighting it with §177's previous “specific practical situation”
 framing. The integration test now asserts the new formula, examples, negative
 constraints, and concise length contract. Full Node suite: 8/8 passing.
+
+---
+
+# 179. Integrated Desktop Manuscript Reader and AI Semantic Finder (2026-09-21)
+
+Harvey wanted the complete Reality Manual inside Content Studio so ideation and
+outline work no longer requires keeping the manuscript PDF open in another
+window. The desktop icon rail now has a book icon pinned to its bottom. It is a
+rail-only destination—deliberately absent from the ordinary product-area tabs
+and from the mobile UI—and opens a reconstructed ivory two-page book spread.
+
+The reader serves the canonical 180-page
+`THE_REALITY_MANUAL_COMPLETE_MANUSCRIPT.txt`, preserving its real page numbers
+while removing `*IMAGE:` descriptions and page delimiter metadata from the
+reading view. A numeric Page field with Go and previous/next-spread controls can
+open any requested page; odd/even alignment keeps the requested page visible on
+the physically appropriate side, including a blank verso beside page 1.
+
+The left-hand finder is deliberately not a keyword filter. Each natural-language
+query becomes a persistent `manuscript_search_jobs` row and is processed in the
+background by the currently selected Ideation AI provider (Codex by default).
+The provider is instructed to inspect the canonical manuscript by meaning,
+including related Rules, arguments, definitions, implications, and examples
+whose vocabulary differs from the query. It returns 3–8 ranked passages with a
+page, concise relevance explanation, and exact excerpt. The server rejects
+invalid/duplicate pages, verifies excerpts against the claimed page (falling
+back to real page text rather than showing fabricated copy), caches identical
+completed queries, and returns in-progress jobs to `pending` after a service
+restart. Clicking any result opens the corresponding spread.
+
+Implementation lives in `src/manuscriptService.js` (authenticated page/search
+API and durable worker), `public/manuscript.js` (reader/search interaction), and
+the dedicated reader styles in `public/style.css`. The complete API is
+admin-only because it exposes the full manuscript; the reviewer role cannot see
+the rail icon and is redirected if it hand-edits the hash.
+
+Verification: all touched JavaScript passes syntax checks; the new integration
+test proves page pairing, diagram removal, background AI-job completion, result
+validation, semantic-search prompting, and completed-query caching; the full
+ops-service suite passes 9/9. A real-browser production check is required after
+deployment because this is a DOM/navigation feature, per §123.
