@@ -5,86 +5,103 @@ const assert = require('node:assert/strict');
 const express = require('express');
 const Database = require('better-sqlite3');
 const ideationService = require('../src/ideationService');
+const corpus = require('../src/ideationCorpus');
 
-function proposal(seed, revised) {
+const TEST_QUOTE = corpus.loadManuscript().pages[0].text.split('\n').map(function (line) { return line.trim(); }).find(function (line) { return line.length > 30; }).slice(0, 90);
+
+function idea(seed) {
   const token = 'concept' + seed.toString(36);
-  const isLongform = seed % 7 === 0;
+  const distinct = Array.from({ length: 12 }, function (_, index) { return token + 'angle' + index; }).join(' ');
   return {
-    contentType: isLongform ? 'longform' : 'short',
-    title: (revised ? 'Revised ' : '') + token,
-    alternativeTitles: isLongform ? [token + ' alternative one', token + ' alternative two', token + ' alternative three'] : [],
-    bigIdea: token + ' angle' + seed.toString(36) + ' application' + seed.toString(36) + ' consequence' + seed.toString(36),
-    hook: 'Opening-' + seed,
-    manuscriptSources: ['Source-' + seed], relevantSections: ['Section I'], relevantPages: [1], directQuotes: [],
-    paraphrases: ['Clearly marked paraphrase ' + seed],
-    script: (revised ? 'REVISED OPENING\n' : '') + (isLongform ? Array(700).fill('usable').join(' ') : 'Usable script ' + seed + ' with a practical emotional well-being conclusion.')
+    bigIdea: distinct + '. This is a sufficiently detailed and practical Big Idea grounded in a real manuscript principle.',
+    conceptsToDiscuss: ['Apply the relevant Rule to ' + token, 'Explain the practical emotional cost of ' + token, 'Show the better strategic response'],
+    directQuotes: [TEST_QUOTE]
   };
 }
 
-test('persistent queue, revisions, learning signals, and Kanban transfer work together', async function (t) {
+test('Big Idea queue, verified support, and Ideation-stage transfer work together', async function (t) {
   const db = new Database(':memory:');
   db.exec('CREATE TABLE records(store_name TEXT,id TEXT,data TEXT,updated_at TEXT,PRIMARY KEY(store_name,id))');
   let generation = 0;
   let generationPrompt = '';
   const fakeProviders = {
     generate: async function (provider, prompt) {
-      if (prompt.startsWith('Maintain a compact')) return { provider: provider, model: 'test', text: JSON.stringify({ summary: 'Prefers precision.', likes: ['precision'], avoids: ['generic'], hookPreferences: [], formatPreferences: [] }) };
-      if (prompt.indexOf('Revise this proposal') !== -1) return { provider: provider, model: 'test', text: JSON.stringify({ proposal: proposal(9000, true), changeSummary: ['Changed only the opening.'] }) };
+      if (prompt.startsWith('Maintain a compact')) {
+        return { provider: provider, model: 'test', text: JSON.stringify({ summary: 'Prefers useful premises.', likes: ['specificity'], avoids: ['generic summaries'] }) };
+      }
       const count = Number((prompt.match(/Generate (\d+)/) || [0, 1])[1]);
       generationPrompt = prompt;
       generation++;
-      return { provider: provider, model: 'test', sessionId: 'test-session', text: JSON.stringify({ proposals: Array.from({ length: count }, function (_, i) { return proposal(generation * 100 + i, false); }) }) };
+      return {
+        provider: provider,
+        model: 'test',
+        sessionId: 'test-session',
+        text: JSON.stringify({ ideas: Array.from({ length: count }, function (_, index) { return idea(generation * 100 + index); }) })
+      };
     }
   };
+
   const service = ideationService.setup(db, { providers: fakeProviders, autoStart: false });
-  const app = express(); app.use(express.json()); app.use('/api/ideation', service.router);
-  const server = app.listen(0); t.after(function () { server.close(); db.close(); });
+  const app = express();
+  app.use(express.json());
+  app.use('/api/ideation', service.router);
+  const server = app.listen(0);
+  t.after(function () { server.close(); db.close(); });
   const base = 'http://127.0.0.1:' + server.address().port + '/api/ideation';
+
   async function request(path, method, body) {
-    const response = await fetch(base + path, { method: method || 'GET', headers: { 'content-type': 'application/json' }, body: body == null ? undefined : JSON.stringify(body) });
+    const response = await fetch(base + path, {
+      method: method || 'GET',
+      headers: { 'content-type': 'application/json' },
+      body: body == null ? undefined : JSON.stringify(body)
+    });
     const data = await response.json();
-    assert.equal(response.ok, true, JSON.stringify(data)); return data;
+    assert.equal(response.ok, true, JSON.stringify(data));
+    return data;
   }
+
   async function waitFor(predicate) {
-    for (let i = 0; i < 80; i++) { const value = await request('/state'); if (predicate(value)) return value; await new Promise(function (r) { setTimeout(r, 20); }); }
+    for (let i = 0; i < 100; i++) {
+      const value = await request('/state');
+      if (predicate(value)) return value;
+      await new Promise(function (resolve) { setTimeout(resolve, 20); });
+    }
     throw new Error('Timed out waiting for Ideation worker');
   }
 
-  let state = await request('/state');
-  state = await waitFor(function (s) { return s.ideas.length === 10; });
+  let state = await waitFor(function (value) { return value.ideas.length === 10; });
   assert.equal(state.selectedProvider, 'codex');
-  assert.equal(state.ideas.find(function (idea) { return idea.content_type === 'longform'; }).alternative_titles.length, 3);
+  assert.equal(state.ideas[0].content_type, 'idea');
+  assert.equal(state.ideas[0].script, '');
+  assert.equal(state.ideas[0].hook, '');
+  assert.equal(state.ideas[0].discussion_angles.length, 3);
+  assert.equal(state.ideas[0].verified_quotes.length, 1);
+  assert.equal(state.ideas[0].verified_quotes[0].verified, true);
+  assert.match(generationPrompt, /Do not write titles, hooks, scripts, outlines/);
   assert.match(generationPrompt, /Rule XIV, The Rule of Crystallized Emotion/);
-  assert.match(generationPrompt, /must not contain timestamps, timecodes/);
-  const edited = state.ideas[0];
-  const nextAfterEdited = state.ideas[1];
-  await request('/ideas/' + edited.id, 'PATCH', { title: edited.title, bigIdea: edited.big_idea, hook: edited.hook, script: edited.script + '\nManual sentence.' });
-  await request('/ideas/' + edited.id + '/feedback', 'POST', { text: 'Use a sharper opening.', source: 'voice' });
-  const queuedRevision = await request('/ideas/' + edited.id + '/revise', 'POST', {});
-  assert.equal(queuedRevision.focusIdeaId, nextAfterEdited.id);
-  state = await waitFor(function (s) { const idea = s.ideas.find(function (x) { return x.id === edited.id; }); return idea && idea.revisions.some(function (r) { return r.kind === 'ai_revision'; }); });
-  const revised = state.ideas.find(function (x) { return x.id === edited.id; });
-  assert.equal(state.ideas[0].id, nextAfterEdited.id);
-  assert.equal(state.ideas[1].id, revised.id);
-  assert.equal(revised.edited, true); assert.equal(revised.feedback[0].source, 'voice');
-  assert.ok(revised.revisions[0].diff.some(function (line) { return line.type === 'add'; }));
+  assert.match(generationPrompt, /conceptsToDiscuss/);
+  assert.match(generationPrompt, /anxiety that someone is losing interest/);
 
-  const transferred = state.ideas[1];
-  const transfer = await request('/ideas/' + transferred.id + '/transfer', 'POST', { title: transferred.title, bigIdea: transferred.big_idea, hook: transferred.hook, script: transferred.script, destination: 'outline_completed' });
-  assert.equal(transfer.piece.stage, 'outline_completed');
-  assert.equal(JSON.parse(db.prepare("SELECT data FROM records WHERE store_name='pieces' AND id=?").get(transfer.piece.id).data).ideationMetadata.ideaId, transferred.id);
-  state = await waitFor(function (s) { return s.ideas.length === 10; });
+  const accepted = state.ideas[0];
+  const transfer = await request('/ideas/' + accepted.id + '/transfer', 'POST', {});
+  assert.equal(transfer.piece.stage, 'ideation');
+  assert.equal(transfer.piece.contentType, 'short');
+  assert.deepEqual(transfer.piece.platforms, []);
+  assert.match(transfer.piece.notesHtml, /<h3>Big Idea<\/h3>/);
+  assert.match(transfer.piece.notesHtml, /Concepts \/ angles to mention/);
+  assert.match(transfer.piece.notesHtml, /Direct quotes/);
+  const stored = JSON.parse(db.prepare("SELECT data FROM records WHERE store_name='pieces' AND id=?").get(transfer.piece.id).data);
+  assert.equal(stored.ideationMetadata.ideaId, accepted.id);
+  assert.equal(stored.ideationMetadata.conceptsToDiscuss.length, 3);
+  assert.equal(db.prepare("SELECT count(*) AS n FROM ideation_signals WHERE signal_type='sent_to_ideation'").get().n, 1);
 
-  const rejected = state.ideas.find(function (x) { return x.id !== edited.id; });
-  await request('/ideas/' + rejected.id + '/reject', 'POST', { title: rejected.title, bigIdea: rejected.big_idea, hook: rejected.hook, script: rejected.script, feedback: 'Too generic.' });
-  state = await waitFor(function (s) { return s.ideas.length === 10; });
-  assert.equal(db.prepare("SELECT count(*) n FROM ideation_signals WHERE signal_type='not_interested'").get().n, 1);
+  state = await waitFor(function (value) { return value.ideas.length === 10; });
+  assert.equal(state.ideas.some(function (entry) { return entry.id === accepted.id; }), false);
 
   await request('/provider', 'PUT', { provider: 'claude' });
   assert.equal((await request('/state')).selectedProvider, 'claude');
-  const timestamped = state.ideas[0];
-  db.prepare('UPDATE ideation_ideas SET script=? WHERE id=?').run('0:00 — HOOK\nA clean opening.\n1:15-2:00 — EXAMPLE\nA clean example.', timestamped.id);
   const restarted = ideationService.setup(db, { providers: fakeProviders, autoStart: false });
-  assert.equal(restarted.state().ideas.length, 10); assert.equal(restarted.state().selectedProvider, 'claude');
-  assert.equal(restarted.state().ideas.find(function (idea) { return idea.id === timestamped.id; }).script, 'HOOK\nA clean opening.\nEXAMPLE\nA clean example.');
+  assert.equal(restarted.state().ideas.length, 10);
+  assert.equal(restarted.state().selectedProvider, 'claude');
+  assert.equal(db.prepare("SELECT count(*) AS n FROM ideation_migrations WHERE id='big_idea_cards_v1'").get().n, 1);
 });

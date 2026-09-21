@@ -7819,7 +7819,7 @@ configuration, not a permanent agent/provider coupling:
 
 ```
 Claude -> ElevenLabs
-Codex  -> OpenAI Audio API (`gpt-4o-mini-tts`, requested `spruce` voice)
+Codex  -> OpenAI Audio API (`gpt-4o-mini-tts`, `cedar` voice)
 ```
 
 Claude's existing behavior is preserved: microphone uploads still use the
@@ -7842,12 +7842,12 @@ fall back to ElevenLabs. `VOICE_TTS_PROVIDER_CLAUDE` and
 `VOICE_TTS_PROVIDER_CODEX` make the mapping changeable later, while
 `OPENAI_TTS_MODEL` and `OPENAI_TTS_VOICE` hold the OpenAI speech settings.
 
-There is one upstream caveat as of 2026-09-21: OpenAI documents Spruce as a
-ChatGPT voice, but the published Audio API voice list does not currently list
-Spruce. The integration sends `voice: spruce` exactly as Harvey requested and
-does not silently substitute another voice. A real API call cannot be verified
-until Harvey installs the separate OpenAI API key, and the API may reject the
-voice unless OpenAI makes Spruce available on the Speech endpoint.
+Harvey supplied the separate OpenAI API key on 2026-09-21 and it was installed
+only in the uncommitted VPS environment. The first real request proved that
+Spruce is a ChatGPT voice rather than an Audio API voice: OpenAI returned HTTP
+400 and its supported-value list omitted `spruce`. Codex speech therefore uses
+the supported OpenAI `cedar` voice; it remains entirely on OpenAI and never
+falls back to ElevenLabs.
 
 The host `/root/.codex/config.toml` now explicitly persists
 `model = "gpt-5.6-sol"`, `model_reasoning_effort = "medium"`,
@@ -8182,10 +8182,97 @@ server's stable error code and a readable message. Both interfaces show a red
 `Audio unavailable` state for other synthesis errors) instead of appearing to
 do nothing.
 
-This UX fix does not weaken the deliberate provider boundary from §158:
-Codex remains on OpenAI's Spruce voice and does not silently fall back to
-ElevenLabs. Actual Codex speech therefore still requires Harvey to place an
-OpenAI API key in the VPS ops-service environment, followed by a container
-redeploy; raw credential entry remains a human-only action. Real Chromium tests
-against the live desktop and mobile interfaces confirmed the visible error
-state and explanatory tooltip on each.
+This UX fix does not weaken the deliberate provider boundary from §158: Codex
+remains on OpenAI and does not silently fall back to ElevenLabs. Harvey later
+supplied the OpenAI key directly; it is installed only in the VPS environment,
+never committed. Real Chromium tests against the live desktop and mobile
+interfaces confirmed the visible error state and explanatory tooltip on each.
+
+---
+
+# 171. Content Ideation Is Now a Big-Idea Queue, Not a Script Generator
+
+Harvey rejected the full proposal/script workflow as premature: until the
+system has more examples of content he has developed himself, Ideation should
+surface only the valuable editorial premise and manuscript support. The
+generation contract now explicitly forbids titles, hooks, scripts, outlines,
+formats, runtimes, timestamps, camera directions, and production instructions.
+Each result contains only:
+
+- a self-contained two-to-five-sentence **Big Idea** connecting a recognizable
+  real-world situation to a specific Reality Manual rule/pillar and practical
+  EWB stakes;
+- three to six **concepts / angles to mention**, which are prompts for Harvey's
+  own thinking rather than ordered content beats; and
+- one to four **direct manuscript quotes**, all passed through the existing
+  exact corpus verifier and displayed with their canonical pages.
+
+The prompt includes Harvey's relationship-anxiety example as a model of the
+desired specificity and logical shape, explicitly not as an idea to repeat. It
+retains the doctrine map, the learned preference profile, and the historical
+duplicate catalog, but no longer feeds representative completed scripts back
+into generation.
+
+Cards now render this entire compact payload directly, with alternating
+backgrounds and a single **Send to Ideation** action. There are no generated
+titles or format/runtime labels, editable hook/script fields, feedback/revision
+controls, source-audit blocks, or alternate destinations. Acceptance creates a
+normal piece at the main Content Pipeline's `ideation` stage, with the Big Idea,
+concepts, and verified quotes in `notesHtml` and structured
+`ideationMetadata`; its required internal card label is derived from the first
+sentence rather than generated as a separate title. Platform selection is
+left blank and the normal short content type is only a pipeline-compatible
+default for Harvey to change while developing the piece.
+
+The database adds `discussion_angles` plus a one-time migration ledger. On the
+first deployment of this version, existing full-script active proposals are
+marked `superseded` rather than deleted (preserving their revisions, feedback,
+and learning history), stale jobs are cancelled, and ten entirely new Big Idea
+cards are generated. The service integration test covers generation, quote
+verification, exact payload shape, Ideation-stage transfer, automatic queue
+replacement, learning signal, provider persistence, and one-time migration.
+Real Chromium tests at 1440×1000 and 390×844 verified the new card contents,
+single action, absence of the old title/hook/script/revision controls, transfer
+refresh, no runtime errors, and no horizontal overflow. A clean Docker image
+build also passed before deployment.
+
+---
+
+# 172. Codex Long Turns No Longer Time Out or Leave an Active Thread Writer
+
+Two consecutive Project Manager failures had one root cause. `codexRunner.js`
+used a fixed twenty-minute wall-clock timeout. A legitimate long implementation
+turn reached that limit and the runner killed only its local SSH client; the
+host-side Codex process survived, retained the thread store's writer lock, and
+continued outside the service's control. The serialized voice queue then
+started the next message against the same stored thread ID, producing
+`thread-store conflict ... already has an active writer`. The noisy SSH
+known-host warning was unrelated but was included in the surfaced stderr.
+
+Codex supervision is now host-aware:
+
+- Project Manager turns use a four-hour **inactivity** watchdog, rearmed by
+  every streamed stdout/stderr event, rather than a twenty-minute total runtime
+  cap. Ideation generation uses the same semantics with a one-hour inactivity
+  window. Active long turns therefore have no practical wall-clock limit.
+- Every host invocation runs in its own process group and records the group
+  leader in a narrowly named `/tmp/rm-codex-<owner>.pid` file. Before a new
+  Project Manager turn starts, it validates and terminates any surviving group
+  from that same dedicated owner lane. If the inactivity watchdog ever fires,
+  it terminates that exact host process group (TERM, bounded wait, then KILL),
+  waits for cleanup, and only then allows the queue to advance.
+- The PID is validated against the configured Codex executable before any
+  signal is sent, so a stale/reused PID cannot target an unrelated process.
+  The SSH client now uses `LogLevel=ERROR`, removing the harmless permanent-host
+  warning from failure text.
+- If Codex still reports an active-writer/session-store conflict (for example,
+  one left by the pre-fix runner), the server clears that stored thread and
+  retries the message once in a fresh session instead of presenting the raw
+  conflict to Harvey.
+
+Validation included shell-syntax checking of the generated nested remote
+supervision command, a real host Codex smoke turn through the SSH wrapper, and
+a forced one-second inactivity test around a thirty-second Codex shell command.
+The forced stop returned only after the host process group was gone and its PID
+file had been removed, proving the failure cannot leave the writer that caused
+the second error.

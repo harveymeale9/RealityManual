@@ -7,7 +7,9 @@
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_TTS_BASE_URL = (process.env.OPENAI_TTS_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
 const OPENAI_TTS_MODEL = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';
-const OPENAI_TTS_VOICE = process.env.OPENAI_TTS_VOICE || 'spruce';
+// Spruce is a ChatGPT voice, not an Audio API voice. Cedar is the closest
+// supported high-quality OpenAI voice and keeps Codex speech fully on OpenAI.
+const OPENAI_TTS_VOICE = process.env.OPENAI_TTS_VOICE || 'cedar';
 
 async function synthesizeSpeech(text) {
   if (!OPENAI_API_KEY) {

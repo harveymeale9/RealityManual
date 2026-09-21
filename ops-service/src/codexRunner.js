@@ -10,12 +10,17 @@
 // into the same three callbacks the Project Manager already persists for
 // Claude: an early acknowledgment, activity lines, and one final reply.
 const { spawn } = require('child_process');
+const crypto = require('crypto');
 
 const HOST = process.env.CODEX_HOST || 'ubuntu@host.docker.internal';
 const HOST_BIN = process.env.CODEX_HOST_BIN || '/root/.local/bin/codex';
 const HOST_REPO = process.env.CODEX_HOST_REPO || '/srv/realitymanual-repo';
-const DEFAULT_TIMEOUT_MS = 20 * 60 * 1000;
+// This is an inactivity watchdog, not a wall-clock turn limit. Long-running
+// implementation turns can legitimately exceed twenty minutes while still
+// emitting Codex events, so every stdout/stderr event rearms it.
+const DEFAULT_TIMEOUT_MS = 4 * 60 * 60 * 1000;
 const SESSION_ID_RE = /^[A-Za-z0-9_-]{8,128}$/;
+const OWNER_KEY_RE = /^[A-Za-z0-9_-]{3,80}$/;
 
 function shellQuote(value) {
   return "'" + String(value).replace(/'/g, "'\\''") + "'";
@@ -58,7 +63,19 @@ function errorText(evt) {
   return '';
 }
 
-function buildRemoteCommand(sessionId, imagePath) {
+function stopScript(pidFile) {
+  return 'if [ -s ' + shellQuote(pidFile) + ' ]; then ' +
+    'old_pid=$(cat ' + shellQuote(pidFile) + ' 2>/dev/null || true); ' +
+    'case "$old_pid" in (*[!0-9]*|"") old_pid="";; esac; ' +
+    'if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null && ' +
+    'tr "\\000" " " < "/proc/$old_pid/cmdline" 2>/dev/null | grep -F -q ' + shellQuote(HOST_BIN) + '; then ' +
+    '/bin/kill -TERM -- "-$old_pid" 2>/dev/null || true; ' +
+    'i=0; while [ "$i" -lt 20 ] && kill -0 "$old_pid" 2>/dev/null; do sleep 0.25; i=$((i+1)); done; ' +
+    'if kill -0 "$old_pid" 2>/dev/null; then /bin/kill -KILL -- "-$old_pid" 2>/dev/null || true; fi; ' +
+    'fi; rm -f ' + shellQuote(pidFile) + '; fi';
+}
+
+function buildRemoteCommand(sessionId, imagePath, pidFile) {
   const args = [HOST_BIN, 'exec'];
   if (sessionId) {
     args.push('resume', '--all', '--json', '--dangerously-bypass-approvals-and-sandbox');
@@ -69,7 +86,21 @@ function buildRemoteCommand(sessionId, imagePath) {
     if (imagePath) args.push('-i', imagePath);
     args.push('-');
   }
-  return 'cd ' + shellQuote(HOST_REPO) + ' && sudo -H ' + args.map(shellQuote).join(' ');
+  const runScript = 'echo $$ > ' + shellQuote(pidFile) + '; ' +
+    'trap ' + shellQuote('rm -f ' + shellQuote(pidFile)) + ' EXIT; ' +
+    args.map(shellQuote).join(' ');
+  const supervised = stopScript(pidFile) + '; exec setsid --wait sh -c ' + shellQuote(runScript);
+  return 'cd ' + shellQuote(HOST_REPO) + ' && sudo -H sh -c ' + shellQuote(supervised);
+}
+
+function stopRemoteRun(pidFile) {
+  return new Promise(function (resolve) {
+    const command = 'sudo -H sh -c ' + shellQuote(stopScript(pidFile));
+    const cleanup = spawn('ssh', ['-o', 'LogLevel=ERROR', HOST, command], { stdio: 'ignore' });
+    const fallback = setTimeout(function () { try { cleanup.kill('SIGKILL'); } catch (e) { /* best effort */ } }, 15000);
+    cleanup.on('error', function () { clearTimeout(fallback); resolve(); });
+    cleanup.on('close', function () { clearTimeout(fallback); resolve(); });
+  });
 }
 
 function runCodex(opts) {
@@ -78,12 +109,15 @@ function runCodex(opts) {
   const sessionId = opts.sessionId && SESSION_ID_RE.test(opts.sessionId) ? opts.sessionId : null;
   const imagePath = opts.imagePath ? String(opts.imagePath) : null;
   const timeoutMs = opts.timeoutMs || DEFAULT_TIMEOUT_MS;
+  const runId = crypto.randomBytes(12).toString('hex');
+  const ownerKey = opts.ownerKey && OWNER_KEY_RE.test(opts.ownerKey) ? opts.ownerKey : runId;
+  const pidFile = '/tmp/rm-codex-' + ownerKey + '.pid';
   const onActivity = typeof opts.onActivity === 'function' ? opts.onActivity : function () {};
   const onEarlyAck = typeof opts.onEarlyAck === 'function' ? opts.onEarlyAck : function () {};
 
   return new Promise(function (resolve) {
     onActivity('\u25cf Starting Codex on the VPS');
-    const child = spawn('ssh', [HOST, buildRemoteCommand(sessionId, imagePath)], {
+    const child = spawn('ssh', ['-o', 'LogLevel=ERROR', HOST, buildRemoteCommand(sessionId, imagePath, pidFile)], {
       stdio: ['pipe', 'pipe', 'pipe']
     });
     let stdoutBuffer = '';
@@ -94,12 +128,27 @@ function runCodex(opts) {
     let agentMessageCount = 0;
     let streamError = '';
     let settled = false;
+    let timeoutTriggered = false;
+    let timeout = null;
 
     function finish(result) {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
       resolve(result);
+    }
+
+    function armWatchdog() {
+      if (settled) return;
+      clearTimeout(timeout);
+      timeout = setTimeout(function () {
+        timeoutTriggered = true;
+        onActivity('\u2715 Codex produced no activity for ' + Math.round(timeoutMs / 60000) + ' minutes; stopping its host process cleanly');
+        stopRemoteRun(pidFile).then(function () {
+          try { child.kill('SIGTERM'); } catch (e) { /* best effort */ }
+          finish({ ok: false, error: 'Codex stopped after ' + Math.round(timeoutMs / 60000) + ' minutes without activity', sessionId: threadId });
+        });
+      }, timeoutMs);
     }
 
     function handleEvent(evt) {
@@ -154,15 +203,17 @@ function runCodex(opts) {
 
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', function (chunk) {
+      armWatchdog();
       stdoutBuffer += chunk;
       consumeLines(false);
     });
     child.stderr.setEncoding('utf8');
-    child.stderr.on('data', function (chunk) { stderr += chunk; });
+    child.stderr.on('data', function (chunk) { armWatchdog(); stderr += chunk; });
     child.on('error', function (err) {
       finish({ ok: false, error: 'codex_start_failed: ' + err.message, sessionId: threadId });
     });
     child.on('close', function (code) {
+      if (timeoutTriggered) return;
       consumeLines(true);
       if (code === 0 && finalText) {
         finish({ ok: true, replyText: finalText, sessionId: threadId });
@@ -172,11 +223,7 @@ function runCodex(opts) {
       finish({ ok: false, error: detail, sessionId: threadId });
     });
 
-    const timeout = setTimeout(function () {
-      try { child.kill('SIGTERM'); } catch (e) { /* best effort */ }
-      finish({ ok: false, error: 'timed_out after ' + Math.round(timeoutMs / 1000) + 's', sessionId: threadId });
-    }, timeoutMs);
-
+    armWatchdog();
     child.stdin.end(prompt);
   });
 }

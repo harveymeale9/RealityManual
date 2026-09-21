@@ -16,7 +16,9 @@ async function generate(provider, prompt, onActivity) {
   if (provider === 'codex') {
     const result = await codexRunner.runCodex({
       prompt: prompt,
-      timeoutMs: 20 * 60 * 1000,
+      // Inactivity watchdog (rearmed by every streamed Codex event), not a
+      // twenty-minute total generation cap.
+      timeoutMs: 60 * 60 * 1000,
       onActivity: onActivity || function () {}
     });
     if (!result.ok) throw new Error(result.error || 'Codex generation failed');

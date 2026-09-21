@@ -1403,6 +1403,7 @@ async function processVoiceMessage(id, mode, text, agent, imageBlock, imagePath)
       return codexRunner.runCodex({
         prompt: prompt,
         sessionId: resumeId,
+        ownerKey: 'project-manager',
         onActivity: onActivity,
         onEarlyAck: onEarlyAck,
         imagePath: imagePath
@@ -1426,14 +1427,17 @@ async function processVoiceMessage(id, mode, text, agent, imageBlock, imagePath)
   const missingSession = agent === 'codex'
     ? /thread|session|rollout/i.test(result.error || '') && /not found|no .*found|unknown|missing/i.test(result.error || '')
     : /no conversation found/i.test(result.error || '');
-  if (!result.ok && sessionId && missingSession) {
-    console.error('voice ' + agent + ' session ' + sessionId + ' is gone, starting fresh:', result.error);
+  const writerConflict = agent === 'codex' && /active writer|thread-store conflict/i.test(result.error || '');
+  if (!result.ok && sessionId && (missingSession || writerConflict)) {
+    console.error('voice ' + agent + ' session ' + sessionId + ' cannot be resumed, starting fresh:', result.error);
     if (agent === 'codex') stmts.upsertCodexSession.run(null, new Date().toISOString());
     else {
       stmts.upsertVoiceSession.run(null, new Date().toISOString());
       claudeRunner.resetSession();
     }
-    activity.push('— previous session was lost, starting a new one —');
+    activity.push(writerConflict
+      ? '— previous Codex writer was still attached; isolated it and started a clean session —'
+      : '— previous session was lost, starting a new one —');
     result = await runSelectedAgent(null);
   }
   const now = new Date().toISOString();
