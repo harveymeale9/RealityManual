@@ -8651,5 +8651,10 @@ the rail icon and is redirected if it hand-edits the hash.
 Verification: all touched JavaScript passes syntax checks; the new integration
 test proves page pairing, diagram removal, background AI-job completion, result
 validation, semantic-search prompting, and completed-query caching; the full
-ops-service suite passes 9/9. A real-browser production check is required after
-deployment because this is a DOM/navigation feature, per §123.
+ops-service suite passes 9/9. The final check used headless Chromium against the
+real deployed `ops.realitymanual.com`: the bottom book icon opened page 1,
+direct entry of page 34 rendered the 34–35 spread with no diagram marker, and a
+natural-language query about knowing what action to take but being unable to do
+it returned seven AI-ranked passages. Its first result was page 110, and clicking
+it opened the 110–111 spread. This verifies the actual DOM/navigation/search
+loop rather than merely proving that the JavaScript parses, per §123.
