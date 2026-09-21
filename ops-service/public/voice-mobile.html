@@ -423,7 +423,7 @@
         // starting playback never updated a button-local flag).
         playBtn.addEventListener('click', function () {
           if (Voice.currentlySpeaking() === msgId) { Voice.stopSpeaking(); return; }
-          Voice.speak(text, msgId).catch(function () {});
+          Voice.speak(text, msgId, agent).catch(function () {});
         });
         meta.appendChild(playBtn);
         if (msgId) {
@@ -596,8 +596,8 @@
             // visible even for a typed/no-speech send, not just spoken.
             var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
             if (typingEl) typingEl.textContent = row.early_ack;
-            if (!voiceAutoSpeak[row.id]) return;
-            Voice.speak(row.early_ack, row.id).catch(function () {});
+            if (!voiceAutoSpeak[row.id] || row.agent === 'codex') return;
+            Voice.speak(row.early_ack, row.id, row.agent).catch(function () {});
           },
           onDone: function (row) {
             // Look the placeholder up (rather than just removeTyping()) so
@@ -616,11 +616,15 @@
               // too when this turn was genuinely quick/no-tool-calls — a
               // turn that did real work only gets the one spoken
               // acknowledgment, with the actual answer landing as text.
-              var usedTools = !!(row.activity_log && row.activity_log.length);
               var replyText = row.reply_text || '';
-              var alreadySaidIt = row.early_ack && replyText.trim() === row.early_ack.trim();
-              if (!usedTools && !alreadySaidIt && row.mode !== 'execute') {
-                Voice.speak(replyText, row.id).catch(function () {});
+              if (row.agent === 'codex' && row.mode !== 'execute') {
+                Voice.speak(replyText, row.id, row.agent).catch(function () {});
+              } else {
+                var usedTools = !!(row.activity_log && row.activity_log.length);
+                var alreadySaidIt = row.early_ack && replyText.trim() === row.early_ack.trim();
+                if (!usedTools && !alreadySaidIt && row.mode !== 'execute') {
+                  Voice.speak(replyText, row.id, row.agent).catch(function () {});
+                }
               }
             }
           },
@@ -631,7 +635,7 @@
             if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
             if (voiceAutoSpeak[row.id]) {
               delete voiceAutoSpeak[row.id];
-              Voice.speak(row.error_message || 'Something went wrong.', row.id).catch(function () {});
+              if (row.agent !== 'codex') Voice.speak(row.error_message || 'Something went wrong.', row.id, row.agent).catch(function () {});
             }
           },
           onTick: function (rows) {
@@ -752,7 +756,7 @@
                 // ack — no need to wait on a real early_ack the way respond
                 // mode does, and execute never speaks the real result either
                 // way, so there's no "redundant double-speak" risk.
-                Voice.speak(EXECUTE_ACK_TEXT, created.id).catch(function () {});
+                if (agent !== 'codex') Voice.speak(EXECUTE_ACK_TEXT, created.id, agent).catch(function () {});
               } else {
                 // Same as desktop: mark it eligible for auto-speak and let
                 // the shared sync engine's onEarlyAck/onDone (above) decide

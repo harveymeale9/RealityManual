@@ -7808,3 +7808,62 @@ at desktop size and 390×844 mobile size verified both labels/colors, both
 selectors, persistence across reload, and selector propagation from mobile
 back to desktop. Syntax checks, `git diff --check`, and an independent
 Docker build also passed before deployment.
+
+---
+
+# 158. Agent-Aware Project Manager Speech: Claude/ElevenLabs and Codex/OpenAI
+
+Project Manager speech output is now routed through a small provider adapter
+instead of every response going directly to ElevenLabs. The default mapping is
+configuration, not a permanent agent/provider coupling:
+
+```
+Claude -> ElevenLabs
+Codex  -> OpenAI Audio API (`gpt-4o-mini-tts`, requested `spruce` voice)
+```
+
+Claude's existing behavior is preserved: microphone uploads still use the
+unchanged ElevenLabs transcription path, and Claude early acknowledgments and
+eligible final replies still use the existing ElevenLabs synthesis function.
+Codex never falls back to ElevenLabs. Its TTS endpoint requires the ID of a
+completed Codex `voice_messages` row and obtains the text from that database
+row, rather than trusting browser-supplied text. This makes the boundary
+server-enforced: only the final user-facing Codex reply can be spoken, never an
+early acknowledgment, shell command, reasoning/activity event, log, or error.
+The OpenAI response is piped to the browser as it arrives; browsers with MP3
+MediaSource support begin playback incrementally and others safely use the
+existing complete-Blob playback approach.
+
+Codex agent authentication remains the host's ChatGPT login. OpenAI speech is
+a separate API service and requires `OPENAI_API_KEY` in the uncommitted
+`ops-service/.env`; no API key is passed to the Codex CLI or browser. If the key
+is absent, Codex speech returns `503 openai_tts_not_configured` and does not
+fall back to ElevenLabs. `VOICE_TTS_PROVIDER_CLAUDE` and
+`VOICE_TTS_PROVIDER_CODEX` make the mapping changeable later, while
+`OPENAI_TTS_MODEL` and `OPENAI_TTS_VOICE` hold the OpenAI speech settings.
+
+There is one upstream caveat as of 2026-09-21: OpenAI documents Spruce as a
+ChatGPT voice, but the published Audio API voice list does not currently list
+Spruce. The integration sends `voice: spruce` exactly as Harvey requested and
+does not silently substitute another voice. A real API call cannot be verified
+until Harvey installs the separate OpenAI API key, and the API may reject the
+voice unless OpenAI makes Spruce available on the Speech endpoint.
+
+The host `/root/.codex/config.toml` now explicitly persists
+`model = "gpt-5.6-sol"`, `model_reasoning_effort = "medium"`,
+`sandbox_mode = "danger-full-access"`, and `approval_policy = "never"`.
+Project trust entries were preserved, ChatGPT authentication remains in use,
+and an explicit `codex -m ...` override still changes the model for a manually
+requested session.
+
+Verification used an isolated `rm-ops-codex-tts-test` container and a local
+streaming OpenAI-compatible mock, leaving the production container untouched
+until deployment. Route tests proved the exact OpenAI request used Spruce,
+Codex made zero ElevenLabs calls, Claude made zero OpenAI calls, and missing
+OpenAI credentials failed closed. Real ElevenLabs synthesis and transcription
+both succeeded. Headless Chromium tested desktop and 390×844 mobile layouts,
+selector persistence/reload, manual playback for each provider, and microphone
+turns through both agents. The OpenAI mock received only completed Codex reply
+text. Finally, the staging backend was restarted: its Codex native session ID
+survived, the resumed turn recalled prior context, ran host `pwd` and
+`docker ps`, and its rollout recorded GPT-5.6 Sol with medium reasoning.

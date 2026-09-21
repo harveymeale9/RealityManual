@@ -8,10 +8,13 @@ const multer = require('multer');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { Readable } = require('stream');
 const Database = require('better-sqlite3');
 const claudeRunner = require('./src/claudeRunner');
 const codexRunner = require('./src/codexRunner');
 const elevenlabs = require('./src/elevenlabs');
+const ttsRouter = require('./src/ttsRouter');
+const speechText = require('./src/speechText');
 const videoAnalysis = require('./src/videoAnalysis');
 const youtubeAuth = require('./src/youtubeAuth');
 const tiktokAuth = require('./src/tiktokAuth');
@@ -1568,15 +1571,46 @@ app.post('/api/voice/transcribe', voiceUpload.single('audio'), function (req, re
   });
 });
 
-app.post('/api/voice/tts', function (req, res) {
-  const text = req.body && req.body.text;
+app.post('/api/voice/tts', async function (req, res) {
+  const agent = normalizeVoiceAgent(req.body && req.body.agent);
+  let text = req.body && req.body.text;
+
+  // Codex may speak completed user-facing replies only. Resolve the text
+  // from the canonical DB row so browser code cannot accidentally send an
+  // early acknowledgment, command, reasoning event, log, or Activity line
+  // to OpenAI TTS. Claude deliberately keeps its existing browser-supplied
+  // text path so its ElevenLabs early-ack/final behavior stays unchanged.
+  if (agent === 'codex') {
+    const messageId = req.body && req.body.messageId;
+    const row = typeof messageId === 'string' ? stmts.getVoiceMessage.get(messageId) : null;
+    if (!row || normalizeVoiceAgent(row.agent) !== 'codex' || row.status !== 'done' || !row.reply_text) {
+      return res.status(400).json({ error: 'codex_tts_requires_completed_message' });
+    }
+    text = speechText.stripMarkdownForSpeech(row.reply_text);
+  }
+
   if (typeof text !== 'string' || !text.trim()) return res.status(400).json({ error: 'invalid_text' });
-  elevenlabs.synthesizeSpeech(text.trim().slice(0, 4000))
-    .then(function (audio) {
-      res.setHeader('Content-Type', 'audio/mpeg');
-      res.send(audio);
-    })
-    .catch(function (e) { console.error('tts failed:', e.message); res.status(502).json({ error: 'tts_failed' }); });
+  try {
+    const audio = await ttsRouter.synthesizeSpeech(agent, text.trim().slice(0, 4096));
+    res.setHeader('Content-Type', audio.contentType);
+    res.setHeader('X-RM-TTS-Provider', audio.provider);
+    res.setHeader('X-RM-TTS-Streaming', audio.streaming ? '1' : '0');
+    if (Buffer.isBuffer(audio.body)) return res.send(audio.body);
+    res.flushHeaders();
+    const stream = Readable.fromWeb(audio.body);
+    stream.on('error', function (err) {
+      console.error('tts stream failed:', err.message);
+      if (!res.destroyed) res.destroy(err);
+    });
+    res.on('close', function () { if (!stream.destroyed) stream.destroy(); });
+    stream.pipe(res);
+  } catch (e) {
+    console.error('tts failed (' + ttsRouter.providerForAgent(agent) + '):', e.message);
+    if (!res.headersSent) {
+      const status = e.code === 'openai_tts_not_configured' ? 503 : 502;
+      res.status(status).json({ error: e.code || 'tts_failed' });
+    }
+  }
 });
 
 app.use(function (err, req, res, next) {

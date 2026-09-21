@@ -241,6 +241,7 @@ window.RMVoice = (function () {
   }
 
   var currentAudio = null;
+  var currentAudioReader = null;
   // Which message a currently-playing (or about-to-play) audio belongs to,
   // and a tiny pub-sub so any page can keep its UI (a per-message Play/Stop
   // button, a "speaking" highlight) in sync regardless of whether playback
@@ -298,6 +299,10 @@ window.RMVoice = (function () {
 
   function stopSpeaking() {
     playToken++;
+    if (currentAudioReader) {
+      try { currentAudioReader.cancel(); } catch (e) { /* ignore */ }
+      currentAudioReader = null;
+    }
     if (currentAudio) {
       try { currentAudio.pause(); } catch (e) { /* ignore */ }
       currentAudio = null;
@@ -311,38 +316,138 @@ window.RMVoice = (function () {
   // msgId (optional): the voice_messages row id this audio belongs to, so
   // listeners registered via onSpeakingChange can highlight/un-highlight
   // the right UI element as playback starts and stops.
-  function speak(text, msgId) {
+  function finishAudioLifecycle(audio, url) {
+    audio.addEventListener('ended', function () {
+      if (currentAudio === audio) {
+        currentAudio = null;
+        currentAudioReader = null;
+        speakingMsgId = null;
+        notifySpeakingChange();
+      }
+      URL.revokeObjectURL(url);
+    });
+  }
+
+  function abandonAudio(audio, reader, url) {
+    if (reader) {
+      try { reader.cancel().catch(function () {}); } catch (e) { /* ignore */ }
+    }
+    try { audio.pause(); } catch (e) { /* ignore */ }
+    if (currentAudio === audio) {
+      currentAudio = null;
+      if (currentAudioReader === reader) currentAudioReader = null;
+      speakingMsgId = null;
+      notifySpeakingChange();
+    }
+    URL.revokeObjectURL(url);
+  }
+
+  function playBufferedResponse(response, myToken, msgId) {
+    return response.blob().then(function (blob) {
+      if (myToken !== playToken || recordingActive) return null;
+      var url = URL.createObjectURL(blob);
+      var audio = new Audio(url);
+      currentAudio = audio;
+      speakingMsgId = (typeof msgId !== 'undefined') ? msgId : null;
+      notifySpeakingChange();
+      finishAudioLifecycle(audio, url);
+      return audio.play().then(function () { return audio; }).catch(function (err) {
+        abandonAudio(audio, null, url);
+        throw err;
+      });
+    });
+  }
+
+  // OpenAI's Speech API returns chunked MP3. MediaSource lets a supporting
+  // browser start after the first decodable chunk instead of waiting for a
+  // complete Blob; browsers without audio/mpeg MediaSource support use the
+  // existing full-response playback path below.
+  function playStreamingResponse(response, myToken, msgId) {
+    var canStream = response.body && window.MediaSource &&
+      typeof MediaSource.isTypeSupported === 'function' && MediaSource.isTypeSupported('audio/mpeg');
+    if (!canStream) return playBufferedResponse(response, myToken, msgId);
+
+    var mediaSource = new MediaSource();
+    var url = URL.createObjectURL(mediaSource);
+    var audio = new Audio(url);
+    var reader = response.body.getReader();
+    currentAudio = audio;
+    currentAudioReader = reader;
+    speakingMsgId = (typeof msgId !== 'undefined') ? msgId : null;
+    notifySpeakingChange();
+    finishAudioLifecycle(audio, url);
+
+    return new Promise(function (resolve, reject) {
+      var sourceBuffer = null;
+      var streamDone = false;
+      var playbackStarted = false;
+      var settled = false;
+
+      function fail(err) {
+        abandonAudio(audio, reader, url);
+        if (!settled) {
+          settled = true;
+          reject(err);
+        }
+      }
+      function finishStream() {
+        if (!streamDone || !sourceBuffer || sourceBuffer.updating) return;
+        try { if (mediaSource.readyState === 'open') mediaSource.endOfStream(); } catch (e) { /* playback can still finish */ }
+        if (currentAudioReader === reader) currentAudioReader = null;
+      }
+      function readNext() {
+        if (myToken !== playToken || recordingActive) {
+          reader.cancel().catch(function () {});
+          if (!settled) { settled = true; resolve(null); }
+          return;
+        }
+        reader.read().then(function (part) {
+          if (part.done) {
+            streamDone = true;
+            finishStream();
+            return;
+          }
+          sourceBuffer.appendBuffer(part.value);
+        }).catch(fail);
+      }
+
+      mediaSource.addEventListener('sourceopen', function () {
+        try { sourceBuffer = mediaSource.addSourceBuffer('audio/mpeg'); } catch (e) {
+          reader.cancel().catch(function () {});
+          fail(e);
+          return;
+        }
+        sourceBuffer.addEventListener('error', function () { fail(new Error('Could not stream speech audio')); });
+        sourceBuffer.addEventListener('updateend', function () {
+          if (!playbackStarted) {
+            playbackStarted = true;
+            audio.play().then(function () {
+              if (!settled) { settled = true; resolve(audio); }
+            }).catch(fail);
+          }
+          if (streamDone) finishStream();
+          else readNext();
+        });
+        readNext();
+      }, { once: true });
+    });
+  }
+
+  function speak(text, msgId, agent) {
     var clean = stripMarkdownForSpeech(text);
     if (!clean || recordingActive) return Promise.resolve(null);
+    agent = agent === 'codex' ? 'codex' : 'claude';
     stopSpeaking();
     var myToken = playToken;
     return fetch(API_BASE + '/api/voice/tts', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: clean })
-    }).then(function (r) { if (!r.ok) throw new Error('Could not synthesize speech'); return r.blob(); })
-      .then(function (blob) {
-        // Superseded by a newer speak()/stopSpeaking() call while this
-        // fetch was still in flight, OR Harvey started recording a new
-        // message before this one's synthesis came back — either way,
-        // never create the Audio element for it, so it can't ever start
-        // playing on top of whatever's current now (or talk over him).
-        if (myToken !== playToken || recordingActive) return null;
-        var url = URL.createObjectURL(blob);
-        var audio = new Audio(url);
-        currentAudio = audio;
-        speakingMsgId = (typeof msgId !== 'undefined') ? msgId : null;
-        notifySpeakingChange();
-        audio.addEventListener('ended', function () {
-          if (currentAudio === audio) {
-            currentAudio = null;
-            speakingMsgId = null;
-            notifySpeakingChange();
-          }
-          URL.revokeObjectURL(url);
-        });
-        return audio.play().then(function () { return audio; });
+      body: JSON.stringify({ text: clean, messageId: msgId, agent: agent })
+    }).then(function (r) {
+      if (!r.ok) throw new Error('Could not synthesize speech');
+      if (r.headers.get('X-RM-TTS-Streaming') === '1') return playStreamingResponse(r, myToken, msgId);
+      return playBufferedResponse(r, myToken, msgId);
       });
   }
 

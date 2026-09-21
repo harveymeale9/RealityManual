@@ -579,7 +579,7 @@
       // instead of stopping it.
       playBtn.addEventListener('click', function () {
         if (Voice.currentlySpeaking() === msgId) { Voice.stopSpeaking(); return; }
-        Voice.speak(text, msgId).catch(function () {});
+        Voice.speak(text, msgId, agent).catch(function () {});
       });
       meta.appendChild(playBtn);
       if (msgId) {
@@ -774,8 +774,8 @@
         // even for a typed/no-speech send, not just spoken.
         var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
         if (typingEl) typingEl.textContent = row.early_ack;
-        if (!voiceAutoSpeak[row.id]) return;
-        Voice.speak(row.early_ack, row.id).catch(function () {});
+        if (!voiceAutoSpeak[row.id] || row.agent === 'codex') return;
+        Voice.speak(row.early_ack, row.id, row.agent).catch(function () {});
       },
       onDone: function (row) {
         // Look the placeholder up (rather than just removeTyping()) so its
@@ -803,11 +803,15 @@
           // spoken acknowledgment ("I'll look into it"), with the actual
           // answer landing as text, not a second spoken message stacked
           // on top of the first.
-          var usedTools = !!(row.activity_log && row.activity_log.length);
           var replyText = row.reply_text || '';
-          var alreadySaidIt = row.early_ack && replyText.trim() === row.early_ack.trim();
-          if (!usedTools && !alreadySaidIt && row.mode !== 'execute') {
-            Voice.speak(replyText, row.id).catch(function () {});
+          if (row.agent === 'codex' && row.mode !== 'execute') {
+            Voice.speak(replyText, row.id, row.agent).catch(function () {});
+          } else {
+            var usedTools = !!(row.activity_log && row.activity_log.length);
+            var alreadySaidIt = row.early_ack && replyText.trim() === row.early_ack.trim();
+            if (!usedTools && !alreadySaidIt && row.mode !== 'execute') {
+              Voice.speak(replyText, row.id, row.agent).catch(function () {});
+            }
           }
         }
       },
@@ -818,7 +822,7 @@
         if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
         if (voiceAutoSpeak[row.id]) {
           delete voiceAutoSpeak[row.id];
-          Voice.speak(row.error_message || 'Something went wrong.', row.id).catch(function () {});
+          if (row.agent !== 'codex') Voice.speak(row.error_message || 'Something went wrong.', row.id, row.agent).catch(function () {});
         }
       },
       onActivity: function (row) { renderActivity(row.activity_log); },
