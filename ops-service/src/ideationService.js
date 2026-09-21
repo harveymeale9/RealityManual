@@ -9,6 +9,7 @@ const providers = require('./ideationProviders');
 
 const TARGET_ACTIVE = 10;
 const BIG_IDEA_MIGRATION = 'big_idea_cards_v1';
+const RULE_NAME_MIGRATION = 'rule_names_not_numbers_v1';
 const DEFAULT_PROFILE = {
   summary: 'No Big Idea preferences have been learned yet. Prioritize specific, useful applications of the manuscript.',
   likes: [], avoids: [], framingPatterns: [], structurePatterns: [], selectionRationale: [],
@@ -34,6 +35,15 @@ function extractJson(text) {
 function internalLabel(bigIdea) {
   const first = clean(bigIdea, 5000).split(/(?<=[.!?])\s+/)[0] || 'Big Idea';
   return first.length <= 140 ? first : first.slice(0, 137).trimEnd() + '…';
+}
+
+function replaceRuleNumberReferences(value) {
+  let result = String(value || '');
+  doctrine.RULES.forEach(function (rule) {
+    const name = rule[0] === 'X' ? 'Tripartite Rule' : 'Rule of ' + rule[1];
+    result = result.replace(new RegExp('\\bRule ' + rule[0] + '\\b', 'gi'), name);
+  });
+  return result;
 }
 
 function notesHtml(idea) {
@@ -125,6 +135,31 @@ function setup(db, options) {
   let workerBusy = false;
   let profileRerunNeeded = false;
 
+  // One-time correction for already-visible cards created before Harvey's
+  // naming rule: replace opaque Roman numerals with the actual Rule names,
+  // keep an auditable revision, and retain his instruction as a global
+  // learning signal for the preference profile.
+  if (!db.prepare('SELECT 1 FROM ideation_migrations WHERE id=?').get(RULE_NAME_MIGRATION)) {
+    db.transaction(function () {
+      const rows = db.prepare("SELECT * FROM ideation_ideas WHERE status='active'").all();
+      const update = db.prepare('UPDATE ideation_ideas SET title=?,big_idea=?,revision_number=?,updated_at=? WHERE id=?');
+      const revisionInsert = db.prepare('INSERT INTO ideation_revisions (id,idea_id,revision_number,kind,snapshot,diff,provider,model,created_at) VALUES (?,?,?,?,?,?,?,?,?)');
+      rows.forEach(function (idea) {
+        const revised = replaceRuleNumberReferences(idea.big_idea);
+        if (revised === idea.big_idea) return;
+        const revision = Number(idea.revision_number || 0) + 1;
+        const stamp = now();
+        update.run(internalLabel(revised), revised, revision, stamp, idea.id);
+        revisionInsert.run(uuid(), idea.id, revision, 'rule_name_normalization', stringify({ bigIdea: revised }), stringify({ bigIdea: { before: idea.big_idea, after: revised } }), idea.provider, idea.model, stamp);
+      });
+      addSignal(null, 'explicit_feedback', 1, {
+        feedback: 'Always identify a Rule by its actual name, such as Rule of Freedom or Rule of Crystallized Emotion. Never call it Rule VIII, Rule XIV, or use any other Roman-numeral label in a Big Idea.',
+        scope: 'global_rule_naming'
+      });
+      db.prepare('INSERT INTO ideation_migrations (id,applied_at) VALUES (?,?)').run(RULE_NAME_MIGRATION, now());
+    })();
+  }
+
   function decodeIdea(row) {
     if (!row) return null;
     const out = Object.assign({}, row);
@@ -197,6 +232,8 @@ function setup(db, options) {
 
 Read the canonical completed manuscript at THE_REALITY_MANUAL_COMPLETE_MANUSCRIPT.txt. Ground every idea in its real arguments, rules, examples, terminology, and reasoning. Direct quotes must be copied exactly from the manuscript; never invent or lightly rewrite a quote.
 
+Always identify every Rule by its actual name, such as "Rule of Freedom," "Rule of Subconscious Action," or "Rule of Crystallized Emotion." Never use Roman-numeral references such as "Rule VIII," "Rule XIV," or "Under Rule XIV" in a Big Idea or its concepts. The numeral is not meaningful to the reader. This naming requirement does not authorize changing a verbatim manuscript quotation.
+
 The following permanent doctrine map identifies reusable intellectual anchors:
 ${doctrine.promptText()}
 
@@ -225,8 +262,8 @@ Return strict JSON only, with no markdown fences or commentary. Provider request
   }
 
   function normalizeIdea(raw, providerResult) {
-    const bigIdea = clean(raw.bigIdea, 6000);
-    const angles = (Array.isArray(raw.conceptsToDiscuss) ? raw.conceptsToDiscuss : []).map(function (value) { return clean(value, 1200); }).filter(Boolean).slice(0, 8);
+    const bigIdea = clean(replaceRuleNumberReferences(raw.bigIdea), 6000);
+    const angles = (Array.isArray(raw.conceptsToDiscuss) ? raw.conceptsToDiscuss : []).map(function (value) { return clean(replaceRuleNumberReferences(value), 1200); }).filter(Boolean).slice(0, 8);
     const suppliedQuotes = Array.isArray(raw.directQuotes) ? raw.directQuotes : [];
     const verifiedQuotes = corpus.verifyQuotes(suppliedQuotes).slice(0, 4);
     if (bigIdea.length < 40) throw new Error('Big Idea is missing or too vague');
@@ -470,9 +507,10 @@ Return strict JSON only, with no markdown fences or commentary. Provider request
 
   if (autoStart) {
     ensureQueue();
+    if (q.unprocessedSignals.get()) enqueue('profile', q.settings.get().selected_provider, 1);
     setImmediate(runWorker);
   }
   return { router: router, state: state, ensureQueue: ensureQueue, recordBigIdeaPiece: recordBigIdeaPiece };
 }
 
-module.exports = { setup: setup };
+module.exports = { setup: setup, replaceRuleNumberReferences: replaceRuleNumberReferences };

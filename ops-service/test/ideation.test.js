@@ -80,7 +80,11 @@ test('Big Idea queue, verified support, and Ideation-stage transfer work togethe
   assert.equal(state.ideas[0].verified_quotes.length, 1);
   assert.equal(state.ideas[0].verified_quotes[0].verified, true);
   assert.match(generationPrompt, /Do not write titles, hooks, scripts, outlines/);
-  assert.match(generationPrompt, /Rule XIV, The Rule of Crystallized Emotion/);
+  assert.match(generationPrompt, /The Rule of Crystallized Emotion \(p\.128\)/);
+  assert.match(generationPrompt, /Always identify every Rule by its actual name/);
+  assert.match(generationPrompt, /Never use Roman-numeral references/);
+  const doctrineRules = generationPrompt.split('THE FOURTEEN RULES OF REALITY')[1].split('\n\nA Big Idea is')[0];
+  assert.doesNotMatch(doctrineRules, /Rule [IVXLCDM]+\b/);
   assert.match(generationPrompt, /conceptsToDiscuss/);
   assert.match(generationPrompt, /FIND THE SIMPLE REFRAME/);
   assert.match(generationPrompt, /FAMILIAR SUBJECT OR QUESTION → MANUSCRIPT-BASED REFRAME/);
@@ -88,6 +92,7 @@ test('Big Idea queue, verified support, and Ideation-stage transfer work togethe
   assert.match(generationPrompt, /No business is actually selling products or services/);
   assert.match(generationPrompt, /Do not hunt for narrow domestic or lifestyle scenarios/);
   assert.match(generationPrompt, /normally in one to three concise sentences/);
+  assert.equal(ideationService.replaceRuleNumberReferences('Under Rule XIV, compare Rule VIII with Rule X.'), 'Under Rule of Crystallized Emotion, compare Rule of Freedom with Tripartite Rule.');
 
   const accepted = state.ideas[0];
   const directFeedback = await request('/ideas/' + accepted.id + '/feedback', 'POST', { text: 'Keep the reframe broad and remove the niche scenario.', source: 'voice' });

@@ -37,7 +37,10 @@ const PILLARS = [
 function promptText() {
   const rules = RULES.map(function (rule) {
     const name = rule[0] === 'X' ? 'The Tripartite Rule' : 'The Rule of ' + rule[1];
-    return 'Rule ' + rule[0] + ', ' + name + ' (p.' + rule[3] + '): ' + rule[2];
+    // Roman numerals are manuscript index metadata, not reader-friendly
+    // names. Keep them out of the generation prompt so cards say “Rule of
+    // Freedom,” never the opaque “Rule VIII.”
+    return name + ' (p.' + rule[3] + '): ' + rule[2];
   }).join('\n');
   return 'CORE PILLARS AND DEFINITIONS\n- ' + PILLARS.join('\n- ') + '\n\nTHE FOURTEEN RULES OF REALITY\n' + rules;
 }

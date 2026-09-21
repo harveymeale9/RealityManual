@@ -12,7 +12,7 @@ THE FORMULA
 
 1. Start with a familiar subject, question, assumption, or public conversation that already has broad human interest: discipline, power, business, selling, success, love, God, suffering, procrastination, UFOs, happiness, motivation, purpose, and so on.
 2. Find the manuscript principle that reveals the conventional understanding of that subject to be incomplete, incorrectly framed, or aimed at the wrong thing.
-3. State the replacement frame in one clean claim: "It is not really X; it is Y," "The wrong question is X; the useful question is Y," or "People assume X, but Rule Y implies Z."
+3. State the replacement frame in one clean claim: "It is not really X; it is Y," "The wrong question is X; the useful question is Y," or "People assume X, but the named Rule implies Z."
 4. Give only the shortest causal explanation required to make the claim intelligible and defensible.
 
 In compact form:

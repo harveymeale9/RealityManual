@@ -8747,3 +8747,30 @@ manual rewrite signals retain the idea context, reach the profile prompt, and
 survive through transfer; full suite 9/9. A Chromium DOM test with intercepted
 synthetic data confirmed typed + dictated feedback is submitted together as a
 voice-sourced learning signal, without altering Harvey's production ideas.
+
+---
+
+# 183. Big Ideas Use Actual Rule Names, Never Roman-Numeral Labels (2026-09-21)
+
+Harvey flagged “Under Rule XIV” as opaque: readers—including Harvey while
+reviewing the queue—should see the actual concept name, such as “Rule of
+Freedom,” not have to remember what a numeral refers to.
+
+Rule naming is now a hard generation constraint. The doctrine map supplied to
+the model no longer displays Roman numerals at all, the Big Idea prompt expressly
+requires actual names and forbids numbered references, and normalization of
+every generated premise/angle converts any numeral the provider emits anyway.
+Verbatim manuscript quotations remain untouched because quotation accuracy
+takes precedence over stylistic normalization.
+
+A one-time migration corrects existing active cards as well: numbered Rule
+references are replaced with their canonical names, each affected card receives
+an auditable `rule_name_normalization` revision, and titles are refreshed from
+the corrected wording. Harvey's instruction is also stored once as a global,
+full-strength `explicit_feedback` signal, so the adaptive preference profile
+learns the same requirement rather than relying only on a static prompt.
+
+Verification covers the exact conversion “Under Rule XIV” → “Under Rule of
+Crystallized Emotion,” “Rule VIII” → “Rule of Freedom,” and “Rule X” →
+“Tripartite Rule”; confirms the doctrine section contains no numeric Rule
+labels; and the complete Node suite passes 9/9.
