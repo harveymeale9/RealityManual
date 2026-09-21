@@ -7910,3 +7910,38 @@ its login card as the browser favicon. The redundant 16px copy of that image
 beside the desktop header text “Reality Manual Content Studio” was removed
 because it was too small to read. The larger diamond mark at the top of the
 vertical navigation rail is unchanged. This is a frontend-only change.
+
+---
+
+# 162. Codex Progress Now Feeds Both Project Manager Status Panels
+
+Codex already populated Activity with command starts/results, file changes,
+reasoning summaries, MCP calls, and web searches, and its message appeared as
+one active row in Task List. One meaningful stream was missing: Codex CLI
+emits intermediate user-facing progress updates as `agent_message` JSONL
+items, the same item type as its final answer. `codexRunner.js` kept replacing
+the buffered final text with each newer message, so those interim updates
+never reached either status panel.
+
+The runner now keeps the newest agent message buffered as the possible final
+answer and, when another arrives, sends the previous one to Activity as a
+confirmed intermediate progress update. The first message remains the
+`early_ack`/Task List title and is not duplicated. Thread-ready, turn-started,
+turn-completed, and failure lifecycle events are also recorded, so Activity
+is no longer blank during Codex startup or between tool calls. Hidden chain of
+thought is not exposed; these are Codex's normal user-facing progress notes
+and already-public tool events.
+
+For an in-progress row, desktop and mobile Task List now show the latest
+Activity line as a smaller live status beneath the stable task title. A
+Codex-only prompt reminder asks for concise progress updates at major phases
+of genuine multi-step work and use of its normal task tracker, while explicitly
+forbidding manufactured plans for simple questions. Claude execution and its
+existing Task List/Activity behavior are unchanged.
+
+Verified in an isolated container with a fresh Project Manager database and a
+real host Codex run. A three-phase read-only audit produced 21 persisted live
+events: startup/session/turn lifecycle, shell starts and results, four distinct
+phase updates, and completion; its final reply remained only in the chat.
+Headless Chromium at desktop and 390×844 mobile sizes confirmed the active
+Task List row showed the stable title plus its latest live status subline.

@@ -82,6 +82,7 @@ function runCodex(opts) {
   const onEarlyAck = typeof opts.onEarlyAck === 'function' ? opts.onEarlyAck : function () {};
 
   return new Promise(function (resolve) {
+    onActivity('\u25cf Starting Codex on the VPS');
     const child = spawn('ssh', [HOST, buildRemoteCommand(sessionId, imagePath)], {
       stdio: ['pipe', 'pipe', 'pipe']
     });
@@ -90,6 +91,7 @@ function runCodex(opts) {
     let threadId = sessionId;
     let finalText = '';
     let earlyAckSent = false;
+    let agentMessageCount = 0;
     let streamError = '';
     let settled = false;
 
@@ -102,14 +104,29 @@ function runCodex(opts) {
 
     function handleEvent(evt) {
       if (!evt || typeof evt !== 'object') return;
-      if (evt.type === 'thread.started' && evt.thread_id) threadId = evt.thread_id;
+      if (evt.type === 'thread.started' && evt.thread_id) {
+        threadId = evt.thread_id;
+        onActivity('\u25cf Codex session ready');
+      }
+      if (evt.type === 'turn.started') onActivity('\u25cf Codex is working');
+      if (evt.type === 'turn.completed') onActivity('\u2713 Codex turn completed');
       if (evt.type === 'error' || evt.type === 'turn.failed') {
         streamError = errorText(evt) || streamError || evt.type;
+        onActivity('\u2715 ' + shortText(streamError, 300));
       }
       if ((evt.type === 'item.started' || evt.type === 'item.completed') && evt.item) {
         if (evt.item.type === 'agent_message' && evt.type === 'item.completed') {
           const text = String(evt.item.text || '').trim();
           if (!text) return;
+          // Codex emits progress updates as agent_message items too. Keep
+          // the newest message buffered as the possible final reply; when
+          // another arrives, the prior one is known to be an intermediate
+          // update and belongs in Activity. The first message is already
+          // visible as the early acknowledgment/Task List title.
+          if (agentMessageCount > 1 && finalText) {
+            onActivity('\u25cf ' + shortText(finalText, 500));
+          }
+          agentMessageCount++;
           finalText = text;
           if (!earlyAckSent) {
             earlyAckSent = true;

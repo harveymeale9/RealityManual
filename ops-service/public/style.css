@@ -452,7 +452,12 @@ body.role-reviewer #pmBackFab {
   font-size: 0.82rem; color: var(--ink-soft); border: 1px solid transparent;
 }
 .pm-queue-item .pm-queue-num { font-family: var(--font-mono); color: var(--ink-faint); flex-shrink: 0; }
+.pm-queue-copy { min-width: 0; display: flex; flex: 1; flex-direction: column; gap: 2px; }
 .pm-queue-item .pm-queue-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-queue-progress {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 0.68rem/1.35 var(--font-mono); color: var(--ink-faint);
+}
 .pm-queue-item.pm-queue-active { background: var(--accent-soft); border-color: var(--accent-soft-strong); color: var(--ink); }
 .pm-queue-item.pm-queue-active .pm-queue-num { color: var(--accent); }
 .pm-queue-divider {

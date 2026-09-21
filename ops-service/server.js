@@ -1275,6 +1275,12 @@ const ACK_REMINDER = ' Before anything else, before any tool call: say, in one s
   '"task-style sentence" or similar) — that exact leak has happened repeatedly and Harvey has ' +
   'asked for it to stop for good.';
 
+const CODEX_VISIBILITY_REMINDER = '\n\n[Project Manager visibility: for a genuine multi-step task, use your ' +
+  'normal task tracker and send concise user-facing progress updates when you begin a major phase, ' +
+  'when the plan changes, or when a long-running phase completes. These updates are shown in the ' +
+  'Activity panel and beneath the active Task List item. Do not expose private chain-of-thought or ' +
+  'turn a simple question into a manufactured plan. Tool and command events are surfaced automatically.]';
+
 function buildVoicePrompt(mode, text) {
   if (mode === 'execute') {
     return '[Voice instruction from Harvey, sent while away from his desk — proceed with full ' +
@@ -1368,7 +1374,7 @@ async function processVoiceMessage(id, mode, text, agent, imageBlock, imagePath)
   const sessionRow = stmts.getVoiceSession.get();
   const sessionId = sessionRow && (agent === 'codex' ? sessionRow.codex_session_id : sessionRow.claude_session_id);
   const sharedContext = buildCrossAgentContext(agent, id, messageRow ? messageRow.created_at : new Date().toISOString());
-  const prompt = buildVoicePrompt(mode, sharedContext + text);
+  const prompt = buildVoicePrompt(mode, sharedContext + text) + (agent === 'codex' ? CODEX_VISIBILITY_REMINDER : '');
 
   // Streamed into the DB as it grows (not held until the run finishes) so
   // the Project Manager tab's right-hand activity pane can poll the same

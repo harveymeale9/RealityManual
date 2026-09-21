@@ -678,8 +678,17 @@
         var textEl = document.createElement('span');
         textEl.className = 'pm-queue-text';
         textEl.textContent = agentName(row.agent) + ': ' + (row.early_ack || row.transcript);
+        var copy = document.createElement('span');
+        copy.className = 'pm-queue-copy';
+        copy.appendChild(textEl);
+        if (row.status === 'running' && row.activity_log && row.activity_log.length) {
+          var progressEl = document.createElement('span');
+          progressEl.className = 'pm-queue-progress';
+          progressEl.textContent = row.activity_log[row.activity_log.length - 1];
+          copy.appendChild(progressEl);
+        }
         item.appendChild(num);
-        item.appendChild(textEl);
+        item.appendChild(copy);
         queueListEl.appendChild(item);
       });
       if (recentDone.length) {
