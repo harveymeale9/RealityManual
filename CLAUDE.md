@@ -8503,3 +8503,60 @@ runner code, the exact host invocation shape (flags, isolated `$HOME`,
 token-via-env auth, and `--resume`/`--fork-session` continuity against a
 real live session) was hand-verified directly on the VPS as root — not
 assumed from `--help` text alone.
+
+---
+
+# 177. Big-Idea Method Reverse-Engineered From the Manuscript and Completed Outlines (2026-09-21)
+
+Harvey asked for a detailed read of the complete manuscript and every card in
+Outline Completed, followed by a real formula for the kind of “big idea” the
+Content Ideation panel is supposed to produce. The review covered the full
+180-page canonical manuscript and all 31 completed outlines in the live
+production database—not merely their titles or a sample of long-form scripts.
+
+The important distinction is now explicit: a subject such as procrastination
+is only a topic, and a teaching such as the Rule of Subconscious Action is only
+a manuscript concept. A Big Idea is the editorial claim produced when the
+manuscript's machinery is used to reinterpret a recognizable human situation
+in a way that changes a diagnosis, decision, or strategy. The common structure
+across Harvey's completed work is:
+
+```text
+recognizable situation
+  + hidden/default assumption
+  + manuscript mechanism
+  + non-obvious logical turn
+  + strategic consequence
+  + concrete emotional-well-being stakes
+```
+
+`ops-service/src/ideationBigIdeaMethod.js` now holds the complete, inspectable
+method supplied to every generation run. It describes an explicit six-step
+derivation process and eight reusable operators found across the completed
+outlines: redefine, invert, compress, transfer, synthesize, extremize,
+diagnose, and resolve an objection. It also records the deeper house patterns:
+start in the audience's world rather than the book; prefer causal mechanisms
+to inspiration; distinguish inputs from outputs and ends from proxies; look
+for category errors; derive second-order implications; preserve boundary
+conditions; expose the lifetime/EWB cost of the mistaken model; and finish at
+a practical strategic lens rather than mere surprise.
+
+The prompt also applies a silent seven-axis quality gate (human relevance,
+non-obviousness, manuscript specificity, derivational rigor, strategic
+usefulness, EWB stakes, and distinctiveness). Any candidate weak on the real
+logical turn, rigor, or usefulness—or scoring under 27/35 overall—is to be
+discarded before output. Rule restatements, chapter summaries, generic
+self-help, mechanism-free provocations, and old outlines with substituted
+nouns are expressly rejected.
+
+This is deliberately a distilled reasoning method rather than the 31 scripts
+being injected wholesale into each prompt. The latter would consume large
+context, encourage stylistic imitation, and overweight the longest outlines.
+Harvey's live Big Ideas column and learned preference profile remain the
+adaptive layer (§173); this new module supplies the stable editorial machinery
+beneath that learning loop.
+
+Verification: syntax checks passed for the new module and changed service, the
+full ops-service Node suite passes (8/8), and the ideation integration test now
+asserts that the derivation formula, operator set, and rejection threshold are
+actually present in the provider prompt.

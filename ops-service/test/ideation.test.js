@@ -81,6 +81,10 @@ test('Big Idea queue, verified support, and Ideation-stage transfer work togethe
   assert.match(generationPrompt, /Rule XIV, The Rule of Crystallized Emotion/);
   assert.match(generationPrompt, /conceptsToDiscuss/);
   assert.match(generationPrompt, /anxiety that someone is losing interest/);
+  assert.match(generationPrompt, /DERIVE, DO NOT SUMMARIZE/);
+  assert.match(generationPrompt, /RECOGNIZABLE SITUATION \+ HIDDEN\/DEFAULT ASSUMPTION/);
+  assert.match(generationPrompt, /REDEFINE:/);
+  assert.match(generationPrompt, /Reject any candidate below 4 on non-obviousness/);
 
   const accepted = state.ideas[0];
   const transfer = await request('/ideas/' + accepted.id + '/transfer', 'POST', {});

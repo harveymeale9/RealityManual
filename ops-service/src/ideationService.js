@@ -4,6 +4,7 @@ const express = require('express');
 const crypto = require('crypto');
 const corpus = require('./ideationCorpus');
 const doctrine = require('./ideationDoctrine');
+const bigIdeaMethod = require('./ideationBigIdeaMethod');
 const providers = require('./ideationProviders');
 
 const TARGET_ACTIVE = 10;
@@ -178,6 +179,8 @@ The following permanent doctrine map identifies reusable intellectual anchors:
 ${doctrine.promptText()}
 
 A Big Idea is a unique, intelligent, practical way to get a highly relevant real-world benefit from the book's teaching. It should connect a recognizable human situation to a manuscript principle and make the stakes clear. A representative shape is: anxiety that someone is losing interest is not evidence that they are; if your objective is to feel incredible, every period spent worrying about it is already losing the game of life. This is an example of specificity, logical connection, and practical stakes—not an idea to repeat.
+
+${bigIdeaMethod.promptText()}
 
 Each Big Idea must stand alone in two to five clear sentences. Root it structurally in at least one named Rule, core definition, or recurring pillar, and show the logical chain rather than merely mentioning doctrine. When useful, begin from the objective of maximizing lifetime-average EWB, then show how a Rule diagnoses the ordinary problem and what useful strategic implication follows. Prefer contemporary, recognizable situations and counterintuitive conclusions over abstract book summaries.
 
