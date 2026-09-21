@@ -8132,3 +8132,18 @@ example, `SHORT · 1:01`) now uses a larger 0.78rem font, slightly tighter
 tracking, and a brighter muted-green color. The provider/origin metadata stays
 small so the useful format/runtime information has clear visual priority. The
 stylesheet URL is cache-busted so the change appears on refresh.
+
+---
+
+# 168. Ideation Script Scroll No Longer Crosses the Panel Footer
+
+An expanded Ideation card could overflow the fixed-height `.panel-main` while
+the normal control-panel footer remained laid out at the bottom of the
+viewport. Its top border then appeared as a horizontal line drawn directly
+through the script while scrolling. `renderActiveTab()` now marks the main
+panel while Content Ideation is active; that mode owns its vertical scrolling,
+contains overscroll, and hides the irrelevant control-panel footer. Switching
+tabs removes the mode, so other workspaces keep their existing layout. The
+Ideation rerender-preservation logic now restores this panel's own scroll offset
+as well as the document/textarea offsets. The stylesheet, `app.js`, and
+`ideation.js` URLs are cache-busted together.

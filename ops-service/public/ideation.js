@@ -70,7 +70,7 @@
       if (state.ideas[0]) expanded[state.ideas[0].id] = true;
       expansionInitialized = true;
     }
-    var pageY = window.scrollY;
+    var pageY = window.scrollY, rootScroll = root.scrollTop;
     var fieldScroll = {};
     root.querySelectorAll('.idea-card[data-idea]').forEach(function (card) {
       card.querySelectorAll('textarea').forEach(function (box) {
@@ -89,6 +89,7 @@
         var box = root.querySelector('[data-idea="' + id + '"] ' + selector);
         if (box) box.scrollTop = fieldScroll[compound];
       });
+      root.scrollTop = rootScroll;
       window.scrollTo(0, pageY);
     });
   }

@@ -390,6 +390,8 @@ body.role-reviewer #pmBackFab {
 .avatar-btn:hover { border-color: var(--accent); }
 
 .panel-main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.panel-main--ideation { overflow-y: auto; overscroll-behavior: contain; }
+.panel-main--ideation + .panel-footer { display: none; }
 
 /* ---------- project manager (chat) tab ---------- */
 

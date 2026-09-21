@@ -302,6 +302,7 @@
     }
     var backFab = document.getElementById('pmBackFab');
     if (backFab) backFab.classList.toggle('show', active !== 'project-manager');
+    panelMain.classList.toggle('panel-main--ideation', active === 'content-ideation');
     if (active !== 'project-manager' && pmSync) { pmSync.stop(); pmSync = null; }
     if (active === 'project-manager') {
       panelMain.innerHTML = PM_MARKUP;
