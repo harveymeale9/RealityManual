@@ -205,6 +205,18 @@ function setup(db, options) {
     return q.idea.get(idea.id);
   }
 
+  function queueRevisionBehindNext(idea) {
+    const active = q.active.all();
+    const index = active.findIndex(function (row) { return row.id === idea.id; });
+    if (index < 0) return null;
+    if (index >= active.length - 1) return index > 0 ? active[index - 1].id : null;
+    const next = active[index + 1], afterNext = active[index + 2];
+    const nextOrder = Number(next.sort_order);
+    const queuedOrder = afterNext ? (nextOrder + Number(afterNext.sort_order)) / 2 : nextOrder + 10;
+    db.prepare('UPDATE ideation_ideas SET sort_order=?,updated_at=? WHERE id=?').run(queuedOrder, now(), idea.id);
+    return next.id;
+  }
+
   function existingContext() {
     const pieces = q.pieces.all().map(function (r) { return json(r.data, {}); });
     const completed = pieces.filter(function (p) { return p.stage === 'outline_completed'; })
@@ -387,11 +399,10 @@ Return STRICT JSON only. Do not include markdown fences or commentary. Provider 
     });
     const parsed = extractJson(result.text), raw = parsed.proposal || parsed;
     const revised = normalizeProposal(raw, result), prior = snapshot(idea), revision = idea.revision_number + 1;
-    const top = db.prepare("SELECT MIN(sort_order) AS n FROM ideation_ideas WHERE status='active'").get().n;
     const changeSummary = Array.isArray(parsed.changeSummary) ? parsed.changeSummary : [];
     db.transaction(function () {
-      db.prepare(`UPDATE ideation_ideas SET sort_order=?,content_type=?,estimated_runtime=?,runtime_seconds=?,title=?,alternative_titles=?,big_idea=?,hook=?,manuscript_sources=?,relevant_sections=?,relevant_pages=?,verified_quotes=?,paraphrases=?,script=?,provider=?,model=?,generation_meta=?,revision_number=?,edited=1,updated_at=? WHERE id=?`)
-        .run((top == null ? 0 : top - 10), revised.contentType, revised.runtime.label, revised.runtime.seconds, revised.title, stringify(revised.alternativeTitles), revised.bigIdea,
+      db.prepare(`UPDATE ideation_ideas SET content_type=?,estimated_runtime=?,runtime_seconds=?,title=?,alternative_titles=?,big_idea=?,hook=?,manuscript_sources=?,relevant_sections=?,relevant_pages=?,verified_quotes=?,paraphrases=?,script=?,provider=?,model=?,generation_meta=?,revision_number=?,edited=1,updated_at=? WHERE id=?`)
+        .run(revised.contentType, revised.runtime.label, revised.runtime.seconds, revised.title, stringify(revised.alternativeTitles), revised.bigIdea,
           revised.hook, stringify(revised.manuscriptSources), stringify(revised.relevantSections), stringify(revised.relevantPages), stringify(revised.verifiedQuotes),
           stringify(revised.paraphrases), revised.script, revised.provider, revised.model, stringify(Object.assign(revised.meta, { changeSummary: changeSummary })), revision, now(), idea.id);
       db.prepare('INSERT INTO ideation_revisions (id,idea_id,revision_number,kind,snapshot,diff,provider,model,created_at) VALUES (?,?,?,?,?,?,?,?,?)')
@@ -491,8 +502,9 @@ Return STRICT JSON only. Do not include markdown fences or commentary. Provider 
       if (req.body && clean(req.body.feedback)) addFeedback(idea.id, req.body.feedback, req.body.source, 1);
       if (!q.feedback.all(idea.id).length) return res.status(400).json({ error: 'feedback_required' });
       const provider = q.settings.get().selected_provider;
+      const focusIdeaId = queueRevisionBehindNext(idea);
       const jobId = enqueue('revise', provider, idea.id, 1);
-      res.status(202).json({ ok: true, jobId: jobId, provider: provider });
+      res.status(202).json({ ok: true, jobId: jobId, provider: provider, focusIdeaId: focusIdeaId });
     } catch (e) { res.status(400).json({ error: e.message }); }
   });
   router.post('/ideas/:id/transfer', function (req, res) {

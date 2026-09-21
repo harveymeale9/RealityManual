@@ -1,6 +1,6 @@
 (function () {
   'use strict';
-  var root = null, timer = null, lastState = null, dirty = {}, expanded = {}, expansionInitialized = false, renderSignature = null;
+  var root = null, timer = null, lastState = null, dirty = {}, expanded = {}, expansionInitialized = false, renderSignature = null, pendingFocusId = null;
   function esc(v) { var d = document.createElement('div'); d.textContent = v == null ? '' : String(v); return d.innerHTML; }
   function api(path, options) {
     options = options || {}; options.credentials = 'include';
@@ -34,7 +34,7 @@
     return '<article class="idea-card' + (idea.edited ? ' is-edited' : '') + (revisionJob ? ' idea-revising' : '') + '" data-idea="' + idea.id + '">' +
       '<button class="idea-summary" type="button" aria-expanded="' + String(isOpen) + '">' +
         '<span class="idea-number">' + String(index + 1).padStart(2, '0') + '</span><span class="idea-summary-main"><span class="idea-kicker">' + esc(labelType(idea.content_type)) + ' · ' + esc(idea.estimated_runtime) + '</span><strong>' + esc(idea.title) + '</strong><span>' + esc(idea.big_idea) + '</span></span>' +
-        '<span class="idea-origin">' + esc(idea.provider) + (idea.edited ? '<b>EDITED</b>' : '') + '</span><span class="idea-chevron">⌄</span></button>' +
+        '<span class="idea-origin">' + esc(idea.provider) + (revisionJob ? '<b>REVISING</b>' : idea.edited ? '<b>EDITED</b>' : '') + '</span><span class="idea-chevron">⌄</span></button>' +
       '<div class="idea-body"' + (isOpen ? '' : ' hidden') + '>' +
         '<div class="idea-edit-grid"><label>Working title<input data-field="title" value="' + esc(idea.title) + '"></label><label class="wide">Big idea<textarea data-field="bigIdea" rows="3">' + esc(idea.big_idea) + '</textarea></label><label class="wide">Hook / opening<textarea data-field="hook" rows="3">' + esc(idea.hook) + '</textarea></label></div>' +
         (idea.content_type === 'longform' ? alternatives(idea.alternative_titles) : '') +
@@ -91,6 +91,15 @@
       });
       root.scrollTop = rootScroll;
       window.scrollTo(0, pageY);
+      if (pendingFocusId) {
+        var focusCard = root.querySelector('[data-idea="' + pendingFocusId + '"]');
+        pendingFocusId = null;
+        if (focusCard) {
+          focusCard.scrollIntoView({ block: 'start' });
+          var summary = focusCard.querySelector('.idea-summary');
+          if (summary) summary.focus({ preventScroll: true });
+        }
+      }
     });
   }
   function refresh() { api('/state').then(render).catch(function (e) { if (root) root.innerHTML = '<div class="idea-fatal">Could not load Content Ideation: ' + esc(e.message) + '</div>'; }); }
@@ -112,13 +121,26 @@
         else if (action === 'reject') { path = '/ideas/' + id + '/reject'; text = 'Recording rejection…'; }
         else { path = '/ideas/' + id + '/transfer'; body.destination = action === 'completed' ? 'outline_completed' : 'outline_started'; text = 'Sending to the Content Pipeline…'; }
         setStatus(card, text); btn.disabled = true;
-        api(path, { method: 'POST', body: JSON.stringify(body) }).then(function () { dirty[id] = false; if (action !== 'revise') card.classList.add(action === 'reject' ? 'idea-exit-reject' : 'idea-exit-send'); else card.classList.add('idea-revising'); setTimeout(refresh, 430); }).catch(function (err) { btn.disabled = false; setStatus(card, err.message, true); });
+        api(path, { method: 'POST', body: JSON.stringify(body) }).then(function (result) {
+          dirty[id] = false;
+          if (action !== 'revise') {
+            card.classList.add(action === 'reject' ? 'idea-exit-reject' : 'idea-exit-send');
+            setTimeout(refresh, 430);
+            return;
+          }
+          Object.keys(expanded).forEach(function (ideaId) { expanded[ideaId] = false; });
+          expanded[id] = false;
+          if (result.focusIdeaId) { expanded[result.focusIdeaId] = true; pendingFocusId = result.focusIdeaId; }
+          card.classList.add('idea-revising');
+          renderSignature = null;
+          refresh();
+        }).catch(function (err) { btn.disabled = false; setStatus(card, err.message, true); });
       }; });
     });
     root.querySelectorAll('[data-retry]').forEach(function (btn) { btn.onclick = function () { api('/jobs/' + btn.dataset.retry + '/retry', { method: 'POST', body: '{}' }).then(refresh); }; });
   }
   function mount(container) {
-    if (timer) clearInterval(timer); root = container; expanded = {}; expansionInitialized = false; renderSignature = null;
+    if (timer) clearInterval(timer); root = container; expanded = {}; expansionInitialized = false; renderSignature = null; pendingFocusId = null;
     root.innerHTML = '<div class="idea-loading" role="status" aria-label="Loading Content Ideation"><span aria-hidden="true"></span></div>'; refresh();
     timer = setInterval(function () { if (location.hash === '#content-ideation') refresh(); else clearInterval(timer); }, 5000);
   }

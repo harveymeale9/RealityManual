@@ -57,11 +57,15 @@ test('persistent queue, revisions, learning signals, and Kanban transfer work to
   assert.match(generationPrompt, /Rule XIV, The Rule of Crystallized Emotion/);
   assert.match(generationPrompt, /must not contain timestamps, timecodes/);
   const edited = state.ideas[0];
+  const nextAfterEdited = state.ideas[1];
   await request('/ideas/' + edited.id, 'PATCH', { title: edited.title, bigIdea: edited.big_idea, hook: edited.hook, script: edited.script + '\nManual sentence.' });
   await request('/ideas/' + edited.id + '/feedback', 'POST', { text: 'Use a sharper opening.', source: 'voice' });
-  await request('/ideas/' + edited.id + '/revise', 'POST', {});
+  const queuedRevision = await request('/ideas/' + edited.id + '/revise', 'POST', {});
+  assert.equal(queuedRevision.focusIdeaId, nextAfterEdited.id);
   state = await waitFor(function (s) { const idea = s.ideas.find(function (x) { return x.id === edited.id; }); return idea && idea.revisions.some(function (r) { return r.kind === 'ai_revision'; }); });
   const revised = state.ideas.find(function (x) { return x.id === edited.id; });
+  assert.equal(state.ideas[0].id, nextAfterEdited.id);
+  assert.equal(state.ideas[1].id, revised.id);
   assert.equal(revised.edited, true); assert.equal(revised.feedback[0].source, 'voice');
   assert.ok(revised.revisions[0].diff.some(function (line) { return line.type === 'add'; }));
 

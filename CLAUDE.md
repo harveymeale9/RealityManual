@@ -8147,3 +8147,23 @@ tabs removes the mode, so other workspaces keep their existing layout. The
 Ideation rerender-preservation logic now restores this panel's own scroll offset
 as well as the document/textarea offsets. The stylesheet, `app.js`, and
 `ideation.js` URLs are cache-busted together.
+
+---
+
+# 169. Implement Feedback Advances Focus and Queues the Revising Card
+
+Implement Feedback no longer leaves a large expanded card occupying the
+workspace while its provider runs. The revision route moves that idea's
+persistent `sort_order` immediately behind the next active proposal and returns
+the next proposal's ID. The browser collapses every other card, expands that
+next proposal, scrolls it into view, and puts keyboard focus on its summary.
+The submitted card therefore appears directly beneath it as a collapsed purple
+`REVISING` card while work continues.
+
+Revision completion now preserves that queue position instead of moving the
+edited idea to the very top. It remains purple through the existing EDITED
+state so Harvey can return to it deliberately after reviewing the newly focused
+idea. If the final card is revised and has no successor, its position is left
+unchanged and the preceding available proposal receives focus. The service integration test verifies the returned focus ID and the
+persistent next-idea/revised-idea ordering; browser tests cover the collapse,
+reorder, purple state, expansion, and focus handoff on desktop and mobile.
