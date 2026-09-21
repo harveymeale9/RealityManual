@@ -8348,3 +8348,66 @@ recovery tests for an already-completed journal, a journal that completes after
 the replacement watcher attaches, and a genuine failed host run. The new paths
 are documented in `.env.example`; production uses their defaults and requires
 no new credential or service.
+
+---
+
+# 175. §174's Own Deploy Broke Every Codex Turn With EACCES (2026-09-21)
+
+§174 shipped and immediately took down Codex entirely — every real Codex
+message after that deploy failed with `EACCES: permission denied, open
+'/data/codex-runs/<id>.jsonl'`, including Codex's own attempt to respond to
+being told about it (the exact self-inflicted chicken-and-egg this produced:
+Codex couldn't fix its own bug because hitting the bug was the first thing
+its own turn tried to do). Harvey asked Claude to fix it, framed simply as
+"fix what codex broke."
+
+**Root cause, confirmed against the live VPS, not guessed:** §174's
+`initializeRunFiles()` runs inside the container as the non-root `node` user
+(uid 1000) and does `fs.mkdirSync('/data/codex-runs')` +
+`fs.writeFileSync(paths.journal, '')` — but that path is a bind mount shared
+with the *host*, where the actual Codex process writes into the same
+directory as **root** (via the `sudo -H sh -c ...` wrapper `codexRunner.js`
+already uses for every host invocation). Whichever side happened to create
+the directory first left it too restrictive for the other: on the live VPS,
+`/root/ops-service-data/codex-runs` ended up `root:root`, mode 755 — which
+let `node` traverse and read it, but not create new files in it, so every
+subsequent Codex turn's local pre-touch threw EACCES before `ssh` was even
+spawned, well before the actual Codex host process (which would have worked
+fine, root can always write there) ever got a chance to run.
+
+**Fix, both in `ops-service/src/codexRunner.js`:**
+- `initializeRunFiles()`'s local pre-touch is now wrapped so a permission
+  failure there can never abort the turn — it's genuinely optional. The
+  *live* run is parsed straight from the `ssh` child process's own stdout,
+  never from these files; the journal/stderr files only matter for
+  recovering a completion after a mid-turn service restart (§174), and the
+  host-side `tee` (running as root) creates them regardless of whether this
+  local pre-touch succeeded. Best-effort `chmod 777` calls on the directory
+  and files are still attempted first (harmless when they work, silently
+  skipped when this process doesn't own whatever's already there).
+- `buildRemoteCommand()`'s host script — which already runs as root via
+  `sudo` — now also does `mkdir -p <dir>; chmod 0777 <dir> 2>/dev/null;`
+  immediately before every Codex invocation, so the shared directory
+  self-heals to permissive on every single turn regardless of which side
+  created it or last narrowed it. Root can always chmod it, whoever
+  currently owns it.
+
+**Immediate relief, applied directly on the VPS** (didn't wait for a
+redeploy): `sudo chmod -R 0777 /root/ops-service-data/codex-runs` — Codex
+turns work again right now, independent of when this code fix actually
+deploys.
+
+This is a `src/*` change, so per §93 it triggers a full rebuild+restart on
+the next deploy — same standing caveat as every other backend change in
+this file. Logged to the work log immediately before pushing.
+
+Verified: `node --check` on the touched file, the full existing Node test
+suite (all 4 suites, including §174's own recovery tests) still passes
+unmodified, and a `bash -n` syntax check against the actual generated
+remote command string (built with a realistic runKey/paths) confirms the
+new `mkdir`/`chmod` prefix nests correctly through the existing multi-layer
+shell-quoting without breaking it. **Not yet re-verified with a real live
+Codex turn after the code deploy** (the manual VPS chmod already unblocks
+things independently of that) — worth confirming after the next deploy
+that a fresh Codex turn still succeeds even if the directory somehow
+reverts to a restrictive owner again.

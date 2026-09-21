@@ -94,9 +94,25 @@ function runPaths(runKey) {
 
 function initializeRunFiles(paths) {
   if (!paths) return;
-  fs.mkdirSync(RUN_DIR, { recursive: true });
-  fs.writeFileSync(paths.journal, '');
-  fs.writeFileSync(paths.stderr, '');
+  // RUN_DIR is a bind mount shared with the host, where Codex itself writes
+  // as root (via sudo, see buildRemoteCommand's tee pipeline below). Whichever
+  // side — this non-root container process, or root on the host — happens to
+  // create the directory/files first can leave them too restrictive for the
+  // other side to write into (EACCES). This whole block is therefore
+  // best-effort pre-creation, not a requirement: the live run is parsed from
+  // the ssh child's own stdout below, never from these files — they only
+  // matter for recovering a completion after a mid-turn service restart, and
+  // the host-side tee (running as root) creates them regardless if this
+  // local pre-touch can't. So a permission failure here must never abort the
+  // turn itself.
+  try {
+    fs.mkdirSync(RUN_DIR, { recursive: true });
+    try { fs.chmodSync(RUN_DIR, 0o777); } catch (e) { /* may not own it; host-side chmod covers this */ }
+    fs.writeFileSync(paths.journal, '');
+    fs.writeFileSync(paths.stderr, '');
+    fs.chmodSync(paths.journal, 0o666);
+    fs.chmodSync(paths.stderr, 0o666);
+  } catch (e) { /* best effort — see comment above */ }
   try { fs.rmSync(paths.exit, { force: true }); } catch (e) { /* best effort */ }
 }
 
@@ -128,6 +144,12 @@ function buildRemoteCommand(sessionId, imagePath, pidFile, paths) {
     // Keep draining into the durable files even when the old container's
     // SSH pipe disappears. Plain tee exits on EPIPE and would otherwise
     // take Codex down with the connection we are specifically surviving.
+    // This whole command already runs as root (via sudo below) — widen the
+    // shared run directory every time, regardless of who created it or last
+    // narrowed it, so the container's own non-root pre-touch in
+    // initializeRunFiles() can never get locked out of it again.
+    const hostRunDir = path.posix.dirname(paths.hostJournal);
+    command = 'mkdir -p ' + shellQuote(hostRunDir) + '; chmod 0777 ' + shellQuote(hostRunDir) + ' 2>/dev/null; ' + command;
     command += ' 2> >(tee --output-error=warn-nopipe -a ' + shellQuote(paths.hostStderr) + ' >&2) | ' +
       'tee --output-error=warn-nopipe -a ' + shellQuote(paths.hostJournal) + '; ' +
       'run_code=${PIPESTATUS[0]}; exit_tmp=' + shellQuote(paths.hostExit + '.tmp.$$') + '; ' +
