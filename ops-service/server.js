@@ -1572,8 +1572,21 @@ app.post('/api/voice/transcribe', voiceUpload.single('audio'), function (req, re
 });
 
 app.post('/api/voice/tts', async function (req, res) {
-  const agent = normalizeVoiceAgent(req.body && req.body.agent);
+  const requestedAgent = req.body && req.body.agent;
+  const messageId = req.body && req.body.messageId;
+  const messageRow = typeof messageId === 'string' ? stmts.getVoiceMessage.get(messageId) : null;
+  // A persisted message's recorded identity always wins over the browser's
+  // claim. This also makes Play buttons from a slightly stale client route
+  // correctly as long as they send the message ID.
+  let agent = messageRow
+    ? normalizeVoiceAgent(messageRow.agent)
+    : (requestedAgent === 'claude' || requestedAgent === 'codex' ? requestedAgent : null);
   let text = req.body && req.body.text;
+
+  // Never default an ambiguous TTS request to Claude/ElevenLabs. Older
+  // pre-agent browser tabs sent text alone; failing closed prevents a Codex
+  // reply from being spoken by ElevenLabs while that stale tab is open.
+  if (!agent) return res.status(400).json({ error: 'tts_agent_required' });
 
   // Codex may speak completed user-facing replies only. Resolve the text
   // from the canonical DB row so browser code cannot accidentally send an
@@ -1581,19 +1594,17 @@ app.post('/api/voice/tts', async function (req, res) {
   // to OpenAI TTS. Claude deliberately keeps its existing browser-supplied
   // text path so its ElevenLabs early-ack/final behavior stays unchanged.
   if (agent === 'codex') {
-    const messageId = req.body && req.body.messageId;
-    const row = typeof messageId === 'string' ? stmts.getVoiceMessage.get(messageId) : null;
-    if (!row || normalizeVoiceAgent(row.agent) !== 'codex' || row.status !== 'done' || !row.reply_text) {
+    if (!messageRow || messageRow.status !== 'done' || !messageRow.reply_text) {
       return res.status(400).json({ error: 'codex_tts_requires_completed_message' });
     }
-    text = speechText.stripMarkdownForSpeech(row.reply_text);
+    text = speechText.stripMarkdownForSpeech(messageRow.reply_text);
   }
 
   if (typeof text !== 'string' || !text.trim()) return res.status(400).json({ error: 'invalid_text' });
+  res.setHeader('X-RM-TTS-Provider', ttsRouter.providerForAgent(agent));
   try {
     const audio = await ttsRouter.synthesizeSpeech(agent, text.trim().slice(0, 4096));
     res.setHeader('Content-Type', audio.contentType);
-    res.setHeader('X-RM-TTS-Provider', audio.provider);
     res.setHeader('X-RM-TTS-Streaming', audio.streaming ? '1' : '0');
     if (Buffer.isBuffer(audio.body)) return res.send(audio.body);
     res.flushHeaders();

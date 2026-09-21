@@ -7879,3 +7879,24 @@ conversation controls share that left-column toolbar. The standalone mobile
 page keeps its existing compact selector placement and all selection,
 persistence, routing, and message-history behavior is unchanged. This is a
 frontend-only layout change, so §93's live-working-tree deploy path applies.
+
+---
+
+# 160. TTS Play Buttons: Persisted Message Agent Is Authoritative
+
+A stale Project Manager tab exposed a routing hole after the Codex TTS work:
+the pre-agent version of `voiceClient.js` sent only speech text, so the backend
+normalized the missing agent to Claude and could send a Codex reply to
+ElevenLabs. The current Play buttons already send both `messageId` and `agent`,
+but server routing now also treats the stored `voice_messages.agent` as
+authoritative whenever a message ID is supplied. A caller cannot relabel a
+persisted Codex reply as Claude or vice versa.
+
+Agent-less requests without a usable message row now fail with
+`tts_agent_required` instead of defaulting to ElevenLabs. This means a very old
+still-open browser tab fails safely until it is refreshed; it can no longer
+send Codex text to the Claude voice. The desktop and mobile HTML also
+cache-bust `voiceClient.js` (and desktop `app.js`) so the next reload reliably
+loads the agent-aware client. The TTS response exposes its resolved provider in
+`X-RM-TTS-Provider` even when synthesis cannot start, which makes the fail-
+closed OpenAI-key state directly verifiable without exposing any credential.
