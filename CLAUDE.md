@@ -8658,3 +8658,26 @@ natural-language query about knowing what action to take but being unable to do
 it returned seven AI-ranked passages. Its first result was page 110, and clicking
 it opened the 110–111 spread. This verifies the actual DOM/navigation/search
 loop rather than merely proving that the JavaScript parses, per §123.
+
+---
+
+# 180. Manuscript Spread Fits the Viewport and Turns from Its Page Edges (2026-09-21)
+
+Harvey found the first integrated reader slightly too tall: longer pages pushed
+the bottom edge and printed page numbers below the visible viewport. The spread
+now has a smaller, fixed viewport-relative footprint instead of expanding with
+its text. Because canonical pages vary in word count, `manuscript.js` measures
+each rendered page and reduces only that page's type in quarter-pixel steps
+until its final line fits above the page number; shorter pages retain the normal
+reading size. The reader stage itself no longer scrolls, while the independent
+search-results column still does.
+
+The outer 56 pixels of each physical page are now full-height Previous/Next
+buttons. Their arrows remain subtle until hover/focus, but the entire edge is a
+real mouse/touch target with accessible labels. Boundary controls disappear on
+the first/last spread, and the toolbar arrows remain available as before.
+
+Verified against the live DOM in headless Chromium at 1440×900: on the dense
+110–111 spread the book bottom was at y=874, its printed page number at y=853,
+and the viewport/stage bottom at y=900. Clicking the right edge opened 112–113;
+clicking the left edge returned to 110–111. All 9 backend tests still pass.

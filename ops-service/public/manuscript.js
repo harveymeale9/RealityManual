@@ -5,6 +5,7 @@
   var pageCount = 180;
   var currentPage = 1;
   var pollTimer = null;
+  var resizeBound = false;
 
   function esc(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, function (char) {
@@ -35,6 +36,37 @@
       '<div class="manual-page-body">' + paragraphs + '</div><span class="manual-page-number">' + page.page + '</span></section>';
   }
 
+  function turnControls() {
+    return '<button type="button" class="manual-turn manual-turn-prev" aria-label="Previous pages" title="Previous pages"><span>‹</span></button>' +
+      '<button type="button" class="manual-turn manual-turn-next" aria-label="Next pages" title="Next pages"><span>›</span></button>';
+  }
+
+  // Canonical pages vary in word count. Keep the physical spread inside
+  // the visible stage, then reduce only a long page's type until its last
+  // line clears the printed page number. Shorter pages retain the normal
+  // reading size instead of every page being made unnecessarily tiny.
+  function fitSpread() {
+    if (!isMounted()) return;
+    root.querySelectorAll('.manual-page:not(.manual-page-blank)').forEach(function (page) {
+      page.style.fontSize = '';
+      var size = parseFloat(getComputedStyle(page).fontSize);
+      while (page.scrollHeight > page.clientHeight && size > 10) {
+        size -= 0.25;
+        page.style.fontSize = size + 'px';
+      }
+    });
+  }
+
+  function bindPageTurns() {
+    var previous = root.querySelector('.manual-turn-prev');
+    var next = root.querySelector('.manual-turn-next');
+    if (!previous || !next) return;
+    previous.disabled = currentPage <= 1;
+    next.disabled = currentPage >= pageCount;
+    previous.onclick = function () { loadPage(Math.max(1, currentPage - 2)); };
+    next.onclick = function () { loadPage(Math.min(pageCount, currentPage + 2)); };
+  }
+
   function loadPage(page) {
     page = Math.max(1, Math.min(pageCount, Number(page) || 1));
     currentPage = page;
@@ -42,14 +74,17 @@
     if (input) input.value = page;
     var book = root.querySelector('#manualBook');
     book.classList.remove('flipping');
-    book.innerHTML = '<section class="manual-page manual-page-left manual-page-blank manual-page-loading">Opening…</section><section class="manual-page manual-page-right manual-page-blank"></section>';
+    book.innerHTML = '<section class="manual-page manual-page-left manual-page-blank manual-page-loading">Opening…</section><section class="manual-page manual-page-right manual-page-blank"></section>' + turnControls();
+    bindPageTurns();
     return api('/pages/' + page).then(function (data) {
       if (!isMounted()) return;
       pageCount = data.pageCount;
       root.querySelector('#manualPageCount').textContent = 'of ' + pageCount;
-      book.innerHTML = pageBody(data.left, 'left') + pageBody(data.right, 'right');
+      book.innerHTML = pageBody(data.left, 'left') + pageBody(data.right, 'right') + turnControls();
+      bindPageTurns();
       void book.offsetWidth;
       book.classList.add('flipping');
+      requestAnimationFrame(fitSpread);
     }).catch(function (error) {
       if (isMounted()) book.innerHTML = '<section class="manual-page manual-page-left manual-page-blank">' + esc(error.message) + '</section><section class="manual-page manual-page-right manual-page-blank"></section>';
     });
@@ -126,6 +161,10 @@
     root = container;
     root.innerHTML = '<div class="manual-reader"><aside class="manual-finder"><div class="eyebrow">Intelligent finder</div><h2>Search the Manual</h2><p class="manual-finder-intro">Describe an idea, question, quotation, or section. The AI searches by meaning, ranks the strongest passages, and opens the book at the result you choose.</p><form class="manual-search-form" id="manualSearchForm"><textarea id="manualSearchQuery" placeholder="e.g. What does the Manual say about why people cannot make themselves take action?"></textarea><button id="manualSearchButton" type="submit">Find relevant passages</button></form><div class="manual-search-status" id="manualSearchStatus" role="status" aria-live="polite"></div><div class="manual-results" id="manualResults"></div></aside><section class="manual-stage"><div class="manual-toolbar"><form class="manual-page-controls" id="manualPageForm"><button type="button" id="manualPrev" aria-label="Previous spread">←</button><label for="manualPageInput">Page</label><input id="manualPageInput" type="number" min="1" max="180" value="1" inputmode="numeric"><span class="manual-page-count" id="manualPageCount">of 180</span><button type="submit">Go</button><button type="button" id="manualNext" aria-label="Next spread">→</button></form></div><div class="manual-book" id="manualBook" aria-live="polite"></div></section></div>';
     bind();
+    if (!resizeBound) {
+      resizeBound = true;
+      window.addEventListener('resize', function () { requestAnimationFrame(fitSpread); });
+    }
     api('/meta').then(function (meta) {
       pageCount = meta.pageCount;
       if (isMounted()) root.querySelector('#manualPageCount').textContent = 'of ' + pageCount;
