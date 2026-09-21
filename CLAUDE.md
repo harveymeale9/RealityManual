@@ -8110,3 +8110,15 @@ confirmed expansion and scroll remained unchanged. They also verified distinct
 alternating backgrounds, removal of source-audit UI, readable label sizing,
 the larger microphone control, and removal of timecodes from the live copied
 proposals.
+
+---
+
+# 166. Content Ideation Loading State Is a Centered Green Spinner
+
+The initial Content Ideation fetch no longer reuses the red `idea-fatal` error
+banner for normal loading. It now shows only an accessible green animated
+spinner centered in the available page area; genuine load failures retain the
+red error treatment. CSS and `ideation.js` are cache-busted together. A real
+Chromium test delayed the live state request, confirmed the spinner was exactly
+centered and green with no loading text or red banner, then confirmed the ten
+proposal cards replaced it when the request completed.

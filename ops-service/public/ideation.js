@@ -118,7 +118,7 @@
   }
   function mount(container) {
     if (timer) clearInterval(timer); root = container; expanded = {}; expansionInitialized = false; renderSignature = null;
-    root.innerHTML = '<div class="idea-fatal">Loading Content Ideation…</div>'; refresh();
+    root.innerHTML = '<div class="idea-loading" role="status" aria-label="Loading Content Ideation"><span aria-hidden="true"></span></div>'; refresh();
     timer = setInterval(function () { if (location.hash === '#content-ideation') refresh(); else clearInterval(timer); }, 5000);
   }
   window.RMIdeation = { mount: mount };

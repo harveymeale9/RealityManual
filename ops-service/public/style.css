@@ -1769,8 +1769,10 @@ body.role-reviewer #pmBackFab {
 .idea-change-summary { color: var(--ink-soft); font-size: .8rem; line-height: 1.45; margin: 10px 0; padding-left: 20px; }
 .idea-generating { min-height: 92px; padding: 20px; display: flex; align-items: center; gap: 15px; color: var(--ink-soft); }.idea-generating span { display: block; color: var(--ink-faint); margin-top: 5px; font-size: .78rem; }.idea-pulse { width: 15px; height: 15px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 20px var(--accent); animation: ideaPulse 1.3s infinite; }
 .idea-job-error,.idea-fatal { margin: 16px; padding: 16px; border: 1px solid var(--error); background: var(--error-soft); border-radius: 8px; }.idea-job-error span { display: block; color: var(--ink-soft); margin: 6px 0 10px; }
+.idea-loading { min-height: min(66vh, 620px); display: grid; place-items: center; }
+.idea-loading span { width: 34px; height: 34px; border: 3px solid rgba(60,255,137,.17); border-top-color: var(--accent); border-radius: 50%; box-shadow: 0 0 18px rgba(60,255,137,.14); animation: ideaLoadingSpin .72s linear infinite; }
 .idea-exit-send { transform: translateX(80px) scale(.97); opacity: 0; border-color: var(--accent); }.idea-exit-reject { transform: translateX(-60px) scale(.97); opacity: 0; border-color: var(--error); }.idea-revising { border-color: #c68cff; animation: ideaGlow .9s infinite alternate; }
-@keyframes ideaPulse { 50% { opacity: .35; transform: scale(.8); } } @keyframes ideaMicPulse { 50% { opacity: .45; } } @keyframes ideaGlow { to { box-shadow: 0 0 24px rgba(198,140,255,.22); } }
+@keyframes ideaPulse { 50% { opacity: .35; transform: scale(.8); } } @keyframes ideaMicPulse { 50% { opacity: .45; } } @keyframes ideaGlow { to { box-shadow: 0 0 24px rgba(198,140,255,.22); } } @keyframes ideaLoadingSpin { to { transform: rotate(360deg); } }
 
 @media (max-width: 640px) {
   /* Same space problem as everything else below: the icon rail is a
