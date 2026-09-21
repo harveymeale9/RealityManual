@@ -8,14 +8,16 @@ const ideationService = require('../src/ideationService');
 
 function proposal(seed, revised) {
   const token = 'concept' + seed.toString(36);
+  const isLongform = seed % 7 === 0;
   return {
-    contentType: seed % 7 === 0 ? 'longform' : 'short',
+    contentType: isLongform ? 'longform' : 'short',
     title: (revised ? 'Revised ' : '') + token,
+    alternativeTitles: isLongform ? [token + ' alternative one', token + ' alternative two', token + ' alternative three'] : [],
     bigIdea: token + ' angle' + seed.toString(36) + ' application' + seed.toString(36) + ' consequence' + seed.toString(36),
     hook: 'Opening-' + seed,
     manuscriptSources: ['Source-' + seed], relevantSections: ['Section I'], relevantPages: [1], directQuotes: [],
     paraphrases: ['Clearly marked paraphrase ' + seed],
-    script: (revised ? 'REVISED OPENING\n' : '') + 'Usable script ' + seed + ' with a practical emotional well-being conclusion.'
+    script: (revised ? 'REVISED OPENING\n' : '') + (isLongform ? Array(700).fill('usable').join(' ') : 'Usable script ' + seed + ' with a practical emotional well-being conclusion.')
   };
 }
 
@@ -23,11 +25,13 @@ test('persistent queue, revisions, learning signals, and Kanban transfer work to
   const db = new Database(':memory:');
   db.exec('CREATE TABLE records(store_name TEXT,id TEXT,data TEXT,updated_at TEXT,PRIMARY KEY(store_name,id))');
   let generation = 0;
+  let generationPrompt = '';
   const fakeProviders = {
     generate: async function (provider, prompt) {
       if (prompt.startsWith('Maintain a compact')) return { provider: provider, model: 'test', text: JSON.stringify({ summary: 'Prefers precision.', likes: ['precision'], avoids: ['generic'], hookPreferences: [], formatPreferences: [] }) };
       if (prompt.indexOf('Revise this proposal') !== -1) return { provider: provider, model: 'test', text: JSON.stringify({ proposal: proposal(9000, true), changeSummary: ['Changed only the opening.'] }) };
       const count = Number((prompt.match(/Generate (\d+)/) || [0, 1])[1]);
+      generationPrompt = prompt;
       generation++;
       return { provider: provider, model: 'test', sessionId: 'test-session', text: JSON.stringify({ proposals: Array.from({ length: count }, function (_, i) { return proposal(generation * 100 + i, false); }) }) };
     }
@@ -49,6 +53,9 @@ test('persistent queue, revisions, learning signals, and Kanban transfer work to
   let state = await request('/state');
   state = await waitFor(function (s) { return s.ideas.length === 10; });
   assert.equal(state.selectedProvider, 'codex');
+  assert.equal(state.ideas.find(function (idea) { return idea.content_type === 'longform'; }).alternative_titles.length, 3);
+  assert.match(generationPrompt, /Rule XIV, The Rule of Crystallized Emotion/);
+  assert.match(generationPrompt, /must not contain timestamps, timecodes/);
   const edited = state.ideas[0];
   await request('/ideas/' + edited.id, 'PATCH', { title: edited.title, bigIdea: edited.big_idea, hook: edited.hook, script: edited.script + '\nManual sentence.' });
   await request('/ideas/' + edited.id + '/feedback', 'POST', { text: 'Use a sharper opening.', source: 'voice' });
@@ -71,6 +78,9 @@ test('persistent queue, revisions, learning signals, and Kanban transfer work to
 
   await request('/provider', 'PUT', { provider: 'claude' });
   assert.equal((await request('/state')).selectedProvider, 'claude');
+  const timestamped = state.ideas[0];
+  db.prepare('UPDATE ideation_ideas SET script=? WHERE id=?').run('0:00 — HOOK\nA clean opening.\n1:15-2:00 — EXAMPLE\nA clean example.', timestamped.id);
   const restarted = ideationService.setup(db, { providers: fakeProviders, autoStart: false });
   assert.equal(restarted.state().ideas.length, 10); assert.equal(restarted.state().selectedProvider, 'claude');
+  assert.equal(restarted.state().ideas.find(function (idea) { return idea.id === timestamped.id; }).script, 'HOOK\nA clean opening.\nEXAMPLE\nA clean example.');
 });

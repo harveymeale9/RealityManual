@@ -8058,3 +8058,55 @@ Verification used an isolated container on port 4011 with the real host SSH
 boundary and real provider accounts. A forced refresh returned Claude and
 Codex data together, including current percentages and reset timestamps; the
 production endpoint was then checked again after the full backend deployment.
+
+---
+
+# 165. Content Ideation UX Stabilization and Doctrine-Grounded Generation
+
+Harvey's first review of the ten generated proposals exposed a severe UI flaw:
+the five-second state poll replaced the entire Ideation DOM even when the
+server response had not changed. That reset the document and script-textarea
+scroll positions, reopened the first card, and closed any other card, making
+both desktop and mobile scripts effectively unreadable. Ideation now hashes
+the returned state and does nothing when a poll is identical. When real state
+does change, it preserves expanded-card choices, page scroll, and textarea
+scroll. Card state therefore remains under the user's control while background
+generation/revision polling continues.
+
+The cards are intentionally much simpler. Manuscript sources, sections, pages,
+verified-quote audit output, paraphrase audit output, and the entire Source
+Treatment block remain available internally for grounding/verification but are
+no longer rendered. Alternating card backgrounds make proposal boundaries
+obvious. Field labels are larger and warmer, editor text is softer than pure
+white on black, and the feedback microphone is a full labelled Record/Stop
+control instead of a tiny unexplained dot. Future long-form cards show three
+alternative titles near the start of the brief.
+
+Generation now uses `src/ideationDoctrine.js`, a permanent compact map derived
+from the manuscript: all fourteen named Rules of Reality plus the objective of
+maximizing lifetime-average EWB, the five axes, emotional scoring, love,
+God/oneness, Heaven/Hell on Earth, fulfilment versus dissolution, triple
+alignment, FIRR, and enlightenment. Prompts require each proposal to use a
+relevant rule/definition as part of the actual logical chain—often objective
+→ rule → diagnosis → strategy—instead of treating source paragraphs as
+isolated material. They explicitly identify a subconscious belief as a
+crystallized emotional signature and encourage exact Rule numbers/names when
+they clarify the argument.
+
+Physical directions are now constrained: TURN/READ/SHOW only when a specific
+passage or visual is genuinely used, and TRACE only for diagrams, never prose
+or a paragraph. Generated scripts may not contain timestamps or timecoded beat
+ranges. Existing active scripts are idempotently migrated to remove their
+timecode prefixes while retaining useful headings. New and revised long-form
+proposals require exactly three distinct alternative titles; those titles are
+stored with the proposal and travel into pipeline metadata.
+
+Verification included the complete Node service test, including doctrine
+instructions, long-form alternative-title persistence, and timecode migration.
+An isolated container on port 4012 used a safe copy of the production database.
+Real headless Chromium tests at 1440×1000 and 390×844 closed the first card,
+opened the second, scrolled its script, waited through a polling interval, and
+confirmed expansion and scroll remained unchanged. They also verified distinct
+alternating backgrounds, removal of source-audit UI, readable label sizing,
+the larger microphone control, and removal of timecodes from the live copied
+proposals.

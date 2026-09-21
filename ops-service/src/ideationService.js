@@ -3,6 +3,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const corpus = require('./ideationCorpus');
+const doctrine = require('./ideationDoctrine');
 const providers = require('./ideationProviders');
 
 const TARGET_ACTIVE = 10;
@@ -17,6 +18,13 @@ function uuid() { return crypto.randomUUID(); }
 function json(value, fallback) { try { return JSON.parse(value); } catch (e) { return fallback; } }
 function stringify(value) { return JSON.stringify(value == null ? null : value); }
 function clean(value, max) { return String(value || '').trim().slice(0, max || 100000); }
+function cleanGeneratedScript(value) {
+  return clean(value, 100000).split('\n').map(function (line) {
+    // Keep useful section headings, but remove production timecodes such as
+    // "0:00 — HOOK" or "[02:10-03:00] Example" from generated scripts.
+    return line.replace(/^\s*\[?\d{1,2}:\d{2}(?:\s*(?:-|–|—|to)\s*\d{1,2}:\d{2})?\]?\s*(?:(?:-|–|—|:)\s*)?/i, '');
+  }).join('\n').replace(/^\s*\n+/, '').replace(/\n{3,}/g, '\n\n').trim();
+}
 function htmlEscape(value) { return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 function scriptHtml(value) { return clean(value, 100000).split(/\n/).map(function (line) { return '<div>' + (htmlEscape(line) || '<br>') + '</div>'; }).join(''); }
 
@@ -42,7 +50,7 @@ function setup(db, options) {
     CREATE TABLE IF NOT EXISTS ideation_ideas (
       id TEXT PRIMARY KEY, status TEXT NOT NULL, sort_order REAL NOT NULL,
       content_type TEXT NOT NULL, estimated_runtime TEXT NOT NULL, runtime_seconds INTEGER NOT NULL,
-      title TEXT NOT NULL, big_idea TEXT NOT NULL, hook TEXT NOT NULL,
+      title TEXT NOT NULL, alternative_titles TEXT NOT NULL DEFAULT '[]', big_idea TEXT NOT NULL, hook TEXT NOT NULL,
       manuscript_sources TEXT NOT NULL, relevant_sections TEXT NOT NULL, relevant_pages TEXT NOT NULL,
       verified_quotes TEXT NOT NULL, paraphrases TEXT NOT NULL, script TEXT NOT NULL,
       provider TEXT NOT NULL, model TEXT NOT NULL, generation_meta TEXT NOT NULL,
@@ -71,6 +79,7 @@ function setup(db, options) {
       error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
     );
   `);
+  try { db.exec("ALTER TABLE ideation_ideas ADD COLUMN alternative_titles TEXT NOT NULL DEFAULT '[]'"); } catch (e) { /* already exists */ }
   db.prepare('INSERT OR IGNORE INTO ideation_settings (id, selected_provider, preference_profile, updated_at) VALUES (1, ?, ?, ?)')
     .run('codex', stringify(DEFAULT_PROFILE), now());
 
@@ -88,12 +97,24 @@ function setup(db, options) {
   };
   db.prepare("UPDATE ideation_jobs SET status='pending', updated_at=? WHERE status='running'").run(now());
 
+  // The first generated batch used timecoded long-form headings. They are
+  // editorial scaffolding, not spoken copy, and made the script needlessly
+  // noisy. Clean existing active proposals once; the operation is idempotent
+  // and intentionally does not create a user-edit learning signal.
+  const migrateScript = db.prepare('UPDATE ideation_ideas SET script=?, estimated_runtime=?, runtime_seconds=? WHERE id=?');
+  db.prepare("SELECT id,script,content_type FROM ideation_ideas WHERE status='active'").all().forEach(function (idea) {
+    const script = cleanGeneratedScript(idea.script);
+    if (script === idea.script) return;
+    const runtime = corpus.estimateRuntime(script, idea.content_type);
+    migrateScript.run(script, runtime.label, runtime.seconds, idea.id);
+  });
+
   let workerBusy = false;
 
   function decodeIdea(row) {
     if (!row) return null;
     const out = Object.assign({}, row);
-    ['manuscript_sources','relevant_sections','relevant_pages','verified_quotes','paraphrases','generation_meta'].forEach(function (key) {
+    ['alternative_titles','manuscript_sources','relevant_sections','relevant_pages','verified_quotes','paraphrases','generation_meta'].forEach(function (key) {
       out[key] = json(row[key], key === 'generation_meta' ? {} : []);
     });
     out.edited = !!row.edited;
@@ -146,6 +167,7 @@ function setup(db, options) {
 
   function snapshot(idea) {
     return { title: idea.title, bigIdea: idea.big_idea, hook: idea.hook, script: idea.script,
+      alternativeTitles: json(idea.alternative_titles, []),
       contentType: idea.content_type, sources: json(idea.manuscript_sources, []), sections: json(idea.relevant_sections, []),
       pages: json(idea.relevant_pages, []), quotes: json(idea.verified_quotes, []), paraphrases: json(idea.paraphrases, []) };
   }
@@ -209,9 +231,16 @@ function setup(db, options) {
 
 Read the canonical completed manuscript at THE_REALITY_MANUAL_COMPLETE_MANUSCRIPT.txt. It contains ==PAGE N== markers. Ground every proposal in its actual arguments, rules, examples, terminology, and reasoning. Do not invent quotations. A direct quote must be copied exactly from the manuscript.
 
-Physical format: overhead camera, physical book and hands in frame, speaker reads/shows/references exact book passages and then explains their relevance to emotional well-being, life strategy, or improving life. Write usable scripts with concise physical directions when useful.
+The following is the permanent doctrine map extracted from that manuscript. Treat it as a set of reusable intellectual anchors, not as a requirement to cram every rule into every script:
+${doctrine.promptText()}
 
-Established method inferred from the strongest Outline Completed records: provocative and concrete hook; state a precise central argument; translate formal book rules into candid conversational speech; use examples/thought experiments; connect apparently distant sections when useful; return to practical emotional well-being; include page cues and READ/SHOW/TRACE directions only when they help. Preserve the author's direct, irreverent, intellectually serious voice. Vary formats. Ultra-short ideas can be one sharp quotation or implication rather than inflated mini-essays.
+Physical format: overhead camera, physical book and hands in frame. The speaker can read or show an exact passage or diagram and then explain its relevance to emotional well-being, life strategy, or improving life. Use TURN/READ/SHOW instructions only when the specific passage or visual will genuinely appear. Never instruct the speaker to trace a paragraph or prose; TRACE is reserved for a diagram whose visual structure is itself being explained.
+
+Established method inferred from the strongest Outline Completed records: provocative and concrete hook; state a precise central argument; translate formal book rules into candid conversational speech; use examples/thought experiments; connect apparently distant sections when useful; return to practical emotional well-being. Preserve the author's direct, irreverent, intellectually serious voice. Vary formats. Ultra-short ideas can be one sharp quotation or implication rather than inflated mini-essays.
+
+Each proposal must be structurally rooted in at least one named Rule, core definition, or recurring pillar above. Do not merely mention it: show the logical chain. When natural, establish the objective first (maximizing EWB / the pleasantness of being alive), then explain how the relevant Rule changes the diagnosis of the human problem and what strategy follows. For example, an ordinary annoyance becomes important because it lowers lifetime-average EWB; the Rule of Desire explains the negative emotion as an unmet desire; a subconscious block is an emotional signature under the Rule of Crystallized Emotion, not merely a sentence to repeat over. Use the manuscript's exact numbering and terminology when naming a Rule.
+
+Scripts must not contain timestamps, timecodes, or timed beat ranges. Use plain descriptive section headings when a long script needs structure.
 
 Representative completed outlines (these are style references, not ideas to duplicate):
 ${JSON.stringify(ctx.examples)}
@@ -230,16 +259,16 @@ Return STRICT JSON only. Do not include markdown fences or commentary. Provider 
   }
 
   function generationPrompt(count, provider) {
-    return basePrompt(provider) + `\nGenerate ${count} NEW proposals. Across long-run generations target approximately six short-form proposals per one longform proposal; within short form mix ultra_short (<25 sec), short (<60 sec), and long_short (1-3 min). Longform is 6-38 min. Quality beats a mechanical batch ratio.\nSchema: {"proposals":[{"contentType":"ultra_short|short|long_short|longform","title":"...","bigIdea":"the exact point and why interesting","hook":"...","manuscriptSources":["specific concept/example"],"relevantSections":["section title"],"relevantPages":[12],"directQuotes":["exact manuscript text"],"paraphrases":["clearly paraphrased source claim"],"script":"complete usable script or detailed longform outline"}]}.`;
+    return basePrompt(provider) + `\nGenerate ${count} NEW proposals. Across long-run generations target approximately six short-form proposals per one longform proposal; within short form mix ultra_short (<25 sec), short (<60 sec), and long_short (1-3 min). Longform is 6-38 min. Quality beats a mechanical batch ratio. Every longform proposal must include exactly three genuinely distinct alternative titles in addition to its working title; other formats should return an empty alternativeTitles array.\nSchema: {"proposals":[{"contentType":"ultra_short|short|long_short|longform","title":"...","alternativeTitles":["...","...","..."],"bigIdea":"the exact point, named rule/pillar, logical chain, and why it matters to EWB","hook":"...","manuscriptSources":["specific concept/example"],"relevantSections":["section title"],"relevantPages":[12],"directQuotes":["exact manuscript text"],"paraphrases":["clearly paraphrased source claim"],"script":"complete usable script or detailed longform outline with no timestamps"}]}.`;
   }
 
   function revisionPrompt(idea, feedback, provider) {
-    return basePrompt(provider) + `\nRevise this proposal to address the feedback precisely. Preserve manual wording and unrelated parts. Recheck all direct quotes against the manuscript.\nCURRENT=${JSON.stringify(snapshot(idea))}\nFEEDBACK=${JSON.stringify(feedback)}\nReturn {"proposal":{same fields as generation schema},"changeSummary":["specific change"]}.`;
+    return basePrompt(provider) + `\nRevise this proposal to address the feedback precisely. Preserve manual wording and unrelated parts. Recheck all direct quotes against the manuscript. A longform proposal must retain or provide exactly three alternativeTitles; other formats use an empty array. Do not add timestamps.\nCURRENT=${JSON.stringify(snapshot(idea))}\nFEEDBACK=${JSON.stringify(feedback)}\nReturn {"proposal":{same fields as generation schema, including alternativeTitles},"changeSummary":["specific change"]}.`;
   }
 
   function normalizeProposal(raw, providerResult) {
     const requestedType = TYPES.indexOf(raw.contentType) >= 0 ? raw.contentType : 'short';
-    const title = clean(raw.title, 300), bigIdea = clean(raw.bigIdea, 5000), hook = clean(raw.hook, 5000), script = clean(raw.script, 100000);
+    const title = clean(raw.title, 300), bigIdea = clean(raw.bigIdea, 5000), hook = clean(raw.hook, 5000), script = cleanGeneratedScript(raw.script);
     if (!title || !bigIdea || !script) throw new Error('Proposal missing title, bigIdea, or script');
     const runtime = corpus.estimateRuntime(script, requestedType);
     if (runtime.seconds > 45 * 60) throw new Error('Proposal exceeds the maximum practical runtime');
@@ -253,7 +282,9 @@ Return STRICT JSON only. Do not include markdown fences or commentary. Provider 
     const validPages = new Set(corpus.loadManuscript().pages.map(function (p) { return p.page; }));
     const suppliedQuoteCount = Array.isArray(raw.directQuotes) ? raw.directQuotes.length : 0;
     if (suppliedQuoteCount > verifiedQuotes.length) console.warn('[ideation] discarded', suppliedQuoteCount - verifiedQuotes.length, 'unverified direct quote(s) from', providerResult.provider);
-    return { contentType: type, title: title, bigIdea: bigIdea, hook: hook,
+    const alternativeTitles = type === 'longform' ? (Array.isArray(raw.alternativeTitles) ? raw.alternativeTitles : []).map(function (x) { return clean(x, 300); }).filter(Boolean).filter(function (x, i, all) { return x !== title && all.indexOf(x) === i; }).slice(0, 3) : [];
+    if (type === 'longform' && alternativeTitles.length !== 3) throw new Error('Longform proposal requires exactly three alternative titles');
+    return { contentType: type, title: title, alternativeTitles: alternativeTitles, bigIdea: bigIdea, hook: hook,
       manuscriptSources: (raw.manuscriptSources || []).map(function (x) { return clean(x, 1000); }).filter(Boolean),
       relevantSections: (raw.relevantSections || []).map(function (x) { return clean(x, 300); }).filter(Boolean),
       relevantPages: (raw.relevantPages || []).map(Number).filter(function (n) { return Number.isInteger(n) && validPages.has(n); }),
@@ -276,9 +307,9 @@ Return STRICT JSON only. Do not include markdown fences or commentary. Provider 
     const order = min == null ? 0 : min - 10;
     const id = uuid(), stamp = now();
     db.prepare(`INSERT INTO ideation_ideas
-      (id,status,sort_order,content_type,estimated_runtime,runtime_seconds,title,big_idea,hook,manuscript_sources,relevant_sections,relevant_pages,verified_quotes,paraphrases,script,provider,model,generation_meta,created_at,updated_at)
-      VALUES (?,'active',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(id, order, proposal.contentType, proposal.runtime.label, proposal.runtime.seconds, proposal.title, proposal.bigIdea,
+      (id,status,sort_order,content_type,estimated_runtime,runtime_seconds,title,alternative_titles,big_idea,hook,manuscript_sources,relevant_sections,relevant_pages,verified_quotes,paraphrases,script,provider,model,generation_meta,created_at,updated_at)
+      VALUES (?,'active',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(id, order, proposal.contentType, proposal.runtime.label, proposal.runtime.seconds, proposal.title, stringify(proposal.alternativeTitles), proposal.bigIdea,
         proposal.hook, stringify(proposal.manuscriptSources), stringify(proposal.relevantSections), stringify(proposal.relevantPages),
         stringify(proposal.verifiedQuotes), stringify(proposal.paraphrases), proposal.script, proposal.provider, proposal.model,
         stringify(proposal.meta), stamp, stamp);
@@ -359,12 +390,12 @@ Return STRICT JSON only. Do not include markdown fences or commentary. Provider 
     const top = db.prepare("SELECT MIN(sort_order) AS n FROM ideation_ideas WHERE status='active'").get().n;
     const changeSummary = Array.isArray(parsed.changeSummary) ? parsed.changeSummary : [];
     db.transaction(function () {
-      db.prepare(`UPDATE ideation_ideas SET sort_order=?,content_type=?,estimated_runtime=?,runtime_seconds=?,title=?,big_idea=?,hook=?,manuscript_sources=?,relevant_sections=?,relevant_pages=?,verified_quotes=?,paraphrases=?,script=?,provider=?,model=?,generation_meta=?,revision_number=?,edited=1,updated_at=? WHERE id=?`)
-        .run((top == null ? 0 : top - 10), revised.contentType, revised.runtime.label, revised.runtime.seconds, revised.title, revised.bigIdea,
+      db.prepare(`UPDATE ideation_ideas SET sort_order=?,content_type=?,estimated_runtime=?,runtime_seconds=?,title=?,alternative_titles=?,big_idea=?,hook=?,manuscript_sources=?,relevant_sections=?,relevant_pages=?,verified_quotes=?,paraphrases=?,script=?,provider=?,model=?,generation_meta=?,revision_number=?,edited=1,updated_at=? WHERE id=?`)
+        .run((top == null ? 0 : top - 10), revised.contentType, revised.runtime.label, revised.runtime.seconds, revised.title, stringify(revised.alternativeTitles), revised.bigIdea,
           revised.hook, stringify(revised.manuscriptSources), stringify(revised.relevantSections), stringify(revised.relevantPages), stringify(revised.verifiedQuotes),
           stringify(revised.paraphrases), revised.script, revised.provider, revised.model, stringify(Object.assign(revised.meta, { changeSummary: changeSummary })), revision, now(), idea.id);
       db.prepare('INSERT INTO ideation_revisions (id,idea_id,revision_number,kind,snapshot,diff,provider,model,created_at) VALUES (?,?,?,?,?,?,?,?,?)')
-        .run(uuid(), idea.id, revision, 'ai_revision', stringify({ title: revised.title, bigIdea: revised.bigIdea, hook: revised.hook, script: revised.script, changeSummary: changeSummary }), stringify(diffLines(prior.script, revised.script)), result.provider, result.model, now());
+        .run(uuid(), idea.id, revision, 'ai_revision', stringify({ title: revised.title, alternativeTitles: revised.alternativeTitles, bigIdea: revised.bigIdea, hook: revised.hook, script: revised.script, changeSummary: changeSummary }), stringify(diffLines(prior.script, revised.script)), result.provider, result.model, now());
       addSignal(idea.id, 'implemented_feedback', 1, { feedback: feedback, changeSummary: changeSummary });
     })();
   }
@@ -420,7 +451,7 @@ Return STRICT JSON only. Do not include markdown fences or commentary. Provider 
     const platforms = idea.content_type === 'longform' ? ['ytlong','facebook'] : ['ytshort','tiktok','instagram','facebook'];
     const piece = { id: id, seq: seq, title: idea.title, stage: destination, platforms: platforms, contentType: idea.content_type,
       notesHtml: scriptHtml(idea.script), order: order, createdAt: stamp, updatedAt: stamp,
-      ideationMetadata: { ideaId: idea.id, bigIdea: idea.big_idea, hook: idea.hook, estimatedRuntime: idea.estimated_runtime,
+      ideationMetadata: { ideaId: idea.id, alternativeTitles: json(idea.alternative_titles, []), bigIdea: idea.big_idea, hook: idea.hook, estimatedRuntime: idea.estimated_runtime,
         runtimeSeconds: idea.runtime_seconds, manuscriptSources: json(idea.manuscript_sources, []), relevantSections: json(idea.relevant_sections, []),
         relevantPages: json(idea.relevant_pages, []), verifiedQuotes: json(idea.verified_quotes, []), provider: idea.provider, model: idea.model,
         revisionNumber: idea.revision_number } };
