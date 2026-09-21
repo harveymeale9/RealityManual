@@ -7900,3 +7900,13 @@ cache-bust `voiceClient.js` (and desktop `app.js`) so the next reload reliably
 loads the agent-aware client. The TTS response exposes its resolved provider in
 `X-RM-TTS-Provider` even when synthesis cannot start, which makes the fail-
 closed OpenAI-key state directly verifiable without exposing any credential.
+
+---
+
+# 161. Ops Panel Favicon and Header Brand Cleanup
+
+The main Content Studio page now uses the same `img/logo.png` mark shown on
+its login card as the browser favicon. The redundant 16px copy of that image
+beside the desktop header text “Reality Manual Content Studio” was removed
+because it was too small to read. The larger diamond mark at the top of the
+vertical navigation rail is unchanged. This is a frontend-only change.

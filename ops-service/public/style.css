@@ -303,8 +303,6 @@ body.role-reviewer #pmBackFab {
 }
 
 .panel-brand { display: flex; align-items: center; gap: 10px; margin-right: 8px; }
-.brand-mark { color: var(--accent); display: flex; flex-shrink: 0; }
-.brand-mark svg, .brand-mark img { width: 16px; height: 16px; }
 .panel-brand-text { display: flex; flex-direction: column; gap: 2px; }
 .wordmark-sm {
   font-family: var(--font-body);
