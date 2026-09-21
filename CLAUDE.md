@@ -8167,3 +8167,25 @@ idea. If the final card is revised and has no successor, its position is left
 unchanged and the preceding available proposal receives focus. The service integration test verifies the returned focus ID and the
 persistent next-idea/revised-idea ordering; browser tests cover the collapse,
 reorder, purple state, expansion, and focus handoff on desktop and mobile.
+
+---
+
+# 170. Project Manager Play Button Exposes Missing TTS Configuration
+
+Codex reply audio was failing with no visible explanation: the live
+`/api/voice/tts` request correctly returned HTTP 503 with
+`openai_tts_not_configured`, because `OPENAI_API_KEY` is not present in the
+production environment, but both desktop and mobile discarded every rejected
+speech promise with an empty `catch`. `voiceClient.js` now preserves the
+server's stable error code and a readable message. Both interfaces show a red
+`OpenAI key needed` state on the exact Play button that failed (and a generic
+`Audio unavailable` state for other synthesis errors) instead of appearing to
+do nothing.
+
+This UX fix does not weaken the deliberate provider boundary from §158:
+Codex remains on OpenAI's Spruce voice and does not silently fall back to
+ElevenLabs. Actual Codex speech therefore still requires Harvey to place an
+OpenAI API key in the VPS ops-service environment, followed by a container
+redeploy; raw credential entry remains a human-only action. Real Chromium tests
+against the live desktop and mobile interfaces confirmed the visible error
+state and explanatory tooltip on each.

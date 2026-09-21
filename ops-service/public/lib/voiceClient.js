@@ -445,7 +445,17 @@ window.RMVoice = (function () {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: clean, messageId: msgId, agent: agent })
     }).then(function (r) {
-      if (!r.ok) throw new Error('Could not synthesize speech');
+      if (!r.ok) {
+        return r.json().catch(function () { return {}; }).then(function (payload) {
+          var code = payload && payload.error ? payload.error : 'tts_failed';
+          var message = code === 'openai_tts_not_configured'
+            ? 'Codex voice needs an OpenAI API key on the server.'
+            : 'Could not synthesize speech.';
+          var error = new Error(message);
+          error.code = code;
+          throw error;
+        });
+      }
       if (r.headers.get('X-RM-TTS-Streaming') === '1') return playStreamingResponse(r, myToken, msgId);
       return playBufferedResponse(r, myToken, msgId);
       });

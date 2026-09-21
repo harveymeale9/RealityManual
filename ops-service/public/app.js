@@ -586,8 +586,19 @@
       // actually going, and clicking it then restarted the same text
       // instead of stopping it.
       playBtn.addEventListener('click', function () {
+        playBtn.classList.remove('pm-play-btn-error');
+        playBtn.removeAttribute('title');
         if (Voice.currentlySpeaking() === msgId) { Voice.stopSpeaking(); return; }
-        Voice.speak(text, msgId, agent).catch(function () {});
+        playBtn.textContent = 'Loading audio…';
+        Voice.speak(text, msgId, agent).then(function (audio) {
+          if (!audio && Voice.currentlySpeaking() !== msgId) playBtn.textContent = '▶ Play';
+        }).catch(function (error) {
+          playBtn.textContent = error && error.code === 'openai_tts_not_configured'
+            ? 'OpenAI key needed'
+            : 'Audio unavailable';
+          playBtn.title = error && error.message ? error.message : 'Could not play this response.';
+          playBtn.classList.add('pm-play-btn-error');
+        });
       });
       meta.appendChild(playBtn);
       if (msgId) {
