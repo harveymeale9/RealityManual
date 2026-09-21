@@ -7945,3 +7945,83 @@ events: startup/session/turn lifecycle, shell starts and results, four distinct
 phase updates, and completion; its final reply remained only in the chat.
 Headless Chromium at desktop and 390×844 mobile sizes confirmed the active
 Task List row showed the stable title plus its latest live status subline.
+
+---
+
+# 163. Content Ideation: Manuscript-Grounded Proposal and Learning Workspace
+
+Content Ops now has a real **Content Ideation** leaf immediately after Content
+Pipeline. It is an admin-only, responsive authoring workspace that maintains a
+server-persisted target of ten active proposals. The desktop view uses dense,
+expandable development cards; the mobile view changes those grids into a
+single-column, touch-sized layout rather than shrinking the desktop board.
+
+**Persistence and queue.** `src/ideationService.js` owns dedicated normalized
+SQLite tables for ideas, immutable revision snapshots/diffs, feedback history,
+weighted learning signals, the inspectable preference profile, provider
+settings, and restart-recoverable jobs. Pending/running jobs recover as pending
+after a backend restart. Generation runs in the background, and a vacant slot
+shows its provider and generation state. Provider failures stay visible and
+explicitly retryable; the service never silently falls back. Accepted work is
+not placed in a second pipeline: it is transactionally written into the
+existing `records`/`pieces` model with the normal stage, sequence, order,
+platform preset, and `notesHtml`, plus compatible `ideationMetadata`. A guarded
+status transition prevents duplicate transfers.
+
+**Grounding and generation.** `src/ideationCorpus.js` reads the canonical root
+`THE_REALITY_MANUAL_COMPLETE_MANUSCRIPT.txt` directly and understands its
+`==PAGE N==` markers. Every alleged direct quote is normalized and checked
+against that file; unverified text is discarded rather than displayed as a
+quotation, and verified quotes receive the canonical page. The provider prompt
+includes the compact learned profile, the current duplicate catalog, historical
+format distribution, and representative Outline Completed records selected
+from the longest/most-developed scripts plus examples of each content type. It
+instructs the agent to read the full manuscript and follows the project-specific
+concept → implication → human problem → well-being/life strategy → physical
+book presentation → hook/script method. Runtime is recalculated server-side at
+145 spoken words per minute plus a small allowance for explicit book/stage
+interactions.
+The saved content type is reconciled to generous runtime bands so a provider
+cannot leave, for example, a five-minute script labelled as a one-to-three-
+minute long-short.
+
+`src/ideationProviders.js` is the provider boundary. Codex uses the existing
+host runner and ChatGPT authentication (therefore the persistent GPT-5.6 Sol,
+medium-reasoning, full-access defaults); Claude uses the existing independent
+one-shot Claude Code subscription path. Both receive the same context and no
+new API credential is required. The server-side Ideation selector defaults to
+Codex and is deliberately independent of Project Manager's selector. Every
+proposal and AI revision records the provider/model that actually produced it.
+
+**Editing, revision, and learning.** Manual title, big-idea, hook, and script
+changes save without AI, recalculate runtime, and create a revision snapshot.
+Polling will not replace a card with unsaved wording. Feedback accepts typing
+or the unchanged shared ElevenLabs transcription path and is append-only.
+Implement Feedback uses the currently selected provider, tells it to preserve
+unrelated/manual text, updates the same idea, moves it to the top, marks it
+EDITED, and shows both a provider change summary and a line-level LCS add/remove
+diff. The full revision chain survives reloads.
+
+Signals are weighted rather than treated equally: explicit feedback/manual
+rewrites/implemented feedback are strong; direct-to-completed is stronger than
+outline-started; explained rejection is stronger than an unexplained rejection.
+The underlying rows remain inspectable while bounded unprocessed batches update
+a compact JSON preference profile. Transferred ideas are also reconciled with
+their real Kanban piece so later progress through filmed/edited/uploaded/
+scheduled/live becomes a positive learning signal once per stage.
+
+**Verification.** A temporary container on port 4002 used a copy of the real
+production database, the real manuscript/repository mount, and the real agent
+credentials; production content was untouched. A real Codex run generated ten
+distinct proposals and scripts, including verified quotations/pages and a
+long-form piece. Manual editing, typed and real voice-transcribed feedback,
+Codex revision, exact preservation of a manual marker, add/remove diff,
+revision history, rejection, both Outline Started and Outline Completed
+transfers, duplicate-transfer count, learned-profile persistence, replacements
+back to ten, and backend-restart persistence were exercised there. The same
+replacement path was also exercised with Claude to prove selector routing and
+metadata without fallback. Headless Chromium at 1440×1000 and 390×844 found no
+runtime errors or horizontal overflow and verified tab order, ten cards,
+provider selection, EDITED state, history, and diff rendering. The committed
+Node integration test covers the queue/edit/feedback/revise/transfer/reject/
+learning/provider/restart lifecycle with deterministic provider doubles.

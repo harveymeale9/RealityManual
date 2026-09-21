@@ -18,6 +18,7 @@ const speechText = require('./src/speechText');
 const videoAnalysis = require('./src/videoAnalysis');
 const youtubeAuth = require('./src/youtubeAuth');
 const tiktokAuth = require('./src/tiktokAuth');
+const ideationService = require('./src/ideationService');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
@@ -240,7 +241,7 @@ app.use(cors({
     cb(new Error('Not allowed by CORS'));
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
 }));
 app.use(cookieParser());
 app.use(express.json({ limit: '2mb' }));
@@ -384,6 +385,11 @@ app.use('/api/store', requireAuthOrReviewer);
 app.use('/api/files', requireAuthOrReviewer);
 app.use('/api/voice', requireAuth);
 app.use('/api/tiktok', requireAuth);
+// Content Ideation is an admin-only authoring/agent surface. It has its
+// own normalized tables but transfers accepted work into the existing
+// pieces record/Kanban model.
+const ideation = ideationService.setup(db);
+app.use('/api/ideation', requireAuth, ideation.router);
 
 // --- YouTube OAuth (Google) — see src/youtubeAuth.js for the token
 // exchange itself. Placeholder-until-configured: YOUTUBE_OAUTH_CLIENT_ID/

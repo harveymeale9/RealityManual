@@ -61,6 +61,7 @@
       ] },
     { label: 'Content Ops', tabs: [
         { id: 'content-ops', label: 'Content Pipeline' },
+        { id: 'content-ideation', label: 'Content Ideation' },
         { id: 'upload-files', label: 'Content Production' },
         { id: 'settings', label: 'Content Settings' }
       ] },
@@ -161,8 +162,9 @@
   function renderSubtabs(active) {
     if (!panelSubtabs) return;
     var group = groupForTab(active);
-    if (group.tabs.length < 2) { panelSubtabs.innerHTML = ''; return; }
-    panelSubtabs.innerHTML = group.tabs.map(function (t) {
+    var visibleTabs = IS_REVIEWER ? group.tabs.filter(function (t) { return REVIEWER_ALLOWED_TABS.indexOf(t.id) !== -1; }) : group.tabs;
+    if (visibleTabs.length < 2) { panelSubtabs.innerHTML = ''; return; }
+    panelSubtabs.innerHTML = visibleTabs.map(function (t) {
       return '<a href="#' + t.id + '" class="panel-subtab' + (t.id === active ? ' active' : '') + '">' + t.label + '</a>';
     }).join('');
   }
@@ -307,6 +309,8 @@
     } else if (active === 'content-ops') {
       panelMain.innerHTML = OPS_MARKUP;
       bootContentOps();
+    } else if (active === 'content-ideation') {
+      window.RMIdeation.mount(panelMain);
     } else if (active === 'upload-files') {
       panelMain.innerHTML = UPLOAD_MARKUP;
       bootUploadFiles();
