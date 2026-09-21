@@ -1,2 +1,39 @@
-ssh: connect to host 187.124.146.235 port 22: Connection timed out
-ssh exit code: 255
++ CLAUDE_HOST_HOME_DIR=/root/ops-service-claude-home/host-identity
++ mkdir -p /root/ops-service-claude-home/host-identity
++ ln -sfn ../claude-dir /root/ops-service-claude-home/host-identity/.claude
++ ln -sfn ../claude.json /root/ops-service-claude-home/host-identity/.claude.json
++ chown -h ubuntu:ubuntu /root/ops-service-claude-home/host-identity /root/ops-service-claude-home/host-identity/.claude /root/ops-service-claude-home/host-identity/.claude.json
++ ln -sfn /srv/realitymanual-repo /repo
++ RUN_ARGS=(-d --name "$CONTAINER" --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-claude-home/claude-dir:/home/node/.claude -v /root/ops-service-claude-home/claude.json:/home/node/.claude.json -v "$DATA_DIR:/data" -v "$RUNTIME_REPO_DIR:/repo" -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file "$ENV_FILE")
++ cd /root/realitymanual-repo
+++ git status --porcelain
++ '[' -n '' ']'
++ git pull
+From https://github.com/harveymeale9/RealityManual
+   90380fd..ede8212  main       -> origin/main
+Updating 90380fd..ede8212
+Fast-forward
+ CLAUDE.md                        | 32 ++++++++++++++++++++++++++++--
+ ops-service/public/index.html    |  4 ++--
+ ops-service/public/manuscript.js | 43 ++++++++++++++++++++++++++++++++++++++--
+ ops-service/public/style.css     | 15 ++++++++++----
+ 4 files changed, 84 insertions(+), 10 deletions(-)
+++ git rev-parse HEAD
++ NEW_HEAD=ede82126f44dc564213876adbef7bd687f3068f7
++ git -C /srv/realitymanual-repo pull
+Already up to date.
++ chown -R 1000:1000 /srv/realitymanual-repo
++ LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
+++ cat /root/ops-service-data/last-image-commit.txt
++ LAST_BUILD_COMMIT=90380fdad9bc04faf2a5cd28675098510580f2e9
++ NEEDS_REBUILD=1
++ '[' -n 90380fdad9bc04faf2a5cd28675098510580f2e9 ']'
++ git cat-file -e '90380fdad9bc04faf2a5cd28675098510580f2e9^{commit}'
+++ git diff --name-only 90380fdad9bc04faf2a5cd28675098510580f2e9 ede82126f44dc564213876adbef7bd687f3068f7 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -z '' ']'
++ NEEDS_REBUILD=0
++ '[' 0 = 0 ']'
++ echo 'no backend changes between 90380fdad9bc04faf2a5cd28675098510580f2e9 and ede82126f44dc564213876adbef7bd687f3068f7 — already live via git pull, skipping rebuild/restart'
+no backend changes between 90380fdad9bc04faf2a5cd28675098510580f2e9 and ede82126f44dc564213876adbef7bd687f3068f7 — already live via git pull, skipping rebuild/restart
++ exit 0
+ssh exit code: 0
