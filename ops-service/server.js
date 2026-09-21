@@ -1346,7 +1346,10 @@ function drainVoiceQueue() {
   const next = voiceQueue.shift();
   if (!next) return;
   voiceProcessing = true;
-  processVoiceMessage(next.id, next.mode, next.text, next.agent, next.imageBlock, next.imagePath)
+  const work = next.recoverCodex
+    ? recoverCodexVoiceMessage(next.id)
+    : processVoiceMessage(next.id, next.mode, next.text, next.agent, next.imageBlock, next.imagePath);
+  work
     .catch(function (err) {
       stmts.finishVoiceMessage.run('error', null, String((err && err.message) || err).slice(0, 2000), new Date().toISOString(), next.id);
     })
@@ -1355,6 +1358,40 @@ function drainVoiceQueue() {
       voiceProcessing = false;
       drainVoiceQueue();
     });
+}
+
+async function recoverCodexVoiceMessage(id) {
+  const row = stmts.getVoiceMessage.get(id);
+  if (!row) return;
+  let activity;
+  try { activity = row.activity_log ? JSON.parse(row.activity_log) : []; } catch (e) { activity = []; }
+  function onActivity(line) {
+    activity.push(line);
+    stmts.setVoiceActivityLog.run(JSON.stringify(activity.slice(-200)), id);
+  }
+  function onEarlyAck(text) {
+    if (!row.early_ack && text) stmts.setVoiceEarlyAck.run(text.slice(0, 2000), id);
+  }
+
+  const result = await codexRunner.recoverCodexRun({
+    runKey: id,
+    onActivity: onActivity,
+    onEarlyAck: onEarlyAck
+  });
+  const now = new Date().toISOString();
+  if (!result) {
+    stmts.finishVoiceMessage.run('error', null,
+      'The service restarted and could not reconnect to this Codex task. Please resend it if it still needs doing.', now, id);
+    return;
+  }
+  if (result.sessionId) stmts.upsertCodexSession.run(result.sessionId, now);
+  if (result.ok) {
+    stmts.finishVoiceMessage.run('done', (result.replyText || '').slice(0, 8000), null, now, id);
+    agentUsage.invalidate();
+  } else {
+    stmts.finishVoiceMessage.run('error', null, String(result.error || 'unknown error').slice(0, 2000), now, id);
+  }
+  codexRunner.cleanupRun(id);
 }
 
 // Read on every fresh-session start (see buildSystemPromptForSession below)
@@ -1413,6 +1450,7 @@ async function processVoiceMessage(id, mode, text, agent, imageBlock, imagePath)
         prompt: prompt,
         sessionId: resumeId,
         ownerKey: 'project-manager',
+        runKey: id,
         onActivity: onActivity,
         onEarlyAck: onEarlyAck,
         imagePath: imagePath
@@ -1456,10 +1494,12 @@ async function processVoiceMessage(id, mode, text, agent, imageBlock, imagePath)
   }
   if (!result.ok) {
     stmts.finishVoiceMessage.run('error', null, String(result.error || 'unknown error').slice(0, 2000), now, id);
+    if (agent === 'codex') codexRunner.cleanupRun(id);
     console.error('voice ' + agent + ' run failed:', result.error);
     return;
   }
   stmts.finishVoiceMessage.run('done', (result.replyText || '').slice(0, 8000), null, now, id);
+  if (agent === 'codex') codexRunner.cleanupRun(id);
   // The next dashboard open/poll should reflect the turn that just consumed
   // allowance. Invalidating is enough; it avoids running usage subprocesses
   // when nobody has the dashboard open.
@@ -1686,6 +1726,7 @@ function recoverInflightVoiceMessages() {
   const now = new Date().toISOString();
   let requeued = 0;
   let errored = 0;
+  let reconnecting = 0;
   rows.forEach(function (row) {
     if (row.status === 'pending') {
       voiceQueue.push({
@@ -1698,6 +1739,9 @@ function recoverInflightVoiceMessages() {
         uploadPath: null
       });
       requeued++;
+    } else if (normalizeVoiceAgent(row.agent) === 'codex' && codexRunner.hasRecoverableRun(row.id)) {
+      voiceQueue.push({ id: row.id, recoverCodex: true });
+      reconnecting++;
     } else {
       stmts.finishVoiceMessage.run('error', null,
         'Service restarted while this was in progress (redeploy or crash) — completion status unknown, please resend if it still needs doing.',
@@ -1705,12 +1749,12 @@ function recoverInflightVoiceMessages() {
       errored++;
     }
   });
-  console.log('voice queue recovery: requeued ' + requeued + ', errored ' + errored);
+  console.log('voice queue recovery: requeued ' + requeued + ', reconnecting ' + reconnecting + ', errored ' + errored);
   fs.appendFile(WORK_LOG_PATH,
     '- [' + now + '] SERVICE RESTARTED — recovered voice queue: ' + requeued + ' pending message(s) requeued, ' +
-    errored + ' interrupted message(s) marked as error.\n',
+    reconnecting + ' Codex message(s) reconnected, ' + errored + ' interrupted message(s) marked as error.\n',
     function () {});
-  if (requeued) drainVoiceQueue();
+  if (requeued || reconnecting) drainVoiceQueue();
 }
 
 // Same self-healing pattern as recoverInflightVoiceMessages() above, now

@@ -8314,3 +8314,37 @@ Chromium at 1440×1000 verified the exact column order, creating directly in Big
 Ideas, moving a Rough Idea via the real card dropdown, editing the created card
 after its first save, zero page errors, no horizontal overflow, exactly two
 selection signals for the two actions, and two current exemplar snapshots.
+
+---
+
+# 174. Codex Project Manager Turns Survive Backend Deploys (2026-09-21)
+
+Backend deploys used to replace the `rm-ops-service` container while a Codex
+Project Manager turn was still running. Codex itself runs on the VPS host and
+usually survived, but the container owned the only copy of its event stream.
+On startup, `recoverInflightVoiceMessages()` therefore had no authoritative way
+to know whether the work finished and rendered a red “completion status
+unknown” error even when Codex had completed successfully.
+
+Project Manager Codex runs now tee stdout JSONL and stderr into per-message
+files under the bind-mounted data directory (`/data/codex-runs` in the
+container, `/root/ops-service-data/codex-runs` on the host). GNU tee is run in
+`warn-nopipe` mode so losing the old container's SSH output pipe does not stop
+the host process or its durable journal. The host wrapper atomically writes an
+exit marker only after Codex ends.
+
+On startup, a running Codex message with those artifacts stays in the normal
+running state. The new service serially reconnects to its journal, adds a
+visible Activity update explaining the reconnection, waits for the exit marker,
+restores the Codex thread ID, and records the real final agent message as the
+normal completed reply. Later queued messages remain behind it, preserving the
+single-writer guarantee. Artifacts are removed after the database has recorded
+success or failure. Old/pre-feature turns and Claude turns still use the
+conservative unknown-status error because they have no surviving authoritative
+event stream and must not be blindly replayed after possible side effects.
+
+Verification includes syntax checks, the full Node test suite, and dedicated
+recovery tests for an already-completed journal, a journal that completes after
+the replacement watcher attaches, and a genuine failed host run. The new paths
+are documented in `.env.example`; production uses their defaults and requires
+no new credential or service.
