@@ -348,16 +348,16 @@
 
   var PM_MARKUP =
     '<div class="pm-app">' +
-      '<div class="pm-toolbar">' +
-        '<div class="pm-agent-switch" role="group" aria-label="Active agent">' +
-          '<button type="button" class="pm-agent-option" data-agent="claude">Claude</button>' +
-          '<button type="button" class="pm-agent-option" data-agent="codex">Codex</button>' +
-        '</div>' +
-        '<a class="link-btn" id="pmMobileLink" href="voice-mobile.html" target="_blank" rel="noopener">Mobile view ↗</a>' +
-        '<button type="button" class="pm-reset-btn" id="pmResetBtn">New conversation</button>' +
-      '</div>' +
       '<div class="pm-columns">' +
         '<div class="pm-col pm-col-clean">' +
+          '<div class="pm-toolbar">' +
+            '<div class="pm-agent-switch" role="group" aria-label="Active agent">' +
+              '<button type="button" class="pm-agent-option" data-agent="claude">Claude</button>' +
+              '<button type="button" class="pm-agent-option" data-agent="codex">Codex</button>' +
+            '</div>' +
+            '<a class="link-btn" id="pmMobileLink" href="voice-mobile.html" target="_blank" rel="noopener">Mobile view ↗</a>' +
+            '<button type="button" class="pm-reset-btn" id="pmResetBtn">New conversation</button>' +
+          '</div>' +
           '<div class="pm-thread" id="pmThread">' +
             '<div class="pm-empty">Type or speak to your VPS Project Manager — same project, same tools, persistent memory.</div>' +
           '</div>' +

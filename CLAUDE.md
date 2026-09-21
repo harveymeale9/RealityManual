@@ -7867,3 +7867,15 @@ turns through both agents. The OpenAI mock received only completed Codex reply
 text. Finally, the staging backend was restarted: its Codex native session ID
 survived, the resumed turn recalled prior context, ran host `pwd` and
 `docker ps`, and its rollout recorded GPT-5.6 Sol with medium reasoning.
+
+---
+
+# 159. Desktop Project Manager Agent Selector Moved Above the Chat Column
+
+The desktop Claude/Codex selector now sits in the left Project Manager column,
+directly above the shared conversation, rather than in a full-width toolbar
+that visually placed it over the right-side Task List. The Mobile view and New
+conversation controls share that left-column toolbar. The standalone mobile
+page keeps its existing compact selector placement and all selection,
+persistence, routing, and message-history behavior is unchanged. This is a
+frontend-only layout change, so §93's live-working-tree deploy path applies.
