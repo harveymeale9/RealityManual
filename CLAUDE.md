@@ -8411,3 +8411,95 @@ Codex turn after the code deploy** (the manual VPS chmod already unblocks
 things independently of that) — worth confirming after the next deploy
 that a fresh Codex turn still succeeds even if the directory somehow
 reverts to a restrictive owner again.
+
+---
+
+# 176. Claude Project Manager Turns Also Survive Backend Deploys (2026-09-21)
+
+§174 fixed this for Codex only; Harvey asked (before §175's EACCES bug even
+existed) for Claude to get the same treatment "regardless of which model
+being used" — that request itself had errored out instantly on the EACCES
+bug without ever reaching this work. Claude's actual gap was structurally
+different, and worse, than Codex's ever was: Codex already ran as a
+host-side process (§157), so §174 only had to fix how its *event stream*
+was recovered. Claude's voice turns ran the Agent SDK **in-process, inside
+this container** (a deliberate choice — see the old top-of-file comment in
+claudeRunner.js — keeping one long-lived streaming session alive across
+many messages specifically to avoid a full CLI cold start on every single
+one). That process died the instant the container did, with nothing left
+on the host to reconnect to at all; every Claude turn caught mid-flight by
+a redeploy was unrecoverable by construction, always bouncing to the
+conservative "completion status unknown" error.
+
+Asked which of two fixes he wanted — mirror Codex exactly (simple, but
+reintroduces the per-message cold start) or build a genuinely persistent,
+reattachable host-side session (keeps the current speed, but is a much
+larger, more novel piece of engineering with no existing pattern in this
+codebase) — Harvey chose the simple one: "you make the call... speed isnt
+super important."
+
+**What changed:** `claudeRunner.js`'s voice-turn path (`runClaude`,
+`recoverClaudeRun`, `hasRecoverableRun`, `cleanupRun`) now mirrors
+`codexRunner.js` structurally, including §175's permission hardening from
+day one: the real `claude` CLI runs once per turn as a host-side SSH
+process, teed into a durable JSONL journal on the same bind-mounted data
+directory pattern (`/data/claude-runs` in the container,
+`/root/ops-service-data/claude-runs` on the host). The old in-process
+session singleton (`currentSession`, `createMessageQueue`, `ensureSession`,
+`handleEvent`) is gone entirely; `resetSession()` is kept as a documented
+no-op so its one existing caller in server.js didn't need touching.
+`runOneShot()` (video-analysis's unrelated one-shot in-process call) is
+untouched. `server.js` now branches on `agent` symmetrically for run-key
+generation, recovery on startup (`recoverInflightVoiceMessages`), and
+cleanup, generalizing the old Codex-only `recoverCodexVoiceMessage` into
+`recoverAgentVoiceMessage(id, agent)`.
+
+**Real differences from Codex's version, not oversights:**
+- Codex escalates to root on the host via `sudo` (it needs root). Claude's
+  `--allow-dangerously-skip-permissions` is refused outright under EUID 0
+  (see the Dockerfile's own comment on this), so its host command runs
+  directly as the non-root `ubuntu` user — no sudo layer at all.
+- Claude's host-side `$HOME` is **not** `ubuntu`'s own real one. That's
+  Harvey's personal interactive Claude Code identity/session history on
+  this VPS (confirmed live during this session: authenticated, real
+  `~/.claude` with active session data) — resuming into it directly would
+  have mixed Project Manager voice-chat turns into Harvey's own terminal
+  history and vice versa. Instead, `CLAUDE_HOST_HOME`
+  (`/root/ops-service-claude-home/host-identity` by default) is a small
+  directory whose `.claude`/`.claude.json` are symlinks onto the exact same
+  files already bind-mounted into the container at `/home/node/.claude`
+  and `/home/node/.claude.json` — the same identity the old in-process
+  runs already used, kept fully isolated from `ubuntu`'s personal one.
+  `deploy.sh` now creates this idempotently on every deploy so it isn't a
+  silent one-off left only on disk.
+- Session continuity required matching **cwd**, not just the identity
+  directory: Claude Code's session store keys conversations by working
+  directory, and the in-container runs always used cwd `/repo`. A
+  host-side process cd'd into `/srv/realitymanual-repo` directly would
+  have looked for `9366b942-...` (an already-live real session id) under
+  the wrong project bucket and failed to resume it. Fixed with a `/repo`
+  symlink on the host pointing at `/srv/realitymanual-repo`
+  (`deploy.sh` now (re)creates this too) — confirmed directly with a real
+  `--resume <id> --fork-session` call against the actual live session
+  before writing any code: it correctly recalled prior conversation
+  content.
+- Auth: the host `claude` CLI otherwise reports "Not logged in" even with
+  the right `$HOME` — it needs `CLAUDE_CODE_OAUTH_TOKEN` in the actual
+  process environment (same variable already in `ops-service/.env`),
+  passed through the ssh command the same way the container already
+  receives it via `--env-file`, not read from any stored credentials file.
+- Images: the host `claude -p` has no equivalent of Codex's native `-i
+  <path>` attachment flag. Rather than block this on building one, an
+  attached image is handed over as a plain host-reachable path appended to
+  the prompt text ("...view it with your Read tool"), which already
+  supports reading images directly — server.js's upload route now computes
+  that host path for both agents instead of only Codex, and the old
+  base64-inlined `imageBlock` content-block path is gone entirely.
+
+**Verified:** `node --check` and `bash -n` on every touched file; the full
+Node test suite (new `claudeRunner.test.js`, mirroring §174's Codex
+recovery tests, plus all pre-existing suites) passes. Before writing any
+runner code, the exact host invocation shape (flags, isolated `$HOME`,
+token-via-env auth, and `--resume`/`--fork-session` continuity against a
+real live session) was hand-verified directly on the VPS as root — not
+assumed from `--help` text alone.

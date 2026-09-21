@@ -25,6 +25,11 @@ const DATA_DIR = process.env.DATA_DIR || '/data';
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 const DB_PATH = path.join(DATA_DIR, 'db.sqlite');
 const WORK_LOG_PATH = path.join(DATA_DIR, 'work-log.md');
+// Despite the name, this is the shared host-side data dir both Codex's and
+// Claude's host-side runners resolve attached-image paths against (both
+// read from the same bind-mounted DATA_DIR, just from outside the
+// container) — kept as CODEX_HOST_DATA_DIR to avoid an unrelated env-var
+// rename on the live host.
 const CODEX_HOST_DATA_DIR = process.env.CODEX_HOST_DATA_DIR || '/root/ops-service-data';
 const PORT = process.env.PORT || 4001;
 const PANEL_PASSWORD = process.env.PANEL_PASSWORD || 'ormiston';
@@ -1346,9 +1351,9 @@ function drainVoiceQueue() {
   const next = voiceQueue.shift();
   if (!next) return;
   voiceProcessing = true;
-  const work = next.recoverCodex
-    ? recoverCodexVoiceMessage(next.id)
-    : processVoiceMessage(next.id, next.mode, next.text, next.agent, next.imageBlock, next.imagePath);
+  const work = next.recoverAgent
+    ? recoverAgentVoiceMessage(next.id, next.recoverAgent)
+    : processVoiceMessage(next.id, next.mode, next.text, next.agent, next.imagePath);
   work
     .catch(function (err) {
       stmts.finishVoiceMessage.run('error', null, String((err && err.message) || err).slice(0, 2000), new Date().toISOString(), next.id);
@@ -1360,7 +1365,11 @@ function drainVoiceQueue() {
     });
 }
 
-async function recoverCodexVoiceMessage(id) {
+// Shared by both agents: each has its own host-side durable journal
+// (codexRunner.recoverCodexRun / claudeRunner.recoverClaudeRun) that this
+// reconnects to after a service restart, in place of the old blind
+// "completion status unknown" bounce.
+async function recoverAgentVoiceMessage(id, agent) {
   const row = stmts.getVoiceMessage.get(id);
   if (!row) return;
   let activity;
@@ -1373,25 +1382,27 @@ async function recoverCodexVoiceMessage(id) {
     if (!row.early_ack && text) stmts.setVoiceEarlyAck.run(text.slice(0, 2000), id);
   }
 
-  const result = await codexRunner.recoverCodexRun({
-    runKey: id,
-    onActivity: onActivity,
-    onEarlyAck: onEarlyAck
-  });
+  const result = agent === 'codex'
+    ? await codexRunner.recoverCodexRun({ runKey: id, onActivity: onActivity, onEarlyAck: onEarlyAck })
+    : await claudeRunner.recoverClaudeRun({ runKey: id, onActivity: onActivity, onEarlyAck: onEarlyAck });
   const now = new Date().toISOString();
   if (!result) {
     stmts.finishVoiceMessage.run('error', null,
-      'The service restarted and could not reconnect to this Codex task. Please resend it if it still needs doing.', now, id);
+      'The service restarted and could not reconnect to this ' + (agent === 'codex' ? 'Codex' : 'Claude') +
+      ' task. Please resend it if it still needs doing.', now, id);
     return;
   }
-  if (result.sessionId) stmts.upsertCodexSession.run(result.sessionId, now);
+  if (result.sessionId) {
+    if (agent === 'codex') stmts.upsertCodexSession.run(result.sessionId, now);
+    else stmts.upsertVoiceSession.run(result.sessionId, now);
+  }
   if (result.ok) {
     stmts.finishVoiceMessage.run('done', (result.replyText || '').slice(0, 8000), null, now, id);
     agentUsage.invalidate();
   } else {
     stmts.finishVoiceMessage.run('error', null, String(result.error || 'unknown error').slice(0, 2000), now, id);
   }
-  codexRunner.cleanupRun(id);
+  if (agent === 'codex') codexRunner.cleanupRun(id); else claudeRunner.cleanupRun(id);
 }
 
 // Read on every fresh-session start (see buildSystemPromptForSession below)
@@ -1420,7 +1431,7 @@ function buildSystemPromptForSession(sessionId) {
     'log, for context on what you and Harvey were doing recently:\n' + recentLog;
 }
 
-async function processVoiceMessage(id, mode, text, agent, imageBlock, imagePath) {
+async function processVoiceMessage(id, mode, text, agent, imagePath) {
   stmts.setVoiceMessageStatus.run('running', id);
   agent = normalizeVoiceAgent(agent);
   const messageRow = stmts.getVoiceMessage.get(id);
@@ -1459,10 +1470,12 @@ async function processVoiceMessage(id, mode, text, agent, imageBlock, imagePath)
     return claudeRunner.runClaude({
       prompt: prompt,
       sessionId: resumeId,
+      ownerKey: 'project-manager',
+      runKey: id,
       appendSystemPrompt: buildSystemPromptForSession(resumeId),
       onActivity: onActivity,
       onEarlyAck: onEarlyAck,
-      imageBlock: imageBlock
+      imagePath: imagePath
     });
   };
 
@@ -1494,12 +1507,12 @@ async function processVoiceMessage(id, mode, text, agent, imageBlock, imagePath)
   }
   if (!result.ok) {
     stmts.finishVoiceMessage.run('error', null, String(result.error || 'unknown error').slice(0, 2000), now, id);
-    if (agent === 'codex') codexRunner.cleanupRun(id);
+    if (agent === 'codex') codexRunner.cleanupRun(id); else claudeRunner.cleanupRun(id);
     console.error('voice ' + agent + ' run failed:', result.error);
     return;
   }
   stmts.finishVoiceMessage.run('done', (result.replyText || '').slice(0, 8000), null, now, id);
-  if (agent === 'codex') codexRunner.cleanupRun(id);
+  if (agent === 'codex') codexRunner.cleanupRun(id); else claudeRunner.cleanupRun(id);
   // The next dashboard open/poll should reflect the turn that just consumed
   // allowance. Invalidating is enough; it avoids running usage subprocesses
   // when nobody has the dashboard open.
@@ -1531,20 +1544,18 @@ app.post('/api/voice/messages', voiceMessageUpload.single('image'), function (re
   res.json({ id: id, status: 'pending', reply_to_id: replyToId, agent: agent });
 
   const SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-  let imageBlock = null;
   let imagePath = null;
   if (req.file && SUPPORTED_IMAGE_TYPES.indexOf(req.file.mimetype) !== -1) {
-    try {
-      imageBlock = { mediaType: req.file.mimetype, base64: fs.readFileSync(req.file.path).toString('base64') };
-      if (agent === 'codex') {
-        const relativeUploadPath = path.relative(DATA_DIR, req.file.path);
-        if (!relativeUploadPath.startsWith('..')) imagePath = path.join(CODEX_HOST_DATA_DIR, relativeUploadPath);
-      }
-    } catch (e) { console.error('failed to read attached image:', e.message); }
+    // Both agents now run on the VPS host, not in-process — an uploaded
+    // image is handed to either as a host-reachable path (Codex via its
+    // native `-i` flag, Claude via a Read-tool pointer in the prompt; see
+    // claudeRunner.js) rather than inlined base64.
+    const relativeUploadPath = path.relative(DATA_DIR, req.file.path);
+    if (!relativeUploadPath.startsWith('..')) imagePath = path.join(CODEX_HOST_DATA_DIR, relativeUploadPath);
   } else if (req.file) {
     console.error('unsupported attached image type: ' + req.file.mimetype);
   }
-  if (agent !== 'codex' || !imagePath) cleanupUpload();
+  if (!imagePath) cleanupUpload();
 
   // Reply-to context is woven into the prompt CC actually sees (not into
   // the stored transcript — that stays exactly what Harvey typed/said, for
@@ -1565,7 +1576,6 @@ app.post('/api/voice/messages', voiceMessageUpload.single('image'), function (re
     mode: mode,
     text: promptText,
     agent: agent,
-    imageBlock: imageBlock,
     imagePath: imagePath,
     uploadPath: imagePath && req.file ? req.file.path : null
   });
@@ -1734,13 +1744,15 @@ function recoverInflightVoiceMessages() {
         mode: row.mode,
         text: row.transcript,
         agent: normalizeVoiceAgent(row.agent),
-        imageBlock: null,
         imagePath: null,
         uploadPath: null
       });
       requeued++;
     } else if (normalizeVoiceAgent(row.agent) === 'codex' && codexRunner.hasRecoverableRun(row.id)) {
-      voiceQueue.push({ id: row.id, recoverCodex: true });
+      voiceQueue.push({ id: row.id, recoverAgent: 'codex' });
+      reconnecting++;
+    } else if (normalizeVoiceAgent(row.agent) === 'claude' && claudeRunner.hasRecoverableRun(row.id)) {
+      voiceQueue.push({ id: row.id, recoverAgent: 'claude' });
       reconnecting++;
     } else {
       stmts.finishVoiceMessage.run('error', null,

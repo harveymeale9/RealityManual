@@ -28,6 +28,22 @@ LOG_FILE="$DATA_DIR/last-deploy.log"
 exec > >(tee "$LOG_FILE") 2>&1
 set -x
 
+# Claude's host-side voice-turn runner (claudeRunner.js) needs an isolated
+# $HOME, distinct from the `ubuntu` user's own real one, whose .claude/
+# .claude.json alias the exact files already bind-mounted into the
+# container below — see CLAUDE_HOST_HOME's comment in .env.example.
+# Idempotent: safe to re-run every deploy, not just the first one.
+CLAUDE_HOST_HOME_DIR=/root/ops-service-claude-home/host-identity
+mkdir -p "$CLAUDE_HOST_HOME_DIR"
+ln -sfn ../claude-dir "$CLAUDE_HOST_HOME_DIR/.claude"
+ln -sfn ../claude.json "$CLAUDE_HOST_HOME_DIR/.claude.json"
+chown -h ubuntu:ubuntu "$CLAUDE_HOST_HOME_DIR" "$CLAUDE_HOST_HOME_DIR/.claude" "$CLAUDE_HOST_HOME_DIR/.claude.json"
+# Same reasoning as CLAUDE_HOST_REPO=/repo in .env.example: the host-side
+# `claude` process's cwd string must match what the old in-container runs
+# used, or Claude Code's cwd-keyed session store can't resume an existing
+# claude_session_id.
+ln -sfn "$RUNTIME_REPO_DIR" /repo 2>/dev/null || true
+
 RUN_ARGS=(-d --name "$CONTAINER" --restart unless-stopped
   -p 127.0.0.1:4001:4001
   --add-host=host.docker.internal:host-gateway
