@@ -24,6 +24,7 @@
       padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     }
     .v-home { flex: 1; display: flex; flex-direction: column; gap: 8px; padding: 8px; min-height: 0; }
+    .pm-agent-switch--mobile { align-self: center; flex-shrink: 0; }
 
     /* Compact top/bottom action buttons — fixed height (not flex:1, which
        used to split the whole screen in half between them and pushed the
@@ -151,14 +152,18 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
     </a>
     <div class="v-home">
+      <div class="pm-agent-switch pm-agent-switch--mobile" role="group" aria-label="Active agent">
+        <button type="button" class="pm-agent-option" data-agent="claude">Claude</button>
+        <button type="button" class="pm-agent-option" data-agent="codex">Codex</button>
+      </div>
       <button type="button" class="v-btn v-btn-ask" id="askBtn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/></svg>
-        <span class="v-btn-text"><span class="v-btn-label">Ask &amp; Wait for Reply</span><span class="v-btn-sub">Speak — hear CC's answer back</span></span>
+        <span class="v-btn-text"><span class="v-btn-label">Ask &amp; Wait for Reply</span><span class="v-btn-sub">Speak — hear the selected agent's answer back</span></span>
       </button>
 
       <div class="v-chat">
         <div class="pm-thread" id="vThread">
-          <div class="pm-empty">Type or speak to Claude Code — same project, same tools, full memory of RealityManual.</div>
+          <div class="pm-empty">Type or speak to your selected Project Manager agent.</div>
         </div>
         <div class="pm-inputbar">
           <div class="pm-reply-preview" id="vReplyPreview" hidden>
@@ -249,6 +254,35 @@
       var replyPreviewEl = document.getElementById('vReplyPreview');
       var replyPreviewTextEl = document.getElementById('vReplyPreviewText');
       var replyPreviewCancelBtn = document.getElementById('vReplyPreviewCancel');
+      var agentButtons = Array.prototype.slice.call(document.querySelectorAll('.pm-agent-option'));
+      var selectedAgent = 'claude';
+      var agentPreferenceVersion = 0;
+
+      function agentName(agent) { return agent === 'codex' ? 'Codex' : 'Claude'; }
+      function applySelectedAgent(agent) {
+        selectedAgent = agent === 'codex' ? 'codex' : 'claude';
+        agentButtons.forEach(function (btn) {
+          var active = btn.dataset.agent === selectedAgent;
+          btn.classList.toggle('active', active);
+          btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+        textInput.placeholder = "Message " + agentName(selectedAgent) + "…";
+      }
+      function refreshAgentPreference() {
+        var requestedAtVersion = agentPreferenceVersion;
+        Voice.getAgentPreference().then(function (agent) {
+          if (requestedAtVersion === agentPreferenceVersion) applySelectedAgent(agent);
+        }).catch(function () {});
+      }
+      applySelectedAgent('claude');
+      agentButtons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var previous = selectedAgent;
+          agentPreferenceVersion++;
+          applySelectedAgent(btn.dataset.agent);
+          Voice.setAgentPreference(selectedAgent).catch(function () { applySelectedAgent(previous); });
+        });
+      });
 
       // Tap-to-reply — same mechanism and purpose as app.js's identical
       // block: selecting one of CC's earlier messages (Reply button in
@@ -281,6 +315,7 @@
 
       function showApp() {
         authChecking.hidden = true; loginGate.hidden = true; vApp.hidden = false;
+        refreshAgentPreference();
         startSync();
       }
       function showLogin() { authChecking.hidden = true; vApp.hidden = true; loginGate.hidden = false; setTimeout(function () { loginPassword.focus(); }, 50); }
@@ -356,12 +391,17 @@
         return el;
       }
 
-      function addAssistantMessage(text, replyToText, msgId, insertBeforeEl) {
+      function addAssistantMessage(text, replyToText, msgId, insertBeforeEl, agent) {
         clearEmptyNote();
+        agent = agent === 'codex' ? 'codex' : 'claude';
         var isAction = /^\[NEEDS_ACTION\]/i.test(text || '');
         var wrap = document.createElement('div');
-        wrap.className = 'pm-msg pm-msg-assistant' + (isAction ? ' pm-msg-assistant--action' : '');
+        wrap.className = 'pm-msg pm-msg-assistant pm-msg-assistant--' + agent + (isAction ? ' pm-msg-assistant--action' : '');
         if (msgId) wrap.dataset.msgId = msgId;
+        var agentLabel = document.createElement('div');
+        agentLabel.className = 'pm-msg-agent-label';
+        agentLabel.textContent = agentName(agent) + ':';
+        wrap.appendChild(agentLabel);
         if (replyToText) {
           var replyTo = document.createElement('div');
           replyTo.className = 'pm-msg-replyto';
@@ -435,7 +475,7 @@
           num.textContent = (idx + 1) + '/' + inflight.length;
           var textEl = document.createElement('span');
           textEl.className = 'pm-queue-text';
-          textEl.textContent = row.early_ack || row.transcript;
+          textEl.textContent = agentName(row.agent) + ': ' + (row.early_ack || row.transcript);
           item.appendChild(num);
           item.appendChild(textEl);
           queueListEl.appendChild(item);
@@ -453,7 +493,7 @@
             mark.textContent = row.status === 'error' ? '✕' : '✓';
             var textEl = document.createElement('span');
             textEl.className = 'pm-queue-text';
-            textEl.textContent = row.early_ack || row.transcript;
+            textEl.textContent = agentName(row.agent) + ': ' + (row.early_ack || row.transcript);
             item.appendChild(mark);
             item.appendChild(textEl);
             queueListEl.appendChild(item);
@@ -494,12 +534,13 @@
         if (imageInput.files && imageInput.files[0]) setPendingImage(imageInput.files[0]);
       });
 
-      function addTyping(msgId) {
+      function addTyping(msgId, agent) {
         clearEmptyNote();
         var el = document.createElement('div');
-        el.className = 'pm-typing';
+        agent = agent === 'codex' ? 'codex' : 'claude';
+        el.className = 'pm-typing pm-typing--' + agent;
         if (msgId) el.dataset.msgId = msgId;
-        el.textContent = 'CC is working on it…';
+        el.textContent = agentName(agent) + ' is working on it…';
         thread.appendChild(el);
         thread.scrollTop = thread.scrollHeight;
         return el;
@@ -548,7 +589,7 @@
         });
         sync = Voice.syncThread({
           onNewMessage: function (row) { addMessage('user', row.transcript, row.id, null, row.reply_to_snippet); },
-          onPending: function (row) { addTyping(row.id); },
+          onPending: function (row) { addTyping(row.id, row.agent); },
           onEarlyAck: function (row) {
             // Swap the generic "CC is working on it…" placeholder for CC's
             // own real, contextual first line the moment it's available —
@@ -566,7 +607,7 @@
             // Execute-mode replies are a real completion summary now (see
             // server.js buildVoicePrompt), not a throwaway line — show it
             // like any other reply instead of a generic "Done" placeholder.
-            addAssistantMessage(row.reply_text || '', row.transcript, row.id, typingEl);
+            addAssistantMessage(row.reply_text || '', row.transcript, row.id, typingEl, row.agent);
             if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
             if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
             if (voiceAutoSpeak[row.id]) {
@@ -593,7 +634,11 @@
               Voice.speak(row.error_message || 'Something went wrong.', row.id).catch(function () {});
             }
           },
-          onTick: function (rows) { renderQueue(rows); pastFirstTick = true; }
+          onTick: function (rows) {
+            renderQueue(rows);
+            pastFirstTick = true;
+            refreshAgentPreference();
+          }
         });
       }
 
@@ -607,9 +652,10 @@
         var replyTo = pendingReplyTo;
         clearPendingReplyTo();
         addMessage('user', text.trim(), null, image, replyTo ? replyTo.snippet : null);
-        var typingEl = addTyping();
+        var agent = selectedAgent;
+        var typingEl = addTyping(null, agent);
         clearPendingImage();
-        Voice.sendMessage(text.trim(), 'respond', image, replyTo ? replyTo.id : null).then(function (created) {
+        Voice.sendMessage(text.trim(), 'respond', image, replyTo ? replyTo.id : null, agent).then(function (created) {
           typingEl.dataset.msgId = created.id;
           sync.markKnown(created);
         }).catch(function (err) {
@@ -687,8 +733,9 @@
             if (!text) throw new Error('empty_transcript');
             waitSub.textContent = '"' + text + '"';
             addMessage('user', text);
-            var typingEl = addTyping();
-            return Voice.sendMessage(text, mode).then(function (created) {
+            var agent = selectedAgent;
+            var typingEl = addTyping(null, agent);
+            return Voice.sendMessage(text, mode, null, null, agent).then(function (created) {
               // Mark it known on the shared sync engine right away so its
               // next tick doesn't treat this same row as new (duplicate user
               // bubble/typing indicator) once it catches up to it.

@@ -1,6 +1,6 @@
 // Shared client for the voice/chat app (voice-mobile.html + index.html):
-// mic recording, transcription, sending messages to the headless Claude
-// agent, polling for a reply, and playing it back via TTS.
+// mic recording, transcription, routing messages to the selected headless
+// agent (Claude or Codex), polling for a reply, and playing it back via TTS.
 window.RMVoice = (function () {
   var API_BASE = window.RMStore ? window.RMStore.API_BASE : '';
 
@@ -66,17 +66,19 @@ window.RMVoice = (function () {
   // replyToId (optional): the id of an earlier voice_messages row this
   // message is a tap-to-reply response to — see server.js's promptText
   // wiring for how it's used.
-  function sendMessage(text, mode, imageFile, replyToId) {
+  function sendMessage(text, mode, imageFile, replyToId, agent) {
+    agent = agent === 'codex' ? 'codex' : 'claude';
     if (imageFile) {
       var form = new FormData();
       form.append('text', text || '');
       form.append('mode', mode);
+      form.append('agent', agent);
       if (replyToId) form.append('replyToId', replyToId);
       form.append('image', imageFile, imageFile.name || 'pasted-image.png');
       return fetch(API_BASE + '/api/voice/messages', { method: 'POST', credentials: 'include', body: form })
         .then(function (r) { if (!r.ok) throw new Error('Could not send message'); return r.json(); });
     }
-    var body = { text: text, mode: mode };
+    var body = { text: text, mode: mode, agent: agent };
     if (replyToId) body.replyToId = replyToId;
     return fetch(API_BASE + '/api/voice/messages', {
       method: 'POST',
@@ -94,6 +96,25 @@ window.RMVoice = (function () {
   function listMessages(limit) {
     return fetch(API_BASE + '/api/voice/messages?limit=' + (limit || 30), { credentials: 'include' })
       .then(function (r) { if (!r.ok) throw new Error('Could not load history'); return r.json(); });
+  }
+
+  function getAgentPreference() {
+    return fetch(API_BASE + '/api/voice/agent', { credentials: 'include' })
+      .then(function (r) { if (!r.ok) throw new Error('Could not load agent preference'); return r.json(); })
+      .then(function (data) { return data.agent === 'codex' ? 'codex' : 'claude'; });
+  }
+
+  function setAgentPreference(agent) {
+    agent = agent === 'codex' ? 'codex' : 'claude';
+    return fetch(API_BASE + '/api/voice/agent', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent: agent })
+    }).then(function (r) {
+      if (!r.ok) throw new Error('Could not save agent preference');
+      return r.json();
+    }).then(function (data) { return data.agent; });
   }
 
   function pollMessage(id, opts) {
@@ -456,6 +477,8 @@ window.RMVoice = (function () {
     sendMessage: sendMessage,
     getMessage: getMessage,
     listMessages: listMessages,
+    getAgentPreference: getAgentPreference,
+    setAgentPreference: setAgentPreference,
     pollMessage: pollMessage,
     speak: speak,
     stopSpeaking: stopSpeaking,

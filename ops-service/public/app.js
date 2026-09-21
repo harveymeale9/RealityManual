@@ -349,13 +349,17 @@
   var PM_MARKUP =
     '<div class="pm-app">' +
       '<div class="pm-toolbar">' +
+        '<div class="pm-agent-switch" role="group" aria-label="Active agent">' +
+          '<button type="button" class="pm-agent-option" data-agent="claude">Claude</button>' +
+          '<button type="button" class="pm-agent-option" data-agent="codex">Codex</button>' +
+        '</div>' +
         '<a class="link-btn" id="pmMobileLink" href="voice-mobile.html" target="_blank" rel="noopener">Mobile view ↗</a>' +
         '<button type="button" class="pm-reset-btn" id="pmResetBtn">New conversation</button>' +
       '</div>' +
       '<div class="pm-columns">' +
         '<div class="pm-col pm-col-clean">' +
           '<div class="pm-thread" id="pmThread">' +
-            '<div class="pm-empty">Type or speak to Claude Code — same project, same tools, full memory of RealityManual.</div>' +
+            '<div class="pm-empty">Type or speak to your VPS Project Manager — same project, same tools, persistent memory.</div>' +
           '</div>' +
           '<div class="pm-inputbar">' +
             '<div class="pm-reply-preview" id="pmReplyPreview" hidden>' +
@@ -368,7 +372,7 @@
               '<button type="button" class="pm-mic-btn" id="pmMicBtn" title="Record voice message" aria-label="Record voice message">' +
                 '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/></svg>' +
               '</button>' +
-              '<textarea id="pmTextInput" class="pm-textarea" rows="1" placeholder="Message Claude Code… (paste or drop an image too)"></textarea>' +
+              '<textarea id="pmTextInput" class="pm-textarea" rows="1" placeholder="Message Claude… (paste or drop an image too)"></textarea>' +
               '<button type="button" class="pm-send-btn" id="pmSendBtn" title="Send" aria-label="Send">' +
                 '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4Z"/></svg>' +
               '</button>' +
@@ -382,7 +386,7 @@
             '<div class="pm-queue-list" id="pmQueueList"><div class="pm-queue-empty">No tasks right now.</div></div>' +
           '</div>' +
           '<div class="pm-activity-section">' +
-            '<div class="pm-activity-head">Activity <span class="pm-activity-hint">— what CC is doing, live</span></div>' +
+            '<div class="pm-activity-head">Activity <span class="pm-activity-hint">— what the selected agent is doing, live</span></div>' +
             '<div class="pm-activity" id="pmActivity"><div class="pm-activity-empty" id="pmActivityEmpty">Nothing happening yet.</div></div>' +
           '</div>' +
         '</div>' +
@@ -404,6 +408,38 @@
     var replyPreviewEl = document.getElementById('pmReplyPreview');
     var replyPreviewTextEl = document.getElementById('pmReplyPreviewText');
     var replyPreviewCancelBtn = document.getElementById('pmReplyPreviewCancel');
+    var agentButtons = Array.prototype.slice.call(document.querySelectorAll('.pm-agent-option'));
+    var selectedAgent = 'claude';
+    var agentPreferenceVersion = 0;
+
+    function agentName(agent) { return agent === 'codex' ? 'Codex' : 'Claude'; }
+    function applySelectedAgent(agent) {
+      selectedAgent = agent === 'codex' ? 'codex' : 'claude';
+      agentButtons.forEach(function (btn) {
+        var active = btn.dataset.agent === selectedAgent;
+        btn.classList.toggle('active', active);
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+      textInput.placeholder = 'Message ' + agentName(selectedAgent) + '… (paste or drop an image too)';
+    }
+    function refreshAgentPreference() {
+      var requestedAtVersion = agentPreferenceVersion;
+      Voice.getAgentPreference().then(function (agent) {
+        // A polling GET that began before a local click must not visually
+        // undo that newer click while its PUT is in flight.
+        if (requestedAtVersion === agentPreferenceVersion) applySelectedAgent(agent);
+      }).catch(function () {});
+    }
+    applySelectedAgent('claude');
+    refreshAgentPreference();
+    agentButtons.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var previous = selectedAgent;
+        agentPreferenceVersion++;
+        applySelectedAgent(btn.dataset.agent);
+        Voice.setAgentPreference(selectedAgent).catch(function () { applySelectedAgent(previous); });
+      });
+    });
 
     // Tap-to-reply: selecting one of CC's earlier messages (via the Reply
     // button added in addAssistantMessage below) sets this, shows the
@@ -508,12 +544,17 @@
       return el;
     }
 
-    function addAssistantMessage(text, replyToText, msgId, insertBeforeEl) {
+    function addAssistantMessage(text, replyToText, msgId, insertBeforeEl, agent) {
       clearEmptyNote();
+      agent = agent === 'codex' ? 'codex' : 'claude';
       var isAction = /^\[NEEDS_ACTION\]/i.test(text || '');
       var wrap = document.createElement('div');
-      wrap.className = 'pm-msg pm-msg-assistant' + (isAction ? ' pm-msg-assistant--action' : '');
+      wrap.className = 'pm-msg pm-msg-assistant pm-msg-assistant--' + agent + (isAction ? ' pm-msg-assistant--action' : '');
       if (msgId) wrap.dataset.msgId = msgId;
+      var agentLabel = document.createElement('div');
+      agentLabel.className = 'pm-msg-agent-label';
+      agentLabel.textContent = agentName(agent) + ':';
+      wrap.appendChild(agentLabel);
       if (replyToText) {
         var replyTo = document.createElement('div');
         replyTo.className = 'pm-msg-replyto';
@@ -636,7 +677,7 @@
         num.textContent = (idx + 1) + '/' + inflight.length;
         var textEl = document.createElement('span');
         textEl.className = 'pm-queue-text';
-        textEl.textContent = row.early_ack || row.transcript;
+        textEl.textContent = agentName(row.agent) + ': ' + (row.early_ack || row.transcript);
         item.appendChild(num);
         item.appendChild(textEl);
         queueListEl.appendChild(item);
@@ -654,7 +695,7 @@
           mark.textContent = row.status === 'error' ? '✕' : '✓';
           var textEl = document.createElement('span');
           textEl.className = 'pm-queue-text';
-          textEl.textContent = row.early_ack || row.transcript;
+          textEl.textContent = agentName(row.agent) + ': ' + (row.early_ack || row.transcript);
           item.appendChild(mark);
           item.appendChild(textEl);
           queueListEl.appendChild(item);
@@ -662,12 +703,13 @@
       }
     }
 
-    function addTyping(msgId) {
+    function addTyping(msgId, agent) {
       clearEmptyNote();
       var el = document.createElement('div');
-      el.className = 'pm-typing';
+      agent = agent === 'codex' ? 'codex' : 'claude';
+      el.className = 'pm-typing pm-typing--' + agent;
       if (msgId) el.dataset.msgId = msgId;
-      el.textContent = 'CC is working on it…';
+      el.textContent = agentName(agent) + ' is working on it…';
       thread.appendChild(el);
       thread.scrollTop = thread.scrollHeight;
       return el;
@@ -725,7 +767,7 @@
 
     pmSync = Voice.syncThread({
       onNewMessage: function (row) { addMessage('user', row.transcript, row.id, null, row.reply_to_snippet); },
-      onPending: function (row) { addTyping(row.id); },
+      onPending: function (row) { addTyping(row.id, row.agent); },
       onEarlyAck: function (row) {
         // Swap the generic "CC is working on it…" placeholder for CC's own
         // real, contextual first line the moment it's available — visible
@@ -745,7 +787,7 @@
         // Execute-mode replies are a real completion summary now (see
         // server.js buildVoicePrompt), not a throwaway line — show it like
         // any other reply instead of a generic "Done" placeholder.
-        addAssistantMessage(row.reply_text || '', row.transcript, row.id, typingEl);
+        addAssistantMessage(row.reply_text || '', row.transcript, row.id, typingEl, row.agent);
         if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
         if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
         if (voiceAutoSpeak[row.id]) {
@@ -780,7 +822,11 @@
         }
       },
       onActivity: function (row) { renderActivity(row.activity_log); },
-      onTick: function (rows) { renderQueue(rows); pastFirstTick = true; }
+      onTick: function (rows) {
+        renderQueue(rows);
+        pastFirstTick = true;
+        refreshAgentPreference();
+      }
     });
 
     function sendText(text, mode, opts) {
@@ -791,9 +837,10 @@
       var replyTo = pendingReplyTo;
       clearPendingReplyTo();
       addMessage('user', text.trim(), null, image, replyTo ? replyTo.snippet : null);
-      var typingEl = addTyping();
+      var agent = selectedAgent;
+      var typingEl = addTyping(null, agent);
       renderActivity(null);
-      Voice.sendMessage(text.trim(), mode, image, replyTo ? replyTo.id : null).then(function (created) {
+      Voice.sendMessage(text.trim(), mode, image, replyTo ? replyTo.id : null, agent).then(function (created) {
         typingEl.dataset.msgId = created.id;
         if (autoSpeak) voiceAutoSpeak[created.id] = true;
         pmSync.markKnown(created);

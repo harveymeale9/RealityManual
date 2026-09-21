@@ -400,6 +400,17 @@ body.role-reviewer #pmBackFab {
   display: flex; align-items: center; justify-content: flex-end; gap: 14px;
   padding: 10px clamp(16px, 3vw, 36px) 0;
 }
+.pm-agent-switch {
+  display: inline-flex; padding: 3px; gap: 3px; border: 1px solid var(--border);
+  border-radius: 9px; background: var(--surface-2);
+}
+.pm-agent-option {
+  border: 0; border-radius: 6px; padding: 6px 13px; background: transparent;
+  color: var(--ink-faint); font: 600 0.78rem var(--font-body); cursor: pointer;
+}
+.pm-agent-option:hover { color: var(--ink); }
+.pm-agent-option[data-agent="claude"].active { background: rgba(139, 124, 246, 0.22); color: #b8adff; }
+.pm-agent-option[data-agent="codex"].active { background: rgba(65, 170, 255, 0.22); color: #82c8ff; }
 .pm-reset-btn {
   background: none; border: 1px solid var(--border); color: var(--ink-soft);
   border-radius: 6px; padding: 6px 12px; font-size: 0.8rem; cursor: pointer;
@@ -468,11 +479,16 @@ body.role-reviewer #pmBackFab {
 .pm-msg { max-width: 88%; padding: 12px 15px; border-radius: 10px; line-height: 1.55; font-size: 0.95rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 .pm-msg-user { align-self: flex-end; background: var(--accent-soft); border: 1px solid var(--accent-soft-strong); color: var(--ink); }
 .pm-msg-assistant { align-self: flex-start; background: var(--surface-2); border: 1px solid var(--border); color: var(--ink); }
+.pm-msg-assistant--claude { background: rgba(139, 124, 246, 0.12); border-color: rgba(139, 124, 246, 0.48); }
+.pm-msg-assistant--codex { background: rgba(65, 170, 255, 0.12); border-color: rgba(65, 170, 255, 0.48); }
+.pm-msg-agent-label { margin-bottom: 5px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.02em; }
+.pm-msg-assistant--claude .pm-msg-agent-label { color: #b8adff; }
+.pm-msg-assistant--codex .pm-msg-agent-label { color: #82c8ff; }
 /* Distinct color specifically when Claude's reply needs Harvey to actually
    do something (run a command, decide, approve) — see the [NEEDS_ACTION]
    marker convention in server.js's VOICE_SYSTEM_PROMPT. A plain status/
    completion report stays the ordinary .pm-msg-assistant color. */
-.pm-msg-assistant--action { background: var(--action-soft); border: 1px solid var(--action); }
+.pm-msg-assistant--action { box-shadow: inset 3px 0 var(--action); }
 .pm-msg-system { align-self: center; color: var(--ink-faint); font-size: 0.82rem; background: none; border: none; padding: 4px; }
 .pm-msg-error { align-self: flex-start; background: var(--error-soft); border: 1px solid var(--error); color: var(--ink); }
 /* Thumbnail for a user message that attached an image — sent messages
@@ -494,6 +510,8 @@ body.role-reviewer #pmBackFab {
 .pm-stop-btn { color: var(--error); border-color: var(--error); }
 .pm-reply-btn { color: var(--ink-soft); }
 .pm-typing { align-self: flex-start; color: var(--ink-faint); font-size: 0.85rem; font-style: italic; padding: 0 clamp(16px, 3vw, 36px); }
+.pm-typing--claude { color: #a99dff; }
+.pm-typing--codex { color: #71bdff; }
 /* Whichever message's audio is currently playing — auto-spoken or via the
    Play button, doesn't matter, both go through the same voiceClient.js
    speaking-state tracking — gets a visible highlight so it's obvious at a

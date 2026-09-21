@@ -10,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
 const claudeRunner = require('./src/claudeRunner');
+const codexRunner = require('./src/codexRunner');
 const elevenlabs = require('./src/elevenlabs');
 const videoAnalysis = require('./src/videoAnalysis');
 const youtubeAuth = require('./src/youtubeAuth');
@@ -19,6 +20,7 @@ const DATA_DIR = process.env.DATA_DIR || '/data';
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 const DB_PATH = path.join(DATA_DIR, 'db.sqlite');
 const WORK_LOG_PATH = path.join(DATA_DIR, 'work-log.md');
+const CODEX_HOST_DATA_DIR = process.env.CODEX_HOST_DATA_DIR || '/root/ops-service-data';
 const PORT = process.env.PORT || 4001;
 const PANEL_PASSWORD = process.env.PANEL_PASSWORD || 'ormiston';
 // A second, much more narrowly-scoped password — for Google's YouTube API
@@ -94,6 +96,11 @@ db.exec(
   '  claude_session_id TEXT,' +
   '  updated_at TEXT NOT NULL' +
   ');' +
+  'CREATE TABLE IF NOT EXISTS voice_preferences (' +
+  '  id INTEGER PRIMARY KEY CHECK (id = 1),' +
+  "  selected_agent TEXT NOT NULL DEFAULT 'claude'," +
+  '  updated_at TEXT NOT NULL' +
+  ');' +
   // Single-row (id=1) — this panel has exactly one admin/one connected
   // YouTube channel, same "one row" pattern as voice_session above.
   // Tokens live here and nowhere else — never returned to the browser
@@ -139,6 +146,14 @@ try { db.exec('ALTER TABLE voice_messages ADD COLUMN early_ack TEXT'); } catch (
 // several different things have been discussed in the same thread. Same
 // safe-ALTER pattern as the columns above.
 try { db.exec('ALTER TABLE voice_messages ADD COLUMN reply_to_id TEXT'); } catch (e) { /* already exists */ }
+// Existing history predates the agent selector and therefore belongs to
+// Claude. New rows record their destination so both UIs can label/color the
+// response correctly and restart recovery can dispatch it to the same agent.
+try { db.exec("ALTER TABLE voice_messages ADD COLUMN agent TEXT NOT NULL DEFAULT 'claude'"); } catch (e) { /* already exists */ }
+// Claude and Codex maintain independent resumable conversations. Keeping
+// both ids in the one existing single-row session record lets "New
+// conversation" reset both without affecting the persistent agent choice.
+try { db.exec('ALTER TABLE voice_session ADD COLUMN codex_session_id TEXT'); } catch (e) { /* already exists */ }
 
 const stmts = {
   getAll: db.prepare('SELECT data FROM records WHERE store_name = ? ORDER BY updated_at ASC'),
@@ -156,7 +171,7 @@ const stmts = {
   getReviewerSession: db.prepare('SELECT * FROM reviewer_sessions WHERE token = ?'),
   delReviewerSession: db.prepare('DELETE FROM reviewer_sessions WHERE token = ?'),
   purgeReviewerSessions: db.prepare('DELETE FROM reviewer_sessions WHERE expires_at < ?'),
-  insertVoiceMessage: db.prepare('INSERT INTO voice_messages (id, mode, transcript, status, created_at, reply_to_id) VALUES (?, ?, ?, ?, ?, ?)'),
+  insertVoiceMessage: db.prepare('INSERT INTO voice_messages (id, mode, transcript, status, created_at, reply_to_id, agent) VALUES (?, ?, ?, ?, ?, ?, ?)'),
   setVoiceMessageStatus: db.prepare('UPDATE voice_messages SET status = ? WHERE id = ?'),
   setVoiceActivityLog: db.prepare('UPDATE voice_messages SET activity_log = ? WHERE id = ?'),
   setVoiceEarlyAck: db.prepare('UPDATE voice_messages SET early_ack = ? WHERE id = ?'),
@@ -164,12 +179,30 @@ const stmts = {
   getVoiceMessage: db.prepare('SELECT * FROM voice_messages WHERE id = ?'),
   listVoiceMessages: db.prepare('SELECT * FROM voice_messages ORDER BY created_at DESC LIMIT ?'),
   getInflightVoiceMessages: db.prepare("SELECT * FROM voice_messages WHERE status IN ('pending','running') ORDER BY created_at ASC"),
-  getVoiceSession: db.prepare('SELECT claude_session_id FROM voice_session WHERE id = 1'),
+  getVoiceSession: db.prepare('SELECT claude_session_id, codex_session_id FROM voice_session WHERE id = 1'),
   upsertVoiceSession: db.prepare(
     'INSERT INTO voice_session (id, claude_session_id, updated_at) VALUES (1, ?, ?) ' +
     'ON CONFLICT(id) DO UPDATE SET claude_session_id = excluded.claude_session_id, updated_at = excluded.updated_at'
   ),
+  upsertCodexSession: db.prepare(
+    'INSERT INTO voice_session (id, codex_session_id, updated_at) VALUES (1, ?, ?) ' +
+    'ON CONFLICT(id) DO UPDATE SET codex_session_id = excluded.codex_session_id, updated_at = excluded.updated_at'
+  ),
   clearVoiceSession: db.prepare('DELETE FROM voice_session WHERE id = 1'),
+  getVoicePreference: db.prepare('SELECT selected_agent FROM voice_preferences WHERE id = 1'),
+  upsertVoicePreference: db.prepare(
+    'INSERT INTO voice_preferences (id, selected_agent, updated_at) VALUES (1, ?, ?) ' +
+    'ON CONFLICT(id) DO UPDATE SET selected_agent = excluded.selected_agent, updated_at = excluded.updated_at'
+  ),
+  getLastAgentMessageBefore: db.prepare(
+    "SELECT created_at FROM voice_messages WHERE agent = ? AND id != ? AND status IN ('done','error') AND created_at < ? ORDER BY created_at DESC LIMIT 1"
+  ),
+  listOtherAgentMessagesSince: db.prepare(
+    "SELECT agent, transcript, reply_text, created_at FROM voice_messages WHERE agent != ? AND status = 'done' AND created_at > ? AND created_at < ? ORDER BY created_at ASC LIMIT 12"
+  ),
+  listRecentOtherAgentMessages: db.prepare(
+    "SELECT agent, transcript, reply_text, created_at FROM voice_messages WHERE agent != ? AND status = 'done' AND created_at < ? ORDER BY created_at DESC LIMIT 12"
+  ),
   getYoutubeAuth: db.prepare('SELECT * FROM youtube_oauth WHERE id = 1'),
   upsertYoutubeAuth: db.prepare(
     'INSERT INTO youtube_oauth (id, channel_id, channel_title, access_token, refresh_token, expires_at, updated_at) ' +
@@ -1254,6 +1287,32 @@ function buildVoicePrompt(mode, text) {
     'longer investigation is fine and expected, not something to shortcut.' + ACK_REMINDER + '] ' + text;
 }
 
+function normalizeVoiceAgent(value) {
+  return value === 'codex' ? 'codex' : 'claude';
+}
+
+// Both agents keep their own native resumable thread, but the browser shows
+// one shared Project Manager conversation. When Harvey switches agents,
+// bridge any completed exchanges handled by the other agent since this one
+// last spoke so the newly-selected agent is not blind to the visible thread.
+function buildCrossAgentContext(agent, id, createdAt) {
+  const lastOwn = stmts.getLastAgentMessageBefore.get(agent, id, createdAt);
+  let rows;
+  if (lastOwn) {
+    rows = stmts.listOtherAgentMessagesSince.all(agent, lastOwn.created_at, createdAt);
+  } else {
+    rows = stmts.listRecentOtherAgentMessages.all(agent, createdAt).reverse();
+  }
+  if (!rows.length) return '';
+  const lines = rows.map(function (row) {
+    const name = normalizeVoiceAgent(row.agent) === 'codex' ? 'Codex' : 'Claude';
+    return 'Harvey: ' + String(row.transcript || '').slice(0, 1200) + '\n' +
+      name + ': ' + String(row.reply_text || '').slice(0, 2400);
+  });
+  return '[Shared Project Manager thread context from the other agent since you last handled a message. Use it as conversation context; do not repeat it unless needed.]\n' +
+    lines.join('\n\n') + '\n[End shared context]\n\n';
+}
+
 let voiceQueue = [];
 let voiceProcessing = false;
 
@@ -1262,11 +1321,12 @@ function drainVoiceQueue() {
   const next = voiceQueue.shift();
   if (!next) return;
   voiceProcessing = true;
-  processVoiceMessage(next.id, next.mode, next.text, next.imageBlock)
+  processVoiceMessage(next.id, next.mode, next.text, next.agent, next.imageBlock, next.imagePath)
     .catch(function (err) {
       stmts.finishVoiceMessage.run('error', null, String((err && err.message) || err).slice(0, 2000), new Date().toISOString(), next.id);
     })
     .finally(function () {
+      if (next.uploadPath) fs.rm(next.uploadPath, { force: true }, function () {});
       voiceProcessing = false;
       drainVoiceQueue();
     });
@@ -1298,11 +1358,14 @@ function buildSystemPromptForSession(sessionId) {
     'log, for context on what you and Harvey were doing recently:\n' + recentLog;
 }
 
-async function processVoiceMessage(id, mode, text, imageBlock) {
+async function processVoiceMessage(id, mode, text, agent, imageBlock, imagePath) {
   stmts.setVoiceMessageStatus.run('running', id);
+  agent = normalizeVoiceAgent(agent);
+  const messageRow = stmts.getVoiceMessage.get(id);
   const sessionRow = stmts.getVoiceSession.get();
-  const sessionId = sessionRow && sessionRow.claude_session_id;
-  const prompt = buildVoicePrompt(mode, text);
+  const sessionId = sessionRow && (agent === 'codex' ? sessionRow.codex_session_id : sessionRow.claude_session_id);
+  const sharedContext = buildCrossAgentContext(agent, id, messageRow ? messageRow.created_at : new Date().toISOString());
+  const prompt = buildVoicePrompt(mode, sharedContext + text);
 
   // Streamed into the DB as it grows (not held until the run finishes) so
   // the Project Manager tab's right-hand activity pane can poll the same
@@ -1319,36 +1382,52 @@ async function processVoiceMessage(id, mode, text, imageBlock) {
     stmts.setVoiceEarlyAck.run(ackText.slice(0, 2000), id);
   }
 
-  let result = await claudeRunner.runClaude({
-    prompt: prompt,
-    sessionId: sessionId,
-    appendSystemPrompt: buildSystemPromptForSession(sessionId),
-    onActivity: onActivity,
-    onEarlyAck: onEarlyAck,
-    imageBlock: imageBlock
-  });
-  // The resumed session id can go stale (e.g. the CLI's local session store
-  // living outside the persisted volume, wiped by a container rebuild) —
-  // rather than leave every future message stuck repeating the same
-  // failure forever, drop the dead session and retry once as a fresh one.
-  if (!result.ok && sessionId && /no conversation found/i.test(result.error || '')) {
-    console.error('voice claude session ' + sessionId + ' is gone, starting fresh:', result.error);
-    stmts.clearVoiceSession.run();
-    activity.push('— previous session was lost, starting a new one —');
-    result = await claudeRunner.runClaude({
+  const runSelectedAgent = function (resumeId) {
+    if (agent === 'codex') {
+      return codexRunner.runCodex({
+        prompt: prompt,
+        sessionId: resumeId,
+        onActivity: onActivity,
+        onEarlyAck: onEarlyAck,
+        imagePath: imagePath
+      });
+    }
+    return claudeRunner.runClaude({
       prompt: prompt,
-      sessionId: null,
-      appendSystemPrompt: buildSystemPromptForSession(null),
+      sessionId: resumeId,
+      appendSystemPrompt: buildSystemPromptForSession(resumeId),
       onActivity: onActivity,
       onEarlyAck: onEarlyAck,
       imageBlock: imageBlock
     });
+  };
+
+  let result = await runSelectedAgent(sessionId);
+  // The resumed session id can go stale (e.g. the CLI's local session store
+  // living outside the persisted volume, wiped by a container rebuild) —
+  // rather than leave every future message stuck repeating the same
+  // failure forever, drop the dead session and retry once as a fresh one.
+  const missingSession = agent === 'codex'
+    ? /thread|session|rollout/i.test(result.error || '') && /not found|no .*found|unknown|missing/i.test(result.error || '')
+    : /no conversation found/i.test(result.error || '');
+  if (!result.ok && sessionId && missingSession) {
+    console.error('voice ' + agent + ' session ' + sessionId + ' is gone, starting fresh:', result.error);
+    if (agent === 'codex') stmts.upsertCodexSession.run(null, new Date().toISOString());
+    else {
+      stmts.upsertVoiceSession.run(null, new Date().toISOString());
+      claudeRunner.resetSession();
+    }
+    activity.push('— previous session was lost, starting a new one —');
+    result = await runSelectedAgent(null);
   }
   const now = new Date().toISOString();
-  if (result.sessionId) stmts.upsertVoiceSession.run(result.sessionId, now);
+  if (result.sessionId) {
+    if (agent === 'codex') stmts.upsertCodexSession.run(result.sessionId, now);
+    else stmts.upsertVoiceSession.run(result.sessionId, now);
+  }
   if (!result.ok) {
     stmts.finishVoiceMessage.run('error', null, String(result.error || 'unknown error').slice(0, 2000), now, id);
-    console.error('voice claude run failed:', result.error);
+    console.error('voice ' + agent + ' run failed:', result.error);
     return;
   }
   stmts.finishVoiceMessage.run('done', (result.replyText || '').slice(0, 8000), null, now, id);
@@ -1365,6 +1444,8 @@ app.post('/api/voice/messages', voiceMessageUpload.single('image'), function (re
   const trimmed = rawText.trim().slice(0, 4000);
   const rawReplyToId = (req.body && req.body.replyToId) || null;
   const replyToId = (typeof rawReplyToId === 'string' && rawReplyToId.trim()) ? rawReplyToId.trim().slice(0, 64) : null;
+  const preference = stmts.getVoicePreference.get();
+  const agent = normalizeVoiceAgent((req.body && req.body.agent) || (preference && preference.selected_agent));
   function cleanupUpload() { if (req.file) fs.rm(req.file.path, { force: true }, function () {}); }
   if (!trimmed && !req.file) { cleanupUpload(); return res.status(400).json({ error: 'invalid_text' }); }
   if (mode !== 'respond' && mode !== 'execute') { cleanupUpload(); return res.status(400).json({ error: 'invalid_mode' }); }
@@ -1372,19 +1453,25 @@ app.post('/api/voice/messages', voiceMessageUpload.single('image'), function (re
   const id = crypto.randomBytes(16).toString('hex');
   const now = new Date().toISOString();
   const finalText = trimmed || '(image attached, no caption)';
-  stmts.insertVoiceMessage.run(id, mode, finalText, 'pending', now, replyToId);
-  res.json({ id: id, status: 'pending', reply_to_id: replyToId });
+  stmts.insertVoiceMessage.run(id, mode, finalText, 'pending', now, replyToId, agent);
+  stmts.upsertVoicePreference.run(agent, now);
+  res.json({ id: id, status: 'pending', reply_to_id: replyToId, agent: agent });
 
   const SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
   let imageBlock = null;
+  let imagePath = null;
   if (req.file && SUPPORTED_IMAGE_TYPES.indexOf(req.file.mimetype) !== -1) {
     try {
       imageBlock = { mediaType: req.file.mimetype, base64: fs.readFileSync(req.file.path).toString('base64') };
+      if (agent === 'codex') {
+        const relativeUploadPath = path.relative(DATA_DIR, req.file.path);
+        if (!relativeUploadPath.startsWith('..')) imagePath = path.join(CODEX_HOST_DATA_DIR, relativeUploadPath);
+      }
     } catch (e) { console.error('failed to read attached image:', e.message); }
   } else if (req.file) {
     console.error('unsupported attached image type: ' + req.file.mimetype);
   }
-  cleanupUpload();
+  if (agent !== 'codex' || !imagePath) cleanupUpload();
 
   // Reply-to context is woven into the prompt CC actually sees (not into
   // the stored transcript — that stays exactly what Harvey typed/said, for
@@ -1400,7 +1487,15 @@ app.post('/api/voice/messages', voiceMessageUpload.single('image'), function (re
     }
   }
 
-  voiceQueue.push({ id: id, mode: mode, text: promptText, imageBlock: imageBlock });
+  voiceQueue.push({
+    id: id,
+    mode: mode,
+    text: promptText,
+    agent: agent,
+    imageBlock: imageBlock,
+    imagePath: imagePath,
+    uploadPath: imagePath && req.file ? req.file.path : null
+  });
   drainVoiceQueue();
 });
 
@@ -1430,6 +1525,18 @@ app.get('/api/voice/messages/:id', function (req, res) {
   const row = stmts.getVoiceMessage.get(req.params.id);
   if (!row) return res.status(404).json({ error: 'not_found' });
   res.json(hydrateVoiceMessageRow(row));
+});
+
+app.get('/api/voice/agent', function (req, res) {
+  const row = stmts.getVoicePreference.get();
+  res.json({ agent: normalizeVoiceAgent(row && row.selected_agent) });
+});
+
+app.put('/api/voice/agent', function (req, res) {
+  const requested = req.body && req.body.agent;
+  if (requested !== 'claude' && requested !== 'codex') return res.status(400).json({ error: 'invalid_agent' });
+  stmts.upsertVoicePreference.run(requested, new Date().toISOString());
+  res.json({ agent: requested });
 });
 
 app.post('/api/voice/session/reset', function (req, res) {
@@ -1497,7 +1604,15 @@ function recoverInflightVoiceMessages() {
   let errored = 0;
   rows.forEach(function (row) {
     if (row.status === 'pending') {
-      voiceQueue.push({ id: row.id, mode: row.mode, text: row.transcript, imageBlock: null });
+      voiceQueue.push({
+        id: row.id,
+        mode: row.mode,
+        text: row.transcript,
+        agent: normalizeVoiceAgent(row.agent),
+        imageBlock: null,
+        imagePath: null,
+        uploadPath: null
+      });
       requeued++;
     } else {
       stmts.finishVoiceMessage.run('error', null,

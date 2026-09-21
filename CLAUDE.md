@@ -7719,6 +7719,10 @@ deploy/restart needed.
 
 # 156. Voice/Chat App: TODO — Show Which Turns Ran on Subscription vs. API Usage
 
+**Superseded 2026-09-21:** Harvey explicitly dropped this request after
+removing the credit-based setup. Do not build the usage-source indicator
+described below unless he asks for it again.
+
 Harvey asked, separately from everything else in this session, for the
 Project Manager (voice/chat) UI to make it "unmissable" which turns are
 running on his Claude subscription versus metered API credits. **Not yet
@@ -7740,3 +7744,67 @@ mix is ever introduced (e.g. a future fallback to a metered key), the
 to be checked for whether Claude Code's own CLI output actually
 surfaces which credential path a given turn used at all — this hasn't
 been researched yet.
+
+---
+
+# 157. Project Manager: Claude/Codex Selector, Shared Thread, and Host-Native Codex Runner
+
+The Project Manager now supports both the existing Claude Code agent and
+OpenAI Codex without replacing or weakening the Claude path. Desktop and
+`voice-mobile.html` each have a compact Claude/Codex selector. The choice
+is stored server-side in the single-row `voice_preferences` table, so it
+survives reloads and stays synchronized across devices. New
+`voice_messages` rows record their `agent` (old rows migrate to `claude`),
+and both clients use that field to render labeled, differently colored
+`Claude:` and `Codex:` response bubbles, agent-specific working text, and
+agent names in the task list. The message history remains one shared
+cross-device stream.
+
+The agents keep separate native resumable conversations in the existing
+single-row `voice_session`: `claude_session_id` is unchanged and
+`codex_session_id` is new. A new conversation clears both IDs while
+leaving the selected-agent preference alone. When Harvey switches agents,
+`buildCrossAgentContext()` supplies the newly selected agent with completed
+other-agent exchanges since its previous turn (or a bounded recent window
+on its first turn). This preserves conversational continuity in the one
+visible thread without pretending Claude and Codex use the same native
+session format.
+
+**Codex execution architecture.** `src/codexRunner.js` starts the Codex
+CLI on the VPS host through the container's already-established audited
+SSH path (`ubuntu@host.docker.internal` plus passwordless `sudo -H`). It
+runs from `/srv/realitymanual-repo` with
+`codex exec --json --dangerously-bypass-approvals-and-sandbox`, then uses
+`codex exec resume` for later turns. This keeps Codex authentication and
+thread storage in root's existing host-level Codex home; no token or other
+credential is copied into the container or committed. It also means Codex
+naturally has the requested host view of the repository, Docker, Nginx,
+systemd, logs, and filesystem. It inherits root's persistent Codex config,
+currently GPT-5.6 Sol with medium reasoning and full access. Optional
+`CODEX_HOST*` environment variables in `.env.example` document the paths
+without containing secrets.
+
+The runner parses Codex's JSONL events into the existing Project Manager
+contract: the first agent message becomes `early_ack`, command/reasoning/
+file/MCP/web events append to `activity_log` while the turn runs, and the
+last agent message becomes the final response. Image uploads remain the
+same browser/API feature; for Codex their `/data/uploads/...` path is
+translated to the corresponding host path under
+`/root/ops-service-data/uploads/...`, passed with `-i`, and deleted after
+the turn. Claude still receives its existing base64 image block and still
+runs through the unchanged Agent SDK route.
+
+**Recovery discipline followed:** the live `rm-ops-service` container was
+left untouched while a separate image/container on port 4011 was built and
+tested. In that staging container, Codex passed a first turn, native resume
+turn, image turn/cleanup, real host-command activity streaming, and
+read-only checks of Docker, `nginx -t`, systemd, the host filesystem, and
+host logs. A deliberately deleted Codex thread also exercised the stale-
+session fallback (`no rollout found`) and retried successfully as a fresh
+thread. The unchanged Claude route also completed a real turn, and a
+Claude turn correctly recovered `IMAGE_OK` from the intervening Codex
+exchange through the shared-context bridge. A real headless Chromium test
+at desktop size and 390×844 mobile size verified both labels/colors, both
+selectors, persistence across reload, and selector propagation from mobile
+back to desktop. Syntax checks, `git diff --check`, and an independent
+Docker build also passed before deployment.
