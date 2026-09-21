@@ -1798,7 +1798,15 @@ body.role-reviewer #pmBackFab {
 .idea-list > .idea-card:nth-child(even) { background: #151c17; border-color: #304338; }
 .idea-big-head { display: grid; grid-template-columns: 48px minmax(0,1fr) auto; gap: 14px; align-items: center; padding: 16px 18px; border-bottom: 1px solid var(--border-soft); color: #b8d0c1; font: 700 .78rem var(--font-mono); text-transform: uppercase; letter-spacing: .09em; }
 .idea-big-body { padding: 22px 24px 20px; }
-.idea-big-copy { max-width: 1050px; margin: 0; color: #ddd7cc; font: 500 clamp(1.02rem,1.35vw,1.2rem)/1.65 var(--font-body); }
+.idea-big-edit { max-width: 1120px; }
+.idea-big-edit > label { display: block; margin-bottom: 8px; color: #a7c9b5; font: 700 .68rem var(--font-mono); text-transform: uppercase; letter-spacing: .09em; }
+.idea-big-editor { display: block; width: 100%; min-height: 92px; overflow: hidden; resize: none; padding: 13px 14px; border: 1px solid #34453b; border-radius: 7px; background: #111612; color: #ddd7cc; font: 500 clamp(1.02rem,1.35vw,1.2rem)/1.65 var(--font-body); }
+.idea-big-editor:focus { border-color: var(--accent-3); outline: 2px solid rgba(60,255,137,.11); }
+.idea-big-edit-actions { display: flex; align-items: center; gap: 9px; margin-top: 9px; }
+.idea-big-edit-actions .idea-save { margin: 0; min-height: 42px; color: var(--accent); border-color: var(--accent-3); }
+.idea-big-edit-actions .idea-save:disabled { opacity: .38; cursor: default; }
+.idea-big-edit-actions .idea-mic { min-height: 42px; }
+.idea-edit-status { color: var(--accent); font-size: .75rem; }
 .idea-big-support { display: grid; grid-template-columns: minmax(0,1fr) minmax(340px,.8fr); gap: 18px; margin-top: 22px; }
 .idea-big-support > section { padding: 16px 18px; border: 1px solid var(--border-soft); border-radius: 8px; background: rgba(2,6,4,.34); }
 .idea-big-support h3 { margin: 0 0 12px; color: #c9c2b5; font: 700 .76rem var(--font-mono); text-transform: uppercase; letter-spacing: .08em; }
@@ -1894,7 +1902,7 @@ body.role-reviewer #pmBackFab {
   .overview-row { display: none; }
   .ops-panel { padding-top: 10px; }
   .ideation-workspace { padding: 10px 10px 80px; }.ideation-hero { display: block; padding: 17px; }.ideation-hero p { font-size: .86rem; }.idea-provider { width: 100%; margin-top: 18px; }.idea-queue-bar { display: grid; font-size: .61rem; }
-  .idea-big-head { grid-template-columns: 34px minmax(0,1fr) auto; gap: 8px; padding: 13px 12px; }.idea-big-body { padding: 16px 13px; }.idea-big-copy { font-size: 1rem; line-height: 1.58; }.idea-big-support { grid-template-columns: 1fr; gap: 11px; margin-top: 17px; }.idea-big-support > section { padding: 14px; }.idea-big-footer { align-items: stretch; flex-direction: column; }.idea-send { width: 100%; min-height: 50px; }.idea-big-footer .idea-meta { margin: 0; text-align: left; }
+  .idea-big-head { grid-template-columns: 34px minmax(0,1fr) auto; gap: 8px; padding: 13px 12px; }.idea-big-body { padding: 16px 13px; }.idea-big-editor { font-size: 1rem; line-height: 1.58; }.idea-big-edit-actions { align-items: stretch; flex-wrap: wrap; }.idea-edit-status { width: 100%; }.idea-big-support { grid-template-columns: 1fr; gap: 11px; margin-top: 17px; }.idea-big-support > section { padding: 14px; }.idea-big-footer { align-items: stretch; flex-direction: column; }.idea-send { width: 100%; min-height: 50px; }.idea-big-footer .idea-meta { margin: 0; text-align: left; }
   .idea-summary { grid-template-columns: 30px minmax(0,1fr) 18px; gap: 8px; padding: 14px 12px; }.idea-origin { grid-column: 2; grid-row: 2; text-align: left; }.idea-chevron { grid-column: 3; grid-row: 1; }.idea-summary-main > span:last-child { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
   .idea-body { padding: 14px 12px; }.idea-edit-grid { grid-template-columns: 1fr; }.idea-edit-grid .wide { grid-column: auto; }.idea-script textarea { min-height: 55vh; }.idea-section-head { display: block; }.idea-section-head span { display: block; margin: -4px 0 8px; }
   .idea-feedback-compose { grid-template-columns: 1fr; }.idea-mic,.idea-feedback-save { width: 100%; min-height: 50px; }.idea-actions { grid-template-columns: 1fr 1fr; }.idea-actions button { min-height: 48px; padding: 9px 7px; }

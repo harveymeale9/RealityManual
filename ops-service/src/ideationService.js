@@ -387,6 +387,24 @@ Return strict JSON only, with no markdown fences or commentary. Provider request
     db.prepare('UPDATE ideation_settings SET selected_provider=?,updated_at=? WHERE id=1').run(provider, now());
     res.json({ ok: true, selectedProvider: provider });
   });
+  router.put('/ideas/:id', function (req, res) {
+    try {
+      const idea = q.idea.get(req.params.id);
+      if (!idea || idea.status !== 'active') return res.status(404).json({ error: 'not_found' });
+      const bigIdea = clean(req.body && req.body.bigIdea, 6000);
+      if (bigIdea.length < 20) return res.status(400).json({ error: 'A Big Idea needs at least 20 characters.' });
+      const revision = Number(idea.revision_number || 0) + 1;
+      const stamp = now();
+      const before = idea.big_idea;
+      db.transaction(function () {
+        db.prepare('UPDATE ideation_ideas SET title=?,big_idea=?,revision_number=?,edited=1,updated_at=? WHERE id=?')
+          .run(internalLabel(bigIdea), bigIdea, revision, stamp, idea.id);
+        db.prepare('INSERT INTO ideation_revisions (id,idea_id,revision_number,kind,snapshot,diff,provider,model,created_at) VALUES (?,?,?,?,?,?,?,?,?)')
+          .run(uuid(), idea.id, revision, 'manual_edit', stringify({ bigIdea: bigIdea }), stringify({ bigIdea: { before: before, after: bigIdea } }), idea.provider, idea.model, stamp);
+      })();
+      res.json({ ok: true, idea: decodeIdea(q.idea.get(idea.id)) });
+    } catch (error) { res.status(400).json({ error: error.message }); }
+  });
   router.post('/ideas/:id/transfer', function (req, res) {
     try {
       const idea = q.idea.get(req.params.id);

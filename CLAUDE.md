@@ -8681,3 +8681,32 @@ Verified against the live DOM in headless Chromium at 1440×900: on the dense
 110–111 spread the book bottom was at y=874, its printed page number at y=853,
 and the viewport/stage bottom at y=900. Clicking the right edge opened 112–113;
 clicking the left edge returned to 110–111. All 9 backend tests still pass.
+
+---
+
+# 181. Big Ideas Can Be Edited and Dictated In Place (2026-09-21)
+
+The Content Ideation cards no longer render the generated premise as immutable
+display text. Each card now has an auto-growing Big Idea editor, an explicit
+Save changes button, a Dictate button, and inline states for unsaved, listening,
+transcribing, saving, saved, and microphone errors. Typed changes remain local
+until Harvey deliberately saves them.
+
+Dictation is an editing input, not an autonomous rewrite: it inserts speech at
+the current caret/selection, leaves the resulting text visible for review, and
+does not save automatically. Chrome/Edge use live browser speech recognition;
+other capable browsers fall back to the existing MediaRecorder + ElevenLabs
+transcription endpoint. The microphone button becomes Stop while recording.
+
+`PUT /api/ideation/ideas/:id` persists the edited premise, regenerates its
+internal label, marks it edited, increments its revision number, and stores a
+`manual_edit` snapshot plus before/after data in `ideation_revisions`. Sending
+the card to Rough Ideas therefore uses the saved revision rather than the
+original generated premise.
+
+Verification: the ideation integration test now edits a generated premise,
+checks its revision record, transfers it, and confirms the edited sentence is
+in the resulting piece. The full Node suite remains 9/9. A Chromium DOM test
+used a synthetic idea and simulated Web Speech Recognition (so no production
+idea was modified): typed copy plus dictated copy appeared together in the
+textarea, and the Save request contained exactly that reviewed combined text.

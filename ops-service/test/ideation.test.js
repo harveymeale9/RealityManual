@@ -88,11 +88,20 @@ test('Big Idea queue, verified support, and Ideation-stage transfer work togethe
   assert.match(generationPrompt, /normally in one to three concise sentences/);
 
   const accepted = state.ideas[0];
+  const editedText = accepted.big_idea + ' Harvey adds one sharper sentence to this premise.';
+  const edit = await request('/ideas/' + accepted.id, 'PUT', { bigIdea: editedText });
+  assert.equal(edit.idea.big_idea, editedText);
+  assert.equal(edit.idea.edited, 1);
+  assert.equal(edit.idea.revision_number, 1);
+  const manualRevision = db.prepare("SELECT * FROM ideation_revisions WHERE idea_id=? AND kind='manual_edit'").get(accepted.id);
+  assert.equal(JSON.parse(manualRevision.snapshot).bigIdea, editedText);
+  assert.equal(JSON.parse(manualRevision.diff).bigIdea.before, accepted.big_idea);
   const transfer = await request('/ideas/' + accepted.id + '/transfer', 'POST', {});
   assert.equal(transfer.piece.stage, 'ideation');
   assert.equal(transfer.piece.contentType, 'short');
   assert.deepEqual(transfer.piece.platforms, []);
   assert.match(transfer.piece.notesHtml, /<h3>Big Idea<\/h3>/);
+  assert.match(transfer.piece.notesHtml, /Harvey adds one sharper sentence/);
   assert.match(transfer.piece.notesHtml, /Concepts \/ angles to mention/);
   assert.match(transfer.piece.notesHtml, /Direct quotes/);
   const stored = JSON.parse(db.prepare("SELECT data FROM records WHERE store_name='pieces' AND id=?").get(transfer.piece.id).data);

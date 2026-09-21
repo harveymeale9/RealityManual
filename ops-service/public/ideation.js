@@ -4,6 +4,7 @@
   var root = null;
   var timer = null;
   var lastHash = '';
+  var activeDictationStop = null;
 
   function esc(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, function (char) {
@@ -32,9 +33,10 @@
 
   function card(idea, index) {
     var meta = idea.generation_meta || {};
-    return '<article class="idea-card idea-big-card" data-idea="' + esc(idea.id) + '">' +
+    return '<article class="idea-card idea-big-card' + (idea.edited ? ' is-edited' : '') + '" data-idea="' + esc(idea.id) + '">' +
       '<header class="idea-big-head"><span class="idea-number">' + String(index + 1).padStart(2, '0') + '</span><span>Big Idea</span><span class="idea-origin">' + esc(idea.provider) + '</span></header>' +
-      '<div class="idea-big-body"><p class="idea-big-copy">' + esc(idea.big_idea) + '</p>' +
+      '<div class="idea-big-body"><div class="idea-big-edit"><label for="idea-text-' + esc(idea.id) + '">Big Idea text</label><textarea class="idea-big-editor" id="idea-text-' + esc(idea.id) + '" rows="3">' + esc(idea.big_idea) + '</textarea>' +
+      '<div class="idea-big-edit-actions"><button type="button" class="idea-save" disabled>Save changes</button><button type="button" class="idea-mic idea-dictate" aria-label="Dictate changes" title="Dictate changes"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="3" width="8" height="12" rx="4"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg><span>Dictate</span></button><span class="idea-edit-status" role="status" aria-live="polite"></span></div></div>' +
       '<div class="idea-big-support"><section><h3>Concepts / angles to mention</h3><ul>' +
         (idea.discussion_angles || []).map(function (angle) { return '<li>' + esc(angle) + '</li>'; }).join('') +
       '</ul></section><section class="idea-big-quotes"><h3>Direct quotes</h3>' + quoteMarkup(idea.verified_quotes) + '</section></div>' +
@@ -62,6 +64,85 @@
     status.classList.toggle('bad', !!bad);
   }
 
+  function resizeEditor(editor) {
+    editor.style.height = 'auto';
+    editor.style.height = Math.max(92, editor.scrollHeight) + 'px';
+  }
+
+  function insertDictation(editor, before, spoken, after) {
+    var leftSpace = before && !/\s$/.test(before) ? ' ' : '';
+    var rightSpace = after && !/^\s/.test(after) ? ' ' : '';
+    editor.value = before + leftSpace + spoken.trim() + rightSpace + after;
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  function startDictation(cardEl, editor, button) {
+    if (activeDictationStop) { activeDictationStop(); return; }
+    var Voice = window.RMVoice;
+    var SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    var start = editor.selectionStart == null ? editor.value.length : editor.selectionStart;
+    var end = editor.selectionEnd == null ? start : editor.selectionEnd;
+    var before = editor.value.slice(0, start);
+    var after = editor.value.slice(end);
+    var label = button.querySelector('span');
+    var status = cardEl.querySelector('.idea-edit-status');
+
+    function recording(on) {
+      button.classList.toggle('recording', on);
+      label.textContent = on ? 'Stop' : 'Dictate';
+      button.title = on ? 'Stop dictation' : 'Dictate changes';
+      button.setAttribute('aria-label', button.title);
+      status.textContent = on ? 'Listening… click Stop when finished.' : '';
+    }
+
+    if (SpeechRecognitionCtor) {
+      var recognition = new SpeechRecognitionCtor();
+      var finalTranscript = '';
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.addEventListener('result', function (event) {
+        var interim = '';
+        for (var i = event.resultIndex; i < event.results.length; i++) {
+          var chunk = event.results[i][0].transcript;
+          if (event.results[i].isFinal) finalTranscript += chunk + ' ';
+          else interim += chunk;
+        }
+        insertDictation(editor, before, finalTranscript + interim, after);
+      });
+      recognition.addEventListener('end', function () {
+        activeDictationStop = null;
+        recording(false);
+        status.textContent = editor.value.trim() ? 'Dictation added — review and save.' : '';
+      });
+      recognition.addEventListener('error', function (event) {
+        activeDictationStop = null;
+        recording(false);
+        if (event.error !== 'aborted' && event.error !== 'no-speech') status.textContent = 'Microphone error: ' + event.error;
+      });
+      activeDictationStop = function () { recognition.stop(); };
+      recording(true);
+      recognition.start();
+      return;
+    }
+
+    if (!Voice) { status.textContent = 'Voice dictation is unavailable in this browser.'; return; }
+    Voice.startRecording().then(function (recorder) {
+      recording(true);
+      activeDictationStop = function () {
+        activeDictationStop = null;
+        recording(false);
+        button.disabled = true;
+        status.textContent = 'Transcribing…';
+        recorder.stop().then(Voice.transcribe).then(function (text) {
+          if (text) insertDictation(editor, before, text, after);
+          status.textContent = text ? 'Dictation added — review and save.' : 'No speech detected.';
+        }).catch(function (error) {
+          status.textContent = error.message || 'Could not transcribe audio.';
+        }).finally(function () { button.disabled = false; });
+      };
+    }).catch(function () { status.textContent = 'Could not access the microphone. Check its permission.'; });
+  }
+
   function bind(state) {
     root.querySelectorAll('[data-provider]').forEach(function (button) {
       button.onclick = function () {
@@ -71,6 +152,35 @@
     });
 
     root.querySelectorAll('.idea-card[data-idea]').forEach(function (cardEl) {
+      var editor = cardEl.querySelector('.idea-big-editor');
+      var save = cardEl.querySelector('.idea-save');
+      var dictate = cardEl.querySelector('.idea-dictate');
+      var editStatus = cardEl.querySelector('.idea-edit-status');
+      var savedValue = editor.value;
+      resizeEditor(editor);
+      editor.addEventListener('input', function () {
+        resizeEditor(editor);
+        var dirty = editor.value !== savedValue;
+        save.disabled = !dirty || editor.value.trim().length < 20;
+        editStatus.textContent = dirty ? 'Unsaved changes' : '';
+      });
+      dictate.onclick = function () { startDictation(cardEl, editor, dictate); };
+      save.onclick = function () {
+        save.disabled = true;
+        dictate.disabled = true;
+        editStatus.textContent = 'Saving…';
+        api('/ideas/' + cardEl.dataset.idea, { method: 'PUT', body: JSON.stringify({ bigIdea: editor.value }) }).then(function (result) {
+          savedValue = result.idea.big_idea;
+          editor.value = savedValue;
+          resizeEditor(editor);
+          cardEl.classList.add('is-edited');
+          editStatus.textContent = 'Saved';
+          lastHash = '';
+        }).catch(function (error) {
+          save.disabled = false;
+          editStatus.textContent = error.message;
+        }).finally(function () { dictate.disabled = false; });
+      };
       cardEl.querySelector('.idea-send').onclick = function (event) {
         var button = event.currentTarget;
         button.disabled = true;
