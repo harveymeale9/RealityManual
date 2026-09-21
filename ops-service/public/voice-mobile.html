@@ -155,6 +155,7 @@
       <div class="pm-agent-switch pm-agent-switch--mobile" role="group" aria-label="Active agent">
         <button type="button" class="pm-agent-option" data-agent="claude">Claude</button>
         <button type="button" class="pm-agent-option" data-agent="codex">Codex</button>
+        <button type="button" class="pm-agent-option pm-usage-option" aria-haspopup="dialog">Usage</button>
       </div>
       <button type="button" class="v-btn v-btn-ask" id="askBtn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/></svg>
@@ -217,6 +218,7 @@
   <script src="lib/store.js"></script>
   <script src="lib/auth.js"></script>
   <script src="lib/voiceClient.js?v=20260921-codex-tts"></script>
+  <script src="lib/usageDashboard.js?v=20260921-usage"></script>
   <script>
     (function () {
       'use strict';
@@ -254,7 +256,8 @@
       var replyPreviewEl = document.getElementById('vReplyPreview');
       var replyPreviewTextEl = document.getElementById('vReplyPreviewText');
       var replyPreviewCancelBtn = document.getElementById('vReplyPreviewCancel');
-      var agentButtons = Array.prototype.slice.call(document.querySelectorAll('.pm-agent-option'));
+      var agentButtons = Array.prototype.slice.call(document.querySelectorAll('.pm-agent-option[data-agent]'));
+      var usageButton = document.querySelector('.pm-usage-option');
       var selectedAgent = 'claude';
       var agentPreferenceVersion = 0;
 
@@ -283,6 +286,7 @@
           Voice.setAgentPreference(selectedAgent).catch(function () { applySelectedAgent(previous); });
         });
       });
+      if (window.RMUsage) window.RMUsage.attach(usageButton);
 
       // Tap-to-reply — same mechanism and purpose as app.js's identical
       // block: selecting one of CC's earlier messages (Reply button in

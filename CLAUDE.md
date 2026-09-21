@@ -8025,3 +8025,36 @@ runtime errors or horizontal overflow and verified tab order, ten cards,
 provider selection, EDITED state, history, and diff rendering. The committed
 Node integration test covers the queue/edit/feedback/revise/transfer/reject/
 learning/provider/restart lifecycle with deterministic provider doubles.
+
+---
+
+# 164. Project Manager Subscription Usage Dashboard
+
+The desktop and standalone-mobile Project Manager agent selectors now include
+a Usage button. It opens a responsive dashboard showing the allowance actually
+reported by the two installed coding-agent accounts: Claude's five-hour and
+weekly limits (plus model-specific weekly limits when Anthropic supplies them),
+and Codex's primary/secondary rate-limit windows. Percentages are presented as
+remaining allowance, with local reset times; the Codex card also shows the
+configured model/reasoning level and both cards show their detected plan.
+
+`src/agentUsage.js` performs both lookups on the VPS host through the existing
+auditable SSH boundary. Claude's host-side helper reads Claude Code's own OAuth
+credential and calls Anthropic's OAuth usage endpoint without sending the
+credential back to the container. Codex starts its native app-server protocol
+and uses `account/rateLimits/read` plus `config/read`. Only a normalized result
+containing plan, percentage, reset, model, reasoning, and optional extra-credit
+status reaches the browser; raw credentials and provider responses are never
+returned. One provider failing does not hide the other. Results are cached for
+two minutes, manual Refresh bypasses the cache, and completing a Project
+Manager turn invalidates it.
+
+The route is under the existing admin-only `/api/voice` middleware. This is an
+informational display only: it does not change the selected agent, billing, or
+credentials. The frontend is shared by desktop and mobile through
+`public/lib/usageDashboard.js` and becomes a full-height sheet on mobile.
+
+Verification used an isolated container on port 4011 with the real host SSH
+boundary and real provider accounts. A forced refresh returned Claude and
+Codex data together, including current percentages and reset timestamps; the
+production endpoint was then checked again after the full backend deployment.

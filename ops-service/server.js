@@ -19,6 +19,7 @@ const videoAnalysis = require('./src/videoAnalysis');
 const youtubeAuth = require('./src/youtubeAuth');
 const tiktokAuth = require('./src/tiktokAuth');
 const ideationService = require('./src/ideationService');
+const agentUsage = require('./src/agentUsage');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
@@ -1446,6 +1447,10 @@ async function processVoiceMessage(id, mode, text, agent, imageBlock, imagePath)
     return;
   }
   stmts.finishVoiceMessage.run('done', (result.replyText || '').slice(0, 8000), null, now, id);
+  // The next dashboard open/poll should reflect the turn that just consumed
+  // allowance. Invalidating is enough; it avoids running usage subprocesses
+  // when nobody has the dashboard open.
+  agentUsage.invalidate();
 }
 
 // Images pasted/dropped/attached into the chat (desktop paste-and-drop,
@@ -1552,6 +1557,15 @@ app.put('/api/voice/agent', function (req, res) {
   if (requested !== 'claude' && requested !== 'codex') return res.status(400).json({ error: 'invalid_agent' });
   stmts.upsertVoicePreference.run(requested, new Date().toISOString());
   res.json({ agent: requested });
+});
+
+app.get('/api/voice/usage', async function (req, res) {
+  try {
+    res.json(await agentUsage.getUsage({ force: req.query.refresh === '1' }));
+  } catch (err) {
+    console.error('agent usage dashboard failed:', err.message);
+    res.status(502).json({ error: 'usage_unavailable' });
+  }
 });
 
 app.post('/api/voice/session/reset', function (req, res) {

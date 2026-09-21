@@ -412,6 +412,56 @@ body.role-reviewer #pmBackFab {
 .pm-agent-option:hover { color: var(--ink); }
 .pm-agent-option[data-agent="claude"].active { background: rgba(139, 124, 246, 0.22); color: #b8adff; }
 .pm-agent-option[data-agent="codex"].active { background: rgba(65, 170, 255, 0.22); color: #82c8ff; }
+.pm-usage-option { border-left: 1px solid var(--border-soft); border-radius: 0 6px 6px 0; }
+.pm-usage-option.open { background: rgba(60, 255, 137, 0.12); color: var(--accent); }
+
+/* Subscription usage is an informational layer over the one shared Project
+   Manager. It never participates in the persisted Claude/Codex selection. */
+.usage-overlay {
+  position: fixed; inset: 0; z-index: 80; display: grid; place-items: center;
+  padding: 24px; background: rgba(1, 8, 4, .78); backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.usage-overlay[hidden] { display: none; }
+.usage-dialog {
+  width: min(720px, 100%); max-height: min(780px, calc(100dvh - 40px)); overflow: auto;
+  border: 1px solid rgba(60,255,137,.3); border-radius: 14px;
+  background: linear-gradient(150deg, rgba(24,38,31,.98), rgba(8,14,11,.99));
+  box-shadow: 0 26px 90px rgba(0,0,0,.65), inset 0 1px rgba(255,255,255,.035);
+}
+.usage-dialog > header { display: flex; align-items: flex-start; justify-content: space-between; padding: 20px 22px 16px; border-bottom: 1px solid var(--border-soft); }
+.usage-kicker { display: block; margin-bottom: 5px; color: var(--accent); font: 600 .62rem var(--font-mono); letter-spacing: .14em; text-transform: uppercase; }
+.usage-dialog h2 { margin: 0; color: var(--ink); font: 500 1.35rem var(--font-display); }
+.usage-close { width: 34px; height: 34px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--ink-soft); cursor: pointer; }
+.usage-content { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; padding: 16px 22px; }
+.usage-provider { min-width: 0; padding: 16px; border: 1px solid var(--border-soft); border-radius: 10px; background: rgba(255,255,255,.018); }
+.usage-provider--claude { border-top-color: rgba(184,173,255,.65); }
+.usage-provider--codex { border-top-color: rgba(130,200,255,.65); }
+.usage-provider-head { min-height: 45px; margin-bottom: 16px; }
+.usage-provider-head > div { display: flex; align-items: center; gap: 8px; }
+.usage-provider-head h3 { margin: 0; color: var(--ink); font: 700 .82rem var(--font-body); letter-spacing: .1em; text-transform: uppercase; }
+.usage-provider-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 11px currentColor; }
+.usage-provider--claude .usage-provider-dot { background: #a99cf8; }
+.usage-provider--codex .usage-provider-dot { background: #63b7f7; }
+.usage-provider-meta { display: block; margin-top: 6px; color: var(--ink-faint); font: .67rem var(--font-mono); text-transform: capitalize; overflow-wrap: anywhere; }
+.usage-limit + .usage-limit { margin-top: 18px; }
+.usage-limit-head { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; font-size: .76rem; }
+.usage-limit-head strong { color: var(--ink-soft); letter-spacing: .08em; text-transform: uppercase; }
+.usage-limit-head span { color: var(--accent); font-variant-numeric: tabular-nums; }
+.usage-meter { height: 7px; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,.07); }
+.usage-meter span { display: block; height: 100%; border-radius: inherit; background: var(--accent); box-shadow: 0 0 12px rgba(60,255,137,.34); transition: width .35s ease; }
+.usage-limit--low .usage-limit-head span { color: #f0bd69; }.usage-limit--low .usage-meter span { background: #d99b3e; }
+.usage-limit--critical .usage-limit-head span { color: #ff8d86; }.usage-limit--critical .usage-meter span { background: var(--error); }
+.usage-reset { margin-top: 7px; color: var(--ink-faint); font-size: .7rem; }
+.usage-reset small { display: block; margin-top: 3px; opacity: .72; }
+.usage-credit { display: flex; justify-content: space-between; gap: 12px; margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--border-soft); color: var(--ink-faint); font-size: .72rem; }
+.usage-credit strong { color: var(--ink-soft); }
+.usage-unavailable { padding: 18px 4px; color: var(--ink-faint); font-size: .82rem; line-height: 1.5; }
+.usage-loading { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 210px; color: var(--ink-soft); }
+.usage-loading span { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); animation: ideaPulse 1.2s infinite; }
+.usage-dialog > footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 22px 18px; border-top: 1px solid var(--border-soft); }
+.usage-updated { color: var(--ink-faint); font: .68rem var(--font-mono); }
+.usage-refresh { min-width: 86px; }
 .pm-reset-btn {
   background: none; border: 1px solid var(--border); color: var(--ink-soft);
   border-radius: 6px; padding: 6px 12px; font-size: 0.8rem; cursor: pointer;
@@ -1732,6 +1782,14 @@ body.role-reviewer #pmBackFab {
   }
   .pm-back-fab.show svg { width: 24px; height: 24px; }
   .panel-footer { display: none; }
+  .pm-toolbar { gap: 8px; padding: 8px 10px; }
+  .pm-agent-option { padding: 6px 9px; }
+  .usage-overlay { padding: 0; place-items: stretch; }
+  .usage-dialog { width: 100%; max-height: 100dvh; height: 100dvh; border: 0; border-radius: 0; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+  .usage-dialog > header { padding: 18px 16px 14px; }
+  .usage-content { grid-template-columns: 1fr; padding: 14px 16px; }
+  .usage-provider { padding: 14px; }
+  .usage-dialog > footer { position: sticky; bottom: 0; background: rgba(8,14,11,.98); padding: 12px 16px; }
   .panel-header { gap: 14px; padding: 12px 16px; flex-wrap: nowrap; }
   .ops-stats { display: none; }
   /* Wrapping 6 tabs onto 2-3 lines (the desktop behavior) ate most of the

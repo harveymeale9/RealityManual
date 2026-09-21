@@ -358,6 +358,7 @@
             '<div class="pm-agent-switch" role="group" aria-label="Active agent">' +
               '<button type="button" class="pm-agent-option" data-agent="claude">Claude</button>' +
               '<button type="button" class="pm-agent-option" data-agent="codex">Codex</button>' +
+              '<button type="button" class="pm-agent-option pm-usage-option" aria-haspopup="dialog">Usage</button>' +
             '</div>' +
             '<a class="link-btn" id="pmMobileLink" href="voice-mobile.html" target="_blank" rel="noopener">Mobile view ↗</a>' +
             '<button type="button" class="pm-reset-btn" id="pmResetBtn">New conversation</button>' +
@@ -412,7 +413,8 @@
     var replyPreviewEl = document.getElementById('pmReplyPreview');
     var replyPreviewTextEl = document.getElementById('pmReplyPreviewText');
     var replyPreviewCancelBtn = document.getElementById('pmReplyPreviewCancel');
-    var agentButtons = Array.prototype.slice.call(document.querySelectorAll('.pm-agent-option'));
+    var agentButtons = Array.prototype.slice.call(document.querySelectorAll('.pm-agent-option[data-agent]'));
+    var usageButton = document.querySelector('.pm-usage-option');
     var selectedAgent = 'claude';
     var agentPreferenceVersion = 0;
 
@@ -444,6 +446,7 @@
         Voice.setAgentPreference(selectedAgent).catch(function () { applySelectedAgent(previous); });
       });
     });
+    if (window.RMUsage) window.RMUsage.attach(usageButton);
 
     // Tap-to-reply: selecting one of CC's earlier messages (via the Reply
     // button added in addAssistantMessage below) sets this, shows the
