@@ -117,11 +117,13 @@ function setup(db, options) {
     idea: db.prepare('SELECT * FROM ideation_ideas WHERE id=?'),
     jobs: db.prepare("SELECT * FROM ideation_jobs WHERE status IN ('pending','running','error') ORDER BY created_at ASC"),
     pieces: db.prepare("SELECT data FROM records WHERE store_name='pieces' ORDER BY updated_at DESC"),
+    feedback: db.prepare('SELECT * FROM ideation_feedback WHERE idea_id=? ORDER BY created_at ASC'),
     bigIdeaExamples: db.prepare('SELECT snapshot FROM ideation_big_idea_examples ORDER BY updated_at DESC LIMIT 60'),
     unprocessedSignals: db.prepare('SELECT * FROM ideation_signals WHERE processed=0 ORDER BY created_at ASC LIMIT 40')
   };
   db.prepare("UPDATE ideation_jobs SET status='pending',updated_at=? WHERE status='running'").run(now());
   let workerBusy = false;
+  let profileRerunNeeded = false;
 
   function decodeIdea(row) {
     if (!row) return null;
@@ -129,12 +131,32 @@ function setup(db, options) {
     out.discussion_angles = json(row.discussion_angles, []);
     out.verified_quotes = json(row.verified_quotes, []);
     out.generation_meta = json(row.generation_meta, {});
+    out.feedback = q.feedback.all(row.id);
     return out;
   }
 
   function addSignal(ideaId, type, strength, detail) {
     db.prepare('INSERT INTO ideation_signals (id,idea_id,signal_type,strength,detail,created_at) VALUES (?,?,?,?,?,?)')
       .run(uuid(), ideaId || null, type, strength, stringify(detail || {}), now());
+  }
+
+  function addFeedback(idea, value, source) {
+    const text = clean(value, 6000);
+    if (!text) throw new Error('Feedback is required.');
+    const feedbackSource = source === 'voice' ? 'voice' : 'typed';
+    const id = uuid(), stamp = now();
+    db.transaction(function () {
+      db.prepare('INSERT INTO ideation_feedback (id,idea_id,text,source,strength,created_at) VALUES (?,?,?,?,?,?)')
+        .run(id, idea.id, text, feedbackSource, 1, stamp);
+      addSignal(idea.id, 'explicit_feedback', 1, {
+        feedback: text,
+        source: feedbackSource,
+        bigIdea: idea.big_idea,
+        conceptsToDiscuss: json(idea.discussion_angles, [])
+      });
+    })();
+    enqueue('profile', q.settings.get().selected_provider, 1);
+    return db.prepare('SELECT * FROM ideation_feedback WHERE id=?').get(id);
   }
 
   function capturePipelineSignals() {
@@ -244,8 +266,11 @@ Return strict JSON only, with no markdown fences or commentary. Provider request
       }
     }
     if (kind === 'profile') {
-      const existing = db.prepare("SELECT id FROM ideation_jobs WHERE kind='profile' AND status IN ('pending','running') LIMIT 1").get();
-      if (existing) return existing.id;
+      const existing = db.prepare("SELECT id,status FROM ideation_jobs WHERE kind='profile' AND status IN ('pending','running') LIMIT 1").get();
+      if (existing) {
+        if (existing.status === 'running') profileRerunNeeded = true;
+        return existing.id;
+      }
     }
     const id = uuid(), stamp = now();
     db.prepare('INSERT INTO ideation_jobs (id,kind,status,provider,requested_count,activity,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)')
@@ -288,7 +313,7 @@ Return strict JSON only, with no markdown fences or commentary. Provider request
     const rows = q.unprocessedSignals.all();
     if (!rows.length) return;
     const current = json(q.settings.get().preference_profile, DEFAULT_PROFILE);
-    const prompt = `Maintain a compact Big Idea preference profile for Harvey. A curated_big_idea signal means Harvey deliberately created a piece in or moved it into his Big Ideas column, so study the actual example closely: how he framed the premise, how he structured the reasoning, what tension or practical stake he emphasized, and what likely made it worth developing. Learn transferable editorial patterns, not merely the topic or phrases. Infer cautiously, do not invent motivations, and require repetition before presenting a one-off choice as a stable preference. Progressing an idea through later pipeline stages is also positive, especially reaching live. Return JSON only with keys summary, likes, avoids, framingPatterns, structurePatterns, selectionRationale; every value except summary must be an array of concise strings. CURRENT=${JSON.stringify(current)} NEW_SIGNALS=${JSON.stringify(rows.map(function (row) { return { type: row.signal_type, strength: row.strength, detail: json(row.detail, {}) }; }))}`;
+    const prompt = `Maintain a compact Big Idea preference profile for Harvey. Treat explicit_feedback as a direct, strong instruction: study both Harvey's words and the idea they refer to, and preserve specific likes, dislikes, corrections, and editorial principles for future generations. Treat manual_rewrite as an equally strong before/after demonstration: infer what changed in framing, simplicity, emphasis, structure, or reasoning rather than merely memorizing the rewritten topic. A curated_big_idea signal means Harvey deliberately created a piece in or moved it into his Big Ideas column, so study the actual example closely: how he framed the premise, how he structured the reasoning, what tension or practical stake he emphasized, and what likely made it worth developing. Learn transferable editorial patterns, not merely topics or phrases. Infer cautiously, but do not dilute an explicit instruction; require repetition only before promoting an inferred one-off choice into a universal preference. Progressing an idea through later pipeline stages is also positive, especially reaching live. Return JSON only with keys summary, likes, avoids, framingPatterns, structurePatterns, selectionRationale; every value except summary must be an array of concise strings. CURRENT=${JSON.stringify(current)} NEW_SIGNALS=${JSON.stringify(rows.map(function (row) { return { type: row.signal_type, strength: row.strength, detail: json(row.detail, {}) }; }))}`;
     const result = await providerEngine.generate(q.settings.get().selected_provider, prompt);
     const profile = extractJson(result.text);
     profile.updatedAt = now();
@@ -322,6 +347,15 @@ Return strict JSON only, with no markdown fences or commentary. Provider request
     } finally {
       workerBusy = false;
       ensureQueue();
+      // A feedback/edit signal can arrive while a profile job is already
+      // running. enqueue() intentionally coalesces that request into the
+      // active job, but the active job may already have snapshotted its
+      // input rows. Schedule one follow-up pass when successful work left
+      // fresh signals behind; do not spin if a profile job is in error.
+      if (profileRerunNeeded && q.unprocessedSignals.get() && !db.prepare("SELECT 1 FROM ideation_jobs WHERE kind='profile' AND status IN ('pending','running') LIMIT 1").get()) {
+        profileRerunNeeded = false;
+        enqueue('profile', q.settings.get().selected_provider, 1);
+      }
     }
   }
 
@@ -401,8 +435,22 @@ Return strict JSON only, with no markdown fences or commentary. Provider request
           .run(internalLabel(bigIdea), bigIdea, revision, stamp, idea.id);
         db.prepare('INSERT INTO ideation_revisions (id,idea_id,revision_number,kind,snapshot,diff,provider,model,created_at) VALUES (?,?,?,?,?,?,?,?,?)')
           .run(uuid(), idea.id, revision, 'manual_edit', stringify({ bigIdea: bigIdea }), stringify({ bigIdea: { before: before, after: bigIdea } }), idea.provider, idea.model, stamp);
+        addSignal(idea.id, 'manual_rewrite', 1, {
+          before: before,
+          after: bigIdea,
+          conceptsToDiscuss: json(idea.discussion_angles, [])
+        });
       })();
+      enqueue('profile', q.settings.get().selected_provider, 1);
       res.json({ ok: true, idea: decodeIdea(q.idea.get(idea.id)) });
+    } catch (error) { res.status(400).json({ error: error.message }); }
+  });
+  router.post('/ideas/:id/feedback', function (req, res) {
+    try {
+      const idea = q.idea.get(req.params.id);
+      if (!idea || idea.status !== 'active') return res.status(404).json({ error: 'not_found' });
+      const entry = addFeedback(idea, req.body && req.body.text, req.body && req.body.source);
+      res.json({ ok: true, feedback: entry });
     } catch (error) { res.status(400).json({ error: error.message }); }
   });
   router.post('/ideas/:id/transfer', function (req, res) {

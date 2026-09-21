@@ -24,9 +24,11 @@ test('Big Idea queue, verified support, and Ideation-stage transfer work togethe
   db.exec('CREATE TABLE records(store_name TEXT,id TEXT,data TEXT,updated_at TEXT,PRIMARY KEY(store_name,id))');
   let generation = 0;
   let generationPrompt = '';
+  const profilePrompts = [];
   const fakeProviders = {
     generate: async function (provider, prompt) {
       if (prompt.startsWith('Maintain a compact')) {
+        profilePrompts.push(prompt);
         return { provider: provider, model: 'test', text: JSON.stringify({ summary: 'Prefers useful premises.', likes: ['specificity'], avoids: ['generic summaries'], framingPatterns: ['familiar tension first'], structurePatterns: ['problem then reframe then stake'], selectionRationale: ['practical emotional consequence'] }) };
       }
       const count = Number((prompt.match(/Generate (\d+)/) || [0, 1])[1]);
@@ -88,6 +90,12 @@ test('Big Idea queue, verified support, and Ideation-stage transfer work togethe
   assert.match(generationPrompt, /normally in one to three concise sentences/);
 
   const accepted = state.ideas[0];
+  const directFeedback = await request('/ideas/' + accepted.id + '/feedback', 'POST', { text: 'Keep the reframe broad and remove the niche scenario.', source: 'voice' });
+  assert.equal(directFeedback.feedback.source, 'voice');
+  assert.match(directFeedback.feedback.text, /remove the niche scenario/);
+  assert.equal(db.prepare("SELECT count(*) AS n FROM ideation_feedback WHERE idea_id=?").get(accepted.id).n, 1);
+  const explicitSignal = db.prepare("SELECT detail FROM ideation_signals WHERE idea_id=? AND signal_type='explicit_feedback'").get(accepted.id);
+  assert.match(JSON.parse(explicitSignal.detail).bigIdea, /concept/);
   const editedText = accepted.big_idea + ' Harvey adds one sharper sentence to this premise.';
   const edit = await request('/ideas/' + accepted.id, 'PUT', { bigIdea: editedText });
   assert.equal(edit.idea.big_idea, editedText);
@@ -96,6 +104,9 @@ test('Big Idea queue, verified support, and Ideation-stage transfer work togethe
   const manualRevision = db.prepare("SELECT * FROM ideation_revisions WHERE idea_id=? AND kind='manual_edit'").get(accepted.id);
   assert.equal(JSON.parse(manualRevision.snapshot).bigIdea, editedText);
   assert.equal(JSON.parse(manualRevision.diff).bigIdea.before, accepted.big_idea);
+  const rewriteSignal = JSON.parse(db.prepare("SELECT detail FROM ideation_signals WHERE idea_id=? AND signal_type='manual_rewrite'").get(accepted.id).detail);
+  assert.equal(rewriteSignal.before, accepted.big_idea);
+  assert.equal(rewriteSignal.after, editedText);
   const transfer = await request('/ideas/' + accepted.id + '/transfer', 'POST', {});
   assert.equal(transfer.piece.stage, 'ideation');
   assert.equal(transfer.piece.contentType, 'short');
@@ -126,8 +137,9 @@ test('Big Idea queue, verified support, and Ideation-stage transfer work togethe
   assert.match(latestExample.notes, /later, more complete framing/);
   assert.equal(service.recordBigIdeaPiece(Object.assign({}, curatedPiece, { stage: 'outline_started' }), 'big_ideas'), false);
 
-  state = await waitFor(function (value) { return value.preferenceProfile.signalCount >= 2; });
+  state = await waitFor(function (value) { return value.preferenceProfile.signalCount >= 4; });
   assert.deepEqual(state.preferenceProfile.structurePatterns, ['problem then reframe then stake']);
+  assert.equal(profilePrompts.some(function (prompt) { return prompt.indexOf('explicit_feedback as a direct, strong instruction') !== -1 && prompt.indexOf('remove the niche scenario') !== -1; }), true);
 
   state = await waitFor(function (value) { return value.ideas.length === 10; });
   assert.equal(state.ideas.some(function (entry) { return entry.id === accepted.id; }), false);

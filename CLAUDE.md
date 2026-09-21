@@ -8710,3 +8710,40 @@ in the resulting piece. The full Node suite remains 9/9. A Chromium DOM test
 used a synthetic idea and simulated Web Speech Recognition (so no production
 idea was modified): typed copy plus dictated copy appeared together in the
 textarea, and the Save request contained exactly that reviewed combined text.
+
+---
+
+# 182. Direct Big-Idea Feedback and Manual Rewrites Train Future Generations (2026-09-21)
+
+Harvey correctly expected direct feedback on a Content Ideation card to teach
+the generator. The database still had the original `ideation_feedback` table,
+but the Big-Idea-only redesign had removed both its API/UI and its connection
+to the preference-profile worker. Before this change, only moving a piece into
+the Kanban's Big Ideas column (plus later pipeline progress) trained the current
+generator; comments and manual edits in the Ideation panel did not.
+
+Every active Big Idea card now includes a Direct feedback field, its own
+Dictate control, a Teach generator button, and permanent feedback history.
+Submitting feedback stores the exact comment with the exact idea/context it
+refers to, records an `explicit_feedback` signal at full strength, and
+immediately queues a preference-profile update. Typed/dictated source is
+preserved. Dictation remains reviewable before submission.
+
+Saving a manual rewrite now also records a full-strength `manual_rewrite`
+learning signal containing the before/after premise and its supporting angles.
+The profile prompt expressly treats direct feedback as an instruction and a
+rewrite as a contrastive demonstration: it should learn transferable changes
+in framing, simplicity, emphasis, structure, or reasoning rather than merely
+memorizing that idea's topic or wording. These learned likes, avoids, framing
+patterns, and structural patterns are included in all subsequent generation
+prompts through the existing preference profile.
+
+The profile queue also now detects feedback arriving while a profile job has
+already snapshotted its inputs and schedules one follow-up pass. This closes a
+subtle race that could otherwise leave a newly inserted signal unprocessed.
+
+Verification: the integration suite proves that voiced direct feedback and
+manual rewrite signals retain the idea context, reach the profile prompt, and
+survive through transfer; full suite 9/9. A Chromium DOM test with intercepted
+synthetic data confirmed typed + dictated feedback is submitted together as a
+voice-sourced learning signal, without altering Harvey's production ideas.
