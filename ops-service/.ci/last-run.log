@@ -4,112 +4,31 @@
 + '[' -n '' ']'
 + git pull
 From https://github.com/harveymeale9/RealityManual
-   ae0c442..5ccb318  main       -> origin/main
-Updating ae0c442..5ccb318
+   5ccb318..e2616db  main       -> origin/main
+Updating 5ccb318..e2616db
 Fast-forward
- CLAUDE.md                           |  52 ++++++++++++++++
- ops-service/.ci/last-run.log        | 116 ++++++++++++++++--------------------
- ops-service/public/ideation.js      |  57 ++++++++++++++----
- ops-service/public/index.html       |   4 +-
- ops-service/public/style.css        |  23 ++++---
- ops-service/src/ideationDoctrine.js |  45 ++++++++++++++
- ops-service/src/ideationService.js  |  61 ++++++++++++++-----
- ops-service/test/ideation.test.js   |  14 ++++-
- 8 files changed, 266 insertions(+), 106 deletions(-)
- create mode 100644 ops-service/src/ideationDoctrine.js
+ CLAUDE.md                      | 12 ++++++
+ ops-service/.ci/last-run.log   | 94 +++++++++++++++++++++---------------------
+ ops-service/public/ideation.js |  2 +-
+ ops-service/public/index.html  |  4 +-
+ ops-service/public/style.css   |  4 +-
+ 5 files changed, 65 insertions(+), 51 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=5ccb3186d52f537ff54da61e7a7ac3e036a58b3c
++ NEW_HEAD=e2616dbc826182e80418da4dc1483d01640fd8a5
 + git -C /srv/realitymanual-repo pull
 Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
 + LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
 ++ cat /root/ops-service-data/last-image-commit.txt
-+ LAST_BUILD_COMMIT=ae0c4420cfb498f1a6800f32c40eb2d799efc982
++ LAST_BUILD_COMMIT=5ccb3186d52f537ff54da61e7a7ac3e036a58b3c
 + NEEDS_REBUILD=1
-+ '[' -n ae0c4420cfb498f1a6800f32c40eb2d799efc982 ']'
-+ git cat-file -e 'ae0c4420cfb498f1a6800f32c40eb2d799efc982^{commit}'
-++ git diff --name-only ae0c4420cfb498f1a6800f32c40eb2d799efc982 5ccb3186d52f537ff54da61e7a7ac3e036a58b3c -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
-+ '[' -z 'ops-service/src/ideationDoctrine.js
-ops-service/src/ideationService.js' ']'
-+ '[' 1 = 0 ']'
-+ docker tag rm-ops-service rm-ops-service:previous
-+ docker build -t rm-ops-service ./ops-service
-#0 building with "default" instance using docker driver
-
-#1 [internal] load build definition from Dockerfile
-#1 transferring dockerfile: 2.60kB 0.0s done
-#1 DONE 0.1s
-
-#2 [internal] load metadata for docker.io/library/node:22-slim
-#2 DONE 0.3s
-
-#3 [internal] load .dockerignore
-#3 transferring context: 136B 0.0s done
-#3 DONE 0.0s
-
-#4 [internal] load build context
-#4 DONE 0.0s
-
-#5 [ 1/11] FROM docker.io/library/node:22-slim@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9
-#5 resolve docker.io/library/node:22-slim@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9 0.0s done
-#5 DONE 0.1s
-
-#5 [ 1/11] FROM docker.io/library/node:22-slim@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9
-#5 DONE 0.1s
-
-#4 [internal] load build context
-#4 transferring context: 32.24MB 0.3s done
-#4 DONE 0.3s
-
-#6 [ 6/11] RUN npm install --omit=dev
-#6 CACHED
-
-#7 [ 2/11] RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && rm -rf /var/lib/apt/lists/*
-#7 CACHED
-
-#8 [ 3/11] RUN npm install -g @anthropic-ai/claude-code@2.1.276
-#8 CACHED
-
-#9 [ 4/11] WORKDIR /app
-#9 CACHED
-
-#10 [ 5/11] COPY package.json ./
-#10 CACHED
-
-#11 [ 7/11] COPY server.js ./
-#11 CACHED
-
-#12 [ 8/11] COPY src ./src
-#12 DONE 0.1s
-
-#13 [ 9/11] COPY public ./public
-#13 DONE 0.2s
-
-#14 [10/11] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
-#14 DONE 15.1s
-
-#15 [11/11] RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
-#15 DONE 0.3s
-
-#16 exporting to image
-#16 exporting layers
-#16 exporting layers 10.7s done
-#16 exporting manifest sha256:058bc7ac61fcf3aafaece69fb6f781fb4b5852a113355c5afe2b755ce7fdf86a 0.0s done
-#16 exporting config sha256:c9d2c11f971e287bcb7789019bd41b51ac94a2d1d6a873e320e112ccc308759a 0.0s done
-#16 exporting attestation manifest sha256:744ff073a87256f58271ac74b19112cc553a47583aaeb676e96f81e38ecfff06 0.0s done
-#16 exporting manifest list sha256:7e61c471cf5aaf760550693b6a74b3a8c504a526159dc0889920ab8c21008cd6 done
-#16 naming to docker.io/library/rm-ops-service:latest done
-#16 unpacking to docker.io/library/rm-ops-service:latest
-#16 unpacking to docker.io/library/rm-ops-service:latest 2.4s done
-#16 DONE 13.2s
-+ docker stop rm-ops-service
-rm-ops-service
-+ docker rm rm-ops-service
-rm-ops-service
-+ docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-claude-home/claude-dir:/home/node/.claude -v /root/ops-service-claude-home/claude.json:/home/node/.claude.json -v /root/ops-service-data:/data -v /srv/realitymanual-repo:/repo -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
-150617e00058cfc7f0ac69cdcf4695bfae567871484a2190c8fb2e58d8b68468
-+ echo 5ccb3186d52f537ff54da61e7a7ac3e036a58b3c
-++ git -C /root/realitymanual-repo rev-parse --short HEAD
-+ echo 'rm-ops-service redeployed at 5ccb318'
-rm-ops-service redeployed at 5ccb318
++ '[' -n 5ccb3186d52f537ff54da61e7a7ac3e036a58b3c ']'
++ git cat-file -e '5ccb3186d52f537ff54da61e7a7ac3e036a58b3c^{commit}'
+++ git diff --name-only 5ccb3186d52f537ff54da61e7a7ac3e036a58b3c e2616dbc826182e80418da4dc1483d01640fd8a5 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -z '' ']'
++ NEEDS_REBUILD=0
++ '[' 0 = 0 ']'
++ echo 'no backend changes between 5ccb3186d52f537ff54da61e7a7ac3e036a58b3c and e2616dbc826182e80418da4dc1483d01640fd8a5 — already live via git pull, skipping rebuild/restart'
+no backend changes between 5ccb3186d52f537ff54da61e7a7ac3e036a58b3c and e2616dbc826182e80418da4dc1483d01640fd8a5 — already live via git pull, skipping rebuild/restart
++ exit 0
 ssh exit code: 0
