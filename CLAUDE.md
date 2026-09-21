@@ -8122,3 +8122,13 @@ red error treatment. CSS and `ideation.js` are cache-busted together. A real
 Chromium test delayed the live state request, confirmed the spinner was exactly
 centered and green with no loading text or red banner, then confirmed the ten
 proposal cards replaced it when the request completed.
+
+---
+
+# 167. Ideation Card Format/Runtime Label Readability
+
+The compact format/runtime kicker at the top of each Ideation card (for
+example, `SHORT · 1:01`) now uses a larger 0.78rem font, slightly tighter
+tracking, and a brighter muted-green color. The provider/origin metadata stays
+small so the useful format/runtime information has clear visual priority. The
+stylesheet URL is cache-busted so the change appears on refresh.
