@@ -10,7 +10,8 @@ const TARGET_ACTIVE = 10;
 const BIG_IDEA_MIGRATION = 'big_idea_cards_v1';
 const DEFAULT_PROFILE = {
   summary: 'No Big Idea preferences have been learned yet. Prioritize specific, useful applications of the manuscript.',
-  likes: [], avoids: [], updatedAt: null, signalCount: 0
+  likes: [], avoids: [], framingPatterns: [], structurePatterns: [], selectionRationale: [],
+  updatedAt: null, signalCount: 0
 };
 
 function now() { return new Date().toISOString(); }
@@ -80,6 +81,10 @@ function setup(db, options) {
       id TEXT PRIMARY KEY, idea_id TEXT, signal_type TEXT NOT NULL, strength REAL NOT NULL,
       detail TEXT NOT NULL, processed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS ideation_big_idea_examples (
+      piece_id TEXT PRIMARY KEY, snapshot TEXT NOT NULL,
+      first_selected_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS ideation_jobs (
       id TEXT PRIMARY KEY, kind TEXT NOT NULL, status TEXT NOT NULL, provider TEXT NOT NULL,
       idea_id TEXT, requested_count INTEGER NOT NULL DEFAULT 1, activity TEXT NOT NULL,
@@ -111,6 +116,7 @@ function setup(db, options) {
     idea: db.prepare('SELECT * FROM ideation_ideas WHERE id=?'),
     jobs: db.prepare("SELECT * FROM ideation_jobs WHERE status IN ('pending','running','error') ORDER BY created_at ASC"),
     pieces: db.prepare("SELECT data FROM records WHERE store_name='pieces' ORDER BY updated_at DESC"),
+    bigIdeaExamples: db.prepare('SELECT snapshot FROM ideation_big_idea_examples ORDER BY updated_at DESC LIMIT 60'),
     unprocessedSignals: db.prepare('SELECT * FROM ideation_signals WHERE processed=0 ORDER BY created_at ASC LIMIT 40')
   };
   db.prepare("UPDATE ideation_jobs SET status='pending',updated_at=? WHERE status='running'").run(now());
@@ -131,7 +137,7 @@ function setup(db, options) {
   }
 
   function capturePipelineSignals() {
-    const ranks = ['archived','ideation','outline_started','outline_completed','filmed','edited','uploaded','processed','final_check','scheduled','live'];
+    const ranks = ['archived','ideation','big_ideas','outline_started','outline_completed','filmed','edited','uploaded','processed','final_check','scheduled','live'];
     const pieces = new Map(q.pieces.all().map(function (row) { const piece = json(row.data, {}); return [piece.id, piece]; }));
     db.prepare("SELECT id,destination_piece_id,exit_reason FROM ideation_ideas WHERE status='transferred' AND destination_piece_id IS NOT NULL").all().forEach(function (idea) {
       const piece = pieces.get(idea.destination_piece_id);
@@ -179,6 +185,9 @@ For each idea, provide three to six concise concepts or angles Harvey could ment
 
 Learned preference profile:
 ${settings.preference_profile}
+
+Harvey-curated Big Ideas, kept current as he edits their cards. Study how these examples are framed and structured, the tensions and practical stakes they foreground, and the kinds of logical turns Harvey promotes. Generalize the editorial pattern; do not copy their wording or merely generate adjacent topics:
+${JSON.stringify(q.bigIdeaExamples.all().map(function (row) { return json(row.snapshot, {}); }))}
 
 Existing, transferred, rejected, and superseded idea catalog. Avoid semantic duplicates; revisit a doctrine only through a materially different real-world application or conclusion:
 ${JSON.stringify(existingContext().slice(0, 300))}
@@ -276,7 +285,7 @@ Return strict JSON only, with no markdown fences or commentary. Provider request
     const rows = q.unprocessedSignals.all();
     if (!rows.length) return;
     const current = json(q.settings.get().preference_profile, DEFAULT_PROFILE);
-    const prompt = `Maintain a compact Big Idea preference profile. Update cautiously: repeated signals matter more than one unusual action. Progressing a transferred idea through the pipeline is positive, especially reaching live. Return JSON only with keys summary, likes, avoids. CURRENT=${JSON.stringify(current)} NEW_SIGNALS=${JSON.stringify(rows.map(function (row) { return { type: row.signal_type, strength: row.strength, detail: json(row.detail, {}) }; }))}`;
+    const prompt = `Maintain a compact Big Idea preference profile for Harvey. A curated_big_idea signal means Harvey deliberately created a piece in or moved it into his Big Ideas column, so study the actual example closely: how he framed the premise, how he structured the reasoning, what tension or practical stake he emphasized, and what likely made it worth developing. Learn transferable editorial patterns, not merely the topic or phrases. Infer cautiously, do not invent motivations, and require repetition before presenting a one-off choice as a stable preference. Progressing an idea through later pipeline stages is also positive, especially reaching live. Return JSON only with keys summary, likes, avoids, framingPatterns, structurePatterns, selectionRationale; every value except summary must be an array of concise strings. CURRENT=${JSON.stringify(current)} NEW_SIGNALS=${JSON.stringify(rows.map(function (row) { return { type: row.signal_type, strength: row.strength, detail: json(row.detail, {}) }; }))}`;
     const result = await providerEngine.generate(q.settings.get().selected_provider, prompt);
     const profile = extractJson(result.text);
     profile.updatedAt = now();
@@ -339,6 +348,34 @@ Return strict JSON only, with no markdown fences or commentary. Provider request
     return piece;
   }
 
+  // The Big Ideas Kanban column is Harvey's strongest lightweight curation
+  // signal. Keep one live exemplar snapshot per piece so later autosaves in
+  // Big Ideas improve the generator's source material without multiplying
+  // signals or jobs for every keystroke.
+  function recordBigIdeaPiece(piece, fromStage) {
+    if (!piece || piece.stage !== 'big_ideas') return false;
+    const metadata = piece.ideationMetadata && typeof piece.ideationMetadata === 'object' ? piece.ideationMetadata : {};
+    const detail = {
+      pieceId: clean(piece.id, 200),
+      title: clean(piece.title, 1000),
+      notes: clean(corpus.stripHtml(piece.notesHtml || ''), 12000),
+      contentType: clean(piece.contentType, 80),
+      fromStage: fromStage || null,
+      origin: metadata.ideaId ? 'generator' : 'harvey',
+      originalGeneratedBigIdea: clean(metadata.bigIdea, 6000),
+      conceptsToDiscuss: Array.isArray(metadata.conceptsToDiscuss) ? metadata.conceptsToDiscuss.slice(0, 12) : []
+    };
+    const stamp = now();
+    db.prepare(`INSERT INTO ideation_big_idea_examples (piece_id,snapshot,first_selected_at,updated_at)
+      VALUES (?,?,?,?) ON CONFLICT(piece_id) DO UPDATE SET snapshot=excluded.snapshot,updated_at=excluded.updated_at`)
+      .run(detail.pieceId, stringify(detail), stamp, stamp);
+    if (fromStage !== 'big_ideas') {
+      addSignal(metadata.ideaId || null, 'curated_big_idea', 1, detail);
+      enqueue('profile', q.settings.get().selected_provider, 1);
+    }
+    return true;
+  }
+
   const router = express.Router();
   router.get('/state', function (req, res) { ensureQueue(); res.json(state()); });
   router.put('/provider', function (req, res) {
@@ -366,7 +403,7 @@ Return strict JSON only, with no markdown fences or commentary. Provider request
     ensureQueue();
     setImmediate(runWorker);
   }
-  return { router: router, state: state, ensureQueue: ensureQueue };
+  return { router: router, state: state, ensureQueue: ensureQueue, recordBigIdeaPiece: recordBigIdeaPiece };
 }
 
 module.exports = { setup: setup };

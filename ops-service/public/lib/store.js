@@ -86,7 +86,8 @@ window.RMStore = (function () {
   // combination automatically the way it used to.
   var STAGES = [
     { id: 'archived', label: 'Archived Ideas' },
-    { id: 'ideation', label: 'Ideation' },
+    { id: 'ideation', label: 'Rough Ideas' },
+    { id: 'big_ideas', label: 'Big Ideas' },
     { id: 'outline_started', label: 'Outline Started' },
     { id: 'outline_completed', label: 'Outline Completed' },
     { id: 'filmed', label: 'Filmed' },

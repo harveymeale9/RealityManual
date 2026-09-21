@@ -8276,3 +8276,41 @@ a forced one-second inactivity test around a thirty-second Codex shell command.
 The forced stop returned only after the host process group was gone and its PID
 file had been removed, proving the failure cannot leave the writer that caused
 the second error.
+
+---
+
+# 173. Kanban Rough Ideas / Big Ideas Stage and Generator Learning Loop (2026-09-21)
+
+The Content Pipeline's `ideation` stage is now labelled **Rough Ideas**, and a
+new manual **Big Ideas** stage (`big_ideas`) sits immediately after it and before
+Outline Started. The existing internal stage ID remains `ideation` so old cards,
+quick-add records, and transferred generator proposals need no migration. Quick
+Add and Content Ideation now say “Save/Send to Rough Ideas” to match the board.
+
+Big Ideas is also a deliberate learning signal, not just a visual column. The
+server compares the persisted stage on every admin piece write. Creating a card
+in Big Ideas or moving one there records one strong `curated_big_idea` signal
+containing the title, plain-text notes, content type, prior stage, generator
+origin/metadata when present, and concepts-to-discuss. Reviewer-owned test
+content is excluded. Ordinary edits while the card remains there do not create
+duplicate signals.
+
+A dedicated `ideation_big_idea_examples` table keeps the latest full snapshot
+for each curated piece. This matters because a newly created card may first
+autosave after only its title has been entered: later note/title edits update the
+same exemplar, so the generator sees the finished framing rather than an early
+partial draft. These current examples are included directly in every generation
+prompt, with instructions to study transferable framing, reasoning structure,
+tension, and practical stakes without copying wording or merely generating
+adjacent topics. The existing persistent preference-profile job also treats
+selection into Big Ideas as a strong signal and now maintains explicit framing,
+structure, and selection-rationale patterns. Pipeline-progress learning includes
+the new stage in its rank order.
+
+Verification covered syntax and the complete Node integration suite, including
+signal persistence, one-signal-per-entry behavior, live exemplar updates, and
+profile rebuilding. An isolated local service/database plus real headless
+Chromium at 1440×1000 verified the exact column order, creating directly in Big
+Ideas, moving a Rough Idea via the real card dropdown, editing the created card
+after its first save, zero page errors, no horizontal overflow, exactly two
+selection signals for the two actions, and two current exemplar snapshots.

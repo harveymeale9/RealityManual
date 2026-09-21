@@ -663,10 +663,12 @@ app.put('/api/store/:storeName/:id', function (req, res) {
   if (!isValidStore(storeName) || !isValidId(id)) return res.status(400).json({ error: 'invalid_params' });
   if (!req.body || typeof req.body !== 'object') return res.status(400).json({ error: 'invalid_body' });
 
+  let existingPiece = null;
   if (storeName === 'pieces') {
     const existingRow = stmts.getOne.get('pieces', id);
     if (existingRow) {
       const existing = JSON.parse(existingRow.data);
+      existingPiece = existing;
       if (existing.hasVideo) {
         SERVER_OWNED_PIECE_FIELDS.forEach(function (f) {
           if (Object.prototype.hasOwnProperty.call(existing, f)) req.body[f] = existing[f];
@@ -699,6 +701,13 @@ app.put('/api/store/:storeName/:id', function (req, res) {
 
   const record = Object.assign({}, req.body, { id: id });
   stmts.upsert.run(storeName, id, JSON.stringify(record), new Date().toISOString());
+  if (storeName === 'pieces' && req.sessionRole !== 'youtube-reviewer' && record.stage === 'big_ideas') {
+    try {
+      ideation.recordBigIdeaPiece(record, existingPiece ? existingPiece.stage : null);
+    } catch (error) {
+      console.error('[ideation] failed to record Big Ideas curation signal for piece', id, error.message);
+    }
+  }
   res.json(record);
 });
 

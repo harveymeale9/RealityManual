@@ -27,7 +27,7 @@ test('Big Idea queue, verified support, and Ideation-stage transfer work togethe
   const fakeProviders = {
     generate: async function (provider, prompt) {
       if (prompt.startsWith('Maintain a compact')) {
-        return { provider: provider, model: 'test', text: JSON.stringify({ summary: 'Prefers useful premises.', likes: ['specificity'], avoids: ['generic summaries'] }) };
+        return { provider: provider, model: 'test', text: JSON.stringify({ summary: 'Prefers useful premises.', likes: ['specificity'], avoids: ['generic summaries'], framingPatterns: ['familiar tension first'], structurePatterns: ['problem then reframe then stake'], selectionRationale: ['practical emotional consequence'] }) };
       }
       const count = Number((prompt.match(/Generate (\d+)/) || [0, 1])[1]);
       generationPrompt = prompt;
@@ -94,6 +94,26 @@ test('Big Idea queue, verified support, and Ideation-stage transfer work togethe
   assert.equal(stored.ideationMetadata.ideaId, accepted.id);
   assert.equal(stored.ideationMetadata.conceptsToDiscuss.length, 3);
   assert.equal(db.prepare("SELECT count(*) AS n FROM ideation_signals WHERE signal_type='sent_to_ideation'").get().n, 1);
+
+  const curatedPiece = Object.assign({}, stored, {
+    stage: 'big_ideas',
+    title: 'Harvey reframed this around the cost of needless worry',
+    notesHtml: '<p>The premise starts with a familiar fear, challenges its evidence, then measures the emotional cost.</p>'
+  });
+  assert.equal(service.recordBigIdeaPiece(curatedPiece, 'ideation'), true);
+  assert.equal(db.prepare("SELECT count(*) AS n FROM ideation_signals WHERE signal_type='curated_big_idea'").get().n, 1);
+  const curatedSignal = JSON.parse(db.prepare("SELECT detail FROM ideation_signals WHERE signal_type='curated_big_idea'").get().detail);
+  assert.equal(curatedSignal.fromStage, 'ideation');
+  assert.equal(curatedSignal.origin, 'generator');
+  assert.match(curatedSignal.notes, /familiar fear/);
+  service.recordBigIdeaPiece(Object.assign({}, curatedPiece, { notesHtml: '<p>A later, more complete framing with a sharper practical stake.</p>' }), 'big_ideas');
+  assert.equal(db.prepare("SELECT count(*) AS n FROM ideation_signals WHERE signal_type='curated_big_idea'").get().n, 1);
+  const latestExample = JSON.parse(db.prepare('SELECT snapshot FROM ideation_big_idea_examples WHERE piece_id=?').get(curatedPiece.id).snapshot);
+  assert.match(latestExample.notes, /later, more complete framing/);
+  assert.equal(service.recordBigIdeaPiece(Object.assign({}, curatedPiece, { stage: 'outline_started' }), 'big_ideas'), false);
+
+  state = await waitFor(function (value) { return value.preferenceProfile.signalCount >= 2; });
+  assert.deepEqual(state.preferenceProfile.structurePatterns, ['problem then reframe then stake']);
 
   state = await waitFor(function (value) { return value.ideas.length === 10; });
   assert.equal(state.ideas.some(function (entry) { return entry.id === accepted.id; }), false);
