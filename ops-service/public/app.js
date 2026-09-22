@@ -1028,6 +1028,46 @@
 
   var pieces = {};
   var piecesLoadedPromise = null;
+  var conflictToastTimer = null;
+
+  function showPieceConflict(message) {
+    var toast = document.getElementById('pieceConflictToast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'pieceConflictToast';
+      toast.className = 'piece-conflict-toast';
+      toast.setAttribute('role', 'alert');
+      document.body.appendChild(toast);
+    }
+    toast.textContent = message || 'This card changed on another device. Your stale change was not saved, and the newest version has been loaded.';
+    toast.classList.add('show');
+    clearTimeout(conflictToastTimer);
+    conflictToastTimer = setTimeout(function () { toast.classList.remove('show'); }, 7000);
+  }
+
+  window.addEventListener('rm-store-conflict', function (event) {
+    var detail = event.detail || {};
+    if (detail.storeName !== 'pieces') return;
+    clearTimeout(saveTimer);
+    showPieceConflict(detail.message);
+    Store.getAll('pieces').then(function (rows) {
+      var fresh = {};
+      rows.forEach(function (piece) { fresh[piece.id] = piece; });
+      pieces = fresh;
+      if (activeId) {
+        var latest = pieces[activeId];
+        if (latest) {
+          isNewUnsaved = false;
+          populateFields(latest);
+          metaUpdated.textContent = 'Updated ' + fmtFull(latest.updatedAt);
+        } else {
+          activeId = null;
+          hideModal();
+        }
+      }
+      notifyPiecesChanged();
+    });
+  });
 
   // One-time backfill for pieces that predate the sequential-ID feature
   // (Harvey: "post 047" needs to mean something stable he can say out loud
@@ -1653,12 +1693,13 @@
       var id = activeId;
       var p = pieces[id];
       disarmDelete();
-      delete pieces[id];
-      Store.del('pieces', id);
-      if (p && p.hasVideo) Store.del('videos', id);
-      activeId = null;
-      hideModal();
-      notifyPiecesChanged();
+      Store.del('pieces', id, p).then(function () {
+        delete pieces[id];
+        if (p && p.hasVideo) Store.del('videos', id);
+        activeId = null;
+        hideModal();
+        notifyPiecesChanged();
+      }).catch(function () {});
     });
 
     // Closing on a click "outside" the editor used to fire on the native
@@ -2913,11 +2954,12 @@
       confirmBtn.addEventListener('click', function (e) {
         e.stopPropagation();
         var p = pieces[id];
-        delete pieces[id];
-        Store.del('pieces', id);
-        if (p && p.hasVideo) { Store.del('videos', id); Store.del('videos', id + '-final'); }
-        closeKanbanCtxMenu();
-        render();
+        Store.del('pieces', id, p).then(function () {
+          delete pieces[id];
+          if (p && p.hasVideo) { Store.del('videos', id); Store.del('videos', id + '-final'); }
+          closeKanbanCtxMenu();
+          render();
+        }).catch(function () { closeKanbanCtxMenu(); });
       });
       var cancelBtn = document.createElement('button');
       cancelBtn.type = 'button';
@@ -3705,7 +3747,7 @@
           // refresh, not a consistency fix).
           if (existing) {
             ['analysisStatus', 'analysisError', 'analysisMatchedPieceId', 'transcript',
-             'ytTitles', 'title', 'finalBuildStatus', 'finalBuildError', 'stage', 'updatedAt'
+             'ytTitles', 'title', 'finalBuildStatus', 'finalBuildError', 'stage', 'updatedAt', '_recordVersion'
             ].forEach(function (k) { if (k in r) existing[k] = r[k]; });
             r = existing;
           } else {

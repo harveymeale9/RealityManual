@@ -8903,3 +8903,40 @@ of the rejected card from active state. The complete Node suite passes 10/10.
 A Chromium test with synthetic API data confirmed the visible button makes one
 reject request, shows the learning status, animates the old card out, and
 renders its replacement without modifying Harvey's production ideas.
+
+---
+
+# 189. Cross-Device Kanban Writes Cannot Overwrite Newer Work (2026-09-22)
+
+Harvey raised the exact lost-update scenario the shared backend did not yet
+protect: leave an old Kanban tab open at home, edit the same cards later from a
+laptop, then interact with the old desktop tab. Because the browser kept a
+complete in-memory copy of every piece and `PUT /api/store/pieces/:id` replaced
+the complete record, that old tab could previously send its entire stale copy
+and silently erase the laptop's newer title, notes, stage, platforms, ordering,
+or other edits.
+
+Piece records now use server-issued optimistic-concurrency tokens. Every piece
+returned by the list or single-record API includes `_recordVersion`; every
+update must present the exact current version. A successful write receives a
+new version. If any other browser or a server-side video job wrote the piece in
+between, the old version receives HTTP 409 `stale_write` and the current record
+instead of being applied. Tabs opened before this deployment have no token and
+are therefore safely rejected too. Conditional deletion uses the same token,
+so an old tab cannot delete a card—or its associated video files—after another
+device improved it.
+
+The shared browser store serializes writes per piece, preventing one tab's own
+rapid autosaves from racing each other. On a cross-device conflict, the current
+app displays a prominent notice, fetches the complete fresh piece collection,
+and reloads an open editor with the server's newer title/notes rather than
+claiming the stale change was saved. Background analysis polling carries the
+latest version token forward alongside its server-owned fields.
+
+Verification includes 12/12 Node tests. The concurrency regression test models
+two clients reading the same original card, accepts the laptop's improvement,
+rejects the desktop's stale full-record write and stale deletion token, rejects
+an old pre-feature client with no token, and accepts a deliberate edit after a
+fresh read. A Chromium two-device simulation edited a stale home modal and
+confirmed its `home-v1` write was rejected, its visible warning appeared, and
+the editor reloaded the exact `cafe-v2` title and notes.

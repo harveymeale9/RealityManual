@@ -21,6 +21,7 @@ const tiktokAuth = require('./src/tiktokAuth');
 const ideationService = require('./src/ideationService');
 const manuscriptService = require('./src/manuscriptService');
 const agentUsage = require('./src/agentUsage');
+const recordConcurrency = require('./src/recordConcurrency');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
@@ -167,8 +168,8 @@ try { db.exec("ALTER TABLE voice_messages ADD COLUMN agent TEXT NOT NULL DEFAULT
 try { db.exec('ALTER TABLE voice_session ADD COLUMN codex_session_id TEXT'); } catch (e) { /* already exists */ }
 
 const stmts = {
-  getAll: db.prepare('SELECT data FROM records WHERE store_name = ? ORDER BY updated_at ASC'),
-  getOne: db.prepare('SELECT data FROM records WHERE store_name = ? AND id = ?'),
+  getAll: db.prepare('SELECT data, updated_at FROM records WHERE store_name = ? ORDER BY updated_at ASC'),
+  getOne: db.prepare('SELECT data, updated_at FROM records WHERE store_name = ? AND id = ?'),
   upsert: db.prepare(
     'INSERT INTO records (store_name, id, data, updated_at) VALUES (?, ?, ?, ?) ' +
     'ON CONFLICT(store_name, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at'
@@ -622,7 +623,7 @@ app.get('/api/store/:storeName', function (req, res) {
     return res.status(403).json({ error: 'forbidden' });
   }
   const rows = stmts.getAll.all(req.params.storeName);
-  let records = rows.map(function (r) { return JSON.parse(r.data); });
+  let records = rows.map(function (r) { return req.params.storeName === 'pieces' ? recordConcurrency.decodeRow(r) : JSON.parse(r.data); });
   if (req.sessionRole === 'youtube-reviewer' && req.params.storeName === 'settings') {
     records = records.map(redactSettingsForReviewer);
   }
@@ -637,7 +638,7 @@ app.get('/api/store/:storeName/:id', function (req, res) {
   }
   const row = stmts.getOne.get(storeName, id);
   if (!row) return res.status(404).json({ error: 'not_found' });
-  let record = JSON.parse(row.data);
+  let record = storeName === 'pieces' ? recordConcurrency.decodeRow(row) : JSON.parse(row.data);
   if (req.sessionRole === 'youtube-reviewer' && storeName === 'settings') record = redactSettingsForReviewer(record);
   res.json(record);
 });
@@ -674,11 +675,21 @@ app.put('/api/store/:storeName/:id', function (req, res) {
   if (!req.body || typeof req.body !== 'object') return res.status(400).json({ error: 'invalid_body' });
 
   let existingPiece = null;
+  let existingPieceRow = null;
   if (storeName === 'pieces') {
     const existingRow = stmts.getOne.get('pieces', id);
+    existingPieceRow = existingRow || null;
     if (existingRow) {
       const existing = JSON.parse(existingRow.data);
       existingPiece = existing;
+      const versionCheck = recordConcurrency.preparePieceWrite(existingRow, req.body, id);
+      if (versionCheck.conflict) {
+        return res.status(409).json({
+          error: 'stale_write',
+          message: 'This card changed on another device. Your stale change was not saved, and the newest version was kept.',
+          latest: versionCheck.latest
+        });
+      }
       if (existing.hasVideo) {
         SERVER_OWNED_PIECE_FIELDS.forEach(function (f) {
           if (Object.prototype.hasOwnProperty.call(existing, f)) req.body[f] = existing[f];
@@ -720,7 +731,9 @@ app.put('/api/store/:storeName/:id', function (req, res) {
     }
   }
 
-  const record = Object.assign({}, req.body, { id: id });
+  const record = storeName === 'pieces'
+    ? recordConcurrency.preparePieceWrite(existingPieceRow, req.body, id).record
+    : Object.assign({}, req.body, { id: id });
   stmts.upsert.run(storeName, id, JSON.stringify(record), new Date().toISOString());
   if (storeName === 'pieces' && req.sessionRole !== 'youtube-reviewer' && record.stage === 'big_ideas') {
     try {
@@ -741,6 +754,19 @@ app.delete('/api/store/:storeName/:id', function (req, res) {
     }
     if ((storeName === 'pieces' || storeName === 'videos') && !pieceOwnedByReviewer(ownerPieceIdFor(storeName, id))) {
       return res.status(403).json({ error: 'forbidden' });
+    }
+  }
+  if (storeName === 'pieces') {
+    const existingRow = stmts.getOne.get(storeName, id);
+    if (existingRow) {
+      const current = recordConcurrency.decodeRow(existingRow);
+      if (!recordConcurrency.matchesPieceVersion(existingRow, req.get('x-record-version'))) {
+        return res.status(409).json({
+          error: 'stale_write',
+          message: 'This card changed on another device. The newer version was kept instead of deleting it.',
+          latest: current
+        });
+      }
     }
   }
   stmts.del.run(storeName, id);
@@ -807,9 +833,10 @@ app.get('/api/files/:storeName/:id', function (req, res) {
 // touches the `pieces` DB record before/during/after.
 function getPieceRecord(id) {
   const row = stmts.getOne.get('pieces', id);
-  return row ? JSON.parse(row.data) : null;
+  return row ? recordConcurrency.decodeRow(row) : null;
 }
 function savePieceRecord(piece) {
+  recordConcurrency.stampServerWrite(piece);
   stmts.upsert.run('pieces', piece.id, JSON.stringify(piece), new Date().toISOString());
 }
 
@@ -1821,7 +1848,7 @@ function recoverInflightVideoJobs() {
     }
     if (changed) {
       piece.updatedAt = now;
-      stmts.upsert.run('pieces', piece.id, JSON.stringify(piece), now);
+      savePieceRecord(piece);
       fixed++;
     }
   });

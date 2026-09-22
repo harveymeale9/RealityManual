@@ -1239,6 +1239,8 @@ body.role-reviewer #pmBackFab {
 .save-flag { color: var(--good); opacity: 0; transition: opacity 0.25s ease; }
 .modal-id { color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 1px 7px; letter-spacing: 0.03em; }
 .save-flag.show { opacity: 1; }
+.piece-conflict-toast { position: fixed; z-index: 1000; left: 50%; top: 18px; width: min(620px,calc(100vw - 28px)); transform: translate(-50%,-18px); opacity: 0; pointer-events: none; padding: 13px 16px; border: 1px solid #d89a4a; border-radius: 8px; background: #281d0d; color: #ffd49a; box-shadow: 0 12px 30px rgba(0,0,0,.55); font: 700 .78rem/1.45 var(--font-body); transition: opacity .2s,transform .2s; }
+.piece-conflict-toast.show { opacity: 1; transform: translate(-50%,0); }
 
 .modal-close {
   background: none; border: none; color: var(--ink-soft);

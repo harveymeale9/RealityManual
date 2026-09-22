@@ -5,6 +5,7 @@
 window.RMStore = (function () {
   var API_BASE = ''; // same-origin now that the panel is served by rm-ops-service itself
   var FILE_STORES = ['videos', 'audioTracks'];
+  var pieceWriteQueues = {};
 
   function apiFetch(path, opts) {
     opts = opts || {};
@@ -41,7 +42,16 @@ window.RMStore = (function () {
       .catch(function () { return undefined; });
   }
 
-  function put(storeName, record) {
+  function signalConflict(storeName, id, data) {
+    window.dispatchEvent(new CustomEvent('rm-store-conflict', { detail: {
+      storeName: storeName,
+      id: id,
+      latest: data && data.latest,
+      message: data && data.message
+    } }));
+  }
+
+  function putNow(storeName, record) {
     if (FILE_STORES.indexOf(storeName) !== -1 && record.blob instanceof Blob) {
       var fd = new FormData();
       var meta = {};
@@ -59,13 +69,47 @@ window.RMStore = (function () {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
-    }).then(function (r) { return r.ok ? r.json() : undefined; }).catch(function () {});
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (data) {
+        if (r.status === 409) {
+          signalConflict(storeName, record.id, data);
+          var conflict = new Error(data.message || 'A newer version exists.');
+          conflict.code = 'stale_write';
+          throw conflict;
+        }
+        if (!r.ok) throw new Error(data.error || 'Could not save.');
+        if (storeName === 'pieces' && data && data._recordVersion) record._recordVersion = data._recordVersion;
+        return data;
+      });
+    });
   }
 
-  function del(storeName, id) {
-    return apiFetch('/api/store/' + storeName + '/' + encodeURIComponent(id), { method: 'DELETE' })
-      .then(function () {})
-      .catch(function () {});
+  function put(storeName, record) {
+    if (storeName !== 'pieces') return putNow(storeName, record);
+    var id = record.id;
+    var previous = pieceWriteQueues[id] || Promise.resolve();
+    var task = previous.catch(function () {}).then(function () { return putNow(storeName, record); });
+    pieceWriteQueues[id] = task;
+    task.finally(function () { if (pieceWriteQueues[id] === task) delete pieceWriteQueues[id]; }).catch(function () {});
+    return task;
+  }
+
+  function del(storeName, id, record) {
+    var headers = {};
+    if (storeName === 'pieces' && record && record._recordVersion) headers['X-Record-Version'] = record._recordVersion;
+    return apiFetch('/api/store/' + storeName + '/' + encodeURIComponent(id), { method: 'DELETE', headers: headers })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (data) {
+          if (r.status === 409) {
+            signalConflict(storeName, id, data);
+            var conflict = new Error(data.message || 'A newer version exists.');
+            conflict.code = 'stale_write';
+            throw conflict;
+          }
+          if (!r.ok) throw new Error(data.error || 'Could not delete.');
+          return data;
+        });
+      });
   }
 
   function genId() {
