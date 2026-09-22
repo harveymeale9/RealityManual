@@ -8977,3 +8977,50 @@ page 81 first; and a remembered quotation fragment returned its exact page 48.
 The complete Node suite passes 12/12 and asserts that no AI provider is invoked,
 semantic paraphrases resolve correctly, exact queries remain cached, and an
 unchanged persistent index is reused across service setup/restart.
+
+---
+
+# 191. Customer Mailbox Interface, Ready for Provider Connection (2026-09-22)
+
+Content Studio now has a first-class **Mailbox** destination for
+`info@realitymanual.com`: an envelope in the desktop side rail with a live
+unread-count badge and a matching top-level tab (so it remains reachable on
+mobile when the rail is hidden). It is admin-only in both navigation and API;
+the YouTube reviewer role cannot see it and `/api/mailbox/*` uses `requireAuth`,
+not `requireAuthOrReviewer`.
+
+The three-pane desktop interface (`public/mailbox.js`) provides Inbox,
+Starred, Drafts, Sent, and Archive views; search; conversation reading;
+read/unread, star, and archive actions; reply/reply-all; and a full composer.
+The composer supports rich text, ordinary file attachments, and images pasted
+or selected into the message body. Mobile collapses this into a folder/list
+view and a separate reading view, while the composer becomes a full-screen
+sheet. On sub-640px screens the header wordmark and Quick Add link are hidden
+to preserve a genuinely tappable horizontally scrolling product-navigation
+row; the same links remain present elsewhere where applicable.
+
+`src/mailboxService.js` owns a normalized, persistent SQLite store for threads,
+messages, and attachment metadata; attachment bytes live under
+`/data/mailbox-attachments`. It includes provider-message-ID deduplication,
+incoming attachment ingestion, durable drafts, unread aggregation, thread
+management, authenticated downloads, and an injected transport boundary for
+sending. A failed Send while no provider exists deliberately preserves the
+message as a draft and tells the UI “Saved to Drafts — connect the mailbox to
+send”; it never pretends the email went out. `MAILBOX_ADDRESS` is documented in
+`.env.example`, while provider credentials will remain server-side in the VPS
+`.env` once supplied.
+
+The provider itself is intentionally not guessed or partially configured.
+Harvey is supplying the real mailbox details next: either its provider/API and
+OAuth details, or standard incoming IMAP host/port/security/username plus
+outgoing SMTP host/port/security/username and the app-specific password. Once
+known, the receiver/sync loop and sender can be injected into the already-built
+service without changing the data model or UI.
+
+Verification: the full Node suite passes 14/14. Dedicated integration tests
+cover idempotent incoming sync, incoming and outgoing attachments, unread/read,
+starred mail, draft persistence, safe not-connected sends, and a configured
+fake transport reaching Sent. Headless Chromium verified the real SPA at
+1440×900 and 390×844 with intercepted provider state: navigation, unread badge,
+connection notice, no viewport overflow, full composer, and durable Save Draft
+all worked at both sizes.

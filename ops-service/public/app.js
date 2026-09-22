@@ -59,6 +59,9 @@
     { label: 'Project Manager', tabs: [
         { id: 'project-manager', label: 'Project Manager' }
       ] },
+    { label: 'Mailbox', tabs: [
+        { id: 'mailbox', label: 'Mailbox' }
+      ] },
     { label: 'Content Ops', tabs: [
         { id: 'content-ops', label: 'Content Pipeline' },
         { id: 'content-ideation', label: 'Content Ideation' },
@@ -309,10 +312,13 @@
     if (backFab) backFab.classList.toggle('show', active !== 'project-manager');
     panelMain.classList.toggle('panel-main--ideation', active === 'content-ideation');
     panelMain.classList.toggle('panel-main--manuscript', active === 'manuscript');
+    panelMain.classList.toggle('panel-main--mailbox', active === 'mailbox');
     if (active !== 'project-manager' && pmSync) { pmSync.stop(); pmSync = null; }
     if (active === 'project-manager') {
       panelMain.innerHTML = PM_MARKUP;
       bootProjectManager();
+    } else if (active === 'mailbox') {
+      window.RMMailbox.mount(panelMain);
     } else if (active === 'content-ops') {
       panelMain.innerHTML = OPS_MARKUP;
       bootContentOps();
@@ -343,6 +349,7 @@
     }
     renderTabs();
     bindSideRail();
+    window.RMMailbox.startBadgePolling();
     bootModal();
     window.addEventListener('hashchange', renderActiveTab);
     if (!location.hash) location.hash = IS_REVIEWER ? 'content-ops' : TABS[0].id;

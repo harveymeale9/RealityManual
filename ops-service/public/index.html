@@ -42,6 +42,10 @@
       <a href="#project-manager" class="side-rail-btn" data-tab="project-manager" title="Project Manager" aria-label="Project Manager">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
       </a>
+      <a href="#mailbox" class="side-rail-btn side-rail-mailbox" data-tab="mailbox" title="Mailbox" aria-label="Mailbox">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 5h18v14H3z"/><path d="m3 6 9 7 9-7"/></svg>
+        <span class="mail-unread-badge" id="mailUnreadBadge" hidden>0</span>
+      </a>
       <!-- Content Ops group: parent icon (a generic "layers" mark, distinct
            from its own default child's icon below) links to the group's
            default leaf, Content Pipeline. Its 3 real leaf tabs are nested
@@ -247,6 +251,7 @@
   <script src="lib/usageDashboard.js?v=20260921-usage"></script>
   <script src="ideation.js?v=20260922-idea-not-interested"></script>
   <script src="manuscript.js?v=20260922-instant-search"></script>
-  <script src="app.js?v=20260922-kanban-conflicts"></script>
+  <script src="mailbox.js?v=20260922-mailbox-shell"></script>
+  <script src="app.js?v=20260922-mailbox-shell"></script>
 </body>
 </html>

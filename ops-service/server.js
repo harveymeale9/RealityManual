@@ -20,6 +20,7 @@ const youtubeAuth = require('./src/youtubeAuth');
 const tiktokAuth = require('./src/tiktokAuth');
 const ideationService = require('./src/ideationService');
 const manuscriptService = require('./src/manuscriptService');
+const mailboxService = require('./src/mailboxService');
 const agentUsage = require('./src/agentUsage');
 const recordConcurrency = require('./src/recordConcurrency');
 
@@ -402,6 +403,11 @@ app.use('/api/ideation', requireAuth, ideation.router);
 // semantic search. Admin-only because it exposes the complete book text.
 const manuscript = manuscriptService.setup(db);
 app.use('/api/manuscript', requireAuth, manuscript.router);
+// Admin-only mailbox shell. Its durable local store/UI are usable before a
+// mail provider is chosen; the transport itself is deliberately injected
+// later so mailbox credentials never enter the browser or repository.
+const mailbox = mailboxService.setup(db, { dataDir: DATA_DIR, address: process.env.MAILBOX_ADDRESS || 'info@realitymanual.com' });
+app.use('/api/mailbox', requireAuth, mailbox.router);
 
 // --- YouTube OAuth (Google) — see src/youtubeAuth.js for the token
 // exchange itself. Placeholder-until-configured: YOUTUBE_OAUTH_CLIENT_ID/
