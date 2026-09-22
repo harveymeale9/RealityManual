@@ -27,10 +27,51 @@
 
   function isMounted() { return root && location.hash === '#manuscript' && document.body.contains(root); }
 
-  function pageBody(page, side) {
+  function normalizedOffsets(value) {
+    var text = String(value || '');
+    var normalized = '';
+    var starts = [];
+    var ends = [];
+    for (var i = 0; i < text.length; i++) {
+      var char = text[i].replace(/[“”]/g, '"').replace(/[‘’]/g, "'").toLowerCase();
+      if (/\s/.test(char)) {
+        if (!normalized || normalized[normalized.length - 1] === ' ') continue;
+        normalized += ' ';
+        starts.push(i);
+        ends.push(i + 1);
+      } else {
+        normalized += char;
+        starts.push(i);
+        ends.push(i + 1);
+      }
+    }
+    if (normalized[normalized.length - 1] === ' ') {
+      normalized = normalized.slice(0, -1);
+      starts.pop();
+      ends.pop();
+    }
+    return { text: normalized, starts: starts, ends: ends };
+  }
+
+  function paragraphHtml(paragraph, highlight) {
+    if (!highlight || highlight.used) return esc(paragraph).replace(/\n/g, '<br>');
+    var haystack = normalizedOffsets(paragraph);
+    var needle = normalizedOffsets(String(highlight.text || '').replace(/…\s*$/, '')).text;
+    var index = needle ? haystack.text.indexOf(needle) : -1;
+    if (index < 0) return esc(paragraph).replace(/\n/g, '<br>');
+    var start = haystack.starts[index];
+    var end = haystack.ends[index + needle.length - 1];
+    highlight.used = true;
+    return esc(paragraph.slice(0, start)).replace(/\n/g, '<br>') +
+      '<mark class="manual-passage-highlight" tabindex="-1">' + esc(paragraph.slice(start, end)).replace(/\n/g, '<br>') + '</mark>' +
+      esc(paragraph.slice(end)).replace(/\n/g, '<br>');
+  }
+
+  function pageBody(page, side, highlightText, highlightPage) {
     if (!page) return '<section class="manual-page manual-page-' + side + ' manual-page-blank"><span>' + (side === 'left' ? 'The Reality Manual' : '') + '</span></section>';
+    var highlight = page.page === highlightPage && highlightText ? { text: highlightText, used: false } : null;
     var paragraphs = String(page.text || '').split(/\n\s*\n/).filter(Boolean).map(function (paragraph) {
-      return '<p>' + esc(paragraph).replace(/\n/g, '<br>') + '</p>';
+      return '<p>' + paragraphHtml(paragraph, highlight) + '</p>';
     }).join('');
     return '<section class="manual-page manual-page-' + (page.page % 2 === 0 ? 'left' : 'right') + '" data-page="' + page.page + '">' +
       '<div class="manual-page-body">' + paragraphs + '</div><span class="manual-page-number">' + page.page + '</span></section>';
@@ -41,16 +82,38 @@
       '<button type="button" class="manual-turn manual-turn-next" aria-label="Next pages" title="Next pages"><span>›</span></button>';
   }
 
-  // Canonical pages vary in word count. Keep the physical spread inside
-  // the visible stage, then reduce only a long page's type until its last
-  // line clears the printed page number. Shorter pages retain the normal
-  // reading size instead of every page being made unnecessarily tiny.
+  // Size the physical spread from the stage's *actual remaining space*, not
+  // the viewport. Laptop browser chrome + the app header/subtabs make those
+  // materially different; the old 100dvh calculation could produce a book
+  // taller than its own panel and then fit text against the wrong geometry.
+  function fitBookGeometry() {
+    var stage = root.querySelector('.manual-stage');
+    var toolbar = root.querySelector('.manual-toolbar');
+    var book = root.querySelector('#manualBook');
+    if (!stage || !toolbar || !book) return;
+    var stageStyle = getComputedStyle(stage);
+    var toolbarStyle = getComputedStyle(toolbar);
+    var availableWidth = stage.clientWidth - parseFloat(stageStyle.paddingLeft) - parseFloat(stageStyle.paddingRight);
+    var availableHeight = stage.clientHeight - parseFloat(stageStyle.paddingTop) - parseFloat(stageStyle.paddingBottom) - toolbar.offsetHeight - parseFloat(toolbarStyle.marginBottom);
+    var width = Math.min(1060, availableWidth * 0.96, availableHeight * (4 / 3));
+    var height = Math.min(780, availableHeight, width * (3 / 4));
+    width = Math.min(width, height * (4 / 3));
+    book.style.width = Math.max(0, Math.floor(width)) + 'px';
+    book.style.height = Math.max(0, Math.floor(height)) + 'px';
+  }
+
+  // Canonical pages vary in word count. Reduce only a long page's type until
+  // the body fits inside its dedicated body region; the page-number footer is
+  // outside that region and therefore can never sit on top of manuscript text.
   function fitSpread() {
     if (!isMounted()) return;
+    fitBookGeometry();
     root.querySelectorAll('.manual-page:not(.manual-page-blank)').forEach(function (page) {
       page.style.fontSize = '';
+      var body = page.querySelector('.manual-page-body');
+      if (!body) return;
       var size = parseFloat(getComputedStyle(page).fontSize);
-      while (page.scrollHeight > page.clientHeight && size > 10) {
+      while (body.scrollHeight > body.clientHeight + 1 && size > 7.5) {
         size -= 0.25;
         page.style.fontSize = size + 'px';
       }
@@ -67,7 +130,7 @@
     next.onclick = function () { loadPage(Math.min(pageCount, currentPage + 2)); };
   }
 
-  function loadPage(page) {
+  function loadPage(page, highlightText) {
     page = Math.max(1, Math.min(pageCount, Number(page) || 1));
     currentPage = page;
     var input = root.querySelector('#manualPageInput');
@@ -76,15 +139,20 @@
     book.classList.remove('flipping');
     book.innerHTML = '<section class="manual-page manual-page-left manual-page-blank manual-page-loading">Opening…</section><section class="manual-page manual-page-right manual-page-blank"></section>' + turnControls();
     bindPageTurns();
+    fitBookGeometry();
     return api('/pages/' + page).then(function (data) {
       if (!isMounted()) return;
       pageCount = data.pageCount;
       root.querySelector('#manualPageCount').textContent = 'of ' + pageCount;
-      book.innerHTML = pageBody(data.left, 'left') + pageBody(data.right, 'right') + turnControls();
+      book.innerHTML = pageBody(data.left, 'left', highlightText, page) + pageBody(data.right, 'right', highlightText, page) + turnControls();
       bindPageTurns();
       void book.offsetWidth;
       book.classList.add('flipping');
-      requestAnimationFrame(fitSpread);
+      requestAnimationFrame(function () {
+        fitSpread();
+        var highlighted = book.querySelector('.manual-passage-highlight');
+        if (highlighted) highlighted.focus({ preventScroll: true });
+      });
     }).catch(function (error) {
       if (isMounted()) book.innerHTML = '<section class="manual-page manual-page-left manual-page-blank">' + esc(error.message) + '</section><section class="manual-page manual-page-right manual-page-blank"></section>';
     });
@@ -93,14 +161,25 @@
   function renderResults(results) {
     var target = root.querySelector('#manualResults');
     target.innerHTML = (results || []).map(function (result) {
-      return '<button type="button" class="manual-result" data-page="' + result.page + '"><span class="manual-result-head"><span>' + esc(result.title) + '</span><span>p. ' + result.page + '</span></span><p>' + esc(result.relevance) + '</p><blockquote>“' + esc(result.excerpt) + '”</blockquote></button>';
+      return '<article class="manual-result" role="button" tabindex="0" data-page="' + result.page + '"><span class="manual-result-head"><span>' + esc(result.title) + '</span><span>p. ' + result.page + '</span></span><p>' + esc(result.relevance) + '</p><blockquote>“' + esc(result.excerpt) + '”</blockquote></article>';
     }).join('');
-    target.querySelectorAll('.manual-result').forEach(function (button) {
-      button.onclick = function () {
-        loadPage(Number(button.dataset.page)).then(function () {
+    target.querySelectorAll('.manual-result').forEach(function (resultCard, index) {
+      function openResult() {
+        var result = results[index];
+        loadPage(Number(result.page), result.excerpt).then(function () {
           var stage = root.querySelector('.manual-stage');
           if (stage) stage.scrollTo({ top: 0, behavior: 'smooth' });
         });
+      }
+      resultCard.onclick = function () {
+        var selection = window.getSelection();
+        if (selection && !selection.isCollapsed && selection.toString()) return;
+        openResult();
+      };
+      resultCard.onkeydown = function (event) {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        openResult();
       };
     });
   }

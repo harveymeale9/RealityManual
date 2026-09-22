@@ -8849,3 +8849,31 @@ speaks. Browsers without that facility use the existing MediaRecorder →
 pulses and changes to Stop while listening, shows listening/transcribing/error
 status, and feeds the resulting edit through the editor's normal autosave.
 Read-only reviewer cards disable the mic alongside their other editor fields.
+
+---
+
+# 187. Laptop-Safe Manuscript Layout, Selectable Results, and Passage Highlighting (2026-09-22)
+
+The manuscript reader could place its printed page number over the final lines
+of text on laptop-sized screens. Two layout assumptions combined to cause it:
+the spread height was calculated from the browser viewport rather than the
+space actually remaining inside the reader panel, and the overflow fitter
+measured the whole page even though its absolutely positioned page number did
+not participate in that measurement.
+
+The reader now derives a 4:3 spread from the stage's measured width and height
+after its toolbar, reserves a real footer for each page number, and fits each
+page's manuscript body inside the space above that footer. Dense pages may
+reduce their type independently, while shorter pages retain their normal size.
+Chromium checks on the dense page 48 at 1440x900, 1536x864, 1366x768, and
+1280x800 all measured zero text/footer overlap, zero body overflow, and zero
+book overflow outside the reader stage.
+
+AI-search result cards are now selectable text rather than native buttons. A
+mouse selection suppresses the card's navigation click, allowing excerpts to
+be copied normally; Enter, Space, or an ordinary click still opens the result.
+Opening a result carries its server-verified excerpt into the spread, finds the
+corresponding text despite curly-quote or whitespace differences, and visibly
+highlights that exact passage on the destination page. A browser test selected
+and copied an excerpt without leaving page 48, then clicked the same result and
+confirmed navigation to page 81 with its complete excerpt highlighted.
