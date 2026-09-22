@@ -198,11 +198,19 @@ function stopScript(pidFile) {
 }
 
 function buildRemoteCommand(sessionId, appendSystemPrompt, pidFile, paths) {
+  const oauthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  if (!oauthToken) throw new Error('CLAUDE_CODE_OAUTH_TOKEN is missing');
   const args = [HOST_BIN, '-p', '--output-format', 'stream-json', '--verbose',
     '--permission-mode', 'bypassPermissions', '--allow-dangerously-skip-permissions'];
   if (sessionId) args.push('--resume', sessionId);
   if (appendSystemPrompt) args.push('--append-system-prompt', appendSystemPrompt);
-  let command = 'HOME=' + shellQuote(HOST_HOME) + ' ' + args.map(shellQuote).join(' ');
+  // `spawn("ssh", ...)` inherits this container's environment locally, but
+  // ssh does not forward arbitrary variables to the remote process. Pass the
+  // existing subscription token explicitly; never fall back to the host
+  // ubuntu user's personal Claude identity.
+  let command = 'HOME=' + shellQuote(HOST_HOME) + ' ' +
+    'CLAUDE_CODE_OAUTH_TOKEN=' + shellQuote(oauthToken) + ' ' +
+    args.map(shellQuote).join(' ');
   if (paths) {
     // See codexRunner.js's identical comment: keeps draining into the
     // durable files even when the old container's SSH pipe disappears.

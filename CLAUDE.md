@@ -8774,3 +8774,30 @@ Verification covers the exact conversion “Under Rule XIV” → “Under Rule 
 Crystallized Emotion,” “Rule VIII” → “Rule of Freedom,” and “Rule X” →
 “Tripartite Rule”; confirms the doctrine section contains no numeric Rule
 labels; and the complete Node suite passes 9/9.
+
+---
+
+# 184. Host-Side Claude OAuth Token Forwarding Regression Fixed (2026-09-22)
+
+Claude Project Manager turns began failing immediately with “Not logged in ·
+Please run /login” after the §176 migration moved the real Claude CLI process
+from inside the container to the VPS host over SSH. The existing OAuth token
+was still present and valid inside `rm-ops-service`; a direct host auth check
+reported unauthenticated without that token and authenticated when it was
+supplied. The isolated host `$HOME` and its symlinks were also intact.
+
+The cause was an implementation/documentation mismatch in
+`src/claudeRunner.js`: §176 and `.env.example` said the existing
+`CLAUDE_CODE_OAUTH_TOKEN` was passed through the SSH command, but
+`buildRemoteCommand()` only set `HOME`. An SSH child inherits the token in its
+local container environment, but SSH does not automatically forward arbitrary
+environment variables to the remote process. The host CLI therefore received
+no usable authentication at all.
+
+`buildRemoteCommand()` now requires the existing container token and explicitly
+sets `CLAUDE_CODE_OAUTH_TOKEN` in the host-side Claude command alongside its
+isolated `HOME`. No new credential, `/login`, `.env` edit, or use of Harvey's
+personal host Claude identity is involved. A regression test replaces `ssh`
+with a local stub and refuses to return a successful Claude event unless both
+the variable name and a synthetic token reached the generated remote command;
+this covers the exact boundary the original recovery tests missed.

@@ -77,3 +77,33 @@ test('surfaces a persisted host-run failure instead of inventing a completion', 
 test('hasRecoverableRun is false once no journal or exit marker exists', function () {
   assert.equal(claudeRunner.hasRecoverableRun('never-existed-run'), false);
 });
+
+test('forwards the container OAuth token to the host-side Claude process', async function () {
+  const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-claude-fake-ssh-'));
+  const fakeSsh = path.join(fakeBin, 'ssh');
+  fs.writeFileSync(fakeSsh, [
+    '#!/bin/sh',
+    'case "$*" in',
+    '  *CLAUDE_CODE_OAUTH_TOKEN*test-oauth-token*) ;;',
+    '  *) echo "OAuth token was not forwarded" >&2; exit 44 ;;',
+    'esac',
+    'cat >/dev/null',
+    "printf '%s\\n' '{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"session_auth_test\"}'",
+    "printf '%s\\n' '{\"type\":\"result\",\"is_error\":false,\"session_id\":\"session_auth_test\",\"result\":\"authenticated\"}'"
+  ].join('\n') + '\n', { mode: 0o755 });
+
+  const originalPath = process.env.PATH;
+  const originalToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  process.env.PATH = fakeBin + path.delimiter + originalPath;
+  process.env.CLAUDE_CODE_OAUTH_TOKEN = 'test-oauth-token';
+  try {
+    const result = await claudeRunner.runClaude({ prompt: 'authentication check', timeoutMs: 1000 });
+    assert.equal(result.ok, true);
+    assert.equal(result.replyText, 'authenticated');
+  } finally {
+    process.env.PATH = originalPath;
+    if (originalToken === undefined) delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+    else process.env.CLAUDE_CODE_OAUTH_TOKEN = originalToken;
+    fs.rmSync(fakeBin, { recursive: true, force: true });
+  }
+});
