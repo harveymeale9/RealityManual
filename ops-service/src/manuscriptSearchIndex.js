@@ -56,6 +56,22 @@ function matchingTopics(query) {
   });
 }
 
+function intentAnchors(query) {
+  const source = normalized(query);
+  const anchors = [];
+  function add(page, conditions) {
+    if (conditions.every(function (condition) { return source.indexOf(condition) !== -1; })) anchors.push(page);
+  }
+  add(14, ['objective']);
+  add(66, ['love', 'defin']);
+  add(81, ['purpose', 'function']);
+  if (source.indexOf('power') !== -1 || source.indexOf('external events') !== -1) anchors.push(89);
+  if (source.indexOf('alien') !== -1 || source.indexOf('ufo') !== -1 || source.indexOf('extraterrestrial') !== -1) anchors.push(57);
+  if ((source.indexOf('know i should') !== -1 || source.indexOf('conscious intention') !== -1 || source.indexOf('discipline') !== -1) && source.indexOf('action') !== -1) anchors.push(110);
+  if ((source.indexOf('change') !== -1 || source.indexOf('reprogram') !== -1) && (source.indexOf('automatic') !== -1 || source.indexOf('response') !== -1 || source.indexOf('trigger') !== -1)) anchors.push(165);
+  return anchors;
+}
+
 function setup(db, pages) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS manuscript_search_index_meta (
@@ -91,6 +107,7 @@ function setup(db, pages) {
   function search(query) {
     const queryTerms = terms(query);
     const topics = matchingTopics(query);
+    const anchors = intentAnchors(query);
     const expanded = queryTerms.concat(topics.flatMap(function (topic) { return topic.terms; }));
     const unique = Array.from(new Set(expanded)).slice(0, 32);
     if (!unique.length) return [];
@@ -106,7 +123,11 @@ function setup(db, pages) {
         return score + 28 + Math.max(0, 8 - Math.abs(page - topic.anchor));
       }, 0);
       const phraseBoost = normalized(row.body).indexOf(normalized(query)) !== -1 ? 80 : 0;
-      const score = -Number(row.rank || 0) + lexical + topicBoost + phraseBoost;
+      const anchorBoost = anchors.reduce(function (score, anchor) {
+        const distance = Math.abs(page - anchor);
+        return score + (distance === 0 ? 100 : distance <= 2 ? 45 - distance * 10 : 0);
+      }, 0);
+      const score = -Number(row.rank || 0) + lexical + topicBoost + phraseBoost + anchorBoost;
       const prior = byPage.get(page);
       if (!prior || score > prior.score) byPage.set(page, Object.assign({}, row, { page: page, score: score }));
     });
@@ -128,4 +149,4 @@ function setup(db, pages) {
   return { search: search, fingerprint: expected, topicCount: TOPICS.length };
 }
 
-module.exports = { setup: setup, matchingTopics: matchingTopics, normalized: normalized, terms: terms, TOPICS: TOPICS };
+module.exports = { setup: setup, matchingTopics: matchingTopics, intentAnchors: intentAnchors, normalized: normalized, terms: terms, TOPICS: TOPICS };
