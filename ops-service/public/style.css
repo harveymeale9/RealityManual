@@ -1223,6 +1223,13 @@ body.role-reviewer #pmBackFab {
   align-items: center;
   gap: 10px;
 }
+.modal-head-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-width: 0; }
+.kanban-dictation-status { max-width: 210px; overflow: hidden; color: var(--ink-faint); font: .68rem/1.3 var(--font-mono); text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.kanban-mic { min-height: 34px; padding: 0 11px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid #42614f; border-radius: 7px; background: #18251d; color: var(--accent); cursor: pointer; font: 700 .67rem var(--font-mono); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+.kanban-mic:hover { border-color: var(--accent); background: var(--accent-soft); }
+.kanban-mic svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.kanban-mic.recording { color: #ff8d86; border-color: #9a504b; background: rgba(255,98,89,.1); animation: ideaMicPulse 1s infinite; }
+.kanban-mic:disabled { opacity: .45; cursor: not-allowed; }
 .save-flag { color: var(--good); opacity: 0; transition: opacity 0.25s ease; }
 .modal-id { color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 1px 7px; letter-spacing: 0.03em; }
 .save-flag.show { opacity: 1; }
@@ -1900,6 +1907,11 @@ body.role-reviewer #pmBackFab {
   .column { width: 86vw; }
   .modal-wrap { padding: 0; }
   .modal { width: 100%; height: 100%; max-height: 100%; border-radius: 0; border: none; }
+  .modal-head { padding: 12px 14px; }
+  .modal-head-actions { gap: 6px; }
+  .kanban-dictation-status { display: none; }
+  .kanban-mic { min-height: 38px; padding: 0 9px; }
+  .kanban-mic span { display: none; }
   .title-input { font-size: 1.4rem; }
   /* Same space problem as the tabs above — the per-content-type overview
      is a nice-to-have summary, not needed to actually see/edit pieces, so

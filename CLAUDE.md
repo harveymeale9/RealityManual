@@ -8831,3 +8831,21 @@ piece API also rejects an implicit Short sent by an older still-open browser
 tab when creating or overwriting an otherwise-unselected early-stage card, so
 the stale frontend cannot silently undo the correction. A deliberate Short
 selection from the current UI remains Short.
+
+---
+
+# 186. Kanban Editor Dictation (2026-09-22)
+
+The shared Kanban piece editor now has a microphone button in its header. It
+targets whichever editable text area Harvey used most recently—Title or
+Notes—and labels itself accordingly, so one compact control covers both rather
+than permanently consuming space beside every field. Dictation inserts at the
+current caret or replaces the current selection; Notes retain their rich HTML
+and pasted images instead of being flattened to plain text.
+
+Chrome/Edge use live Speech Recognition with interim text visible while Harvey
+speaks. Browsers without that facility use the existing MediaRecorder →
+`/api/voice/transcribe` fallback already proven in Content Ideation. The button
+pulses and changes to Stop while listening, shows listening/transcribing/error
+status, and feeds the resulting edit through the editor's normal autosave.
+Read-only reviewer cards disable the mic alongside their other editor fields.

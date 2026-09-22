@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,400&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=20260921-idea-feedback-learning" />
+  <link rel="stylesheet" href="style.css?v=20260922-kanban-dictation" />
 </head>
 <body>
 
@@ -135,7 +135,14 @@
     <div class="modal" id="pieceModal" role="dialog" aria-modal="true" aria-hidden="true">
       <div class="modal-head">
         <div class="modal-eyebrow"><span id="modalEyebrowText">Piece</span><span class="card-id modal-id" id="modalIdBadge" hidden></span><span class="save-flag" id="saveFlag">Saved</span></div>
-        <button class="modal-close" id="modalClose" aria-label="Close">&times;</button>
+        <div class="modal-head-actions">
+          <span class="kanban-dictation-status" id="kanbanDictationStatus" role="status" aria-live="polite"></span>
+          <button type="button" class="kanban-mic" id="kanbanDictateBtn" title="Dictate into notes" aria-label="Dictate into notes">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="3" width="8" height="12" rx="4"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg>
+            <span>Dictate notes</span>
+          </button>
+          <button class="modal-close" id="modalClose" aria-label="Close">&times;</button>
+        </div>
       </div>
       <div class="modal-body">
         <div class="field">
@@ -240,6 +247,6 @@
   <script src="lib/usageDashboard.js?v=20260921-usage"></script>
   <script src="ideation.js?v=20260921-idea-feedback-learning"></script>
   <script src="manuscript.js?v=20260921-manuscript-fit"></script>
-  <script src="app.js?v=20260921-manuscript-reader"></script>
+  <script src="app.js?v=20260922-kanban-dictation"></script>
 </body>
 </html>

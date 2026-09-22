@@ -1298,7 +1298,8 @@
       pickFrameBtn, thumbScrub, scrubRange, captureFrameBtn, captionReadout,
       utmField, fieldUtmLink, copyUtmBtn, scheduleStatus, approveBtn,
       stageField, stageReadoutField, stageReadout,
-      ytTitlesField, fieldYtTitle1, fieldYtTitle2, fieldYtTitle3;
+      ytTitlesField, fieldYtTitle1, fieldYtTitle2, fieldYtTitle3,
+      kanbanDictateBtn, kanbanDictationStatus;
 
   var activeId = null;
   var isNewUnsaved = false;
@@ -1308,6 +1309,169 @@
   var currentVideoObjectUrl = null;
   var modalBound = false;
   var onModalClosed = null; // optional callback set by whichever tab opened the modal
+  var kanbanDictationTarget = null;
+  var activeKanbanDictationStop = null;
+
+  function setKanbanDictationTarget(target) {
+    kanbanDictationTarget = target === fieldTitle ? fieldTitle : fieldNotes;
+    if (!kanbanDictateBtn) return;
+    var name = kanbanDictationTarget === fieldTitle ? 'title' : 'notes';
+    kanbanDictateBtn.querySelector('span').textContent = 'Dictate ' + name;
+    kanbanDictateBtn.title = 'Dictate into ' + name;
+    kanbanDictateBtn.setAttribute('aria-label', kanbanDictateBtn.title);
+  }
+
+  function dictationInsertion(target) {
+    if (target === fieldTitle) {
+      var start = target.selectionStart == null ? target.value.length : target.selectionStart;
+      var end = target.selectionEnd == null ? start : target.selectionEnd;
+      var before = target.value.slice(0, start);
+      var after = target.value.slice(end);
+      return {
+        update: function (spoken) {
+          var leftSpace = before && !/\s$/.test(before) ? ' ' : '';
+          var rightSpace = after && !/^\s/.test(after) ? ' ' : '';
+          target.value = before + leftSpace + spoken.trim() + rightSpace + after;
+        },
+        finish: function () {
+          target.dispatchEvent(new Event('input', { bubbles: true }));
+          target.focus();
+        }
+      };
+    }
+
+    target.focus();
+    var selection = window.getSelection();
+    var range = selection && selection.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
+    if (!range || !target.contains(range.commonAncestorContainer)) {
+      range = document.createRange();
+      range.selectNodeContents(target);
+      range.collapse(false);
+    }
+    var marker = null;
+    function ensureMarker() {
+      if (marker) return;
+      marker = document.createElement('span');
+      marker.className = 'kanban-dictation-insert';
+      range.deleteContents();
+      range.insertNode(marker);
+    }
+    return {
+      update: function (spoken) {
+        ensureMarker();
+        var left = document.createRange();
+        left.selectNodeContents(target);
+        left.setEndBefore(marker);
+        var right = document.createRange();
+        right.selectNodeContents(target);
+        right.setStartAfter(marker);
+        var beforeText = left.toString();
+        var afterText = right.toString();
+        var leftSpace = beforeText && !/\s$/.test(beforeText) ? ' ' : '';
+        var rightSpace = afterText && !/^\s/.test(afterText) ? ' ' : '';
+        marker.textContent = leftSpace + spoken.trim() + rightSpace;
+      },
+      finish: function () {
+        if (marker && marker.parentNode) {
+          var text = document.createTextNode(marker.textContent);
+          marker.parentNode.replaceChild(text, marker);
+          target.normalize();
+          var caret = document.createRange();
+          caret.setStartAfter(text);
+          caret.collapse(true);
+          var sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(caret);
+          target.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        target.focus();
+      }
+    };
+  }
+
+  function startKanbanDictation() {
+    if (activeKanbanDictationStop) { activeKanbanDictationStop(); return; }
+    var target = kanbanDictationTarget || fieldNotes;
+    var insertion = dictationInsertion(target);
+    var Voice = window.RMVoice;
+    var SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    function recording(on) {
+      kanbanDictateBtn.classList.toggle('recording', on);
+      kanbanDictateBtn.querySelector('span').textContent = on ? 'Stop' : ('Dictate ' + (target === fieldTitle ? 'title' : 'notes'));
+      kanbanDictateBtn.title = on ? 'Stop dictation' : 'Dictate into ' + (target === fieldTitle ? 'title' : 'notes');
+      kanbanDictateBtn.setAttribute('aria-label', kanbanDictateBtn.title);
+      kanbanDictationStatus.textContent = on ? 'Listening… click Stop when finished.' : '';
+    }
+
+    function completed(text) {
+      activeKanbanDictationStop = null;
+      recording(false);
+      insertion.finish();
+      kanbanDictationStatus.textContent = text ? 'Dictation added and saving…' : 'No speech detected.';
+      if (text) debounceSync();
+    }
+
+    if (SpeechRecognitionCtor) {
+      var recognition = new SpeechRecognitionCtor();
+      var finalTranscript = '';
+      var latestTranscript = '';
+      var recognitionFailed = false;
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.addEventListener('result', function (event) {
+        var interim = '';
+        for (var i = event.resultIndex; i < event.results.length; i++) {
+          var chunk = event.results[i][0].transcript;
+          if (event.results[i].isFinal) finalTranscript += chunk + ' ';
+          else interim += chunk;
+        }
+        latestTranscript = finalTranscript + interim;
+        insertion.update(latestTranscript);
+      });
+      recognition.addEventListener('end', function () {
+        if (!recognitionFailed) completed(latestTranscript || finalTranscript);
+      });
+      recognition.addEventListener('error', function (event) {
+        recognitionFailed = true;
+        activeKanbanDictationStop = null;
+        recording(false);
+        insertion.finish();
+        if (latestTranscript) debounceSync();
+        if (event.error !== 'aborted' && event.error !== 'no-speech') kanbanDictationStatus.textContent = 'Microphone error: ' + event.error;
+      });
+      activeKanbanDictationStop = function () { recognition.stop(); };
+      recording(true);
+      try { recognition.start(); } catch (error) {
+        activeKanbanDictationStop = null;
+        recording(false);
+        kanbanDictationStatus.textContent = 'Could not start the microphone.';
+      }
+      return;
+    }
+
+    if (!Voice) { kanbanDictationStatus.textContent = 'Voice dictation is unavailable in this browser.'; return; }
+    kanbanDictateBtn.disabled = true;
+    Voice.startRecording().then(function (recorder) {
+      kanbanDictateBtn.disabled = false;
+      recording(true);
+      activeKanbanDictationStop = function () {
+        activeKanbanDictationStop = null;
+        recording(false);
+        kanbanDictateBtn.disabled = true;
+        kanbanDictationStatus.textContent = 'Transcribing…';
+        recorder.stop().then(Voice.transcribe).then(function (text) {
+          if (text) insertion.update(text);
+          completed(text);
+        }).catch(function (error) {
+          kanbanDictationStatus.textContent = error.message || 'Could not transcribe audio.';
+        }).finally(function () { kanbanDictateBtn.disabled = false; });
+      };
+    }).catch(function () {
+      kanbanDictateBtn.disabled = false;
+      kanbanDictationStatus.textContent = 'Could not access the microphone. Check its permission.';
+    });
+  }
 
   function bootModal() {
     if (modalBound) return;
@@ -1327,6 +1491,8 @@
     modalEyebrowText = document.getElementById('modalEyebrowText');
     modalIdBadge = document.getElementById('modalIdBadge');
     btnDelete = document.getElementById('btnDelete');
+    kanbanDictateBtn = document.getElementById('kanbanDictateBtn');
+    kanbanDictationStatus = document.getElementById('kanbanDictationStatus');
 
     videoSection = document.getElementById('videoSection');
     videoPreview = document.getElementById('videoPreview');
@@ -1381,6 +1547,11 @@
     });
     fieldNotes.addEventListener('input', debounceSync);
     fieldNotes.addEventListener('blur', function () { clearTimeout(saveTimer); syncFromForm(); });
+    fieldTitle.addEventListener('focus', function () { setKanbanDictationTarget(fieldTitle); });
+    fieldNotes.addEventListener('focus', function () { setKanbanDictationTarget(fieldNotes); });
+    kanbanDictateBtn.addEventListener('pointerdown', function (event) { event.preventDefault(); });
+    kanbanDictateBtn.addEventListener('click', startKanbanDictation);
+    setKanbanDictationTarget(fieldNotes);
     fieldTranscript.addEventListener('input', debounceSync);
     fieldTranscript.addEventListener('blur', function () { clearTimeout(saveTimer); syncFromForm(); });
     [fieldYtTitle1, fieldYtTitle2, fieldYtTitle3].forEach(function (el) {
@@ -1741,6 +1912,7 @@
     fieldStage.disabled = !editable;
     fieldContentType.disabled = !editable;
     fieldNotes.contentEditable = editable ? 'true' : 'false';
+    kanbanDictateBtn.disabled = !editable;
     platformGrid.querySelectorAll('.platform-toggle').forEach(function (t) {
       var isYoutube = t.dataset.platform === 'ytshort' || t.dataset.platform === 'ytlong';
       t.querySelector('input').disabled = !editable || !isYoutube;
@@ -1818,6 +1990,7 @@
   }
 
   function hideModal() {
+    if (activeKanbanDictationStop) activeKanbanDictationStop();
     modalWrap.classList.remove('open');
     pieceModal.setAttribute('aria-hidden', 'true');
     scrim.classList.remove('show');
