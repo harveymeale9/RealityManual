@@ -59,6 +59,13 @@ test('manuscript reader serves diagram-free spreads and instant persistent seman
   });
   assert.equal(cached.id, created.id);
   assert.equal(calls, 0);
+  db.prepare("UPDATE manuscript_search_jobs SET index_fingerprint='older-index' WHERE id=?").run(created.id);
+  const refreshedForNewIndex = await request('/search', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ query: 'What belief stops me doing what I know I should do?' })
+  });
+  assert.notEqual(refreshedForNewIndex.id, created.id);
+  assert.equal(refreshedForNewIndex.status, 'done');
 
   const conceptual = await request('/search', {
     method: 'POST', headers: { 'content-type': 'application/json' },

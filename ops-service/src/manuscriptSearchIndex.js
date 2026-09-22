@@ -2,7 +2,7 @@
 
 const crypto = require('crypto');
 
-const INDEX_VERSION = 'semantic-fts-v1';
+const INDEX_VERSION = 'semantic-fts-v2';
 const STOP_WORDS = new Set(['a','an','and','are','as','at','be','but','by','do','does','for','from','had','has','have','how','i','if','in','is','it','me','my','of','on','or','our','should','so','that','the','their','there','they','this','to','was','we','what','when','where','which','who','why','will','with','you','your']);
 
 const TOPICS = [

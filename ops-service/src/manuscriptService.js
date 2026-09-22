@@ -63,10 +63,12 @@ function setup(db, options) {
       id TEXT PRIMARY KEY, query TEXT NOT NULL, status TEXT NOT NULL,
       provider TEXT NOT NULL, results TEXT NOT NULL DEFAULT '[]',
       activity TEXT NOT NULL DEFAULT '[]', error TEXT,
+      index_fingerprint TEXT,
       created_at TEXT NOT NULL, updated_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_manuscript_search_status ON manuscript_search_jobs(status, created_at);
   `);
+  try { db.exec('ALTER TABLE manuscript_search_jobs ADD COLUMN index_fingerprint TEXT'); } catch (e) { /* already exists */ }
   db.prepare("UPDATE manuscript_search_jobs SET status='pending',updated_at=? WHERE status='running'").run(now());
 
   let workerBusy = false;
@@ -97,8 +99,8 @@ function setup(db, options) {
         try {
           const results = searchIndex.search(job.query);
           if (!results.length) throw new Error('The manuscript index found no relevant passages');
-          db.prepare("UPDATE manuscript_search_jobs SET status='done',provider='instant semantic index',results=?,activity='[]',updated_at=? WHERE id=?")
-            .run(JSON.stringify(results), now(), job.id);
+          db.prepare("UPDATE manuscript_search_jobs SET status='done',provider='instant semantic index',results=?,activity='[]',index_fingerprint=?,updated_at=? WHERE id=?")
+            .run(JSON.stringify(results), searchIndex.fingerprint, now(), job.id);
           console.log('[manuscript] indexed search complete', job.id, results.length + ' result(s)');
         } catch (error) {
           console.error('[manuscript] search failed', job.provider, job.id, error.message);
@@ -112,7 +114,7 @@ function setup(db, options) {
   }
 
   function enqueue(query) {
-    const cached = db.prepare("SELECT * FROM manuscript_search_jobs WHERE query=? AND status='done' ORDER BY updated_at DESC LIMIT 1").get(query);
+    const cached = db.prepare("SELECT * FROM manuscript_search_jobs WHERE query=? AND status='done' AND index_fingerprint=? ORDER BY updated_at DESC LIMIT 1").get(query, searchIndex.fingerprint);
     if (cached) return publicJob(cached);
     const existing = db.prepare("SELECT * FROM manuscript_search_jobs WHERE query=? AND status IN ('pending','running') ORDER BY created_at DESC LIMIT 1").get(query);
     if (existing) return publicJob(existing);
@@ -120,8 +122,8 @@ function setup(db, options) {
     const results = searchIndex.search(query);
     const status = results.length ? 'done' : 'error';
     const error = results.length ? null : 'The manuscript index found no relevant passages';
-    db.prepare('INSERT INTO manuscript_search_jobs (id,query,status,provider,results,error,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)')
-      .run(id, query, status, 'instant semantic index', JSON.stringify(results), error, stamp, stamp);
+    db.prepare('INSERT INTO manuscript_search_jobs (id,query,status,provider,results,error,index_fingerprint,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)')
+      .run(id, query, status, 'instant semantic index', JSON.stringify(results), error, searchIndex.fingerprint, stamp, stamp);
     return publicJob(db.prepare('SELECT * FROM manuscript_search_jobs WHERE id=?').get(id));
   }
 
@@ -158,8 +160,8 @@ function setup(db, options) {
     const job = db.prepare("SELECT * FROM manuscript_search_jobs WHERE id=? AND status='error'").get(req.params.id);
     if (!job) return res.status(404).json({ error: 'not_found' });
     const results = searchIndex.search(job.query);
-    db.prepare("UPDATE manuscript_search_jobs SET status=?,provider='instant semantic index',results=?,activity='[]',error=?,updated_at=? WHERE id=?")
-      .run(results.length ? 'done' : 'error', JSON.stringify(results), results.length ? null : 'The manuscript index found no relevant passages', now(), job.id);
+    db.prepare("UPDATE manuscript_search_jobs SET status=?,provider='instant semantic index',results=?,activity='[]',error=?,index_fingerprint=?,updated_at=? WHERE id=?")
+      .run(results.length ? 'done' : 'error', JSON.stringify(results), results.length ? null : 'The manuscript index found no relevant passages', searchIndex.fingerprint, now(), job.id);
     res.json(publicJob(db.prepare('SELECT * FROM manuscript_search_jobs WHERE id=?').get(job.id)));
   });
 
