@@ -8940,3 +8940,40 @@ an old pre-feature client with no token, and accepts a deliberate edit after a
 fresh read. A Chromium two-device simulation edited a stale home modal and
 confirmed its `home-v1` write was rejected, its visible warning appeared, and
 the editor reloaded the exact `cafe-v2` title and notes.
+
+---
+
+# 190. Manuscript Finder Uses a Persistent Instant Semantic Index (2026-09-22)
+
+Harvey found the integrated book search impractical while writing because a new
+query routinely took 15+ seconds. The manuscript text itself was already
+memory-cached; the latency came from launching a fresh Codex or Claude process
+for every previously unseen wording and asking it to inspect the complete book.
+Only an identical-query result was cached, so even a small paraphrase paid the
+full agent startup and reasoning cost again.
+
+The finder now builds a persistent SQLite FTS5 index from the canonical 180
+pages once, fingerprinted against both the manuscript and index algorithm.
+Each real paragraph is indexed with Porter stemming, its section heading, and
+domain-specific semantic concepts covering the Manual's Rules and recurring
+pillars. Queries combine ordinary full-text relevance, exact phrase matching,
+semantic expansion, and concept/page-range weighting, then deduplicate and
+rank the strongest passages locally. Excerpts still come directly from the
+canonical page, so result clicks retain exact passage highlighting. If the
+manuscript or indexing algorithm changes, the fingerprint rebuilds the index;
+otherwise service restarts reuse it without reprocessing.
+
+New searches complete synchronously in the initial POST response instead of
+creating a 15-second agent job and an extra 1.8-second browser polling wait.
+Historical completed-query rows remain valid instant cache hits, while legacy
+pending jobs are completed from the same local index after a restart. The UI
+now describes the finder accurately as a pre-indexed meaning-based search.
+
+Representative local benchmarks ranked results in 2.7–4.8 ms: inability to do
+what one knows one should returned the Subconscious Action pages 109–112;
+power as immunity to external upset returned Freedom pages 89–93; fear of
+advanced aliens/UFOs returned Oneness pages 57–59; purpose/function returned
+page 81 first; and a remembered quotation fragment returned its exact page 48.
+The complete Node suite passes 12/12 and asserts that no AI provider is invoked,
+semantic paraphrases resolve correctly, exact queries remain cached, and an
+unchanged persistent index is reused across service setup/restart.

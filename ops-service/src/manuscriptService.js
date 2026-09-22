@@ -3,7 +3,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const corpus = require('./ideationCorpus');
-const providers = require('./ideationProviders');
+const manuscriptSearchIndex = require('./manuscriptSearchIndex');
 
 function now() { return new Date().toISOString(); }
 function clean(value, max) { return String(value || '').trim().slice(0, max || 100000); }
@@ -21,14 +21,6 @@ function pages() {
   return corpus.loadManuscript().pages.map(function (entry) {
     return { page: entry.page, text: readerText(entry.text) };
   });
-}
-
-function extractJson(text) {
-  let raw = String(text || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
-  const start = raw.indexOf('{');
-  if (start < 0) throw new Error('AI search returned no JSON');
-  raw = raw.slice(start, raw.lastIndexOf('}') + 1);
-  return JSON.parse(raw);
 }
 
 function fallbackExcerpt(text) {
@@ -59,22 +51,12 @@ function normalizeResults(raw, pageMap) {
   }).filter(Boolean).slice(0, 8);
 }
 
-function searchPrompt(query) {
-  return `You are the semantic finder for The Reality Manual. Read the canonical manuscript file THE_REALITY_MANUAL_COMPLETE_MANUSCRIPT.txt and find the passages that best answer or illuminate the user's request below.
-
-This is meaning-based research, not keyword matching. Search for relevant arguments, Rules, definitions, implications, examples, and closely related concepts even when the manuscript uses different words. Rank only genuinely useful passages. Prefer distinct results that illuminate different facets over adjacent duplicate pages. Never edit any file.
-
-USER REQUEST: ${JSON.stringify(query)}
-
-Return strict JSON only, with no markdown: {"results":[{"page":34,"title":"short descriptive label","relevance":"one concise sentence explaining why this answers the request","excerpt":"an exact short quotation copied from that page"}]}. Return 3-8 results when supported. Every page must be an integer from 1 through 180 and every excerpt must occur verbatim on that page. Do not invent quotations.`;
-}
-
 function setup(db, options) {
   options = options || {};
-  const providerEngine = options.providers || providers;
   const autoStart = options.autoStart !== false;
   const manuscriptPages = pages();
   const pageMap = new Map(manuscriptPages.map(function (entry) { return [entry.page, entry]; }));
+  const searchIndex = manuscriptSearchIndex.setup(db, manuscriptPages);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS manuscript_search_jobs (
@@ -112,20 +94,12 @@ function setup(db, options) {
         const job = db.prepare("SELECT * FROM manuscript_search_jobs WHERE status='pending' ORDER BY created_at ASC LIMIT 1").get();
         if (!job) break;
         db.prepare("UPDATE manuscript_search_jobs SET status='running',error=NULL,updated_at=? WHERE id=?").run(now(), job.id);
-        const activity = [];
         try {
-          const result = await providerEngine.generate(job.provider, searchPrompt(job.query), function (line) {
-            const message = clean(line, 500);
-            if (!message || message.indexOf('💭') === 0) return;
-            activity.push(message);
-            db.prepare('UPDATE manuscript_search_jobs SET activity=?,updated_at=? WHERE id=?')
-              .run(JSON.stringify(activity.slice(-20)), now(), job.id);
-          });
-          const normalized = normalizeResults(extractJson(result.text), pageMap);
-          if (!normalized.length) throw new Error('AI search found no verifiable manuscript passages');
-          db.prepare("UPDATE manuscript_search_jobs SET status='done',results=?,updated_at=? WHERE id=?")
-            .run(JSON.stringify(normalized), now(), job.id);
-          console.log('[manuscript] search complete', job.provider, job.id, normalized.length + ' result(s)');
+          const results = searchIndex.search(job.query);
+          if (!results.length) throw new Error('The manuscript index found no relevant passages');
+          db.prepare("UPDATE manuscript_search_jobs SET status='done',provider='instant semantic index',results=?,activity='[]',updated_at=? WHERE id=?")
+            .run(JSON.stringify(results), now(), job.id);
+          console.log('[manuscript] indexed search complete', job.id, results.length + ' result(s)');
         } catch (error) {
           console.error('[manuscript] search failed', job.provider, job.id, error.message);
           db.prepare("UPDATE manuscript_search_jobs SET status='error',error=?,updated_at=? WHERE id=?")
@@ -142,21 +116,18 @@ function setup(db, options) {
     if (cached) return publicJob(cached);
     const existing = db.prepare("SELECT * FROM manuscript_search_jobs WHERE query=? AND status IN ('pending','running') ORDER BY created_at DESC LIMIT 1").get(query);
     if (existing) return publicJob(existing);
-    let provider = 'codex';
-    try {
-      const setting = db.prepare('SELECT selected_provider FROM ideation_settings WHERE id=1').get();
-      if (setting && (setting.selected_provider === 'codex' || setting.selected_provider === 'claude')) provider = setting.selected_provider;
-    } catch (e) { /* ideation initializes first in production, but keep this service standalone-testable */ }
     const id = crypto.randomUUID(), stamp = now();
-    db.prepare("INSERT INTO manuscript_search_jobs (id,query,status,provider,created_at,updated_at) VALUES (?,?,'pending',?,?,?)")
-      .run(id, query, provider, stamp, stamp);
-    setImmediate(runWorker);
+    const results = searchIndex.search(query);
+    const status = results.length ? 'done' : 'error';
+    const error = results.length ? null : 'The manuscript index found no relevant passages';
+    db.prepare('INSERT INTO manuscript_search_jobs (id,query,status,provider,results,error,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)')
+      .run(id, query, status, 'instant semantic index', JSON.stringify(results), error, stamp, stamp);
     return publicJob(db.prepare('SELECT * FROM manuscript_search_jobs WHERE id=?').get(id));
   }
 
   const router = express.Router();
   router.get('/meta', function (req, res) {
-    res.json({ title: 'The Reality Manual', pageCount: manuscriptPages.length });
+    res.json({ title: 'The Reality Manual', pageCount: manuscriptPages.length, search: 'instant semantic index' });
   });
   router.get('/pages/:page', function (req, res) {
     const requested = Number(req.params.page);
@@ -175,7 +146,8 @@ function setup(db, options) {
   router.post('/search', function (req, res) {
     const query = clean(req.body && req.body.query, 1000);
     if (query.length < 3) return res.status(400).json({ error: 'Enter at least three characters.' });
-    res.status(202).json(enqueue(query));
+    const job = enqueue(query);
+    res.status(job.status === 'done' ? 200 : 202).json(job);
   });
   router.get('/search/:id', function (req, res) {
     const job = db.prepare('SELECT * FROM manuscript_search_jobs WHERE id=?').get(req.params.id);
@@ -185,8 +157,9 @@ function setup(db, options) {
   router.post('/search/:id/retry', function (req, res) {
     const job = db.prepare("SELECT * FROM manuscript_search_jobs WHERE id=? AND status='error'").get(req.params.id);
     if (!job) return res.status(404).json({ error: 'not_found' });
-    db.prepare("UPDATE manuscript_search_jobs SET status='pending',results='[]',activity='[]',error=NULL,updated_at=? WHERE id=?").run(now(), job.id);
-    setImmediate(runWorker);
+    const results = searchIndex.search(job.query);
+    db.prepare("UPDATE manuscript_search_jobs SET status=?,provider='instant semantic index',results=?,activity='[]',error=?,updated_at=? WHERE id=?")
+      .run(results.length ? 'done' : 'error', JSON.stringify(results), results.length ? null : 'The manuscript index found no relevant passages', now(), job.id);
     res.json(publicJob(db.prepare('SELECT * FROM manuscript_search_jobs WHERE id=?').get(job.id)));
   });
 
@@ -194,4 +167,4 @@ function setup(db, options) {
   return { router: router, runWorker: runWorker, readerText: readerText, normalizeResults: normalizeResults };
 }
 
-module.exports = { setup: setup, readerText: readerText, normalizeResults: normalizeResults, searchPrompt: searchPrompt };
+module.exports = { setup: setup, readerText: readerText, normalizeResults: normalizeResults };

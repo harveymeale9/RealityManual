@@ -7,24 +7,12 @@ const Database = require('better-sqlite3');
 const manuscriptService = require('../src/manuscriptService');
 const corpus = require('../src/ideationCorpus');
 
-test('manuscript reader serves diagram-free spreads and restart-safe AI search', async function (t) {
-  const firstLine = manuscriptService.readerText(corpus.loadManuscript().pages[0].text)
-    .split('\n').map(function (line) { return line.trim(); }).find(function (line) { return line.length > 80; });
+test('manuscript reader serves diagram-free spreads and instant persistent semantic search', async function (t) {
   let calls = 0;
-  let receivedPrompt = '';
   const fakeProviders = {
-    generate: async function (provider, prompt, onActivity) {
+    generate: async function () {
       calls++;
-      receivedPrompt = prompt;
-      onActivity('Reading manuscript concepts');
-      return {
-        provider: provider,
-        model: 'test',
-        text: JSON.stringify({ results: [
-          { page: 1, title: 'The game of life', relevance: 'It establishes the governing metaphor.', excerpt: firstLine },
-          { page: 999, title: 'Invalid', relevance: 'Must be rejected.', excerpt: 'Invented' }
-        ] })
-      };
+      throw new Error('Search must not launch an AI provider');
     }
   };
   const db = new Database(':memory:');
@@ -52,24 +40,35 @@ test('manuscript reader serves diagram-free spreads and restart-safe AI search',
   assert.doesNotMatch(spread.left.text, /\*IMAGE:/);
   assert.doesNotMatch(spread.left.text, /==END PAGE/);
 
+  const started = performance.now();
   const created = await request('/search', {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ query: 'What is the real objective beneath ordinary goals?' })
+    body: JSON.stringify({ query: 'What belief stops me doing what I know I should do?' })
   });
-  assert.equal(created.status, 'pending');
-  await service.runWorker();
-  const finished = await request('/search/' + created.id);
-  assert.equal(finished.status, 'done');
-  assert.equal(finished.results.length, 1);
-  assert.equal(finished.results[0].page, 1);
-  assert.equal(finished.results[0].excerpt, firstLine);
-  assert.match(receivedPrompt, /meaning-based research, not keyword matching/);
-  assert.match(receivedPrompt, /What is the real objective/);
+  const elapsed = performance.now() - started;
+  assert.equal(created.status, 'done');
+  assert.equal(created.provider, 'instant semantic index');
+  assert.ok(created.results.length >= 3);
+  assert.equal(created.results.slice(0, 3).some(function (result) { return result.page === 109 || result.page === 110; }), true);
+  assert.ok(elapsed < 250, 'indexed search took ' + elapsed + 'ms');
+  assert.equal(calls, 0);
 
   const cached = await request('/search', {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ query: 'What is the real objective beneath ordinary goals?' })
+    body: JSON.stringify({ query: 'What belief stops me doing what I know I should do?' })
   });
   assert.equal(cached.id, created.id);
-  assert.equal(calls, 1);
+  assert.equal(calls, 0);
+
+  const conceptual = await request('/search', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ query: 'Should humanity fear advanced aliens or UFOs?' })
+  });
+  assert.equal(conceptual.status, 'done');
+  assert.equal(conceptual.results.slice(0, 2).some(function (result) { return result.page === 57; }), true);
+  assert.match(conceptual.results[0].relevance, /oneness/i);
+
+  const rowsBeforeRestart = db.prepare('SELECT count(*) AS n FROM manuscript_search_chunks').get().n;
+  manuscriptService.setup(db, { providers: fakeProviders, autoStart: false });
+  assert.equal(db.prepare('SELECT count(*) AS n FROM manuscript_search_chunks').get().n, rowsBeforeRestart);
 });

@@ -191,20 +191,29 @@
     status.className = 'manual-search-status' + (state ? ' ' + state : '');
   }
 
+  function applySearchJob(job) {
+    if (!isMounted()) return true;
+    if (job.status === 'done') {
+      setSearchStatus(job.results.length + ' relevant passage' + (job.results.length === 1 ? '' : 's') + ', ranked by ' + job.provider + '.');
+      root.querySelector('#manualSearchButton').disabled = false;
+      renderResults(job.results);
+      return true;
+    }
+    if (job.status === 'error') {
+      setSearchStatus(job.error || 'Search failed.', 'error');
+      root.querySelector('#manualSearchButton').disabled = false;
+      return true;
+    }
+    return false;
+  }
+
   function pollSearch(id) {
     if (!isMounted()) return;
     api('/search/' + id).then(function (job) {
       if (!isMounted()) return;
-      if (job.status === 'done') {
-        setSearchStatus(job.results.length + ' relevant passage' + (job.results.length === 1 ? '' : 's') + ', ranked by ' + job.provider + '.');
-        root.querySelector('#manualSearchButton').disabled = false;
-        renderResults(job.results);
-      } else if (job.status === 'error') {
-        setSearchStatus(job.error || 'Search failed.', 'error');
-        root.querySelector('#manualSearchButton').disabled = false;
-      } else {
+      if (!applySearchJob(job)) {
         var activity = job.activity && job.activity.length ? ' ' + job.activity[job.activity.length - 1] : '';
-        setSearchStatus('AI is reading and ranking the manuscript…' + activity, 'working');
+        setSearchStatus('Preparing the manuscript index…' + activity, 'working');
         pollTimer = setTimeout(function () { pollSearch(id); }, 1800);
       }
     }).catch(function (error) {
@@ -227,8 +236,10 @@
       if (pollTimer) clearTimeout(pollTimer);
       root.querySelector('#manualSearchButton').disabled = true;
       root.querySelector('#manualResults').innerHTML = '';
-      setSearchStatus('Starting a meaning-based search of all 180 pages…', 'working');
-      api('/search', { method: 'POST', body: JSON.stringify({ query: query }) }).then(function (job) { pollSearch(job.id); }).catch(function (error) {
+      setSearchStatus('Searching the pre-indexed manuscript…', 'working');
+      api('/search', { method: 'POST', body: JSON.stringify({ query: query }) }).then(function (job) {
+        if (!applySearchJob(job)) pollSearch(job.id);
+      }).catch(function (error) {
         setSearchStatus(error.message, 'error');
         if (isMounted()) root.querySelector('#manualSearchButton').disabled = false;
       });
@@ -238,7 +249,7 @@
   function mount(container) {
     if (pollTimer) clearTimeout(pollTimer);
     root = container;
-    root.innerHTML = '<div class="manual-reader"><aside class="manual-finder"><div class="eyebrow">Intelligent finder</div><h2>Search the Manual</h2><p class="manual-finder-intro">Describe an idea, question, quotation, or section. The AI searches by meaning, ranks the strongest passages, and opens the book at the result you choose.</p><form class="manual-search-form" id="manualSearchForm"><textarea id="manualSearchQuery" placeholder="e.g. What does the Manual say about why people cannot make themselves take action?"></textarea><button id="manualSearchButton" type="submit">Find relevant passages</button></form><div class="manual-search-status" id="manualSearchStatus" role="status" aria-live="polite"></div><div class="manual-results" id="manualResults"></div></aside><section class="manual-stage"><div class="manual-toolbar"><form class="manual-page-controls" id="manualPageForm"><button type="button" id="manualPrev" aria-label="Previous spread">←</button><label for="manualPageInput">Page</label><input id="manualPageInput" type="number" min="1" max="180" value="1" inputmode="numeric"><span class="manual-page-count" id="manualPageCount">of 180</span><button type="submit">Go</button><button type="button" id="manualNext" aria-label="Next spread">→</button></form></div><div class="manual-book" id="manualBook" aria-live="polite"></div></section></div>';
+    root.innerHTML = '<div class="manual-reader"><aside class="manual-finder"><div class="eyebrow">Intelligent finder</div><h2>Search the Manual</h2><p class="manual-finder-intro">Describe an idea, question, quotation, or section. The pre-indexed semantic finder searches by meaning, ranks the strongest passages instantly, and opens the book at the result you choose.</p><form class="manual-search-form" id="manualSearchForm"><textarea id="manualSearchQuery" placeholder="e.g. What does the Manual say about why people cannot make themselves take action?"></textarea><button id="manualSearchButton" type="submit">Find relevant passages</button></form><div class="manual-search-status" id="manualSearchStatus" role="status" aria-live="polite"></div><div class="manual-results" id="manualResults"></div></aside><section class="manual-stage"><div class="manual-toolbar"><form class="manual-page-controls" id="manualPageForm"><button type="button" id="manualPrev" aria-label="Previous spread">←</button><label for="manualPageInput">Page</label><input id="manualPageInput" type="number" min="1" max="180" value="1" inputmode="numeric"><span class="manual-page-count" id="manualPageCount">of 180</span><button type="submit">Go</button><button type="button" id="manualNext" aria-label="Next spread">→</button></form></div><div class="manual-book" id="manualBook" aria-live="polite"></div></section></div>';
     bind();
     if (!resizeBound) {
       resizeBound = true;
