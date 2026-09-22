@@ -10,36 +10,32 @@
 + '[' -n '' ']'
 + git pull
 From https://github.com/harveymeale9/RealityManual
-   1bf1d30..9f5f35b  main       -> origin/main
-Updating 1bf1d30..9f5f35b
+   9f5f35b..c7753bf  main       -> origin/main
+Updating 9f5f35b..c7753bf
 Fast-forward
- CLAUDE.md                                  |  37 ++++++++++
- ops-service/.ci/last-run.log               | 104 ++++++++++++++++++++++++-----
- ops-service/public/app.js                  |  66 ++++++++++++++----
- ops-service/public/index.html              |   6 +-
- ops-service/public/lib/store.js            |  56 ++++++++++++++--
- ops-service/public/quick-add.html          |   2 +-
- ops-service/public/style.css               |   2 +
- ops-service/server.js                      |  41 ++++++++++--
- ops-service/src/recordConcurrency.js       |  40 +++++++++++
- ops-service/test/recordConcurrency.test.js |  47 +++++++++++++
- 10 files changed, 356 insertions(+), 45 deletions(-)
- create mode 100644 ops-service/src/recordConcurrency.js
- create mode 100644 ops-service/test/recordConcurrency.test.js
+ CLAUDE.md                                |  37 +++++++++
+ ops-service/.ci/last-run.log             |  82 ++++++++++---------
+ ops-service/public/index.html            |   2 +-
+ ops-service/public/manuscript.js         |  35 ++++++---
+ ops-service/src/manuscriptSearchIndex.js | 131 +++++++++++++++++++++++++++++++
+ ops-service/src/manuscriptService.js     |  65 +++++----------
+ ops-service/test/manuscript.test.js      |  53 ++++++-------
+ 7 files changed, 281 insertions(+), 124 deletions(-)
+ create mode 100644 ops-service/src/manuscriptSearchIndex.js
 ++ git rev-parse HEAD
-+ NEW_HEAD=9f5f35b69b17e517cbf6a7520ef6e39e4a5c0d68
++ NEW_HEAD=c7753bfc465494683f3570e6fdfe31ecf02e9884
 + git -C /srv/realitymanual-repo pull
 Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
 + LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
 ++ cat /root/ops-service-data/last-image-commit.txt
-+ LAST_BUILD_COMMIT=1bf1d30f78eb61f6c6b0466f53ecb6319764b552
++ LAST_BUILD_COMMIT=9f5f35b69b17e517cbf6a7520ef6e39e4a5c0d68
 + NEEDS_REBUILD=1
-+ '[' -n 1bf1d30f78eb61f6c6b0466f53ecb6319764b552 ']'
-+ git cat-file -e '1bf1d30f78eb61f6c6b0466f53ecb6319764b552^{commit}'
-++ git diff --name-only 1bf1d30f78eb61f6c6b0466f53ecb6319764b552 9f5f35b69b17e517cbf6a7520ef6e39e4a5c0d68 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
-+ '[' -z 'ops-service/server.js
-ops-service/src/recordConcurrency.js' ']'
++ '[' -n 9f5f35b69b17e517cbf6a7520ef6e39e4a5c0d68 ']'
++ git cat-file -e '9f5f35b69b17e517cbf6a7520ef6e39e4a5c0d68^{commit}'
+++ git diff --name-only 9f5f35b69b17e517cbf6a7520ef6e39e4a5c0d68 c7753bfc465494683f3570e6fdfe31ecf02e9884 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -z 'ops-service/src/manuscriptSearchIndex.js
+ops-service/src/manuscriptService.js' ']'
 + '[' 1 = 0 ']'
 + docker tag rm-ops-service rm-ops-service:previous
 + docker build -t rm-ops-service ./ops-service
@@ -50,7 +46,7 @@ ops-service/src/recordConcurrency.js' ']'
 #1 DONE 0.0s
 
 #2 [internal] load metadata for docker.io/library/node:22-slim
-#2 DONE 0.2s
+#2 DONE 0.3s
 
 #3 [internal] load .dockerignore
 #3 transferring context: 136B done
@@ -61,7 +57,7 @@ ops-service/src/recordConcurrency.js' ']'
 #4 DONE 0.0s
 
 #5 [internal] load build context
-#5 transferring context: 451.68kB 0.0s done
+#5 transferring context: 54.09kB 0.0s done
 #5 DONE 0.0s
 
 #6 [ 2/11] RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && rm -rf /var/lib/apt/lists/*
@@ -80,39 +76,39 @@ ops-service/src/recordConcurrency.js' ']'
 #10 CACHED
 
 #11 [ 7/11] COPY server.js ./
-#11 DONE 0.1s
+#11 CACHED
 
 #12 [ 8/11] COPY src ./src
 #12 DONE 0.1s
 
 #13 [ 9/11] COPY public ./public
-#13 DONE 0.3s
+#13 DONE 1.0s
 
 #14 [10/11] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
-#14 DONE 25.0s
+#14 DONE 32.2s
 
 #15 [11/11] RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
 #15 DONE 0.6s
 
 #16 exporting to image
 #16 exporting layers
-#16 exporting layers 13.1s done
-#16 exporting manifest sha256:3a79046593d6f9594a27f96b16b0571343ce1d6eb7e66295be71a9573c0723bf done
-#16 exporting config sha256:7bdf1d23890e9e270287bf15f4ae76a0597278a734cef052f5ea48ad896b330d 0.0s done
-#16 exporting attestation manifest sha256:9f8bbcbec209c2586d8e9732b5e832c4fb61153a290ce65ac5a826113750226e 0.0s done
-#16 exporting manifest list sha256:767ce3cb75b4ec83bbcb22d81d139a80dbcc6652bae11bb38e3b746ebf8a707c 0.0s done
+#16 exporting layers 14.3s done
+#16 exporting manifest sha256:b8cc5bff01330ffd970dd77a11922902be24680c8a8739b0ea8eb642b21f8662 0.0s done
+#16 exporting config sha256:24bbbbc14ed543a663f3a98efabe10ecc7a9f1f2d3ed1241f0b7fe27d13257ab 0.0s done
+#16 exporting attestation manifest sha256:c49b260dd7f6bde1eff406091a81210c4daea4ae1d603647260838b9c08e51f0 0.0s done
+#16 exporting manifest list sha256:3c7ecdd18a2586de3e41a3e5eff6f50645a5f313eb36c8d40254acc4e24564d3 0.0s done
 #16 naming to docker.io/library/rm-ops-service:latest done
 #16 unpacking to docker.io/library/rm-ops-service:latest
-#16 unpacking to docker.io/library/rm-ops-service:latest 3.3s done
-#16 DONE 16.6s
+#16 unpacking to docker.io/library/rm-ops-service:latest 4.0s done
+#16 DONE 18.5s
 + docker stop rm-ops-service
 rm-ops-service
 + docker rm rm-ops-service
 rm-ops-service
 + docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-claude-home/claude-dir:/home/node/.claude -v /root/ops-service-claude-home/claude.json:/home/node/.claude.json -v /root/ops-service-data:/data -v /srv/realitymanual-repo:/repo -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
-e07fb8daa3a12d6c94727178977b7ba209097264d9f64fb503c8ef33e325cec5
-+ echo 9f5f35b69b17e517cbf6a7520ef6e39e4a5c0d68
+a416478833ce634417f341b56f4746494727d8d0f31926e6097f44de85ff2b04
++ echo c7753bfc465494683f3570e6fdfe31ecf02e9884
 ++ git -C /root/realitymanual-repo rev-parse --short HEAD
-+ echo 'rm-ops-service redeployed at 9f5f35b'
-rm-ops-service redeployed at 9f5f35b
++ echo 'rm-ops-service redeployed at c7753bf'
+rm-ops-service redeployed at c7753bf
 ssh exit code: 0
