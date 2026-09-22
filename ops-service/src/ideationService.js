@@ -404,7 +404,7 @@ Return strict JSON only, with no markdown fences or commentary. Provider request
     const order = stageOrders.length ? Math.min.apply(Math, stageOrders) - 10 : 0;
     const id = uuid(), stamp = now();
     const piece = {
-      id: id, seq: seq, title: internalLabel(idea.big_idea), stage: 'ideation', platforms: [], contentType: 'short',
+      id: id, seq: seq, title: internalLabel(idea.big_idea), stage: 'ideation', platforms: [], contentType: '',
       notesHtml: notesHtml(idea), order: order, createdAt: stamp, updatedAt: stamp,
       ideationMetadata: {
         ideaId: idea.id, bigIdea: idea.big_idea, conceptsToDiscuss: json(idea.discussion_angles, []),

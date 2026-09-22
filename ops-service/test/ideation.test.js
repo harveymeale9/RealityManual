@@ -114,7 +114,7 @@ test('Big Idea queue, verified support, and Ideation-stage transfer work togethe
   assert.equal(rewriteSignal.after, editedText);
   const transfer = await request('/ideas/' + accepted.id + '/transfer', 'POST', {});
   assert.equal(transfer.piece.stage, 'ideation');
-  assert.equal(transfer.piece.contentType, 'short');
+  assert.equal(transfer.piece.contentType, '');
   assert.deepEqual(transfer.piece.platforms, []);
   assert.match(transfer.piece.notesHtml, /<h3>Big Idea<\/h3>/);
   assert.match(transfer.piece.notesHtml, /Harvey adds one sharper sentence/);

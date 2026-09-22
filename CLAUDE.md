@@ -8801,3 +8801,20 @@ personal host Claude identity is involved. A regression test replaces `ssh`
 with a local stub and refuses to return a successful Claude event unless both
 the variable name and a synthetic token reached the generated remote command;
 this covers the exact boundary the original recovery tests missed.
+
+---
+
+# 185. Video Type Defaults to “Not selected” (2026-09-22)
+
+New planned pieces no longer silently claim to be Shorts before Harvey has
+chosen a video type. The shared piece editor now begins with a real “Not
+selected” option and renders untyped cards with the same label instead of
+falling back visually to Short. Changing a piece back to “Not selected” also
+clears the platform preset that came from its prior type.
+
+All non-video creation paths use the unset value consistently: New Piece,
+Quick Add, and transfer from the Content Ideation panel. Existing deliberate
+type selections are preserved. Actual uploaded video files are unchanged:
+their type is still detected automatically from orientation and duration,
+because that classification is based on the real video rather than a planning
+default.

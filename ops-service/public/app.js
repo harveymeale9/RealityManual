@@ -1135,7 +1135,8 @@
   }
 
   function contentTypeOf(id) {
-    return Store.CONTENT_TYPES.filter(function (c) { return c.id === id; })[0] || Store.CONTENT_TYPES[1];
+    return Store.CONTENT_TYPES.filter(function (c) { return c.id === id; })[0] ||
+      { id: '', label: 'Not selected', hint: '', color: '#77736b' };
   }
 
   function stageLabelOf(id) {
@@ -1355,6 +1356,10 @@
       o.value = s.id; o.textContent = s.label;
       fieldStage.appendChild(o);
     });
+    var unselectedType = document.createElement('option');
+    unselectedType.value = '';
+    unselectedType.textContent = 'Not selected';
+    fieldContentType.appendChild(unselectedType);
     Store.CONTENT_TYPES.forEach(function (c) {
       var o = document.createElement('option');
       o.value = c.id; o.textContent = c.label + ' (' + c.hint + ')';
@@ -1384,14 +1389,12 @@
     });
     fieldStage.addEventListener('change', function () { clearTimeout(saveTimer); syncFromForm(); });
     fieldContentType.addEventListener('change', function () {
-      var preset = PLATFORM_PRESET_BY_TYPE[fieldContentType.value];
-      if (preset) {
-        platformGrid.querySelectorAll('.platform-toggle').forEach(function (t) {
-          var checked = preset.indexOf(t.dataset.platform) !== -1;
-          t.classList.toggle('checked', checked);
-          t.querySelector('input').checked = checked;
-        });
-      }
+      var preset = PLATFORM_PRESET_BY_TYPE[fieldContentType.value] || [];
+      platformGrid.querySelectorAll('.platform-toggle').forEach(function (t) {
+        var checked = preset.indexOf(t.dataset.platform) !== -1;
+        t.classList.toggle('checked', checked);
+        t.querySelector('input').checked = checked;
+      });
       clearTimeout(saveTimer);
       syncFromForm();
     });
@@ -1655,7 +1658,7 @@
 
   function populateFields(p) {
     fieldTitle.value = p.title || '';
-    fieldContentType.value = p.contentType || 'short';
+    fieldContentType.value = p.contentType || '';
     stageField.hidden = !!p.hasVideo;
     stageReadoutField.hidden = !p.hasVideo;
     if (p.hasVideo) stageReadout.textContent = stageLabelOf(p.stage);
@@ -1781,7 +1784,7 @@
   function createDraft(stageId, closedCb) {
     var id = Store.genId();
     pieces[id] = {
-      id: id, seq: Store.nextSeq(allPiecesArray()), title: '', stage: stageId, platforms: [], contentType: 'short', notesHtml: '', hasVideo: false,
+      id: id, seq: Store.nextSeq(allPiecesArray()), title: '', stage: stageId, platforms: [], contentType: '', notesHtml: '', hasVideo: false,
       order: minOrder(stageId) - 10,
       createdAt: nowIso(),
       updatedAt: nowIso()
