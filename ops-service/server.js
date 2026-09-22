@@ -686,6 +686,17 @@ app.put('/api/store/:storeName/:id', function (req, res) {
         });
       }
     }
+    // A browser tab opened before §185 still constructs new planning cards
+    // with the retired implicit `short` default. Do not let that stale client
+    // recreate the value after the migration. The current UI marks a genuine
+    // user choice explicitly, so deliberately selecting Short is preserved.
+    const earlyPlanningStage = ['archived', 'ideation', 'big_ideas'].indexOf(req.body.stage) !== -1;
+    const existingWasUnselected = existingPiece && !existingPiece.contentType;
+    if (!req.body.hasVideo && earlyPlanningStage && req.body.contentType === 'short' &&
+        req.body.contentTypeSelectionExplicit !== true && (!existingPiece || existingWasUnselected)) {
+      req.body.contentType = '';
+      req.body.contentTypeSelectionExplicit = false;
+    }
   }
 
   if (req.sessionRole === 'youtube-reviewer') {

@@ -10,6 +10,7 @@ const providers = require('./ideationProviders');
 const TARGET_ACTIVE = 10;
 const BIG_IDEA_MIGRATION = 'big_idea_cards_v1';
 const RULE_NAME_MIGRATION = 'rule_names_not_numbers_v1';
+const KANBAN_TYPE_DEFAULT_MIGRATION = 'kanban_video_type_unselected_v1';
 const DEFAULT_PROFILE = {
   summary: 'No Big Idea preferences have been learned yet. Prioritize specific, useful applications of the manuscript.',
   likes: [], avoids: [], framingPatterns: [], structurePatterns: [], selectionRationale: [],
@@ -157,6 +158,25 @@ function setup(db, options) {
         scope: 'global_rule_naming'
       });
       db.prepare('INSERT INTO ideation_migrations (id,applied_at) VALUES (?,?)').run(RULE_NAME_MIGRATION, now());
+    })();
+  }
+
+  // Pieces created before §185 were silently stamped `short` even though
+  // Harvey had never chosen a video type. Correct only early planning cards,
+  // where that value was the old creation default; later-stage selections
+  // and every real uploaded video remain untouched.
+  if (!db.prepare('SELECT 1 FROM ideation_migrations WHERE id=?').get(KANBAN_TYPE_DEFAULT_MIGRATION)) {
+    db.transaction(function () {
+      const rows = db.prepare("SELECT id,data FROM records WHERE store_name='pieces'").all();
+      const update = db.prepare("UPDATE records SET data=?,updated_at=? WHERE store_name='pieces' AND id=?");
+      rows.forEach(function (row) {
+        const piece = json(row.data, {});
+        if (piece.hasVideo || ['archived', 'ideation', 'big_ideas'].indexOf(piece.stage) === -1 || piece.contentType !== 'short') return;
+        piece.contentType = '';
+        piece.contentTypeSelectionExplicit = false;
+        update.run(stringify(piece), now(), row.id);
+      });
+      db.prepare('INSERT INTO ideation_migrations (id,applied_at) VALUES (?,?)').run(KANBAN_TYPE_DEFAULT_MIGRATION, now());
     })();
   }
 
@@ -404,7 +424,7 @@ Return strict JSON only, with no markdown fences or commentary. Provider request
     const order = stageOrders.length ? Math.min.apply(Math, stageOrders) - 10 : 0;
     const id = uuid(), stamp = now();
     const piece = {
-      id: id, seq: seq, title: internalLabel(idea.big_idea), stage: 'ideation', platforms: [], contentType: '',
+      id: id, seq: seq, title: internalLabel(idea.big_idea), stage: 'ideation', platforms: [], contentType: '', contentTypeSelectionExplicit: false,
       notesHtml: notesHtml(idea), order: order, createdAt: stamp, updatedAt: stamp,
       ideationMetadata: {
         ideaId: idea.id, bigIdea: idea.big_idea, conceptsToDiscuss: json(idea.discussion_angles, []),

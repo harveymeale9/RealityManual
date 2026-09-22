@@ -8818,3 +8818,16 @@ type selections are preserved. Actual uploaded video files are unchanged:
 their type is still detected automatically from orientation and duration,
 because that classification is based on the real video rather than a planning
 default.
+
+**Follow-up correction:** the first pass changed creation code but left the
+old stored `contentType: "short"` value on existing Kanban cards, so Harvey
+quite reasonably still saw Short throughout the board. An idempotent data
+migration now clears that retired default on non-video cards in Archived,
+Rough Ideas, and Big Ideas while preserving every later-stage type and every
+actual video classification. New records carry
+`contentTypeSelectionExplicit`: choosing a type in the editor sets it true,
+whereas Quick Add and Content Ideation transfers leave it false. The generic
+piece API also rejects an implicit Short sent by an older still-open browser
+tab when creating or overwriting an otherwise-unselected early-stage card, so
+the stale frontend cannot silently undo the correction. A deliberate Short
+selection from the current UI remains Short.

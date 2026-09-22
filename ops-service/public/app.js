@@ -1389,6 +1389,9 @@
     });
     fieldStage.addEventListener('change', function () { clearTimeout(saveTimer); syncFromForm(); });
     fieldContentType.addEventListener('change', function () {
+      if (activeId && pieces[activeId]) {
+        pieces[activeId].contentTypeSelectionExplicit = fieldContentType.value !== '';
+      }
       var preset = PLATFORM_PRESET_BY_TYPE[fieldContentType.value] || [];
       platformGrid.querySelectorAll('.platform-toggle').forEach(function (t) {
         var checked = preset.indexOf(t.dataset.platform) !== -1;
@@ -1784,7 +1787,7 @@
   function createDraft(stageId, closedCb) {
     var id = Store.genId();
     pieces[id] = {
-      id: id, seq: Store.nextSeq(allPiecesArray()), title: '', stage: stageId, platforms: [], contentType: '', notesHtml: '', hasVideo: false,
+      id: id, seq: Store.nextSeq(allPiecesArray()), title: '', stage: stageId, platforms: [], contentType: '', contentTypeSelectionExplicit: false, notesHtml: '', hasVideo: false,
       order: minOrder(stageId) - 10,
       createdAt: nowIso(),
       updatedAt: nowIso()
@@ -1832,6 +1835,7 @@
     var vals = {
       title: fieldTitle.value,
       contentType: fieldContentType.value,
+      contentTypeSelectionExplicit: !!(p && p.contentTypeSelectionExplicit),
       notesHtml: fieldNotes.innerHTML,
       platforms: platforms,
       ytTitles: [fieldYtTitle1.value, fieldYtTitle2.value, fieldYtTitle3.value].filter(function (t) { return t.trim(); })
@@ -3649,6 +3653,7 @@
           platforms: (PLATFORM_PRESET_BY_TYPE[detectedType] || []).slice()
             .filter(function (pl) { return !IS_REVIEWER || pl === 'ytshort' || pl === 'ytlong'; }),
           contentType: detectedType,
+          contentTypeSelectionExplicit: true,
           createdBy: IS_REVIEWER ? 'youtube-reviewer' : undefined,
           // Drives the frame-picker/thumbnail box orientation in the
           // upload row (see buildUploadRowHead/buildUploadRow) — read

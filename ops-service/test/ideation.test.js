@@ -22,6 +22,10 @@ function idea(seed) {
 test('Big Idea queue, verified support, and Ideation-stage transfer work together', async function (t) {
   const db = new Database(':memory:');
   db.exec('CREATE TABLE records(store_name TEXT,id TEXT,data TEXT,updated_at TEXT,PRIMARY KEY(store_name,id))');
+  const seedRecord = db.prepare('INSERT INTO records(store_name,id,data,updated_at) VALUES (?,?,?,?)');
+  seedRecord.run('pieces', 'old-rough-default', JSON.stringify({ id: 'old-rough-default', seq: 1, stage: 'ideation', contentType: 'short', hasVideo: false }), '2026-01-01T00:00:00Z');
+  seedRecord.run('pieces', 'chosen-completed-short', JSON.stringify({ id: 'chosen-completed-short', seq: 2, stage: 'outline_completed', contentType: 'short', hasVideo: false }), '2026-01-01T00:00:00Z');
+  seedRecord.run('pieces', 'real-short-video', JSON.stringify({ id: 'real-short-video', seq: 3, stage: 'processed', contentType: 'short', hasVideo: true }), '2026-01-01T00:00:00Z');
   let generation = 0;
   let generationPrompt = '';
   const profilePrompts = [];
@@ -44,6 +48,13 @@ test('Big Idea queue, verified support, and Ideation-stage transfer work togethe
   };
 
   const service = ideationService.setup(db, { providers: fakeProviders, autoStart: false });
+  const migratedRough = JSON.parse(db.prepare("SELECT data FROM records WHERE store_name='pieces' AND id='old-rough-default'").get().data);
+  const preservedCompleted = JSON.parse(db.prepare("SELECT data FROM records WHERE store_name='pieces' AND id='chosen-completed-short'").get().data);
+  const preservedVideo = JSON.parse(db.prepare("SELECT data FROM records WHERE store_name='pieces' AND id='real-short-video'").get().data);
+  assert.equal(migratedRough.contentType, '');
+  assert.equal(migratedRough.contentTypeSelectionExplicit, false);
+  assert.equal(preservedCompleted.contentType, 'short');
+  assert.equal(preservedVideo.contentType, 'short');
   const app = express();
   app.use(express.json());
   app.use('/api/ideation', service.router);
@@ -115,6 +126,7 @@ test('Big Idea queue, verified support, and Ideation-stage transfer work togethe
   const transfer = await request('/ideas/' + accepted.id + '/transfer', 'POST', {});
   assert.equal(transfer.piece.stage, 'ideation');
   assert.equal(transfer.piece.contentType, '');
+  assert.equal(transfer.piece.contentTypeSelectionExplicit, false);
   assert.deepEqual(transfer.piece.platforms, []);
   assert.match(transfer.piece.notesHtml, /<h3>Big Idea<\/h3>/);
   assert.match(transfer.piece.notesHtml, /Harvey adds one sharper sentence/);

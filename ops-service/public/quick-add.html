@@ -185,7 +185,7 @@
           var id = Store.genId();
           var now = Store.nowIso();
           var piece = {
-            id: id, seq: newSeq, title: title, stage: 'ideation', platforms: [], contentType: '',
+            id: id, seq: newSeq, title: title, stage: 'ideation', platforms: [], contentType: '', contentTypeSelectionExplicit: false,
             notesHtml: textToNotesHtml(text), hasVideo: false,
             order: minOrder - 10, createdAt: now, updatedAt: now
           };
