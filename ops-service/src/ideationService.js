@@ -214,6 +214,24 @@ function setup(db, options) {
     return db.prepare('SELECT * FROM ideation_feedback WHERE id=?').get(id);
   }
 
+  function rejectIdea(idea) {
+    if (idea.status !== 'active') throw new Error('Idea already left the active queue');
+    const stamp = now();
+    db.transaction(function () {
+      db.prepare("UPDATE ideation_ideas SET status='rejected',exit_reason='not_interested',updated_at=? WHERE id=? AND status='active'")
+        .run(stamp, idea.id);
+      addSignal(idea.id, 'not_interested', 1, {
+        bigIdea: idea.big_idea,
+        conceptsToDiscuss: json(idea.discussion_angles, []),
+        verifiedQuotes: json(idea.verified_quotes, []),
+        provider: idea.provider,
+        model: idea.model
+      });
+    })();
+    ensureQueue();
+    enqueue('profile', q.settings.get().selected_provider, 1);
+  }
+
   function capturePipelineSignals() {
     const ranks = ['archived','ideation','big_ideas','outline_started','outline_completed','filmed','edited','uploaded','processed','final_check','scheduled','live'];
     const pieces = new Map(q.pieces.all().map(function (row) { const piece = json(row.data, {}); return [piece.id, piece]; }));
@@ -370,7 +388,7 @@ Return strict JSON only, with no markdown fences or commentary. Provider request
     const rows = q.unprocessedSignals.all();
     if (!rows.length) return;
     const current = json(q.settings.get().preference_profile, DEFAULT_PROFILE);
-    const prompt = `Maintain a compact Big Idea preference profile for Harvey. Treat explicit_feedback as a direct, strong instruction: study both Harvey's words and the idea they refer to, and preserve specific likes, dislikes, corrections, and editorial principles for future generations. Treat manual_rewrite as an equally strong before/after demonstration: infer what changed in framing, simplicity, emphasis, structure, or reasoning rather than merely memorizing the rewritten topic. A curated_big_idea signal means Harvey deliberately created a piece in or moved it into his Big Ideas column, so study the actual example closely: how he framed the premise, how he structured the reasoning, what tension or practical stake he emphasized, and what likely made it worth developing. Learn transferable editorial patterns, not merely topics or phrases. Infer cautiously, but do not dilute an explicit instruction; require repetition only before promoting an inferred one-off choice into a universal preference. Progressing an idea through later pipeline stages is also positive, especially reaching live. Return JSON only with keys summary, likes, avoids, framingPatterns, structurePatterns, selectionRationale; every value except summary must be an array of concise strings. CURRENT=${JSON.stringify(current)} NEW_SIGNALS=${JSON.stringify(rows.map(function (row) { return { type: row.signal_type, strength: row.strength, detail: json(row.detail, {}) }; }))}`;
+    const prompt = `Maintain a compact Big Idea preference profile for Harvey. Treat explicit_feedback as a direct, strong instruction: study both Harvey's words and the idea they refer to, and preserve specific likes, dislikes, corrections, and editorial principles for future generations. Treat manual_rewrite as an equally strong before/after demonstration: infer what changed in framing, simplicity, emphasis, structure, or reasoning rather than merely memorizing the rewritten topic. Treat not_interested as a deliberate strong negative example: study the rejected premise and its supporting angles, infer which transferable framing, scope, structure, reasoning, or subject treatment likely made it unappealing, and add those traits to avoids where warranted. Do not infer a blanket ban on its topic from one rejection; repetition should increase confidence. A curated_big_idea signal means Harvey deliberately created a piece in or moved it into his Big Ideas column, so study the actual example closely: how he framed the premise, how he structured the reasoning, what tension or practical stake he emphasized, and what likely made it worth developing. Learn transferable editorial patterns, not merely topics or phrases. Infer cautiously, but do not dilute an explicit instruction; require repetition only before promoting an inferred one-off choice into a universal preference. Progressing an idea through later pipeline stages is also positive, especially reaching live. Return JSON only with keys summary, likes, avoids, framingPatterns, structurePatterns, selectionRationale; every value except summary must be an array of concise strings. CURRENT=${JSON.stringify(current)} NEW_SIGNALS=${JSON.stringify(rows.map(function (row) { return { type: row.signal_type, strength: row.strength, detail: json(row.detail, {}) }; }))}`;
     const result = await providerEngine.generate(q.settings.get().selected_provider, prompt);
     const profile = extractJson(result.text);
     profile.updatedAt = now();
@@ -508,6 +526,14 @@ Return strict JSON only, with no markdown fences or commentary. Provider request
       if (!idea || idea.status !== 'active') return res.status(404).json({ error: 'not_found' });
       const entry = addFeedback(idea, req.body && req.body.text, req.body && req.body.source);
       res.json({ ok: true, feedback: entry });
+    } catch (error) { res.status(400).json({ error: error.message }); }
+  });
+  router.post('/ideas/:id/reject', function (req, res) {
+    try {
+      const idea = q.idea.get(req.params.id);
+      if (!idea || idea.status !== 'active') return res.status(404).json({ error: 'not_found' });
+      rejectIdea(idea);
+      res.json({ ok: true });
     } catch (error) { res.status(400).json({ error: error.message }); }
   });
   router.post('/ideas/:id/transfer', function (req, res) {

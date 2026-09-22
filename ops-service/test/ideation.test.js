@@ -106,6 +106,13 @@ test('Big Idea queue, verified support, and Ideation-stage transfer work togethe
   assert.equal(ideationService.replaceRuleNumberReferences('Under Rule XIV, compare Rule VIII with Rule X.'), 'Under Rule of Crystallized Emotion, compare Rule of Freedom with Tripartite Rule.');
 
   const accepted = state.ideas[0];
+  const rejected = state.ideas[1];
+  await request('/ideas/' + rejected.id + '/reject', 'POST', {});
+  const rejectedRow = db.prepare('SELECT status,exit_reason FROM ideation_ideas WHERE id=?').get(rejected.id);
+  assert.deepEqual(rejectedRow, { status: 'rejected', exit_reason: 'not_interested' });
+  const rejectedSignal = JSON.parse(db.prepare("SELECT detail FROM ideation_signals WHERE idea_id=? AND signal_type='not_interested'").get(rejected.id).detail);
+  assert.equal(rejectedSignal.bigIdea, rejected.big_idea);
+  assert.deepEqual(rejectedSignal.conceptsToDiscuss, rejected.discussion_angles);
   const directFeedback = await request('/ideas/' + accepted.id + '/feedback', 'POST', { text: 'Keep the reframe broad and remove the niche scenario.', source: 'voice' });
   assert.equal(directFeedback.feedback.source, 'voice');
   assert.match(directFeedback.feedback.text, /remove the niche scenario/);
@@ -154,12 +161,14 @@ test('Big Idea queue, verified support, and Ideation-stage transfer work togethe
   assert.match(latestExample.notes, /later, more complete framing/);
   assert.equal(service.recordBigIdeaPiece(Object.assign({}, curatedPiece, { stage: 'outline_started' }), 'big_ideas'), false);
 
-  state = await waitFor(function (value) { return value.preferenceProfile.signalCount >= 4; });
+  state = await waitFor(function (value) { return value.preferenceProfile.signalCount >= 5; });
   assert.deepEqual(state.preferenceProfile.structurePatterns, ['problem then reframe then stake']);
   assert.equal(profilePrompts.some(function (prompt) { return prompt.indexOf('explicit_feedback as a direct, strong instruction') !== -1 && prompt.indexOf('remove the niche scenario') !== -1; }), true);
+  assert.equal(profilePrompts.some(function (prompt) { return prompt.indexOf('not_interested as a deliberate strong negative example') !== -1 && prompt.indexOf(rejected.big_idea) !== -1; }), true);
 
   state = await waitFor(function (value) { return value.ideas.length === 10; });
   assert.equal(state.ideas.some(function (entry) { return entry.id === accepted.id; }), false);
+  assert.equal(state.ideas.some(function (entry) { return entry.id === rejected.id; }), false);
 
   await request('/provider', 'PUT', { provider: 'claude' });
   assert.equal((await request('/state')).selectedProvider, 'claude');

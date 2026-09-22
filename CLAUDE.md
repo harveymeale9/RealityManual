@@ -8877,3 +8877,29 @@ corresponding text despite curly-quote or whitespace differences, and visibly
 highlights that exact passage on the destination page. A browser test selected
 and copied an excerpt without leaving page 48, then clicked the same result and
 confirmed navigation to page 81 with its complete excerpt highlighted.
+
+---
+
+# 188. “Not Interested” Teaches the Big-Idea Generator (2026-09-22)
+
+Every active card in Content Ideation now has a **Not interested** button next
+to **Send to Rough Ideas**. Choosing it removes the card from the active queue,
+marks the durable idea record `rejected` with the `not_interested` exit reason,
+and immediately generates a replacement so the panel returns to ten ideas.
+
+The dismissal is also a deliberate strong negative learning signal, not merely
+a UI deletion. It stores the rejected Big Idea, its concepts/angles, verified
+quotes, and provider metadata, then queues a preference-profile update. The
+profile worker studies transferable problems in the rejected framing, scope,
+structure, reasoning, or treatment and adds warranted traits to its avoids. It
+is expressly told not to infer a blanket topic ban from one rejection; repeated
+rejections increase confidence. Future generation prompts already consume this
+profile and the rejected catalog, so both taste learning and duplicate
+avoidance apply automatically.
+
+Verification: the integration test proves the status/exit reason, complete
+negative signal, profile-prompt inclusion, replacement generation, and absence
+of the rejected card from active state. The complete Node suite passes 10/10.
+A Chromium test with synthetic API data confirmed the visible button makes one
+reject request, shows the learning status, animates the old card out, and
+renders its replacement without modifying Harvey's production ideas.
