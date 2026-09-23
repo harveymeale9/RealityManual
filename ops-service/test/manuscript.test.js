@@ -101,6 +101,7 @@ test('manuscript reader serves diagram-free spreads and instant persistent seman
   assert.equal(exactPhrase.results[0].page, 91);
   assert.match(exactPhrase.results[0].relevance, /exact phrase/i);
   assert.match(manuscriptSearchIndex.normalized(exactPhrase.results[0].excerpt), /the more of ones life that can be directed toward what one wants/);
+  assert.doesNotMatch(exactPhrase.results[0].excerpt, /\n\s*\n/, 'click-highlight excerpt must stay within one rendered paragraph');
 
   // Exact matching must work even when every word is normally discarded as
   // an FTS stop word; literal lookup is its own path, not a ranking bonus that

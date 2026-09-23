@@ -78,7 +78,7 @@ function exactPhraseExcerpt(text, query) {
     if (excerptEnd - excerptStart > 500) {
       const room = Math.max(0, 500 - (end - start));
       excerptStart = Math.max(excerptStart, start - Math.floor(room / 2));
-      excerptEnd = Math.min(source.length, Math.max(end, excerptStart + 500));
+      excerptEnd = Math.min(paragraphEnd, Math.max(end, excerptStart + 500));
       if (excerptEnd - excerptStart > 500) excerptStart = excerptEnd - 500;
       if (excerptStart > paragraphStart && /\S/.test(source.charAt(excerptStart - 1))) {
         const nextSpace = source.slice(excerptStart, start).search(/\s/);
