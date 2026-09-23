@@ -1050,8 +1050,7 @@ async function runVideoAnalysis(id) {
     latest.transcript = transcript;
     latest.analysisStatus = 'done';
     latest.analysisMatchedPieceId = result.matchedPieceId || '';
-    if (result.titleOptions.length) latest.ytTitles = result.titleOptions;
-    if (result.workingTitle) latest.title = result.workingTitle;
+    videoAnalysis.applyGeneratedTitleSuggestions(latest, result);
     latest.updatedAt = new Date().toISOString();
     savePieceRecord(latest);
     maybeAdvanceToFinalCheck(id);

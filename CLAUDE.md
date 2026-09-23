@@ -9460,3 +9460,40 @@ confirmed there was no legacy thumbnail node, the spinner was visible and both
 controls disabled during load, loading alone did not write a thumbnail, the
 explicit click saved a JPEG data URL and tag while showing the tick, and
 scrubbing reset the prompt. The full ops-service suite remains 26/26.
+
+---
+
+# 206. Manual Production Titles Beat Late Analysis + Live YouTube Stats Audit (2026-09-23)
+
+Harvey typed `demo vid` into Content Production, but Final Check later showed
+the analysis-generated `Are You Ready?`. The title field itself updated both
+`ytTitles[0]` and `piece.title`; the real bug was concurrency. Video analysis
+runs independently and, when it completed after Harvey's edit, unconditionally
+replaced both fields with its generated suggestions. The three-second analysis
+poller also treated those fields as always background-owned, so a stale poll
+response could replace a title currently being typed before its debounced save.
+
+Typing in any production title slot now sets durable
+`ytTitlesManuallyEdited: true`. The analysis worker re-reads the latest piece
+before applying its result and refuses to replace titles carrying that marker.
+The browser poller likewise preserves a locally edited title against an older
+generated response, while still accepting an explicit manual title saved from
+another device. Generated suggestions continue to populate untouched uploads;
+only the user's deliberate choice takes ownership. Regression coverage proves
+both halves: analysis still fills an untouched title, and the identical late
+result cannot replace `demo vid` once manually selected. The full suite is now
+27/27.
+
+The connected YouTube OAuth grant was also tested directly against the live
+YouTube Data API, not inferred from configured scopes. The current
+`youtube.upload` + `youtube.readonly` connection successfully resolved the
+connected channel's uploads playlist and fetched `videos.list` with
+`snippet,statistics` for its ten most recent videos. Returned fields include
+per-video title/publish time, views, likes, and comments; for example the API
+currently reports `Reality Manual Content Studio Demo` at 5 views, 0 likes,
+and 0 comments, and another recent video returned a nonzero like count. The
+existing `fetchVideoStatistics` implementation and weekly report already use
+these fields for pieces that have a stored `youtubeVideoId`. The Content
+Analytics tab remains a placeholder and does not yet display them; watch time,
+retention, and shares require the separate YouTube Analytics API rather than
+the Data API statistics response tested here.

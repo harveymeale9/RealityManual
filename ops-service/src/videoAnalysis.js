@@ -161,4 +161,16 @@ async function matchAndGenerateTitles(transcript, candidates) {
   return parseMatchResult(raw);
 }
 
-module.exports = { transcribeVideo, matchAndGenerateTitles, buildFinalVideo, ensureBrowserCompatibleVideo };
+// Analysis-generated titles are suggestions, never an authority over a title
+// Harvey has typed himself. Analysis and editing run concurrently, so checking
+// this on the freshly re-read record is what closes the race where a late
+// matching result replaced an explicit Content Production choice just before
+// the piece entered Final Check.
+function applyGeneratedTitleSuggestions(piece, result) {
+  if (!piece || piece.ytTitlesManuallyEdited) return piece;
+  if (result && Array.isArray(result.titleOptions) && result.titleOptions.length) piece.ytTitles = result.titleOptions;
+  if (result && result.workingTitle) piece.title = result.workingTitle;
+  return piece;
+}
+
+module.exports = { transcribeVideo, matchAndGenerateTitles, buildFinalVideo, ensureBrowserCompatibleVideo, applyGeneratedTitleSuggestions };

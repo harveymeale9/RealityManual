@@ -3586,6 +3586,10 @@
       input.addEventListener('input', function () {
         var vals = titleInputs.map(function (el) { return el.value; }).filter(function (v) { return v.trim(); });
         p.ytTitles = vals;
+        // Background transcription/title matching can finish while Harvey is
+        // editing this field. Persist an explicit ownership marker so its
+        // late suggestions can never overwrite a deliberate title choice.
+        p.ytTitlesManuallyEdited = true;
         // The kanban card (and everywhere else that shows piece.title)
         // was still showing the raw uploaded filename forever, since this
         // field only ever wrote to ytTitles — Harvey's ask: once a real
@@ -3828,9 +3832,19 @@
           // correctness (refreshUploadRowHeadById is now purely a visual
           // refresh, not a consistency fix).
           if (existing) {
+            var localManualTitles = existing.ytTitlesManuallyEdited === true;
+            var remoteManualTitles = r.ytTitlesManuallyEdited === true;
             ['analysisStatus', 'analysisError', 'analysisMatchedPieceId', 'transcript',
-             'ytTitles', 'title', 'finalBuildStatus', 'finalBuildError', 'stage', 'updatedAt', '_recordVersion'
+             'finalBuildStatus', 'finalBuildError', 'stage', 'updatedAt', '_recordVersion'
             ].forEach(function (k) { if (k in r) existing[k] = r[k]; });
+            // An old poll response containing generated suggestions must not
+            // clobber a title currently being typed. A manual choice from the
+            // server (e.g. another device) is authoritative and may merge.
+            if (!localManualTitles || remoteManualTitles) {
+              if ('ytTitles' in r) existing.ytTitles = r.ytTitles;
+              if ('title' in r) existing.title = r.title;
+            }
+            if (remoteManualTitles) existing.ytTitlesManuallyEdited = true;
             r = existing;
           } else {
             pieces[r.id] = r;
