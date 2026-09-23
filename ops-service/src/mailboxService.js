@@ -39,6 +39,8 @@ function setup(db, options) {
       id TEXT PRIMARY KEY,
       thread_id TEXT NOT NULL,
       provider_id TEXT,
+      internet_message_id TEXT,
+      references_json TEXT NOT NULL DEFAULT '[]',
       direction TEXT NOT NULL,
       status TEXT NOT NULL,
       from_name TEXT,
@@ -70,7 +72,19 @@ function setup(db, options) {
       FOREIGN KEY(message_id) REFERENCES mailbox_messages(id)
     );
     CREATE INDEX IF NOT EXISTS idx_mailbox_attachments_message ON mailbox_attachments(message_id);
+    CREATE TABLE IF NOT EXISTS mailbox_sync_state (
+      id INTEGER PRIMARY KEY CHECK (id=1),
+      uid_validity TEXT NOT NULL DEFAULT '',
+      last_uid INTEGER NOT NULL DEFAULT 0,
+      last_sync_at TEXT,
+      last_error TEXT,
+      updated_at TEXT NOT NULL
+    );
   `);
+  try { db.exec('ALTER TABLE mailbox_messages ADD COLUMN internet_message_id TEXT'); } catch (e) { /* already exists */ }
+  try { db.exec("ALTER TABLE mailbox_messages ADD COLUMN references_json TEXT NOT NULL DEFAULT '[]'"); } catch (e) { /* already exists */ }
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_mailbox_messages_internet_id ON mailbox_messages(internet_message_id) WHERE internet_message_id IS NOT NULL');
+  db.prepare("INSERT OR IGNORE INTO mailbox_sync_state(id,uid_validity,last_uid,updated_at) VALUES(1,'',0,?)").run(now());
 
   const upload = multer({ dest: tempDir, limits: { fileSize: 20 * 1024 * 1024, files: 12 } });
 
@@ -107,6 +121,8 @@ function setup(db, options) {
       threadId: row.thread_id,
       direction: row.direction,
       status: row.status,
+      internetMessageId: row.internet_message_id,
+      references: json(row.references_json, []),
       from: { name: row.from_name || '', email: row.from_email },
       to: json(row.to_json, []),
       cc: json(row.cc_json, []),
@@ -165,9 +181,16 @@ function setup(db, options) {
       const existing = db.prepare('SELECT id FROM mailbox_messages WHERE provider_id=?').get(providerId);
       if (existing) return messageRow(db.prepare('SELECT * FROM mailbox_messages WHERE id=?').get(existing.id));
     }
+    const internetMessageId = clean(input.internetMessageId, 500) || null;
+    if (internetMessageId) {
+      const existing = db.prepare('SELECT id FROM mailbox_messages WHERE internet_message_id=?').get(internetMessageId);
+      if (existing) return messageRow(db.prepare('SELECT * FROM mailbox_messages WHERE id=?').get(existing.id));
+    }
     const stamp = clean(input.receivedAt, 64) || now();
+    const replyTarget = clean(input.inReplyTo, 500);
+    const referenced = replyTarget ? db.prepare('SELECT thread_id FROM mailbox_messages WHERE internet_message_id=?').get(replyTarget) : null;
     const threadId = ensureThread({
-      threadId: input.threadId,
+      threadId: input.threadId || (referenced && referenced.thread_id),
       subject: input.subject,
       participants: input.participants || [{ name: input.fromName || '', email: input.fromEmail || '' }],
       folder: input.folder || 'inbox',
@@ -175,9 +198,9 @@ function setup(db, options) {
     });
     const id = clean(input.id, 128) || crypto.randomUUID();
     db.prepare(`INSERT INTO mailbox_messages
-      (id,thread_id,provider_id,direction,status,from_name,from_email,to_json,cc_json,subject,text_body,html_body,is_read,in_reply_to,created_at,sent_at,received_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(id, threadId, providerId, 'inbound', 'received', clean(input.fromName, 300), clean(input.fromEmail, 500),
+      (id,thread_id,provider_id,internet_message_id,references_json,direction,status,from_name,from_email,to_json,cc_json,subject,text_body,html_body,is_read,in_reply_to,created_at,sent_at,received_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(id, threadId, providerId, internetMessageId, JSON.stringify(input.references || []), 'inbound', 'received', clean(input.fromName, 300), clean(input.fromEmail, 500),
         JSON.stringify(input.to || [mailboxAddress]), JSON.stringify(input.cc || []), clean(input.subject, 500) || '(no subject)',
         clean(input.textBody), clean(input.htmlBody), bool(input.read) ? 1 : 0, clean(input.inReplyTo, 500) || null, stamp, null, stamp);
     (input.attachments || []).forEach(function (file) {
@@ -223,12 +246,50 @@ function setup(db, options) {
     return messageRow(db.prepare('SELECT * FROM mailbox_messages WHERE id=?').get(id));
   }
 
+  let syncingPromise = null;
+  function syncNow() {
+    if (!configured() || typeof transport.sync !== 'function') return Promise.resolve({ configured: configured(), synced: false });
+    if (syncingPromise) return syncingPromise;
+    const row = db.prepare('SELECT * FROM mailbox_sync_state WHERE id=1').get();
+    syncingPromise = Promise.resolve().then(function () {
+      return transport.sync({ uidValidity: row.uid_validity, lastUid: row.last_uid });
+    }).then(function (result) {
+      (result.messages || []).forEach(ingest);
+      const stamp = now();
+      db.prepare('UPDATE mailbox_sync_state SET uid_validity=?,last_uid=?,last_sync_at=?,last_error=NULL,updated_at=? WHERE id=1')
+        .run(String(result.uidValidity || ''), Number(result.lastUid || 0), stamp, stamp);
+      return { configured: true, synced: true, imported: (result.messages || []).length, lastSyncAt: stamp };
+    }).catch(function (error) {
+      const stamp = now();
+      db.prepare('UPDATE mailbox_sync_state SET last_error=?,updated_at=? WHERE id=1').run(clean(error.message, 1000), stamp);
+      console.error('[mailbox] sync failed:', error.message);
+      return { configured: true, synced: false, error: 'mailbox_sync_failed' };
+    }).finally(function () { syncingPromise = null; });
+    return syncingPromise;
+  }
+
   const router = express.Router();
 
   router.get('/status', function (req, res) {
     const unread = db.prepare("SELECT COALESCE(sum(unread_count),0) AS n FROM mailbox_threads WHERE folder='inbox'").get().n;
     const drafts = db.prepare("SELECT count(*) AS n FROM mailbox_messages WHERE status='draft'").get().n;
-    res.json({ address: mailboxAddress, configured: configured(), provider: configured() ? clean(transport.name, 120) || 'connected mailbox' : null, unread: unread, drafts: drafts });
+    const syncState = db.prepare('SELECT last_sync_at,last_error FROM mailbox_sync_state WHERE id=1').get();
+    res.json({
+      address: mailboxAddress,
+      displayName: configured() ? clean(transport.displayName, 200) : 'Reality Manual Support',
+      configured: configured(),
+      connected: configured() && !!syncState.last_sync_at && !syncState.last_error,
+      provider: configured() ? clean(transport.name, 120) || 'connected mailbox' : null,
+      unread: unread,
+      drafts: drafts,
+      lastSyncAt: syncState.last_sync_at,
+      syncError: syncState.last_error ? 'Mailbox connection failed. Check the app password or server settings.' : null
+    });
+  });
+
+  router.post('/sync', async function (req, res) {
+    const result = await syncNow();
+    res.status(result.error ? 502 : 200).json(result);
   });
 
   router.get('/threads', function (req, res) {
@@ -284,10 +345,12 @@ function setup(db, options) {
       const attachments = db.prepare('SELECT * FROM mailbox_attachments WHERE message_id=?').all(draft.id).map(function (row) {
         return { filename: row.file_name, contentType: row.mime_type, path: path.join(attachmentDir, row.storage_name), cid: row.content_id || undefined };
       });
-      const result = await transport.send({ message: draft, attachments: attachments });
+      const replyRow = draft.inReplyTo ? db.prepare('SELECT internet_message_id,references_json FROM mailbox_messages WHERE id=?').get(draft.inReplyTo) : null;
+      const references = replyRow ? json(replyRow.references_json, []).concat(replyRow.internet_message_id || []).filter(Boolean) : [];
+      const result = await transport.send({ message: draft, attachments: attachments, inReplyTo: replyRow && replyRow.internet_message_id, references: references });
       const stamp = now();
-      db.prepare("UPDATE mailbox_messages SET status='sent',sent_at=?,provider_id=? WHERE id=?")
-        .run(stamp, clean(result && result.id, 500) || null, draft.id);
+      db.prepare("UPDATE mailbox_messages SET status='sent',sent_at=?,internet_message_id=?,references_json=? WHERE id=?")
+        .run(stamp, clean(result && result.id, 500) || null, JSON.stringify(references), draft.id);
       db.prepare("UPDATE mailbox_threads SET folder='sent',updated_at=? WHERE id=? AND NOT EXISTS (SELECT 1 FROM mailbox_messages WHERE thread_id=? AND direction='inbound')")
         .run(stamp, draft.threadId, draft.threadId);
       refreshThread(draft.threadId);
@@ -305,7 +368,14 @@ function setup(db, options) {
     res.sendFile(filePath);
   });
 
-  return { router: router, ingest: ingest, configured: configured };
+  let syncTimer = null;
+  if (configured() && typeof transport.sync === 'function' && options.autoSync !== false) {
+    setImmediate(syncNow);
+    syncTimer = setInterval(syncNow, Number(options.syncIntervalMs) || 60000);
+    if (syncTimer.unref) syncTimer.unref();
+  }
+
+  return { router: router, ingest: ingest, configured: configured, syncNow: syncNow, close: function () { if (syncTimer) clearInterval(syncTimer); } };
 }
 
 module.exports = { setup: setup };

@@ -114,3 +114,40 @@ test('configured transport sends a stored message and exposes it in Sent', async
   const sentResponse = await fetch('http://127.0.0.1:' + server.address().port + '/api/mailbox/threads?folder=sent');
   assert.equal((await sentResponse.json()).threads.length, 1);
 });
+
+test('mailbox sync imports provider messages and reports connection health', async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-mailbox-sync-'));
+  const db = new Database(':memory:');
+  let syncCalls = 0;
+  const service = mailboxService.setup(db, {
+    dataDir: dir,
+    autoSync: false,
+    transport: {
+      name: 'Namecheap Private Email', displayName: 'Reality Manual Support',
+      send: async function () { return { id: 'unused' }; },
+      sync: async function (state) {
+        syncCalls++;
+        assert.equal(state.lastUid, 0);
+        return { uidValidity: '44', lastUid: 9, messages: [{
+          providerId: 'namecheap:44:9', internetMessageId: '<nine@example.com>',
+          fromName: 'Reader', fromEmail: 'reader@example.com', to: ['info@realitymanual.com'],
+          subject: 'Hello', textBody: 'A synced message', receivedAt: '2026-09-23T10:00:00Z'
+        }] };
+      }
+    }
+  });
+  const app = express(); app.use(express.json()); app.use('/api/mailbox', service.router);
+  const server = app.listen(0);
+  t.after(function () { service.close(); server.close(); db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+  const base = 'http://127.0.0.1:' + server.address().port + '/api/mailbox';
+  let response = await fetch(base + '/sync', { method: 'POST' });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).imported, 1);
+  response = await fetch(base + '/status');
+  const status = await response.json();
+  assert.equal(status.connected, true);
+  assert.equal(status.provider, 'Namecheap Private Email');
+  assert.equal(status.displayName, 'Reality Manual Support');
+  assert.equal(status.unread, 1);
+  assert.equal(syncCalls, 1);
+});

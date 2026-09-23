@@ -9035,3 +9035,46 @@ Shift+Enter remains available for an intentional multiline query, and IME
 composition confirmation is left untouched. The behavior calls the form's
 normal `requestSubmit()` path, so button clicks and keyboard searches share
 the same validation, loading state, API request, and result rendering.
+
+---
+
+# 193. Namecheap Private Email Connector for the Customer Mailbox (2026-09-23)
+
+The Mailbox shell from §191 now has its real provider implementation. DNS
+identifies `info@realitymanual.com` as Namecheap Private Email, so the service
+uses the provider's standard encrypted endpoints: IMAP at
+`mail.privateemail.com:993` and SMTP at `mail.privateemail.com:465`, both TLS.
+`src/namecheapMailbox.js` is the isolated adapter, using ImapFlow for receipt,
+MailParser for MIME bodies/attachments, and Nodemailer for delivery. The From
+identity is **Reality Manual Support <info@realitymanual.com>**.
+
+Incoming mail is pulled once at service startup, once per minute thereafter,
+and immediately when the Mailbox Refresh control is used. The first connection
+imports at most the newest 250 Inbox messages (configurable), then stores the
+mailbox UID validity and highest UID so later passes fetch only new mail.
+Provider UID plus RFC Message-ID deduplication makes retries/restarts safe.
+In-Reply-To/References headers map replies into the existing conversation, and
+incoming files/inline images are persisted through §191's attachment store.
+Outgoing replies preserve those same threading headers; rich HTML, plain text,
+ordinary attachments, and CID-embedded images pass through SMTP.
+
+Connection state is explicit: configured-but-not-yet-synced reads “Connecting,”
+a failed IMAP connection produces a useful non-secret error in the UI, and a
+successful sync marks Namecheap connected with a timestamp. `POST
+/api/mailbox/sync` is authenticated/admin-only like the rest of the mailbox.
+The adapter remains completely disabled when `MAILBOX_APP_PASSWORD` is absent;
+it does not partially attempt anonymous connections.
+
+All settings are documented in `.env.example`. The app password is deliberately
+not committed, printed, or copied by an agent: Harvey must enter it directly in
+the VPS's gitignored `/root/realitymanual-repo/ops-service/.env`, after which
+the container must be recreated so `--env-file` loads it. Defaults already
+cover address, display name, hosts, ports, and TLS, so the password is the only
+required secret.
+
+Verification before the real credential: 17/17 Node tests pass. The provider
+test uses a wholly synthetic password and fake IMAP/SMTP boundaries to prove
+UID incremental fetch, MIME/address/inline-attachment mapping, reply headers,
+SMTP delivery, and the exact From identity. Mailbox integration coverage proves
+sync ingestion and connected status. A real provider login/send test remains
+deliberately pending until Harvey performs the raw-credential environment step.

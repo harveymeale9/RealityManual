@@ -112,6 +112,11 @@ if [ -n "$LAST_BUILD_COMMIT" ] && git cat-file -e "${LAST_BUILD_COMMIT}^{commit}
   fi
 fi
 
+if [ "${FORCE_RECREATE:-0}" = "1" ]; then
+  echo "FORCE_RECREATE=1 — rebuilding/recreating even though the current commit may already be live"
+  NEEDS_REBUILD=1
+fi
+
 if [ "$NEEDS_REBUILD" = "0" ]; then
   echo "no backend changes between $LAST_BUILD_COMMIT and $NEW_HEAD — already live via git pull, skipping rebuild/restart"
   exit 0

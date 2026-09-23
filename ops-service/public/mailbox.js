@@ -80,8 +80,10 @@
   function renderConnection() {
     if (!root || !state.status) return;
     var el = root.querySelector('#mailConnection');
-    el.textContent = state.status.configured ? 'Connected · ' + state.status.provider : 'Connection details needed';
-    el.classList.toggle('connected', !!state.status.configured);
+    if (!state.status.configured) el.textContent = 'Connection details needed';
+    else if (state.status.connected) el.textContent = 'Connected · ' + state.status.provider;
+    else el.textContent = state.status.syncError || 'Connecting to ' + state.status.provider + '…';
+    el.classList.toggle('connected', !!state.status.connected);
     root.querySelector('#mailInboxCount').textContent = state.status.unread || '';
     root.querySelector('#mailDraftCount').textContent = state.status.drafts || '';
   }
@@ -118,6 +120,16 @@
       if (state.selected && !state.threads.some(function (thread) { return thread.id === state.selected; })) state.selected = null;
       renderThreads();
     }).catch(function () { root.querySelector('#mailThreadList').innerHTML = '<div class="mail-error">Could not load the mailbox.</div>'; });
+  }
+  function syncMailbox() {
+    var button = root && root.querySelector('#mailRefresh');
+    if (button) button.disabled = true;
+    return api('/sync', { method: 'POST' }).catch(function () {}).then(function () {
+      return refreshStatus();
+    }).then(function () {
+      renderConnection();
+      return loadThreads();
+    }).finally(function () { if (button) button.disabled = false; });
   }
   function messageBody(message) {
     var body = message.textBody || String(message.htmlBody || '').replace(/<[^>]+>/g, ' ');
@@ -256,7 +268,7 @@
     root.querySelector('#mailCompose').addEventListener('click', function () { openComposer(false, false); });
     root.querySelector('#mailComposeClose').addEventListener('click', closeComposer);
     root.querySelector('#mailComposer').addEventListener('click', function (event) { if (event.target === event.currentTarget) closeComposer(); });
-    root.querySelector('#mailRefresh').addEventListener('click', function () { refreshStatus().then(renderConnection); loadThreads(); });
+    root.querySelector('#mailRefresh').addEventListener('click', syncMailbox);
     root.querySelector('.mail-folders nav').addEventListener('click', function (event) { var button = event.target.closest('[data-folder]'); if (!button) return; state.folder = button.dataset.folder; state.selected = null; state.detail = null; root.querySelector('.mail-app').classList.remove('thread-open'); root.querySelector('#mailReading').innerHTML = '<div class="mail-reading-empty"><span>✉</span><strong>Select a conversation</strong></div>'; loadThreads(); });
     var searchTimer;
     root.querySelector('#mailSearch').addEventListener('input', function (event) { clearTimeout(searchTimer); state.query = event.target.value; searchTimer = setTimeout(loadThreads, 180); });
@@ -277,7 +289,10 @@
     state.folder = 'inbox'; state.query = ''; state.threads = []; state.selected = null; state.detail = null;
     root.innerHTML = SHELL;
     bind();
-    refreshStatus().then(function () { renderConnection(); return loadThreads(); });
+    refreshStatus().then(function (status) {
+      renderConnection();
+      return status && status.configured ? syncMailbox() : loadThreads();
+    });
   }
 
   window.RMMailbox = { mount: mount, startBadgePolling: startBadgePolling };

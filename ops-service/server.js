@@ -21,6 +21,7 @@ const tiktokAuth = require('./src/tiktokAuth');
 const ideationService = require('./src/ideationService');
 const manuscriptService = require('./src/manuscriptService');
 const mailboxService = require('./src/mailboxService');
+const namecheapMailbox = require('./src/namecheapMailbox');
 const agentUsage = require('./src/agentUsage');
 const recordConcurrency = require('./src/recordConcurrency');
 
@@ -406,7 +407,12 @@ app.use('/api/manuscript', requireAuth, manuscript.router);
 // Admin-only mailbox shell. Its durable local store/UI are usable before a
 // mail provider is chosen; the transport itself is deliberately injected
 // later so mailbox credentials never enter the browser or repository.
-const mailbox = mailboxService.setup(db, { dataDir: DATA_DIR, address: process.env.MAILBOX_ADDRESS || 'info@realitymanual.com' });
+const mailboxTransport = namecheapMailbox.fromEnv(process.env);
+const mailbox = mailboxService.setup(db, {
+  dataDir: DATA_DIR,
+  address: process.env.MAILBOX_ADDRESS || 'info@realitymanual.com',
+  transport: mailboxTransport
+});
 app.use('/api/mailbox', requireAuth, mailbox.router);
 
 // --- YouTube OAuth (Google) — see src/youtubeAuth.js for the token
