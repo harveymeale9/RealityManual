@@ -9349,3 +9349,33 @@ canonical pages: none retained hidden overflow and none needed the emergency
 per-page scrollbar. It also clicked all eight results for the reproduced
 belief/meaning search; every card produced exactly one visible highlight,
 including pages 34 and 35 from Harvey's screenshot.
+
+---
+
+# 203. Durable, Credit-Aware Background Waiters (2026-09-23)
+
+Project Manager can now continue authorized work after an external condition
+becomes ready without Harvey sending another message. `backgroundMonitorService`
+persists watchers in SQLite and supports GitHub release assets, HTTPS status/body
+conditions, stable files under `/data`, and scheduled times. Its 30-second probes
+are deterministic and consume no Claude/Codex allowance. When a condition is
+met, it creates a normal durable Project Manager queue row with the saved
+continuation prompt, so the selected agent resumes the work through the existing
+runner, cross-device thread, activity, and restart-recovery mechanisms.
+
+Agent turns register watchers with the host-side
+`ops-service/scripts/register-monitor.js`; it atomically drops a validated JSON
+request into `/root/ops-service-data/monitor-requests`, the host view of the
+existing `/data` bind mount. This avoids an internal bearer credential or Docker
+socket. The system prompt now explicitly instructs both agents to register a
+watcher instead of asking Harvey to nudge them when only an observable external
+condition remains, but forbids doing so when human input, approval, or a scope
+decision is still required.
+
+Before waking an agent, the watcher reads the existing normalized subscription
+usage service. If the selected provider's weekly remaining percentage is below
+the monitor's reserve (15% by default), it enters `paused_credits` and keeps
+polling without invoking the model; it resumes automatically after allowance
+recovers. Watchers expire after seven days by default, claim themselves before
+queueing to prevent duplicate turns, and survive service restarts. Authenticated
+list, manual-check, and cancel routes live under `/api/voice/monitors`.

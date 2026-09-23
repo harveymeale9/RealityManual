@@ -28,6 +28,7 @@ const weeklyReportService = require('./src/weeklyReportService');
 const diskMonitorService = require('./src/diskMonitorService');
 const agentUsage = require('./src/agentUsage');
 const recordConcurrency = require('./src/recordConcurrency');
+const backgroundMonitorService = require('./src/backgroundMonitorService');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
@@ -1412,6 +1413,15 @@ const VOICE_SYSTEM_PROMPT =
   'item verbatim — each item should be a short, plain-language summary of what that step ' +
   'accomplishes (e.g. "Check recent order errors in the ops panel"), the same way you would ' +
   'title a task for a colleague, not a transcript of what he said.\n\n' +
+  'Deferred external conditions: if an authorized task is blocked only because an observable ' +
+  'upload, URL, file, or time condition is not ready yet, do not end by asking Harvey to come ' +
+  'back and nudge you. Register a durable watcher with `ops-service/scripts/register-monitor.js ' +
+  '--help`, giving it a precise continuation prompt containing the remaining work and finish ' +
+  'line. Watchers poll deterministically without agent credits, persist across restarts, and ' +
+  'wake the selected agent automatically when ready. Only use one when the continuation is ' +
+  'already authorized and no human judgment/input is still required. Never use it to broaden ' +
+  'scope or bypass approval. The watcher automatically pauses agent wake-up when weekly usage ' +
+  'is below its configured reserve.\n\n' +
   'Host access: you are running inside the rm-ops-service Docker container, which only ' +
   'contains this one service — for anything outside it (managing other Docker containers ' +
   'including rebuilding/redeploying this very one, nginx, systemd, or anything else on the ' +
@@ -1662,6 +1672,40 @@ async function processVoiceMessage(id, mode, text, agent, imagePath) {
   // when nobody has the dashboard open.
   agentUsage.invalidate();
 }
+
+// Durable, credit-aware wait/continue loop. Deterministic probes consume no
+// model allowance; only a satisfied condition queues a normal Project Manager
+// turn, which then uses the same durable runner/recovery path as Harvey's own
+// messages. Agent-written request files cross the existing /data bind mount,
+// avoiding another credential or a privileged internal HTTP endpoint.
+const backgroundMonitors = backgroundMonitorService.setup(db, {
+  enabled: process.env.BACKGROUND_MONITORS_ENABLED !== 'false',
+  requestDir: process.env.BACKGROUND_MONITOR_REQUEST_DIR || path.join(DATA_DIR, 'monitor-requests'),
+  intervalMs: Number(process.env.BACKGROUND_MONITOR_INTERVAL_MS || 30000),
+  getUsage: function (options) { return agentUsage.getUsage(options); },
+  enqueueContinuation: async function (item) {
+    const id = crypto.randomBytes(16).toString('hex');
+    const stamp = new Date().toISOString();
+    const resultText = JSON.stringify(item.result || {}).slice(0, 2000);
+    const transcript = '[Automatic continuation — ' + item.title + '] The watched condition is now satisfied. Resume the previously authorized work without waiting for another message from Harvey.';
+    const prompt = transcript + '\n\nCondition result: ' + resultText + '\n\nRemaining task and finish line:\n' + item.prompt;
+    stmts.insertVoiceMessage.run(id, 'execute', transcript, 'pending', stamp, null, normalizeVoiceAgent(item.agent));
+    voiceQueue.push({ id: id, mode: 'execute', text: prompt, agent: normalizeVoiceAgent(item.agent), imagePath: null, uploadPath: null });
+    drainVoiceQueue();
+    return id;
+  }
+});
+
+app.get('/api/voice/monitors', function (req, res) {
+  res.json({ enabled: backgroundMonitors.enabled, monitors: backgroundMonitors.list() });
+});
+app.post('/api/voice/monitors/check', async function (req, res) {
+  try { res.json({ results: await backgroundMonitors.checkDue() }); }
+  catch (error) { res.status(502).json({ error: 'monitor_check_failed', message: String(error.message || error).slice(0, 300) }); }
+});
+app.post('/api/voice/monitors/:id/cancel', function (req, res) {
+  res.status(backgroundMonitors.cancel(req.params.id) ? 200 : 404).json({ ok: true });
+});
 
 // Images pasted/dropped/attached into the chat (desktop paste-and-drop,
 // mobile's attach button) — multipart so a text field and an optional
