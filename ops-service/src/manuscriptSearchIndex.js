@@ -3,7 +3,7 @@
 const crypto = require('crypto');
 const doctrine = require('./ideationDoctrine');
 
-const INDEX_VERSION = 'semantic-fts-v4-exact-phrases';
+const INDEX_VERSION = 'semantic-fts-v5-highlight-safe-phrases';
 const STOP_WORDS = new Set(['a','an','and','are','as','at','be','but','by','do','does','for','from','had','has','have','how','i','if','in','is','it','me','my','of','on','or','our','should','so','that','the','their','there','they','this','to','was','we','what','when','where','which','who','why','will','with','you','your']);
 
 const TOPICS = [
