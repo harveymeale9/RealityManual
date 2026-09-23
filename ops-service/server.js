@@ -202,7 +202,7 @@ const stmts = {
   setVoiceEarlyAck: db.prepare('UPDATE voice_messages SET early_ack = ? WHERE id = ?'),
   finishVoiceMessage: db.prepare('UPDATE voice_messages SET status = ?, reply_text = ?, error_message = ?, completed_at = ? WHERE id = ?'),
   getVoiceMessage: db.prepare('SELECT * FROM voice_messages WHERE id = ?'),
-  listVoiceMessages: db.prepare('SELECT * FROM voice_messages ORDER BY created_at DESC LIMIT ?'),
+  listVoiceMessages: db.prepare("SELECT * FROM voice_messages WHERE notification_kind!='superseded_mail_alert' ORDER BY created_at DESC LIMIT ?"),
   countUnreadVoiceNotifications: db.prepare("SELECT count(*) AS n FROM voice_messages WHERE notification_kind='mail_alert' AND notification_unread=1"),
   listUnreadVoiceNotificationIds: db.prepare("SELECT id FROM voice_messages WHERE notification_kind='mail_alert' AND notification_unread=1 ORDER BY created_at DESC LIMIT 100"),
   markVoiceNotificationRead: db.prepare("UPDATE voice_messages SET notification_unread=0 WHERE id=? AND notification_kind='mail_alert'"),
@@ -224,13 +224,13 @@ const stmts = {
     'ON CONFLICT(id) DO UPDATE SET selected_agent = excluded.selected_agent, updated_at = excluded.updated_at'
   ),
   getLastAgentMessageBefore: db.prepare(
-    "SELECT created_at FROM voice_messages WHERE agent = ? AND id != ? AND status IN ('done','error') AND created_at < ? ORDER BY created_at DESC LIMIT 1"
+    "SELECT created_at FROM voice_messages WHERE notification_kind='conversation' AND agent = ? AND id != ? AND status IN ('done','error') AND created_at < ? ORDER BY created_at DESC LIMIT 1"
   ),
   listOtherAgentMessagesSince: db.prepare(
-    "SELECT agent, transcript, reply_text, created_at FROM voice_messages WHERE agent != ? AND status = 'done' AND created_at > ? AND created_at < ? ORDER BY created_at ASC LIMIT 12"
+    "SELECT agent, transcript, reply_text, created_at FROM voice_messages WHERE notification_kind='conversation' AND agent != ? AND status = 'done' AND created_at > ? AND created_at < ? ORDER BY created_at ASC LIMIT 12"
   ),
   listRecentOtherAgentMessages: db.prepare(
-    "SELECT agent, transcript, reply_text, created_at FROM voice_messages WHERE agent != ? AND status = 'done' AND created_at < ? ORDER BY created_at DESC LIMIT 12"
+    "SELECT agent, transcript, reply_text, created_at FROM voice_messages WHERE notification_kind='conversation' AND agent != ? AND status = 'done' AND created_at < ? ORDER BY created_at DESC LIMIT 12"
   ),
   getYoutubeAuth: db.prepare('SELECT * FROM youtube_oauth WHERE id = 1'),
   upsertYoutubeAuth: db.prepare(

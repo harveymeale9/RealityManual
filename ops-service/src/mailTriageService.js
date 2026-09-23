@@ -25,6 +25,15 @@ function plainBody(row) {
   if (text) return text;
   return clean(String(row.html_body || '').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '), 16000);
 }
+function topicKey(row) {
+  // Full address, not merely the domain: two unrelated Gmail customers can
+  // easily send the same generic subject and must never share an alert.
+  const sender = clean(row.from_email, 500).toLowerCase();
+  const subject = clean(row.subject, 1000).toLowerCase()
+    .replace(/^\s*((re|fw|fwd)\s*:\s*)+/i, '')
+    .replace(/\s+/g, ' ').replace(/[^a-z0-9 ]/g, '').trim();
+  return crypto.createHash('sha256').update(sender + '\n' + subject).digest('hex').slice(0, 40);
+}
 function forceImportant(row) {
   const sender = clean(row.from_email, 500).toLowerCase();
   const haystack = (clean(row.subject, 1000) + ' ' + plainBody(row).slice(0, 5000)).toLowerCase();
@@ -78,17 +87,49 @@ function setup(db, options) {
     CREATE TABLE IF NOT EXISTS mail_triage (
       message_id TEXT PRIMARY KEY, status TEXT NOT NULL, important INTEGER,
       category TEXT, summary TEXT, action_required INTEGER, suggested_next_step TEXT,
-      reason TEXT, attempts INTEGER NOT NULL DEFAULT 0, alert_message_id TEXT,
+      reason TEXT, attempts INTEGER NOT NULL DEFAULT 0, alert_message_id TEXT, topic_key TEXT,
       last_error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, processed_at TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_mail_triage_status ON mail_triage(status,updated_at);
+    CREATE TABLE IF NOT EXISTS mail_alert_topics (
+      topic_key TEXT PRIMARY KEY, alert_message_id TEXT NOT NULL,
+      latest_mail_message_id TEXT NOT NULL, updated_at TEXT NOT NULL
+    );
   `);
+  try { db.exec('ALTER TABLE mail_triage ADD COLUMN topic_key TEXT'); } catch (error) { /* already exists */ }
+
+  // Backfill/consolidate the first release's one-card-per-email history.
+  // Keep the newest important status for each sender+canonical-subject topic
+  // and hide older intermediate cards (e.g. received -> reviewing -> needs
+  // info -> approved) from the chat and unread count.
+  const historical = db.prepare(`SELECT t.*,m.from_email,m.subject,m.created_at AS mail_created_at
+    FROM mail_triage t JOIN mailbox_messages m ON m.id=t.message_id
+    WHERE t.status='done' ORDER BY m.created_at ASC`).all();
+  const groups = {};
+  historical.forEach(function (row) {
+    const key = row.topic_key || topicKey(row);
+    if (!row.topic_key) db.prepare('UPDATE mail_triage SET topic_key=? WHERE message_id=?').run(key, row.message_id);
+    if (row.important && row.alert_message_id) (groups[key] || (groups[key] = [])).push(row);
+  });
+  db.transaction(function () {
+    Object.keys(groups).forEach(function (key) {
+      const rows = groups[key];
+      const latest = rows[rows.length - 1];
+      rows.slice(0, -1).forEach(function (row) {
+        db.prepare("UPDATE voice_messages SET notification_kind='superseded_mail_alert',notification_unread=0 WHERE id=?").run(row.alert_message_id);
+      });
+      db.prepare(`INSERT INTO mail_alert_topics(topic_key,alert_message_id,latest_mail_message_id,updated_at)
+        VALUES(?,?,?,?) ON CONFLICT(topic_key) DO UPDATE SET alert_message_id=excluded.alert_message_id,
+        latest_mail_message_id=excluded.latest_mail_message_id,updated_at=excluded.updated_at`)
+        .run(key, latest.alert_message_id, latest.message_id, latest.updated_at);
+    });
+  })();
 
   const claim = db.prepare(`INSERT INTO mail_triage(message_id,status,attempts,created_at,updated_at)
     VALUES(?,'running',1,?,?) ON CONFLICT(message_id) DO UPDATE SET
     status='running',attempts=mail_triage.attempts+1,last_error=NULL,updated_at=excluded.updated_at`);
   const finish = db.prepare(`UPDATE mail_triage SET status='done',important=?,category=?,summary=?,
-    action_required=?,suggested_next_step=?,reason=?,alert_message_id=?,last_error=NULL,processed_at=?,updated_at=? WHERE message_id=?`);
+    action_required=?,suggested_next_step=?,reason=?,alert_message_id=?,topic_key=?,last_error=NULL,processed_at=?,updated_at=? WHERE message_id=?`);
   const fail = db.prepare("UPDATE mail_triage SET status='error',last_error=?,updated_at=? WHERE message_id=?");
 
   function candidates(limit) {
@@ -110,22 +151,31 @@ function setup(db, options) {
     const nextStep = clean(result.suggestedNextStep, 1000) || (actionRequired ? 'Open the mailbox and review it.' : 'No action needed right now.');
     const reason = clean(result.reason, 1000);
     const stamp = new Date().toISOString();
-    const existingAlert = db.prepare("SELECT id FROM voice_messages WHERE notification_kind='mail_alert' AND source_ref=?").get(row.id);
-    const alertId = important ? (existingAlert && existingAlert.id || crypto.randomBytes(16).toString('hex')) : null;
+    const key = topicKey(row);
+    const existingTopic = important ? db.prepare('SELECT alert_message_id FROM mail_alert_topics WHERE topic_key=?').get(key) : null;
+    const alertId = important ? (existingTopic && existingTopic.alert_message_id || crypto.randomBytes(16).toString('hex')) : null;
+    const rendered = important ? alertText(row, {
+      category: category, summary: summary, actionRequired: actionRequired, suggestedNextStep: nextStep
+    }) : null;
     db.transaction(function () {
       db.prepare("UPDATE mailbox_messages SET is_read=1 WHERE id=? AND direction='inbound'").run(row.id);
       db.prepare(`UPDATE mailbox_threads SET folder='archive',
         unread_count=(SELECT count(*) FROM mailbox_messages WHERE thread_id=? AND direction='inbound' AND is_read=0),
         updated_at=? WHERE id=?`).run(row.thread_id, stamp, row.thread_id);
-      if (important && !existingAlert) {
+      if (important && existingTopic) {
+        db.prepare(`UPDATE voice_messages SET transcript=?,reply_text=?,created_at=?,completed_at=?,
+          notification_kind='mail_alert',notification_unread=1,source_ref=? WHERE id=?`)
+          .run('Email: ' + (clean(row.subject, 400) || '(no subject)'), rendered, stamp, stamp, row.id, alertId);
+        db.prepare('UPDATE mail_alert_topics SET latest_mail_message_id=?,updated_at=? WHERE topic_key=?').run(row.id, stamp, key);
+      } else if (important) {
         db.prepare(`INSERT INTO voice_messages
           (id,mode,transcript,status,reply_text,created_at,completed_at,agent,notification_kind,notification_unread,source_ref)
           VALUES(?,'notification',?,'done',?,?,?,?, 'mail_alert',1,?)`)
-          .run(alertId, 'Email: ' + (clean(row.subject, 400) || '(no subject)'), alertText(row, {
-            category: category, summary: summary, actionRequired: actionRequired, suggestedNextStep: nextStep
-          }), stamp, stamp, 'claude', row.id);
+          .run(alertId, 'Email: ' + (clean(row.subject, 400) || '(no subject)'), rendered, stamp, stamp, 'claude', row.id);
+        db.prepare('INSERT INTO mail_alert_topics(topic_key,alert_message_id,latest_mail_message_id,updated_at) VALUES(?,?,?,?)')
+          .run(key, alertId, row.id, stamp);
       }
-      finish.run(important ? 1 : 0, category, summary, actionRequired ? 1 : 0, nextStep, reason, alertId, stamp, stamp, row.id);
+      finish.run(important ? 1 : 0, category, summary, actionRequired ? 1 : 0, nextStep, reason, alertId, key, stamp, stamp, row.id);
     })();
     return { messageId: row.id, important: important, alertMessageId: alertId, archived: true };
   }
@@ -176,4 +226,4 @@ function setup(db, options) {
   return { enabled: enabled, processPending: processPending, status: status, close: function () { if (timer) clearInterval(timer); } };
 }
 
-module.exports = { setup: setup, TRIAGE_SCHEMA: TRIAGE_SCHEMA, promptFor: promptFor, forceImportant: forceImportant, alertText: alertText };
+module.exports = { setup: setup, TRIAGE_SCHEMA: TRIAGE_SCHEMA, promptFor: promptFor, forceImportant: forceImportant, alertText: alertText, topicKey: topicKey };

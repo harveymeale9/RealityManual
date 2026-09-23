@@ -305,6 +305,15 @@
       function refreshAlertCount() {
         return Voice.getNotificationStatus().then(function (data) { updateAlertCount(data.unread); return data; }).catch(function () {});
       }
+      function syncVisibleMailAlerts(rows) {
+        var active = {};
+        rows.forEach(function (row) {
+          if (row.notification_kind === 'mail_alert') active[row.id] = true;
+        });
+        thread.querySelectorAll('.pm-msg-assistant--mail-alert[data-msg-id]').forEach(function (el) {
+          if (!active[el.dataset.msgId]) el.remove();
+        });
+      }
       alertButton.addEventListener('click', function () {
         var unread = thread.querySelector('.pm-msg-assistant--mail-alert.pm-msg-notification-unread');
         if (unread) unread.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -707,7 +716,16 @@
               if (row.agent !== 'codex') Voice.speak(row.error_message || 'Something went wrong.', row.id, row.agent).catch(function () {});
             }
           },
+          onUpdate: function (row) {
+            if (row.notification_kind !== 'mail_alert') return;
+            var existing = thread.querySelector('.pm-msg-assistant--mail-alert[data-msg-id="' + row.id + '"]');
+            addAssistantMessage(row.reply_text || '', null, row.id, existing, row.agent, row.notification_kind, !!row.notification_unread);
+            if (existing) existing.remove();
+            if (pastFirstTick && row.notification_unread && Voice.isActiveHere()) Voice.playPing();
+            refreshAlertCount();
+          },
           onTick: function (rows) {
+            syncVisibleMailAlerts(rows);
             renderQueue(rows);
             pastFirstTick = true;
             refreshAgentPreference();

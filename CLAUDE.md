@@ -9230,13 +9230,25 @@ TikTok API-review decisions and serious Stripe/BookVault/Namecheap/GitHub
 operational notices. A synthetic live call through the production Claude SDK
 proved schema output works with zero tools exposed.
 
-Important messages create one idempotent `mail_alert` row in the existing
-`voice_messages` timeline. Desktop and `/voice-mobile.html` render that row as a
-single warm coral **Mailbox alert** card—not as a fake Harvey message plus a
-Claude reply, and not in the Task List. The card gives sender/subject, the facts
-that matter, and an explicit action or “No action needed right now,” with Play,
-Reply, and Open Mailbox controls. A unique source-message index prevents retries
-or service restarts from duplicating alerts.
+Important messages create a living `mail_alert` row in the existing
+`voice_messages` timeline. Alerts are grouped by sender address plus canonical
+conversation subject (ignoring `Re:`/`Fwd:`), so a thread's later reply replaces
+its earlier status in the same card and marks that card unread again rather than
+stacking one notification per email. The first release's existing per-message
+history is consolidated on startup: only the newest current status remains
+visible and older intermediate cards are retained as hidden superseded history.
+This is deliberately per conversation/topic—not one global mailbox card—so an
+unrelated customer problem or security warning still gets its own alert.
+
+Desktop and `/voice-mobile.html` render each current topic as a single warm coral
+**Mailbox alert** card—not as a fake Harvey message plus a Claude reply, and not
+in the Task List. The card gives sender/subject, the facts that matter, and an
+explicit action or “No action needed right now,” with Play, Reply, and Open
+Mailbox controls. Their shared poller recognizes in-place alert updates and
+replaces the visible card on an already-open device; it also removes any card
+that became superseded after a backend restart/migration. Mail notifications are
+excluded from the normal Claude/Codex cross-agent context bridge so they do not
+pollute future Project Manager turns.
 
 Unread mail alerts have a separate durable read state and authenticated count/
 mark-read APIs. Both Project Manager interfaces show a numbered envelope badge;
@@ -9248,7 +9260,8 @@ in-app number as the reliable cross-browser fallback.
 Verification: the full Node suite passes 22/22. Integration coverage proves all
 successfully digested mail is archived, only important mail creates an alert,
 YouTube approval is force-protected even if model classification is false,
-reprocessing is idempotent, and a classifier outage leaves the original email
-untouched in Inbox. Headless Chromium at 390×844 and 1440×900 proved the coral
-single-card rendering, unread `1` badge, mark-read behavior, no fake user bubble,
-no Task List pollution, and no viewport overflow.
+a related follow-up updates the same durable alert row, reprocessing is
+idempotent, and a classifier outage leaves the original email untouched in
+Inbox. Headless Chromium at 390×844 and 1440×900 proved the coral single-card
+rendering, unread `1` badge, mark-read behavior, no fake user bubble, no Task List
+pollution, and no viewport overflow.

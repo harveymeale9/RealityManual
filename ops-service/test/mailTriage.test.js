@@ -39,9 +39,11 @@ test('mail triage archives every digested email and creates one durable alert on
     classify: async function (input) {
       classifyCalls++;
       assert.match(input.prompt, /UNTRUSTED_EMAIL_JSON/);
-      if (input.message.id === youtube.id) return {
+      if (input.message.from_email === 'api-review@youtube.com') return {
         important: false, category: 'Platform approval',
-        summary: 'YouTube approved the API compliance review and the integration can proceed.',
+        summary: input.message.subject.startsWith('Re:')
+          ? 'YouTube clarified that the approved integration can publish publicly.'
+          : 'YouTube approved the API compliance review and the integration can proceed.',
         actionRequired: false, suggestedNextStep: 'No action needed right now.', reason: 'Approval decision'
       };
       return {
@@ -66,9 +68,28 @@ test('mail triage archives every digested email and creates one durable alert on
   assert.match(alerts[0].reply_text, /YouTube approved/);
   assert.match(alerts[0].reply_text, /No action needed right now/);
 
+  const youtubeFollowup = mailbox.ingest({
+    providerId: 'yt-review-2', fromName: 'YouTube API Services', fromEmail: 'api-review@youtube.com',
+    to: ['info@realitymanual.com'], subject: 'Re: YouTube API review approved',
+    textBody: 'Yes, the approved integration may publish public videos.',
+    receivedAt: '2026-09-23T10:10:00Z'
+  });
+  const followupResult = await triage.processPending(10);
+  assert.deepEqual({ processed: followupResult.processed, alerted: followupResult.alerted }, { processed: 1, alerted: 1 });
+  const updatedAlerts = db.prepare("SELECT * FROM voice_messages WHERE notification_kind='mail_alert'").all();
+  assert.equal(updatedAlerts.length, 1);
+  assert.equal(updatedAlerts[0].id, alerts[0].id);
+  assert.equal(updatedAlerts[0].source_ref, youtubeFollowup.id);
+  assert.equal(updatedAlerts[0].notification_unread, 1);
+  assert.match(updatedAlerts[0].reply_text, /publish publicly/);
+  const triageRows = db.prepare('SELECT alert_message_id,topic_key FROM mail_triage WHERE message_id IN (?,?) ORDER BY message_id').all(youtube.id, youtubeFollowup.id);
+  assert.equal(triageRows[0].alert_message_id, triageRows[1].alert_message_id);
+  assert.equal(triageRows[0].topic_key, triageRows[1].topic_key);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM mail_alert_topics').get().n, 1);
+
   const again = await triage.processPending(10);
   assert.equal(again.processed, 0);
-  assert.equal(classifyCalls, 2);
+  assert.equal(classifyCalls, 3);
   assert.equal(db.prepare("SELECT count(*) AS n FROM voice_messages WHERE notification_kind='mail_alert'").get().n, 1);
   triage.close();
 });

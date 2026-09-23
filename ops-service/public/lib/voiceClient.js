@@ -535,6 +535,9 @@ window.RMVoice = (function () {
   //            onEarlyAck(row)   — row.early_ack just appeared, fires once
   //            onDone(row)       — row finished successfully
   //            onError(row)      — row finished with an error
+  //            onUpdate(row)     — a completed row's visible content/read
+  //                                state changed in place (mail alerts use
+  //                                one living row per topic)
   //            onActivity(row)   — row's activity_log grew
   //            onTick(rows)      — every poll, the raw current window of rows
   //                                (oldest-last, as the API returns them) —
@@ -554,8 +557,9 @@ window.RMVoice = (function () {
 
     function applyRow(row) {
       var seen = known[row.id];
+      var isNew = !seen;
       if (!seen) {
-        known[row.id] = seen = { bucket: null, activityLen: 0, hadEarlyAck: false };
+        known[row.id] = seen = { bucket: null, activityLen: 0, hadEarlyAck: false, contentSignature: null };
         if (callbacks.onNewMessage) callbacks.onNewMessage(row);
       }
       // Fires once, the moment early_ack first appears — well before the
@@ -577,6 +581,12 @@ window.RMVoice = (function () {
         seen.activityLen = activityLen;
         if (callbacks.onActivity) callbacks.onActivity(row);
       }
+      var contentSignature = [row.transcript || '', row.reply_text || '', row.error_message || '',
+        row.notification_kind || '', Number(row.notification_unread) || 0, row.completed_at || ''].join('\u001f');
+      if (!isNew && seen.contentSignature !== null && contentSignature !== seen.contentSignature && callbacks.onUpdate) {
+        callbacks.onUpdate(row);
+      }
+      seen.contentSignature = contentSignature;
     }
 
     function tick() {
@@ -604,7 +614,7 @@ window.RMVoice = (function () {
       // instant feedback — marks the row known so the next tick updates that
       // same message in place instead of rendering a duplicate from scratch.
       markKnown: function (row) {
-        known[row.id] = { bucket: bucketOf(row.status || 'pending'), activityLen: 0 };
+        known[row.id] = { bucket: bucketOf(row.status || 'pending'), activityLen: 0, contentSignature: null };
       }
     };
   }
