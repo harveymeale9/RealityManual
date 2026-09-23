@@ -9160,3 +9160,48 @@ confirmed the Namecheap connected state, address, five-count unread badge, Inbox
 count, imported thread list, visible Compose control, and absence of UI errors.
 The complete Node suite passes 17/17, including outgoing identity, IMAP mapping,
 incremental sync/deduplication, SMTP send behavior, attachments, and threading.
+
+---
+
+# 197. Automated Weekly Performance Email (2026-09-23)
+
+Content Studio now sends Harvey (`harveymeale9@gmail.com`) a weekly performance
+report every Monday at 09:00 **Europe/London** time. The reporting window is the
+previous completed local Monday-to-Monday week, so an email never compares a
+partial current week with a complete prior one. The service checks for a due
+report on startup and every fifteen minutes, which provides cron-like scheduling
+without adding a second host process; a persisted `weekly_report_runs` record
+prevents an ordinary restart or redeploy from resending the same period and also
+records errors/retries. Authenticated status and manual due-check endpoints live
+at `/api/reports/weekly/status` and `/api/reports/weekly/run`.
+
+The email is delivered through the already-connected Namecheap mailbox as
+**Reality Manual Support <info@realitymanual.com>**, and the exact outbound
+message is saved in the Content Studio Mailbox's Sent folder. It includes:
+
+- first-party page views, unique visitors, funnel conversion, and tagged traffic
+  sources, with the headline visitor comparison against the previous week;
+- paid order count, units, gross USD revenue, average order value, and refunds;
+- new/actively worked-on content, every meaningful Kanban milestone reached,
+  pieces published, and a current pipeline breakdown;
+- connected YouTube lifetime views/likes/comments plus measured view growth, and
+  TikTok publication counts. TikTok engagement is identified as unavailable
+  because the current TikTok connection has publish-only scope rather than an
+  analytics scope.
+
+All sales/customer data remains private. `deploy.sh` bind-mounts the storefront
+SQLite directory into the ops container at `/store-data` read-only; the weekly
+reporter queries only aggregate values and never returns names, addresses, email
+addresses, or order rows. There is no public revenue API and no copied storefront
+credential. YouTube statistics use the existing refresh-token flow and never
+enter the report database or email as credentials.
+
+`piece_stage_events` records stage transitions at the shared write boundary, so
+future completion counts reflect actual movement during each week rather than
+merely today's card state. Existing pieces are bootstrapped once from their best
+available stage timestamp, and reviewer-created demo cards are excluded. The
+complete ops test suite passes 20/20, covering London/BST week boundaries,
+one-send-only behavior, stage tracking, email contents, mailbox Sent storage,
+YouTube statistics normalization, and aggregate storefront reporting with an
+explicit no-PII contract. A direct read-only query against the live storefront
+database also returned the expected traffic/funnel/sales aggregates.

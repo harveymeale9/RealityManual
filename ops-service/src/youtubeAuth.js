@@ -87,6 +87,32 @@ async function fetchChannelInfo(accessToken) {
 }
 
 const UPLOAD_URL = 'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status';
+const VIDEOS_URL = 'https://www.googleapis.com/youtube/v3/videos';
+
+async function fetchVideoStatistics(accessToken, videoIds) {
+  const ids = Array.from(new Set((videoIds || []).map(String).filter(Boolean)));
+  const results = [];
+  for (let i = 0; i < ids.length; i += 50) {
+    const url = new URL(VIDEOS_URL);
+    url.searchParams.set('part', 'snippet,statistics');
+    url.searchParams.set('id', ids.slice(i, i + 50).join(','));
+    const res = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
+    if (!res.ok) throw new Error('YouTube video statistics lookup failed (' + res.status + '): ' + (await res.text()));
+    const data = await res.json();
+    (data.items || []).forEach(function (item) {
+      const stats = item.statistics || {};
+      results.push({
+        id: item.id,
+        title: item.snippet && item.snippet.title || item.id,
+        publishedAt: item.snippet && item.snippet.publishedAt || null,
+        views: Number(stats.viewCount) || 0,
+        likes: Number(stats.likeCount) || 0,
+        comments: Number(stats.commentCount) || 0
+      });
+    });
+  }
+  return results;
+}
 
 // Real publish, using YouTube's resumable-upload protocol directly (no
 // googleapis SDK — same "plain REST calls" philosophy as the rest of this
@@ -136,4 +162,4 @@ async function uploadVideo(accessToken, filePath, mimeType, metadata) {
   return { videoId: data.id };
 }
 
-module.exports = { SCOPES, isConfigured, buildAuthUrl, exchangeCode, refreshAccessToken, fetchChannelInfo, uploadVideo };
+module.exports = { SCOPES, isConfigured, buildAuthUrl, exchangeCode, refreshAccessToken, fetchChannelInfo, fetchVideoStatistics, uploadVideo };

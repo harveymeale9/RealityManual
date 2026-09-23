@@ -92,7 +92,7 @@ test('configured transport sends a stored message and exposes it in Sent', async
   const sent = [];
   const service = mailboxService.setup(db, {
     dataDir: dir,
-    transport: { name: 'Test mail', send: async function (payload) { sent.push(payload); return { id: 'sent-1' }; } }
+    transport: { name: 'Test mail', send: async function (payload) { sent.push(payload); return { id: 'sent-' + sent.length }; } }
   });
   const app = express();
   app.use(express.json());
@@ -111,8 +111,16 @@ test('configured transport sends a stored message and exposes it in Sent', async
   assert.equal(response.status, 200, JSON.stringify(body));
   assert.equal(body.message.status, 'sent');
   assert.equal(sent.length, 1);
+  assert.equal(sent[0].message.from.name, 'Reality Manual Support');
+  const automated = await service.sendAutomated({
+    to: ['harvey@example.com'], cc: [], subject: 'Weekly report',
+    textBody: 'Report text', htmlBody: '<p>Report text</p>'
+  });
+  assert.equal(automated.status, 'sent');
+  assert.equal(automated.from.name, 'Reality Manual Support');
+  assert.equal(sent.length, 2);
   const sentResponse = await fetch('http://127.0.0.1:' + server.address().port + '/api/mailbox/threads?folder=sent');
-  assert.equal((await sentResponse.json()).threads.length, 1);
+  assert.equal((await sentResponse.json()).threads.length, 2);
 });
 
 test('mailbox sync imports provider messages and reports connection health', async function (t) {

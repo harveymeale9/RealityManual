@@ -22,6 +22,8 @@ const ideationService = require('./src/ideationService');
 const manuscriptService = require('./src/manuscriptService');
 const mailboxService = require('./src/mailboxService');
 const namecheapMailbox = require('./src/namecheapMailbox');
+const storefrontReporting = require('./src/storefrontReporting');
+const weeklyReportService = require('./src/weeklyReportService');
 const agentUsage = require('./src/agentUsage');
 const recordConcurrency = require('./src/recordConcurrency');
 
@@ -411,6 +413,7 @@ const mailboxTransport = namecheapMailbox.fromEnv(process.env);
 const mailbox = mailboxService.setup(db, {
   dataDir: DATA_DIR,
   address: process.env.MAILBOX_ADDRESS || 'info@realitymanual.com',
+  displayName: process.env.MAILBOX_DISPLAY_NAME || 'Reality Manual Support',
   transport: mailboxTransport
 });
 app.use('/api/mailbox', requireAuth, mailbox.router);
@@ -574,6 +577,43 @@ async function getValidYoutubeAccessToken() {
   stmts.upsertYoutubeAuth.run(row.channel_id, row.channel_title, tokens.access_token, row.refresh_token, newExpiresAt, new Date().toISOString());
   return tokens.access_token;
 }
+
+// Sales and storefront analytics stay private: deploy.sh mounts the storefront
+// SQLite directory read-only and this process returns aggregates only to the
+// report builder. Open lazily so a temporary mount problem cannot prevent the
+// rest of Content Studio from starting.
+let storefrontReportDb = null;
+function readStorefrontReport(start, end) {
+  if (!storefrontReportDb) {
+    storefrontReportDb = new Database(process.env.STOREFRONT_DB_PATH || '/store-data/reality-manual.db', {
+      readonly: true,
+      fileMustExist: true
+    });
+  }
+  return storefrontReporting.getPeriodReport(storefrontReportDb, start, end);
+}
+
+const weeklyReports = weeklyReportService.setup(db, {
+  recipient: process.env.WEEKLY_REPORT_RECIPIENT || 'harveymeale9@gmail.com',
+  timeZone: process.env.WEEKLY_REPORT_TIME_ZONE || 'Europe/London',
+  sendHour: Number(process.env.WEEKLY_REPORT_HOUR || 9),
+  enabled: process.env.WEEKLY_REPORT_ENABLED !== 'false',
+  sendMail: mailboxTransport ? function (message) { return mailbox.sendAutomated(message); } : null,
+  fetchStorefrontReport: async function (start, end) { return readStorefrontReport(start, end); },
+  fetchYoutubeStatistics: async function (pieces) {
+    const ids = pieces.map(function (piece) { return piece.youtubeVideoId; }).filter(Boolean);
+    if (!ids.length) return [];
+    return youtubeAuth.fetchVideoStatistics(await getValidYoutubeAccessToken(), ids);
+  }
+});
+
+app.get('/api/reports/weekly/status', requireAuth, function (req, res) {
+  res.json(weeklyReports.status());
+});
+app.post('/api/reports/weekly/run', requireAuth, async function (req, res) {
+  try { res.json(await weeklyReports.runDue()); }
+  catch (error) { res.status(502).json({ error: 'weekly_report_failed', message: String(error.message || error).slice(0, 300) }); }
+});
 
 // --- Reviewer access control for /api/store and /api/files. A reviewer
 // session (see requireAuthOrReviewer/req.sessionRole) can read broadly —
@@ -746,7 +786,9 @@ app.put('/api/store/:storeName/:id', function (req, res) {
   const record = storeName === 'pieces'
     ? recordConcurrency.preparePieceWrite(existingPieceRow, req.body, id).record
     : Object.assign({}, req.body, { id: id });
-  stmts.upsert.run(storeName, id, JSON.stringify(record), new Date().toISOString());
+  const writeStamp = new Date().toISOString();
+  stmts.upsert.run(storeName, id, JSON.stringify(record), writeStamp);
+  if (storeName === 'pieces') weeklyReports.recordStageChange(record, existingPiece && existingPiece.stage, 'kanban', writeStamp);
   if (storeName === 'pieces' && req.sessionRole !== 'youtube-reviewer' && record.stage === 'big_ideas') {
     try {
       ideation.recordBigIdeaPiece(record, existingPiece ? existingPiece.stage : null);
@@ -848,8 +890,11 @@ function getPieceRecord(id) {
   return row ? recordConcurrency.decodeRow(row) : null;
 }
 function savePieceRecord(piece) {
+  const previous = getPieceRecord(piece.id);
+  const stamp = new Date().toISOString();
   recordConcurrency.stampServerWrite(piece);
-  stmts.upsert.run('pieces', piece.id, JSON.stringify(piece), new Date().toISOString());
+  stmts.upsert.run('pieces', piece.id, JSON.stringify(piece), stamp);
+  weeklyReports.recordStageChange(piece, previous && previous.stage, 'automation', stamp);
 }
 
 // Analysis (runVideoAnalysis, triggered right after upload) and the final
