@@ -53,6 +53,10 @@ function setup(db, options) {
     expires_at TEXT NOT NULL, triggered_at TEXT, continuation_message_id TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_background_monitors_due ON background_monitors(status,next_check_at);`);
+  // `triggering` is the tiny claim/enqueue window. A restart there should
+  // retry with the same deterministic voice-message id, never strand the
+  // watcher or create a second continuation.
+  db.prepare("UPDATE background_monitors SET status='watching' WHERE status='triggering'").run();
 
   try { fs.mkdirSync(requestDir, { recursive: true, mode: 0o777 }); fs.chmodSync(requestDir, 0o777); } catch (error) { console.error('[background-monitor] request dir:', error.message); }
 
@@ -152,16 +156,18 @@ function setup(db, options) {
       }
       // Claim before enqueueing so overlapping timer/manual checks cannot
       // wake two agent turns for the same condition.
-      const claimed = db.prepare("UPDATE background_monitors SET status='triggering',result_json=?,last_error=NULL,updated_at=? WHERE id=? AND status IN ('watching','paused_credits')")
-        .run(JSON.stringify(outcome.result || {}), stamp, row.id);
+      const continuationMessageId = crypto.createHash('sha256').update('background-monitor:' + row.id).digest('hex').slice(0, 32);
+      const claimed = db.prepare("UPDATE background_monitors SET status='triggering',result_json=?,continuation_message_id=?,last_error=NULL,updated_at=? WHERE id=? AND status IN ('watching','paused_credits')")
+        .run(JSON.stringify(outcome.result || {}), continuationMessageId, stamp, row.id);
       if (!claimed.changes) return { id: row.id, status: row.status };
       const messageId = await enqueueContinuation({
         monitorId: row.id, title: row.title, agent: row.agent,
+        messageId: continuationMessageId,
         prompt: row.continuation_prompt,
         result: outcome.result || {}
       });
       db.prepare("UPDATE background_monitors SET status='triggered',triggered_at=?,continuation_message_id=?,updated_at=? WHERE id=?")
-        .run(stamp, clean(messageId, 128) || null, stamp, row.id);
+        .run(stamp, clean(messageId, 128) || continuationMessageId, stamp, row.id);
       return { id: row.id, status: 'triggered', messageId: messageId };
     } catch (error) {
       const next = new Date(Date.now() + Number(row.interval_seconds) * 1000).toISOString();

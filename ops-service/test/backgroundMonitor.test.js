@@ -30,6 +30,7 @@ test('monitor wakes the agent exactly once when an asset becomes ready', async f
   assert.equal((await monitor.checkRow(db.prepare('SELECT * FROM background_monitors WHERE id=?').get(row.id))).status, 'triggered');
   assert.equal(queued.length, 1);
   assert.match(queued[0].prompt, /reader conversion/);
+  assert.match(queued[0].messageId, /^[a-f0-9]{32}$/);
   assert.equal(db.prepare('SELECT status FROM background_monitors WHERE id=?').get(row.id).status, 'triggered');
   monitor.close(); db.close();
 });

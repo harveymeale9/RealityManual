@@ -9379,3 +9379,7 @@ polling without invoking the model; it resumes automatically after allowance
 recovers. Watchers expire after seven days by default, claim themselves before
 queueing to prevent duplicate turns, and survive service restarts. Authenticated
 list, manual-check, and cancel routes live under `/api/voice/monitors`.
+The brief claim/enqueue window uses a deterministic continuation-message ID;
+startup retries an interrupted claim against that same ID, so a crash at the
+worst possible instant neither strands the watcher nor duplicates the agent
+turn.

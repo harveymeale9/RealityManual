@@ -1684,11 +1684,16 @@ const backgroundMonitors = backgroundMonitorService.setup(db, {
   intervalMs: Number(process.env.BACKGROUND_MONITOR_INTERVAL_MS || 30000),
   getUsage: function (options) { return agentUsage.getUsage(options); },
   enqueueContinuation: async function (item) {
-    const id = crypto.randomBytes(16).toString('hex');
+    const id = item.messageId;
     const stamp = new Date().toISOString();
     const resultText = JSON.stringify(item.result || {}).slice(0, 2000);
     const transcript = '[Automatic continuation — ' + item.title + '] The watched condition is now satisfied. Resume the previously authorized work without waiting for another message from Harvey.';
     const prompt = transcript + '\n\nCondition result: ' + resultText + '\n\nRemaining task and finish line:\n' + item.prompt;
+    // A watcher derives this id from its own durable id. If the service died
+    // after inserting the row but before recording `triggered`, startup
+    // recovery already owns the existing pending row; do not insert or queue
+    // it twice when the watcher retries its claim.
+    if (stmts.getVoiceMessage.get(id)) return id;
     stmts.insertVoiceMessage.run(id, 'execute', transcript, 'pending', stamp, null, normalizeVoiceAgent(item.agent));
     voiceQueue.push({ id: id, mode: 'execute', text: prompt, agent: normalizeVoiceAgent(item.agent), imagePath: null, uploadPath: null });
     drainVoiceQueue();
