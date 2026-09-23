@@ -9265,3 +9265,24 @@ idempotent, and a classifier outage leaves the original email untouched in
 Inbox. Headless Chromium at 390×844 and 1440×900 proved the coral single-card
 rendering, unread `1` badge, mark-read behavior, no fake user bubble, no Task List
 pollution, and no viewport overflow.
+
+---
+
+# 199. Green Ask Button Speaks Codex's Immediate Contextual Response (2026-09-23)
+
+The mobile green **Ask & Wait for Reply** button promised a spoken response, but
+when Codex was selected its contextual first sentence was only rendered at the
+bottom of the chat. The client explicitly skipped Codex in `onEarlyAck`, while
+the TTS route allowed Codex to speak only a completed `reply_text`; consequently
+Harvey heard nothing during a tool-using turn even though the response was
+already visible.
+
+Both Project Manager clients now request speech for that stored `early_ack` as
+soon as it arrives. The server does not trust browser-supplied Codex text: a new
+`speechKind` discriminator makes it resolve either `early_ack` or `reply_text`
+from the identified `voice_messages` row. Arbitrary activity, commands,
+reasoning, and logs remain impossible to route to Codex TTS. Final replies keep
+their existing behavior, so a green-button Codex turn speaks the immediate
+contextual acknowledgment and later speaks the answer when it is ready. The
+desktop mic uses the same corrected path for consistency; typed messages and
+the lower **Just Execute** button remain text-only as before.

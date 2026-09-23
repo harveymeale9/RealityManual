@@ -1802,6 +1802,7 @@ app.post('/api/voice/transcribe', voiceUpload.single('audio'), function (req, re
 app.post('/api/voice/tts', async function (req, res) {
   const requestedAgent = req.body && req.body.agent;
   const messageId = req.body && req.body.messageId;
+  const speechKind = req.body && req.body.speechKind === 'early_ack' ? 'early_ack' : 'reply';
   const messageRow = typeof messageId === 'string' ? stmts.getVoiceMessage.get(messageId) : null;
   // A persisted message's recorded identity always wins over the browser's
   // claim. This also makes Play buttons from a slightly stale client route
@@ -1816,16 +1817,26 @@ app.post('/api/voice/tts', async function (req, res) {
   // reply from being spoken by ElevenLabs while that stale tab is open.
   if (!agent) return res.status(400).json({ error: 'tts_agent_required' });
 
-  // Codex may speak completed user-facing replies only. Resolve the text
-  // from the canonical DB row so browser code cannot accidentally send an
-  // early acknowledgment, command, reasoning event, log, or Activity line
-  // to OpenAI TTS. Claude deliberately keeps its existing browser-supplied
-  // text path so its ElevenLabs early-ack/final behavior stays unchanged.
+  // Codex may speak only the two user-facing fields persisted for the
+  // requested message: its contextual early acknowledgment while work is
+  // underway, or its completed final reply. Resolve either one from the
+  // canonical DB row so browser code can never send a command, reasoning
+  // event, log, or Activity line to OpenAI TTS. Claude deliberately keeps
+  // its existing browser-supplied path so its ElevenLabs behavior stays
+  // unchanged.
   if (agent === 'codex') {
-    if (!messageRow || messageRow.status !== 'done' || !messageRow.reply_text) {
+    if (!messageRow) {
       return res.status(400).json({ error: 'codex_tts_requires_completed_message' });
     }
-    text = speechText.stripMarkdownForSpeech(messageRow.reply_text);
+    if (speechKind === 'early_ack') {
+      if (!messageRow.early_ack) return res.status(400).json({ error: 'codex_tts_ack_not_ready' });
+      text = speechText.stripMarkdownForSpeech(messageRow.early_ack);
+    } else {
+      if (messageRow.status !== 'done' || !messageRow.reply_text) {
+        return res.status(400).json({ error: 'codex_tts_requires_completed_message' });
+      }
+      text = speechText.stripMarkdownForSpeech(messageRow.reply_text);
+    }
   }
 
   if (typeof text !== 'string' || !text.trim()) return res.status(400).json({ error: 'invalid_text' });

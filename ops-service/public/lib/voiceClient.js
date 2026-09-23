@@ -456,7 +456,7 @@ window.RMVoice = (function () {
     });
   }
 
-  function speak(text, msgId, agent) {
+  function speak(text, msgId, agent, speechKind) {
     var clean = stripMarkdownForSpeech(text);
     if (!clean || recordingActive) return Promise.resolve(null);
     agent = agent === 'codex' ? 'codex' : 'claude';
@@ -466,7 +466,15 @@ window.RMVoice = (function () {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: clean, messageId: msgId, agent: agent })
+      body: JSON.stringify({
+        text: clean,
+        messageId: msgId,
+        agent: agent,
+        // The backend still resolves Codex speech from the canonical DB
+        // row. This flag only tells it whether the requested stored text is
+        // the live contextual acknowledgment or the completed final reply.
+        speechKind: speechKind === 'early_ack' ? 'early_ack' : 'reply'
+      })
     }).then(function (r) {
       if (!r.ok) {
         return r.json().catch(function () { return {}; }).then(function (payload) {

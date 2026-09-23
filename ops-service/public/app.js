@@ -867,8 +867,8 @@
         // even for a typed/no-speech send, not just spoken.
         var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
         if (typingEl) typingEl.textContent = row.early_ack;
-        if (!voiceAutoSpeak[row.id] || row.agent === 'codex') return;
-        Voice.speak(row.early_ack, row.id, row.agent).catch(function () {});
+        if (!voiceAutoSpeak[row.id]) return;
+        Voice.speak(row.early_ack, row.id, row.agent, 'early_ack').catch(function () {});
       },
       onDone: function (row) {
         // Look the placeholder up (rather than just removeTyping()) so its
