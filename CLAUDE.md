@@ -9497,3 +9497,36 @@ these fields for pieces that have a stored `youtubeVideoId`. The Content
 Analytics tab remains a placeholder and does not yet display them; watch time,
 retention, and shares require the separate YouTube Analytics API rather than
 the Data API statistics response tested here.
+
+---
+
+# 207. Daily YouTube Publication Audit and Terminal Removed Stage (2026-09-23)
+
+Content Studio now reconciles its **Posted / Live** column with YouTube once per
+24 hours. The service performs an hourly due-check (and a due-check at startup),
+but a durable `youtube_publication_audit_state` row prevents a successful audit
+from running more than once in the 24-hour window. Only production cards in
+`live` with the exact `youtubeVideoId` stored by our uploader are included;
+Google-reviewer demo cards and non-YouTube cards are excluded.
+
+The audit uses the existing `youtube.readonly` OAuth grant and an authenticated
+`videos.list?part=status` lookup. A video whose privacy is still `public` and
+whose upload is processed remains in Posted / Live. A private, unlisted,
+deleted/missing, rejected, or otherwise unavailable video moves automatically
+to a new final Kanban column: **Deleted / Removed / Private** (`removed`). The
+piece retains its original YouTube id/URL and records the last checked time and
+reason, so the history is not destroyed.
+
+Safety is deliberately fail-closed with respect to Kanban mutation: all API
+batches must complete successfully before the first card is saved. OAuth,
+quota, network, or YouTube server failures record an audit error and move no
+cards; the hourly due-check then retries because no successful completion time
+was written. Admin-only status and force-run endpoints are available at
+`/api/youtube/publication-audit/status` and `/api/youtube/publication-audit/run`.
+`YOUTUBE_PUBLICATION_AUDIT_ENABLED=false` is the emergency off switch.
+
+Regression coverage proves public/private/missing decisions, terminal-stage
+movement, the 24-hour guard, reviewer/non-live exclusions, and the no-mutation
+rule on API failure. The YouTube boundary test separately proves the requested
+status fields and authenticated scope behavior. The complete suite passes
+30/30.

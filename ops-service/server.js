@@ -26,6 +26,7 @@ const mailTriageService = require('./src/mailTriageService');
 const storefrontReporting = require('./src/storefrontReporting');
 const weeklyReportService = require('./src/weeklyReportService');
 const diskMonitorService = require('./src/diskMonitorService');
+const youtubePublicationAudit = require('./src/youtubePublicationAudit');
 const agentUsage = require('./src/agentUsage');
 const recordConcurrency = require('./src/recordConcurrency');
 const backgroundMonitorService = require('./src/backgroundMonitorService');
@@ -645,6 +646,21 @@ const diskMonitor = diskMonitorService.setup(db, {
   sendMail: mailboxTransport ? function (message) { return mailbox.sendAutomated(message); } : null
 });
 
+// A lightweight daily reconciliation for the terminal Posted / Live column.
+// Only a successful YouTube response may move a card: transient auth/network/
+// quota failures throw before any status is interpreted, leaving the Kanban
+// untouched and eligible for the next hourly due-check retry.
+const youtubeAudit = youtubePublicationAudit.setup(db, {
+  enabled: process.env.YOUTUBE_PUBLICATION_AUDIT_ENABLED !== 'false',
+  listPieces: async function () {
+    return stmts.getAll.all('pieces').map(function (row) { return recordConcurrency.decodeRow(row); });
+  },
+  fetchStatuses: async function (ids) {
+    return youtubeAuth.fetchVideoStatuses(await getValidYoutubeAccessToken(), ids);
+  },
+  savePiece: async function (piece) { savePieceRecord(piece); }
+});
+
 app.get('/api/reports/weekly/status', requireAuth, function (req, res) {
   res.json(weeklyReports.status());
 });
@@ -658,6 +674,13 @@ app.get('/api/system/disk/status', requireAuth, function (req, res) {
 app.post('/api/system/disk/check', requireAuth, async function (req, res) {
   try { res.json(await diskMonitor.check()); }
   catch (error) { res.status(502).json({ error: 'disk_check_failed', message: String(error.message || error).slice(0, 300) }); }
+});
+app.get('/api/youtube/publication-audit/status', requireAuth, function (req, res) {
+  res.json(youtubeAudit.status());
+});
+app.post('/api/youtube/publication-audit/run', requireAuth, async function (req, res) {
+  try { res.json(await youtubeAudit.run(true)); }
+  catch (error) { res.status(502).json({ error: 'youtube_publication_audit_failed', message: String(error.message || error).slice(0, 300) }); }
 });
 
 // --- Reviewer access control for /api/store and /api/files. A reviewer

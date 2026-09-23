@@ -140,7 +140,8 @@ window.RMStore = (function () {
     { id: 'processed', label: 'Processing' },
     { id: 'final_check', label: 'Final Check' },
     { id: 'scheduled', label: 'Scheduled' },
-    { id: 'live', label: 'Posted / Live' }
+    { id: 'live', label: 'Posted / Live' },
+    { id: 'removed', label: 'Deleted / Removed / Private' }
   ];
 
   // Replaces the old "Thumbnail Selected" stage — set automatically by the

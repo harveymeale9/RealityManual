@@ -114,6 +114,32 @@ async function fetchVideoStatistics(accessToken, videoIds) {
   return results;
 }
 
+// Used by the daily Posted / Live audit. An authenticated videos.list call
+// returns the connected channel's private/unlisted items as well as public
+// ones; an id omitted from a successful response is no longer available to
+// this channel (normally deleted). Keep this separate from statistics so the
+// audit's public/private decision never depends on engagement fields.
+async function fetchVideoStatuses(accessToken, videoIds) {
+  const ids = Array.from(new Set((videoIds || []).map(String).filter(Boolean)));
+  const results = [];
+  for (let i = 0; i < ids.length; i += 50) {
+    const url = new URL(VIDEOS_URL);
+    url.searchParams.set('part', 'status');
+    url.searchParams.set('id', ids.slice(i, i + 50).join(','));
+    const res = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
+    if (!res.ok) throw new Error('YouTube video status lookup failed (' + res.status + '): ' + (await res.text()));
+    const data = await res.json();
+    (data.items || []).forEach(function (item) {
+      results.push({
+        id: item.id,
+        privacyStatus: item.status && item.status.privacyStatus || null,
+        uploadStatus: item.status && item.status.uploadStatus || null
+      });
+    });
+  }
+  return results;
+}
+
 // Real publish, using YouTube's resumable-upload protocol directly (no
 // googleapis SDK — same "plain REST calls" philosophy as the rest of this
 // file). Two requests: (1) POST the metadata to open an upload session and
@@ -162,4 +188,4 @@ async function uploadVideo(accessToken, filePath, mimeType, metadata) {
   return { videoId: data.id };
 }
 
-module.exports = { SCOPES, isConfigured, buildAuthUrl, exchangeCode, refreshAccessToken, fetchChannelInfo, fetchVideoStatistics, uploadVideo };
+module.exports = { SCOPES, isConfigured, buildAuthUrl, exchangeCode, refreshAccessToken, fetchChannelInfo, fetchVideoStatistics, fetchVideoStatuses, uploadVideo };

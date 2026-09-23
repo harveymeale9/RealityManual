@@ -29,3 +29,27 @@ test('YouTube statistics lookup returns numeric performance totals without expos
     { id: 'video-2', title: 'Second', publishedAt: null, views: 7, likes: 0, comments: 0 }
   ]);
 });
+
+test('YouTube status lookup exposes public visibility and omits no ids itself', async function (t) {
+  const originalFetch = global.fetch;
+  t.after(function () { global.fetch = originalFetch; });
+  global.fetch = async function (url, options) {
+    const parsed = new URL(String(url));
+    assert.equal(parsed.searchParams.get('part'), 'status');
+    assert.equal(parsed.searchParams.get('id'), 'public-id,private-id,deleted-id');
+    assert.equal(options.headers.Authorization, 'Bearer synthetic-token');
+    return {
+      ok: true,
+      json: async function () {
+        return { items: [
+          { id: 'public-id', status: { privacyStatus: 'public', uploadStatus: 'processed' } },
+          { id: 'private-id', status: { privacyStatus: 'private', uploadStatus: 'processed' } }
+        ] };
+      }
+    };
+  };
+  assert.deepEqual(await youtubeAuth.fetchVideoStatuses('synthetic-token', ['public-id', 'private-id', 'deleted-id']), [
+    { id: 'public-id', privacyStatus: 'public', uploadStatus: 'processed' },
+    { id: 'private-id', privacyStatus: 'private', uploadStatus: 'processed' }
+  ]);
+});
