@@ -10,71 +10,51 @@
 + '[' -n '' ']'
 + git pull
 From https://github.com/harveymeale9/RealityManual
-   e9f3a15..e155cba  main       -> origin/main
-Updating e9f3a15..e155cba
+   e155cba..e65ce57  main       -> origin/main
+Updating e155cba..e65ce57
 Fast-forward
- CLAUDE.md                                 |  43 +++
- ops-service/.ci/last-run.log              | 116 +------
- ops-service/.env.example                  |  11 +
- ops-service/configure-mailbox.sh          |  52 +++
- ops-service/deploy.sh                     |   5 +
- ops-service/package-lock.json             | 555 +++++++++++++++++++++++++++++-
- ops-service/package.json                  |   5 +-
- ops-service/public/index.html             |   4 +-
- ops-service/public/mailbox.js             |  23 +-
- ops-service/server.js                     |   8 +-
- ops-service/src/mailboxService.js         |  88 ++++-
- ops-service/src/namecheapMailbox.js       | 150 ++++++++
- ops-service/test/mailbox.test.js          |  37 ++
- ops-service/test/namecheapMailbox.test.js |  79 +++++
- 14 files changed, 1059 insertions(+), 117 deletions(-)
- create mode 100755 ops-service/configure-mailbox.sh
- create mode 100644 ops-service/src/namecheapMailbox.js
- create mode 100644 ops-service/test/namecheapMailbox.test.js
+ CLAUDE.md                                |  26 +++++++
+ ops-service/.ci/last-run.log             | 130 +++++++++++++++++++++++++++----
+ ops-service/src/manuscriptSearchIndex.js |  57 ++++++++++++--
+ ops-service/test/manuscript.test.js      |  19 +++++
+ 4 files changed, 209 insertions(+), 23 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=e155cbae61e02fa9db05c7a47cfac36c2f64e7bd
++ NEW_HEAD=e65ce5763d5edeaaf3e2f58e7df5b1a06628258a
 + git -C /srv/realitymanual-repo pull
 Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
 + LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
 ++ cat /root/ops-service-data/last-image-commit.txt
-+ LAST_BUILD_COMMIT=933f3d479a0899c98beb54191058e34cb9e0603d
++ LAST_BUILD_COMMIT=e155cbae61e02fa9db05c7a47cfac36c2f64e7bd
 + NEEDS_REBUILD=1
-+ '[' -n 933f3d479a0899c98beb54191058e34cb9e0603d ']'
-+ git cat-file -e '933f3d479a0899c98beb54191058e34cb9e0603d^{commit}'
-++ git diff --name-only 933f3d479a0899c98beb54191058e34cb9e0603d e155cbae61e02fa9db05c7a47cfac36c2f64e7bd -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
-+ '[' -z 'ops-service/deploy.sh
-ops-service/package-lock.json
-ops-service/package.json
-ops-service/server.js
-ops-service/src/mailboxService.js
-ops-service/src/namecheapMailbox.js' ']'
++ '[' -n e155cbae61e02fa9db05c7a47cfac36c2f64e7bd ']'
++ git cat-file -e 'e155cbae61e02fa9db05c7a47cfac36c2f64e7bd^{commit}'
+++ git diff --name-only e155cbae61e02fa9db05c7a47cfac36c2f64e7bd e65ce5763d5edeaaf3e2f58e7df5b1a06628258a -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -z ops-service/src/manuscriptSearchIndex.js ']'
++ '[' 0 = 1 ']'
 + '[' 1 = 0 ']'
 + docker tag rm-ops-service rm-ops-service:previous
 + docker build -t rm-ops-service ./ops-service
 #0 building with "default" instance using docker driver
 
 #1 [internal] load build definition from Dockerfile
-#1 transferring dockerfile: 2.60kB 0.0s done
+#1 transferring dockerfile: 2.60kB done
 #1 DONE 0.0s
 
 #2 [internal] load metadata for docker.io/library/node:22-slim
-#2 DONE 0.4s
+#2 DONE 0.3s
 
 #3 [internal] load .dockerignore
 #3 transferring context: 136B done
 #3 DONE 0.0s
 
-#4 [internal] load build context
+#4 [ 1/11] FROM docker.io/library/node:22-slim@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9
+#4 resolve docker.io/library/node:22-slim@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9 0.0s done
 #4 DONE 0.0s
 
-#5 [ 1/11] FROM docker.io/library/node:22-slim@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9
-#5 resolve docker.io/library/node:22-slim@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9 0.0s done
+#5 [internal] load build context
+#5 transferring context: 20.25kB done
 #5 DONE 0.0s
-
-#4 [internal] load build context
-#4 transferring context: 183.94kB 0.0s done
-#4 DONE 0.0s
 
 #6 [ 2/11] RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && rm -rf /var/lib/apt/lists/*
 #6 CACHED
@@ -85,55 +65,47 @@ ops-service/src/namecheapMailbox.js' ']'
 #8 [ 4/11] WORKDIR /app
 #8 CACHED
 
-#9 [ 5/11] COPY package.json ./
-#9 DONE 0.1s
+#9 [ 6/11] RUN npm install --omit=dev
+#9 CACHED
 
-#10 [ 6/11] RUN npm install --omit=dev
-#10 13.00 npm warn deprecated prebuild-install@7.1.3: No longer maintained. Please contact the author of the relevant native addon; alternatives are available.
-#10 13.17 npm warn deprecated multer@1.4.5-lts.2: Multer 1.x is impacted by a number of vulnerabilities, which have been patched in 2.x. You should upgrade to the latest 2.x version.
-#10 18.58 
-#10 18.58 added 232 packages, and audited 233 packages in 17s
-#10 18.58 
-#10 18.58 60 packages are looking for funding
-#10 18.58   run `npm fund` for details
-#10 18.58 
-#10 18.58 found 0 vulnerabilities
-#10 DONE 19.3s
+#10 [ 5/11] COPY package.json ./
+#10 CACHED
 
 #11 [ 7/11] COPY server.js ./
-#11 DONE 0.1s
+#11 CACHED
 
 #12 [ 8/11] COPY src ./src
 #12 DONE 0.1s
 
 #13 [ 9/11] COPY public ./public
-#13 DONE 0.6s
+#13 DONE 0.1s
 
 #14 [10/11] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
-#14 DONE 20.6s
+#14 DONE 25.2s
 
 #15 [11/11] RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
 #15 DONE 0.3s
 
 #16 exporting to image
 #16 exporting layers
-#16 exporting layers 18.0s done
-#16 exporting manifest sha256:541150d9e80d118124954a641ac29b51e3153941225b243de11bc86b5c775418 0.0s done
-#16 exporting config sha256:1dcadce825a30c2c0a92d47ac4ebac6543809cf6a4572fca60956a128eefa2f2 done
-#16 exporting attestation manifest sha256:ae24bdd01b6aeec280642ec38088ea0263bd360f30d3dc9869cc2dfe5d4f2593 0.0s done
-#16 exporting manifest list sha256:77a2e3dcc142b549865d3832614e02e6a6ca6220c1dfec5dad8059c80e14dcbc 0.0s done
+#16 exporting layers 12.8s done
+#16 exporting manifest sha256:0fd55072cfb70d7f86ee2d82a2bad8ce5678bf15869ac57aa4fd68f2c96e6e54
+#16 exporting manifest sha256:0fd55072cfb70d7f86ee2d82a2bad8ce5678bf15869ac57aa4fd68f2c96e6e54 0.0s done
+#16 exporting config sha256:401996a46706ceb83a89f515bbd5ffc2267e5e291429db947873fb92df3e12d2 done
+#16 exporting attestation manifest sha256:10c8082d0bda28f7d4cc21bc0e7a5e70015c49d5747a9483b3b5bf0fe3863ded 0.0s done
+#16 exporting manifest list sha256:ebcd4af51e5ae753657d2309ac26b5c17a01e8ae361bc96ab39fc69eed48ea24 0.0s done
 #16 naming to docker.io/library/rm-ops-service:latest done
 #16 unpacking to docker.io/library/rm-ops-service:latest
-#16 unpacking to docker.io/library/rm-ops-service:latest 9.1s done
-#16 DONE 27.2s
+#16 unpacking to docker.io/library/rm-ops-service:latest 2.5s done
+#16 DONE 15.4s
 + docker stop rm-ops-service
 rm-ops-service
 + docker rm rm-ops-service
 rm-ops-service
 + docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-claude-home/claude-dir:/home/node/.claude -v /root/ops-service-claude-home/claude.json:/home/node/.claude.json -v /root/ops-service-data:/data -v /srv/realitymanual-repo:/repo -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
-ea4a906a4b3014d0d7ed713d386960632f46b63fcc8227eabdc65bb0a96f1c29
-+ echo e155cbae61e02fa9db05c7a47cfac36c2f64e7bd
+accad57e59702af5063b456d4d6f331a5363eb2e7819f5e5f6f48eba07209232
++ echo e65ce5763d5edeaaf3e2f58e7df5b1a06628258a
 ++ git -C /root/realitymanual-repo rev-parse --short HEAD
-+ echo 'rm-ops-service redeployed at e155cba'
-rm-ops-service redeployed at e155cba
++ echo 'rm-ops-service redeployed at e65ce57'
+rm-ops-service redeployed at e65ce57
 ssh exit code: 0
