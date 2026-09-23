@@ -25,6 +25,7 @@ const namecheapMailbox = require('./src/namecheapMailbox');
 const mailTriageService = require('./src/mailTriageService');
 const storefrontReporting = require('./src/storefrontReporting');
 const weeklyReportService = require('./src/weeklyReportService');
+const diskMonitorService = require('./src/diskMonitorService');
 const agentUsage = require('./src/agentUsage');
 const recordConcurrency = require('./src/recordConcurrency');
 
@@ -631,12 +632,31 @@ const weeklyReports = weeklyReportService.setup(db, {
   }
 });
 
+// Hourly host-filesystem guard. The container's root overlay reports the
+// underlying VPS filesystem capacity, so this catches Docker growth and all
+// other host usage without granting the service a Docker socket or extra host
+// privileges. Mail is deduplicated by threshold transition in the database.
+const diskMonitor = diskMonitorService.setup(db, {
+  recipient: process.env.DISK_ALERT_RECIPIENT || process.env.WEEKLY_REPORT_RECIPIENT || 'harveymeale9@gmail.com',
+  warningPercent: Number(process.env.DISK_ALERT_WARNING_PERCENT || 80),
+  criticalPercent: Number(process.env.DISK_ALERT_CRITICAL_PERCENT || 90),
+  enabled: process.env.DISK_MONITOR_ENABLED !== 'false',
+  sendMail: mailboxTransport ? function (message) { return mailbox.sendAutomated(message); } : null
+});
+
 app.get('/api/reports/weekly/status', requireAuth, function (req, res) {
   res.json(weeklyReports.status());
 });
 app.post('/api/reports/weekly/run', requireAuth, async function (req, res) {
   try { res.json(await weeklyReports.runDue()); }
   catch (error) { res.status(502).json({ error: 'weekly_report_failed', message: String(error.message || error).slice(0, 300) }); }
+});
+app.get('/api/system/disk/status', requireAuth, function (req, res) {
+  res.json(diskMonitor.status());
+});
+app.post('/api/system/disk/check', requireAuth, async function (req, res) {
+  try { res.json(await diskMonitor.check()); }
+  catch (error) { res.status(502).json({ error: 'disk_check_failed', message: String(error.message || error).slice(0, 300) }); }
 });
 
 // --- Reviewer access control for /api/store and /api/files. A reviewer

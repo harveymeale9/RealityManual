@@ -9286,3 +9286,28 @@ their existing behavior, so a green-button Codex turn speaks the immediate
 contextual acknowledgment and later speaks the answer when it is ready. The
 desktop mic uses the same corrected path for consistency; typed messages and
 the lower **Just Execute** button remain text-only as before.
+
+---
+
+# 200. Automated VPS Disk-Capacity Monitoring (2026-09-23)
+
+The ops service now checks the VPS filesystem every hour and emails Harvey at
+`harveymeale9@gmail.com` through the connected Reality Manual Support mailbox
+when usage first reaches 80%. It sends one additional urgent email if usage
+reaches 90%, but does not repeat mail while capacity remains in the same band;
+returning below 80% rearms the warning. State, the last measured capacity, and
+any monitor error persist in `disk_monitor_state`, so service restarts cannot
+cause duplicate alerts. Authenticated status and manual-check endpoints are
+`/api/system/disk/status` and `/api/system/disk/check`. The container root
+overlay exposes the underlying VPS capacity, so no Docker socket or added host
+privilege is required.
+
+The baseline audit that motivated the monitor found the 96 GB filesystem at
+51% use (49 GB used, 48 GB available). `/var/lib/containerd` accounted for
+about 37 GB: roughly 29 GB of Docker overlay snapshots and 8.2 GB of content
+blobs. Docker reported 26.34 GB of build cache (25.98 GB reclaimable) and 35.66
+GB of images (27.24 GB associated with unused images). n8n accounted for
+another roughly 4 GB across its 1.3 GB live Docker volume and 2.7 GB legacy
+root-level data/database copies. The remaining major usage was normal system
+and application data. No cleanup was performed as part of this monitoring
+change.
