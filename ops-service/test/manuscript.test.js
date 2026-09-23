@@ -94,6 +94,31 @@ test('manuscript reader serves diagram-free spreads and instant persistent seman
   assert.equal(namedRule.results[0].page, 9);
   assert.equal(namedRule.results[0].title, 'Rule I: The Rule of Internal Value');
 
+  const exactPhrase = await request('/search', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ query: '“The more of one\'s life that can be directed toward what one wants, the greater one\'s freedom.”' })
+  });
+  assert.equal(exactPhrase.results[0].page, 91);
+  assert.match(exactPhrase.results[0].relevance, /exact phrase/i);
+  assert.match(manuscriptSearchIndex.normalized(exactPhrase.results[0].excerpt), /the more of ones life that can be directed toward what one wants/);
+
+  // Exact matching must work even when every word is normally discarded as
+  // an FTS stop word; literal lookup is its own path, not a ranking bonus that
+  // only runs after lexical search happens to find a candidate.
+  const stopWordPhrase = await request('/search', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ query: 'what is to be' })
+  });
+  assert.equal(stopWordPhrase.results[0].page, 16);
+  assert.match(stopWordPhrase.results[0].relevance, /exact phrase/i);
+
+  const describedFreedom = await request('/search', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ query: 'You see, we all get 24 hours in a day, regardless of how much money we have. And we all have to fill that 24 hours doing actions in the world. Now the extent of your happiness will be the extent to which you can orient those actions toward the things you find desirable.' })
+  });
+  assert.equal(describedFreedom.results[0].page, 91);
+  assert.match(describedFreedom.results[0].relevance, /freedom/i);
+
   const rowsBeforeRestart = db.prepare('SELECT count(*) AS n FROM manuscript_search_chunks').get().n;
   manuscriptService.setup(db, { providers: fakeProviders, autoStart: false });
   assert.equal(db.prepare('SELECT count(*) AS n FROM manuscript_search_chunks').get().n, rowsBeforeRestart);

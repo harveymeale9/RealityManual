@@ -3,7 +3,7 @@
 const crypto = require('crypto');
 const doctrine = require('./ideationDoctrine');
 
-const INDEX_VERSION = 'semantic-fts-v3-rule-references';
+const INDEX_VERSION = 'semantic-fts-v4-exact-phrases';
 const STOP_WORDS = new Set(['a','an','and','are','as','at','be','but','by','do','does','for','from','had','has','have','how','i','if','in','is','it','me','my','of','on','or','our','should','so','that','the','their','there','they','this','to','was','we','what','when','where','which','who','why','will','with','you','your']);
 
 const TOPICS = [
@@ -41,8 +41,57 @@ function normalized(value) {
   return String(value || '').toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+function phraseTokens(value) {
+  return normalized(value).split(/\s+/).filter(Boolean);
+}
+
 function terms(value) {
-  return normalized(value).split(/\s+/).filter(function (term) { return term.length > 1 && !STOP_WORDS.has(term); });
+  return phraseTokens(value).filter(function (term) { return term.length > 1 && !STOP_WORDS.has(term); });
+}
+
+// Find a genuinely verbatim sequence while ignoring typography and punctuation
+// differences (smart quotes, em dashes, well-being vs. well being, etc.). Keep
+// offsets into the original text so the result excerpt remains selectable and
+// can be highlighted when the reader opens the page.
+function exactPhraseExcerpt(text, query) {
+  const wanted = phraseTokens(query);
+  if (wanted.length < 2) return null;
+  const source = String(text || '');
+  const tokens = [];
+  const pattern = /[a-z0-9]+(?:[’'][a-z0-9]+)*/gi;
+  let match;
+  while ((match = pattern.exec(source))) {
+    tokens.push({ value: normalized(match[0]), start: match.index, end: pattern.lastIndex });
+  }
+  outer: for (let i = 0; i <= tokens.length - wanted.length; i++) {
+    for (let j = 0; j < wanted.length; j++) {
+      if (tokens[i + j].value !== wanted[j]) continue outer;
+    }
+    const start = tokens[i].start;
+    const end = tokens[i + wanted.length - 1].end;
+    let excerptStart = source.lastIndexOf('\n\n', start);
+    excerptStart = excerptStart === -1 ? 0 : excerptStart + 2;
+    let excerptEnd = source.indexOf('\n\n', end);
+    excerptEnd = excerptEnd === -1 ? source.length : excerptEnd;
+    const paragraphStart = excerptStart;
+    const paragraphEnd = excerptEnd;
+    if (excerptEnd - excerptStart > 500) {
+      const room = Math.max(0, 500 - (end - start));
+      excerptStart = Math.max(excerptStart, start - Math.floor(room / 2));
+      excerptEnd = Math.min(source.length, Math.max(end, excerptStart + 500));
+      if (excerptEnd - excerptStart > 500) excerptStart = excerptEnd - 500;
+      if (excerptStart > paragraphStart && /\S/.test(source.charAt(excerptStart - 1))) {
+        const nextSpace = source.slice(excerptStart, start).search(/\s/);
+        if (nextSpace !== -1) excerptStart += nextSpace + 1;
+      }
+      if (excerptEnd < paragraphEnd && /\S/.test(source.charAt(excerptEnd))) {
+        const priorSpace = source.slice(end, excerptEnd).search(/\s(?=\S*$)/);
+        if (priorSpace !== -1) excerptEnd = end + priorSpace;
+      }
+    }
+    return source.slice(excerptStart, excerptEnd).trim();
+  }
+  return null;
 }
 
 function titleFor(page) {
@@ -66,9 +115,19 @@ function fingerprint(pages) {
 
 function matchingTopics(query) {
   const source = normalized(query);
-  return TOPICS.filter(function (topic) {
+  const matches = TOPICS.filter(function (topic) {
     return topic.triggers.some(function (trigger) { return source.indexOf(normalized(trigger)) !== -1; });
   });
+  // Long natural-language searches often describe freedom without using the
+  // noun itself: directing one's finite time/actions toward desires instead of
+  // spending them avoiding worse outcomes. Recognize the relationship, not
+  // merely the literal keyword.
+  const desireDirectedAction = /\b(?:desir\w*|want\w*|prefer\w*)\b/.test(source)
+    && /\b(?:act\w*|time|hours?|life)\b/.test(source)
+    && /\b(?:orient\w*|toward\w*|avoid\w*|prevent\w*|compel\w*|money|financial)\b/.test(source);
+  const freedom = TOPICS.find(function (topic) { return topic.id === 'freedom'; });
+  if (desireDirectedAction && freedom && matches.indexOf(freedom) === -1) matches.push(freedom);
+  return matches;
 }
 
 function matchingRule(query) {
@@ -100,6 +159,9 @@ function intentAnchors(query) {
   add(66, ['love', 'defin']);
   add(81, ['purpose', 'function']);
   if (source.indexOf('power') !== -1 || source.indexOf('external events') !== -1) anchors.push(89);
+  if (/\b(?:desir\w*|want\w*|prefer\w*)\b/.test(source)
+      && /\b(?:act\w*|time|hours?|life)\b/.test(source)
+      && /\b(?:orient\w*|toward\w*|avoid\w*|prevent\w*|compel\w*|money|financial)\b/.test(source)) anchors.push(91);
   if (source.indexOf('alien') !== -1 || source.indexOf('ufo') !== -1 || source.indexOf('extraterrestrial') !== -1) anchors.push(57);
   if ((source.indexOf('know i should') !== -1 || source.indexOf('conscious intention') !== -1 || source.indexOf('discipline') !== -1) && source.indexOf('action') !== -1) anchors.push(110);
   if ((source.indexOf('change') !== -1 || source.indexOf('reprogram') !== -1) && (source.indexOf('automatic') !== -1 || source.indexOf('response') !== -1 || source.indexOf('trigger') !== -1)) anchors.push(165);
@@ -147,9 +209,18 @@ function setup(db, pages) {
     const ruleTerms = rule ? terms(rule.canonicalName + ' ' + rule.description) : [];
     const expanded = queryTerms.concat(ruleTerms, topics.flatMap(function (topic) { return topic.terms; }));
     const unique = Array.from(new Set(expanded)).slice(0, 32);
-    if (!unique.length) return [];
+    const exactRows = pages.map(function (page) {
+      const excerpt = exactPhraseExcerpt(page.text, query);
+      return excerpt ? { page: page.page, title: titleFor(page), body: excerpt, rank: 0, exactPhrase: true } : null;
+    }).filter(Boolean);
+    if (!unique.length && !exactRows.length) return [];
     const match = unique.map(function (term) { return '"' + term + '"*'; }).join(' OR ');
-    const rows = lookup.all(match).concat(rule ? pageLookup.all(rule.page) : []);
+    // FTS deliberately caps its broad candidate set. Always inject semantic
+    // intent anchors as candidates too, otherwise a long query full of common
+    // words can identify the right concept yet have its canonical page dropped
+    // before the reranker ever sees it.
+    const anchorRows = anchors.flatMap(function (page) { return pageLookup.all(page); });
+    const rows = (match ? lookup.all(match) : []).concat(exactRows, anchorRows, rule ? pageLookup.all(rule.page) : []);
     const byPage = new Map();
     rows.forEach(function (row) {
       const page = Number(row.page);
@@ -159,7 +230,7 @@ function setup(db, pages) {
         if (page < topic.from || page > topic.to) return score;
         return score + 28 + Math.max(0, 8 - Math.abs(page - topic.anchor));
       }, 0);
-      const phraseBoost = normalized(row.body).indexOf(normalized(query)) !== -1 ? 80 : 0;
+      const phraseBoost = row.exactPhrase ? 4000 : 0;
       const anchorBoost = anchors.reduce(function (score, anchor) {
         const distance = Math.abs(page - anchor);
         return score + (distance === 0 ? 100 : distance <= 2 ? 45 - distance * 10 : 0);
@@ -172,12 +243,15 @@ function setup(db, pages) {
     return Array.from(byPage.values()).sort(function (a, b) { return b.score - a.score; }).slice(0, 8).map(function (row) {
       const topic = topics.find(function (candidate) { return row.page >= candidate.from && row.page <= candidate.to; });
       const exactRule = rule && row.page === rule.page;
+      const exactPhrase = !!row.exactPhrase;
       const body = row.body.length > 500 ? row.body.slice(0, 500).replace(/\s+\S*$/, '') : row.body;
       return {
         page: row.page,
         title: exactRule ? rule.title : (row.title === 'Page ' + row.page && topic ? topic.label : row.title),
         relevance: exactRule
           ? 'This is ' + rule.title + ', the exact Rule requested.'
+          : exactPhrase
+          ? 'This passage contains the exact phrase from your search.'
           : topic
           ? 'This passage is a strong match for your search through the Manual’s discussion of ' + topic.label + '.'
           : 'This passage contains the closest indexed match to the meaning and language of your search.',
@@ -190,4 +264,4 @@ function setup(db, pages) {
   return { search: search, fingerprint: expected, topicCount: TOPICS.length };
 }
 
-module.exports = { setup: setup, matchingTopics: matchingTopics, matchingRule: matchingRule, intentAnchors: intentAnchors, normalized: normalized, terms: terms, TOPICS: TOPICS, RULE_REFERENCES: RULE_REFERENCES };
+module.exports = { setup: setup, matchingTopics: matchingTopics, matchingRule: matchingRule, intentAnchors: intentAnchors, exactPhraseExcerpt: exactPhraseExcerpt, normalized: normalized, terms: terms, TOPICS: TOPICS, RULE_REFERENCES: RULE_REFERENCES };
