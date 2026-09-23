@@ -22,6 +22,7 @@ const ideationService = require('./src/ideationService');
 const manuscriptService = require('./src/manuscriptService');
 const mailboxService = require('./src/mailboxService');
 const namecheapMailbox = require('./src/namecheapMailbox');
+const mailTriageService = require('./src/mailTriageService');
 const storefrontReporting = require('./src/storefrontReporting');
 const weeklyReportService = require('./src/weeklyReportService');
 const agentUsage = require('./src/agentUsage');
@@ -166,6 +167,14 @@ try { db.exec('ALTER TABLE voice_messages ADD COLUMN reply_to_id TEXT'); } catch
 // Claude. New rows record their destination so both UIs can label/color the
 // response correctly and restart recovery can dispatch it to the same agent.
 try { db.exec("ALTER TABLE voice_messages ADD COLUMN agent TEXT NOT NULL DEFAULT 'claude'"); } catch (e) { /* already exists */ }
+// Machine-generated Project Manager alerts share the durable chat timeline,
+// but are visually/read-state distinct from Harvey's normal Claude/Codex
+// turns. source_ref links a mail alert back to the exact inbound message and
+// its partial unique index makes triage retries idempotent.
+try { db.exec("ALTER TABLE voice_messages ADD COLUMN notification_kind TEXT NOT NULL DEFAULT 'conversation'"); } catch (e) { /* already exists */ }
+try { db.exec('ALTER TABLE voice_messages ADD COLUMN notification_unread INTEGER NOT NULL DEFAULT 0'); } catch (e) { /* already exists */ }
+try { db.exec('ALTER TABLE voice_messages ADD COLUMN source_ref TEXT'); } catch (e) { /* already exists */ }
+db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_mail_alert_source ON voice_messages(source_ref) WHERE notification_kind='mail_alert' AND source_ref IS NOT NULL");
 // Claude and Codex maintain independent resumable conversations. Keeping
 // both ids in the one existing single-row session record lets "New
 // conversation" reset both without affecting the persistent agent choice.
@@ -194,6 +203,10 @@ const stmts = {
   finishVoiceMessage: db.prepare('UPDATE voice_messages SET status = ?, reply_text = ?, error_message = ?, completed_at = ? WHERE id = ?'),
   getVoiceMessage: db.prepare('SELECT * FROM voice_messages WHERE id = ?'),
   listVoiceMessages: db.prepare('SELECT * FROM voice_messages ORDER BY created_at DESC LIMIT ?'),
+  countUnreadVoiceNotifications: db.prepare("SELECT count(*) AS n FROM voice_messages WHERE notification_kind='mail_alert' AND notification_unread=1"),
+  listUnreadVoiceNotificationIds: db.prepare("SELECT id FROM voice_messages WHERE notification_kind='mail_alert' AND notification_unread=1 ORDER BY created_at DESC LIMIT 100"),
+  markVoiceNotificationRead: db.prepare("UPDATE voice_messages SET notification_unread=0 WHERE id=? AND notification_kind='mail_alert'"),
+  markAllVoiceNotificationsRead: db.prepare("UPDATE voice_messages SET notification_unread=0 WHERE notification_kind='mail_alert' AND notification_unread=1"),
   getInflightVoiceMessages: db.prepare("SELECT * FROM voice_messages WHERE status IN ('pending','running') ORDER BY created_at ASC"),
   getVoiceSession: db.prepare('SELECT claude_session_id, codex_session_id FROM voice_session WHERE id = 1'),
   upsertVoiceSession: db.prepare(
@@ -417,6 +430,17 @@ const mailbox = mailboxService.setup(db, {
   transport: mailboxTransport
 });
 app.use('/api/mailbox', requireAuth, mailbox.router);
+
+// Every inbound email is classified in a text-only Claude turn with *zero*
+// tools exposed (email content is untrusted). All successfully digested mail
+// is marked read and archived; only important items become durable, unread
+// warm-colored alert cards in the shared Project Manager thread.
+const mailTriage = mailTriageService.setup(db, {
+  enabled: process.env.MAIL_TRIAGE_ENABLED !== 'false',
+  classify: function (input) {
+    return claudeRunner.runTextOnlyStructured(input.prompt, input.schema, 90000);
+  }
+});
 
 // --- YouTube OAuth (Google) — see src/youtubeAuth.js for the token
 // exchange itself. Placeholder-until-configured: YOUTUBE_OAUTH_CLIENT_ID/
@@ -1708,6 +1732,21 @@ app.get('/api/voice/messages/:id', function (req, res) {
   const row = stmts.getVoiceMessage.get(req.params.id);
   if (!row) return res.status(404).json({ error: 'not_found' });
   res.json(hydrateVoiceMessageRow(row));
+});
+
+app.get('/api/voice/notifications/status', function (req, res) {
+  res.json({
+    unread: Number(stmts.countUnreadVoiceNotifications.get().n) || 0,
+    ids: stmts.listUnreadVoiceNotificationIds.all().map(function (row) { return row.id; }),
+    triage: mailTriage.status()
+  });
+});
+
+app.post('/api/voice/notifications/read', function (req, res) {
+  const ids = req.body && Array.isArray(req.body.ids) ? req.body.ids.filter(isValidId).slice(0, 100) : [];
+  if (ids.length) db.transaction(function () { ids.forEach(function (id) { stmts.markVoiceNotificationRead.run(id); }); })();
+  else stmts.markAllVoiceNotificationsRead.run();
+  res.json({ ok: true, unread: Number(stmts.countUnreadVoiceNotifications.get().n) || 0 });
 });
 
 app.get('/api/voice/agent', function (req, res) {

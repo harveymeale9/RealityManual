@@ -492,11 +492,44 @@ async function runOneShot(prompt, timeoutMs) {
   return Promise.race([consume, timeout]);
 }
 
+// Restricted one-turn classifier for untrusted text such as inbound email.
+// Unlike runOneShot(), this deliberately exposes zero built-in tools, cannot
+// ask for permissions, and is capped at one turn. An email can therefore try
+// prompt injection all it likes, but it has no filesystem/shell/network tool
+// with which to act on it. JSON schema output also keeps callers away from
+// brittle prose parsing.
+async function runTextOnlyStructured(prompt, schema, timeoutMs) {
+  const iterator = query({
+    prompt: prompt,
+    options: {
+      cwd: CLAUDE_REPO_DIR,
+      tools: [],
+      maxTurns: 1,
+      permissionMode: 'dontAsk',
+      outputFormat: { type: 'json_schema', schema: schema }
+    }
+  });
+  const consume = (async function () {
+    for await (const evt of iterator) {
+      if (evt.type !== 'result') continue;
+      if (evt.subtype !== 'success' || evt.is_error) throw new Error(evt.result || 'text-only Claude call failed');
+      if (evt.structured_output == null) throw new Error('text-only Claude call returned no structured output');
+      return evt.structured_output;
+    }
+    throw new Error('text-only Claude call ended without a result');
+  })();
+  const timeout = new Promise(function (resolve, reject) {
+    setTimeout(function () { reject(new Error('text-only Claude call timed out')); }, timeoutMs || 90000);
+  });
+  return Promise.race([consume, timeout]);
+}
+
 module.exports = {
   runClaude: runClaude,
   recoverClaudeRun: recoverClaudeRun,
   hasRecoverableRun: hasRecoverableRun,
   cleanupRun: cleanupRun,
   resetSession: resetSession,
-  runOneShot: runOneShot
+  runOneShot: runOneShot,
+  runTextOnlyStructured: runTextOnlyStructured
 };

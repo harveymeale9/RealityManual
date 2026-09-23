@@ -9205,3 +9205,50 @@ one-send-only behavior, stage tracking, email contents, mailbox Sent storage,
 YouTube statistics normalization, and aggregate storefront reporting with an
 explicit no-PII contract. A direct read-only query against the live storefront
 database also returned the expected traffic/funnel/sales aggregates.
+
+---
+
+# 198. Automatic Mail Digestion, Archiving, and Project Manager Alerts (2026-09-23)
+
+Every inbound message imported into the customer mailbox now enters a durable
+AI-triage queue. Each email is read once and classified for Harvey-specific
+importance: customer/order/support problems; platform/API/account-review news;
+payment, legal, security, domain, or infrastructure issues; genuine partnership
+or media enquiries; and direct business messages that likely need a response.
+Routine newsletters, promotions, generic product updates, and spam are silently
+filed. After successful digestion every message is marked read and its thread is
+moved to Mailbox Archive, so Inbox is an arrival queue rather than a second task
+list. If classification fails, the email deliberately remains visible and
+unread in Inbox and is retried later; nothing is silently archived on an error.
+
+Inbound email is hostile/untrusted input, so it is never passed to either normal
+tool-capable Project Manager agent. `claudeRunner.runTextOnlyStructured()` creates
+a fresh single-turn classifier with `tools: []`, `permissionMode: dontAsk`, a
+one-turn cap, and a strict JSON schema. The prompt explicitly treats the message
+as data, and a deterministic safeguard independently recognizes YouTube/Google/
+TikTok API-review decisions and serious Stripe/BookVault/Namecheap/GitHub
+operational notices. A synthetic live call through the production Claude SDK
+proved schema output works with zero tools exposed.
+
+Important messages create one idempotent `mail_alert` row in the existing
+`voice_messages` timeline. Desktop and `/voice-mobile.html` render that row as a
+single warm coral **Mailbox alert** card—not as a fake Harvey message plus a
+Claude reply, and not in the Task List. The card gives sender/subject, the facts
+that matter, and an explicit action or “No action needed right now,” with Play,
+Reply, and Open Mailbox controls. A unique source-message index prevents retries
+or service restarts from duplicating alerts.
+
+Unread mail alerts have a separate durable read state and authenticated count/
+mark-read APIs. Both Project Manager interfaces show a numbered envelope badge;
+tapping it scrolls to the unread alert and clears the count, while tapping an
+individual card clears only that alert. The mobile shortcut also uses the Web
+Badging API where the installed browser supports it, with the always-visible
+in-app number as the reliable cross-browser fallback.
+
+Verification: the full Node suite passes 22/22. Integration coverage proves all
+successfully digested mail is archived, only important mail creates an alert,
+YouTube approval is force-protected even if model classification is false,
+reprocessing is idempotent, and a classifier outage leaves the original email
+untouched in Inbox. Headless Chromium at 390×844 and 1440×900 proved the coral
+single-card rendering, unread `1` badge, mark-read behavior, no fake user bubble,
+no Task List pollution, and no viewport overflow.

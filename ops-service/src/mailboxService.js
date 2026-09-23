@@ -204,6 +204,10 @@ function setup(db, options) {
       .run(id, threadId, providerId, internetMessageId, JSON.stringify(input.references || []), 'inbound', 'received', clean(input.fromName, 300), clean(input.fromEmail, 500),
         JSON.stringify(input.to || [mailboxAddress]), JSON.stringify(input.cc || []), clean(input.subject, 500) || '(no subject)',
         clean(input.textBody), clean(input.htmlBody), bool(input.read) ? 1 : 0, clean(input.inReplyTo, 500) || null, stamp, null, stamp);
+    // A reply to an archived conversation is new mail again until triage (or
+    // Harvey) handles it. Otherwise a classifier outage on a later reply
+    // could leave that unread message hidden in Archive instead of Inbox.
+    db.prepare("UPDATE mailbox_threads SET folder='inbox',updated_at=? WHERE id=?").run(stamp, threadId);
     (input.attachments || []).forEach(function (file) {
       if (!file || !Buffer.isBuffer(file.content)) return;
       const attachmentId = crypto.randomUUID();

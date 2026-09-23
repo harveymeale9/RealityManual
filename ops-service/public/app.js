@@ -376,6 +376,7 @@
               '<button type="button" class="pm-agent-option" data-agent="codex">Codex</button>' +
               '<button type="button" class="pm-agent-option pm-usage-option" aria-haspopup="dialog">Usage</button>' +
             '</div>' +
+            '<button type="button" class="pm-alert-btn" id="pmAlertBtn" title="Unread mailbox alerts">✉ Alerts <span class="pm-alert-badge" id="pmAlertBadge" hidden></span></button>' +
             '<a class="link-btn" id="pmMobileLink" href="voice-mobile.html" target="_blank" rel="noopener">Mobile view ↗</a>' +
             '<button type="button" class="pm-reset-btn" id="pmResetBtn">New conversation</button>' +
           '</div>' +
@@ -431,6 +432,8 @@
     var replyPreviewCancelBtn = document.getElementById('pmReplyPreviewCancel');
     var agentButtons = Array.prototype.slice.call(document.querySelectorAll('.pm-agent-option[data-agent]'));
     var usageButton = document.querySelector('.pm-usage-option');
+    var alertButton = document.getElementById('pmAlertBtn');
+    var alertBadge = document.getElementById('pmAlertBadge');
     var selectedAgent = 'claude';
     var agentPreferenceVersion = 0;
 
@@ -567,18 +570,39 @@
       return el;
     }
 
-    function addAssistantMessage(text, replyToText, msgId, insertBeforeEl, agent) {
+    function updateAlertCount(count) {
+      count = Number(count) || 0;
+      alertBadge.textContent = count > 99 ? '99+' : String(count);
+      alertBadge.hidden = count < 1;
+      alertButton.setAttribute('aria-label', count ? count + ' unread mailbox alert' + (count === 1 ? '' : 's') : 'No unread mailbox alerts');
+      Voice.setAppBadge(count);
+    }
+    function refreshAlertCount() {
+      return Voice.getNotificationStatus().then(function (data) { updateAlertCount(data.unread); return data; }).catch(function () {});
+    }
+    alertButton.addEventListener('click', function () {
+      var unread = thread.querySelector('.pm-msg-assistant--mail-alert.pm-msg-notification-unread');
+      if (unread) unread.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      Voice.markNotificationsRead([]).then(function () {
+        thread.querySelectorAll('.pm-msg-notification-unread').forEach(function (el) { el.classList.remove('pm-msg-notification-unread'); });
+        updateAlertCount(0);
+      }).catch(function () {});
+    });
+
+    function addAssistantMessage(text, replyToText, msgId, insertBeforeEl, agent, notificationKind, notificationUnread) {
       clearEmptyNote();
       agent = agent === 'codex' ? 'codex' : 'claude';
+      var isMailAlert = notificationKind === 'mail_alert';
       var isAction = /^\[NEEDS_ACTION\]/i.test(text || '');
       var wrap = document.createElement('div');
-      wrap.className = 'pm-msg pm-msg-assistant pm-msg-assistant--' + agent + (isAction ? ' pm-msg-assistant--action' : '');
+      wrap.className = 'pm-msg pm-msg-assistant ' + (isMailAlert ? 'pm-msg-assistant--mail-alert' : 'pm-msg-assistant--' + agent) +
+        (isAction && !isMailAlert ? ' pm-msg-assistant--action' : '') + (isMailAlert && notificationUnread ? ' pm-msg-notification-unread' : '');
       if (msgId) wrap.dataset.msgId = msgId;
       var agentLabel = document.createElement('div');
       agentLabel.className = 'pm-msg-agent-label';
-      agentLabel.textContent = agentName(agent) + ':';
+      agentLabel.textContent = isMailAlert ? 'Mailbox alert' : agentName(agent) + ':';
       wrap.appendChild(agentLabel);
-      if (replyToText) {
+      if (replyToText && !isMailAlert) {
         var replyTo = document.createElement('div');
         replyTo.className = 'pm-msg-replyto';
         replyTo.textContent = replyToSnippet(replyToText);
@@ -616,6 +640,21 @@
         });
       });
       meta.appendChild(playBtn);
+      if (isMailAlert) {
+        var mailboxBtn = document.createElement('button');
+        mailboxBtn.type = 'button';
+        mailboxBtn.className = 'pm-reply-btn';
+        mailboxBtn.textContent = 'Open Mailbox';
+        mailboxBtn.addEventListener('click', function () { window.location.hash = 'mailbox'; });
+        meta.appendChild(mailboxBtn);
+        wrap.addEventListener('click', function () {
+          if (!wrap.classList.contains('pm-msg-notification-unread')) return;
+          Voice.markNotificationsRead([msgId]).then(function (data) {
+            wrap.classList.remove('pm-msg-notification-unread');
+            updateAlertCount(data.unread);
+          }).catch(function () {});
+        });
+      }
       if (msgId) {
         var replyBtn = document.createElement('button');
         replyBtn.type = 'button';
@@ -688,6 +727,7 @@
     // bottom rather than piling up.
     var RECENT_DONE_LIMIT = 5;
     function renderQueue(rows) {
+      rows = rows.filter(function (r) { return r.notification_kind !== 'mail_alert'; });
       var inflight = rows.filter(function (r) { return r.status === 'pending' || r.status === 'running'; }).slice().reverse();
       var recentDone = rows.filter(function (r) { return r.status === 'done' || r.status === 'error'; })
         .slice()
@@ -807,10 +847,11 @@
     // after that tick's onDone/onError calls, so flipping this true there
     // suppresses exactly (and only) the first tick's replay.
     var pastFirstTick = false;
+    var lastAlertRefresh = 0;
 
     pmSync = Voice.syncThread({
-      onNewMessage: function (row) { addMessage('user', row.transcript, row.id, null, row.reply_to_snippet); },
-      onPending: function (row) { addTyping(row.id, row.agent); },
+      onNewMessage: function (row) { if (row.notification_kind !== 'mail_alert') addMessage('user', row.transcript, row.id, null, row.reply_to_snippet); },
+      onPending: function (row) { if (row.notification_kind !== 'mail_alert') addTyping(row.id, row.agent); },
       onEarlyAck: function (row) {
         // Swap the generic "CC is working on it…" placeholder for CC's own
         // real, contextual first line the moment it's available — visible
@@ -830,7 +871,7 @@
         // Execute-mode replies are a real completion summary now (see
         // server.js buildVoicePrompt), not a throwaway line — show it like
         // any other reply instead of a generic "Done" placeholder.
-        addAssistantMessage(row.reply_text || '', row.transcript, row.id, typingEl, row.agent);
+        addAssistantMessage(row.reply_text || '', row.transcript, row.id, typingEl, row.agent, row.notification_kind, !!row.notification_unread);
         if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
         if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
         if (voiceAutoSpeak[row.id]) {
@@ -873,6 +914,7 @@
         renderQueue(rows);
         pastFirstTick = true;
         refreshAgentPreference();
+        if (Date.now() - lastAlertRefresh > 10000) { lastAlertRefresh = Date.now(); refreshAlertCount(); }
       }
     });
 

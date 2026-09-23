@@ -693,9 +693,16 @@ body.role-reviewer #pmBackFab {
 .pm-msg-assistant { align-self: flex-start; background: var(--surface-2); border: 1px solid var(--border); color: var(--ink); }
 .pm-msg-assistant--claude { background: rgba(139, 124, 246, 0.12); border-color: rgba(139, 124, 246, 0.48); }
 .pm-msg-assistant--codex { background: rgba(65, 170, 255, 0.12); border-color: rgba(65, 170, 255, 0.48); }
+.pm-msg-assistant--mail-alert { background: rgba(255, 112, 78, 0.14); border-color: rgba(255, 126, 92, 0.72); box-shadow: inset 3px 0 #ff7e5c; }
+.pm-msg-assistant--mail-alert.pm-msg-notification-unread { box-shadow: inset 4px 0 #ff7e5c, 0 0 0 1px rgba(255,126,92,.16); }
 .pm-msg-agent-label { margin-bottom: 5px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.02em; }
 .pm-msg-assistant--claude .pm-msg-agent-label { color: #b8adff; }
 .pm-msg-assistant--codex .pm-msg-agent-label { color: #82c8ff; }
+.pm-msg-assistant--mail-alert .pm-msg-agent-label { color: #ff9b7d; text-transform: uppercase; letter-spacing: .08em; }
+.pm-alert-btn { position: relative; min-height: 32px; padding: 5px 10px; border: 1px solid rgba(255,126,92,.5); border-radius: 7px; background: rgba(255,112,78,.09); color: #ffad94; font: 700 .72rem var(--font-mono); cursor: pointer; }
+.pm-alert-btn:hover { border-color: #ff7e5c; color: #ffd1c3; }
+.pm-alert-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-left: 5px; padding: 0 4px; border-radius: 99px; background: #ff7e5c; color: #1a0905; font-size: .65rem; }
+.pm-alert-badge[hidden] { display: none; }
 /* Distinct color specifically when Claude's reply needs Harvey to actually
    do something (run a command, decide, approve) — see the [NEEDS_ACTION]
    marker convention in server.js's VOICE_SYSTEM_PROMPT. A plain status/

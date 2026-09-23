@@ -98,6 +98,29 @@ window.RMVoice = (function () {
       .then(function (r) { if (!r.ok) throw new Error('Could not load history'); return r.json(); });
   }
 
+  function getNotificationStatus() {
+    return fetch(API_BASE + '/api/voice/notifications/status', { credentials: 'include' })
+      .then(function (r) { if (!r.ok) throw new Error('Could not load notifications'); return r.json(); });
+  }
+
+  function markNotificationsRead(ids) {
+    return fetch(API_BASE + '/api/voice/notifications/read', {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: Array.isArray(ids) ? ids : [] })
+    }).then(function (r) { if (!r.ok) throw new Error('Could not update notifications'); return r.json(); });
+  }
+
+  // Best-effort installed-PWA/home-screen badge. The always-visible in-app
+  // badge is the reliable fallback on browsers (notably iOS versions) that
+  // do not expose the Badging API to a simple home-screen shortcut.
+  function setAppBadge(count) {
+    count = Number(count) || 0;
+    try {
+      if (count && navigator.setAppBadge) navigator.setAppBadge(count).catch(function () {});
+      else if (!count && navigator.clearAppBadge) navigator.clearAppBadge().catch(function () {});
+    } catch (error) { /* unsupported browser */ }
+  }
+
   function getAgentPreference() {
     return fetch(API_BASE + '/api/voice/agent', { credentials: 'include' })
       .then(function (r) { if (!r.ok) throw new Error('Could not load agent preference'); return r.json(); })
@@ -592,6 +615,9 @@ window.RMVoice = (function () {
     sendMessage: sendMessage,
     getMessage: getMessage,
     listMessages: listMessages,
+    getNotificationStatus: getNotificationStatus,
+    markNotificationsRead: markNotificationsRead,
+    setAppBadge: setAppBadge,
     getAgentPreference: getAgentPreference,
     setAgentPreference: setAgentPreference,
     pollMessage: pollMessage,
