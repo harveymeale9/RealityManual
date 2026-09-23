@@ -9137,3 +9137,26 @@ the reader's highlight boundary. Integration coverage
 now proves punctuation-tolerant exact quotation lookup, all-stop-word literal
 lookup, and the real long freedom paraphrase, in addition to every numbered Rule
 lookup from §194. The full test suite passes 17/17.
+
+---
+
+# 196. Customer Mailbox Connected and Live (2026-09-23)
+
+Harvey completed the root-only interactive credential step introduced in §193 by
+running `sudo /root/realitymanual-repo/ops-service/configure-mailbox.sh`. The app
+password is present only in the host's gitignored `.env` and the recreated
+container; it was not printed, read back, or committed.
+
+The production mailbox is now fully connected to Namecheap Private Email. A
+manual live sync authenticated to IMAP, completed without error, and imported the
+real inbox; the Content Studio reports the provider as connected with five unread
+messages and twelve visible threads at verification time. A direct provider
+verification from the production container authenticated successfully to both
+encrypted IMAP and encrypted SMTP. The live provider identity is
+**Reality Manual Support <info@realitymanual.com>**.
+
+Headless Chromium then logged into the real production site, opened Mailbox, and
+confirmed the Namecheap connected state, address, five-count unread badge, Inbox
+count, imported thread list, visible Compose control, and absence of UI errors.
+The complete Node suite passes 17/17, including outgoing identity, IMAP mapping,
+incremental sync/deduplication, SMTP send behavior, attachments, and threading.
