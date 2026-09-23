@@ -10,35 +10,27 @@
 + '[' -n '' ']'
 + git pull
 From https://github.com/harveymeale9/RealityManual
-   69632ba..9423e76  main       -> origin/main
- * [new tag]         manuscript-interior-source -> manuscript-interior-source
-Updating 69632ba..9423e76
+   9423e76..2084380  main       -> origin/main
+Updating 9423e76..2084380
 Fast-forward
- CLAUDE.md                                   |  30 +++++
- ops-service/.ci/last-run.log                | 107 +++------------
- ops-service/.env.example                    |   8 ++
- ops-service/scripts/register-monitor.js     |  30 +++++
- ops-service/server.js                       |  44 ++++++
- ops-service/src/backgroundMonitorService.js | 201 ++++++++++++++++++++++++++++
- ops-service/test/backgroundMonitor.test.js  |  54 ++++++++
- 7 files changed, 386 insertions(+), 88 deletions(-)
- create mode 100644 ops-service/scripts/register-monitor.js
- create mode 100644 ops-service/src/backgroundMonitorService.js
- create mode 100644 ops-service/test/backgroundMonitor.test.js
+ CLAUDE.md                                   |   4 +
+ ops-service/.ci/last-run.log                | 111 ++++++++++++++++++++++++----
+ ops-service/server.js                       |   7 +-
+ ops-service/src/backgroundMonitorService.js |  12 ++-
+ ops-service/test/backgroundMonitor.test.js  |   1 +
+ 5 files changed, 115 insertions(+), 20 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=9423e76e519ec3be639ad58c97760e94b2b84e6f
++ NEW_HEAD=2084380b5835115a3be57c29f1d3b3dff9df20e3
 + git -C /srv/realitymanual-repo pull
-From https://github.com/harveymeale9/RealityManual
- * [new tag]         manuscript-interior-source -> manuscript-interior-source
 Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
 + LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
 ++ cat /root/ops-service-data/last-image-commit.txt
-+ LAST_BUILD_COMMIT=bd202ec84a8c590c5d62f3033426f4b23a7658fc
++ LAST_BUILD_COMMIT=9423e76e519ec3be639ad58c97760e94b2b84e6f
 + NEEDS_REBUILD=1
-+ '[' -n bd202ec84a8c590c5d62f3033426f4b23a7658fc ']'
-+ git cat-file -e 'bd202ec84a8c590c5d62f3033426f4b23a7658fc^{commit}'
-++ git diff --name-only bd202ec84a8c590c5d62f3033426f4b23a7658fc 9423e76e519ec3be639ad58c97760e94b2b84e6f -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -n 9423e76e519ec3be639ad58c97760e94b2b84e6f ']'
++ git cat-file -e '9423e76e519ec3be639ad58c97760e94b2b84e6f^{commit}'
+++ git diff --name-only 9423e76e519ec3be639ad58c97760e94b2b84e6f 2084380b5835115a3be57c29f1d3b3dff9df20e3 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z 'ops-service/server.js
 ops-service/src/backgroundMonitorService.js' ']'
 + '[' 0 = 1 ']'
@@ -48,11 +40,11 @@ ops-service/src/backgroundMonitorService.js' ']'
 #0 building with "default" instance using docker driver
 
 #1 [internal] load build definition from Dockerfile
-#1 transferring dockerfile: 2.60kB 0.0s done
+#1 transferring dockerfile: 2.60kB done
 #1 DONE 0.0s
 
 #2 [internal] load metadata for docker.io/library/node:22-slim
-#2 DONE 0.3s
+#2 DONE 0.1s
 
 #3 [internal] load .dockerignore
 #3 transferring context: 136B done
@@ -63,7 +55,7 @@ ops-service/src/backgroundMonitorService.js' ']'
 #4 DONE 0.0s
 
 #5 [internal] load build context
-#5 transferring context: 268.81kB 0.0s done
+#5 transferring context: 127.43kB 0.0s done
 #5 DONE 0.0s
 
 #6 [ 3/11] RUN npm install -g @anthropic-ai/claude-code@2.1.276
@@ -88,33 +80,33 @@ ops-service/src/backgroundMonitorService.js' ']'
 #12 DONE 0.1s
 
 #13 [ 9/11] COPY public ./public
-#13 DONE 0.9s
+#13 DONE 0.3s
 
 #14 [10/11] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
-#14 DONE 37.1s
+#14 DONE 42.3s
 
 #15 [11/11] RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
-#15 DONE 0.8s
+#15 DONE 0.7s
 
 #16 exporting to image
 #16 exporting layers
-#16 exporting layers 17.3s done
-#16 exporting manifest sha256:504e5d02b927c33b602ed072d0d5a481ebc47cb848cf308139032e9fb0928c1e 0.0s done
-#16 exporting config sha256:8e24dde34613971e30823e2d254b8fccc29aff58be5b009ad5c11f4cc3a0be6d 0.0s done
-#16 exporting attestation manifest sha256:41cb87459e48af324b97cbf3cba0201eeab94044bac899ebb09f0086bcbb07d0 0.0s done
-#16 exporting manifest list sha256:ac85da34c932578c6cd3944fadb1a178ba6a06514f5d28949c118585d714e19c 0.0s done
+#16 exporting layers 18.4s done
+#16 exporting manifest sha256:e65a67c9aa91f2265557643b2182a7cb2182e040f28a101deb2b3584e4075df5 0.0s done
+#16 exporting config sha256:1cca66e566002658e6d28146a149efde3dbf4acc85337211f8699fadb530d4e7 done
+#16 exporting attestation manifest sha256:ce9264542c555021a638a6b2241263ad667e9022fe7819ceaf9f38ca7caee811 0.0s done
+#16 exporting manifest list sha256:f4276910c37ed6d69c85e38bafdbe49f5b1fa307201aa0e1b8099333b54cd983 0.0s done
 #16 naming to docker.io/library/rm-ops-service:latest done
 #16 unpacking to docker.io/library/rm-ops-service:latest
-#16 unpacking to docker.io/library/rm-ops-service:latest 7.9s done
-#16 DONE 25.3s
+#16 unpacking to docker.io/library/rm-ops-service:latest 4.9s done
+#16 DONE 23.4s
 + docker stop rm-ops-service
 rm-ops-service
 + docker rm rm-ops-service
 rm-ops-service
 + docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-claude-home/claude-dir:/home/node/.claude -v /root/ops-service-claude-home/claude.json:/home/node/.claude.json -v /root/ops-service-data:/data -v /root/realitymanual-backend-data:/store-data:ro -v /srv/realitymanual-repo:/repo -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
-3036fb10364aadfbcf0cb3aeec57b954a67a8bda76eb5216108826a70af6d0c5
-+ echo 9423e76e519ec3be639ad58c97760e94b2b84e6f
+976a5b97e544a01e6e58dbec67eec6d428efb9e22a68d709076a62b71ead5cd8
++ echo 2084380b5835115a3be57c29f1d3b3dff9df20e3
 ++ git -C /root/realitymanual-repo rev-parse --short HEAD
-+ echo 'rm-ops-service redeployed at 9423e76'
-rm-ops-service redeployed at 9423e76
++ echo 'rm-ops-service redeployed at 2084380'
+rm-ops-service redeployed at 2084380
 ssh exit code: 0
