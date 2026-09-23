@@ -9078,3 +9078,29 @@ UID incremental fetch, MIME/address/inline-attachment mapping, reply headers,
 SMTP delivery, and the exact From identity. Mailbox integration coverage proves
 sync ingestion and connected status. A real provider login/send test remains
 deliberately pending until Harvey performs the raw-credential environment step.
+
+---
+
+# 194. Intelligent Finder Resolves Exact Rule References (2026-09-23)
+
+The manuscript finder now treats references to any of the fourteen named Rules
+as exact navigational intent. Previously, tokenization discarded the one-character
+number in `rule1` / `rule 1`, leaving only the generic word `rule`; normal FTS
+ranking then compared every Rule passage and could put Rule VII first. The finder
+now resolves Arabic numbers (`rule1`, `Rule 1`), Roman numerals (`Rule I`), number
+words (`rule one`), and canonical names (`Rule of Internal Value`) against the
+single doctrine catalogue in `ideationDoctrine.js`.
+
+An exact Rule request injects that Rule's actual manuscript page into the candidate
+set, gives it an explicit navigation-priority boost, and presents its canonical
+title (for example, **Rule I: The Rule of Internal Value**) first. This applies
+consistently to Rules I–XIV rather than special-casing Rule I. Generic conceptual
+searches still use semantic/topic ranking; a passing mention of a broad word such
+as “freedom” inside a longer query does not accidentally become an exact Rule
+lookup. The search-index fingerprint was bumped so cached pre-fix jobs cannot
+continue serving the old ranking.
+
+Verification: the manuscript integration suite exercises all 14 Rules in compact
+Arabic, spaced Arabic, and Roman forms, plus a canonical-name lookup. The full
+Node test suite passes 17/17, and direct index checks confirm `rule1` opens page 9
+with Rule I first while Rule X and Rule XIV resolve to pages 104 and 128.

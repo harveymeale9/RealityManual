@@ -1,8 +1,9 @@
 'use strict';
 
 const crypto = require('crypto');
+const doctrine = require('./ideationDoctrine');
 
-const INDEX_VERSION = 'semantic-fts-v2';
+const INDEX_VERSION = 'semantic-fts-v3-rule-references';
 const STOP_WORDS = new Set(['a','an','and','are','as','at','be','but','by','do','does','for','from','had','has','have','how','i','if','in','is','it','me','my','of','on','or','our','should','so','that','the','their','there','they','this','to','was','we','what','when','where','which','who','why','will','with','you','your']);
 
 const TOPICS = [
@@ -21,6 +22,20 @@ const TOPICS = [
   { id: 'firr', label: 'FIRR and automatic emotional reprogramming', from: 165, to: 175, anchor: 165, triggers: ['firr','reprogram','automatic response','emotional response','autopilot','triggered','trigger'], terms: ['firr','integrated','responsive','reprogramming','automatic','response','emotion','subconscious'] },
   { id: 'enlightenment', label: 'enlightenment, desirelessness, and oneness', from: 176, to: 180, anchor: 176, triggers: ['enlightenment','enlightened','transcend desire','desirelessness','heaven on earth'], terms: ['enlightenment','transcendence','desire','oneness','existence','wellbeing','heaven'] }
 ];
+
+const NUMBER_WORDS = ['one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen'];
+const RULE_REFERENCES = doctrine.RULES.map(function (rule, index) {
+  const canonicalName = rule[0] === 'X' ? 'The Tripartite Rule' : 'The Rule of ' + rule[1];
+  return {
+    number: index + 1,
+    roman: rule[0],
+    shortName: rule[1],
+    canonicalName: canonicalName,
+    title: 'Rule ' + rule[0] + ': ' + canonicalName,
+    description: rule[2],
+    page: rule[3]
+  };
+});
 
 function normalized(value) {
   return String(value || '').toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
@@ -54,6 +69,25 @@ function matchingTopics(query) {
   return TOPICS.filter(function (topic) {
     return topic.triggers.some(function (trigger) { return source.indexOf(normalized(trigger)) !== -1; });
   });
+}
+
+function matchingRule(query) {
+  const source = normalized(query);
+  const numbered = source.match(/\brule\s*(14|13|12|11|10|[1-9]|xiv|xiii|xii|xi|ix|viii|vii|vi|iv|iii|ii|x|v|i)\b/i);
+  if (numbered) {
+    const token = numbered[1].toUpperCase();
+    const numeric = /^\d+$/.test(token) ? Number(token) : null;
+    return RULE_REFERENCES.find(function (rule) { return numeric ? rule.number === numeric : rule.roman === token; }) || null;
+  }
+  for (let i = 0; i < NUMBER_WORDS.length; i++) {
+    if (new RegExp('\\brule\\s+' + NUMBER_WORDS[i] + '\\b').test(source)) return RULE_REFERENCES[i];
+  }
+  return RULE_REFERENCES.find(function (rule) {
+    const shortName = normalized(rule.shortName);
+    return source.indexOf(normalized(rule.canonicalName)) !== -1
+      || source === shortName
+      || (source.indexOf('rule') !== -1 && source.indexOf(shortName) !== -1);
+  }) || null;
 }
 
 function intentAnchors(query) {
@@ -103,16 +137,19 @@ function setup(db, pages) {
 
   const lookup = db.prepare(`SELECT page,title,body,bm25(manuscript_search_chunks,0,0,3.2,1.5,0.55) AS rank
     FROM manuscript_search_chunks WHERE manuscript_search_chunks MATCH ? ORDER BY rank LIMIT 80`);
+  const pageLookup = db.prepare('SELECT page,title,body,0 AS rank FROM manuscript_search_chunks WHERE page=?');
 
   function search(query) {
     const queryTerms = terms(query);
     const topics = matchingTopics(query);
-    const anchors = intentAnchors(query);
-    const expanded = queryTerms.concat(topics.flatMap(function (topic) { return topic.terms; }));
+    const rule = matchingRule(query);
+    const anchors = intentAnchors(query).concat(rule ? [rule.page] : []);
+    const ruleTerms = rule ? terms(rule.canonicalName + ' ' + rule.description) : [];
+    const expanded = queryTerms.concat(ruleTerms, topics.flatMap(function (topic) { return topic.terms; }));
     const unique = Array.from(new Set(expanded)).slice(0, 32);
     if (!unique.length) return [];
     const match = unique.map(function (term) { return '"' + term + '"*'; }).join(' OR ');
-    const rows = lookup.all(match);
+    const rows = lookup.all(match).concat(rule ? pageLookup.all(rule.page) : []);
     const byPage = new Map();
     rows.forEach(function (row) {
       const page = Number(row.page);
@@ -127,17 +164,21 @@ function setup(db, pages) {
         const distance = Math.abs(page - anchor);
         return score + (distance === 0 ? 100 : distance <= 2 ? 45 - distance * 10 : 0);
       }, 0);
-      const score = -Number(row.rank || 0) + lexical + topicBoost + phraseBoost + anchorBoost;
+      const ruleBoost = rule && page === rule.page ? 2000 : 0;
+      const score = -Number(row.rank || 0) + lexical + topicBoost + phraseBoost + anchorBoost + ruleBoost;
       const prior = byPage.get(page);
       if (!prior || score > prior.score) byPage.set(page, Object.assign({}, row, { page: page, score: score }));
     });
     return Array.from(byPage.values()).sort(function (a, b) { return b.score - a.score; }).slice(0, 8).map(function (row) {
       const topic = topics.find(function (candidate) { return row.page >= candidate.from && row.page <= candidate.to; });
+      const exactRule = rule && row.page === rule.page;
       const body = row.body.length > 500 ? row.body.slice(0, 500).replace(/\s+\S*$/, '') : row.body;
       return {
         page: row.page,
-        title: row.title === 'Page ' + row.page && topic ? topic.label : row.title,
-        relevance: topic
+        title: exactRule ? rule.title : (row.title === 'Page ' + row.page && topic ? topic.label : row.title),
+        relevance: exactRule
+          ? 'This is ' + rule.title + ', the exact Rule requested.'
+          : topic
           ? 'This passage is a strong match for your search through the Manual’s discussion of ' + topic.label + '.'
           : 'This passage contains the closest indexed match to the meaning and language of your search.',
         excerpt: body,
@@ -149,4 +190,4 @@ function setup(db, pages) {
   return { search: search, fingerprint: expected, topicCount: TOPICS.length };
 }
 
-module.exports = { setup: setup, matchingTopics: matchingTopics, intentAnchors: intentAnchors, normalized: normalized, terms: terms, TOPICS: TOPICS };
+module.exports = { setup: setup, matchingTopics: matchingTopics, matchingRule: matchingRule, intentAnchors: intentAnchors, normalized: normalized, terms: terms, TOPICS: TOPICS, RULE_REFERENCES: RULE_REFERENCES };

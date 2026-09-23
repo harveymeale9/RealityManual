@@ -6,6 +6,7 @@ const express = require('express');
 const Database = require('better-sqlite3');
 const manuscriptService = require('../src/manuscriptService');
 const corpus = require('../src/ideationCorpus');
+const manuscriptSearchIndex = require('../src/manuscriptSearchIndex');
 
 test('manuscript reader serves diagram-free spreads and instant persistent semantic search', async function (t) {
   let calls = 0;
@@ -74,6 +75,24 @@ test('manuscript reader serves diagram-free spreads and instant persistent seman
   assert.equal(conceptual.status, 'done');
   assert.equal(conceptual.results.slice(0, 2).some(function (result) { return result.page === 57; }), true);
   assert.match(conceptual.results[0].relevance, /oneness/i);
+
+  for (const rule of manuscriptSearchIndex.RULE_REFERENCES) {
+    for (const reference of ['rule' + rule.number, 'Rule ' + rule.number, 'Rule ' + rule.roman]) {
+      const lookup = await request('/search', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ query: reference })
+      });
+      assert.equal(lookup.results[0].page, rule.page, reference + ' should open ' + rule.title);
+      assert.equal(lookup.results[0].title, rule.title, reference + ' should name the exact Rule');
+      assert.match(lookup.results[0].relevance, /exact Rule requested/i);
+    }
+  }
+  const namedRule = await request('/search', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ query: 'Rule of Internal Value' })
+  });
+  assert.equal(namedRule.results[0].page, 9);
+  assert.equal(namedRule.results[0].title, 'Rule I: The Rule of Internal Value');
 
   const rowsBeforeRestart = db.prepare('SELECT count(*) AS n FROM manuscript_search_chunks').get().n;
   manuscriptService.setup(db, { providers: fakeProviders, autoStart: false });
