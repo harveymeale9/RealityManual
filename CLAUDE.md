@@ -9323,3 +9323,29 @@ behind the existing admin session gate. It downloads the canonical
 or desktop download without publishing the full manuscript at a public static
 URL. Integration coverage verifies the attachment filename and manuscript
 contents.
+
+---
+
+# 202. Manuscript Result Highlighting and No-Clipping Page Fit (2026-09-23)
+
+At a 1663×573 laptop viewport, pages 34–35 reproduced Harvey's screenshot:
+the old fitter stopped at approximately 7.4px while the page bodies still
+overflowed by 140px and 207px. Because page bodies deliberately hid overflow,
+the bottom paragraphs—and sometimes the otherwise-correct search highlight—
+were present in the DOM but invisible.
+
+The fitter now enters a compact typography mode when an ordinary page still
+does not fit at 7.5px, tightening paragraph spacing/line height and continuing
+to fit down to 4.5px. An individual page body becomes scrollable only as a
+last-resort guard for an exceptionally dense future page, so text is never
+silently cut off. Search highlighting now finds the longest exact excerpt run
+within a paragraph when the indexed excerpt spans a paragraph boundary or was
+ellipsized. A strongest-word-overlap fallback guarantees that even stale
+cached results visibly mark the most relevant paragraph instead of opening an
+unmarked page.
+
+Headless Chromium at the reported 1663×573 laptop viewport opened all 180
+canonical pages: none retained hidden overflow and none needed the emergency
+per-page scrollbar. It also clicked all eight results for the reproduced
+belief/meaning search; every card produced exactly one visible highlight,
+including pages 34 and 35 from Harvey's screenshot.

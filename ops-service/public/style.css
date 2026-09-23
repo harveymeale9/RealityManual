@@ -532,6 +532,9 @@ body.role-reviewer #pmBackFab {
 .manual-page-body p { margin: 0 0 1.05em; }
 .manual-page-body p:first-child { margin-top: 0; }
 .manual-page-body p:last-child { margin-bottom: 0; }
+.manual-page-compact { line-height: 1.38; }
+.manual-page-compact .manual-page-body p { margin-bottom: .7em; }
+.manual-page-body-scroll { overflow-y: auto; scrollbar-width: thin; scrollbar-color: #aaa18f transparent; }
 .manual-page-number { flex: 0 0 22px; display: flex; align-items: flex-end; justify-content: center; padding-top: 6px; text-align: center; color: #706b61; font: .72rem var(--font-body); }
 .manual-passage-highlight { border-radius: 2px; padding: .04em .08em; background: #ffe96a; color: #1c1a13; box-shadow: 0 0 0 2px rgba(255,233,106,.28); animation: manualPassageGlow 1.8s ease-out; }
 .manual-passage-highlight:focus { outline: 2px solid #c49a00; outline-offset: 2px; }

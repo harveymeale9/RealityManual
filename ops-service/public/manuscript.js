@@ -53,15 +53,56 @@
     return { text: normalized, starts: starts, ends: ends };
   }
 
-  function paragraphHtml(paragraph, highlight) {
-    if (!highlight || highlight.used) return esc(paragraph).replace(/\n/g, '<br>');
+  function matchRange(paragraph, highlightText) {
     var haystack = normalizedOffsets(paragraph);
-    var needle = normalizedOffsets(String(highlight.text || '').replace(/…\s*$/, '')).text;
+    var needle = normalizedOffsets(String(highlightText || '').replace(/…\s*$/, '')).text;
     var index = needle ? haystack.text.indexOf(needle) : -1;
-    if (index < 0) return esc(paragraph).replace(/\n/g, '<br>');
-    var start = haystack.starts[index];
-    var end = haystack.ends[index + needle.length - 1];
-    highlight.used = true;
+    if (index >= 0) return { start: haystack.starts[index], end: haystack.ends[index + needle.length - 1], score: 100000 + needle.length };
+
+    // A search excerpt can legitimately cross a paragraph boundary. Find
+    // the longest exact run of its words that lives inside this rendered
+    // paragraph instead of requiring the whole multi-paragraph excerpt to
+    // appear in one <p>. This also tolerates an excerpt shortened with an
+    // ellipsis while keeping the highlight anchored to real book text.
+    var words = needle.split(' ').filter(Boolean);
+    for (var length = Math.min(words.length, 32); length >= Math.min(5, words.length); length--) {
+      for (var startWord = 0; startWord + length <= words.length; startWord++) {
+        var fragment = words.slice(startWord, startWord + length).join(' ');
+        index = haystack.text.indexOf(fragment);
+        if (index >= 0) return { start: haystack.starts[index], end: haystack.ends[index + fragment.length - 1], score: fragment.length };
+      }
+    }
+    return null;
+  }
+
+  function highlightPlan(paragraphs, highlightText) {
+    if (!highlightText) return null;
+    var best = null;
+    paragraphs.forEach(function (paragraph, index) {
+      var range = matchRange(paragraph, highlightText);
+      if (range && (!best || range.score > best.score)) best = { paragraph: index, start: range.start, end: range.end, score: range.score };
+    });
+    if (best) return best;
+
+    // The backend normally guarantees a verbatim excerpt, but stale cached
+    // search data should still produce a useful visible highlight. Choose
+    // the paragraph with the strongest word overlap and mark the paragraph
+    // itself rather than silently opening a page with no indication at all.
+    var wanted = new Set(normalizedOffsets(highlightText).text.split(/[^a-z0-9']+/).filter(function (word) { return word.length > 3; }));
+    var overlapBest = null;
+    paragraphs.forEach(function (paragraph, index) {
+      var words = new Set(normalizedOffsets(paragraph).text.split(/[^a-z0-9']+/).filter(Boolean));
+      var score = 0;
+      wanted.forEach(function (word) { if (words.has(word)) score++; });
+      if (!overlapBest || score > overlapBest.score) overlapBest = { paragraph: index, start: 0, end: paragraph.length, score: score };
+    });
+    return overlapBest;
+  }
+
+  function paragraphHtml(paragraph, range) {
+    if (!range) return esc(paragraph).replace(/\n/g, '<br>');
+    var start = range.start;
+    var end = range.end;
     return esc(paragraph.slice(0, start)).replace(/\n/g, '<br>') +
       '<mark class="manual-passage-highlight" tabindex="-1">' + esc(paragraph.slice(start, end)).replace(/\n/g, '<br>') + '</mark>' +
       esc(paragraph.slice(end)).replace(/\n/g, '<br>');
@@ -69,12 +110,13 @@
 
   function pageBody(page, side, highlightText, highlightPage) {
     if (!page) return '<section class="manual-page manual-page-' + side + ' manual-page-blank"><span>' + (side === 'left' ? 'The Reality Manual' : '') + '</span></section>';
-    var highlight = page.page === highlightPage && highlightText ? { text: highlightText, used: false } : null;
-    var paragraphs = String(page.text || '').split(/\n\s*\n/).filter(Boolean).map(function (paragraph) {
-      return '<p>' + paragraphHtml(paragraph, highlight) + '</p>';
+    var paragraphs = String(page.text || '').split(/\n\s*\n/).filter(Boolean);
+    var plan = page.page === highlightPage ? highlightPlan(paragraphs, highlightText) : null;
+    var paragraphMarkup = paragraphs.map(function (paragraph, index) {
+      return '<p>' + paragraphHtml(paragraph, plan && plan.paragraph === index ? plan : null) + '</p>';
     }).join('');
     return '<section class="manual-page manual-page-' + (page.page % 2 === 0 ? 'left' : 'right') + '" data-page="' + page.page + '">' +
-      '<div class="manual-page-body">' + paragraphs + '</div><span class="manual-page-number">' + page.page + '</span></section>';
+      '<div class="manual-page-body">' + paragraphMarkup + '</div><span class="manual-page-number">' + page.page + '</span></section>';
   }
 
   function turnControls() {
@@ -110,13 +152,28 @@
     fitBookGeometry();
     root.querySelectorAll('.manual-page:not(.manual-page-blank)').forEach(function (page) {
       page.style.fontSize = '';
+      page.classList.remove('manual-page-compact');
       var body = page.querySelector('.manual-page-body');
       if (!body) return;
+      body.classList.remove('manual-page-body-scroll');
       var size = parseFloat(getComputedStyle(page).fontSize);
       while (body.scrollHeight > body.clientHeight + 1 && size > 7.5) {
         size -= 0.25;
         page.style.fontSize = size + 'px';
       }
+      if (body.scrollHeight > body.clientHeight + 1) {
+        page.classList.add('manual-page-compact');
+        size = 7.5;
+        page.style.fontSize = size + 'px';
+        while (body.scrollHeight > body.clientHeight + 1 && size > 4.5) {
+          size -= 0.15;
+          page.style.fontSize = size + 'px';
+        }
+      }
+      // Last-resort accessibility guard for an unusually dense future page:
+      // allow that page body to scroll rather than ever hiding manuscript
+      // text. Current canonical pages fit before this fallback is needed.
+      if (body.scrollHeight > body.clientHeight + 1) body.classList.add('manual-page-body-scroll');
     });
   }
 
