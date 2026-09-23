@@ -9024,3 +9024,14 @@ fake transport reaching Sent. Headless Chromium verified the real SPA at
 1440×900 and 390×844 with intercepted provider state: navigation, unread badge,
 connection notice, no viewport overflow, full composer, and durable Save Draft
 all worked at both sizes.
+
+---
+
+# 192. Manuscript Finder: Enter Searches, Shift+Enter Adds a Line (2026-09-23)
+
+The integrated manuscript reader's Intelligent Finder now treats ordinary
+Enter as a submit action instead of inserting a newline into its textarea.
+Shift+Enter remains available for an intentional multiline query, and IME
+composition confirmation is left untouched. The behavior calls the form's
+normal `requestSubmit()` path, so button clicks and keyboard searches share
+the same validation, loading state, API request, and result rendering.

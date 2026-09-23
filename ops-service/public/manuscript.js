@@ -244,6 +244,15 @@
         if (isMounted()) root.querySelector('#manualSearchButton').disabled = false;
       });
     };
+    // This finder is a single-query control even though a textarea gives
+    // Harvey enough room to see a longer natural-language search. Plain
+    // Enter submits immediately; Shift+Enter remains the deliberate way to
+    // insert a line break. Ignore IME composition confirmation keystrokes.
+    root.querySelector('#manualSearchQuery').onkeydown = function (event) {
+      if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
+      event.preventDefault();
+      root.querySelector('#manualSearchForm').requestSubmit();
+    };
   }
 
   function mount(container) {
