@@ -9383,3 +9383,51 @@ The brief claim/enqueue window uses a deterministic continuation-message ID;
 startup retries an interrupted claim against that same ID, so a crash at the
 worst possible instant neither strands the watcher nor duplicates the agent
 turn.
+
+---
+
+# 204. Illustrated, Searchable Manuscript Reader from the Print Interior (2026-09-23)
+
+The integrated reader now displays the actual designed pages from Harvey's
+print-ready interior—including every diagram, illustration, parchment texture,
+heading, and printed page number—instead of reconstructing the book from plain
+text. The supplied `interior_printready2.pdf` is a 1,874,043,869-byte,
+187-sheet PDF/X file with no embedded fonts or text layer: every page is a
+flattened image. Its first three sheets are title/contents front matter, sheets
+4–183 correspond exactly to the canonical numbered pages 1–180, and the last
+four sheets are unnumbered end matter. The reader deliberately preserves its
+existing 180-page numbering, so search results and outline citations did not
+change.
+
+`scripts/build-manuscript-artwork.js` is the reproducible ingestion pipeline.
+It renders the numbered interior once at 200 DPI, compresses each page to a
+1,606×2,386 lossy WebP at quality 72, runs Tesseract over the render, and emits
+a compact positioned word layer plus a source-hash manifest. It requires the
+host commands `pdftoppm`, `cwebp`, and `tesseract`. Generated files live only
+under `/data/manuscript-pages` (the host path is
+`/root/ops-service-data/manuscript-pages`), never in Git or the container
+image. The 180 images total 46,959,366 bytes and the 43,974-word coordinate
+layer totals 1,272,477 bytes: 48,231,843 bytes combined, a 97.43% reduction
+from the 1.874 GB print source and an average image size of about 261 KB.
+
+The authenticated manuscript API detects the completed manifest at startup,
+serves immutable private page artwork, and returns the corresponding OCR word
+boxes with each spread. If the generated bundle is unavailable or incomplete,
+the existing canonical text reader remains the safe fallback. The browser
+lays those transparent words over the artwork, which keeps page text
+selectable/copyable and lets a clicked semantic-search result illuminate the
+actual printed passage. Longest exact OCR runs anchor highlights; a local
+vocabulary-overlap window guarantees a visible passage even when decorative
+type causes an OCR error. Search itself still uses the much cleaner canonical
+180-page text index, so illustration support does not weaken or slow semantic
+retrieval. The physical spread now uses the print interior's true aspect ratio,
+and edge-tap navigation remains above the selection layer.
+
+Verification covered all 180 page images and all 180 coordinate files, their
+page IDs and 1,606×2,386 geometry, representative text/diagram quality, the
+authenticated artwork response/cache headers, and the full ops-service test
+suite. A real Chromium run at Harvey's reproduced 1,663×573 laptop viewport
+opened every spread and observed every numbered page with no failed image
+request or cropped page; it also copied text from the OCR layer, found an exact
+quotation on page 91 by pressing Enter, visibly highlighted 89 positioned
+words, and turned the spread by clicking its right edge.

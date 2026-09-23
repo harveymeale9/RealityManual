@@ -108,8 +108,66 @@
       esc(paragraph.slice(end)).replace(/\n/g, '<br>');
   }
 
+  function token(value) {
+    return String(value || '').toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '');
+  }
+
+  function artworkHighlight(words, highlightText) {
+    if (!highlightText || !words || !words.length) return new Set();
+    var source = words.map(function (word) { return token(word[0]); });
+    var wanted = String(highlightText).replace(/…\s*$/, '').split(/\s+/).map(token).filter(Boolean);
+    var best = { source: 0, length: 0 };
+    for (var wantedStart = 0; wantedStart < wanted.length; wantedStart++) {
+      for (var sourceStart = 0; sourceStart < source.length; sourceStart++) {
+        if (!source[sourceStart] || source[sourceStart] !== wanted[wantedStart]) continue;
+        var length = 0;
+        while (sourceStart + length < source.length && wantedStart + length < wanted.length && source[sourceStart + length] === wanted[wantedStart + length]) length++;
+        if (length > best.length) best = { source: sourceStart, length: length };
+      }
+    }
+    var highlighted = new Set();
+    if (best.length >= 4) {
+      // Include a little context around an exact OCR run so the highlighted
+      // region reads as a passage rather than an isolated phrase.
+      var context = Math.min(8, Math.floor(wanted.length / 4));
+      var from = Math.max(0, best.source - context);
+      var to = Math.min(source.length, best.source + best.length + context);
+      for (var exactIndex = from; exactIndex < to; exactIndex++) highlighted.add(exactIndex);
+      return highlighted;
+    }
+    // OCR occasionally misreads decorative type. In that case choose the
+    // local window with the greatest vocabulary overlap; clicking a result
+    // must still visibly identify the relevant region.
+    var wantedSet = new Set(wanted);
+    var windowLength = Math.max(12, Math.min(48, wanted.length || 24));
+    var bestScore = -1, bestStart = 0;
+    for (var start = 0; start < source.length; start++) {
+      var score = 0;
+      for (var offset = 0; offset < windowLength && start + offset < source.length; offset++) if (wantedSet.has(source[start + offset])) score++;
+      if (score > bestScore) { bestScore = score; bestStart = start; }
+    }
+    for (var fuzzyIndex = bestStart; fuzzyIndex < Math.min(source.length, bestStart + windowLength); fuzzyIndex++) highlighted.add(fuzzyIndex);
+    return highlighted;
+  }
+
+  function artworkPageBody(page, highlightText, highlightPage) {
+    var artwork = page.artwork;
+    var highlighted = page.page === highlightPage ? artworkHighlight(artwork.words, highlightText) : new Set();
+    var words = artwork.words.map(function (word, index) {
+      var left = (Number(word[1]) / artwork.width * 100).toFixed(4);
+      var top = (Number(word[2]) / artwork.height * 100).toFixed(4);
+      var width = (Number(word[3]) / artwork.width * 100).toFixed(4);
+      var height = (Number(word[4]) / artwork.height * 100).toFixed(4);
+      return '<span class="manual-art-word' + (highlighted.has(index) ? ' is-highlighted' : '') + '" style="left:' + left + '%;top:' + top + '%;width:' + width + '%;height:' + height + '%;font-size:' + height + 'cqh">' + esc(word[0]) + '&nbsp;</span>';
+    }).join('');
+    return '<section class="manual-page manual-page-artwork manual-page-' + (page.page % 2 === 0 ? 'left' : 'right') + '" data-page="' + page.page + '">' +
+      '<img class="manual-page-image" src="' + esc(artwork.imageUrl) + '" alt="The Reality Manual, page ' + page.page + '" draggable="false">' +
+      '<div class="manual-art-text" aria-label="Selectable text for page ' + page.page + '">' + words + '</div></section>';
+  }
+
   function pageBody(page, side, highlightText, highlightPage) {
     if (!page) return '<section class="manual-page manual-page-' + side + ' manual-page-blank"><span>' + (side === 'left' ? 'The Reality Manual' : '') + '</span></section>';
+    if (page.artwork && page.artwork.imageUrl) return artworkPageBody(page, highlightText, highlightPage);
     var paragraphs = String(page.text || '').split(/\n\s*\n/).filter(Boolean);
     var plan = page.page === highlightPage ? highlightPlan(paragraphs, highlightText) : null;
     var paragraphMarkup = paragraphs.map(function (paragraph, index) {
@@ -137,9 +195,10 @@
     var toolbarStyle = getComputedStyle(toolbar);
     var availableWidth = stage.clientWidth - parseFloat(stageStyle.paddingLeft) - parseFloat(stageStyle.paddingRight);
     var availableHeight = stage.clientHeight - parseFloat(stageStyle.paddingTop) - parseFloat(stageStyle.paddingBottom) - toolbar.offsetHeight - parseFloat(toolbarStyle.marginBottom);
-    var width = Math.min(1060, availableWidth * 0.96, availableHeight * (4 / 3));
-    var height = Math.min(780, availableHeight, width * (3 / 4));
-    width = Math.min(width, height * (4 / 3));
+    var spreadRatio = 1.3462;
+    var width = Math.min(1060, availableWidth * 0.96, availableHeight * spreadRatio);
+    var height = Math.min(780, availableHeight, width / spreadRatio);
+    width = Math.min(width, height * spreadRatio);
     book.style.width = Math.max(0, Math.floor(width)) + 'px';
     book.style.height = Math.max(0, Math.floor(height)) + 'px';
   }
@@ -151,6 +210,7 @@
     if (!isMounted()) return;
     fitBookGeometry();
     root.querySelectorAll('.manual-page:not(.manual-page-blank)').forEach(function (page) {
+      if (page.classList.contains('manual-page-artwork')) return;
       page.style.fontSize = '';
       page.classList.remove('manual-page-compact');
       var body = page.querySelector('.manual-page-body');
@@ -207,7 +267,7 @@
       book.classList.add('flipping');
       requestAnimationFrame(function () {
         fitSpread();
-        var highlighted = book.querySelector('.manual-passage-highlight');
+        var highlighted = book.querySelector('.manual-passage-highlight, .manual-art-word.is-highlighted');
         if (highlighted) highlighted.focus({ preventScroll: true });
       });
     }).catch(function (error) {

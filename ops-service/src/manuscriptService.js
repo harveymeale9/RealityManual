@@ -2,6 +2,8 @@
 
 const express = require('express');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const corpus = require('./ideationCorpus');
 const manuscriptSearchIndex = require('./manuscriptSearchIndex');
 
@@ -54,9 +56,40 @@ function normalizeResults(raw, pageMap) {
 function setup(db, options) {
   options = options || {};
   const autoStart = options.autoStart !== false;
+  const artworkRoot = path.resolve(options.artworkRoot || process.env.MANUSCRIPT_ARTWORK_DIR || '/data/manuscript-pages');
   const manuscriptPages = pages();
   const pageMap = new Map(manuscriptPages.map(function (entry) { return [entry.page, entry]; }));
   const searchIndex = manuscriptSearchIndex.setup(db, manuscriptPages);
+  let artworkManifest = null;
+  try {
+    artworkManifest = JSON.parse(fs.readFileSync(path.join(artworkRoot, 'manifest.json'), 'utf8'));
+    if (Number(artworkManifest.pageCount) !== manuscriptPages.length) throw new Error('page count does not match canonical manuscript');
+  } catch (error) {
+    artworkManifest = null;
+    if (options.artworkRoot) console.warn('[manuscript] illustrated pages unavailable:', error.message);
+  }
+
+  function artworkPage(page) {
+    if (!artworkManifest) return null;
+    const file = path.join(artworkRoot, 'text', String(page).padStart(3, '0') + '.json');
+    try {
+      const layer = JSON.parse(fs.readFileSync(file, 'utf8'));
+      return {
+        imageUrl: '/api/manuscript/artwork/' + page + '?v=' + encodeURIComponent(String(artworkManifest.sourceSha256 || '').slice(0, 12)),
+        width: Number(layer.width),
+        height: Number(layer.height),
+        words: Array.isArray(layer.words) ? layer.words : []
+      };
+    } catch (error) {
+      console.error('[manuscript] cannot load artwork text layer for page', page, error.message);
+      return null;
+    }
+  }
+
+  function publicPage(page) {
+    const entry = pageMap.get(page);
+    return entry ? Object.assign({}, entry, { artwork: artworkPage(page) }) : null;
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS manuscript_search_jobs (
@@ -129,7 +162,13 @@ function setup(db, options) {
 
   const router = express.Router();
   router.get('/meta', function (req, res) {
-    res.json({ title: 'The Reality Manual', pageCount: manuscriptPages.length, search: 'instant semantic index' });
+    res.json({
+      title: 'The Reality Manual',
+      pageCount: manuscriptPages.length,
+      search: 'instant semantic index',
+      illustrated: Boolean(artworkManifest),
+      artworkBytes: artworkManifest ? Number(artworkManifest.imageBytes || 0) : 0
+    });
   });
   router.get('/download', function (req, res) {
     // The parent server mounts this router behind requireAuth, so the full
@@ -147,9 +186,20 @@ function setup(db, options) {
     res.json({
       requestedPage: requested,
       pageCount: manuscriptPages.length,
-      left: leftNumber ? pageMap.get(leftNumber) || null : null,
-      right: rightNumber <= manuscriptPages.length ? pageMap.get(rightNumber) || null : null
+      left: leftNumber ? publicPage(leftNumber) : null,
+      right: rightNumber <= manuscriptPages.length ? publicPage(rightNumber) : null
     });
+  });
+  router.get('/artwork/:page', function (req, res) {
+    const requested = Number(req.params.page);
+    if (!artworkManifest) return res.status(404).json({ error: 'artwork_unavailable' });
+    if (!Number.isInteger(requested) || requested < 1 || requested > manuscriptPages.length) {
+      return res.status(400).json({ error: 'invalid_page', pageCount: manuscriptPages.length });
+    }
+    const file = path.join(artworkRoot, 'pages', String(requested).padStart(3, '0') + '.webp');
+    if (!fs.existsSync(file)) return res.status(404).json({ error: 'artwork_missing' });
+    res.set('Cache-Control', 'private, max-age=31536000, immutable');
+    res.type('image/webp').sendFile(file);
   });
   router.post('/search', function (req, res) {
     const query = clean(req.body && req.body.query, 1000);

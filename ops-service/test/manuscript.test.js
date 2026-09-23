@@ -4,11 +4,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const express = require('express');
 const Database = require('better-sqlite3');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const manuscriptService = require('../src/manuscriptService');
 const corpus = require('../src/ideationCorpus');
 const manuscriptSearchIndex = require('../src/manuscriptSearchIndex');
 
-test('manuscript reader serves diagram-free spreads and instant persistent semantic search', async function (t) {
+test('manuscript reader serves illustrated selectable spreads and instant persistent semantic search', async function (t) {
   let calls = 0;
   const fakeProviders = {
     generate: async function () {
@@ -17,13 +20,21 @@ test('manuscript reader serves diagram-free spreads and instant persistent seman
     }
   };
   const db = new Database(':memory:');
+  const artworkRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-manuscript-test-'));
+  fs.mkdirSync(path.join(artworkRoot, 'pages'));
+  fs.mkdirSync(path.join(artworkRoot, 'text'));
+  fs.writeFileSync(path.join(artworkRoot, 'manifest.json'), JSON.stringify({ pageCount: 180, sourceSha256: 'abc123', imageBytes: 8 }));
+  for (const page of [4, 5]) {
+    fs.writeFileSync(path.join(artworkRoot, 'pages', String(page).padStart(3, '0') + '.webp'), Buffer.from('RIFFtest'));
+    fs.writeFileSync(path.join(artworkRoot, 'text', String(page).padStart(3, '0') + '.json'), JSON.stringify({ width: 1606, height: 2386, words: [['Belief', 200, 300, 80, 32, 95]] }));
+  }
   db.exec("CREATE TABLE ideation_settings(id INTEGER PRIMARY KEY,selected_provider TEXT); INSERT INTO ideation_settings VALUES(1,'codex')");
-  const service = manuscriptService.setup(db, { providers: fakeProviders, autoStart: false });
+  const service = manuscriptService.setup(db, { providers: fakeProviders, autoStart: false, artworkRoot: artworkRoot });
   const app = express();
   app.use(express.json());
   app.use('/api/manuscript', service.router);
   const server = app.listen(0);
-  t.after(function () { server.close(); db.close(); });
+  t.after(function () { server.close(); db.close(); fs.rmSync(artworkRoot, { recursive: true, force: true }); });
   const base = 'http://127.0.0.1:' + server.address().port + '/api/manuscript';
 
   async function request(path, options) {
@@ -35,6 +46,7 @@ test('manuscript reader serves diagram-free spreads and instant persistent seman
 
   const meta = await request('/meta');
   assert.equal(meta.pageCount, 180);
+  assert.equal(meta.illustrated, true);
   const download = await fetch(base + '/download');
   assert.equal(download.ok, true);
   assert.match(download.headers.get('content-disposition') || '', /attachment;.*The Reality Manual - Complete Manuscript\.txt/i);
@@ -42,8 +54,14 @@ test('manuscript reader serves diagram-free spreads and instant persistent seman
   const spread = await request('/pages/4');
   assert.equal(spread.left.page, 4);
   assert.equal(spread.right.page, 5);
+  assert.match(spread.left.artwork.imageUrl, /^\/api\/manuscript\/artwork\/4/);
+  assert.deepEqual(spread.left.artwork.words[0].slice(0, 2), ['Belief', 200]);
   assert.doesNotMatch(spread.left.text, /\*IMAGE:/);
   assert.doesNotMatch(spread.left.text, /==END PAGE/);
+  const artwork = await fetch('http://127.0.0.1:' + server.address().port + spread.left.artwork.imageUrl);
+  assert.equal(artwork.ok, true);
+  assert.equal(artwork.headers.get('content-type'), 'image/webp');
+  assert.match(artwork.headers.get('cache-control') || '', /immutable/);
 
   const started = performance.now();
   const created = await request('/search', {
