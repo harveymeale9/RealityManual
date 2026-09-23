@@ -10,41 +10,32 @@
 + '[' -n '' ']'
 + git pull
 From https://github.com/harveymeale9/RealityManual
-   eb412e1..5f69612  main       -> origin/main
-Updating eb412e1..5f69612
+   5f69612..9bb3cfa  main       -> origin/main
+Updating 5f69612..9bb3cfa
 Fast-forward
- CLAUDE.md                             |  47 +++++++++
- ops-service/.ci/last-run.log          | 104 ++++++++------------
- ops-service/.env.example              |   4 +
- ops-service/public/app.js             |  56 +++++++++--
- ops-service/public/index.html         |   6 +-
- ops-service/public/lib/voiceClient.js |  26 +++++
- ops-service/public/style.css          |   7 ++
- ops-service/public/voice-mobile.html  |  74 +++++++++++---
- ops-service/server.js                 |  39 ++++++++
- ops-service/src/claudeRunner.js       |  35 ++++++-
- ops-service/src/mailTriageService.js  | 179 ++++++++++++++++++++++++++++++++++
- ops-service/src/mailboxService.js     |   4 +
- ops-service/test/mailTriage.test.js   | 102 +++++++++++++++++++
- 13 files changed, 595 insertions(+), 88 deletions(-)
- create mode 100644 ops-service/src/mailTriageService.js
- create mode 100644 ops-service/test/mailTriage.test.js
+ CLAUDE.md                             | 35 +++++++++----
+ ops-service/.ci/last-run.log          | 94 +++++++++++++++++++++--------------
+ ops-service/public/app.js             | 18 +++++++
+ ops-service/public/lib/voiceClient.js | 14 +++++-
+ ops-service/public/voice-mobile.html  | 18 +++++++
+ ops-service/server.js                 |  8 +--
+ ops-service/src/mailTriageService.js  | 70 ++++++++++++++++++++++----
+ ops-service/test/mailTriage.test.js   | 27 ++++++++--
+ 8 files changed, 216 insertions(+), 68 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=5f696123ed6a53af54991196add17e78bdc303d9
++ NEW_HEAD=9bb3cfad4bd80d601aaeb2ca05c60ddf1ec38962
 + git -C /srv/realitymanual-repo pull
 Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
 + LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
 ++ cat /root/ops-service-data/last-image-commit.txt
-+ LAST_BUILD_COMMIT=eb412e1084b1707997a34fc8a3551bd6e2dcb8b5
++ LAST_BUILD_COMMIT=5f696123ed6a53af54991196add17e78bdc303d9
 + NEEDS_REBUILD=1
-+ '[' -n eb412e1084b1707997a34fc8a3551bd6e2dcb8b5 ']'
-+ git cat-file -e 'eb412e1084b1707997a34fc8a3551bd6e2dcb8b5^{commit}'
-++ git diff --name-only eb412e1084b1707997a34fc8a3551bd6e2dcb8b5 5f696123ed6a53af54991196add17e78bdc303d9 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -n 5f696123ed6a53af54991196add17e78bdc303d9 ']'
++ git cat-file -e '5f696123ed6a53af54991196add17e78bdc303d9^{commit}'
+++ git diff --name-only 5f696123ed6a53af54991196add17e78bdc303d9 9bb3cfad4bd80d601aaeb2ca05c60ddf1ec38962 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z 'ops-service/server.js
-ops-service/src/claudeRunner.js
-ops-service/src/mailTriageService.js
-ops-service/src/mailboxService.js' ']'
+ops-service/src/mailTriageService.js' ']'
 + '[' 0 = 1 ']'
 + '[' 1 = 0 ']'
 + docker tag rm-ops-service rm-ops-service:previous
@@ -52,11 +43,11 @@ ops-service/src/mailboxService.js' ']'
 #0 building with "default" instance using docker driver
 
 #1 [internal] load build definition from Dockerfile
-#1 transferring dockerfile: 2.60kB done
+#1 transferring dockerfile: 2.60kB 0.0s done
 #1 DONE 0.0s
 
 #2 [internal] load metadata for docker.io/library/node:22-slim
-#2 DONE 0.2s
+#2 DONE 0.3s
 
 #3 [internal] load .dockerignore
 #3 transferring context: 136B done
@@ -67,16 +58,16 @@ ops-service/src/mailboxService.js' ']'
 #4 DONE 0.0s
 
 #5 [internal] load build context
-#5 transferring context: 580.52kB 0.0s done
+#5 transferring context: 414.90kB 0.0s done
 #5 DONE 0.0s
 
-#6 [ 3/11] RUN npm install -g @anthropic-ai/claude-code@2.1.276
+#6 [ 5/11] COPY package.json ./
 #6 CACHED
 
-#7 [ 5/11] COPY package.json ./
+#7 [ 2/11] RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && rm -rf /var/lib/apt/lists/*
 #7 CACHED
 
-#8 [ 2/11] RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && rm -rf /var/lib/apt/lists/*
+#8 [ 3/11] RUN npm install -g @anthropic-ai/claude-code@2.1.276
 #8 CACHED
 
 #9 [ 4/11] WORKDIR /app
@@ -89,37 +80,36 @@ ops-service/src/mailboxService.js' ']'
 #11 DONE 0.1s
 
 #12 [ 8/11] COPY src ./src
-#12 DONE 0.0s
+#12 DONE 0.1s
 
 #13 [ 9/11] COPY public ./public
-#13 DONE 0.1s
+#13 DONE 0.9s
 
 #14 [10/11] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
-#14 DONE 17.8s
+#14 DONE 29.5s
 
 #15 [11/11] RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
-#15 DONE 0.6s
+#15 DONE 0.7s
 
 #16 exporting to image
 #16 exporting layers
-#16 exporting layers 11.8s done
-#16 exporting manifest sha256:eebecc50b07ebd7ea23a9c62e3e75d988c7b5a554cae829aa86ea0310554f3fd
-#16 exporting manifest sha256:eebecc50b07ebd7ea23a9c62e3e75d988c7b5a554cae829aa86ea0310554f3fd 0.0s done
-#16 exporting config sha256:3037ce1d54d75ec31a6997912be2060e7931d34326d8bffa3ff94595e4ef391e 0.0s done
-#16 exporting attestation manifest sha256:49be50f9b5bbc0e3259b2e9c2f8a008642175c1fc4b0b4b974ee7034bd8b8c9e 0.0s done
-#16 exporting manifest list sha256:4514551386a670fe0878cbcb42c9b794ddd8efae1b9a3ff44a849970b29f3ee4 0.0s done
+#16 exporting layers 14.5s done
+#16 exporting manifest sha256:dc41ac50519f68d87f75b2bd07952f5a46e7ba9851c5f602fb483aeb72dd93f9 0.0s done
+#16 exporting config sha256:4d1c56269b7ebefb02f17e685df683bfd8f7da8ee0e2b851d668de29148b54f8 0.0s done
+#16 exporting attestation manifest sha256:c2140d5a1fcbeb8b6f9c33f9624f081c624807ad54922f31cecc439c1510f0cb 0.0s done
+#16 exporting manifest list sha256:23ade7a922e54aefe5a9a6a6ef33d5e1796f8b7bf2d821b63315850ca438f8ec 0.0s done
 #16 naming to docker.io/library/rm-ops-service:latest done
 #16 unpacking to docker.io/library/rm-ops-service:latest
-#16 unpacking to docker.io/library/rm-ops-service:latest 2.7s done
-#16 DONE 14.6s
+#16 unpacking to docker.io/library/rm-ops-service:latest 5.4s done
+#16 DONE 20.0s
 + docker stop rm-ops-service
 rm-ops-service
 + docker rm rm-ops-service
 rm-ops-service
 + docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-claude-home/claude-dir:/home/node/.claude -v /root/ops-service-claude-home/claude.json:/home/node/.claude.json -v /root/ops-service-data:/data -v /root/realitymanual-backend-data:/store-data:ro -v /srv/realitymanual-repo:/repo -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
-6a8ffb4280c4c1cda103c8385e15ca52e6330fb6fd5d6f88e68414c3d2bff9c8
-+ echo 5f696123ed6a53af54991196add17e78bdc303d9
+e7fd8d416213cfd15e0bfaa32ace490b8507a9a81b294f7b4d71c2a5efe37aa4
++ echo 9bb3cfad4bd80d601aaeb2ca05c60ddf1ec38962
 ++ git -C /root/realitymanual-repo rev-parse --short HEAD
-+ echo 'rm-ops-service redeployed at 5f69612'
-rm-ops-service redeployed at 5f69612
++ echo 'rm-ops-service redeployed at 9bb3cfa'
+rm-ops-service redeployed at 9bb3cfa
 ssh exit code: 0
