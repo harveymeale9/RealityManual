@@ -3248,7 +3248,7 @@
   // modal click-through needed for the normal upload workflow anymore
   // (the shared modal still exists and still works, for anything this row
   // doesn't cover directly, e.g. notes/platforms/content type).
-  // Rebuilding this row's own "head" (thumbnail/title/#id/tags/analysis
+  // Rebuilding this row's own "head" (title/#id/tags/analysis
   // status) in place — rather than routing every small change through a
   // full renderUploadLists() — is what stops the whole list from
   // flashing/reloading (every other row's video blob getting re-fetched,
@@ -3258,9 +3258,6 @@
   function buildUploadRowHead(p) {
     var head = document.createElement('div');
     head.className = 'upload-row-head';
-    var thumbEl = document.createElement('div');
-    thumbEl.className = 'upload-row-thumb' + (p.videoIsVertical ? ' is-vertical' : '');
-    thumbEl.innerHTML = p.thumbnailDataUrl ? ('<img src="' + p.thumbnailDataUrl + '" alt="" />') : '<span class="thumb-empty">No thumbnail</span>';
     var titleId = document.createElement('div');
     titleId.className = 'upload-row-title-id';
     var titleLine = document.createElement('div');
@@ -3392,7 +3389,6 @@
     });
     titleId.appendChild(platformsRow);
 
-    head.appendChild(thumbEl);
     head.appendChild(titleId);
     return head;
   }
@@ -3422,10 +3418,15 @@
     // just inline instead of behind a click-to-open.
     var frameSection = document.createElement('div');
     frameSection.className = 'upload-row-section upload-row-frame';
+    var videoShell = document.createElement('div');
+    videoShell.className = 'upload-row-video-shell' + (p.videoIsVertical ? ' is-vertical' : '');
     var videoEl = document.createElement('video');
     videoEl.className = 'upload-row-video' + (p.videoIsVertical ? ' is-vertical' : '');
     videoEl.playsInline = true;
     videoEl.muted = true;
+    var frameLoader = document.createElement('div');
+    frameLoader.className = 'upload-row-frame-loader';
+    frameLoader.innerHTML = '<span class="spinner" aria-hidden="true"></span><span>Loading frame…</span>';
     var scrub = document.createElement('input');
     scrub.type = 'range';
     scrub.min = '0';
@@ -3447,12 +3448,17 @@
           refreshHead();
         }
         videoEl.classList.toggle('is-vertical', vertical);
+        videoShell.classList.toggle('is-vertical', vertical);
       }
     });
-    scrub.addEventListener('input', function () { try { videoEl.currentTime = parseFloat(scrub.value); } catch (e) {} });
-    // Shared by the button and the auto-pick-on-load below, so there's
-    // one capture implementation, not two. Returns false (does nothing
-    // saved) if the video has no real frame data to draw yet — this used
+    var frameMatchesThumbnail = !!p.thumbnailDataUrl;
+    scrub.addEventListener('input', function () {
+      try { videoEl.currentTime = parseFloat(scrub.value); } catch (e) {}
+      frameMatchesThumbnail = false;
+      setCaptureButtonState(videoEl.readyState >= 2);
+    });
+    // Used only after Harvey explicitly presses the button. Returns false
+    // (does nothing saved) if the video has no real frame data to draw yet — this used
     // to silently produce a blank image for any video the browser
     // couldn't decode (HEVC uploads in particular, see
     // ensureBrowserCompatibleVideo in videoAnalysis.js, the actual fix);
@@ -3474,49 +3480,58 @@
       // every row in the list (re-fetching every other row's video blob
       // in the process), which is what looked like the whole panel
       // flashing/disappearing for a moment on every single click.
-      Store.put('pieces', p).then(refreshHead);
-      return true;
+      return Store.put('pieces', p).then(refreshHead);
     }
     var captureBtn = document.createElement('button');
     captureBtn.type = 'button';
-    captureBtn.className = 'btn-secondary btn-tiny';
-    captureBtn.addEventListener('click', function () { captureCurrentFrame(); });
-    frameSection.appendChild(videoEl);
+    captureBtn.className = 'btn-secondary btn-tiny upload-row-capture';
+    captureBtn.addEventListener('click', function () {
+      var save = captureCurrentFrame();
+      if (!save) return;
+      frameMatchesThumbnail = true;
+      setCaptureButtonState(true);
+      Promise.resolve(save).catch(function () {
+        frameMatchesThumbnail = false;
+        setCaptureButtonState(true, 'Could not save — try again');
+      });
+    });
+    videoShell.appendChild(videoEl);
+    videoShell.appendChild(frameLoader);
+    frameSection.appendChild(videoShell);
     frameSection.appendChild(scrub);
     frameSection.appendChild(captureBtn);
-    // Disabled with a "Loading video…" label until the video actually has
-    // a frame to give — found live (2026-09-20, headless-browser test
+    // Disabled while a spinner covers the frame area until the video
+    // actually has a frame to give — found live (2026-09-20, headless-browser test
     // against a throttled connection) that with several rows in the list
     // at once, a later row's (often multi-MB) video blob can take a real
     // while to fetch, and clicking "Use this frame" during that window
     // silently no-op'd via captureCurrentFrame()'s own early-return guard
     // with zero feedback — looked exactly like a dead button, especially
     // on a slower real connection than this container's own fast link to
-    // the VPS. `loadeddata` (readyState >= HAVE_CURRENT_DATA) is the same
-    // event the auto-pick-thumbnail listener below already waits for, so
-    // "the button becomes usable" and "a frame is actually capturable"
-    // are now driven by the identical signal.
-    function setFrameControlsReady(ready) {
+    // the VPS. `loadeddata` (readyState >= HAVE_CURRENT_DATA) now removes
+    // the spinner and enables the button from the same readiness signal.
+    function setCaptureButtonState(ready, overrideText) {
       captureBtn.disabled = !ready || !canEditRow;
-      captureBtn.textContent = ready ? 'Use this frame' : 'Loading video…';
+      captureBtn.classList.toggle('is-selected', ready && frameMatchesThumbnail);
+      captureBtn.textContent = overrideText || (ready && frameMatchesThumbnail ? '✓ Thumbnail selected' : 'Use this frame');
+    }
+    function setFrameControlsReady(ready) {
+      frameLoader.hidden = ready;
+      videoShell.classList.toggle('is-loading', !ready);
+      setCaptureButtonState(ready);
       scrub.disabled = !ready || !canEditRow;
     }
     setFrameControlsReady(videoEl.readyState >= 2);
     videoEl.addEventListener('loadeddata', function () { setFrameControlsReady(true); });
-    // Auto-pick a starting thumbnail (the very first frame) the moment
-    // the video has one to give, so a row never sits at "No thumbnail"
-    // by default — Harvey still freely overrides it via the scrub bar +
-    // "Use this frame" above. Only for a piece that doesn't already have
-    // a thumbnail (e.g. a page reload of an already-edited row shouldn't
-    // silently reset a deliberate pick back to frame 0).
-    if (!p.thumbnailDataUrl) {
-      videoEl.addEventListener('loadeddata', function onFirstFrame() {
-        videoEl.removeEventListener('loadeddata', onFirstFrame);
-        captureCurrentFrame();
-      });
-    }
+    videoEl.addEventListener('error', function () {
+      frameLoader.innerHTML = '<span>Video preview could not load.</span>';
+      setCaptureButtonState(false);
+    });
     Store.get('videos', p.id).then(function (v) {
-      if (!v || !v.blob) return;
+      if (!v || !v.blob) {
+        frameLoader.innerHTML = '<span>Video preview is unavailable.</span>';
+        return;
+      }
       if (uploadRowObjectUrls[p.id]) URL.revokeObjectURL(uploadRowObjectUrls[p.id]);
       var url = URL.createObjectURL(v.blob);
       uploadRowObjectUrls[p.id] = url;

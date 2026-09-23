@@ -9431,3 +9431,32 @@ opened every spread and observed every numbered page with no failed image
 request or cropped page; it also copied text from the OCR layer, found an exact
 quotation on page 91 by pressing Enter, visibly highlighted 89 positioned
 words, and turned the spread by clicking its right edge.
+
+---
+
+# 205. Explicit Thumbnail Choice and Unified Frame Preview (2026-09-23)
+
+Content Production previously showed two competing image surfaces: an empty
+`No thumbnail` box in the row's left metadata column and the real scrubbable
+video frame picker beside it. It also silently captured frame zero as soon as
+the video loaded, which meant the app claimed a thumbnail was selected before
+Harvey had actually chosen one.
+
+The redundant left thumbnail surface is gone. The real frame picker is now the
+only visual source of truth: while its video blob is loading it shows a centered
+spinner over that exact frame area, keeps the scrubber and **Use this frame**
+button disabled, and reveals/enables them together on `loadeddata`. Missing or
+undecodable video data replaces the spinner with a direct error instead of
+leaving an unexplained black/empty box. No frame is selected automatically.
+Only an explicit **Use this frame** click captures and persists the JPEG, adds
+the existing `Thumbnail selected` tag, and changes the button itself to
+**✓ Thumbnail selected**. Moving the scrubber afterward changes the button back
+to **Use this frame**, making it clear that the newly displayed frame has not
+yet replaced the saved thumbnail.
+
+A real Chromium test used an isolated temporary service/database and generated
+H.264 video, with the video response delayed to exercise the loading phase. It
+confirmed there was no legacy thumbnail node, the spinner was visible and both
+controls disabled during load, loading alone did not write a thumbnail, the
+explicit click saved a JPEG data URL and tag while showing the tick, and
+scrubbing reset the prompt. The full ops-service suite remains 26/26.
