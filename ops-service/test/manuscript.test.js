@@ -35,6 +35,10 @@ test('manuscript reader serves diagram-free spreads and instant persistent seman
 
   const meta = await request('/meta');
   assert.equal(meta.pageCount, 180);
+  const download = await fetch(base + '/download');
+  assert.equal(download.ok, true);
+  assert.match(download.headers.get('content-disposition') || '', /attachment;.*The Reality Manual - Complete Manuscript\.txt/i);
+  assert.match(await download.text(), /==PAGE 1==[\s\S]*The Absurdity of Life/i);
   const spread = await request('/pages/4');
   assert.equal(spread.left.page, 4);
   assert.equal(spread.right.page, 5);

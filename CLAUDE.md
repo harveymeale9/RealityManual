@@ -9311,3 +9311,15 @@ another roughly 4 GB across its 1.3 GB live Docker volume and 2.7 GB legacy
 root-level data/database copies. The remaining major usage was normal system
 and application data. No cleanup was performed as part of this monitoring
 change.
+
+---
+
+# 201. Authenticated Complete-Manuscript Download (2026-09-23)
+
+The manuscript reader now exposes `GET /api/manuscript/download`, mounted
+behind the existing admin session gate. It downloads the canonical
+`THE_REALITY_MANUAL_COMPLETE_MANUSCRIPT.txt` as
+`The Reality Manual - Complete Manuscript.txt`, giving Harvey a one-tap phone
+or desktop download without publishing the full manuscript at a public static
+URL. Integration coverage verifies the attachment filename and manuscript
+contents.

@@ -131,6 +131,12 @@ function setup(db, options) {
   router.get('/meta', function (req, res) {
     res.json({ title: 'The Reality Manual', pageCount: manuscriptPages.length, search: 'instant semantic index' });
   });
+  router.get('/download', function (req, res) {
+    // The parent server mounts this router behind requireAuth, so the full
+    // unpublished manuscript remains private while still being a one-tap
+    // download from Harvey's logged-in phone or desktop.
+    res.download(corpus.loadManuscript().file, 'The Reality Manual - Complete Manuscript.txt');
+  });
   router.get('/pages/:page', function (req, res) {
     const requested = Number(req.params.page);
     if (!Number.isInteger(requested) || requested < 1 || requested > manuscriptPages.length) {
