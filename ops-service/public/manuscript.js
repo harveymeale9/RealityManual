@@ -6,6 +6,7 @@
   var currentPage = 1;
   var pollTimer = null;
   var resizeBound = false;
+  var pageLoadGeneration = 0;
 
   function esc(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, function (char) {
@@ -182,6 +183,41 @@
       '<button type="button" class="manual-turn manual-turn-next" aria-label="Next pages" title="Next pages"><span>›</span></button>';
   }
 
+  function showBookLoader(book) {
+    book.setAttribute('aria-busy', 'true');
+    book.classList.add('manual-book-loading');
+    var loader = book.querySelector('.manual-book-loader');
+    if (!loader) {
+      loader = document.createElement('div');
+      loader.className = 'manual-book-loader';
+      loader.setAttribute('role', 'status');
+      loader.setAttribute('aria-label', 'Loading pages');
+      loader.innerHTML = '<div class="spinner" aria-hidden="true"></div>';
+      book.appendChild(loader);
+    }
+  }
+
+  // The API returns page metadata before the protected WebP artwork itself
+  // has arrived. Preload and decode both page images while the old spread
+  // remains visible, then replace the DOM in one paint. This prevents the
+  // cream fallback and artwork background from flashing in sequence.
+  function preloadArtwork(pages) {
+    var urls = (pages || []).map(function (page) {
+      return page && page.artwork && page.artwork.imageUrl;
+    }).filter(Boolean);
+    return Promise.all(urls.map(function (url) {
+      return new Promise(function (resolve, reject) {
+        var image = new Image();
+        image.onload = function () {
+          if (typeof image.decode === 'function') image.decode().catch(function () {}).then(resolve);
+          else resolve();
+        };
+        image.onerror = function () { reject(new Error('A manuscript page image could not be loaded.')); };
+        image.src = url;
+      });
+    }));
+  }
+
   // Size the physical spread from the stage's *actual remaining space*, not
   // the viewport. Laptop browser chrome + the app header/subtabs make those
   // materially different; the old 100dvh calculation could produce a book
@@ -249,19 +285,23 @@
 
   function loadPage(page, highlightText) {
     page = Math.max(1, Math.min(pageCount, Number(page) || 1));
+    var generation = ++pageLoadGeneration;
     currentPage = page;
     var input = root.querySelector('#manualPageInput');
     if (input) input.value = page;
     var book = root.querySelector('#manualBook');
     book.classList.remove('flipping');
-    book.innerHTML = '<section class="manual-page manual-page-left manual-page-blank manual-page-loading">Opening…</section><section class="manual-page manual-page-right manual-page-blank"></section>' + turnControls();
-    bindPageTurns();
+    showBookLoader(book);
     fitBookGeometry();
     return api('/pages/' + page).then(function (data) {
-      if (!isMounted()) return;
+      return preloadArtwork([data.left, data.right]).then(function () { return data; });
+    }).then(function (data) {
+      if (!isMounted() || generation !== pageLoadGeneration) return;
       pageCount = data.pageCount;
       root.querySelector('#manualPageCount').textContent = 'of ' + pageCount;
       book.innerHTML = pageBody(data.left, 'left', highlightText, page) + pageBody(data.right, 'right', highlightText, page) + turnControls();
+      book.removeAttribute('aria-busy');
+      book.classList.remove('manual-book-loading');
       bindPageTurns();
       void book.offsetWidth;
       book.classList.add('flipping');
@@ -271,7 +311,12 @@
         if (highlighted) highlighted.focus({ preventScroll: true });
       });
     }).catch(function (error) {
-      if (isMounted()) book.innerHTML = '<section class="manual-page manual-page-left manual-page-blank">' + esc(error.message) + '</section><section class="manual-page manual-page-right manual-page-blank"></section>';
+      if (isMounted() && generation === pageLoadGeneration) {
+        book.removeAttribute('aria-busy');
+        book.classList.remove('manual-book-loading');
+        book.innerHTML = '<section class="manual-page manual-page-left manual-page-blank">' + esc(error.message) + '</section><section class="manual-page manual-page-right manual-page-blank"></section>' + turnControls();
+        bindPageTurns();
+      }
     });
   }
 

@@ -523,7 +523,10 @@ body.role-reviewer #pmBackFab {
 .manual-page-controls input { width: 64px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface-2); color: var(--ink); padding: 7px; text-align: center; font: .76rem var(--font-mono); }
 .manual-page-count { color: var(--ink-faint); font: .7rem var(--font-mono); min-width: 52px; }
 .manual-book { position: relative; width: min(96%, 1060px); height: auto; aspect-ratio: 1.3462; max-height: 780px; min-height: 0; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; align-items: stretch; filter: drop-shadow(0 18px 28px rgba(0,0,0,.55)); transform-style: preserve-3d; }
-.manual-book.flipping { animation: manualFlip .26s ease-out; }
+.manual-book.flipping { animation: manualFlip .3s ease-out; }
+.manual-book-loader { position: absolute; z-index: 8; inset: 0; display: grid; place-items: center; border-radius: 7px; background: rgba(5,8,6,.58); opacity: 0; pointer-events: none; transition: opacity .16s ease; backdrop-filter: blur(1.5px); -webkit-backdrop-filter: blur(1.5px); }
+.manual-book-loading .manual-book-loader { opacity: 1; pointer-events: auto; }
+.manual-book-loader .spinner { width: 31px; height: 31px; border-color: rgba(255,255,255,.2); border-top-color: var(--accent); box-shadow: 0 0 18px rgba(60,255,137,.18); }
 .manual-page { position: relative; min-width: 0; min-height: 0; height: 100%; overflow: hidden; padding: clamp(28px,3.5vh,44px) clamp(32px,3.5vw,56px) 18px; display: flex; flex-direction: column; background: #eee8d9; color: #29271f; font: 400 clamp(.76rem,.79vw,.9rem)/1.52 Georgia,'Times New Roman',serif; }
 .manual-page-left { border-radius: 7px 0 0 7px; background: linear-gradient(90deg,#e4decf 0,#f2eddf 12%,#f0ebdd 91%,#d8d1c1 100%); box-shadow: inset -16px 0 25px -24px #241f18; }
 .manual-page-right { border-radius: 0 7px 7px 0; background: linear-gradient(90deg,#d8d1c1 0,#f0ebdd 9%,#f2eddf 88%,#e4decf 100%); box-shadow: inset 16px 0 25px -24px #241f18; }
@@ -544,7 +547,6 @@ body.role-reviewer #pmBackFab {
 .manual-art-word.is-highlighted { overflow: visible; border-radius: 2px; background: rgba(255,231,64,.56); box-shadow: 0 0 4px rgba(255,218,0,.34); animation: manualArtworkGlow 1.8s ease-out; }
 .manual-passage-highlight { border-radius: 2px; padding: .04em .08em; background: #ffe96a; color: #1c1a13; box-shadow: 0 0 0 2px rgba(255,233,106,.28); animation: manualPassageGlow 1.8s ease-out; }
 .manual-passage-highlight:focus { outline: 2px solid #c49a00; outline-offset: 2px; }
-.manual-page-loading { color: #777166; font-style: italic; }
 .manual-turn { position: absolute; z-index: 3; top: 0; bottom: 0; width: 56px; border: 0; background: transparent; color: rgba(41,39,31,.34); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; transition: color .15s ease, background .15s ease; }
 .manual-turn span { display: grid; place-items: center; width: 30px; height: 52px; border-radius: 999px; font: 400 2rem/1 Georgia,serif; }
 .manual-turn-prev { left: 0; border-radius: 7px 0 0 7px; }
@@ -552,7 +554,7 @@ body.role-reviewer #pmBackFab {
 .manual-turn:hover,.manual-turn:focus-visible { color: #28251e; background: rgba(76,68,53,.08); }
 .manual-turn:hover span { background: rgba(255,255,255,.28); }
 .manual-turn:disabled { opacity: 0; cursor: default; pointer-events: none; }
-@keyframes manualFlip { 0% { opacity: .58; transform: perspective(1200px) rotateY(-2.4deg) scale(.995); } 100% { opacity: 1; transform: perspective(1200px) rotateY(0) scale(1); } }
+@keyframes manualFlip { 0% { opacity: 0; transform: translateY(3px) scale(.998); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes manualPassageGlow { 0%,35% { background: #fff3a2; box-shadow: 0 0 0 5px rgba(255,233,106,.42); } 100% { background: #ffe96a; box-shadow: 0 0 0 2px rgba(255,233,106,.28); } }
 @keyframes manualArtworkGlow { 0%,35% { background: rgba(255,244,120,.72); box-shadow: 0 0 5px rgba(255,233,106,.55); } 100% { background: rgba(255,231,64,.56); box-shadow: 0 0 4px rgba(255,218,0,.34); } }
 @media (max-width: 1100px) { .manual-reader { grid-template-columns: 290px minmax(0,1fr); }.manual-page { padding-left: 28px; padding-right: 28px; }.manual-turn { width: 42px; } }

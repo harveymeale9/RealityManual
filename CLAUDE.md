@@ -9530,3 +9530,28 @@ movement, the 24-hour guard, reviewer/non-live exclusions, and the no-mutation
 rule on API failure. The YouTube boundary test separately proves the requested
 status fields and authenticated scope behavior. The complete suite passes
 30/30.
+
+---
+
+# 208. Manuscript Page Turns Preload Behind a Stable Spinner (2026-09-23)
+
+Illustrated page turns no longer replace the current spread with text/blank
+page placeholders while the protected WebPs are still downloading. That old
+sequence exposed three different paint states in quick succession—the cream
+fallback, the artwork page's ochre background, and finally the image—which
+looked like the pages changed colour twice on every turn.
+
+`public/manuscript.js` now keeps the existing spread intact, overlays one
+centered green loading spinner, fetches the page metadata, then preloads and
+decodes both artwork images before replacing the DOM in one paint. The fully
+ready spread enters with a short opacity/position reveal instead of the old
+partial page-flip flash. The initial book opening uses the same stable loader,
+rapid successive navigation is protected by a request generation number so an
+older response cannot replace a newer requested spread, and image failures
+still surface a readable error with page-turn controls.
+
+A real Chromium test against the protected production artwork deliberately
+delayed every image response. It proved that the initial state contained only
+the visible spinner (no fallback pages), a later turn retained the old page
+while loading, and the new two-page spread appeared only after both images had
+finished. The full suite remains 30/30.
