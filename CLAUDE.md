@@ -9671,3 +9671,12 @@ metadata-fingerprint cache reuse, explicit regeneration, graceful AI failure,
 description minimization, and the unchanged 50/10 split. Synthetic Chromium at
 1440×900 and 390×844 rendered six outlier cards, ten recent cards, all 18 AI
 fields, and no horizontal overflow. Full suite: 37/37.
+
+Production verification resolved `@YouTube` through the real OAuth connection,
+stored 50 videos, selected six top-viewed cards, and generated all six
+structured creative reads in one real restricted Claude call with no error.
+The outputs correctly admitted when sparse metadata did not establish a big
+idea or angle. Production Chromium loaded all six original thumbnails, 18 AI
+fields, the source/caption disclosure, and the current cache-busted asset with
+no desktop overflow or runtime error. The temporary channel was removed and
+the production watchlist returned to empty afterward.
