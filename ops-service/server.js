@@ -665,6 +665,12 @@ const youtubeAudit = youtubePublicationAudit.setup(db, {
 const youtubeCompetitors = youtubeCompetitorService.setup(db, {
   fetchChannel: async function (input) {
     return youtubeAuth.fetchCompetitorChannel(await getValidYoutubeAccessToken(), input);
+  },
+  analyzeVideos: async function (input) {
+    // Titles/descriptions are untrusted third-party text. The same restricted
+    // one-turn runner used for mail triage exposes no tools and enforces the
+    // JSON contract, so metadata cannot become an instruction to the agent.
+    return claudeRunner.runTextOnlyStructured(input.prompt, input.schema, 90000);
   }
 });
 
@@ -704,6 +710,10 @@ app.post('/api/youtube/competitors', requireAuth, async function (req, res) {
 app.post('/api/youtube/competitors/refresh', requireAuth, async function (req, res) {
   try { res.json({ channels: await youtubeCompetitors.refreshAll() }); }
   catch (error) { res.status(502).json({ error: 'youtube_competitor_refresh_failed', message: String(error.message || error).slice(0, 500) }); }
+});
+app.post('/api/youtube/competitors/:channelId/analyze', requireAuth, async function (req, res) {
+  try { res.json({ channel: await youtubeCompetitors.analyze(req.params.channelId) }); }
+  catch (error) { res.status(502).json({ error: 'youtube_competitor_analysis_failed', message: String(error.message || error).slice(0, 500) }); }
 });
 app.delete('/api/youtube/competitors/:channelId', requireAuth, function (req, res) {
   res.json(youtubeCompetitors.remove(req.params.channelId));

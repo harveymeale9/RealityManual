@@ -88,13 +88,14 @@ test('competitor lookup resolves a handle without search, ranks its latest ten, 
   assert.equal(result.medianViews, 500);
   assert.equal(result.baselineVideoCount, 2);
   assert.equal(result.recentVideoCount, 2);
-  assert.equal(result.sampleVersion, 2);
+  assert.equal(result.sampleVersion, 3);
   assert.equal(result.videos[0].id, 'newer');
   assert.equal(result.videos[0].recentViewRank, 2);
   assert.equal(result.videos[0].baselineViewRank, 2);
   assert.equal(result.videos[0].comments, null);
   assert.equal(result.videos[1].recentViewRank, 1);
   assert.equal(result.videos[1].baselineViewRank, 1);
+  assert.equal(result.videos[1].description, '');
   assert.equal(result.videos[1].durationSeconds, 65);
 });
 
@@ -117,7 +118,7 @@ test('competitor baseline includes older videos without letting them enter the l
       return { items: ids.map(function (id, index) {
         return {
           id: id,
-          snippet: { title: id, publishedAt: '2026-09-' + String(20 - index).padStart(2, '0') + 'T00:00:00Z' },
+          snippet: { title: id, description: 'Description ' + index, publishedAt: '2026-09-' + String(20 - index).padStart(2, '0') + 'T00:00:00Z' },
           contentDetails: { duration: 'PT1M' },
           statistics: { viewCount: String(index === 10 ? 1000 : index + 1) }
         };
@@ -133,6 +134,8 @@ test('competitor baseline includes older videos without letting them enter the l
   assert.equal(result.videos[9].recentViewRank, 1);
   assert.equal(result.videos[10].recentViewRank, null);
   assert.equal(result.videos[10].baselineViewRank, 1);
+  assert.equal(result.videos[10].description, 'Description 10');
+  assert.equal(result.videos[0].description, undefined);
 });
 
 test('competitor channel input accepts handles and stable channel ids but rejects arbitrary URLs', function () {

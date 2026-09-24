@@ -164,6 +164,7 @@ async function fetchCompetitorChannel(accessToken, input) {
     return {
       id: item.id,
       title: item.snippet && item.snippet.title || item.id,
+      description: item.snippet && item.snippet.description || '',
       publishedAt: item.snippet && item.snippet.publishedAt || null,
       thumbnailUrl: thumb.url || '',
       durationSeconds: isoDurationSeconds(item.contentDetails && item.contentDetails.duration),
@@ -179,6 +180,12 @@ async function fetchCompetitorChannel(accessToken, input) {
   const recentRanked = recentVideos.slice().sort(function (a, b) { return b.views - a.views || String(b.publishedAt).localeCompare(String(a.publishedAt)); });
   const recentRanks = new Map(recentRanked.map(function (video, index) { return [video.id, index + 1]; }));
   videos.forEach(function (video) { video.recentViewRank = recentRanks.get(video.id) || null; });
+  // Descriptions are needed only for the six top-viewed creative reads. Do not
+  // ship/store up to fifty 5,000-character descriptions when the UI never uses
+  // the remainder; every refresh can select the current top six afresh.
+  videos.forEach(function (video) {
+    if (video.baselineViewRank > 6) delete video.description;
+  });
   const sortedViewCounts = videos.map(function (video) { return video.views; }).sort(function (a, b) { return a - b; });
   const middle = Math.floor(sortedViewCounts.length / 2);
   const medianViews = !sortedViewCounts.length ? 0 : (sortedViewCounts.length % 2
@@ -204,7 +211,7 @@ async function fetchCompetitorChannel(accessToken, input) {
     medianViews: medianViews,
     baselineVideoCount: videos.length,
     recentVideoCount: recentVideos.length,
-    sampleVersion: 2,
+    sampleVersion: 3,
     fetchedAt: new Date().toISOString()
   };
 }
