@@ -9783,3 +9783,32 @@ showed zero creative cards plus the explicit “5 statistical outliers ... none
 expose a retrievable public caption track” explanation, while retaining the ten
 ordinary statistics cards; current cachebuster, no errors or overflow. The
 temporary watchlist channel was removed and live count returned to 0.
+
+---
+
+# 214. Routine Mail Acknowledgements Are Silent (2026-09-24)
+
+Harvey reiterated that the mailbox assistant must not create a Project Manager
+notification for every inbound message. The concrete failure was BookVault's
+automatic response to our production enquiry: the model correctly described it
+as a content-free acknowledgement, but marked it important because the response
+subject inherited the word `Urgent` from our outgoing email. The deterministic
+BookVault safeguard also treated that inherited word as an operational problem,
+so a routine auto-response became a coral alert.
+
+Mail triage now has a hard acknowledgement filter ahead of both the AI result
+and deterministic safeguards. Automatic/out-of-office responses, support-ticket
+receipts, submission acknowledgements, and messages that only promise a reply
+within a stated number of working days are archived and remain silent. Words
+such as urgent, order, payment, and review inherited from an outgoing subject do
+not change that. The classifier prompt now requires genuinely new substantive
+information, an actual decision/request/problem, or a likely-needed human reply.
+The platform safeguard was narrowed from any mention of a review/API to actual
+approval, rejection, completion, failure, suspension, deadline, or requested
+action; `urgent` alone was removed from the operational safeguard.
+
+This does not suppress the eventual useful reply. Regression coverage proves
+that an urgent-sounding BookVault auto-response produces no alert even if the
+model calls it important, while a later human response identifying a production
+fault and asking for a decision still alerts normally. The full suite passes
+42/42.

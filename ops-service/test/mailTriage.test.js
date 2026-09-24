@@ -94,6 +94,51 @@ test('mail triage archives every digested email and creates one durable alert on
   triage.close();
 });
 
+test('routine acknowledgements stay silent even when their inherited subject sounds urgent', async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-mail-triage-ack-'));
+  const db = new Database(':memory:');
+  db.exec(`CREATE TABLE voice_messages (
+    id TEXT PRIMARY KEY,mode TEXT NOT NULL,transcript TEXT NOT NULL,status TEXT NOT NULL,
+    reply_text TEXT,error_message TEXT,created_at TEXT NOT NULL,completed_at TEXT,
+    agent TEXT NOT NULL DEFAULT 'claude',notification_kind TEXT NOT NULL DEFAULT 'conversation',
+    notification_unread INTEGER NOT NULL DEFAULT 0,source_ref TEXT
+  ); CREATE UNIQUE INDEX idx_voice_mail_alert_source ON voice_messages(source_ref)
+    WHERE notification_kind='mail_alert' AND source_ref IS NOT NULL;`);
+  const mailbox = mailboxService.setup(db, { dataDir: dir, autoSync: false });
+  t.after(function () { mailbox.close(); db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+
+  const autoReply = mailbox.ingest({
+    providerId: 'bookvault-auto-1', fromName: 'BookVault', fromEmail: 'customers@bookvault.app',
+    subject: 'Automatic reply: Urgent production query — order and payment problem',
+    textBody: 'Thanks for your email. We try to get back to all email enquiries in 1-2 working days.',
+    receivedAt: '2026-09-24T08:19:47Z'
+  });
+  const triage = mailTriageService.setup(db, {
+    autoStart: false,
+    classify: async function () {
+      return {
+        important: true, category: 'fulfilment', summary: 'An urgent order email was acknowledged.',
+        actionRequired: false, suggestedNextStep: 'Wait for a reply.', reason: 'The subject says urgent.'
+      };
+    }
+  });
+  const result = await triage.processPending(10);
+  assert.deepEqual({ processed: result.processed, alerted: result.alerted }, { processed: 1, alerted: 0 });
+  assert.equal(db.prepare('SELECT important FROM mail_triage WHERE message_id=?').get(autoReply.id).important, 0);
+  assert.equal(db.prepare("SELECT count(*) AS n FROM voice_messages WHERE notification_kind='mail_alert'").get().n, 0);
+
+  const humanReply = mailbox.ingest({
+    providerId: 'bookvault-human-1', fromName: 'BookVault Support', fromEmail: 'bookvault@bookvault.app',
+    subject: 'Your Bookvault Support Ticket 48718421148',
+    textBody: 'We have checked the order. A binding fault delayed production; please confirm whether you want us to expedite it.',
+    receivedAt: '2026-09-24T10:00:00Z'
+  });
+  const humanResult = await triage.processPending(10);
+  assert.deepEqual({ processed: humanResult.processed, alerted: humanResult.alerted }, { processed: 1, alerted: 1 });
+  assert.equal(db.prepare('SELECT important FROM mail_triage WHERE message_id=?').get(humanReply.id).important, 1);
+  triage.close();
+});
+
 test('a classification failure leaves mail visible and retryable instead of silently archiving it', async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-mail-triage-error-'));
   const db = new Database(':memory:');
