@@ -9773,3 +9773,13 @@ captioned, uncaptioned-outlier, and no-outlier states with no overflow. Full
 suite: 41/41. A read-only live `@YouTube` sample found five statistical
 outliers but zero publicly retrievable tracks, so the new board correctly shows
 none rather than manufacturing analyses from metadata.
+
+Production verification at `bf0a904` confirmed the deployed container can
+retrieve a real 487-word manual-English public caption track through the new
+parser. The authenticated `@YouTube` test returned sampleVersion 5, five true
+statistical outliers, zero retrievable player tracks, zero AI reads, and zero
+stored description fields. Real Chromium at 1440×900 and 390×844 therefore
+showed zero creative cards plus the explicit “5 statistical outliers ... none
+expose a retrievable public caption track” explanation, while retaining the ten
+ordinary statistics cards; current cachebuster, no errors or overflow. The
+temporary watchlist channel was removed and live count returned to 0.
