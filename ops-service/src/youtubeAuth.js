@@ -121,6 +121,34 @@ function isoDurationSeconds(value) {
   return Math.round((Number(match[1] || 0) * 86400) + (Number(match[2] || 0) * 3600) + (Number(match[3] || 0) * 60) + Number(match[4] || 0));
 }
 
+function medianNumber(values) {
+  if (!values.length) return 0;
+  const middle = Math.floor(values.length / 2);
+  return values.length % 2 ? values[middle] : Math.round((values[middle - 1] + values[middle]) / 2);
+}
+
+function markOneInTenOutliers(videos) {
+  const sortedViewCounts = videos.map(function (video) { return video.views; }).sort(function (a, b) { return a - b; });
+  const medianViews = medianNumber(sortedViewCounts);
+  const midpoint = Math.floor(sortedViewCounts.length / 2);
+  const q1Views = medianNumber(sortedViewCounts.slice(0, midpoint));
+  const q3Views = medianNumber(sortedViewCounts.slice(Math.ceil(sortedViewCounts.length / 2)));
+  const outlierThreshold = Math.round(q3Views + (1.5 * Math.max(0, q3Views - q1Views)));
+  const topDecileCount = videos.length >= 10 ? Math.max(1, Math.ceil(videos.length / 10)) : 0;
+  videos.forEach(function (video) {
+    // A real one-in-ten candidate must be in the sample's top decile AND clear
+    // the conventional high-outlier fence. This produces zero results when a
+    // channel's videos all perform similarly instead of always manufacturing
+    // five "outliers" from every 50-video sample.
+    video.isOneInTenOutlier = topDecileCount > 0 && video.baselineViewRank <= topDecileCount && video.views > outlierThreshold;
+  });
+  return {
+    medianViews: medianViews,
+    outlierThreshold: outlierThreshold,
+    outlierCount: videos.filter(function (video) { return video.isOneInTenOutlier; }).length
+  };
+}
+
 // Public competitor discovery deliberately reuses the app's existing
 // youtube.readonly token. No competitor authorization or additional scope is
 // needed: every field returned here is already public on YouTube. Requiring a
@@ -180,17 +208,13 @@ async function fetchCompetitorChannel(accessToken, input) {
   const recentRanked = recentVideos.slice().sort(function (a, b) { return b.views - a.views || String(b.publishedAt).localeCompare(String(a.publishedAt)); });
   const recentRanks = new Map(recentRanked.map(function (video, index) { return [video.id, index + 1]; }));
   videos.forEach(function (video) { video.recentViewRank = recentRanks.get(video.id) || null; });
-  // Descriptions are needed only for the six top-viewed creative reads. Do not
+  const outlierStats = markOneInTenOutliers(videos);
+  // Descriptions are needed only for genuine outlier creative reads. Do not
   // ship/store up to fifty 5,000-character descriptions when the UI never uses
-  // the remainder; every refresh can select the current top six afresh.
+  // the remainder; every refresh can select the current outliers afresh.
   videos.forEach(function (video) {
-    if (video.baselineViewRank > 6) delete video.description;
+    if (!video.isOneInTenOutlier) delete video.description;
   });
-  const sortedViewCounts = videos.map(function (video) { return video.views; }).sort(function (a, b) { return a - b; });
-  const middle = Math.floor(sortedViewCounts.length / 2);
-  const medianViews = !sortedViewCounts.length ? 0 : (sortedViewCounts.length % 2
-    ? sortedViewCounts[middle]
-    : Math.round((sortedViewCounts[middle - 1] + sortedViewCounts[middle]) / 2));
 
   const channelThumbs = channel.snippet && channel.snippet.thumbnails || {};
   const channelThumb = channelThumbs.high || channelThumbs.medium || channelThumbs.default || {};
@@ -208,10 +232,12 @@ async function fetchCompetitorChannel(accessToken, input) {
     uploadsPlaylistId: uploadsPlaylistId,
     videos: videos,
     averageViews: videos.length ? Math.round(videos.reduce(function (sum, video) { return sum + video.views; }, 0) / videos.length) : 0,
-    medianViews: medianViews,
+    medianViews: outlierStats.medianViews,
+    outlierThreshold: outlierStats.outlierThreshold,
+    outlierCount: outlierStats.outlierCount,
     baselineVideoCount: videos.length,
     recentVideoCount: recentVideos.length,
-    sampleVersion: 3,
+    sampleVersion: 4,
     fetchedAt: new Date().toISOString()
   };
 }
@@ -315,4 +341,4 @@ async function uploadVideo(accessToken, filePath, mimeType, metadata) {
   return { videoId: data.id };
 }
 
-module.exports = { SCOPES, isConfigured, buildAuthUrl, exchangeCode, refreshAccessToken, fetchChannelInfo, fetchVideoStatistics, fetchVideoStatuses, fetchCompetitorChannel, competitorChannelFilter, uploadVideo };
+module.exports = { SCOPES, isConfigured, buildAuthUrl, exchangeCode, refreshAccessToken, fetchChannelInfo, fetchVideoStatistics, fetchVideoStatuses, fetchCompetitorChannel, competitorChannelFilter, markOneInTenOutliers, uploadVideo };

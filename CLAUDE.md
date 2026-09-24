@@ -9680,3 +9680,39 @@ idea or angle. Production Chromium loaded all six original thumbnails, 18 AI
 fields, the source/caption disclosure, and the current cache-busted asset with
 no desktop overflow or runtime error. The temporary channel was removed and
 the production watchlist returned to empty afterward.
+
+---
+
+# 212. Genuine One-in-Ten Outliers Replace the Fixed Top Six (2026-09-24)
+
+Harvey clarified that the Creative outlier board must not always show an
+arbitrary fixed number of winners. It now displays a variable number of videos,
+including zero, under a transparent two-part rule across the latest-50 sample:
+
+1. the video must rank in the sample's top 10%; and
+2. its views must exceed the conventional high-outlier fence, `Q3 + 1.5 × IQR`.
+
+The rank condition preserves the intended “one in ten” rarity, while the
+second condition prevents a flat-performing channel from manufacturing five
+supposed outliers merely because something must occupy ranks 1–5. Samples with
+fewer than ten public videos produce no one-in-ten designation. This remains a
+within-channel calculation over raw YouTube view counts—never a cross-channel
+score or league table.
+
+Each qualifying card now shows an immediately legible performance lift against
+the channel median, e.g. **5.0× typical · +400% vs median**. Median is used as
+the “typical” baseline because the breakout video itself can badly inflate a
+mean. The interface explains the inclusion rule and has a deliberate no-outlier
+state. Only qualifying videos retain public descriptions and receive cached AI
+topic/big-idea/angle reads; ordinary top-decile videos no longer consume an AI
+call or appear in the creative board. Snapshots are now `sampleVersion: 4`, so
+existing watchlists refresh automatically.
+
+Regression coverage proves a flat 50-video sample yields zero outliers, while a
+single 10× breakout is retained and ordinary top-decile neighbors are rejected.
+It also proves AI runs only for videos already marked as genuine outliers.
+Synthetic Chromium at 1440×900 and 390×844 verifies both multi-outlier and
+zero-outlier states, relative-performance labels, the unchanged latest-ten
+grid, and no horizontal overflow. Full suite: 38/38. A read-only live calculation
+against `@YouTube` returned five qualifiers from 50, all above the 421,203-view
+outlier fence and ranging from 7.0× to 127.8× that channel's median.

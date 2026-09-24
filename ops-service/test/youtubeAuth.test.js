@@ -88,14 +88,15 @@ test('competitor lookup resolves a handle without search, ranks its latest ten, 
   assert.equal(result.medianViews, 500);
   assert.equal(result.baselineVideoCount, 2);
   assert.equal(result.recentVideoCount, 2);
-  assert.equal(result.sampleVersion, 3);
+  assert.equal(result.sampleVersion, 4);
+  assert.equal(result.outlierCount, 0);
   assert.equal(result.videos[0].id, 'newer');
   assert.equal(result.videos[0].recentViewRank, 2);
   assert.equal(result.videos[0].baselineViewRank, 2);
   assert.equal(result.videos[0].comments, null);
   assert.equal(result.videos[1].recentViewRank, 1);
   assert.equal(result.videos[1].baselineViewRank, 1);
-  assert.equal(result.videos[1].description, '');
+  assert.equal(result.videos[1].description, undefined);
   assert.equal(result.videos[1].durationSeconds, 65);
 });
 
@@ -131,11 +132,33 @@ test('competitor baseline includes older videos without letting them enter the l
   assert.equal(result.recentVideoCount, 10);
   assert.equal(result.averageViews, 96);
   assert.equal(result.medianViews, 6);
+  assert.equal(result.outlierThreshold, 18);
+  assert.equal(result.outlierCount, 1);
   assert.equal(result.videos[9].recentViewRank, 1);
   assert.equal(result.videos[10].recentViewRank, null);
   assert.equal(result.videos[10].baselineViewRank, 1);
+  assert.equal(result.videos[10].isOneInTenOutlier, true);
   assert.equal(result.videos[10].description, 'Description 10');
+  assert.equal(result.videos[0].isOneInTenOutlier, false);
   assert.equal(result.videos[0].description, undefined);
+});
+
+test('one-in-ten detection never manufactures an outlier from a flat top decile', function () {
+  const flat = Array.from({ length: 50 }, function (_, index) {
+    return { id: 'flat-' + index, views: 100, baselineViewRank: index + 1 };
+  });
+  assert.equal(youtubeAuth.markOneInTenOutliers(flat).outlierCount, 0);
+  assert.equal(flat.filter(function (video) { return video.isOneInTenOutlier; }).length, 0);
+
+  const breakout = Array.from({ length: 50 }, function (_, index) {
+    return { id: 'breakout-' + index, views: index === 0 ? 1000 : 100, baselineViewRank: index + 1 };
+  });
+  const result = youtubeAuth.markOneInTenOutliers(breakout);
+  assert.equal(result.medianViews, 100);
+  assert.equal(result.outlierThreshold, 100);
+  assert.equal(result.outlierCount, 1);
+  assert.equal(breakout[0].isOneInTenOutlier, true);
+  assert.equal(breakout[1].isOneInTenOutlier, false);
 });
 
 test('competitor channel input accepts handles and stable channel ids but rejects arbitrary URLs', function () {

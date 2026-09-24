@@ -64,8 +64,12 @@
       '</div></a>';
   }
 
-  function outlierCard(video, total) {
+  function outlierCard(video, total, medianViews) {
     var analysis = video.creativeAnalysis;
+    var multiple = medianViews > 0 ? video.views / medianViews : null;
+    var relative = multiple == null
+      ? 'Channel median is 0 views'
+      : multiple.toFixed(multiple >= 10 ? 0 : 1) + '× typical · +' + Math.max(0, Math.round((multiple - 1) * 100)) + '% vs median';
     return '<article class="competitor-outlier' + (video.baselineViewRank === 1 ? ' is-top' : '') + '">' +
       '<a class="competitor-outlier-link" href="https://www.youtube.com/watch?v=' + encodeURIComponent(video.id) + '" target="_blank" rel="noopener">' +
         '<div class="competitor-outlier-thumb">' +
@@ -74,6 +78,7 @@
         '</div>' +
         '<h4>' + esc(video.title) + '</h4>' +
         '<div class="competitor-outlier-views">' + number(video.views) + ' views</div>' +
+        '<div class="competitor-outlier-lift">' + esc(relative) + '</div>' +
       '</a>' +
       (analysis ? '<dl class="competitor-ai-read">' +
         '<div><dt>Topic</dt><dd>' + esc(analysis.topic) + '</dd></div>' +
@@ -92,7 +97,7 @@
     var baselineVideos = snapshot.videos || [];
     var videos = baselineVideos.slice(0, 10);
     var ranked = videos.slice().sort(function (a, b) { return (a.recentViewRank || a.viewRank || 999) - (b.recentViewRank || b.viewRank || 999); });
-    var topViewed = baselineVideos.slice().sort(function (a, b) { return (a.baselineViewRank || 999) - (b.baselineViewRank || 999); }).slice(0, 6);
+    var outliers = baselineVideos.filter(function (video) { return video.isOneInTenOutlier === true; }).sort(function (a, b) { return (a.baselineViewRank || 999) - (b.baselineViewRank || 999); });
     var winner = ranked[0];
     return '<section class="competitor-channel">' +
       '<div class="competitor-channel-head">' +
@@ -108,10 +113,11 @@
         '<div><b>' + number(snapshot.totalVideoCount) + '</b><span>Public videos</span></div>' +
       '</div>' +
       (winner ? '<div class="competitor-winner"><span>Current winner</span><strong>#1 of ' + videos.length + '</strong><p>' + esc(winner.title) + ' · ' + number(winner.views) + ' views</p></div>' : '') +
-      (topViewed.length ? '<section class="competitor-outlier-section"><div class="competitor-section-head"><div><span>Creative outlier board</span><h4>Top viewed · latest ' + (snapshot.baselineVideoCount || baselineVideos.length) + '</h4></div><button class="competitor-analyze" data-id="' + esc(record.channelId) + '" type="button">Refresh AI reads</button></div>' +
-        '<p class="competitor-analysis-source">' + esc(snapshot.creativeAnalysisSource || 'AI analysis uses the public title and description only — not a transcript.') + '</p>' +
+      '<section class="competitor-outlier-section"><div class="competitor-section-head"><div><span>Creative outlier board</span><h4>True one-in-ten outliers · latest ' + (snapshot.baselineVideoCount || baselineVideos.length) + '</h4></div>' + (outliers.length ? '<button class="competitor-analyze" data-id="' + esc(record.channelId) + '" type="button">Refresh AI reads</button>' : '') + '</div>' +
+        '<p class="competitor-outlier-rule">A video appears only when it is both in the sample’s top 10% and above the standard high-outlier boundary. This avoids labelling an ordinary top-five result as exceptional.</p>' +
+        (outliers.length ? '<p class="competitor-analysis-source">' + esc(snapshot.creativeAnalysisSource || 'AI analysis uses the public title and description only — not a transcript.') + '</p>' : '') +
         (snapshot.creativeAnalysisError ? '<p class="competitor-analysis-error">' + esc(snapshot.creativeAnalysisError) + '</p>' : '') +
-        '<div class="competitor-outlier-grid">' + topViewed.map(function (video) { return outlierCard(video, snapshot.baselineVideoCount || baselineVideos.length); }).join('') + '</div></section>' : '') +
+        (outliers.length ? '<div class="competitor-outlier-grid">' + outliers.map(function (video) { return outlierCard(video, snapshot.baselineVideoCount || baselineVideos.length, snapshot.medianViews || 0); }).join('') + '</div>' : '<div class="competitor-no-outliers"><strong>No genuine one-in-ten outliers in this sample.</strong><span>The leading videos are not far enough above this channel’s normal performance range.</span></div>') + '</section>' +
       (videos.length ? '<section class="competitor-recent-section"><div class="competitor-section-head"><div><span>Recent comparison</span><h4>Latest ten ranked by current views</h4></div></div><div class="competitor-video-grid">' + ranked.map(function (video) { return videoCard(video, videos.length); }).join('') + '</div></section>' : '<div class="competitor-empty">No public uploads were returned.</div>') +
     '</section>';
   }
@@ -203,7 +209,7 @@
       '<header class="competitor-hero"><div><div class="eyebrow">YouTube competitor intelligence</div><h2>Find the one-of-ten winners</h2><p>Track selected channels and see which of their latest ten public uploads currently ranks first by views, against a broader fifty-video performance baseline. Uses the YouTube connection already in Content Studio—nothing else to connect.</p></div><button id="competitorRefresh" type="button">Refresh all</button></header>' +
       '<form class="competitor-add" id="competitorAddForm"><label for="competitorChannelInput">YouTube channel</label><div><input id="competitorChannelInput" placeholder="@handle or youtube.com/@handle" autocomplete="off"><button id="competitorAddButton" type="submit">Add channel</button></div><small>Use an @handle or /channel/UC… URL. Requiring an exact channel avoids YouTube search quota entirely.</small></form>' +
       '<div class="competitor-status" id="competitorStatus" role="status" aria-live="polite"></div>' +
-      '<div class="competitor-note">The visible #1-of-10 rank compares the latest ten uploads by current public views. Average, median, and the top-viewed board use up to the latest fifty. AI creative reads use only the creator’s public title and description: YouTube does not permit this connection to download competitors’ captions, so the tool never pretends it saw a transcript.</div>' +
+      '<div class="competitor-note">The visible #1-of-10 rank compares the latest ten uploads by current public views. Average, median, and true-outlier detection use up to the latest fifty. AI creative reads appear only for genuine outliers and use the creator’s public title and description: YouTube does not permit this connection to download competitors’ captions, so the tool never pretends it saw a transcript.</div>' +
       '<div class="competitor-channels" id="competitorChannels"><div class="competitor-loading"><div class="spinner"></div></div></div>' +
     '</div>';
     bind();
@@ -211,7 +217,7 @@
       // Refresh on entry when any snapshot is absent or over six hours old;
       // repeated tab visits otherwise remain instant and quota-light.
       var stale = items.some(function (item) {
-        return !item.snapshot || item.snapshot.sampleVersion !== 3 || !item.refreshedAt || Date.now() - new Date(item.refreshedAt).getTime() > 6 * 60 * 60 * 1000;
+        return !item.snapshot || item.snapshot.sampleVersion !== 4 || !item.refreshedAt || Date.now() - new Date(item.refreshedAt).getTime() > 6 * 60 * 60 * 1000;
       });
       if (stale) refresh();
     }).catch(function (error) { setStatus(error.message, true); });
