@@ -9624,3 +9624,10 @@ Compatibility fallbacks keep such a snapshot readable during that refresh.
 Regression coverage proves the fifty-item request, correct mean/median fields,
 and that an older high-view outlier contributes to the baseline without
 entering the latest-ten winner ranking. Full suite: 35/35.
+
+Production verification used the existing OAuth connection to resolve
+`@YouTube` and returned exactly 50 baseline videos plus 10 recent ranked
+videos; the eleventh item had no recent rank as intended. Real Chromium at
+1440×900 and 390×844 showed exactly ten cards, **#1 of 10**, both latest-50
+statistics, the new cache-busted asset, no horizontal overflow, and no runtime
+errors. The temporary production watchlist entry was removed afterward.
