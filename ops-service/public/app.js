@@ -50,7 +50,7 @@
   var pmSpeakingUnsub = null;
 
   // Nav hierarchy (Harvey's restructure, 2026-09-19): top level is just
-  // Project Manager / Content Ops / Analytics — each of the latter two is
+  // Project Manager / Content Ops / Competitor Analytics — each of the latter two is
   // a group of real leaf tabs, not a routable panel itself. Leaf tab ids
   // are unchanged from before this restructure (only labels/grouping
   // changed) so nothing downstream that already keys off e.g.
@@ -68,8 +68,8 @@
         { id: 'upload-files', label: 'Content Production' },
         { id: 'settings', label: 'Content Settings' }
       ] },
-    { label: 'Analytics', tabs: [
-        { id: 'content-analytics', label: 'Content Analytics' },
+    { label: 'Competitor Analytics', tabs: [
+        { id: 'content-analytics', label: 'Competitor Analytics' },
         { id: 'sales-analytics', label: 'Sales Analytics' },
         { id: 'website-analytics', label: 'Website Analytics' }
       ] },
@@ -191,7 +191,7 @@
 
   var ANALYTICS_INFO = {
     'content-analytics': {
-      title: 'Content Analytics',
+      title: 'Competitor Analytics',
       blurb: 'Per-video and per-content-type performance, once the YouTube / TikTok / Instagram / Facebook API keys in Settings are actually wired up to a backend that can call them.',
       metrics: [
         'Views — daily, weekly, monthly, per video and per content type',

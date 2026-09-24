@@ -221,7 +221,7 @@ a { color: var(--accent); }
 
 /* Left icon rail — a second, decorative-first way into the same tabs
    panel-tabs already drives (see app.js bindSideRail()). Only the 5
-   sections with an obvious icon get one; Content Analytics stays
+   sections with an obvious icon get one; Competitor Analytics stays
    reachable from the top tab row only. */
 .side-rail {
   width: var(--rail-w);

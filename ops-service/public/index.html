@@ -72,16 +72,16 @@
           </a>
         </div>
       </div>
-      <!-- Analytics group: same pattern, parent is a "trending up" mark,
+      <!-- Competitor Analytics group: same pattern, parent is a "trending up" mark,
            3 real leaf tabs nested beneath it. Hidden entirely for a
            youtube-reviewer session (app.js sets body.role-reviewer) — see
            style.css. -->
       <div class="side-rail-group side-rail-group-analytics">
-        <a href="#content-analytics" class="side-rail-btn" data-tab="content-analytics" title="Analytics" aria-label="Analytics">
+        <a href="#content-analytics" class="side-rail-btn" data-tab="content-analytics" title="Competitor Analytics" aria-label="Competitor Analytics">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>
         </a>
         <div class="side-rail-sub">
-          <a href="#content-analytics" class="side-rail-btn side-rail-btn-sub" data-tab="content-analytics" title="Content Analytics" aria-label="Content Analytics">
+          <a href="#content-analytics" class="side-rail-btn side-rail-btn-sub" data-tab="content-analytics" title="Competitor Analytics" aria-label="Competitor Analytics">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M10 8l6 4-6 4V8Z"/></svg>
           </a>
           <a href="#sales-analytics" class="side-rail-btn side-rail-btn-sub" data-tab="sales-analytics" title="Sales Analytics" aria-label="Sales Analytics">
@@ -111,7 +111,7 @@
         </div>
       </header>
       <!-- Secondary tab strip for whichever group is active (Content Ops:
-           Pipeline/Production/Settings, Analytics: Content/Sales/Website) —
+           Pipeline/Production/Settings, Analytics: Competitor/Sales/Website) —
            app.js's renderSubtabs() fills this in and leaves it empty (so it
            collapses via CSS :empty) for single-leaf groups like Project
            Manager. -->
@@ -253,6 +253,6 @@
   <script src="manuscript.js?v=20260923-smooth-page-loading"></script>
   <script src="competitors.js?v=20260924-caption-only-outliers"></script>
   <script src="mailbox.js?v=20260923-namecheap-mail"></script>
-  <script src="app.js?v=20260924-youtube-competitors"></script>
+  <script src="app.js?v=20260924-competitor-analytics-nav"></script>
 </body>
 </html>

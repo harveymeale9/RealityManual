@@ -9812,3 +9812,18 @@ that an urgent-sounding BookVault auto-response produces no alert even if the
 model calls it important, while a later human response identifying a production
 fault and asking for a decision still alerts normally. The full suite passes
 42/42.
+
+---
+
+# 215. Competitor Analytics Navigation Label (2026-09-24)
+
+The working YouTube competitor dashboard is now labelled **Competitor
+Analytics** throughout the Content Studio navigation and panel heading, replacing
+the old generic `Analytics` / `Content Analytics` wording. Its top-level menu
+group remains the final normal navigation item after Content Ops (the
+rail-pinned manuscript reader is still a separate utility). The existing Sales
+Analytics and Website Analytics subtabs remain available beneath that group.
+
+The `app.js` cache key was advanced so already-open browsers fetch the new menu
+label immediately. This is a presentation-only change; the stable
+`#content-analytics` route and competitor data are unchanged.
