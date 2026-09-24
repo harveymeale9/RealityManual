@@ -88,7 +88,7 @@ test('competitor lookup resolves a handle without search, ranks its latest ten, 
   assert.equal(result.medianViews, 500);
   assert.equal(result.baselineVideoCount, 2);
   assert.equal(result.recentVideoCount, 2);
-  assert.equal(result.sampleVersion, 4);
+  assert.equal(result.sampleVersion, 5);
   assert.equal(result.outlierCount, 0);
   assert.equal(result.videos[0].id, 'newer');
   assert.equal(result.videos[0].recentViewRank, 2);
@@ -96,7 +96,7 @@ test('competitor lookup resolves a handle without search, ranks its latest ten, 
   assert.equal(result.videos[0].comments, null);
   assert.equal(result.videos[1].recentViewRank, 1);
   assert.equal(result.videos[1].baselineViewRank, 1);
-  assert.equal(result.videos[1].description, undefined);
+  assert.equal(result.videos[1].captionsAvailable, false);
   assert.equal(result.videos[1].durationSeconds, 65);
 });
 
@@ -120,7 +120,7 @@ test('competitor baseline includes older videos without letting them enter the l
         return {
           id: id,
           snippet: { title: id, description: 'Description ' + index, publishedAt: '2026-09-' + String(20 - index).padStart(2, '0') + 'T00:00:00Z' },
-          contentDetails: { duration: 'PT1M' },
+          contentDetails: { duration: 'PT1M', caption: index === 10 ? 'true' : 'false' },
           statistics: { viewCount: String(index === 10 ? 1000 : index + 1) }
         };
       }) };
@@ -138,9 +138,42 @@ test('competitor baseline includes older videos without letting them enter the l
   assert.equal(result.videos[10].recentViewRank, null);
   assert.equal(result.videos[10].baselineViewRank, 1);
   assert.equal(result.videos[10].isOneInTenOutlier, true);
-  assert.equal(result.videos[10].description, 'Description 10');
+  assert.equal(result.videos[10].captionsAvailable, true);
   assert.equal(result.videos[0].isOneInTenOutlier, false);
-  assert.equal(result.videos[0].description, undefined);
+  assert.equal(result.videos[0].captionsAvailable, false);
+});
+
+test('public player caption lookup selects a manual English track and parses its real transcript', async function (t) {
+  const originalFetch = global.fetch;
+  t.after(function () { global.fetch = originalFetch; });
+  const calls = [];
+  global.fetch = async function (url, options) {
+    calls.push({ url: String(url), options: options });
+    if (String(url).includes('/youtubei/v1/player')) return {
+      ok: true,
+      json: async function () { return { captions: { playerCaptionsTracklistRenderer: { captionTracks: [
+        { baseUrl: 'https://www.youtube.com/api/timedtext?track=asr', languageCode: 'en', kind: 'asr', name: { simpleText: 'English auto-generated' } },
+        { baseUrl: 'https://www.youtube.com/api/timedtext?track=manual', languageCode: 'en', name: { simpleText: 'English' } },
+        { baseUrl: 'https://www.youtube.com/api/timedtext?track=fr', languageCode: 'fr', name: { simpleText: 'French' } }
+      ] } } }; }
+    };
+    assert.match(String(url), /track=manual/);
+    return { ok: true, text: async function () { return '<?xml version="1.0"?><timedtext><body><p t="0" d="1000"><s>Hello &amp; </s><s>world</s></p><p t="1000" d="1000">Second line.</p></body></timedtext>'; } };
+  };
+  const result = await youtubeAuth.fetchPublicCaptionTranscript('dQw4w9WgXcQ');
+  assert.equal(calls.length, 2);
+  assert.equal(result.text, 'Hello & world Second line.');
+  assert.equal(result.language, 'en');
+  assert.equal(result.languageName, 'English');
+  assert.equal(result.kind, 'manual');
+  assert.equal(result.wordCount, 5);
+});
+
+test('public player caption lookup returns null when a video exposes no track', async function (t) {
+  const originalFetch = global.fetch;
+  t.after(function () { global.fetch = originalFetch; });
+  global.fetch = async function () { return { ok: true, json: async function () { return {}; } }; };
+  assert.equal(await youtubeAuth.fetchPublicCaptionTranscript('dQw4w9WgXcQ'), null);
 });
 
 test('one-in-ten detection never manufactures an outlier from a flat top decile', function () {

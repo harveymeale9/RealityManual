@@ -79,6 +79,7 @@
         '<h4>' + esc(video.title) + '</h4>' +
         '<div class="competitor-outlier-views">' + number(video.views) + ' views</div>' +
         '<div class="competitor-outlier-lift">' + esc(relative) + '</div>' +
+        '<div class="competitor-caption-meta">Captions · ' + esc(video.captionLanguage || 'available') + (video.captionKind ? ' · ' + esc(video.captionKind) : '') + (video.captionWordCount ? ' · ' + number(video.captionWordCount) + ' words' : '') + '</div>' +
       '</a>' +
       (analysis ? '<dl class="competitor-ai-read">' +
         '<div><dt>Topic</dt><dd>' + esc(analysis.topic) + '</dd></div>' +
@@ -97,7 +98,8 @@
     var baselineVideos = snapshot.videos || [];
     var videos = baselineVideos.slice(0, 10);
     var ranked = videos.slice().sort(function (a, b) { return (a.recentViewRank || a.viewRank || 999) - (b.recentViewRank || b.viewRank || 999); });
-    var outliers = baselineVideos.filter(function (video) { return video.isOneInTenOutlier === true; }).sort(function (a, b) { return (a.baselineViewRank || 999) - (b.baselineViewRank || 999); });
+    var rawOutliers = baselineVideos.filter(function (video) { return video.isOneInTenOutlier === true; });
+    var outliers = rawOutliers.filter(function (video) { return video.captionAnalysisAvailable === true; }).sort(function (a, b) { return (a.baselineViewRank || 999) - (b.baselineViewRank || 999); });
     var winner = ranked[0];
     return '<section class="competitor-channel">' +
       '<div class="competitor-channel-head">' +
@@ -113,11 +115,11 @@
         '<div><b>' + number(snapshot.totalVideoCount) + '</b><span>Public videos</span></div>' +
       '</div>' +
       (winner ? '<div class="competitor-winner"><span>Current winner</span><strong>#1 of ' + videos.length + '</strong><p>' + esc(winner.title) + ' · ' + number(winner.views) + ' views</p></div>' : '') +
-      '<section class="competitor-outlier-section"><div class="competitor-section-head"><div><span>Creative outlier board</span><h4>True one-in-ten outliers · latest ' + (snapshot.baselineVideoCount || baselineVideos.length) + '</h4></div>' + (outliers.length ? '<button class="competitor-analyze" data-id="' + esc(record.channelId) + '" type="button">Refresh AI reads</button>' : '') + '</div>' +
-        '<p class="competitor-outlier-rule">A video appears only when it is both in the sample’s top 10% and above the standard high-outlier boundary. This avoids labelling an ordinary top-five result as exceptional.</p>' +
-        (outliers.length ? '<p class="competitor-analysis-source">' + esc(snapshot.creativeAnalysisSource || 'AI analysis uses the public title and description only — not a transcript.') + '</p>' : '') +
+      '<section class="competitor-outlier-section"><div class="competitor-section-head"><div><span>Creative outlier board</span><h4>Captioned one-in-ten outliers · latest ' + (snapshot.baselineVideoCount || baselineVideos.length) + '</h4></div>' + (outliers.length ? '<button class="competitor-analyze" data-id="' + esc(record.channelId) + '" type="button">Refresh caption reads</button>' : '') + '</div>' +
+        '<p class="competitor-outlier-rule">A video appears only when it is both a genuine statistical outlier and exposes a retrievable public caption track. Videos without captions are omitted completely from this board.</p>' +
+        (outliers.length ? '<p class="competitor-analysis-source">' + esc(snapshot.creativeAnalysisSource || 'AI analysis uses the actual public caption transcript only.') + '</p>' : '') +
         (snapshot.creativeAnalysisError ? '<p class="competitor-analysis-error">' + esc(snapshot.creativeAnalysisError) + '</p>' : '') +
-        (outliers.length ? '<div class="competitor-outlier-grid">' + outliers.map(function (video) { return outlierCard(video, snapshot.baselineVideoCount || baselineVideos.length, snapshot.medianViews || 0); }).join('') + '</div>' : '<div class="competitor-no-outliers"><strong>No genuine one-in-ten outliers in this sample.</strong><span>The leading videos are not far enough above this channel’s normal performance range.</span></div>') + '</section>' +
+        (outliers.length ? '<div class="competitor-outlier-grid">' + outliers.map(function (video) { return outlierCard(video, snapshot.baselineVideoCount || baselineVideos.length, snapshot.medianViews || 0); }).join('') + '</div>' : '<div class="competitor-no-outliers"><strong>' + (rawOutliers.length ? 'No captioned outliers in this sample.' : 'No genuine one-in-ten outliers in this sample.') + '</strong><span>' + (rawOutliers.length ? rawOutliers.length + ' statistical outlier' + (rawOutliers.length === 1 ? ' was' : 's were') + ' found, but none expose a retrievable public caption track.' : 'The leading videos are not far enough above this channel’s normal performance range.') + '</span></div>') + '</section>' +
       (videos.length ? '<section class="competitor-recent-section"><div class="competitor-section-head"><div><span>Recent comparison</span><h4>Latest ten ranked by current views</h4></div></div><div class="competitor-video-grid">' + ranked.map(function (video) { return videoCard(video, videos.length); }).join('') + '</div></section>' : '<div class="competitor-empty">No public uploads were returned.</div>') +
     '</section>';
   }
@@ -144,9 +146,9 @@
         busy = true;
         button.disabled = true;
         button.textContent = 'Reading…';
-        setStatus('Reading the public titles and descriptions for this channel’s top-viewed videos…');
+        setStatus('Retrieving and reading the public caption transcripts for this channel’s outliers…');
         api('/api/youtube/competitors/' + encodeURIComponent(button.dataset.id) + '/analyze', { method: 'POST', body: '{}' })
-          .then(load).then(function () { setStatus('AI creative reads updated from the current public metadata.'); })
+          .then(load).then(function () { setStatus('AI creative reads updated from the current public captions.'); })
           .catch(function (error) { setStatus(error.message, true); })
           .finally(function () { busy = false; });
       };
@@ -209,7 +211,7 @@
       '<header class="competitor-hero"><div><div class="eyebrow">YouTube competitor intelligence</div><h2>Find the one-of-ten winners</h2><p>Track selected channels and see which of their latest ten public uploads currently ranks first by views, against a broader fifty-video performance baseline. Uses the YouTube connection already in Content Studio—nothing else to connect.</p></div><button id="competitorRefresh" type="button">Refresh all</button></header>' +
       '<form class="competitor-add" id="competitorAddForm"><label for="competitorChannelInput">YouTube channel</label><div><input id="competitorChannelInput" placeholder="@handle or youtube.com/@handle" autocomplete="off"><button id="competitorAddButton" type="submit">Add channel</button></div><small>Use an @handle or /channel/UC… URL. Requiring an exact channel avoids YouTube search quota entirely.</small></form>' +
       '<div class="competitor-status" id="competitorStatus" role="status" aria-live="polite"></div>' +
-      '<div class="competitor-note">The visible #1-of-10 rank compares the latest ten uploads by current public views. Average, median, and true-outlier detection use up to the latest fifty. AI creative reads appear only for genuine outliers and use the creator’s public title and description: YouTube does not permit this connection to download competitors’ captions, so the tool never pretends it saw a transcript.</div>' +
+      '<div class="competitor-note">The visible #1-of-10 rank compares the latest ten uploads by current public views. Average, median, and true-outlier detection use up to the latest fifty. Creative analysis uses actual public caption transcripts only; an outlier without retrievable captions is omitted from the creative board.</div>' +
       '<div class="competitor-channels" id="competitorChannels"><div class="competitor-loading"><div class="spinner"></div></div></div>' +
     '</div>';
     bind();
@@ -217,7 +219,7 @@
       // Refresh on entry when any snapshot is absent or over six hours old;
       // repeated tab visits otherwise remain instant and quota-light.
       var stale = items.some(function (item) {
-        return !item.snapshot || item.snapshot.sampleVersion !== 4 || !item.refreshedAt || Date.now() - new Date(item.refreshedAt).getTime() > 6 * 60 * 60 * 1000;
+        return !item.snapshot || item.snapshot.sampleVersion !== 5 || !item.refreshedAt || Date.now() - new Date(item.refreshedAt).getTime() > 6 * 60 * 60 * 1000;
       });
       if (stale) refresh();
     }).catch(function (error) { setStatus(error.message, true); });

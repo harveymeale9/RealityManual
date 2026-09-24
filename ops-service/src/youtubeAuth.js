@@ -90,6 +90,8 @@ const UPLOAD_URL = 'https://www.googleapis.com/upload/youtube/v3/videos?uploadTy
 const VIDEOS_URL = 'https://www.googleapis.com/youtube/v3/videos';
 const CHANNELS_LIST_URL = 'https://www.googleapis.com/youtube/v3/channels';
 const PLAYLIST_ITEMS_URL = 'https://www.googleapis.com/youtube/v3/playlistItems';
+const PUBLIC_PLAYER_URL = 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false';
+const PUBLIC_PLAYER_VERSION = '20.10.38';
 
 async function youtubeGet(accessToken, url, label) {
   const res = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
@@ -125,6 +127,82 @@ function medianNumber(values) {
   if (!values.length) return 0;
   const middle = Math.floor(values.length / 2);
   return values.length % 2 ? values[middle] : Math.round((values[middle - 1] + values[middle]) / 2);
+}
+
+function decodeCaptionEntities(value) {
+  return String(value || '')
+    .replace(/&#(\d+);/g, function (_, code) { return String.fromCodePoint(Number(code)); })
+    .replace(/&#x([0-9a-f]+);/gi, function (_, code) { return String.fromCodePoint(parseInt(code, 16)); })
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'");
+}
+
+function parseCaptionXml(xml) {
+  const chunks = [];
+  const paragraphs = String(xml || '').match(/<p\b[^>]*>[\s\S]*?<\/p>/g) || [];
+  paragraphs.forEach(function (paragraph) {
+    const words = [];
+    let match;
+    const wordPattern = /<s\b[^>]*>([\s\S]*?)<\/s>/g;
+    while ((match = wordPattern.exec(paragraph)) !== null) words.push(match[1]);
+    const text = words.length ? words.join('') : paragraph.replace(/<[^>]+>/g, ' ');
+    if (text.trim()) chunks.push(decodeCaptionEntities(text));
+  });
+  if (!chunks.length) {
+    let match;
+    const classicPattern = /<text\b[^>]*>([\s\S]*?)<\/text>/g;
+    while ((match = classicPattern.exec(String(xml || ''))) !== null) chunks.push(decodeCaptionEntities(match[1]));
+  }
+  return chunks.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+// Public competitors cannot be read through captions.download (that official
+// method requires edit permission on the video). The public YouTube player,
+// however, returns caption tracks intended for ordinary playback. Read only
+// that JSON/player caption feed; deliberately never fall back to scraping a
+// watch page. Missing/blocked tracks return null and are omitted by the UI.
+async function fetchPublicCaptionTranscript(videoId) {
+  const id = String(videoId || '').trim();
+  if (!/^[A-Za-z0-9_-]{11}$/.test(id)) throw new Error('Invalid YouTube video id for captions.');
+  const playerRes = await fetch(PUBLIC_PLAYER_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'User-Agent': 'com.google.android.youtube/' + PUBLIC_PLAYER_VERSION + ' (Linux; U; Android 14)'
+    },
+    body: JSON.stringify({ context: { client: { clientName: 'ANDROID', clientVersion: PUBLIC_PLAYER_VERSION } }, videoId: id }),
+    signal: AbortSignal.timeout(15000)
+  });
+  if (!playerRes.ok) return null;
+  const player = await playerRes.json();
+  const tracks = player && player.captions && player.captions.playerCaptionsTracklistRenderer && player.captions.playerCaptionsTracklistRenderer.captionTracks || [];
+  if (!tracks.length) return null;
+  const track = tracks.slice().sort(function (a, b) {
+    function priority(item) {
+      const english = /^en(?:-|$)/i.test(item.languageCode || '');
+      const manual = item.kind !== 'asr';
+      return english && manual ? 0 : english ? 1 : manual ? 2 : 3;
+    }
+    return priority(a) - priority(b);
+  })[0];
+  let captionUrl;
+  try { captionUrl = new URL(track.baseUrl); } catch (error) { return null; }
+  if (captionUrl.protocol !== 'https:' || !(captionUrl.hostname === 'youtube.com' || captionUrl.hostname.endsWith('.youtube.com'))) return null;
+  const captionRes = await fetch(captionUrl, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; RealityManualContentStudio/1.0)' },
+    signal: AbortSignal.timeout(15000)
+  });
+  if (!captionRes.ok) return null;
+  const text = parseCaptionXml(await captionRes.text());
+  if (!text) return null;
+  const name = track.name && (track.name.simpleText || (track.name.runs || []).map(function (run) { return run.text; }).join('')) || '';
+  return {
+    text: text,
+    language: track.languageCode || '',
+    languageName: name,
+    kind: track.kind === 'asr' ? 'auto-generated' : 'manual',
+    wordCount: text.split(/\s+/).filter(Boolean).length
+  };
 }
 
 function markOneInTenOutliers(videos) {
@@ -192,10 +270,10 @@ async function fetchCompetitorChannel(accessToken, input) {
     return {
       id: item.id,
       title: item.snippet && item.snippet.title || item.id,
-      description: item.snippet && item.snippet.description || '',
       publishedAt: item.snippet && item.snippet.publishedAt || null,
       thumbnailUrl: thumb.url || '',
       durationSeconds: isoDurationSeconds(item.contentDetails && item.contentDetails.duration),
+      captionsAvailable: item.contentDetails && item.contentDetails.caption === 'true',
       views: Number(stats.viewCount) || 0,
       likes: stats.likeCount == null ? null : (Number(stats.likeCount) || 0),
       comments: stats.commentCount == null ? null : (Number(stats.commentCount) || 0)
@@ -209,12 +287,6 @@ async function fetchCompetitorChannel(accessToken, input) {
   const recentRanks = new Map(recentRanked.map(function (video, index) { return [video.id, index + 1]; }));
   videos.forEach(function (video) { video.recentViewRank = recentRanks.get(video.id) || null; });
   const outlierStats = markOneInTenOutliers(videos);
-  // Descriptions are needed only for genuine outlier creative reads. Do not
-  // ship/store up to fifty 5,000-character descriptions when the UI never uses
-  // the remainder; every refresh can select the current outliers afresh.
-  videos.forEach(function (video) {
-    if (!video.isOneInTenOutlier) delete video.description;
-  });
 
   const channelThumbs = channel.snippet && channel.snippet.thumbnails || {};
   const channelThumb = channelThumbs.high || channelThumbs.medium || channelThumbs.default || {};
@@ -237,7 +309,7 @@ async function fetchCompetitorChannel(accessToken, input) {
     outlierCount: outlierStats.outlierCount,
     baselineVideoCount: videos.length,
     recentVideoCount: recentVideos.length,
-    sampleVersion: 4,
+    sampleVersion: 5,
     fetchedAt: new Date().toISOString()
   };
 }
@@ -341,4 +413,4 @@ async function uploadVideo(accessToken, filePath, mimeType, metadata) {
   return { videoId: data.id };
 }
 
-module.exports = { SCOPES, isConfigured, buildAuthUrl, exchangeCode, refreshAccessToken, fetchChannelInfo, fetchVideoStatistics, fetchVideoStatuses, fetchCompetitorChannel, competitorChannelFilter, markOneInTenOutliers, uploadVideo };
+module.exports = { SCOPES, isConfigured, buildAuthUrl, exchangeCode, refreshAccessToken, fetchChannelInfo, fetchVideoStatistics, fetchVideoStatuses, fetchCompetitorChannel, competitorChannelFilter, markOneInTenOutliers, fetchPublicCaptionTranscript, parseCaptionXml, uploadVideo };

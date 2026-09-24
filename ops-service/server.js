@@ -666,8 +666,11 @@ const youtubeCompetitors = youtubeCompetitorService.setup(db, {
   fetchChannel: async function (input) {
     return youtubeAuth.fetchCompetitorChannel(await getValidYoutubeAccessToken(), input);
   },
+  fetchTranscript: function (videoId) {
+    return youtubeAuth.fetchPublicCaptionTranscript(videoId);
+  },
   analyzeVideos: async function (input) {
-    // Titles/descriptions are untrusted third-party text. The same restricted
+    // Public captions are untrusted third-party text. The same restricted
     // one-turn runner used for mail triage exposes no tools and enforces the
     // JSON contract, so metadata cannot become an instruction to the agent.
     return claudeRunner.runTextOnlyStructured(input.prompt, input.schema, 90000);

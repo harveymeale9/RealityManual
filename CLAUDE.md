@@ -9725,3 +9725,51 @@ path rather than hiding it. Real Chromium at 1440×900 and 390×844 showed five
 cards, 15 creative fields, original thumbnails, exact median-lift labels from
 7.0× through 128×, ten recent cards, the current cachebuster, and no overflow
 or runtime errors. The temporary watchlist entry was removed; live count is 0.
+
+---
+
+# 213. Caption-Only Competitor Analysis; Metadata Analysis Removed (2026-09-24)
+
+Harvey rejected title/description inference as too shallow. Competitor creative
+analysis now uses **actual caption transcript text or nothing**. Titles remain
+visible as YouTube labels on cards but are never included in the AI prompt;
+video descriptions are no longer fetched, stored, or analyzed at all.
+
+The official Data API cannot provide this competitor use case:
+`captions.download` requires the authorizing user to have edit permission on
+the video and uses the broader `youtube.force-ssl`/partner scope. Instead, the
+backend makes a no-login request to YouTube's public player JSON endpoint and,
+when that response exposes a caption-track URL, downloads the same timed-text
+feed used for ordinary public closed-caption playback. It prefers manual
+English, then English ASR, then another manual language, then any available
+track. The caption URL is restricted to HTTPS `youtube.com` hosts, both requests
+have 15-second timeouts, and there is deliberately **no watch-page HTML
+scraping fallback**. This player endpoint is public but undocumented/best-effort
+and can be bot-gated or changed by YouTube; any failure is treated exactly like
+no public caption track and the card is omitted.
+
+The transcript is parsed from both current `<p>/<s>` and classic `<text>` timed
+text, decoded, and passed as explicitly untrusted data to the existing
+single-turn structured Claude runner with `tools: []`. The transcript itself is
+not persisted. Only language, manual/auto status, word count, a short content
+hash, and Topic/Big Idea/Angle output are stored. Unchanged transcript hashes
+reuse the cached AI read; long transcripts are represented by equal opening,
+middle, and ending sections so a five-outlier batch stays inside model context.
+
+The Creative outlier board now filters for both `isOneInTenOutlier` and a
+successfully retrieved caption. If five statistical outliers exist but zero
+public tracks can be read, the board shows no cards and says why; the ordinary
+latest-ten statistics grid remains unaffected. Captioned cards explicitly show
+caption language, manual/auto source, and word count. Snapshots are now
+`sampleVersion: 5`, forcing every old metadata-derived result to be replaced.
+
+Regression coverage proves caption-track preference, XML parsing, entity
+decoding, no-track behavior, prompt isolation from titles/descriptions,
+transcript-hash caching, AI-failure preservation, and zero AI calls for
+uncaptioned outliers. Real network validation retrieved and parsed 487 words of
+manual English captions for a known public video and returned null for an
+uncaptioned/bot-gated video. Synthetic Chromium at 1440×900 and 390×844 proves
+captioned, uncaptioned-outlier, and no-outlier states with no overflow. Full
+suite: 41/41. A read-only live `@YouTube` sample found five statistical
+outliers but zero publicly retrievable tracks, so the new board correctly shows
+none rather than manufacturing analyses from metadata.
