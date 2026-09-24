@@ -50,17 +50,14 @@
   var pmSpeakingUnsub = null;
 
   // Nav hierarchy (Harvey's restructure, 2026-09-19): top level is just
-  // Project Manager / Content Ops / Competitor Analytics — each of the latter two is
-  // a group of real leaf tabs, not a routable panel itself. Leaf tab ids
-  // are unchanged from before this restructure (only labels/grouping
+  // Project Manager / Content Ops / Analytics / Mailbox — Content Ops and
+  // Analytics are groups of real leaf tabs, not routable panels themselves.
+  // Leaf tab ids are unchanged from before this restructure (only labels/grouping
   // changed) so nothing downstream that already keys off e.g.
   // active === 'content-ops' needed to change.
   var GROUPS = [
     { label: 'Project Manager', tabs: [
         { id: 'project-manager', label: 'Project Manager' }
-      ] },
-    { label: 'Mailbox', tabs: [
-        { id: 'mailbox', label: 'Mailbox' }
       ] },
     { label: 'Content Ops', tabs: [
         { id: 'content-ops', label: 'Content Pipeline' },
@@ -68,10 +65,13 @@
         { id: 'upload-files', label: 'Content Production' },
         { id: 'settings', label: 'Content Settings' }
       ] },
-    { label: 'Competitor Analytics', tabs: [
+    { label: 'Analytics', tabs: [
         { id: 'content-analytics', label: 'Competitor Analytics' },
         { id: 'sales-analytics', label: 'Sales Analytics' },
         { id: 'website-analytics', label: 'Website Analytics' }
+      ] },
+    { label: 'Mailbox', tabs: [
+        { id: 'mailbox', label: 'Mailbox' }
       ] },
     // Rail-only utility: routable like every other leaf, deliberately
     // omitted from the horizontal product-area navigation.

@@ -42,10 +42,6 @@
       <a href="#project-manager" class="side-rail-btn" data-tab="project-manager" title="Project Manager" aria-label="Project Manager">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
       </a>
-      <a href="#mailbox" class="side-rail-btn side-rail-mailbox" data-tab="mailbox" title="Mailbox" aria-label="Mailbox">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 5h18v14H3z"/><path d="m3 6 9 7 9-7"/></svg>
-        <span class="mail-unread-badge" id="mailUnreadBadge" hidden>0</span>
-      </a>
       <!-- Content Ops group: parent icon (a generic "layers" mark, distinct
            from its own default child's icon below) links to the group's
            default leaf, Content Pipeline. Its 3 real leaf tabs are nested
@@ -72,12 +68,12 @@
           </a>
         </div>
       </div>
-      <!-- Competitor Analytics group: same pattern, parent is a "trending up" mark,
+      <!-- Analytics group: same pattern, parent is a "trending up" mark,
            3 real leaf tabs nested beneath it. Hidden entirely for a
            youtube-reviewer session (app.js sets body.role-reviewer) — see
            style.css. -->
       <div class="side-rail-group side-rail-group-analytics">
-        <a href="#content-analytics" class="side-rail-btn" data-tab="content-analytics" title="Competitor Analytics" aria-label="Competitor Analytics">
+        <a href="#content-analytics" class="side-rail-btn" data-tab="content-analytics" title="Analytics" aria-label="Analytics">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>
         </a>
         <div class="side-rail-sub">
@@ -92,6 +88,10 @@
           </a>
         </div>
       </div>
+      <a href="#mailbox" class="side-rail-btn side-rail-mailbox" data-tab="mailbox" title="Mailbox" aria-label="Mailbox">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 5h18v14H3z"/><path d="m3 6 9 7 9-7"/></svg>
+        <span class="mail-unread-badge" id="mailUnreadBadge" hidden>0</span>
+      </a>
       <a href="#manuscript" class="side-rail-btn side-rail-manuscript" data-tab="manuscript" title="Read The Reality Manual" aria-label="Read The Reality Manual">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 5.5A3.5 3.5 0 0 1 6.5 2H11a3 3 0 0 1 3 3v16a3 3 0 0 0-3-3H6.5A3.5 3.5 0 0 0 3 21.5v-16Z"/><path d="M21 5.5A3.5 3.5 0 0 0 17.5 2H14v19a3 3 0 0 1 3-3h.5a3.5 3.5 0 0 1 3.5 3.5v-16Z"/></svg>
       </a>
@@ -253,6 +253,6 @@
   <script src="manuscript.js?v=20260923-smooth-page-loading"></script>
   <script src="competitors.js?v=20260924-caption-only-outliers"></script>
   <script src="mailbox.js?v=20260923-namecheap-mail"></script>
-  <script src="app.js?v=20260924-competitor-analytics-nav"></script>
+  <script src="app.js?v=20260924-analytics-mailbox-order"></script>
 </body>
 </html>

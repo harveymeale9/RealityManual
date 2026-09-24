@@ -9827,3 +9827,15 @@ Analytics and Website Analytics subtabs remain available beneath that group.
 The `app.js` cache key was advanced so already-open browsers fetch the new menu
 label immediately. This is a presentation-only change; the stable
 `#content-analytics` route and competitor data are unchanged.
+
+---
+
+# 216. Analytics Parent and Mailbox Navigation Order (2026-09-24)
+
+Harvey clarified the intended hierarchy after §215: **Analytics** is the
+top-level group name, while **Competitor Analytics** is the name of its first
+subtab and dashboard. The top navigation order is now Project Manager, Content
+Ops, Analytics, Mailbox, making Mailbox the far-right final item. The icon rail
+mirrors the same functional order (with the manuscript reader still pinned at
+the bottom as a utility). The asset cache key was advanced again so the corrected
+label and ordering appear immediately on existing devices.
