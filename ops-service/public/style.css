@@ -1896,7 +1896,7 @@ body.role-reviewer #pmBackFab {
 .competitor-remove { border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--ink-faint); padding: 7px 9px; cursor: pointer; font: .65rem var(--font-mono); text-transform: uppercase; }
 .competitor-remove:hover { color: var(--error); border-color: var(--error); }
 .competitor-channel-error { margin-top: 12px; font-size: .76rem; }
-.competitor-summary { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; margin: 16px 0; }
+.competitor-summary { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; margin: 16px 0; }
 .competitor-summary > div { padding: 11px 13px; border: 1px solid var(--border-soft); border-radius: 7px; background: var(--surface-2); }
 .competitor-summary b { display: block; color: var(--accent); font: 700 1.18rem var(--font-mono); }
 .competitor-summary span { color: var(--ink-faint); font-size: .68rem; }

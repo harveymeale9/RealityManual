@@ -51,10 +51,11 @@
   }
 
   function videoCard(video, total) {
-    return '<a class="competitor-video' + (video.viewRank === 1 ? ' is-winner' : '') + '" href="https://www.youtube.com/watch?v=' + encodeURIComponent(video.id) + '" target="_blank" rel="noopener">' +
+    var rank = video.recentViewRank || video.viewRank || '?';
+    return '<a class="competitor-video' + (rank === 1 ? ' is-winner' : '') + '" href="https://www.youtube.com/watch?v=' + encodeURIComponent(video.id) + '" target="_blank" rel="noopener">' +
       '<div class="competitor-thumb">' +
         (video.thumbnailUrl ? '<img src="' + esc(video.thumbnailUrl) + '" alt="" loading="lazy">' : '') +
-        '<span class="competitor-rank">#' + video.viewRank + ' of ' + total + '</span>' +
+        '<span class="competitor-rank">#' + rank + ' of ' + total + '</span>' +
         (video.durationSeconds != null ? '<span class="competitor-duration">' + duration(video.durationSeconds) + '</span>' : '') +
       '</div>' +
       '<div class="competitor-video-body"><h4>' + esc(video.title) + '</h4>' +
@@ -69,8 +70,9 @@
       return '<section class="competitor-channel"><div class="competitor-channel-head"><div><h3>' + esc(record.title || record.input) + '</h3><p>' + esc(record.input) + '</p></div><button class="competitor-remove" data-id="' + esc(record.channelId) + '">Remove</button></div>' +
         '<div class="competitor-channel-error">' + esc(record.lastError || 'This channel needs to be refreshed.') + '</div></section>';
     }
-    var videos = snapshot.videos || [];
-    var ranked = videos.slice().sort(function (a, b) { return a.viewRank - b.viewRank; });
+    var baselineVideos = snapshot.videos || [];
+    var videos = baselineVideos.slice(0, 10);
+    var ranked = videos.slice().sort(function (a, b) { return (a.recentViewRank || a.viewRank || 999) - (b.recentViewRank || b.viewRank || 999); });
     var winner = ranked[0];
     return '<section class="competitor-channel">' +
       '<div class="competitor-channel-head">' +
@@ -81,7 +83,8 @@
       (record.lastError ? '<div class="competitor-channel-error">Latest refresh failed: ' + esc(record.lastError) + '</div>' : '') +
       '<div class="competitor-summary">' +
         '<div><b>' + number(snapshot.subscriberCount) + '</b><span>' + (snapshot.subscriberHidden ? 'Subscribers hidden' : 'Subscribers') + '</span></div>' +
-        '<div><b>' + number(snapshot.averageViews) + '</b><span>Average views · latest ' + videos.length + '</span></div>' +
+        '<div><b>' + number(snapshot.averageViews) + '</b><span>Average views · latest ' + (snapshot.baselineVideoCount || baselineVideos.length) + '</span></div>' +
+        '<div><b>' + number(snapshot.medianViews) + '</b><span>Median views · latest ' + (snapshot.baselineVideoCount || baselineVideos.length) + '</span></div>' +
         '<div><b>' + number(snapshot.totalVideoCount) + '</b><span>Public videos</span></div>' +
       '</div>' +
       (winner ? '<div class="competitor-winner"><span>Current winner</span><strong>#1 of ' + videos.length + '</strong><p>' + esc(winner.title) + ' · ' + number(winner.views) + ' views</p></div>' : '') +
@@ -160,10 +163,10 @@
   function mount(container) {
     root = container;
     root.innerHTML = '<div class="competitor-workspace">' +
-      '<header class="competitor-hero"><div><div class="eyebrow">YouTube competitor intelligence</div><h2>Find the one-of-ten winners</h2><p>Track selected channels and see which of their latest ten public uploads currently ranks first by views. Uses the YouTube connection already in Content Studio—nothing else to connect.</p></div><button id="competitorRefresh" type="button">Refresh all</button></header>' +
+      '<header class="competitor-hero"><div><div class="eyebrow">YouTube competitor intelligence</div><h2>Find the one-of-ten winners</h2><p>Track selected channels and see which of their latest ten public uploads currently ranks first by views, against a broader fifty-video performance baseline. Uses the YouTube connection already in Content Studio—nothing else to connect.</p></div><button id="competitorRefresh" type="button">Refresh all</button></header>' +
       '<form class="competitor-add" id="competitorAddForm"><label for="competitorChannelInput">YouTube channel</label><div><input id="competitorChannelInput" placeholder="@handle or youtube.com/@handle" autocomplete="off"><button id="competitorAddButton" type="submit">Add channel</button></div><small>Use an @handle or /channel/UC… URL. Requiring an exact channel avoids YouTube search quota entirely.</small></form>' +
       '<div class="competitor-status" id="competitorStatus" role="status" aria-live="polite"></div>' +
-      '<div class="competitor-note">Rank is based on current public view counts within the channel’s latest ten available uploads—not private Studio retention or equal-age velocity data.</div>' +
+      '<div class="competitor-note">The visible #1-of-10 rank compares the latest ten uploads by current public views. Average and median performance use up to the latest fifty videos, giving the baseline a proper sample—not private Studio retention or equal-age velocity data.</div>' +
       '<div class="competitor-channels" id="competitorChannels"><div class="competitor-loading"><div class="spinner"></div></div></div>' +
     '</div>';
     bind();
@@ -171,7 +174,7 @@
       // Refresh on entry when any snapshot is absent or over six hours old;
       // repeated tab visits otherwise remain instant and quota-light.
       var stale = items.some(function (item) {
-        return !item.snapshot || !item.refreshedAt || Date.now() - new Date(item.refreshedAt).getTime() > 6 * 60 * 60 * 1000;
+        return !item.snapshot || item.snapshot.sampleVersion !== 2 || !item.refreshedAt || Date.now() - new Date(item.refreshedAt).getTime() > 6 * 60 * 60 * 1000;
       });
       if (stale) refresh();
     }).catch(function (error) { setStatus(error.message, true); });

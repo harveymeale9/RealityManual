@@ -9596,3 +9596,31 @@ fallback, and 30-day expiry. A direct live call through the existing production
 OAuth connection resolved `@YouTube`, returned ten public uploads, and ranked a
 winner without exposing the token. Chromium at 1440×900 and 390×844 verified
 the dashboard layout with no overflow or runtime errors. Full suite: 34/34.
+
+---
+
+# 210. Fifty-Video Competitor Baseline, Ten-Video Winner Set (2026-09-24)
+
+The competitor dashboard originally calculated its average from the same latest
+ten videos used for the visible **one-of-ten** contest. Harvey correctly pointed
+out that ten is too small a sample for a useful channel-performance baseline.
+Those are now deliberately separate populations: the current winner and video
+cards still rank only the channel's latest ten public uploads, while average and
+median views are calculated from up to its latest fifty public uploads.
+
+Fifty is YouTube's maximum `playlistItems.list` page size, so the larger sample
+does not add another request: each channel refresh remains the same three Data
+API calls (channel, uploads playlist, batched video details). The saved snapshot
+contains the full baseline plus distinct `recentViewRank` and
+`baselineViewRank` values, but the interface renders only the ten recent cards
+and labels the two baseline statistics with their actual sample count. Median
+was added alongside average so one unusually viral upload cannot disguise the
+channel's typical performance.
+
+Snapshots now carry `sampleVersion: 2`. Opening the dashboard automatically
+refreshes an older ten-video snapshot even if it is less than six hours old,
+which prevents stale cache data from silently preserving the old calculation.
+Compatibility fallbacks keep such a snapshot readable during that refresh.
+Regression coverage proves the fifty-item request, correct mean/median fields,
+and that an older high-view outlier contributes to the baseline without
+entering the latest-ten winner ranking. Full suite: 35/35.

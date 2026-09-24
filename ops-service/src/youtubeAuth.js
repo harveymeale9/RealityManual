@@ -139,9 +139,10 @@ async function fetchCompetitorChannel(accessToken, input) {
   const playlistUrl = new URL(PLAYLIST_ITEMS_URL);
   playlistUrl.searchParams.set('part', 'contentDetails');
   playlistUrl.searchParams.set('playlistId', uploadsPlaylistId);
-  // Fetch a few extras because deleted/private playlist entries can be omitted
-  // by videos.list; the dashboard still aims to show ten real public uploads.
-  playlistUrl.searchParams.set('maxResults', '25');
+  // Fifty is YouTube's maximum page size and gives the performance baseline a
+  // useful sample without adding another request. The UI still ranks the ten
+  // most recent uploads against one another; all fifty feed its averages.
+  playlistUrl.searchParams.set('maxResults', '50');
   const playlistData = await youtubeGet(accessToken, playlistUrl, 'YouTube competitor uploads lookup');
   const orderedIds = (playlistData.items || []).map(function (item) {
     return item.contentDetails && item.contentDetails.videoId;
@@ -156,7 +157,7 @@ async function fetchCompetitorChannel(accessToken, input) {
     videoItems = videosData.items || [];
   }
   const byId = new Map(videoItems.map(function (item) { return [item.id, item]; }));
-  const videos = orderedIds.map(function (id) { return byId.get(id); }).filter(Boolean).slice(0, 10).map(function (item) {
+  const videos = orderedIds.map(function (id) { return byId.get(id); }).filter(Boolean).slice(0, 50).map(function (item) {
     const thumbs = item.snippet && item.snippet.thumbnails || {};
     const thumb = thumbs.maxres || thumbs.standard || thumbs.high || thumbs.medium || thumbs.default || {};
     const stats = item.statistics || {};
@@ -171,10 +172,18 @@ async function fetchCompetitorChannel(accessToken, input) {
       comments: stats.commentCount == null ? null : (Number(stats.commentCount) || 0)
     };
   });
-  const ranked = videos.slice().sort(function (a, b) { return b.views - a.views || String(b.publishedAt).localeCompare(String(a.publishedAt)); });
-  ranked.forEach(function (video, index) { video.viewRank = index + 1; });
-  const ranks = new Map(ranked.map(function (video) { return [video.id, video.viewRank]; }));
-  videos.forEach(function (video) { video.viewRank = ranks.get(video.id); });
+  const baselineRanked = videos.slice().sort(function (a, b) { return b.views - a.views || String(b.publishedAt).localeCompare(String(a.publishedAt)); });
+  const baselineRanks = new Map(baselineRanked.map(function (video, index) { return [video.id, index + 1]; }));
+  videos.forEach(function (video) { video.baselineViewRank = baselineRanks.get(video.id); });
+  const recentVideos = videos.slice(0, 10);
+  const recentRanked = recentVideos.slice().sort(function (a, b) { return b.views - a.views || String(b.publishedAt).localeCompare(String(a.publishedAt)); });
+  const recentRanks = new Map(recentRanked.map(function (video, index) { return [video.id, index + 1]; }));
+  videos.forEach(function (video) { video.recentViewRank = recentRanks.get(video.id) || null; });
+  const sortedViewCounts = videos.map(function (video) { return video.views; }).sort(function (a, b) { return a - b; });
+  const middle = Math.floor(sortedViewCounts.length / 2);
+  const medianViews = !sortedViewCounts.length ? 0 : (sortedViewCounts.length % 2
+    ? sortedViewCounts[middle]
+    : Math.round((sortedViewCounts[middle - 1] + sortedViewCounts[middle]) / 2));
 
   const channelThumbs = channel.snippet && channel.snippet.thumbnails || {};
   const channelThumb = channelThumbs.high || channelThumbs.medium || channelThumbs.default || {};
@@ -192,6 +201,10 @@ async function fetchCompetitorChannel(accessToken, input) {
     uploadsPlaylistId: uploadsPlaylistId,
     videos: videos,
     averageViews: videos.length ? Math.round(videos.reduce(function (sum, video) { return sum + video.views; }, 0) / videos.length) : 0,
+    medianViews: medianViews,
+    baselineVideoCount: videos.length,
+    recentVideoCount: recentVideos.length,
+    sampleVersion: 2,
     fetchedAt: new Date().toISOString()
   };
 }

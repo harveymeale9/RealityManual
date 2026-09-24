@@ -54,7 +54,7 @@ test('YouTube status lookup exposes public visibility and omits no ids itself', 
   ]);
 });
 
-test('competitor lookup resolves a handle without search and ranks its latest public videos by raw views', async function (t) {
+test('competitor lookup resolves a handle without search, ranks its latest ten, and builds a fifty-video baseline', async function (t) {
   const originalFetch = global.fetch;
   t.after(function () { global.fetch = originalFetch; });
   const calls = [];
@@ -80,16 +80,59 @@ test('competitor lookup resolves a handle without search and ranks its latest pu
   assert.equal(calls.length, 3);
   assert.equal(calls[0].query.forHandle, 'Example.Creator');
   assert.equal(calls[1].query.playlistId, 'UUabcdefghijklmnopqrstuv');
-  assert.equal(calls[1].query.maxResults, '25');
+  assert.equal(calls[1].query.maxResults, '50');
   assert.equal(calls[2].query.part, 'snippet,statistics,contentDetails');
   assert.ok(calls.every(function (call) { return call.auth === 'Bearer existing-token'; }));
   assert.equal(result.title, 'Example Creator');
   assert.equal(result.averageViews, 500);
+  assert.equal(result.medianViews, 500);
+  assert.equal(result.baselineVideoCount, 2);
+  assert.equal(result.recentVideoCount, 2);
+  assert.equal(result.sampleVersion, 2);
   assert.equal(result.videos[0].id, 'newer');
-  assert.equal(result.videos[0].viewRank, 2);
+  assert.equal(result.videos[0].recentViewRank, 2);
+  assert.equal(result.videos[0].baselineViewRank, 2);
   assert.equal(result.videos[0].comments, null);
-  assert.equal(result.videos[1].viewRank, 1);
+  assert.equal(result.videos[1].recentViewRank, 1);
+  assert.equal(result.videos[1].baselineViewRank, 1);
   assert.equal(result.videos[1].durationSeconds, 65);
+});
+
+test('competitor baseline includes older videos without letting them enter the latest-ten ranking', async function (t) {
+  const originalFetch = global.fetch;
+  t.after(function () { global.fetch = originalFetch; });
+  const ids = Array.from({ length: 11 }, function (_, index) { return 'video-' + index; });
+  global.fetch = async function (url) {
+    const parsed = new URL(String(url));
+    if (parsed.pathname.endsWith('/channels')) return { ok: true, json: async function () { return { items: [{
+      id: 'UCabcdefghijklmnopqrstuv',
+      snippet: { title: 'Larger Sample' },
+      contentDetails: { relatedPlaylists: { uploads: 'UUabcdefghijklmnopqrstuv' } },
+      statistics: { subscriberCount: '100', videoCount: '11' }
+    }] }; } };
+    if (parsed.pathname.endsWith('/playlistItems')) return { ok: true, json: async function () {
+      return { items: ids.map(function (id) { return { contentDetails: { videoId: id } }; }) };
+    } };
+    return { ok: true, json: async function () {
+      return { items: ids.map(function (id, index) {
+        return {
+          id: id,
+          snippet: { title: id, publishedAt: '2026-09-' + String(20 - index).padStart(2, '0') + 'T00:00:00Z' },
+          contentDetails: { duration: 'PT1M' },
+          statistics: { viewCount: String(index === 10 ? 1000 : index + 1) }
+        };
+      }) };
+    } };
+  };
+
+  const result = await youtubeAuth.fetchCompetitorChannel('existing-token', '@sample');
+  assert.equal(result.baselineVideoCount, 11);
+  assert.equal(result.recentVideoCount, 10);
+  assert.equal(result.averageViews, 96);
+  assert.equal(result.medianViews, 6);
+  assert.equal(result.videos[9].recentViewRank, 1);
+  assert.equal(result.videos[10].recentViewRank, null);
+  assert.equal(result.videos[10].baselineViewRank, 1);
 });
 
 test('competitor channel input accepts handles and stable channel ids but rejects arbitrary URLs', function () {
