@@ -9716,3 +9716,12 @@ zero-outlier states, relative-performance labels, the unchanged latest-ten
 grid, and no horizontal overflow. Full suite: 38/38. A read-only live calculation
 against `@YouTube` returned five qualifiers from 50, all above the 421,203-view
 outlier fence and ranging from 7.0× to 127.8× that channel's median.
+
+Production verification at `ede4634` returned the same five qualifiers through
+the authenticated API. The initial structured Claude call had one transient
+failure; this deliberately left all YouTube data intact and the live **Refresh
+AI reads** retry then populated all five analyses, proving the graceful-failure
+path rather than hiding it. Real Chromium at 1440×900 and 390×844 showed five
+cards, 15 creative fields, original thumbnails, exact median-lift labels from
+7.0× through 128×, ten recent cards, the current cachebuster, and no overflow
+or runtime errors. The temporary watchlist entry was removed; live count is 0.
