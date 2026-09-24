@@ -9555,3 +9555,44 @@ delayed every image response. It proved that the initial state contained only
 the visible spinner (no fallback pages), a later turn retained the old page
 while loading, and the new two-page spread appeared only after both images had
 finished. The full suite remains 30/30.
+
+---
+
+# 209. YouTube Competitor “One-of-Ten” Dashboard, No New API Signup (2026-09-24)
+
+The former Content Analytics placeholder is now a working YouTube competitor
+dashboard. Harvey can paste any current `@handle`, `youtube.com/@handle` URL,
+stable `/channel/UC…` URL, or raw channel id into a saved watchlist. Each channel
+shows its public subscriber/video totals, average views across the latest ten
+available uploads, all ten videos with thumbnail/title/date/duration/views/
+likes/comments, their raw view-count rank, and an explicit **Current winner —
+#1 of 10** callout. Every video card opens the original YouTube watch page.
+
+This uses only the OAuth connection already present in Content Studio and its
+existing `youtube.readonly` scope. It requires no API key, new Google project,
+new scope, or competitor authorization. Exact channel handles are resolved with
+`channels.list`, then the uploads playlist is read with `playlistItems.list`
+and the latest public video details are fetched in one `videos.list` batch.
+Deliberately avoiding `search.list` both removes ambiguous channel matching and
+avoids its separate, tighter search quota bucket. One channel refresh is three
+cheap read calls.
+
+The ranking is intentionally transparent and policy-safe: it sorts the current
+public view counts within that channel's latest ten uploads. It does not pretend
+to reproduce YouTube Studio's private equal-age velocity ranking, retention,
+impressions, or CTR, and it does not manufacture an opaque proprietary score.
+The UI states that limitation directly. Public snapshots are cached so revisits
+are instant and auto-refreshed on entry once older than six hours; snapshots
+older than YouTube's 30-day non-authorized-data limit are erased automatically
+at service startup while the user's channel watchlist remains.
+
+Backend state lives in `youtube_competitor_channels`; authenticated admin-only
+list/add/refresh/delete endpoints are under `/api/youtube/competitors`. A failed
+channel refresh retains and displays the last good snapshot plus the current
+error instead of blanking the dashboard. Tests cover exact-handle parsing, the
+three-call API flow, stable recency ordering plus view ranking, duration and
+missing-stat normalization, durable add/refresh/remove behavior, failed-refresh
+fallback, and 30-day expiry. A direct live call through the existing production
+OAuth connection resolved `@YouTube`, returned ten public uploads, and ranked a
+winner without exposing the token. Chromium at 1440×900 and 390×844 verified
+the dashboard layout with no overflow or runtime errors. Full suite: 34/34.

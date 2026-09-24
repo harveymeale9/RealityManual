@@ -1869,6 +1869,59 @@ body.role-reviewer #pmBackFab {
 .tab-placeholder.wide h2 { text-align: left; }
 .metric-list { margin: 18px 0 0; padding: 0 0 0 1.1em; color: var(--ink-soft); font-size: 0.9rem; line-height: 1.9; }
 
+/* ---------- YouTube competitor intelligence ---------- */
+.competitor-workspace { width: 100%; max-width: 1500px; margin: 0 auto; padding: 24px clamp(16px,3vw,38px) 60px; }
+.competitor-hero { display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; padding-bottom: 22px; border-bottom: 1px solid var(--border); }
+.competitor-hero h2 { margin: 6px 0 9px; font: 600 clamp(1.8rem,3vw,2.8rem)/1.05 var(--font-display); }
+.competitor-hero p { max-width: 760px; margin: 0; color: var(--ink-soft); line-height: 1.55; }
+.competitor-hero button,.competitor-add button { flex: 0 0 auto; border: 1px solid var(--accent-3); border-radius: 7px; background: var(--accent-soft); color: var(--accent); padding: 10px 15px; cursor: pointer; font: 700 .7rem var(--font-mono); text-transform: uppercase; letter-spacing: .05em; }
+.competitor-hero button:disabled,.competitor-add button:disabled { opacity: .45; cursor: wait; }
+.competitor-add { max-width: 850px; margin: 22px 0 0; }
+.competitor-add > label { display: block; margin-bottom: 7px; color: var(--ink-faint); font: 700 .68rem var(--font-mono); text-transform: uppercase; letter-spacing: .1em; }
+.competitor-add > div { display: flex; gap: 8px; }
+.competitor-add input { flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-2); color: var(--ink); padding: 11px 13px; font: .88rem var(--font-body); }
+.competitor-add input:focus { outline: 2px solid rgba(60,255,137,.18); border-color: var(--accent-3); }
+.competitor-add small { display: block; margin-top: 7px; color: var(--ink-faint); font-size: .71rem; }
+.competitor-status { min-height: 22px; margin-top: 13px; color: var(--accent); font: .7rem/1.4 var(--font-mono); }
+.competitor-status.error,.competitor-channel-error { color: #ff8f82; }
+.competitor-note { margin: 5px 0 18px; padding: 10px 12px; border-left: 2px solid var(--accent-3); color: var(--ink-faint); background: rgba(60,255,137,.035); font-size: .75rem; line-height: 1.5; }
+.competitor-channels { display: grid; gap: 20px; }
+.competitor-loading { min-height: 180px; display: grid; place-items: center; }
+.competitor-channel { border: 1px solid var(--border); border-radius: 11px; background: rgba(8,13,10,.94); padding: 18px; }
+.competitor-channel-head { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.competitor-identity { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.competitor-identity > img { width: 48px; height: 48px; flex: 0 0 auto; border-radius: 50%; object-fit: cover; }
+.competitor-channel-head h3 { margin: 0; color: var(--ink); font: 600 1.25rem var(--font-display); }
+.competitor-channel-head p { margin: 3px 0 0; color: var(--ink-faint); font-size: .72rem; }
+.competitor-remove { border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--ink-faint); padding: 7px 9px; cursor: pointer; font: .65rem var(--font-mono); text-transform: uppercase; }
+.competitor-remove:hover { color: var(--error); border-color: var(--error); }
+.competitor-channel-error { margin-top: 12px; font-size: .76rem; }
+.competitor-summary { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; margin: 16px 0; }
+.competitor-summary > div { padding: 11px 13px; border: 1px solid var(--border-soft); border-radius: 7px; background: var(--surface-2); }
+.competitor-summary b { display: block; color: var(--accent); font: 700 1.18rem var(--font-mono); }
+.competitor-summary span { color: var(--ink-faint); font-size: .68rem; }
+.competitor-winner { display: grid; grid-template-columns: auto auto minmax(0,1fr); align-items: center; gap: 10px; margin-bottom: 12px; padding: 10px 12px; border: 1px solid rgba(60,255,137,.28); border-radius: 7px; background: rgba(60,255,137,.07); }
+.competitor-winner > span { color: var(--ink-faint); font: 700 .65rem var(--font-mono); text-transform: uppercase; letter-spacing: .08em; }
+.competitor-winner strong { color: var(--accent); font: 700 .78rem var(--font-mono); }
+.competitor-winner p { min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-soft); font-size: .78rem; }
+.competitor-video-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(220px,1fr)); gap: 10px; }
+.competitor-video { min-width: 0; overflow: hidden; border: 1px solid var(--border-soft); border-radius: 8px; background: var(--surface-2); color: inherit; text-decoration: none; transition: transform .16s ease,border-color .16s ease; }
+.competitor-video:hover { transform: translateY(-2px); border-color: var(--accent-3); }
+.competitor-video.is-winner { border-color: rgba(60,255,137,.42); }
+.competitor-thumb { position: relative; aspect-ratio: 16/9; overflow: hidden; background: #050806; }
+.competitor-thumb img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.competitor-rank,.competitor-duration { position: absolute; bottom: 7px; padding: 4px 6px; border-radius: 4px; background: rgba(0,0,0,.84); color: white; font: 700 .65rem var(--font-mono); }
+.competitor-rank { left: 7px; }.competitor-duration { right: 7px; }
+.competitor-video.is-winner .competitor-rank { background: var(--accent); color: var(--accent-ink); }
+.competitor-video-body { padding: 10px 11px 12px; }
+.competitor-video h4 { min-height: 2.7em; margin: 0; color: var(--ink); font: 600 .8rem/1.35 var(--font-body); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.competitor-video-date { margin-top: 5px; color: var(--ink-faint); font-size: .66rem; }
+.competitor-video-stats { display: flex; flex-wrap: wrap; gap: 7px 11px; margin-top: 9px; color: var(--ink-faint); font-size: .65rem; }
+.competitor-video-stats b { color: var(--ink-soft); font-family: var(--font-mono); }
+.competitor-empty { min-height: 150px; display: grid; place-items: center; align-content: center; gap: 7px; border: 1px dashed var(--border); border-radius: 9px; color: var(--ink-faint); text-align: center; }
+.competitor-empty strong { color: var(--ink-soft); }
+@media (max-width: 700px) { .competitor-hero { display: block; }.competitor-hero button { margin-top: 16px; }.competitor-add > div { display: grid; }.competitor-summary { grid-template-columns: 1fr; }.competitor-winner { grid-template-columns: auto auto; }.competitor-winner p { grid-column: 1/-1; }.competitor-video-grid { grid-template-columns: 1fr; } }
+
 /* ---------- website analytics (live data) ---------- */
 
 .funnel-section { margin: 0 clamp(16px, 3vw, 36px) 24px; max-width: 640px; }

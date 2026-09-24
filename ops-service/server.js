@@ -27,6 +27,7 @@ const storefrontReporting = require('./src/storefrontReporting');
 const weeklyReportService = require('./src/weeklyReportService');
 const diskMonitorService = require('./src/diskMonitorService');
 const youtubePublicationAudit = require('./src/youtubePublicationAudit');
+const youtubeCompetitorService = require('./src/youtubeCompetitorService');
 const agentUsage = require('./src/agentUsage');
 const recordConcurrency = require('./src/recordConcurrency');
 const backgroundMonitorService = require('./src/backgroundMonitorService');
@@ -661,6 +662,12 @@ const youtubeAudit = youtubePublicationAudit.setup(db, {
   savePiece: async function (piece) { savePieceRecord(piece); }
 });
 
+const youtubeCompetitors = youtubeCompetitorService.setup(db, {
+  fetchChannel: async function (input) {
+    return youtubeAuth.fetchCompetitorChannel(await getValidYoutubeAccessToken(), input);
+  }
+});
+
 app.get('/api/reports/weekly/status', requireAuth, function (req, res) {
   res.json(weeklyReports.status());
 });
@@ -681,6 +688,25 @@ app.get('/api/youtube/publication-audit/status', requireAuth, function (req, res
 app.post('/api/youtube/publication-audit/run', requireAuth, async function (req, res) {
   try { res.json(await youtubeAudit.run(true)); }
   catch (error) { res.status(502).json({ error: 'youtube_publication_audit_failed', message: String(error.message || error).slice(0, 300) }); }
+});
+app.get('/api/youtube/competitors', requireAuth, function (req, res) {
+  res.json({ channels: youtubeCompetitors.list() });
+});
+app.post('/api/youtube/competitors', requireAuth, async function (req, res) {
+  try {
+    const input = req.body && req.body.channel;
+    if (!input || typeof input !== 'string') return res.status(400).json({ error: 'channel_required' });
+    res.json({ channel: await youtubeCompetitors.add(input) });
+  } catch (error) {
+    res.status(502).json({ error: 'youtube_competitor_lookup_failed', message: String(error.message || error).slice(0, 500) });
+  }
+});
+app.post('/api/youtube/competitors/refresh', requireAuth, async function (req, res) {
+  try { res.json({ channels: await youtubeCompetitors.refreshAll() }); }
+  catch (error) { res.status(502).json({ error: 'youtube_competitor_refresh_failed', message: String(error.message || error).slice(0, 500) }); }
+});
+app.delete('/api/youtube/competitors/:channelId', requireAuth, function (req, res) {
+  res.json(youtubeCompetitors.remove(req.params.channelId));
 });
 
 // --- Reviewer access control for /api/store and /api/files. A reviewer

@@ -334,6 +334,8 @@
       bootSettings();
     } else if (active === 'website-analytics') {
       renderWebsiteAnalytics();
+    } else if (active === 'content-analytics') {
+      window.RMCompetitors.mount(panelMain);
     } else {
       renderAnalyticsPlaceholder(active);
     }

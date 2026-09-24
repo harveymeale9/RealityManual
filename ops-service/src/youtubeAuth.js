@@ -88,6 +88,113 @@ async function fetchChannelInfo(accessToken) {
 
 const UPLOAD_URL = 'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status';
 const VIDEOS_URL = 'https://www.googleapis.com/youtube/v3/videos';
+const CHANNELS_LIST_URL = 'https://www.googleapis.com/youtube/v3/channels';
+const PLAYLIST_ITEMS_URL = 'https://www.googleapis.com/youtube/v3/playlistItems';
+
+async function youtubeGet(accessToken, url, label) {
+  const res = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
+  if (!res.ok) throw new Error(label + ' failed (' + res.status + '): ' + (await res.text()));
+  return res.json();
+}
+
+function competitorChannelFilter(value) {
+  let input = String(value || '').trim();
+  if (!input) throw new Error('Enter a YouTube @handle or channel URL.');
+  if (/^https?:\/\//i.test(input)) {
+    let parsed;
+    try { parsed = new URL(input); } catch (error) { throw new Error('That is not a valid YouTube channel URL.'); }
+    if (!/(^|\.)youtube\.com$/i.test(parsed.hostname)) throw new Error('Enter a youtube.com channel URL.');
+    const parts = parsed.pathname.split('/').filter(Boolean);
+    if (parts[0] === 'channel' && /^UC[A-Za-z0-9_-]{20,}$/.test(parts[1] || '')) return { key: 'id', value: parts[1] };
+    if (parts[0] && parts[0][0] === '@') input = parts[0];
+    else throw new Error('Use the channel’s @handle URL or /channel/UC… URL.');
+  }
+  if (/^UC[A-Za-z0-9_-]{20,}$/.test(input)) return { key: 'id', value: input };
+  const handle = input.replace(/^@/, '').trim();
+  if (!/^[A-Za-z0-9._-]{3,100}$/.test(handle)) throw new Error('Enter a valid YouTube @handle.');
+  return { key: 'forHandle', value: handle };
+}
+
+function isoDurationSeconds(value) {
+  const match = String(value || '').match(/^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$/);
+  if (!match) return null;
+  return Math.round((Number(match[1] || 0) * 86400) + (Number(match[2] || 0) * 3600) + (Number(match[3] || 0) * 60) + Number(match[4] || 0));
+}
+
+// Public competitor discovery deliberately reuses the app's existing
+// youtube.readonly token. No competitor authorization or additional scope is
+// needed: every field returned here is already public on YouTube. Requiring a
+// handle/channel URL avoids the separate search.list quota bucket entirely.
+async function fetchCompetitorChannel(accessToken, input) {
+  const filter = competitorChannelFilter(input);
+  const channelUrl = new URL(CHANNELS_LIST_URL);
+  channelUrl.searchParams.set('part', 'snippet,contentDetails,statistics');
+  channelUrl.searchParams.set(filter.key, filter.value);
+  const channelData = await youtubeGet(accessToken, channelUrl, 'YouTube competitor channel lookup');
+  const channel = (channelData.items || [])[0];
+  if (!channel) throw new Error('No YouTube channel matched that handle or URL.');
+  const uploadsPlaylistId = channel.contentDetails && channel.contentDetails.relatedPlaylists && channel.contentDetails.relatedPlaylists.uploads;
+  if (!uploadsPlaylistId) throw new Error('YouTube did not expose this channel’s uploads playlist.');
+
+  const playlistUrl = new URL(PLAYLIST_ITEMS_URL);
+  playlistUrl.searchParams.set('part', 'contentDetails');
+  playlistUrl.searchParams.set('playlistId', uploadsPlaylistId);
+  // Fetch a few extras because deleted/private playlist entries can be omitted
+  // by videos.list; the dashboard still aims to show ten real public uploads.
+  playlistUrl.searchParams.set('maxResults', '25');
+  const playlistData = await youtubeGet(accessToken, playlistUrl, 'YouTube competitor uploads lookup');
+  const orderedIds = (playlistData.items || []).map(function (item) {
+    return item.contentDetails && item.contentDetails.videoId;
+  }).filter(Boolean);
+
+  let videoItems = [];
+  if (orderedIds.length) {
+    const videosUrl = new URL(VIDEOS_URL);
+    videosUrl.searchParams.set('part', 'snippet,statistics,contentDetails');
+    videosUrl.searchParams.set('id', orderedIds.join(','));
+    const videosData = await youtubeGet(accessToken, videosUrl, 'YouTube competitor video lookup');
+    videoItems = videosData.items || [];
+  }
+  const byId = new Map(videoItems.map(function (item) { return [item.id, item]; }));
+  const videos = orderedIds.map(function (id) { return byId.get(id); }).filter(Boolean).slice(0, 10).map(function (item) {
+    const thumbs = item.snippet && item.snippet.thumbnails || {};
+    const thumb = thumbs.maxres || thumbs.standard || thumbs.high || thumbs.medium || thumbs.default || {};
+    const stats = item.statistics || {};
+    return {
+      id: item.id,
+      title: item.snippet && item.snippet.title || item.id,
+      publishedAt: item.snippet && item.snippet.publishedAt || null,
+      thumbnailUrl: thumb.url || '',
+      durationSeconds: isoDurationSeconds(item.contentDetails && item.contentDetails.duration),
+      views: Number(stats.viewCount) || 0,
+      likes: stats.likeCount == null ? null : (Number(stats.likeCount) || 0),
+      comments: stats.commentCount == null ? null : (Number(stats.commentCount) || 0)
+    };
+  });
+  const ranked = videos.slice().sort(function (a, b) { return b.views - a.views || String(b.publishedAt).localeCompare(String(a.publishedAt)); });
+  ranked.forEach(function (video, index) { video.viewRank = index + 1; });
+  const ranks = new Map(ranked.map(function (video) { return [video.id, video.viewRank]; }));
+  videos.forEach(function (video) { video.viewRank = ranks.get(video.id); });
+
+  const channelThumbs = channel.snippet && channel.snippet.thumbnails || {};
+  const channelThumb = channelThumbs.high || channelThumbs.medium || channelThumbs.default || {};
+  const subscriberHidden = !!(channel.statistics && channel.statistics.hiddenSubscriberCount);
+  return {
+    channelId: channel.id,
+    input: String(input).trim(),
+    handle: filter.key === 'forHandle' ? '@' + filter.value : '',
+    title: channel.snippet && channel.snippet.title || channel.id,
+    description: channel.snippet && channel.snippet.description || '',
+    thumbnailUrl: channelThumb.url || '',
+    subscriberCount: subscriberHidden ? null : (Number(channel.statistics && channel.statistics.subscriberCount) || 0),
+    subscriberHidden: subscriberHidden,
+    totalVideoCount: Number(channel.statistics && channel.statistics.videoCount) || 0,
+    uploadsPlaylistId: uploadsPlaylistId,
+    videos: videos,
+    averageViews: videos.length ? Math.round(videos.reduce(function (sum, video) { return sum + video.views; }, 0) / videos.length) : 0,
+    fetchedAt: new Date().toISOString()
+  };
+}
 
 async function fetchVideoStatistics(accessToken, videoIds) {
   const ids = Array.from(new Set((videoIds || []).map(String).filter(Boolean)));
@@ -188,4 +295,4 @@ async function uploadVideo(accessToken, filePath, mimeType, metadata) {
   return { videoId: data.id };
 }
 
-module.exports = { SCOPES, isConfigured, buildAuthUrl, exchangeCode, refreshAccessToken, fetchChannelInfo, fetchVideoStatistics, fetchVideoStatuses, uploadVideo };
+module.exports = { SCOPES, isConfigured, buildAuthUrl, exchangeCode, refreshAccessToken, fetchChannelInfo, fetchVideoStatistics, fetchVideoStatuses, fetchCompetitorChannel, competitorChannelFilter, uploadVideo };
