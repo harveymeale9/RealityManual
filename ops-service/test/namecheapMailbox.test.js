@@ -70,7 +70,10 @@ test('Namecheap provider maps encrypted IMAP mail and sends with the support ide
 
 test('provider stays disabled until an app password exists', function () {
   assert.equal(namecheapMailbox.fromEnv({ MAILBOX_ADDRESS: 'info@realitymanual.com' }), null);
-  const defaults = namecheapMailbox.envConfig({ MAILBOX_ADDRESS: 'info@realitymanual.com', MAILBOX_APP_PASSWORD: 'test-only' });
+  // envConfig exposes non-secret provider defaults independently of whether a
+  // password has been supplied. Keeping a password-shaped test literal here
+  // also causes public-repository secret scanners to report a false positive.
+  const defaults = namecheapMailbox.envConfig({ MAILBOX_ADDRESS: 'info@realitymanual.com' });
   assert.equal(defaults.imapHost, 'mail.privateemail.com');
   assert.equal(defaults.imapPort, 993);
   assert.equal(defaults.smtpHost, 'mail.privateemail.com');

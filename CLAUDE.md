@@ -9839,3 +9839,24 @@ Ops, Analytics, Mailbox, making Mailbox the far-right final item. The icon rail
 mirrors the same functional order (with the manuscript reader still pinned at
 the bottom as a utility). The asset cache key was advanced again so the corrected
 label and ordering appear immediately on existing devices.
+
+---
+
+# 217. GitGuardian SMTP Alert Was a Unit-Test False Positive (2026-09-25)
+
+GitGuardian emailed that commit `e155cba` had exposed SMTP credentials in the
+public repository. The alert's exact GitHub diff anchor resolves to
+`ops-service/test/namecheapMailbox.test.js`, line 73—not `.env`, deployment
+configuration, or a real mailbox value. The flagged code was the deliberately
+synthetic unit-test pair `MAILBOX_APP_PASSWORD: 'test-only'` alongside the
+public support address and Namecheap SMTP defaults. The actual app password has
+only ever lived in the gitignored VPS `ops-service/.env`; that file is mode 600,
+and both backend and ops-service `.env` paths remain covered by gitignore.
+
+The test now calls `envConfig()` without a password, which exercises the same
+non-secret provider defaults and avoids presenting scanners with a
+credential-shaped literal. No live credential was exposed, so password
+rotation and destructive Git-history rewriting are neither necessary nor
+appropriate. The old harmless `test-only` string may remain visible in the
+historical commit referenced by the alert; it was never accepted by the mail
+provider and grants no access.
