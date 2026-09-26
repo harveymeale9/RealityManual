@@ -32,6 +32,7 @@ const researchIdeaService = require('./src/researchIdeaService');
 const agentUsage = require('./src/agentUsage');
 const recordConcurrency = require('./src/recordConcurrency');
 const backgroundMonitorService = require('./src/backgroundMonitorService');
+const bufferService = require('./src/bufferService');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
@@ -70,6 +71,12 @@ const STORE_NAMES = ['pieces', 'videos', 'audioTracks', 'settings', 'errors'];
 const FILE_STORES = ['videos', 'audioTracks'];
 const ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const FINAL_VIDEO_SUFFIX = '-final';
+const buffer = bufferService.setup({
+  apiKey: process.env.BUFFER_API_KEY,
+  tiktokChannelId: process.env.BUFFER_TIKTOK_CHANNEL_ID,
+  mediaBaseUrl: process.env.BUFFER_MEDIA_BASE_URL || 'https://ops.realitymanual.com'
+});
 
 function isValidStore(name) { return STORE_NAMES.indexOf(name) !== -1; }
 function isValidId(id) { return typeof id === 'string' && ID_RE.test(id); }
@@ -1015,6 +1022,20 @@ function getPieceRecord(id) {
   const row = stmts.getOne.get('pieces', id);
   return row ? recordConcurrency.decodeRow(row) : null;
 }
+
+// Buffer requires a publicly fetchable URL for video assets. This narrowly
+// scoped route exposes only a finished video, for a short HMAC-signed window,
+// and never exposes directory listing or the API key itself.
+app.get('/api/buffer/media/:id', function (req, res) {
+  const id = req.params.id;
+  if (!isValidId(id) || !buffer.verifyMediaSignature(id, req.query.expires, req.query.sig)) return res.status(403).end();
+  const piece = getPieceRecord(id);
+  if (!piece || (piece.platforms || []).indexOf('tiktok') === -1) return res.status(404).end();
+  const filePath = path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX);
+  if (!fs.existsSync(filePath)) return res.status(404).end();
+  res.type('video/mp4');
+  res.sendFile(filePath);
+});
 function savePieceRecord(piece) {
   const previous = getPieceRecord(piece.id);
   const stamp = new Date().toISOString();
@@ -1174,8 +1195,6 @@ app.post('/api/videos/:id/analyze', requireAuthOrReviewer, function (req, res) {
 // overwriting the raw upload) specifically so re-running this later
 // (Harvey picks a different audio track and sends it again) always
 // splices from the untouched original, not from a previous splice.
-const FINAL_VIDEO_SUFFIX = '-final';
-
 async function runBuildFinalVideo(id) {
   const piece = getPieceRecord(id);
   if (!piece) return; // deleted before this started — nothing to do
@@ -1406,6 +1425,62 @@ app.post('/api/tiktok/publish/:id', function (req, res) {
   };
   res.json({ ok: true, status: 'running' });
   runTiktokPublish(id, opts).catch(function (e) { console.error('unhandled tiktok publish error for ' + id + ':', e.message); });
+});
+
+// Buffer is the supported path for Reality Manual's own TikTok scheduling:
+// TikTok rejected the internal Direct Post use case, while Buffer is an
+// approved third-party scheduler. The old direct integration remains intact
+// for historical records, but the UI now calls this route for TikTok.
+app.get('/api/buffer/status', requireAuth, async function (req, res) {
+  res.json(await buffer.status());
+});
+
+async function runBufferTiktokPublish(id, opts) {
+  const piece = getPieceRecord(id);
+  if (!piece) return;
+  piece.tiktokPublishStatus = 'running';
+  piece.tiktokPublishError = '';
+  piece.tiktokPublishProvider = 'buffer';
+  savePieceRecord(piece);
+  try {
+    const finalPath = path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX);
+    if (!fs.existsSync(finalPath)) throw new Error('finished video not found on disk');
+    const result = await buffer.createTiktokVideoPost({
+      text: opts.title || piece.title || 'Untitled',
+      videoUrl: buffer.mediaUrl(id),
+      thumbnailOffset: Math.round((Number(piece.thumbnailTimeSeconds) || 0) * 1000)
+    });
+    const latest = getPieceRecord(id);
+    if (!latest) return;
+    latest.stage = 'scheduled';
+    latest.tiktokPublishStatus = 'done';
+    latest.tiktokPublishProvider = 'buffer';
+    latest.tiktokPublishId = result.post.id;
+    latest.tiktokBufferStatus = result.post.status;
+    latest.scheduledAt = result.post.dueAt || latest.scheduledAt || null;
+    latest.updatedAt = new Date().toISOString();
+    savePieceRecord(latest);
+  } catch (error) {
+    console.error('Buffer TikTok scheduling failed for ' + id + ':', error.message);
+    const latest = getPieceRecord(id);
+    if (!latest) return;
+    latest.tiktokPublishStatus = 'error';
+    latest.tiktokPublishError = String(error.message || error).slice(0, 500);
+    latest.updatedAt = new Date().toISOString();
+    savePieceRecord(latest);
+  }
+}
+
+app.post('/api/buffer/publish/:id', requireAuth, function (req, res) {
+  const id = req.params.id;
+  if (!isValidId(id)) return res.status(400).json({ error: 'invalid_params' });
+  const piece = getPieceRecord(id);
+  if (!piece) return res.status(404).json({ error: 'piece_not_found' });
+  if (!buffer.configured) return res.status(400).json({ error: 'buffer_not_configured' });
+  const body = req.body || {};
+  res.json({ ok: true, status: 'running' });
+  runBufferTiktokPublish(id, { title: typeof body.title === 'string' ? body.title : '' })
+    .catch(function (error) { console.error('unhandled Buffer publish error for ' + id + ':', error.message); });
 });
 
 // --- Voice app: talk to a real headless Claude Code agent by voice or text ---

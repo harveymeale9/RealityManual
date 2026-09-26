@@ -10169,3 +10169,50 @@ ffmpeg integration render used a -43.96 LUFS dialogue source and -24.85 LUFS
 music source; the intermediate mix measured -15.96 LUFS and the completed AAC
 output measured -16.00 LUFS, confirming the passes affect produced media rather
 than only the settings UI.
+
+---
+
+# 226. Buffer-Backed TikTok Scheduling Foundation (2026-09-26)
+
+TikTok rejected Reality Manual's direct internal-use developer application, so
+the supported publishing path is now Buffer rather than trying to disguise the
+same prohibited use case. Buffer's current official GraphQL API was checked
+before implementation: account API keys can enumerate connected channels,
+`createPost` can add a TikTok video to its automatic queue, video assets require
+a publicly reachable URL, and the video asset accepts a millisecond thumbnail
+offset. Buffer also exposes scheduled/sent posts and per-post/aggregate metrics
+for the later reporting reconciliation.
+
+`src/bufferService.js` is a server-only GraphQL client which discovers the sole
+connected TikTok channel automatically (or honors
+`BUFFER_TIKTOK_CHANNEL_ID` when an account has several), rejects disconnected
+or locked channels, and creates an automatic `addToQueue` video post with the
+real TikTok caption and selected thumbnail time. It handles GraphQL union
+errors explicitly rather than treating every HTTP 200 as success.
+
+Buffer must fetch the finished MP4 from a URL, but the internal video library
+must not become publicly browsable. `/api/buffer/media/:pieceId` therefore
+serves only an existing finished video for a TikTok-tagged piece and only while
+a short-lived HMAC URL is valid. The signature is derived server-side from the
+Buffer credential, checked with constant-time comparison, bounded to seven
+days maximum, and reveals neither the credential nor other file paths.
+
+Final Check's TikTok action now targets `/api/buffer/publish/:id`. A successful
+Buffer enqueue stores the provider, Buffer post id/status/due time and moves
+the card to Scheduled rather than falsely claiming the post is already live.
+The captured thumbnail's exact video timestamp is now persisted so Buffer can
+use the same chosen frame. Content Settings reports **TikTok via Buffer** and
+whether the server can see a usable channel; the key itself never enters the
+browser settings record. The old direct TikTok implementation remains in place
+only for historical records and is no longer called by the UI.
+
+The live secret is deliberately not committed. `.env.example` documents
+`BUFFER_API_KEY`, optional `BUFFER_TIKTOK_CHANNEL_ID`, and
+`BUFFER_MEDIA_BASE_URL`. Per the repository's hard credential boundary, an
+agent may build the integration but Harvey must place the raw key into the VPS
+`.env` himself before the status check and real channel discovery can run.
+
+Regression coverage uses a synthetic credential and mocked Buffer server to
+prove authenticated GraphQL calls, automatic channel discovery, queue payload,
+thumbnail offset, signed media acceptance/rejection, ambiguous-channel refusal
+and safe missing-configuration status. Full suite: 56/56.

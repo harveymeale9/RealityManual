@@ -2557,7 +2557,7 @@
 
   function publishStatusFieldFor(platform) { return platform === 'ytlong' ? 'youtubePublishStatus' : 'tiktokPublishStatus'; }
   function publishErrorFieldFor(platform) { return platform === 'ytlong' ? 'youtubePublishError' : 'tiktokPublishError'; }
-  function publishEndpointFor(platform) { return platform === 'ytlong' ? '/api/youtube/publish/' : '/api/tiktok/publish/'; }
+  function publishEndpointFor(platform) { return platform === 'ytlong' ? '/api/youtube/publish/' : '/api/buffer/publish/'; }
   function publishPlatformConnected(platform) {
     var cache = platform === 'ytlong' ? youtubeStatusCache : tiktokStatusCache;
     return !!(cache && cache.connected);
@@ -3082,8 +3082,8 @@
     boardWrap.addEventListener('pointercancel', endPan);
   }
 
-  // Real YouTube/TikTok publish both run in the background server-side
-  // (server.js's runYoutubePublish/runTiktokPublish) — this polls the
+  // Real YouTube/Buffer-TikTok publishing both run in the background
+  // server-side — this polls the
   // handful of pieces currently mid-publish on either platform and does a
   // full render() once one lands on done/error, since "done" moves the
   // piece out of the Final Check column entirely (a targeted DOM patch
@@ -3120,8 +3120,8 @@
           Object.assign(prev, r);
           if (prevStage !== prev.stage) movedIds.push(r.id);
         });
-        // Real move animation (2026-09-20) for Final Check -> Posted/Live
-        // once a publish actually succeeds — same animateBoardMove used by
+        // Real move animation for Final Check -> Scheduled/Live once a
+        // publish actually succeeds — same animateBoardMove used by
         // the analysis/build poller, called directly since this poller
         // only ever runs while Content Ops is already the booted tab (the
         // Publish button that starts it only exists on a Final Check
@@ -3194,7 +3194,7 @@
     Store.getSettings().then(function (s) { boardSettingsCache = s; render(); });
     fetch('/api/youtube/status', { credentials: 'include' }).then(function (r) { return r.ok ? r.json() : null; })
       .then(function (s) { youtubeStatusCache = s; render(); }).catch(function () {});
-    fetch('/api/tiktok/status', { credentials: 'include' }).then(function (r) { return r.ok ? r.json() : null; })
+    fetch('/api/buffer/status', { credentials: 'include' }).then(function (r) { return r.ok ? r.json() : null; })
       .then(function (s) { tiktokStatusCache = s; render(); }).catch(function () {});
     render();
   }
@@ -3467,6 +3467,7 @@
       var ctx = canvas.getContext('2d');
       try { ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height); } catch (e) { return false; }
       p.thumbnailDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      p.thumbnailTimeSeconds = Number(videoEl.currentTime) || 0;
       p.updatedAt = nowIso();
       syncTags(p);
       // Only this row's own thumbnail/tags need to update — routing this
@@ -4084,9 +4085,7 @@
       '</section>' +
       '<section class="settings-section">' +
         '<h3>Platform connections</h3>' +
-        '<p class="settings-hint">Real OAuth logins used to actually publish on a connected account\'s behalf ' +
-          '(needed for the YouTube/TikTok API review process) — separate from the plain API-key placeholder fields ' +
-          'below, which aren\'t wired to anything yet.</p>' +
+        '<p class="settings-hint">YouTube publishes directly through Google. TikTok is scheduled through Buffer, the approved third-party scheduler, rather than Reality Manual\'s rejected internal-use TikTok app.</p>' +
         '<div class="platform-connect-card" id="youtubeConnectCard">' +
           '<div class="platform-connect-info">' +
             '<span class="platform-connect-name">YouTube</span>' +
@@ -4096,7 +4095,7 @@
         '</div>' +
         '<div class="platform-connect-card" id="tiktokConnectCard">' +
           '<div class="platform-connect-info">' +
-            '<span class="platform-connect-name">TikTok</span>' +
+            '<span class="platform-connect-name">TikTok via Buffer</span>' +
             '<span class="platform-connect-status" id="tiktokConnectStatus">Checking…</span>' +
           '</div>' +
           '<button type="button" class="btn-secondary btn-tiny" id="tiktokConnectBtn" disabled>…</button>' +
@@ -4118,12 +4117,9 @@
     { id: 'transcriptionKey', label: 'Transcription API key', type: 'password' }
   ];
 
-  // YouTube's and TikTok's own real OAuth connect cards, above — both
-  // have a working login flow now (src/youtubeAuth.js, src/tiktokAuth.js),
-  // so the old plain-text "TikTok (pending access)" API key field (never
-  // wired to anything) was dropped from KEY_FIELDS rather than kept
-  // alongside a second, real mechanism for the same platform — same
-  // reasoning already applied to YouTube's own field.
+  // YouTube's OAuth and Buffer's server-only API key are represented by the
+  // connection cards above. Neither credential belongs in this browser-side
+  // settings record, so there is no duplicate plain-text field here.
   function renderYoutubeConnectCard() {
     var statusEl = document.getElementById('youtubeConnectStatus');
     var btn = document.getElementById('youtubeConnectBtn');
@@ -4160,41 +4156,32 @@
       .catch(function () { statusEl.textContent = 'Status unavailable.'; });
   }
 
-  // Mirrors renderYoutubeConnectCard() exactly, one platform over.
+  // TikTok scheduling now goes through Buffer. The API key stays exclusively
+  // in the server environment; this card only reports whether Buffer can see
+  // one usable TikTok channel.
   function renderTiktokConnectCard() {
     var statusEl = document.getElementById('tiktokConnectStatus');
     var btn = document.getElementById('tiktokConnectBtn');
     if (!statusEl || !btn) return;
-    // /api/tiktok/* is requireAuth-only, always (server.js) — a reviewer
-    // session would just get a 401 from the fetch below, so skip it and
-    // say so plainly instead of a generic "Status unavailable."
     if (IS_REVIEWER) { statusEl.textContent = 'Not available for this account.'; btn.disabled = true; btn.textContent = 'N/A'; return; }
-    fetch('/api/tiktok/status', { credentials: 'include' })
+    fetch('/api/buffer/status', { credentials: 'include' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (s) {
         if (!s) { statusEl.textContent = 'Status unavailable.'; btn.disabled = true; btn.textContent = '—'; return; }
         if (!s.configured) {
-          statusEl.textContent = 'Not configured yet (waiting on TikTok OAuth credentials).';
+          statusEl.textContent = 'Buffer API key is not installed on the server yet.';
           btn.disabled = true;
-          btn.textContent = 'Connect';
+          btn.textContent = 'Pending';
           return;
         }
-        btn.disabled = false;
         if (s.connected) {
-          statusEl.textContent = 'Connected as ' + (s.displayName || 'a TikTok account') + '.';
-          btn.textContent = 'Disconnect';
-          btn.onclick = function () {
-            btn.disabled = true;
-            fetch('/api/tiktok/disconnect', { method: 'POST', credentials: 'include' })
-              .then(renderTiktokConnectCard);
-          };
+          statusEl.textContent = 'Buffer can schedule to ' + ((s.channel && s.channel.displayName) || 'the connected TikTok channel') + (s.channel && s.channel.isQueuePaused ? ' — queue is paused.' : '.');
+          btn.textContent = 'Connected';
+          btn.disabled = true;
         } else {
-          statusEl.textContent = 'Not connected.';
-          btn.textContent = 'Connect';
-          // Real full-page navigation through TikTok's own consent
-          // screen, same reasoning as YouTube's — not something an XHR
-          // can drive.
-          btn.onclick = function () { window.location.href = '/api/tiktok/oauth/start'; };
+          statusEl.textContent = s.reason || 'No usable TikTok channel is connected in Buffer.';
+          btn.textContent = 'Check Buffer';
+          btn.disabled = true;
         }
       })
       .catch(function () { statusEl.textContent = 'Status unavailable.'; });
