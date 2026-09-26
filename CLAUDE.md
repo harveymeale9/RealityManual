@@ -9884,3 +9884,52 @@ Validation covered `pdfinfo`, an embedded-image inventory (exactly one
 dense body text, illustrated pages, and end matter. The unauthenticated release
 download was also verified to return HTTP 200 with the exact expected byte
 length.
+
+---
+
+# 219. Research Product Area, Outlier Analysis Rename, and Thinker Seed List (2026-09-26)
+
+Harvey separated two fundamentally different activities that had been conflated
+under Analytics. The existing YouTube competitor tool studies externally
+observable performance—packaging, titles, thumbnails, topics, big ideas and
+angles that materially outperform a channel's normal result. A new body-of-work
+tool will instead ingest a thinker's public writing, newsletters, interviews,
+podcasts and captioned videos, extract recurring claims, and generate sourced
+ideas by relating those claims to The Reality Manual.
+
+The desktop/mobile Content Studio navigation now has five normal top-level
+areas in this order: Project Manager, Content Ops, **Research**, Analytics and
+Mailbox. Research contains **Outlier Analysis** (the existing stable
+`#content-analytics` route and fully working competitor dashboard, renamed and
+given accurate explanatory copy) plus a new **Idea Research**
+(`#idea-research`) workspace. Idea Research currently presents the intended
+source-grounded workflow and is ready for the first profiles; its ingestion,
+corpus and comparison UI will be built once Harvey supplies his direct list.
+Analytics now contains only Sales Analytics and Website Analytics. The side
+rail mirrors this hierarchy with a distinct Research group and reviewer-role
+sessions remain unable to see either Research or Analytics.
+
+The initial candidate discovery used the live YouTube connection to enumerate
+all 150 uploads on the real `@PickingNuggets` channel rather than sampling its
+latest 50. The archive is unusually concentrated: 114 titles mention Naval
+Ravikant and 16 mention Nassim Taleb, with recurring appearances from Kapil
+Gupta, Charlie Munger, Tim Ferriss, Elon Musk, Mohnish Pabrai, Jordan Peterson,
+Shane Parrish, Peter Thiel, Daniel Kahneman, Steven Pinker, James Clear, Sam
+Harris, William Irvine and Josh Waitzkin. Julio Froment's own published source
+list and broader consciousness/metaphysics research were then used to avoid
+mistaking that Naval-heavy editorial mix for the entire relevant universe.
+
+A curated 36-person seed list was emailed successfully to
+`harveymeale9@gmail.com` from Reality Manual Support at
+2026-09-26T06:44:22.789Z. It is prioritized into closest conceptual overlaps,
+psychology/meaning/transformation, and useful contrasts/applications; the first
+recommended ingestion batch is Naval Ravikant, Kapil Gupta, Jiddu Krishnamurti,
+Alan Watts, Michael A. Singer, Byron Katie, Anthony de Mello, Eckhart Tolle,
+Rupert Spira, Donald Hoffman, Bernardo Kastrup and Iain McGilchrist. Research
+artifacts live outside Git under `/root/ops-service-data/research`.
+
+Verification: `node --check` passes for both edited JavaScript files, CSS braces
+balance, and real Chromium sessions at 1,663×900 and 390×844 confirmed the exact
+top-level order, Research subtabs, Outlier Analysis heading, Idea Research
+workspace, and Analytics' two remaining subtabs. The only console 401 was the
+expected pre-login session probe.

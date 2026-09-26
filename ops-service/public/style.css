@@ -265,7 +265,7 @@ a { color: var(--accent); }
   padding-top: 8px;
 }
 
-/* Content Ops / Analytics groups: a full-size parent icon, then its real
+/* Content Ops / Research / Analytics groups: a full-size parent icon, then its real
    leaf tabs nested underneath — smaller, under a thin divider, per
    Harvey's "nested sub-icons" request. Deliberately not indented
    sideways (the rail is only 76px wide, not much room), so the nesting
@@ -294,6 +294,7 @@ body.role-reviewer a[data-tab="project-manager"],
 body.role-reviewer a[data-tab="content-ideation"],
 body.role-reviewer a[data-tab="manuscript"],
 body.role-reviewer a[data-tab="mailbox"],
+body.role-reviewer .side-rail-group-research,
 body.role-reviewer .side-rail-group-analytics,
 body.role-reviewer #quickAddLink,
 body.role-reviewer #pmBackFab {

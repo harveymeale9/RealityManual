@@ -50,8 +50,8 @@
   var pmSpeakingUnsub = null;
 
   // Nav hierarchy (Harvey's restructure, 2026-09-19): top level is just
-  // Project Manager / Content Ops / Analytics / Mailbox — Content Ops and
-  // Analytics are groups of real leaf tabs, not routable panels themselves.
+  // Project Manager / Content Ops / Research / Analytics / Mailbox — the
+  // multi-leaf entries are groups, not routable panels themselves.
   // Leaf tab ids are unchanged from before this restructure (only labels/grouping
   // changed) so nothing downstream that already keys off e.g.
   // active === 'content-ops' needed to change.
@@ -65,8 +65,11 @@
         { id: 'upload-files', label: 'Content Production' },
         { id: 'settings', label: 'Content Settings' }
       ] },
+    { label: 'Research', tabs: [
+        { id: 'content-analytics', label: 'Outlier Analysis' },
+        { id: 'idea-research', label: 'Idea Research' }
+      ] },
     { label: 'Analytics', tabs: [
-        { id: 'content-analytics', label: 'Competitor Analytics' },
         { id: 'sales-analytics', label: 'Sales Analytics' },
         { id: 'website-analytics', label: 'Website Analytics' }
       ] },
@@ -161,7 +164,7 @@
   }
 
   // Secondary strip shown under the top tabs whenever the active group has
-  // more than one leaf (Content Ops, Analytics) — this is the only way to
+  // more than one leaf (Content Ops, Research, Analytics) — this is the only way to
   // reach a group's non-default leaf (e.g. Content Production, Sales
   // Analytics) from the top nav now that renderTabs() above collapses each
   // group to one link. Rebuilt on every renderActiveTab() call rather than
@@ -190,17 +193,6 @@
   }
 
   var ANALYTICS_INFO = {
-    'content-analytics': {
-      title: 'Competitor Analytics',
-      blurb: 'Per-video and per-content-type performance, once the YouTube / TikTok / Instagram / Facebook API keys in Settings are actually wired up to a backend that can call them.',
-      metrics: [
-        'Views — daily, weekly, monthly, per video and per content type',
-        'Watch time / retention where the platform provides it',
-        'Likes, comments, shares per video',
-        'Performance by content type — ultra-short vs. short vs. long-short vs. longform',
-        'Best and worst performing pieces this month'
-      ]
-    },
     'sales-analytics': {
       title: 'Sales Analytics',
       blurb: 'Order and revenue reporting once the storefront backend (backend/) is deployed with live Stripe and BookVault credentials.',
@@ -235,6 +227,22 @@
         '<h2>' + info.title + '</h2>' +
         '<p>' + info.blurb + '</p>' +
         '<ul class="metric-list">' + info.metrics.map(function (m) { return '<li>' + m + '</li>'; }).join('') + '</ul>' +
+      '</div>';
+  }
+
+  function renderIdeaResearch() {
+    panelMain.innerHTML =
+      '<div class="tab-placeholder wide">' +
+        '<div class="eyebrow">Source-grounded idea engine</div>' +
+        '<h2>Idea Research</h2>' +
+        '<p>Build durable research profiles from a thinker’s public writing, newsletters, interviews, podcasts, and captioned videos—then map their recurring claims against The Reality Manual.</p>' +
+        '<ul class="metric-list">' +
+          '<li>Traceable statements linked to the original article, video, or timestamp</li>' +
+          '<li>Recurring concepts distilled across the person’s whole available body of work</li>' +
+          '<li>Agreement, tension, contradiction, extension, and reframing against Manual passages</li>' +
+          '<li>Ranked big-idea opportunities with relevant Manual pages and quotations</li>' +
+        '</ul>' +
+        '<p class="muted">The research workspace is ready for the initial list of people.</p>' +
       '</div>';
   }
 
@@ -336,6 +344,8 @@
       renderWebsiteAnalytics();
     } else if (active === 'content-analytics') {
       window.RMCompetitors.mount(panelMain);
+    } else if (active === 'idea-research') {
+      renderIdeaResearch();
     } else {
       renderAnalyticsPlaceholder(active);
     }
