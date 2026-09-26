@@ -10,31 +10,27 @@
 + '[' -n '' ']'
 + git pull
 From https://github.com/harveymeale9/RealityManual
-   7a3902c..2bff9d9  main       -> origin/main
-Updating 7a3902c..2bff9d9
+   2bff9d9..8af954f  main       -> origin/main
+Updating 2bff9d9..8af954f
 Fast-forward
- CLAUDE.md                         |  12 +++++
- ops-service/.ci/last-run.log      | 105 ++++++++++++++++++++++++++++++++------
- ops-service/public/app.js         |  39 ++++++++++++--
- ops-service/public/style.css      |   6 ++-
- ops-service/server.js             |  58 ++++++++++++++++++---
- ops-service/src/metaAuth.js       |  21 +++++++-
- ops-service/test/metaAuth.test.js |  15 ++++++
- 7 files changed, 227 insertions(+), 29 deletions(-)
+ CLAUDE.md                         | 11 ++++++
+ ops-service/.ci/last-run.log      | 82 +++++++++++++++++++--------------------
+ ops-service/src/metaAuth.js       |  1 +
+ ops-service/test/metaAuth.test.js |  2 +-
+ 4 files changed, 54 insertions(+), 42 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=2bff9d90b9d0850fb4ceb54fe31cd06d79be6da9
++ NEW_HEAD=8af954fc6c597541cf3daecc0771ca483449adf1
 + git -C /srv/realitymanual-repo pull
 Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
 + LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
 ++ cat /root/ops-service-data/last-image-commit.txt
-+ LAST_BUILD_COMMIT=7a3902c40cfb9229f7e76f296a507338b6a29717
++ LAST_BUILD_COMMIT=2bff9d90b9d0850fb4ceb54fe31cd06d79be6da9
 + NEEDS_REBUILD=1
-+ '[' -n 7a3902c40cfb9229f7e76f296a507338b6a29717 ']'
-+ git cat-file -e '7a3902c40cfb9229f7e76f296a507338b6a29717^{commit}'
-++ git diff --name-only 7a3902c40cfb9229f7e76f296a507338b6a29717 2bff9d90b9d0850fb4ceb54fe31cd06d79be6da9 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
-+ '[' -z 'ops-service/server.js
-ops-service/src/metaAuth.js' ']'
++ '[' -n 2bff9d90b9d0850fb4ceb54fe31cd06d79be6da9 ']'
++ git cat-file -e '2bff9d90b9d0850fb4ceb54fe31cd06d79be6da9^{commit}'
+++ git diff --name-only 2bff9d90b9d0850fb4ceb54fe31cd06d79be6da9 8af954fc6c597541cf3daecc0771ca483449adf1 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -z ops-service/src/metaAuth.js ']'
 + '[' 0 = 1 ']'
 + '[' 1 = 0 ']'
 + docker tag rm-ops-service rm-ops-service:previous
@@ -57,26 +53,26 @@ ops-service/src/metaAuth.js' ']'
 #4 DONE 0.0s
 
 #5 [internal] load build context
-#5 transferring context: 511.59kB 0.0s done
+#5 transferring context: 11.98kB done
 #5 DONE 0.0s
 
-#6 [ 5/11] COPY package.json ./
+#6 [ 2/11] RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && rm -rf /var/lib/apt/lists/*
 #6 CACHED
 
-#7 [ 2/11] RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && rm -rf /var/lib/apt/lists/*
+#7 [ 4/11] WORKDIR /app
 #7 CACHED
 
 #8 [ 3/11] RUN npm install -g @anthropic-ai/claude-code@2.1.276
 #8 CACHED
 
-#9 [ 4/11] WORKDIR /app
+#9 [ 6/11] RUN npm install --omit=dev
 #9 CACHED
 
-#10 [ 6/11] RUN npm install --omit=dev
+#10 [ 5/11] COPY package.json ./
 #10 CACHED
 
 #11 [ 7/11] COPY server.js ./
-#11 DONE 0.0s
+#11 CACHED
 
 #12 [ 8/11] COPY src ./src
 #12 DONE 0.1s
@@ -85,30 +81,30 @@ ops-service/src/metaAuth.js' ']'
 #13 DONE 0.1s
 
 #14 [10/11] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
-#14 DONE 23.1s
+#14 DONE 24.6s
 
 #15 [11/11] RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
-#15 DONE 0.4s
+#15 DONE 0.2s
 
 #16 exporting to image
 #16 exporting layers
-#16 exporting layers 14.3s done
-#16 exporting manifest sha256:d4fded85b3f563d975eebe6f5f7a975887b8ec4b5e6a47d288ae931b81b9a03a done
-#16 exporting config sha256:ffcc096a486afe74bfbbc2cf4da52d07680f300fd5b43543c7a7e73461fafa8a done
-#16 exporting attestation manifest sha256:2fd81f0874ecc7e9729c2f3a8481600f45c9a0107a5db1d29b2977648b71b1ff 0.0s done
-#16 exporting manifest list sha256:8c1ab0bfe25871bfffbfad077789c036502120d0b4103ea145deceead334524d 0.0s done
+#16 exporting layers 13.6s done
+#16 exporting manifest sha256:93e9b1ec2950f74a1c1327c13d1a788801f73fc7f1cd686147812b03db126c34 0.0s done
+#16 exporting config sha256:573033c321dd0936e7f5bc4917ce307f5c349a586928bd2e81a4ed492f8a937c done
+#16 exporting attestation manifest sha256:19c4a555b6541999a69ca2e8684cd082bf6807c61b99f64f0da4421aa5bb4223 0.0s done
+#16 exporting manifest list sha256:940713d6e1a367e5e8d0292f8d9eac87c0ebe083836bbce86eddb16ae45ef722 0.0s done
 #16 naming to docker.io/library/rm-ops-service:latest done
 #16 unpacking to docker.io/library/rm-ops-service:latest
-#16 unpacking to docker.io/library/rm-ops-service:latest 3.9s done
-#16 DONE 18.3s
+#16 unpacking to docker.io/library/rm-ops-service:latest 3.8s done
+#16 DONE 17.5s
 + docker stop rm-ops-service
 rm-ops-service
 + docker rm rm-ops-service
 rm-ops-service
 + docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-claude-home/claude-dir:/home/node/.claude -v /root/ops-service-claude-home/claude.json:/home/node/.claude.json -v /root/ops-service-data:/data -v /root/realitymanual-backend-data:/store-data:ro -v /srv/realitymanual-repo:/repo -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
-1c88538c7697f67eedcc9ccec7b2e70ababc0f8f8e9b9733419df7f66390dc3f
-+ echo 2bff9d90b9d0850fb4ceb54fe31cd06d79be6da9
+796f44503faf6e83d3385d095ecc33c272c45d5f22245b9c32c10339d1f0ffb5
++ echo 8af954fc6c597541cf3daecc0771ca483449adf1
 ++ git -C /root/realitymanual-repo rev-parse --short HEAD
-+ echo 'rm-ops-service redeployed at 2bff9d9'
-rm-ops-service redeployed at 2bff9d9
++ echo 'rm-ops-service redeployed at 8af954f'
+rm-ops-service redeployed at 8af954f
 ssh exit code: 0
