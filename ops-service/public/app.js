@@ -4046,8 +4046,8 @@
         '<p class="settings-hint">One description per platform, organized by content shape — a piece can be tagged ' +
           'for several platforms at once, each getting its own independently-set caption (Final Check shows all of ' +
           'them with a toggle when there\'s more than one). Facebook always receives the piece\'s UTM-tracked store ' +
-          'link: put <code>[LINK]</code> where you want it, or it is appended automatically. YouTube Shorts, Instagram ' +
-          'and TikTok are kept link-free.</p>' +
+          'link: put <code>[LINK]</code> where you want it, or it is appended automatically. Long-form YouTube also ' +
+          'supports <code>[LINK]</code>. YouTube Shorts, Instagram and TikTok are kept link-free.</p>' +
         '<div class="caption-group-tabs" id="captionGroupTabs">' +
           '<button type="button" class="caption-group-tab active" data-group="shortform">Short-form</button>' +
           '<button type="button" class="caption-group-tab" data-group="longform">Longform</button>' +
@@ -4064,14 +4064,14 @@
         '</div>' +
         '<div class="caption-group-panel" data-group="longform" id="captionPanelLongform" hidden>' +
           '<label class="field-label">YouTube caption</label>' +
-          '<textarea class="notes-input settings-textarea" id="caption-longform-ytlong" placeholder="YouTube description — no tracked store link"></textarea>' +
+          '<textarea class="notes-input settings-textarea" id="caption-longform-ytlong" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
           '<label class="field-label" style="margin-top:14px;display:block;">Facebook caption</label>' +
           '<textarea class="notes-input settings-textarea" id="caption-longform-facebook" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
         '</div>' +
       '</section>' +
       '<section class="settings-section">' +
         '<h3>Tracked link</h3>' +
-        '<p class="settings-hint">Base URL used to build the Facebook UTM-tracked [LINK] for every piece, short or long.</p>' +
+        '<p class="settings-hint">Base URL used for Facebook links and the optional long-form YouTube [LINK].</p>' +
         '<input class="title-input settings-input" id="baseLinkInput" />' +
       '</section>' +
       '<section class="settings-section">' +

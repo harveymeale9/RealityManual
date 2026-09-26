@@ -193,9 +193,9 @@ window.RMStore = (function () {
       // posted to both YouTube and Facebook (a longform upload going to
       // both) needs an independently-editable description for each — see
       // app.js's captionsForPiece, which is what lets the Final Check card
-      // show both at once with a toggle. Facebook captions support "[LINK]";
-      // the publish-time policy removes it from every other platform because
-      // those captions should not carry the tracked store URL. This replaces an older
+      // show both at once with a toggle. Facebook and long-form YouTube
+      // captions support "[LINK]"; the publish-time policy removes it from
+      // Shorts, Instagram and TikTok. This replaces an older
       // flat shape (captions.shorts/longform/tiktok/instagram/facebook, and
       // before that a combined "igfb" field) — see getSettings()'s
       // migration below, which preserves any real text saved under either
@@ -294,13 +294,13 @@ window.RMStore = (function () {
     return (template || '').replace(/\[LINK\]/gi, link);
   }
 
-  // The storefront CTA is intentionally Facebook-only. In particular,
-  // YouTube Shorts makes description URLs non-clickable; Instagram and
-  // TikTok captions are also kept link-free. Keeping this as publish-time
-  // policy means an old saved template containing [LINK] cannot leak a URL
-  // after the rule changes.
+  // The storefront CTA is allowed on Facebook and long-form YouTube. In
+  // particular, YouTube Shorts makes description URLs non-clickable;
+  // Instagram and TikTok captions are also kept link-free. Keeping this as
+  // publish-time policy means an old saved template containing [LINK] cannot
+  // leak a URL after the rule changes.
   function captionAllowsTrackedLink(platform) {
-    return platform === 'facebook';
+    return platform === 'facebook' || platform === 'ytlong';
   }
 
   function stripCaptionLink(template) {
@@ -321,7 +321,10 @@ window.RMStore = (function () {
     if (/\[LINK\]/i.test(text)) return applyCaptionLink(text, link).trim();
     // Facebook should always carry the tracked destination, even when the
     // template author omitted the shortcode (or left the caption blank).
-    return [text, String(link || '').trim()].filter(Boolean).join('\n\n');
+    // Long-form YouTube preserves the old opt-in behavior: [LINK] expands,
+    // but no URL is added when its template does not contain the shortcode.
+    if (platform === 'facebook') return [text, String(link || '').trim()].filter(Boolean).join('\n\n');
+    return text;
   }
 
   return {

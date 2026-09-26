@@ -10014,7 +10014,7 @@ changes the produced audio rather than merely changing UI state.
 
 ---
 
-# 222. Facebook-Only Tracked Caption Links (2026-09-26)
+# 222. Platform-Specific Tracked Caption Links (2026-09-26)
 
 Caption link handling is now an explicit publish-time platform policy rather
 than a blind `[LINK]` string replacement. Facebook receives a per-piece
@@ -10026,22 +10026,21 @@ source is derived from the caption's actual platform, fixing the prior case in
 which a Facebook caption on a joint Facebook/YouTube piece could receive
 `utm_source=youtube`.
 
-YouTube Shorts, YouTube long-form, Instagram and TikTok captions are kept free
-of the store URL per Harvey's platform policy. Any legacy `[LINK]` shortcode in
-one of those saved templates is removed while rendering the Final Check card
-and again in the same rendered text passed to the publish endpoint; the stored
-template remains editable and is not destructively rewritten. This protects
-publishing even before Harvey tidies old caption wording. The Settings copy and
-placeholders now explain the policy accurately and reserve `[LINK]` guidance
-for Facebook.
+Long-form YouTube retains its existing clickable-link behavior: `[LINK]` is
+expanded with `utm_source=youtube`, but unlike Facebook it is not forced into a
+template which omits the shortcode. Only YouTube Shorts, Instagram and TikTok
+are kept free of the store URL. Any legacy `[LINK]` shortcode in one of those
+saved templates is removed while rendering the Final Check card and again in
+the same rendered text passed to the publish endpoint; the stored template
+remains editable and is not destructively rewritten. This protects publishing
+even before Harvey tidies old caption wording. The Settings copy and
+placeholders now explain the distinction accurately.
 
 YouTube's current official documentation confirms the underlying Shorts
 constraint: URLs in Shorts descriptions/comments are non-clickable, whereas
 long-form description URLs can be clickable for channels with advanced-feature
-access. The broader Facebook-only rule is therefore a deliberate Content Studio
-policy, not a claim that ordinary YouTube descriptions are technically unable
-to link.
+access. Content Studio follows that same Shorts-versus-long-form distinction.
 
 Regression tests exercise the platform allowlist, Facebook replacement and
-automatic append behavior, and legacy-shortcode removal across every excluded
-platform. Full suite: 46/46.
+automatic append behavior, long-form YouTube expansion without forced append,
+and legacy-shortcode removal across every excluded platform. Full suite: 47/47.
