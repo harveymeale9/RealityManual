@@ -9784,8 +9784,6 @@ expose a retrievable public caption track” explanation, while retaining the te
 ordinary statistics cards; current cachebuster, no errors or overflow. The
 temporary watchlist channel was removed and live count returned to 0.
 
----
-
 # 214. Routine Mail Acknowledgements Are Silent (2026-09-24)
 
 Harvey reiterated that the mailbox assistant must not create a Project Manager
@@ -9933,3 +9931,52 @@ balance, and real Chromium sessions at 1,663×900 and 390×844 confirmed the exa
 top-level order, Research subtabs, Outlier Analysis heading, Idea Research
 workspace, and Analytics' two remaining subtabs. The only console 401 was the
 expected pre-login session probe.
+
+---
+
+# 220. Canonical Manual Concept Index and Two-Pass Idea Research (2026-09-26)
+
+Idea Research now has a compact, source-checked representation of the full
+180-page manuscript instead of requiring every future source statement to be
+compared blindly against the complete book. `src/manualConceptIndex.js`
+compresses the Manual into 35 concepts across six useful groups: the game and
+objective, all fourteen named Rules, core mechanisms, metaphysics and purpose,
+practical change methods, and the final conceptions of power/Heaven on Earth.
+It includes the objective of maximizing emotional well-being, life as a
+solvable game, the emotional scoreboard, the five axes, the reciprocal
+meaning–belief–emotion relationship, both modes of resolving desire, the
+Tripartite/action model, resistance, motivation, the action cycle, triple
+alignment, Panacea, FIRR, and enlightenment.
+
+Each entry has a stable id, concise thesis, comparison aliases, page range,
+and a short canonical quotation with its exact page. The service validates
+every quote against the actual manuscript during startup and refuses to start
+if a quote drifts or any of Rules I–XIV is absent. This prevents a compact
+summary from gradually becoming an uncited substitute for Harvey's book.
+
+The research contract is deliberately two-pass:
+
+1. compare an external source statement against the small concept index to
+   identify likely conceptual connections;
+2. return to the canonical manuscript page and quotation for every useful
+   candidate; and
+3. only then develop the agreement, tension, contradiction, extension, or
+   reframe using Harvey's exact formulation.
+
+The protected manuscript API exposes `GET /api/manuscript/concepts` and
+`POST /api/manuscript/concepts/match`. Idea Research is no longer a placeholder:
+it shows the complete grouped index, provides a fast filter and statement
+comparison control, and makes every result open the illustrated manuscript at
+the verified source page with its passage highlighted. This is also the data
+contract the later thinker-ingestion pipeline will place in its comparison
+prompt (`promptText()` supplies the small AI-readable form); the full
+manuscript remains the authority for the final sourced output.
+
+Validation added to the manuscript regression suite proves there are exactly
+14 Rules, every quotation is verbatim on its declared page, reciprocal
+meaning/belief/emotion language ranks the Rule of Bidirectional Belief first,
+and action/discipline resistance language returns the relevant action
+concepts. Full suite: 42/42. Real Chromium at 1440×900 and 390×844 rendered all
+35 concepts/14 Rules with no horizontal overflow or runtime errors, ranked the
+Bidirectional Belief example first, then opened page 36 and highlighted 50 OCR
+text-layer words from the canonical passage.

@@ -230,22 +230,6 @@
       '</div>';
   }
 
-  function renderIdeaResearch() {
-    panelMain.innerHTML =
-      '<div class="tab-placeholder wide">' +
-        '<div class="eyebrow">Source-grounded idea engine</div>' +
-        '<h2>Idea Research</h2>' +
-        '<p>Build durable research profiles from a thinker’s public writing, newsletters, interviews, podcasts, and captioned videos—then map their recurring claims against The Reality Manual.</p>' +
-        '<ul class="metric-list">' +
-          '<li>Traceable statements linked to the original article, video, or timestamp</li>' +
-          '<li>Recurring concepts distilled across the person’s whole available body of work</li>' +
-          '<li>Agreement, tension, contradiction, extension, and reframing against Manual passages</li>' +
-          '<li>Ranked big-idea opportunities with relevant Manual pages and quotations</li>' +
-        '</ul>' +
-        '<p class="muted">The research workspace is ready for the initial list of people.</p>' +
-      '</div>';
-  }
-
   // The storefront's own backend — separate service, separate domain (see
   // CLAUDE.md §62/§65). Read-only, unauthenticated aggregate counts, no PII.
   var STOREFRONT_API_BASE = 'https://api.realitymanual.com';
@@ -345,7 +329,7 @@
     } else if (active === 'content-analytics') {
       window.RMCompetitors.mount(panelMain);
     } else if (active === 'idea-research') {
-      renderIdeaResearch();
+      window.RMResearch.mount(panelMain);
     } else {
       renderAnalyticsPlaceholder(active);
     }

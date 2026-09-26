@@ -7,6 +7,7 @@
   var pollTimer = null;
   var resizeBound = false;
   var pageLoadGeneration = 0;
+  var pendingOpen = null;
 
   function esc(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, function (char) {
@@ -430,8 +431,21 @@
       pageCount = meta.pageCount;
       if (isMounted()) root.querySelector('#manualPageCount').textContent = 'of ' + pageCount;
     });
-    loadPage(currentPage);
+    var target = pendingOpen;
+    pendingOpen = null;
+    loadPage(target ? target.page : currentPage, target && target.quote);
   }
 
-  window.RMManuscript = { mount: mount };
+  function open(page, quote) {
+    pendingOpen = { page: page, quote: quote };
+    if (isMounted()) {
+      var target = pendingOpen;
+      pendingOpen = null;
+      loadPage(target.page, target.quote);
+      return;
+    }
+    location.hash = 'manuscript';
+  }
+
+  window.RMManuscript = { mount: mount, open: open };
 })();

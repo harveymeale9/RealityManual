@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const corpus = require('./ideationCorpus');
 const manuscriptSearchIndex = require('./manuscriptSearchIndex');
+const manualConceptIndex = require('./manualConceptIndex');
 
 function now() { return new Date().toISOString(); }
 function clean(value, max) { return String(value || '').trim().slice(0, max || 100000); }
@@ -60,6 +61,10 @@ function setup(db, options) {
   const manuscriptPages = pages();
   const pageMap = new Map(manuscriptPages.map(function (entry) { return [entry.page, entry]; }));
   const searchIndex = manuscriptSearchIndex.setup(db, manuscriptPages);
+  // Fail startup if a source quotation has drifted or any named Rule is
+  // missing. Research comparisons must never quietly cite an invented or
+  // stale paraphrase as though it came from the canonical manuscript.
+  const concepts = manualConceptIndex.publicIndex(manuscriptPages);
   let artworkManifest = null;
   try {
     artworkManifest = JSON.parse(fs.readFileSync(path.join(artworkRoot, 'manifest.json'), 'utf8'));
@@ -168,6 +173,18 @@ function setup(db, options) {
       search: 'instant semantic index',
       illustrated: Boolean(artworkManifest),
       artworkBytes: artworkManifest ? Number(artworkManifest.imageBytes || 0) : 0
+    });
+  });
+  router.get('/concepts', function (req, res) {
+    res.json(concepts);
+  });
+  router.post('/concepts/match', function (req, res) {
+    const statement = clean(req.body && req.body.statement, 12000);
+    if (statement.length < 3) return res.status(400).json({ error: 'Enter a source statement to compare.' });
+    res.json({
+      statement: statement,
+      matches: manualConceptIndex.match(statement, manuscriptPages, req.body && req.body.limit),
+      nextStep: concepts.workflow.verify
     });
   });
   router.get('/download', function (req, res) {

@@ -10,6 +10,7 @@ const path = require('path');
 const manuscriptService = require('../src/manuscriptService');
 const corpus = require('../src/ideationCorpus');
 const manuscriptSearchIndex = require('../src/manuscriptSearchIndex');
+const manualConceptIndex = require('../src/manualConceptIndex');
 
 test('manuscript reader serves illustrated selectable spreads and instant persistent semantic search', async function (t) {
   let calls = 0;
@@ -47,6 +48,31 @@ test('manuscript reader serves illustrated selectable spreads and instant persis
   const meta = await request('/meta');
   assert.equal(meta.pageCount, 180);
   assert.equal(meta.illustrated, true);
+  const concepts = await request('/concepts');
+  assert.equal(concepts.conceptCount, 35);
+  assert.equal(concepts.ruleCount, 14);
+  assert.deepEqual(concepts.concepts.filter(function (concept) { return concept.rule; }).map(function (concept) { return concept.rule; }),
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+  assert.equal(concepts.concepts.every(function (concept) {
+    const page = corpus.loadManuscript().pages.find(function (entry) { return entry.page === concept.quotePage; });
+    return page && manualConceptIndex.normalize(page.text).indexOf(manualConceptIndex.normalize(concept.quote)) !== -1;
+  }), true, 'every compact concept must retain a verified canonical quote');
+  assert.match(concepts.workflow.verify, /canonical manuscript page and quote/i);
+
+  const beliefMatch = await request('/concepts/match', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ statement: 'Meaning, belief, and emotion affect one another reciprocally, so changing the interpretation changes the feeling.' })
+  });
+  assert.equal(beliefMatch.matches[0].id, 'rule-bidirectional-belief');
+  assert.equal(beliefMatch.matches[0].quotePage, 36);
+  assert.match(beliefMatch.nextStep, /canonical manuscript/i);
+
+  const actionMatch = await request('/concepts/match', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ statement: 'When someone cannot make themselves act, calling them lazy or demanding more discipline misses the subconscious belief producing resistance.' })
+  });
+  assert.equal(actionMatch.matches.slice(0, 3).some(function (concept) { return concept.id === 'rule-subconscious-action'; }), true);
+  assert.equal(actionMatch.matches.slice(0, 3).some(function (concept) { return concept.id === 'resistance-is-information'; }), true);
   const download = await fetch(base + '/download');
   assert.equal(download.ok, true);
   assert.match(download.headers.get('content-disposition') || '', /attachment;.*The Reality Manual - Complete Manuscript\.txt/i);
