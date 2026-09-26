@@ -10,33 +10,34 @@
 + '[' -n '' ']'
 + git pull
 From https://github.com/harveymeale9/RealityManual
-   2ebbc90..c8f35b9  main       -> origin/main
-Updating 2ebbc90..c8f35b9
+   c8f35b9..21894e9  main       -> origin/main
+Updating c8f35b9..21894e9
 Fast-forward
- CLAUDE.md                              |  42 +++++++++
- ops-service/.ci/last-run.log           |  88 +++++++++--------
- ops-service/public/app.js              |  61 +++++++++++-
- ops-service/public/index.html          |   4 +-
- ops-service/public/lib/store.js        |  18 +++-
- ops-service/public/style.css           |   2 +
- ops-service/server.js                  |  16 ++--
- ops-service/src/videoAnalysis.js       | 166 +++++++++++++++++++++++++++++----
- ops-service/test/videoAnalysis.test.js |  28 ++++++
- 9 files changed, 344 insertions(+), 81 deletions(-)
+ CLAUDE.md                              |  47 ++++++++++++++
+ ops-service/.ci/last-run.log           |  76 +++++++++++-----------
+ ops-service/.env.example               |   8 +++
+ ops-service/public/app.js              |  61 +++++++-----------
+ ops-service/public/index.html          |   2 +-
+ ops-service/server.js                  |  79 ++++++++++++++++++++++-
+ ops-service/src/bufferService.js       | 112 +++++++++++++++++++++++++++++++++
+ ops-service/test/bufferService.test.js |  47 ++++++++++++++
+ 8 files changed, 354 insertions(+), 78 deletions(-)
+ create mode 100644 ops-service/src/bufferService.js
+ create mode 100644 ops-service/test/bufferService.test.js
 ++ git rev-parse HEAD
-+ NEW_HEAD=c8f35b9046b9a3c734826e9d4fbb074539bbba10
++ NEW_HEAD=21894e903bdb4ab2aaa012d42f4584294f32abc5
 + git -C /srv/realitymanual-repo pull
 Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
 + LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
 ++ cat /root/ops-service-data/last-image-commit.txt
-+ LAST_BUILD_COMMIT=2ebbc900e86818809bdfad66a3492966600c8aaf
++ LAST_BUILD_COMMIT=c8f35b9046b9a3c734826e9d4fbb074539bbba10
 + NEEDS_REBUILD=1
-+ '[' -n 2ebbc900e86818809bdfad66a3492966600c8aaf ']'
-+ git cat-file -e '2ebbc900e86818809bdfad66a3492966600c8aaf^{commit}'
-++ git diff --name-only 2ebbc900e86818809bdfad66a3492966600c8aaf c8f35b9046b9a3c734826e9d4fbb074539bbba10 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -n c8f35b9046b9a3c734826e9d4fbb074539bbba10 ']'
++ git cat-file -e 'c8f35b9046b9a3c734826e9d4fbb074539bbba10^{commit}'
+++ git diff --name-only c8f35b9046b9a3c734826e9d4fbb074539bbba10 21894e903bdb4ab2aaa012d42f4584294f32abc5 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z 'ops-service/server.js
-ops-service/src/videoAnalysis.js' ']'
+ops-service/src/bufferService.js' ']'
 + '[' 0 = 1 ']'
 + '[' 1 = 0 ']'
 + docker tag rm-ops-service rm-ops-service:previous
@@ -59,19 +60,19 @@ ops-service/src/videoAnalysis.js' ']'
 #4 DONE 0.0s
 
 #5 [internal] load build context
-#5 transferring context: 529.59kB 0.0s done
+#5 transferring context: 373.99kB done
 #5 DONE 0.0s
 
 #6 [ 5/11] COPY package.json ./
 #6 CACHED
 
-#7 [ 3/11] RUN npm install -g @anthropic-ai/claude-code@2.1.276
+#7 [ 2/11] RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && rm -rf /var/lib/apt/lists/*
 #7 CACHED
 
-#8 [ 2/11] RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && rm -rf /var/lib/apt/lists/*
+#8 [ 4/11] WORKDIR /app
 #8 CACHED
 
-#9 [ 4/11] WORKDIR /app
+#9 [ 3/11] RUN npm install -g @anthropic-ai/claude-code@2.1.276
 #9 CACHED
 
 #10 [ 6/11] RUN npm install --omit=dev
@@ -87,31 +88,30 @@ ops-service/src/videoAnalysis.js' ']'
 #13 DONE 0.1s
 
 #14 [10/11] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
-#14 DONE 16.9s
+#14 DONE 15.2s
 
 #15 [11/11] RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
-#15 DONE 0.3s
+#15 DONE 0.2s
 
 #16 exporting to image
 #16 exporting layers
-#16 exporting layers 11.9s done
-#16 exporting manifest sha256:2c02f4037aa3d73534aa116e078b4a5b1295aaa3c92de40d171acdac8427e6f8
-#16 exporting manifest sha256:2c02f4037aa3d73534aa116e078b4a5b1295aaa3c92de40d171acdac8427e6f8 done
-#16 exporting config sha256:f3627befcf3d966acb74cc62fe699bec1a011de000586d023971b9e52b3a39f0 done
-#16 exporting attestation manifest sha256:9097304a2832b709fd6edcbdd439ca7565f2914c013895469ae897b9d8d5686b 0.0s done
-#16 exporting manifest list sha256:a70feec3c03365711fc51381a858c48d48d1c9df52c014465203c74cb9ab971b done
+#16 exporting layers 15.0s done
+#16 exporting manifest sha256:7213eb180408c50c668354c3fcd5eb674a041d4d5628b9df40b3a694ad71b400 0.0s done
+#16 exporting config sha256:128343bfbe838f88011616a507f920d745c17b2ad36d0f5215312c91d3e8a6ec 0.0s done
+#16 exporting attestation manifest sha256:2462c3051f5848816d3f99b4a58d6120c7105beb49352dc9d469c15457501cb1 0.0s done
+#16 exporting manifest list sha256:08eb6fd0e5ca1bff6cdcadd4e71b58cf9149b933fd6128336cad8e5902ee1135 done
 #16 naming to docker.io/library/rm-ops-service:latest done
 #16 unpacking to docker.io/library/rm-ops-service:latest
-#16 unpacking to docker.io/library/rm-ops-service:latest 3.1s done
-#16 DONE 15.1s
+#16 unpacking to docker.io/library/rm-ops-service:latest 3.0s done
+#16 DONE 18.1s
 + docker stop rm-ops-service
 rm-ops-service
 + docker rm rm-ops-service
 rm-ops-service
 + docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-claude-home/claude-dir:/home/node/.claude -v /root/ops-service-claude-home/claude.json:/home/node/.claude.json -v /root/ops-service-data:/data -v /root/realitymanual-backend-data:/store-data:ro -v /srv/realitymanual-repo:/repo -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
-e861303c83ef2d248ea09feaaf8faee10dc728a8f4a4972cb60803b02885bebe
-+ echo c8f35b9046b9a3c734826e9d4fbb074539bbba10
+8e427c685c0b12da7733a3f161a7e2fc78d3511b84c9777fb157c26feedf677b
++ echo 21894e903bdb4ab2aaa012d42f4584294f32abc5
 ++ git -C /root/realitymanual-repo rev-parse --short HEAD
-+ echo 'rm-ops-service redeployed at c8f35b9'
-rm-ops-service redeployed at c8f35b9
++ echo 'rm-ops-service redeployed at 21894e9'
+rm-ops-service redeployed at 21894e9
 ssh exit code: 0
