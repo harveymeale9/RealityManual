@@ -10044,3 +10044,41 @@ access. Content Studio follows that same Shorts-versus-long-form distinction.
 Regression tests exercise the platform allowlist, Facebook replacement and
 automatic append behavior, long-form YouTube expansion without forced append,
 and legacy-shortcode removal across every excluded platform. Full suite: 47/47.
+
+---
+
+# 223. Authenticated Owner Email Becomes a Project Manager Instruction (2026-09-26)
+
+Harvey's own replies to `info@realitymanual.com` must not be summarized back to
+him as incoming-email alerts. Mail arriving from the configured owner address
+(`MAIL_OWNER_INSTRUCTION_SENDERS`, falling back to the weekly-report recipient
+and therefore currently `harveymeale9@gmail.com`) now takes a separate route:
+its newly-written text is inserted into the ordinary durable Project Manager
+queue in autonomous `execute` mode, assigned to whichever agent Harvey has
+currently selected, and processed through the same runner, progress,
+restart-recovery and completion path as a task submitted from the app. It does
+not create a `mail_alert`, does not increment the mobile unread badge, and is
+archived only after the durable task row exists. The resulting task and real
+completion remain visible in the normal shared conversation, rather than as a
+yellow email-summary card.
+
+This is not based on the display address alone. During IMAP ingestion the
+Namecheap adapter records whether the receiving server reported an aligned
+DMARC or DKIM pass for the message's From domain. Both the exact configured
+address and that authentication result are required before an email can reach
+the executable queue; a spoofed From address stays in the existing tool-free,
+untrusted classifier. Gmail/desktop quoted-thread markers and `>` quote lines
+are removed before queuing, so instructions reflected from an earlier support
+email or third party cannot become commands. A source-ref partial unique index
+and deterministic task ID make the handoff idempotent across a crash between
+queueing and triage completion.
+
+On startup, historical mail-alert cards whose source was Harvey's exact owner
+address are marked superseded and removed from the unread count, fixing the
+already-generated self-notification that prompted this change. Existing mail
+ingested before authentication metadata was stored is deliberately not
+retroactively executed.
+
+Regression coverage proves aligned authentication parsing, rejection of a
+display-address spoof, silent owner routing, quote removal, archival after
+queueing, and cleanup of the previous self-alert. Full suite: 50/50.

@@ -25,6 +25,28 @@ function plainBody(row) {
   if (text) return text;
   return clean(String(row.html_body || '').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '), 16000);
 }
+function ownerInstructionText(row) {
+  let body = plainBody(row);
+  // Gmail and most desktop clients put the new reply above one of these
+  // separators. Only the newly-authored portion is executable; quoted mail
+  // remains untrusted context and must never become a command by reflection.
+  const markers = [
+    /\nOn .{0,800}\bwrote:\s*\n/i,
+    /\n-{2,}\s*Original Message\s*-{2,}\s*\n/i,
+    /\nFrom:\s*[^\n]+\n(?:Sent|Date):/i
+  ];
+  markers.forEach(function (marker) {
+    const match = marker.exec(body);
+    if (match && match.index >= 0) body = body.slice(0, match.index);
+  });
+  body = body.split('\n').filter(function (line) { return !/^\s*>/.test(line); }).join('\n');
+  return clean(body.replace(/\n--\s*\n[\s\S]*$/, ''), 8000);
+}
+
+function normalizedOwnerEmails(value) {
+  const items = Array.isArray(value) ? value : String(value || '').split(',');
+  return items.map(function (item) { return clean(item, 500).toLowerCase(); }).filter(Boolean);
+}
 function topicKey(row) {
   // Full address, not merely the domain: two unrelated Gmail customers can
   // easily send the same generic subject and must never share an alert.
@@ -95,9 +117,15 @@ function alertText(row, result) {
 function setup(db, options) {
   options = options || {};
   const classify = options.classify;
+  const enqueueOwnerInstruction = options.enqueueOwnerInstruction;
+  const ownerEmails = normalizedOwnerEmails(options.ownerEmails);
   const intervalMs = Number(options.intervalMs) || 30000;
   const retryMs = Number(options.retryMs) || 15 * 60 * 1000;
   const enabled = options.enabled !== false && typeof classify === 'function';
+
+  function isAuthenticatedOwner(row) {
+    return !!row.sender_authenticated && ownerEmails.indexOf(clean(row.from_email, 500).toLowerCase()) !== -1;
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS mail_triage (
@@ -113,6 +141,15 @@ function setup(db, options) {
     );
   `);
   try { db.exec('ALTER TABLE mail_triage ADD COLUMN topic_key TEXT'); } catch (error) { /* already exists */ }
+
+  // The old behavior could surface Harvey's own replies as important-email
+  // alerts. Hide those historical cards once this owner-command route is
+  // configured; they are neither customer mail nor useful notifications.
+  if (ownerEmails.length) {
+    const placeholders = ownerEmails.map(function () { return '?'; }).join(',');
+    db.prepare("UPDATE voice_messages SET notification_kind='superseded_mail_alert',notification_unread=0 WHERE notification_kind='mail_alert' AND source_ref IN (SELECT id FROM mailbox_messages WHERE lower(from_email) IN (" + placeholders + '))')
+      .run(...ownerEmails);
+  }
 
   // Backfill/consolidate the first release's one-card-per-email history.
   // Keep the newest important status for each sender+canonical-subject topic
@@ -199,18 +236,47 @@ function setup(db, options) {
     return { messageId: row.id, important: important, alertMessageId: alertId, archived: true };
   }
 
+  function completeOwnerInstruction(row, instructionMessageId) {
+    const stamp = new Date().toISOString();
+    const key = topicKey(row);
+    db.transaction(function () {
+      db.prepare("UPDATE mailbox_messages SET is_read=1 WHERE id=? AND direction='inbound'").run(row.id);
+      db.prepare(`UPDATE mailbox_threads SET folder='archive',
+        unread_count=(SELECT count(*) FROM mailbox_messages WHERE thread_id=? AND direction='inbound' AND is_read=0),
+        updated_at=? WHERE id=?`).run(row.thread_id, stamp, row.thread_id);
+      finish.run(0, 'Owner instruction', 'Queued directly in Project Manager.', 0,
+        'No notification created.', 'Authenticated owner email; executed as a Project Manager instruction.',
+        null, key, stamp, stamp, row.id);
+    })();
+    return { messageId: row.id, important: false, alertMessageId: null, instructionMessageId: instructionMessageId, archived: true };
+  }
+
   let processing = false;
   async function processPending(limit) {
     if (!enabled || processing) return { enabled: enabled, skipped: processing ? 'already_running' : 'disabled', processed: 0 };
     processing = true;
     let processed = 0;
     let alerted = 0;
+    let instructionsQueued = 0;
     try {
       const rows = candidates(limit || 5);
       for (const row of rows) {
         const stamp = new Date().toISOString();
         claim.run(row.id, stamp, stamp);
         try {
+          if (isAuthenticatedOwner(row) && typeof enqueueOwnerInstruction === 'function') {
+            const body = ownerInstructionText(row);
+            const instructionMessageId = await enqueueOwnerInstruction({
+              message: row,
+              subject: clean(row.subject, 500),
+              instruction: body || clean(row.subject, 500),
+              attachments: json(row.attachment_names_json, [])
+            });
+            completeOwnerInstruction(row, instructionMessageId);
+            processed++;
+            instructionsQueued++;
+            continue;
+          }
           const result = await classify({ prompt: promptFor(row), schema: TRIAGE_SCHEMA, message: row });
           const outcome = complete(row, result);
           processed++;
@@ -220,7 +286,7 @@ function setup(db, options) {
           console.error('[mail-triage] failed for ' + row.id + ':', error.message);
         }
       }
-      return { enabled: true, processed: processed, alerted: alerted, remaining: candidates(1).length > 0 };
+      return { enabled: true, processed: processed, alerted: alerted, instructionsQueued: instructionsQueued, remaining: candidates(1).length > 0 };
     } finally {
       processing = false;
     }
@@ -245,4 +311,4 @@ function setup(db, options) {
   return { enabled: enabled, processPending: processPending, status: status, close: function () { if (timer) clearInterval(timer); } };
 }
 
-module.exports = { setup: setup, TRIAGE_SCHEMA: TRIAGE_SCHEMA, promptFor: promptFor, forceImportant: forceImportant, routineAcknowledgement: routineAcknowledgement, alertText: alertText, topicKey: topicKey };
+module.exports = { setup: setup, TRIAGE_SCHEMA: TRIAGE_SCHEMA, promptFor: promptFor, forceImportant: forceImportant, routineAcknowledgement: routineAcknowledgement, alertText: alertText, topicKey: topicKey, ownerInstructionText: ownerInstructionText, normalizedOwnerEmails: normalizedOwnerEmails };

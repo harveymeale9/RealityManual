@@ -46,6 +46,8 @@ function setup(db, options) {
       status TEXT NOT NULL,
       from_name TEXT,
       from_email TEXT NOT NULL,
+      sender_authenticated INTEGER NOT NULL DEFAULT 0,
+      sender_authentication TEXT NOT NULL DEFAULT '',
       to_json TEXT NOT NULL DEFAULT '[]',
       cc_json TEXT NOT NULL DEFAULT '[]',
       subject TEXT NOT NULL,
@@ -84,6 +86,8 @@ function setup(db, options) {
   `);
   try { db.exec('ALTER TABLE mailbox_messages ADD COLUMN internet_message_id TEXT'); } catch (e) { /* already exists */ }
   try { db.exec("ALTER TABLE mailbox_messages ADD COLUMN references_json TEXT NOT NULL DEFAULT '[]'"); } catch (e) { /* already exists */ }
+  try { db.exec('ALTER TABLE mailbox_messages ADD COLUMN sender_authenticated INTEGER NOT NULL DEFAULT 0'); } catch (e) { /* already exists */ }
+  try { db.exec("ALTER TABLE mailbox_messages ADD COLUMN sender_authentication TEXT NOT NULL DEFAULT ''"); } catch (e) { /* already exists */ }
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_mailbox_messages_internet_id ON mailbox_messages(internet_message_id) WHERE internet_message_id IS NOT NULL');
   db.prepare("INSERT OR IGNORE INTO mailbox_sync_state(id,uid_validity,last_uid,updated_at) VALUES(1,'',0,?)").run(now());
 
@@ -125,6 +129,7 @@ function setup(db, options) {
       internetMessageId: row.internet_message_id,
       references: json(row.references_json, []),
       from: { name: row.from_name || '', email: row.from_email },
+      senderAuthenticated: !!row.sender_authenticated,
       to: json(row.to_json, []),
       cc: json(row.cc_json, []),
       subject: row.subject,
@@ -199,10 +204,10 @@ function setup(db, options) {
     });
     const id = clean(input.id, 128) || crypto.randomUUID();
     db.prepare(`INSERT INTO mailbox_messages
-      (id,thread_id,provider_id,internet_message_id,references_json,direction,status,from_name,from_email,to_json,cc_json,subject,text_body,html_body,is_read,in_reply_to,created_at,sent_at,received_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      (id,thread_id,provider_id,internet_message_id,references_json,direction,status,from_name,from_email,sender_authenticated,sender_authentication,to_json,cc_json,subject,text_body,html_body,is_read,in_reply_to,created_at,sent_at,received_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(id, threadId, providerId, internetMessageId, JSON.stringify(input.references || []), 'inbound', 'received', clean(input.fromName, 300), clean(input.fromEmail, 500),
-        JSON.stringify(input.to || [mailboxAddress]), JSON.stringify(input.cc || []), clean(input.subject, 500) || '(no subject)',
+        bool(input.senderAuthenticated) ? 1 : 0, clean(input.senderAuthentication, 40), JSON.stringify(input.to || [mailboxAddress]), JSON.stringify(input.cc || []), clean(input.subject, 500) || '(no subject)',
         clean(input.textBody), clean(input.htmlBody), bool(input.read) ? 1 : 0, clean(input.inReplyTo, 500) || null, stamp, null, stamp);
     // A reply to an archived conversation is new mail again until triage (or
     // Harvey) handles it. Otherwise a classifier outage on a later reply

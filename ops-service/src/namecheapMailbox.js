@@ -16,6 +16,29 @@ function addressList(value) {
   }).filter(function (entry) { return entry.email; });
 }
 
+function headerText(parsed, name) {
+  if (!parsed || !parsed.headers || typeof parsed.headers.get !== 'function') return '';
+  const value = parsed.headers.get(name);
+  if (Array.isArray(value)) return value.map(String).join('\n');
+  return value == null ? '' : String(value);
+}
+
+// Trust an address for command execution only when the receiving mail server
+// recorded an aligned DMARC or DKIM pass for its From domain. A visible From
+// address by itself is trivial to spoof and is not sufficient.
+function senderAuthentication(parsed, fromEmail) {
+  const address = String(fromEmail || '').trim().toLowerCase();
+  const domain = address.split('@')[1] || '';
+  const results = headerText(parsed, 'authentication-results').toLowerCase();
+  if (!domain || !results) return { authenticated: false, mechanism: '' };
+  const escaped = domain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const alignedFrom = new RegExp('header\\.from\\s*=\\s*' + escaped + '(?:\\s|;|$)', 'i').test(results);
+  const alignedDkim = new RegExp('header\\.(?:d|i)\\s*=\\s*@?' + escaped + '(?:\\s|;|$)', 'i').test(results);
+  if (/\bdmarc=pass\b/i.test(results) && alignedFrom) return { authenticated: true, mechanism: 'dmarc' };
+  if (/\bdkim=pass\b/i.test(results) && alignedDkim) return { authenticated: true, mechanism: 'dkim' };
+  return { authenticated: false, mechanism: '' };
+}
+
 function envConfig(env) {
   env = env || process.env;
   const address = env.MAILBOX_ADDRESS || 'info@realitymanual.com';
@@ -80,6 +103,7 @@ function create(config, dependencies) {
           if (!item || !item.source) continue;
           const parsed = await parse(item.source);
           const from = addressList(parsed.from)[0] || { name: '', email: '' };
+          const authentication = senderAuthentication(parsed, from.email);
           const internetMessageId = String(parsed.messageId || '').trim();
           messages.push({
             providerId: 'namecheap:' + uidValidity + ':' + item.uid,
@@ -88,6 +112,8 @@ function create(config, dependencies) {
             references: Array.isArray(parsed.references) ? parsed.references : (parsed.references ? [parsed.references] : []),
             fromName: from.name,
             fromEmail: from.email,
+            senderAuthenticated: authentication.authenticated,
+            senderAuthentication: authentication.mechanism,
             to: addressList(parsed.to),
             cc: addressList(parsed.cc),
             subject: parsed.subject || '(no subject)',
@@ -147,4 +173,4 @@ function fromEnv(env, dependencies) {
   return create(config, dependencies);
 }
 
-module.exports = { create: create, fromEnv: fromEnv, envConfig: envConfig, addressList: addressList };
+module.exports = { create: create, fromEnv: fromEnv, envConfig: envConfig, addressList: addressList, senderAuthentication: senderAuthentication };

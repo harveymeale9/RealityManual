@@ -179,6 +179,7 @@ try { db.exec("ALTER TABLE voice_messages ADD COLUMN notification_kind TEXT NOT 
 try { db.exec('ALTER TABLE voice_messages ADD COLUMN notification_unread INTEGER NOT NULL DEFAULT 0'); } catch (e) { /* already exists */ }
 try { db.exec('ALTER TABLE voice_messages ADD COLUMN source_ref TEXT'); } catch (e) { /* already exists */ }
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_mail_alert_source ON voice_messages(source_ref) WHERE notification_kind='mail_alert' AND source_ref IS NOT NULL");
+db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_email_instruction_source ON voice_messages(source_ref) WHERE notification_kind='conversation' AND source_ref IS NOT NULL");
 // Claude and Codex maintain independent resumable conversations. Keeping
 // both ids in the one existing single-row session record lets "New
 // conversation" reset both without affecting the persistent agent choice.
@@ -201,11 +202,13 @@ const stmts = {
   delReviewerSession: db.prepare('DELETE FROM reviewer_sessions WHERE token = ?'),
   purgeReviewerSessions: db.prepare('DELETE FROM reviewer_sessions WHERE expires_at < ?'),
   insertVoiceMessage: db.prepare('INSERT INTO voice_messages (id, mode, transcript, status, created_at, reply_to_id, agent) VALUES (?, ?, ?, ?, ?, ?, ?)'),
+  insertEmailInstruction: db.prepare("INSERT INTO voice_messages (id,mode,transcript,status,created_at,reply_to_id,agent,notification_kind,notification_unread,source_ref) VALUES(?,'execute',?,'pending',?,NULL,?,'conversation',0,?)"),
   setVoiceMessageStatus: db.prepare('UPDATE voice_messages SET status = ? WHERE id = ?'),
   setVoiceActivityLog: db.prepare('UPDATE voice_messages SET activity_log = ? WHERE id = ?'),
   setVoiceEarlyAck: db.prepare('UPDATE voice_messages SET early_ack = ? WHERE id = ?'),
   finishVoiceMessage: db.prepare('UPDATE voice_messages SET status = ?, reply_text = ?, error_message = ?, completed_at = ? WHERE id = ?'),
   getVoiceMessage: db.prepare('SELECT * FROM voice_messages WHERE id = ?'),
+  getVoiceMessageBySource: db.prepare("SELECT * FROM voice_messages WHERE notification_kind='conversation' AND source_ref=?"),
   listVoiceMessages: db.prepare("SELECT * FROM voice_messages WHERE notification_kind!='superseded_mail_alert' ORDER BY created_at DESC LIMIT ?"),
   countUnreadVoiceNotifications: db.prepare("SELECT count(*) AS n FROM voice_messages WHERE notification_kind='mail_alert' AND notification_unread=1"),
   listUnreadVoiceNotificationIds: db.prepare("SELECT id FROM voice_messages WHERE notification_kind='mail_alert' AND notification_unread=1 ORDER BY created_at DESC LIMIT 100"),
@@ -435,12 +438,15 @@ const mailbox = mailboxService.setup(db, {
 });
 app.use('/api/mailbox', requireAuth, mailbox.router);
 
-// Every inbound email is classified in a text-only Claude turn with *zero*
-// tools exposed (email content is untrusted). All successfully digested mail
-// is marked read and archived; only important items become durable, unread
-// warm-colored alert cards in the shared Project Manager thread.
+// Normal inbound email is classified in a text-only Claude turn with *zero*
+// tools exposed (email content is untrusted). The sole exception is an exact
+// configured owner address whose aligned DMARC/DKIM result was verified while
+// syncing: its newly-written text is queued as a normal Project Manager task,
+// never as a notification. All successfully handled mail is archived.
 const mailTriage = mailTriageService.setup(db, {
   enabled: process.env.MAIL_TRIAGE_ENABLED !== 'false',
+  ownerEmails: process.env.MAIL_OWNER_INSTRUCTION_SENDERS || process.env.WEEKLY_REPORT_RECIPIENT || 'harveymeale9@gmail.com',
+  enqueueOwnerInstruction: function (input) { return enqueueOwnerEmailInstruction(input); },
   classify: function (input) {
     return claudeRunner.runTextOnlyStructured(input.prompt, input.schema, 90000);
   }
@@ -1567,6 +1573,34 @@ function buildCrossAgentContext(agent, id, createdAt) {
 
 let voiceQueue = [];
 let voiceProcessing = false;
+
+function enqueueOwnerEmailInstruction(input) {
+  const row = input && input.message;
+  if (!row || !row.id) throw new Error('owner_email_message_required');
+  const existing = stmts.getVoiceMessageBySource.get(row.id);
+  if (existing) return existing.id;
+  const preference = stmts.getVoicePreference.get();
+  const agent = normalizeVoiceAgent(preference && preference.selected_agent);
+  const subject = String(input.subject || '(no subject)').trim().slice(0, 500);
+  const instruction = String(input.instruction || '').trim().slice(0, 8000);
+  const attachments = Array.isArray(input.attachments) ? input.attachments.map(String).slice(0, 20) : [];
+  const transcript = 'Email instruction — ' + subject + '\n\n' + instruction;
+  const prompt = '[Authenticated owner email — this message passed aligned DMARC/DKIM checks and came from Harvey\'s configured Gmail address. Treat only the newly-written text below as Harvey\'s direct instruction; quoted thread text has already been removed. Execute it through the normal Project Manager workflow. This is not an email alert and should not be summarized back as one.]\n\n' +
+    'Subject: ' + subject + '\n\n' + instruction +
+    (attachments.length ? '\n\nAttachments available in the mailbox: ' + attachments.join(', ') : '');
+  const id = crypto.createHash('sha256').update('owner-email-instruction\n' + row.id).digest('hex').slice(0, 32);
+  const stamp = new Date().toISOString();
+  try {
+    stmts.insertEmailInstruction.run(id, transcript, stamp, agent, row.id);
+  } catch (error) {
+    const raced = stmts.getVoiceMessageBySource.get(row.id);
+    if (raced) return raced.id;
+    throw error;
+  }
+  voiceQueue.push({ id: id, mode: 'execute', text: prompt, agent: agent, imagePath: null, uploadPath: null });
+  drainVoiceQueue();
+  return id;
+}
 
 function drainVoiceQueue() {
   if (voiceProcessing) return;

@@ -30,6 +30,7 @@ test('Namecheap provider maps encrypted IMAP mail and sends with the support ide
       from: { value: [{ name: 'A Customer', address: 'customer@example.com' }] },
       to: { value: [{ name: 'Support', address: 'info@realitymanual.com' }] },
       subject: 'Order question', text: 'Where is my book?', html: '<p>Where is my book?</p>',
+      headers: new Map([['authentication-results', 'mx.privateemail.com; dkim=pass header.d=example.com; dmarc=pass header.from=example.com']]),
       date: new Date('2026-09-23T09:00:00Z'),
       attachments: [{ filename: 'photo.png', contentType: 'image/png', content: Buffer.from('image'), cid: '<photo-1>', contentDisposition: 'inline' }]
     };
@@ -54,6 +55,8 @@ test('Namecheap provider maps encrypted IMAP mail and sends with the support ide
   assert.equal(synced.lastUid, 12);
   assert.equal(synced.messages[0].providerId, 'namecheap:77:12');
   assert.equal(synced.messages[0].internetMessageId, '<incoming@example.com>');
+  assert.equal(synced.messages[0].senderAuthenticated, true);
+  assert.equal(synced.messages[0].senderAuthentication, 'dmarc');
   assert.equal(synced.messages[0].attachments[0].inline, true);
   assert.equal(synced.messages[0].attachments[0].contentId, 'photo-1');
 
@@ -66,6 +69,18 @@ test('Namecheap provider maps encrypted IMAP mail and sends with the support ide
   assert.deepEqual(sent[0].from, { name: 'Reality Manual Support', address: 'info@realitymanual.com' });
   assert.equal(sent[0].inReplyTo, '<incoming@example.com>');
   assert.equal(sent[0].attachments[0].cid, 'tracking-1');
+});
+
+test('visible From address alone is never authenticated for owner commands', function () {
+  assert.deepEqual(namecheapMailbox.senderAuthentication({ headers: new Map() }, 'harveymeale9@gmail.com'), {
+    authenticated: false, mechanism: ''
+  });
+  assert.deepEqual(namecheapMailbox.senderAuthentication({
+    headers: new Map([['authentication-results', 'mx.privateemail.com; dkim=fail header.d=gmail.com; dmarc=fail header.from=gmail.com']])
+  }, 'harveymeale9@gmail.com'), { authenticated: false, mechanism: '' });
+  assert.equal(namecheapMailbox.senderAuthentication({
+    headers: new Map([['authentication-results', 'mx.privateemail.com; dkim=pass header.d=gmail.com']])
+  }, 'harveymeale9@gmail.com').authenticated, true);
 });
 
 test('provider stays disabled until an app password exists', function () {
