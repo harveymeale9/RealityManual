@@ -10,27 +10,28 @@
 + '[' -n '' ']'
 + git pull
 From https://github.com/harveymeale9/RealityManual
-   89409f8..5852ba1  main       -> origin/main
-Updating 89409f8..5852ba1
+   5852ba1..aeb0316  main       -> origin/main
+Updating 5852ba1..aeb0316
 Fast-forward
- CLAUDE.md                        |  3 ++
- ops-service/.ci/last-run.log     | 77 ++++++++++++++++++++++------------------
- ops-service/public/app.js        |  3 +-
- ops-service/src/bufferService.js | 12 +++++--
- 4 files changed, 56 insertions(+), 39 deletions(-)
+ CLAUDE.md                              | 18 ++++++++
+ ops-service/.ci/last-run.log           | 78 ++++++++++++++--------------------
+ ops-service/public/app.js              | 12 +++---
+ ops-service/server.js                  | 12 +++++-
+ ops-service/test/bufferService.test.js |  3 +-
+ 5 files changed, 69 insertions(+), 54 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=5852ba15a989cfd4072649c67b784f5bc86a0d8f
++ NEW_HEAD=aeb0316b84f7ee5a6e07ff33eca86a98d76a4921
 + git -C /srv/realitymanual-repo pull
 Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
 + LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
 ++ cat /root/ops-service-data/last-image-commit.txt
-+ LAST_BUILD_COMMIT=89409f8097f51dcb590687d783142110fd611e6f
++ LAST_BUILD_COMMIT=5852ba15a989cfd4072649c67b784f5bc86a0d8f
 + NEEDS_REBUILD=1
-+ '[' -n 89409f8097f51dcb590687d783142110fd611e6f ']'
-+ git cat-file -e '89409f8097f51dcb590687d783142110fd611e6f^{commit}'
-++ git diff --name-only 89409f8097f51dcb590687d783142110fd611e6f 5852ba15a989cfd4072649c67b784f5bc86a0d8f -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
-+ '[' -z ops-service/src/bufferService.js ']'
++ '[' -n 5852ba15a989cfd4072649c67b784f5bc86a0d8f ']'
++ git cat-file -e '5852ba15a989cfd4072649c67b784f5bc86a0d8f^{commit}'
+++ git diff --name-only 5852ba15a989cfd4072649c67b784f5bc86a0d8f aeb0316b84f7ee5a6e07ff33eca86a98d76a4921 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -z ops-service/server.js ']'
 + '[' 0 = 1 ']'
 + '[' 1 = 0 ']'
 + docker tag rm-ops-service rm-ops-service:previous
@@ -42,7 +43,7 @@ Already up to date.
 #1 DONE 0.0s
 
 #2 [internal] load metadata for docker.io/library/node:22-slim
-#2 DONE 0.1s
+#2 DONE 0.3s
 
 #3 [internal] load .dockerignore
 #3 transferring context: 136B done
@@ -53,26 +54,26 @@ Already up to date.
 #4 DONE 0.0s
 
 #5 [internal] load build context
-#5 transferring context: 242.25kB done
+#5 transferring context: 357.41kB 0.0s done
 #5 DONE 0.0s
 
 #6 [ 2/11] RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && rm -rf /var/lib/apt/lists/*
 #6 CACHED
 
-#7 [ 5/11] COPY package.json ./
+#7 [ 3/11] RUN npm install -g @anthropic-ai/claude-code@2.1.276
 #7 CACHED
 
 #8 [ 4/11] WORKDIR /app
 #8 CACHED
 
-#9 [ 3/11] RUN npm install -g @anthropic-ai/claude-code@2.1.276
+#9 [ 5/11] COPY package.json ./
 #9 CACHED
 
 #10 [ 6/11] RUN npm install --omit=dev
 #10 CACHED
 
 #11 [ 7/11] COPY server.js ./
-#11 CACHED
+#11 DONE 0.1s
 
 #12 [ 8/11] COPY src ./src
 #12 DONE 0.1s
@@ -81,30 +82,30 @@ Already up to date.
 #13 DONE 0.1s
 
 #14 [10/11] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
-#14 DONE 15.4s
+#14 DONE 15.9s
 
 #15 [11/11] RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
-#15 DONE 0.3s
+#15 DONE 0.2s
 
 #16 exporting to image
 #16 exporting layers
-#16 exporting layers 11.4s done
-#16 exporting manifest sha256:2c59dc3b2cdc0ca6e9b9972e5705ef2789059c5088a0747f6985c9a04e8f4440 done
-#16 exporting config sha256:6199783c24ae8f535461267d5e0c7ec615837461441510e7fa1fc074c50aea5e done
-#16 exporting attestation manifest sha256:629d6c7b0cf5d0ce6d42966cd067a9494d57c613c448673d0a80546f7540ef92 0.0s done
-#16 exporting manifest list sha256:e1e792e6d1130e0f44ccd06b19b461902401d6ac7af6410f4c0b3116af31f5bc done
+#16 exporting layers 10.7s done
+#16 exporting manifest sha256:e50a4aa88d0a680f1a40e93fed8ab6d177971bf60046a8b9c3aefb74cdadd1c7 0.0s done
+#16 exporting config sha256:130235c715e508b36e6811bd3869330c3989b0741cdea6fea2e11c66e8a37e31 0.0s done
+#16 exporting attestation manifest sha256:40ce075a85b06a122a8cd2debe2cee93dc0431941497930ae527cde10fb5988e 0.0s done
+#16 exporting manifest list sha256:b2c4eeaf114c5b9ad25e154ee837f81d9269265159d937fe310ae7a708a6be3f done
 #16 naming to docker.io/library/rm-ops-service:latest done
 #16 unpacking to docker.io/library/rm-ops-service:latest
-#16 unpacking to docker.io/library/rm-ops-service:latest 3.1s done
-#16 DONE 14.6s
+#16 unpacking to docker.io/library/rm-ops-service:latest 2.2s done
+#16 DONE 13.0s
 + docker stop rm-ops-service
 rm-ops-service
 + docker rm rm-ops-service
 rm-ops-service
 + docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-claude-home/claude-dir:/home/node/.claude -v /root/ops-service-claude-home/claude.json:/home/node/.claude.json -v /root/ops-service-data:/data -v /root/realitymanual-backend-data:/store-data:ro -v /srv/realitymanual-repo:/repo -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
-b49e553357b98a2e7ce0905098eb8c068c201faa423ec3831e207157a7294685
-+ echo 5852ba15a989cfd4072649c67b784f5bc86a0d8f
+01fc2de2da59155624db130b5fabee3462beec0230587adb1d927c22206f6a7d
++ echo aeb0316b84f7ee5a6e07ff33eca86a98d76a4921
 ++ git -C /root/realitymanual-repo rev-parse --short HEAD
-+ echo 'rm-ops-service redeployed at 5852ba1'
-rm-ops-service redeployed at 5852ba1
++ echo 'rm-ops-service redeployed at aeb0316'
+rm-ops-service redeployed at aeb0316
 ssh exit code: 0
