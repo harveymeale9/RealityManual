@@ -10322,3 +10322,11 @@ real Chromium run at 1440×900 and 390×844 confirmed the new cadence and Meta
 controls render without horizontal overflow or runtime errors; a local API
 round-trip additionally proved the stored App Secret never appears in status
 responses.
+
+Meta's app-settings form also requires a public user-data deletion instruction
+URL even though Content Studio has no public users. `public/data-deletion.html`
+now provides the truthful first-party process: disconnect Meta from Content
+Settings to remove stored tokens/identifiers, revoke through Meta directly, or
+email support for a verified deletion request. The privacy policy links to it.
+This satisfies the platform form without pretending that the private tool has
+a public customer-account system.
