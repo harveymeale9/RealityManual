@@ -10,18 +10,21 @@
 + '[' -n '' ']'
 + git pull
 From https://github.com/harveymeale9/RealityManual
-   9f39588..e54c027  main       -> origin/main
-Updating 9f39588..e54c027
+   e54c027..a96003c  main       -> origin/main
+Updating e54c027..a96003c
 Fast-forward
- CLAUDE.md                              |  27 ++++----
- ops-service/.ci/last-run.log           | 115 ++++++---------------------------
- ops-service/public/app.js              |   8 +--
- ops-service/public/index.html          |   4 +-
- ops-service/public/lib/store.js        |  23 ++++---
- ops-service/test/captionPolicy.test.js |  15 +++--
- 6 files changed, 64 insertions(+), 128 deletions(-)
+ CLAUDE.md                                 | 38 +++++++++++++++
+ ops-service/.ci/last-run.log              | 25 +++++-----
+ ops-service/.env.example                  |  6 +++
+ ops-service/server.js                     | 42 ++++++++++++++--
+ ops-service/src/mailTriageService.js      | 70 ++++++++++++++++++++++++++-
+ ops-service/src/mailboxService.js         | 11 +++--
+ ops-service/src/namecheapMailbox.js       | 28 ++++++++++-
+ ops-service/test/mailTriage.test.js       | 80 +++++++++++++++++++++++++++++++
+ ops-service/test/namecheapMailbox.test.js | 15 ++++++
+ 9 files changed, 292 insertions(+), 23 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=e54c0272a36a4e78b13f0a00cc27600f3bf80720
++ NEW_HEAD=a96003cac4a1622ee9916a0051d3fb32699d590f
 + git -C /srv/realitymanual-repo pull
 Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
@@ -31,12 +34,88 @@ Already up to date.
 + NEEDS_REBUILD=1
 + '[' -n 32e93e5c54e2acd8d072d2655c0235fd9d326baf ']'
 + git cat-file -e '32e93e5c54e2acd8d072d2655c0235fd9d326baf^{commit}'
-++ git diff --name-only 32e93e5c54e2acd8d072d2655c0235fd9d326baf e54c0272a36a4e78b13f0a00cc27600f3bf80720 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
-+ '[' -z '' ']'
-+ NEEDS_REBUILD=0
+++ git diff --name-only 32e93e5c54e2acd8d072d2655c0235fd9d326baf a96003cac4a1622ee9916a0051d3fb32699d590f -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -z 'ops-service/server.js
+ops-service/src/mailTriageService.js
+ops-service/src/mailboxService.js
+ops-service/src/namecheapMailbox.js' ']'
 + '[' 0 = 1 ']'
-+ '[' 0 = 0 ']'
-+ echo 'no backend changes between 32e93e5c54e2acd8d072d2655c0235fd9d326baf and e54c0272a36a4e78b13f0a00cc27600f3bf80720 — already live via git pull, skipping rebuild/restart'
-no backend changes between 32e93e5c54e2acd8d072d2655c0235fd9d326baf and e54c0272a36a4e78b13f0a00cc27600f3bf80720 — already live via git pull, skipping rebuild/restart
-+ exit 0
++ '[' 1 = 0 ']'
++ docker tag rm-ops-service rm-ops-service:previous
++ docker build -t rm-ops-service ./ops-service
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 2.60kB 0.0s done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/node:22-slim
+#2 DONE 0.3s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 136B done
+#3 DONE 0.0s
+
+#4 [internal] load build context
+#4 DONE 0.0s
+
+#5 [ 1/11] FROM docker.io/library/node:22-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c
+#5 resolve docker.io/library/node:22-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c 0.0s done
+#5 DONE 0.1s
+
+#4 [internal] load build context
+#4 transferring context: 423.85kB 0.0s done
+#4 DONE 0.1s
+
+#6 [ 3/11] RUN npm install -g @anthropic-ai/claude-code@2.1.276
+#6 CACHED
+
+#7 [ 4/11] WORKDIR /app
+#7 CACHED
+
+#8 [ 5/11] COPY package.json ./
+#8 CACHED
+
+#9 [ 2/11] RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && rm -rf /var/lib/apt/lists/*
+#9 CACHED
+
+#10 [ 6/11] RUN npm install --omit=dev
+#10 CACHED
+
+#11 [ 7/11] COPY server.js ./
+#11 DONE 0.1s
+
+#12 [ 8/11] COPY src ./src
+#12 DONE 0.1s
+
+#13 [ 9/11] COPY public ./public
+#13 DONE 0.9s
+
+#14 [10/11] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
+#14 DONE 34.3s
+
+#15 [11/11] RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
+#15 DONE 0.3s
+
+#16 exporting to image
+#16 exporting layers
+#16 exporting layers 16.2s done
+#16 exporting manifest sha256:fe5800486d8ffa72d4cf0345cddb71b8bf86165ccce7708ef9e9f073fed4a13c 0.0s done
+#16 exporting config sha256:43f62231c11c23339ac593c5b8e5266e4f10c052568d1be24dcb2f8369d6365b 0.0s done
+#16 exporting attestation manifest sha256:12bd773c73bdcc14bc19b0a921be25980abe7614c32acc2ccd5c9b886985b241 0.0s done
+#16 exporting manifest list sha256:06c330b93a108e8d7bea5e9dba655bc8e71107b79e2ac0f78aed8da78ba4bff7 done
+#16 naming to docker.io/library/rm-ops-service:latest done
+#16 unpacking to docker.io/library/rm-ops-service:latest
+#16 unpacking to docker.io/library/rm-ops-service:latest 7.4s done
+#16 DONE 23.7s
++ docker stop rm-ops-service
+rm-ops-service
++ docker rm rm-ops-service
+rm-ops-service
++ docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-claude-home/claude-dir:/home/node/.claude -v /root/ops-service-claude-home/claude.json:/home/node/.claude.json -v /root/ops-service-data:/data -v /root/realitymanual-backend-data:/store-data:ro -v /srv/realitymanual-repo:/repo -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
+f56c2e34b2dfba50daecbe0f77baa3a2b1305748697600fe537cb68587b1ba61
++ echo a96003cac4a1622ee9916a0051d3fb32699d590f
+++ git -C /root/realitymanual-repo rev-parse --short HEAD
++ echo 'rm-ops-service redeployed at a96003c'
+rm-ops-service redeployed at a96003c
 ssh exit code: 0
