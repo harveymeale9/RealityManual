@@ -2347,6 +2347,29 @@
     return out;
   }
 
+  function tiktokPerformanceHtml(piece) {
+    if (!piece || piece.tiktokPublishProvider !== 'buffer') return '';
+    var metrics = piece.tiktokMetrics || {};
+    function value(type, fallback) {
+      var metric = metrics[type] || (fallback ? metrics[fallback] : null);
+      return metric ? Number(metric.value || 0).toLocaleString() : null;
+    }
+    var parts = [];
+    var views = value('views');
+    var reactions = value('reactions', 'likes');
+    var comments = value('comments');
+    var shares = value('shares', 'reposts');
+    if (views !== null) parts.push(views + ' views');
+    if (reactions !== null) parts.push(reactions + ' reactions');
+    if (comments !== null) parts.push(comments + ' comments');
+    if (shares !== null) parts.push(shares + ' shares');
+    var link = /^https:\/\//i.test(piece.tiktokExternalLink || '')
+      ? '<a class="card-external-link" href="' + escapeHtml(piece.tiktokExternalLink) + '" target="_blank" rel="noopener">View TikTok ↗</a>'
+      : '';
+    if (!parts.length && !link) return '';
+    return '<div class="card-performance">' + (parts.length ? '<span>' + parts.join(' · ') + '</span>' : '') + link + '</div>';
+  }
+
   function cardHtml(id, piece) {
     var title = (piece.title || '').trim();
     var titleHtml = title ? escapeHtml(title) : 'Untitled piece';
@@ -2395,6 +2418,7 @@
         // not just there.
         '<div class="chip-row">' + chipHtml(piece, { hideVideoChip: true }) + '</div>' +
         tagsHtml +
+        tiktokPerformanceHtml(piece) +
         '<div class="card-foot">' +
           '<span class="card-time">' + fmtTime(piece.updatedAt) + '</span>' +
           moveControl +
@@ -2764,7 +2788,7 @@
   function bindBoardEvents() {
     board.querySelectorAll('.card').forEach(function (el) {
       el.addEventListener('click', function (e) {
-        if (e.target.closest('.card-move')) return;
+        if (e.target.closest('.card-move, .card-external-link')) return;
         openPiece(el.dataset.id, render);
       });
       el.addEventListener('dragstart', function (e) {
@@ -3091,6 +3115,40 @@
   // Same shape as maybeStartAnalysisPolling in the Upload Files tab, kept
   // separate since it watches different fields on a different view.
   var youtubePublishPollTimer = null;
+  var contentOpsRefreshTimer = null;
+
+  // Buffer publishes later, independently of the browser tab that queued
+  // the post. Refresh the board while it is open so Scheduled -> Posted/Live
+  // and newly available metrics appear without a manual reload.
+  function startContentOpsRefresh() {
+    clearTimeout(contentOpsRefreshTimer);
+    contentOpsRefreshTimer = setTimeout(function refreshContentOps() {
+      if (currentTabId() !== 'content-ops') { contentOpsRefreshTimer = null; return; }
+      if (pieceModal && pieceModal.getAttribute('aria-hidden') === 'false') {
+        contentOpsRefreshTimer = setTimeout(refreshContentOps, 60000);
+        return;
+      }
+      Store.getAll('pieces').then(function (rows) {
+        var incoming = {};
+        var changed = rows.length !== Object.keys(pieces).length;
+        rows.forEach(function (piece) {
+          incoming[piece.id] = true;
+          var current = pieces[piece.id];
+          if (!current || current._recordVersion !== piece._recordVersion) {
+            pieces[piece.id] = piece;
+            changed = true;
+          }
+        });
+        Object.keys(pieces).forEach(function (id) {
+          if (!incoming[id]) { delete pieces[id]; changed = true; }
+        });
+        if (changed) render();
+      }).finally(function () {
+        if (currentTabId() === 'content-ops') contentOpsRefreshTimer = setTimeout(refreshContentOps, 60000);
+      });
+    }, 60000);
+  }
+
   function maybeStartYoutubePublishPoll() {
     function isWaiting(piece) {
       return WIRED_PUBLISH_PLATFORMS.some(function (platform) {
@@ -3166,6 +3224,7 @@
     bindPanning();
     bindKanbanContextMenu();
     bindVisibilityRepoll();
+    startContentOpsRefresh();
     document.getElementById('btnNew').addEventListener('click', function () { createDraft('ideation', render); });
 
     activeTypeFilter = '';
@@ -3232,6 +3291,7 @@
         '<div class="video-card-title">' + escapeHtml(p.title || 'Untitled') + '</div>' +
         '<div class="video-card-meta"><span class="chip format"><span class="dot" style="background:' + ct.color + '"></span>' + ct.label + '</span><span class="video-card-stage">' + stageLabelOf(p.stage) + '</span></div>' +
         (scheduledLine ? '<div class="video-card-sched">' + scheduledLine + '</div>' : '') +
+        tiktokPerformanceHtml(p) +
       '</div>' +
     '</div>';
   }
@@ -4030,7 +4090,8 @@
         '<h3>Publishing cadence</h3>' +
         '<p class="settings-hint">Just two cadences — Shorts covers ultra-short/short/long-short together, rotating ' +
           'through whichever of the three has something ready (ultra-short → short → long-short → repeat, skipping ' +
-          'any type with nothing queued). Longform is its own timeline.</p>' +
+          'any type with nothing queued). Longform is its own timeline. TikTok posts use the publishing times configured ' +
+          'on the connected TikTok channel in Buffer; Buffer returns the actual scheduled time to this board.</p>' +
         '<div class="cadence-grid" id="cadenceGrid"></div>' +
       '</section>' +
       '<section class="settings-section">' +
@@ -4104,8 +4165,8 @@
       '<section class="settings-section">' +
         '<h3>API keys</h3>' +
         '<p class="settings-hint">Stored on the ops-service backend (same place as everything else here — the ' +
-          'shared `settings` record), not just this browser, so any Claude Code session with server access can read ' +
-          'them when it needs to. TikTok access still needs approving; the field is here for when it does.</p>' +
+          'shared `settings` record), not just this browser. Publishing credentials such as Buffer and YouTube remain ' +
+          'server-only and are represented by the connection cards above.</p>' +
         '<div class="key-grid" id="keyGrid"></div>' +
       '</section>' +
     '</div>';
@@ -4175,7 +4236,14 @@
           return;
         }
         if (s.connected) {
-          statusEl.textContent = 'Buffer can schedule to ' + ((s.channel && s.channel.displayName) || 'the connected TikTok channel') + (s.channel && s.channel.isQueuePaused ? ' — queue is paused.' : '.');
+          var activeDays = s.channel && s.channel.postingSchedule ? s.channel.postingSchedule.filter(function (day) { return !day.paused; }) : [];
+          var slotCounts = activeDays.map(function (day) { return (day.times || []).length; });
+          var uniformSlots = slotCounts.length && slotCounts.every(function (count) { return count === slotCounts[0]; }) ? slotCounts[0] : null;
+          var scheduleNote = uniformSlots !== null
+            ? ' Queue: ' + uniformSlots + ' post' + (uniformSlots === 1 ? '' : 's') + '/day' + (s.channel.timezone ? ' (' + s.channel.timezone + ')' : '') + '.'
+            : ' Queue schedule is configured in Buffer.';
+          statusEl.textContent = 'Buffer can schedule to ' + ((s.channel && s.channel.displayName) || 'the connected TikTok channel') +
+            (s.channel && s.channel.isQueuePaused ? ' — queue is paused.' : '.' + scheduleNote);
           btn.textContent = 'Connected';
           btn.disabled = true;
         } else {

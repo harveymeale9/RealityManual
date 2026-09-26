@@ -90,6 +90,7 @@ function setup(db, options) {
   const sendMail = options.sendMail;
   const fetchStorefrontReport = options.fetchStorefrontReport;
   const fetchYoutubeStatistics = options.fetchYoutubeStatistics || (async function () { return []; });
+  const fetchTiktokStatistics = options.fetchTiktokStatistics || (async function () { return []; });
   const enabled = options.enabled !== false && !!recipient && typeof sendMail === 'function' && typeof fetchStorefrontReport === 'function';
 
   db.exec(`
@@ -174,12 +175,12 @@ function setup(db, options) {
     };
   }
 
-  function previousVideoSnapshot(periodStart) {
+  function previousVideoSnapshot(periodStart, platform) {
     const row = db.prepare(`SELECT metrics_json FROM weekly_report_runs
       WHERE recipient=? AND status='sent' AND period_end<=?
       ORDER BY period_end DESC LIMIT 1`).get(recipient, periodStart);
     const metrics = row ? json(row.metrics_json, {}) : {};
-    return metrics.video && metrics.video.youtube ? metrics.video.youtube.by_id || {} : {};
+    return metrics.video && metrics.video[platform] ? metrics.video[platform].by_id || {} : {};
   }
 
   async function collect(period) {
@@ -190,7 +191,7 @@ function setup(db, options) {
     let youtube = { available: true, totals: { views: 0, likes: 0, comments: 0, view_gain: 0 }, videos: [], by_id: {} };
     try {
       const stats = await fetchYoutubeStatistics(content.pieces);
-      const prior = previousVideoSnapshot(period.start);
+      const prior = previousVideoSnapshot(period.start, 'youtube');
       stats.forEach(function (video) {
         const before = prior[video.id];
         const publishedThisPeriod = video.publishedAt && new Date(video.publishedAt) >= new Date(period.start) && new Date(video.publishedAt) < new Date(period.end);
@@ -207,6 +208,38 @@ function setup(db, options) {
     } catch (error) {
       youtube = { available: false, error: clean(error.message, 300), totals: { views: 0, likes: 0, comments: 0, view_gain: 0 }, videos: [], by_id: {} };
     }
+    let tiktok = {
+      available: true, published_this_week: content.published.filter(function (piece) { return piece.platforms.indexOf('tiktok') !== -1; }).length,
+      total_published: content.pieces.filter(function (piece) { return !!piece.tiktokPublishId; }).length,
+      totals: { views: 0, reactions: 0, comments: 0, shares: 0, view_gain: 0 }, videos: [], by_id: {}
+    };
+    try {
+      const posts = await fetchTiktokStatistics(content.pieces);
+      const prior = previousVideoSnapshot(period.start, 'tiktok');
+      posts.forEach(function (post) {
+        const metrics = post.metrics || {};
+        const views = Number(metrics.views && metrics.views.value || 0);
+        const reactions = Number((metrics.reactions || metrics.likes) && (metrics.reactions || metrics.likes).value || 0);
+        const comments = Number(metrics.comments && metrics.comments.value || 0);
+        const shares = Number((metrics.shares || metrics.reposts) && (metrics.shares || metrics.reposts).value || 0);
+        const before = prior[post.pieceId];
+        const publishedThisPeriod = post.postedAt && new Date(post.postedAt) >= new Date(period.start) && new Date(post.postedAt) < new Date(period.end);
+        const viewGain = before ? Math.max(0, views - Number(before.views || 0)) : (publishedThisPeriod ? views : 0);
+        const video = { id: post.pieceId, title: post.title || 'Untitled', views: views, reactions: reactions,
+          comments: comments, shares: shares, viewGain: viewGain, externalLink: post.externalLink || '' };
+        tiktok.totals.views += views;
+        tiktok.totals.reactions += reactions;
+        tiktok.totals.comments += comments;
+        tiktok.totals.shares += shares;
+        tiktok.totals.view_gain += viewGain;
+        tiktok.by_id[post.pieceId] = { views: views, reactions: reactions, comments: comments, shares: shares, title: video.title };
+        tiktok.videos.push(video);
+      });
+      tiktok.videos.sort(function (a, b) { return b.viewGain - a.viewGain || b.views - a.views; });
+    } catch (error) {
+      tiktok.available = false;
+      tiktok.error = clean(error.message, 300);
+    }
     return {
       period: { start: period.start, end: period.end },
       storefront: currentStorefront,
@@ -214,11 +247,7 @@ function setup(db, options) {
       content: content,
       video: {
         youtube: youtube,
-        tiktok: {
-          published_this_week: content.published.filter(function (piece) { return piece.platforms.indexOf('tiktok') !== -1; }).length,
-          total_published: content.pieces.filter(function (piece) { return !!piece.tiktokPublishId; }).length,
-          engagement_available: false
-        }
+        tiktok: tiktok
       }
     };
   }
@@ -237,6 +266,7 @@ function setup(db, options) {
     const sales = current.sales;
     const content = metrics.content;
     const youtube = metrics.video.youtube;
+    const tiktok = metrics.video.tiktok;
     const startLabel = reportTitleDate(metrics.period.start, timeZone);
     const endLabel = reportTitleDate(new Date(new Date(metrics.period.end).getTime() - 1).toISOString(), timeZone);
     const subject = 'Reality Manual Weekly Report · ' + startLabel + '–' + endLabel;
@@ -258,6 +288,9 @@ function setup(db, options) {
     const youtubeRows = youtube.videos.length ? youtube.videos.slice(0, 8).map(function (video) {
       return '<tr><td>' + escapeHtml(video.title) + '</td><td>' + number(video.viewGain) + '</td><td>' + number(video.views) + '</td><td>' + number(video.likes) + '</td><td>' + number(video.comments) + '</td></tr>';
     }).join('') : '<tr><td colspan="5">No connected YouTube videos to measure yet.</td></tr>';
+    const tiktokRows = tiktok.videos.length ? tiktok.videos.slice(0, 8).map(function (video) {
+      return '<tr><td>' + escapeHtml(video.title) + '</td><td>' + number(video.viewGain) + '</td><td>' + number(video.views) + '</td><td>' + number(video.reactions) + '</td><td>' + number(video.comments) + '</td><td>' + number(video.shares) + '</td></tr>';
+    }).join('') : '<tr><td colspan="6">' + (tiktok.available ? 'No Buffer-published TikTok videos have metrics yet.' : 'TikTok metrics are temporarily unavailable.') + '</td></tr>';
     const html = '<!doctype html><html><body style="margin:0;background:#f3f0e8;color:#172019;font-family:Arial,sans-serif">' +
       '<div style="max-width:760px;margin:0 auto;padding:32px 18px"><div style="background:#07110b;color:#eef8ef;padding:28px;border-radius:12px 12px 0 0">' +
       '<div style="font:12px monospace;letter-spacing:2px;color:#56f39a">REALITY MANUAL</div><h1 style="margin:10px 0 5px;font:28px Georgia,serif">Weekly Performance Report</h1><div style="color:#a9beb0">' + startLabel + ' – ' + endLabel + '</div></div>' +
@@ -275,7 +308,8 @@ function setup(db, options) {
       '<h3 style="font:18px Georgia,serif">Published this week</h3><ul>' + publishedRows + '</ul>' +
       '<h2 style="font:22px Georgia,serif;margin-top:30px">Video performance</h2><p>YouTube: <strong>' + number(youtube.totals.view_gain) + '</strong> measured views gained this week; ' + number(youtube.totals.views) + ' lifetime views, ' + number(youtube.totals.likes) + ' likes and ' + number(youtube.totals.comments) + ' comments across connected videos.</p>' +
       '<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left">Video</th><th>New views</th><th>Total</th><th>Likes</th><th>Comments</th></tr></thead><tbody>' + youtubeRows + '</tbody></table>' +
-      '<p style="color:#67736a;font-size:13px">TikTok: ' + number(metrics.video.tiktok.published_this_week) + ' published this week, ' + number(metrics.video.tiktok.total_published) + ' connected publication(s) total. TikTok engagement metrics are not exposed by the account’s current publish-only API scope.</p>' +
+      '<p>TikTok via Buffer: <strong>' + number(tiktok.totals.view_gain) + '</strong> measured views gained since the prior report; ' + number(tiktok.totals.views) + ' lifetime views, ' + number(tiktok.totals.reactions) + ' reactions, ' + number(tiktok.totals.comments) + ' comments and ' + number(tiktok.totals.shares) + ' shares across tracked posts.</p>' +
+      '<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left">TikTok</th><th>New views</th><th>Total</th><th>Reactions</th><th>Comments</th><th>Shares</th></tr></thead><tbody>' + tiktokRows + '</tbody></table>' +
       '<h2 style="font:22px Georgia,serif;margin-top:30px">Pipeline now</h2><table style="width:100%;border-collapse:collapse"><tbody>' + pipelineRows + '</tbody></table>' +
       '<p style="margin-top:30px;color:#67736a;font-size:12px">Automatically generated from Content Studio, first-party website analytics, order records, and connected platform data.</p>' +
       '</div></div></body></html>';
@@ -289,7 +323,9 @@ function setup(db, options) {
       'CONTENT', number(content.created) + ' new cards', number(content.actively_updated) + ' pieces worked on',
       MILESTONE_STAGES.map(function (stage) { return STAGE_LABELS[stage] + ': ' + number(content.milestones[stage]); }).join('\n'), '',
       'VIDEO', 'YouTube views gained: ' + number(youtube.totals.view_gain), 'YouTube lifetime views: ' + number(youtube.totals.views),
-      'TikTok publications this week: ' + number(metrics.video.tiktok.published_this_week), '',
+      'TikTok publications this week: ' + number(tiktok.published_this_week),
+      'TikTok views gained: ' + number(tiktok.totals.view_gain), 'TikTok lifetime views: ' + number(tiktok.totals.views),
+      'TikTok reactions: ' + number(tiktok.totals.reactions), 'TikTok comments: ' + number(tiktok.totals.comments), 'TikTok shares: ' + number(tiktok.totals.shares), '',
       'Generated automatically by Reality Manual Content Studio.'
     ].join('\n');
     return { subject: subject, htmlBody: html, textBody: text };

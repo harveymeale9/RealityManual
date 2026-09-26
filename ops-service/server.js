@@ -33,6 +33,7 @@ const agentUsage = require('./src/agentUsage');
 const recordConcurrency = require('./src/recordConcurrency');
 const backgroundMonitorService = require('./src/backgroundMonitorService');
 const bufferService = require('./src/bufferService');
+const bufferPublicationSyncService = require('./src/bufferPublicationSync');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
@@ -646,6 +647,23 @@ const weeklyReports = weeklyReportService.setup(db, {
     const ids = pieces.map(function (piece) { return piece.youtubeVideoId; }).filter(Boolean);
     if (!ids.length) return [];
     return youtubeAuth.fetchVideoStatistics(await getValidYoutubeAccessToken(), ids);
+  },
+  fetchTiktokStatistics: async function (pieces) {
+    const tracked = pieces.filter(function (piece) {
+      return piece.tiktokPublishProvider === 'buffer' && piece.tiktokPublishId && piece.stage === 'live';
+    });
+    const results = [];
+    for (const piece of tracked) {
+      const post = await buffer.getPost(piece.tiktokPublishId);
+      results.push({
+        pieceId: piece.id,
+        title: piece.title || 'Untitled',
+        postedAt: post.sentAt || piece.postedAt || null,
+        externalLink: post.externalLink || piece.tiktokExternalLink || '',
+        metrics: bufferPublicationSyncService.metricsObject(post.metrics)
+      });
+    }
+    return results;
   }
 });
 
@@ -674,6 +692,32 @@ const youtubeAudit = youtubePublicationAudit.setup(db, {
     return youtubeAuth.fetchVideoStatuses(await getValidYoutubeAccessToken(), ids);
   },
   savePiece: async function (piece) { savePieceRecord(piece); }
+});
+
+// Buffer owns TikTok's actual queue and reports the authoritative lifecycle.
+// Reconcile it every fifteen minutes so Scheduled -> Posted/Live, failures,
+// external links, and engagement metrics all flow back into Content Studio.
+const bufferPublicationSync = bufferPublicationSyncService.setup(db, {
+  enabled: buffer.configured && process.env.BUFFER_PUBLICATION_SYNC_ENABLED !== 'false',
+  intervalMs: Number(process.env.BUFFER_PUBLICATION_SYNC_INTERVAL_MS || 15 * 60 * 1000),
+  listPieces: async function () {
+    return stmts.getAll.all('pieces').map(function (row) { return recordConcurrency.decodeRow(row); });
+  },
+  fetchPost: function (postId) { return buffer.getPost(postId); },
+  savePiece: async function (piece) {
+    // A browser may edit notes/title while this network request is in
+    // flight. Merge only Buffer-owned fields into the newest row so the
+    // background sync cannot overwrite that newer user work.
+    const latest = getPieceRecord(piece.id);
+    if (!latest) return;
+    ['stage', 'scheduledAt', 'postedAt', 'tiktokPublishStatus', 'tiktokPublishError',
+      'tiktokBufferStatus', 'tiktokBufferCheckedAt', 'tiktokExternalLink',
+      'tiktokBufferSupportUrl', 'tiktokMetrics', 'tiktokMetricsUpdatedAt'].forEach(function (field) {
+      latest[field] = piece[field];
+    });
+    latest.updatedAt = piece.updatedAt;
+    savePieceRecord(latest);
+  }
 });
 
 const youtubeCompetitors = youtubeCompetitorService.setup(db, {
@@ -723,6 +767,13 @@ app.get('/api/youtube/publication-audit/status', requireAuth, function (req, res
 app.post('/api/youtube/publication-audit/run', requireAuth, async function (req, res) {
   try { res.json(await youtubeAudit.run(true)); }
   catch (error) { res.status(502).json({ error: 'youtube_publication_audit_failed', message: String(error.message || error).slice(0, 300) }); }
+});
+app.get('/api/buffer/publication-sync/status', requireAuth, function (req, res) {
+  res.json(bufferPublicationSync.status());
+});
+app.post('/api/buffer/publication-sync/run', requireAuth, async function (req, res) {
+  try { res.json(await bufferPublicationSync.run()); }
+  catch (error) { res.status(502).json({ error: 'buffer_publication_sync_failed', message: String(error.message || error).slice(0, 300) }); }
 });
 app.get('/api/youtube/competitors', requireAuth, function (req, res) {
   res.json({ channels: youtubeCompetitors.list() });
@@ -1432,7 +1483,9 @@ app.post('/api/tiktok/publish/:id', function (req, res) {
 // approved third-party scheduler. The old direct integration remains intact
 // for historical records, but the UI now calls this route for TikTok.
 app.get('/api/buffer/status', requireAuth, async function (req, res) {
-  res.json(await buffer.status());
+  const status = await buffer.status();
+  status.publicationSync = bufferPublicationSync.status();
+  res.json(status);
 });
 
 async function runBufferTiktokPublish(id, opts) {

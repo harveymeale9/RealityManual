@@ -45,3 +45,19 @@ test('Buffer refuses ambiguous TikTok channels and reports missing configuration
   await assert.rejects(ambiguous.resolveTiktokChannel(), /Multiple TikTok channels/);
 });
 
+test('Buffer returns authoritative lifecycle, destination link, and normalized post metrics', async function () {
+  const service = bufferService.setup({ apiKey: 'test-key', fetchImpl: async function (url, options) {
+    const body = JSON.parse(options.body);
+    assert.equal(body.variables.input.id, 'post-1');
+    assert.match(body.query, /metricsUpdatedAt/);
+    return response({ data: { post: {
+      id: 'post-1', channelId: 'tt-1', status: 'sent', dueAt: '2026-09-27T08:00:00Z',
+      sentAt: '2026-09-27T08:00:04Z', externalLink: 'https://www.tiktok.com/@rm/video/1',
+      metrics: [{ type: 'views', name: 'Views', value: 1200, unit: 'count' }],
+      metricsUpdatedAt: '2026-09-28T08:00:00Z'
+    } } });
+  } });
+  const post = await service.getPost('post-1');
+  assert.equal(post.status, 'sent');
+  assert.equal(post.metrics[0].value, 1200);
+});

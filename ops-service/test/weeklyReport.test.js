@@ -56,6 +56,11 @@ test('weekly report sends one complete Monday-to-Monday email and never duplicat
     },
     fetchYoutubeStatistics: async function () {
       return [{ id: 'yt-1', title: 'Published video', publishedAt: '2026-09-20T12:00:00.000Z', views: 500, likes: 40, comments: 6 }];
+    },
+    fetchTiktokStatistics: async function () {
+      return [{ pieceId: 'video-1', title: 'Published video', postedAt: '2026-09-20T12:00:00.000Z', metrics: {
+        views: { value: 800 }, likes: { value: 70 }, comments: { value: 5 }, shares: { value: 9 }
+      } }];
     }
   });
 
@@ -73,6 +78,8 @@ test('weekly report sends one complete Monday-to-Monday email and never duplicat
   assert.match(sent[0].htmlBody, /\$142\.00/);
   assert.match(sent[0].htmlBody, /Completed outline/);
   assert.match(sent[0].htmlBody, /500/);
+  assert.match(sent[0].htmlBody, /800/);
+  assert.match(sent[0].htmlBody, /70 reactions/);
   assert.equal(db.prepare("SELECT status FROM weekly_report_runs").get().status, 'sent');
 
   const second = await service.runDue('2026-09-23T13:00:00.000Z');

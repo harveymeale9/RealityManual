@@ -31,7 +31,7 @@ function setup(options) {
     const organizations = account.account && account.account.organizations || [];
     const channels = [];
     for (const organization of organizations) {
-      const data = await graphql('query Channels($input: ChannelsInput!) { channels(input: $input) { id displayName descriptor service isDisconnected isLocked isQueuePaused externalLink } }',
+      const data = await graphql('query Channels($input: ChannelsInput!) { channels(input: $input) { id displayName descriptor service isDisconnected isLocked isQueuePaused externalLink timezone postingSchedule { day paused times } } }',
         { input: { organizationId: organization.id } });
       (data.channels || []).forEach(function (channel) {
         channels.push(Object.assign({ organizationId: organization.id, organizationName: organization.name }, channel));
@@ -93,20 +93,38 @@ function setup(options) {
     return { post: result.post, channel: channel };
   }
 
+  // One authoritative read for both lifecycle reconciliation and analytics.
+  // Buffer refreshes post metrics itself (normally daily); callers can poll
+  // this cheaply without needing direct TikTok insight scopes.
+  async function getPost(postId) {
+    const data = await graphql(`query BufferPost($input: PostInput!) {
+      post(input: $input) {
+        id channelId status dueAt sentAt externalLink
+        error { message supportUrl }
+        metrics { type name value unit }
+        metricsUpdatedAt
+      }
+    }`, { input: { id: clean(postId, 300) } });
+    if (!data.post) throw new Error('Buffer post was not found.');
+    return data.post;
+  }
+
   async function status() {
     if (!apiKey) return { configured: false, connected: false, reason: 'missing_api_key' };
     try {
       const channel = await resolveTiktokChannel();
       return { configured: true, connected: !channel.isDisconnected && !channel.isLocked,
         channel: { id: channel.id, displayName: channel.displayName, descriptor: channel.descriptor,
-          isDisconnected: channel.isDisconnected, isLocked: channel.isLocked, isQueuePaused: channel.isQueuePaused } };
+          isDisconnected: channel.isDisconnected, isLocked: channel.isLocked, isQueuePaused: channel.isQueuePaused,
+          timezone: channel.timezone, postingSchedule: channel.postingSchedule || [] } };
     } catch (error) {
       return { configured: true, connected: false, reason: clean(error.message, 500) };
     }
   }
 
   return { configured: !!apiKey, graphql: graphql, listChannels: listChannels, resolveTiktokChannel: resolveTiktokChannel,
-    createTiktokVideoPost: createTiktokVideoPost, mediaUrl: mediaUrl, verifyMediaSignature: verifyMediaSignature, status: status };
+    createTiktokVideoPost: createTiktokVideoPost, getPost: getPost,
+    mediaUrl: mediaUrl, verifyMediaSignature: verifyMediaSignature, status: status };
 }
 
 module.exports = { setup: setup, API_URL: API_URL };

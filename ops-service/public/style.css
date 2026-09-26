@@ -1684,6 +1684,9 @@ body.role-reviewer #pmBackFab {
 .video-card-meta { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .video-card-stage { font-size: 0.7rem; color: var(--ink-faint); }
 .video-card-sched { font-size: 0.72rem; color: var(--accent-2); }
+.card-performance { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; margin-top:8px; color:var(--ink-muted); font:0.68rem/1.4 var(--mono); }
+.card-external-link { color:var(--accent); text-decoration:none; }
+.card-external-link:hover { text-decoration:underline; }
 
 /* Small status chips replacing the old "Thumbnail Selected" stage — set
    automatically (see app.js's syncTags), shown both on kanban cards and

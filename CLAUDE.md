@@ -10216,3 +10216,49 @@ Regression coverage uses a synthetic credential and mocked Buffer server to
 prove authenticated GraphQL calls, automatic channel discovery, queue payload,
 thumbnail offset, signed media acceptance/rejection, ambiguous-channel refusal
 and safe missing-configuration status. Full suite: 56/56.
+
+---
+
+# 227. Complete Buffer TikTok Queue, Lifecycle Reconciliation, and Metrics (2026-09-26)
+
+The Buffer foundation in §226 now operates as a complete publication pipeline,
+not a one-way queue submission. The real personal API key and connected TikTok
+channel were verified without exposing the credential: Buffer identifies the
+channel as `the.reality.manual`, connected/unlocked, automatic queue active,
+timezone `Asia/Bangkok`, and no existing Buffer posts at implementation time.
+
+Final Check still sends the finished MP4, TikTok caption and selected thumbnail
+offset to Buffer with `addToQueue`; Buffer's channel schedule is authoritative
+and its returned `dueAt` is what Content Studio shows. The connected channel is
+currently configured for **two** posting slots on every day, not the intended
+three, so Harvey must add a third daily time in Buffer's TikTok posting schedule.
+The Settings connection card now reads Buffer's real timezone and schedule and
+shows the daily slot count, making future drift visible inside Content Studio.
+
+`src/bufferPublicationSync.js` runs every 15 minutes and reads each tracked
+Buffer post's real lifecycle. Scheduled/sending items remain in Scheduled;
+`sent` moves the Kanban card to Posted / Live with Buffer's `sentAt` and public
+TikTok URL; `error` returns it to Final Check with Buffer's human-readable error
+and support link. Temporary API failure never moves the affected card and never
+blocks reconciliation of the other cards. To protect edits made while a network
+request is in flight, the server merges only Buffer-owned fields into the
+newest record rather than saving an older whole-card snapshot. The open Content
+Pipeline refreshes records every minute (while no editor is open), so delayed
+Buffer state changes appear without a manual browser reload.
+
+The same post read imports Buffer's normalized metrics—views, reactions/likes,
+comments, shares/reposts and any future metric types—plus `metricsUpdatedAt`.
+Tracked metrics and a direct TikTok link appear on Kanban and Content Production
+cards. The weekly report now fetches current Buffer metrics, measures view gains
+against its prior weekly snapshot, and reports TikTok lifetime/new views,
+reactions, comments and shares alongside YouTube. Buffer itself refreshes social
+metrics about daily, so the 15-minute local sync cannot make upstream numbers
+fresher than Buffer's last ingestion.
+
+Protected status/run endpoints expose the synchronizer health for diagnostics;
+environment settings allow disabling it or changing the 900,000 ms interval.
+Regression coverage now includes real-shaped Buffer post reads, scheduled/sent/
+error transitions, metrics storage, partial API failure isolation, and TikTok
+weekly-report metrics. Full suite: 59/59. Real Chromium at 1440×900 and 390×844
+confirmed the connected Buffer card and revised settings copy without overflow
+or runtime errors.
