@@ -2881,13 +2881,15 @@
         platforms.forEach(function (platform) {
           var captionEntry = captions.filter(function (c) { return c.key === platform; })[0];
           var description = (captionEntry && !captionEntry.empty) ? captionEntry.text : '';
-          // TikTok's Content Posting API has one text field ("title",
-          // really the on-post caption) rather than separate title/
-          // description fields — send the real caption there if one's
-          // set, falling back to the plain title otherwise.
+          // Buffer/TikTok has one on-post text field. Keep it explicitly
+          // named `caption` through our API so the independently editable
+          // TikTok caption from Content Settings can never be confused with
+          // (or accidentally replaced by) the piece/YouTube title.
           var body = platform === 'ytlong'
             ? { title: title, description: description, privacyStatus: privacyStatus }
-            : { title: description || title, brandedContent: brandedContent };
+            : platform === 'tiktok'
+              ? { caption: description || title, brandedContent: brandedContent }
+              : { title: description || title, brandedContent: brandedContent };
           fetch(publishEndpointFor(platform) + encodeURIComponent(id), {
             method: 'POST',
             credentials: 'include',

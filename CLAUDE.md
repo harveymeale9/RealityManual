@@ -10265,3 +10265,21 @@ error transitions, metrics storage, partial API failure isolation, and TikTok
 weekly-report metrics. Full suite: 59/59. Real Chromium at 1440×900 and 390×844
 confirmed the connected Buffer card and revised settings copy without overflow
 or runtime errors.
+
+---
+
+# 228. Explicit Content Studio Caption Handoff to Buffer (2026-09-26)
+
+Final Check's Buffer request now carries the rendered TikTok text under an
+explicit `caption` field all the way to the server, rather than overloading a
+field named `title`. The value is still produced by `captionsForPiece()`, so it
+comes from the independently editable **Content Settings → Short-form →
+TikTok** caption template after platform rendering and link policy are applied.
+Buffer receives that exact string as its post `text`; only an actually empty
+TikTok caption falls back to the piece title. The server temporarily accepts
+the old `title` field as a compatibility fallback for browser tabs that were
+already open during deployment.
+
+The mocked Buffer regression now asserts the exact caption text in the GraphQL
+`CreatePostInput`, preventing a future refactor from silently substituting the
+card or YouTube title.

@@ -19,6 +19,7 @@ test('Buffer discovers the sole TikTok channel and queues a signed video post', 
     ] } });
     assert.equal(body.variables.input.channelId, 'tt-1');
     assert.equal(body.variables.input.mode, 'addToQueue');
+    assert.equal(body.variables.input.text, 'Exact Content Studio TikTok caption');
     assert.equal(body.variables.input.assets[0].video.metadata.thumbnailOffset, 2750);
     assert.match(body.variables.input.assets[0].video.url, /^https:\/\/ops\.example\/api\/buffer\/media\/piece-1\?/);
     return response({ data: { createPost: { __typename: 'PostActionSuccess', post: { id: 'post-1', status: 'scheduled', dueAt: '2026-09-27T08:00:00Z' } } } });
@@ -27,7 +28,7 @@ test('Buffer discovers the sole TikTok channel and queues a signed video post', 
   const parsed = new URL(url);
   assert.equal(service.verifyMediaSignature('piece-1', parsed.searchParams.get('expires'), parsed.searchParams.get('sig')), true);
   assert.equal(service.verifyMediaSignature('other', parsed.searchParams.get('expires'), parsed.searchParams.get('sig')), false);
-  const result = await service.createTiktokVideoPost({ text: 'Caption', videoUrl: url, thumbnailOffset: 2750 });
+  const result = await service.createTiktokVideoPost({ text: 'Exact Content Studio TikTok caption', videoUrl: url, thumbnailOffset: 2750 });
   assert.equal(result.post.id, 'post-1');
   assert.equal(calls.length, 3);
 });

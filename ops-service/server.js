@@ -1499,7 +1499,10 @@ async function runBufferTiktokPublish(id, opts) {
     const finalPath = path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX);
     if (!fs.existsSync(finalPath)) throw new Error('finished video not found on disk');
     const result = await buffer.createTiktokVideoPost({
-      text: opts.title || piece.title || 'Untitled',
+      // `text` is Buffer's name for the visible TikTok caption. Final Check
+      // supplies the fully rendered, platform-specific Content Settings
+      // caption (including any piece tokens), not the YouTube/card title.
+      text: opts.caption || piece.title || 'Untitled',
       videoUrl: buffer.mediaUrl(id),
       thumbnailOffset: Math.round((Number(piece.thumbnailTimeSeconds) || 0) * 1000)
     });
@@ -1532,7 +1535,12 @@ app.post('/api/buffer/publish/:id', requireAuth, function (req, res) {
   if (!buffer.configured) return res.status(400).json({ error: 'buffer_not_configured' });
   const body = req.body || {};
   res.json({ ok: true, status: 'running' });
-  runBufferTiktokPublish(id, { title: typeof body.title === 'string' ? body.title : '' })
+  runBufferTiktokPublish(id, {
+    caption: typeof body.caption === 'string'
+      ? body.caption
+      // Backward compatibility for an already-open pre-deploy browser tab.
+      : (typeof body.title === 'string' ? body.title : '')
+  })
     .catch(function (error) { console.error('unhandled Buffer publish error for ' + id + ':', error.message); });
 });
 
