@@ -4,6 +4,7 @@ const API_VERSION = 'v26.0';
 const AUTH_URL = 'https://www.facebook.com/' + API_VERSION + '/dialog/oauth';
 const GRAPH_URL = 'https://graph.facebook.com/' + API_VERSION;
 const SCOPES = [
+  'business_management',
   'pages_show_list',
   'pages_read_engagement',
   'pages_manage_posts',

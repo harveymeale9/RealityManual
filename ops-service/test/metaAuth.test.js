@@ -16,7 +16,7 @@ test('Meta authorization requests only permissions supported by Facebook Login',
   assert.equal(url.searchParams.get('redirect_uri'), config.redirectUri);
   assert.equal(url.searchParams.get('state'), 'csrf-token');
   const scopes = url.searchParams.get('scope').split(',');
-  ['pages_manage_posts', 'instagram_content_publish', 'read_insights'].forEach(function (scope) {
+  ['business_management', 'pages_manage_posts', 'instagram_content_publish', 'read_insights'].forEach(function (scope) {
     assert.ok(scopes.includes(scope));
   });
   assert.equal(scopes.includes('instagram_manage_insights'), false);

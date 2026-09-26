@@ -10362,3 +10362,14 @@ Meta returns exactly one Page, or retains a previously explicit choice; it
 never guesses among multiple Pages. Reality Manual must first be added to the
 authorized business portfolio/Page selection before it can appear in this
 list.
+
+A subsequent check of Meta Business Settings showed that The Reality Manual
+was already the sole Page in Harvey's portfolio and that Harvey had full
+access. The real mismatch was the authorization request: Meta's current
+Facebook-login Instagram content bundle explicitly includes
+`business_management`, but the first implementation had not requested it.
+That omission allowed `/me/accounts` to return older directly managed Pages
+while omitting the portfolio-owned Reality Manual Page. The OAuth scope list
+now includes `business_management`; Harvey must disconnect/reconnect once to
+grant it, after which the explicit selector can see portfolio assets without
+reintroducing the invalid Instagram-insights scope from above.
