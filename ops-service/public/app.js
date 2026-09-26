@@ -4090,11 +4090,15 @@
     '<div class="settings-panel">' +
       '<section class="settings-section">' +
         '<h3>Publishing cadence</h3>' +
-        '<p class="settings-hint">Just two cadences — Shorts covers ultra-short/short/long-short together, rotating ' +
+        '<p class="settings-hint">Direct-platform short-form covers YouTube Shorts, Instagram and Facebook together, rotating ' +
           'through whichever of the three has something ready (ultra-short → short → long-short → repeat, skipping ' +
-          'any type with nothing queued). Longform is its own timeline. TikTok posts use the publishing times configured ' +
-          'on the connected TikTok channel in Buffer; Buffer returns the actual scheduled time to this board.</p>' +
+          'any type with nothing queued). Longform is its own YouTube/Facebook timeline.</p>' +
         '<div class="cadence-grid" id="cadenceGrid"></div>' +
+        '<div class="tiktok-schedule-block">' +
+          '<div class="cadence-label">TikTok via Buffer <span class="ink-faint">(read-only)</span></div>' +
+          '<div class="tiktok-schedule-grid" id="tiktokScheduleGrid"><span class="ink-faint">Checking Buffer schedule…</span></div>' +
+          '<p class="settings-hint tiktok-schedule-note">To change these TikTok times, edit the posting schedule in Buffer. Content Studio reads them automatically.</p>' +
+        '</div>' +
       '</section>' +
       '<section class="settings-section">' +
         '<h3>Ambient audio library</h3>' +
@@ -4148,7 +4152,7 @@
       '</section>' +
       '<section class="settings-section">' +
         '<h3>Platform connections</h3>' +
-        '<p class="settings-hint">YouTube publishes directly through Google. TikTok is scheduled through Buffer, the approved third-party scheduler, rather than Reality Manual\'s rejected internal-use TikTok app.</p>' +
+        '<p class="settings-hint">YouTube publishes directly through Google. Facebook and Instagram connect directly through Meta. TikTok alone is scheduled through Buffer.</p>' +
         '<div class="platform-connect-card" id="youtubeConnectCard">' +
           '<div class="platform-connect-info">' +
             '<span class="platform-connect-name">YouTube</span>' +
@@ -4163,6 +4167,19 @@
           '</div>' +
           '<button type="button" class="btn-secondary btn-tiny" id="tiktokConnectBtn" disabled>…</button>' +
         '</div>' +
+        '<div class="platform-connect-card meta-connect-card" id="metaConnectCard">' +
+          '<div class="platform-connect-info">' +
+            '<span class="platform-connect-name">Facebook + Instagram · direct</span>' +
+            '<span class="platform-connect-status" id="metaConnectStatus">Checking…</span>' +
+          '</div>' +
+          '<button type="button" class="btn-secondary btn-tiny" id="metaConnectBtn" disabled>…</button>' +
+          '<div class="meta-credential-fields" id="metaCredentialFields">' +
+            '<label>Meta App ID<input class="title-input settings-input" id="metaAppIdInput" inputmode="numeric" autocomplete="off" /></label>' +
+            '<label>Meta App Secret<input class="title-input settings-input" id="metaAppSecretInput" type="password" autocomplete="new-password" placeholder="Not shown after saving" /></label>' +
+            '<button type="button" class="btn-secondary btn-tiny" id="metaSaveCredentialsBtn">Save credentials</button>' +
+            '<span class="platform-connect-status" id="metaCredentialMessage"></span>' +
+          '</div>' +
+        '</div>' +
       '</section>' +
       '<section class="settings-section">' +
         '<h3>API keys</h3>' +
@@ -4174,8 +4191,6 @@
     '</div>';
 
   var KEY_FIELDS = [
-    { id: 'instagram', label: 'Instagram' },
-    { id: 'facebook', label: 'Facebook' },
     { id: 'transcriptionProvider', label: 'Transcription provider', placeholder: 'e.g. AssemblyAI, Deepgram, Whisper' },
     { id: 'transcriptionKey', label: 'Transcription API key', type: 'password' }
   ];
@@ -4230,6 +4245,7 @@
     fetch('/api/buffer/status', { credentials: 'include' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (s) {
+        renderTiktokSchedule(s);
         if (!s) { statusEl.textContent = 'Status unavailable.'; btn.disabled = true; btn.textContent = '—'; return; }
         if (!s.configured) {
           statusEl.textContent = 'Buffer API key is not installed on the server yet.';
@@ -4255,7 +4271,68 @@
           btn.disabled = true;
         }
       })
-      .catch(function () { statusEl.textContent = 'Status unavailable.'; });
+      .catch(function () { statusEl.textContent = 'Status unavailable.'; renderTiktokSchedule(null); });
+  }
+
+  function renderTiktokSchedule(status) {
+    var grid = document.getElementById('tiktokScheduleGrid');
+    if (!grid) return;
+    var days = status && status.connected && status.channel ? (status.channel.postingSchedule || []) : [];
+    if (!days.length) {
+      grid.innerHTML = '<span class="ink-faint">Buffer schedule unavailable.</span>';
+      return;
+    }
+    var labels = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' };
+    grid.innerHTML = days.map(function (day) {
+      var times = day.paused ? ['Paused'] : (day.times || []);
+      return '<div class="tiktok-schedule-day"><strong>' + (labels[day.day] || escapeHtml(day.day)) + '</strong>' +
+        '<span>' + times.map(function (time) { return escapeHtml(time); }).join(' · ') + '</span></div>';
+    }).join('') + '<div class="tiktok-schedule-zone">Timezone: ' + escapeHtml(status.channel.timezone || 'Buffer account') + '</div>';
+  }
+
+  function renderMetaConnectCard() {
+    var statusEl = document.getElementById('metaConnectStatus');
+    var btn = document.getElementById('metaConnectBtn');
+    var appIdInput = document.getElementById('metaAppIdInput');
+    var secretInput = document.getElementById('metaAppSecretInput');
+    var saveBtn = document.getElementById('metaSaveCredentialsBtn');
+    var message = document.getElementById('metaCredentialMessage');
+    if (!statusEl || !btn || !saveBtn) return;
+    if (IS_REVIEWER) {
+      statusEl.textContent = 'Not available for this account.';
+      btn.disabled = saveBtn.disabled = appIdInput.disabled = secretInput.disabled = true;
+      btn.textContent = 'N/A';
+      return;
+    }
+    fetch('/api/meta/status', { credentials: 'include' })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('status')); })
+      .then(function (s) {
+        appIdInput.value = s.appId || '';
+        secretInput.value = '';
+        secretInput.placeholder = s.hasAppSecret ? 'Saved securely · enter only to replace' : 'Paste Meta App Secret';
+        statusEl.textContent = s.connected
+          ? 'Connected to ' + ((s.page && s.page.name) || 'Facebook') + (s.instagram ? ' and @' + (s.instagram.username || s.instagram.id) : '; no linked professional Instagram account found.')
+          : (s.configured ? 'Credentials saved. Connect your Meta accounts.' : 'Save the App ID and App Secret, then connect.');
+        btn.disabled = !s.configured;
+        btn.textContent = s.connected ? 'Disconnect' : 'Connect';
+        btn.onclick = s.connected ? function () {
+          btn.disabled = true;
+          fetch('/api/meta/disconnect', { method: 'POST', credentials: 'include' }).then(renderMetaConnectCard);
+        } : function () { window.location.href = '/api/meta/oauth/start'; };
+        saveBtn.onclick = function () {
+          message.textContent = 'Saving…';
+          saveBtn.disabled = true;
+          fetch('/api/meta/config', {
+            method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ appId: appIdInput.value.trim(), appSecret: secretInput.value })
+          }).then(function (r) {
+            return r.json().catch(function () { return {}; }).then(function (body) { if (!r.ok) throw new Error(body.error || 'Could not save credentials.'); });
+          }).then(function () { message.textContent = 'Saved.'; renderMetaConnectCard(); })
+            .catch(function (error) { message.textContent = error.message; })
+            .finally(function () { saveBtn.disabled = false; });
+        };
+      })
+      .catch(function () { statusEl.textContent = 'Status unavailable.'; btn.disabled = true; });
   }
 
   var settingsCache = null;
@@ -4267,8 +4344,8 @@
   }
 
   var CADENCE_ROWS = [
-    { key: 'shorts', label: 'Shorts', hint: 'ultra-short / short / long-short, rotated' },
-    { key: 'longform', label: 'Longform', hint: 'YT / FB' }
+    { key: 'shorts', label: 'Direct short-form', hint: 'YouTube Shorts / Instagram / Facebook' },
+    { key: 'longform', label: 'Direct longform', hint: 'YouTube / Facebook' }
   ];
 
   function renderCadenceGrid() {
@@ -4385,6 +4462,7 @@
       renderKeyGrid();
       renderYoutubeConnectCard();
       renderTiktokConnectCard();
+      renderMetaConnectCard();
 
       var audioMixModeSelect = document.getElementById('audioMixModeSelect');
       var dialogueLufsSelect = document.getElementById('dialogueLufsSelect');

@@ -10283,3 +10283,42 @@ already open during deployment.
 The mocked Buffer regression now asserts the exact caption text in the GraphQL
 `CreatePostInput`, preventing a future refactor from silently substituting the
 card or YouTube title.
+
+---
+
+# 229. Direct Meta Connection Shell and Platform-Specific Cadence UI (2026-09-26)
+
+Content Settings now has a protected **Facebook + Instagram · direct**
+connection card. Harvey can enter the Meta App ID and App Secret there rather
+than touching the VPS console. They are POSTed to an admin-only endpoint and
+stored in a dedicated `meta_oauth` database row alongside the resulting tokens;
+the secret and tokens are never returned to the browser or placed in the shared
+settings JSON. Reopening Settings reveals only the non-secret App ID and whether
+a secret exists. Changing the App ID invalidates tokens from the prior app.
+
+The new first-party OAuth flow uses Meta Graph API v26, a CSRF state cookie and
+the fixed callback `https://ops.realitymanual.com/api/meta/oauth/callback`. It
+requests only Page discovery/publishing/insight and Instagram professional
+publishing/insight permissions. After authorization it exchanges the short
+grant for a long-lived token, discovers managed Pages, prefers the Page linked
+to an Instagram professional account, and stores the Page token plus Page and
+Instagram identities. This change establishes and verifies the credential and
+account connection; actual Facebook/Instagram upload and reconciliation are the
+next phase once Harvey supplies real credentials so their live API shapes can
+be tested without inventing a successful publish.
+
+Publishing cadence is now explicit about ownership. The editable `shorts`
+cadence is labelled **Direct short-form (YouTube Shorts / Instagram /
+Facebook)**, longform is **Direct longform (YouTube / Facebook)**, and TikTok is
+excluded from both. TikTok gets a separate read-only seven-day schedule populated
+from Buffer's live channel response, including every queue time and timezone,
+with a note that changes belong in Buffer. Obsolete plaintext Instagram and
+Facebook API-key fields were removed; their platform credentials now belong to
+the protected Meta card.
+
+Regression coverage verifies the exact Meta scopes, authorization URL, token
+exchange and linked Page/Instagram discovery. The full suite passes 61/61. A
+real Chromium run at 1440×900 and 390×844 confirmed the new cadence and Meta
+controls render without horizontal overflow or runtime errors; a local API
+round-trip additionally proved the stored App Secret never appears in status
+responses.

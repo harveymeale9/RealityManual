@@ -34,6 +34,7 @@ const recordConcurrency = require('./src/recordConcurrency');
 const backgroundMonitorService = require('./src/backgroundMonitorService');
 const bufferService = require('./src/bufferService');
 const bufferPublicationSyncService = require('./src/bufferPublicationSync');
+const metaAuth = require('./src/metaAuth');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
@@ -154,6 +155,21 @@ db.exec(
   '  refresh_token TEXT,' +
   '  expires_at TEXT,' +
   '  updated_at TEXT NOT NULL' +
+  ');' +
+  // One private first-party Meta connection. App credentials and tokens are
+  // server-only; the browser sees only configured/connected status.
+  'CREATE TABLE IF NOT EXISTS meta_oauth (' +
+  '  id INTEGER PRIMARY KEY CHECK (id = 1),' +
+  '  app_id TEXT,' +
+  '  app_secret TEXT,' +
+  '  user_access_token TEXT,' +
+  '  expires_at TEXT,' +
+  '  page_id TEXT,' +
+  '  page_name TEXT,' +
+  '  page_access_token TEXT,' +
+  '  instagram_account_id TEXT,' +
+  '  instagram_username TEXT,' +
+  '  updated_at TEXT NOT NULL' +
   ');'
 );
 
@@ -265,7 +281,28 @@ const stmts = {
     'access_token = excluded.access_token, refresh_token = excluded.refresh_token, ' +
     'expires_at = excluded.expires_at, updated_at = excluded.updated_at'
   ),
-  clearTiktokAuth: db.prepare('DELETE FROM tiktok_oauth WHERE id = 1')
+  clearTiktokAuth: db.prepare('DELETE FROM tiktok_oauth WHERE id = 1'),
+  getMetaAuth: db.prepare('SELECT * FROM meta_oauth WHERE id = 1'),
+  upsertMetaConfig: db.prepare(
+    'INSERT INTO meta_oauth (id, app_id, app_secret, updated_at) VALUES (1, ?, ?, ?) ' +
+    'ON CONFLICT(id) DO UPDATE SET app_id = excluded.app_id, app_secret = excluded.app_secret, ' +
+    'user_access_token = CASE WHEN meta_oauth.app_id = excluded.app_id THEN meta_oauth.user_access_token ELSE NULL END, ' +
+    'expires_at = CASE WHEN meta_oauth.app_id = excluded.app_id THEN meta_oauth.expires_at ELSE NULL END, ' +
+    'page_id = CASE WHEN meta_oauth.app_id = excluded.app_id THEN meta_oauth.page_id ELSE NULL END, ' +
+    'page_name = CASE WHEN meta_oauth.app_id = excluded.app_id THEN meta_oauth.page_name ELSE NULL END, ' +
+    'page_access_token = CASE WHEN meta_oauth.app_id = excluded.app_id THEN meta_oauth.page_access_token ELSE NULL END, ' +
+    'instagram_account_id = CASE WHEN meta_oauth.app_id = excluded.app_id THEN meta_oauth.instagram_account_id ELSE NULL END, ' +
+    'instagram_username = CASE WHEN meta_oauth.app_id = excluded.app_id THEN meta_oauth.instagram_username ELSE NULL END, ' +
+    'updated_at = excluded.updated_at'
+  ),
+  upsertMetaConnection: db.prepare(
+    'UPDATE meta_oauth SET user_access_token = ?, expires_at = ?, page_id = ?, page_name = ?, page_access_token = ?, ' +
+    'instagram_account_id = ?, instagram_username = ?, updated_at = ? WHERE id = 1'
+  ),
+  clearMetaConnection: db.prepare(
+    'UPDATE meta_oauth SET user_access_token = NULL, expires_at = NULL, page_id = NULL, page_name = NULL, ' +
+    'page_access_token = NULL, instagram_account_id = NULL, instagram_username = NULL, updated_at = ? WHERE id = 1'
+  )
 };
 
 setInterval(function () {
@@ -529,6 +566,85 @@ app.get('/api/youtube/oauth/callback', requireAuthOrReviewer, function (req, res
 
 app.post('/api/youtube/disconnect', requireAuthOrReviewer, function (req, res) {
   stmts.clearYoutubeAuth.run();
+  res.json({ ok: true });
+});
+
+// --- Direct Facebook + Instagram connection ---
+// This is deliberately admin-only and separate from the browser-saved
+// settings record: the App Secret and Meta tokens never come back to JS.
+const META_REDIRECT_URI = process.env.META_REDIRECT_URI || 'https://ops.realitymanual.com/api/meta/oauth/callback';
+
+function metaConfigFromRow(row) {
+  return row ? { appId: row.app_id, appSecret: row.app_secret, redirectUri: META_REDIRECT_URI } : null;
+}
+
+app.get('/api/meta/status', requireAuth, function (req, res) {
+  const row = stmts.getMetaAuth.get();
+  const configured = metaAuth.validConfig(metaConfigFromRow(row));
+  res.json({
+    configured: configured,
+    appId: configured ? row.app_id : '',
+    hasAppSecret: !!(row && row.app_secret),
+    redirectUri: META_REDIRECT_URI,
+    connected: !!(configured && row.page_access_token),
+    page: row && row.page_id ? { id: row.page_id, name: row.page_name } : null,
+    instagram: row && row.instagram_account_id ? { id: row.instagram_account_id, username: row.instagram_username } : null
+  });
+});
+
+app.post('/api/meta/config', requireAuth, function (req, res) {
+  const body = req.body || {};
+  const appId = String(body.appId || '').trim();
+  const suppliedSecret = String(body.appSecret || '').trim();
+  const current = stmts.getMetaAuth.get();
+  const appSecret = suppliedSecret || (current && current.app_id === appId ? current.app_secret : '');
+  const config = { appId: appId, appSecret: appSecret, redirectUri: META_REDIRECT_URI };
+  if (!metaAuth.validConfig(config)) return res.status(400).json({ error: 'Enter a valid numeric Meta App ID and App Secret.' });
+  stmts.upsertMetaConfig.run(appId, appSecret, new Date().toISOString());
+  res.json({ ok: true });
+});
+
+app.get('/api/meta/oauth/start', requireAuth, function (req, res) {
+  const config = metaConfigFromRow(stmts.getMetaAuth.get());
+  if (!metaAuth.validConfig(config)) return res.status(400).send('Save the Meta App ID and App Secret in Content Settings first.');
+  const state = crypto.randomBytes(16).toString('hex');
+  res.cookie('meta_oauth_state', state, { httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 10 * 60 * 1000 });
+  res.redirect(metaAuth.buildAuthUrl(config, state));
+});
+
+app.get('/api/meta/oauth/callback', requireAuth, async function (req, res) {
+  const returnTo = '/#settings';
+  const expectedState = req.cookies && req.cookies.meta_oauth_state;
+  res.clearCookie('meta_oauth_state', { path: '/' });
+  if (req.query.error) return res.redirect(returnTo);
+  if (!req.query.state || req.query.state !== expectedState) return res.status(400).send('OAuth state did not match. Please connect Meta again.');
+  const row = stmts.getMetaAuth.get();
+  const config = metaConfigFromRow(row);
+  if (!metaAuth.validConfig(config)) return res.status(400).send('Meta credentials are no longer configured.');
+  try {
+    const shortToken = await metaAuth.exchangeCode(config, req.query.code);
+    const longToken = await metaAuth.exchangeLongLived(config, shortToken.access_token);
+    const pages = await metaAuth.fetchManagedPages(longToken.access_token);
+    if (!pages.length) throw new Error('No Facebook Page managed by this account was returned.');
+    // Prefer the Page linked to an Instagram professional account, because
+    // that single authorization then activates both direct destinations.
+    const page = pages.find(function (candidate) { return candidate.instagram_business_account; }) || pages[0];
+    const instagram = page.instagram_business_account || null;
+    const expiresAt = longToken.expires_in ? new Date(Date.now() + Number(longToken.expires_in) * 1000).toISOString() : null;
+    stmts.upsertMetaConnection.run(
+      longToken.access_token, expiresAt, page.id, page.name || page.id, page.access_token,
+      instagram ? instagram.id : null, instagram ? instagram.username : null, new Date().toISOString()
+    );
+    res.redirect(returnTo);
+  } catch (error) {
+    console.error('Meta OAuth callback failed:', error.message);
+    res.status(502).send('Meta connection failed: ' + String(error.message || error).slice(0, 500));
+  }
+});
+
+app.post('/api/meta/disconnect', requireAuth, function (req, res) {
+  const row = stmts.getMetaAuth.get();
+  if (row) stmts.clearMetaConnection.run(new Date().toISOString());
   res.json({ ok: true });
 });
 

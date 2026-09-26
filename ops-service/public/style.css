@@ -1810,6 +1810,13 @@ body.role-reviewer #pmBackFab {
 
 .cadence-grid { display: flex; flex-direction: column; gap: 10px; }
 .cadence-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 8px 0; }
+.tiktok-schedule-block { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-soft); }
+.tiktok-schedule-grid { display: grid; grid-template-columns: repeat(7, minmax(76px, 1fr)); gap: 7px; margin-top: 10px; }
+.tiktok-schedule-day { min-width: 0; border: 1px solid var(--border-soft); border-radius: 8px; padding: 8px; background: var(--surface-2); display: flex; flex-direction: column; gap: 4px; }
+.tiktok-schedule-day strong { color: var(--accent); font-size: 0.72rem; text-transform: uppercase; }
+.tiktok-schedule-day span { color: var(--ink-soft); font-size: 0.72rem; line-height: 1.45; }
+.tiktok-schedule-zone { grid-column: 1 / -1; color: var(--ink-faint); font-size: 0.72rem; }
+.tiktok-schedule-note { margin-top: 9px; margin-bottom: 0; }
 .cadence-label { display: flex; align-items: center; gap: 8px; font-size: 0.92rem; }
 .cadence-label .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .cadence-inputs { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--ink-soft); }
@@ -1872,6 +1879,17 @@ body.role-reviewer #pmBackFab {
 .platform-connect-info { display: flex; flex-direction: column; gap: 2px; }
 .platform-connect-name { font-size: 0.9rem; font-weight: 600; color: var(--ink); }
 .platform-connect-status { font-size: 0.78rem; color: var(--ink-faint); }
+.meta-connect-card { flex-wrap: wrap; }
+.meta-connect-card > .platform-connect-info { flex: 1; min-width: 220px; }
+.meta-credential-fields { width: 100%; display: grid; grid-template-columns: minmax(150px, 0.8fr) minmax(220px, 1.2fr) auto; gap: 9px; align-items: end; padding-top: 10px; border-top: 1px solid var(--border-soft); }
+.meta-credential-fields label { display: flex; flex-direction: column; gap: 5px; color: var(--ink-soft); font-size: 0.74rem; }
+.meta-credential-fields .settings-input { width: 100%; }
+.meta-credential-fields #metaCredentialMessage { grid-column: 1 / -1; }
+
+@media (max-width: 780px) {
+  .tiktok-schedule-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .meta-credential-fields { grid-template-columns: 1fr; }
+}
 
 .key-grid { display: flex; flex-direction: column; gap: 14px; }
 .key-row label { display: block; font-size: 0.8rem; color: var(--ink-soft); margin-bottom: 4px; }
