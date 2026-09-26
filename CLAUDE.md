@@ -10226,6 +10226,9 @@ not a one-way queue submission. The real personal API key and connected TikTok
 channel were verified without exposing the credential: Buffer identifies the
 channel as `the.reality.manual`, connected/unlocked, automatic queue active,
 timezone `Asia/Bangkok`, and no existing Buffer posts at implementation time.
+Its live capability response includes `scheduleUpdates`, `viewInsights`,
+`video.publish` and `video.insights`, so both unattended publishing and the
+performance reads are authorized rather than inferred from connection alone.
 
 Final Check still sends the finished MP4, TikTok caption and selected thumbnail
 offset to Buffer with `addToQueue`; Buffer's channel schedule is authoritative

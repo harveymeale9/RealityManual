@@ -4242,8 +4242,9 @@
           var scheduleNote = uniformSlots !== null
             ? ' Queue: ' + uniformSlots + ' post' + (uniformSlots === 1 ? '' : 's') + '/day' + (s.channel.timezone ? ' (' + s.channel.timezone + ')' : '') + '.'
             : ' Queue schedule is configured in Buffer.';
+          var insightsNote = s.channel && s.channel.canViewInsights ? ' Performance tracking active.' : '';
           statusEl.textContent = 'Buffer can schedule to ' + ((s.channel && s.channel.displayName) || 'the connected TikTok channel') +
-            (s.channel && s.channel.isQueuePaused ? ' — queue is paused.' : '.' + scheduleNote);
+            (s.channel && s.channel.isQueuePaused ? ' — queue is paused.' : '.' + scheduleNote + insightsNote);
           btn.textContent = 'Connected';
           btn.disabled = true;
         } else {

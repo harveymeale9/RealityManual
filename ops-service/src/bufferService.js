@@ -31,7 +31,7 @@ function setup(options) {
     const organizations = account.account && account.account.organizations || [];
     const channels = [];
     for (const organization of organizations) {
-      const data = await graphql('query Channels($input: ChannelsInput!) { channels(input: $input) { id displayName descriptor service isDisconnected isLocked isQueuePaused externalLink timezone postingSchedule { day paused times } } }',
+      const data = await graphql('query Channels($input: ChannelsInput!) { channels(input: $input) { id displayName descriptor service isDisconnected isLocked isQueuePaused externalLink timezone allowedActions products scopes postingSchedule { day paused times } } }',
         { input: { organizationId: organization.id } });
       (data.channels || []).forEach(function (channel) {
         channels.push(Object.assign({ organizationId: organization.id, organizationName: organization.name }, channel));
@@ -76,6 +76,9 @@ function setup(options) {
   async function createTiktokVideoPost(input) {
     const channel = await resolveTiktokChannel();
     if (channel.isDisconnected || channel.isLocked) throw new Error('The Buffer TikTok channel is disconnected or locked.');
+    if (Array.isArray(channel.allowedActions) && channel.allowedActions.length && channel.allowedActions.indexOf('scheduleUpdates') === -1) {
+      throw new Error('The Buffer account does not have permission to schedule posts on this TikTok channel.');
+    }
     const data = await graphql(`mutation CreateVideoPost($input: CreatePostInput!) {
       createPost(input: $input) {
         __typename
@@ -113,10 +116,13 @@ function setup(options) {
     if (!apiKey) return { configured: false, connected: false, reason: 'missing_api_key' };
     try {
       const channel = await resolveTiktokChannel();
-      return { configured: true, connected: !channel.isDisconnected && !channel.isLocked,
+      const canSchedule = !Array.isArray(channel.allowedActions) || !channel.allowedActions.length || channel.allowedActions.indexOf('scheduleUpdates') !== -1;
+      const canViewInsights = (channel.allowedActions || []).indexOf('viewInsights') !== -1 || (channel.scopes || []).indexOf('video.insights') !== -1;
+      return { configured: true, connected: !channel.isDisconnected && !channel.isLocked && canSchedule,
         channel: { id: channel.id, displayName: channel.displayName, descriptor: channel.descriptor,
           isDisconnected: channel.isDisconnected, isLocked: channel.isLocked, isQueuePaused: channel.isQueuePaused,
-          timezone: channel.timezone, postingSchedule: channel.postingSchedule || [] } };
+          timezone: channel.timezone, postingSchedule: channel.postingSchedule || [], canSchedule: canSchedule,
+          canViewInsights: canViewInsights } };
     } catch (error) {
       return { configured: true, connected: false, reason: clean(error.message, 500) };
     }
