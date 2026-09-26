@@ -28,6 +28,7 @@ const weeklyReportService = require('./src/weeklyReportService');
 const diskMonitorService = require('./src/diskMonitorService');
 const youtubePublicationAudit = require('./src/youtubePublicationAudit');
 const youtubeCompetitorService = require('./src/youtubeCompetitorService');
+const researchIdeaService = require('./src/researchIdeaService');
 const agentUsage = require('./src/agentUsage');
 const recordConcurrency = require('./src/recordConcurrency');
 const backgroundMonitorService = require('./src/backgroundMonitorService');
@@ -682,6 +683,18 @@ const youtubeCompetitors = youtubeCompetitorService.setup(db, {
     return claudeRunner.runTextOnlyStructured(input.prompt, input.schema, 90000);
   }
 });
+
+// Research is a distinct inspiration surface: it synthesizes the canonical
+// Manual concept map through Harvey's chosen thinker/source pool, then checks
+// every candidate against the real caption-derived 1/10 outliers already in
+// the competitor store. Generated source/outlier references are allow-listed
+// by the service before they can reach the UI.
+const researchIdeas = researchIdeaService.setup(db, {
+  generateIdeas: async function (input) {
+    return claudeRunner.runTextOnlyStructured(input.prompt, input.schema, 120000);
+  }
+});
+app.use('/api/research', requireAuth, researchIdeas.router);
 
 app.get('/api/reports/weekly/status', requireAuth, function (req, res) {
   res.json(weeklyReports.status());

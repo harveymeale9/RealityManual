@@ -10082,3 +10082,48 @@ retroactively executed.
 Regression coverage proves aligned authentication parsing, rejection of a
 display-address spoof, silent owner routing, quote removal, archival after
 queueing, and cleanup of the previous self-alert. Full suite: 50/50.
+
+---
+
+# 224. Ten-at-a-Time Thinker Research and 1/10 Synthesis (2026-09-26)
+
+The Research surface is now an actual inspiration queue rather than only the
+Manual's compact concept index. It maintains ten durable Big Ideas at a time
+and exposes Harvey's requested workflow on every card: approve/unapprove, add
+autosaved notes, mark **Not interested**, or **Send to Ideation**. Rejecting or
+transferring a card queues a replacement, while **Generate a fresh 10**
+supersedes the visible batch. Each generation uses a fresh exploration nonce,
+shuffles the complete source pool and receives the last 40 ideas as an
+anti-duplication catalogue, so browsing does not simply replay a fixed prompt.
+Sending an idea creates a normal Kanban piece in
+the Ideation stage with the Big Idea, Harvey's notes, source lenses, verified
+Manual quotations/pages, and any 1/10 corroboration in its notes.
+
+The source pool contains all 36 thinkers from the initial seed email plus Teal
+Swan, Mark Manson, Alex O'Connor, The Mindset Mentor Podcast and Chase Hughes.
+Peter Crone was already in the original 36, so the deduplicated pool is 41,
+not 42. The complete named pool and its focus descriptors are sent to every
+generation pass and are visible in a collapsible UI roster. Source names are
+explicitly presented as intellectual lenses rather than verified attributions:
+this phase has not silently invented a quotation corpus or claimed that a
+specific thinker said generated wording.
+
+Before a proposed idea is stored, generation receives all currently available
+Outlier Analysis entries which are both statistically genuine 1-in-10 videos
+and have a creative read derived from an actual public caption transcript.
+The model may attach corroboration only when the video's premise, mechanism or
+angle materially supports the new idea; no match is required. Server-side
+allowlists then discard every source name, Manual concept ID and video ID not
+present in the real stores. The UI labels surviving links **1/10
+corroboration**, includes channel/title and relative median-view lift, and does
+not use title/description text as the basis of its creative interpretation.
+Manual connections likewise expand only from the canonical 35-concept index,
+so every transferred quote and page is already verified against the manuscript.
+
+Generation runs in a restart-safe SQLite job queue and reports running/error
+state in the UI. An errored job occupies its intended queue slots until an
+explicit retry, preventing a model outage from causing an automatic retry
+storm. Regression coverage proves the 41-person pool, ten-card invariant,
+approval/notes, reject and transfer replenishment, Ideation record shape,
+verified-reference allowlisting, caption-only outlier eligibility and bounded
+error behavior. Full suite: 52/52.
