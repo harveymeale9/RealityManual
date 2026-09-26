@@ -203,6 +203,10 @@ window.RMStore = (function () {
         shortform: { ytshort: '', tiktok: '', instagram: '', facebook: '' },
         longform: { ytlong: '', facebook: '' }
       },
+      // Applied by the backend when the real Final Check video is built.
+      // Kept as a whole-number percentage because Harvey tunes it in exact
+      // one-percent steps rather than editing an ffmpeg gain coefficient.
+      ambientMusicVolumePercent: 10,
       baseLinkUrl: 'https://realitymanual.com',
       apiKeys: { youtube: '', instagram: '', facebook: '', tiktok: '', transcriptionProvider: '', transcriptionKey: '' }
     };
@@ -251,6 +255,8 @@ window.RMStore = (function () {
       }
       s.captions.shortform = Object.assign({}, d.captions.shortform, s.captions.shortform || {});
       s.captions.longform = Object.assign({}, d.captions.longform, s.captions.longform || {});
+      var ambientVolume = Math.round(Number(s.ambientMusicVolumePercent));
+      s.ambientMusicVolumePercent = Number.isFinite(ambientVolume) ? Math.max(5, Math.min(30, ambientVolume)) : d.ambientMusicVolumePercent;
       if (typeof s.baseLinkUrl !== 'string') s.baseLinkUrl = d.baseLinkUrl;
       if (typeof s.lastShortType !== 'string') s.lastShortType = '';
       return s;

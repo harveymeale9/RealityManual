@@ -1174,7 +1174,14 @@ async function runBuildFinalVideo(id) {
     }
     const finalId = id + FINAL_VIDEO_SUFFIX;
     const outPath = path.join(UPLOADS_DIR, 'videos', finalId);
-    await videoAnalysis.buildFinalVideo(videoPath, audioPath, outPath);
+    // Resolve this at build time rather than copying it onto every piece:
+    // Harvey's current Content Settings choice is the mix used whenever a
+    // piece is sent (or resent) to Final Check. Old settings rows predate the
+    // field, so videoAnalysis's normalizer supplies the deliberate 10% default.
+    const settingsRow = stmts.getOne.get('settings', 'settings');
+    const settings = settingsRow ? JSON.parse(settingsRow.data) : {};
+    const ambientVolumePercent = videoAnalysis.normalizeAmbientVolumePercent(settings.ambientMusicVolumePercent);
+    await videoAnalysis.buildFinalVideo(videoPath, audioPath, outPath, ambientVolumePercent);
 
     const stat = fs.statSync(outPath);
     const finalRecord = { id: finalId, fileName: 'final.mp4', sizeBytes: stat.size, mimeType: 'video/mp4', createdAt: new Date().toISOString() };

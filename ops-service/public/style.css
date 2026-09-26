@@ -1828,6 +1828,24 @@ body.role-reviewer #pmBackFab {
   font-family: inherit;
 }
 
+.ambient-volume-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 16px 0;
+  padding: 11px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.ambient-volume-row label { display: flex; flex-direction: column; gap: 2px; color: var(--ink-soft); font-size: .87rem; }
+.ambient-volume-row small { color: var(--ink-faint); font-size: .68rem; }
+.ambient-volume-row select { min-width: 82px; }
+@media (max-width: 520px) {
+  .ambient-volume-row { align-items: flex-start; }
+}
+
 .audio-list { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
 .audio-row { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border: 1px solid var(--border-soft); border-radius: var(--radius); background: var(--surface); flex-wrap: wrap; }
 .audio-name { font-size: 0.85rem; color: var(--ink-soft); min-width: 120px; }

@@ -4037,6 +4037,8 @@
       '<section class="settings-section">' +
         '<h3>Ambient audio library</h3>' +
         '<p class="settings-hint">Backing tracks offered in the audio dropdown when editing an uploaded video.</p>' +
+        '<div class="ambient-volume-row"><label for="ambientMusicVolumeSelect"><span>Background music volume</span><small>Used the next time a video is sent to Final Check</small></label>' +
+          '<select class="stage-select" id="ambientMusicVolumeSelect"></select></div>' +
         '<label class="btn-secondary file-btn">Upload audio<input type="file" id="audioUpload" accept="audio/*" multiple hidden /></label>' +
         '<div class="audio-upload-progress" id="audioUploadProgress"></div>' +
         '<div class="audio-list" id="audioList"></div>' +
@@ -4318,6 +4320,18 @@
       renderKeyGrid();
       renderYoutubeConnectCard();
       renderTiktokConnectCard();
+
+      var ambientMusicVolumeSelect = document.getElementById('ambientMusicVolumeSelect');
+      ambientMusicVolumeSelect.innerHTML = Array.from({ length: 26 }, function (_, index) {
+        var percent = index + 5;
+        return '<option value="' + percent + '">' + percent + '%</option>';
+      }).join('');
+      ambientMusicVolumeSelect.value = String(settings.ambientMusicVolumePercent || 10);
+      ambientMusicVolumeSelect.disabled = IS_REVIEWER;
+      ambientMusicVolumeSelect.addEventListener('change', function () {
+        settingsCache.ambientMusicVolumePercent = Math.max(5, Math.min(30, parseInt(ambientMusicVolumeSelect.value, 10) || 10));
+        saveSettingsDebounced();
+      });
 
       // One textarea per platform, ids following "caption-<group>-<key>"
       // (see SETTINGS_MARKUP) — driven off CAPTION_GROUPS so this list

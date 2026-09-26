@@ -9980,3 +9980,34 @@ concepts. Full suite: 42/42. Real Chromium at 1440×900 and 390×844 rendered al
 35 concepts/14 Rules with no horizontal overflow or runtime errors, ranked the
 Bidirectional Belief example first, then opened page 36 and highlighted 50 OCR
 text-layer words from the canonical passage.
+
+---
+
+# 221. Configurable Ambient-Music Mix Level (2026-09-26)
+
+The background-music gain used to be hard-coded in
+`src/videoAnalysis.js` at 20%, so changing it required a code change and every
+final build used the same fixed mix. Content Settings' **Ambient audio
+library** now includes a **Background music volume** selector with every whole
+percentage from 5% through 30%. It defaults to 10%, matching Harvey's expected
+normal working level, and saves as `settings.ambientMusicVolumePercent` in the
+existing shared settings record. Reviewer sessions can see the value but
+cannot change this global production setting.
+
+`runBuildFinalVideo()` reads the current value directly from the server-side
+settings record each time **Send to final check** is run (including a retry),
+normalizes it to an integer inside the 5–30 range, and passes it into the
+ffmpeg final-video builder. Existing settings rows need no migration: a missing
+or malformed value resolves to 10%. The no-music path remains a byte-preserving
+remux and ignores the mix value. Already-built final files do not change
+retroactively; resending a piece to Final Check rebuilds it using the current
+selection.
+
+Regression coverage proves the 10% fallback, 5%/30% bounds, exact 13% ffmpeg
+filter, and unchanged no-music command. Full suite: 43/43. Real Chromium at
+1440×900 and 390×844 showed all 26 choices, a 10% initial value, persisted a
+17% selection through the real settings API, and had no horizontal overflow.
+A real one-second ffmpeg render using a silent source plus sine-wave backing
+track measured -50.11 dB RMS at 5% and -34.56 dB RMS at 30%, the expected
+15.55 dB separation for a sixfold gain difference, confirming the selection
+changes the produced audio rather than merely changing UI state.
