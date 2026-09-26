@@ -9,8 +9,7 @@ const SCOPES = [
   'pages_manage_posts',
   'read_insights',
   'instagram_basic',
-  'instagram_content_publish',
-  'instagram_manage_insights'
+  'instagram_content_publish'
 ];
 
 function clean(value, max) { return String(value == null ? '' : value).trim().slice(0, max || 1000); }

@@ -10330,3 +10330,23 @@ Settings to remove stored tokens/identifiers, revoke through Meta directly, or
 email support for a verified deletion request. The privacy policy links to it.
 This satisfies the platform form without pretending that the private tool has
 a public customer-account system.
+
+---
+
+# 230. Meta Connection No Longer Blocked by an Unsupported Insights Scope (2026-09-26)
+
+The first live owner authorization exposed a difference between Meta's current
+Facebook Login for Business permission surface and older Instagram Graph API
+examples: `instagram_manage_insights` was rejected by the OAuth dialog as an
+invalid scope for this app. It is not part of the app's installed Instagram
+content-publishing bundle, and the similarly named
+`instagram_business_manage_insights` belongs to the separate Instagram Login
+flow rather than this Facebook Login flow.
+
+The initial connection now requests only the permissions the configured flow
+actually exposes: Page discovery, Page publishing/read/insights, Instagram
+basic identity, and Instagram content publishing. Instagram analytics is
+deliberately deferred instead of preventing Facebook and Instagram publishing
+from connecting at all. The regression test now explicitly rejects both
+incompatible Instagram insight scope names so they cannot silently return to
+the authorization URL.

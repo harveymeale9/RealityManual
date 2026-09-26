@@ -10,15 +10,17 @@ function response(payload) {
   return { ok: true, status: 200, json: async function () { return payload; } };
 }
 
-test('Meta authorization requests only direct publishing and insight permissions', function () {
+test('Meta authorization requests only permissions supported by Facebook Login', function () {
   const url = new URL(metaAuth.buildAuthUrl(config, 'csrf-token'));
   assert.equal(url.searchParams.get('client_id'), config.appId);
   assert.equal(url.searchParams.get('redirect_uri'), config.redirectUri);
   assert.equal(url.searchParams.get('state'), 'csrf-token');
   const scopes = url.searchParams.get('scope').split(',');
-  ['pages_manage_posts', 'instagram_content_publish', 'instagram_manage_insights', 'read_insights'].forEach(function (scope) {
+  ['pages_manage_posts', 'instagram_content_publish', 'read_insights'].forEach(function (scope) {
     assert.ok(scopes.includes(scope));
   });
+  assert.equal(scopes.includes('instagram_manage_insights'), false);
+  assert.equal(scopes.includes('instagram_business_manage_insights'), false);
 });
 
 test('Meta exchanges the owner grant and discovers the Page plus linked Instagram account', async function () {
