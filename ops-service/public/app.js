@@ -2288,6 +2288,7 @@
   // card making its own request.
   var youtubeStatusCache = null;
   var tiktokStatusCache = null;
+  var metaStatusCache = null;
 
   function renderStats() {
     var total = Object.keys(pieces).length;
@@ -2564,26 +2565,37 @@
       '</div>';
   }
 
-  // Platforms that actually have a real backend publish integration wired
-  // up right now — YouTube and TikTok. Harvey's framing (2026-09-20): the
+  // Platforms that have a real backend publish integration. Harvey's framing
+  // (2026-09-20): the
   // button here should read as one generic scheduling/publish action that
   // goes out to every platform a piece is tagged for, not "Publish to
   // <platform>" — it just happens that only these two platforms can
   // genuinely act on that so far. Extend this list (and the per-platform
   // helpers right below) as other platforms get real integrations.
-  var WIRED_PUBLISH_PLATFORMS = ['ytlong', 'tiktok'];
-  var PUBLISH_PLATFORM_LABELS = { ytlong: 'YouTube', tiktok: 'TikTok' };
+  var WIRED_PUBLISH_PLATFORMS = ['ytlong', 'ytshort', 'tiktok', 'instagram', 'facebook'];
+  var PUBLISH_PLATFORM_LABELS = { ytlong: 'YouTube', ytshort: 'YouTube Shorts', tiktok: 'TikTok', instagram: 'Instagram', facebook: 'Facebook' };
   // A youtube-reviewer session only ever gets YouTube — TikTok has nothing
   // to do with why this account exists, and server.js's /api/tiktok
   // blanket rejects it outright anyway (401), so there's no point ever
   // offering it here.
   function effectiveWiredPlatforms() { return IS_REVIEWER ? ['ytlong'] : WIRED_PUBLISH_PLATFORMS; }
 
-  function publishStatusFieldFor(platform) { return platform === 'ytlong' ? 'youtubePublishStatus' : 'tiktokPublishStatus'; }
-  function publishErrorFieldFor(platform) { return platform === 'ytlong' ? 'youtubePublishError' : 'tiktokPublishError'; }
-  function publishEndpointFor(platform) { return platform === 'ytlong' ? '/api/youtube/publish/' : '/api/buffer/publish/'; }
+  function publishStatusFieldFor(platform) {
+    if (platform === 'ytlong' || platform === 'ytshort') return 'youtubePublishStatus';
+    if (platform === 'tiktok') return 'tiktokPublishStatus';
+    if (platform === 'instagram') return 'instagramPublishStatus';
+    return 'facebookPublishStatus';
+  }
+  function publishErrorFieldFor(platform) {
+    if (platform === 'ytlong' || platform === 'ytshort') return 'youtubePublishError';
+    if (platform === 'tiktok') return 'tiktokPublishError';
+    if (platform === 'instagram') return 'instagramPublishError';
+    return 'facebookPublishError';
+  }
   function publishPlatformConnected(platform) {
-    var cache = platform === 'ytlong' ? youtubeStatusCache : tiktokStatusCache;
+    var cache = (platform === 'ytlong' || platform === 'ytshort')
+      ? youtubeStatusCache
+      : (platform === 'tiktok' ? tiktokStatusCache : metaStatusCache);
     return !!(cache && cache.connected);
   }
 
@@ -2641,7 +2653,7 @@
     // The privacy select only ever affects YouTube — TikTok is forced to
     // SELF_ONLY (private) regardless while unaudited/sandboxed, so there's
     // no real choice to offer for it yet.
-    var privacySelectHtml = wired.indexOf('ytlong') !== -1
+    var privacySelectHtml = (wired.indexOf('ytlong') !== -1 || wired.indexOf('ytshort') !== -1)
       ? '' +
         '<select class="fc-yt-privacy" data-id="' + id + '" title="YouTube visibility">' +
           '<option value="private" selected>Private</option>' +
@@ -2827,17 +2839,15 @@
       v.addEventListener('pause', syncPlayState);
       syncPlayState();
     });
-    // Real YouTube publish — kicks off the background upload
-    // (server.js's runYoutubePublish) and switches this one card into a
+    // One coordinated backend job publishes every wired/tagged platform and
+    // switches this one card into a
     // disabled "Publishing…" state without a full render(), matching the
     // same "don't reset the video's playback" reasoning as the caption-tab
     // toggle. The poller below (maybeStartYoutubePublishPoll) is what
     // notices the eventual done/error and does the full render() once the
     // piece's stage/status actually changes.
-    // Fires a real, independent publish request per wired-and-tagged
-    // platform (currently ytlong and/or tiktok) — see fcScheduleVideoHtml's
-    // comment above about the known concurrency limitation if a piece is
-    // ever tagged for both at once.
+    // The server runs destinations sequentially and merges results, avoiding
+    // duplicate retry posts and cross-platform record-write races.
     board.querySelectorAll('.fc-yt-publish-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var id = btn.dataset.id;
@@ -2875,37 +2885,30 @@
         if (select) select.disabled = true;
         if (musicCheckbox) musicCheckbox.disabled = true;
         if (brandedCheckbox) brandedCheckbox.disabled = true;
-        platforms.forEach(function (platform) { p[publishStatusFieldFor(platform)] = 'pending'; });
+        var unpublishedPlatforms = platforms.filter(function (platform) { return p[publishStatusFieldFor(platform)] !== 'done'; });
+        unpublishedPlatforms.forEach(function (platform) { p[publishStatusFieldFor(platform)] = 'pending'; });
         pieces[id] = p;
 
-        platforms.forEach(function (platform) {
+        var destinations = unpublishedPlatforms.map(function (platform) {
           var captionEntry = captions.filter(function (c) { return c.key === platform; })[0];
-          var description = (captionEntry && !captionEntry.empty) ? captionEntry.text : '';
-          // Buffer/TikTok has one on-post text field. Keep it explicitly
-          // named `caption` through our API so the independently editable
-          // TikTok caption from Content Settings can never be confused with
-          // (or accidentally replaced by) the piece/YouTube title.
-          var body = platform === 'ytlong'
-            ? { title: title, description: description, privacyStatus: privacyStatus }
-            : platform === 'tiktok'
-              ? { caption: description || title, brandedContent: brandedContent }
-              : { title: description || title, brandedContent: brandedContent };
-          fetch(publishEndpointFor(platform) + encodeURIComponent(id), {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-          }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (data) { return { ok: r.ok, data: data }; }); })
-            .then(function (result) {
-              if (!result.ok) {
+          var caption = (captionEntry && !captionEntry.empty) ? captionEntry.text : '';
+          return { platform: platform, title: title, caption: caption, privacyStatus: privacyStatus, brandedContent: brandedContent };
+        });
+        fetch('/api/publish/' + encodeURIComponent(id), {
+          method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ destinations: destinations })
+        }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (data) { return { ok: r.ok, data: data }; }); })
+          .then(function (result) {
+            if (!result.ok) {
+              unpublishedPlatforms.forEach(function (platform) {
                 p[publishStatusFieldFor(platform)] = 'error';
                 p[publishErrorFieldFor(platform)] = (result.data && result.data.error) || 'Could not start publish.';
-                render();
-                return;
-              }
-              maybeStartYoutubePublishPoll();
-            });
-        });
+              });
+              render();
+              return;
+            }
+            maybeStartYoutubePublishPoll();
+          });
       });
     });
 
@@ -3257,6 +3260,8 @@
       .then(function (s) { youtubeStatusCache = s; render(); }).catch(function () {});
     fetch('/api/buffer/status', { credentials: 'include' }).then(function (r) { return r.ok ? r.json() : null; })
       .then(function (s) { tiktokStatusCache = s; render(); }).catch(function () {});
+    fetch('/api/meta/status', { credentials: 'include' }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (s) { metaStatusCache = s; render(); }).catch(function () {});
     render();
   }
 

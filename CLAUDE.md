@@ -10382,3 +10382,44 @@ discovery now reflects that distinction in code: it merges directly assigned
 Pages returned by both edges, and still never returns Page access tokens to the
 browser. Until an older grant is reauthorized with `business_management`, a
 portfolio lookup failure gracefully leaves the direct Page list usable.
+
+---
+
+# 231. Coordinated Facebook, Instagram, YouTube, and TikTok Publishing (2026-09-26)
+
+Final Check's single **Schedule Video** action now covers every platform in
+the piece's selected platform list: long-form YouTube, YouTube Shorts, TikTok
+through Buffer, Instagram Reels, and Facebook Page video. Short-form defaults
+therefore publish to all four intended short destinations; long-form defaults
+publish to YouTube and Facebook. Each destination receives its own rendered
+Content Settings caption, preserving the established link policy (Facebook
+and long-form YouTube can carry the tracked link; Shorts, Instagram and TikTok
+remain link-free). The chosen title and YouTube visibility still come from
+Final Check.
+
+The browser now starts one protected `/api/publish/:id` batch rather than
+launching one competing request per platform. The server runs destinations
+sequentially, stores independent status/error/id/link fields, keeps the card in
+Final Check while work is running or any destination has failed, and retries
+only failed destinations—already-successful platforms are never posted twice.
+When every immediate destination succeeds the card becomes Posted / Live; a
+batch containing Buffer TikTok remains Scheduled until Buffer's existing
+lifecycle reconciliation observes the queued TikTok post going live.
+
+Facebook uploads the reviewed `<piece>-final` MP4 directly to the selected
+Reality Manual Page's Video API with the Facebook caption. Instagram creates a
+Reels container for the linked `@therealitymanual` professional account,
+waits for Meta to finish ingesting it, publishes it, and stores the resulting
+media id/permalink. Meta must fetch Reel media from a URL, so
+`/api/meta/media/:id` exposes only an Instagram-tagged finished video behind a
+one-hour HMAC URL derived from the server-only App Secret; it provides no
+directory listing and reveals no credential. `META_MEDIA_BASE_URL` documents
+the public origin override.
+
+Regression coverage uses mocked Meta responses to verify Facebook multipart
+caption/video handoff, the complete Instagram create/process/publish/permalink
+sequence, and rejection of tampered signed media URLs. The full suite passes
+65/65. Per Harvey's explicit direction, verification did not create a live
+Facebook or Instagram test post; the first real video will provide the live
+platform acceptance check, and any platform-specific rejection remains visible
+on its Final Check card without blocking or duplicating the others.

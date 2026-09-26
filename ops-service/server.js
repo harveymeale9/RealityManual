@@ -35,6 +35,7 @@ const backgroundMonitorService = require('./src/backgroundMonitorService');
 const bufferService = require('./src/bufferService');
 const bufferPublicationSyncService = require('./src/bufferPublicationSync');
 const metaAuth = require('./src/metaAuth');
+const metaPublisherService = require('./src/metaPublisher');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
@@ -78,6 +79,9 @@ const buffer = bufferService.setup({
   apiKey: process.env.BUFFER_API_KEY,
   tiktokChannelId: process.env.BUFFER_TIKTOK_CHANNEL_ID,
   mediaBaseUrl: process.env.BUFFER_MEDIA_BASE_URL || 'https://ops.realitymanual.com'
+});
+const metaPublisher = metaPublisherService.setup({
+  mediaBaseUrl: process.env.META_MEDIA_BASE_URL || 'https://ops.realitymanual.com'
 });
 
 function isValidStore(name) { return STORE_NAMES.indexOf(name) !== -1; }
@@ -1245,6 +1249,21 @@ app.get('/api/buffer/media/:id', function (req, res) {
   res.type('video/mp4');
   res.sendFile(filePath);
 });
+
+// Instagram's container API fetches the finished Reel from a URL. This is
+// separate from the Buffer URL/signature so neither external service can
+// reuse the other's credential or fetch an unrelated upload.
+app.get('/api/meta/media/:id', function (req, res) {
+  const id = req.params.id;
+  const auth = stmts.getMetaAuth.get();
+  if (!isValidId(id) || !auth || !metaPublisher.verifyMediaSignature(id, req.query.expires, req.query.sig, auth.app_secret)) return res.status(403).end();
+  const piece = getPieceRecord(id);
+  if (!piece || (piece.platforms || []).indexOf('instagram') === -1) return res.status(404).end();
+  const filePath = path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX);
+  if (!fs.existsSync(filePath)) return res.status(404).end();
+  res.type('video/mp4');
+  res.sendFile(filePath);
+});
 function savePieceRecord(piece) {
   const previous = getPieceRecord(piece.id);
   const stamp = new Date().toISOString();
@@ -1700,6 +1719,172 @@ app.post('/api/buffer/publish/:id', requireAuth, function (req, res) {
       : (typeof body.title === 'string' ? body.title : '')
   })
     .catch(function (error) { console.error('unhandled Buffer publish error for ' + id + ':', error.message); });
+});
+
+// --- Coordinated multi-platform publication ---
+// Final Check sends one request for every selected destination. Running the
+// uploads inside one job prevents the old independent-job race where two
+// platforms could overwrite each other's status or move the card before the
+// remaining uploads had finished.
+const PUBLISH_PLATFORMS = ['ytlong', 'ytshort', 'tiktok', 'instagram', 'facebook'];
+function publishStatusField(platform) {
+  if (platform === 'ytlong' || platform === 'ytshort') return 'youtubePublishStatus';
+  if (platform === 'tiktok') return 'tiktokPublishStatus';
+  if (platform === 'instagram') return 'instagramPublishStatus';
+  return 'facebookPublishStatus';
+}
+function publishErrorField(platform) {
+  if (platform === 'ytlong' || platform === 'ytshort') return 'youtubePublishError';
+  if (platform === 'tiktok') return 'tiktokPublishError';
+  if (platform === 'instagram') return 'instagramPublishError';
+  return 'facebookPublishError';
+}
+function updatePieceFields(id, fields) {
+  const latest = getPieceRecord(id);
+  if (!latest) return null;
+  Object.assign(latest, fields, { updatedAt: new Date().toISOString() });
+  savePieceRecord(latest);
+  return latest;
+}
+function uniquePublishDestinations(destinations) {
+  const seen = new Set();
+  return destinations.filter(function (destination) {
+    const canonical = destination.platform === 'ytshort' ? 'youtube' : (destination.platform === 'ytlong' ? 'youtube' : destination.platform);
+    if (seen.has(canonical)) return false;
+    seen.add(canonical);
+    return true;
+  });
+}
+
+async function runPlatformPublishBatch(id, destinations) {
+  const finalPath = path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX);
+  if (!fs.existsSync(finalPath)) {
+    destinations.forEach(function (destination) {
+      const fields = {}; fields[publishStatusField(destination.platform)] = 'error'; fields[publishErrorField(destination.platform)] = 'finished video not found on disk';
+      updatePieceFields(id, fields);
+    });
+    return;
+  }
+  const videoRow = stmts.getOne.get('videos', id + FINAL_VIDEO_SUFFIX);
+  const videoMeta = videoRow ? JSON.parse(videoRow.data) : {};
+  const mimeType = videoMeta.mimeType || 'video/mp4';
+
+  for (const destination of destinations) {
+    const platform = destination.platform;
+    const running = {}; running[publishStatusField(platform)] = 'running'; running[publishErrorField(platform)] = '';
+    updatePieceFields(id, running);
+    try {
+      if (platform === 'ytlong' || platform === 'ytshort') {
+        const accessToken = await getValidYoutubeAccessToken();
+        const result = await youtubeAuth.uploadVideo(accessToken, finalPath, mimeType, {
+          title: destination.title || 'Untitled', description: destination.caption || '',
+          privacyStatus: destination.privacyStatus || 'private'
+        });
+        updatePieceFields(id, {
+          youtubePublishStatus: 'done', youtubePublishError: '', youtubeVideoId: result.videoId,
+          youtubeUrl: 'https://www.youtube.com/watch?v=' + result.videoId,
+          youtubePublishType: platform
+        });
+      } else if (platform === 'tiktok') {
+        const current = getPieceRecord(id);
+        const result = await buffer.createTiktokVideoPost({
+          text: destination.caption || destination.title || 'Untitled',
+          videoUrl: buffer.mediaUrl(id),
+          thumbnailOffset: Math.round((Number(current && current.thumbnailTimeSeconds) || 0) * 1000)
+        });
+        updatePieceFields(id, {
+          tiktokPublishStatus: 'done', tiktokPublishError: '', tiktokPublishProvider: 'buffer',
+          tiktokPublishId: result.post.id, tiktokBufferStatus: result.post.status,
+          scheduledAt: result.post.dueAt || null
+        });
+      } else {
+        const auth = stmts.getMetaAuth.get();
+        if (!auth || !auth.page_access_token || !auth.page_id) throw new Error('Facebook + Instagram is not connected to a publishing Page.');
+        if (platform === 'facebook') {
+          const result = await metaPublisher.publishFacebookVideo({
+            pageId: auth.page_id, pageToken: auth.page_access_token, videoPath: finalPath, mimeType: mimeType,
+            title: destination.title || 'Untitled', description: destination.caption || ''
+          });
+          updatePieceFields(id, {
+            facebookPublishStatus: 'done', facebookPublishError: '', facebookVideoId: result.id, facebookUrl: result.url
+          });
+        } else {
+          if (!auth.instagram_account_id) throw new Error('The selected Facebook Page has no linked Instagram professional account.');
+          const result = await metaPublisher.publishInstagramReel({
+            instagramAccountId: auth.instagram_account_id, pageToken: auth.page_access_token,
+            videoUrl: metaPublisher.mediaUrl(id, auth.app_secret), caption: destination.caption || ''
+          });
+          updatePieceFields(id, {
+            instagramPublishStatus: 'done', instagramPublishError: '', instagramMediaId: result.id,
+            instagramContainerId: result.containerId, instagramUrl: result.url
+          });
+        }
+      }
+    } catch (error) {
+      console.error(platform + ' publish failed for ' + id + ':', error.message);
+      const failed = {}; failed[publishStatusField(platform)] = 'error'; failed[publishErrorField(platform)] = String(error.message || error).slice(0, 500);
+      updatePieceFields(id, failed);
+    }
+  }
+
+  const latest = getPieceRecord(id);
+  if (!latest) return;
+  const allPlatforms = Array.isArray(latest.publishBatchPlatforms) ? latest.publishBatchPlatforms : destinations.map(function (d) { return d.platform; });
+  const hasError = allPlatforms.some(function (platform) { return latest[publishStatusField(platform)] === 'error'; });
+  const allDone = allPlatforms.every(function (platform) { return latest[publishStatusField(platform)] === 'done'; });
+  if (hasError) latest.stage = 'final_check';
+  else if (allDone) {
+    latest.stage = allPlatforms.indexOf('tiktok') !== -1 ? 'scheduled' : 'live';
+    latest.postedAt = new Date().toISOString();
+  }
+  latest.updatedAt = new Date().toISOString();
+  savePieceRecord(latest);
+}
+
+app.post('/api/publish/:id', requireAuthOrReviewer, async function (req, res) {
+  const id = req.params.id;
+  if (!isValidId(id)) return res.status(400).json({ error: 'invalid_params' });
+  const piece = getPieceRecord(id);
+  if (!piece) return res.status(404).json({ error: 'piece_not_found' });
+  if (req.sessionRole === 'youtube-reviewer' && piece.createdBy !== 'youtube-reviewer') return res.status(403).json({ error: 'forbidden' });
+  const selected = Array.isArray(piece.platforms) ? piece.platforms : [];
+  const requested = Array.isArray(req.body && req.body.destinations) ? req.body.destinations.slice(0, 5) : [];
+  let destinations = requested.map(function (destination) {
+    return {
+      platform: String(destination && destination.platform || ''),
+      title: String(destination && destination.title || '').slice(0, 255),
+      caption: String(destination && destination.caption || '').slice(0, 60000),
+      privacyStatus: ['private', 'unlisted', 'public'].includes(destination && destination.privacyStatus) ? destination.privacyStatus : 'private'
+    };
+  }).filter(function (destination) {
+    return PUBLISH_PLATFORMS.includes(destination.platform) && selected.includes(destination.platform) &&
+      (req.sessionRole !== 'youtube-reviewer' || destination.platform === 'ytlong' || destination.platform === 'ytshort');
+  });
+  destinations = uniquePublishDestinations(destinations).filter(function (destination) {
+    return piece[publishStatusField(destination.platform)] !== 'done';
+  });
+  if (!destinations.length) return res.status(400).json({ error: 'no_unpublished_destinations' });
+
+  const needsYoutube = destinations.some(function (d) { return d.platform === 'ytlong' || d.platform === 'ytshort'; });
+  const needsTiktok = destinations.some(function (d) { return d.platform === 'tiktok'; });
+  const needsMeta = destinations.some(function (d) { return d.platform === 'facebook' || d.platform === 'instagram'; });
+  if (needsYoutube) { const auth = stmts.getYoutubeAuth.get(); if (!auth || !auth.refresh_token) return res.status(400).json({ error: 'youtube_not_connected' }); }
+  if (needsTiktok && !buffer.configured) return res.status(400).json({ error: 'buffer_not_configured' });
+  if (needsMeta) {
+    const auth = stmts.getMetaAuth.get();
+    if (!auth || !auth.page_access_token) return res.status(400).json({ error: 'meta_not_connected' });
+    if (destinations.some(function (d) { return d.platform === 'instagram'; }) && !auth.instagram_account_id) return res.status(400).json({ error: 'instagram_not_connected' });
+  }
+
+  piece.publishBatchPlatforms = uniquePublishDestinations(selected.filter(function (platform) { return PUBLISH_PLATFORMS.includes(platform); }).map(function (platform) { return { platform: platform }; })).map(function (d) { return d.platform; });
+  destinations.forEach(function (destination) {
+    piece[publishStatusField(destination.platform)] = 'pending';
+    piece[publishErrorField(destination.platform)] = '';
+  });
+  piece.updatedAt = new Date().toISOString();
+  savePieceRecord(piece);
+  res.json({ ok: true, status: 'running', platforms: destinations.map(function (d) { return d.platform; }) });
+  runPlatformPublishBatch(id, destinations).catch(function (error) { console.error('unhandled multi-platform publish error for ' + id + ':', error.message); });
 });
 
 // --- Voice app: talk to a real headless Claude Code agent by voice or text ---
@@ -2435,6 +2620,16 @@ function recoverInflightVideoJobs() {
       piece.finalBuildError = 'Service restarted while this was in progress — try "Send to final check" again.';
       changed = true;
     }
+    ['youtube', 'tiktok', 'instagram', 'facebook'].forEach(function (platform) {
+      const statusField = platform + 'PublishStatus';
+      const errorField = platform + 'PublishError';
+      if (piece[statusField] === 'pending' || piece[statusField] === 'running') {
+        piece[statusField] = 'error';
+        piece[errorField] = 'Service restarted during publishing. Check the platform before retrying because completion could not be confirmed.';
+        piece.stage = 'final_check';
+        changed = true;
+      }
+    });
     if (changed) {
       piece.updatedAt = now;
       savePieceRecord(piece);
