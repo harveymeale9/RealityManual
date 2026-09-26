@@ -4034,9 +4034,17 @@
       '</section>' +
       '<section class="settings-section">' +
         '<h3>Ambient audio library</h3>' +
-        '<p class="settings-hint">Backing tracks offered in the audio dropdown when editing an uploaded video.</p>' +
-        '<div class="ambient-volume-row"><label for="ambientMusicVolumeSelect"><span>Background music volume</span><small>Used the next time a video is sent to Final Check</small></label>' +
-          '<select class="stage-select" id="ambientMusicVolumeSelect"></select></div>' +
+        '<p class="settings-hint">Backing tracks offered in the audio dropdown when editing an uploaded video. Loudness matching measures dialogue, music and the finished mix each time a video is sent to Final Check.</p>' +
+        '<div class="ambient-mix-controls">' +
+          '<div class="ambient-volume-row"><label for="audioMixModeSelect"><span>Mixing method</span><small>Loudness matched is recommended; Legacy preserves the old percentage control for comparison</small></label><select class="stage-select" id="audioMixModeSelect"><option value="loudness">Loudness matched</option><option value="legacy_percent">Legacy percentage</option></select></div>' +
+          '<div id="loudnessMixSettings">' +
+            '<div class="ambient-volume-row"><label for="dialogueLufsSelect"><span>Finished dialogue loudness</span><small>Integrated programme target; −16 LUFS is the spoken-video default</small></label><select class="stage-select" id="dialogueLufsSelect"></select></div>' +
+            '<div class="ambient-volume-row"><label for="musicBelowDialogueSelect"><span>Music level below dialogue</span><small>Measured independently; larger negative values make music quieter</small></label><select class="stage-select" id="musicBelowDialogueSelect"></select></div>' +
+            '<div class="ambient-volume-row"><label for="audioTruePeakSelect"><span>True-peak ceiling</span><small>Final safety limit after the completed mix is measured</small></label><select class="stage-select" id="audioTruePeakSelect"></select></div>' +
+            '<div class="ambient-volume-row"><label for="musicDuckingToggle"><span>Gentle speech ducking</span><small>Slightly lowers music while dialogue is active</small></label><input type="checkbox" id="musicDuckingToggle"></div>' +
+          '</div>' +
+          '<div id="legacyMixSettings"><div class="ambient-volume-row"><label for="ambientMusicVolumeSelect"><span>Legacy background percentage</span><small>Old fixed-gain method for direct A/B comparison</small></label><select class="stage-select" id="ambientMusicVolumeSelect"></select></div></div>' +
+        '</div>' +
         '<label class="btn-secondary file-btn">Upload audio<input type="file" id="audioUpload" accept="audio/*" multiple hidden /></label>' +
         '<div class="audio-upload-progress" id="audioUploadProgress"></div>' +
         '<div class="audio-list" id="audioList"></div>' +
@@ -4320,13 +4328,58 @@
       renderYoutubeConnectCard();
       renderTiktokConnectCard();
 
+      var audioMixModeSelect = document.getElementById('audioMixModeSelect');
+      var dialogueLufsSelect = document.getElementById('dialogueLufsSelect');
+      var musicBelowDialogueSelect = document.getElementById('musicBelowDialogueSelect');
+      var audioTruePeakSelect = document.getElementById('audioTruePeakSelect');
+      var musicDuckingToggle = document.getElementById('musicDuckingToggle');
       var ambientMusicVolumeSelect = document.getElementById('ambientMusicVolumeSelect');
+      dialogueLufsSelect.innerHTML = [-18, -17, -16, -15, -14].map(function (value) {
+        return '<option value="' + value + '">' + value + ' LUFS</option>';
+      }).join('');
+      musicBelowDialogueSelect.innerHTML = Array.from({ length: 11 }, function (_, index) {
+        var value = index + 15;
+        return '<option value="' + value + '">−' + value + ' dB</option>';
+      }).join('');
+      audioTruePeakSelect.innerHTML = [-3, -2.5, -2, -1.5, -1].map(function (value) {
+        return '<option value="' + value + '">' + value + ' dBTP</option>';
+      }).join('');
       ambientMusicVolumeSelect.innerHTML = Array.from({ length: 26 }, function (_, index) {
         var percent = index + 5;
         return '<option value="' + percent + '">' + percent + '%</option>';
       }).join('');
+      audioMixModeSelect.value = settings.audioMixMode || 'loudness';
+      dialogueLufsSelect.value = String(settings.dialogueLufsTarget == null ? -16 : settings.dialogueLufsTarget);
+      musicBelowDialogueSelect.value = String(settings.musicBelowDialogueDb || 20);
+      audioTruePeakSelect.value = String(settings.audioTruePeakDbtp == null ? -1.5 : settings.audioTruePeakDbtp);
+      musicDuckingToggle.checked = settings.musicDuckingEnabled === true;
       ambientMusicVolumeSelect.value = String(settings.ambientMusicVolumePercent || 10);
-      ambientMusicVolumeSelect.disabled = IS_REVIEWER;
+      [audioMixModeSelect, dialogueLufsSelect, musicBelowDialogueSelect, audioTruePeakSelect, musicDuckingToggle, ambientMusicVolumeSelect].forEach(function (control) { control.disabled = IS_REVIEWER; });
+      function showMixMethod() {
+        document.getElementById('loudnessMixSettings').hidden = audioMixModeSelect.value !== 'loudness';
+        document.getElementById('legacyMixSettings').hidden = audioMixModeSelect.value !== 'legacy_percent';
+      }
+      showMixMethod();
+      audioMixModeSelect.addEventListener('change', function () {
+        settingsCache.audioMixMode = audioMixModeSelect.value === 'legacy_percent' ? 'legacy_percent' : 'loudness';
+        showMixMethod(); saveSettingsDebounced();
+      });
+      dialogueLufsSelect.addEventListener('change', function () {
+        settingsCache.dialogueLufsTarget = Math.max(-18, Math.min(-14, parseInt(dialogueLufsSelect.value, 10) || -16));
+        saveSettingsDebounced();
+      });
+      musicBelowDialogueSelect.addEventListener('change', function () {
+        settingsCache.musicBelowDialogueDb = Math.max(15, Math.min(25, parseInt(musicBelowDialogueSelect.value, 10) || 20));
+        saveSettingsDebounced();
+      });
+      audioTruePeakSelect.addEventListener('change', function () {
+        settingsCache.audioTruePeakDbtp = Math.max(-3, Math.min(-1, parseFloat(audioTruePeakSelect.value) || -1.5));
+        saveSettingsDebounced();
+      });
+      musicDuckingToggle.addEventListener('change', function () {
+        settingsCache.musicDuckingEnabled = musicDuckingToggle.checked;
+        saveSettingsDebounced();
+      });
       ambientMusicVolumeSelect.addEventListener('change', function () {
         settingsCache.ambientMusicVolumePercent = Math.max(5, Math.min(30, parseInt(ambientMusicVolumeSelect.value, 10) || 10));
         saveSettingsDebounced();

@@ -10127,3 +10127,45 @@ storm. Regression coverage proves the 41-person pool, ten-card invariant,
 approval/notes, reject and transfer replenishment, Ideation record shape,
 verified-reference allowlisting, caption-only outlier eligibility and bounded
 error behavior. Full suite: 52/52.
+
+---
+
+# 225. Measured LUFS Dialogue/Music Mixing With Legacy A/B Mode (2026-09-26)
+
+Final Check audio no longer has to rely on a raw music percentage, which made
+tracks with different masters sound unpredictably loud or quiet at the same
+setting. Content Settings now defaults to **Loudness matched** and exposes four
+controls: finished dialogue loudness from -18 through -14 LUFS (default -16),
+music level from 15 through 25 dB below dialogue in 1 dB steps (default -20
+dB), true-peak ceiling from -3 through -1 dBTP in 0.5 dB steps (default -1.5),
+and optional gentle speech-triggered music ducking. **Legacy percentage** is
+still selectable and reveals the old 5–30% control for direct listening
+comparisons; its ffmpeg behavior remains unchanged.
+
+The new renderer is deliberately measured rather than a renamed volume knob.
+For every Final Check build it runs ffmpeg loudness analysis independently on
+the uploaded video's dialogue and the selected music. It applies calculated
+gains so dialogue reaches its configured LUFS target and music reaches the
+configured dB relationship, optionally runs a mild sidechain compressor during
+speech, and writes a temporary lossless FLAC mix. It then measures that
+completed mix and uses those measured values in a true two-pass `loudnorm`
+finalization, followed by a no-makeup limiter at the configured ceiling. Short
+music still loops to the duration of the original audio. With no music chosen,
+the dialogue is still normalized and peak-protected in Loudness mode. Temporary
+audio is removed in success and failure paths.
+
+Each built piece records the mix mode and effective settings in
+`finalAudioMix`, making it possible to tell later which version Harvey heard.
+Changing a global setting affects the next send/resend to Final Check; it does
+not silently rewrite an already-reviewed file. Old settings records migrate in
+the client to the new measured defaults, while explicit Legacy mode is
+normalized server-side and retains the old percentage fallback.
+
+Regression coverage now includes bounds/defaults for every setting, independent
+dialogue and music gain calculation, loudness JSON parsing, ducking graph
+selection, measured two-pass finalization and the true-peak limiter, while
+retaining the prior percentage tests. Full suite: 54/54. A real five-second
+ffmpeg integration render used a -43.96 LUFS dialogue source and -24.85 LUFS
+music source; the intermediate mix measured -15.96 LUFS and the completed AAC
+output measured -16.00 LUFS, confirming the passes affect produced media rather
+than only the settings UI.

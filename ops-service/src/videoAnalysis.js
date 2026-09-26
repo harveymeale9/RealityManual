@@ -70,7 +70,29 @@ function normalizeAmbientVolumePercent(value) {
   return Number.isFinite(parsed) ? Math.max(5, Math.min(30, parsed)) : 10;
 }
 
-function finalVideoArgs(videoPath, audioPath, outPath, ambientVolumePercent) {
+function clampNumber(value, fallback, min, max, step) {
+  let parsed = Number(value);
+  if (!Number.isFinite(parsed)) parsed = fallback;
+  parsed = Math.max(min, Math.min(max, parsed));
+  return step ? Math.round(parsed / step) * step : parsed;
+}
+
+function normalizeAudioMixSettings(input) {
+  if (typeof input === 'number' || typeof input === 'string') {
+    return { mode: 'legacy_percent', legacyPercent: normalizeAmbientVolumePercent(input) };
+  }
+  input = input || {};
+  return {
+    mode: input.audioMixMode === 'legacy_percent' ? 'legacy_percent' : 'loudness',
+    dialogueLufs: clampNumber(input.dialogueLufsTarget, -16, -18, -14, 1),
+    musicBelowDialogueDb: clampNumber(input.musicBelowDialogueDb, 20, 15, 25, 1),
+    truePeakDbtp: clampNumber(input.audioTruePeakDbtp, -1.5, -3, -1, 0.5),
+    duckingEnabled: input.musicDuckingEnabled === true,
+    legacyPercent: normalizeAmbientVolumePercent(input.ambientMusicVolumePercent)
+  };
+}
+
+function legacyFinalVideoArgs(videoPath, audioPath, outPath, ambientVolumePercent) {
   if (!audioPath) return ['-y', '-i', videoPath, '-c', 'copy', '-movflags', '+faststart', '-f', 'mp4', outPath];
   const volume = (normalizeAmbientVolumePercent(ambientVolumePercent) / 100).toFixed(2);
   return ['-y', '-i', videoPath, '-stream_loop', '-1', '-i', audioPath,
@@ -79,27 +101,124 @@ function finalVideoArgs(videoPath, audioPath, outPath, ambientVolumePercent) {
     '-movflags', '+faststart', '-f', 'mp4', outPath];
 }
 
-// The actual "final" video Harvey reviews in Final Check and (eventually)
-// schedules — audio spliced beneath the original track at the configurable
-// Content Settings level (5–30%, default 10%). `-stream_loop -1` on the
-// audio input loops it indefinitely at
-// the demuxer level (per Harvey's own uploader spec: "all music is simply
-// to loop/repeat until the video ends") — amix's `duration=first` still
-// cuts the whole output off once the video's own original audio track
-// ends, so a short ambient track loops for the full video length instead
-// of playing once and going silent partway through. audioPath is
-// optional — when Harvey picked "No ambient music" (or hasn't picked
-// anything yet), this just remuxes the original video/audio untouched
-// rather than skipping the step and leaving two different code paths for
-// "what Final Check actually shows" to keep in sync.
-function buildFinalVideo(videoPath, audioPath, outPath, ambientVolumePercent) {
+// Kept as the public compatibility helper used by earlier tests/callers. The
+// measured pipeline is asynchronous because it needs three real analysis/
+// render passes; a scalar fourth argument still means the old percentage mix.
+function finalVideoArgs(videoPath, audioPath, outPath, ambientVolumePercent) {
+  return legacyFinalVideoArgs(videoPath, audioPath, outPath, ambientVolumePercent);
+}
+
+function loudnessMeasureArgs(inputPath, settings) {
+  settings = normalizeAudioMixSettings(settings);
+  return ['-hide_banner', '-nostats', '-i', inputPath, '-vn', '-af',
+    'loudnorm=I=' + settings.dialogueLufs + ':TP=' + settings.truePeakDbtp + ':LRA=11:print_format=json',
+    '-f', 'null', '-'];
+}
+
+function parseLoudnessMeasurement(stderr) {
+  const matches = String(stderr || '').match(/\{\s*"input_i"[\s\S]*?\}/g);
+  if (!matches || !matches.length) throw new Error('ffmpeg returned no loudness measurement');
+  const raw = JSON.parse(matches[matches.length - 1]);
+  function number(key, fallback) {
+    const value = Number(raw[key]);
+    return Number.isFinite(value) ? value : fallback;
+  }
+  return {
+    inputI: number('input_i', null), inputTp: number('input_tp', null), inputLra: number('input_lra', 0),
+    inputThresh: number('input_thresh', -70), targetOffset: number('target_offset', 0)
+  };
+}
+
+function dbGain(target, measured) {
+  return measured && Number.isFinite(measured.inputI)
+    ? clampNumber(target - measured.inputI, 0, -30, 30, 0.01) : 0;
+}
+
+function measuredMixAudioArgs(videoPath, audioPath, tempAudioPath, settings, dialogueMeasurement, musicMeasurement) {
+  settings = normalizeAudioMixSettings(settings);
+  const dialogueGain = dbGain(settings.dialogueLufs, dialogueMeasurement).toFixed(2);
+  const args = ['-y', '-i', videoPath];
+  if (!audioPath) {
+    args.push('-filter_complex', '[0:a]volume=' + dialogueGain + 'dB[mix]', '-map', '[mix]', '-c:a', 'flac', tempAudioPath);
+    return args;
+  }
+  args.push('-stream_loop', '-1', '-i', audioPath);
+  const musicTarget = settings.dialogueLufs - settings.musicBelowDialogueDb;
+  const musicGain = dbGain(musicTarget, musicMeasurement).toFixed(2);
+  let filter;
+  if (settings.duckingEnabled) {
+    // A mild sidechain pass lowers music only while dialogue is active. The
+    // final relative baseline remains controlled by musicBelowDialogueDb.
+    filter = '[0:a]volume=' + dialogueGain + 'dB,asplit=2[dialogue][key];' +
+      '[1:a]volume=' + musicGain + 'dB[bg];[bg][key]sidechaincompress=threshold=0.035:ratio=3:attack=20:release=300[ducked];' +
+      '[dialogue][ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[mix]';
+  } else {
+    filter = '[0:a]volume=' + dialogueGain + 'dB[dialogue];[1:a]volume=' + musicGain + 'dB[bg];' +
+      '[dialogue][bg]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[mix]';
+  }
+  args.push('-filter_complex', filter, '-map', '[mix]', '-c:a', 'flac', tempAudioPath);
+  return args;
+}
+
+function finalLoudnormFilter(settings, measurement) {
+  settings = normalizeAudioMixSettings(settings);
+  const limit = Math.pow(10, settings.truePeakDbtp / 20).toFixed(6);
+  if (!measurement || !Number.isFinite(measurement.inputI) || !Number.isFinite(measurement.inputTp)) {
+    return 'alimiter=limit=' + limit + ':level=false';
+  }
+  return 'loudnorm=I=' + settings.dialogueLufs + ':TP=' + settings.truePeakDbtp + ':LRA=11' +
+    ':measured_I=' + measurement.inputI + ':measured_LRA=' + measurement.inputLra +
+    ':measured_TP=' + measurement.inputTp + ':measured_thresh=' + measurement.inputThresh +
+    ':offset=' + measurement.targetOffset + ':linear=true:print_format=summary,' +
+    'alimiter=limit=' + limit + ':level=false';
+}
+
+function measuredFinalVideoArgs(videoPath, tempAudioPath, outPath, settings, mixMeasurement) {
+  return ['-y', '-i', videoPath, '-i', tempAudioPath,
+    '-filter_complex', '[1:a]' + finalLoudnormFilter(settings, mixMeasurement) + '[aout]',
+    '-map', '0:v', '-map', '[aout]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k',
+    '-shortest', '-movflags', '+faststart', '-f', 'mp4', outPath];
+}
+
+function runFfmpeg(args, label) {
   return new Promise(function (resolve, reject) {
-    const args = finalVideoArgs(videoPath, audioPath, outPath, ambientVolumePercent);
-    execFile('ffmpeg', args, { maxBuffer: 20 * 1024 * 1024 }, function (err) {
-      if (err) return reject(new Error('ffmpeg final-video build failed: ' + err.message));
-      resolve();
+    execFile('ffmpeg', args, { maxBuffer: 30 * 1024 * 1024 }, function (err, stdout, stderr) {
+      if (err) return reject(new Error('ffmpeg ' + label + ' failed: ' + err.message));
+      resolve({ stdout: stdout, stderr: stderr });
     });
   });
+}
+
+async function measureLoudness(inputPath, settings) {
+  const result = await runFfmpeg(loudnessMeasureArgs(inputPath, settings), 'loudness measurement');
+  return parseLoudnessMeasurement(result.stderr);
+}
+
+// The actual "final" video Harvey reviews in Final Check and eventually
+// publishes. Loudness mode performs independent dialogue/music measurements,
+// renders a lossless intermediate at the configured relative level, measures
+// that completed mix, then applies two-pass loudnorm plus the final limiter.
+// `-stream_loop -1` keeps short music beds alive for the full dialogue track.
+// With no selected music, dialogue is still normalized and peak-protected.
+// Legacy mode deliberately retains the old percentage/remux behavior for A/B
+// comparison until Harvey is happy with the measured workflow.
+async function buildFinalVideo(videoPath, audioPath, outPath, mixInput) {
+  const settings = normalizeAudioMixSettings(mixInput);
+  if (settings.mode === 'legacy_percent') {
+    await runFfmpeg(legacyFinalVideoArgs(videoPath, audioPath, outPath, settings.legacyPercent), 'legacy final-video build');
+    return { mode: settings.mode };
+  }
+  const tempAudioPath = outPath + '.loudness-mix.flac';
+  try {
+    const dialogueMeasurement = await measureLoudness(videoPath, settings);
+    const musicMeasurement = audioPath ? await measureLoudness(audioPath, settings) : null;
+    await runFfmpeg(measuredMixAudioArgs(videoPath, audioPath, tempAudioPath, settings, dialogueMeasurement, musicMeasurement), 'measured audio mix');
+    const mixMeasurement = await measureLoudness(tempAudioPath, settings);
+    await runFfmpeg(measuredFinalVideoArgs(videoPath, tempAudioPath, outPath, settings, mixMeasurement), 'loudness-normalized final-video build');
+    return { mode: settings.mode, dialogue: dialogueMeasurement, music: musicMeasurement, mix: mixMeasurement };
+  } finally {
+    fs.rmSync(tempAudioPath, { force: true });
+  }
 }
 
 // videoPath: the uploaded video file on disk. tmpDir: scratch space to
@@ -188,5 +307,12 @@ module.exports = {
   ensureBrowserCompatibleVideo,
   applyGeneratedTitleSuggestions,
   normalizeAmbientVolumePercent,
-  finalVideoArgs
+  normalizeAudioMixSettings,
+  finalVideoArgs,
+  legacyFinalVideoArgs,
+  loudnessMeasureArgs,
+  parseLoudnessMeasurement,
+  measuredMixAudioArgs,
+  finalLoudnormFilter,
+  measuredFinalVideoArgs
 };

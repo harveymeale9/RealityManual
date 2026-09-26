@@ -204,9 +204,13 @@ window.RMStore = (function () {
         shortform: { ytshort: '', tiktok: '', instagram: '', facebook: '' },
         longform: { ytlong: '', facebook: '' }
       },
-      // Applied by the backend when the real Final Check video is built.
-      // Kept as a whole-number percentage because Harvey tunes it in exact
-      // one-percent steps rather than editing an ffmpeg gain coefficient.
+      // Final Check defaults to measured loudness matching. The percentage
+      // value remains available only as an explicit Legacy A/B fallback.
+      audioMixMode: 'loudness',
+      dialogueLufsTarget: -16,
+      musicBelowDialogueDb: 20,
+      audioTruePeakDbtp: -1.5,
+      musicDuckingEnabled: false,
       ambientMusicVolumePercent: 10,
       baseLinkUrl: 'https://realitymanual.com',
       apiKeys: { youtube: '', instagram: '', facebook: '', tiktok: '', transcriptionProvider: '', transcriptionKey: '' }
@@ -258,6 +262,14 @@ window.RMStore = (function () {
       s.captions.longform = Object.assign({}, d.captions.longform, s.captions.longform || {});
       var ambientVolume = Math.round(Number(s.ambientMusicVolumePercent));
       s.ambientMusicVolumePercent = Number.isFinite(ambientVolume) ? Math.max(5, Math.min(30, ambientVolume)) : d.ambientMusicVolumePercent;
+      s.audioMixMode = s.audioMixMode === 'legacy_percent' ? 'legacy_percent' : d.audioMixMode;
+      var dialogueLufs = Math.round(Number(s.dialogueLufsTarget));
+      s.dialogueLufsTarget = Number.isFinite(dialogueLufs) ? Math.max(-18, Math.min(-14, dialogueLufs)) : d.dialogueLufsTarget;
+      var musicBelow = Math.round(Number(s.musicBelowDialogueDb));
+      s.musicBelowDialogueDb = Number.isFinite(musicBelow) ? Math.max(15, Math.min(25, musicBelow)) : d.musicBelowDialogueDb;
+      var truePeak = Math.round(Number(s.audioTruePeakDbtp) * 2) / 2;
+      s.audioTruePeakDbtp = Number.isFinite(truePeak) ? Math.max(-3, Math.min(-1, truePeak)) : d.audioTruePeakDbtp;
+      s.musicDuckingEnabled = s.musicDuckingEnabled === true;
       if (typeof s.baseLinkUrl !== 'string') s.baseLinkUrl = d.baseLinkUrl;
       if (typeof s.lastShortType !== 'string') s.lastShortType = '';
       return s;

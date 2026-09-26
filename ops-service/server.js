@@ -1193,14 +1193,13 @@ async function runBuildFinalVideo(id) {
     }
     const finalId = id + FINAL_VIDEO_SUFFIX;
     const outPath = path.join(UPLOADS_DIR, 'videos', finalId);
-    // Resolve this at build time rather than copying it onto every piece:
-    // Harvey's current Content Settings choice is the mix used whenever a
-    // piece is sent (or resent) to Final Check. Old settings rows predate the
-    // field, so videoAnalysis's normalizer supplies the deliberate 10% default.
+    // Resolve the complete mix profile at build time rather than copying it
+    // onto every piece. Loudness mode measures dialogue, music, and the mixed
+    // result; Legacy mode remains available for direct percentage A/B tests.
     const settingsRow = stmts.getOne.get('settings', 'settings');
     const settings = settingsRow ? JSON.parse(settingsRow.data) : {};
-    const ambientVolumePercent = videoAnalysis.normalizeAmbientVolumePercent(settings.ambientMusicVolumePercent);
-    await videoAnalysis.buildFinalVideo(videoPath, audioPath, outPath, ambientVolumePercent);
+    const mixProfile = videoAnalysis.normalizeAudioMixSettings(settings);
+    const mixResult = await videoAnalysis.buildFinalVideo(videoPath, audioPath, outPath, settings);
 
     const stat = fs.statSync(outPath);
     const finalRecord = { id: finalId, fileName: 'final.mp4', sizeBytes: stat.size, mimeType: 'video/mp4', createdAt: new Date().toISOString() };
@@ -1209,6 +1208,11 @@ async function runBuildFinalVideo(id) {
     const latest = getPieceRecord(id);
     if (!latest) return; // deleted while this was running
     latest.finalBuildStatus = 'done';
+    latest.finalAudioMix = mixResult.mode === 'legacy_percent'
+      ? { mode: mixResult.mode, ambientMusicVolumePercent: mixProfile.legacyPercent, builtAt: new Date().toISOString() }
+      : { mode: mixResult.mode, dialogueLufsTarget: mixProfile.dialogueLufs,
+        musicBelowDialogueDb: mixProfile.musicBelowDialogueDb, truePeakDbtp: mixProfile.truePeakDbtp,
+        duckingEnabled: mixProfile.duckingEnabled, builtAt: new Date().toISOString() };
     // Stage only actually advances once analysis has also settled — see
     // maybeAdvanceToFinalCheck's own comment. In the common case (analysis
     // already finished by the time this build completes) this behaves

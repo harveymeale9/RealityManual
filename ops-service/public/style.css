@@ -1842,6 +1842,8 @@ body.role-reviewer #pmBackFab {
 .ambient-volume-row label { display: flex; flex-direction: column; gap: 2px; color: var(--ink-soft); font-size: .87rem; }
 .ambient-volume-row small { color: var(--ink-faint); font-size: .68rem; }
 .ambient-volume-row select { min-width: 82px; }
+.ambient-mix-controls #audioMixModeSelect { min-width: 160px; }
+.ambient-mix-controls input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
 @media (max-width: 520px) {
   .ambient-volume-row { align-items: flex-start; }
 }
