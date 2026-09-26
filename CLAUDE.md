@@ -10373,3 +10373,12 @@ while omitting the portfolio-owned Reality Manual Page. The OAuth scope list
 now includes `business_management`; Harvey must disconnect/reconnect once to
 grant it, after which the explicit selector can see portfolio assets without
 reintroducing the invalid Instagram-insights scope from above.
+
+Meta login itself still correctly identifies Harvey through his personal
+Facebook profile—business portfolios are not separate login identities. Page
+discovery now reflects that distinction in code: it merges directly assigned
+`/me/accounts` Pages with every portfolio's `/owned_pages` reached through
+`/me/businesses`. The selector labels portfolio-derived destinations, dedupes
+Pages returned by both edges, and still never returns Page access tokens to the
+browser. Until an older grant is reauthorized with `business_management`, a
+portfolio lookup failure gracefully leaves the direct Page list usable.

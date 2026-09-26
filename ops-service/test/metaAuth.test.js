@@ -27,6 +27,11 @@ test('Meta exchanges the owner grant and discovers the Page plus linked Instagra
   const calls = [];
   const fetchImpl = async function (url) {
     calls.push(new URL(url));
+    if (url.indexOf('/me/businesses') !== -1) return response({ data: [{ id: 'business-1', name: 'Harvey Meale' }] });
+    if (url.indexOf('/business-1/owned_pages') !== -1) return response({ data: [{
+      id: 'page-2', name: 'The Reality Manual', access_token: 'portfolio-page-token',
+      instagram_business_account: { id: 'ig-2', username: 'therealitymanual' }
+    }] });
     if (url.indexOf('/me/accounts') !== -1) return response({ data: [{
       id: 'page-1', name: 'Reality Manual', access_token: 'page-token',
       instagram_business_account: { id: 'ig-1', username: 'realitymanual' }
@@ -40,7 +45,9 @@ test('Meta exchanges the owner grant and discovers the Page plus linked Instagra
   assert.equal(long.access_token, 'long-token');
   assert.equal(pages[0].name, 'Reality Manual');
   assert.equal(pages[0].instagram_business_account.username, 'realitymanual');
-  assert.equal(calls.length, 3);
+  assert.equal(pages[1].name, 'The Reality Manual');
+  assert.equal(pages[1].business_name, 'Harvey Meale');
+  assert.equal(calls.length, 5);
 });
 
 test('Meta Page selection is explicit and never exposes Page access tokens', function () {
@@ -52,8 +59,8 @@ test('Meta Page selection is explicit and never exposes Page access tokens', fun
   assert.equal(metaAuth.selectManagedPage(pages, 'unknown'), null);
   const publicPages = metaAuth.publicManagedPages(pages);
   assert.deepEqual(publicPages, [
-    { id: 'page-1', name: 'Reality Manual', instagram: { id: 'ig-1', username: 'reality.manual' } },
-    { id: 'page-2', name: 'Another Page', instagram: null }
+    { id: 'page-1', name: 'Reality Manual', business: null, instagram: { id: 'ig-1', username: 'reality.manual' } },
+    { id: 'page-2', name: 'Another Page', business: null, instagram: null }
   ]);
   assert.equal(JSON.stringify(publicPages).includes('private-page-token'), false);
 });

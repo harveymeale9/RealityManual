@@ -4336,7 +4336,8 @@
             .then(function (body) {
               pageSelect.innerHTML = (body.pages || []).map(function (page) {
                 var linked = page.instagram ? ' · @' + (page.instagram.username || page.instagram.id) : ' · no linked Instagram';
-                return '<option value="' + escapeHtml(page.id) + '"' + (page.id === body.selectedPageId ? ' selected' : '') + '>' + escapeHtml(page.name + linked) + '</option>';
+                var portfolio = page.business ? ' · ' + page.business + ' portfolio' : '';
+                return '<option value="' + escapeHtml(page.id) + '"' + (page.id === body.selectedPageId ? ' selected' : '') + '>' + escapeHtml(page.name + portfolio + linked) + '</option>';
               }).join('');
               pageSaveBtn.disabled = !(body.pages || []).length;
               pageMessage.textContent = (body.pages || []).length ? 'Choose explicitly; the app will never guess between Pages.' : 'No Pages are available to this authorization.';

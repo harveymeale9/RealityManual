@@ -58,12 +58,37 @@ async function exchangeLongLived(config, accessToken, fetchImpl) {
 
 async function fetchManagedPages(accessToken, fetchImpl) {
   fetchImpl = fetchImpl || fetch;
-  const params = new URLSearchParams({
+  const pageParams = new URLSearchParams({
     fields: 'id,name,access_token,instagram_business_account{id,username}',
     access_token: clean(accessToken, 2000)
   });
-  const result = await graphJson(fetchImpl, GRAPH_URL + '/me/accounts?' + params.toString(), {}, 'Meta Page discovery');
-  return Array.isArray(result.data) ? result.data : [];
+  const result = await graphJson(fetchImpl, GRAPH_URL + '/me/accounts?' + pageParams.toString(), {}, 'Meta Page discovery');
+  const pages = Array.isArray(result.data) ? result.data.slice() : [];
+
+  // Facebook authentication always represents a real person. Portfolio-owned
+  // Pages are a separate edge and are not guaranteed to appear in
+  // /me/accounts, even when that person has full business access.
+  try {
+    const businessParams = new URLSearchParams({ fields: 'id,name', access_token: clean(accessToken, 2000) });
+    const businesses = await graphJson(fetchImpl, GRAPH_URL + '/me/businesses?' + businessParams.toString(), {}, 'Meta business discovery');
+    for (const business of (Array.isArray(businesses.data) ? businesses.data : [])) {
+      const owned = await graphJson(
+        fetchImpl,
+        GRAPH_URL + '/' + encodeURIComponent(clean(business.id, 100)) + '/owned_pages?' + pageParams.toString(),
+        {},
+        'Meta portfolio Page discovery'
+      );
+      for (const page of (Array.isArray(owned.data) ? owned.data : [])) {
+        page.business_name = clean(business.name, 300);
+        if (!pages.some(function (existing) { return clean(existing.id, 100) === clean(page.id, 100); })) pages.push(page);
+      }
+    }
+  } catch (error) {
+    // An existing pre-business_management grant can still manage directly
+    // assigned Pages. Reauthorization adds portfolio discovery without making
+    // the already-valid direct Page list disappear in the meantime.
+  }
+  return pages;
 }
 
 function publicManagedPages(pages) {
@@ -72,6 +97,7 @@ function publicManagedPages(pages) {
     return {
       id: clean(page && page.id, 100),
       name: clean(page && page.name, 300),
+      business: clean(page && page.business_name, 300) || null,
       instagram: instagram ? { id: clean(instagram.id, 100), username: clean(instagram.username, 300) } : null
     };
   }).filter(function (page) { return page.id; });
