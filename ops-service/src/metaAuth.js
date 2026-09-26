@@ -65,8 +65,27 @@ async function fetchManagedPages(accessToken, fetchImpl) {
   return Array.isArray(result.data) ? result.data : [];
 }
 
+function publicManagedPages(pages) {
+  return (Array.isArray(pages) ? pages : []).map(function (page) {
+    const instagram = page && page.instagram_business_account;
+    return {
+      id: clean(page && page.id, 100),
+      name: clean(page && page.name, 300),
+      instagram: instagram ? { id: clean(instagram.id, 100), username: clean(instagram.username, 300) } : null
+    };
+  }).filter(function (page) { return page.id; });
+}
+
+function selectManagedPage(pages, pageId) {
+  pageId = clean(pageId, 100);
+  return (Array.isArray(pages) ? pages : []).find(function (page) {
+    return clean(page && page.id, 100) === pageId;
+  }) || null;
+}
+
 module.exports = {
   API_VERSION: API_VERSION, AUTH_URL: AUTH_URL, GRAPH_URL: GRAPH_URL, SCOPES: SCOPES,
   validConfig: validConfig, buildAuthUrl: buildAuthUrl, exchangeCode: exchangeCode,
-  exchangeLongLived: exchangeLongLived, fetchManagedPages: fetchManagedPages
+  exchangeLongLived: exchangeLongLived, fetchManagedPages: fetchManagedPages,
+  publicManagedPages: publicManagedPages, selectManagedPage: selectManagedPage
 };

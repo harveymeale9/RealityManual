@@ -299,6 +299,14 @@ const stmts = {
     'UPDATE meta_oauth SET user_access_token = ?, expires_at = ?, page_id = ?, page_name = ?, page_access_token = ?, ' +
     'instagram_account_id = ?, instagram_username = ?, updated_at = ? WHERE id = 1'
   ),
+  upsertMetaGrant: db.prepare(
+    'UPDATE meta_oauth SET user_access_token = ?, expires_at = ?, page_id = NULL, page_name = NULL, page_access_token = NULL, ' +
+    'instagram_account_id = NULL, instagram_username = NULL, updated_at = ? WHERE id = 1'
+  ),
+  selectMetaPage: db.prepare(
+    'UPDATE meta_oauth SET page_id = ?, page_name = ?, page_access_token = ?, instagram_account_id = ?, ' +
+    'instagram_username = ?, updated_at = ? WHERE id = 1'
+  ),
   clearMetaConnection: db.prepare(
     'UPDATE meta_oauth SET user_access_token = NULL, expires_at = NULL, page_id = NULL, page_name = NULL, ' +
     'page_access_token = NULL, instagram_account_id = NULL, instagram_username = NULL, updated_at = ? WHERE id = 1'
@@ -586,6 +594,7 @@ app.get('/api/meta/status', requireAuth, function (req, res) {
     appId: configured ? row.app_id : '',
     hasAppSecret: !!(row && row.app_secret),
     redirectUri: META_REDIRECT_URI,
+    authorized: !!(configured && row.user_access_token),
     connected: !!(configured && row.page_access_token),
     page: row && row.page_id ? { id: row.page_id, name: row.page_name } : null,
     instagram: row && row.instagram_account_id ? { id: row.instagram_account_id, username: row.instagram_username } : null
@@ -602,6 +611,35 @@ app.post('/api/meta/config', requireAuth, function (req, res) {
   if (!metaAuth.validConfig(config)) return res.status(400).json({ error: 'Enter a valid numeric Meta App ID and App Secret.' });
   stmts.upsertMetaConfig.run(appId, appSecret, new Date().toISOString());
   res.json({ ok: true });
+});
+
+app.get('/api/meta/pages', requireAuth, async function (req, res) {
+  const row = stmts.getMetaAuth.get();
+  if (!row || !row.user_access_token) return res.status(400).json({ error: 'Connect Meta first.' });
+  try {
+    const pages = await metaAuth.fetchManagedPages(row.user_access_token);
+    res.json({ pages: metaAuth.publicManagedPages(pages), selectedPageId: row.page_id || null });
+  } catch (error) {
+    res.status(502).json({ error: String(error.message || error).slice(0, 500) });
+  }
+});
+
+app.post('/api/meta/page', requireAuth, async function (req, res) {
+  const row = stmts.getMetaAuth.get();
+  if (!row || !row.user_access_token) return res.status(400).json({ error: 'Connect Meta first.' });
+  try {
+    const pages = await metaAuth.fetchManagedPages(row.user_access_token);
+    const page = metaAuth.selectManagedPage(pages, req.body && req.body.pageId);
+    if (!page || !page.access_token) return res.status(400).json({ error: 'That Page is not available to this Meta authorization.' });
+    const instagram = page.instagram_business_account || null;
+    stmts.selectMetaPage.run(
+      page.id, page.name || page.id, page.access_token,
+      instagram ? instagram.id : null, instagram ? instagram.username : null, new Date().toISOString()
+    );
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(502).json({ error: String(error.message || error).slice(0, 500) });
+  }
 });
 
 app.get('/api/meta/oauth/start', requireAuth, function (req, res) {
@@ -626,15 +664,19 @@ app.get('/api/meta/oauth/callback', requireAuth, async function (req, res) {
     const longToken = await metaAuth.exchangeLongLived(config, shortToken.access_token);
     const pages = await metaAuth.fetchManagedPages(longToken.access_token);
     if (!pages.length) throw new Error('No Facebook Page managed by this account was returned.');
-    // Prefer the Page linked to an Instagram professional account, because
-    // that single authorization then activates both direct destinations.
-    const page = pages.find(function (candidate) { return candidate.instagram_business_account; }) || pages[0];
-    const instagram = page.instagram_business_account || null;
     const expiresAt = longToken.expires_in ? new Date(Date.now() + Number(longToken.expires_in) * 1000).toISOString() : null;
-    stmts.upsertMetaConnection.run(
-      longToken.access_token, expiresAt, page.id, page.name || page.id, page.access_token,
-      instagram ? instagram.id : null, instagram ? instagram.username : null, new Date().toISOString()
-    );
+    stmts.upsertMetaGrant.run(longToken.access_token, expiresAt, new Date().toISOString());
+    // A single available Page is unambiguous. With multiple Pages, retain a
+    // previous explicit choice if it is still available; otherwise require
+    // Harvey to choose in Content Settings rather than guessing.
+    const page = pages.length === 1 ? pages[0] : metaAuth.selectManagedPage(pages, row.page_id);
+    if (page) {
+      const instagram = page.instagram_business_account || null;
+      stmts.selectMetaPage.run(
+        page.id, page.name || page.id, page.access_token,
+        instagram ? instagram.id : null, instagram ? instagram.username : null, new Date().toISOString()
+      );
+    }
     res.redirect(returnTo);
   } catch (error) {
     console.error('Meta OAuth callback failed:', error.message);

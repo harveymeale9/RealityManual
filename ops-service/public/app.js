@@ -4179,6 +4179,11 @@
             '<button type="button" class="btn-secondary btn-tiny" id="metaSaveCredentialsBtn">Save credentials</button>' +
             '<span class="platform-connect-status" id="metaCredentialMessage"></span>' +
           '</div>' +
+          '<div class="meta-page-fields" id="metaPageFields" hidden>' +
+            '<label>Publishing destination<select class="title-input settings-input" id="metaPageSelect"></select></label>' +
+            '<button type="button" class="btn-secondary btn-tiny" id="metaSavePageBtn">Use this Page</button>' +
+            '<span class="platform-connect-status" id="metaPageMessage"></span>' +
+          '</div>' +
         '</div>' +
       '</section>' +
       '<section class="settings-section">' +
@@ -4297,6 +4302,10 @@
     var secretInput = document.getElementById('metaAppSecretInput');
     var saveBtn = document.getElementById('metaSaveCredentialsBtn');
     var message = document.getElementById('metaCredentialMessage');
+    var pageFields = document.getElementById('metaPageFields');
+    var pageSelect = document.getElementById('metaPageSelect');
+    var pageSaveBtn = document.getElementById('metaSavePageBtn');
+    var pageMessage = document.getElementById('metaPageMessage');
     if (!statusEl || !btn || !saveBtn) return;
     if (IS_REVIEWER) {
       statusEl.textContent = 'Not available for this account.';
@@ -4312,13 +4321,37 @@
         secretInput.placeholder = s.hasAppSecret ? 'Saved securely · enter only to replace' : 'Paste Meta App Secret';
         statusEl.textContent = s.connected
           ? 'Connected to ' + ((s.page && s.page.name) || 'Facebook') + (s.instagram ? ' and @' + (s.instagram.username || s.instagram.id) : '; no linked professional Instagram account found.')
-          : (s.configured ? 'Credentials saved. Connect your Meta accounts.' : 'Save the App ID and App Secret, then connect.');
+          : (s.authorized ? 'Meta authorized. Choose the Page this app should publish to.' : (s.configured ? 'Credentials saved. Connect your Meta accounts.' : 'Save the App ID and App Secret, then connect.'));
         btn.disabled = !s.configured;
-        btn.textContent = s.connected ? 'Disconnect' : 'Connect';
-        btn.onclick = s.connected ? function () {
+        btn.textContent = s.authorized ? 'Disconnect' : 'Connect';
+        btn.onclick = s.authorized ? function () {
           btn.disabled = true;
           fetch('/api/meta/disconnect', { method: 'POST', credentials: 'include' }).then(renderMetaConnectCard);
         } : function () { window.location.href = '/api/meta/oauth/start'; };
+        pageFields.hidden = !s.authorized;
+        if (s.authorized) {
+          pageMessage.textContent = 'Loading available Pages…';
+          fetch('/api/meta/pages', { credentials: 'include' })
+            .then(function (r) { return r.json().then(function (body) { if (!r.ok) throw new Error(body.error || 'Could not load Pages.'); return body; }); })
+            .then(function (body) {
+              pageSelect.innerHTML = (body.pages || []).map(function (page) {
+                var linked = page.instagram ? ' · @' + (page.instagram.username || page.instagram.id) : ' · no linked Instagram';
+                return '<option value="' + escapeHtml(page.id) + '"' + (page.id === body.selectedPageId ? ' selected' : '') + '>' + escapeHtml(page.name + linked) + '</option>';
+              }).join('');
+              pageSaveBtn.disabled = !(body.pages || []).length;
+              pageMessage.textContent = (body.pages || []).length ? 'Choose explicitly; the app will never guess between Pages.' : 'No Pages are available to this authorization.';
+            }).catch(function (error) { pageMessage.textContent = error.message; pageSaveBtn.disabled = true; });
+          pageSaveBtn.onclick = function () {
+            pageSaveBtn.disabled = true;
+            pageMessage.textContent = 'Saving destination…';
+            fetch('/api/meta/page', {
+              method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ pageId: pageSelect.value })
+            }).then(function (r) { return r.json().then(function (body) { if (!r.ok) throw new Error(body.error || 'Could not select Page.'); }); })
+              .then(renderMetaConnectCard)
+              .catch(function (error) { pageMessage.textContent = error.message; pageSaveBtn.disabled = false; });
+          };
+        }
         saveBtn.onclick = function () {
           message.textContent = 'Saving…';
           saveBtn.disabled = true;

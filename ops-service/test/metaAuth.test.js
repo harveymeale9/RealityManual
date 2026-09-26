@@ -42,3 +42,18 @@ test('Meta exchanges the owner grant and discovers the Page plus linked Instagra
   assert.equal(pages[0].instagram_business_account.username, 'realitymanual');
   assert.equal(calls.length, 3);
 });
+
+test('Meta Page selection is explicit and never exposes Page access tokens', function () {
+  const pages = [
+    { id: 'page-1', name: 'Reality Manual', access_token: 'private-page-token', instagram_business_account: { id: 'ig-1', username: 'reality.manual' } },
+    { id: 'page-2', name: 'Another Page', access_token: 'another-private-token' }
+  ];
+  assert.equal(metaAuth.selectManagedPage(pages, 'page-2').name, 'Another Page');
+  assert.equal(metaAuth.selectManagedPage(pages, 'unknown'), null);
+  const publicPages = metaAuth.publicManagedPages(pages);
+  assert.deepEqual(publicPages, [
+    { id: 'page-1', name: 'Reality Manual', instagram: { id: 'ig-1', username: 'reality.manual' } },
+    { id: 'page-2', name: 'Another Page', instagram: null }
+  ]);
+  assert.equal(JSON.stringify(publicPages).includes('private-page-token'), false);
+});

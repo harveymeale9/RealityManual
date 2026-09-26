@@ -10350,3 +10350,15 @@ deliberately deferred instead of preventing Facebook and Instagram publishing
 from connecting at all. The regression test now explicitly rejects both
 incompatible Instagram insight scope names so they cannot silently return to
 the authorization URL.
+
+The first successful grant also showed why the destination cannot be inferred:
+the owner token returned five managed Pages, and the old callback silently
+picked Health Sense Exercise Physiology merely because it was the only returned
+Page with a linked Instagram account. Reality Manual was not present in Meta's
+`/me/accounts` response at all. Content Settings now lists every Page actually
+available to the grant and requires an explicit publishing destination. Page
+access tokens remain server-only. A new authorization auto-selects only when
+Meta returns exactly one Page, or retains a previously explicit choice; it
+never guesses among multiple Pages. Reality Manual must first be added to the
+authorized business portfolio/Page selection before it can appear in this
+list.

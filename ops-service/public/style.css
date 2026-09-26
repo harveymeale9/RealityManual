@@ -1885,10 +1885,14 @@ body.role-reviewer #pmBackFab {
 .meta-credential-fields label { display: flex; flex-direction: column; gap: 5px; color: var(--ink-soft); font-size: 0.74rem; }
 .meta-credential-fields .settings-input { width: 100%; }
 .meta-credential-fields #metaCredentialMessage { grid-column: 1 / -1; }
+.meta-page-fields { width: 100%; display: grid; grid-template-columns: minmax(260px, 1fr) auto; gap: 9px; align-items: end; padding-top: 10px; border-top: 1px solid var(--border-soft); }
+.meta-page-fields label { display: flex; flex-direction: column; gap: 5px; color: var(--ink-soft); font-size: 0.74rem; }
+.meta-page-fields .settings-input { width: 100%; }
+.meta-page-fields #metaPageMessage { grid-column: 1 / -1; }
 
 @media (max-width: 780px) {
   .tiktok-schedule-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .meta-credential-fields { grid-template-columns: 1fr; }
+  .meta-credential-fields, .meta-page-fields { grid-template-columns: 1fr; }
 }
 
 .key-grid { display: flex; flex-direction: column; gap: 14px; }
