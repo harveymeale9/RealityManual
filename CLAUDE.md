@@ -10011,3 +10011,37 @@ A real one-second ffmpeg render using a silent source plus sine-wave backing
 track measured -50.11 dB RMS at 5% and -34.56 dB RMS at 30%, the expected
 15.55 dB separation for a sixfold gain difference, confirming the selection
 changes the produced audio rather than merely changing UI state.
+
+---
+
+# 222. Facebook-Only Tracked Caption Links (2026-09-26)
+
+Caption link handling is now an explicit publish-time platform policy rather
+than a blind `[LINK]` string replacement. Facebook receives a per-piece
+UTM-tracked storefront link for both short-form and long-form posts. If the
+Facebook template contains `[LINK]`, it is replaced in place; if it omits the
+shortcode (or is blank), the URL is appended automatically, so Facebook cannot
+accidentally publish without the requested trackable destination. The UTM
+source is derived from the caption's actual platform, fixing the prior case in
+which a Facebook caption on a joint Facebook/YouTube piece could receive
+`utm_source=youtube`.
+
+YouTube Shorts, YouTube long-form, Instagram and TikTok captions are kept free
+of the store URL per Harvey's platform policy. Any legacy `[LINK]` shortcode in
+one of those saved templates is removed while rendering the Final Check card
+and again in the same rendered text passed to the publish endpoint; the stored
+template remains editable and is not destructively rewritten. This protects
+publishing even before Harvey tidies old caption wording. The Settings copy and
+placeholders now explain the policy accurately and reserve `[LINK]` guidance
+for Facebook.
+
+YouTube's current official documentation confirms the underlying Shorts
+constraint: URLs in Shorts descriptions/comments are non-clickable, whereas
+long-form description URLs can be clickable for channels with advanced-feature
+access. The broader Facebook-only rule is therefore a deliberate Content Studio
+policy, not a claim that ordinary YouTube descriptions are technically unable
+to link.
+
+Regression tests exercise the platform allowlist, Facebook replacement and
+automatic append behavior, and legacy-shortcode removal across every excluded
+platform. Full suite: 46/46.

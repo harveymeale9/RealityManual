@@ -1835,9 +1835,14 @@
     el.scrollTop = el.scrollHeight;
   }
 
-  function buildUtmLink(p, settings) {
+  function buildUtmLink(p, settings, platform) {
     var base = (settings.baseLinkUrl || 'https://realitymanual.com').trim() || 'https://realitymanual.com';
-    var source = (p.platforms || []).indexOf('facebook') !== -1 && (p.platforms || []).indexOf('ytlong') === -1 ? 'facebook' : 'youtube';
+    // Caption rendering passes the exact destination platform so a piece
+    // tagged for both Facebook and YouTube never gives Facebook a
+    // utm_source=youtube URL. The fallback preserves the modal's generic
+    // one-link preview when no caption tab is selected there.
+    var sourceByPlatform = { facebook: 'facebook', instagram: 'instagram', tiktok: 'tiktok', ytshort: 'youtube', ytlong: 'youtube' };
+    var source = sourceByPlatform[platform] || ((p.platforms || []).indexOf('facebook') !== -1 && (p.platforms || []).indexOf('ytlong') === -1 ? 'facebook' : 'youtube');
     var sep = base.indexOf('?') === -1 ? '?' : '&';
     // utm_content uses the human-friendly #047 id, not the internal uuid —
     // it's what shows up in analytics, so it should be the same number
@@ -1891,29 +1896,22 @@
       .filter(function (o) { return platforms.indexOf(o.key) !== -1; })
       .map(function (o) {
         var template = group[o.key] || '';
-        var hasText = !!template.trim();
+        var text = Store.renderPlatformCaption(template, o.key, buildUtmLink(p, settings, o.key));
+        var hasText = !!text.trim();
         return {
           key: o.key,
           label: o.label,
           template: template,
           empty: !hasText,
-          text: hasText ? Store.applyCaptionLink(template, buildUtmLink(p, settings)) : ''
+          text: hasText ? text : ''
         };
       });
   }
 
-  // Single-winner version for the shared editor modal's one-line caption
-  // readout, which has no room for a multi-tab toggle — the first
-  // tagged-and-non-empty caption in CAPTION_GROUPS' own order.
-  function captionTemplateFor(settings, p) {
-    var entries = captionsForPiece(settings, p).filter(function (e) { return !e.empty; });
-    return entries.length ? entries[0].template : '';
-  }
-
   function renderCaptionText(p, settings) {
-    var template = captionTemplateFor(settings, p);
-    if (!template || !template.trim()) return 'No caption set for this type yet — add one in Settings.';
-    return Store.applyCaptionLink(template, buildUtmLink(p, settings));
+    var entry = captionsForPiece(settings, p).filter(function (e) { return !e.empty; })[0];
+    if (!entry) return 'No caption set for this type yet — add one in Settings.';
+    return entry.text;
   }
 
   function updateStageAndScheduleUI(p) {
@@ -4047,32 +4045,33 @@
         '<h3>Captions</h3>' +
         '<p class="settings-hint">One description per platform, organized by content shape — a piece can be tagged ' +
           'for several platforms at once, each getting its own independently-set caption (Final Check shows all of ' +
-          'them with a toggle when there\'s more than one). Use the shortcode <code>[LINK]</code> anywhere in the ' +
-          'text and it\'s replaced with that piece\'s own UTM-tracked link when the caption is shown or copied.</p>' +
+          'them with a toggle when there\'s more than one). Facebook always receives the piece\'s UTM-tracked store ' +
+          'link: put <code>[LINK]</code> where you want it, or it is appended automatically. YouTube Shorts, Instagram ' +
+          'and TikTok are kept link-free.</p>' +
         '<div class="caption-group-tabs" id="captionGroupTabs">' +
           '<button type="button" class="caption-group-tab active" data-group="shortform">Short-form</button>' +
           '<button type="button" class="caption-group-tab" data-group="longform">Longform</button>' +
         '</div>' +
         '<div class="caption-group-panel" data-group="shortform" id="captionPanelShortform">' +
           '<label class="field-label">YT Shorts caption</label>' +
-          '<textarea class="notes-input settings-textarea" id="caption-shortform-ytshort" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
+          '<textarea class="notes-input settings-textarea" id="caption-shortform-ytshort" placeholder="Shorts caption — no external link"></textarea>' +
           '<label class="field-label" style="margin-top:14px;display:block;">TikTok caption</label>' +
-          '<textarea class="notes-input settings-textarea" id="caption-shortform-tiktok" placeholder="e.g. Grab your copy of the book here [LINK]! #booktok"></textarea>' +
+          '<textarea class="notes-input settings-textarea" id="caption-shortform-tiktok" placeholder="TikTok caption — no external link"></textarea>' +
           '<label class="field-label" style="margin-top:14px;display:block;">Instagram caption</label>' +
-          '<textarea class="notes-input settings-textarea" id="caption-shortform-instagram" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
+          '<textarea class="notes-input settings-textarea" id="caption-shortform-instagram" placeholder="Instagram caption — no external link"></textarea>' +
           '<label class="field-label" style="margin-top:14px;display:block;">Facebook caption</label>' +
           '<textarea class="notes-input settings-textarea" id="caption-shortform-facebook" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
         '</div>' +
         '<div class="caption-group-panel" data-group="longform" id="captionPanelLongform" hidden>' +
           '<label class="field-label">YouTube caption</label>' +
-          '<textarea class="notes-input settings-textarea" id="caption-longform-ytlong" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
+          '<textarea class="notes-input settings-textarea" id="caption-longform-ytlong" placeholder="YouTube description — no tracked store link"></textarea>' +
           '<label class="field-label" style="margin-top:14px;display:block;">Facebook caption</label>' +
           '<textarea class="notes-input settings-textarea" id="caption-longform-facebook" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
         '</div>' +
       '</section>' +
       '<section class="settings-section">' +
         '<h3>Tracked link</h3>' +
-        '<p class="settings-hint">Base URL used to build the UTM-tracked [LINK] for every piece, any type.</p>' +
+        '<p class="settings-hint">Base URL used to build the Facebook UTM-tracked [LINK] for every piece, short or long.</p>' +
         '<input class="title-input settings-input" id="baseLinkInput" />' +
       '</section>' +
       '<section class="settings-section">' +
