@@ -9860,3 +9860,27 @@ rotation and destructive Git-history rewriting are neither necessary nor
 appropriate. The old harmless `test-only` string may remain visible in the
 historical commit referenced by the alert; it was never accepted by the mail
 provider and grants no access.
+
+---
+
+# 218. Phone-Readable Complete Manuscript PDF (2026-09-26)
+
+Harvey needed a practical copy of the full print interior to send to a friend
+for offline reading on a phone. The immutable source remains
+`interior_printready2.pdf` in the `manuscript-interior-source` GitHub release
+(1,874,043,869 bytes, SHA-256
+`138b4f88f592fe2a429037baf95b81f1bb4eb6a89fd79af1ecff698a91e2a5e3`). A
+separate derivative, `The_Reality_Manual_phone.pdf`, now lives alongside it in
+that release; the original was not replaced or modified.
+
+The derivative was produced with Ghostscript as an RGB PDF 1.6, downsampling
+the flattened print artwork to 180 DPI with bicubic scaling and JPEG quality
+82. It preserves all 187 sheets at 1,445×2,147 pixels, including the front and
+end matter and every illustration/diagram. The result is 49,759,595 bytes
+(47.45 MiB), a 97.34% reduction / 37.7× smaller than the print source, with
+SHA-256 `ea335691d3d8d7a38adcf004847a16c15a5f551143c6c9081bb6043b0d6f5052`.
+Validation covered `pdfinfo`, an embedded-image inventory (exactly one
+1,445×2,147 image on each of 187 pages), and visual checks of front matter,
+dense body text, illustrated pages, and end matter. The unauthenticated release
+download was also verified to return HTTP 200 with the exact expected byte
+length.
