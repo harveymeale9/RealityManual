@@ -10445,25 +10445,19 @@ only special-casing the editor's close button.
 
 ---
 
-# 233. Facebook Captions Are User-Written and Outbound-Link-Free (2026-09-27)
+# 233. Facebook Captions Are Entirely User-Controlled (2026-09-27)
 
-Facebook publishing no longer places the tracked storefront URL directly in a
-post caption. Early organic reach is the priority while the Page is building an
-audience, and Meta itself has advised Page managers to avoid caption links when
-distribution matters. The actual caption and any link-in-bio wording remain
-entirely user-selected in Content Settings; the system does not append a fixed
-CTA.
+Facebook publishing neither forces nor suppresses an outbound link. Harvey
+chooses the complete caption in Content Settings and can decide per template
+whether the post should contain a direct URL, link-in-bio wording, or no CTA.
+The system does not append a fixed CTA and does not remove literal URLs.
 
-This is enforced at the final platform-caption rendering boundary, not merely
-as placeholder copy. An old saved Facebook template containing `[LINK]`, or a
-literal `http://`/`https://` URL pasted into that template, is stripped, so
-stale settings cannot leak an outbound URL into a scheduled post. All other
-wording is preserved. Both short-form and long-form Facebook video use this policy.
-Long-form YouTube retains its optional tracked `[LINK]`; YouTube Shorts,
+Both short-form and long-form Facebook captions support the optional `[LINK]`
+token, which expands in place to the per-piece tracked store URL. If the token
+is absent, no URL is added; a literal pasted URL is preserved exactly. Long-form
+YouTube retains the same optional tracked `[LINK]` behaviour. YouTube Shorts,
 Instagram and TikTok remain link-free as before.
 
-Content Settings now explains the policy beside the platform-specific caption
-fields and reminds the operator that the Facebook Page website/bio destination
-must be maintained in Meta. Individual Facebook sales attribution is therefore
-intentionally traded away in favour of reach; post performance itself remains
-available through Meta's video statistics.
+Content Settings explains this behaviour beside the platform-specific caption
+fields. This keeps the reach-versus-attribution choice where it belongs: in the
+caption Harvey selects, rather than hidden publishing policy.

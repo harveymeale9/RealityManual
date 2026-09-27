@@ -4141,10 +4141,9 @@
         '<h3>Captions</h3>' +
         '<p class="settings-hint">One description per platform, organized by content shape — a piece can be tagged ' +
           'for several platforms at once, each getting its own independently-set caption (Final Check shows all of ' +
-          'them with a toggle when there\'s more than one). Your Facebook caption is used as selected; any old ' +
-          '<code>[LINK]</code> token or pasted URL is removed at publish time so you can write your preferred ' +
-          'link-in-bio wording yourself. Long-form YouTube supports <code>[LINK]</code>; YouTube Shorts, Instagram ' +
-          'and TikTok are also kept link-free.</p>' +
+          'them with a toggle when there\'s more than one). Facebook and long-form YouTube publish the caption you ' +
+          'choose and support an optional <code>[LINK]</code> token for the tracked store URL. Nothing is added or ' +
+          'removed from Facebook automatically. YouTube Shorts, Instagram and TikTok are kept link-free.</p>' +
         '<div class="caption-group-tabs" id="captionGroupTabs">' +
           '<button type="button" class="caption-group-tab active" data-group="shortform">Short-form</button>' +
           '<button type="button" class="caption-group-tab" data-group="longform">Longform</button>' +
@@ -4157,18 +4156,18 @@
           '<label class="field-label" style="margin-top:14px;display:block;">Instagram caption</label>' +
           '<textarea class="notes-input settings-textarea" id="caption-shortform-instagram" placeholder="Instagram caption — no external link"></textarea>' +
           '<label class="field-label" style="margin-top:14px;display:block;">Facebook caption</label>' +
-          '<textarea class="notes-input settings-textarea" id="caption-shortform-facebook" placeholder="Choose your Facebook caption"></textarea>' +
+          '<textarea class="notes-input settings-textarea" id="caption-shortform-facebook" placeholder="Choose your Facebook caption — [LINK] is optional"></textarea>' +
         '</div>' +
         '<div class="caption-group-panel" data-group="longform" id="captionPanelLongform" hidden>' +
           '<label class="field-label">YouTube caption</label>' +
           '<textarea class="notes-input settings-textarea" id="caption-longform-ytlong" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
           '<label class="field-label" style="margin-top:14px;display:block;">Facebook caption</label>' +
-          '<textarea class="notes-input settings-textarea" id="caption-longform-facebook" placeholder="Choose your Facebook caption"></textarea>' +
+          '<textarea class="notes-input settings-textarea" id="caption-longform-facebook" placeholder="Choose your Facebook caption — [LINK] is optional"></textarea>' +
         '</div>' +
       '</section>' +
       '<section class="settings-section">' +
         '<h3>Tracked link</h3>' +
-        '<p class="settings-hint">Base URL used for the optional long-form YouTube <code>[LINK]</code>. Keep the Facebook Page\'s website/bio link pointed at the book separately in Meta.</p>' +
+        '<p class="settings-hint">Base URL used for the optional Facebook and long-form YouTube <code>[LINK]</code>.</p>' +
         '<input class="title-input settings-input" id="baseLinkInput" />' +
       '</section>' +
       '<section class="settings-section">' +

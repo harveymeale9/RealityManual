@@ -13,26 +13,26 @@ function loadStore() {
 
 const Store = loadStore();
 
-test('tracked caption links are allowed only on long-form YouTube', function () {
+test('tracked caption links are allowed on Facebook and long-form YouTube', function () {
+  assert.equal(Store.captionAllowsTrackedLink('facebook'), true);
   assert.equal(Store.captionAllowsTrackedLink('ytlong'), true);
-  ['facebook', 'ytshort', 'instagram', 'tiktok'].forEach(function (platform) {
+  ['ytshort', 'instagram', 'tiktok'].forEach(function (platform) {
     assert.equal(Store.captionAllowsTrackedLink(platform), false, platform);
   });
 });
 
-test('Facebook removes outbound links without changing the selected caption or forcing a CTA', function () {
+test('Facebook publishes the selected caption exactly and expands an optional LINK token', function () {
   const link = 'https://realitymanual.com?utm_source=facebook';
   assert.equal(
     Store.renderPlatformCaption('A useful caption\n\nRead it here: [LINK]', 'facebook', link),
-    'A useful caption\n\nRead it here'
+    'A useful caption\n\nRead it here: ' + link
   );
   assert.equal(
     Store.renderPlatformCaption('A useful caption https://example.test/book', 'facebook', link),
-    'A useful caption'
+    'A useful caption https://example.test/book'
   );
   assert.equal(Store.renderPlatformCaption('Get the book through the link in our bio.', 'facebook', link), 'Get the book through the link in our bio.');
   assert.equal(Store.renderPlatformCaption('', 'facebook', link), '');
-  assert.equal(Store.renderPlatformCaption('', 'facebook', link).includes(link), false);
 });
 
 test('long-form YouTube expands LINK without forcing one into an unlinked template', function () {

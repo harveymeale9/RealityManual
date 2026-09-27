@@ -194,9 +194,9 @@ window.RMStore = (function () {
       // both) needs an independently-editable description for each — see
       // app.js's captionsForPiece, which is what lets the Final Check card
       // show both at once with a toggle. Facebook and long-form YouTube
-      // captions are rendered through a publish-time policy: Facebook
-      // receives a book-in-bio CTA instead of an outbound URL, long-form
-      // YouTube supports "[LINK]", and Shorts/Instagram/TikTok remove it.
+      // captions are rendered through a publish-time policy: Facebook and
+      // long-form YouTube support optional "[LINK]", while Shorts/Instagram/
+      // TikTok remove it.
       // This replaces an older
       // flat shape (captions.shorts/longform/tiktok/instagram/facebook, and
       // before that a combined "igfb" field) — see getSettings()'s
@@ -308,15 +308,13 @@ window.RMStore = (function () {
     return (template || '').replace(/\[LINK\]/gi, link);
   }
 
-  // Only long-form YouTube receives a tracked storefront URL. Facebook is
-  // deliberately link-free to avoid suppressing early organic distribution,
-  // but its caption wording remains entirely user-selected. YouTube Shorts
-  // makes description URLs non-clickable, and Instagram/TikTok captions are
-  // also kept link-free.
-  // Keeping this as publish-time policy means an old saved template containing
-  // [LINK] cannot leak a URL after the rule changes.
+  // Facebook and long-form YouTube support the optional tracked storefront
+  // shortcode. Harvey controls whether Facebook contains a link by what he
+  // writes in its caption field; the renderer neither forces nor suppresses
+  // one. YouTube Shorts makes description URLs non-clickable, and Instagram/
+  // TikTok captions remain link-free.
   function captionAllowsTrackedLink(platform) {
-    return platform === 'ytlong';
+    return platform === 'facebook' || platform === 'ytlong';
   }
 
   function stripCaptionLink(template) {
@@ -331,29 +329,12 @@ window.RMStore = (function () {
       .trim();
   }
 
-  function renderFacebookCaption(template) {
-    // Existing settings may contain either the old [LINK] shortcode or an
-    // already-pasted URL. Remove both at the final rendering boundary so a
-    // stale template can never reintroduce an outbound Facebook caption link.
-    var text = stripCaptionLink(template)
-      .replace(/https?:\/\/[^\s<]+/gi, '')
-      .replace(/[ \t]+([,.;!?])/g, '$1')
-      .replace(/[:;,][ \t]*(?=\n|$)/gm, '')
-      .split('\n')
-      .map(function (line) { return line.replace(/[ \t]+$/g, ''); })
-      .join('\n')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
-    return text;
-  }
-
   function renderPlatformCaption(template, platform, link) {
     var text = String(template || '').trim();
-    if (platform === 'facebook') return renderFacebookCaption(text);
     if (!captionAllowsTrackedLink(platform)) return stripCaptionLink(text);
     if (/\[LINK\]/i.test(text)) return applyCaptionLink(text, link).trim();
-    // Long-form YouTube preserves the opt-in behavior: [LINK] expands, but no
-    // URL is added when its template does not contain the shortcode.
+    // Supported platforms preserve opt-in behavior: [LINK] expands, but no URL
+    // is added when the selected template does not contain the shortcode.
     return text;
   }
 
@@ -364,7 +345,6 @@ window.RMStore = (function () {
     applyCaptionLink: applyCaptionLink,
     captionAllowsTrackedLink: captionAllowsTrackedLink,
     stripCaptionLink: stripCaptionLink,
-    renderFacebookCaption: renderFacebookCaption,
     renderPlatformCaption: renderPlatformCaption,
     getAll: getAll, get: get, put: put, del: del,
     genId: genId, nowIso: nowIso,
