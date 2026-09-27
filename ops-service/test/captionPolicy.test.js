@@ -13,19 +13,25 @@ function loadStore() {
 
 const Store = loadStore();
 
-test('tracked caption links are allowed on Facebook and long-form YouTube', function () {
-  assert.equal(Store.captionAllowsTrackedLink('facebook'), true);
+test('tracked caption links are allowed only on long-form YouTube', function () {
   assert.equal(Store.captionAllowsTrackedLink('ytlong'), true);
-  ['ytshort', 'instagram', 'tiktok'].forEach(function (platform) {
+  ['facebook', 'ytshort', 'instagram', 'tiktok'].forEach(function (platform) {
     assert.equal(Store.captionAllowsTrackedLink(platform), false, platform);
   });
 });
 
-test('Facebook expands the shortcode and appends a link when it is omitted', function () {
+test('Facebook removes outbound links and always appends the book-in-bio CTA', function () {
   const link = 'https://realitymanual.com?utm_source=facebook';
-  assert.equal(Store.renderPlatformCaption('Read it here: [LINK]', 'facebook', link), 'Read it here: ' + link);
-  assert.equal(Store.renderPlatformCaption('A useful caption', 'facebook', link), 'A useful caption\n\n' + link);
-  assert.equal(Store.renderPlatformCaption('', 'facebook', link), link);
+  assert.equal(
+    Store.renderPlatformCaption('A useful caption\n\nRead it here: [LINK]', 'facebook', link),
+    'A useful caption\n\nRead it here\n\n' + Store.FACEBOOK_BIO_CTA
+  );
+  assert.equal(
+    Store.renderPlatformCaption('A useful caption https://example.test/book', 'facebook', link),
+    'A useful caption\n\n' + Store.FACEBOOK_BIO_CTA
+  );
+  assert.equal(Store.renderPlatformCaption('', 'facebook', link), Store.FACEBOOK_BIO_CTA);
+  assert.equal(Store.renderPlatformCaption('', 'facebook', link).includes(link), false);
 });
 
 test('long-form YouTube expands LINK without forcing one into an unlinked template', function () {

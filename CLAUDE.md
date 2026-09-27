@@ -10442,3 +10442,27 @@ column order keeps restoration correct across filtering, card moves, and future
 stage additions. Because the fix lives in the shared redraw path, it also
 protects scroll position during autosave/background refresh renders instead of
 only special-casing the editor's close button.
+
+---
+
+# 233. Facebook Captions Use a Bio CTA Instead of Outbound Links (2026-09-27)
+
+Facebook publishing no longer places the tracked storefront URL directly in a
+post caption. Early organic reach is the priority while the Page is building an
+audience, and Meta itself has advised Page managers to avoid caption links when
+distribution matters. Every Facebook caption now receives the stable CTA
+`Get The Reality Manual through the link in our bio.` instead.
+
+This is enforced at the final platform-caption rendering boundary, not merely
+as placeholder copy. An old saved Facebook template containing `[LINK]`, or a
+literal `http://`/`https://` URL pasted into that template, is stripped before
+the bio CTA is appended, so stale settings cannot leak an outbound URL into a
+scheduled post. Both short-form and long-form Facebook video use this policy.
+Long-form YouTube retains its optional tracked `[LINK]`; YouTube Shorts,
+Instagram and TikTok remain link-free as before.
+
+Content Settings now explains the policy beside the platform-specific caption
+fields and reminds the operator that the Facebook Page website/bio destination
+must be maintained in Meta. Individual Facebook sales attribution is therefore
+intentionally traded away in favour of reach; post performance itself remains
+available through Meta's video statistics.
