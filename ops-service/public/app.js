@@ -2711,6 +2711,16 @@
 
   function render() {
     var scrollLeft = boardWrap.scrollLeft;
+    // Rebuilding the board replaces every `.column-body`, which otherwise
+    // resets each stage to the top. This is especially disruptive when an
+    // editor opened halfway down a busy column closes and calls render().
+    // Key the offsets by stage rather than DOM order so filtering, moving a
+    // card, or adding a future stage cannot restore an offset to the wrong
+    // column.
+    var columnScrollTops = {};
+    board.querySelectorAll('.column-body[data-stage]').forEach(function (body) {
+      columnScrollTops[body.dataset.stage] = body.scrollTop;
+    });
     var query = activeSearchQuery.trim().toLowerCase();
     board.innerHTML = Store.STAGES.map(function (s, idx) {
       var ids = orderedIds(s.id);
@@ -2734,6 +2744,11 @@
         '</div>';
     }).join('');
     boardWrap.scrollLeft = scrollLeft;
+    board.querySelectorAll('.column-body[data-stage]').forEach(function (body) {
+      if (Object.prototype.hasOwnProperty.call(columnScrollTops, body.dataset.stage)) {
+        body.scrollTop = columnScrollTops[body.dataset.stage];
+      }
+    });
     renderStats();
     renderOverview();
     bindBoardEvents();

@@ -10423,3 +10423,22 @@ sequence, and rejection of tampered signed media URLs. The full suite passes
 Facebook or Instagram test post; the first real video will provide the live
 platform acceptance check, and any platform-specific rejection remains visible
 on its Final Check card without blocking or duplicating the others.
+
+---
+
+# 232. Kanban Column Scroll Survives Editor Open/Close (2026-09-27)
+
+Closing the shared piece editor used to return every Content Pipeline column to
+its top. The close callback redraws the Kanban so edits are visible, and
+`render()` preserved the board's horizontal offset but replaced every
+`.column-body` without preserving its independent vertical offset. This was most
+noticeable in a long stage such as Outline Completed: opening a card halfway
+down, then closing it, forced Harvey to find the same position again.
+
+`render()` now captures every column body's `scrollTop` keyed by stage before
+replacing the board markup and restores those offsets onto the corresponding
+new elements immediately afterward. Keying by stable stage id rather than
+column order keeps restoration correct across filtering, card moves, and future
+stage additions. Because the fix lives in the shared redraw path, it also
+protects scroll position during autosave/background refresh renders instead of
+only special-casing the editor's close button.
