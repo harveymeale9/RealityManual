@@ -10445,19 +10445,20 @@ only special-casing the editor's close button.
 
 ---
 
-# 233. Facebook Captions Use a Bio CTA Instead of Outbound Links (2026-09-27)
+# 233. Facebook Captions Are User-Written and Outbound-Link-Free (2026-09-27)
 
 Facebook publishing no longer places the tracked storefront URL directly in a
 post caption. Early organic reach is the priority while the Page is building an
 audience, and Meta itself has advised Page managers to avoid caption links when
-distribution matters. Every Facebook caption now receives the stable CTA
-`Get The Reality Manual through the link in our bio.` instead.
+distribution matters. The actual caption and any link-in-bio wording remain
+entirely user-selected in Content Settings; the system does not append a fixed
+CTA.
 
 This is enforced at the final platform-caption rendering boundary, not merely
 as placeholder copy. An old saved Facebook template containing `[LINK]`, or a
-literal `http://`/`https://` URL pasted into that template, is stripped before
-the bio CTA is appended, so stale settings cannot leak an outbound URL into a
-scheduled post. Both short-form and long-form Facebook video use this policy.
+literal `http://`/`https://` URL pasted into that template, is stripped, so
+stale settings cannot leak an outbound URL into a scheduled post. All other
+wording is preserved. Both short-form and long-form Facebook video use this policy.
 Long-form YouTube retains its optional tracked `[LINK]`; YouTube Shorts,
 Instagram and TikTok remain link-free as before.
 

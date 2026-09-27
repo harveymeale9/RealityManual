@@ -20,17 +20,18 @@ test('tracked caption links are allowed only on long-form YouTube', function () 
   });
 });
 
-test('Facebook removes outbound links and always appends the book-in-bio CTA', function () {
+test('Facebook removes outbound links without changing the selected caption or forcing a CTA', function () {
   const link = 'https://realitymanual.com?utm_source=facebook';
   assert.equal(
     Store.renderPlatformCaption('A useful caption\n\nRead it here: [LINK]', 'facebook', link),
-    'A useful caption\n\nRead it here\n\n' + Store.FACEBOOK_BIO_CTA
+    'A useful caption\n\nRead it here'
   );
   assert.equal(
     Store.renderPlatformCaption('A useful caption https://example.test/book', 'facebook', link),
-    'A useful caption\n\n' + Store.FACEBOOK_BIO_CTA
+    'A useful caption'
   );
-  assert.equal(Store.renderPlatformCaption('', 'facebook', link), Store.FACEBOOK_BIO_CTA);
+  assert.equal(Store.renderPlatformCaption('Get the book through the link in our bio.', 'facebook', link), 'Get the book through the link in our bio.');
+  assert.equal(Store.renderPlatformCaption('', 'facebook', link), '');
   assert.equal(Store.renderPlatformCaption('', 'facebook', link).includes(link), false);
 });
 

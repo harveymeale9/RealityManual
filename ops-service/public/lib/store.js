@@ -309,9 +309,10 @@ window.RMStore = (function () {
   }
 
   // Only long-form YouTube receives a tracked storefront URL. Facebook is
-  // deliberately link-free to avoid suppressing early organic distribution;
-  // it gets a stable bio CTA below. YouTube Shorts makes description URLs
-  // non-clickable, and Instagram/TikTok captions are also kept link-free.
+  // deliberately link-free to avoid suppressing early organic distribution,
+  // but its caption wording remains entirely user-selected. YouTube Shorts
+  // makes description URLs non-clickable, and Instagram/TikTok captions are
+  // also kept link-free.
   // Keeping this as publish-time policy means an old saved template containing
   // [LINK] cannot leak a URL after the rule changes.
   function captionAllowsTrackedLink(platform) {
@@ -330,8 +331,6 @@ window.RMStore = (function () {
       .trim();
   }
 
-  var FACEBOOK_BIO_CTA = 'Get The Reality Manual through the link in our bio.';
-
   function renderFacebookCaption(template) {
     // Existing settings may contain either the old [LINK] shortcode or an
     // already-pasted URL. Remove both at the final rendering boundary so a
@@ -345,7 +344,7 @@ window.RMStore = (function () {
       .join('\n')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
-    return [text, FACEBOOK_BIO_CTA].filter(Boolean).join('\n\n');
+    return text;
   }
 
   function renderPlatformCaption(template, platform, link) {
@@ -365,7 +364,6 @@ window.RMStore = (function () {
     applyCaptionLink: applyCaptionLink,
     captionAllowsTrackedLink: captionAllowsTrackedLink,
     stripCaptionLink: stripCaptionLink,
-    FACEBOOK_BIO_CTA: FACEBOOK_BIO_CTA,
     renderFacebookCaption: renderFacebookCaption,
     renderPlatformCaption: renderPlatformCaption,
     getAll: getAll, get: get, put: put, del: del,

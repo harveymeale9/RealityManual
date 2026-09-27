@@ -4141,10 +4141,10 @@
         '<h3>Captions</h3>' +
         '<p class="settings-hint">One description per platform, organized by content shape — a piece can be tagged ' +
           'for several platforms at once, each getting its own independently-set caption (Final Check shows all of ' +
-          'them with a toggle when there\'s more than one). Facebook is kept free of outbound links and automatically ' +
-          'receives a “Get The Reality Manual through the link in our bio” CTA. Any old <code>[LINK]</code> token or ' +
-          'pasted URL is removed at publish time. Long-form YouTube supports <code>[LINK]</code>; YouTube Shorts, ' +
-          'Instagram and TikTok are also kept link-free.</p>' +
+          'them with a toggle when there\'s more than one). Your Facebook caption is used as selected; any old ' +
+          '<code>[LINK]</code> token or pasted URL is removed at publish time so you can write your preferred ' +
+          'link-in-bio wording yourself. Long-form YouTube supports <code>[LINK]</code>; YouTube Shorts, Instagram ' +
+          'and TikTok are also kept link-free.</p>' +
         '<div class="caption-group-tabs" id="captionGroupTabs">' +
           '<button type="button" class="caption-group-tab active" data-group="shortform">Short-form</button>' +
           '<button type="button" class="caption-group-tab" data-group="longform">Longform</button>' +
@@ -4157,13 +4157,13 @@
           '<label class="field-label" style="margin-top:14px;display:block;">Instagram caption</label>' +
           '<textarea class="notes-input settings-textarea" id="caption-shortform-instagram" placeholder="Instagram caption — no external link"></textarea>' +
           '<label class="field-label" style="margin-top:14px;display:block;">Facebook caption</label>' +
-          '<textarea class="notes-input settings-textarea" id="caption-shortform-facebook" placeholder="Facebook caption — the book-in-bio CTA is added automatically"></textarea>' +
+          '<textarea class="notes-input settings-textarea" id="caption-shortform-facebook" placeholder="Choose your Facebook caption"></textarea>' +
         '</div>' +
         '<div class="caption-group-panel" data-group="longform" id="captionPanelLongform" hidden>' +
           '<label class="field-label">YouTube caption</label>' +
           '<textarea class="notes-input settings-textarea" id="caption-longform-ytlong" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
           '<label class="field-label" style="margin-top:14px;display:block;">Facebook caption</label>' +
-          '<textarea class="notes-input settings-textarea" id="caption-longform-facebook" placeholder="Facebook caption — the book-in-bio CTA is added automatically"></textarea>' +
+          '<textarea class="notes-input settings-textarea" id="caption-longform-facebook" placeholder="Choose your Facebook caption"></textarea>' +
         '</div>' +
       '</section>' +
       '<section class="settings-section">' +
