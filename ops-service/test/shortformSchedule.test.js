@@ -27,3 +27,23 @@ test('missing Buffer schedule safely falls back to two daily GMT+7 slots', funct
   assert.equal(schedule.isShortform({ contentType: 'short' }), true);
   assert.equal(schedule.isShortform({ contentType: 'longform' }), false);
 });
+
+test('longform uses the chosen Bangkok time on a three-day calendar rhythm', function () {
+  assert.equal(
+    schedule.nextBangkokLongformSlot(Date.parse('2026-09-28T00:00:00Z'), '07:55', null),
+    '2026-09-28T00:55:00.000Z'
+  );
+  assert.equal(
+    schedule.nextBangkokLongformSlot(Date.parse('2026-09-28T02:00:00Z'), '07:55', null),
+    '2026-09-29T00:55:00.000Z'
+  );
+  assert.equal(
+    schedule.nextBangkokLongformSlot(Date.parse('2026-09-29T00:00:00Z'), '07:55', '2026-09-28T00:55:00.000Z'),
+    '2026-10-01T00:55:00.000Z'
+  );
+});
+
+test('longform time input is normalized and safely defaults to the shorts midpoint', function () {
+  assert.equal(schedule.normalizeLongformTime('19:05'), '19:05');
+  assert.equal(schedule.normalizeLongformTime('bad'), '07:55');
+});

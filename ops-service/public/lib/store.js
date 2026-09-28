@@ -174,7 +174,7 @@ window.RMStore = (function () {
   var SHORT_TYPES = ['ultra_short', 'short', 'long_short'];
   var DEFAULT_CADENCE = {
     shorts: { every: 8, unit: 'hours' },
-    longform: { every: 7, unit: 'days' }
+    longform: { every: 3, unit: 'days' }
   };
 
   var SETTINGS_ID = 'settings';
@@ -183,6 +183,7 @@ window.RMStore = (function () {
     return {
       id: SETTINGS_ID,
       cadence: JSON.parse(JSON.stringify(DEFAULT_CADENCE)),
+      longformScheduleTime: '07:55',
       lastShortType: '',
       // Captions are organized by content shape, per Harvey (2026-09-20) —
       // one field per platform that shape can actually be tagged with,
@@ -274,6 +275,7 @@ window.RMStore = (function () {
       s.musicDuckingEnabled = s.musicDuckingEnabled === true;
       if (typeof s.baseLinkUrl !== 'string') s.baseLinkUrl = d.baseLinkUrl;
       if (typeof s.lastShortType !== 'string') s.lastShortType = '';
+      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(s.longformScheduleTime || ''))) s.longformScheduleTime = d.longformScheduleTime;
       return s;
     });
   }

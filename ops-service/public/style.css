@@ -1839,6 +1839,7 @@ body.role-reviewer #pmBackFab {
   border-radius: var(--radius);
   font-family: inherit;
 }
+.cadence-time { width: 112px; padding: 8px 10px; border: 1px solid var(--border-soft); border-radius: 7px; background: var(--surface-2); color: var(--ink); font: inherit; color-scheme: dark; }
 
 .ambient-volume-row {
   display: flex;

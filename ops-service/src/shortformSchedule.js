@@ -60,9 +60,34 @@ function isShortform(piece) {
   return ['ultra_short', 'short', 'long_short'].indexOf(piece && piece.contentType) !== -1;
 }
 
+function normalizeLongformTime(value) {
+  return normalizeTime(value) || '07:55';
+}
+
+// Longform uses a three-calendar-day Bangkok rhythm at one chosen wall-clock
+// time. Using the prior longform's local calendar date as the anchor means the
+// normal case is exactly 72 hours, while changing the chosen time deliberately
+// shifts the next release to that new wall-clock time.
+function nextBangkokLongformSlot(after, selectedTime, latestScheduledAt) {
+  const afterMs = after instanceof Date ? after.getTime() : Number(after);
+  if (!Number.isFinite(afterMs)) throw new Error('A valid starting time is required.');
+  const time = normalizeLongformTime(selectedTime).split(':').map(Number);
+  const latestMs = Date.parse(latestScheduledAt || '');
+  const anchorMs = Number.isFinite(latestMs) ? latestMs : afterMs;
+  const anchorLocal = new Date(anchorMs + BANGKOK_OFFSET_MS);
+  let localDay = Date.UTC(anchorLocal.getUTCFullYear(), anchorLocal.getUTCMonth(), anchorLocal.getUTCDate());
+  if (Number.isFinite(latestMs)) localDay += 3 * 86400000;
+  let candidate = localDay + time[0] * 3600000 + time[1] * 60000 - BANGKOK_OFFSET_MS;
+  if (!Number.isFinite(latestMs) && candidate <= afterMs) candidate += 86400000;
+  while (candidate <= afterMs) candidate += 3 * 86400000;
+  return new Date(candidate).toISOString();
+}
+
 module.exports = {
   DEFAULT_SLOTS: DEFAULT_SLOTS,
   nextBangkokSlot: nextBangkokSlot,
+  nextBangkokLongformSlot: nextBangkokLongformSlot,
+  normalizeLongformTime: normalizeLongformTime,
   scheduleMap: scheduleMap,
   isShortform: isShortform
 };

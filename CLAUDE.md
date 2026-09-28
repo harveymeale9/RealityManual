@@ -10823,3 +10823,37 @@ safe fallback. The complete ops-service suite passes (72 tests). Real Chromium
 at 1440×900 and 390×844 confirmed the Settings surface shows only the longform
 rolling control, shows the shared short-form schedule, has no runtime errors and
 has no horizontal overflow.
+
+---
+
+# 245. Three-Day Longform Releases at a Selectable Bangkok Midpoint (2026-09-28)
+
+Harvey finalized Buffer at two daily TikTok slots around **1:55 AM and 1:55
+PM Asia/Bangkok** and changed longform from the prior 70-hour interval to one
+release every three days. The intended default longform time is **7:55 AM
+Asia/Bangkok**, exactly halfway between the two nominal short slots, so a
+YouTube/Facebook longform post never lands on top of either daily short.
+
+Content Settings now presents longform as **Every 3 days at [time]
+Asia/Bangkok** with a native time field. The stored default is `07:55`, and
+existing production settings are migrated explicitly during deployment to
+`cadence.longform = { every: 3, unit: 'days' }` plus
+`longformScheduleTime = '07:55'`. The old rolling number/unit editor is gone;
+the cadence decision is fixed while the release time remains easy for Harvey to
+adjust later.
+
+This is real publication scheduling, not UI-only metadata. Pressing **Schedule
+Video** on a longform piece now persists the fully rendered YouTube/Facebook
+payload and moves it to Scheduled. The same restart-safe 30-second release
+worker used by direct short-form publishes it at the selected Bangkok time.
+Each subsequent longform uses the previous scheduled longform's Bangkok
+calendar date plus three days, which is exactly 72 hours when the selected time
+is unchanged. Changing the time deliberately shifts the next three-day release
+to the new wall-clock time. The legacy client-side approval route uses the same
+calculation, so it cannot display a contradictory timestamp.
+
+No social post was created. Two new regressions cover the 7:55 Bangkok UTC
+conversion, first-slot rollover, three-day recurrence, and invalid-time
+fallback. The complete ops-service suite passes (74 tests). Real Chromium at
+1440×900 and 390×844 confirmed the new field defaults to 07:55, renders without
+runtime errors, and causes no horizontal overflow.

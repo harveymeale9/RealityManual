@@ -1791,9 +1791,45 @@ async function runPlatformPublishBatch(id, destinations) {
   // its exact dueAt, then persist the direct-platform payload until that same
   // instant. If TikTok is not selected, mirror Buffer's current Bangkok queue
   // schedule so YouTube Shorts / Instagram / Facebook still occupy the same
-  // midnight-or-noon timeline. Longform deliberately stays on its existing
-  // path and is not affected by this fixed-slot scheduler.
+  // midnight-or-noon timeline. Longform is queued separately below on its
+  // three-day Bangkok rhythm and never competes with either short slot.
   const initialPiece = getPieceRecord(id);
+  const isScheduledLongformRelease = initialPiece && initialPiece.contentType === 'longform' &&
+    !initialPiece.directLongformReleaseRunning;
+  if (isScheduledLongformRelease) {
+    const settingsRow = stmts.getOne.get('settings', 'settings');
+    let settings = {};
+    try { settings = settingsRow ? JSON.parse(settingsRow.data) : {}; } catch (error) { settings = {}; }
+    let latestScheduledAt = null;
+    let latestTimestamp = 0;
+    stmts.getAll.all('pieces').forEach(function (row) {
+      const other = recordConcurrency.decodeRow(row);
+      if (!other || other.id === id || other.contentType !== 'longform' ||
+          ['scheduled', 'live'].indexOf(other.stage) === -1 || !other.scheduledAt) return;
+      const timestamp = Date.parse(other.scheduledAt);
+      if (Number.isFinite(timestamp) && timestamp > latestTimestamp) {
+        latestTimestamp = timestamp;
+        latestScheduledAt = other.scheduledAt;
+      }
+    });
+    const dueAt = shortformSchedule.nextBangkokLongformSlot(
+      Date.now(), settings.longformScheduleTime || '07:55', latestScheduledAt
+    );
+    const latest = getPieceRecord(id);
+    if (!latest) return;
+    latest.scheduledAt = dueAt;
+    latest.stage = 'scheduled';
+    latest.directLongformPublishStatus = 'scheduled';
+    latest.scheduledPublishDestinations = destinations;
+    latest.directLongformReleaseRunning = false;
+    destinations.forEach(function (destination) {
+      latest[publishStatusField(destination.platform)] = 'scheduled';
+      latest[publishErrorField(destination.platform)] = '';
+    });
+    latest.updatedAt = new Date().toISOString();
+    savePieceRecord(latest);
+    return;
+  }
   const isScheduledShortRelease = shortformSchedule.isShortform(initialPiece) &&
     !(initialPiece && initialPiece.directShortReleaseRunning);
   if (isScheduledShortRelease) {
@@ -1929,49 +1965,64 @@ async function runPlatformPublishBatch(id, destinations) {
     latest.stage = allPlatforms.indexOf('tiktok') !== -1 ? 'scheduled' : 'live';
     latest.postedAt = new Date().toISOString();
   }
-  if (latest.directShortReleaseRunning) {
-    latest.directShortPublishStatus = hasError ? 'error' : (allDone ? 'done' : latest.directShortPublishStatus);
+  if (latest.directShortReleaseRunning || latest.directLongformReleaseRunning) {
+    if (latest.directShortReleaseRunning) {
+      latest.directShortPublishStatus = hasError ? 'error' : (allDone ? 'done' : latest.directShortPublishStatus);
+    }
+    if (latest.directLongformReleaseRunning) {
+      latest.directLongformPublishStatus = hasError ? 'error' : (allDone ? 'done' : latest.directLongformPublishStatus);
+    }
     latest.scheduledPublishDestinations = [];
     latest.directShortReleaseRunning = false;
+    latest.directLongformReleaseRunning = false;
   }
   latest.updatedAt = new Date().toISOString();
   savePieceRecord(latest);
 }
 
-const directShortReleasesInFlight = new Set();
-async function releaseDueDirectShorts() {
+const directReleasesInFlight = new Set();
+async function releaseDueDirectPosts() {
   const now = Date.now();
   const piecesDue = stmts.getAll.all('pieces').map(function (row) { return recordConcurrency.decodeRow(row); })
     .filter(function (piece) {
-      return piece && piece.stage === 'scheduled' && piece.directShortPublishStatus === 'scheduled' &&
+      const scheduled = piece && (piece.directShortPublishStatus === 'scheduled' || piece.directLongformPublishStatus === 'scheduled');
+      return scheduled && piece.stage === 'scheduled' &&
         Array.isArray(piece.scheduledPublishDestinations) && piece.scheduledPublishDestinations.length &&
         Number.isFinite(Date.parse(piece.scheduledAt)) && Date.parse(piece.scheduledAt) <= now &&
-        !directShortReleasesInFlight.has(piece.id);
+        !directReleasesInFlight.has(piece.id);
     });
   for (const piece of piecesDue) {
-    directShortReleasesInFlight.add(piece.id);
+    directReleasesInFlight.add(piece.id);
     try {
       const latest = getPieceRecord(piece.id);
-      if (!latest || latest.directShortPublishStatus !== 'scheduled') continue;
-      latest.directShortReleaseRunning = true;
-      latest.directShortPublishStatus = 'running';
+      const isLongform = latest && latest.directLongformPublishStatus === 'scheduled';
+      if (!latest || (!isLongform && latest.directShortPublishStatus !== 'scheduled')) continue;
+      if (isLongform) {
+        latest.directLongformReleaseRunning = true;
+        latest.directLongformPublishStatus = 'running';
+      } else {
+        latest.directShortReleaseRunning = true;
+        latest.directShortPublishStatus = 'running';
+      }
       (latest.scheduledPublishDestinations || []).forEach(function (destination) {
         latest[publishStatusField(destination.platform)] = 'pending';
       });
       savePieceRecord(latest);
       await runPlatformPublishBatch(piece.id, latest.scheduledPublishDestinations || []);
     } catch (error) {
-      console.error('Scheduled direct short-form release failed for ' + piece.id + ':', error.message);
+      console.error('Scheduled direct release failed for ' + piece.id + ':', error.message);
       const latest = getPieceRecord(piece.id);
       if (latest) {
-        latest.directShortPublishStatus = 'error';
+        if (latest.contentType === 'longform') latest.directLongformPublishStatus = 'error';
+        else latest.directShortPublishStatus = 'error';
         latest.directShortReleaseRunning = false;
+        latest.directLongformReleaseRunning = false;
         latest.stage = 'final_check';
         latest.updatedAt = new Date().toISOString();
         savePieceRecord(latest);
       }
     } finally {
-      directShortReleasesInFlight.delete(piece.id);
+      directReleasesInFlight.delete(piece.id);
     }
   }
 }
@@ -2777,6 +2828,13 @@ function recoverInflightVideoJobs() {
       piece.stage = 'final_check';
       changed = true;
     }
+    if (piece.directLongformReleaseRunning || piece.directLongformPublishStatus === 'running') {
+      piece.directLongformReleaseRunning = false;
+      piece.directLongformPublishStatus = 'error';
+      piece.scheduledPublishDestinations = [];
+      piece.stage = 'final_check';
+      changed = true;
+    }
     if (changed) {
       piece.updatedAt = now;
       savePieceRecord(piece);
@@ -2795,8 +2853,8 @@ app.listen(PORT, function () {
   console.log('rm-ops-service listening on ' + PORT);
   recoverInflightVoiceMessages();
   recoverInflightVideoJobs();
-  releaseDueDirectShorts().catch(function (error) { console.error('initial direct short-form release check failed:', error.message); });
+  releaseDueDirectPosts().catch(function (error) { console.error('initial direct release check failed:', error.message); });
   setInterval(function () {
-    releaseDueDirectShorts().catch(function (error) { console.error('direct short-form release check failed:', error.message); });
+    releaseDueDirectPosts().catch(function (error) { console.error('direct release check failed:', error.message); });
   }, 30000);
 });

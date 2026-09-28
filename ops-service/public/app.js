@@ -1273,6 +1273,20 @@
     return candidates.filter(function (candidate) { return candidate > afterMs; })[0] || (localMidnight + 36 * 3600000 - offset);
   }
 
+  function nextBangkokLongformSlot(afterMs, selectedTime, latestMs) {
+    var offset = 7 * 60 * 60 * 1000;
+    var match = String(selectedTime || '').match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+    var hour = match ? Number(match[1]) : 7;
+    var minute = match ? Number(match[2]) : 55;
+    var anchor = new Date((latestMs || afterMs) + offset);
+    var localDay = Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), anchor.getUTCDate());
+    if (latestMs) localDay += 3 * 86400000;
+    var candidate = localDay + hour * 3600000 + minute * 60000 - offset;
+    if (!latestMs && candidate <= afterMs) candidate += 86400000;
+    while (candidate <= afterMs) candidate += 3 * 86400000;
+    return candidate;
+  }
+
   // Fills as many consecutive shorts slots as there are approved pieces
   // for, rotating ultra_short -> short -> long_short -> repeat and
   // skipping any type with nothing ready right now (falls back to
@@ -1330,8 +1344,6 @@
         scheduleShorts(settings);
         return;
       }
-      var cfg = settings.cadence.longform || Store.DEFAULT_CADENCE.longform;
-      var ms = Store.cadenceMs(cfg);
       var latest = null;
       Object.keys(pieces).forEach(function (id) {
         var o = pieces[id];
@@ -1340,8 +1352,7 @@
           if (!latest || t > latest) latest = t;
         }
       });
-      var base = latest || Date.now();
-      p.scheduledAt = new Date(base + ms).toISOString();
+      p.scheduledAt = new Date(nextBangkokLongformSlot(Date.now(), settings.longformScheduleTime, latest)).toISOString();
       p.stage = 'scheduled';
     });
   }
@@ -4421,31 +4432,20 @@
     settingsSaveTimer = setTimeout(function () { Store.saveSettings(settingsCache); }, 400);
   }
 
-  var CADENCE_ROWS = [
-    { key: 'longform', label: 'Direct longform', hint: 'YouTube / Facebook' }
-  ];
-
   function renderCadenceGrid() {
     var grid = document.getElementById('cadenceGrid');
-    grid.innerHTML = CADENCE_ROWS.map(function (row) {
-      var cfg = settingsCache.cadence[row.key];
-      var dis = IS_REVIEWER ? ' disabled' : '';
-      return '<div class="cadence-row" data-key="' + row.key + '">' +
-        '<span class="cadence-label">' + row.label + ' <span class="ink-faint">(' + row.hint + ')</span></span>' +
-        '<span class="cadence-inputs">1 every <input type="number" min="1" step="1" class="cadence-every" value="' + cfg.every + '"' + dis + ' /> ' +
-        '<select class="cadence-unit"' + dis + '><option value="hours"' + (cfg.unit === 'hours' ? ' selected' : '') + '>hours</option><option value="days"' + (cfg.unit === 'days' ? ' selected' : '') + '>days</option></select></span>' +
-      '</div>';
-    }).join('');
-    grid.querySelectorAll('.cadence-row').forEach(function (row) {
-      var key = row.dataset.key;
-      row.querySelector('.cadence-every').addEventListener('input', function (e) {
-        settingsCache.cadence[key].every = Math.max(1, parseInt(e.target.value, 10) || 1);
-        saveSettingsDebounced();
-      });
-      row.querySelector('.cadence-unit').addEventListener('change', function (e) {
-        settingsCache.cadence[key].unit = e.target.value;
-        saveSettingsDebounced();
-      });
+    var dis = IS_REVIEWER ? ' disabled' : '';
+    grid.innerHTML = '<div class="cadence-row" data-key="longform">' +
+      '<span class="cadence-label">Direct longform <span class="ink-faint">(YouTube / Facebook)</span></span>' +
+      '<span class="cadence-inputs">Every 3 days at <input type="time" class="cadence-time" id="longformScheduleTime" value="' +
+        escapeHtml(settingsCache.longformScheduleTime || '07:55') + '"' + dis + ' /> <span>Asia/Bangkok</span></span>' +
+    '</div>';
+    var timeInput = document.getElementById('longformScheduleTime');
+    timeInput.addEventListener('change', function () {
+      settingsCache.longformScheduleTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(timeInput.value) ? timeInput.value : '07:55';
+      settingsCache.cadence.longform = { every: 3, unit: 'days' };
+      timeInput.value = settingsCache.longformScheduleTime;
+      saveSettingsDebounced();
     });
   }
 
