@@ -31,6 +31,18 @@ try {
   // Already present, or the table doesn't exist yet.
 }
 
+for (const column of [
+  'shipping_service_name TEXT',
+  'shipping_min_delivery_days INTEGER',
+  'shipping_max_delivery_days INTEGER',
+]) {
+  try {
+    db.exec(`ALTER TABLE orders ADD COLUMN ${column}`);
+  } catch {
+    // Already present, or the table does not exist yet.
+  }
+}
+
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
 db.exec(schema);
 

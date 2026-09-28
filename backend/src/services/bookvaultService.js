@@ -69,8 +69,8 @@ async function request(method, path, body) {
 const PREFERRED_SERVICE_NAME = 'USPS Consolidator';
 
 // Get a live shipping quote for the given quantity of books to a
-// country/postcode. Returns { shippingPriceCents, currency, serviceName } or
-// throws — callers decide how to handle a failure (shippingService falls
+// country/postcode. Returns pricing, the selected service, and BookVault's
+// estimated delivery-day range or throws. Callers decide how to handle a failure (shippingService falls
 // back to the static shipping_rates table).
 //
 // POST /Dispatch — "Loads all the available dispatch services based on the
@@ -115,6 +115,8 @@ async function getShippingQuote({ countryCode, postalCode, quantity = 1, currenc
     shippingPriceCents: Math.round(chosen.DelTotal * 100),
     currency,
     serviceName: chosen.ServName || null,
+    minDeliveryDays: Number(chosen.MinDeliveryDays) > 0 ? Number(chosen.MinDeliveryDays) : null,
+    maxDeliveryDays: Number(chosen.MaxDeliveryDays) > 0 ? Number(chosen.MaxDeliveryDays) : null,
   };
 }
 

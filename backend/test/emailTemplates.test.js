@@ -24,11 +24,12 @@ test('confirmation email is branded, responsive, plain-text backed, and escapes 
   assert.equal(email.subject, '[PREVIEW] We’re Making Your Copy of The Reality Manual');
   assert.match(email.html, /We’re Making Your Copy of The Reality Manual/);
   assert.match(email.html, /15 working days/);
-  assert.match(email.html, /individually produced with the care and attention/);
-  assert.match(email.html, /make, inspect and finish your book properly/);
+  assert.match(email.html, /leading printers of bespoke books/);
+  assert.match(email.html, /time and individual attention/);
+  assert.match(email.html, /Thank you for giving us the time/);
   assert.doesNotMatch(email.html, /<script>alert/);
   assert.match(email.html, /Ava &lt;script&gt;/);
-  assert.match(email.text, /Hardcover — Deluxe First Edition/);
+  assert.match(email.text, /Hardcover, Deluxe First Edition/);
   assert.match(email.text, /\$139\.98 USD/);
 });
 
@@ -37,7 +38,13 @@ test('dispatch email includes tracking only when BookVault supplies it', () => {
     carrierName: 'Royal Mail',
     trackingNumber: 'TRACK-123',
     trackingUrl: 'https://tracking.example/TRACK-123',
+    minDeliveryDays: 2,
+    maxDeliveryDays: 5,
   });
+  assert.equal(tracked.subject, 'Your Copy of The Reality Manual Is on Its Way');
+  assert.match(tracked.html, /Wonderful news, Ava/);
+  assert.match(tracked.html, /Thank you for your patience/);
+  assert.match(tracked.html, /2 to 5 working days after dispatch/);
   assert.match(tracked.html, /Track your shipment/);
   assert.match(tracked.html, /https:\/\/tracking\.example\/TRACK-123/);
   assert.match(tracked.text, /TRACK-123/);
@@ -49,14 +56,25 @@ test('dispatch email includes tracking only when BookVault supplies it', () => {
 
 test('refund email says the refund was issued without promising bank timing', () => {
   const email = orderRefundedEmail(order);
-  assert.equal(email.subject, 'We couldn’t complete your order.');
+  assert.equal(email.subject, 'We Couldn’t Complete Your Order');
   assert.match(email.html, /issued a full refund/);
   assert.match(email.html, /Try Your Order Again/);
   assert.match(email.html, /https:\/\/realitymanual\.com\/checkout\.html/);
   assert.match(email.text, /Please try placing your order once more/);
-  assert.match(email.text, /we’ll be in touch to help resolve it/);
+  assert.match(email.text, /We’ll be in touch to help resolve it/);
   assert.match(email.text, /bank may take several working days/);
   assert.match(email.text, /\$139\.98 USD/);
+});
+
+test('customer-facing email content never contains an em dash', () => {
+  const emails = [
+    orderConfirmedEmail(order, { preview: true }),
+    orderShippedEmail(order, { minDeliveryDays: 2, maxDeliveryDays: 5 }, { preview: true }),
+    orderRefundedEmail(order, { preview: true }),
+  ];
+  for (const email of emails) {
+    assert.doesNotMatch(`${email.subject}\n${email.html}\n${email.text}`, /—/);
+  }
 });
 
 test('Resend client sends HTML and text with domain identity and idempotency', async () => {

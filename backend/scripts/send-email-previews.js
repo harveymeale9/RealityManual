@@ -31,6 +31,8 @@ const previews = [
     carrierName: 'Royal Mail',
     trackingNumber: 'RM123456789GB',
     trackingUrl: 'https://www.royalmail.com/track-your-item',
+    minDeliveryDays: 2,
+    maxDeliveryDays: 5,
   }, { preview: true })],
   ['refunded', orderRefundedEmail(sampleOrder, { preview: true })],
 ];

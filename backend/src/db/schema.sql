@@ -17,6 +17,9 @@ CREATE TABLE IF NOT EXISTS orders (
   quantity                  INTEGER NOT NULL DEFAULT 1,
   book_price_cents          INTEGER NOT NULL,
   shipping_price_cents      INTEGER NOT NULL,
+  shipping_service_name     TEXT,
+  shipping_min_delivery_days INTEGER,
+  shipping_max_delivery_days INTEGER,
   total_price_cents         INTEGER NOT NULL,
   currency                  TEXT NOT NULL DEFAULT 'usd',
   -- BookVault's PodRef for this order (see CLAUDE.md §25-28/§64). Unused

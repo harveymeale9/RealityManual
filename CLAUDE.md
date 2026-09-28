@@ -10525,3 +10525,37 @@ The manual preview recipient is now stored once in the VPS backend's private
 instead of typing or remembering a recipient ad hoc. This corrects the earlier
 one-character address mistake and prevents future preview sends from repeating
 it; the personal address itself remains out of git.
+
+---
+
+# 237. Warmer Email Voice, No Em Dashes, and BookVault Delivery Estimates (2026-09-28)
+
+Harvey's second email review established three explicit copy rules for customer
+messages: sound genuinely pleased and appreciative rather than merely
+transactional, use consistent title capitalization, and use absolutely no em
+dashes. A regression now scans the complete subject, HTML and plain-text output
+of all three messages for em dashes. The preview banner and edition label were
+also rewritten so the prohibition applies to every visible part of an email,
+not just its paragraphs.
+
+The order confirmation now says the team is delighted to begin, describes the
+printer as a creator of bespoke books, explains the individual inspection and
+attention each copy receives, and thanks the customer for allowing the time to
+make it properly. The dispatch message opens with “Wonderful news,” thanks the
+customer for their patience, celebrates the completion of their book and sets an
+expectation for how special it should feel to open. The failure message retains
+the one-retry instruction and support promise without using dash punctuation.
+
+BookVault's current `POST /Dispatch` response was rechecked against the live API
+and its OpenAPI schema. Each selected service provides `MinDeliveryDays` and
+`MaxDeliveryDays`; a live USPS Consolidator quote returned 1 and 8 working days.
+The BookVault client now preserves those fields, checkout stores the selected
+service and delivery-day range on the order, and the dispatch template shows the
+range as working days after dispatch. If BookVault returns zero or no estimate,
+the email gracefully omits the range rather than inventing one. Existing
+databases gain the three nullable shipping fields through the same idempotent
+startup-migration pattern used by earlier order columns.
+
+Five template/delivery tests pass, a temporary real SQLite order confirmed the
+new service and estimate fields persist, and real Chromium renders of all three
+emails at 390 px showed no horizontal overflow.

@@ -28,6 +28,8 @@ async function calculateTotal(countryCode, postalCode, quantity = 1) {
 
   let shippingPriceCents;
   let serviceName = null;
+  let minDeliveryDays = null;
+  let maxDeliveryDays = null;
   // True once we can confirm the order has been priced out of whatever
   // service would apply to a single copy (USPS Consolidator domestically,
   // the cheapest tracked option generally — see CLAUDE.md §66) into a
@@ -46,6 +48,8 @@ async function calculateTotal(countryCode, postalCode, quantity = 1) {
     });
     shippingPriceCents = quote.shippingPriceCents;
     serviceName = quote.serviceName;
+    minDeliveryDays = quote.minDeliveryDays;
+    maxDeliveryDays = quote.maxDeliveryDays;
 
     if (quantity > 1) {
       try {
@@ -81,6 +85,8 @@ async function calculateTotal(countryCode, postalCode, quantity = 1) {
     currency,
     quantity,
     serviceName,
+    minDeliveryDays,
+    maxDeliveryDays,
     shippingUpgraded,
   };
 }

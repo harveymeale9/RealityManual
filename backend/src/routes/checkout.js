@@ -39,6 +39,9 @@ router.post('/create-payment-intent', async (req, res) => {
     quantity,
     bookPriceCents: totals.bookPriceCents,
     shippingPriceCents: totals.shippingPriceCents,
+    shippingServiceName: totals.serviceName,
+    shippingMinDeliveryDays: totals.minDeliveryDays,
+    shippingMaxDeliveryDays: totals.maxDeliveryDays,
     totalPriceCents: totals.totalPriceCents,
     currency: totals.currency,
   });

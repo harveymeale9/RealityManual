@@ -5,10 +5,12 @@ const config = require('../config');
 const insertOrderStmt = db.prepare(`
   INSERT INTO orders (
     id, customer_name, email, phone, country, street1, street2, city, state, postal_code, quantity,
-    book_price_cents, shipping_price_cents, total_price_cents, currency, order_status
+    book_price_cents, shipping_price_cents, shipping_service_name, shipping_min_delivery_days,
+    shipping_max_delivery_days, total_price_cents, currency, order_status
   ) VALUES (
     @id, @customer_name, @email, @phone, @country, @street1, @street2, @city, @state, @postal_code, @quantity,
-    @book_price_cents, @shipping_price_cents, @total_price_cents, @currency, 'PAYMENT_PENDING'
+    @book_price_cents, @shipping_price_cents, @shipping_service_name, @shipping_min_delivery_days,
+    @shipping_max_delivery_days, @total_price_cents, @currency, 'PAYMENT_PENDING'
   )
 `);
 
@@ -41,6 +43,9 @@ function createOrder(input) {
     quantity: input.quantity,
     book_price_cents: input.bookPriceCents,
     shipping_price_cents: input.shippingPriceCents,
+    shipping_service_name: input.shippingServiceName || null,
+    shipping_min_delivery_days: input.shippingMinDeliveryDays || null,
+    shipping_max_delivery_days: input.shippingMaxDeliveryDays || null,
     total_price_cents: input.totalPriceCents,
     currency: input.currency,
   });
