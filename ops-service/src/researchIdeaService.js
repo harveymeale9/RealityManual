@@ -5,6 +5,10 @@ const crypto = require('crypto');
 const manual = require('./manualConceptIndex');
 
 const TARGET_ACTIVE = 10;
+// Each card needs live search plus an opened source page. Asking one agent to
+// research all ten in a single turn exceeded the four-minute evidence window;
+// small batches finish, persist, and retry independently.
+const MAX_RESEARCH_BATCH = 2;
 const SOURCE_SPLIT_MIGRATION = 'source_manual_split_v1';
 const SOURCES = [
   ['Naval Ravikant', 'happiness, desire, freedom, wealth, judgment and self-knowledge'],
@@ -163,7 +167,7 @@ function setup(db, options) {
   }
 
   function enqueue(count) {
-    count = Math.max(1, Math.min(Number(count) || 1, TARGET_ACTIVE));
+    count = Math.max(1, Math.min(Number(count) || 1, MAX_RESEARCH_BATCH));
     const stamp = now();
     db.prepare('INSERT INTO research_idea_jobs (id,status,requested_count,error,created_at,updated_at) VALUES(?,?,?,?,?,?)')
       .run(uuid(), 'pending', count, null, stamp, stamp);
@@ -172,10 +176,11 @@ function setup(db, options) {
 
   function ensureQueue() {
     const active = db.prepare("SELECT count(*) n FROM research_ideas WHERE status='active'").get().n;
-    // An errored job still represents the missing queue slots until Harvey
-    // retries or requests a fresh set. Counting it prevents an outage from
-    // creating an unbounded chain of automatic replacement jobs.
-    const queued = db.prepare("SELECT coalesce(sum(requested_count),0) n FROM research_idea_jobs WHERE status IN ('pending','running','error')").get().n;
+    // Any errored job pauses automatic filling until Harvey retries it or
+    // requests a fresh set. With intentionally small jobs, merely counting
+    // its two slots would still spawn four more jobs after an outage.
+    if (db.prepare("SELECT 1 FROM research_idea_jobs WHERE status='error' LIMIT 1").get()) return;
+    const queued = db.prepare("SELECT coalesce(sum(requested_count),0) n FROM research_idea_jobs WHERE status IN ('pending','running')").get().n;
     if (active + queued < TARGET_ACTIVE) enqueue(TARGET_ACTIVE - active - queued);
   }
 

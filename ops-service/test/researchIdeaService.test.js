@@ -50,7 +50,7 @@ test('research queue uses the complete source pool and only accepts verified Man
   } });
 
   service.ensureQueue();
-  await service.runWorker();
+  for (let index = 0; index < 5; index++) await service.runWorker();
   const state = service.state();
   assert.equal(state.ideas.length, 10);
   assert.equal(state.sourceCount, 41);
@@ -105,7 +105,7 @@ test('research generation errors stop and remain retryable instead of spawning j
   db.close();
 });
 
-test('a partial researched batch keeps valid cards and queues only the missing remainder', async function () {
+test('small partial research batches keep valid cards and continue filling the target', async function () {
   const db = database();
   let generation = 0;
   const service = researchIdeaService.setup(db, { autoStart: false, generateIdeas: async function (input) {
@@ -125,12 +125,12 @@ test('a partial researched batch keeps valid cards and queues only the missing r
   service.ensureQueue();
   await service.runWorker();
   let state = service.state();
-  assert.equal(state.ideas.length, 9);
+  assert.equal(state.ideas.length, 1);
   assert.equal(state.jobs.length, 1);
   assert.equal(state.jobs[0].status, 'pending');
-  assert.equal(state.jobs[0].requestedCount, 1);
+  assert.equal(state.jobs[0].requestedCount, 2);
 
-  await service.runWorker();
+  for (let index = 0; index < 5; index++) await service.runWorker();
   state = service.state();
   assert.equal(state.ideas.length, 10);
   assert.equal(state.jobs.length, 0);
