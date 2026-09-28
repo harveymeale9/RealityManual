@@ -130,6 +130,7 @@ To test a declined payment, use test card `4000 0000 0000 0002`.
 
 ```
 PAYMENT_PENDING   order created, awaiting Stripe payment
+PAYMENT_PROCESSING Stripe has authorized a non-card payment but not confirmed funds
 PAYMENT_RECEIVED  Stripe webhook confirmed payment_intent.succeeded
 FULFILLMENT_RETRY BookVault submission failed transiently and is scheduled for retry
 BOOKVAULT_ACCEPTED BookVault accepted the paid order; confirmation email sent/retrying

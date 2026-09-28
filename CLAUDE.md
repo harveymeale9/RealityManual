@@ -10624,3 +10624,34 @@ Harvey approves the physical proof, installs the live Stripe publishable and
 secret keys plus a separate live-mode webhook signing secret, changes the
 frontend publishable key, then enables fulfillment. No order or BookVault
 submission was created during this implementation.
+
+---
+
+# 240. Controlled Card, Wallet and Link Checkout (2026-09-28)
+
+Harvey chose a deliberately small launch payment-method set rather than either
+card-only checkout or every method enabled in Stripe: ordinary cards, eligible
+Apple Pay, eligible Google Pay and Link, including Link Instant Bank Payments
+when Stripe offers that funding source to an eligible US customer. In Stripe's
+API these are the controlled `card` and `link` types: `card` also powers Apple
+Pay and Google Pay, while Link requires both types. Klarna, Afterpay, Cash App
+and direct `us_bank_account` ACH Debit remain excluded. This keeps the $65 book
+checkout uncluttered and avoids delayed ordinary ACH settlement while retaining
+the lower-friction wallets and Stripe-managed instant bank option.
+
+The backend PaymentIntent and the client-side deferred Elements configuration
+now use the same exact `['card', 'link']` list. A regression locks that list and
+specifically proves that ordinary ACH and BNPL methods are absent. Stripe's
+`payment_intent.processing` webhook is now persisted as `PAYMENT_PROCESSING`,
+and the confirmation page explains that fulfillment waits for confirmed funds;
+only the existing signed `payment_intent.succeeded` path can enter BookVault.
+Nine backend tests pass and both checkout scripts parse cleanly.
+
+The go-live audit also confirmed that the VPS and public storefront still have
+only `sk_test_` and `pk_test_` credentials, the current webhook is a sandbox
+endpoint, and `FULFILLMENT_ENABLED` remains false. Live Stripe objects are
+separate rather than a mode bit the application can toggle. Harvey must place
+the live publishable key, live secret key and the signing secret from a new
+live-mode webhook endpoint into the private environment directly. Until then,
+the controlled payment-method change can be deployed and exercised only in
+Stripe's sandbox, and no BookVault order can be created.

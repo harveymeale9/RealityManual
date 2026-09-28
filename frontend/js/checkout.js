@@ -54,10 +54,11 @@
     mode: 'payment',
     amount: BOOK_PRICE_CENTS,
     currency: 'usd',
-    // Matches the server's payment_method_types on the actual PaymentIntent
-    // (stripeService.js) — card only, so the Payment Element never shows a
-    // method (Link, etc.) that the backend would then refuse at confirm time.
-    paymentMethodTypes: ['card'],
+    // Matches the server's payment_method_types. `card` gives customers
+    // ordinary cards plus eligible Apple Pay / Google Pay wallets; `link`
+    // adds Link and its eligible Instant Bank Payments funding source.
+    // We intentionally do not expose the rest of the Dashboard catalogue.
+    paymentMethodTypes: ['card', 'link'],
     appearance: {
       theme: 'night',
       variables: {

@@ -93,6 +93,13 @@
       return;
     }
 
+    if (order.order_status === 'PAYMENT_PROCESSING') {
+      statusTitle.textContent = 'Payment processing';
+      statusMessage.textContent = 'Your payment has been authorized and is still being confirmed. We will begin preparing your order only after Stripe confirms the funds.';
+      orderMeta.textContent = `Order ${order.order_id}`;
+      return;
+    }
+
     // PAYMENT_PENDING — keep polling, waiting state stays as-is.
     orderMeta.textContent = `Order ${order.order_id}`;
   }

@@ -54,6 +54,11 @@ router.post('/stripe', express.raw({ type: 'application/json' }), (req, res) => 
         orderService.updateStatusByPaymentIntentId(pi.id, 'FAILED', pi.status, event.livemode);
         break;
       }
+      case 'payment_intent.processing': {
+        const pi = event.data.object;
+        orderService.updateStatusByPaymentIntentId(pi.id, 'PAYMENT_PROCESSING', pi.status, event.livemode);
+        break;
+      }
       default:
         // Other event types aren't relevant to this phase — ignore.
         break;

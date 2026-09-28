@@ -8,18 +8,18 @@ const stripe = new Stripe(config.stripe.secretKey || 'sk_test_not_configured', {
   apiVersion: '2026-04-22.dahlia',
 });
 
+// `card` covers ordinary cards plus eligible Apple Pay and Google Pay
+// wallets. `link` adds Link explicitly; eligible US Link customers can use
+// Stripe's Instant Bank Payments funding source without exposing a delayed
+// ACH Debit method. Keep this list controlled rather than enabling every
+// Dashboard method (Klarna, Afterpay, Cash App, etc.).
+const PAYMENT_METHOD_TYPES = Object.freeze(['card', 'link']);
+
 async function createPaymentIntent({ amountCents, currency, orderId, country, quantity }) {
   return stripe.paymentIntents.create({
     amount: amountCents,
     currency,
-    // Explicit ['card'] rather than automatic_payment_methods — the latter
-    // was surfacing every non-redirect method enabled in the Dashboard
-    // (Link, Cash App Pay, etc.) as separate tabs on the Payment Element,
-    // which read as cluttered for a single $65 product. Card still covers
-    // Apple Pay / Google Pay (they ride on the card payment method when
-    // enabled in the Dashboard and supported by the browser/device) —
-    // just not Link or anything redirect-based.
-    payment_method_types: ['card'],
+    payment_method_types: PAYMENT_METHOD_TYPES,
     metadata: {
       order_id: orderId,
       product: 'reality-manual-first-edition-hardcover',
@@ -42,4 +42,10 @@ async function refundPayment(paymentIntentId, orderId) {
   );
 }
 
-module.exports = { stripe, createPaymentIntent, constructWebhookEvent, refundPayment };
+module.exports = {
+  stripe,
+  PAYMENT_METHOD_TYPES,
+  createPaymentIntent,
+  constructWebhookEvent,
+  refundPayment,
+};
