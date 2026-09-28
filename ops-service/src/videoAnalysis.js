@@ -115,6 +115,37 @@ function loudnessMeasureArgs(inputPath, settings) {
     '-f', 'null', '-'];
 }
 
+// The relative music control is about the loudest passage the viewer will
+// actually hear, not the average of an entire track. EBU R128 short-term
+// loudness uses a rolling three-second window, which is long enough to ignore
+// isolated transients but catches a musical build that stays loud. Momentary
+// loudness is retained as a fallback for clips shorter than three seconds.
+function musicPeakMeasureArgs(inputPath) {
+  return ['-hide_banner', '-loglevel', 'verbose', '-nostats', '-i', inputPath, '-vn', '-af',
+    'ebur128=peak=true:framelog=verbose', '-f', 'null', '-'];
+}
+
+function parseMusicPeakMeasurement(stderr) {
+  let loudestShortTerm = null;
+  let loudestMomentary = null;
+  String(stderr || '').split(/\r?\n/).forEach(function (line) {
+    if (line.indexOf('TARGET:') === -1) return;
+    const shortTerm = line.match(/\bS:\s*(-?\d+(?:\.\d+)?)/);
+    const momentary = line.match(/\bM:\s*(-?\d+(?:\.\d+)?)/);
+    if (shortTerm) {
+      const value = Number(shortTerm[1]);
+      if (Number.isFinite(value) && value > -70 && (loudestShortTerm === null || value > loudestShortTerm)) loudestShortTerm = value;
+    }
+    if (momentary) {
+      const value = Number(momentary[1]);
+      if (Number.isFinite(value) && value > -70 && (loudestMomentary === null || value > loudestMomentary)) loudestMomentary = value;
+    }
+  });
+  const loudestLufs = loudestShortTerm === null ? loudestMomentary : loudestShortTerm;
+  if (!Number.isFinite(loudestLufs)) throw new Error('ffmpeg returned no usable music loudness windows');
+  return { loudestShortTermLufs: loudestLufs, usedMomentaryFallback: loudestShortTerm === null };
+}
+
 function parseLoudnessMeasurement(stderr) {
   const matches = String(stderr || '').match(/\{\s*"input_i"[\s\S]*?\}/g);
   if (!matches || !matches.length) throw new Error('ffmpeg returned no loudness measurement');
@@ -134,6 +165,13 @@ function dbGain(target, measured) {
     ? clampNumber(target - measured.inputI, 0, -30, 30, 0.01) : 0;
 }
 
+function musicDbGain(target, measured) {
+  const baseline = measured && Number.isFinite(measured.loudestShortTermLufs)
+    ? measured.loudestShortTermLufs
+    : measured && Number.isFinite(measured.inputI) ? measured.inputI : null;
+  return baseline === null ? 0 : clampNumber(target - baseline, 0, -30, 30, 0.01);
+}
+
 function measuredMixAudioArgs(videoPath, audioPath, tempAudioPath, settings, dialogueMeasurement, musicMeasurement) {
   settings = normalizeAudioMixSettings(settings);
   const dialogueGain = dbGain(settings.dialogueLufs, dialogueMeasurement).toFixed(2);
@@ -144,7 +182,7 @@ function measuredMixAudioArgs(videoPath, audioPath, tempAudioPath, settings, dia
   }
   args.push('-stream_loop', '-1', '-i', audioPath);
   const musicTarget = settings.dialogueLufs - settings.musicBelowDialogueDb;
-  const musicGain = dbGain(musicTarget, musicMeasurement).toFixed(2);
+  const musicGain = musicDbGain(musicTarget, musicMeasurement).toFixed(2);
   let filter;
   if (settings.duckingEnabled) {
     // A mild sidechain pass lowers music only while dialogue is active. The
@@ -180,6 +218,18 @@ function measuredFinalVideoArgs(videoPath, tempAudioPath, outPath, settings, mix
     '-shortest', '-movflags', '+faststart', '-f', 'mp4', outPath];
 }
 
+function measuredFinalAudioArgs(tempAudioPath, outPath, settings, mixMeasurement) {
+  return ['-y', '-i', tempAudioPath, '-af', finalLoudnormFilter(settings, mixMeasurement),
+    '-c:a', 'libmp3lame', '-b:a', '192k', '-f', 'mp3', outPath];
+}
+
+function legacyAudioPreviewArgs(dialoguePath, audioPath, outPath, ambientVolumePercent) {
+  const volume = (normalizeAmbientVolumePercent(ambientVolumePercent) / 100).toFixed(2);
+  return ['-y', '-i', dialoguePath, '-stream_loop', '-1', '-i', audioPath,
+    '-filter_complex', '[1:a]volume=' + volume + '[bg];[0:a][bg]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]',
+    '-map', '[aout]', '-c:a', 'libmp3lame', '-b:a', '192k', '-f', 'mp3', outPath];
+}
+
 function runFfmpeg(args, label) {
   return new Promise(function (resolve, reject) {
     execFile('ffmpeg', args, { maxBuffer: 30 * 1024 * 1024 }, function (err, stdout, stderr) {
@@ -194,8 +244,14 @@ async function measureLoudness(inputPath, settings) {
   return parseLoudnessMeasurement(result.stderr);
 }
 
+async function measureMusicPeak(inputPath) {
+  const result = await runFfmpeg(musicPeakMeasureArgs(inputPath), 'music peak measurement');
+  return parseMusicPeakMeasurement(result.stderr);
+}
+
 // The actual "final" video Harvey reviews in Final Check and eventually
-// publishes. Loudness mode performs independent dialogue/music measurements,
+// publishes. Loudness mode measures dialogue as an integrated programme and
+// anchors music to its loudest sustained three-second section,
 // renders a lossless intermediate at the configured relative level, measures
 // that completed mix, then applies two-pass loudnorm plus the final limiter.
 // `-stream_loop -1` keeps short music beds alive for the full dialogue track.
@@ -211,10 +267,32 @@ async function buildFinalVideo(videoPath, audioPath, outPath, mixInput) {
   const tempAudioPath = outPath + '.loudness-mix.flac';
   try {
     const dialogueMeasurement = await measureLoudness(videoPath, settings);
-    const musicMeasurement = audioPath ? await measureLoudness(audioPath, settings) : null;
+    const musicMeasurement = audioPath ? await measureMusicPeak(audioPath) : null;
     await runFfmpeg(measuredMixAudioArgs(videoPath, audioPath, tempAudioPath, settings, dialogueMeasurement, musicMeasurement), 'measured audio mix');
     const mixMeasurement = await measureLoudness(tempAudioPath, settings);
     await runFfmpeg(measuredFinalVideoArgs(videoPath, tempAudioPath, outPath, settings, mixMeasurement), 'loudness-normalized final-video build');
+    return { mode: settings.mode, dialogue: dialogueMeasurement, music: musicMeasurement, mix: mixMeasurement };
+  } finally {
+    fs.rmSync(tempAudioPath, { force: true });
+  }
+}
+
+// Audio-only audition used by Content Settings. It deliberately calls the
+// same measurement and mix helpers as Final Check, so a test is representative
+// of the production render rather than a lighter browser approximation.
+async function buildAudioPreview(dialoguePath, audioPath, outPath, mixInput) {
+  const settings = normalizeAudioMixSettings(mixInput);
+  if (settings.mode === 'legacy_percent') {
+    await runFfmpeg(legacyAudioPreviewArgs(dialoguePath, audioPath, outPath, settings.legacyPercent), 'legacy audio preview');
+    return { mode: settings.mode };
+  }
+  const tempAudioPath = outPath + '.loudness-mix.flac';
+  try {
+    const dialogueMeasurement = await measureLoudness(dialoguePath, settings);
+    const musicMeasurement = await measureMusicPeak(audioPath);
+    await runFfmpeg(measuredMixAudioArgs(dialoguePath, audioPath, tempAudioPath, settings, dialogueMeasurement, musicMeasurement), 'preview audio mix');
+    const mixMeasurement = await measureLoudness(tempAudioPath, settings);
+    await runFfmpeg(measuredFinalAudioArgs(tempAudioPath, outPath, settings, mixMeasurement), 'loudness-normalized audio preview');
     return { mode: settings.mode, dialogue: dialogueMeasurement, music: musicMeasurement, mix: mixMeasurement };
   } finally {
     fs.rmSync(tempAudioPath, { force: true });
@@ -304,6 +382,7 @@ module.exports = {
   transcribeVideo,
   matchAndGenerateTitles,
   buildFinalVideo,
+  buildAudioPreview,
   ensureBrowserCompatibleVideo,
   applyGeneratedTitleSuggestions,
   normalizeAmbientVolumePercent,
@@ -311,8 +390,12 @@ module.exports = {
   finalVideoArgs,
   legacyFinalVideoArgs,
   loudnessMeasureArgs,
+  musicPeakMeasureArgs,
   parseLoudnessMeasurement,
+  parseMusicPeakMeasurement,
   measuredMixAudioArgs,
   finalLoudnormFilter,
-  measuredFinalVideoArgs
+  measuredFinalVideoArgs,
+  measuredFinalAudioArgs,
+  legacyAudioPreviewArgs
 };

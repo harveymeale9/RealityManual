@@ -10994,3 +10994,43 @@ and synchronizes across open tabs through the storage event. Desktop avoids a
 listener leak when its Project Manager panel is reopened. A VM regression
 starts a pending TTS request, disables Auto voice before its response arrives,
 and proves the stale audio never starts while the muted preference persists.
+
+---
+
+# 249. Ambient Track Auditioning and Loudest-Passage Calibration (2026-09-28)
+
+Content Settings now has a **Test a voice recording** panel for evaluating
+the ambient library before a real video reaches production. Harvey can upload
+a local spoken audio or video sample, select any saved ambient track, and
+build an MP3 audition. The spoken sample and rendered preview are temporary;
+neither is added to the content library. The backend preview route calls the
+same FFmpeg measurement, mixing, optional ducking, final loudness-normalizing,
+and true-peak limiting helpers used when Final Check builds a real video, so
+the result is representative rather than a browser-only approximation.
+
+Each ambient track can now be renamed and given a short usage note such as
+"Good for reflective ideas and slow reveals." The note is editable beside the
+track and becomes the row's hover tooltip; both fields persist in the existing
+`audioTracks` metadata record without uploading the audio blob again. Delete
+now asks for confirmation, and every upload, edit, or deletion refreshes the
+audition dropdown immediately.
+
+The measured production mixer no longer calculates the music baseline from
+whole-track integrated LUFS. That average could understate a track with a long
+soft opening and therefore make its later build too loud. Music is now scanned
+with EBU R128 and anchored by its loudest valid short-term loudness window, a
+rolling three-second passage. Very short clips fall back to their loudest
+momentary window. Dialogue remains measured as an integrated programme, the
+configured `musicBelowDialogueDb` offset is applied to that loudest sustained
+music passage, and the completed mix still receives the existing two-pass
+loudness normalization plus true-peak limiter. Thus a quiet intro remains
+quiet while the loudest later section is the part constrained by the chosen
+"Music level below dialogue" value.
+
+Verification covered all 79 Node tests, a generated seven-second FFmpeg
+voice/music audition, and the real authenticated UI in headless Chromium. The
+browser uploaded a track, renamed it, saved and exposed its usage tooltip,
+selected it from the tester, uploaded a voice sample, and received a playable
+six-second blob from the live preview route. A 390-pixel mobile pass confirmed
+the tester and editable track rows collapse to one column with no horizontal
+overflow.

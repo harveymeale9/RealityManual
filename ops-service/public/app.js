@@ -4169,16 +4169,27 @@
       '</section>' +
       '<section class="settings-section">' +
         '<h3>Ambient audio library</h3>' +
-        '<p class="settings-hint">Backing tracks offered in the audio dropdown when editing an uploaded video. Loudness matching measures dialogue, music and the finished mix each time a video is sent to Final Check.</p>' +
+        '<p class="settings-hint">Backing tracks offered in the audio dropdown when editing an uploaded video. Loudness matching anchors each track\'s loudest sustained three-second passage to the selected level below dialogue, so a soft intro stays soft without letting the later build overwhelm your voice.</p>' +
         '<div class="ambient-mix-controls">' +
           '<div class="ambient-volume-row"><label for="audioMixModeSelect"><span>Mixing method</span><small>Loudness matched is recommended; Legacy preserves the old percentage control for comparison</small></label><select class="stage-select" id="audioMixModeSelect"><option value="loudness">Loudness matched</option><option value="legacy_percent">Legacy percentage</option></select></div>' +
           '<div id="loudnessMixSettings">' +
             '<div class="ambient-volume-row"><label for="dialogueLufsSelect"><span>Finished dialogue loudness</span><small>Integrated programme target; −16 LUFS is the spoken-video default</small></label><select class="stage-select" id="dialogueLufsSelect"></select></div>' +
-            '<div class="ambient-volume-row"><label for="musicBelowDialogueSelect"><span>Music level below dialogue</span><small>Measured independently; larger negative values make music quieter</small></label><select class="stage-select" id="musicBelowDialogueSelect"></select></div>' +
+            '<div class="ambient-volume-row"><label for="musicBelowDialogueSelect"><span>Music level below dialogue</span><small>Applied to the track\'s loudest sustained passage; larger negative values make music quieter</small></label><select class="stage-select" id="musicBelowDialogueSelect"></select></div>' +
             '<div class="ambient-volume-row"><label for="audioTruePeakSelect"><span>True-peak ceiling</span><small>Final safety limit after the completed mix is measured</small></label><select class="stage-select" id="audioTruePeakSelect"></select></div>' +
             '<div class="ambient-volume-row"><label for="musicDuckingToggle"><span>Gentle speech ducking</span><small>Slightly lowers music while dialogue is active</small></label><input type="checkbox" id="musicDuckingToggle"></div>' +
           '</div>' +
           '<div id="legacyMixSettings"><div class="ambient-volume-row"><label for="ambientMusicVolumeSelect"><span>Legacy background percentage</span><small>Old fixed-gain method for direct A/B comparison</small></label><select class="stage-select" id="ambientMusicVolumeSelect"></select></div></div>' +
+        '</div>' +
+        '<div class="audio-test-panel">' +
+          '<div class="audio-test-heading"><div><h4>Test a voice recording</h4><p>Upload a spoken audio or video sample, choose a track, and hear the same mix used in Final Check. Test files are temporary and are not added to Content Studio.</p></div></div>' +
+          '<div class="audio-test-controls">' +
+            '<label class="btn-secondary file-btn">Choose voice sample<input type="file" id="audioTestDialogue" accept="audio/*,video/*" hidden /></label>' +
+            '<span class="audio-test-file" id="audioTestFileName">No file chosen</span>' +
+            '<select class="stage-select" id="audioTestTrack"><option value="">Choose an ambient track</option></select>' +
+            '<button type="button" class="btn-primary" id="audioTestBuild">Build test mix</button>' +
+          '</div>' +
+          '<div class="audio-test-status" id="audioTestStatus"></div>' +
+          '<audio class="audio-test-player" id="audioTestPlayer" controls hidden></audio>' +
         '</div>' +
         '<label class="btn-secondary file-btn">Upload audio<input type="file" id="audioUpload" accept="audio/*" multiple hidden /></label>' +
         '<div class="audio-upload-progress" id="audioUploadProgress"></div>' +
@@ -4474,6 +4485,17 @@
   }
 
   var audioListObjectUrls = [];
+  var audioTestPreviewUrl = '';
+
+  function refreshAudioTestTrackOptions(tracks) {
+    var select = document.getElementById('audioTestTrack');
+    if (!select) return;
+    var selected = select.value;
+    select.innerHTML = '<option value="">Choose an ambient track</option>' + tracks.map(function (track) {
+      return '<option value="' + escapeHtml(track.id) + '">' + escapeHtml(track.name || 'Untitled track') + '</option>';
+    }).join('');
+    if (tracks.some(function (track) { return track.id === selected; })) select.value = selected;
+  }
 
   // Store.put() goes through fetch(), which has no upload-progress event at
   // all — the only way to get real byte-level progress in a browser is
@@ -4511,25 +4533,98 @@
     audioListObjectUrls.forEach(function (u) { URL.revokeObjectURL(u); });
     audioListObjectUrls = [];
     Store.getAll('audioTracks').then(function (tracks) {
+      refreshAudioTestTrackOptions(tracks);
       if (!tracks.length) { list.innerHTML = '<div class="empty-slot wide">No ambient tracks yet.</div>'; return; }
       list.innerHTML = tracks.map(function (t) {
-        var url = URL.createObjectURL(t.blob);
-        audioListObjectUrls.push(url);
-        return '<div class="audio-row" data-id="' + t.id + '">' +
-          '<span class="audio-name">' + escapeHtml(t.name) + '</span>' +
-          '<audio controls preload="none" src="' + url + '"></audio>' +
+        var url = t.blob instanceof Blob ? URL.createObjectURL(t.blob) : '';
+        if (url) audioListObjectUrls.push(url);
+        var note = t.note || '';
+        return '<div class="audio-row" data-id="' + escapeHtml(t.id) + '" title="' + escapeHtml(note) + '">' +
+          '<div class="audio-track-meta">' +
+            '<label>Name<input class="title-input audio-track-name" value="' + escapeHtml(t.name || '') + '"' + (IS_REVIEWER ? ' disabled' : '') + ' /></label>' +
+            '<label>Use note <span class="audio-note-tip" title="' + escapeHtml(note || 'Add a note such as: Good for reflective, slower videos.') + '">ⓘ</span><input class="title-input audio-track-note" value="' + escapeHtml(note) + '" placeholder="Good for reflective, slower videos…"' + (IS_REVIEWER ? ' disabled' : '') + ' /></label>' +
+          '</div>' +
+          (url ? '<audio controls preload="none" src="' + url + '"></audio>' : '<span class="audio-upload-error">Audio file unavailable</span>') +
           // Ambient-library management (add/remove tracks) is admin-only —
           // a reviewer can still freely pick from existing tracks in
           // Content Production's audio dropdown, just can't change the
           // library itself.
-          (IS_REVIEWER ? '' : '<button type="button" class="link-btn audio-delete" data-id="' + t.id + '">Delete</button>') +
+          (IS_REVIEWER ? '' : '<div class="audio-track-actions"><button type="button" class="btn-secondary btn-tiny audio-save" data-id="' + escapeHtml(t.id) + '">Save</button><button type="button" class="link-btn audio-delete" data-id="' + escapeHtml(t.id) + '">Delete</button></div>') +
         '</div>';
       }).join('');
+      list.querySelectorAll('.audio-save').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var row = btn.closest('.audio-row');
+          var track = tracks.find(function (candidate) { return candidate.id === btn.dataset.id; });
+          if (!row || !track) return;
+          var name = row.querySelector('.audio-track-name').value.trim();
+          var note = row.querySelector('.audio-track-note').value.trim();
+          btn.disabled = true;
+          Store.put('audioTracks', {
+            id: track.id,
+            name: name || track.name || 'Untitled track',
+            note: note,
+            createdAt: track.createdAt,
+            mimeType: track.mimeType
+          }).then(renderAudioList).catch(function () {
+            btn.disabled = false;
+            btn.textContent = 'Could not save';
+          });
+        });
+      });
       list.querySelectorAll('.audio-delete').forEach(function (btn) {
         btn.addEventListener('click', function () {
+          var track = tracks.find(function (candidate) { return candidate.id === btn.dataset.id; });
+          if (!window.confirm('Delete "' + ((track && track.name) || 'this track') + '"?')) return;
           Store.del('audioTracks', btn.dataset.id).then(renderAudioList);
         });
       });
+    });
+  }
+
+  function bootAudioTester() {
+    var input = document.getElementById('audioTestDialogue');
+    var fileName = document.getElementById('audioTestFileName');
+    var trackSelect = document.getElementById('audioTestTrack');
+    var buildBtn = document.getElementById('audioTestBuild');
+    var status = document.getElementById('audioTestStatus');
+    var player = document.getElementById('audioTestPlayer');
+    var dialogueFile = null;
+    input.disabled = IS_REVIEWER;
+    trackSelect.disabled = IS_REVIEWER;
+    buildBtn.disabled = IS_REVIEWER;
+    input.addEventListener('change', function () {
+      dialogueFile = input.files && input.files[0];
+      fileName.textContent = dialogueFile ? dialogueFile.name : 'No file chosen';
+      status.textContent = '';
+    });
+    buildBtn.addEventListener('click', function () {
+      if (!dialogueFile) { status.textContent = 'Choose a voice recording first.'; return; }
+      if (!trackSelect.value) { status.textContent = 'Choose an ambient track first.'; return; }
+      var fd = new FormData();
+      fd.append('dialogue', dialogueFile, dialogueFile.name);
+      fd.append('audioTrackId', trackSelect.value);
+      fd.append('settings', JSON.stringify(settingsCache || {}));
+      buildBtn.disabled = true;
+      player.hidden = true;
+      status.textContent = 'Measuring the voice, checking the track\'s loudest section, and building the mix…';
+      fetch('/api/audio-test/preview', { method: 'POST', credentials: 'include', body: fd })
+        .then(function (response) {
+          if (response.ok) return response.blob();
+          return response.json().catch(function () { return {}; }).then(function (body) {
+            throw new Error(body.message || 'Could not build the test mix.');
+          });
+        })
+        .then(function (blob) {
+          if (audioTestPreviewUrl) URL.revokeObjectURL(audioTestPreviewUrl);
+          audioTestPreviewUrl = URL.createObjectURL(blob);
+          player.src = audioTestPreviewUrl;
+          player.hidden = false;
+          status.textContent = 'Ready. This uses the same loudness settings as Final Check.';
+          return player.play().catch(function () {});
+        })
+        .catch(function (err) { status.textContent = (err && err.message) || 'Could not build the test mix.'; })
+        .finally(function () { buildBtn.disabled = IS_REVIEWER; });
     });
   }
 
@@ -4560,6 +4655,7 @@
       settingsCache = settings;
       renderCadenceGrid();
       renderAudioList();
+      bootAudioTester();
       renderKeyGrid();
       renderYoutubeConnectCard();
       renderTiktokConnectCard();

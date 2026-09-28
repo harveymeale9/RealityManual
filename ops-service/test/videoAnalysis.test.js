@@ -54,6 +54,25 @@ test('measured audio profile normalizes safe settings and builds independent dia
     dialogueLufsTarget: -16, musicBelowDialogueDb: 20, musicDuckingEnabled: false
   }, measured, { inputI: -18 });
   assert.equal(args.includes('[0:a]volume=6.00dB[dialogue];[1:a]volume=-18.00dB[bg];[dialogue][bg]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[mix]'), true);
+
+  const builtTrack = videoAnalysis.measuredMixAudioArgs('/video', '/music', '/mix.flac', {
+    dialogueLufsTarget: -16, musicBelowDialogueDb: 20
+  }, { inputI: -16 }, { loudestShortTermLufs: -24, inputI: -40 });
+  assert.match(builtTrack.join(' '), /\[1:a\]volume=-12\.00dB\[bg\]/);
+});
+
+test('music calibration uses the loudest valid three-second EBU R128 window', function () {
+  const stderr = [
+    '[Parsed_ebur128] t: 0.4 TARGET:-23 LUFS M: -38.0 S: -120.7 I: -70.0 LUFS',
+    '[Parsed_ebur128] t: 3.2 TARGET:-23 LUFS M: -25.0 S: -31.5 I: -35.0 LUFS',
+    '[Parsed_ebur128] t: 8.2 TARGET:-23 LUFS M: -15.0 S: -18.2 I: -25.0 LUFS',
+    '[Parsed_ebur128] t: 9.2 TARGET:-23 LUFS M: -17.0 S: -20.0 I: -24.0 LUFS'
+  ].join('\n');
+  assert.deepEqual(videoAnalysis.parseMusicPeakMeasurement(stderr), {
+    loudestShortTermLufs: -18.2,
+    usedMomentaryFallback: false
+  });
+  assert.match(videoAnalysis.musicPeakMeasureArgs('/music').join(' '), /ebur128=peak=true:framelog=verbose/);
 });
 
 test('measured final pass uses two-pass loudnorm values and a true-peak safeguard', function () {

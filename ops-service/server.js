@@ -1197,6 +1197,41 @@ app.delete('/api/store/:storeName/:id', function (req, res) {
 // --- File-backed stores (videos, audioTracks) ---
 const upload = multer({ dest: path.join(DATA_DIR, 'tmp'), limits: { fileSize: 2 * 1024 * 1024 * 1024 } });
 
+// Ephemeral Content Settings audition: Harvey supplies a real spoken audio or
+// video sample, selects one library track, and gets back the exact audio mix
+// profile used by Final Check. The dialogue upload and rendered MP3 are both
+// scratch files and are removed after the response; only ambient-library
+// tracks themselves remain persistent.
+app.post('/api/audio-test/preview', requireAuth, upload.single('dialogue'), async function (req, res, next) {
+  const dialoguePath = req.file && req.file.path;
+  const audioTrackId = req.body && req.body.audioTrackId;
+  const audioPath = isValidId(audioTrackId) ? path.join(UPLOADS_DIR, 'audioTracks', audioTrackId) : '';
+  const outPath = path.join(DATA_DIR, 'tmp', 'audio-preview-' + crypto.randomUUID() + '.mp3');
+  function cleanup() {
+    if (dialoguePath) fs.rm(dialoguePath, { force: true }, function () {});
+    fs.rm(outPath, { force: true }, function () {});
+  }
+  if (!dialoguePath) { cleanup(); return res.status(400).json({ error: 'missing_dialogue' }); }
+  if (!audioPath || !fs.existsSync(audioPath) || !stmts.getOne.get('audioTracks', audioTrackId)) {
+    cleanup();
+    return res.status(400).json({ error: 'invalid_audio_track' });
+  }
+  let settings = {};
+  try { settings = req.body.settings ? JSON.parse(req.body.settings) : {}; }
+  catch (e) { cleanup(); return res.status(400).json({ error: 'invalid_settings' }); }
+  try {
+    await videoAnalysis.buildAudioPreview(dialoguePath, audioPath, outPath, settings);
+    res.type('audio/mpeg');
+    res.sendFile(outPath, function (err) {
+      cleanup();
+      if (err && !res.headersSent) next(err);
+    });
+  } catch (err) {
+    cleanup();
+    res.status(422).json({ error: 'audio_preview_failed', message: err.message });
+  }
+});
+
 app.post('/api/files/:storeName/:id', upload.single('file'), function (req, res) {
   const { storeName, id } = req.params;
   if (FILE_STORES.indexOf(storeName) === -1 || !isValidId(id)) {
