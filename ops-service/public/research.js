@@ -27,6 +27,23 @@
   function manuscriptApi(path, options) { return request('/api/manuscript', path, options); }
   function researchApi(path, options) { return request('/api/research', path, options); }
 
+  function readableParagraphs(items) {
+    var output = [];
+    (items || []).forEach(function (item) {
+      var sentences = String(item || '').trim().split(/(?<=[.!?])\s+/).filter(Boolean);
+      var paragraph = '';
+      sentences.forEach(function (sentence) {
+        var candidate = paragraph ? paragraph + ' ' + sentence : sentence;
+        if (paragraph && candidate.length > 380) {
+          output.push(paragraph);
+          paragraph = sentence;
+        } else paragraph = candidate;
+      });
+      if (paragraph) output.push(paragraph);
+    });
+    return output;
+  }
+
   function conceptCard(concept, score) {
     return '<article class="research-concept" data-concept-id="' + esc(concept.id) + '">' +
       '<div class="research-concept-head"><span class="research-kind">' + esc(concept.group === 'rule' ? 'Rule ' + concept.rule : concept.group) + '</span>' +
@@ -99,14 +116,14 @@
     var outliers = (idea.outlierMatches || []).map(function (match) {
       return '<div class="research-outlier-match"><div><b>1/10 corroboration</b><span>' + esc(match.channel) + (match.lift ? ' · ' + match.lift + '× median views' : '') + '</span></div><strong>' + esc(match.title || match.bigIdea) + '</strong><p>' + esc(match.why) + '</p></div>';
     }).join('');
-    var sourceParagraphs = (idea.theirIdea || []).map(function (paragraph) {
+    var sourceParagraphs = readableParagraphs(idea.theirIdea).map(function (paragraph) {
       return '<p>' + esc(paragraph) + '</p>';
     }).join('');
     var sourceEvidence = (idea.sourceEvidence || []).map(function (item) {
       return '<blockquote>“' + esc(String(item.quote || '').replace(/^[“”"']|[“”"']$/g, '')) + '”' +
         '<cite><a href="' + esc(item.url) + '" target="_blank" rel="noopener">' + esc(item.thinkerName) + ' ↗</a></cite></blockquote>';
     }).join('');
-    var manualParagraphs = (idea.realityManualAngle || []).map(function (paragraph) {
+    var manualParagraphs = readableParagraphs(idea.realityManualAngle).map(function (paragraph) {
       return '<p>' + esc(paragraph) + '</p>';
     }).join('');
     return '<article class="research-idea-card' + (idea.approved ? ' is-approved' : '') + '" data-idea-id="' + esc(idea.id) + '">' +

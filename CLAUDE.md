@@ -10941,6 +10941,12 @@ The Manual panel names the relevant concepts separately. Transferring a card to
 Ideation preserves this exact source/evidence/synthesis structure in the new
 Kanban card rather than collapsing it back into blended prose.
 
+The display also breaks long model paragraphs at sentence boundaries into
+roughly tweet-sized blocks (about 380 characters) without truncating or
+rewriting their content. Future generation explicitly asks for one point and
+fewer than 70 words per paragraph, so the interface remains skimmable even
+when a synthesis needs several distinct steps.
+
 Migration `source_manual_split_v1` preserves the prior unsplit rows as
 `superseded` history and replaces the active queue, because there is no honest
 way to infer where the source claim stopped and the Manual synthesis began in
