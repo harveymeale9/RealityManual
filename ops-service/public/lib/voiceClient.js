@@ -341,6 +341,12 @@ window.RMVoice = (function () {
 
   var currentAudio = null;
   var currentAudioReader = null;
+  var AUTO_SPEECH_KEY = 'rm_project_manager_auto_speech';
+  var autoSpeechListeners = [];
+  function readAutoSpeechPreference() {
+    try { return window.localStorage.getItem(AUTO_SPEECH_KEY) !== 'off'; } catch (e) { return true; }
+  }
+  var autoSpeechEnabled = readAutoSpeechPreference();
   // Which message a currently-playing (or about-to-play) audio belongs to,
   // and a tiny pub-sub so any page can keep its UI (a per-message Play/Stop
   // button, a "speaking" highlight) in sync regardless of whether playback
@@ -368,6 +374,35 @@ window.RMVoice = (function () {
     speakingListeners.forEach(function (fn) { try { fn(speakingMsgId); } catch (e) { /* ignore */ } });
   }
   function currentlySpeaking() { return speakingMsgId; }
+
+  // Auto speech is a device/browser preference, shared by the desktop and
+  // mobile views through localStorage. It gates only automatic acknowledgments
+  // and replies at their call sites; the per-message Play button still calls
+  // speak() directly and therefore always remains available.
+  function isAutoSpeechEnabled() { return autoSpeechEnabled; }
+  function notifyAutoSpeechChange() {
+    autoSpeechListeners.forEach(function (fn) { try { fn(autoSpeechEnabled); } catch (e) { /* ignore */ } });
+  }
+  function setAutoSpeechEnabled(enabled) {
+    autoSpeechEnabled = !!enabled;
+    try { window.localStorage.setItem(AUTO_SPEECH_KEY, autoSpeechEnabled ? 'on' : 'off'); } catch (e) { /* preference remains valid for this page */ }
+    if (!autoSpeechEnabled) stopSpeaking();
+    notifyAutoSpeechChange();
+    return autoSpeechEnabled;
+  }
+  function onAutoSpeechChange(fn) {
+    autoSpeechListeners.push(fn);
+    return function unsubscribe() {
+      var idx = autoSpeechListeners.indexOf(fn);
+      if (idx !== -1) autoSpeechListeners.splice(idx, 1);
+    };
+  }
+  if (window.addEventListener) window.addEventListener('storage', function (event) {
+    if (event.key !== AUTO_SPEECH_KEY) return;
+    autoSpeechEnabled = event.newValue !== 'off';
+    if (!autoSpeechEnabled) stopSpeaking();
+    notifyAutoSpeechChange();
+  });
 
   // Bumped on every stopSpeaking() (including the one speak() itself does
   // before firing off a new TTS request) — a speak() call that's still
@@ -726,6 +761,9 @@ window.RMVoice = (function () {
     stopSpeaking: stopSpeaking,
     onSpeakingChange: onSpeakingChange,
     currentlySpeaking: currentlySpeaking,
+    isAutoSpeechEnabled: isAutoSpeechEnabled,
+    setAutoSpeechEnabled: setAutoSpeechEnabled,
+    onAutoSpeechChange: onAutoSpeechChange,
     setRecordingActive: setRecordingActive,
     playPing: playPing,
     isActiveHere: isActiveHere,

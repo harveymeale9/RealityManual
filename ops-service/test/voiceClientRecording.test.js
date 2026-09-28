@@ -142,3 +142,39 @@ test('voice playback buffers the complete response instead of playing uneven pro
   assert.equal(streamReaderUsed, false);
   assert.equal(playCalls, 1);
 });
+
+test('turning automatic speech off cancels pending audio and persists the preference', async () => {
+  let resolveResponse;
+  let playCalls = 0;
+  const saved = {};
+  class FakeAudio {
+    addEventListener() {}
+    play() { playCalls += 1; return Promise.resolve(); }
+    pause() {}
+  }
+  const sandbox = {
+    Audio: FakeAudio, Blob, clearTimeout, console, document: {}, FormData, navigator: {}, setTimeout,
+    fetch: () => new Promise((resolve) => { resolveResponse = resolve; }),
+    URL: { createObjectURL: () => 'blob:audio', revokeObjectURL() {} },
+    window: {
+      Audio: FakeAudio,
+      addEventListener() {},
+      localStorage: {
+        getItem(key) { return saved[key] || null; },
+        setItem(key, value) { saved[key] = value; }
+      }
+    }
+  };
+  sandbox.window.window = sandbox.window;
+  sandbox.window.navigator = sandbox.navigator;
+  vm.runInNewContext(source, sandbox);
+
+  const pending = sandbox.window.RMVoice.speak('Opening response.', 'message-2', 'codex', 'early_ack');
+  sandbox.window.RMVoice.setAutoSpeechEnabled(false);
+  resolveResponse({ ok: true, blob: async () => new Blob(['audio'], { type: 'audio/mpeg' }) });
+  await pending;
+
+  assert.equal(playCalls, 0);
+  assert.equal(sandbox.window.RMVoice.isAutoSpeechEnabled(), false);
+  assert.equal(saved.rm_project_manager_auto_speech, 'off');
+});

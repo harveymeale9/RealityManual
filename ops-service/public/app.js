@@ -48,6 +48,7 @@
   // previous tab visit's speaking-state listener before registering a new
   // one in bootProjectManager().
   var pmSpeakingUnsub = null;
+  var pmAutoSpeechUnsub = null;
 
   // Nav hierarchy (Harvey's restructure, 2026-09-19): top level is just
   // Project Manager / Content Ops / Research / Analytics / Mailbox — the
@@ -372,6 +373,7 @@
               '<button type="button" class="pm-agent-option" data-agent="codex">Codex</button>' +
               '<button type="button" class="pm-agent-option pm-usage-option" aria-haspopup="dialog">Usage</button>' +
             '</div>' +
+            '<button type="button" class="pm-auto-speech-btn" id="pmAutoSpeechBtn" aria-pressed="true" title="Turn automatic voice responses off"><span>Auto voice</span></button>' +
             '<button type="button" class="pm-alert-btn" id="pmAlertBtn" title="Unread mailbox alerts">✉ Alerts <span class="pm-alert-badge" id="pmAlertBadge" hidden></span></button>' +
             '<a class="link-btn" id="pmMobileLink" href="voice-mobile.html" target="_blank" rel="noopener">Mobile view ↗</a>' +
             '<button type="button" class="pm-reset-btn" id="pmResetBtn">New conversation</button>' +
@@ -395,7 +397,7 @@
                 '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4Z"/></svg>' +
               '</button>' +
             '</div>' +
-            '<div class="pm-hint">Voice replies are spoken automatically. Typed replies show as text — tap ▶ to hear one.</div>' +
+            '<div class="pm-hint" id="pmVoiceHint">Voice replies are spoken automatically. Typed replies show as text — tap ▶ to hear one.</div>' +
           '</div>' +
         '</div>' +
         '<div class="pm-col pm-col-activity">' +
@@ -428,6 +430,8 @@
     var replyPreviewCancelBtn = document.getElementById('pmReplyPreviewCancel');
     var agentButtons = Array.prototype.slice.call(document.querySelectorAll('.pm-agent-option[data-agent]'));
     var usageButton = document.querySelector('.pm-usage-option');
+    var autoSpeechButton = document.getElementById('pmAutoSpeechBtn');
+    var voiceHint = document.getElementById('pmVoiceHint');
     var alertButton = document.getElementById('pmAlertBtn');
     var alertBadge = document.getElementById('pmAlertBadge');
     var selectedAgent = 'claude';
@@ -462,6 +466,25 @@
       });
     });
     if (window.RMUsage) window.RMUsage.attach(usageButton);
+    function autoSpeechIcon(enabled) {
+      return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6.5 9H3v6h3.5l4.5 4V5Z"/><path d="M15 9.5a4 4 0 0 1 0 5"/>' +
+        (enabled ? '<path d="M18 6.5a8 8 0 0 1 0 11"/>' : '<path d="m16 8 5 8M21 8l-5 8"/>') + '</svg>';
+    }
+    function renderAutoSpeech(enabled) {
+      autoSpeechButton.classList.toggle('is-muted', !enabled);
+      autoSpeechButton.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+      autoSpeechButton.title = enabled ? 'Turn automatic voice responses off' : 'Turn automatic voice responses on';
+      autoSpeechButton.innerHTML = autoSpeechIcon(enabled) + (enabled ? '<span>Auto voice</span>' : '<span>Voice muted</span>');
+      voiceHint.textContent = enabled
+        ? 'Voice replies are spoken automatically. Typed replies show as text — tap ▶ to hear one.'
+        : 'Automatic voice is muted. Tap ▶ on any response whenever you do want to hear it.';
+    }
+    renderAutoSpeech(Voice.isAutoSpeechEnabled());
+    autoSpeechButton.addEventListener('click', function () {
+      Voice.setAutoSpeechEnabled(!Voice.isAutoSpeechEnabled());
+    });
+    if (pmAutoSpeechUnsub) pmAutoSpeechUnsub();
+    pmAutoSpeechUnsub = Voice.onAutoSpeechChange(renderAutoSpeech);
 
     // Tap-to-reply: selecting one of CC's earlier messages (via the Reply
     // button added in addAssistantMessage below) sets this, shows the
@@ -863,7 +886,7 @@
         // even for a typed/no-speech send, not just spoken.
         var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
         if (typingEl) typingEl.textContent = row.early_ack;
-        if (!voiceAutoSpeak[row.id]) return;
+        if (!voiceAutoSpeak[row.id] || !Voice.isAutoSpeechEnabled()) return;
         Voice.speak(row.early_ack, row.id, row.agent, 'early_ack').catch(function () {});
       },
       onDone: function (row) {
@@ -881,6 +904,7 @@
         if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
         if (voiceAutoSpeak[row.id]) {
           delete voiceAutoSpeak[row.id];
+          if (!Voice.isAutoSpeechEnabled()) return;
           // Whether the final answer also gets spoken, on top of the
           // acknowledgment already spoken by onEarlyAck, depends on
           // whether this turn actually needed real work — Harvey's own
@@ -911,7 +935,7 @@
         if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
         if (voiceAutoSpeak[row.id]) {
           delete voiceAutoSpeak[row.id];
-          if (row.agent !== 'codex') Voice.speak(row.error_message || 'Something went wrong.', row.id, row.agent).catch(function () {});
+          if (Voice.isAutoSpeechEnabled() && row.agent !== 'codex') Voice.speak(row.error_message || 'Something went wrong.', row.id, row.agent).catch(function () {});
         }
       },
       onUpdate: function (row) {

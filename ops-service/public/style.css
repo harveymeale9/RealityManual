@@ -583,6 +583,17 @@ body.role-reviewer #pmBackFab {
 .pm-agent-option[data-agent="codex"].active { background: rgba(65, 170, 255, 0.22); color: #82c8ff; }
 .pm-usage-option { border-left: 1px solid var(--border-soft); border-radius: 0 6px 6px 0; }
 .pm-usage-option.open { background: rgba(60, 255, 137, 0.12); color: var(--accent); }
+.pm-auto-speech-btn {
+  min-height: 34px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px;
+  background: rgba(60,255,137,.08); color: var(--accent); font: 600 .72rem var(--font-body);
+  cursor: pointer; white-space: nowrap;
+}
+.pm-auto-speech-btn:hover { border-color: var(--accent); }
+.pm-auto-speech-btn.is-muted { background: var(--surface-2); color: var(--ink-faint); }
+.pm-auto-speech-btn svg { width: 16px; height: 16px; margin-right: 5px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; vertical-align: -3px; }
+.pm-auto-speech-btn--mobile { flex-shrink: 0; }
+.pm-auto-speech-btn--mobile span { display: none; }
+.pm-auto-speech-btn--mobile svg { margin-right: 0; }
 
 /* Subscription usage is an informational layer over the one shared Project
    Manager. It never participates in the persisted Claude/Codex selection. */

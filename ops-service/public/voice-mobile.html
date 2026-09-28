@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=20260923-mail-alerts" />
+  <link rel="stylesheet" href="style.css?v=20260928-auto-voice-toggle" />
   <style>
     html, body { height: 100%; overflow: hidden; }
     body { display: flex; }
@@ -160,6 +160,7 @@
           <button type="button" class="pm-agent-option" data-agent="codex">Codex</button>
           <button type="button" class="pm-agent-option pm-usage-option" aria-haspopup="dialog">Usage</button>
         </div>
+        <button type="button" class="pm-auto-speech-btn pm-auto-speech-btn--mobile" id="vAutoSpeechBtn" aria-pressed="true" title="Turn automatic voice responses off"><span>Auto voice</span></button>
         <button type="button" class="pm-alert-btn v-alert-btn" id="vAlertBtn" title="Unread mailbox alerts">✉ <span class="pm-alert-badge" id="vAlertBadge" hidden></span></button>
       </div>
       <button type="button" class="v-btn v-btn-ask" id="askBtn">
@@ -222,7 +223,7 @@
 
   <script src="lib/store.js"></script>
   <script src="lib/auth.js"></script>
-  <script src="lib/voiceClient.js?v=20260928-recorder-startup"></script>
+  <script src="lib/voiceClient.js?v=20260928-auto-voice-toggle"></script>
   <script src="lib/usageDashboard.js?v=20260921-usage"></script>
   <script>
     (function () {
@@ -263,6 +264,7 @@
       var replyPreviewCancelBtn = document.getElementById('vReplyPreviewCancel');
       var agentButtons = Array.prototype.slice.call(document.querySelectorAll('.pm-agent-option[data-agent]'));
       var usageButton = document.querySelector('.pm-usage-option');
+      var autoSpeechButton = document.getElementById('vAutoSpeechBtn');
       var alertButton = document.getElementById('vAlertBtn');
       var alertBadge = document.getElementById('vAlertBadge');
       var selectedAgent = 'claude';
@@ -294,6 +296,24 @@
         });
       });
       if (window.RMUsage) window.RMUsage.attach(usageButton);
+      function autoSpeechIcon(enabled) {
+        return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6.5 9H3v6h3.5l4.5 4V5Z"/><path d="M15 9.5a4 4 0 0 1 0 5"/>' +
+          (enabled ? '<path d="M18 6.5a8 8 0 0 1 0 11"/>' : '<path d="m16 8 5 8M21 8l-5 8"/>') + '</svg>';
+      }
+      function renderAutoSpeech(enabled) {
+        autoSpeechButton.classList.toggle('is-muted', !enabled);
+        autoSpeechButton.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+        autoSpeechButton.title = enabled ? 'Turn automatic voice responses off' : 'Turn automatic voice responses on';
+        autoSpeechButton.innerHTML = autoSpeechIcon(enabled) + (enabled ? '<span>Auto voice</span>' : '<span>Voice muted</span>');
+        askBtn.querySelector('.v-btn-sub').textContent = enabled
+          ? "Speak — hear the selected agent's answer back"
+          : 'Speak — response stays text-only while voice is muted';
+      }
+      renderAutoSpeech(Voice.isAutoSpeechEnabled());
+      autoSpeechButton.addEventListener('click', function () {
+        Voice.setAutoSpeechEnabled(!Voice.isAutoSpeechEnabled());
+      });
+      Voice.onAutoSpeechChange(renderAutoSpeech);
 
       function updateAlertCount(count) {
         count = Number(count) || 0;
@@ -674,7 +694,7 @@
             // visible even for a typed/no-speech send, not just spoken.
             var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
             if (typingEl) typingEl.textContent = row.early_ack;
-            if (!voiceAutoSpeak[row.id]) return;
+            if (!voiceAutoSpeak[row.id] || !Voice.isAutoSpeechEnabled()) return;
             Voice.speak(row.early_ack, row.id, row.agent, 'early_ack').catch(function () {});
           },
           onDone: function (row) {
@@ -690,6 +710,7 @@
             if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
             if (voiceAutoSpeak[row.id]) {
               delete voiceAutoSpeak[row.id];
+              if (!Voice.isAutoSpeechEnabled()) return;
               // See app.js's identical comment: only speak the final reply
               // too when this turn was genuinely quick/no-tool-calls — a
               // turn that did real work only gets the one spoken
@@ -713,7 +734,7 @@
             if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
             if (voiceAutoSpeak[row.id]) {
               delete voiceAutoSpeak[row.id];
-              if (row.agent !== 'codex') Voice.speak(row.error_message || 'Something went wrong.', row.id, row.agent).catch(function () {});
+              if (Voice.isAutoSpeechEnabled() && row.agent !== 'codex') Voice.speak(row.error_message || 'Something went wrong.', row.id, row.agent).catch(function () {});
             }
           },
           onUpdate: function (row) {
@@ -856,7 +877,7 @@
                 // ack — no need to wait on a real early_ack the way respond
                 // mode does, and execute never speaks the real result either
                 // way, so there's no "redundant double-speak" risk.
-                if (agent !== 'codex') Voice.speak(EXECUTE_ACK_TEXT, created.id, agent).catch(function () {});
+                if (Voice.isAutoSpeechEnabled() && agent !== 'codex') Voice.speak(EXECUTE_ACK_TEXT, created.id, agent).catch(function () {});
               } else {
                 // Same as desktop: mark it eligible for auto-speak and let
                 // the shared sync engine's onEarlyAck/onDone (above) decide

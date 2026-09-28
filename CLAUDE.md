@@ -10913,7 +10913,7 @@ generation.
 
 Automated coverage includes versioned caching, Manual-map prompt grounding,
 new-field persistence, downstream Research consumption, and rejection of an
-invented quote. The complete ops-service suite passes (77 tests). Real Chromium
+invented quote. The complete ops-service suite passes (78 tests). Real Chromium
 at 1440×1000 and 390×844 verified the section labels, paragraph and quote
 counts, normal 400-weight body copy, zero runtime errors, and no horizontal
 overflow.
@@ -10972,3 +10972,25 @@ attempt exposed this by correctly refusing to fabricate a quote after both web
 calls were denied. A live smoke test now proves the restricted runner can
 search, open an HTTPS source page, and return a sourced quotation while still
 having no shell, filesystem, edit, browser-control, or MCP access.
+
+---
+
+# 248. Project Manager Auto Voice Can Be Muted Before It Starts (2026-09-28)
+
+Harvey sometimes wants to dictate a request without hearing the immediate
+spoken acknowledgment over audio already playing in his headphones. The
+existing per-message Stop button only became useful after playback had begun,
+so both Project Manager views now have an always-visible **Auto voice** toggle.
+Turning it off immediately cancels audio that is playing or still being
+synthesized, and suppresses automatic early acknowledgments, quick final
+answers, errors, and the mobile execute acknowledgment. Every message's manual
+Play button remains available, because the preference gates only automatic
+call sites rather than disabling `Voice.speak()` itself.
+
+The preference is stored in same-origin localStorage and therefore survives a
+reload and is shared by the desktop and mobile views on that browser/device.
+The button changes to **Voice muted**, exposes the state through `aria-pressed`,
+and synchronizes across open tabs through the storage event. Desktop avoids a
+listener leak when its Project Manager panel is reopened. A VM regression
+starts a pending TTS request, disables Auto voice before its response arrives,
+and proves the stale audio never starts while the muted preference persists.
