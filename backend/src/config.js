@@ -34,6 +34,12 @@ module.exports = {
     titleIsbn: process.env.BOOKVAULT_TITLE_ISBN || '',
   },
 
+  resend: {
+    apiKey: process.env.RESEND_API_KEY || '',
+    fromEmail: process.env.RESEND_FROM_EMAIL || '',
+    replyTo: process.env.RESEND_REPLY_TO || '',
+  },
+
   // Product/site settings. Admin-editable site settings land in a later phase —
   // for now this is the single source of truth for price/currency.
   site: {

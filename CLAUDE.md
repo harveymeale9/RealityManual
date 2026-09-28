@@ -10473,3 +10473,32 @@ to suppress the ordinary link divider, leaving the CTA looking visibly cut off
 on phones. The mobile rule now restores the CTA's warm outlined bottom border,
 so all four edges render consistently while About and FAQ retain their divider
 lines.
+
+---
+
+# 235. Branded Transactional Email Templates and Resend Preview Delivery (2026-09-28)
+
+The storefront backend now has a reusable Resend delivery client and three
+production-shaped customer email templates: order accepted/entering production,
+BookVault dispatch with an optional tracking button, and the exceptional refund
+notice used when fulfillment cannot be completed. Every message has both inline
+HTML and plain-text bodies, escapes all order/customer data, supports Resend
+idempotency keys, and uses the verified Reality Manual sending identity and
+reply-to address supplied through private environment variables.
+
+The visual treatment deliberately matches the storefront rather than Resend's
+generic examples: deep black and warm ivory surfaces, restrained gold rules,
+serif editorial typography, responsive table-based markup, and no remote image
+dependency. The confirmation copy presents the up-to-15-working-day production
+window as the result of printing, binding and finishing each volume to order by
+a specialist European book printer, with the intended payoff of a book made to
+last a lifetime. The dispatch template accepts BookVault's carrier, tracking
+number and tracking URL; if no tracking URL is supplied, it does not render a
+dead button.
+
+`npm run email:previews` sends clearly marked, synthetic previews of all three
+templates to `PREVIEW_EMAIL_TO`, without creating an order, charging Stripe or
+contacting BookVault. Automated coverage verifies escaping, production-window
+copy, money formatting, conditional tracking, refund language, and the exact
+Resend request shape. A real Chromium rendering at desktop email width confirmed
+the inline design and content layout before the first preview send.

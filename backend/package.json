@@ -7,7 +7,9 @@
   "scripts": {
     "start": "node --no-warnings src/server.js",
     "dev": "node --no-warnings --watch src/server.js",
-    "db:migrate": "node --no-warnings src/db/migrate.js"
+    "db:migrate": "node --no-warnings src/db/migrate.js",
+    "test": "node --test",
+    "email:previews": "node --no-warnings scripts/send-email-previews.js"
   },
   "engines": {
     "node": ">=22.5.0"
