@@ -10461,3 +10461,15 @@ Instagram and TikTok remain link-free as before.
 Content Settings explains this behaviour beside the platform-specific caption
 fields. This keeps the reach-versus-attribution choice where it belongs: in the
 caption Harvey selects, rather than hidden publishing policy.
+
+---
+
+# 234. Mobile Storefront Navigation CTA Has a Complete Border (2026-09-28)
+
+The landing page's expanded mobile menu used the same bottom-border rule for
+ordinary navigation links and the outlined **Get Your Copy** button. A more
+specific mobile override then removed the button's bottom border in an attempt
+to suppress the ordinary link divider, leaving the CTA looking visibly cut off
+on phones. The mobile rule now restores the CTA's warm outlined bottom border,
+so all four edges render consistently while About and FAQ retain their divider
+lines.

@@ -192,7 +192,11 @@ img { max-width: 100%; }
 
   .site-nav.is-open { display: flex; }
   .site-nav a { padding: 0.85rem 0; border-bottom: 1px solid var(--border); }
-  .site-nav .btn--nav { margin-top: 1rem; text-align: center; border-bottom: 0; }
+  .site-nav .btn--nav {
+    margin-top: 1rem;
+    text-align: center;
+    border-bottom: 1px solid var(--border-warm);
+  }
   .nav-toggle { display: block; }
   .site-header__inner { position: relative; }
 }
