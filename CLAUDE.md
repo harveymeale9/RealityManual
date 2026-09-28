@@ -10857,3 +10857,24 @@ conversion, first-slot rollover, three-day recurrence, and invalid-time
 fallback. The complete ops-service suite passes (74 tests). Real Chromium at
 1440×900 and 390×844 confirmed the new field defaults to 07:55, renders without
 runtime errors, and causes no horizontal overflow.
+
+---
+
+# 246. Project Manager Speech No Longer Plays Faster Than It Arrives (2026-09-28)
+
+Harvey reported that Codex's spoken acknowledgments repeatedly cut to silence
+and resumed a few seconds later on multiple devices. This was not a device or
+Bluetooth problem. A production trace reproduced the exact failure: one
+nine-second acknowledgment arrived from OpenAI as roughly one-second MP3 bursts
+separated by gaps of 11 to 16 seconds. The browser's MediaSource path started
+playback after the first decodable network chunk, exhausted that tiny buffer,
+then stalled until each later burst arrived.
+
+Project Manager now buffers the complete TTS response before beginning
+playback. The existing play token still discards a response if Harvey presses
+Stop, begins recording, or requests newer speech while it is downloading, but
+once audio starts it has the entire sentence available and cannot underrun due
+to an uneven provider transfer. The voice, model and spoken wording are
+unchanged. A VM regression presents a response explicitly marked as streaming
+on a browser that claims MP3 MediaSource support and proves the client reads the
+complete Blob, never opens the chunk reader, and starts playback exactly once.

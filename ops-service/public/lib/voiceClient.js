@@ -563,7 +563,14 @@ window.RMVoice = (function () {
           throw error;
         });
       }
-      if (r.headers.get('X-RM-TTS-Streaming') === '1') return playStreamingResponse(r, myToken, msgId);
+      // Do not hand a provider's network chunks straight to the audio
+      // element. OpenAI can occasionally deliver a short sentence as small
+      // bursts with long gaps between them; starting after the first burst
+      // makes the browser speak, fall silent while its buffer is empty, and
+      // then resume repeatedly. A voice reply is small enough to buffer in
+      // full, which guarantees one continuous playback even when the
+      // upstream transfer itself is uneven. playToken still prevents a stale
+      // response from starting after Stop or a newer reply was requested.
       return playBufferedResponse(r, myToken, msgId);
       });
   }

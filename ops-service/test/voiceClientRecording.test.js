@@ -81,3 +81,64 @@ test('voice recorder retries an immediate fresh-stream interruption and returns 
   assert.equal(blob.size, 12);
   assert.equal(tracks[1].readyState, 'ended');
 });
+
+test('voice playback buffers the complete response instead of playing uneven provider chunks', async () => {
+  let blobRead = false;
+  let streamReaderUsed = false;
+  let playCalls = 0;
+
+  class FakeAudio {
+    addEventListener() {}
+    play() {
+      playCalls += 1;
+      return Promise.resolve();
+    }
+    pause() {}
+  }
+
+  class FakeMediaSource {
+    static isTypeSupported() { return true; }
+  }
+
+  const response = {
+    ok: true,
+    headers: { get: (name) => name === 'X-RM-TTS-Streaming' ? '1' : null },
+    body: {
+      getReader() {
+        streamReaderUsed = true;
+        throw new Error('provider chunks must not be played directly');
+      }
+    },
+    async blob() {
+      blobRead = true;
+      return new Blob(['complete audio'], { type: 'audio/mpeg' });
+    }
+  };
+
+  const sandbox = {
+    Audio: FakeAudio,
+    Blob,
+    clearTimeout,
+    console,
+    document: {},
+    fetch: async () => response,
+    FormData,
+    MediaSource: FakeMediaSource,
+    navigator: {},
+    setTimeout,
+    URL: {
+      createObjectURL: () => 'blob:complete-audio',
+      revokeObjectURL() {}
+    },
+    window: { Audio: FakeAudio, MediaSource: FakeMediaSource }
+  };
+  sandbox.window.window = sandbox.window;
+  sandbox.window.navigator = sandbox.navigator;
+  vm.runInNewContext(source, sandbox);
+
+  await sandbox.window.RMVoice.speak('A smooth spoken acknowledgment.', 'message-1', 'codex', 'early_ack');
+
+  assert.equal(blobRead, true);
+  assert.equal(streamReaderUsed, false);
+  assert.equal(playCalls, 1);
+});
