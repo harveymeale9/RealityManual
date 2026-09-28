@@ -139,6 +139,47 @@ test('routine acknowledgements stay silent even when their inherited subject sou
   triage.close();
 });
 
+test('routine security codes and login alerts never create Project Manager notifications', async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-mail-triage-security-'));
+  const db = new Database(':memory:');
+  db.exec(`CREATE TABLE voice_messages (
+    id TEXT PRIMARY KEY,mode TEXT NOT NULL,transcript TEXT NOT NULL,status TEXT NOT NULL,
+    reply_text TEXT,error_message TEXT,created_at TEXT NOT NULL,completed_at TEXT,
+    agent TEXT NOT NULL DEFAULT 'claude',notification_kind TEXT NOT NULL DEFAULT 'conversation',
+    notification_unread INTEGER NOT NULL DEFAULT 0,source_ref TEXT
+  ); CREATE UNIQUE INDEX idx_voice_mail_alert_source ON voice_messages(source_ref)
+    WHERE notification_kind='mail_alert' AND source_ref IS NOT NULL;`);
+  const mailbox = mailboxService.setup(db, { dataDir: dir, autoSync: false });
+  t.after(function () { mailbox.close(); db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+
+  mailbox.ingest({
+    providerId: 'security-code-1', fromName: 'Meta', fromEmail: 'security@facebookmail.com',
+    subject: 'Your Facebook verification code is 482193',
+    textBody: 'Enter this security code to continue: 482193. Do not share this code.',
+    receivedAt: '2026-09-28T10:00:00Z'
+  });
+  mailbox.ingest({
+    providerId: 'security-login-1', fromName: 'Meta', fromEmail: 'security@facebookmail.com',
+    subject: 'New sign-in to your Facebook account',
+    textBody: 'We noticed a new login. If this was you, no action is needed. Otherwise secure your account.',
+    receivedAt: '2026-09-28T10:01:00Z'
+  });
+  const triage = mailTriageService.setup(db, {
+    autoStart: false,
+    classify: async function () {
+      return {
+        important: true, category: 'Security', summary: 'Security email.',
+        actionRequired: true, suggestedNextStep: 'Review it.', reason: 'Contains security language.'
+      };
+    }
+  });
+  const result = await triage.processPending(10);
+  assert.deepEqual({ processed: result.processed, alerted: result.alerted }, { processed: 2, alerted: 0 });
+  assert.equal(db.prepare('SELECT count(*) AS n FROM mail_triage WHERE important=1').get().n, 0);
+  assert.equal(db.prepare("SELECT count(*) AS n FROM voice_messages WHERE notification_kind='mail_alert'").get().n, 0);
+  triage.close();
+});
+
 test('a classification failure leaves mail visible and retryable instead of silently archiving it', async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-mail-triage-error-'));
   const db = new Database(':memory:');

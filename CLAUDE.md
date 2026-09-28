@@ -10559,3 +10559,23 @@ startup-migration pattern used by earlier order columns.
 Five template/delivery tests pass, a temporary real SQLite order confirmed the
 new service and estimate fields persist, and real Chromium renders of all three
 emails at 390 px showed no horizontal overflow.
+
+---
+
+# 238. Routine Security Emails Never Become Project Manager Alerts (2026-09-28)
+
+Harvey confirmed the replacement Facebook Page is connected and reiterated that
+routine security mail must not appear in Project Manager. Mail triage now has a
+deterministic suppression rule for verification/security/authentication/login
+codes, PINs, OTP and two-factor messages, routine new-login alerts, and automated
+password-reset notices. This rule runs after ingestion but before either the AI
+classifier or the existing “important security issue” safeguard can create an
+alert. The original message is still archived in Mailbox, so suppression affects
+only Project Manager notifications and does not delete the email.
+
+On startup, Content Studio also finds any older Project Manager alert whose
+source email matches this routine-authentication rule, marks the alert as
+superseded/read, and removes its topic pointer. This cleans up the prior noisy
+card as well as protecting future mail. A regression deliberately returns an
+`important: true` security classification for a Meta verification code and a
+Meta new-login warning; both are archived with zero Project Manager alerts.
