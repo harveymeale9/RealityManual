@@ -10655,3 +10655,32 @@ the live publishable key, live secret key and the signing secret from a new
 live-mode webhook endpoint into the private environment directly. Until then,
 the controlled payment-method change can be deployed and exercised only in
 Stripe's sandbox, and no BookVault order can be created.
+
+---
+
+# 241. Stripe Live Mode Activated Without Placing an Order (2026-09-28)
+
+Harvey installed the three separate live Stripe values directly in the private
+VPS environment: `pk_live_`, `sk_live_` and the signing secret from the new
+live webhook destination. `FULFILLMENT_ENABLED` is also true. A sanitized API
+audit confirmed that the destination is a live, enabled endpoint at
+`https://api.realitymanual.com/api/webhooks/stripe` and listens for all three
+events the backend needs: `payment_intent.processing`, `.succeeded` and
+`.payment_failed`. Listening to additional events is harmless because the route
+acknowledges and ignores unknown types.
+
+The payment-method domain `realitymanual.com` is now registered, enabled and
+validated in **live mode**. Stripe reports Apple Pay, Google Pay and Link all
+active. The account's live default payment-method configuration reports Card
+and Link active, with Klarna, Afterpay/Clearpay and ordinary US bank account ACH
+off, matching §240's intended launch set.
+
+One final drift hazard was removed during activation. The static site formerly
+embedded its own publishable key in `frontend/js/config.js`, which meant a
+future server key rotation could silently leave the browser and backend in
+different Stripe modes. The backend now exposes only its safe-to-publish active
+key at `GET /api/config/stripe`; checkout fetches that before constructing
+Elements and keeps the payment button disabled if it cannot load. The raw key
+therefore remains sourced exclusively from the private VPS environment while
+still reaching the browser as Stripe requires. No PaymentIntent, charge,
+customer order or BookVault order was created during the live-mode audit.

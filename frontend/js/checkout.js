@@ -37,6 +37,8 @@
   let shippingRequestSeq = 0;
   let postalDebounceTimer = null;
   let checkoutStartedTracked = false;
+  let stripe = null;
+  let elements = null;
 
   RMAnalytics.track('checkout_view');
   // Fired once, on the first time the shopper actually touches the form —
@@ -48,39 +50,51 @@
   }, { once: true });
 
   populateCountrySelect();
+  initializeStripe();
 
-  const stripe = Stripe(window.RM_CONFIG.STRIPE_PUBLISHABLE_KEY);
-  const elements = stripe.elements({
-    mode: 'payment',
-    amount: BOOK_PRICE_CENTS,
-    currency: 'usd',
-    // Matches the server's payment_method_types. `card` gives customers
-    // ordinary cards plus eligible Apple Pay / Google Pay wallets; `link`
-    // adds Link and its eligible Instant Bank Payments funding source.
-    // We intentionally do not expose the rest of the Dashboard catalogue.
-    paymentMethodTypes: ['card', 'link'],
-    appearance: {
-      theme: 'night',
-      variables: {
-        colorPrimary: '#c9a24d',
-        colorBackground: '#14100b',
-        colorText: '#ece4d5',
-        colorTextSecondary: '#a2957e',
-        colorDanger: '#e2685f',
-        fontFamily: 'Archivo, system-ui, sans-serif',
-        borderRadius: '0px',
-      },
-      rules: {
-        '.Input': { border: '1px solid #2a2318', boxShadow: 'none' },
-        '.Input:focus': { border: '1px solid #c9a24d', boxShadow: 'none' },
-      },
-    },
-  });
-  const paymentElement = elements.create('payment');
-  paymentElement.mount('#payment-element');
-  paymentElement.on('ready', () => {
-    submitButton.disabled = false;
-  });
+  async function initializeStripe() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/config/stripe`);
+      if (!response.ok) throw new Error('stripe_config_unavailable');
+      const { publishable_key: publishableKey } = await response.json();
+      if (!publishableKey || !publishableKey.startsWith('pk_')) throw new Error('stripe_config_invalid');
+
+      stripe = Stripe(publishableKey);
+      elements = stripe.elements({
+        mode: 'payment',
+        amount: BOOK_PRICE_CENTS,
+        currency: 'usd',
+        // Matches the server's payment_method_types. `card` gives customers
+        // ordinary cards plus eligible Apple Pay / Google Pay wallets; `link`
+        // adds Link and its eligible Instant Bank Payments funding source.
+        // We intentionally do not expose the rest of the Dashboard catalogue.
+        paymentMethodTypes: ['card', 'link'],
+        appearance: {
+          theme: 'night',
+          variables: {
+            colorPrimary: '#c9a24d',
+            colorBackground: '#14100b',
+            colorText: '#ece4d5',
+            colorTextSecondary: '#a2957e',
+            colorDanger: '#e2685f',
+            fontFamily: 'Archivo, system-ui, sans-serif',
+            borderRadius: '0px',
+          },
+          rules: {
+            '.Input': { border: '1px solid #2a2318', boxShadow: 'none' },
+            '.Input:focus': { border: '1px solid #c9a24d', boxShadow: 'none' },
+          },
+        },
+      });
+      const paymentElement = elements.create('payment');
+      paymentElement.mount('#payment-element');
+      paymentElement.on('ready', () => {
+        submitButton.disabled = false;
+      });
+    } catch (err) {
+      showFormError('Secure payment options could not be loaded. Please refresh the page and try again.');
+    }
+  }
 
   function populateCountrySelect() {
     const priorityGroup = document.createElement('optgroup');
@@ -198,7 +212,7 @@
       }
       submitButton.textContent = `Pay ${formatCents(data.total_price_cents)}`;
 
-      elements.update({ amount: currentTotalCents });
+      if (elements) elements.update({ amount: currentTotalCents });
     } catch (err) {
       if (requestId !== shippingRequestSeq) return;
       summaryShipping.textContent = 'Unavailable';

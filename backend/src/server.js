@@ -40,6 +40,14 @@ app.use('/api/checkout', checkoutRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/analytics', analyticsRoutes);
 
+// Publishable Stripe keys are intentionally public browser configuration,
+// not secrets. Serving the active key from the backend prevents the static
+// storefront from drifting into test mode while the server is live (or vice
+// versa) during future key rotations.
+app.get('/api/config/stripe', (req, res) => {
+  res.json({ publishable_key: config.stripe.publishableKey });
+});
+
 app.get('/health', (req, res) => res.json({ ok: true }));
 
 // eslint-disable-next-line no-unused-vars
