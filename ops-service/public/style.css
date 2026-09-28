@@ -1817,6 +1817,8 @@ body.role-reviewer #pmBackFab {
 .tiktok-schedule-day span { color: var(--ink-soft); font-size: 0.72rem; line-height: 1.45; }
 .tiktok-schedule-zone { grid-column: 1 / -1; color: var(--ink-faint); font-size: 0.72rem; }
 .tiktok-schedule-note { margin-top: 9px; margin-bottom: 0; }
+.shortform-mirror-block { margin-top: 0; margin-bottom: 14px; padding: 12px 14px; border: 1px solid var(--border-soft); border-radius: 9px; }
+.shortform-schedule-summary { margin-top: 7px; color: var(--accent); font-family: var(--font-serif); font-size: 1rem; }
 .cadence-label { display: flex; align-items: center; gap: 8px; font-size: 0.92rem; }
 .cadence-label .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .cadence-inputs { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--ink-soft); }

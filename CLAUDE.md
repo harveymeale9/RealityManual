@@ -10786,3 +10786,40 @@ same-piece reanalysis without sample-count inflation, and real-record baseline
 backfill. The complete ops-service suite passes (69 tests), both changed runtime
 files pass syntax checking, and the migration was exercised against an in-memory
 copy of every live piece rather than writing to production during development.
+
+---
+
+# 244. Short-Form Platforms Share Buffer's Fixed Bangkok Release Slots (2026-09-28)
+
+Harvey reduced the short-form cadence from three rolling posts per day to two
+fixed daily releases at **12:00 AM and 12:00 PM in Asia/Bangkok (GMT+7)**. TikTok
+continues to own its queue in Buffer, but YouTube Shorts, Instagram and Facebook
+must now release alongside it rather than publishing immediately when Final
+Check's **Schedule Video** button is pressed. Longform remains on its existing,
+separate rolling cadence and was deliberately not changed.
+
+The coordinated publish job now queues TikTok first and treats Buffer's returned
+`dueAt` as the authoritative release instant for the whole short. The exact
+direct-platform payloads (title, rendered platform caption and YouTube privacy)
+are persisted on the piece, which moves to Scheduled. A backend worker checks
+every 30 seconds and uploads the direct destinations when that shared timestamp
+arrives. The payload survives a container restart; a restart before the slot
+does not publish early or lose the queue. If a short is intentionally not tagged
+for TikTok, Content Studio reads Buffer's current seven-day schedule and selects
+the next Bangkok slot itself, falling back to midnight/noon every day only when
+Buffer's schedule is unavailable. This also means a later Buffer time/day change
+is mirrored instead of requiring a second independent cadence setting.
+
+Content Settings no longer presents direct short-form as an editable rolling
+"1 every N hours" control. It explains the shared schedule, shows the Buffer
+times/timezone, and retains only the independently editable longform cadence.
+The older browser-side approval path was also changed from interval arithmetic
+to Bangkok midnight/noon slots so it cannot create contradictory timestamps.
+
+No live social post was created, following Harvey's instruction that the first
+real content should be the integration test. Automated coverage locks Bangkok
+midnight/noon UTC conversion, day pauses, future Buffer slot changes and the
+safe fallback. The complete ops-service suite passes (72 tests). Real Chromium
+at 1440×900 and 390×844 confirmed the Settings surface shows only the longform
+rolling control, shows the shared short-form schedule, has no runtime errors and
+has no horizontal overflow.

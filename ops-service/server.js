@@ -37,6 +37,7 @@ const bufferService = require('./src/bufferService');
 const bufferPublicationSyncService = require('./src/bufferPublicationSync');
 const metaAuth = require('./src/metaAuth');
 const metaPublisherService = require('./src/metaPublisher');
+const shortformSchedule = require('./src/shortformSchedule');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
@@ -1785,6 +1786,81 @@ async function runPlatformPublishBatch(id, destinations) {
   const videoMeta = videoRow ? JSON.parse(videoRow.data) : {};
   const mimeType = videoMeta.mimeType || 'video/mp4';
 
+  // Shorts use one shared release instant across every destination. Buffer is
+  // authoritative whenever TikTok is selected: enqueue TikTok first, retain
+  // its exact dueAt, then persist the direct-platform payload until that same
+  // instant. If TikTok is not selected, mirror Buffer's current Bangkok queue
+  // schedule so YouTube Shorts / Instagram / Facebook still occupy the same
+  // midnight-or-noon timeline. Longform deliberately stays on its existing
+  // path and is not affected by this fixed-slot scheduler.
+  const initialPiece = getPieceRecord(id);
+  const isScheduledShortRelease = shortformSchedule.isShortform(initialPiece) &&
+    !(initialPiece && initialPiece.directShortReleaseRunning);
+  if (isScheduledShortRelease) {
+    const tiktokDestination = destinations.find(function (destination) { return destination.platform === 'tiktok'; });
+    const directDestinations = destinations.filter(function (destination) { return destination.platform !== 'tiktok'; });
+    let dueAt = null;
+
+    if (tiktokDestination) {
+      try {
+        const result = await buffer.createTiktokVideoPost({
+          text: tiktokDestination.caption || tiktokDestination.title || 'Untitled',
+          videoUrl: buffer.mediaUrl(id),
+          thumbnailOffset: Math.round((Number(initialPiece && initialPiece.thumbnailTimeSeconds) || 0) * 1000)
+        });
+        dueAt = result.post.dueAt || null;
+        updatePieceFields(id, {
+          tiktokPublishStatus: 'done', tiktokPublishError: '', tiktokPublishProvider: 'buffer',
+          tiktokPublishId: result.post.id, tiktokBufferStatus: result.post.status,
+          scheduledAt: dueAt
+        });
+      } catch (error) {
+        console.error('tiktok publish failed for ' + id + ':', error.message);
+        updatePieceFields(id, {
+          tiktokPublishStatus: 'error',
+          tiktokPublishError: String(error.message || error).slice(0, 500),
+          stage: 'final_check'
+        });
+        return;
+      }
+    }
+
+    if (!dueAt) {
+      let postingSchedule = [];
+      try {
+        const bufferStatus = await buffer.status();
+        if (bufferStatus.connected && bufferStatus.channel && bufferStatus.channel.timezone === 'Asia/Bangkok') {
+          postingSchedule = bufferStatus.channel.postingSchedule || [];
+        }
+      } catch (error) {
+        console.error('Could not read Buffer schedule; using midnight/noon Bangkok fallback:', error.message);
+      }
+      let after = Date.now();
+      stmts.getAll.all('pieces').forEach(function (row) {
+        const other = recordConcurrency.decodeRow(row);
+        if (!other || other.id === id || !shortformSchedule.isShortform(other) || other.stage !== 'scheduled' || !other.scheduledAt) return;
+        const timestamp = Date.parse(other.scheduledAt);
+        if (Number.isFinite(timestamp) && timestamp > after) after = timestamp;
+      });
+      dueAt = shortformSchedule.nextBangkokSlot(after, postingSchedule);
+    }
+
+    const latest = getPieceRecord(id);
+    if (!latest) return;
+    latest.scheduledAt = dueAt;
+    latest.stage = 'scheduled';
+    latest.directShortPublishStatus = directDestinations.length ? 'scheduled' : 'not_required';
+    latest.scheduledPublishDestinations = directDestinations;
+    latest.directShortReleaseRunning = false;
+    directDestinations.forEach(function (destination) {
+      latest[publishStatusField(destination.platform)] = 'scheduled';
+      latest[publishErrorField(destination.platform)] = '';
+    });
+    latest.updatedAt = new Date().toISOString();
+    savePieceRecord(latest);
+    return;
+  }
+
   for (const destination of destinations) {
     const platform = destination.platform;
     const running = {}; running[publishStatusField(platform)] = 'running'; running[publishErrorField(platform)] = '';
@@ -1853,8 +1929,51 @@ async function runPlatformPublishBatch(id, destinations) {
     latest.stage = allPlatforms.indexOf('tiktok') !== -1 ? 'scheduled' : 'live';
     latest.postedAt = new Date().toISOString();
   }
+  if (latest.directShortReleaseRunning) {
+    latest.directShortPublishStatus = hasError ? 'error' : (allDone ? 'done' : latest.directShortPublishStatus);
+    latest.scheduledPublishDestinations = [];
+    latest.directShortReleaseRunning = false;
+  }
   latest.updatedAt = new Date().toISOString();
   savePieceRecord(latest);
+}
+
+const directShortReleasesInFlight = new Set();
+async function releaseDueDirectShorts() {
+  const now = Date.now();
+  const piecesDue = stmts.getAll.all('pieces').map(function (row) { return recordConcurrency.decodeRow(row); })
+    .filter(function (piece) {
+      return piece && piece.stage === 'scheduled' && piece.directShortPublishStatus === 'scheduled' &&
+        Array.isArray(piece.scheduledPublishDestinations) && piece.scheduledPublishDestinations.length &&
+        Number.isFinite(Date.parse(piece.scheduledAt)) && Date.parse(piece.scheduledAt) <= now &&
+        !directShortReleasesInFlight.has(piece.id);
+    });
+  for (const piece of piecesDue) {
+    directShortReleasesInFlight.add(piece.id);
+    try {
+      const latest = getPieceRecord(piece.id);
+      if (!latest || latest.directShortPublishStatus !== 'scheduled') continue;
+      latest.directShortReleaseRunning = true;
+      latest.directShortPublishStatus = 'running';
+      (latest.scheduledPublishDestinations || []).forEach(function (destination) {
+        latest[publishStatusField(destination.platform)] = 'pending';
+      });
+      savePieceRecord(latest);
+      await runPlatformPublishBatch(piece.id, latest.scheduledPublishDestinations || []);
+    } catch (error) {
+      console.error('Scheduled direct short-form release failed for ' + piece.id + ':', error.message);
+      const latest = getPieceRecord(piece.id);
+      if (latest) {
+        latest.directShortPublishStatus = 'error';
+        latest.directShortReleaseRunning = false;
+        latest.stage = 'final_check';
+        latest.updatedAt = new Date().toISOString();
+        savePieceRecord(latest);
+      }
+    } finally {
+      directShortReleasesInFlight.delete(piece.id);
+    }
+  }
 }
 
 app.post('/api/publish/:id', requireAuthOrReviewer, async function (req, res) {
@@ -2651,6 +2770,13 @@ function recoverInflightVideoJobs() {
         changed = true;
       }
     });
+    if (piece.directShortReleaseRunning || piece.directShortPublishStatus === 'running') {
+      piece.directShortReleaseRunning = false;
+      piece.directShortPublishStatus = 'error';
+      piece.scheduledPublishDestinations = [];
+      piece.stage = 'final_check';
+      changed = true;
+    }
     if (changed) {
       piece.updatedAt = now;
       savePieceRecord(piece);
@@ -2669,4 +2795,8 @@ app.listen(PORT, function () {
   console.log('rm-ops-service listening on ' + PORT);
   recoverInflightVoiceMessages();
   recoverInflightVideoJobs();
+  releaseDueDirectShorts().catch(function (error) { console.error('initial direct short-form release check failed:', error.message); });
+  setInterval(function () {
+    releaseDueDirectShorts().catch(function (error) { console.error('direct short-form release check failed:', error.message); });
+  }, 30000);
 });

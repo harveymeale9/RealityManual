@@ -1265,6 +1265,14 @@
     p.tags = Object.keys(tags);
   }
 
+  function nextBangkokShortSlot(afterMs) {
+    var offset = 7 * 60 * 60 * 1000;
+    var local = new Date(afterMs + offset);
+    var localMidnight = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate());
+    var candidates = [localMidnight + 12 * 3600000 - offset, localMidnight + 24 * 3600000 - offset];
+    return candidates.filter(function (candidate) { return candidate > afterMs; })[0] || (localMidnight + 36 * 3600000 - offset);
+  }
+
   // Fills as many consecutive shorts slots as there are approved pieces
   // for, rotating ultra_short -> short -> long_short -> repeat and
   // skipping any type with nothing ready right now (falls back to
@@ -1277,7 +1285,6 @@
   // instant a piece had both audio and a thumbnail, with no review step
   // at all; approveAndSchedule below is the only caller now.
   function scheduleShorts(settings) {
-    var ms = Store.cadenceMs(settings.cadence.shorts || Store.DEFAULT_CADENCE.shorts);
     var tail = 0;
     Object.keys(pieces).forEach(function (id) {
       var o = pieces[id];
@@ -1301,7 +1308,7 @@
         if (ready.length) { found = { piece: ready[0], idx: candidateIdx, type: candidateType }; break; }
       }
       if (!found) break;
-      tail += ms;
+      tail = nextBangkokShortSlot(tail);
       found.piece.scheduledAt = new Date(tail).toISOString();
       found.piece.updatedAt = nowIso();
       found.piece.stage = 'scheduled';
@@ -4110,9 +4117,14 @@
     '<div class="settings-panel">' +
       '<section class="settings-section">' +
         '<h3>Publishing cadence</h3>' +
-        '<p class="settings-hint">Direct-platform short-form covers YouTube Shorts, Instagram and Facebook together, rotating ' +
-          'through whichever of the three has something ready (ultra-short → short → long-short → repeat, skipping ' +
-          'any type with nothing queued). Longform is its own YouTube/Facebook timeline.</p>' +
+        '<p class="settings-hint">Every short-form piece uses one shared slot across TikTok, YouTube Shorts, Instagram and Facebook. ' +
+          'TikTok remains the source of truth in Buffer; the direct platforms wait for the exact same release time. ' +
+          'Longform keeps its separate rolling YouTube/Facebook timeline.</p>' +
+        '<div class="tiktok-schedule-block shortform-mirror-block">' +
+          '<div class="cadence-label">Shared short-form schedule</div>' +
+          '<div class="shortform-schedule-summary" id="directShortScheduleSummary">12:00 AM · 12:00 PM daily (Asia/Bangkok)</div>' +
+          '<p class="settings-hint tiktok-schedule-note">YouTube Shorts, Instagram and Facebook automatically mirror the TikTok queue slot assigned by Buffer.</p>' +
+        '</div>' +
         '<div class="cadence-grid" id="cadenceGrid"></div>' +
         '<div class="tiktok-schedule-block">' +
           '<div class="cadence-label">TikTok via Buffer <span class="ink-faint">(read-only)</span></div>' +
@@ -4301,10 +4313,12 @@
 
   function renderTiktokSchedule(status) {
     var grid = document.getElementById('tiktokScheduleGrid');
+    var directSummary = document.getElementById('directShortScheduleSummary');
     if (!grid) return;
     var days = status && status.connected && status.channel ? (status.channel.postingSchedule || []) : [];
     if (!days.length) {
       grid.innerHTML = '<span class="ink-faint">Buffer schedule unavailable.</span>';
+      if (directSummary) directSummary.textContent = '12:00 AM · 12:00 PM daily (Asia/Bangkok fallback)';
       return;
     }
     var labels = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' };
@@ -4313,6 +4327,16 @@
       return '<div class="tiktok-schedule-day"><strong>' + (labels[day.day] || escapeHtml(day.day)) + '</strong>' +
         '<span>' + times.map(function (time) { return escapeHtml(time); }).join(' · ') + '</span></div>';
     }).join('') + '<div class="tiktok-schedule-zone">Timezone: ' + escapeHtml(status.channel.timezone || 'Buffer account') + '</div>';
+    if (directSummary) {
+      var active = days.filter(function (day) { return !day.paused; });
+      var firstTimes = active.length ? (active[0].times || []) : [];
+      var uniform = active.length && active.every(function (day) {
+        return JSON.stringify(day.times || []) === JSON.stringify(firstTimes);
+      });
+      directSummary.textContent = uniform
+        ? firstTimes.join(' · ') + ' daily (' + (status.channel.timezone || 'Buffer timezone') + ')'
+        : 'Mirrors each day’s Buffer slots (' + (status.channel.timezone || 'Buffer timezone') + ')';
+    }
   }
 
   function renderMetaConnectCard() {
@@ -4398,7 +4422,6 @@
   }
 
   var CADENCE_ROWS = [
-    { key: 'shorts', label: 'Direct short-form', hint: 'YouTube Shorts / Instagram / Facebook' },
     { key: 'longform', label: 'Direct longform', hint: 'YouTube / Facebook' }
   ];
 
