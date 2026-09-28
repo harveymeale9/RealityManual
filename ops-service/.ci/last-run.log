@@ -1,2 +1,44 @@
-ssh: connect to host 187.124.146.235 port 22: Connection timed out
-ssh exit code: 255
++ CLAUDE_HOST_HOME_DIR=/root/ops-service-claude-home/host-identity
++ mkdir -p /root/ops-service-claude-home/host-identity
++ ln -sfn ../claude-dir /root/ops-service-claude-home/host-identity/.claude
++ ln -sfn ../claude.json /root/ops-service-claude-home/host-identity/.claude.json
++ chown -h ubuntu:ubuntu /root/ops-service-claude-home/host-identity /root/ops-service-claude-home/host-identity/.claude /root/ops-service-claude-home/host-identity/.claude.json
++ ln -sfn /srv/realitymanual-repo /repo
++ RUN_ARGS=(-d --name "$CONTAINER" --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-claude-home/claude-dir:/home/node/.claude -v /root/ops-service-claude-home/claude.json:/home/node/.claude.json -v "$DATA_DIR:/data" -v /root/realitymanual-backend-data:/store-data:ro -v "$RUNTIME_REPO_DIR:/repo" -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file "$ENV_FILE")
++ cd /root/realitymanual-repo
+++ git status --porcelain
++ '[' -n '' ']'
++ git pull
+From https://github.com/harveymeale9/RealityManual
+   a6f4c70..5802570  main       -> origin/main
+Updating a6f4c70..5802570
+Fast-forward
+ CLAUDE.md                                     |  24 +++++-
+ ops-service/.ci/last-run.log                  | 112 +-------------------------
+ ops-service/public/app.js                     |  30 ++++++-
+ ops-service/public/index.html                 |   8 +-
+ ops-service/public/lib/voiceClient.js         |  38 +++++++++
+ ops-service/public/style.css                  |  11 +++
+ ops-service/public/voice-mobile.html          |  31 +++++--
+ ops-service/test/voiceClientRecording.test.js |  36 +++++++++
+ 8 files changed, 167 insertions(+), 123 deletions(-)
+++ git rev-parse HEAD
++ NEW_HEAD=58025707bb29963033a60875befe3094711fdb7e
++ git -C /srv/realitymanual-repo pull
+Already up to date.
++ chown -R 1000:1000 /srv/realitymanual-repo
++ LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
+++ cat /root/ops-service-data/last-image-commit.txt
++ LAST_BUILD_COMMIT=a6f4c709787948463a38f2b7470bb3e3474973b5
++ NEEDS_REBUILD=1
++ '[' -n a6f4c709787948463a38f2b7470bb3e3474973b5 ']'
++ git cat-file -e 'a6f4c709787948463a38f2b7470bb3e3474973b5^{commit}'
+++ git diff --name-only a6f4c709787948463a38f2b7470bb3e3474973b5 58025707bb29963033a60875befe3094711fdb7e -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -z '' ']'
++ NEEDS_REBUILD=0
++ '[' 0 = 1 ']'
++ '[' 0 = 0 ']'
++ echo 'no backend changes between a6f4c709787948463a38f2b7470bb3e3474973b5 and 58025707bb29963033a60875befe3094711fdb7e — already live via git pull, skipping rebuild/restart'
+no backend changes between a6f4c709787948463a38f2b7470bb3e3474973b5 and 58025707bb29963033a60875befe3094711fdb7e — already live via git pull, skipping rebuild/restart
++ exit 0
+ssh exit code: 0
