@@ -110,12 +110,19 @@ function setup(db, options) {
       const snap = json(row.snapshot_json, {});
       (snap.videos || []).forEach(function (video) {
         if (!video.isOneInTenOutlier || !video.captionAnalysisAvailable || !video.creativeAnalysis) return;
-        found.push({
+        const analysis = video.creativeAnalysis;
+        const sourceRead = analysis.version === 2 ? {
+          theirIdea: (analysis.theirIdea || []).map(function (item) { return clean(item, 700); }).filter(Boolean),
+          directQuotes: (analysis.directQuotes || []).map(function (item) { return clean(item, 500); }).filter(Boolean),
+          realityManualAngle: (analysis.realityManualAngle || []).map(function (item) { return clean(item, 700); }).filter(Boolean)
+        } : {
+          topic: clean(analysis.topic, 600), bigIdea: clean(analysis.bigIdea, 1000), angle: clean(analysis.angle, 1000)
+        };
+        found.push(Object.assign({
           videoId: clean(video.id, 200), channel: clean(snap.title || row.title, 300), title: clean(video.title, 500),
           views: Number(video.views) || 0, medianViews: Number(snap.medianViews) || 0,
-          lift: snap.medianViews ? Math.round((Number(video.views) || 0) / snap.medianViews * 10) / 10 : null,
-          topic: clean(video.creativeAnalysis.topic, 600), bigIdea: clean(video.creativeAnalysis.bigIdea, 1000), angle: clean(video.creativeAnalysis.angle, 1000)
-        });
+          lift: snap.medianViews ? Math.round((Number(video.views) || 0) / snap.medianViews * 10) / 10 : null
+        }, sourceRead));
       });
     });
     return found;

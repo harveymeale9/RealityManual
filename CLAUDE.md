@@ -10878,3 +10878,42 @@ to an uneven provider transfer. The voice, model and spoken wording are
 unchanged. A VM regression presents a response explicitly marked as streaming
 on a browser that claims MP3 MediaSource support and proves the client reads the
 complete Blob, never opens the chunk reader, and starts playback exactly once.
+
+---
+
+# 247. Outlier Reads Separate the Source Idea from the Manual Synthesis (2026-09-28)
+
+Harvey found the competitor outlier cards draining to read because their
+`Topic`, `Big idea`, and `Angle` fields blended a creator's position into the
+editorial interpretation without making either boundary clear. The cards now
+have exactly two readable sections: **Their idea** and **Reality Manual angle**.
+Each uses short, normal-weight body paragraphs. The source section also shows
+one to three visually distinct direct quotations, while the Manual section has
+its own subtle treatment instead of another run of bold labels. The desktop
+board now uses two wider columns rather than three narrow ones and remains one
+column on mobile.
+
+This is not only a presentation change. Caption analysis now receives the
+canonical Reality Manual concept map and returns a structured two-part read:
+one to three source-summary paragraphs, one to three verbatim caption excerpts,
+and one to three paragraphs identifying the relevant Manual principle plus the
+specific agreement, extension, reframe, or challenge Harvey could develop.
+The prompt expressly forbids mixing Manual claims into the creator summary or
+merely restating the creator in the Manual section. Every returned source quote
+is normalized only for whitespace and quotation marks and then checked against
+the actual retrieved transcript; if none is genuinely present, the analysis is
+rejected rather than displaying invented evidence.
+
+Creative reads carry schema version 2. Cached version-1 reads are not silently
+reused or disguised as the new format: the UI asks for a caption-read refresh,
+and the normal refresh path regenerates them. The downstream Research idea
+service accepts both legacy reads and the new source/quote/Manual structure so
+the schema upgrade does not erase outlier corroboration from future idea
+generation.
+
+Automated coverage includes versioned caching, Manual-map prompt grounding,
+new-field persistence, downstream Research consumption, and rejection of an
+invented quote. The complete ops-service suite passes (76 tests). Real Chromium
+at 1440×1000 and 390×844 verified the section labels, paragraph and quote
+counts, normal 400-weight body copy, zero runtime errors, and no horizontal
+overflow.

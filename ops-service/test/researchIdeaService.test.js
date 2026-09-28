@@ -22,7 +22,9 @@ test('research queue uses the complete source pool and only accepts verified Man
   db.prepare('INSERT INTO youtube_competitor_channels VALUES(?,?,?,?,?,?,?)').run(
     'UC1', '@one', 'Caption Channel', JSON.stringify({ title: 'Caption Channel', medianViews: 100,
       videos: [{ id: 'real-video', title: 'Real outlier', views: 900, isOneInTenOutlier: true,
-        captionAnalysisAvailable: true, creativeAnalysis: { topic: 'Meaning', bigIdea: 'Belief changes experience.', angle: 'The hidden cause.' } },
+        captionAnalysisAvailable: true, creativeAnalysis: { version: 2,
+          theirIdea: ['Belief changes experience.'], directQuotes: ['Belief changes the world you experience.'],
+          realityManualAngle: ['The Rule of Required Belief explains the hidden mechanism.'] } },
       { id: 'no-captions', title: 'Unavailable', views: 1000, isOneInTenOutlier: true, captionAnalysisAvailable: false }]
     }), new Date().toISOString(), new Date().toISOString(), null
   );
@@ -36,6 +38,7 @@ test('research queue uses the complete source pool and only accepts verified Man
     assert.match(input.prompt, /The Mindset Mentor Podcast/);
     assert.match(input.prompt, /Chase Hughes/);
     assert.match(input.prompt, /real-video/);
+    assert.match(input.prompt, /Rule of Required Belief explains the hidden mechanism/);
     const count = Number(input.prompt.match(/Generate exactly (\d+)/)[1]);
     return { ideas: Array.from({ length: count }, function (_, index) { return {
       bigIdea: 'Belief does not merely describe experience; it helps construct the meaning that experience can have. Batch ' + generation + ', idea ' + index + '.',
@@ -93,4 +96,3 @@ test('research generation errors stop and remain retryable instead of spawning j
   assert.equal(db.prepare('SELECT count(*) n FROM research_idea_jobs').get().n, 1);
   db.close();
 });
-

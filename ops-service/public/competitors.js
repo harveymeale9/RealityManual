@@ -42,6 +42,32 @@
     return (hours ? hours + ':' + String(minutes).padStart(2, '0') : String(minutes)) + ':' + String(secs).padStart(2, '0');
   }
 
+  function shortParagraphs(value) {
+    return (Array.isArray(value) ? value : []).filter(Boolean).map(function (paragraph) {
+      return '<p>' + esc(paragraph) + '</p>';
+    }).join('');
+  }
+
+  function creativeRead(analysis) {
+    if (!analysis) {
+      return '<div class="competitor-ai-pending">AI creative read unavailable. Use Refresh caption reads.</div>';
+    }
+    if (analysis.version !== 2) {
+      return '<div class="competitor-ai-pending">This read uses the previous format. Refresh caption reads to rebuild it with quoted source ideas and a separate Reality Manual angle.</div>';
+    }
+    var quotes = (analysis.directQuotes || []).map(function (quote) {
+      return '<blockquote>“' + esc(String(quote).replace(/^[“”"']|[“”"']$/g, '')) + '”</blockquote>';
+    }).join('');
+    return '<div class="competitor-ai-read">' +
+      '<section class="competitor-read-section competitor-their-idea"><h5>Their idea</h5>' +
+        shortParagraphs(analysis.theirIdea) + quotes +
+      '</section>' +
+      '<section class="competitor-read-section competitor-manual-angle"><h5>Reality Manual angle</h5>' +
+        shortParagraphs(analysis.realityManualAngle) +
+      '</section>' +
+    '</div>';
+  }
+
   function setStatus(message, isError) {
     if (!root) return;
     var target = root.querySelector('#competitorStatus');
@@ -81,11 +107,7 @@
         '<div class="competitor-outlier-lift">' + esc(relative) + '</div>' +
         '<div class="competitor-caption-meta">Captions · ' + esc(video.captionLanguage || 'available') + (video.captionKind ? ' · ' + esc(video.captionKind) : '') + (video.captionWordCount ? ' · ' + number(video.captionWordCount) + ' words' : '') + '</div>' +
       '</a>' +
-      (analysis ? '<dl class="competitor-ai-read">' +
-        '<div><dt>Topic</dt><dd>' + esc(analysis.topic) + '</dd></div>' +
-        '<div><dt>Big idea</dt><dd>' + esc(analysis.bigIdea) + '</dd></div>' +
-        '<div><dt>Angle</dt><dd>' + esc(analysis.angle) + '</dd></div>' +
-      '</dl>' : '<div class="competitor-ai-pending">AI creative read unavailable — use Refresh AI reads.</div>') +
+      creativeRead(analysis) +
     '</article>';
   }
 
