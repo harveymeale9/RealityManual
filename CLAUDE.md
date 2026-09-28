@@ -10913,7 +10913,7 @@ generation.
 
 Automated coverage includes versioned caching, Manual-map prompt grounding,
 new-field persistence, downstream Research consumption, and rejection of an
-invented quote. The complete ops-service suite passes (76 tests). Real Chromium
+invented quote. The complete ops-service suite passes (77 tests). Real Chromium
 at 1440×1000 and 390×844 verified the section labels, paragraph and quote
 counts, normal 400-weight body copy, zero runtime errors, and no horizontal
 overflow.
@@ -10954,3 +10954,12 @@ direct quotation, Manual concept, or separated paragraph set, the valid nine
 are persisted and the queue automatically researches only the missing one.
 Only a batch with zero valid sourced ideas becomes a visible retryable error;
 one weak citation can never discard the rest of a sound researched batch.
+
+The research runner's two web tools are named in both `tools` and
+`allowedTools`. The distinction matters in the Agent SDK: `tools` makes a tool
+available to the model, while a headless `dontAsk` session still denies its
+execution unless `allowedTools` explicitly grants it. The first production
+attempt exposed this by correctly refusing to fabricate a quote after both web
+calls were denied. A live smoke test now proves the restricted runner can
+search, open an HTTPS source page, and return a sourced quotation while still
+having no shell, filesystem, edit, browser-control, or MCP access.

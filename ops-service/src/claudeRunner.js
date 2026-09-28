@@ -536,6 +536,11 @@ async function runWebResearchStructured(prompt, schema, timeoutMs) {
     options: {
       cwd: CLAUDE_REPO_DIR,
       tools: ['WebSearch', 'WebFetch'],
+      // `tools` controls what exists in the session; it does not grant
+      // permission to call those tools. In a headless `dontAsk` run, an
+      // otherwise valid web call is denied unless it is also explicitly
+      // allowlisted here.
+      allowedTools: ['WebSearch', 'WebFetch'],
       maxTurns: 20,
       permissionMode: 'dontAsk',
       outputFormat: { type: 'json_schema', schema: schema }
