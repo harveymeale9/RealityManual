@@ -19,6 +19,7 @@ const videoAnalysis = require('./src/videoAnalysis');
 const youtubeAuth = require('./src/youtubeAuth');
 const tiktokAuth = require('./src/tiktokAuth');
 const ideationService = require('./src/ideationService');
+const outlineLearningService = require('./src/outlineLearningService');
 const manuscriptService = require('./src/manuscriptService');
 const mailboxService = require('./src/mailboxService');
 const namecheapMailbox = require('./src/namecheapMailbox');
@@ -480,6 +481,12 @@ app.use('/api/tiktok', requireAuth);
 // pieces record/Kanban model.
 const ideation = ideationService.setup(db);
 app.use('/api/ideation', requireAuth, ideation.router);
+// Durable Big Idea -> Outline Started -> Outline Completed snapshots and
+// learned drafting guidance. Admin-only: snapshots contain Harvey's private
+// in-progress writing, and the analyzer uses the same private agent boundary
+// as Content Ideation.
+const outlineLearning = outlineLearningService.setup(db);
+app.use('/api/outline-learning', requireAuth, outlineLearning.router);
 // Desktop manuscript reader: page text plus restart-safe, AI-ranked
 // semantic search. Admin-only because it exposes the complete book text.
 const manuscript = manuscriptService.setup(db);
@@ -1134,7 +1141,16 @@ app.put('/api/store/:storeName/:id', function (req, res) {
     : Object.assign({}, req.body, { id: id });
   const writeStamp = new Date().toISOString();
   stmts.upsert.run(storeName, id, JSON.stringify(record), writeStamp);
-  if (storeName === 'pieces') weeklyReports.recordStageChange(record, existingPiece && existingPiece.stage, 'kanban', writeStamp);
+  if (storeName === 'pieces') {
+    weeklyReports.recordStageChange(record, existingPiece && existingPiece.stage, 'kanban', writeStamp);
+    try {
+      outlineLearning.recordPieceWrite(existingPiece, record, 'kanban', writeStamp);
+    } catch (error) {
+      // Tracking must never block Harvey's primary Kanban save. The write is
+      // already durable; surface the auxiliary failure in logs for repair.
+      console.error('[outline-learning] failed to capture piece', id, error.message);
+    }
+  }
   if (storeName === 'pieces' && req.sessionRole !== 'youtube-reviewer' && record.stage === 'big_ideas') {
     try {
       ideation.recordBigIdeaPiece(record, existingPiece ? existingPiece.stage : null);
@@ -2190,7 +2206,12 @@ async function processVoiceMessage(id, mode, text, agent, imagePath) {
   const sessionRow = stmts.getVoiceSession.get();
   const sessionId = sessionRow && (agent === 'codex' ? sessionRow.codex_session_id : sessionRow.claude_session_id);
   const sharedContext = buildCrossAgentContext(agent, id, messageRow ? messageRow.created_at : new Date().toISOString());
-  const prompt = buildVoicePrompt(mode, sharedContext + text) + (agent === 'codex' ? CODEX_VISIBILITY_REMINDER : '');
+  // Do not spend context on this for unrelated operational turns. When the
+  // message is actually about developing content, both Project Manager
+  // agents receive the same current learned profile automatically.
+  const outlineContext = /\b(outline|big idea|content idea|script|hook|video idea|kanban)\b/i.test(text)
+    ? outlineLearning.agentContext() : '';
+  const prompt = buildVoicePrompt(mode, sharedContext + outlineContext + text) + (agent === 'codex' ? CODEX_VISIBILITY_REMINDER : '');
 
   // Streamed into the DB as it grows (not held until the run finishes) so
   // the Project Manager tab's right-hand activity pane can poll the same

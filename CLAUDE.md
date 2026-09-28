@@ -10723,3 +10723,66 @@ real Chromium mobile-viewport test exercised the actual `voice-mobile.html`
 flow with the same first-stream interruption: the UI progressed from
 "Starting microphone…" to "Listening…", made exactly two mic acquisitions,
 kept the recording overlay open, and produced no page errors.
+
+---
+
+# 243. Big Idea-to-Completed-Outline Learning Trail (2026-09-28)
+
+Harvey wants Content Studio to learn the transformation he performs between a
+promising Big Idea and an Outline Completed card, so Project Manager can
+eventually produce a useful first outline rather than requiring him to develop
+every premise from zero. This is separate from §173's Big Idea generator
+learning: that system learns which premises Harvey selects; this one learns how
+he develops a selected premise into an outline.
+
+`src/outlineLearningService.js` adds four normalized, admin-only data sets:
+
+- immutable/coalesced content snapshots across `big_ideas`,
+  `outline_started`, and `outline_completed`;
+- one durable trajectory record per Kanban piece;
+- restart-safe analysis jobs; and
+- one compact, inspectable outline-development profile built from completed
+  trajectories.
+
+Every normal admin Kanban piece write now passes its persisted before/after
+states to this service. Entering or leaving a tracked stage always records an
+exact checkpoint. Ordinary edits are recorded as full snapshots with structured
+title, word-count, character-count, heading, and changed-field metadata, but
+edits inside the same ten-minute authoring burst coalesce into one checkpoint
+so contentEditable autosaves do not manufacture hundreds of meaningless
+keystroke revisions. Reviewer-owned audit content is excluded. Tracking errors
+are logged but can never reject the primary Kanban save.
+
+When a tracked piece reaches Outline Completed, analysis waits ten quiet
+minutes. Any further completed-outline edit postpones or reruns it, preventing
+the learner from treating an intermediate autosave as final. The selected
+Content Ideation provider then receives the actual first/last Big Ideas
+snapshots, first/last Outline Started snapshots, final Outline Completed
+snapshot, and current learned profile. It records both an audit per trajectory
+and a revised compact profile covering preserved ideas, transformations,
+reasoning moves, structure, style, future-draft instructions, avoids, evidence
+counts, confidence, and uncertainty. Reanalyzing a later edit refines the same
+example rather than inflating the number of independent examples.
+
+Project Manager automatically receives that compact profile on future messages
+about outlines, Big Ideas, hooks, scripts, video ideas, or the Kanban. Unrelated
+operational turns pay no context cost. The raw system is also inspectable at
+admin-only `GET /api/outline-learning/state` and a piece's complete trajectory
+at `GET /api/outline-learning/pieces/:id`; failed analyses remain visible and
+explicitly retryable through `POST /api/outline-learning/jobs/:id/retry`.
+
+Existing historical completed outlines are deliberately **not** reverse-labelled
+as training examples because the database does not contain their original Big
+Idea versions. On first startup, the system instead establishes honest
+`tracking_baseline` snapshots for every card currently in Big Ideas and learns
+forward from there. An in-memory migration using the live production records
+confirmed that all 31 current Big Ideas become 31 trajectories/31 snapshots and
+zero fake analyzed examples.
+
+Verification includes two dedicated service regressions: the full
+Big Ideas → edited Big Idea → Outline Started → developed outline → Outline
+Completed path, coalescing, strict before/after prompt contents, profile update,
+same-piece reanalysis without sample-count inflation, and real-record baseline
+backfill. The complete ops-service suite passes (69 tests), both changed runtime
+files pass syntax checking, and the migration was exercised against an in-memory
+copy of every live piece rather than writing to production during development.
