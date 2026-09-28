@@ -245,7 +245,12 @@ function setup(db, options) {
     const history = db.prepare('SELECT big_idea FROM research_ideas ORDER BY created_at DESC LIMIT 40').all().map(function (row) { return clean(row.big_idea, 1000); });
     const result = await generateIdeas({ prompt: prompt(job.requested_count, outliers, job.id, history), schema: RESULT_SCHEMA });
     const ideas = validateResult(result, job.requested_count, outliers);
-    if (ideas.length < job.requested_count) throw new Error('Idea generator returned an incomplete or unverifiable batch.');
+    // Web research is less uniform than a tool-free generation call: one
+    // candidate may lack a usable HTTPS source or exact attribution while
+    // the other nine are sound. Keep every valid card and let ensureQueue()
+    // request only the missing remainder instead of discarding the whole
+    // researched batch. Zero valid cards is still a real, visible failure.
+    if (!ideas.length) throw new Error('Idea generator returned no verifiable source-grounded ideas.');
     const max = db.prepare("SELECT coalesce(max(sort_order),0) n FROM research_ideas WHERE status='active'").get().n;
     const stamp = now();
     const insert = db.prepare(`INSERT INTO research_ideas

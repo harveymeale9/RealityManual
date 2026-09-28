@@ -104,3 +104,35 @@ test('research generation errors stop and remain retryable instead of spawning j
   assert.equal(db.prepare('SELECT count(*) n FROM research_idea_jobs').get().n, 1);
   db.close();
 });
+
+test('a partial researched batch keeps valid cards and queues only the missing remainder', async function () {
+  const db = database();
+  let generation = 0;
+  const service = researchIdeaService.setup(db, { autoStart: false, generateIdeas: async function (input) {
+    generation++;
+    const requested = Number(input.prompt.match(/Generate exactly (\d+)/)[1]);
+    const returned = generation === 1 ? requested - 1 : requested;
+    return { ideas: Array.from({ length: returned }, function (_, index) {
+      return {
+        theirIdea: ['The source distinguishes useful uncertainty from indecision.'],
+        sourceEvidence: [{ thinkerName: 'Naval Ravikant', quote: 'Specific knowledge cannot be trained.', url: 'https://example.com/naval-' + generation + '-' + index }],
+        realityManualAngle: ['The Rule of Unknown Truth turns uncertainty into a deliberate provisional-belief strategy.'],
+        thinkerNames: ['Naval Ravikant'], manualConceptIds: ['rule-unknown-truth'], outlierMatches: []
+      };
+    }) };
+  } });
+
+  service.ensureQueue();
+  await service.runWorker();
+  let state = service.state();
+  assert.equal(state.ideas.length, 9);
+  assert.equal(state.jobs.length, 1);
+  assert.equal(state.jobs[0].status, 'pending');
+  assert.equal(state.jobs[0].requestedCount, 1);
+
+  await service.runWorker();
+  state = service.state();
+  assert.equal(state.ideas.length, 10);
+  assert.equal(state.jobs.length, 0);
+  db.close();
+});

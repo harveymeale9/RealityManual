@@ -10947,3 +10947,10 @@ way to infer where the source claim stopped and the Manual synthesis began in
 those old paragraphs. The ten production rows had no approvals and no notes
 before migration. Real Chromium at 1440×1000 and 390×844 verified both panels,
 the linked quotation, normal 400-weight copy, and no horizontal overflow.
+
+Source research batches are intentionally partial-success tolerant. If one of
+ten returned ideas lacks a valid allow-listed thinker, HTTPS evidence URL,
+direct quotation, Manual concept, or separated paragraph set, the valid nine
+are persisted and the queue automatically researches only the missing one.
+Only a batch with zero valid sourced ideas becomes a visible retryable error;
+one weak citation can never discard the rest of a sound researched batch.
