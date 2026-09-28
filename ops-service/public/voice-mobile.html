@@ -222,7 +222,7 @@
 
   <script src="lib/store.js"></script>
   <script src="lib/auth.js"></script>
-  <script src="lib/voiceClient.js?v=20260923-codex-early-voice"></script>
+  <script src="lib/voiceClient.js?v=20260928-recorder-startup"></script>
   <script src="lib/usageDashboard.js?v=20260921-usage"></script>
   <script>
     (function () {
@@ -778,10 +778,12 @@
       }
 
       var activeRecorder = null;
+      var activeRecordingFlow = 0;
 
       function startFlow(mode) {
+        var thisFlow = ++activeRecordingFlow;
         recordPulse.className = 'v-pulse' + (mode === 'execute' ? ' execute' : '');
-        recordStatus.textContent = 'Listening…';
+        recordStatus.textContent = 'Starting microphone…';
         hideAllOverlays();
         recordOverlay.hidden = false;
         // Don't talk over Harvey while he's dictating — see app.js's
@@ -791,14 +793,24 @@
         // opens the listener.
         Voice.setRecordingActive(true);
         Voice.startRecording().then(function (rec) {
+          // Cancel can be pressed while the mic is still passing its startup
+          // check. Never leave that late recorder running behind a closed
+          // overlay.
+          if (thisFlow !== activeRecordingFlow) {
+            rec.stop();
+            return;
+          }
           activeRecorder = rec;
+          recordStatus.textContent = 'Listening…';
         }).catch(function () {
+          if (thisFlow !== activeRecordingFlow) return;
           hideAllOverlays();
           Voice.setRecordingActive(false);
           alert('Could not access the microphone. Check the browser has mic permission.');
         });
 
         function cleanup() {
+          if (thisFlow === activeRecordingFlow) activeRecordingFlow++;
           activeRecorder = null;
           finishBtn.onclick = null;
           cancelRecordBtn.onclick = null;

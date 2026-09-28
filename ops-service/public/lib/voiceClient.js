@@ -29,27 +29,103 @@ window.RMVoice = (function () {
   // measurable benefit. Accepted as a known, low-priority platform
   // limitation per Harvey's own call ("not a big enough deal to waste
   // more time on").
+  // Android/Chrome can briefly grant a fresh microphone stream and then end
+  // it again while its audio session is being established. Previously we
+  // returned that already-dying recorder to the UI immediately, showed
+  // "Listening", and silently captured nothing. Give a new recorder a short
+  // proving window and retry one immediate interruption. This is deliberately
+  // about recorder liveness, not Bluetooth routing: the three failed attempts
+  // to suppress Android's headset call tone remain reverted (§106).
+  var RECORDING_STABILITY_MS = 600;
+  var RECORDING_START_ATTEMPTS = 2;
+
   function startRecording() {
-    return navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
-      requestWakeLock();
-      var mimeType = (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/webm')) ? 'audio/webm' : '';
-      var recorder = mimeType ? new MediaRecorder(stream, { mimeType: mimeType }) : new MediaRecorder(stream);
-      var chunks = [];
-      recorder.addEventListener('dataavailable', function (e) { if (e.data && e.data.size) chunks.push(e.data); });
-      recorder.start();
-      return {
-        stop: function () {
-          return new Promise(function (resolve) {
-            recorder.addEventListener('stop', function () {
-              stream.getTracks().forEach(function (t) { t.stop(); });
-              releaseWakeLock();
-              resolve(new Blob(chunks, { type: recorder.mimeType || 'audio/webm' }));
-            });
-            recorder.stop();
+    function open(attempt) {
+      return navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+        var mimeType = (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/webm')) ? 'audio/webm' : '';
+        var recorder = mimeType ? new MediaRecorder(stream, { mimeType: mimeType }) : new MediaRecorder(stream);
+        var chunks = [];
+        var provedStable = false;
+        var stabilityTimer = null;
+
+        function stopTracks() {
+          stream.getTracks().forEach(function (track) {
+            try { track.stop(); } catch (error) { /* already stopped */ }
           });
         }
-      };
-    });
+
+        function hasLiveTrack() {
+          return stream.getTracks().some(function (track) { return track.readyState !== 'ended'; });
+        }
+
+        recorder.addEventListener('dataavailable', function (event) {
+          if (event.data && event.data.size) chunks.push(event.data);
+        });
+
+        return new Promise(function (resolve, reject) {
+          var startupFinished = false;
+
+          function retryOrReject(error) {
+            if (startupFinished) return;
+            startupFinished = true;
+            if (stabilityTimer) clearTimeout(stabilityTimer);
+            stopTracks();
+            releaseWakeLock();
+            if (attempt < RECORDING_START_ATTEMPTS) {
+              setTimeout(function () { open(attempt + 1).then(resolve, reject); }, 150);
+            } else {
+              reject(error || new Error('The microphone stopped during startup.'));
+            }
+          }
+
+          recorder.addEventListener('error', function () {
+            retryOrReject(new Error('The microphone stopped during startup.'));
+          });
+          recorder.addEventListener('stop', function () {
+            if (!provedStable) retryOrReject(new Error('The microphone stopped during startup.'));
+          });
+
+          try {
+            recorder.start();
+          } catch (error) {
+            retryOrReject(error);
+            return;
+          }
+
+          stabilityTimer = setTimeout(function () {
+            if (recorder.state !== 'recording' || !hasLiveTrack()) {
+              retryOrReject(new Error('The microphone stopped during startup.'));
+              return;
+            }
+            startupFinished = true;
+            provedStable = true;
+            requestWakeLock();
+            resolve({
+              stop: function () {
+                return new Promise(function (resolveStop) {
+                  var finished = false;
+                  function finish() {
+                    if (finished) return;
+                    finished = true;
+                    stopTracks();
+                    releaseWakeLock();
+                    resolveStop(new Blob(chunks, { type: recorder.mimeType || 'audio/webm' }));
+                  }
+                  if (recorder.state === 'inactive') {
+                    finish();
+                    return;
+                  }
+                  recorder.addEventListener('stop', finish, { once: true });
+                  try { recorder.stop(); } catch (error) { finish(); }
+                });
+              }
+            });
+          }, RECORDING_STABILITY_MS);
+        });
+      });
+    }
+
+    return open(1);
   }
 
   function transcribe(blob) {

@@ -10684,3 +10684,42 @@ Elements and keeps the payment button disabled if it cannot load. The raw key
 therefore remains sourced exclusively from the private VPS environment while
 still reaching the browser as Stripe requires. No PaymentIntent, charge,
 customer order or BookVault order was created during the live-mode audit.
+
+---
+
+# 242. Project Manager Recorder Recovers from Fresh-Session Mic False Starts (2026-09-28)
+
+Harvey reported an intermittent first-recording failure in the mobile Project
+Manager: after pressing the green voice button, the UI briefly said
+"Listening" and Android announced that the call had ended, forcing him to
+start over. The shared recorder previously considered `getUserMedia()` success
+and a synchronous `MediaRecorder.start()` call sufficient proof that recording
+had begun. A fresh Android/Chrome audio session can grant that stream and then
+end it immediately during device/audio-session setup, so the UI could accept an
+already-dying recorder and capture nothing.
+
+`public/lib/voiceClient.js` now gives a newly opened recorder a 600 ms liveness
+window. It confirms that the recorder is still in `recording` state and at
+least one input track is still live before returning it to the page. If the
+recorder errors or stops inside that startup window, the dead stream is cleaned
+up and the microphone is acquired once more automatically. This is intentionally
+separate from the abandoned Bluetooth call-tone suppression attempts in
+§86/§103/§105/§106: it does not change routing, cache a stream, or claim to
+silence Android's headset notification; it prevents an immediate audio-session
+drop from becoming a false successful recording. `stop()` is also now safe if
+the recorder has already become inactive, rather than waiting forever for a
+`stop` event that already happened.
+
+`voice-mobile.html` says "Starting microphone…" during that proving/retry
+window and changes to "Listening…" only after the recorder is genuinely live.
+Its flow id also makes cancelling during startup safe: a late recorder is
+immediately stopped instead of continuing invisibly behind a closed overlay.
+Both entry pages use a new cache-busting URL for the shared client.
+
+A new Node regression simulates the first stream stopping after 20 ms, proves
+that a second stream is acquired, and verifies that the stable take stops and
+returns audio normally. The complete ops-service suite passes (67 tests). A
+real Chromium mobile-viewport test exercised the actual `voice-mobile.html`
+flow with the same first-stream interruption: the UI progressed from
+"Starting microphone…" to "Listening…", made exactly two mic acquisitions,
+kept the recording overlay open, and produced no page errors.

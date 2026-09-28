@@ -1,0 +1,83 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const test = require('node:test');
+const vm = require('node:vm');
+
+const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'lib', 'voiceClient.js'), 'utf8');
+
+test('voice recorder retries an immediate fresh-stream interruption and returns the stable take', async () => {
+  let mediaRequests = 0;
+  let recorderInstances = 0;
+  const tracks = [];
+
+  class FakeMediaRecorder {
+    static isTypeSupported() { return true; }
+
+    constructor(stream) {
+      this.stream = stream;
+      this.state = 'inactive';
+      this.mimeType = 'audio/webm';
+      this.listeners = Object.create(null);
+      this.instance = ++recorderInstances;
+    }
+
+    addEventListener(name, callback) {
+      (this.listeners[name] || (this.listeners[name] = [])).push(callback);
+    }
+
+    emit(name, event = {}) {
+      (this.listeners[name] || []).slice().forEach((callback) => callback(event));
+    }
+
+    start() {
+      this.state = 'recording';
+      if (this.instance === 1) {
+        setTimeout(() => {
+          this.state = 'inactive';
+          this.stream.getTracks()[0].readyState = 'ended';
+          this.emit('stop');
+        }, 20);
+      }
+    }
+
+    stop() {
+      this.emit('dataavailable', { data: new Blob(['stable audio'], { type: this.mimeType }) });
+      this.state = 'inactive';
+      this.emit('stop');
+    }
+  }
+
+  const sandbox = {
+    Blob,
+    clearTimeout,
+    console,
+    fetch: () => Promise.reject(new Error('unused')),
+    FormData,
+    MediaRecorder: FakeMediaRecorder,
+    navigator: {
+      mediaDevices: {
+        getUserMedia: async () => {
+          mediaRequests += 1;
+          const track = { readyState: 'live', stop() { this.readyState = 'ended'; } };
+          tracks.push(track);
+          return { getTracks: () => [track] };
+        }
+      }
+    },
+    setTimeout,
+    window: { MediaRecorder: FakeMediaRecorder }
+  };
+  sandbox.window.window = sandbox.window;
+  sandbox.window.navigator = sandbox.navigator;
+  vm.runInNewContext(source, sandbox);
+
+  const recording = await sandbox.window.RMVoice.startRecording();
+  assert.equal(mediaRequests, 2);
+  assert.equal(recorderInstances, 2);
+  assert.equal(tracks[0].readyState, 'ended');
+
+  const blob = await recording.stop();
+  assert.equal(blob.size, 12);
+  assert.equal(tracks[1].readyState, 'ended');
+});
