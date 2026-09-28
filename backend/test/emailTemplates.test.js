@@ -21,10 +21,11 @@ const order = {
 
 test('confirmation email is branded, responsive, plain-text backed, and escapes customer data', () => {
   const email = orderConfirmedEmail(order, { preview: true });
-  assert.match(email.subject, /^\[PREVIEW\]/);
-  assert.match(email.html, /Your copy is being made/);
+  assert.equal(email.subject, '[PREVIEW] We’re Making Your Copy of The Reality Manual');
+  assert.match(email.html, /We’re Making Your Copy of The Reality Manual/);
   assert.match(email.html, /15 working days/);
-  assert.match(email.html, /designed to be read, kept and passed on for a lifetime/);
+  assert.match(email.html, /individually produced with the care and attention/);
+  assert.match(email.html, /make, inspect and finish your book properly/);
   assert.doesNotMatch(email.html, /<script>alert/);
   assert.match(email.html, /Ava &lt;script&gt;/);
   assert.match(email.text, /Hardcover — Deluxe First Edition/);
@@ -48,7 +49,12 @@ test('dispatch email includes tracking only when BookVault supplies it', () => {
 
 test('refund email says the refund was issued without promising bank timing', () => {
   const email = orderRefundedEmail(order);
+  assert.equal(email.subject, 'We couldn’t complete your order.');
   assert.match(email.html, /issued a full refund/);
+  assert.match(email.html, /Try Your Order Again/);
+  assert.match(email.html, /https:\/\/realitymanual\.com\/checkout\.html/);
+  assert.match(email.text, /Please try placing your order once more/);
+  assert.match(email.text, /we’ll be in touch to help resolve it/);
   assert.match(email.text, /bank may take several working days/);
   assert.match(email.text, /\$139\.98 USD/);
 });

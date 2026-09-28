@@ -91,7 +91,7 @@ function layout({ preview = false, preheader, eyebrow, title, body, details, cal
 function orderConfirmedEmail(order, { preview = false } = {}) {
   const orderNumber = order.display_order_id || order.id;
   const address = addressLines(order);
-  const subject = `${preview ? '[PREVIEW] ' : ''}Your copy of The Reality Manual is being made`;
+  const subject = `${preview ? '[PREVIEW] ' : ''}We’re Making Your Copy of The Reality Manual`;
   const details = detailsTable([
     ['Order', escapeHtml(orderNumber)],
     ['Edition', 'Hardcover — Deluxe First Edition'],
@@ -100,20 +100,20 @@ function orderConfirmedEmail(order, { preview = false } = {}) {
     ['Delivering to', address.map(escapeHtml).join('<br>')],
   ]);
   const body = `
-    <p style="margin:0 0 18px;">Thank you, ${escapeHtml(firstName(order.customer_name))}. Your order has been accepted and your copy of <em>The Reality Manual</em> is now entering production.</p>
-    <p style="margin:0;">It is not being pulled from a warehouse shelf. Your copy will be printed, bound and finished to order by one of Europe’s leading specialist book printers.</p>`;
-  const callout = `Please allow up to <strong style="color:${BRAND.gold};">15 working days</strong> for this process before dispatch. Those days are spent making a carefully finished volume designed to be read, kept and passed on for a lifetime. We’ll email you again the moment it leaves the printer.`;
+    <p style="margin:0 0 18px;">Thank you, ${escapeHtml(firstName(order.customer_name))}. Your order is confirmed, and we’re now beginning the careful process of creating your copy of <em>The Reality Manual</em>.</p>
+    <p style="margin:0;">Every copy is printed, bound and finished to order by one of Europe’s leading specialist book printers. This isn’t a book taken from a warehouse shelf: it is individually produced with the care and attention intended to make it a volume you can return to—and keep—for a lifetime.</p>`;
+  const callout = `Please allow up to <strong style="color:${BRAND.gold};">15 working days</strong> before dispatch. That time allows our printer to make, inspect and finish your book properly, rather than rush it through mass production. We’ll email you the moment it leaves the printer.`;
   const text = [
     preview ? 'SAMPLE PREVIEW — NOT A REAL ORDER' : '',
     'THE REALITY MANUAL',
     '',
-    'YOUR COPY IS BEING MADE',
+    'WE’RE MAKING YOUR COPY OF THE REALITY MANUAL',
     '',
-    `Thank you, ${firstName(order.customer_name)}. Your order has been accepted and your copy of The Reality Manual is now entering production.`,
+    `Thank you, ${firstName(order.customer_name)}. Your order is confirmed, and we’re now beginning the careful process of creating your copy of The Reality Manual.`,
     '',
-    'It is not being pulled from a warehouse shelf. Your copy will be printed, bound and finished to order by one of Europe’s leading specialist book printers.',
+    'Every copy is printed, bound and finished to order by one of Europe’s leading specialist book printers. This isn’t a book taken from a warehouse shelf: it is individually produced with the care and attention intended to make it a volume you can return to—and keep—for a lifetime.',
     '',
-    'Please allow up to 15 working days for this process before dispatch. Those days are spent making a carefully finished volume designed to be read, kept and passed on for a lifetime. We’ll email you again the moment it leaves the printer.',
+    'Please allow up to 15 working days before dispatch. That time allows our printer to make, inspect and finish your book properly, rather than rush it through mass production. We’ll email you the moment it leaves the printer.',
     '',
     `Order: ${orderNumber}`,
     'Edition: Hardcover — Deluxe First Edition',
@@ -128,7 +128,7 @@ function orderConfirmedEmail(order, { preview = false } = {}) {
 
   return {
     subject,
-    html: layout({ preview, preheader: 'Your copy has been accepted for production.', eyebrow: 'Order confirmed', title: 'Your copy is being made.', body, details, callout }),
+    html: layout({ preview, preheader: 'We’re carefully creating your copy of The Reality Manual.', eyebrow: 'Order confirmed', title: 'We’re Making Your Copy of The Reality Manual', body, details, callout }),
     text,
   };
 }
@@ -188,11 +188,11 @@ function orderShippedEmail(order, shipment = {}, { preview = false } = {}) {
 function orderRefundedEmail(order, { preview = false } = {}) {
   const orderNumber = order.display_order_id || order.id;
   const total = `${formatMoney(order.total_price_cents, order.currency)} ${String(order.currency || 'usd').toUpperCase()}`;
-  const subject = `${preview ? '[PREVIEW] ' : ''}An update concerning your Reality Manual order`;
+  const subject = `${preview ? '[PREVIEW] ' : ''}We couldn’t complete your order.`;
   const body = `
     <p style="margin:0 0 18px;">We’re sorry, ${escapeHtml(firstName(order.customer_name))}, but our printer was unable to accept your order after several attempts.</p>
-    <p style="margin:0;">Rather than leave you waiting, we have issued a full refund to your original payment method.</p>`;
-  const callout = 'The refund has left our system. Your bank may take several working days to display it on your statement. You are welcome to place the order again at any time.';
+    <p style="margin:0;">Rather than leave you waiting, we have issued a full refund to your original payment method. Please try placing your order once more using the button below—temporary address, shipping or printer-validation issues often resolve on a fresh attempt.</p>`;
+  const callout = 'The refund has left our system, although your bank may take several working days to display it. If your next order encounters the same problem, there is no need to keep retrying—we’ll be in touch to help resolve it.';
   const text = [
     preview ? 'SAMPLE PREVIEW — NOT A REAL ORDER' : '',
     'THE REALITY MANUAL',
@@ -200,12 +200,14 @@ function orderRefundedEmail(order, { preview = false } = {}) {
     'WE COULDN’T COMPLETE YOUR ORDER',
     '',
     `We’re sorry, ${firstName(order.customer_name)}, but our printer was unable to accept your order after several attempts.`,
-    'Rather than leave you waiting, we have issued a full refund to your original payment method.',
+    'Rather than leave you waiting, we have issued a full refund to your original payment method. Please try placing your order once more—temporary address, shipping or printer-validation issues often resolve on a fresh attempt.',
     '',
     `Order: ${orderNumber}`,
     `Refund: ${total}`,
     '',
-    'The refund has left our system. Your bank may take several working days to display it on your statement. You are welcome to place the order again at any time.',
+    'Try your order again: https://realitymanual.com/checkout.html',
+    '',
+    'The refund has left our system, although your bank may take several working days to display it. If your next order encounters the same problem, there is no need to keep retrying—we’ll be in touch to help resolve it.',
     '',
     'Questions about your order? Reply to this email.',
     'https://realitymanual.com',
@@ -224,6 +226,7 @@ function orderRefundedEmail(order, { preview = false } = {}) {
         ['Refund', escapeHtml(total)],
       ]),
       callout,
+      button: { label: 'Try Your Order Again', href: 'https://realitymanual.com/checkout.html' },
     }),
     text,
   };

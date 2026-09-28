@@ -10502,3 +10502,26 @@ contacting BookVault. Automated coverage verifies escaping, production-window
 copy, money formatting, conditional tracking, refund language, and the exact
 Resend request shape. A real Chromium rendering at desktop email width confirmed
 the inline design and content layout before the first preview send.
+
+---
+
+# 236. Transactional Email Copy Revision and Safe Preview Recipient (2026-09-28)
+
+Harvey approved the email color scheme and layout but asked for warmer copy that
+better communicates the care invested in each copy. The confirmation subject and
+headline are now **“We’re Making Your Copy of The Reality Manual”**. Its body
+explains that every copy is individually printed, bound, finished and inspected,
+and frames the production window as time spent making a lasting volume rather
+than as transactional delay.
+
+The exceptional fulfillment-failure email now uses **“We couldn’t complete your
+order.”** as both its subject and headline. It confirms the refund, asks the
+customer to try once more, links directly back to checkout with a prominent
+**Try Your Order Again** button, and explains that the team will follow up if a
+second attempt encounters the same issue.
+
+The manual preview recipient is now stored once in the VPS backend's private
+`PREVIEW_EMAIL_TO` environment variable. Preview commands should use that value
+instead of typing or remembering a recipient ad hoc. This corrects the earlier
+one-character address mistake and prevents future preview sends from repeating
+it; the personal address itself remains out of git.
