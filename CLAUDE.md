@@ -1990,7 +1990,8 @@ with `bookvault`, the `orders.lulu_order_id` column renamed to
 migration step needed), `error_logs.service` enum value `'lulu'` →
 `'bookvault'`, and the corresponding `backend/README.md` passages.
 
-**Deliberately not built yet** (out of scope for this pass — see §25-30
+**Historical note, superseded by §239:** at the time of this pass, the
+following was deliberately not built (see §25-30
 for the intended design once it happens): order creation
 (`POST /Order`), fulfillment status polling (`Progress.Status`:
 `Created → Acknowledged → SentToPrint → Batched → Printed → Dispatched →
@@ -2004,7 +2005,8 @@ mechanism for order status was found in the spec (only per-platform
 `WebHookURL` fields tied to their prebuilt Shopify/WooCommerce/etc. store
 integrations, not a generic account-level webhook for direct API
 integrations) — polling `GET /Order?PodRef=…` will be the mechanism when
-order submission is built, per §27's "if not, poll" instruction.
+order submission is built, per §27's "if not, poll" instruction. Those paid
+order and polling pieces are now implemented as described in §239.
 
 ---
 
@@ -10579,3 +10581,46 @@ superseded/read, and removes its topic pointer. This cleans up the prior noisy
 card as well as protecting future mail. A regression deliberately returns an
 `important: true` security classification for a Meta verification code and a
 Meta new-login warning; both are archived with zero Project Manager alerts.
+
+---
+
+# 239. Paid Order Fulfillment Is Wired, with an Explicit Live-Mode Gate (2026-09-28)
+
+A go-live audit found that the storefront could create and confirm Stripe
+PaymentIntents, quote BookVault shipping and render all three customer emails,
+but these pieces were still disconnected: `payment_intent.succeeded` only set
+`PAYMENT_RECEIVED`. It did not create a BookVault order, send confirmation mail,
+watch for dispatch or refund an order BookVault could not accept. This was a
+real launch blocker because a customer could otherwise be charged without
+fulfillment.
+
+The backend now has a durable fulfillment worker. A successful **live-mode**
+Stripe event records payment and queues its SQLite order. The worker submits
+`POST /Order?payMethod=Saved` using the customer's complete address, the title
+ISBN and the exact BookVault service selected during checkout. The internal
+order UUID is BookVault's `DocRef`; the client always queries that reference
+before a POST, so a Stripe retry, process restart or lost BookVault response
+cannot create a duplicate print order. An accepted `PodRef` is persisted before
+Resend is called. Confirmation-email failures are retried separately and can
+never refund or resubmit an already accepted print order.
+
+Accepted orders are polled every 15 minutes with `GET /Order?PodRef=...`.
+When `Progress.Status` becomes `Dispatched`, the bespoke shipping email is sent
+once using BookVault's carrier, tracking number and combined tracking URL when
+available. Submission failures use a widening retry schedule. After the final
+attempt Stripe issues one idempotent full refund and Resend sends the failure
+and retry email. Worker state, attempt times and all three email timestamps are
+persisted, so the flow survives container restarts. Eight automated tests cover
+the existing email contracts, exact BookVault order payload, accepted-order
+state, tracked dispatch and the critical rule that a mail outage cannot refund
+an accepted order.
+
+Because BookVault has no sandbox, two independent safeguards prevent a Stripe
+test payment from printing a real book: fulfillment candidates must have
+`stripe_livemode = 1`, taken from Stripe's signed event, and the private
+`FULFILLMENT_ENABLED` environment flag must explicitly be `true`. It remains
+false while test Stripe keys are installed. The final go-live sequence is:
+Harvey approves the physical proof, installs the live Stripe publishable and
+secret keys plus a separate live-mode webhook signing secret, changes the
+frontend publishable key, then enables fulfillment. No order or BookVault
+submission was created during this implementation.

@@ -40,6 +40,13 @@ module.exports = {
     replyTo: process.env.RESEND_REPLY_TO || '',
   },
 
+  fulfillment: {
+    // BookVault has no sandbox. Keep this false while Stripe is in test mode;
+    // enabling it is a deliberate final go-live step after live keys and the
+    // live Stripe webhook secret are installed.
+    enabled: process.env.FULFILLMENT_ENABLED === 'true',
+  },
+
   // Product/site settings. Admin-editable site settings land in a later phase —
   // for now this is the single source of truth for price/currency.
   site: {

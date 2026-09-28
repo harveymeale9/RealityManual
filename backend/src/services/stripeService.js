@@ -35,4 +35,11 @@ function constructWebhookEvent(rawBody, signatureHeader) {
   return stripe.webhooks.constructEvent(rawBody, signatureHeader, config.stripe.webhookSecret);
 }
 
-module.exports = { stripe, createPaymentIntent, constructWebhookEvent };
+async function refundPayment(paymentIntentId, orderId) {
+  return stripe.refunds.create(
+    { payment_intent: paymentIntentId, metadata: { order_id: orderId, reason: 'bookvault_fulfillment_failed' } },
+    { idempotencyKey: `bookvault-failure-${orderId}` },
+  );
+}
+
+module.exports = { stripe, createPaymentIntent, constructWebhookEvent, refundPayment };

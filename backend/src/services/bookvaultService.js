@@ -49,13 +49,89 @@ async function request(method, path, body) {
 
     if (!res.ok) {
       const message = (data && data.Message) || (typeof data === 'string' ? data : null) || `BookVault ${method} ${path} returned ${res.status}`;
-      throw new Error(message);
+      const error = new Error(message);
+      error.status = res.status;
+      throw error;
     }
 
     return data;
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function orderPayload(order) {
+  if (!config.bookvault.titleIsbn) {
+    throw new Error('BOOKVAULT_TITLE_ISBN is not configured.');
+  }
+
+  const dispatchRequest = order.shipping_service_id
+    ? { RequestedService: 'Specified', RequestedServID: [Number(order.shipping_service_id)] }
+    : { RequestedService: 'CheapestTracked' };
+
+  return {
+    Status: 'Active',
+    DocRef: order.id,
+    CustRef: order.id,
+    PartnerID: 0,
+    ProductionLevel: 'Standard',
+    DispatchRequest: dispatchRequest,
+    Notifications: { NotifyCustomer: false },
+    Address: {
+      Addressee: order.customer_name,
+      Address1: order.street1,
+      Address2: order.street2 || '',
+      Town: order.city,
+      County: order.state || order.city,
+      Postcode: order.postal_code,
+      Country: { ISO_Code: order.country },
+      TelNumber: order.phone,
+      Email: order.email,
+    },
+    OrderLines: [{
+      LineNumber: 1,
+      ISBN: config.bookvault.titleIsbn,
+      Quantity: Number(order.quantity),
+    }],
+  };
+}
+
+function assertAcceptedOrder(data) {
+  if (!data || data.CriticalError || !data.PodRef) {
+    const messages = Array.isArray(data?.Messages)
+      ? data.Messages.map((message) => message.Message || message.Text || JSON.stringify(message)).join('; ')
+      : '';
+    throw new Error(messages || 'BookVault did not accept the order.');
+  }
+  return data;
+}
+
+async function findOrderByDocRef(docRef) {
+  try {
+    return await request('GET', `/Order?DocRef=${encodeURIComponent(docRef)}`);
+  } catch (err) {
+    if (err.status === 404 || /not found/i.test(err.message)) return null;
+    throw err;
+  }
+}
+
+async function submitOrder(order) {
+  // BookVault has no idempotency key. Looking up our unique DocRef before
+  // POSTing prevents duplicate print orders after webhook retries or a
+  // timeout where BookVault accepted the order but our response was lost.
+  const existing = await findOrderByDocRef(order.id);
+  if (existing?.PodRef) return existing;
+
+  const data = await request(
+    'POST',
+    '/Order?payMethod=Saved',
+    orderPayload(order),
+  );
+  return assertAcceptedOrder(data);
+}
+
+async function getOrder(podRef) {
+  return request('GET', `/Order?PodRef=${encodeURIComponent(podRef)}`);
 }
 
 // Harvey's explicit instruction (2026-09-17): USPS Consolidator must always
@@ -115,9 +191,10 @@ async function getShippingQuote({ countryCode, postalCode, quantity = 1, currenc
     shippingPriceCents: Math.round(chosen.DelTotal * 100),
     currency,
     serviceName: chosen.ServName || null,
+    serviceId: Number(chosen.ServID) || null,
     minDeliveryDays: Number(chosen.MinDeliveryDays) > 0 ? Number(chosen.MinDeliveryDays) : null,
     maxDeliveryDays: Number(chosen.MaxDeliveryDays) > 0 ? Number(chosen.MaxDeliveryDays) : null,
   };
 }
 
-module.exports = { getShippingQuote };
+module.exports = { getShippingQuote, submitOrder, getOrder, orderPayload };

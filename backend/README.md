@@ -13,8 +13,8 @@ how to redeploy a change). Everything below this point describes running
 a *second*, local instance for development — the live frontend at
 realitymanual.com talks to the deployed one by default. BookVault order
 submission/fulfillment, first-party analytics, SEO admin, refunds, and the
-`/admin-dashboard` are not built yet — see the "Deferred" note at the
-bottom.
+`/admin-dashboard` are not built yet. Paid-order fulfillment is now built
+behind the explicit `FULFILLMENT_ENABLED` production safety gate.
 
 ## Setup
 
@@ -35,6 +35,10 @@ Edit `.env`:
 - `BOOKVAULT_API_KEY` / `BOOKVAULT_TITLE_ISBN` — required for live shipping
   quotes to work (see below). BookVault has no sandbox, so this hits their
   live API even locally — see CLAUDE.md §26/§64.
+- `FULFILLMENT_ENABLED` — keep `false` with Stripe test keys. Set `true`
+  only after live Stripe keys and the signing secret for a live-mode webhook
+  endpoint are installed. Test payments are also recorded as non-live and
+  can never enter the BookVault worker.
 
 ## Database
 
@@ -118,7 +122,7 @@ To test a declined payment, use test card `4000 0000 0000 0002`.
   PaymentIntent, returns `client_secret`.
 - `POST /api/webhooks/stripe` — Stripe-signed webhook, handles
   `payment_intent.succeeded` / `payment_intent.payment_failed`
-  idempotently.
+  idempotently and queues paid live orders for durable fulfillment.
 - `GET /api/orders/:id/status` — public, non-PII status polling endpoint
   for the confirmation page.
 
@@ -127,15 +131,22 @@ To test a declined payment, use test card `4000 0000 0000 0002`.
 ```
 PAYMENT_PENDING   order created, awaiting Stripe payment
 PAYMENT_RECEIVED  Stripe webhook confirmed payment_intent.succeeded
+FULFILLMENT_RETRY BookVault submission failed transiently and is scheduled for retry
+BOOKVAULT_ACCEPTED BookVault accepted the paid order; confirmation email sent/retrying
+SHIPPED           BookVault reports dispatch; shipping email sent
+REFUNDED          Fulfillment retries exhausted; Stripe payment refunded
 FAILED            Stripe webhook reported payment_intent.payment_failed
 ```
 
-`BOOKVAULT_PENDING`, `COMPLETE`, and `REFUNDED` are added when BookVault
-order submission is built — the `orders` table already has the
-`bookvault_order_id` column reserved so no migration will be needed then.
+The background worker uses the internal order UUID as BookVault `DocRef`,
+looks it up before every submission to prevent duplicate print orders, and
+polls accepted orders until BookVault reports `Dispatched`. Resend messages
+use stable idempotency keys. Submission failures are retried on a widening
+schedule; after the final attempt the Stripe payment is refunded and the
+customer receives the retry-order email. A Resend outage never cancels or
+duplicates a BookVault order.
 
 ## Deferred to later phases
 
-BookVault order submission + fulfillment confirmation, first-party
-analytics ingestion/reporting, SEO admin, `/admin-dashboard` (auth, orders
-view, shipping editor, site settings, error log viewer), Stripe refunds.
+First-party analytics reporting, SEO admin, and `/admin-dashboard` (auth,
+orders view, shipping editor, site settings, error log viewer).

@@ -28,6 +28,7 @@ async function calculateTotal(countryCode, postalCode, quantity = 1) {
 
   let shippingPriceCents;
   let serviceName = null;
+  let serviceId = null;
   let minDeliveryDays = null;
   let maxDeliveryDays = null;
   // True once we can confirm the order has been priced out of whatever
@@ -48,6 +49,7 @@ async function calculateTotal(countryCode, postalCode, quantity = 1) {
     });
     shippingPriceCents = quote.shippingPriceCents;
     serviceName = quote.serviceName;
+    serviceId = quote.serviceId;
     minDeliveryDays = quote.minDeliveryDays;
     maxDeliveryDays = quote.maxDeliveryDays;
 
@@ -85,6 +87,7 @@ async function calculateTotal(countryCode, postalCode, quantity = 1) {
     currency,
     quantity,
     serviceName,
+    serviceId,
     minDeliveryDays,
     maxDeliveryDays,
     shippingUpgraded,

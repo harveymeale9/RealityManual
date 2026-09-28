@@ -33,8 +33,16 @@ try {
 
 for (const column of [
   'shipping_service_name TEXT',
+  'stripe_livemode INTEGER NOT NULL DEFAULT 0',
+  'shipping_service_id INTEGER',
   'shipping_min_delivery_days INTEGER',
   'shipping_max_delivery_days INTEGER',
+  'fulfillment_attempts INTEGER NOT NULL DEFAULT 0',
+  'fulfillment_next_attempt_at TEXT',
+  'fulfillment_last_error TEXT',
+  'confirmation_email_sent_at TEXT',
+  'shipping_email_sent_at TEXT',
+  'refund_email_sent_at TEXT',
 ]) {
   try {
     db.exec(`ALTER TABLE orders ADD COLUMN ${column}`);

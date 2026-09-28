@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS orders (
   id                        TEXT PRIMARY KEY,
   stripe_payment_intent_id  TEXT UNIQUE,
   stripe_payment_status     TEXT,
+  stripe_livemode           INTEGER NOT NULL DEFAULT 0,
   customer_name             TEXT NOT NULL,
   email                     TEXT NOT NULL,
   phone                     TEXT NOT NULL,
@@ -18,6 +19,7 @@ CREATE TABLE IF NOT EXISTS orders (
   book_price_cents          INTEGER NOT NULL,
   shipping_price_cents      INTEGER NOT NULL,
   shipping_service_name     TEXT,
+  shipping_service_id       INTEGER,
   shipping_min_delivery_days INTEGER,
   shipping_max_delivery_days INTEGER,
   total_price_cents         INTEGER NOT NULL,
@@ -26,6 +28,12 @@ CREATE TABLE IF NOT EXISTS orders (
   -- until order submission is built — included now so no migration is
   -- needed when that phase starts.
   bookvault_order_id       TEXT,
+  fulfillment_attempts       INTEGER NOT NULL DEFAULT 0,
+  fulfillment_next_attempt_at TEXT,
+  fulfillment_last_error     TEXT,
+  confirmation_email_sent_at TEXT,
+  shipping_email_sent_at     TEXT,
+  refund_email_sent_at       TEXT,
   order_status               TEXT NOT NULL DEFAULT 'PAYMENT_PENDING',
   created_at                 TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   updated_at                 TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))

@@ -40,6 +40,7 @@ router.post('/create-payment-intent', async (req, res) => {
     bookPriceCents: totals.bookPriceCents,
     shippingPriceCents: totals.shippingPriceCents,
     shippingServiceName: totals.serviceName,
+    shippingServiceId: totals.serviceId,
     shippingMinDeliveryDays: totals.minDeliveryDays,
     shippingMaxDeliveryDays: totals.maxDeliveryDays,
     totalPriceCents: totals.totalPriceCents,

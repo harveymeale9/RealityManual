@@ -72,7 +72,7 @@
   }
 
   function render(order) {
-    if (order.order_status === 'PAYMENT_RECEIVED') {
+    if (['PAYMENT_RECEIVED', 'FULFILLMENT_RETRY', 'BOOKVAULT_ACCEPTED', 'SHIPPED'].includes(order.order_status)) {
       clearTimeout(timerId);
       spinner.style.display = 'none';
       statusTitle.textContent = 'Payment confirmed';

@@ -8,6 +8,7 @@ const shippingRoutes = require('./routes/shipping');
 const checkoutRoutes = require('./routes/checkout');
 const orderRoutes = require('./routes/orders');
 const analyticsRoutes = require('./routes/analytics');
+const { startFulfillmentWorker } = require('./services/fulfillmentService');
 
 const app = express();
 
@@ -53,3 +54,5 @@ app.listen(config.port, () => {
     console.warn('STRIPE_SECRET_KEY is not set — payment endpoints will fail until backend/.env is configured.');
   }
 });
+
+startFulfillmentWorker();

@@ -2,6 +2,7 @@ const express = require('express');
 const stripeService = require('../services/stripeService');
 const orderService = require('../services/orderService');
 const errorLogService = require('../services/errorLogService');
+const fulfillmentService = require('../services/fulfillmentService');
 
 const router = express.Router();
 
@@ -26,7 +27,7 @@ router.post('/stripe', express.raw({ type: 'application/json' }), (req, res) => 
     switch (event.type) {
       case 'payment_intent.succeeded': {
         const pi = event.data.object;
-        const order = orderService.updateStatusByPaymentIntentId(pi.id, 'PAYMENT_RECEIVED', pi.status);
+        const order = orderService.updateStatusByPaymentIntentId(pi.id, 'PAYMENT_RECEIVED', pi.status, event.livemode);
         if (!order) {
           errorLogService.logError({
             service: 'stripe',
@@ -34,12 +35,23 @@ router.post('/stripe', express.raw({ type: 'application/json' }), (req, res) => 
             errorMessage: `No order found for payment_intent ${pi.id}`,
             requestReference: pi.id,
           });
+        } else {
+          // The durable worker owns fulfillment. This immediate kick keeps
+          // normal orders fast without making Stripe wait for BookVault.
+          setImmediate(() => fulfillmentService.processPendingOrders().catch((err) => {
+            errorLogService.logError({
+              orderId: order.id,
+              service: 'backend',
+              errorType: 'fulfillment_worker_failed',
+              errorMessage: err.message,
+            });
+          }));
         }
         break;
       }
       case 'payment_intent.payment_failed': {
         const pi = event.data.object;
-        orderService.updateStatusByPaymentIntentId(pi.id, 'FAILED', pi.status);
+        orderService.updateStatusByPaymentIntentId(pi.id, 'FAILED', pi.status, event.livemode);
         break;
       }
       default:
