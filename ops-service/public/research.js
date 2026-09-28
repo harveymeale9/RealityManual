@@ -99,10 +99,21 @@
     var outliers = (idea.outlierMatches || []).map(function (match) {
       return '<div class="research-outlier-match"><div><b>1/10 corroboration</b><span>' + esc(match.channel) + (match.lift ? ' · ' + match.lift + '× median views' : '') + '</span></div><strong>' + esc(match.title || match.bigIdea) + '</strong><p>' + esc(match.why) + '</p></div>';
     }).join('');
+    var sourceParagraphs = (idea.theirIdea || []).map(function (paragraph) {
+      return '<p>' + esc(paragraph) + '</p>';
+    }).join('');
+    var sourceEvidence = (idea.sourceEvidence || []).map(function (item) {
+      return '<blockquote>“' + esc(String(item.quote || '').replace(/^[“”"']|[“”"']$/g, '')) + '”' +
+        '<cite><a href="' + esc(item.url) + '" target="_blank" rel="noopener">' + esc(item.thinkerName) + ' ↗</a></cite></blockquote>';
+    }).join('');
+    var manualParagraphs = (idea.realityManualAngle || []).map(function (paragraph) {
+      return '<p>' + esc(paragraph) + '</p>';
+    }).join('');
     return '<article class="research-idea-card' + (idea.approved ? ' is-approved' : '') + '" data-idea-id="' + esc(idea.id) + '">' +
       '<div class="research-idea-number">' + String(number + 1).padStart(2, '0') + '</div>' +
       '<div class="research-idea-body"><div class="research-idea-meta"><span>' + (idea.thinkerNames || []).map(function (name) { return esc(name); }).join(' × ') + '</span>' + (idea.approved ? '<b>Approved</b>' : '') + '</div>' +
-      '<p class="research-big-idea">' + esc(idea.bigIdea) + '</p><div class="research-idea-concepts">' + concepts + '</div>' + outliers +
+      '<div class="research-idea-split"><section class="research-source-position"><h3>Their idea</h3>' + sourceParagraphs + sourceEvidence + '</section>' +
+      '<section class="research-manual-position"><h3>Reality Manual angle</h3>' + manualParagraphs + '<div class="research-idea-concepts">' + concepts + '</div></section></div>' + outliers +
       '<label class="research-notes-label">Notes<textarea class="research-idea-notes" placeholder="Add a direction, correction, or thought…">' + esc(idea.notes || '') + '</textarea></label>' +
       '<div class="research-idea-actions"><button type="button" data-action="approve">' + (idea.approved ? 'Undo approval' : 'Approve') + '</button><button type="button" data-action="reject" class="is-reject">Not interested</button><button type="button" data-action="transfer" class="is-primary">Send to Ideation</button><span class="research-save-state" aria-live="polite"></span></div></div></article>';
   }
@@ -178,9 +189,9 @@
   function renderShell() {
     root.innerHTML = '<div class="research-workspace">' +
       '<header class="research-hero"><div><div class="eyebrow">Source-grounded idea engine</div><h1>Idea Research</h1>' +
-      '<p>The 180-page Manual is compressed into a fast conceptual map. External statements are matched here first; every useful connection then returns to the real manuscript for Harvey’s exact wording, quotation, and page.</p></div>' +
+      '<p>Each external position is researched and shown separately from the Reality Manual synthesis. Direct source quotations make the boundary inspectable; Manual connections return to Harvey’s exact wording and page.</p></div>' +
       '<div class="research-stats"><strong>' + index.conceptCount + '</strong><span>core concepts</span><strong>' + index.ruleCount + '</strong><span>named Rules</span></div></header>' +
-      '<section class="research-ideas"><div class="research-ideas-head"><div><div class="eyebrow">Browse for inspiration</div><h2>10 Big Ideas</h2><p>Fresh syntheses drawn from <b id="researchSourceCount">41</b> selected thinkers and checked against <b id="researchOutlierCount">0</b> caption-derived 1/10 videos. Thinker names are lenses, not attributed quotations.</p></div><button type="button" id="researchFreshIdeas">Generate a fresh 10</button></div>' +
+      '<section class="research-ideas"><div class="research-ideas-head"><div><div class="eyebrow">Browse for inspiration</div><h2>10 Big Ideas</h2><p>Source-grounded opportunities drawn from <b id="researchSourceCount">41</b> selected thinkers and checked against <b id="researchOutlierCount">0</b> caption-derived 1/10 videos. Each card separates the source position from our treatment.</p></div><button type="button" id="researchFreshIdeas">Generate a fresh 10</button></div>' +
       '<details class="research-source-roster"><summary>View the 41-source research pool</summary><div id="researchSourceRoster"></div></details>' +
       '<div id="researchIdeaStatus"></div><div id="researchIdeaCards" class="research-idea-list"><div class="research-idea-generating"><div class="spinner"></div><span>Loading ideas…</span></div></div></section>' +
       '<section class="research-workflow"><div><b>1 · Candidate</b><span>' + esc(index.workflow.candidate) + '</span></div><div><b>2 · Verify</b><span>' + esc(index.workflow.verify) + '</span></div><div><b>3 · Develop</b><span>' + esc(index.workflow.develop) + '</span></div></section>' +

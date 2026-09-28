@@ -10917,3 +10917,33 @@ invented quote. The complete ops-service suite passes (76 tests). Real Chromium
 at 1440×1000 and 390×844 verified the section labels, paragraph and quote
 counts, normal 400-weight body copy, zero runtime errors, and no horizontal
 overflow.
+
+The same boundary now applies to the ten **Idea Research** cards, which were
+the more important instance of Harvey's feedback: their previous `big_idea`
+field mixed a named thinker's position directly into the Manual's conclusion,
+despite having no stored source passage behind the attribution. The research
+runner is no longer tool-free. It receives only `WebSearch` and `WebFetch`
+(still no shell, filesystem, editing, browser-control, or MCP tools), and must
+open a real public source before returning an attribution. For every new card
+it stores:
+
+- one to three plain-language **Their idea** paragraphs containing no Manual
+  claims;
+- one to three under-25-word direct quotations, each with the allow-listed
+  thinker name and the exact HTTPS source page;
+- one to three independent **Reality Manual angle** paragraphs; and
+- allow-listed canonical Manual concepts and optional verified outlier links.
+
+The UI renders the two positions side by side on desktop and stacked on mobile,
+using normal-weight, Twitter-like paragraphs rather than one continuous bold
+block. Source quotations are visually offset and link back to the evidence.
+The Manual panel names the relevant concepts separately. Transferring a card to
+Ideation preserves this exact source/evidence/synthesis structure in the new
+Kanban card rather than collapsing it back into blended prose.
+
+Migration `source_manual_split_v1` preserves the prior unsplit rows as
+`superseded` history and replaces the active queue, because there is no honest
+way to infer where the source claim stopped and the Manual synthesis began in
+those old paragraphs. The ten production rows had no approvals and no notes
+before migration. Real Chromium at 1440×1000 and 390×844 verified both panels,
+the linked quotation, normal 400-weight copy, and no horizontal overflow.

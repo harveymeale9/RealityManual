@@ -912,7 +912,7 @@ const youtubeCompetitors = youtubeCompetitorService.setup(db, {
 // by the service before they can reach the UI.
 const researchIdeas = researchIdeaService.setup(db, {
   generateIdeas: async function (input) {
-    return claudeRunner.runTextOnlyStructured(input.prompt, input.schema, 120000);
+    return claudeRunner.runWebResearchStructured(input.prompt, input.schema, 240000);
   }
 });
 app.use('/api/research', requireAuth, researchIdeas.router);

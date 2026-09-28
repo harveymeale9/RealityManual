@@ -32,16 +32,17 @@ test('research queue uses the complete source pool and only accepts verified Man
   const service = researchIdeaService.setup(db, { autoStart: false, generateIdeas: async function (input) {
     generation++;
     assert.equal(input.schema, researchIdeaService.RESULT_SCHEMA);
-    assert.match(input.prompt, /Teal Swan/);
-    assert.match(input.prompt, /Mark Manson/);
-    assert.match(input.prompt, /Alex O'Connor/);
-    assert.match(input.prompt, /The Mindset Mentor Podcast/);
-    assert.match(input.prompt, /Chase Hughes/);
+    assert.match(input.prompt, /WebSearch and WebFetch/);
+    assert.match(input.prompt, /TheirIdea|theirIdea/);
+    assert.match(input.prompt, /sourceEvidence/);
+    assert.match(input.prompt, /RealityManualAngle|realityManualAngle/);
     assert.match(input.prompt, /real-video/);
     assert.match(input.prompt, /Rule of Required Belief explains the hidden mechanism/);
     const count = Number(input.prompt.match(/Generate exactly (\d+)/)[1]);
     return { ideas: Array.from({ length: count }, function (_, index) { return {
-      bigIdea: 'Belief does not merely describe experience; it helps construct the meaning that experience can have. Batch ' + generation + ', idea ' + index + '.',
+      theirIdea: ['The source argues that chosen values shape how a person interprets hardship.'],
+      sourceEvidence: [{ thinkerName: index ? 'Teal Swan' : 'Mark Manson', quote: 'Who you are is defined by what you are willing to struggle for.', url: 'https://example.com/source-' + index }],
+      realityManualAngle: ['Belief does not merely describe experience; it helps construct the meaning that experience can have. Batch ' + generation + ', idea ' + index + '.'],
       thinkerNames: index ? ['Teal Swan'] : ['Mark Manson', 'Invented Person'],
       manualConceptIds: ['belief-generates-meaning', 'invented-concept'],
       outlierMatches: [{ videoId: 'real-video', why: 'Both expose belief as the hidden causal layer.' }, { videoId: 'fake-video', why: 'Invented.' }]
@@ -55,6 +56,10 @@ test('research queue uses the complete source pool and only accepts verified Man
   assert.equal(state.sourceCount, 41);
   assert.equal(state.outlierCount, 1);
   assert.deepEqual(state.ideas[0].thinkerNames, ['Mark Manson']);
+  assert.deepEqual(state.ideas[0].theirIdea, ['The source argues that chosen values shape how a person interprets hardship.']);
+  assert.equal(state.ideas[0].sourceEvidence[0].thinkerName, 'Mark Manson');
+  assert.match(state.ideas[0].sourceEvidence[0].url, /^https:/);
+  assert.match(state.ideas[0].realityManualAngle[0], /Belief does not merely describe/);
   assert.equal(state.ideas[0].manualConcepts[0].id, 'belief-generates-meaning');
   assert.deepEqual(state.ideas[0].outlierMatches.map(function (item) { return item.videoId; }), ['real-video']);
 
@@ -72,6 +77,9 @@ test('research queue uses the complete source pool and only accepts verified Man
   const piece = service.transfer(transferred.id);
   assert.equal(piece.stage, 'ideation');
   assert.equal(piece.contentType, '');
+  assert.match(piece.notesHtml, /Their idea/);
+  assert.match(piece.notesHtml, /Reality Manual angle/);
+  assert.match(piece.notesHtml, /Who you are is defined/);
   assert.match(piece.notesHtml, /1\/10 synthesis/);
   assert.match(piece.notesHtml, /Keep this note/);
   assert.equal(JSON.parse(db.prepare("SELECT data FROM records WHERE store_name='pieces' AND id=?").get(piece.id).data).researchMetadata.ideaId, transferred.id);

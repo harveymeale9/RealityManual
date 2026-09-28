@@ -524,6 +524,38 @@ async function runTextOnlyStructured(prompt, schema, timeoutMs) {
   return Promise.race([consume, timeout]);
 }
 
+// Research-only structured runner. It can search and open public web pages,
+// but has no shell, filesystem, edit, browser-control, or MCP tools. This is
+// intentionally separate from runTextOnlyStructured: untrusted mail and
+// caption classifiers must remain completely tool-free, while the Research
+// idea engine needs genuine source pages before it can attribute a quotation
+// to a thinker rather than relying on model memory.
+async function runWebResearchStructured(prompt, schema, timeoutMs) {
+  const iterator = query({
+    prompt: prompt,
+    options: {
+      cwd: CLAUDE_REPO_DIR,
+      tools: ['WebSearch', 'WebFetch'],
+      maxTurns: 20,
+      permissionMode: 'dontAsk',
+      outputFormat: { type: 'json_schema', schema: schema }
+    }
+  });
+  const consume = (async function () {
+    for await (const evt of iterator) {
+      if (evt.type !== 'result') continue;
+      if (evt.subtype !== 'success' || evt.is_error) throw new Error(evt.result || 'web-research Claude call failed');
+      if (evt.structured_output == null) throw new Error('web-research Claude call returned no structured output');
+      return evt.structured_output;
+    }
+    throw new Error('web-research Claude call ended without a result');
+  })();
+  const timeout = new Promise(function (resolve, reject) {
+    setTimeout(function () { reject(new Error('web-research Claude call timed out')); }, timeoutMs || 240000);
+  });
+  return Promise.race([consume, timeout]);
+}
+
 module.exports = {
   runClaude: runClaude,
   recoverClaudeRun: recoverClaudeRun,
@@ -531,5 +563,6 @@ module.exports = {
   cleanupRun: cleanupRun,
   resetSession: resetSession,
   runOneShot: runOneShot,
-  runTextOnlyStructured: runTextOnlyStructured
+  runTextOnlyStructured: runTextOnlyStructured,
+  runWebResearchStructured: runWebResearchStructured
 };
