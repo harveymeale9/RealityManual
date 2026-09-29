@@ -168,7 +168,9 @@ test('vertical captions show one large yellow word at a time', function () {
   assert.match(ass, /Dialogue: 0,0:00:01\.25,0:00:01\.60.*word$/m);
   assert.match(ass, /Dialogue: 0,0:00:01\.60,0:00:02\.00.*now$/m);
   const fitted = editor.buildAss({ width: 1080, height: 1920 }, [{ start: 0, end: 1, text: 'xxxxxxxxxxxxxxxxxxxxxxxx', words: [{ text: 'xxxxxxxxxxxxxxxxxxxxxxxx', start: 0, end: 1 }] }]);
-  assert.match(fitted, /\{\\fs90\}xxxxxxxxxxxxxxxxxxxxxxxx\{\\r\}/);
+  assert.match(fitted, /\{\\fs75\}xxxxxxxxxxxxxxxxxxxxxxxx\{\\r\}/);
+  const fittedMaximum = editor.buildAss({ width: 1080, height: 1920 }, [{ start: 0, end: 1, text: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', words: [{ text: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', start: 0, end: 1 }] }]);
+  assert.match(fittedMaximum, /\{\\fs45\}xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\{\\r\}/);
 });
 
 test('batch preprocessing serializes expensive transcription and frame analysis', { timeout: 15000 }, async function (t) {
@@ -427,6 +429,9 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.words[0].originalText, 'One');
   assert.equal(project.transcriptText, 'Once two. Three four.');
   assert.deepEqual(project.captionGroups.map(function (group) { return group.text; }), ['Once two.']);
+  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wordCorrection: { index: 0, text: 'x'.repeat(41) } }) });
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error, 'invalid_word_correction');
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ retainedPauseSeconds: 0.55 }) });
   assert.equal(response.status, 200);
   for (let attempt = 0; attempt < 600 && (project.renderStatus !== 'ready' || renderReadyCalls < 2); attempt++) {

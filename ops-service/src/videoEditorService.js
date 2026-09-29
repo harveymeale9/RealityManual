@@ -389,7 +389,7 @@ function buildAss(project, groups) {
         if (eventEnd <= eventStart) return;
         const escaped = escapeAss(word.text);
         const characterCount = Array.from(String(word.text || '')).length;
-        const fittedSize = Math.max(Math.round(fontSize * 0.64), Math.min(fontSize, Math.round(fontSize * 18 / Math.max(18, characterCount))));
+        const fittedSize = Math.max(Math.round(fontSize * 0.36), Math.min(fontSize, Math.round(fontSize * 15 / Math.max(15, characterCount))));
         const fittedText = fittedSize < fontSize ? '{\\fs' + fittedSize + '}' + escaped + '{\\r}' : escaped;
         events.push('Dialogue: 0,' + assTime(eventStart) + ',' + assTime(eventEnd) + ',Default,,0,0,0,,' + fittedText);
       });
@@ -1022,8 +1022,8 @@ async function renderProject(id) {
       const index = Number(req.body.wordCorrection.index);
       const word = Number.isInteger(index) && index >= 0 ? (project.words || [])[index] : null;
       const replacement = String(req.body.wordCorrection.text || '').replace(/[\r\n]+/g, ' ').trim();
-      if (!word || !replacement || replacement.length > 80) {
-        return res.status(400).json({ error: 'invalid_word_correction', message: 'Choose one transcript word and enter 1–80 characters.' });
+      if (!word || !replacement || replacement.length > 40) {
+        return res.status(400).json({ error: 'invalid_word_correction', message: 'Choose one transcript word and enter 1–40 characters.' });
       }
       if (!word.originalText) word.originalText = word.text;
       word.text = replacement;

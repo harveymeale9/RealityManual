@@ -12240,3 +12240,19 @@ screens, enforces the same 80-character bound as the server and tells Harvey tha
 timing remains unchanged. The browser workflow now drives this real tray through
 selection, input, persistence and rerender instead of intercepting a synthetic
 native dialog.
+
+---
+
+# 303. Every Allowed Vertical Caption Correction Fits the Frame (2026-09-29)
+
+Correction initially allowed 80 characters while the vertical one-word font
+fitter stopped shrinking at 64% of its 120 px base. That combination could
+recreate horizontal clipping with a long correction even though ordinary
+transcribed words fit correctly.
+
+Corrections are now bounded to 40 characters in both the tray and server. The
+shared visual formula keeps normal words at the large 120 px treatment, then
+targets a conservative 15-character line width and may shrink as far as 36%
+for the longest accepted word. Browser preview uses the exact equivalent in
+container-width units. Tests cover the 24-character intermediate size, the
+40-character boundary size and server rejection at 41 characters.
