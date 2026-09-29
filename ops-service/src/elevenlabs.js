@@ -8,7 +8,7 @@ const STT_MODEL = 'scribe_v1';
 const TTS_MODEL = process.env.ELEVENLABS_TTS_MODEL || 'eleven_turbo_v2_5';
 const TTS_SPEED = 1.2; // Harvey: default pace felt slow
 
-async function transcribeAudio(buffer, mimeType) {
+async function transcribeAudioDetailed(buffer, mimeType) {
   if (!ELEVEN_API_KEY) throw new Error('ELEVENLABS_API_KEY not configured');
   const form = new FormData();
   form.append('file', new Blob([buffer], { type: mimeType || 'audio/webm' }), 'audio.webm');
@@ -19,7 +19,11 @@ async function transcribeAudio(buffer, mimeType) {
     body: form
   });
   if (!res.ok) throw new Error('stt_failed_' + res.status + ': ' + (await res.text()).slice(0, 500));
-  const data = await res.json();
+  return await res.json();
+}
+
+async function transcribeAudio(buffer, mimeType) {
+  const data = await transcribeAudioDetailed(buffer, mimeType);
   return (data.text || '').trim();
 }
 
@@ -35,4 +39,4 @@ async function synthesizeSpeech(text) {
   return Buffer.from(arrayBuffer);
 }
 
-module.exports = { transcribeAudio, synthesizeSpeech };
+module.exports = { transcribeAudio, transcribeAudioDetailed, synthesizeSpeech };

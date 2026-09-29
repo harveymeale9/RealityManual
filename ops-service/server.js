@@ -38,6 +38,7 @@ const bufferPublicationSyncService = require('./src/bufferPublicationSync');
 const metaAuth = require('./src/metaAuth');
 const metaPublisherService = require('./src/metaPublisher');
 const shortformSchedule = require('./src/shortformSchedule');
+const videoEditorService = require('./src/videoEditorService');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
@@ -477,6 +478,14 @@ app.use('/api/store', requireAuthOrReviewer);
 app.use('/api/files', requireAuthOrReviewer);
 app.use('/api/voice', requireAuth);
 app.use('/api/tiktok', requireAuth);
+// Transcript-driven raw-video editor. Source recordings and rendered files
+// remain server-side under DATA_DIR; only project metadata lives in SQLite.
+const videoEditor = videoEditorService.setup({
+  db: db,
+  dataDir: DATA_DIR,
+  transcribeDetailed: elevenlabs.transcribeAudioDetailed
+});
+app.use('/api/editor', requireAuth, videoEditor.router);
 // Content Ideation is an admin-only authoring/agent surface. It has its
 // own normalized tables but transfers accepted work into the existing
 // pieces record/Kanban model.

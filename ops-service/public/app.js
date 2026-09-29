@@ -64,6 +64,7 @@
         { id: 'content-ops', label: 'Content Pipeline' },
         { id: 'content-ideation', label: 'Content Ideation' },
         { id: 'upload-files', label: 'Content Production' },
+        { id: 'editor', label: 'Editor' },
         { id: 'settings', label: 'Content Settings' }
       ] },
     { label: 'Research', tabs: [
@@ -322,6 +323,8 @@
     } else if (active === 'upload-files') {
       panelMain.innerHTML = UPLOAD_MARKUP;
       bootUploadFiles();
+    } else if (active === 'editor') {
+      window.RMEditor.mount(panelMain);
     } else if (active === 'settings') {
       panelMain.innerHTML = SETTINGS_MARKUP;
       bootSettings();

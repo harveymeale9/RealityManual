@@ -11238,3 +11238,47 @@ in sync. The same check passed against the deployed authenticated service and
 its real FFmpeg route, including the new cache-busted client; the temporary
 piece, video, and soundtrack records were deleted afterward. A 390-pixel pass
 also confirmed the new inline controls introduce no horizontal overflow.
+
+---
+
+# 256. Transcript-Driven Raw Video Editor (2026-09-29)
+
+Content Studio now has an admin-only **Editor** under Content Ops for turning a
+raw spoken recording into the simple finished format Harvey uses without
+round-tripping through CapCut. A raw video upload is stored under
+`DATA_DIR/editor/<project-id>/`, probed with FFprobe, and transcribed through
+ElevenLabs Scribe with word-level timestamps. Editor project metadata is
+durable in the existing `records` table under the isolated `editorProjects`
+store; neither the source nor rendered video is placed in SQLite.
+
+The first automatic edit removes the middle of speech gaps longer than one
+second while retaining 380 milliseconds around each boundary, plus trims
+obvious leading and trailing dead space. These decisions are non-destructive:
+the original file never changes, the UI can toggle automatic silence removal,
+and the computed cut list is rebuilt from source timestamps. The browser
+previews the edit by jumping over those cut intervals in the original video.
+
+The complete timed transcript is directly editable. Harvey can click words,
+Shift-select a range, or drag across a sentence, then cut or restore it. Cut
+words remain visible with a strikethrough, and an Undo stack makes accidental
+changes reversible. Transcript selections become time-aligned manual cuts and
+are combined with the automatic silence cuts. The panel always displays the
+original duration, estimated edited duration, and seconds removed.
+
+Captions are grouped into short readable phrases and previewed over the raw
+video in bold yellow text below center. Rendering uses FFmpeg to trim and
+concatenate the retained video/audio segments, remaps every caption from source
+time to the edited timeline, burns an ASS caption track into H.264 video, and
+produces a downloadable fast-start MP4. Interrupted transcription or rendering
+jobs become explicit retryable errors after a service restart rather than
+permanent spinners. Source and rendered media routes, editing routes, and the
+Editor navigation itself remain unavailable to the external YouTube reviewer.
+
+The ElevenLabs module now exposes its full timed transcription result while
+preserving the existing plain-text wrapper for every earlier caller. Seven
+focused Node tests cover word normalization, natural pause handles, manual
+cuts, timeline mapping, caption grouping, ASS styling, and a real end-to-end
+generated-video upload/transcribe/edit/FFmpeg-render/download flow. The full
+suite has 89 passing tests. A real Chromium test exercised the Editor tab,
+word/range selection, cut, Undo, render initiation, and the 390-pixel mobile
+layout with no page errors or horizontal overflow.
