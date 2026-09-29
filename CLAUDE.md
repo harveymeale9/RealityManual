@@ -12674,3 +12674,22 @@ older saved uploads too. The native file chooser explicitly lists the same
 extensions so camera MOV files remain selectable even when the OS cannot supply
 a useful MIME type. API integration coverage uploads a generic uppercase MOV
 and verifies both persisted metadata and the source response header.
+
+---
+
+# 327. Failed Safety Analysis Cannot Be Silently Bypassed (2026-09-29)
+
+A retake-analysis failure correctly put a recording in **Needs attention**, but
+the final-render button and endpoint still allowed a manual render. That could
+send a repeated or abandoned take downstream without Harvey ever making the
+review decision the Editor exists to surface. A failed landscape framing check
+had the same bypass while Frame remained on Auto.
+
+Failed retake analysis now blocks rendering until retried successfully. Failed
+automatic framing blocks only while a landscape source is still on Auto;
+choosing Vertical or Horizontal explicitly is a valid human resolution and
+unblocks it. Both the UI and API enforce these rules, with the disabled action
+stating the exact recovery required. Planning-card matching remains metadata,
+so its failure is visible but does not unnecessarily prevent a correct media
+render. Focused service tests and a real browser failure-state check cover the
+new gate.

@@ -76,6 +76,9 @@ test('format classification respects composition and explicit overrides', functi
   assert.equal(editor.contentTypeForProject(project, []), 'short');
   assert.equal(editor.effectiveLayout({ width: 1080, height: 1920, visualClassification: { layout: 'horizontal' } }), 'vertical');
   assert.equal(editor.layoutReviewRequired({ width: 1080, height: 1920, visualClassification: { layout: 'horizontal', confidence: 'low' } }), false);
+  assert.match(editor.blockingReviewFailure({ width: 1920, height: 1080, layoutOverride: 'auto', classificationStatus: 'error' }), /framing failed/i);
+  assert.equal(editor.blockingReviewFailure({ width: 1920, height: 1080, layoutOverride: 'vertical', classificationStatus: 'error' }), '');
+  assert.match(editor.blockingReviewFailure({ width: 1920, height: 1080, retakeAnalysisStatus: 'error' }), /retake check failed/i);
 });
 
 test('invalidating an edit clears every stale output claim', function () {

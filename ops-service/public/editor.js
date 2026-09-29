@@ -487,8 +487,10 @@
       ['pending', 'running', 'pending_transcript'].indexOf(project.planningMatchStatus) !== -1;
     var unresolvedRetakes = Number(project.unresolvedRetakeCount) || 0;
     var appliedRetakes = Number(project.appliedRetakeCount) || 0;
-    var renderBlocked = automaticEditRunning || unresolvedRetakes > 0 || project.layoutReviewRequired;
-    var renderButtonText = automaticEditRunning ? 'Preparing automatic edit…' : project.layoutReviewRequired ? 'Confirm Vertical or Horizontal frame' : unresolvedRetakes ? 'Review ' + unresolvedRetakes + ' possible retake' + (unresolvedRetakes === 1 ? '' : 's') : 'Build final edit';
+    var framingFailureBlocks = project.classificationStatus === 'error' && (project.layoutOverride === 'auto' || !project.layoutOverride) && Number(project.width) >= Number(project.height);
+    var failedSafetyCheck = project.retakeAnalysisStatus === 'error' || framingFailureBlocks;
+    var renderBlocked = automaticEditRunning || failedSafetyCheck || unresolvedRetakes > 0 || project.layoutReviewRequired;
+    var renderButtonText = automaticEditRunning ? 'Preparing automatic edit…' : project.retakeAnalysisStatus === 'error' ? 'Retry failed retake check' : framingFailureBlocks ? 'Retry framing or choose a frame' : project.layoutReviewRequired ? 'Confirm Vertical or Horizontal frame' : unresolvedRetakes ? 'Review ' + unresolvedRetakes + ' possible retake' + (unresolvedRetakes === 1 ? '' : 's') : 'Build final edit';
     var rendering = ['queued', 'running'].indexOf(project.renderStatus) !== -1;
     var sentToProduction = !!project.productionPieceId;
     var failures = failedSteps(project);

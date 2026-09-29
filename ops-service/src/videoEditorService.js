@@ -191,6 +191,17 @@ function layoutReviewRequired(project) {
     project.visualClassification && project.visualClassification.confidence === 'low');
 }
 
+function blockingReviewFailure(project) {
+  if (project && project.retakeAnalysisStatus === 'error') {
+    return 'The automatic retake check failed. Retry it before building the final edit.';
+  }
+  if (project && sourceLayout(project) === 'horizontal' &&
+      (!project.layoutOverride || project.layoutOverride === 'auto') && project.classificationStatus === 'error') {
+    return 'Automatic framing failed. Retry it or choose Vertical or Horizontal yourself.';
+  }
+  return '';
+}
+
 function contentTypeForProject(project, cuts) {
   if (project && ['ultra_short', 'short', 'long_short', 'longform'].includes(project.contentTypeOverride)) return project.contentTypeOverride;
   if (effectiveLayout(project) === 'horizontal') return 'longform';
@@ -1241,6 +1252,10 @@ async function renderProject(id) {
     if (unresolvedRetakeCount(project) > 0) {
       return res.status(409).json({ error: 'retake_review_required', message: 'Review each possible retake before building the final edit.' });
     }
+    const reviewFailure = blockingReviewFailure(project);
+    if (reviewFailure) {
+      return res.status(409).json({ error: 'automatic_review_failed', message: reviewFailure });
+    }
     if (layoutReviewRequired(project)) {
       return res.status(409).json({ error: 'layout_review_required', message: 'Choose Vertical or Horizontal once to confirm this uncertain frame.' });
     }
@@ -1366,5 +1381,6 @@ module.exports = {
   unresolvedRetakeCount,
   appliedRetakeCount,
   layoutReviewRequired,
+  blockingReviewFailure,
   normalizedVideoMimeType
 };
