@@ -16,6 +16,9 @@
   var saveStates = {};
   var renderRefreshTimers = {};
   var restoreTranscriptFocus = false;
+  var uploadBatchInProgress = false;
+  var uploadStatusText = '';
+  var uploadStatusPercent = 0;
   var MAX_RECORDING_BYTES = 2 * 1024 * 1024 * 1024;
   var listFilter = localStorage.getItem('rmEditorListFilter') === 'sent' ? 'sent' : 'active';
   var reviewRate = Number(localStorage.getItem('rmEditorReviewRate')) || 1;
@@ -74,6 +77,20 @@
 
   function editorMounted() {
     return !!(root && root.querySelector('.video-editor'));
+  }
+
+  function paintUploadStatus() {
+    if (!editorMounted()) return;
+    var progress = root.querySelector('#editorUploadProgress');
+    var bar = root.querySelector('#editorUploadBar');
+    var label = root.querySelector('#editorUploadLabel');
+    var input = root.querySelector('#editorFile');
+    var control = root.querySelector('.editor-upload');
+    if (progress) progress.hidden = !uploadStatusText;
+    if (bar) bar.style.width = Math.max(0, Math.min(100, uploadStatusPercent)) + '%';
+    if (label && uploadStatusText) label.textContent = uploadStatusText;
+    if (input) input.disabled = uploadBatchInProgress;
+    if (control) control.classList.toggle('disabled', uploadBatchInProgress);
   }
 
   function rememberedProjectKey(filter) {
@@ -307,6 +324,7 @@
         }
       });
     });
+    paintUploadStatus();
   }
 
   function renderNotice() {
@@ -351,12 +369,9 @@
 
   function upload(file, queueIndex, queueTotal) {
     return new Promise(function (resolve, reject) {
-    var progress = root.querySelector('#editorUploadProgress');
-    var bar = root.querySelector('#editorUploadBar');
-    var label = root.querySelector('#editorUploadLabel');
-    progress.hidden = false;
-    bar.style.width = Math.round(queueIndex / queueTotal * 100) + '%';
-    label.textContent = 'Uploading ' + (queueIndex + 1) + ' of ' + queueTotal + ' · ' + file.name;
+    uploadStatusPercent = Math.round(queueIndex / queueTotal * 100);
+    uploadStatusText = 'Uploading ' + (queueIndex + 1) + ' of ' + queueTotal + ' · ' + file.name;
+    paintUploadStatus();
     var data = new FormData();
     data.append('video', file);
     data.append('name', file.name.replace(/\.[^.]+$/, ''));
@@ -364,7 +379,10 @@
     xhr.open('POST', '/api/editor');
     xhr.withCredentials = true;
     xhr.upload.onprogress = function (event) {
-      if (event.lengthComputable) bar.style.width = Math.round((queueIndex + event.loaded / event.total) / queueTotal * 100) + '%';
+      if (event.lengthComputable) {
+        uploadStatusPercent = Math.round((queueIndex + event.loaded / event.total) / queueTotal * 100);
+        paintUploadStatus();
+      }
     };
     xhr.onload = function () {
       var body = {};
@@ -384,6 +402,11 @@
   }
 
   function uploadFiles(fileList) {
+    if (uploadBatchInProgress) {
+      editorNotice = 'A filming batch is already uploading. Let it finish before adding another batch.';
+      renderNotice();
+      return;
+    }
     var duplicateCount = 0;
     var oversized = [];
     var unsupported = [];
@@ -402,6 +425,10 @@
     unsupported.forEach(function (name) { failures.push(name + ': unsupported file type'); });
     editorNotice = '';
     renderNotice();
+    uploadBatchInProgress = true;
+    uploadStatusText = 'Preparing ' + files.length + ' recording' + (files.length === 1 ? '' : 's') + '…';
+    uploadStatusPercent = 0;
+    paintUploadStatus();
     var sequence = Promise.resolve();
     files.forEach(function (file, index) {
       sequence = sequence.then(function () {
@@ -412,12 +439,11 @@
       });
     });
     sequence.then(function () {
-      var progress = root && root.querySelector('#editorUploadProgress');
-      var bar = root && root.querySelector('#editorUploadBar');
-      var label = root && root.querySelector('#editorUploadLabel');
-      if (bar) bar.style.width = '100%';
-      if (label) label.textContent = created.length + ' recording' + (created.length === 1 ? '' : 's') + ' added to the edit queue' + (duplicateCount ? ' · ' + duplicateCount + ' duplicate skipped' : '');
-      setTimeout(function () { if (progress) progress.hidden = true; }, 1400);
+      uploadBatchInProgress = false;
+      uploadStatusPercent = 100;
+      uploadStatusText = created.length + ' recording' + (created.length === 1 ? '' : 's') + ' added to the edit queue' + (duplicateCount ? ' · ' + duplicateCount + ' duplicate skipped' : '');
+      paintUploadStatus();
+      setTimeout(function () { uploadStatusText = ''; uploadStatusPercent = 0; paintUploadStatus(); }, 1400);
       if (created[0] && editorMounted()) openProject(created[0].id);
       if (failures.length) alert('Some recordings could not be uploaded:\n\n' + failures.join('\n'));
     });
@@ -1119,4 +1145,10 @@
       });
     }
   };
+
+  window.addEventListener('beforeunload', function (event) {
+    if (!uploadBatchInProgress) return;
+    event.preventDefault();
+    event.returnValue = '';
+  });
 })();

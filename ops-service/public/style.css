@@ -2360,6 +2360,7 @@ body.role-reviewer #pmBackFab {
 .editor-heading h1{font-family:"Fraunces",serif;font-size:38px;margin:4px 0 6px}
 .editor-heading p{margin:0;color:var(--muted,#8d9991);max-width:720px;line-height:1.55}
 .editor-upload{cursor:pointer;white-space:nowrap}
+.editor-upload.disabled{opacity:.46;cursor:wait;pointer-events:none}
 .editor-upload-progress{padding:13px 16px;border:1px solid #27543d;background:#0d1b14;border-radius:9px;margin-bottom:16px;color:#b6c7bc;font-size:13px}
 .editor-upload-progress>div{height:4px;background:#1a2a21;border-radius:5px;margin-top:9px;overflow:hidden}.editor-upload-progress i{display:block;height:100%;width:0;background:#41ec8b;transition:width .2s}
 .editor-drop-overlay{position:fixed;z-index:80;inset:78px 22px 22px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;border:2px dashed #50e895;border-radius:16px;background:rgba(5,17,11,.95);color:#dce8e0;opacity:0;visibility:hidden;pointer-events:none;transform:scale(.985);transition:opacity .15s,transform .15s,visibility .15s}.editor-drop-overlay.visible{opacity:1;visibility:visible;transform:scale(1)}.editor-drop-overlay strong{font-family:"Fraunces",serif;font-size:30px}.editor-drop-overlay span{font-size:12px;color:#85a08f}

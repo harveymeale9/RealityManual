@@ -13006,3 +13006,22 @@ non-blocking for automatic rendering. The failure path explicitly wakes the
 automatic renderer, while transcription, framing, uncertain-layout, and retake
 safety gates remain strict. Focused coverage proves a planning error proceeds
 but a running match, failed retake review, or failed framing analysis does not.
+
+---
+
+# 344. Large Camera Uploads Survive Content-Studio Navigation Safely (2026-09-29)
+
+The upload queue previously assumed Editor's DOM remained mounted. Navigating
+to another Content Studio section while a large sequential batch continued
+could leave the next file trying to update missing progress elements. Starting
+a second batch concurrently also produced two independent queues competing for
+one progress bar, and closing or refreshing the browser offered no warning that
+an in-flight camera transfer would be lost.
+
+Upload progress is now durable JavaScript state rather than state held only by
+the current DOM. Leaving Editor for another in-app section does not interrupt
+the requests; returning remounts the current filename and percentage. A second
+batch is politely refused until the first finishes, the upload control visibly
+locks and later re-enables, and an actual page unload triggers the browser's
+standard unsaved-work warning only while bytes are in flight. Detached progress
+elements are never dereferenced, so background batch completion remains safe.
