@@ -11310,5 +11310,20 @@ estimated reading speed.
 
 The browser preview uses the same full-phrase/current-word behavior as the ASS
 caption track burned into the finished MP4. Vertical short-form renders retain
-the existing static yellow phrase treatment; animated word emphasis is limited
-to longform so it does not silently alter the established short-form style.
+their own deliberately different treatment described below.
+
+---
+
+# 258. Vertical Captions Show One Large Word at a Time (2026-09-29)
+
+Portrait/short-form Editor renders no longer display caption phrases. They show
+exactly one bold yellow word at a time, switching at the next word's real Scribe
+timestamp and clearing at sentence or deliberate-pause boundaries. Because a
+single word uses far less horizontal space, the vertical caption base is now
+8.5% of frame width (92 px on a 1080×1920 export), substantially larger than
+the earlier phrase caption without occupying more of the image.
+
+This behavior is implemented both in the browser preview and in the burned ASS
+track. Landscape longform remains the stable full phrase with an enlarged
+currently-spoken word from §257; orientation alone selects the two caption
+systems, matching the existing Content Production longform/short-form rule.

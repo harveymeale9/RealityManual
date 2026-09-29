@@ -65,7 +65,7 @@ test('caption groups omit deleted words and carry raw and edited timing', functi
 
 test('ASS export uses bold yellow captions below centre', function () {
   const ass = editor.buildAss({ width: 1080, height: 1920 }, [{ start: 1, end: 2, text: 'A {real} caption' }]);
-  assert.match(ass, /PrimaryColour.*\nStyle: Default,Arial,56,&H0000FFFF/);
+  assert.match(ass, /PrimaryColour.*\nStyle: Default,Arial,92,&H0000FFFF/);
   assert.match(ass, /,2,40,40,518,1/);
   assert.match(ass, /Dialogue: 0,0:00:01\.00,0:00:02\.00.*A \\{real\\} caption/);
 });
@@ -79,6 +79,18 @@ test('landscape captions are larger and advance spoken-word emphasis', function 
   assert.equal((ass.match(/^Dialogue:/gm) || []).length, 3);
   assert.match(ass, /\\fs77\\bord4}A\{\\r} wise move/);
   assert.match(ass, /A \{\\fs77\\bord4}wise\{\\r} move/);
+});
+
+test('vertical captions show one large yellow word at a time', function () {
+  const groups = [{ start: 1, end: 2, text: 'One word now', words: [
+    { text: 'One', start: 1, end: 1.2 }, { text: 'word', start: 1.25, end: 1.55 }, { text: 'now', start: 1.6, end: 2 }
+  ] }];
+  const ass = editor.buildAss({ width: 1080, height: 1920 }, groups);
+  assert.match(ass, /Style: Default,Arial,92,.*&H0000FFFF/);
+  assert.equal((ass.match(/^Dialogue:/gm) || []).length, 3);
+  assert.match(ass, /Dialogue: 0,0:00:01\.00,0:00:01\.25.*One$/m);
+  assert.match(ass, /Dialogue: 0,0:00:01\.25,0:00:01\.60.*word$/m);
+  assert.match(ass, /Dialogue: 0,0:00:01\.60,0:00:02\.00.*now$/m);
 });
 
 test('upload, timed transcription and FFmpeg captioned render work end to end', { timeout: 30000 }, async function (t) {

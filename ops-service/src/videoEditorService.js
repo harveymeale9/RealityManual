@@ -185,7 +185,7 @@ function buildAss(project, groups) {
   const width = Math.max(360, Math.round(Number(project.width) || 1080));
   const height = Math.max(360, Math.round(Number(project.height) || 1920));
   const isLongform = width >= height;
-  const fontSize = Math.max(30, Math.round(Math.min(width, height) * (isLongform ? 0.06 : 0.052)));
+  const fontSize = Math.max(30, Math.round(Math.min(width, height) * (isLongform ? 0.06 : 0.085)));
   const emphasizedSize = Math.round(fontSize * 1.18);
   const marginV = Math.round(height * 0.27);
   const header = [
@@ -197,8 +197,21 @@ function buildAss(project, groups) {
   ];
   const events = [];
   (groups || []).forEach(function (group) {
-    if (!isLongform || !Array.isArray(group.words) || !group.words.length) {
+    if (!Array.isArray(group.words) || !group.words.length) {
       events.push('Dialogue: 0,' + assTime(group.start) + ',' + assTime(group.end) + ',Default,,0,0,0,,' + escapeAss(group.text));
+      return;
+    }
+    if (!isLongform) {
+      // Vertical content deliberately shows exactly one large word at a
+      // time. Hold it until the following word begins, then switch cleanly;
+      // the phrase grouper still supplies a blank beat at sentence/long-pause
+      // boundaries so a finished thought does not linger on screen.
+      group.words.forEach(function (word, wordIndex) {
+        const eventStart = word.start;
+        const eventEnd = wordIndex + 1 < group.words.length ? group.words[wordIndex + 1].start : group.end;
+        if (eventEnd <= eventStart) return;
+        events.push('Dialogue: 0,' + assTime(eventStart) + ',' + assTime(eventEnd) + ',Default,,0,0,0,,' + escapeAss(word.text));
+      });
       return;
     }
     // Keep the complete phrase on screen while moving one stable emphasis

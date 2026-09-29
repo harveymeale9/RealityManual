@@ -199,8 +199,10 @@
         return video.currentTime >= item.sourceStart && video.currentTime <= item.sourceEnd + 0.18;
       })[0];
       caption.replaceChildren();
-      caption.classList.toggle('longform', Number(project.width) >= Number(project.height));
-      if (group && Array.isArray(group.words) && Number(project.width) >= Number(project.height)) {
+      var isLongform = Number(project.width) >= Number(project.height);
+      caption.classList.toggle('longform', isLongform);
+      caption.classList.toggle('shortform', !isLongform);
+      if (group && Array.isArray(group.words) && isLongform) {
         group.words.forEach(function (word, index) {
           var span = document.createElement('span');
           span.textContent = word.text + (index + 1 < group.words.length ? ' ' : '');
@@ -208,6 +210,12 @@
           span.className = video.currentTime >= word.sourceStart && video.currentTime < emphasisEnd ? 'active' : '';
           caption.appendChild(span);
         });
+      } else if (group && Array.isArray(group.words)) {
+        var spokenWord = group.words.filter(function (word, index) {
+          var wordEnd = index + 1 < group.words.length ? group.words[index + 1].sourceStart : group.sourceEnd + 0.18;
+          return video.currentTime >= word.sourceStart && video.currentTime < wordEnd;
+        })[0];
+        caption.textContent = spokenWord ? spokenWord.text : '';
       } else if (group) caption.textContent = group.text;
       caption.classList.toggle('visible', !!group);
     });
