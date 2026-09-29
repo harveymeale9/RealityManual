@@ -11,16 +11,16 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   2479087..a374047  main       -> origin/main
+   a374047..fedc8a3  main       -> origin/main
 + git merge --ff-only origin/main
-Updating 2479087..a374047
+Updating a374047..fedc8a3
 Fast-forward
- CLAUDE.md                    | 15 +++++++++++++++
- ops-service/.ci/last-run.log | 20 ++++++++++----------
- ops-service/public/editor.js | 11 +++++++++--
- 3 files changed, 34 insertions(+), 12 deletions(-)
+ CLAUDE.md                    | 14 ++++++++++++++
+ ops-service/.ci/last-run.log | 18 +++++++++---------
+ ops-service/public/style.css |  2 +-
+ 3 files changed, 24 insertions(+), 10 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=a3740474e0dcf32175934a9655178aa054bb640a
++ NEW_HEAD=fedc8a365718d06a3919e971de36ecadd0996321
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -33,12 +33,12 @@ Already up to date.
 + NEEDS_REBUILD=1
 + '[' -n 3d453ba809b97208da0b94c99cf8d61c9819ab7c ']'
 + git cat-file -e '3d453ba809b97208da0b94c99cf8d61c9819ab7c^{commit}'
-++ git diff --name-only 3d453ba809b97208da0b94c99cf8d61c9819ab7c a3740474e0dcf32175934a9655178aa054bb640a -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
+++ git diff --name-only 3d453ba809b97208da0b94c99cf8d61c9819ab7c fedc8a365718d06a3919e971de36ecadd0996321 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z '' ']'
 + NEEDS_REBUILD=0
 + '[' 0 = 1 ']'
 + '[' 0 = 0 ']'
-+ echo 'no backend changes between 3d453ba809b97208da0b94c99cf8d61c9819ab7c and a3740474e0dcf32175934a9655178aa054bb640a — already live via git pull, skipping rebuild/restart'
-no backend changes between 3d453ba809b97208da0b94c99cf8d61c9819ab7c and a3740474e0dcf32175934a9655178aa054bb640a — already live via git pull, skipping rebuild/restart
++ echo 'no backend changes between 3d453ba809b97208da0b94c99cf8d61c9819ab7c and fedc8a365718d06a3919e971de36ecadd0996321 — already live via git pull, skipping rebuild/restart'
+no backend changes between 3d453ba809b97208da0b94c99cf8d61c9819ab7c and fedc8a365718d06a3919e971de36ecadd0996321 — already live via git pull, skipping rebuild/restart
 + exit 0
 ssh exit code: 0
