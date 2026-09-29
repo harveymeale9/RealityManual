@@ -13230,7 +13230,9 @@ has dismissed or restored. Restoring an auto-cut also releases its ownership,
 and the 50-step cut/retake undo snapshots retain that ownership metadata. A
 focused regression proves a dismissed take stays restored, an obsolete auto
 cut disappears, a new clear retake is applied, and an unrelated manual cut is
-never touched.
+never touched. New projects initialize ownership explicitly, and undoing one of
+the older pre-metadata array snapshots now intersects ownership with the
+restored cut set so a legacy history entry cannot leave phantom ownership.
 
 ---
 

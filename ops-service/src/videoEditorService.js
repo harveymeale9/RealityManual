@@ -1309,6 +1309,7 @@ async function renderProject(id) {
         transcriptText: '',
         words: [],
         removedWordIndices: [],
+        autoRetakeRemovedWordIndices: [],
         dismissedRetakeIds: [],
         restoredAutoCutIds: [],
         autoSilenceEnabled: true,
@@ -1475,7 +1476,13 @@ async function renderProject(id) {
     const history = Array.isArray(project.cutDecisionHistory) ? project.cutDecisionHistory.slice() : [];
     if (!history.length) return res.status(409).json({ error: 'nothing_to_undo', message: 'There is no earlier edit decision to restore.' });
     const snapshot = history.pop();
-    if (Array.isArray(snapshot)) project.removedWordIndices = snapshot;
+    if (Array.isArray(snapshot)) {
+      project.removedWordIndices = snapshot;
+      const restoredIndices = new Set(snapshot.map(Number));
+      project.autoRetakeRemovedWordIndices = (project.autoRetakeRemovedWordIndices || []).map(Number).filter(function (index) {
+        return restoredIndices.has(index);
+      });
+    }
     else {
       project.removedWordIndices = Array.isArray(snapshot && snapshot.removedWordIndices) ? snapshot.removedWordIndices : [];
       project.dismissedRetakeIds = Array.isArray(snapshot && snapshot.dismissedRetakeIds) ? snapshot.dismissedRetakeIds : [];
