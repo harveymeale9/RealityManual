@@ -64,15 +64,18 @@ test('individual automatic pauses can be restored without disabling the rest', f
 });
 
 test('format classification respects composition and explicit overrides', function () {
-  const project = { width: 3840, height: 2160, duration: 80, words: words, visualClassification: { layout: 'vertical' } };
+  const project = { width: 3840, height: 2160, duration: 80, words: words, visualClassification: { layout: 'vertical', confidence: 'low' } };
   assert.equal(editor.effectiveLayout(project), 'vertical');
   assert.equal(editor.contentTypeForProject(project, []), 'long_short');
+  assert.equal(editor.layoutReviewRequired(project), true);
   project.layoutOverride = 'horizontal';
   assert.equal(editor.effectiveLayout(project), 'horizontal');
   assert.equal(editor.contentTypeForProject(project, []), 'longform');
+  assert.equal(editor.layoutReviewRequired(project), false);
   project.contentTypeOverride = 'short';
   assert.equal(editor.contentTypeForProject(project, []), 'short');
   assert.equal(editor.effectiveLayout({ width: 1080, height: 1920, visualClassification: { layout: 'horizontal' } }), 'vertical');
+  assert.equal(editor.layoutReviewRequired({ width: 1080, height: 1920, visualClassification: { layout: 'horizontal', confidence: 'low' } }), false);
 });
 
 test('invalidating an edit clears every stale output claim', function () {

@@ -12422,3 +12422,28 @@ working-preview playback use their native source time, and only the previously
 active word is touched when the playhead advances, avoiding a full transcript
 DOM repaint on every video event. The browser workflow verifies that the
 highlight lands on the expected word at an exact timestamp.
+
+---
+
+# 314. Low-Confidence Framing Cannot Silently Auto-Render (2026-09-29)
+
+Landscape camera masters require visual classification to decide whether a
+single page should become 9:16 or a full spread should remain 16:9. A low-
+confidence result previously flowed into automatic rendering exactly like a
+high-confidence result, making the fastest workflow capable of confidently
+producing the wrong composition.
+
+Only genuinely low-confidence landscape detections now pause before rendering.
+The recording becomes **Review framing**, enters the session's attention count,
+and the readiness bar asks Harvey to confirm Vertical or Horizontal once. That
+explicit dropdown choice clears the gate and resumes automatic rendering;
+medium/high confidence and physically portrait masters stay fully hands-off.
+The render endpoint independently enforces the gate rather than trusting a
+disabled browser button.
+
+The visual-classifier prompt also now defines `cropCenterX` as crop-window pan:
+0 is flush left, 1 flush right and 0.5 centered. This matches both CSS
+`object-position` and FFmpeg's `(input width - crop width) × position`, avoiding
+systematic under-panning toward the gutter on one-page landscape recordings.
+Unit and browser-batch coverage prove the review rule, explicit-override escape,
+portrait exemption, visible label and attention count.

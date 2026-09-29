@@ -170,6 +170,12 @@ function effectiveLayout(project) {
   return sourceLayout(project);
 }
 
+function layoutReviewRequired(project) {
+  return !!(sourceLayout(project) === 'horizontal' &&
+    (!project.layoutOverride || project.layoutOverride === 'auto') &&
+    project.visualClassification && project.visualClassification.confidence === 'low');
+}
+
 function contentTypeForProject(project, cuts) {
   if (project && ['ultra_short', 'short', 'long_short', 'longform'].includes(project.contentTypeOverride)) return project.contentTypeOverride;
   if (effectiveLayout(project) === 'horizontal') return 'longform';
@@ -706,7 +712,7 @@ function setup(options) {
     if (!['ready', 'unavailable'].includes(project.classificationStatus)) return false;
     if (!['ready', 'unavailable'].includes(project.retakeAnalysisStatus)) return false;
     if (!['ready', 'unavailable'].includes(project.planningMatchStatus)) return false;
-    if (unresolvedRetakeCount(project) > 0) return false;
+    if (unresolvedRetakeCount(project) > 0 || layoutReviewRequired(project)) return false;
     project.automaticRenderStartedAt = new Date().toISOString();
     saveProject(project);
     setImmediate(function () { renderProject(id); });
@@ -924,6 +930,7 @@ async function renderProject(id) {
       try {
         const project = JSON.parse(row.data);
         project.unresolvedRetakeCount = unresolvedRetakeCount(project);
+        project.layoutReviewRequired = layoutReviewRequired(project);
         project.canUndoCut = Array.isArray(project.cutDecisionHistory) && project.cutDecisionHistory.length > 0;
         delete project.cutDecisionHistory;
         return withQueuePositions(project);
@@ -1016,6 +1023,7 @@ async function renderProject(id) {
     project.gapDecisions = gapDecisions(project);
     project.retakeCandidates = retakeCandidatesForProject(project);
     project.unresolvedRetakeCount = unresolvedRetakeCount(project);
+    project.layoutReviewRequired = layoutReviewRequired(project);
     project.effectiveLayout = effectiveLayout(project);
     project.detectedContentType = contentTypeForProject(project, project.cuts);
     project.planningCandidates = typeof getPlanningCandidates === 'function' ? getPlanningCandidates(project) : [];
@@ -1087,6 +1095,7 @@ async function renderProject(id) {
     project.gapDecisions = gapDecisions(project);
     project.retakeCandidates = retakeCandidatesForProject(project);
     project.unresolvedRetakeCount = unresolvedRetakeCount(project);
+    project.layoutReviewRequired = layoutReviewRequired(project);
     project.effectiveLayout = effectiveLayout(project);
     project.detectedContentType = contentTypeForProject(project, project.cuts);
     project.planningCandidates = typeof getPlanningCandidates === 'function' ? getPlanningCandidates(project) : [];
@@ -1113,6 +1122,7 @@ async function renderProject(id) {
     project.gapDecisions = gapDecisions(project);
     project.retakeCandidates = retakeCandidatesForProject(project);
     project.unresolvedRetakeCount = unresolvedRetakeCount(project);
+    project.layoutReviewRequired = layoutReviewRequired(project);
     project.effectiveLayout = effectiveLayout(project);
     project.detectedContentType = contentTypeForProject(project, project.cuts);
     project.planningCandidates = typeof getPlanningCandidates === 'function' ? getPlanningCandidates(project) : [];
@@ -1174,6 +1184,9 @@ async function renderProject(id) {
     }
     if (unresolvedRetakeCount(project) > 0) {
       return res.status(409).json({ error: 'retake_review_required', message: 'Review each possible retake before building the final edit.' });
+    }
+    if (layoutReviewRequired(project)) {
+      return res.status(409).json({ error: 'layout_review_required', message: 'Choose Vertical or Horizontal once to confirm this uncertain frame.' });
     }
     res.status(202).json({ ok: true, status: 'running' });
     renderProject(project.id);
@@ -1286,5 +1299,6 @@ module.exports = {
   gapDecisions,
   retakeCandidates,
   normalizeRetakeDecisions,
-  unresolvedRetakeCount
+  unresolvedRetakeCount,
+  layoutReviewRequired
 };

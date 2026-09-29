@@ -101,6 +101,7 @@
     if (item.classificationStatus === 'error' || item.retakeAnalysisStatus === 'error' || item.planningMatchStatus === 'error' || item.renderStatus === 'error') return 'Needs attention';
     if (item.classificationStatus === 'pending') return queued('Waiting for frame analysis', item.classificationQueuePosition);
     if (item.classificationStatus === 'running') return 'Analyzing frame';
+    if (item.layoutReviewRequired) return 'Review framing';
     if (item.retakeAnalysisStatus === 'pending') return queued('Waiting for retake review', item.retakeQueuePosition);
     if (item.retakeAnalysisStatus === 'running') return 'Checking retakes';
     if (Number(item.unresolvedRetakeCount) > 0) return 'Review ' + Number(item.unresolvedRetakeCount) + ' possible retake' + (Number(item.unresolvedRetakeCount) === 1 ? '' : 's');
@@ -115,7 +116,7 @@
 
   function sessionBucket(item) {
     if (item.productionPieceId) return item.workflowWarning ? 'warning' : 'sent';
-    if (item.transcriptionStatus === 'error' || item.classificationStatus === 'error' || item.retakeAnalysisStatus === 'error' || item.planningMatchStatus === 'error' || item.renderStatus === 'error' || Number(item.unresolvedRetakeCount) > 0) return 'attention';
+    if (item.transcriptionStatus === 'error' || item.classificationStatus === 'error' || item.retakeAnalysisStatus === 'error' || item.planningMatchStatus === 'error' || item.renderStatus === 'error' || Number(item.unresolvedRetakeCount) > 0 || item.layoutReviewRequired) return 'attention';
     if (item.workflowWarning) return 'warning';
     if (item.renderStatus === 'ready') return 'ready';
     if (['pending', 'running'].indexOf(item.transcriptionStatus) !== -1 || ['pending', 'running'].indexOf(item.classificationStatus) !== -1 || ['pending', 'running', 'pending_transcript'].indexOf(item.retakeAnalysisStatus) !== -1 || ['pending', 'running', 'pending_transcript'].indexOf(item.planningMatchStatus) !== -1 || ['queued', 'running'].indexOf(item.renderStatus) !== -1) return 'working';
@@ -464,7 +465,7 @@
     var layout = project.effectiveLayout || (Number(project.height) > Number(project.width) ? 'vertical' : 'horizontal');
     var cropPercent = Math.round((Number(project.cropCenterX) || 0.5) * 100);
     var classificationCopy = project.classificationStatus === 'ready' && project.visualClassification
-      ? esc(project.visualClassification.explanation || ('Frame analysis: ' + project.visualClassification.confidence + ' confidence'))
+      ? (project.layoutReviewRequired ? 'Low-confidence detection. Confirm Frame once. ' : '') + esc(project.visualClassification.explanation || ('Frame analysis: ' + project.visualClassification.confidence + ' confidence'))
       : project.classificationStatus === 'running' || project.classificationStatus === 'pending'
         ? 'Analyzing three frames to distinguish a single page from an open spread…'
         : 'Using source dimensions until the book framing is analyzed.';
@@ -472,8 +473,8 @@
       ['pending', 'running', 'pending_transcript'].indexOf(project.retakeAnalysisStatus) !== -1 ||
       ['pending', 'running', 'pending_transcript'].indexOf(project.planningMatchStatus) !== -1;
     var unresolvedRetakes = Number(project.unresolvedRetakeCount) || 0;
-    var renderBlocked = automaticEditRunning || unresolvedRetakes > 0;
-    var renderButtonText = automaticEditRunning ? 'Preparing automatic edit…' : unresolvedRetakes ? 'Review ' + unresolvedRetakes + ' possible retake' + (unresolvedRetakes === 1 ? '' : 's') : 'Build final edit';
+    var renderBlocked = automaticEditRunning || unresolvedRetakes > 0 || project.layoutReviewRequired;
+    var renderButtonText = automaticEditRunning ? 'Preparing automatic edit…' : project.layoutReviewRequired ? 'Confirm Vertical or Horizontal frame' : unresolvedRetakes ? 'Review ' + unresolvedRetakes + ' possible retake' + (unresolvedRetakes === 1 ? '' : 's') : 'Build final edit';
     var rendering = ['queued', 'running'].indexOf(project.renderStatus) !== -1;
     var sentToProduction = !!project.productionPieceId;
     var failures = failedSteps(project);
@@ -518,7 +519,7 @@
         (project.productionPieceId ? 'This edit is ready in Content Production for titles, thumbnail, and ambient music.' :
           project.renderStatus === 'ready' ? 'Send the finished edit across without uploading it again.' :
           'Build the final edit first. Yellow captions will be baked in below center.') + '</span>' +
-        '<div class="editor-readiness"><i class="ready">Transcript ready</i><i class="' + (['pending', 'running'].indexOf(project.classificationStatus) !== -1 ? 'working' : 'ready') + '">Framing ' + (['pending', 'running'].indexOf(project.classificationStatus) !== -1 ? 'checking' : 'ready') + '</i><i class="' + (['pending', 'running', 'pending_transcript'].indexOf(project.retakeAnalysisStatus) !== -1 ? 'working' : unresolvedRetakes ? 'review' : 'ready') + '">' + (['pending', 'running', 'pending_transcript'].indexOf(project.retakeAnalysisStatus) !== -1 ? 'Retakes checking' : unresolvedRetakes ? unresolvedRetakes + ' to review' : 'Retakes resolved') + '</i><i class="' + (['pending', 'running', 'pending_transcript'].indexOf(project.planningMatchStatus) !== -1 ? 'working' : 'ready') + '">Plan ' + (['pending', 'running', 'pending_transcript'].indexOf(project.planningMatchStatus) !== -1 ? 'matching' : project.planningPieceId ? 'linked' : 'not required') + '</i>' + (project.renderStatus === 'ready' ? '<i class="ready">Output verified</i>' : '') + '</div>' +
+        '<div class="editor-readiness"><i class="ready">Transcript ready</i><i class="' + (['pending', 'running'].indexOf(project.classificationStatus) !== -1 ? 'working' : project.layoutReviewRequired ? 'review' : 'ready') + '">Framing ' + (['pending', 'running'].indexOf(project.classificationStatus) !== -1 ? 'checking' : project.layoutReviewRequired ? 'confirm once' : 'ready') + '</i><i class="' + (['pending', 'running', 'pending_transcript'].indexOf(project.retakeAnalysisStatus) !== -1 ? 'working' : unresolvedRetakes ? 'review' : 'ready') + '">' + (['pending', 'running', 'pending_transcript'].indexOf(project.retakeAnalysisStatus) !== -1 ? 'Retakes checking' : unresolvedRetakes ? unresolvedRetakes + ' to review' : 'Retakes resolved') + '</i><i class="' + (['pending', 'running', 'pending_transcript'].indexOf(project.planningMatchStatus) !== -1 ? 'working' : 'ready') + '">Plan ' + (['pending', 'running', 'pending_transcript'].indexOf(project.planningMatchStatus) !== -1 ? 'matching' : project.planningPieceId ? 'linked' : 'not required') + '</i>' + (project.renderStatus === 'ready' ? '<i class="ready">Output verified</i>' : '') + '</div>' +
         (['queued', 'running'].indexOf(project.renderStatus) !== -1 ? '<div class="editor-render-progress"><span id="editorRenderProgressLabel">' + (project.renderStatus === 'queued' ? (Number(project.renderQueuePosition) > 1 ? (Number(project.renderQueuePosition) - 1) + ' recording(s) ahead in the render queue' : 'Next in the render queue') : 'Encoding final edit · ' + Math.round(Number(project.renderProgress) || 0) + '%') + '</span><div><i id="editorRenderProgressBar" style="width:' + (project.renderStatus === 'queued' ? 4 : Math.max(2, Number(project.renderProgress) || 0)) + '%"></i></div></div>' : '') +
         (project.renderStatus === 'error' ? '<em>' + esc(project.renderError) + '</em>' : '') + '</div><div class="editor-export-actions">' +
         (project.productionPieceId ? '<button class="btn-primary" id="editorOpenProduction">Open Content Production</button>' :
