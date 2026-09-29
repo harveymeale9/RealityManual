@@ -71,6 +71,14 @@ function hashFile(filePath) {
   });
 }
 
+function parseMaxVolume(stderr) {
+  const matches = String(stderr || '').match(/max_volume:\s*(-?inf|-?\d+(?:\.\d+)?)\s*dB/ig) || [];
+  if (!matches.length) return -Infinity;
+  const value = matches[matches.length - 1].match(/(-?inf|-?\d+(?:\.\d+)?)/i);
+  if (!value || /inf/i.test(value[1])) return -Infinity;
+  return Number(value[1]);
+}
+
 async function cleanStaleTempFiles(directory, olderThanMs, nowMs) {
   const cutoff = (Number(nowMs) || Date.now()) - Math.max(60000, Number(olderThanMs) || 24 * 60 * 60 * 1000);
   let entries;
@@ -1048,12 +1056,16 @@ async function renderProject(id) {
       if (!project) return;
       const stat = fs.statSync(renderPath(id));
       const renderedMedia = await probe(renderPath(id));
+      const volumeResult = await run('ffmpeg', ['-hide_banner', '-nostats', '-i', renderPath(id), '-map', '0:a:0',
+        '-af', 'volumedetect', '-f', 'null', '-'], 'render audio verification');
+      const audioPeakDb = parseMaxVolume(volumeResult.stderr);
       const durationTolerance = Math.max(0.35, expectedDuration * 0.01);
       const qualityChecks = {
         playableFile: stat.size > 1024,
         correctFrame: renderedMedia.width === renderShape.width && renderedMedia.height === renderShape.height,
         standardPixelFormat: renderedMedia.pixelFormat === 'yuv420p',
         audioPresent: renderedMedia.hasAudio,
+        audibleAudio: Number.isFinite(audioPeakDb) && audioPeakDb > -55,
         durationMatches: Math.abs(renderedMedia.duration - expectedDuration) <= durationTolerance
       };
       if (Object.keys(qualityChecks).some(function (key) { return !qualityChecks[key]; })) {
@@ -1067,7 +1079,8 @@ async function renderProject(id) {
       project.editedDuration = expectedDuration;
       project.renderQuality = {
         status: 'passed', checkedAt: new Date().toISOString(), checks: qualityChecks,
-        width: renderedMedia.width, height: renderedMedia.height, pixelFormat: renderedMedia.pixelFormat, duration: renderedMedia.duration
+        width: renderedMedia.width, height: renderedMedia.height, pixelFormat: renderedMedia.pixelFormat,
+        duration: renderedMedia.duration, audioPeakDb: audioPeakDb
       };
       project.lastRenderAt = new Date().toISOString();
       saveProject(project);
@@ -1738,6 +1751,7 @@ module.exports = {
   patchAffectsRender,
   patchNeedsAutoRender,
   hashFile,
+  parseMaxVolume,
   cleanStaleTempFiles,
   cleanOrphanedEditorTempFiles,
   gapDecisions,

@@ -99,6 +99,12 @@ test('approval only accepts the exact verified render bytes', async function (t)
   t.after(function () { fs.rmSync(dir, { recursive: true, force: true }); });
 });
 
+test('render loudness parsing distinguishes audible output from digital silence', function () {
+  assert.equal(editor.parseMaxVolume('[Parsed_volumedetect] max_volume: -12.4 dB'), -12.4);
+  assert.equal(editor.parseMaxVolume('max_volume: -inf dB'), -Infinity);
+  assert.equal(editor.parseMaxVolume('unrelated ffmpeg output'), -Infinity);
+});
+
 test('automatic cuts preserve natural handles around long pauses', function () {
   const cuts = editor.calculateAutoCuts(words, 9);
   assert.deepEqual(cuts.map(function (cut) { return cut.reason; }), ['leading_silence', 'long_pause', 'long_pause', 'trailing_silence']);
@@ -667,7 +673,8 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(renderReadyCalls, 1);
   assert.equal(project.workflowWarning, 'Synthetic first workflow failure.');
   assert.equal(project.renderQuality.status, 'passed');
-  assert.deepEqual(project.renderQuality.checks, { playableFile: true, correctFrame: true, standardPixelFormat: true, audioPresent: true, durationMatches: true });
+  assert.deepEqual(project.renderQuality.checks, { playableFile: true, correctFrame: true, standardPixelFormat: true, audioPresent: true, audibleAudio: true, durationMatches: true });
+  assert.ok(project.renderQuality.audioPeakDb > -55);
   assert.deepEqual([project.renderQuality.width, project.renderQuality.height], [1080, 1920]);
   assert.equal(project.renderQuality.pixelFormat, 'yuv420p');
   const staleRevision = project.editRevision;

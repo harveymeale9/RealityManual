@@ -13292,3 +13292,22 @@ voice previews, chat attachments, and other Content Studio features. Coverage
 proves fresh Editor orphans disappear while same-directory files belonging to
 other features remain untouched; the periodic age sweeper remains defense in
 depth for ordinary runtime leftovers.
+
+---
+
+# 359. Verified Final Edits Must Contain Audible Audio (2026-09-29)
+
+Technical verification previously proved that the final MP4 had an audio stream,
+but a filter or encoder regression could still fill that stream with digital
+silence and pass. Editor now runs FFmpeg `volumedetect` over the completed final
+and records its peak level. Output must peak above -55 dBFS in addition to being
+playable, correctly framed, standard pixel format, duration-matched, and
+audio-bearing; `-inf`, missing measurements, and effectively silent tracks fail
+closed before approval.
+
+This adds only a fast audio decode, not another video encode. The real 9259 edit
+was also inspected empirically during this pass: three source pauses totaling
+10.46 seconds were reduced to a 16.07-second final whose remaining detected
+quiet beat was 0.36 seconds, consistent with the configured natural handles.
+Unit coverage protects loudness parsing, and the real FFmpeg end-to-end render
+must now report an audible peak as part of its passed quality record.
