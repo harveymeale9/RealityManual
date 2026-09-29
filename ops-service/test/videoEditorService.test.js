@@ -222,6 +222,39 @@ test('service restart automatically resumes an interrupted transcription', { tim
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
 
+test('one recovery endpoint retries failed automatic work without replacing the source', { timeout: 10000 }, async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-retry-'));
+  const projectDir = path.join(dir, 'editor', 'retry-1'); fs.mkdirSync(projectDir, { recursive: true });
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=320x180:d=1:r=12',
+    '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-f', 'mp4', path.join(projectDir, 'source')]);
+  const db = new Database(path.join(dir, 'test.sqlite'));
+  db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
+  const now = new Date().toISOString();
+  db.prepare('INSERT INTO records (store_name,id,data,updated_at) VALUES (?,?,?,?)').run('editorProjects', 'retry-1', JSON.stringify({
+    id: 'retry-1', name: 'Failed take', fileName: 'failed.mp4', mimeType: 'video/mp4', sizeBytes: 1000,
+    duration: 1, width: 320, height: 180, words: [], removedWordIndices: [], dismissedRetakeIds: [], restoredAutoCutIds: [],
+    autoSilenceEnabled: true, silenceThresholdSeconds: 1, retainedPauseSeconds: .38, captionsEnabled: true,
+    layoutOverride: 'auto', contentTypeOverride: 'auto', cropCenterX: .5, classificationStatus: 'unavailable',
+    retakeAnalysisStatus: 'unavailable', planningMatchStatus: 'unavailable', transcriptionStatus: 'error', transcriptionError: 'Synthetic failure', renderStatus: '', automaticRenderStartedAt: 'test-hold', createdAt: now, updatedAt: now
+  }), now);
+  const service = editor.setup({ db: db, dataDir: dir, transcribeDetailed: async function () { return { text: 'Recovered.', words: [{ type: 'word', text: 'Recovered.', start: .2, end: .8 }] }; } });
+  const app = express(); app.use(express.json()); app.use('/api/editor', service.router);
+  const server = http.createServer(app); await new Promise(function (resolve) { server.listen(0, '127.0.0.1', resolve); });
+  t.after(function () { server.close(); db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+  const base = 'http://127.0.0.1:' + server.address().port;
+  let response = await fetch(base + '/api/editor/retry-1/retry-failed', { method: 'POST' });
+  assert.equal(response.status, 202); assert.deepEqual((await response.json()).retried, ['transcription']);
+  let project;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    project = await (await fetch(base + '/api/editor/retry-1')).json();
+    if (project.transcriptionStatus === 'ready') break;
+    await new Promise(function (resolve) { setTimeout(resolve, 30); });
+  }
+  assert.equal(project.transcriptionStatus, 'ready'); assert.equal(project.transcriptText, 'Recovered.');
+  response = await fetch(base + '/api/editor/retry-1/retry-failed', { method: 'POST' });
+  assert.equal(response.status, 409);
+});
+
 test('upload, timed transcription and FFmpeg captioned render work end to end', { timeout: 30000 }, async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-'));
   const input = path.join(dir, 'sample.mp4');

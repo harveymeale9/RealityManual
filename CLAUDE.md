@@ -11810,3 +11810,29 @@ Progress changes are persisted only when the reported value advances by at
 least two percentage points, avoiding a write for every FFmpeg status line.
 The generated-video integration test now asserts that the completed captioned
 render reaches 100% in addition to proving the resulting MP4 exists.
+
+---
+
+# 280. Editor Sessions Separate Active Work, Recovery and Archive (2026-09-29)
+
+The recording sidebar now defaults to **Active** work and provides a separate
+**Sent** view for completed recordings. Each tab carries its own live count,
+while the header summary still describes the entire filming session. Approval
+moves directly to the next active recording without briefly leaving the
+workspace unselected; completed masters remain available in Sent for review or
+deliberate deletion instead of cluttering the working queue.
+
+All non-transcription automatic failures now share one visible recovery banner
+and one `retry-failed` endpoint. It retries exactly the failed framing, retake,
+planning and/or render stages while retaining the original master and every
+manual cut decision. Transcription retains its purpose-built full-screen retry
+state because no editable workspace exists until timed words are available. A
+backend regression proves recovery of a failed transcript and rejects a retry
+when no failure exists.
+
+Queued/running final renders now lock every mutating control and server-side
+deletion while leaving video review, seeking and playback speed available.
+That prevents a save or removal racing FFmpeg. Progress-only polling updates
+the percentage in place rather than rebuilding the video element every 1.8
+seconds, so Harvey can continue reviewing the source uninterrupted while the
+final file encodes.

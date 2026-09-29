@@ -1030,6 +1030,36 @@ async function renderProject(id) {
     renderProject(project.id);
   });
 
+  router.post('/:id/retry-failed', function (req, res) {
+    if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
+    const project = getProject(req.params.id);
+    if (!project) return res.status(404).json({ error: 'not_found' });
+    const retried = [];
+    if (project.transcriptionStatus === 'error') {
+      project.transcriptionStatus = 'pending'; project.transcriptionError = ''; retried.push('transcription');
+    }
+    if (project.classificationStatus === 'error' && typeof classifyVisualLayout === 'function') {
+      project.classificationStatus = 'pending'; project.classificationError = ''; retried.push('classification');
+    }
+    if (project.transcriptionStatus === 'ready' && project.retakeAnalysisStatus === 'error' && typeof analyzeRetakes === 'function') {
+      project.retakeAnalysisStatus = 'pending'; project.retakeAnalysisError = ''; retried.push('retakes');
+    }
+    if (project.transcriptionStatus === 'ready' && project.planningMatchStatus === 'error' && typeof matchPlanningPiece === 'function') {
+      project.planningMatchStatus = 'pending'; project.planningMatchError = ''; retried.push('planning');
+    }
+    if (project.renderStatus === 'error') {
+      project.renderStatus = ''; project.renderError = ''; project.automaticRenderStartedAt = ''; retried.push('render');
+    }
+    if (!retried.length) return res.status(409).json({ error: 'nothing_to_retry', message: 'No failed Editor step needs retrying.' });
+    saveProject(project);
+    res.status(202).json({ ok: true, retried: retried });
+    if (retried.includes('transcription')) transcribeProject(project.id);
+    if (retried.includes('classification')) classifyProject(project.id);
+    if (retried.includes('retakes')) analyzeProjectRetakes(project.id);
+    if (retried.includes('planning')) matchProjectPlanningPiece(project.id);
+    if (retried.includes('render')) setImmediate(function () { maybeAutoRender(project.id); });
+  });
+
   router.post('/:id/production', async function (req, res) {
     if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
     let project = getProject(req.params.id);
@@ -1076,6 +1106,7 @@ async function renderProject(id) {
 
   router.delete('/:id', function (req, res) {
     if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
+    if (renderJobs.has(req.params.id)) return res.status(409).json({ error: 'render_in_progress', message: 'Wait for the final edit to finish before deleting this recording.' });
     delStmt.run(STORE_NAME, req.params.id);
     fs.rm(projectDir(req.params.id), { recursive: true, force: true }, function () {});
     res.json({ ok: true });

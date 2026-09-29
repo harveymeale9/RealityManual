@@ -12,6 +12,7 @@
   var previewModes = {};
   var saveQueues = {};
   var saveStates = {};
+  var listFilter = localStorage.getItem('rmEditorListFilter') === 'sent' ? 'sent' : 'active';
   var reviewRate = Number(localStorage.getItem('rmEditorReviewRate')) || 1;
   if ([1, 1.25, 1.5, 2].indexOf(reviewRate) === -1) reviewRate = 1;
 
@@ -162,6 +163,16 @@
       step(planState, 'Planning card', planState === 'done' ? 'Workflow linked' : planState === 'error' ? 'Manual choice available' : planState === 'active' ? 'Matching filmed content' : 'Starts after transcription') + '</div>';
   }
 
+  function failedSteps(item) {
+    var labels = [];
+    if (item.transcriptionStatus === 'error') labels.push('transcript');
+    if (item.classificationStatus === 'error') labels.push('framing');
+    if (item.retakeAnalysisStatus === 'error') labels.push('retake review');
+    if (item.planningMatchStatus === 'error') labels.push('planning match');
+    if (item.renderStatus === 'error') labels.push('final render');
+    return labels;
+  }
+
   function shell() {
     root.innerHTML =
       '<section class="video-editor">' +
@@ -171,7 +182,7 @@
         '<div class="editor-upload-progress" id="editorUploadProgress" hidden><span id="editorUploadLabel">Uploading…</span><div><i id="editorUploadBar"></i></div></div>' +
         '<div class="editor-notice" id="editorNotice" hidden></div>' +
         '<div class="editor-session-summary" id="editorSessionSummary" hidden></div>' +
-        '<div class="editor-layout"><aside class="editor-projects"><div class="editor-aside-title">Recordings</div><div id="editorProjectList"></div></aside>' +
+        '<div class="editor-layout"><aside class="editor-projects"><div class="editor-aside-head"><div class="editor-aside-title">Recordings</div><div class="editor-list-filters"><button type="button" data-filter="active">Active</button><button type="button" data-filter="sent">Sent</button></div></div><div id="editorProjectList"></div></aside>' +
           '<main class="editor-workspace" id="editorWorkspace"><div class="editor-empty"><strong>No recording selected</strong><span>Upload a raw video to begin.</span></div></main></div>' +
         '<div class="editor-drop-overlay" id="editorDropOverlay"><strong>Drop filming session</strong><span>Every video will enter the automatic edit queue</span></div>' +
       '</section>';
@@ -189,6 +200,13 @@
       event.preventDefault(); dragDepth = 0; overlay.classList.remove('visible');
       if (event.dataTransfer && event.dataTransfer.files) uploadFiles(event.dataTransfer.files);
     });
+    root.querySelectorAll('.editor-list-filters button').forEach(function (button) {
+      button.addEventListener('click', function () {
+        listFilter = button.dataset.filter;
+        localStorage.setItem('rmEditorListFilter', listFilter);
+        renderList();
+      });
+    });
   }
 
   function renderNotice() {
@@ -202,13 +220,24 @@
     var list = root && root.querySelector('#editorProjectList');
     if (!list) return;
     renderSessionSummary();
+    var activeCount = projects.filter(function (item) { return !item.productionPieceId; }).length;
+    var sentCount = projects.length - activeCount;
+    var visibleProjects = projects.filter(function (item) { return listFilter === 'sent' ? !!item.productionPieceId : !item.productionPieceId; });
     var asideTitle = root.querySelector('.editor-aside-title');
-    if (asideTitle) asideTitle.textContent = 'Recordings · ' + projects.length;
+    if (asideTitle) asideTitle.textContent = 'Recordings · ' + (listFilter === 'sent' ? sentCount : activeCount);
+    root.querySelectorAll('.editor-list-filters button').forEach(function (button) {
+      button.classList.toggle('active', button.dataset.filter === listFilter);
+      button.textContent = (button.dataset.filter === 'sent' ? 'Sent ' + sentCount : 'Active ' + activeCount);
+    });
     if (!projects.length) {
       list.innerHTML = '<div class="editor-projects-empty">Your recordings will appear here.</div>';
       return;
     }
-    list.innerHTML = projects.map(function (item) {
+    if (!visibleProjects.length) {
+      list.innerHTML = '<div class="editor-projects-empty">' + (listFilter === 'sent' ? 'No recordings have been sent yet.' : 'All recordings in this session are in Production.') + '</div>';
+      return;
+    }
+    list.innerHTML = visibleProjects.map(function (item) {
       return '<button class="editor-project' + (project && item.id === project.id ? ' active' : '') + '" data-id="' + esc(item.id) + '">' +
         '<strong>' + esc(displayName(item)) + '</strong><span>' + esc(statusLabel(item)) + ' · ' + formatTime(item.duration) + '</span></button>';
     }).join('');
@@ -298,11 +327,23 @@
   function openProject(id, quiet) {
     clearTimeout(pollTimer);
     return api('/api/editor/' + encodeURIComponent(id)).then(function (item) {
+      var progressOnly = !!(quiet && project && project.id === item.id && project.renderStatus === 'running' && item.renderStatus === 'running');
       project = item;
       projects = projects.map(function (entry) { return entry.id === item.id ? item : entry; });
       selected.clear();
       if (!quiet) history = [];
       renderList();
+      if (progressOnly) {
+        var percent = Math.round(Number(item.renderProgress) || 0);
+        var label = root.querySelector('#editorRenderProgressLabel');
+        var bar = root.querySelector('#editorRenderProgressBar');
+        var button = root.querySelector('#editorRender');
+        if (label) label.textContent = 'Encoding final edit · ' + percent + '%';
+        if (bar) bar.style.width = Math.max(2, percent) + '%';
+        if (button) button.textContent = 'Building final edit… ' + percent + '%';
+        schedulePoll();
+        return;
+      }
       renderWorkspace();
       schedulePoll();
     }).catch(function (error) {
@@ -355,11 +396,15 @@
     var unresolvedRetakes = Number(project.unresolvedRetakeCount) || 0;
     var renderBlocked = automaticEditRunning || unresolvedRetakes > 0;
     var renderButtonText = automaticEditRunning ? 'Preparing automatic edit…' : unresolvedRetakes ? 'Review ' + unresolvedRetakes + ' possible retake' + (unresolvedRetakes === 1 ? '' : 's') : 'Build final edit';
+    var rendering = ['queued', 'running'].indexOf(project.renderStatus) !== -1;
+    var failures = failedSteps(project);
     var previewMode = project.renderStatus === 'ready' && previewModes[project.id] !== 'source' ? 'final' : 'source';
     var previewUrl = previewMode === 'final' ? '/api/editor/' + encodeURIComponent(project.id) + '/render?inline=1' : '/api/editor/' + encodeURIComponent(project.id) + '/source';
     workspace.innerHTML =
       '<div class="editor-topbar"><div><h2>' + esc(displayName(project)) + '</h2><span>' + (project.planningPieceTitle ? esc(project.name) + ' · ' : '') + formatTime(project.duration) + ' original · ' + formatTime(editedDuration(project)) + ' edited · ' + cutSeconds.toFixed(1) + 's removed</span></div>' +
         '<div class="editor-topbar-actions"><span class="editor-save-state ' + esc(saveStates[project.id] || '') + '" id="editorSaveState">' + ({ saving: 'Saving…', saved: 'Saved', error: 'Save failed' }[saveStates[project.id]] || '') + '</span><button class="editor-delete" id="editorDelete">Delete recording</button></div></div>' +
+      (rendering ? '<div class="editor-lock-notice"><strong>Final edit is encoding</strong><span>Review remains available. Editing unlocks as soon as the verified file is ready.</span></div>' : '') +
+      (failures.length ? '<div class="editor-error-recovery"><div><strong>' + failures.join(', ') + ' need' + (failures.length === 1 ? 's' : '') + ' attention</strong><span>Retry the failed automatic work without changing the source recording or your edit decisions.</span></div><button type="button" class="btn-secondary btn-tiny" id="editorRetryFailed">Retry failed steps</button></div>' : '') +
       '<section class="editor-classification"><div><div class="eyebrow">Automatic classification</div><strong>' + (layout === 'vertical' ? 'Single page · Vertical' : 'Open spread · Horizontal') + '</strong><span>' + classificationCopy + ' · ' + esc(typeLabel(project.detectedContentType)) + '</span>' +
         (project.classificationStatus !== 'ready' && project.classificationStatus !== 'running' && project.classificationStatus !== 'pending' ? '<button type="button" class="editor-analyze" id="editorAnalyze">Analyze book framing</button>' : '') + '</div>' +
         '<label>Frame<select id="editorLayout"><option value="auto"' + (project.layoutOverride === 'auto' || !project.layoutOverride ? ' selected' : '') + '>Auto detect</option><option value="vertical"' + (project.layoutOverride === 'vertical' ? ' selected' : '') + '>Vertical · single page</option><option value="horizontal"' + (project.layoutOverride === 'horizontal' ? ' selected' : '') + '>Horizontal · open spread</option></select></label>' +
@@ -382,7 +427,7 @@
       '<section class="editor-transcript-panel"><div class="editor-transcript-head"><div><div class="eyebrow">Transcript editor</div><h3>Select words or sentences to cut them from the video</h3></div>' +
         '<div class="editor-transcript-actions"><button class="btn-secondary btn-tiny" id="editorUndo" ' + (!history.length ? 'disabled' : '') + '>Undo</button>' +
         '<button class="btn-secondary btn-tiny" id="editorRestore" disabled>Restore selected</button><button class="btn-primary btn-tiny" id="editorCut" disabled>Cut selected</button></div></div>' +
-        '<div class="editor-transcript" id="editorTranscript">' + (project.words || []).map(function (word) {
+        '<div class="editor-transcript' + (rendering ? ' locked' : '') + '" id="editorTranscript">' + (project.words || []).map(function (word) {
           return '<span class="editor-word' + (removed.has(word.index) ? ' removed' : '') + '" data-index="' + word.index + '" data-start="' + word.start + '" data-end="' + word.end + '">' + esc(word.text) + '</span> ';
         }).join('') + '</div><p class="editor-selection-hint">Drag across text to select a sentence, or click individual words. Removed words remain visible so you can restore them.</p></section>' +
       '<div class="editor-export"><div><strong>Next: Content Production</strong><span>' +
@@ -390,7 +435,7 @@
           project.renderStatus === 'ready' ? 'Send the finished edit across without uploading it again.' :
           'Build the final edit first. Yellow captions will be baked in below center.') + '</span>' +
         '<div class="editor-readiness"><i class="ready">Transcript ready</i><i class="' + (['pending', 'running'].indexOf(project.classificationStatus) !== -1 ? 'working' : 'ready') + '">Framing ' + (['pending', 'running'].indexOf(project.classificationStatus) !== -1 ? 'checking' : 'ready') + '</i><i class="' + (['pending', 'running', 'pending_transcript'].indexOf(project.retakeAnalysisStatus) !== -1 ? 'working' : unresolvedRetakes ? 'review' : 'ready') + '">' + (['pending', 'running', 'pending_transcript'].indexOf(project.retakeAnalysisStatus) !== -1 ? 'Retakes checking' : unresolvedRetakes ? unresolvedRetakes + ' to review' : 'Retakes resolved') + '</i><i class="' + (['pending', 'running', 'pending_transcript'].indexOf(project.planningMatchStatus) !== -1 ? 'working' : 'ready') + '">Plan ' + (['pending', 'running', 'pending_transcript'].indexOf(project.planningMatchStatus) !== -1 ? 'matching' : project.planningPieceId ? 'linked' : 'not required') + '</i>' + (project.renderStatus === 'ready' ? '<i class="ready">Output verified</i>' : '') + '</div>' +
-        (['queued', 'running'].indexOf(project.renderStatus) !== -1 ? '<div class="editor-render-progress"><span>' + (project.renderStatus === 'queued' ? 'Waiting for the previous recording' : 'Encoding final edit · ' + Math.round(Number(project.renderProgress) || 0) + '%') + '</span><div><i style="width:' + (project.renderStatus === 'queued' ? 4 : Math.max(2, Number(project.renderProgress) || 0)) + '%"></i></div></div>' : '') +
+        (['queued', 'running'].indexOf(project.renderStatus) !== -1 ? '<div class="editor-render-progress"><span id="editorRenderProgressLabel">' + (project.renderStatus === 'queued' ? 'Waiting for the previous recording' : 'Encoding final edit · ' + Math.round(Number(project.renderProgress) || 0) + '%') + '</span><div><i id="editorRenderProgressBar" style="width:' + (project.renderStatus === 'queued' ? 4 : Math.max(2, Number(project.renderProgress) || 0)) + '%"></i></div></div>' : '') +
         (project.renderStatus === 'error' ? '<em>' + esc(project.renderError) + '</em>' : '') + '</div><div class="editor-export-actions">' +
         (project.productionPieceId ? '<button class="btn-primary" id="editorOpenProduction">Open Content Production</button>' :
           project.renderStatus === 'ready' ? '<button class="btn-primary" id="editorSendProduction">Approve &amp; Send to Production</button>' :
@@ -404,6 +449,7 @@
     var caption = root.querySelector('#editorCaption');
     var transcript = root.querySelector('#editorTranscript');
     var previewingFinal = video.dataset.previewMode === 'final';
+    var rendering = ['queued', 'running'].indexOf(project.renderStatus) !== -1;
     video.playbackRate = reviewRate;
     var lastClicked = null;
     var ignoreNextClick = false;
@@ -468,6 +514,7 @@
       video.playbackRate = reviewRate;
     };
     transcript.addEventListener('click', function (event) {
+      if (rendering) return;
       if (ignoreNextClick) { ignoreNextClick = false; return; }
       var word = event.target.closest('.editor-word');
       if (!word) return;
@@ -480,6 +527,7 @@
       paintSelection();
     });
     transcript.addEventListener('mouseup', function () {
+      if (rendering) return;
       var selection = window.getSelection();
       if (!selection || selection.isCollapsed || !transcript.contains(selection.anchorNode) || !transcript.contains(selection.focusNode)) return;
       function spanFor(node) { return (node.nodeType === 1 ? node : node.parentElement).closest('.editor-word'); }
@@ -576,6 +624,14 @@
           project.renderStatus = 'running'; renderWorkspace(); schedulePoll();
         }).catch(function (error) { alert(error.message); });
       };
+    var retryFailedButton = root.querySelector('#editorRetryFailed');
+    if (retryFailedButton) retryFailedButton.onclick = function () {
+      retryFailedButton.disabled = true;
+      retryFailedButton.textContent = 'Retrying…';
+      api('/api/editor/' + project.id + '/retry-failed', { method: 'POST' }).then(function () {
+        return openProject(project.id, true);
+      }).catch(function (error) { retryFailedButton.disabled = false; retryFailedButton.textContent = 'Retry failed steps'; alert(error.message); });
+    };
     var sendButton = root.querySelector('#editorSendProduction');
     if (sendButton) sendButton.onclick = function () {
       var approvedId = project.id;
@@ -587,11 +643,11 @@
         project.sentToProductionAt = new Date().toISOString();
         projects = projects.map(function (item) { return item.id === approvedId ? Object.assign({}, item, { productionPieceId: result.pieceId, sentToProductionAt: project.sentToProductionAt }) : item; });
         editorNotice = approvedName + ' was approved and sent to Content Production.';
-        renderList();
         var next = projects.filter(function (item) { return item.id !== approvedId && !item.productionPieceId; }).sort(function (a, b) {
           return String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
         })[0];
         if (next) return openProject(next.id).then(renderNotice);
+        renderList();
         renderWorkspace();
         renderNotice();
       }).catch(function (error) {
@@ -615,6 +671,12 @@
         if (projects[0]) openProject(projects[0].id);
       });
     };
+    if (rendering) {
+      ['#editorDelete', '#editorAnalyze', '#editorLayout', '#editorContentType', '#editorPlanningPiece', '#editorMatchPlan', '#editorCropX', '#editorAutoSilence', '#editorCaptions', '#editorPacing', '#editorAnalyzeRetakes', '#editorUndo', '#editorRestore', '#editorCut'].forEach(function (selector) {
+        var control = root.querySelector(selector); if (control) control.disabled = true;
+      });
+      root.querySelectorAll('.editor-gap-toggle,.editor-retake-apply,.editor-retake-dismiss').forEach(function (control) { control.disabled = true; });
+    }
   }
 
   function paintSelection() {
@@ -624,8 +686,9 @@
     var removed = new Set((project.removedWordIndices || []).map(Number));
     var hasKept = Array.from(selected).some(function (index) { return !removed.has(index); });
     var hasRemoved = Array.from(selected).some(function (index) { return removed.has(index); });
-    root.querySelector('#editorCut').disabled = !hasKept;
-    root.querySelector('#editorRestore').disabled = !hasRemoved;
+    var locked = project && ['queued', 'running'].indexOf(project.renderStatus) !== -1;
+    root.querySelector('#editorCut').disabled = locked || !hasKept;
+    root.querySelector('#editorRestore').disabled = locked || !hasRemoved;
   }
 
   function alterSelected(remove) {
