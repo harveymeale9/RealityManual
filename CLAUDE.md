@@ -12464,3 +12464,22 @@ green ready state rather than manufacturing human work; it simply makes the
 automation's meaningful decision visible before approval. Restoring or
 dismissing the candidate updates the count immediately. Unit coverage verifies
 unresolved, applied and dismissed states independently.
+
+---
+
+# 316. Correcting a Card Match Reconciles the Old Card's Stage (2026-09-29)
+
+Rendering a linked recording advances its planning card from Filmed to Edited.
+If the automatic match was wrong and Harvey selected a different card after the
+render, the old card previously remained falsely Edited while the replacement
+would also advance on the next render.
+
+Planning-link changes now carry the previous id into a server-side reconciliation
+hook. An old card is returned to Filmed only when it is currently Edited **and**
+its `editorProjectId` proves this exact recording advanced it; unrelated or
+manually moved cards are never touched. The newly selected card then advances
+through the normal verified-render hook. Unlinking receives the same safe
+cleanup, while Sent projects remain locked. Integration coverage starts with an
+automatic match, changes to a second valid card, verifies the prior/new ids
+delivered to reconciliation, and proves the subsequent render operates against
+the corrected link.

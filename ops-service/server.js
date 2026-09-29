@@ -592,6 +592,18 @@ function tryAdvanceEditorPlanningPiece(input, targetStage) {
     return 'The edited video reached Content Production, but its linked planning card could not be advanced automatically.';
   }
 }
+
+function reconcileEditorPlanningPiece(input) {
+  const project = input && input.project;
+  const previousId = input && input.previousPlanningPieceId;
+  if (!project || !previousId || previousId === project.planningPieceId) return;
+  const previous = getPieceRecord(previousId);
+  if (!previous || previous.stage !== 'edited' || previous.editorProjectId !== project.id) return;
+  previous.stage = 'filmed';
+  previous.updatedAt = new Date().toISOString();
+  delete previous.editorProjectId;
+  savePieceRecord(previous);
+}
 const videoEditor = videoEditorService.setup({
   db: db,
   dataDir: DATA_DIR,
@@ -601,6 +613,7 @@ const videoEditor = videoEditorService.setup({
   getPlanningCandidates: editorPlanningCandidates,
   matchPlanningPiece: matchEditorPlanningPiece,
   onRenderReady: function (input) { advanceEditorPlanningPiece(input, 'edited'); },
+  onPlanningPieceChanged: reconcileEditorPlanningPiece,
   handoffToProduction: sendEditorProjectToProduction
 });
 app.use('/api/editor', requireAuth, videoEditor.router);

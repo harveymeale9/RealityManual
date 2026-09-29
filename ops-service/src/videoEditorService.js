@@ -438,6 +438,7 @@ function setup(options) {
   const getPlanningCandidates = options.getPlanningCandidates;
   const matchPlanningPiece = options.matchPlanningPiece;
   const onRenderReady = options.onRenderReady;
+  const onPlanningPieceChanged = options.onPlanningPieceChanged;
   if (!db || !dataDir || typeof transcribeDetailed !== 'function') throw new Error('video editor setup is incomplete');
   const router = express.Router();
   const rootDir = path.join(dataDir, 'editor');
@@ -1092,10 +1093,17 @@ async function renderProject(id) {
       const candidate = getPlanningCandidates(project).find(function (item) { return item.id === requested; });
       const valid = !requested || !!candidate;
       if (valid) {
+        const previousPlanningPieceId = project.planningPieceId || '';
         project.planningPieceId = requested;
         project.planningPieceTitle = candidate && candidate.title || '';
         project.planningPieceSeq = candidate ? Number(candidate.seq) || 0 : 0;
         project.planningPieceManuallySelected = true;
+        if (requested !== previousPlanningPieceId && typeof onPlanningPieceChanged === 'function') {
+          try { onPlanningPieceChanged({ project: project, previousPlanningPieceId: previousPlanningPieceId }); }
+          catch (error) {
+            return res.status(422).json({ error: 'planning_link_update_failed', message: 'The prior planning-card stage could not be reconciled. Nothing was saved.' });
+          }
+        }
       }
     }
     invalidateRender(project);

@@ -336,6 +336,8 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   let retakeCalls = 0;
   let planningMatchCalls = 0;
   let renderReadyCalls = 0;
+  let expectedPlanningPieceId = 'plan-1';
+  const planningChanges = [];
   const service = editor.setup({
     db: db,
     dataDir: dir,
@@ -355,12 +357,15 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
       if (retakeCalls === 1) throw new Error('synthetic transient classifier failure');
       return { decisions: [{ removeStartIndex: 2, removeEndIndex: 3, replacementStartIndex: 0, replacementEndIndex: 1, confidence: 'high', reason: 'Synthetic replaced take.' }] };
     },
-    getPlanningCandidates: function () { return [{ id: 'plan-1', seq: 79, title: 'Synthetic outline', stage: 'filmed', notesSnippet: 'One two.' }]; },
+    getPlanningCandidates: function () { return [{ id: 'plan-1', seq: 79, title: 'Synthetic outline', stage: 'filmed', notesSnippet: 'One two.' }, { id: 'plan-2', seq: 80, title: 'Corrected outline', stage: 'filmed', notesSnippet: 'Three four.' }]; },
     matchPlanningPiece: async function () { planningMatchCalls++; return { pieceId: 'plan-1', confidence: 'high', reason: 'The transcript matches the filmed outline.' }; },
     onRenderReady: function (input) {
       renderReadyCalls++;
-      assert.equal(input.project.planningPieceId, 'plan-1');
+      assert.equal(input.project.planningPieceId, expectedPlanningPieceId);
       if (renderReadyCalls === 1) throw new Error('Synthetic first workflow failure.');
+    },
+    onPlanningPieceChanged: function (input) {
+      planningChanges.push({ previous: input.previousPlanningPieceId, next: input.project.planningPieceId });
     },
     handoffToProduction: async function (input) {
       handoffCalls++;
@@ -432,6 +437,13 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.renderQuality.status, 'passed');
   assert.deepEqual(project.renderQuality.checks, { playableFile: true, correctFrame: true, audioPresent: true, durationMatches: true });
   assert.deepEqual([project.renderQuality.width, project.renderQuality.height], [1080, 1920]);
+  expectedPlanningPieceId = 'plan-2';
+  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planningPieceId: 'plan-2' }) });
+  assert.equal(response.status, 200);
+  project = await response.json();
+  assert.equal(project.planningPieceId, 'plan-2');
+  assert.equal(project.planningPieceTitle, 'Corrected outline');
+  assert.deepEqual(planningChanges, [{ previous: 'plan-1', next: 'plan-2' }]);
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ removedWordIndices: [0, 1, 2, 3] }) });
   assert.equal(response.status, 200);
   project = await response.json();
