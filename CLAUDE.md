@@ -13931,3 +13931,17 @@ asserting that unrelated `One two` / `Three four` lines should be auto-cut. The
 recovery-render test also allows 12 seconds rather than 6 for its FFmpeg result
 when Node's full suite is running encoders concurrently; its functional
 assertions and endpoint timeout remain bounded.
+
+---
+
+# 389. Transcript Recovery Has a Durable Starting State (2026-09-29)
+
+The dedicated transcription-error screen previously fired one unguarded POST:
+the control stayed clickable during the request, a lost response looked like a
+dead button, and a failure became an unhandled browser rejection. The server's
+transcription job map already makes repeated starts join the same job, so the
+client now disables the button as `Starting transcription…`, retries one
+transient network/408/425/429/5xx response after 500ms, and enters the existing
+processing/polling view. A persistent failure restores `Retry transcription`
+and reports the reason. The browser workflow forces a first-attempt 503 and
+requires exactly one retry plus the processing state.

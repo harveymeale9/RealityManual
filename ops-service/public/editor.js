@@ -713,7 +713,17 @@
         processingStepsHtml(project) +
         (isError ? '<button class="btn-primary" id="editorRetry">Retry transcription</button>' : '') + '</div>';
       if (isError) workspace.querySelector('#editorRetry').onclick = function () {
-        api('/api/editor/' + project.id + '/transcribe', { method: 'POST' }).then(function () { project.transcriptionStatus = 'running'; renderWorkspace(); schedulePoll(); });
+        var retryButton = workspace.querySelector('#editorRetry');
+        retryButton.disabled = true;
+        retryButton.textContent = 'Starting transcription…';
+        retryTransientOnce(function () {
+          return api('/api/editor/' + project.id + '/transcribe', { method: 'POST' });
+        }, 500).then(function () {
+          project.transcriptionStatus = 'running'; renderWorkspace(); schedulePoll();
+        }).catch(function (error) {
+          if (retryButton.isConnected) { retryButton.disabled = false; retryButton.textContent = 'Retry transcription'; }
+          alert(error.message);
+        });
       };
       return;
     }
