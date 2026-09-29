@@ -303,7 +303,9 @@
       });
     }
     var backFab = document.getElementById('pmBackFab');
-    if (backFab) backFab.classList.toggle('show', active !== 'project-manager');
+    // Editor provides its own in-flow mobile return link so the global fixed
+    // bubble cannot cover crop/format/review controls while Harvey scrolls.
+    if (backFab) backFab.classList.toggle('show', active !== 'project-manager' && active !== 'editor');
     panelMain.classList.toggle('panel-main--ideation', active === 'content-ideation');
     panelMain.classList.toggle('panel-main--manuscript', active === 'manuscript');
     panelMain.classList.toggle('panel-main--mailbox', active === 'mailbox');

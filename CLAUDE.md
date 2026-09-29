@@ -13354,3 +13354,10 @@ also resolve the current ordered list at click time, preventing a newly added or
 approved recording from leaving stale navigation closures behind. The browser
 regression adds a second recording after the first workspace exists, then moves
 forward and back to prove the live counter and both targets update correctly.
+
+The mobile screenshot also showed the global fixed Project Manager return bubble
+covering Editor form controls as the page scrolled. Editor now suppresses that
+floating control only on its own tab and provides an in-flow **Project Manager**
+link beside **Upload raw videos** at phone width. The return path remains obvious
+without ever obscuring Frame, Format, crop, retake, or approval controls; every
+other Content Studio tab keeps the established floating button.
