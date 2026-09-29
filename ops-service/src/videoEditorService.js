@@ -10,6 +10,15 @@ const { execFile, spawn } = require('child_process');
 const STORE_NAME = 'editorProjects';
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
 const EDIT_RENDER_DEBOUNCE_MS = 2500;
+const EDITOR_DISK_RESERVE_BYTES = 2 * 1024 * 1024 * 1024;
+
+function requiredEditorCapacity(fileBytes, fileAlreadyStored) {
+  const bytes = Math.max(0, Number(fileBytes) || 0);
+  // Source, Editor render, Production copy, and the later mixed final can all
+  // coexist. Once Multer has stored the source, only the latter three remain
+  // additional allocations.
+  return EDITOR_DISK_RESERVE_BYTES + bytes * (fileAlreadyStored ? 3 : 4);
+}
 
 function run(command, args, label) {
   return new Promise(function (resolve, reject) {
@@ -572,6 +581,19 @@ function setup(options) {
   function sourcePath(id) { return path.join(projectDir(id), 'source'); }
   function renderPath(id) { return path.join(projectDir(id), 'render.mp4'); }
   function isId(id) { return /^[A-Za-z0-9_-]{1,128}$/.test(String(id || '')); }
+  function availableDiskBytes() {
+    try {
+      const stat = fs.statfsSync(dataDir);
+      return Number(stat.bavail) * Number(stat.bsize || stat.frsize || 4096);
+    } catch (error) { return Infinity; }
+  }
+  function ensureUploadCapacity(req, res, next) {
+    const contentLength = Number(req.headers['content-length']);
+    if (Number.isFinite(contentLength) && contentLength > 0 && availableDiskBytes() < requiredEditorCapacity(contentLength, false)) {
+      return res.status(507).json({ error: 'insufficient_storage', message: 'There is not enough free workspace to safely edit this recording. Clear old Editor files or VPS storage, then try again.' });
+    }
+    next();
+  }
 
   async function probe(filePath) {
     const result = await run('ffprobe', ['-v', 'error', '-show_entries',
@@ -1041,8 +1063,12 @@ async function renderProject(id) {
     res.json(projects);
   });
 
-  router.post('/', upload.single('video'), async function (req, res) {
+  router.post('/', ensureUploadCapacity, upload.single('video'), async function (req, res) {
     if (!req.file || !req.file.path) return res.status(400).json({ error: 'missing_video' });
+    if (availableDiskBytes() < requiredEditorCapacity(req.file.size, true)) {
+      fs.rm(req.file.path, { force: true }, function () {});
+      return res.status(507).json({ error: 'insufficient_storage', message: 'There is not enough free workspace to safely render and hand off this recording. Clear old Editor files or VPS storage, then try again.' });
+    }
     let sourceSha256;
     try { sourceSha256 = await hashFile(req.file.path); }
     catch (error) {
@@ -1433,6 +1459,7 @@ async function renderProject(id) {
 
 module.exports = {
   setup,
+  requiredEditorCapacity,
   normalizeWords,
   calculateAutoCuts,
   calculateManualCuts,

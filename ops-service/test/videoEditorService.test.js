@@ -61,6 +61,12 @@ test('stale temporary media is removed without touching active uploads', async f
   t.after(function () { fs.rmSync(dir, { recursive: true, force: true }); });
 });
 
+test('upload capacity reserves every downstream master plus operating space', function () {
+  const gib = 1024 * 1024 * 1024;
+  assert.equal(editor.requiredEditorCapacity(2 * gib, false), 10 * gib);
+  assert.equal(editor.requiredEditorCapacity(2 * gib, true), 8 * gib);
+});
+
 test('automatic cuts preserve natural handles around long pauses', function () {
   const cuts = editor.calculateAutoCuts(words, 9);
   assert.deepEqual(cuts.map(function (cut) { return cut.reason; }), ['leading_silence', 'long_pause', 'long_pause', 'trailing_silence']);

@@ -12907,3 +12907,23 @@ and its proxy location sets `proxy_request_buffering off` so camera data streams
 directly into Multer. `nginx -t` passed, the service reloaded cleanly, and the
 public authenticated boundary still returns the expected 401 without a session.
 This is live host configuration, not a repository-managed nginx file.
+
+---
+
+# 339. Editor Rejects Recordings That Cannot Safely Finish the Pipeline (2026-09-29)
+
+A raw recording does not consume only its upload size. During the full workflow,
+the source, verified Editor render, Content Production copy, and later
+music-mixed final may coexist. With 19 GB currently free this is comfortable for
+normal 49 MB-style takes, but blindly accepting a maximum 2 GiB file on a fuller
+disk could defer failure until hours later during rendering or approval.
+
+The upload route now measures the filesystem before reading a known-length
+multipart body and again after Multer stores it. It reserves 2 GiB for normal
+service operation plus space for every downstream master: four file sizes before
+ingest, three additional sizes after the source already exists. Unsafe uploads
+receive HTTP 507 and a direct cleanup message; if capacity cannot be measured,
+the existing disk monitor and normal behavior remain the fallback rather than
+blocking work. The post-upload rejection removes its temp file immediately.
+Focused coverage proves a 2 GiB recording requires 10 GiB before ingest and
+8 GiB still free after storage.
