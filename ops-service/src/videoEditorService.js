@@ -23,6 +23,14 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, Number(value) || 0));
 }
 
+function displayDimensions(width, height, rotation) {
+  width = Number(width) || 0;
+  height = Number(height) || 0;
+  rotation = Number(rotation) || 0;
+  const quarterTurn = Math.abs(Math.round(rotation / 90)) % 2 === 1;
+  return quarterTurn ? { width: height, height: width } : { width: width, height: height };
+}
+
 function normalizeWords(rawWords) {
   return (Array.isArray(rawWords) ? rawWords : []).filter(function (word) {
     return word && word.type === 'word' && Number.isFinite(Number(word.start)) &&
@@ -268,13 +276,20 @@ function setup(options) {
   function isId(id) { return /^[A-Za-z0-9_-]{1,128}$/.test(String(id || '')); }
 
   async function probe(filePath) {
-    const result = await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type,width,height', '-of', 'json', filePath], 'video probe');
+    const result = await run('ffprobe', ['-v', 'error', '-show_entries',
+      'format=duration:stream=codec_type,width,height:stream_tags=rotate:stream_side_data=rotation',
+      '-of', 'json', filePath], 'video probe');
     const parsed = JSON.parse(result.stdout || '{}');
     const video = (parsed.streams || []).find(function (stream) { return stream.codec_type === 'video'; }) || {};
+    const sideRotation = (video.side_data_list || []).map(function (entry) { return Number(entry.rotation); })
+      .find(function (value) { return Number.isFinite(value); });
+    const tagRotation = video.tags && Number(video.tags.rotate);
+    const dimensions = displayDimensions(video.width, video.height,
+      Number.isFinite(sideRotation) ? sideRotation : Number.isFinite(tagRotation) ? tagRotation : 0);
     return {
       duration: Number(parsed.format && parsed.format.duration) || 0,
-      width: Number(video.width) || 0,
-      height: Number(video.height) || 0,
+      width: dimensions.width,
+      height: dimensions.height,
       hasAudio: (parsed.streams || []).some(function (stream) { return stream.codec_type === 'audio'; })
     };
   }
@@ -376,6 +391,28 @@ function setup(options) {
         saveProject(project);
       }
     } catch (e) {}
+  });
+
+  // Older Editor uploads were probed without display-matrix rotation. Phone
+  // recordings can therefore be physically 1920x1080 but displayed 1080x1920,
+  // which selected landscape captions even though the browser visibly showed
+  // a portrait video. Re-probe persisted sources once on startup and invalidate
+  // only a stale render when the display dimensions change.
+  setImmediate(function () {
+    listStmt.all(STORE_NAME).forEach(function (row) {
+      let project;
+      try { project = JSON.parse(row.data); } catch (e) { return; }
+      if (!project || !isId(project.id) || !fs.existsSync(sourcePath(project.id))) return;
+      probe(sourcePath(project.id)).then(function (media) {
+        const current = getProject(project.id);
+        if (!current || (current.width === media.width && current.height === media.height)) return;
+        current.width = media.width;
+        current.height = media.height;
+        current.renderStatus = '';
+        current.renderError = '';
+        saveProject(current);
+      }).catch(function () {});
+    });
   });
 
   router.get('/', function (req, res) {
@@ -525,5 +562,6 @@ module.exports = {
   keepSegments,
   mapSourceTimeToEdited,
   captionGroups,
-  buildAss
+  buildAss,
+  displayDimensions
 };

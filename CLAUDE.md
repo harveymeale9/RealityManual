@@ -11327,3 +11327,31 @@ This behavior is implemented both in the browser preview and in the burned ASS
 track. Landscape longform remains the stable full phrase with an enlarged
 currently-spoken word from §257; orientation alone selects the two caption
 systems, matching the existing Content Production longform/short-form rule.
+
+---
+
+# 259. Portrait Caption Preview Is Bound to the Video, Not the Panel (2026-09-29)
+
+The first vertical one-word implementation exposed two connected orientation
+bugs on a real phone recording. The caption overlay was positioned against the
+full-width Editor preview panel rather than the narrow portrait `<video>`, so
+text could run far outside the visible frame. In addition, phone files may be
+stored as landscape pixels plus a 90-degree display matrix. Browsers honor that
+matrix and visibly show portrait video, but the original FFprobe query ignored
+it and selected the landscape full-phrase caption system. This produced several
+concatenated words across the panel even though the source looked vertical.
+
+The preview now wraps the video and overlay in the same shrink-wrapped frame,
+so caption bounds are always inset inside the actual displayed image. Runtime
+orientation prefers the browser's decoded `videoWidth`/`videoHeight`. Server
+probing now reads both display-matrix and legacy rotation metadata, swaps stored
+dimensions for quarter turns, and re-probes older Editor projects on startup;
+if their orientation changes, the stale caption render is invalidated for a
+clean rebuild. Final ASS rendering therefore uses the same display orientation
+as the browser.
+
+Vertical caption selection remains strictly singular: each time update replaces
+the caption node's entire text with the one current timed word, in the same
+centered position. Tests now cover rotation-normalized dimensions, exact
+one-word ASS events, live portrait word replacement, and assert that the
+caption rectangle stays within the video rectangle.

@@ -20,6 +20,12 @@ const words = [
   { index: 5, text: 'going.', start: 7.05, end: 7.6 }
 ];
 
+test('display dimensions honor phone rotation metadata', function () {
+  assert.deepEqual(editor.displayDimensions(1920, 1080, -90), { width: 1080, height: 1920 });
+  assert.deepEqual(editor.displayDimensions(1920, 1080, 0), { width: 1920, height: 1080 });
+  assert.deepEqual(editor.displayDimensions(1080, 1920, 180), { width: 1080, height: 1920 });
+});
+
 test('normalizes only timed spoken words and assigns stable indices', function () {
   assert.deepEqual(editor.normalizeWords([
     { type: 'word', text: ' Hello ', start: 0.2, end: 0.5 },

@@ -164,8 +164,8 @@
     workspace.innerHTML =
       '<div class="editor-topbar"><div><h2>' + esc(project.name) + '</h2><span>' + formatTime(project.duration) + ' original · ' + formatTime(editedDuration(project)) + ' edited · ' + cutSeconds.toFixed(1) + 's removed</span></div>' +
         '<button class="editor-delete" id="editorDelete">Delete recording</button></div>' +
-      '<div class="editor-preview"><video id="editorVideo" controls playsinline preload="metadata" src="/api/editor/' + encodeURIComponent(project.id) + '/source"></video>' +
-        '<div class="editor-caption" id="editorCaption"></div></div>' +
+      '<div class="editor-preview"><div class="editor-video-frame"><video id="editorVideo" controls playsinline preload="metadata" src="/api/editor/' + encodeURIComponent(project.id) + '/source"></video>' +
+        '<div class="editor-caption" id="editorCaption"></div></div></div>' +
       '<div class="editor-controls"><label class="editor-toggle"><input type="checkbox" id="editorAutoSilence" ' + (project.autoSilenceEnabled !== false ? 'checked' : '') + '><span></span>Automatically remove long pauses</label>' +
         '<span class="editor-help">Natural mode leaves a short breath between phrases.</span></div>' +
       '<section class="editor-transcript-panel"><div class="editor-transcript-head"><div><div class="eyebrow">Transcript editor</div><h3>Select words or sentences to cut them from the video</h3></div>' +
@@ -192,6 +192,11 @@
     var transcript = root.querySelector('#editorTranscript');
     var lastClicked = null;
     var ignoreNextClick = false;
+    function isLongformVideo() {
+      var width = video.videoWidth || Number(project.width);
+      var height = video.videoHeight || Number(project.height);
+      return width >= height;
+    }
     video.addEventListener('timeupdate', function () {
       var cut = (project.cuts || []).filter(function (item) { return video.currentTime >= item.start && video.currentTime < item.end; })[0];
       if (cut && cut.end < video.duration) { video.currentTime = cut.end + 0.01; return; }
@@ -199,7 +204,7 @@
         return video.currentTime >= item.sourceStart && video.currentTime <= item.sourceEnd + 0.18;
       })[0];
       caption.replaceChildren();
-      var isLongform = Number(project.width) >= Number(project.height);
+      var isLongform = isLongformVideo();
       caption.classList.toggle('longform', isLongform);
       caption.classList.toggle('shortform', !isLongform);
       if (group && Array.isArray(group.words) && isLongform) {
