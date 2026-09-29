@@ -13361,3 +13361,9 @@ floating control only on its own tab and provides an in-flow **Project Manager**
 link beside **Upload raw videos** at phone width. The return path remains obvious
 without ever obscuring Frame, Format, crop, retake, or approval controls; every
 other Content Studio tab keeps the established floating button.
+
+Previous/Next navigation can also select a recording beyond the visible portion
+of the phone carousel. After list repaint, Editor now horizontally centres the
+active card with `scrollLeft` only; it never calls vertical `scrollIntoView`, so
+background polling cannot yank Harvey away from the video or transcript he is
+reviewing.

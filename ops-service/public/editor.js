@@ -414,6 +414,13 @@
     list.querySelectorAll('.editor-project').forEach(function (button) {
       button.addEventListener('click', function () { openProject(button.dataset.id); });
     });
+    if (window.innerWidth <= 800) {
+      var activeCard = list.querySelector('.editor-project.active');
+      if (activeCard) requestAnimationFrame(function () {
+        if (!editorMounted() || !activeCard.isConnected) return;
+        list.scrollTo({ left: Math.max(0, activeCard.offsetLeft - (list.clientWidth - activeCard.offsetWidth) / 2), behavior: 'smooth' });
+      });
+    }
     paintProjectNavigation();
   }
 
