@@ -245,6 +245,30 @@ test('retake retries respect restored takes and replace only automation-owned cu
   assert.deepEqual(project.autoRetakeRemovedWordIndices, []);
 });
 
+test('editor queue summaries omit transcript-scale payload while retaining action state', function () {
+  const project = {
+    id: 'summary-1', name: 'Take 1', width: 1920, height: 1080,
+    words: [{ index: 0, text: 'Hello', start: 0, end: 0.4 }],
+    transcriptText: 'Hello', removedWordIndices: [], autoRetakeRemovedWordIndices: [],
+    dismissedRetakeIds: [], restoredAutoCutIds: [], retakeDecisions: [{
+      id: 'smart-retake-0-0-0', confidence: 'review', removeWordIndices: [0]
+    }],
+    cutDecisionHistory: [{ removedWordIndices: [] }], renderQuality: { status: 'passed' },
+    visualClassification: { layout: 'horizontal', confidence: 'high' },
+    planningMatch: { confidence: 'high' }, transcriptionStatus: 'ready', renderStatus: 'ready'
+  };
+  const summary = editor.projectListSummary(project);
+  assert.equal(summary.id, project.id);
+  assert.equal(summary.renderStatus, 'ready');
+  assert.equal(summary.unresolvedRetakeCount, 1);
+  assert.equal(summary.canUndoCut, true);
+  ['words', 'transcriptText', 'removedWordIndices', 'retakeDecisions', 'cutDecisionHistory',
+    'renderQuality', 'visualClassification', 'planningMatch'].forEach(function (key) {
+    assert.equal(Object.prototype.hasOwnProperty.call(summary, key), false, key + ' should not be in a queue summary');
+  });
+  assert.equal(project.words.length, 1, 'summarizing must not mutate the durable project');
+});
+
 test('adjacent removed transcript words become one manual cut', function () {
   const cuts = editor.calculateManualCuts(words, [2, 3], 9);
   assert.equal(cuts.length, 1);

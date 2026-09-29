@@ -587,6 +587,23 @@ function buildAss(project, groups) {
   return header.concat(events).join('\n') + '\n';
 }
 
+function projectListSummary(project) {
+  const summary = Object.assign({}, project);
+  summary.unresolvedRetakeCount = unresolvedRetakeCount(project);
+  summary.appliedRetakeCount = appliedRetakeCount(project);
+  summary.layoutReviewRequired = layoutReviewRequired(project);
+  summary.canUndoCut = Array.isArray(project.cutDecisionHistory) && project.cutDecisionHistory.length > 0;
+  // Queue cards and status polling need lifecycle metadata, not the complete
+  // transcript/edit graph. A filming batch can otherwise resend megabytes of
+  // repeated word timing and analysis every 1.8 seconds.
+  ['words', 'transcriptText', 'removedWordIndices', 'autoRetakeRemovedWordIndices',
+    'dismissedRetakeIds', 'restoredAutoCutIds', 'retakeDecisions', 'cutDecisionHistory',
+    'renderQuality', 'visualClassification', 'planningMatch'].forEach(function (key) {
+    delete summary[key];
+  });
+  return summary;
+}
+
 function setup(options) {
   options = options || {};
   const db = options.db;
@@ -1272,12 +1289,7 @@ async function renderProject(id) {
     const projects = listStmt.all(STORE_NAME).map(function (row) {
       try {
         const project = JSON.parse(row.data);
-        project.unresolvedRetakeCount = unresolvedRetakeCount(project);
-        project.appliedRetakeCount = appliedRetakeCount(project);
-        project.layoutReviewRequired = layoutReviewRequired(project);
-        project.canUndoCut = Array.isArray(project.cutDecisionHistory) && project.cutDecisionHistory.length > 0;
-        delete project.cutDecisionHistory;
-        return withQueuePositions(project);
+        return withQueuePositions(projectListSummary(project));
       } catch (e) { return null; }
     }).filter(Boolean);
     res.json(projects);
@@ -1771,5 +1783,6 @@ module.exports = {
   advanceEditRevision,
   normalizedVideoMimeType,
   browserPreviewNeeded,
-  reconcileAutomaticRetakeCuts
+  reconcileAutomaticRetakeCuts,
+  projectListSummary
 };

@@ -13400,3 +13400,22 @@ during the request, surfaces the same failure recovery, and advances to the
 highest-priority actionable recording after success. The bottom readiness gate
 remains in place for a transcript-first review. Browser coverage approves via
 the new fast path and proves both controls exist only in the eligible state.
+
+---
+
+# 362. Editor Queue Polling Is Transcript-Light (2026-09-29)
+
+The queue endpoint originally returned every complete project record. That
+included every timed word, full transcript, retake graph, correction history,
+visual-analysis result, and render-quality object for every recording. The
+client polls this endpoint every 1.8 seconds while a batch is processing, so a
+20-video session would repeatedly serialize, transfer, parse, and retain the
+entire editing corpus merely to repaint status labels.
+
+`GET /api/editor` now emits lightweight lifecycle summaries. They retain every
+field used for ordering, queue status, progress, action counts, filenames,
+dimensions, and navigation, while omitting transcript-scale edit data. Opening
+a recording still loads its full authoritative record from `GET /api/editor/:id`.
+This changes no editing semantics; it removes work proportional to the total
+spoken-word count from the hot polling path. Unit coverage proves summaries
+retain actionable state, exclude heavy fields, and never mutate durable data.
