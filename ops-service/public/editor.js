@@ -14,6 +14,7 @@
   var saveQueues = {};
   var saveStates = {};
   var restoreTranscriptFocus = false;
+  var MAX_RECORDING_BYTES = 2 * 1024 * 1024 * 1024;
   var listFilter = localStorage.getItem('rmEditorListFilter') === 'sent' ? 'sent' : 'active';
   var reviewRate = Number(localStorage.getItem('rmEditorReviewRate')) || 1;
   if ([1, 1.25, 1.5, 2].indexOf(reviewRate) === -1) reviewRate = 1;
@@ -314,7 +315,7 @@
       var body = {};
       try { body = JSON.parse(xhr.responseText || '{}'); } catch (e) {}
       if (xhr.status < 200 || xhr.status >= 300) {
-        var uploadError = new Error(body.message || 'The recording could not be uploaded.');
+        var uploadError = new Error(body.message || (xhr.status === 413 ? 'This recording is larger than the 2 GB upload limit. Split or trim the raw take, then try again.' : 'The recording could not be uploaded.'));
         uploadError.duplicate = body.error === 'duplicate_recording';
         return reject(uploadError);
       }
@@ -329,12 +330,15 @@
 
   function uploadFiles(fileList) {
     var duplicateCount = 0;
+    var oversized = [];
     var files = Array.prototype.slice.call(fileList || []).filter(function (file) {
-      return String(file.type || '').indexOf('video') === 0;
+      if (String(file.type || '').indexOf('video') !== 0) return false;
+      if (Number(file.size) > MAX_RECORDING_BYTES) { oversized.push(file.name); return false; }
+      return true;
     });
-    if (!files.length) return alert('Drop one or more video files.');
+    if (!files.length) return alert(oversized.length ? 'These recordings are larger than the 2 GB per-file limit:\n\n' + oversized.join('\n') + '\n\nSplit or trim each raw take, then try again.' : 'Drop one or more video files.');
     var created = [];
-    var failures = [];
+    var failures = oversized.map(function (name) { return name + ': larger than the 2 GB per-file limit'; });
     editorNotice = '';
     renderNotice();
     var sequence = Promise.resolve();

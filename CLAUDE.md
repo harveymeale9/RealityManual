@@ -12163,3 +12163,21 @@ The Sent UI disables every edit decision, clearly labels the approved version as
 locked, and explains that downstream work belongs in Content Production. Server
 tests prove post-approval patch/render rejection, while a browser regression
 proves the archive is visibly locked without disabling its cleanup action.
+
+---
+
+# 299. Oversized Raw Takes Fail Before Transfer Without Sacrificing the Batch (2026-09-29)
+
+Both nginx and the Editor upload parser intentionally cap one recording at 2
+GiB, but that operational limit was invisible. nginx's HTML 413 response could
+only become “The recording could not be uploaded,” after Harvey had already
+waited for a huge transfer, and one oversized file made the intake outcome
+needlessly unclear.
+
+The Editor now preflights each browser `File.size`, explains which take exceeds
+the 2 GB per-file limit and advises splitting or trimming it. Valid companions
+in the same filming batch continue uploading and the oversized names join the
+end-of-batch failure summary. A defense-in-depth 413 path handles Multer's
+`LIMIT_FILE_SIZE`, while the XHR also recognizes an nginx 413 even when its body
+is not JSON. A browser regression supplies a synthetic over-limit file, proves
+no upload request is made, then proceeds through the normal multi-file batch.

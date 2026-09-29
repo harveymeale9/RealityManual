@@ -3090,6 +3090,9 @@ app.post('/api/voice/tts', async function (req, res) {
 
 app.use(function (err, req, res, next) {
   console.error(err.message);
+  if (err && err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({ error: 'file_too_large', message: 'The selected file exceeds this upload’s size limit.' });
+  }
   res.status(500).json({ error: 'internal_error' });
 });
 
