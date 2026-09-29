@@ -1622,6 +1622,45 @@ app.post('/api/videos/:id/build-final', requireAuthOrReviewer, function (req, re
   runBuildFinalVideo(id).catch(function (e) { console.error('unhandled final-build error for ' + id + ':', e.message); });
 });
 
+// On-demand Content Production audition. This returns only the finished
+// mixed audio, not another copy of the (potentially very large) video: the
+// browser keeps the already-loaded raw video muted and plays this audio in
+// lockstep beside it. The exact same measured mixer and saved Settings used
+// by runBuildFinalVideo are used here, so choosing a track is an honest
+// preview of what Final Check will receive. Nothing is persisted; the scratch
+// MP3 is removed as soon as the response has been sent.
+app.post('/api/videos/:id/audio-preview', requireAuthOrReviewer, async function (req, res, next) {
+  const { id } = req.params;
+  const audioTrackId = req.body && req.body.audioTrackId;
+  if (!isValidId(id) || !isValidId(audioTrackId)) return res.status(400).json({ error: 'invalid_params' });
+  const piece = getPieceRecord(id);
+  if (!piece) return res.status(404).json({ error: 'piece_not_found' });
+  if (req.sessionRole === 'youtube-reviewer' && piece.createdBy !== 'youtube-reviewer') {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+  const videoPath = path.join(UPLOADS_DIR, 'videos', id);
+  const audioPath = path.join(UPLOADS_DIR, 'audioTracks', audioTrackId);
+  if (!fs.existsSync(videoPath)) return res.status(404).json({ error: 'video_not_found' });
+  if (!fs.existsSync(audioPath) || !stmts.getOne.get('audioTracks', audioTrackId)) {
+    return res.status(400).json({ error: 'invalid_audio_track' });
+  }
+
+  const outPath = path.join(DATA_DIR, 'tmp', 'video-audio-preview-' + crypto.randomUUID() + '.mp3');
+  const settingsRow = stmts.getOne.get('settings', 'settings');
+  const settings = settingsRow ? JSON.parse(settingsRow.data) : {};
+  try {
+    await videoAnalysis.buildAudioPreview(videoPath, audioPath, outPath, settings);
+    res.type('audio/mpeg');
+    res.sendFile(outPath, function (err) {
+      fs.rm(outPath, { force: true }, function () {});
+      if (err && !res.headersSent) next(err);
+    });
+  } catch (err) {
+    fs.rm(outPath, { force: true }, function () {});
+    res.status(422).json({ error: 'audio_preview_failed', message: err.message });
+  }
+});
+
 // --- Real YouTube publish: the actual videos.insert-equivalent, using the
 // token stored by the OAuth connect flow above (src/youtubeAuth.js). Same
 // "respond immediately, run the real work in the background, let the

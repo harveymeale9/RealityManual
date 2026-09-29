@@ -1768,6 +1768,10 @@ body.role-reviewer #pmBackFab {
 .upload-row-video-shell.is-loading .upload-row-video { visibility: hidden; }
 .upload-row-capture.is-selected { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 .upload-row-frame input[type="range"] { width: 100%; accent-color: var(--accent); }
+.upload-row-audio-picker { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: stretch; }
+.upload-row-audio-picker select { min-width: 0; width: 100%; }
+.upload-row-audio-preview { white-space: nowrap; }
+.upload-row-audio-preview-status { min-height: 1.2em; font-size: 0.68rem; line-height: 1.35; color: var(--ink-faint); }
 .upload-row-titles .title-input { margin-bottom: 4px; }
 .upload-row-action { display: flex; flex-direction: column; gap: 8px; align-self: stretch; justify-content: center; }
 

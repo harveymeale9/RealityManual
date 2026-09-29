@@ -3374,6 +3374,9 @@
 
   var dropzone, fileInput, uploadRows, postedGrid;
   var uploadRowObjectUrls = {}; // pieceId -> object URL, revoked/rebuilt on each render pass
+  // pieceId -> { trackId: mixed-audio object URL }. These are on-demand,
+  // temporary uploader auditions, never persistent media-library records.
+  var uploadRowPreviewUrls = {};
   // pieceId -> pending debounce timer for the platform-checkbox save
   // below — see that handler's own comment for why this exists.
   var platformSaveTimers = {};
@@ -3606,7 +3609,11 @@
     scrub.addEventListener('input', function () {
       try { videoEl.currentTime = parseFloat(scrub.value); } catch (e) {}
       frameMatchesThumbnail = false;
-      setCaptureButtonState(videoEl.readyState >= 2);
+      // Seeking can synchronously drop readyState below HAVE_CURRENT_DATA.
+      // Keep the button unavailable only until the requested frame arrives;
+      // `seeked` below is the missing half that used to leave it disabled
+      // forever even though the new frame was visibly on screen.
+      setCaptureButtonState(false);
     });
     // Used only after Harvey explicitly presses the button. Returns false
     // (does nothing saved) if the video has no real frame data to draw yet — this used
@@ -3675,6 +3682,9 @@
     }
     setFrameControlsReady(videoEl.readyState >= 2);
     videoEl.addEventListener('loadeddata', function () { setFrameControlsReady(true); });
+    videoEl.addEventListener('seeked', function () {
+      if (videoEl.videoWidth && videoEl.videoHeight) setFrameControlsReady(true);
+    });
     videoEl.addEventListener('error', function () {
       frameLoader.innerHTML = '<span>Video preview could not load.</span>';
       setCaptureButtonState(false);
@@ -3701,14 +3711,125 @@
       audioTracks.map(function (t) { return '<option value="' + t.id + '">' + escapeHtml(t.name) + '</option>'; }).join('');
     audioSelect.value = p.audioTrackId || '';
     audioSelect.disabled = !canEditRow;
+    var audioPicker = document.createElement('div');
+    audioPicker.className = 'upload-row-audio-picker';
+    var audioPreviewBtn = document.createElement('button');
+    audioPreviewBtn.type = 'button';
+    audioPreviewBtn.className = 'btn-secondary btn-tiny upload-row-audio-preview';
+    audioPreviewBtn.textContent = 'Preview';
+    var audioPreviewStatus = document.createElement('span');
+    audioPreviewStatus.className = 'upload-row-audio-preview-status';
+    var previewAudio = document.createElement('audio');
+    previewAudio.preload = 'auto';
+    previewAudio.hidden = true;
+    var previewUrls = {};
+    uploadRowPreviewUrls[p.id] = previewUrls;
+    var previewRequest = 0;
+    var previewPlaying = false;
+
+    function setPreviewButtonState() {
+      var selectable = !!audioSelect.value;
+      audioPreviewBtn.disabled = !selectable;
+      audioPreviewBtn.textContent = previewPlaying ? 'Stop' : 'Preview';
+    }
+
+    function stopAudioPreview(message) {
+      previewRequest++;
+      previewPlaying = false;
+      previewAudio.pause();
+      videoEl.pause();
+      videoEl.muted = true;
+      setPreviewButtonState();
+      if (message !== undefined) audioPreviewStatus.textContent = message;
+    }
+
+    function startSynchronizedPreview(trackId) {
+      previewAudio.src = previewUrls[trackId];
+      previewAudio.currentTime = 0;
+      videoEl.currentTime = 0;
+      videoEl.muted = true;
+      previewPlaying = true;
+      setPreviewButtonState();
+      audioPreviewStatus.textContent = 'Playing from the start.';
+      Promise.all([videoEl.play(), previewAudio.play()]).catch(function () {
+        stopAudioPreview('Preview is ready. Press Preview to play it.');
+      });
+    }
+
     audioSelect.addEventListener('change', function () {
+      stopAudioPreview('');
       p.audioTrackId = audioSelect.value;
       p.updatedAt = nowIso();
       syncTags(p);
       Store.put('pieces', p).then(refreshHead);
     });
+    audioPreviewBtn.addEventListener('click', function () {
+      if (previewPlaying) { stopAudioPreview(''); return; }
+      var trackId = audioSelect.value;
+      if (!trackId) return;
+      if (trackId === '__none__') {
+        previewRequest++;
+        videoEl.currentTime = 0;
+        videoEl.muted = false;
+        previewPlaying = true;
+        setPreviewButtonState();
+        audioPreviewStatus.textContent = 'Playing the original audio from the start.';
+        videoEl.play().catch(function () { stopAudioPreview('Press Preview to play.'); });
+        return;
+      }
+      if (previewUrls[trackId]) { startSynchronizedPreview(trackId); return; }
+
+      var thisRequest = ++previewRequest;
+      audioPreviewBtn.disabled = true;
+      audioPreviewBtn.textContent = 'Building…';
+      audioPreviewStatus.textContent = 'Mixing this soundtrack with the video…';
+      fetch('/api/videos/' + encodeURIComponent(p.id) + '/audio-preview', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audioTrackId: trackId })
+      }).then(function (response) {
+        if (!response.ok) throw new Error('Could not build the preview.');
+        return response.blob();
+      }).then(function (blob) {
+        if (!row.isConnected) return;
+        var url = URL.createObjectURL(blob);
+        // Cache every completed mix for instant repeat comparisons while
+        // this upload row remains open, even if a newer click superseded
+        // the autoplay request before this render finished.
+        if (previewUrls[trackId]) URL.revokeObjectURL(previewUrls[trackId]);
+        previewUrls[trackId] = url;
+        if (thisRequest !== previewRequest || audioSelect.value !== trackId) return;
+        startSynchronizedPreview(trackId);
+      }).catch(function (err) {
+        if (thisRequest !== previewRequest) return;
+        previewPlaying = false;
+        setPreviewButtonState();
+        audioPreviewStatus.textContent = (err && err.message) || 'Could not build the preview.';
+      });
+    });
+    previewAudio.addEventListener('ended', function () { stopAudioPreview('Preview finished.'); });
+    videoEl.addEventListener('ended', function () { if (previewPlaying) stopAudioPreview('Preview finished.'); });
+    videoEl.addEventListener('pause', function () {
+      if (previewPlaying && !videoEl.ended && !videoEl.seeking) previewAudio.pause();
+    });
+    videoEl.addEventListener('play', function () {
+      if (!previewPlaying || audioSelect.value === '__none__' || !previewAudio.src) return;
+      if (Math.abs((previewAudio.currentTime || 0) - (videoEl.currentTime || 0)) > 0.2) {
+        previewAudio.currentTime = videoEl.currentTime || 0;
+      }
+      previewAudio.play().catch(function () {});
+    });
+    videoEl.addEventListener('seeked', function () {
+      if (!previewPlaying || audioSelect.value === '__none__' || !previewAudio.src) return;
+      try { previewAudio.currentTime = videoEl.currentTime || 0; } catch (e) {}
+    });
+    setPreviewButtonState();
     audioSection.appendChild(audioLabel);
-    audioSection.appendChild(audioSelect);
+    audioPicker.appendChild(audioSelect);
+    audioPicker.appendChild(audioPreviewBtn);
+    audioSection.appendChild(audioPicker);
+    audioSection.appendChild(audioPreviewStatus);
+    audioSection.appendChild(previewAudio);
 
     // --- Title picker. Longform gets up to 3 (auto-populated from the
     // matched outline once analysis finishes, freely editable either
@@ -3843,6 +3964,10 @@
     row.classList.add('upload-row-removing');
     setTimeout(function () {
       if (uploadRowObjectUrls[id]) { URL.revokeObjectURL(uploadRowObjectUrls[id]); delete uploadRowObjectUrls[id]; }
+      if (uploadRowPreviewUrls[id]) {
+        Object.keys(uploadRowPreviewUrls[id]).forEach(function (trackId) { URL.revokeObjectURL(uploadRowPreviewUrls[id][trackId]); });
+        delete uploadRowPreviewUrls[id];
+      }
       if (row.parentNode) row.parentNode.removeChild(row);
       if (!uploadRows.querySelector('.upload-row')) {
         uploadRows.innerHTML = '<div class="empty-slot wide">Nothing uploaded yet — drop a video above.</div>';
@@ -3872,7 +3997,9 @@
 
     function swapIn(audioTracks) {
       var oldObjectUrls = uploadRowObjectUrls;
+      var oldPreviewUrls = uploadRowPreviewUrls;
       uploadRowObjectUrls = {};
+      uploadRowPreviewUrls = {};
       var frag = document.createDocumentFragment();
       if (!inProgress.length) {
         var empty = document.createElement('div');
@@ -3885,6 +4012,9 @@
       uploadRows.innerHTML = '';
       uploadRows.appendChild(frag);
       Object.keys(oldObjectUrls).forEach(function (id) { URL.revokeObjectURL(oldObjectUrls[id]); });
+      Object.keys(oldPreviewUrls).forEach(function (id) {
+        Object.keys(oldPreviewUrls[id]).forEach(function (trackId) { URL.revokeObjectURL(oldPreviewUrls[id][trackId]); });
+      });
     }
 
     if (!inProgress.length) {

@@ -11199,3 +11199,33 @@ its render completed, and that Next then changed the audio source and restarted
 it. Previous returned to the first source at zero, the third preview appeared
 after completion, and the 390-pixel layout retained zero horizontal overflow.
 The app cache key was bumped so the corrected client loads immediately.
+
+---
+
+# 255. Content Production Can Preview the Real Music Mix Against Its Video (2026-09-29)
+
+The backing-audio dropdown in Content Production previously saved a soundtrack
+choice without providing any way to hear it against the uploaded edit. Each
+in-production row now has a **Preview** button beside that dropdown. For a
+selected soundtrack, the backend renders a temporary MP3 with the exact saved
+mix settings and the same loudness-measurement, loudest-three-second music
+calibration, optional ducking, normalization, and peak limiting used by the
+final-video builder. The browser keeps the already-loaded video muted and plays
+the rendered mix from zero in lockstep with it, so the visible result is the
+real video with the proposed music dubbed in without downloading a second full
+copy of the video. **Stop** ends both streams. Selecting **No ambient music**
+previews the original video audio directly.
+
+Completed mixes are cached as browser blobs for instant repeat comparison
+while that upload row remains open, then revoked when the row is removed or the
+list is rebuilt. The server MP3 is scratch-only and deleted after its response;
+previewing does not modify the final video or move the card. Reviewer ownership
+is enforced on the new route in the same way as the actual final-build route.
+
+The disabled **Use this frame** bug was independent but surfaced in the same
+row. Moving the scrubber can temporarily drop a video below
+`HAVE_CURRENT_DATA`, so the input handler correctly disabled capture while the
+new frame loaded, but no `seeked` handler ever enabled it again. The visible
+frame could therefore be ready while the button still showed the browser's
+not-allowed cursor. A successful seek now restores the frame controls as soon
+as decoded dimensions are available.
