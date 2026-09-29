@@ -1330,9 +1330,20 @@
     if (!project || !project.canUndoCut) return;
     rememberPlaybackBeforeEdit(project.id, true);
     selected.clear();
+    var mutationId = window.crypto && typeof window.crypto.randomUUID === 'function'
+      ? window.crypto.randomUUID()
+      : 'undo-' + Date.now() + '-' + Math.random().toString(36).slice(2);
     queueProjectUpdate(project.id, function (id) {
-      var latest = project && project.id === id ? project : projects.find(function (item) { return item.id === id; });
-      return api('/api/editor/' + id + '/undo-cut', { method: 'POST', body: JSON.stringify({ expectedEditRevision: Number(latest && latest.editRevision) || 0 }) }).catch(function (error) {
+      var latest = project && project.id === id ? project : projectDetails[id] || projects.find(function (item) { return item.id === id; });
+      var payload = { expectedEditRevision: Number(latest && latest.editRevision) || 0, mutationId: mutationId };
+      function send(canRetryTransport) {
+        return api('/api/editor/' + id + '/undo-cut', { method: 'POST', body: JSON.stringify(payload) }).catch(function (error) {
+          var transient = !error.status || error.status === 408 || error.status === 425 || error.status === 429 || error.status >= 500;
+          if (!canRetryTransport || !transient) throw error;
+          return new Promise(function (resolve) { setTimeout(resolve, 350); }).then(function () { return send(false); });
+        });
+      }
+      return send(true).catch(function (error) {
         if (error.code !== 'edit_conflict') throw error;
         return api('/api/editor/' + id).then(function (fresh) {
           projects = projects.map(function (entry) { return entry.id === id ? fresh : entry; });

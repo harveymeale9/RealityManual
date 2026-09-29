@@ -13756,3 +13756,10 @@ detail builder also removes duplicated response-decoration logic. Integration
 coverage applies the same stale-revision mutation twice and proves one revision,
 while the headless browser forces a transient PATCH failure and proves the
 automatic retry reaches Saved.
+
+Undo now uses the same contract rather than being the one remaining destructive
+decision outside it. A replayed Undo returns the already-undone revision before
+checking history or render locks, and the client retries one transient failure
+with the same mutation id. The Undo fallback also uses the full-detail cache
+instead of a compact polling summary. Integration coverage replays one Undo and
+proves it consumes exactly one history entry and one revision.
