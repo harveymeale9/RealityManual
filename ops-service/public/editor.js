@@ -47,7 +47,7 @@
     if (item.classificationStatus === 'pending' || item.classificationStatus === 'running') return 'Analyzing frame';
     if (item.retakeAnalysisStatus === 'pending' || item.retakeAnalysisStatus === 'running') return 'Checking retakes';
     if (item.renderStatus === 'running') return 'Rendering';
-    if (item.renderStatus === 'ready') return 'Export ready';
+    if (item.renderStatus === 'ready') return 'Ready for approval';
     return 'Ready to edit';
   }
 
@@ -224,6 +224,11 @@
       : project.classificationStatus === 'running' || project.classificationStatus === 'pending'
         ? 'Analyzing three frames to distinguish a single page from an open spread…'
         : 'Using source dimensions until the book framing is analyzed.';
+    var automaticEditRunning = ['pending', 'running'].indexOf(project.classificationStatus) !== -1 ||
+      ['pending', 'running', 'pending_transcript'].indexOf(project.retakeAnalysisStatus) !== -1;
+    var unresolvedRetakes = Number(project.unresolvedRetakeCount) || 0;
+    var renderBlocked = automaticEditRunning || unresolvedRetakes > 0;
+    var renderButtonText = automaticEditRunning ? 'Preparing automatic edit…' : unresolvedRetakes ? 'Review ' + unresolvedRetakes + ' possible retake' + (unresolvedRetakes === 1 ? '' : 's') : 'Build final edit';
     workspace.innerHTML =
       '<div class="editor-topbar"><div><h2>' + esc(project.name) + '</h2><span>' + formatTime(project.duration) + ' original · ' + formatTime(editedDuration(project)) + ' edited · ' + cutSeconds.toFixed(1) + 's removed</span></div>' +
         '<button class="editor-delete" id="editorDelete">Delete recording</button></div>' +
@@ -250,11 +255,12 @@
       '<div class="editor-export"><div><strong>Next: Content Production</strong><span>' +
         (project.productionPieceId ? 'This edit is ready in Content Production for titles, thumbnail, and ambient music.' :
           project.renderStatus === 'ready' ? 'Send the finished edit across without uploading it again.' :
-          'Finish the edit first. Yellow captions will be baked in below center.') + '</span>' +
+          'Build the final edit first. Yellow captions will be baked in below center.') + '</span>' +
+        '<div class="editor-readiness"><i class="ready">Transcript ready</i><i class="' + (['pending', 'running'].indexOf(project.classificationStatus) !== -1 ? 'working' : 'ready') + '">Framing ' + (['pending', 'running'].indexOf(project.classificationStatus) !== -1 ? 'checking' : 'ready') + '</i><i class="' + (automaticEditRunning ? 'working' : unresolvedRetakes ? 'review' : 'ready') + '">' + (automaticEditRunning ? 'Retakes checking' : unresolvedRetakes ? unresolvedRetakes + ' to review' : 'Retakes resolved') + '</i></div>' +
         (project.renderStatus === 'error' ? '<em>' + esc(project.renderError) + '</em>' : '') + '</div><div class="editor-export-actions">' +
         (project.productionPieceId ? '<button class="btn-primary" id="editorOpenProduction">Open Content Production</button>' :
-          project.renderStatus === 'ready' ? '<button class="btn-primary" id="editorSendProduction">Send to Production</button>' :
-          '<button class="btn-primary" id="editorRender" ' + (project.renderStatus === 'running' ? 'disabled' : '') + '>' + (project.renderStatus === 'running' ? 'Finishing edit…' : 'Finish edit') + '</button>') +
+          project.renderStatus === 'ready' ? '<button class="btn-primary" id="editorSendProduction">Approve &amp; Send to Production</button>' :
+          '<button class="btn-primary" id="editorRender" ' + (project.renderStatus === 'running' || renderBlocked ? 'disabled' : '') + '>' + (project.renderStatus === 'running' ? 'Building final edit…' : renderButtonText) + '</button>') +
         '</div></div>';
     bindWorkspace();
   }

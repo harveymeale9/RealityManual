@@ -233,6 +233,14 @@ function retakeCandidatesForProject(project) {
     : retakeCandidates(project.words || []);
 }
 
+function unresolvedRetakeCount(project) {
+  const dismissed = new Set((project.dismissedRetakeIds || []).map(String));
+  const removed = new Set((project.removedWordIndices || []).map(Number));
+  return retakeCandidatesForProject(project).filter(function (candidate) {
+    return !dismissed.has(candidate.id) && !candidate.removeWordIndices.every(function (index) { return removed.has(index); });
+  }).length;
+}
+
 function keepSegments(duration, cuts) {
   const total = Math.max(0, Number(duration) || 0);
   const segments = [];
@@ -468,7 +476,16 @@ function setup(options) {
       project.retakeAnalysisError = '';
       saveProject(project);
       try {
-        const raw = await analyzeRetakes({ words: project.words || [], transcriptText: project.transcriptText || '' });
+        let raw;
+        try {
+          raw = await analyzeRetakes({ words: project.words || [], transcriptText: project.transcriptText || '' });
+        } catch (firstError) {
+          // One-shot provider processes can fail transiently while the shared
+          // CLI credential/session is being refreshed. Retry once inside the
+          // same durable job before asking Harvey to intervene.
+          await new Promise(function (resolve) { setTimeout(resolve, 750); });
+          raw = await analyzeRetakes({ words: project.words || [], transcriptText: project.transcriptText || '' });
+        }
         project = getProject(id);
         if (!project) return;
         const decisions = normalizeRetakeDecisions(raw && raw.decisions, project.words || []);
@@ -719,6 +736,7 @@ async function renderProject(id) {
     project.captionGroups = captionGroups(project, project.cuts);
     project.gapDecisions = gapDecisions(project);
     project.retakeCandidates = retakeCandidatesForProject(project);
+    project.unresolvedRetakeCount = unresolvedRetakeCount(project);
     project.effectiveLayout = effectiveLayout(project);
     project.detectedContentType = contentTypeForProject(project, project.cuts);
     res.json(project);
@@ -756,6 +774,7 @@ async function renderProject(id) {
     project.captionGroups = captionGroups(project, project.cuts);
     project.gapDecisions = gapDecisions(project);
     project.retakeCandidates = retakeCandidatesForProject(project);
+    project.unresolvedRetakeCount = unresolvedRetakeCount(project);
     project.effectiveLayout = effectiveLayout(project);
     project.detectedContentType = contentTypeForProject(project, project.cuts);
     res.json(project);
@@ -793,6 +812,12 @@ async function renderProject(id) {
     const project = getProject(req.params.id);
     if (!project) return res.status(404).json({ error: 'not_found' });
     if (project.transcriptionStatus !== 'ready') return res.status(409).json({ error: 'transcript_not_ready' });
+    if (['pending', 'running'].includes(project.classificationStatus) || ['pending', 'running', 'pending_transcript'].includes(project.retakeAnalysisStatus)) {
+      return res.status(409).json({ error: 'automatic_edit_running', message: 'Wait for the automatic framing and retake checks to finish.' });
+    }
+    if (unresolvedRetakeCount(project) > 0) {
+      return res.status(409).json({ error: 'retake_review_required', message: 'Review each possible retake before building the final edit.' });
+    }
     res.status(202).json({ ok: true, status: 'running' });
     renderProject(project.id);
   });
@@ -865,6 +890,7 @@ module.exports = {
   effectiveLayout,
   contentTypeForProject,
   gapDecisions,
-  retakeCandidates
-  ,normalizeRetakeDecisions
+  retakeCandidates,
+  normalizeRetakeDecisions,
+  unresolvedRetakeCount
 };

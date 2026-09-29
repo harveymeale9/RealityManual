@@ -11442,3 +11442,30 @@ detector remains as a no-cost UI fallback if no semantic decisions exist. Tests
 cover bounded semantic ranges, automatic application of high-confidence cuts,
 the async analysis lifecycle, and restoration alongside the existing complete
 render/handoff path.
+
+The first production semantic call exposed a transient empty failure from the
+shared structured Claude process. It changed no words and succeeded unchanged
+on immediate retry. Retake jobs therefore retry one such provider failure once
+internally after 750ms before surfacing an error; the integration test forces
+that first-call failure and proves the second result is applied exactly once.
+
+---
+
+# 262. Editor Approval Has a Real Readiness Gate (2026-09-29)
+
+The bottom of the Editor is now an approval boundary rather than an always-live
+render button. A compact readiness row shows Transcript, Framing and Retakes.
+While automatic framing or semantic retake review is running, the action reads
+**Preparing automatic edit…** and cannot be pressed. If the semantic pass finds
+uncertain repetition, it instead names the number of decisions still requiring
+review. Each must be resolved with **Use latest take** or **Keep both** before
+the final build becomes available.
+
+This is enforced by the server as well as the disabled button: direct render
+requests receive a conflict while automatic jobs are active or a candidate is
+unresolved. High-confidence retakes satisfy the gate because they were already
+removed automatically; restoring one also dismisses that decision deliberately.
+After rendering, the action is now **Approve & Send to Production**, which more
+accurately names Harvey's final review step. Project-list status says **Ready for
+approval** rather than the obsolete “Export ready.” Tests cover unresolved,
+accepted, and explicitly dismissed retake states plus the full browser flow.

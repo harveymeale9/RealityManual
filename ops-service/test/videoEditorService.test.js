@@ -87,6 +87,16 @@ test('semantic retake ranges become bounded exact word decisions', function () {
   assert.equal(decisions[0].source, 'semantic');
 });
 
+test('unresolved retakes block approval until cut or explicitly dismissed', function () {
+  const project = { words: words, removedWordIndices: [], dismissedRetakeIds: [], retakeDecisions: [{ id: 'smart-retake-0', removeWordIndices: [2, 3], confidence: 'review' }] };
+  assert.equal(editor.unresolvedRetakeCount(project), 1);
+  project.removedWordIndices = [2, 3];
+  assert.equal(editor.unresolvedRetakeCount(project), 0);
+  project.removedWordIndices = [];
+  project.dismissedRetakeIds = ['smart-retake-0'];
+  assert.equal(editor.unresolvedRetakeCount(project), 0);
+});
+
 test('adjacent removed transcript words become one manual cut', function () {
   const cuts = editor.calculateManualCuts(words, [2, 3], 9);
   assert.equal(cuts.length, 1);
@@ -168,7 +178,8 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
     },
     analyzeRetakes: async function () {
       retakeCalls++;
-      return { decisions: [{ removeStartIndex: 0, removeEndIndex: 1, replacementStartIndex: 2, replacementEndIndex: 3, confidence: 'high', reason: 'Synthetic replaced take.' }] };
+      if (retakeCalls === 1) throw new Error('synthetic transient classifier failure');
+      return { decisions: [{ removeStartIndex: 2, removeEndIndex: 3, replacementStartIndex: 0, replacementEndIndex: 1, confidence: 'high', reason: 'Synthetic replaced take.' }] };
     },
     handoffToProduction: async function (input) {
       handoffCalls++;
@@ -208,8 +219,8 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
     project = await (await fetch(base + '/api/editor/' + project.id)).json();
   }
   assert.equal(project.retakeAnalysisStatus, 'ready', project.retakeAnalysisError);
-  assert.equal(retakeCalls, 1);
-  assert.deepEqual(project.removedWordIndices, [0, 1]);
+  assert.equal(retakeCalls, 2);
+  assert.deepEqual(project.removedWordIndices, [2, 3]);
   assert.ok(project.cuts.some(function (cut) { return cut.reason === 'long_pause'; }));
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ removedWordIndices: [2, 3] }) });
   project = await response.json();
