@@ -72,7 +72,11 @@ if [ -n "$(git status --porcelain)" ]; then
   echo "local changes present in $REPO_DIR — auto-stashing before pull"
   git stash push -u -m "deploy.sh auto-stash $(date -u +%FT%TZ)" || fail "could not stash local changes in $REPO_DIR"
 fi
-git pull || fail "git pull failed in $REPO_DIR"
+# CI also commits its deployment log back to main. Make the intended history
+# rule explicit: deploy checkouts only fast-forward to origin/main and never
+# synthesize a merge commit or depend on host-global pull.rebase settings.
+git fetch origin main || fail "git fetch failed in $REPO_DIR"
+git merge --ff-only origin/main || fail "git fast-forward failed in $REPO_DIR"
 NEW_HEAD="$(git rev-parse HEAD)"
 
 # The headless voice-app runner's own working tree (bind-mounted into the
@@ -82,7 +86,8 @@ NEW_HEAD="$(git rev-parse HEAD)"
 # server.js now serves that directory straight out of $RUNTIME_REPO_DIR
 # rather than a copy baked into the Docker image (see the section below on
 # skipping the rebuild).
-git -C "$RUNTIME_REPO_DIR" pull || fail "git pull failed in $RUNTIME_REPO_DIR"
+git -C "$RUNTIME_REPO_DIR" fetch origin main || fail "git fetch failed in $RUNTIME_REPO_DIR"
+git -C "$RUNTIME_REPO_DIR" merge --ff-only origin/main || fail "git fast-forward failed in $RUNTIME_REPO_DIR"
 chown -R 1000:1000 "$RUNTIME_REPO_DIR"
 
 # Rebuilding/restarting the container kills whatever Project Manager

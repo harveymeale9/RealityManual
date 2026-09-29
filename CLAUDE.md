@@ -11516,3 +11516,21 @@ session”) rather than the earlier single-file/export mental model. A dedicated
 Chromium regression submits two in-memory MP4 files through the real multi-file
 input, verifies two sequential POSTs, two project cards and the completed queue
 status; the existing desktop/mobile Editor regression still passes unchanged.
+
+---
+
+# 265. Deploy Pulls Are Explicit Fast-Forwards (2026-09-29)
+
+The filming-session public-only release initially failed to reach the live
+checkout even though that tree was clean and only behind remote. During a CI
+log-commit race, plain `git pull` stopped with Git's “need to specify how to
+reconcile divergent branches” configuration prompt. No Editor data or code was
+lost; manually fetching and fast-forwarding exposed the v6 assets immediately.
+
+`ops-service/deploy.sh` now fetches `origin main` and performs an explicit
+`merge --ff-only origin/main` in both `/root/realitymanual-repo` and the
+bind-mounted `/srv/realitymanual-repo`. Deploy checkouts are never supposed to
+create merge commits, so this states the real invariant, removes reliance on
+host-global `pull.rebase` configuration, and still fails safely if either clone
+contains an actual unpublished commit. Existing dirty-tree auto-stashing remains
+unchanged.
