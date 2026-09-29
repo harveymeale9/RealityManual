@@ -374,6 +374,9 @@ function setup(options) {
   const handoffToProduction = options.handoffToProduction;
   const classifyVisualLayout = options.classifyVisualLayout;
   const analyzeRetakes = options.analyzeRetakes;
+  const getPlanningCandidates = options.getPlanningCandidates;
+  const matchPlanningPiece = options.matchPlanningPiece;
+  const onRenderReady = options.onRenderReady;
   if (!db || !dataDir || typeof transcribeDetailed !== 'function') throw new Error('video editor setup is incomplete');
   const router = express.Router();
   const rootDir = path.join(dataDir, 'editor');
@@ -389,6 +392,7 @@ function setup(options) {
   const renderJobs = new Map();
   const classificationJobs = new Map();
   const retakeJobs = new Map();
+  const planningMatchJobs = new Map();
 
   function getProject(id) {
     const row = getStmt.get(STORE_NAME, id);
@@ -449,8 +453,11 @@ function setup(options) {
         project.retakeAnalysisStatus = project.words.length && typeof analyzeRetakes === 'function' ? 'pending' : 'unavailable';
         project.retakeAnalysisError = '';
         project.retakeDecisions = [];
+        project.planningMatchStatus = project.words.length && typeof matchPlanningPiece === 'function' ? 'pending' : 'unavailable';
+        project.planningMatchError = '';
         saveProject(project);
         if (project.words.length && typeof analyzeRetakes === 'function') setImmediate(function () { analyzeProjectRetakes(id); });
+        if (project.words.length && typeof matchPlanningPiece === 'function') setImmediate(function () { matchProjectPlanningPiece(id); });
       } catch (err) {
         project = getProject(id);
         if (project) {
@@ -510,6 +517,51 @@ function setup(options) {
       }
     })().finally(function () { retakeJobs.delete(id); });
     retakeJobs.set(id, job);
+    return job;
+  }
+
+  async function matchProjectPlanningPiece(id) {
+    if (planningMatchJobs.has(id)) return planningMatchJobs.get(id);
+    if (typeof matchPlanningPiece !== 'function' || typeof getPlanningCandidates !== 'function') return;
+    const job = (async function () {
+      let project = getProject(id);
+      if (!project || project.transcriptionStatus !== 'ready') return;
+      project.planningMatchStatus = 'running';
+      project.planningMatchError = '';
+      saveProject(project);
+      try {
+        const candidates = await Promise.resolve(getPlanningCandidates(project));
+        let result = { pieceId: '', confidence: 'none', reason: candidates.length ? 'No confident planning-card match.' : 'No Filmed cards are waiting.' };
+        if (candidates.length) {
+          try {
+            result = await matchPlanningPiece({ project: project, candidates: candidates });
+          } catch (firstError) {
+            await new Promise(function (resolve) { setTimeout(resolve, 750); });
+            result = await matchPlanningPiece({ project: project, candidates: candidates });
+          }
+        }
+        project = getProject(id);
+        if (!project) return;
+        const matched = candidates.find(function (candidate) { return candidate.id === (result && result.pieceId); });
+        if (matched && result.confidence === 'high' && !project.planningPieceManuallySelected) project.planningPieceId = matched.id;
+        project.planningMatch = {
+          suggestedPieceId: matched ? matched.id : '',
+          confidence: result && result.confidence || 'none',
+          reason: String(result && result.reason || '').slice(0, 300)
+        };
+        project.planningMatchStatus = 'ready';
+        project.planningMatchError = '';
+        saveProject(project);
+      } catch (err) {
+        project = getProject(id);
+        if (project) {
+          project.planningMatchStatus = 'error';
+          project.planningMatchError = String(err.message || err).slice(0, 500);
+          saveProject(project);
+        }
+      }
+    })().finally(function () { planningMatchJobs.delete(id); });
+    planningMatchJobs.set(id, job);
     return job;
   }
 
@@ -611,6 +663,16 @@ async function renderProject(id) {
       project.editedDuration = segments.reduce(function (sum, segment) { return sum + segment.end - segment.start; }, 0);
       project.lastRenderAt = new Date().toISOString();
       saveProject(project);
+      if (typeof onRenderReady === 'function') {
+        try { await Promise.resolve(onRenderReady({ project: project, renderPath: renderPath(id) })); }
+        catch (workflowError) {
+          project = getProject(id);
+          if (project) {
+            project.workflowWarning = String(workflowError.message || workflowError).slice(0, 500);
+            saveProject(project);
+          }
+        }
+      }
     })().catch(function (err) {
       const project = getProject(id);
       if (project) {
@@ -647,6 +709,11 @@ async function renderProject(id) {
       if (project.retakeAnalysisStatus === 'running') {
         project.retakeAnalysisStatus = 'error';
         project.retakeAnalysisError = 'Retake analysis was interrupted by a service restart. Press Analyze retakes.';
+        saveProject(project);
+      }
+      if (project.planningMatchStatus === 'running') {
+        project.planningMatchStatus = 'error';
+        project.planningMatchError = 'Planning-card matching was interrupted by a service restart. Press Match again.';
         saveProject(project);
       }
     } catch (e) {}
@@ -715,6 +782,11 @@ async function renderProject(id) {
         retakeAnalysisStatus: typeof analyzeRetakes === 'function' ? 'pending_transcript' : 'unavailable',
         retakeAnalysisError: '',
         retakeDecisions: [],
+        planningPieceId: '',
+        planningPieceManuallySelected: false,
+        planningMatchStatus: typeof matchPlanningPiece === 'function' ? 'pending_transcript' : 'unavailable',
+        planningMatchError: '',
+        planningMatch: null,
         transcriptionStatus: 'pending',
         transcriptionError: '',
         renderStatus: '',
@@ -742,6 +814,7 @@ async function renderProject(id) {
     project.unresolvedRetakeCount = unresolvedRetakeCount(project);
     project.effectiveLayout = effectiveLayout(project);
     project.detectedContentType = contentTypeForProject(project, project.cuts);
+    project.planningCandidates = typeof getPlanningCandidates === 'function' ? getPlanningCandidates(project) : [];
     res.json(project);
   });
 
@@ -761,7 +834,7 @@ async function renderProject(id) {
     }
     if (Array.isArray(req.body && req.body.dismissedRetakeIds)) {
       project.dismissedRetakeIds = Array.from(new Set(req.body.dismissedRetakeIds.map(String).filter(function (id) {
-        return /^retake-\d+$/.test(id);
+        return /^(?:retake-\d+|smart-retake-\d+-\d+-\d+)$/.test(id);
       })));
     }
     if (typeof (req.body && req.body.captionsEnabled) === 'boolean') project.captionsEnabled = req.body.captionsEnabled;
@@ -770,6 +843,14 @@ async function renderProject(id) {
     if (Number.isFinite(Number(req.body && req.body.cropCenterX))) project.cropCenterX = clamp(req.body.cropCenterX, 0, 1);
     if (Number.isFinite(Number(req.body && req.body.silenceThresholdSeconds))) project.silenceThresholdSeconds = clamp(req.body.silenceThresholdSeconds, 0.65, 5);
     if (Number.isFinite(Number(req.body && req.body.retainedPauseSeconds))) project.retainedPauseSeconds = clamp(req.body.retainedPauseSeconds, 0.18, 1.2);
+    if (typeof (req.body && req.body.planningPieceId) === 'string' && typeof getPlanningCandidates === 'function') {
+      const requested = req.body.planningPieceId;
+      const valid = !requested || getPlanningCandidates(project).some(function (candidate) { return candidate.id === requested; });
+      if (valid) {
+        project.planningPieceId = requested;
+        project.planningPieceManuallySelected = true;
+      }
+    }
     project.renderStatus = '';
     project.renderError = '';
     saveProject(project);
@@ -780,6 +861,7 @@ async function renderProject(id) {
     project.unresolvedRetakeCount = unresolvedRetakeCount(project);
     project.effectiveLayout = effectiveLayout(project);
     project.detectedContentType = contentTypeForProject(project, project.cuts);
+    project.planningCandidates = typeof getPlanningCandidates === 'function' ? getPlanningCandidates(project) : [];
     res.json(project);
   });
 
@@ -810,13 +892,23 @@ async function renderProject(id) {
     analyzeProjectRetakes(project.id);
   });
 
+  router.post('/:id/match-planning-piece', function (req, res) {
+    if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
+    const project = getProject(req.params.id);
+    if (!project) return res.status(404).json({ error: 'not_found' });
+    if (project.transcriptionStatus !== 'ready') return res.status(409).json({ error: 'transcript_not_ready' });
+    if (typeof matchPlanningPiece !== 'function') return res.status(501).json({ error: 'planning_match_unavailable' });
+    res.status(202).json({ ok: true, status: 'running' });
+    matchProjectPlanningPiece(project.id);
+  });
+
   router.post('/:id/render', function (req, res) {
     if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
     const project = getProject(req.params.id);
     if (!project) return res.status(404).json({ error: 'not_found' });
     if (project.transcriptionStatus !== 'ready') return res.status(409).json({ error: 'transcript_not_ready' });
-    if (['pending', 'running'].includes(project.classificationStatus) || ['pending', 'running', 'pending_transcript'].includes(project.retakeAnalysisStatus)) {
-      return res.status(409).json({ error: 'automatic_edit_running', message: 'Wait for the automatic framing and retake checks to finish.' });
+    if (['pending', 'running'].includes(project.classificationStatus) || ['pending', 'running', 'pending_transcript'].includes(project.retakeAnalysisStatus) || ['pending', 'running', 'pending_transcript'].includes(project.planningMatchStatus)) {
+      return res.status(409).json({ error: 'automatic_edit_running', message: 'Wait for the automatic framing, retake, and planning checks to finish.' });
     }
     if (unresolvedRetakeCount(project) > 0) {
       return res.status(409).json({ error: 'retake_review_required', message: 'Review each possible retake before building the final edit.' });
@@ -875,7 +967,7 @@ async function renderProject(id) {
     res.json({ ok: true });
   });
 
-  return { router: router, transcribeProject: transcribeProject, classifyProject: classifyProject, analyzeProjectRetakes: analyzeProjectRetakes, renderProject: renderProject };
+  return { router: router, transcribeProject: transcribeProject, classifyProject: classifyProject, analyzeProjectRetakes: analyzeProjectRetakes, matchProjectPlanningPiece: matchProjectPlanningPiece, renderProject: renderProject };
 }
 
 module.exports = {

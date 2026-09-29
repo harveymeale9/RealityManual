@@ -162,6 +162,8 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   let handoffCalls = 0;
   let classificationCalls = 0;
   let retakeCalls = 0;
+  let planningMatchCalls = 0;
+  let renderReadyCalls = 0;
   const service = editor.setup({
     db: db,
     dataDir: dir,
@@ -181,6 +183,9 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
       if (retakeCalls === 1) throw new Error('synthetic transient classifier failure');
       return { decisions: [{ removeStartIndex: 2, removeEndIndex: 3, replacementStartIndex: 0, replacementEndIndex: 1, confidence: 'high', reason: 'Synthetic replaced take.' }] };
     },
+    getPlanningCandidates: function () { return [{ id: 'plan-1', seq: 79, title: 'Synthetic outline', stage: 'filmed', notesSnippet: 'One two.' }]; },
+    matchPlanningPiece: async function () { planningMatchCalls++; return { pieceId: 'plan-1', confidence: 'high', reason: 'The transcript matches the filmed outline.' }; },
+    onRenderReady: function (input) { renderReadyCalls++; assert.equal(input.project.planningPieceId, 'plan-1'); },
     handoffToProduction: async function (input) {
       handoffCalls++;
       assert.equal(input.project.id.length > 0, true);
@@ -221,6 +226,13 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.retakeAnalysisStatus, 'ready', project.retakeAnalysisError);
   assert.equal(retakeCalls, 2);
   assert.deepEqual(project.removedWordIndices, [2, 3]);
+  for (let attempt = 0; attempt < 100 && project.planningMatchStatus !== 'ready'; attempt++) {
+    await new Promise(function (resolve) { setTimeout(resolve, 30); });
+    project = await (await fetch(base + '/api/editor/' + project.id)).json();
+  }
+  assert.equal(project.planningMatchStatus, 'ready', project.planningMatchError);
+  assert.equal(project.planningPieceId, 'plan-1');
+  assert.equal(planningMatchCalls, 1);
   assert.ok(project.cuts.some(function (cut) { return cut.reason === 'long_pause'; }));
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ removedWordIndices: [2, 3] }) });
   project = await response.json();
@@ -232,6 +244,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
     project = await (await fetch(base + '/api/editor/' + project.id)).json();
   }
   assert.equal(project.renderStatus, 'ready', project.renderError);
+  assert.equal(renderReadyCalls, 1);
   response = await fetch(base + '/api/editor/' + project.id + '/render');
   assert.equal(response.status, 200);
   const rendered = Buffer.from(await response.arrayBuffer());

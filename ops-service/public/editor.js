@@ -46,6 +46,7 @@
     if (item.transcriptionStatus === 'error') return 'Needs attention';
     if (item.classificationStatus === 'pending' || item.classificationStatus === 'running') return 'Analyzing frame';
     if (item.retakeAnalysisStatus === 'pending' || item.retakeAnalysisStatus === 'running') return 'Checking retakes';
+    if (item.planningMatchStatus === 'pending' || item.planningMatchStatus === 'running') return 'Matching plan';
     if (item.renderStatus === 'running') return 'Rendering';
     if (item.renderStatus === 'ready') return 'Ready for approval';
     return 'Ready to edit';
@@ -53,6 +54,13 @@
 
   function typeLabel(value) {
     return { ultra_short: 'Ultra-short', short: 'Short', long_short: 'Long-short', longform: 'Longform' }[value] || 'Automatic';
+  }
+
+  function planningOptionsHtml(item) {
+    var selected = item.planningPieceId || '';
+    return '<option value=""' + (!selected ? ' selected' : '') + '>No linked planning card</option>' + (item.planningCandidates || []).map(function (candidate) {
+      return '<option value="' + esc(candidate.id) + '"' + (candidate.id === selected ? ' selected' : '') + '>#' + String(candidate.seq || '').padStart(3, '0') + ' · ' + esc(candidate.title || 'Untitled') + ' · ' + esc(candidate.stage || '') + '</option>';
+    }).join('');
   }
 
   function timelineHtml(item) {
@@ -111,10 +119,12 @@
     var transcriptState = item.transcriptionStatus === 'error' ? 'error' : item.transcriptionStatus === 'ready' ? 'done' : 'active';
     var frameState = item.classificationStatus === 'error' ? 'error' : item.classificationStatus === 'ready' ? 'done' : item.classificationStatus === 'running' || item.classificationStatus === 'pending' ? 'active' : 'waiting';
     var retakeState = item.retakeAnalysisStatus === 'error' ? 'error' : item.retakeAnalysisStatus === 'ready' ? 'done' : item.retakeAnalysisStatus === 'running' || item.retakeAnalysisStatus === 'pending' ? 'active' : 'waiting';
+    var planState = item.planningMatchStatus === 'error' ? 'error' : item.planningMatchStatus === 'ready' ? 'done' : item.planningMatchStatus === 'running' || item.planningMatchStatus === 'pending' ? 'active' : 'waiting';
     return '<div class="editor-processing-steps">' + step('done', 'Recording secured', 'Original master preserved') +
       step(transcriptState, 'Word-timed transcript', transcriptState === 'done' ? 'Speech mapped' : transcriptState === 'error' ? 'Needs retry' : 'Listening for every word') +
       step(frameState, 'Publishing frame', frameState === 'done' ? 'Composition detected' : frameState === 'error' ? 'Manual choice available' : frameState === 'active' ? 'Inspecting the book framing' : 'Waiting') +
-      step(retakeState, 'Retake review', retakeState === 'done' ? 'Decisions ready' : retakeState === 'error' ? 'Can be retried' : retakeState === 'active' ? 'Comparing nearby takes' : 'Starts after transcription') + '</div>';
+      step(retakeState, 'Retake review', retakeState === 'done' ? 'Decisions ready' : retakeState === 'error' ? 'Can be retried' : retakeState === 'active' ? 'Comparing nearby takes' : 'Starts after transcription') +
+      step(planState, 'Planning card', planState === 'done' ? 'Workflow linked' : planState === 'error' ? 'Manual choice available' : planState === 'active' ? 'Matching filmed content' : 'Starts after transcription') + '</div>';
   }
 
   function shell() {
@@ -241,7 +251,8 @@
     if (!project) return;
     var active = ['pending', 'running'].indexOf(project.transcriptionStatus) !== -1 ||
       ['pending', 'running'].indexOf(project.classificationStatus) !== -1 ||
-      ['pending', 'running'].indexOf(project.retakeAnalysisStatus) !== -1 || project.renderStatus === 'running';
+      ['pending', 'running'].indexOf(project.retakeAnalysisStatus) !== -1 ||
+      ['pending', 'running'].indexOf(project.planningMatchStatus) !== -1 || project.renderStatus === 'running';
     if (!active) return;
     var id = project.id;
     var token = mountToken;
@@ -275,7 +286,8 @@
         ? 'Analyzing three frames to distinguish a single page from an open spread…'
         : 'Using source dimensions until the book framing is analyzed.';
     var automaticEditRunning = ['pending', 'running'].indexOf(project.classificationStatus) !== -1 ||
-      ['pending', 'running', 'pending_transcript'].indexOf(project.retakeAnalysisStatus) !== -1;
+      ['pending', 'running', 'pending_transcript'].indexOf(project.retakeAnalysisStatus) !== -1 ||
+      ['pending', 'running', 'pending_transcript'].indexOf(project.planningMatchStatus) !== -1;
     var unresolvedRetakes = Number(project.unresolvedRetakeCount) || 0;
     var renderBlocked = automaticEditRunning || unresolvedRetakes > 0;
     var renderButtonText = automaticEditRunning ? 'Preparing automatic edit…' : unresolvedRetakes ? 'Review ' + unresolvedRetakes + ' possible retake' + (unresolvedRetakes === 1 ? '' : 's') : 'Build final edit';
@@ -286,6 +298,8 @@
         (project.classificationStatus !== 'ready' && project.classificationStatus !== 'running' && project.classificationStatus !== 'pending' ? '<button type="button" class="editor-analyze" id="editorAnalyze">Analyze book framing</button>' : '') + '</div>' +
         '<label>Frame<select id="editorLayout"><option value="auto"' + (project.layoutOverride === 'auto' || !project.layoutOverride ? ' selected' : '') + '>Auto detect</option><option value="vertical"' + (project.layoutOverride === 'vertical' ? ' selected' : '') + '>Vertical · single page</option><option value="horizontal"' + (project.layoutOverride === 'horizontal' ? ' selected' : '') + '>Horizontal · open spread</option></select></label>' +
         '<label>Format<select id="editorContentType"><option value="auto"' + (project.contentTypeOverride === 'auto' || !project.contentTypeOverride ? ' selected' : '') + '>Auto · ' + esc(typeLabel(project.detectedContentType)) + '</option><option value="ultra_short"' + (project.contentTypeOverride === 'ultra_short' ? ' selected' : '') + '>Ultra-short</option><option value="short"' + (project.contentTypeOverride === 'short' ? ' selected' : '') + '>Short</option><option value="long_short"' + (project.contentTypeOverride === 'long_short' ? ' selected' : '') + '>Long-short</option><option value="longform"' + (project.contentTypeOverride === 'longform' ? ' selected' : '') + '>Longform</option></select></label></section>' +
+      '<section class="editor-plan-link"><div><div class="eyebrow">Planning workflow</div><strong>' + (project.planningPieceId ? 'Linked to its Filmed card' : 'No planning card linked') + '</strong><span>' + esc(project.planningMatch && project.planningMatch.reason || (project.planningMatchStatus === 'running' || project.planningMatchStatus === 'pending' ? 'Matching the transcript to Filmed cards…' : 'Choose a card manually if this recording came from the Kanban.')) + '</span></div><label>Content card<select id="editorPlanningPiece">' + planningOptionsHtml(project) + '</select></label>' +
+        (project.planningMatchStatus !== 'running' && project.planningMatchStatus !== 'pending' ? '<button type="button" class="editor-analyze" id="editorMatchPlan">Match again</button>' : '') + '</section>' +
       '<div class="editor-preview"><div class="editor-video-frame ' + layout + '" style="--crop-x:' + cropPercent + '%"><video id="editorVideo" controls playsinline preload="metadata" src="/api/editor/' + encodeURIComponent(project.id) + '/source"></video>' +
         '<div class="editor-caption" id="editorCaption"></div></div></div>' +
       (layout === 'vertical' ? '<div class="editor-crop-control"><label>Horizontal crop position <input id="editorCropX" type="range" min="0" max="100" value="' + cropPercent + '"></label><span>Keep the single page centred inside the vertical frame.</span></div>' : '') +
@@ -306,7 +320,7 @@
         (project.productionPieceId ? 'This edit is ready in Content Production for titles, thumbnail, and ambient music.' :
           project.renderStatus === 'ready' ? 'Send the finished edit across without uploading it again.' :
           'Build the final edit first. Yellow captions will be baked in below center.') + '</span>' +
-        '<div class="editor-readiness"><i class="ready">Transcript ready</i><i class="' + (['pending', 'running'].indexOf(project.classificationStatus) !== -1 ? 'working' : 'ready') + '">Framing ' + (['pending', 'running'].indexOf(project.classificationStatus) !== -1 ? 'checking' : 'ready') + '</i><i class="' + (automaticEditRunning ? 'working' : unresolvedRetakes ? 'review' : 'ready') + '">' + (automaticEditRunning ? 'Retakes checking' : unresolvedRetakes ? unresolvedRetakes + ' to review' : 'Retakes resolved') + '</i></div>' +
+        '<div class="editor-readiness"><i class="ready">Transcript ready</i><i class="' + (['pending', 'running'].indexOf(project.classificationStatus) !== -1 ? 'working' : 'ready') + '">Framing ' + (['pending', 'running'].indexOf(project.classificationStatus) !== -1 ? 'checking' : 'ready') + '</i><i class="' + (['pending', 'running', 'pending_transcript'].indexOf(project.retakeAnalysisStatus) !== -1 ? 'working' : unresolvedRetakes ? 'review' : 'ready') + '">' + (['pending', 'running', 'pending_transcript'].indexOf(project.retakeAnalysisStatus) !== -1 ? 'Retakes checking' : unresolvedRetakes ? unresolvedRetakes + ' to review' : 'Retakes resolved') + '</i><i class="' + (['pending', 'running', 'pending_transcript'].indexOf(project.planningMatchStatus) !== -1 ? 'working' : 'ready') + '">Plan ' + (['pending', 'running', 'pending_transcript'].indexOf(project.planningMatchStatus) !== -1 ? 'matching' : project.planningPieceId ? 'linked' : 'not required') + '</i></div>' +
         (project.renderStatus === 'error' ? '<em>' + esc(project.renderError) + '</em>' : '') + '</div><div class="editor-export-actions">' +
         (project.productionPieceId ? '<button class="btn-primary" id="editorOpenProduction">Open Content Production</button>' :
           project.renderStatus === 'ready' ? '<button class="btn-primary" id="editorSendProduction">Approve &amp; Send to Production</button>' :
@@ -397,6 +411,7 @@
     root.querySelector('#editorCaptions').onchange = function () { save({ captionsEnabled: this.checked }, true); };
     root.querySelector('#editorLayout').onchange = function () { save({ layoutOverride: this.value }, true); };
     root.querySelector('#editorContentType').onchange = function () { save({ contentTypeOverride: this.value }, true); };
+    root.querySelector('#editorPlanningPiece').onchange = function () { save({ planningPieceId: this.value }, true); };
     var analyzeButton = root.querySelector('#editorAnalyze');
     if (analyzeButton) analyzeButton.onclick = function () {
       analyzeButton.disabled = true;
@@ -411,6 +426,14 @@
       retakeAnalyzeButton.textContent = 'Analyzing…';
       api('/api/editor/' + project.id + '/analyze-retakes', { method: 'POST' }).then(function () {
         project.retakeAnalysisStatus = 'running'; renderWorkspace(); schedulePoll();
+      }).catch(function (error) { alert(error.message); renderWorkspace(); });
+    };
+    var matchPlanButton = root.querySelector('#editorMatchPlan');
+    if (matchPlanButton) matchPlanButton.onclick = function () {
+      matchPlanButton.disabled = true;
+      matchPlanButton.textContent = 'Matching…';
+      api('/api/editor/' + project.id + '/match-planning-piece', { method: 'POST' }).then(function () {
+        project.planningMatchStatus = 'running'; renderWorkspace(); schedulePoll();
       }).catch(function (error) { alert(error.message); renderWorkspace(); });
     };
     root.querySelector('#editorPacing').onchange = function () {

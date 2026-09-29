@@ -11534,3 +11534,36 @@ create merge commits, so this states the real invariant, removes reliance on
 host-global `pull.rebase` configuration, and still fails safely if either clone
 contains an actual unpublished commit. Existing dirty-tree auto-stashing remains
 unchanged.
+
+---
+
+# 266. Editor Recordings Stay Linked to the Content Pipeline (2026-09-29)
+
+An Editor recording is now connected to the planning card it came from rather
+than becoming an unrelated second item. As soon as word-timed transcription is
+ready, a tool-free structured Claude pass compares the transcript with cards in
+Filmed or Edited and links only a high-confidence subject match. The processing
+story now includes a fifth Planning card step, the chosen card is visible in a
+manual fallback dropdown, and **Match again** remains available. Provider
+failure receives the same single 750ms retry used by semantic retake review;
+an error never blocks manual linking or destroys an edit.
+
+The link drives the real Kanban workflow. Completing the final Editor render
+moves a linked Filmed card to Edited. **Approve & Send to Production** moves it
+from Filmed/Edited to Uploaded immediately before the existing production
+analyzer runs, so the established Uploaded-outline matching path can take over.
+The generated Processing item stores both `editorProjectId` and
+`sourcePlanningPieceId` for durable traceability. Transitions are forward-only
+and idempotent: retrying a handoff can finish an interrupted planning-card move
+without producing a duplicate production item.
+
+Automatic planning-card matching is part of the readiness gate alongside
+framing and retake review, and the server enforces the same boundary. The
+Editor service integration now proves automatic linking plus the render-ready
+callback; the full 97-test suite and real Chromium desktop/mobile workflow pass,
+including manual plan selection and the multi-file filming queue.
+
+This work also fixed a latent Smart Review persistence bug: server validation
+accepted old deterministic IDs such as `retake-1` but silently discarded the
+new semantic IDs such as `smart-retake-4-8-10`. Both ID formats are now accepted,
+so **Keep both** and restored semantic takes remain resolved after refresh.
