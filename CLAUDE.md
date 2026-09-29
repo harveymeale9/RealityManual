@@ -13213,3 +13213,21 @@ unlinks the partial UUID upload, completed earlier files remain safely queued,
 and the upload control re-enables for a corrected batch without reloading the
 page. Navigation continues to leave intentional uploads running in the
 background; cancellation is an explicit user action.
+
+---
+
+# 355. Retake Reanalysis Respects Harvey's Restores (2026-09-29)
+
+High-confidence retakes are removed automatically, but their word indices were
+previously indistinguishable from manual transcript cuts. If analysis was run
+again, a take Harvey had explicitly restored could be removed again, while a
+cut owned by an obsolete model decision could remain forever.
+
+Each project now records the exact word indices owned by automatic retake
+analysis. Reanalysis first releases only those owned indices, preserves every
+manual cut, then applies current high-confidence decisions except ids Harvey
+has dismissed or restored. Restoring an auto-cut also releases its ownership,
+and the 50-step cut/retake undo snapshots retain that ownership metadata. A
+focused regression proves a dismissed take stays restored, an obsolete auto
+cut disappears, a new clear retake is applied, and an unrelated manual cut is
+never touched.

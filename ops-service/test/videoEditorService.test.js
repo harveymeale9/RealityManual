@@ -204,6 +204,23 @@ test('unresolved retakes block approval until cut or explicitly dismissed', func
   assert.equal(editor.appliedRetakeCount(project), 0);
 });
 
+test('retake retries respect restored takes and replace only automation-owned cuts', function () {
+  const oldDecision = { id: 'smart-retake-0-0-1', confidence: 'high', removeWordIndices: [0, 1] };
+  const nextDecision = { id: 'smart-retake-1-2-3', confidence: 'high', removeWordIndices: [2, 3] };
+  const project = {
+    removedWordIndices: [0, 1, 5],
+    autoRetakeRemovedWordIndices: [0, 1],
+    dismissedRetakeIds: [oldDecision.id]
+  };
+  editor.reconcileAutomaticRetakeCuts(project, [oldDecision, nextDecision]);
+  assert.deepEqual(project.removedWordIndices, [2, 3, 5]);
+  assert.deepEqual(project.autoRetakeRemovedWordIndices, [2, 3]);
+  project.dismissedRetakeIds.push(nextDecision.id);
+  editor.reconcileAutomaticRetakeCuts(project, [nextDecision]);
+  assert.deepEqual(project.removedWordIndices, [5]);
+  assert.deepEqual(project.autoRetakeRemovedWordIndices, []);
+});
+
 test('adjacent removed transcript words become one manual cut', function () {
   const cuts = editor.calculateManualCuts(words, [2, 3], 9);
   assert.equal(cuts.length, 1);

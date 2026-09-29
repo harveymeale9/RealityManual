@@ -414,6 +414,24 @@ function appliedRetakeCount(project) {
   }).length;
 }
 
+function reconcileAutomaticRetakeCuts(project, decisions) {
+  const removed = new Set((project.removedWordIndices || []).map(Number));
+  // Release only indices explicitly owned by the previous automatic analysis.
+  // Manual transcript cuts are never inferred from the current decision list,
+  // so a changed model answer cannot silently restore Harvey's own edit.
+  (project.autoRetakeRemovedWordIndices || []).map(Number).forEach(function (index) { removed.delete(index); });
+  const dismissed = new Set((project.dismissedRetakeIds || []).map(String));
+  const owned = new Set();
+  (decisions || []).filter(function (decision) {
+    return decision.confidence === 'high' && !dismissed.has(decision.id);
+  }).forEach(function (decision) {
+    decision.removeWordIndices.forEach(function (index) { removed.add(index); owned.add(index); });
+  });
+  project.removedWordIndices = Array.from(removed).sort(function (a, b) { return a - b; });
+  project.autoRetakeRemovedWordIndices = Array.from(owned).sort(function (a, b) { return a - b; });
+  return project;
+}
+
 function keepSegments(duration, cuts) {
   const total = Math.max(0, Number(duration) || 0);
   const segments = [];
@@ -793,11 +811,7 @@ function setup(options) {
         project = getProject(id);
         if (!project) return;
         const decisions = normalizeRetakeDecisions(raw && raw.decisions, project.words || []);
-        const removed = new Set((project.removedWordIndices || []).map(Number));
-        decisions.filter(function (decision) { return decision.confidence === 'high'; }).forEach(function (decision) {
-          decision.removeWordIndices.forEach(function (index) { removed.add(index); });
-        });
-        project.removedWordIndices = Array.from(removed).sort(function (a, b) { return a - b; });
+        reconcileAutomaticRetakeCuts(project, decisions);
         project.retakeDecisions = decisions;
         project.retakeAnalysisStatus = 'ready';
         project.retakeAnalysisError = '';
@@ -1344,10 +1358,17 @@ async function renderProject(id) {
       ? Array.from(new Set(req.body.dismissedRetakeIds.map(String).filter(function (id) { return /^(?:retake-\d+|smart-retake-\d+-\d+-\d+)$/.test(id); }))).sort()
       : currentDismissedRetakeIds;
     if (JSON.stringify(nextRemovedWordIndices) !== JSON.stringify(currentRemovedWordIndices) || JSON.stringify(nextDismissedRetakeIds) !== JSON.stringify(currentDismissedRetakeIds)) {
-      const snapshot = { removedWordIndices: currentRemovedWordIndices, dismissedRetakeIds: currentDismissedRetakeIds };
+      const snapshot = { removedWordIndices: currentRemovedWordIndices, dismissedRetakeIds: currentDismissedRetakeIds,
+        autoRetakeRemovedWordIndices: (project.autoRetakeRemovedWordIndices || []).map(Number) };
       project.cutDecisionHistory = (Array.isArray(project.cutDecisionHistory) ? project.cutDecisionHistory : []).concat([snapshot]).slice(-50);
       project.removedWordIndices = nextRemovedWordIndices;
       project.dismissedRetakeIds = nextDismissedRetakeIds;
+      const dismissedOwnedIndices = new Set(retakeCandidatesForProject(project).filter(function (candidate) {
+        return nextDismissedRetakeIds.includes(candidate.id);
+      }).flatMap(function (candidate) { return candidate.removeWordIndices; }));
+      project.autoRetakeRemovedWordIndices = (project.autoRetakeRemovedWordIndices || []).map(Number).filter(function (index) {
+        return nextRemovedWordIndices.includes(index) && !dismissedOwnedIndices.has(index);
+      });
     }
     if (req.body && req.body.wordCorrection && typeof req.body.wordCorrection === 'object') {
       const index = Number(req.body.wordCorrection.index);
@@ -1426,6 +1447,7 @@ async function renderProject(id) {
     else {
       project.removedWordIndices = Array.isArray(snapshot && snapshot.removedWordIndices) ? snapshot.removedWordIndices : [];
       project.dismissedRetakeIds = Array.isArray(snapshot && snapshot.dismissedRetakeIds) ? snapshot.dismissedRetakeIds : [];
+      project.autoRetakeRemovedWordIndices = Array.isArray(snapshot && snapshot.autoRetakeRemovedWordIndices) ? snapshot.autoRetakeRemovedWordIndices : [];
     }
     project.cutDecisionHistory = history;
     invalidateProjectRender(project);
@@ -1674,5 +1696,6 @@ module.exports = {
   automaticReviewReady,
   advanceEditRevision,
   normalizedVideoMimeType,
-  browserPreviewNeeded
+  browserPreviewNeeded,
+  reconcileAutomaticRetakeCuts
 };
