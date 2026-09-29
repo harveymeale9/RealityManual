@@ -17,6 +17,8 @@
   var renderRefreshTimers = {};
   var restoreTranscriptFocus = false;
   var uploadBatchInProgress = false;
+  var uploadBatchCancelled = false;
+  var currentUploadXhr = null;
   var uploadStatusText = '';
   var uploadStatusPercent = 0;
   var MAX_RECORDING_BYTES = 2 * 1024 * 1024 * 1024;
@@ -86,11 +88,13 @@
     var label = root.querySelector('#editorUploadLabel');
     var input = root.querySelector('#editorFile');
     var control = root.querySelector('.editor-upload');
+    var cancel = root.querySelector('#editorCancelUpload');
     if (progress) progress.hidden = !uploadStatusText;
     if (bar) bar.style.width = Math.max(0, Math.min(100, uploadStatusPercent)) + '%';
     if (label && uploadStatusText) label.textContent = uploadStatusText;
     if (input) input.disabled = uploadBatchInProgress;
     if (control) control.classList.toggle('disabled', uploadBatchInProgress);
+    if (cancel) cancel.hidden = !uploadBatchInProgress;
   }
 
   function rememberedProjectKey(filter) {
@@ -308,7 +312,7 @@
         '<header class="editor-heading"><div><div class="eyebrow">Content production</div><h1>Editor</h1>' +
           '<p>Drop in a filming session. Each recording is framed, transcribed, cleaned and prepared for your approval.</p></div>' +
           '<label class="editor-upload btn-primary"><input id="editorFile" type="file" accept="video/*,.mp4,.mov,.m4v,.webm,.mkv,.avi" multiple hidden>Upload raw videos</label></header>' +
-        '<div class="editor-upload-progress" id="editorUploadProgress" hidden><span id="editorUploadLabel">Uploading…</span><div><i id="editorUploadBar"></i></div></div>' +
+        '<div class="editor-upload-progress" id="editorUploadProgress" hidden><div class="editor-upload-progress-head"><span id="editorUploadLabel">Uploading…</span><button type="button" class="btn-secondary btn-tiny" id="editorCancelUpload" hidden>Cancel batch</button></div><div><i id="editorUploadBar"></i></div></div>' +
         '<div class="editor-notice" id="editorNotice" hidden></div>' +
         '<div class="editor-session-summary" id="editorSessionSummary" hidden></div>' +
         '<div class="editor-layout"><aside class="editor-projects"><div class="editor-aside-head"><div class="editor-aside-title">Recordings</div><div class="editor-list-filters"><button type="button" data-filter="active">Active</button><button type="button" data-filter="sent">Sent</button></div></div><div id="editorProjectList"></div></aside>' +
@@ -318,6 +322,13 @@
     root.querySelector('#editorFile').addEventListener('change', function () {
       if (this.files && this.files[0]) uploadFiles(this.files);
       this.value = '';
+    });
+    root.querySelector('#editorCancelUpload').addEventListener('click', function () {
+      if (!uploadBatchInProgress) return;
+      uploadBatchCancelled = true;
+      uploadStatusText = 'Cancelling upload…';
+      paintUploadStatus();
+      if (currentUploadXhr) currentUploadXhr.abort();
     });
     var shellNode = root.querySelector('.video-editor');
     var overlay = root.querySelector('#editorDropOverlay');
@@ -397,6 +408,7 @@
     data.append('video', file);
     data.append('name', file.name.replace(/\.[^.]+$/, ''));
     var xhr = new XMLHttpRequest();
+    currentUploadXhr = xhr;
     xhr.open('POST', '/api/editor');
     xhr.withCredentials = true;
     xhr.upload.onprogress = function (event) {
@@ -406,6 +418,7 @@
       }
     };
     xhr.onload = function () {
+      if (currentUploadXhr === xhr) currentUploadXhr = null;
       var body = {};
       try { body = JSON.parse(xhr.responseText || '{}'); } catch (e) {}
       if (xhr.status < 200 || xhr.status >= 300) {
@@ -417,7 +430,16 @@
       renderList();
       resolve(body);
     };
-    xhr.onerror = function () { reject(new Error('Upload failed. Check the connection and try again.')); };
+    xhr.onerror = function () {
+      if (currentUploadXhr === xhr) currentUploadXhr = null;
+      reject(new Error('Upload failed. Check the connection and try again.'));
+    };
+    xhr.onabort = function () {
+      if (currentUploadXhr === xhr) currentUploadXhr = null;
+      var error = new Error('Upload cancelled.');
+      error.cancelled = true;
+      reject(error);
+    };
     xhr.send(data);
     });
   }
@@ -447,22 +469,30 @@
     editorNotice = '';
     renderNotice();
     uploadBatchInProgress = true;
+    uploadBatchCancelled = false;
     uploadStatusText = 'Preparing ' + files.length + ' recording' + (files.length === 1 ? '' : 's') + '…';
     uploadStatusPercent = 0;
     paintUploadStatus();
     var sequence = Promise.resolve();
     files.forEach(function (file, index) {
       sequence = sequence.then(function () {
+        if (uploadBatchCancelled) return;
         return upload(file, index, files.length).then(function (item) { created.push(item); }).catch(function (error) {
+          if (error.cancelled) return;
           if (error.duplicate) duplicateCount++;
           else failures.push(file.name + ': ' + error.message);
         });
       });
     });
     sequence.then(function () {
+      var wasCancelled = uploadBatchCancelled;
       uploadBatchInProgress = false;
-      uploadStatusPercent = 100;
-      uploadStatusText = created.length + ' recording' + (created.length === 1 ? '' : 's') + ' added to the edit queue' + (duplicateCount ? ' · ' + duplicateCount + ' duplicate skipped' : '');
+      uploadBatchCancelled = false;
+      currentUploadXhr = null;
+      uploadStatusPercent = wasCancelled ? uploadStatusPercent : 100;
+      uploadStatusText = wasCancelled
+        ? 'Batch cancelled' + (created.length ? ' · ' + created.length + ' recording' + (created.length === 1 ? '' : 's') + ' safely added before cancellation' : ' · no recordings added')
+        : created.length + ' recording' + (created.length === 1 ? '' : 's') + ' added to the edit queue' + (duplicateCount ? ' · ' + duplicateCount + ' duplicate skipped' : '');
       paintUploadStatus();
       setTimeout(function () { uploadStatusText = ''; uploadStatusPercent = 0; paintUploadStatus(); }, 1400);
       if (created[0] && editorMounted()) openProject(created[0].id);

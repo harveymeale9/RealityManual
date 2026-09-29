@@ -13196,3 +13196,20 @@ inside the player instead of leaving a black, unexplained rectangle. **Reload
 preview** cache-busts and reloads only that media source, retaining the project,
 edit decisions, and generated files. It does not re-upload or re-encode the
 recording, and it resumes playback if the failed player had been active.
+
+---
+
+# 354. Filming Batches Can Be Cancelled Safely Mid-Upload (2026-09-29)
+
+Editor accepted camera masters up to 2 GB and showed reliable aggregate upload
+progress, but a mistaken selection had no in-app escape: Harvey had to refresh
+the whole tool. The progress panel now exposes **Cancel batch** only while a
+batch is active. It aborts the current XHR, prevents every remaining queued file
+from starting, and reports how many earlier recordings were already secured.
+
+Cancellation is deliberately distinct from an upload failure, so it produces
+no misleading connection-error alert. The server's abort handler immediately
+unlinks the partial UUID upload, completed earlier files remain safely queued,
+and the upload control re-enables for a corrected batch without reloading the
+page. Navigation continues to leave intentional uploads running in the
+background; cancellation is an explicit user action.
