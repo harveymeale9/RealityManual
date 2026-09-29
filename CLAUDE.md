@@ -11168,3 +11168,7 @@ so directly. All 82 Node tests pass. A real Chromium UI test with three tracks
 proved there was exactly one source upload and one preview per soundtrack, then
 proved both Previous and Next changed the audio URL and reset playback to the
 beginning. The app and stylesheet cache keys were bumped for immediate pickup.
+After deployment, the authenticated live API was also exercised with one
+uploaded voice sample and two real library tracks. It returned two playable
+four-second MP3s from the same session, then confirmed successful explicit
+session deletion.
