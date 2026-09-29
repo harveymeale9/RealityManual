@@ -13662,3 +13662,19 @@ duplicate decisions from overlap are collapsed before the existing strict
 range validator sees them. Ordinary recordings still make exactly one model
 call. Unit coverage proves complete coverage beyond 10,000 words, the expected
 overlap, preservation of a decision from the final window, and deduplication.
+
+---
+
+# 375. Planning Matching Samples the Whole Long-Form Narrative (2026-09-29)
+
+The automatic Editor-to-Kanban matcher bounded its prompt by taking only the
+first 9,000 transcript characters. That kept costs predictable, but made a
+long-form take's middle and conclusion completely invisible. Generic openings
+or a late change of emphasis could therefore cause a false low-confidence
+result even when the correct Filmed card was obvious later.
+
+The prompt remains capped at the same 9,000-character budget, but long
+transcripts now contribute 50% opening, 25% middle, and 25% ending samples with
+clear omission markers. Short transcripts remain unchanged. Focused coverage
+proves all three regions survive and the result never exceeds its fixed model
+budget.
