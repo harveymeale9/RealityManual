@@ -12978,10 +12978,15 @@ different master from the one that passed the duration, stream, and size
 checks.
 
 Approval now requires the file to remain a regular file larger than the minimum
-valid output and to match the exact byte count recorded by the successful
-verification pass. A mismatch invalidates and removes the stale master, returns
-a clear HTTP 409, and automatically schedules a clean rebuild; the client
-refreshes immediately so the rebuilding state is visible. Already-sent projects
-remain idempotent and return their existing Production piece even if their old
-Editor render is later cleaned up. Focused coverage mutates a verified render
-and proves it is rejected.
+valid output, to match the exact byte count, and to match the streamed SHA-256
+fingerprint recorded by the successful verification pass. This catches both
+truncation and a same-size replacement without loading a potentially multi-GB
+master into Node memory. A mismatch invalidates and removes the stale master,
+returns a clear HTTP 409, and automatically schedules a clean rebuild; the
+client refreshes immediately so the rebuilding state is visible. Existing
+active verified renders acquire a fingerprint in the background on first
+startup rather than being needlessly re-encoded. Already-sent projects remain
+idempotent and return their existing Production piece even if their old Editor
+render is later cleaned up. Unit coverage replaces a render with different
+bytes of the same length, while route-level coverage mutates a finished render
+and proves it is rejected and rebuilt.

@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
+const crypto = require('node:crypto');
 const { execFileSync } = require('node:child_process');
 const express = require('express');
 const Database = require('better-sqlite3');
@@ -67,15 +68,16 @@ test('upload capacity reserves every downstream master plus operating space', fu
   assert.equal(editor.requiredEditorCapacity(2 * gib, true), 8 * gib);
 });
 
-test('approval only accepts the exact verified render size', function (t) {
+test('approval only accepts the exact verified render bytes', async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-verified-'));
   const file = path.join(dir, 'render.mp4');
   fs.writeFileSync(file, Buffer.alloc(2048));
-  const project = { renderStatus: 'ready', renderQuality: { status: 'passed' }, renderSizeBytes: 2048 };
-  assert.equal(editor.verifiedRenderMatches(project, file), true);
-  fs.appendFileSync(file, 'changed');
-  assert.equal(editor.verifiedRenderMatches(project, file), false);
-  assert.equal(editor.verifiedRenderMatches(Object.assign({}, project, { renderQuality: null }), file), false);
+  const project = { renderStatus: 'ready', renderQuality: { status: 'passed' }, renderSizeBytes: 2048,
+    renderSha256: crypto.createHash('sha256').update(Buffer.alloc(2048)).digest('hex') };
+  assert.equal(await editor.verifiedRenderMatches(project, file), true);
+  fs.writeFileSync(file, Buffer.alloc(2048, 1));
+  assert.equal(await editor.verifiedRenderMatches(project, file), false);
+  assert.equal(await editor.verifiedRenderMatches(Object.assign({}, project, { renderQuality: null }), file), false);
   t.after(function () { fs.rmSync(dir, { recursive: true, force: true }); });
 });
 
@@ -117,7 +119,7 @@ test('invalidating an edit clears every stale output claim', function () {
   const project = { renderStatus: 'ready', renderError: 'old', renderProgress: 100, automaticRenderStartedAt: 'then',
     renderQuality: { status: 'passed' }, renderSizeBytes: 1234, editedDuration: 42 };
   editor.invalidateRender(project);
-  assert.deepEqual(project, { renderStatus: '', renderError: '', renderProgress: 0, automaticRenderStartedAt: '', renderQuality: null, renderSizeBytes: 0, editedDuration: 0 });
+  assert.deepEqual(project, { renderStatus: '', renderError: '', renderProgress: 0, automaticRenderStartedAt: '', renderQuality: null, renderSizeBytes: 0, renderSha256: '', editedDuration: 0 });
 });
 
 test('metadata-only editor changes preserve a verified render', function () {
@@ -620,7 +622,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   }
   assert.equal(project.renderStatus, 'ready', project.renderError);
   assert.equal(renderReadyCalls, 3);
-  assert.equal(editor.verifiedRenderMatches(project, verifiedRenderPath), true);
+  assert.equal(await editor.verifiedRenderMatches(project, verifiedRenderPath), true);
   const simultaneousHandoffs = await Promise.all([
     fetch(base + '/api/editor/' + project.id + '/production', { method: 'POST' }),
     fetch(base + '/api/editor/' + project.id + '/production', { method: 'POST' })

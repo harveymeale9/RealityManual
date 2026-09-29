@@ -20,11 +20,12 @@ function requiredEditorCapacity(fileBytes, fileAlreadyStored) {
   return EDITOR_DISK_RESERVE_BYTES + bytes * (fileAlreadyStored ? 3 : 4);
 }
 
-function verifiedRenderMatches(project, filePath) {
+async function verifiedRenderMatches(project, filePath) {
   if (!project || project.renderStatus !== 'ready' || !project.renderQuality || project.renderQuality.status !== 'passed') return false;
   try {
     const stat = fs.statSync(filePath);
-    return stat.isFile() && stat.size > 1024 && stat.size === Number(project.renderSizeBytes);
+    if (!stat.isFile() || stat.size <= 1024 || stat.size !== Number(project.renderSizeBytes) || !project.renderSha256) return false;
+    return await hashFile(filePath) === project.renderSha256;
   } catch (error) { return false; }
 }
 
@@ -255,6 +256,7 @@ function invalidateRender(project) {
   project.automaticRenderStartedAt = '';
   project.renderQuality = null;
   project.renderSizeBytes = 0;
+  project.renderSha256 = '';
   project.editedDuration = 0;
   return project;
 }
@@ -924,9 +926,11 @@ async function renderProject(id) {
       if (Object.keys(qualityChecks).some(function (key) { return !qualityChecks[key]; })) {
         throw new Error('Rendered output failed technical verification: ' + Object.keys(qualityChecks).filter(function (key) { return !qualityChecks[key]; }).join(', '));
       }
+      const renderSha256 = await hashFile(renderPath(id));
       project.renderStatus = 'ready';
       project.renderProgress = 100;
       project.renderSizeBytes = stat.size;
+      project.renderSha256 = renderSha256;
       project.editedDuration = expectedDuration;
       project.renderQuality = {
         status: 'passed', checkedAt: new Date().toISOString(), checks: qualityChecks,
@@ -1040,6 +1044,27 @@ async function renderProject(id) {
         invalidateProjectRender(current);
         saveProject(current);
         setImmediate(function () { maybeAutoRender(current.id); });
+      }).catch(function () {});
+    });
+  });
+
+  // Render fingerprints were introduced after technical output verification.
+  // Backfill active verified masters so a deploy does not force an otherwise
+  // unchanged recording through another expensive encode at approval time.
+  setImmediate(function () {
+    listStmt.all(STORE_NAME).forEach(function (row) {
+      let project;
+      try { project = JSON.parse(row.data); } catch (e) { return; }
+      if (!project || project.productionPieceId || project.renderStatus !== 'ready' || project.renderSha256 || !isId(project.id) || !fs.existsSync(renderPath(project.id))) return;
+      const filePath = renderPath(project.id);
+      let stat;
+      try { stat = fs.statSync(filePath); } catch (error) { return; }
+      if (!stat.isFile() || stat.size <= 1024 || stat.size !== Number(project.renderSizeBytes) || !project.renderQuality || project.renderQuality.status !== 'passed') return;
+      hashFile(filePath).then(function (digest) {
+        const current = getProject(project.id);
+        if (!current || current.productionPieceId || current.renderStatus !== 'ready' || current.renderSha256 || current.renderSizeBytes !== stat.size) return;
+        current.renderSha256 = digest;
+        saveProject(current);
       }).catch(function () {});
     });
   });
@@ -1404,7 +1429,7 @@ async function renderProject(id) {
     if (project.renderStatus !== 'ready' || !fs.existsSync(renderPath(project.id))) {
       return res.status(409).json({ error: 'render_not_ready', message: 'Finish the edit before sending it to production.' });
     }
-    if (!verifiedRenderMatches(project, renderPath(project.id))) {
+    if (!(await verifiedRenderMatches(project, renderPath(project.id)))) {
       invalidateProjectRender(project);
       saveProject(project);
       res.status(409).json({ error: 'render_verification_stale', message: 'The final file no longer matches its verified render. Editor is rebuilding it automatically before approval.' });
