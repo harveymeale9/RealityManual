@@ -400,10 +400,10 @@
     });
   }
 
-  function upload(file, queueIndex, queueTotal) {
+  function upload(file, queueIndex, queueTotal, completedBytes, totalBytes) {
     return new Promise(function (resolve, reject) {
-    uploadStatusPercent = Math.round(queueIndex / queueTotal * 100);
-    uploadStatusText = 'Uploading ' + (queueIndex + 1) + ' of ' + queueTotal + ' · ' + file.name;
+    uploadStatusPercent = Math.round(completedBytes / Math.max(1, totalBytes) * 100);
+    uploadStatusText = 'Uploading ' + (queueIndex + 1) + ' of ' + queueTotal + ' · ' + file.name + (formatBytes(file.size) ? ' · ' + formatBytes(file.size) : '');
     paintUploadStatus();
     var data = new FormData();
     data.append('video', file);
@@ -414,7 +414,7 @@
     xhr.withCredentials = true;
     xhr.upload.onprogress = function (event) {
       if (event.lengthComputable) {
-        uploadStatusPercent = Math.round((queueIndex + event.loaded / event.total) / queueTotal * 100);
+        uploadStatusPercent = Math.round((completedBytes + Math.min(Number(file.size) || event.loaded, event.loaded)) / Math.max(1, totalBytes) * 100);
         paintUploadStatus();
       }
     };
@@ -476,10 +476,12 @@
     uploadStatusPercent = 0;
     paintUploadStatus();
     var sequence = Promise.resolve();
+    var totalBytes = files.reduce(function (sum, file) { return sum + Math.max(0, Number(file.size) || 0); }, 0);
+    var completedBytes = 0;
     files.forEach(function (file, index) {
       sequence = sequence.then(function () {
         if (uploadBatchCancelled) return;
-        return upload(file, index, files.length).then(function (item) {
+        return upload(file, index, files.length, completedBytes, totalBytes).then(function (item) {
           created.push(item);
           // A fresh session can start showing automatic work as soon as its
           // first file is secured. Never steal selection from an edit Harvey
@@ -489,6 +491,8 @@
           if (error.cancelled) return;
           if (error.duplicate) duplicateCount++;
           else failures.push(file.name + ': ' + error.message);
+        }).then(function () {
+          completedBytes += Math.max(0, Number(file.size) || 0);
         });
       });
     });

@@ -13333,3 +13333,9 @@ immediately while the remaining files continue uploading. If a project was
 already selected when the batch began, that review remains untouched throughout
 and after completion; new recordings still appear live in the queue and session
 summary. Completion only auto-selects when there is genuinely no active project.
+
+Upload progress is now byte-weighted across the batch. A 2 GB camera master and
+a 20 MB clip no longer each claim half the bar: progress reflects actual bytes
+transferred, while the label still identifies the current file, ordinal, and
+size. Duplicate/server-rejected files count as completed attempts once their
+transfer settles, and explicit cancellation preserves the honest partial point.
