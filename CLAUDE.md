@@ -13645,3 +13645,20 @@ once Harvey chooses a frame manually it is accurately described as the active
 fallback rather than a failed requirement. Shared predicates keep queue status,
 session counts and priority, the recovery banner, render blocking, and footer
 badges consistent.
+
+---
+
+# 374. Retake Analysis Covers the Entire Long-Form Recording (2026-09-29)
+
+`analyzeEditorRetakes` previously sliced the timed transcript to its first 5,000
+words and then marked the whole retake phase Ready. A sufficiently long
+horizontal recording could therefore contain false starts near the end that
+were never inspected, with no indication that coverage was partial.
+
+Retake analysis now divides the complete transcript into 5,000-word windows
+with 200 words of overlap. Global word indices are preserved, every word is
+covered, boundary-spanning replacements have shared context, and exact
+duplicate decisions from overlap are collapsed before the existing strict
+range validator sees them. Ordinary recordings still make exactly one model
+call. Unit coverage proves complete coverage beyond 10,000 words, the expected
+overlap, preservation of a decision from the final window, and deduplication.
