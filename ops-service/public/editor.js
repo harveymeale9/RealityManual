@@ -7,8 +7,10 @@
   var selected = new Set();
   var pollTimer = null;
   var mountToken = 0;
+  var openRequestToken = 0;
   var editorNotice = '';
   var previewModes = {};
+  var explicitSourcePreviews = {};
   var previewSeekTimes = {};
   var previewAutoplay = {};
   var previewStopTimes = {};
@@ -129,6 +131,8 @@
     var duration = Number(item.duration) || 0;
     if (!Number.isFinite(sourceTime) || sourceTime < 1 || (duration > 0 && sourceTime >= duration - 1)) return;
     var mode = saved.mode === 'source' || item.renderStatus !== 'ready' ? 'source' : 'final';
+    if (mode === 'source' && item.renderStatus === 'ready' && saved.explicitSource) explicitSourcePreviews[item.id] = true;
+    else delete explicitSourcePreviews[item.id];
     previewModes[item.id] = mode;
     previewSeekTimes[item.id] = mode === 'final' ? sourceToEditedTime(sourceTime, cutsForClient(item)) : sourceTime;
   }
@@ -190,6 +194,7 @@
     var time = Math.max(0, Number(video.currentTime) || 0);
     var mode = video.dataset.previewMode === 'final' ? 'final' : 'source';
     if (!video.paused && !video.ended) previewAutoplay[id] = true;
+    if (renderWillChange) delete explicitSourcePreviews[id];
     if (mode === 'final' && renderWillChange) {
       previewSeekTimes[id] = editedToSourceTime(time, project);
       previewModes[id] = 'source';
@@ -623,7 +628,9 @@
 
   function openProject(id, quiet) {
     clearTimeout(pollTimer);
+    var requestToken = ++openRequestToken;
     return api('/api/editor/' + encodeURIComponent(id)).then(function (item) {
+      if (requestToken !== openRequestToken || !editorMounted()) return;
       var progressOnly = !!(quiet && project && project.id === item.id && project.renderStatus === 'running' && item.renderStatus === 'running');
       project = item;
       projectDetails[item.id] = item;
@@ -646,7 +653,7 @@
       renderWorkspace();
       schedulePoll();
     }).catch(function (error) {
-      if (!quiet) alert(error.message);
+      if (requestToken === openRequestToken && !quiet) alert(error.message);
     });
   }
 
@@ -726,7 +733,7 @@
     var rendering = ['queued', 'running'].indexOf(project.renderStatus) !== -1;
     var sentToProduction = !!project.productionPieceId;
     var failures = failedSteps(project);
-    var previewMode = project.renderStatus === 'ready' && previewModes[project.id] !== 'source' ? 'final' : 'source';
+    var previewMode = project.renderStatus === 'ready' && !(previewModes[project.id] === 'source' && explicitSourcePreviews[project.id]) ? 'final' : 'source';
     var previewingWorkingEdit = previewMode === 'source' && project.renderStatus !== 'ready';
     var browserSafeSource = project.browserPreviewRequired && project.browserPreviewStatus === 'ready';
     var sourcePreviewLabel = browserSafeSource ? 'Browser-safe source copy' : 'Original master';
@@ -896,7 +903,8 @@
         try {
           sessionStorage.setItem(reviewProgressKey(videoProjectId), JSON.stringify({
             sourceTime: sourcePlayheadTime,
-            mode: previewingFinal ? 'final' : 'source'
+            mode: previewingFinal ? 'final' : 'source',
+            explicitSource: !previewingFinal && !!explicitSourcePreviews[videoProjectId]
           }));
         } catch (error) {}
       }
@@ -919,7 +927,7 @@
       if (playhead && project.duration) {
         playhead.style.left = Math.min(100, sourcePlayheadTime / project.duration * 100) + '%';
       }
-      if (previewingFinal) {
+      if (previewingFinal || previewingOriginalMaster) {
         caption.classList.remove('visible');
         return;
       }
@@ -984,11 +992,13 @@
     var finalPreviewButton = root.querySelector('#editorPreviewFinal');
     if (finalPreviewButton) finalPreviewButton.onclick = function () {
       previewSeekTimes[project.id] = previewingFinal ? video.currentTime : sourceToEditedTime(video.currentTime, project.cuts);
+      delete explicitSourcePreviews[project.id];
       previewModes[project.id] = 'final'; renderWorkspace();
     };
     var sourcePreviewButton = root.querySelector('#editorPreviewSource');
     if (sourcePreviewButton) sourcePreviewButton.onclick = function () {
       previewSeekTimes[project.id] = previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime;
+      explicitSourcePreviews[project.id] = true;
       previewModes[project.id] = 'source'; renderWorkspace();
     };
     root.querySelector('#editorReviewRate').onchange = function () {
@@ -1251,6 +1261,7 @@
         });
         projects = projects.filter(function (item) { return item.id !== id; });
         delete projectDetails[id];
+        delete explicitSourcePreviews[id];
         clearReviewProgress(id);
         project = null; selected.clear(); renderList();
         var workspace = root && root.querySelector('#editorWorkspace');
@@ -1441,6 +1452,7 @@
   window.RMEditor = {
     mount: function (element) {
       mountToken++;
+      openRequestToken++;
       clearTimeout(pollTimer);
       Object.keys(renderRefreshTimers).forEach(function (id) { clearTimeout(renderRefreshTimers[id]); });
       // Save queues deliberately survive a tab round trip. A PATCH already in

@@ -13780,3 +13780,33 @@ joins the running copy or receives the durable already-sent result, then follows
 the normal notice/next-recording flow. Validation and business failures remain
 single-shot and visible. The browser regression forces the first approval
 response to fail and requires the retry to succeed exactly once.
+
+---
+
+# 381. A Newly Verified Render Becomes the Review Surface Automatically (2026-09-29)
+
+When an edit invalidated a prior render, playback correctly moved to the source
+working preview. But that same `source` flag survived the replacement render
+finishing, so the workspace could continue showing the untouched camera master
+while `Approve & next` appeared. In that state the source view also overlaid
+preview captions even though its copy said it was untouched.
+
+The browser now distinguishes an explicit click on `Original master` from the
+temporary source mode used while a rebuild is pending. A completed verified
+render automatically becomes the Final edit unless Harvey deliberately chose
+the original after it was available. That deliberate choice, including its
+source time, survives refresh; any render-changing decision clears it. Original
+master playback now hides caption overlays as well as preserving every cut, so
+the two review modes truthfully mean Final encoded bytes versus untouched
+source. Browser coverage exercises explicit-source refresh separately from the
+automatic working-source-to-final transition.
+
+During that browser regression, a second ordering bug became reproducible: a
+poll/detail GET for the old recording could already be in flight when Harvey
+clicked the next card. Clearing the timer cannot cancel that request, so its
+later response could steal selection back to the old recording. Every
+`openProject` now receives a monotonic request token and only the newest token
+may update global project/workspace state or show an error; remounting also
+invalidates every prior response. The regression deliberately overlaps saves,
+remounting, polling, and next-card navigation and requires the clicked card to
+remain selected.
