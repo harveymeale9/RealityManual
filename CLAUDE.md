@@ -13255,6 +13255,11 @@ ready; it does not hammer the media route in a failure loop. The real HEVC
 regression now begins with a corrupt proxy and a
 false `ready` record, then requires startup to replace it with verified H.264.
 
+Proxy verification also compares decoded duration with the original recording
+using the same bounded 350 ms–1.5 s tolerance as final-output verification. A
+valid-looking but prematurely truncated H.264 file is therefore rebuilt rather
+than offered as a misleading complete review.
+
 ---
 
 # 357. Editor Review Layout Remains Usable Before Media Metadata (2026-09-29)

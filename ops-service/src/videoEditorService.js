@@ -731,12 +731,13 @@ function setup(options) {
     };
   }
 
-  async function browserPreviewIsValid(filePath) {
+  async function browserPreviewIsValid(filePath, expectedDuration) {
     try {
       const stat = fs.statSync(filePath);
       if (!stat.isFile() || stat.size <= 1024) return false;
       const media = await probe(filePath);
-      return media.videoCodec === 'h264' && media.hasAudio && media.width > 0 && media.height > 0;
+      const durationValid = !Number(expectedDuration) || Math.abs(media.duration - Number(expectedDuration)) <= renderDurationTolerance(expectedDuration);
+      return media.videoCodec === 'h264' && media.hasAudio && media.width > 0 && media.height > 0 && durationValid;
     } catch (error) { return false; }
   }
 
@@ -756,7 +757,7 @@ function setup(options) {
           "scale=w='if(gte(iw,ih),trunc(min(1280,iw)/2)*2,-2)':h='if(gte(iw,ih),-2,trunc(min(1280,ih)/2)*2)'",
           '-c:v', 'libx264', '-preset', 'superfast', '-crf', '28', '-pix_fmt', 'yuv420p',
           '-c:a', 'aac', '-b:a', '96k', '-movflags', '+faststart', previewPath(id)], 'browser review proxy');
-        if (!await browserPreviewIsValid(previewPath(id))) throw new Error('The browser review proxy failed verification.');
+        if (!await browserPreviewIsValid(previewPath(id), project.duration)) throw new Error('The browser review proxy failed verification.');
         project = getProject(id);
         if (!project) return;
         project.browserPreviewStatus = 'ready';
@@ -1198,7 +1199,7 @@ async function renderProject(id) {
         const needsPreview = browserPreviewNeeded(current.fileName, media);
         const previewMetadataChanged = !current.videoCodec || current.browserPreviewRequired === undefined;
         const previewFile = previewPath(current.id);
-        const previewValid = needsPreview && await browserPreviewIsValid(previewFile);
+        const previewValid = needsPreview && await browserPreviewIsValid(previewFile, current.duration);
         const expectedPreviewStatus = needsPreview ? (previewValid ? 'ready' : 'pending') : 'not_required';
         const previewStateChanged = current.browserPreviewRequired !== needsPreview || current.browserPreviewStatus !== expectedPreviewStatus;
         if (!dimensionsChanged && !previewMetadataChanged && !previewStateChanged) return;
