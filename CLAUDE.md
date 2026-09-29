@@ -13260,6 +13260,17 @@ using the same bounded 350 ms–1.5 s tolerance as final-output verification. A
 valid-looking but prematurely truncated H.264 file is therefore rebuilt rather
 than offered as a misleading complete review.
 
+Player URLs are versioned as well. Final playback carries the exact verified
+render SHA-256, untouched source playback carries its source SHA-256, and a
+derived browser proxy carries the current project revision timestamp. Rebuilt
+bytes can no longer be confused with a browser-cached predecessor at the same
+route, while unchanged masters retain a stable cache identity.
+
+The one-shot automatic media recovery timer also releases its per-project
+guard when the operator navigates away before it fires. Returning to that
+recording can therefore attempt recovery again instead of inheriting a stale
+"retry already scheduled" flag from an abandoned player.
+
 ---
 
 # 357. Editor Review Layout Remains Usable Before Media Metadata (2026-09-29)

@@ -650,7 +650,12 @@
     var previewingWorkingEdit = previewMode === 'source' && project.renderStatus !== 'ready';
     var browserSafeSource = project.browserPreviewRequired && project.browserPreviewStatus === 'ready';
     var sourcePreviewLabel = browserSafeSource ? 'Browser-safe source copy' : 'Original master';
-    var previewUrl = previewMode === 'final' ? '/api/editor/' + encodeURIComponent(project.id) + '/render?inline=1' : '/api/editor/' + encodeURIComponent(project.id) + '/source';
+    var previewVersion = previewMode === 'final'
+      ? (project.renderSha256 || project.lastRenderAt || project.updatedAt || '')
+      : (browserSafeSource ? project.updatedAt : project.sourceSha256 || project.updatedAt || '');
+    var previewUrl = previewMode === 'final'
+      ? '/api/editor/' + encodeURIComponent(project.id) + '/render?inline=1&v=' + encodeURIComponent(previewVersion)
+      : '/api/editor/' + encodeURIComponent(project.id) + '/source?v=' + encodeURIComponent(previewVersion);
     var previewSeek = Math.max(0, Number(previewSeekTimes[project.id]) || 0);
     workspace.innerHTML =
       '<div class="editor-topbar"><div><h2>' + esc(displayName(project)) + '</h2><span>' + (project.planningPieceTitle ? esc(project.name) + ' · ' : '') + formatTime(project.duration) + ' original · ' + formatTime(editedDuration(project)) + ' edited · ' + cutSeconds.toFixed(1) + 's removed' + (formatBytes(project.sizeBytes) ? ' · ' + formatBytes(project.sizeBytes) + ' source' : '') + '</span></div>' +
@@ -734,7 +739,11 @@
       if (videoError) videoError.hidden = false;
       if (!mediaRecoveryChecks[videoProjectId]) {
         mediaRecoveryChecks[videoProjectId] = setTimeout(function () {
-          if (editorMounted() && project && project.id === videoProjectId) openProject(videoProjectId, true);
+          if (!editorMounted() || !project || project.id !== videoProjectId) {
+            delete mediaRecoveryChecks[videoProjectId];
+            return;
+          }
+          openProject(videoProjectId, true);
         }, 800);
       }
     });
