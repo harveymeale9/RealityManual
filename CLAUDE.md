@@ -12181,3 +12181,21 @@ end-of-batch failure summary. A defense-in-depth 413 path handles Multer's
 `LIMIT_FILE_SIZE`, while the XHR also recognizes an nginx 413 even when its body
 is not JSON. A browser regression supplies a synthetic over-limit file, proves
 no upload request is made, then proceeds through the normal multi-file batch.
+
+---
+
+# 300. Editor Storage Is Visible and Sent Cleanup Is Unambiguous (2026-09-29)
+
+Raw 4K footage dominates this workflow's disk use, but the Editor showed only
+duration and its generic “Delete recording” copy made removing a Sent archive
+feel as though it might delete the approved Production asset too. Source size is
+now visible on every recording card and beside the original/edited durations,
+using readable KB/MB/GB units.
+
+Once approved, the action becomes **Remove Editor files** and its confirmation
+states precisely that it removes the Editor source plus render while the copied
+Content Production version remains safe. Unsent deletion instead warns that the
+original and edit are permanently removed. No automatic cleanup policy was
+introduced: Harvey retains explicit control over his masters. The browser test
+verifies size rendering, the Sent action label and the non-destructive boundary
+communicated by its confirmation.

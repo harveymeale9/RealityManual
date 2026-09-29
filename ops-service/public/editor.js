@@ -45,6 +45,14 @@
     return minutes + ':' + String(Math.floor(seconds % 60)).padStart(2, '0');
   }
 
+  function formatBytes(bytes) {
+    var value = Math.max(0, Number(bytes) || 0);
+    if (!value) return '';
+    if (value >= 1024 * 1024 * 1024) return (value / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+    if (value >= 1024 * 1024) return Math.round(value / (1024 * 1024)) + ' MB';
+    return Math.max(1, Math.round(value / 1024)) + ' KB';
+  }
+
   function displayName(item) {
     if (!item || !item.planningPieceTitle) return item && item.name || 'Untitled recording';
     return (item.planningPieceSeq ? '#' + String(item.planningPieceSeq).padStart(3, '0') + ' · ' : '') + item.planningPieceTitle;
@@ -287,7 +295,7 @@
     }
     list.innerHTML = visibleProjects.map(function (item) {
       return '<button class="editor-project' + (project && item.id === project.id ? ' active' : '') + '" data-id="' + esc(item.id) + '">' +
-        '<strong>' + esc(displayName(item)) + '</strong><span>' + esc(statusLabel(item)) + ' · ' + formatTime(item.duration) + '</span></button>';
+        '<strong>' + esc(displayName(item)) + '</strong><span>' + esc(statusLabel(item)) + ' · ' + formatTime(item.duration) + (formatBytes(item.sizeBytes) ? ' · ' + formatBytes(item.sizeBytes) : '') + '</span></button>';
     }).join('');
     list.querySelectorAll('.editor-project').forEach(function (button) {
       button.addEventListener('click', function () { openProject(button.dataset.id); });
@@ -470,8 +478,8 @@
     var previewUrl = previewMode === 'final' ? '/api/editor/' + encodeURIComponent(project.id) + '/render?inline=1' : '/api/editor/' + encodeURIComponent(project.id) + '/source';
     var previewSeek = Math.max(0, Number(previewSeekTimes[project.id]) || 0);
     workspace.innerHTML =
-      '<div class="editor-topbar"><div><h2>' + esc(displayName(project)) + '</h2><span>' + (project.planningPieceTitle ? esc(project.name) + ' · ' : '') + formatTime(project.duration) + ' original · ' + formatTime(editedDuration(project)) + ' edited · ' + cutSeconds.toFixed(1) + 's removed</span></div>' +
-        '<div class="editor-topbar-actions"><span class="editor-save-state ' + esc(saveStates[project.id] || '') + '" id="editorSaveState">' + ({ saving: 'Saving…', saved: 'Saved', error: 'Save failed' }[saveStates[project.id]] || '') + '</span><button class="editor-delete" id="editorDelete">Delete recording</button></div></div>' +
+      '<div class="editor-topbar"><div><h2>' + esc(displayName(project)) + '</h2><span>' + (project.planningPieceTitle ? esc(project.name) + ' · ' : '') + formatTime(project.duration) + ' original · ' + formatTime(editedDuration(project)) + ' edited · ' + cutSeconds.toFixed(1) + 's removed' + (formatBytes(project.sizeBytes) ? ' · ' + formatBytes(project.sizeBytes) + ' source' : '') + '</span></div>' +
+        '<div class="editor-topbar-actions"><span class="editor-save-state ' + esc(saveStates[project.id] || '') + '" id="editorSaveState">' + ({ saving: 'Saving…', saved: 'Saved', error: 'Save failed' }[saveStates[project.id]] || '') + '</span><button class="editor-delete" id="editorDelete">' + (sentToProduction ? 'Remove Editor files' : 'Delete recording') + '</button></div></div>' +
       (rendering ? '<div class="editor-lock-notice"><strong>Final edit is encoding</strong><span>Review remains available. Editing unlocks as soon as the verified file is ready.</span></div>' : '') +
       (sentToProduction ? '<div class="editor-lock-notice approved"><strong>Approved version locked</strong><span>The exact reviewed file is now in Content Production. Source and final previews remain available here.</span></div>' : '') +
       (failures.length ? '<div class="editor-error-recovery"><div><strong>' + failures.join(', ') + ' need' + (failures.length === 1 ? 's' : '') + ' attention</strong><span>Retry the failed automatic work without changing the source recording or your edit decisions.</span></div><button type="button" class="btn-secondary btn-tiny" id="editorRetryFailed">Retry failed steps</button></div>' : '') +
@@ -776,7 +784,10 @@
       else location.hash = 'upload-files';
     };
     root.querySelector('#editorDelete').onclick = function () {
-      if (!confirm('Delete this recording and its rendered export?')) return;
+      var message = project.productionPieceId
+        ? 'Remove this Editor source and render? The approved Content Production copy will remain safe.'
+        : 'Permanently delete this original recording and its rendered edit? This cannot be undone.';
+      if (!confirm(message)) return;
       var id = project.id;
       api('/api/editor/' + id, { method: 'DELETE' }).then(function () {
         projects = projects.filter(function (item) { return item.id !== id; });
