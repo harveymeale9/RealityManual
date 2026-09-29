@@ -13252,3 +13252,23 @@ that a newly pending repair enters normal polling and replaces the player when
 ready; it does not hammer the media route in a failure loop. The real HEVC
 regression now begins with a corrupt proxy and a
 false `ready` record, then requires startup to replace it with verified H.264.
+
+---
+
+# 357. Editor Review Layout Remains Usable Before Media Metadata (2026-09-29)
+
+A real browser screenshot exposed behavior that DOM assertions missed. The
+horizontal frame used intrinsic video width, so an unavailable or failed media
+response had no dimensions and collapsed the player/error overlay into a thin
+vertical strip. Horizontal review now owns a responsive 16:9 frame up to the
+workspace width, with the media contained inside it. Loading, successful, and
+error states therefore retain the same stable layout.
+
+At phone width the Recordings header and file list also sat side by side,
+producing a tall awkward picker before the edit itself. The mobile aside is now
+a compact header followed by a horizontally scrolling, snap-aligned recording
+carousel. Desktop's persistent queue/sidebar is unchanged. The same visual pass
+showed the sticky approval bar covering part of the video while Harvey was
+supposed to review it. Approval now sits in normal document flow after the
+transcript, matching the intended review-then-approve sequence and never
+obscuring playback.
