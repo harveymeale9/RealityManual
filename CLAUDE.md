@@ -13110,3 +13110,19 @@ it is harmless and the render callback advances normally; after rendering it
 immediately advances the newly linked card and safely releases any prior link.
 End-to-end coverage now observes both the automatic initial link and the later
 manual reassignment.
+
+---
+
+# 349. Edit Decisions Preserve the Exact Review Position (2026-09-29)
+
+Every saved decision re-renders the Editor workspace. Although this was safe,
+it reset playback to the beginning, so checking a later retake or pause and then
+cutting it forced Harvey to find the same moment again after each decision.
+
+Before any save or undo, Editor now remembers the active player's time and mode.
+Metadata-only changes return to the same point in the same source/final view.
+When a decision invalidates the final render, its edited-timeline position is
+translated back to the corresponding original-master time and the working
+source preview resumes there. This applies consistently to transcript cuts and
+restores, smart-retake choices, pause restoration, pacing, captions, framing,
+crop changes, word corrections, and repeated undo.

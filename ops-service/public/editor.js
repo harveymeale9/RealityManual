@@ -139,6 +139,21 @@
     return Math.min(Number(item.duration) || sourceCursor + target - cursor, sourceCursor + target - cursor);
   }
 
+  function rememberPlaybackBeforeEdit(id, renderWillChange) {
+    if (!editorMounted() || !project || project.id !== id) return;
+    var video = root.querySelector('#editorVideo');
+    if (!video || !Number.isFinite(Number(video.currentTime))) return;
+    var time = Math.max(0, Number(video.currentTime) || 0);
+    var mode = video.dataset.previewMode === 'final' ? 'final' : 'source';
+    if (mode === 'final' && renderWillChange) {
+      previewSeekTimes[id] = editedToSourceTime(time, project);
+      previewModes[id] = 'source';
+    } else {
+      previewSeekTimes[id] = time;
+      previewModes[id] = mode;
+    }
+  }
+
   function statusLabel(item) {
     function queued(label, position) {
       position = Number(position) || 0;
@@ -1067,6 +1082,7 @@
 
   function undo() {
     if (!project || !project.canUndoCut) return;
+    rememberPlaybackBeforeEdit(project.id, true);
     selected.clear();
     queueProjectUpdate(project.id, function (id) {
       var latest = project && project.id === id ? project : projects.find(function (item) { return item.id === id; });
@@ -1119,6 +1135,12 @@
 
   function save(patch) {
     var id = project.id;
+    var renderKeys = ['removedWordIndices', 'wordCorrection', 'autoSilenceEnabled', 'restoredAutoCutIds', 'captionsEnabled',
+      'layoutOverride', 'cropCenterX', 'silenceThresholdSeconds', 'retainedPauseSeconds'];
+    var renderWillChange = typeof patch === 'function' || renderKeys.some(function (key) {
+      return patch && Object.prototype.hasOwnProperty.call(patch, key);
+    });
+    rememberPlaybackBeforeEdit(id, renderWillChange);
     return queueProjectUpdate(id, function () {
       var latest = project && project.id === id ? project : projects.find(function (item) { return item.id === id; });
       function attempt(base, canRetryConflict) {
