@@ -11963,3 +11963,33 @@ claimed to be ready. Rotation correction now also schedules the replacement
 render rather than merely invalidating it. A focused regression proves every
 stale output claim is removed by the shared operation; the full generated-video
 test continues to prove the replacement reaches verified readiness.
+
+---
+
+# 288. Editor Rendering Is 58% Faster on the Real 4K Camera Sample (2026-09-29)
+
+The H.264 preset was changed from `medium` to `veryfast` while retaining the
+same 1080×1920/1920×1080 output, CRF 18 quality target, AAC 192 kbps audio,
+captions and post-render QC. A sequential benchmark against three seconds of
+the real 51.6 MB overhead-camera master measured 9.42s (`medium`), 6.68s
+(`fast`) and 3.98s (`veryfast`) on the production host. The faster result was
+also smaller (5.59 MB vs 6.22 MB) and its full-frame SSIM was marginally higher
+(0.870929 vs 0.870235) on this footage, so there was no measured quality reason
+to keep the 2.4× slower preset.
+
+This directly reduces the tail of a many-recording filming session while the
+single-render queue still protects the VPS from CPU saturation. The generated
+video integration continues to decode and verify the resulting dimensions,
+audio, duration and playable file after the preset change.
+
+---
+
+# 289. Editor Reads No Longer Leave Orphaned Readiness Callbacks (2026-09-29)
+
+The per-project GET route used to defer its inexpensive automatic-render gate
+with `setImmediate` after sending the response. Rapid polling could therefore
+leave callbacks behind after the caller had already moved on (and made clean
+database teardown in integration tests race those callbacks). The gate now
+runs synchronously after the response is formed; the expensive render itself
+remains asynchronous and queued. Read latency is unchanged in practice, while
+each request fully accounts for its own readiness check.

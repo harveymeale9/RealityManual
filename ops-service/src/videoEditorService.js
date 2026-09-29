@@ -752,7 +752,7 @@ async function renderProject(id) {
       else filters.push('[joinedv]null[outv]');
       let lastReportedProgress = -1;
       await runWithProgress('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', sourcePath(id), '-filter_complex', filters.join(';'),
-        '-map', '[outv]', '-map', '[outa]', '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-c:a', 'aac', '-b:a', '192k',
+        '-map', '[outv]', '-map', '[outa]', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-c:a', 'aac', '-b:a', '192k',
         '-movflags', '+faststart', '-progress', 'pipe:1', '-nostats', renderPath(id)], 'editor render', function (encodedSeconds) {
         const percent = Math.min(99, Math.max(0, Math.floor(encodedSeconds / Math.max(0.01, expectedDuration) * 100)));
         if (percent < lastReportedProgress + 2) return;
@@ -967,7 +967,7 @@ async function renderProject(id) {
     project.detectedContentType = contentTypeForProject(project, project.cuts);
     project.planningCandidates = typeof getPlanningCandidates === 'function' ? getPlanningCandidates(project) : [];
     res.json(withQueuePositions(project));
-    setImmediate(function () { maybeAutoRender(project.id); });
+    maybeAutoRender(project.id);
   });
 
   router.patch('/:id', function (req, res) {
