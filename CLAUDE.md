@@ -13587,3 +13587,22 @@ failed, that phase's normal completion/retry remains authoritative. Integration
 coverage starts with a valid source and the exact stranded metadata state, then
 boots the service and requires a technically verified final without any GET or
 manual action.
+
+---
+
+# 371. Concurrent Editor Uploads Reserve Capacity Before Arrival (2026-09-29)
+
+The Editor's two disk-admission checks accounted for recordings already in the
+database, but overlapping HTTP uploads could both pass the first check before
+either became a project. This was especially plausible during a multi-file
+camera dump or two open tabs and could promise more render/proxy/Production
+copies than the VPS could safely hold.
+
+Accepted uploads with a known Content-Length now reserve their full conservative
+downstream capacity in an in-memory byte ledger before Multer receives the
+body. Later requests include every live reservation in admission. Once Multer
+has stored the current request, only that request's reservation is released;
+the definitive post-upload check still includes all other uploads in flight.
+Finish, disconnect, parse error, and duplicate release paths are idempotent, so
+failed requests cannot leak capacity. A focused unit test proves summing and
+exactly-once release behavior.

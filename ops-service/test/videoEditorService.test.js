@@ -90,6 +90,18 @@ test('batch capacity includes unfinished copies owed to earlier recordings', fun
   ]), 200);
 });
 
+test('concurrent upload reservations are counted and released exactly once', function () {
+  const ledger = editor.createByteReservationLedger();
+  const first = ledger.reserve(500);
+  const second = ledger.reserve(750);
+  assert.equal(ledger.total(), 1250);
+  assert.equal(ledger.release(first), true);
+  assert.equal(ledger.release(first), false);
+  assert.equal(ledger.total(), 750);
+  assert.equal(ledger.release(second), true);
+  assert.equal(ledger.total(), 0);
+});
+
 test('final renders take the next serial encoder slot ahead of waiting proxies', async function () {
   const queue = editor.createPriorityTaskQueue();
   const order = [];
