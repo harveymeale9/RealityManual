@@ -1064,14 +1064,19 @@ async function renderProject(id) {
     if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked. Make downstream changes in Content Production.' });
     if (renderJobs.has(project.id)) return res.status(409).json({ error: 'render_in_progress', message: 'Wait for this final edit to finish before changing its cut settings.' });
     const renderWillChange = patchAffectsRender(req.body);
-    if (Array.isArray(req.body && req.body.removedWordIndices)) {
-      const nextRemovedWordIndices = Array.from(new Set(req.body.removedWordIndices.map(Number)
-        .filter(function (index) { return Number.isInteger(index) && index >= 0 && index < (project.words || []).length; }))).sort(function (a, b) { return a - b; });
-      const currentRemovedWordIndices = (project.removedWordIndices || []).map(Number).sort(function (a, b) { return a - b; });
-      if (JSON.stringify(nextRemovedWordIndices) !== JSON.stringify(currentRemovedWordIndices)) {
-        project.cutDecisionHistory = (Array.isArray(project.cutDecisionHistory) ? project.cutDecisionHistory : []).concat([currentRemovedWordIndices]).slice(-50);
-        project.removedWordIndices = nextRemovedWordIndices;
-      }
+    const currentRemovedWordIndices = (project.removedWordIndices || []).map(Number).sort(function (a, b) { return a - b; });
+    const currentDismissedRetakeIds = (project.dismissedRetakeIds || []).map(String).sort();
+    const nextRemovedWordIndices = Array.isArray(req.body && req.body.removedWordIndices)
+      ? Array.from(new Set(req.body.removedWordIndices.map(Number).filter(function (index) { return Number.isInteger(index) && index >= 0 && index < (project.words || []).length; }))).sort(function (a, b) { return a - b; })
+      : currentRemovedWordIndices;
+    const nextDismissedRetakeIds = Array.isArray(req.body && req.body.dismissedRetakeIds)
+      ? Array.from(new Set(req.body.dismissedRetakeIds.map(String).filter(function (id) { return /^(?:retake-\d+|smart-retake-\d+-\d+-\d+)$/.test(id); }))).sort()
+      : currentDismissedRetakeIds;
+    if (JSON.stringify(nextRemovedWordIndices) !== JSON.stringify(currentRemovedWordIndices) || JSON.stringify(nextDismissedRetakeIds) !== JSON.stringify(currentDismissedRetakeIds)) {
+      const snapshot = { removedWordIndices: currentRemovedWordIndices, dismissedRetakeIds: currentDismissedRetakeIds };
+      project.cutDecisionHistory = (Array.isArray(project.cutDecisionHistory) ? project.cutDecisionHistory : []).concat([snapshot]).slice(-50);
+      project.removedWordIndices = nextRemovedWordIndices;
+      project.dismissedRetakeIds = nextDismissedRetakeIds;
     }
     if (req.body && req.body.wordCorrection && typeof req.body.wordCorrection === 'object') {
       const index = Number(req.body.wordCorrection.index);
@@ -1089,11 +1094,6 @@ async function renderProject(id) {
     if (Array.isArray(req.body && req.body.restoredAutoCutIds)) {
       project.restoredAutoCutIds = Array.from(new Set(req.body.restoredAutoCutIds.map(String).filter(function (id) {
         return /^(lead|tail|gap-\d+)$/.test(id);
-      })));
-    }
-    if (Array.isArray(req.body && req.body.dismissedRetakeIds)) {
-      project.dismissedRetakeIds = Array.from(new Set(req.body.dismissedRetakeIds.map(String).filter(function (id) {
-        return /^(?:retake-\d+|smart-retake-\d+-\d+-\d+)$/.test(id);
       })));
     }
     if (typeof (req.body && req.body.captionsEnabled) === 'boolean') project.captionsEnabled = req.body.captionsEnabled;
@@ -1143,10 +1143,15 @@ async function renderProject(id) {
     const project = getProject(req.params.id);
     if (!project) return res.status(404).json({ error: 'not_found' });
     if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked.' });
-    if (renderJobs.has(project.id)) return res.status(409).json({ error: 'render_in_progress', message: 'Wait for this final edit to finish before undoing a cut.' });
+    if (renderJobs.has(project.id)) return res.status(409).json({ error: 'render_in_progress', message: 'Wait for this final edit to finish before undoing the decision.' });
     const history = Array.isArray(project.cutDecisionHistory) ? project.cutDecisionHistory.slice() : [];
-    if (!history.length) return res.status(409).json({ error: 'nothing_to_undo', message: 'There is no earlier cut decision to restore.' });
-    project.removedWordIndices = history.pop();
+    if (!history.length) return res.status(409).json({ error: 'nothing_to_undo', message: 'There is no earlier edit decision to restore.' });
+    const snapshot = history.pop();
+    if (Array.isArray(snapshot)) project.removedWordIndices = snapshot;
+    else {
+      project.removedWordIndices = Array.isArray(snapshot && snapshot.removedWordIndices) ? snapshot.removedWordIndices : [];
+      project.dismissedRetakeIds = Array.isArray(snapshot && snapshot.dismissedRetakeIds) ? snapshot.dismissedRetakeIds : [];
+    }
     project.cutDecisionHistory = history;
     invalidateRender(project);
     saveProject(project);

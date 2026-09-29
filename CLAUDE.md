@@ -12546,3 +12546,21 @@ simulation before a final exists. General timeline clicks still respect the
 chosen view, so Original master remains useful for deliberate source inspection.
 The browser regression begins inside an actual cut in Original master, invokes
 the contextual preview and proves playback switches to the rendered file.
+
+---
+
+# 320. Retake Undo Restores the Whole Decision Atomically (2026-09-29)
+
+Durable cut history initially stored only removed word indices. Retake actions
+also change whether a candidate is dismissed: **Keep both** had no Undo at all,
+and undoing **Restore first take** could put the cut back while leaving its card
+hidden as dismissed. The media and review UI could then disagree invisibly.
+
+Each history entry now snapshots both `removedWordIndices` and
+`dismissedRetakeIds` before either changes. **Undo last decision** and Ctrl/Cmd-Z
+restore them together, so a kept repetition resurfaces for review and a restored
+automatic take returns to the exact visible/applied state it had before. Legacy
+array-only history remains readable and the bounded 50-decision limit is
+unchanged. Integration coverage performs a combined restore-and-dismiss action,
+undoes it, and proves the word cut, dismissed ids, applied candidate and Undo
+availability all return coherently.

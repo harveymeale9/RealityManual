@@ -459,6 +459,18 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.planningPieceTitle, 'Corrected outline');
   assert.equal(project.renderStatus, 'ready');
   assert.deepEqual(planningChanges, [{ previous: 'plan-1', next: 'plan-2', renderWillChange: false }]);
+  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ removedWordIndices: [], dismissedRetakeIds: ['smart-retake-0-2-3'] }) });
+  assert.equal(response.status, 200);
+  project = await response.json();
+  assert.deepEqual(project.removedWordIndices, []);
+  assert.deepEqual(project.dismissedRetakeIds, ['smart-retake-0-2-3']);
+  assert.equal(project.canUndoCut, true);
+  response = await fetch(base + '/api/editor/' + project.id + '/undo-cut', { method: 'POST' });
+  assert.equal(response.status, 200);
+  project = await response.json();
+  assert.deepEqual(project.removedWordIndices, [2, 3]);
+  assert.deepEqual(project.dismissedRetakeIds, []);
+  assert.equal(project.canUndoCut, false);
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ removedWordIndices: [0, 1, 2, 3] }) });
   assert.equal(response.status, 200);
   project = await response.json();
