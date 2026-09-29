@@ -115,6 +115,18 @@ test('format classification respects composition and explicit overrides', functi
   assert.match(editor.blockingReviewFailure({ width: 1920, height: 1080, retakeAnalysisStatus: 'error' }), /retake check failed/i);
 });
 
+test('planning linkage failures do not block an otherwise safe automatic edit', function () {
+  const safe = {
+    transcriptionStatus: 'ready', classificationStatus: 'ready', retakeAnalysisStatus: 'ready',
+    planningMatchStatus: 'error', words: [], removedWordIndices: [], retakeDecisions: [],
+    layoutOverride: 'vertical', width: 1920, height: 1080
+  };
+  assert.equal(editor.automaticReviewReady(safe), true);
+  assert.equal(editor.automaticReviewReady(Object.assign({}, safe, { planningMatchStatus: 'running' })), false);
+  assert.equal(editor.automaticReviewReady(Object.assign({}, safe, { retakeAnalysisStatus: 'error' })), false);
+  assert.equal(editor.automaticReviewReady(Object.assign({}, safe, { classificationStatus: 'error' })), false);
+});
+
 test('invalidating an edit clears every stale output claim', function () {
   const project = { renderStatus: 'ready', renderError: 'old', renderProgress: 100, automaticRenderStartedAt: 'then',
     renderQuality: { status: 'passed' }, renderSizeBytes: 1234, editedDuration: 42 };

@@ -238,6 +238,17 @@ function blockingReviewFailure(project) {
   return '';
 }
 
+function automaticReviewReady(project) {
+  if (!project || project.transcriptionStatus !== 'ready') return false;
+  if (!['ready', 'unavailable'].includes(project.classificationStatus)) return false;
+  if (!['ready', 'unavailable'].includes(project.retakeAnalysisStatus)) return false;
+  // Planning linkage controls workflow bookkeeping, never the safety or bytes
+  // of the video. A failed matcher must remain visible and retryable without
+  // turning an otherwise finished automatic edit into manual babysitting.
+  if (!['ready', 'unavailable', 'error'].includes(project.planningMatchStatus)) return false;
+  return unresolvedRetakeCount(project) === 0 && !layoutReviewRequired(project);
+}
+
 function contentTypeForProject(project, cuts) {
   if (project && ['ultra_short', 'short', 'long_short', 'longform'].includes(project.contentTypeOverride)) return project.contentTypeOverride;
   if (effectiveLayout(project) === 'horizontal') return 'longform';
@@ -770,6 +781,7 @@ function setup(options) {
           project.planningMatchStatus = 'error';
           project.planningMatchError = String(err.message || err).slice(0, 500);
           saveProject(project);
+          setImmediate(function () { maybeAutoRender(id); });
         }
       }
     }).finally(function () { planningMatchJobs.delete(id); });
@@ -839,11 +851,7 @@ function setup(options) {
 
   function maybeAutoRender(id) {
     const project = getProject(id);
-    if (!project || project.productionPieceId || project.automaticRenderStartedAt || project.renderStatus || project.transcriptionStatus !== 'ready') return false;
-    if (!['ready', 'unavailable'].includes(project.classificationStatus)) return false;
-    if (!['ready', 'unavailable'].includes(project.retakeAnalysisStatus)) return false;
-    if (!['ready', 'unavailable'].includes(project.planningMatchStatus)) return false;
-    if (unresolvedRetakeCount(project) > 0 || layoutReviewRequired(project)) return false;
+    if (!project || project.productionPieceId || project.automaticRenderStartedAt || project.renderStatus || !automaticReviewReady(project)) return false;
     project.automaticRenderStartedAt = new Date().toISOString();
     saveProject(project);
     setImmediate(function () { renderProject(id); });
@@ -1530,6 +1538,7 @@ module.exports = {
   appliedRetakeCount,
   layoutReviewRequired,
   blockingReviewFailure,
+  automaticReviewReady,
   advanceEditRevision,
   normalizedVideoMimeType
 };

@@ -12990,3 +12990,19 @@ idempotent and return their existing Production piece even if their old Editor
 render is later cleaned up. Unit coverage replaces a render with different
 bytes of the same length, while route-level coverage mutates a finished render
 and proves it is rejected and rebuilt.
+
+---
+
+# 343. Planning-Link Failures No Longer Stall Video Rendering (2026-09-29)
+
+The automatic Editor pipeline previously required planning-card matching to be
+`ready` or unavailable before it would render. A transient model/provider error
+therefore stopped an otherwise safe, complete edit and forced Harvey to press
+Build manually, even though planning linkage changes only workflow metadata and
+cannot affect the finished video.
+
+Planning-match errors now remain prominently visible and retryable but count as
+non-blocking for automatic rendering. The failure path explicitly wakes the
+automatic renderer, while transcription, framing, uncertain-layout, and retake
+safety gates remain strict. Focused coverage proves a planning error proceeds
+but a running match, failed retake review, or failed framing analysis does not.
