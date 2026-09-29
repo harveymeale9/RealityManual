@@ -41,6 +41,16 @@ function runWithProgress(command, args, label, onProgress) {
   });
 }
 
+function hashFile(filePath) {
+  return new Promise(function (resolve, reject) {
+    const hash = crypto.createHash('sha256');
+    const stream = fs.createReadStream(filePath);
+    stream.on('data', function (chunk) { hash.update(chunk); });
+    stream.on('error', reject);
+    stream.on('end', function () { resolve(hash.digest('hex')); });
+  });
+}
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, Number(value) || 0));
 }
@@ -885,6 +895,23 @@ async function renderProject(id) {
     });
   });
 
+  // Older recordings predate byte-accurate duplicate detection. Hash their
+  // durable masters once in the background so future uploads use content
+  // identity rather than a camera filename/size guess.
+  setImmediate(function () {
+    listStmt.all(STORE_NAME).forEach(function (row) {
+      let project;
+      try { project = JSON.parse(row.data); } catch (e) { return; }
+      if (!project || project.sourceSha256 || !isId(project.id) || !fs.existsSync(sourcePath(project.id))) return;
+      hashFile(sourcePath(project.id)).then(function (digest) {
+        const current = getProject(project.id);
+        if (!current || current.sourceSha256) return;
+        current.sourceSha256 = digest;
+        saveProject(current);
+      }).catch(function () {});
+    });
+  });
+
   router.get('/', function (req, res) {
     const projects = listStmt.all(STORE_NAME).map(function (row) { try { return withQueuePositions(JSON.parse(row.data)); } catch (e) { return null; } }).filter(Boolean);
     res.json(projects);
@@ -892,12 +919,18 @@ async function renderProject(id) {
 
   router.post('/', upload.single('video'), async function (req, res) {
     if (!req.file || !req.file.path) return res.status(400).json({ error: 'missing_video' });
+    let sourceSha256;
+    try { sourceSha256 = await hashFile(req.file.path); }
+    catch (error) {
+      fs.rm(req.file.path, { force: true }, function () {});
+      return res.status(422).json({ error: 'hash_failed', message: 'The uploaded recording could not be read completely. Please try again.' });
+    }
     const duplicate = listStmt.all(STORE_NAME).map(function (row) { try { return JSON.parse(row.data); } catch (e) { return null; } }).filter(Boolean).find(function (item) {
-      return item.fileName === String(req.file.originalname || 'recording.mp4').slice(0, 255) && Number(item.sizeBytes) === Number(req.file.size);
+      return item.sourceSha256 && item.sourceSha256 === sourceSha256;
     });
     if (duplicate) {
       fs.rm(req.file.path, { force: true }, function () {});
-      return res.status(409).json({ error: 'duplicate_recording', existingProjectId: duplicate.id, message: 'This exact filename and file size are already in the Editor.' });
+      return res.status(409).json({ error: 'duplicate_recording', existingProjectId: duplicate.id, message: 'These exact video bytes are already in the Editor.' });
     }
     const id = crypto.randomUUID();
     try {
@@ -912,6 +945,7 @@ async function renderProject(id) {
         fileName: String(req.file.originalname || 'recording.mp4').slice(0, 255),
         mimeType: req.file.mimetype || 'video/mp4',
         sizeBytes: req.file.size,
+        sourceSha256: sourceSha256,
         duration: media.duration,
         width: media.width,
         height: media.height,
@@ -1178,6 +1212,7 @@ module.exports = {
   effectiveLayout,
   contentTypeForProject,
   invalidateRender,
+  hashFile,
   gapDecisions,
   retakeCandidates,
   normalizeRetakeDecisions,

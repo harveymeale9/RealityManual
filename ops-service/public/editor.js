@@ -302,7 +302,11 @@
     xhr.onload = function () {
       var body = {};
       try { body = JSON.parse(xhr.responseText || '{}'); } catch (e) {}
-      if (xhr.status < 200 || xhr.status >= 300) return reject(new Error(body.message || 'The recording could not be uploaded.'));
+      if (xhr.status < 200 || xhr.status >= 300) {
+        var uploadError = new Error(body.message || 'The recording could not be uploaded.');
+        uploadError.duplicate = body.error === 'duplicate_recording';
+        return reject(uploadError);
+      }
       projects.unshift(body);
       renderList();
       resolve(body);
@@ -313,7 +317,7 @@
   }
 
   function uploadFiles(fileList) {
-    var seen = new Set(projects.map(function (item) { return String(item.fileName || '') + '::' + String(item.sizeBytes || 0); }));
+    var seen = new Set();
     var duplicateCount = 0;
     var files = Array.prototype.slice.call(fileList || []).filter(function (file) {
       if (String(file.type || '').indexOf('video') !== 0) return false;
@@ -338,7 +342,8 @@
     files.forEach(function (file, index) {
       sequence = sequence.then(function () {
         return upload(file, index, files.length).then(function (item) { created.push(item); }).catch(function (error) {
-          failures.push(file.name + ': ' + error.message);
+          if (error.duplicate) duplicateCount++;
+          else failures.push(file.name + ': ' + error.message);
         });
       });
     });

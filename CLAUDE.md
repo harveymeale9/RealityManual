@@ -12030,3 +12030,22 @@ positioning. At phone width the action returns to normal document flow so a
 tall stacked bar never consumes the limited viewport. Browser checks assert
 the computed desktop/mobile positioning and retain the existing no-overflow
 guarantees.
+
+---
+
+# 292. Editor Duplicate Detection Uses Video Bytes, Not Camera Filenames (2026-09-29)
+
+The server now streams each completed upload through SHA-256 and identifies a
+recording by its exact bytes. Filename plus file size was only a convenient
+proxy: cameras reuse names across cards/days, and two different clips can have
+the same byte count. Conversely, renaming the same file used to bypass the
+check. New projects persist `sourceSha256`; older durable masters are hashed
+once in the background on startup so they join the same scheme.
+
+The browser still removes an obvious duplicate selected twice in one batch
+before upload, but it no longer rejects a new file merely because an existing
+project shares its name and size. A server-reported byte duplicate is counted
+as skipped rather than as a failed batch. Tests prove equal-size different
+content receives different identities, repeated content is stable, exact
+reuploads are rejected, and the concurrency fixture now uses two genuinely
+different synthetic videos instead of disguising one file with two names.

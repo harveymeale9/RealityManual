@@ -37,6 +37,16 @@ test('normalizes only timed spoken words and assigns stable indices', function (
   ]);
 });
 
+test('recording identity uses bytes rather than camera name and size', async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-hash-'));
+  const first = path.join(dir, 'first.bin'); const second = path.join(dir, 'second.bin');
+  fs.writeFileSync(first, 'same-size-A'); fs.writeFileSync(second, 'same-size-B');
+  assert.equal(fs.statSync(first).size, fs.statSync(second).size);
+  assert.notEqual(await editor.hashFile(first), await editor.hashFile(second));
+  assert.equal(await editor.hashFile(first), await editor.hashFile(first));
+  t.after(function () { fs.rmSync(dir, { recursive: true, force: true }); });
+});
+
 test('automatic cuts preserve natural handles around long pauses', function () {
   const cuts = editor.calculateAutoCuts(words, 9);
   assert.deepEqual(cuts.map(function (cut) { return cut.reason; }), ['leading_silence', 'long_pause', 'long_pause', 'trailing_silence']);
@@ -164,8 +174,11 @@ test('vertical captions show one large yellow word at a time', function () {
 test('batch preprocessing serializes expensive transcription and frame analysis', { timeout: 15000 }, async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-queue-'));
   const input = path.join(dir, 'sample.mp4');
+  const secondInput = path.join(dir, 'sample-two.mp4');
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=320x180:d=1:r=12',
     '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', input]);
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=320x180:d=1:r=12',
+    '-f', 'lavfi', '-i', 'sine=frequency=550:duration=1', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', secondInput]);
   const db = new Database(path.join(dir, 'test.sqlite'));
   db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
   let activeTranscriptions = 0; let maxTranscriptions = 0; let transcriptionCalls = 0;
@@ -189,7 +202,8 @@ test('batch preprocessing serializes expensive transcription and frame analysis'
   t.after(function () { server.close(); db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   const base = 'http://127.0.0.1:' + server.address().port;
   async function upload(name) {
-    const form = new FormData(); form.append('name', name); form.append('video', new Blob([fs.readFileSync(input)], { type: 'video/mp4' }), name + '.mp4');
+    const source = name === 'Second' ? secondInput : input;
+    const form = new FormData(); form.append('name', name); form.append('video', new Blob([fs.readFileSync(source)], { type: 'video/mp4' }), name + '.mp4');
     const response = await fetch(base + '/api/editor', { method: 'POST', body: form }); assert.equal(response.status, 202); return response.json();
   }
   const first = await upload('First'); const second = await upload('Second');
