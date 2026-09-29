@@ -14,6 +14,7 @@
   var previewStopTimes = {};
   var saveQueues = {};
   var saveStates = {};
+  var renderRefreshTimers = {};
   var restoreTranscriptFocus = false;
   var MAX_RECORDING_BYTES = 2 * 1024 * 1024 * 1024;
   var listFilter = localStorage.getItem('rmEditorListFilter') === 'sent' ? 'sent' : 'active';
@@ -878,6 +879,7 @@
       if (!confirm(message)) return;
       var id = project.id;
       api('/api/editor/' + id, { method: 'DELETE' }).then(function () {
+        clearTimeout(renderRefreshTimers[id]); delete renderRefreshTimers[id];
         projects = projects.filter(function (item) { return item.id !== id; });
         project = null; selected.clear(); renderList();
         root.querySelector('#editorWorkspace').innerHTML = '<div class="editor-empty"><strong>Recording deleted</strong><span>Select another recording or upload a new one.</span></div>';
@@ -985,9 +987,13 @@
         // Its PATCH response can arrive just before that queued status is
         // persisted, so fetch once more rather than leaving a hands-off
         // rebuild invisible until the page is revisited.
-        if (!item.renderStatus && !item.productionPieceId) setTimeout(function () {
-          if (project && project.id === id && !project.renderStatus) openProject(id, true);
-        }, 2900);
+        if (!item.renderStatus && !item.productionPieceId) {
+          clearTimeout(renderRefreshTimers[id]);
+          renderRefreshTimers[id] = setTimeout(function () {
+            delete renderRefreshTimers[id];
+            if (project && project.id === id && !project.renderStatus) openProject(id, true);
+          }, 2900);
+        }
       }
       return item;
     }).catch(function (error) {
@@ -1011,7 +1017,8 @@
     mount: function (element) {
       mountToken++;
       clearTimeout(pollTimer);
-      root = element; projects = []; project = null; selected.clear(); saveQueues = {}; saveStates = {}; previewSeekTimes = {}; restoreTranscriptFocus = false;
+      Object.keys(renderRefreshTimers).forEach(function (id) { clearTimeout(renderRefreshTimers[id]); });
+      root = element; projects = []; project = null; selected.clear(); saveQueues = {}; saveStates = {}; renderRefreshTimers = {}; previewSeekTimes = {}; restoreTranscriptFocus = false;
       shell();
       loadProjects().catch(function (error) {
         root.querySelector('#editorWorkspace').innerHTML = '<div class="editor-empty"><strong>Editor unavailable</strong><span>' + esc(error.message) + '</span></div>';

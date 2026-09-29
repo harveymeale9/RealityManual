@@ -12624,3 +12624,18 @@ has not advanced it yet. Because planning analysis is serialized, the first
 saved high-confidence match becomes visible before the next match builds its
 candidate set, closing the concurrent-upload race as well as the post-render
 case.
+
+---
+
+# 324. Edit Bursts Cause One Browser Refresh, Not One Per Save (2026-09-29)
+
+The server-side render debounce coalesced rapid edits correctly, but each PATCH
+still scheduled its own delayed browser fetch. Five transcript changes could
+therefore produce five near-simultaneous workspace refreshes just as the render
+began, causing needless DOM churn and potentially interrupting review controls.
+
+The Editor now keeps one delayed render-status refresh timer per project. Every
+new save replaces that timer, mirroring the server's quiet-period behavior;
+deleting a recording or remounting the Editor cancels outstanding refreshes.
+Serialized saves remain unchanged, and the final refresh still discovers the
+queued/running render and hands control to normal polling.
