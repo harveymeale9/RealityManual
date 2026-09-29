@@ -1218,6 +1218,7 @@ async function renderProject(id) {
       const resumeClassification = project.classificationStatus === 'running' || project.classificationStatus === 'pending';
       const resumeRetakes = ['running', 'pending', 'pending_transcript'].includes(project.retakeAnalysisStatus);
       const resumePlanning = ['running', 'pending', 'pending_transcript'].includes(project.planningMatchStatus);
+      const orphanedRenderKickoff = !project.renderStatus && !!project.automaticRenderStartedAt;
       if (project.transcriptionStatus === 'running' || project.transcriptionStatus === 'pending') {
         project.transcriptionStatus = 'pending';
         project.transcriptionError = '';
@@ -1231,6 +1232,7 @@ async function renderProject(id) {
         project.renderError = '';
         project.automaticRenderStartedAt = '';
       }
+      if (orphanedRenderKickoff) project.automaticRenderStartedAt = '';
       if (project.classificationStatus === 'running' || project.classificationStatus === 'pending') {
         project.classificationStatus = 'pending';
         project.classificationError = '';
@@ -1243,14 +1245,15 @@ async function renderProject(id) {
         project.planningMatchStatus = project.transcriptionStatus === 'ready' ? 'pending' : 'pending_transcript';
         project.planningMatchError = '';
       }
-      if (migrated || resumeTranscription || resumePreview || resumeRender || resumeClassification || resumeRetakes || resumePlanning) saveProject(project);
+      const resumeAutomaticRender = (resumeRender || !project.renderStatus) && automaticReviewReady(project);
+      if (migrated || resumeTranscription || resumePreview || resumeRender || resumeClassification || resumeRetakes || resumePlanning || orphanedRenderKickoff || resumeAutomaticRender) saveProject(project);
       setImmediate(function () {
         if (resumeTranscription) transcribeProject(project.id);
         if (resumePreview) generateBrowserPreview(project.id);
         if (resumeClassification) classifyProject(project.id);
         if (!resumeTranscription && project.transcriptionStatus === 'ready' && resumeRetakes) analyzeProjectRetakes(project.id);
         if (!resumeTranscription && project.transcriptionStatus === 'ready' && resumePlanning) matchProjectPlanningPiece(project.id);
-        if (resumeRender) maybeAutoRender(project.id);
+        if (resumeAutomaticRender) maybeAutoRender(project.id);
       });
     } catch (e) {}
   });

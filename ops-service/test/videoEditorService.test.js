@@ -443,6 +443,35 @@ test('service restart automatically resumes an interrupted transcription', { tim
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
 
+test('restart resumes a safe render whose kickoff died before FFmpeg queued', { timeout: 15000 }, async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-render-kickoff-'));
+  const projectDir = path.join(dir, 'editor', 'kickoff-1'); fs.mkdirSync(projectDir, { recursive: true });
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=320x180:d=1:r=12',
+    '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-f', 'mp4', path.join(projectDir, 'source')]);
+  const db = new Database(path.join(dir, 'test.sqlite'));
+  db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
+  const now = new Date().toISOString();
+  db.prepare('INSERT INTO records VALUES (?, ?, ?, ?)').run('editorProjects', 'kickoff-1', JSON.stringify({
+    id: 'kickoff-1', name: 'Interrupted kickoff', fileName: 'take.mp4', duration: 1, width: 320, height: 180,
+    words: [{ index: 0, text: 'Hello.', start: 0.2, end: 0.8 }], removedWordIndices: [], dismissedRetakeIds: [], restoredAutoCutIds: [],
+    autoSilenceEnabled: true, silenceThresholdSeconds: 1, retainedPauseSeconds: 0.38, captionsEnabled: false,
+    layoutOverride: 'horizontal', cropCenterX: 0.5, transcriptionStatus: 'ready', classificationStatus: 'unavailable',
+    retakeAnalysisStatus: 'unavailable', planningMatchStatus: 'unavailable', renderStatus: '',
+    automaticRenderStartedAt: 'interrupted-before-queue', createdAt: now, updatedAt: now
+  }), now);
+  editor.setup({ db: db, dataDir: dir, transcribeDetailed: async function () { return { text: '', words: [] }; } });
+  let stored;
+  for (let attempt = 0; attempt < 300; attempt++) {
+    stored = JSON.parse(db.prepare('SELECT data FROM records WHERE store_name=? AND id=?').get('editorProjects', 'kickoff-1').data);
+    if (stored.renderStatus === 'ready' || stored.renderStatus === 'error') break;
+    await new Promise(function (resolve) { setTimeout(resolve, 30); });
+  }
+  assert.equal(stored.renderStatus, 'ready', stored.renderError);
+  assert.equal(stored.renderQuality.status, 'passed');
+  assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), true);
+  t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+});
+
 test('approved editor projects stay immutable during restart maintenance', { timeout: 10000 }, async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-approved-'));
   const editorDir = path.join(dir, 'editor', 'approved-1'); fs.mkdirSync(editorDir, { recursive: true });
@@ -549,7 +578,7 @@ test('legacy ready recordings acquire missing analysis phases on startup', { tim
     id: 'legacy-1', name: 'Legacy take', duration: 5, width: 1920, height: 1080,
     transcriptText: 'An existing transcript.', words: [{ index: 0, text: 'Existing.', start: .2, end: .8 }],
     removedWordIndices: [], dismissedRetakeIds: [], restoredAutoCutIds: [], autoSilenceEnabled: true,
-    transcriptionStatus: 'ready', classificationStatus: 'ready', retakeAnalysisStatus: 'ready',
+    transcriptionStatus: 'ready', classificationStatus: 'ready', retakeAnalysisStatus: 'error',
     automaticRenderStartedAt: 'test-hold', createdAt: now, updatedAt: now
   }), now);
   let planningCalls = 0;

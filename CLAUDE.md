@@ -13567,3 +13567,23 @@ Undo restores the complete prior cut strategy, invalidates the stale render,
 and schedules the same debounced rebuild. End-to-end coverage changes all pause
 settings together, verifies the altered state, then proves one undo returns
 every field to the exact natural-mode baseline.
+
+---
+
+# 370. Safe Automatic Renders Cannot Be Stranded by Restart (2026-09-29)
+
+`maybeAutoRender` durably marks a kickoff before scheduling FFmpeg. A process
+restart in the tiny interval between those operations left `renderStatus`
+empty but `automaticRenderStartedAt` populated. Startup only resumed explicit
+Queued/Running renders, while the stale kickoff marker prevented every future
+automatic attempt. A recording could therefore remain prepared but never
+become approvable until a manual edit happened to invalidate it.
+
+Startup now clears orphaned kickoff markers and evaluates every renderless,
+unapproved project after interrupted phase normalization. If transcription,
+framing, retakes, and planning are already safe, it enters the same serialized
+priority render queue immediately; if a safety phase is still pending or
+failed, that phase's normal completion/retry remains authoritative. Integration
+coverage starts with a valid source and the exact stranded metadata state, then
+boots the service and requires a technically verified final without any GET or
+manual action.
