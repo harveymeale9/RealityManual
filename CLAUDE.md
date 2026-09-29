@@ -11791,3 +11791,22 @@ sent to Production, preventing background work from reopening completed items.
 A regression seeds a persisted in-flight transcription, constructs a fresh
 service instance, and proves it automatically retries the real source and
 reaches the correct terminal result without a button press.
+
+---
+
+# 279. Editor Renders Show Real FFmpeg Progress (2026-09-29)
+
+The Editor no longer presents a motionless `Rendering final video` state while
+FFmpeg is doing the longest part of the job. The render process now uses
+FFmpeg's machine-readable progress stream, compares encoded output time with
+the retained edit duration, and durably records bounded percentage updates.
+Both the active workspace and the recording sidebar display the actual encode
+percentage; the workspace also includes a compact progress bar. Queued renders
+remain distinguishable from encodes that have genuinely begun, completed
+renders settle at 100%, and failures reset the meter instead of preserving a
+misleading partial value.
+
+Progress changes are persisted only when the reported value advances by at
+least two percentage points, avoiding a write for every FFmpeg status line.
+The generated-video integration test now asserts that the completed captioned
+render reaches 100% in addition to proving the resulting MP4 exists.

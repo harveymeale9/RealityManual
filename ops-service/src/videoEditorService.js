@@ -5,7 +5,7 @@ const multer = require('multer');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 
 const STORE_NAME = 'editorProjects';
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
@@ -15,6 +15,28 @@ function run(command, args, label) {
     execFile(command, args, { maxBuffer: 20 * 1024 * 1024 }, function (err, stdout, stderr) {
       if (err) return reject(new Error(label + ' failed: ' + String(stderr || err.message).slice(-2000)));
       resolve({ stdout: stdout, stderr: stderr });
+    });
+  });
+}
+
+function runWithProgress(command, args, label, onProgress) {
+  return new Promise(function (resolve, reject) {
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = ''; let stderr = '';
+    child.stdout.setEncoding('utf8'); child.stderr.setEncoding('utf8');
+    child.stdout.on('data', function (chunk) {
+      stdout += chunk;
+      const lines = stdout.split(/\r?\n/); stdout = lines.pop() || '';
+      lines.forEach(function (line) {
+        const match = line.match(/^out_time_us=(\d+)$/);
+        if (match && typeof onProgress === 'function') onProgress(Number(match[1]) / 1000000);
+      });
+    });
+    child.stderr.on('data', function (chunk) { stderr = (stderr + chunk).slice(-20000); });
+    child.on('error', function (error) { reject(new Error(label + ' failed: ' + error.message)); });
+    child.on('close', function (code) {
+      if (code !== 0) return reject(new Error(label + ' failed: ' + stderr.slice(-2000)));
+      resolve();
     });
   });
 }
@@ -655,16 +677,19 @@ async function renderProject(id) {
     if (!queuedProject) return;
     queuedProject.renderStatus = 'queued';
     queuedProject.renderError = '';
+    queuedProject.renderProgress = 0;
     saveProject(queuedProject);
     const job = renderChain.catch(function () {}).then(async function () {
       let project = getProject(id);
       if (!project) return;
       project.renderStatus = 'running';
       project.renderError = '';
+      project.renderProgress = 0;
       saveProject(project);
       const cuts = cutsForProject(project);
       const segments = keepSegments(project.duration, cuts);
       if (!segments.length) throw new Error('Every part of the recording is currently cut. Restore some transcript first.');
+      const expectedDuration = segments.reduce(function (sum, segment) { return sum + segment.end - segment.start; }, 0);
       const assPath = path.join(projectDir(id), 'captions.ass');
       const layout = effectiveLayout(project);
       const renderShape = layout === 'vertical' ? { width: 1080, height: 1920 } : { width: 1920, height: 1080 };
@@ -688,13 +713,19 @@ async function renderProject(id) {
       filters.push(concatInputs + 'concat=n=' + segments.length + ':v=1:a=1[joinedv][outa]');
       if (project.captionsEnabled !== false) filters.push("[joinedv]subtitles='" + assPath.replace(/'/g, "'\\''") + "'[outv]");
       else filters.push('[joinedv]null[outv]');
-      await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', sourcePath(id), '-filter_complex', filters.join(';'),
+      let lastReportedProgress = -1;
+      await runWithProgress('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', sourcePath(id), '-filter_complex', filters.join(';'),
         '-map', '[outv]', '-map', '[outa]', '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-c:a', 'aac', '-b:a', '192k',
-        '-movflags', '+faststart', renderPath(id)], 'editor render');
+        '-movflags', '+faststart', '-progress', 'pipe:1', '-nostats', renderPath(id)], 'editor render', function (encodedSeconds) {
+        const percent = Math.min(99, Math.max(0, Math.floor(encodedSeconds / Math.max(0.01, expectedDuration) * 100)));
+        if (percent < lastReportedProgress + 2) return;
+        lastReportedProgress = percent;
+        const current = getProject(id);
+        if (current && current.renderStatus === 'running') { current.renderProgress = percent; saveProject(current); }
+      });
       project = getProject(id);
       if (!project) return;
       const stat = fs.statSync(renderPath(id));
-      const expectedDuration = segments.reduce(function (sum, segment) { return sum + segment.end - segment.start; }, 0);
       const renderedMedia = await probe(renderPath(id));
       const durationTolerance = Math.max(0.35, expectedDuration * 0.01);
       const qualityChecks = {
@@ -707,6 +738,7 @@ async function renderProject(id) {
         throw new Error('Rendered output failed technical verification: ' + Object.keys(qualityChecks).filter(function (key) { return !qualityChecks[key]; }).join(', '));
       }
       project.renderStatus = 'ready';
+      project.renderProgress = 100;
       project.renderSizeBytes = stat.size;
       project.editedDuration = expectedDuration;
       project.renderQuality = {
@@ -729,6 +761,7 @@ async function renderProject(id) {
       const project = getProject(id);
       if (project) {
         project.renderStatus = 'error';
+        project.renderProgress = 0;
         project.renderError = String(err.message || err).slice(0, 1000);
         project.renderQuality = { status: 'failed', checkedAt: new Date().toISOString(), message: project.renderError };
         saveProject(project);
@@ -860,6 +893,7 @@ async function renderProject(id) {
         planningMatchError: '',
         planningMatch: null,
         automaticRenderStartedAt: '',
+        renderProgress: 0,
         transcriptionStatus: 'pending',
         transcriptionError: '',
         renderStatus: '',
