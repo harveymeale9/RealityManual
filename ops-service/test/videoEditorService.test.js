@@ -351,7 +351,11 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
     },
     getPlanningCandidates: function () { return [{ id: 'plan-1', seq: 79, title: 'Synthetic outline', stage: 'filmed', notesSnippet: 'One two.' }]; },
     matchPlanningPiece: async function () { planningMatchCalls++; return { pieceId: 'plan-1', confidence: 'high', reason: 'The transcript matches the filmed outline.' }; },
-    onRenderReady: function (input) { renderReadyCalls++; assert.equal(input.project.planningPieceId, 'plan-1'); },
+    onRenderReady: function (input) {
+      renderReadyCalls++;
+      assert.equal(input.project.planningPieceId, 'plan-1');
+      if (renderReadyCalls === 1) throw new Error('Synthetic first workflow failure.');
+    },
     handoffToProduction: async function (input) {
       handoffCalls++;
       assert.equal(input.project.id.length > 0, true);
@@ -411,13 +415,14 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(planningMatchCalls, 1);
   assert.ok(project.cuts.some(function (cut) { return cut.reason === 'long_pause'; }));
   assert.deepEqual(project.captionGroups.map(function (group) { return group.text; }), ['One two.']);
-  for (let attempt = 0; attempt < 600 && project.renderStatus !== 'ready' && project.renderStatus !== 'error'; attempt++) {
+  for (let attempt = 0; attempt < 600 && (project.renderStatus !== 'error' && (project.renderStatus !== 'ready' || renderReadyCalls < 1 || !project.workflowWarning)); attempt++) {
     await new Promise(function (resolve) { setTimeout(resolve, 50); });
     project = await (await fetch(base + '/api/editor/' + project.id)).json();
   }
   assert.equal(project.renderStatus, 'ready', project.renderError);
   assert.equal(project.renderProgress, 100);
   assert.equal(renderReadyCalls, 1);
+  assert.equal(project.workflowWarning, 'Synthetic first workflow failure.');
   assert.equal(project.renderQuality.status, 'passed');
   assert.deepEqual(project.renderQuality.checks, { playableFile: true, correctFrame: true, audioPresent: true, durationMatches: true });
   assert.deepEqual([project.renderQuality.width, project.renderQuality.height], [1080, 1920]);
@@ -434,12 +439,13 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal((await response.json()).error, 'invalid_word_correction');
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ retainedPauseSeconds: 0.55 }) });
   assert.equal(response.status, 200);
-  for (let attempt = 0; attempt < 600 && (project.renderStatus !== 'ready' || renderReadyCalls < 2); attempt++) {
+  for (let attempt = 0; attempt < 600 && (project.renderStatus !== 'ready' || renderReadyCalls < 2 || project.workflowWarning); attempt++) {
     await new Promise(function (resolve) { setTimeout(resolve, 50); });
     project = await (await fetch(base + '/api/editor/' + project.id)).json();
   }
   assert.equal(project.renderStatus, 'ready', project.renderError);
   assert.equal(renderReadyCalls, 2);
+  assert.equal(project.workflowWarning, undefined);
   assert.equal(project.captionsEnabled, false);
   assert.equal(project.retainedPauseSeconds, 0.55);
   response = await fetch(base + '/api/editor/' + project.id + '/render');

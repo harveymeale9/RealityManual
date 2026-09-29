@@ -799,7 +799,14 @@ async function renderProject(id) {
       project.lastRenderAt = new Date().toISOString();
       saveProject(project);
       if (typeof onRenderReady === 'function') {
-        try { await Promise.resolve(onRenderReady({ project: project, renderPath: renderPath(id) })); }
+        try {
+          await Promise.resolve(onRenderReady({ project: project, renderPath: renderPath(id) }));
+          project = getProject(id);
+          if (project && project.workflowWarning) {
+            delete project.workflowWarning;
+            saveProject(project);
+          }
+        }
         catch (workflowError) {
           project = getProject(id);
           if (project) {

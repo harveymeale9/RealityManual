@@ -12256,3 +12256,19 @@ targets a conservative 15-character line width and may shrink as far as 36%
 for the longest accepted word. Browser preview uses the exact equivalent in
 container-width units. Tests cover the 24-character intermediate size, the
 40-character boundary size and server rejection at 41 characters.
+
+---
+
+# 304. Workflow Warnings Clear Only After a Successful Recovery (2026-09-29)
+
+If the post-render Kanban advancement hook failed, the Editor correctly kept the
+verified video and stored a visible `workflowWarning`. A later successful render
+ran the hook again but never removed that old warning, leaving a permanently
+alarming banner after the underlying workflow had healed.
+
+Successful completion of `onRenderReady` now reloads the durable project and
+clears a prior workflow warning; failure still records it exactly as before. The
+warning is therefore neither dismissed optimistically nor made sticky forever.
+The end-to-end Editor test deliberately fails the first workflow hook, proves
+the verified render carries its warning, rerenders successfully, and proves the
+warning disappears only after that second hook completes.
