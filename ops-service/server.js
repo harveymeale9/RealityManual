@@ -265,7 +265,7 @@ const stmts = {
     "SELECT created_at FROM voice_messages WHERE notification_kind='conversation' AND agent = ? AND id != ? AND status IN ('done','error') AND created_at < ? ORDER BY created_at DESC LIMIT 1"
   ),
   listOtherAgentMessagesSince: db.prepare(
-    "SELECT agent, transcript, reply_text, created_at FROM voice_messages WHERE notification_kind='conversation' AND agent != ? AND status = 'done' AND created_at > ? AND created_at < ? ORDER BY created_at ASC LIMIT 12"
+    "SELECT agent, transcript, reply_text, created_at FROM voice_messages WHERE notification_kind='conversation' AND agent != ? AND status = 'done' AND created_at > ? AND created_at < ? ORDER BY created_at DESC LIMIT 12"
   ),
   listRecentOtherAgentMessages: db.prepare(
     "SELECT agent, transcript, reply_text, created_at FROM voice_messages WHERE notification_kind='conversation' AND agent != ? AND status = 'done' AND created_at < ? ORDER BY created_at DESC LIMIT 12"
@@ -2384,7 +2384,7 @@ function buildCrossAgentContext(agent, id, createdAt) {
   const lastOwn = stmts.getLastAgentMessageBefore.get(agent, id, createdAt);
   let rows;
   if (lastOwn) {
-    rows = stmts.listOtherAgentMessagesSince.all(agent, lastOwn.created_at, createdAt);
+    rows = stmts.listOtherAgentMessagesSince.all(agent, lastOwn.created_at, createdAt).reverse();
   } else {
     rows = stmts.listRecentOtherAgentMessages.all(agent, createdAt).reverse();
   }
