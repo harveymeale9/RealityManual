@@ -60,6 +60,12 @@
     return (item.planningPieceSeq ? '#' + String(item.planningPieceSeq).padStart(3, '0') + ' · ' : '') + item.planningPieceTitle;
   }
 
+  function isVideoFile(file) {
+    var mime = String(file && file.type || '').toLowerCase();
+    if (mime.indexOf('video/') === 0) return true;
+    return (!mime || mime === 'application/octet-stream') && /\.(?:mp4|mov|m4v|webm|mkv|avi)$/i.test(String(file && file.name || ''));
+  }
+
   function editedDuration(item) {
     return Math.max(0, Number(item.duration || 0) - (item.cuts || []).reduce(function (sum, cut) {
       return sum + Number(cut.end - cut.start || 0);
@@ -345,14 +351,20 @@
   function uploadFiles(fileList) {
     var duplicateCount = 0;
     var oversized = [];
+    var unsupported = [];
     var files = Array.prototype.slice.call(fileList || []).filter(function (file) {
-      if (String(file.type || '').indexOf('video') !== 0) return false;
+      if (!isVideoFile(file)) { unsupported.push(file.name || 'Unnamed file'); return false; }
       if (Number(file.size) > MAX_RECORDING_BYTES) { oversized.push(file.name); return false; }
       return true;
     });
-    if (!files.length) return alert(oversized.length ? 'These recordings are larger than the 2 GB per-file limit:\n\n' + oversized.join('\n') + '\n\nSplit or trim each raw take, then try again.' : 'Drop one or more video files.');
+    if (!files.length) {
+      if (oversized.length) return alert('These recordings are larger than the 2 GB per-file limit:\n\n' + oversized.join('\n') + '\n\nSplit or trim each raw take, then try again.');
+      if (unsupported.length) return alert('These files do not look like supported recordings:\n\n' + unsupported.join('\n') + '\n\nUse MP4, MOV, M4V, WebM, MKV, or AVI.');
+      return alert('Drop one or more video files.');
+    }
     var created = [];
     var failures = oversized.map(function (name) { return name + ': larger than the 2 GB per-file limit'; });
+    unsupported.forEach(function (name) { failures.push(name + ': unsupported file type'); });
     editorNotice = '';
     renderNotice();
     var sequence = Promise.resolve();

@@ -12639,3 +12639,21 @@ new save replaces that timer, mirroring the server's quiet-period behavior;
 deleting a recording or remounting the Editor cancels outstanding refreshes.
 Serialized saves remain unchanged, and the final refresh still discovers the
 queued/running render and hands control to normal polling.
+
+---
+
+# 325. Camera Files With Generic MIME Metadata Reach Video Probing (2026-09-29)
+
+Desktop browsers do not consistently label camera recordings. In particular,
+dragged `.MOV` files can arrive with an empty MIME type or the generic
+`application/octet-stream` type. The Editor's client-side gate previously
+accepted only values beginning with `video`, silently discarding a legitimate
+recording before the server could inspect its real streams with `ffprobe`.
+
+The uploader now accepts common camera/video extensions (MP4, MOV, M4V, WebM,
+MKV and AVI) when the browser supplies empty or generic metadata, while the
+server remains the authority that validates the actual media. Unsupported
+files are also named explicitly, including when mixed into an otherwise valid
+batch, rather than disappearing without explanation. Browser coverage uploads
+an uppercase `.MOV` marked `application/octet-stream` and proves it enters the
+edit queue.
