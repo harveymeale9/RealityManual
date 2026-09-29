@@ -11097,3 +11097,40 @@ unanswered `/api/voice/tts` request: it entered **Loading audio…**, recovered 
 **↻ Try again** after the deadline, displayed the timeout reason, and produced
 no page errors. The shared script cache key was bumped on both Project Manager
 pages so existing browsers fetch the fix immediately.
+
+---
+
+# 252. Manual Project Manager Playback Always Outranks Automatic Speech (2026-09-29)
+
+Harvey reported that pressing Play on an existing response while a quick
+automatic acknowledgment was loading or speaking did not take control of the
+audio channel immediately. Manual and automatic playback previously entered
+the same undifferentiated `Voice.speak()` path. Although any new request could
+cancel an older one, there was no durable ownership: a later polling callback
+for an acknowledgment or completed answer could reclaim playback after the
+manual click.
+
+The shared voice client now distinguishes manual from automatic speech. A
+manual Play request immediately aborts any pending automatic TTS request or
+pauses active automatic audio, then owns the speech channel until its request
+fails, is explicitly stopped, or its audio ends. Any automatic acknowledgment,
+answer, or error that arrives while that manual owner is loading or playing is
+ignored without issuing another TTS request. Automatic speech resumes normally
+after the selected audio releases ownership. Both desktop and mobile message
+buttons explicitly identify their requests as manual; all existing background
+call sites remain automatic by default.
+
+The browser check also exposed a related status-display defect. User and
+assistant bubbles for one turn intentionally share a message ID, but the
+speaking-state listener selected the first matching bubble, which was often the
+user bubble with no Play button. Both views now target the assistant bubble
+explicitly, so a manually selected response reliably changes from **Loading
+audio…** to **Stop** while it plays.
+
+A VM regression proves manual playback aborts an in-flight acknowledgment,
+blocks a later automatic callback without a third network request, and releases
+the channel on `ended`. A real 430-pixel Chromium run used the actual mobile
+Project Manager Play button and reproduced the same race: only the automatic
+request and the manually selected request reached TTS, the late automatic
+callback was suppressed, the selected response remained active, and its button
+showed **Stop**. The shared voice-client cache key was bumped on both views.

@@ -525,7 +525,7 @@
         if (btn) { btn.textContent = '▶ Play'; btn.classList.remove('pm-stop-btn'); }
       });
       if (activeId === null || typeof activeId === 'undefined') return;
-      var active = thread.querySelector('[data-msg-id="' + activeId + '"]');
+      var active = thread.querySelector('.pm-msg-assistant[data-msg-id="' + activeId + '"]');
       if (!active) return;
       active.classList.add('pm-speaking');
       var btn = active.querySelector('.pm-play-btn');
@@ -657,7 +657,7 @@
         playBtn.removeAttribute('title');
         if (Voice.currentlySpeaking() === msgId) { Voice.stopSpeaking(); return; }
         playBtn.textContent = 'Loading audio…';
-        Voice.speak(text, msgId, agent).then(function (audio) {
+        Voice.speak(text, msgId, agent, 'reply', { manual: true }).then(function (audio) {
           if (!audio && Voice.currentlySpeaking() !== msgId) playBtn.textContent = '▶ Play';
         }).catch(function (error) {
           playBtn.textContent = error && error.code === 'openai_tts_not_configured'

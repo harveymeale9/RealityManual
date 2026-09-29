@@ -347,6 +347,12 @@ window.RMVoice = (function () {
   var currentAudio = null;
   var currentAudioReader = null;
   var currentSpeechController = null;
+  // A manual per-message Play click owns the speech channel until that
+  // request is stopped, fails, or its audio ends. Automatic acknowledgments
+  // and replies may still replace one another, but they must never queue in
+  // front of, or interrupt, something Harvey explicitly chose to hear.
+  var currentSpeechMode = null;
+  var currentSpeechToken = null;
   var TTS_LOAD_TIMEOUT_MS = 45000;
   var AUTO_SPEECH_KEY = 'rm_project_manager_auto_speech';
   var autoSpeechListeners = [];
@@ -440,6 +446,8 @@ window.RMVoice = (function () {
 
   function stopSpeaking() {
     playToken++;
+    currentSpeechMode = null;
+    currentSpeechToken = null;
     if (currentSpeechController) {
       try { currentSpeechController.abort(); } catch (e) { /* ignore */ }
       currentSpeechController = null;
@@ -461,7 +469,7 @@ window.RMVoice = (function () {
   // msgId (optional): the voice_messages row id this audio belongs to, so
   // listeners registered via onSpeakingChange can highlight/un-highlight
   // the right UI element as playback starts and stops.
-  function finishAudioLifecycle(audio, url) {
+  function finishAudioLifecycle(audio, url, myToken) {
     var finished = false;
     function finish() {
       if (finished) return;
@@ -469,6 +477,10 @@ window.RMVoice = (function () {
       if (currentAudio === audio) {
         currentAudio = null;
         currentAudioReader = null;
+        if (currentSpeechToken === myToken) {
+          currentSpeechMode = null;
+          currentSpeechToken = null;
+        }
         speakingMsgId = null;
         notifySpeakingChange();
       }
@@ -509,7 +521,7 @@ window.RMVoice = (function () {
       currentAudio = audio;
       speakingMsgId = (typeof msgId !== 'undefined') ? msgId : null;
       notifySpeakingChange();
-      var finish = finishAudioLifecycle(audio, url);
+      var finish = finishAudioLifecycle(audio, url, myToken);
       return audio.play().then(function () { return audio; }).catch(function (err) {
         abandonAudio(audio, null, url, finish);
         throw err;
@@ -534,7 +546,7 @@ window.RMVoice = (function () {
     currentAudioReader = reader;
     speakingMsgId = (typeof msgId !== 'undefined') ? msgId : null;
     notifySpeakingChange();
-    var finishAudio = finishAudioLifecycle(audio, url);
+    var finishAudio = finishAudioLifecycle(audio, url, myToken);
 
     return new Promise(function (resolve, reject) {
       var sourceBuffer = null;
@@ -592,12 +604,21 @@ window.RMVoice = (function () {
     });
   }
 
-  function speak(text, msgId, agent, speechKind) {
+  function speak(text, msgId, agent, speechKind, options) {
     var clean = stripMarkdownForSpeech(text);
     if (!clean || recordingActive) return Promise.resolve(null);
+    options = options || {};
+    var speechMode = options.manual ? 'manual' : 'automatic';
+    // A sync callback for a newly-arriving acknowledgment/final answer can
+    // fire after Harvey has clicked Play on an older response. Ignore that
+    // automatic request rather than allowing it to abort or queue ahead of
+    // the explicitly selected audio.
+    if (speechMode === 'automatic' && currentSpeechMode === 'manual') return Promise.resolve(null);
     agent = agent === 'codex' ? 'codex' : 'claude';
     stopSpeaking();
     var myToken = playToken;
+    currentSpeechMode = speechMode;
+    currentSpeechToken = myToken;
     var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     currentSpeechController = controller;
     var timedOut = false;
@@ -667,10 +688,18 @@ window.RMVoice = (function () {
     }).then(function (result) {
       if (timeoutId) clearTimeout(timeoutId);
       if (currentSpeechController === controller) currentSpeechController = null;
+      if (!result && currentSpeechToken === myToken) {
+        currentSpeechMode = null;
+        currentSpeechToken = null;
+      }
       return result;
     }, function (error) {
       if (timeoutId) clearTimeout(timeoutId);
       if (currentSpeechController === controller) currentSpeechController = null;
+      if (currentSpeechToken === myToken) {
+        currentSpeechMode = null;
+        currentSpeechToken = null;
+      }
       throw error;
     });
   }
