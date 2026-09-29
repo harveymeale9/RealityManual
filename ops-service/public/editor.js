@@ -1136,7 +1136,9 @@
     if (analyzeButton) analyzeButton.onclick = function () {
       analyzeButton.disabled = true;
       analyzeButton.textContent = 'Analyzing…';
-      api('/api/editor/' + project.id + '/classify', { method: 'POST' }).then(function () {
+      retryTransientOnce(function () {
+        return api('/api/editor/' + project.id + '/classify', { method: 'POST' });
+      }, 500).then(function () {
         project.classificationStatus = 'running'; renderWorkspace(); schedulePoll();
       }).catch(function (error) { alert(error.message); renderWorkspace(); });
     };
@@ -1144,7 +1146,9 @@
     if (retakeAnalyzeButton) retakeAnalyzeButton.onclick = function () {
       retakeAnalyzeButton.disabled = true;
       retakeAnalyzeButton.textContent = 'Analyzing…';
-      api('/api/editor/' + project.id + '/analyze-retakes', { method: 'POST' }).then(function () {
+      retryTransientOnce(function () {
+        return api('/api/editor/' + project.id + '/analyze-retakes', { method: 'POST' });
+      }, 500).then(function () {
         project.retakeAnalysisStatus = 'running'; renderWorkspace(); schedulePoll();
       }).catch(function (error) { alert(error.message); renderWorkspace(); });
     };
@@ -1152,7 +1156,9 @@
     if (matchPlanButton) matchPlanButton.onclick = function () {
       matchPlanButton.disabled = true;
       matchPlanButton.textContent = 'Matching…';
-      api('/api/editor/' + project.id + '/match-planning-piece', { method: 'POST' }).then(function () {
+      retryTransientOnce(function () {
+        return api('/api/editor/' + project.id + '/match-planning-piece', { method: 'POST' });
+      }, 500).then(function () {
         project.planningMatchStatus = 'running'; renderWorkspace(); schedulePoll();
       }).catch(function (error) { alert(error.message); renderWorkspace(); });
     };

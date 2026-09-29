@@ -13945,3 +13945,16 @@ transient network/408/425/429/5xx response after 500ms, and enters the existing
 processing/polling view. A persistent failure restores `Retry transcription`
 and reports the reason. The browser workflow forces a first-attempt 503 and
 requires exactly one retry plus the processing state.
+
+---
+
+# 390. Manual Analysis Restarts Survive Lost Responses (2026-09-29)
+
+The framing, possible-retake, and planning-card `Analyze/Match again` controls
+already disabled themselves while starting, but each made only one request.
+Their server functions all deduplicate by recording ID, so retrying a lost
+response joins the existing classifier rather than launching competing work.
+All three controls now use one bounded transient retry after 500ms, preserving
+the existing error restoration for persistent failures. The browser workflow
+forces the first manual retake-analysis response to fail with 503, then requires
+one retry and a visible running-analysis state.
