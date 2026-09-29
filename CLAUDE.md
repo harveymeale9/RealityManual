@@ -11373,6 +11373,14 @@ and confidence are shown in the UI, and both layout and duration-derived
 Ultra-short/Short/Long-short/Longform remain explicitly overridable. Older
 projects can request the same analysis with **Analyze book framing**.
 
+A production pass exposed an important boundary in that definition: a
+single-page shot can still contain a narrow sliver of its facing page. The
+classifier now calls a recording horizontal only when both pages are
+substantially visible as co-equal subjects; one dominant page remains vertical.
+A physically portrait master bypasses AI entirely and is always vertical unless
+Harvey explicitly overrides it, preventing a visual-model mistake from undoing
+an already unambiguous camera orientation.
+
 Selecting vertical now changes the actual output, not only its label. The
 preview displays a movable 9:16 crop with a horizontal crop-position control,
 and FFmpeg applies that crop independently to every retained segment before

@@ -127,6 +127,11 @@ function sourceLayout(project) {
 
 function effectiveLayout(project) {
   if (project && (project.layoutOverride === 'vertical' || project.layoutOverride === 'horizontal')) return project.layoutOverride;
+  // A physically portrait master is already an unambiguous vertical piece.
+  // Visual analysis is for Harvey's shared landscape overhead-camera setup,
+  // where one dominant page means crop vertically and two full pages means
+  // preserve the spread horizontally.
+  if (sourceLayout(project) === 'vertical') return 'vertical';
   if (project && project.visualClassification && (project.visualClassification.layout === 'vertical' || project.visualClassification.layout === 'horizontal')) {
     return project.visualClassification.layout;
   }
@@ -429,6 +434,16 @@ function setup(options) {
       saveProject(project);
       const sheetPath = path.join(projectDir(id), 'classification.jpg');
       try {
+        if (sourceLayout(project) === 'vertical') {
+          project.visualClassification = {
+            layout: 'vertical', confidence: 'high', cropCenterX: 0.5,
+            explanation: 'The camera master is already portrait, so this is an unambiguous vertical composition.'
+          };
+          project.classificationStatus = 'ready';
+          project.classificationError = '';
+          saveProject(project);
+          return;
+        }
         const sampleRate = Math.max(0.01, 3 / Math.max(1, Number(project.duration) || 1));
         await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', sourcePath(id), '-vf',
           'fps=' + sampleRate.toFixed(6) + ',scale=480:-2,tile=3x1', '-frames:v', '1', '-q:v', '3', sheetPath], 'classification frames');

@@ -62,6 +62,7 @@ test('format classification respects composition and explicit overrides', functi
   assert.equal(editor.contentTypeForProject(project, []), 'longform');
   project.contentTypeOverride = 'short';
   assert.equal(editor.contentTypeForProject(project, []), 'short');
+  assert.equal(editor.effectiveLayout({ width: 1080, height: 1920, visualClassification: { layout: 'horizontal' } }), 'vertical');
 });
 
 test('likely restarted lines are surfaced without being automatically removed', function () {
@@ -134,7 +135,7 @@ test('vertical captions show one large yellow word at a time', function () {
 test('upload, timed transcription and FFmpeg captioned render work end to end', { timeout: 30000 }, async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-'));
   const input = path.join(dir, 'sample.mp4');
-  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=360x640:d=5:r=24',
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=640x360:d=5:r=24',
     '-f', 'lavfi', '-i', 'sine=frequency=440:duration=5', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', input]);
   const db = new Database(path.join(dir, 'test.sqlite'));
   db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
