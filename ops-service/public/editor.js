@@ -465,6 +465,7 @@
       return alert('Drop one or more video files.');
     }
     var created = [];
+    var projectAtBatchStart = project && project.id || '';
     var failures = oversized.map(function (name) { return name + ': larger than the 2 GB per-file limit'; });
     unsupported.forEach(function (name) { failures.push(name + ': unsupported file type'); });
     editorNotice = '';
@@ -478,7 +479,13 @@
     files.forEach(function (file, index) {
       sequence = sequence.then(function () {
         if (uploadBatchCancelled) return;
-        return upload(file, index, files.length).then(function (item) { created.push(item); }).catch(function (error) {
+        return upload(file, index, files.length).then(function (item) {
+          created.push(item);
+          // A fresh session can start showing automatic work as soon as its
+          // first file is secured. Never steal selection from an edit Harvey
+          // was already reviewing when he added a background batch.
+          if (created.length === 1 && !projectAtBatchStart && !project && editorMounted()) openProject(item.id);
+        }).catch(function (error) {
           if (error.cancelled) return;
           if (error.duplicate) duplicateCount++;
           else failures.push(file.name + ': ' + error.message);
@@ -496,7 +503,7 @@
         : created.length + ' recording' + (created.length === 1 ? '' : 's') + ' added to the edit queue' + (duplicateCount ? ' · ' + duplicateCount + ' duplicate skipped' : '');
       paintUploadStatus();
       setTimeout(function () { uploadStatusText = ''; uploadStatusPercent = 0; paintUploadStatus(); }, 1400);
-      if (created[0] && editorMounted()) openProject(created[0].id);
+      if (created[0] && !project && editorMounted()) openProject(created[0].id);
       if (failures.length) alert('Some recordings could not be uploaded:\n\n' + failures.join('\n'));
     });
   }

@@ -13317,3 +13317,19 @@ The normal 1% allowance now has a 350 ms floor for short clips and a 1.5-second
 ceiling for long-form work. A one-hour export can no longer lose 36 seconds and
 still pass merely because that loss equals one percent, while ordinary AAC/VFR
 rounding remains comfortably tolerated.
+
+---
+
+# 360. Upload Batches Do Not Hijack the Active Review (2026-09-29)
+
+The client used to wait for an entire multi-file batch before opening its first
+recording, then forcibly selected that recording when the batch completed. A
+fresh filming session therefore showed an empty workspace longer than
+necessary, while adding background footage during an existing review could
+unexpectedly throw Harvey into another project minutes later.
+
+On an empty Editor, the first successfully secured recording now opens
+immediately while the remaining files continue uploading. If a project was
+already selected when the batch began, that review remains untouched throughout
+and after completion; new recordings still appear live in the queue and session
+summary. Completion only auto-selects when there is genuinely no active project.
