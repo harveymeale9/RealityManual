@@ -709,6 +709,8 @@
       ['pending', 'running', 'pending_transcript'].indexOf(project.planningMatchStatus) !== -1;
     var unresolvedRetakes = Number(project.unresolvedRetakeCount) || 0;
     var appliedRetakes = Number(project.appliedRetakeCount) || 0;
+    var automaticRetakeIndices = new Set((project.autoRetakeRemovedWordIndices || []).map(Number));
+    var automaticCutsPresent = (project.autoSilenceEnabled !== false && (project.gapDecisions || []).some(function (gap) { return !gap.restored; })) || automaticRetakeIndices.size > 0;
     var framingFailureBlocks = framingFailureIsBlocking(project);
     var failedSafetyCheck = project.retakeAnalysisStatus === 'error' || framingFailureBlocks;
     var renderBlocked = automaticEditRunning || failedSafetyCheck || unresolvedRetakes > 0 || project.layoutReviewRequired;
@@ -771,6 +773,7 @@
       '<section class="editor-automation"><div class="editor-automation-head"><div><div class="eyebrow">Automatic edit</div><h3>Speech and pause map</h3></div><div class="editor-legend"><span class="speech">Speech</span><span class="cut">Removed pause</span><span class="pause">Kept pause</span></div></div>' + timelineHtml(project) +
         '<div class="editor-controls"><label class="editor-toggle"><input type="checkbox" id="editorAutoSilence" ' + (project.autoSilenceEnabled !== false ? 'checked' : '') + '><span></span>Remove long pauses</label>' +
           '<label class="editor-toggle"><input type="checkbox" id="editorCaptions" ' + (project.captionsEnabled !== false ? 'checked' : '') + '><span></span>Add yellow captions</label>' +
+          '<button type="button" class="btn-secondary btn-tiny editor-clear-automation" id="editorClearAutomation" ' + (!automaticCutsPresent ? 'disabled' : '') + ' title="Restore every pause and retake removed automatically. Manual transcript cuts stay intact.">Restore automatic cuts</button>' +
           '<label class="editor-mode">Pacing<select id="editorPacing"><option value="tight"' + (Number(project.silenceThresholdSeconds) < 0.85 ? ' selected' : '') + '>Tight</option><option value="natural"' + (Number(project.silenceThresholdSeconds || 1) >= 0.85 && Number(project.silenceThresholdSeconds || 1) < 1.3 ? ' selected' : '') + '>Natural</option><option value="gentle"' + (Number(project.silenceThresholdSeconds || 1) >= 1.3 ? ' selected' : '') + '>Gentle</option></select></label></div></section>' +
       '<section class="editor-review"><div class="editor-review-column"><div class="editor-section-title"><div><div class="eyebrow">Pause decisions</div><h3>Every automatic silence cut</h3></div><span>Red means removed</span></div><div id="editorGapReview">' + gapReviewHtml(project) + '</div></div>' +
         '<div class="editor-review-column"><div class="editor-section-title"><div><div class="eyebrow">Smart review</div><h3>Possible retakes</h3></div>' +
@@ -1111,6 +1114,25 @@
       var settings = { tight: [0.7, 0.22], natural: [1, 0.38], gentle: [1.5, 0.55] }[this.value] || [1, 0.38];
       save({ silenceThresholdSeconds: settings[0], retainedPauseSeconds: settings[1] }, true);
     };
+    var clearAutomation = root.querySelector('#editorClearAutomation');
+    if (clearAutomation) clearAutomation.onclick = function () {
+      save(function (latest) {
+        var owned = new Set((latest.autoRetakeRemovedWordIndices || []).map(Number));
+        var dismissed = new Set((latest.dismissedRetakeIds || []).map(String));
+        (latest.retakeCandidates || []).forEach(function (candidate) {
+          if (candidate.removeWordIndices && candidate.removeWordIndices.length && candidate.removeWordIndices.every(function (index) { return owned.has(Number(index)); })) dismissed.add(candidate.id);
+        });
+        return {
+          autoSilenceEnabled: false,
+          removedWordIndices: (latest.removedWordIndices || []).map(Number).filter(function (index) { return !owned.has(index); }),
+          dismissedRetakeIds: Array.from(dismissed)
+        };
+      }, true).then(function (item) {
+        if (!item) return;
+        editorNotice = 'Automatic pause and retake cuts were restored. Manual transcript cuts were preserved, and Undo is available.';
+        renderNotice();
+      });
+    };
     var crop = root.querySelector('#editorCropX');
     if (crop) {
       crop.oninput = function () {
@@ -1228,7 +1250,7 @@
       });
     };
     if (editingLocked) {
-      ['#editorAnalyze', '#editorLayout', '#editorContentType', '#editorPlanningPiece', '#editorMatchPlan', '#editorCropX', '#editorAutoSilence', '#editorCaptions', '#editorPacing', '#editorAnalyzeRetakes', '#editorUndo', '#editorCorrect', '#editorRestore', '#editorCut'].forEach(function (selector) {
+      ['#editorAnalyze', '#editorLayout', '#editorContentType', '#editorPlanningPiece', '#editorMatchPlan', '#editorCropX', '#editorAutoSilence', '#editorCaptions', '#editorClearAutomation', '#editorPacing', '#editorAnalyzeRetakes', '#editorUndo', '#editorCorrect', '#editorRestore', '#editorCut'].forEach(function (selector) {
         var control = root.querySelector(selector); if (control) control.disabled = true;
       });
       root.querySelectorAll('.editor-gap-toggle,.editor-retake-apply,.editor-retake-dismiss').forEach(function (control) { control.disabled = true; });

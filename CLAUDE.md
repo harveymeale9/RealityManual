@@ -13715,3 +13715,23 @@ contract, while a failed invalid owner releases the key so the independently
 received copy can safely become the new claimant. Claims settle idempotently on
 every post-claim success/failure path. Unit coverage proves one owner, waiting
 recovery, exactly-once settlement, cleanup, and reacquisition after failure.
+
+---
+
+# 378. Restore All Automatic Cuts Without Touching Manual Edits (2026-09-29)
+
+Harvey could restore individual pauses/takes and undo recent decisions, but an
+obviously over-aggressive first pass still required many clicks. More
+importantly, retake ownership previously included every index in a high-
+confidence range even if Harvey had manually removed an overlapping word first;
+a later automation restore could therefore revive his manual cut.
+
+Retake reconciliation now claims only words that automation actually adds. A
+focused regression proves an overlapping manual word survives both applying
+and later dismissing the automatic retake. The Automatic edit panel now exposes
+`Restore automatic cuts` whenever an applied automatic pause or retake exists.
+It disables automatic pause removal, releases only automation-owned retake
+indices, and dismisses only the applied retakes it restored; manual transcript
+cuts and unresolved review-only candidates remain intact. The whole action is
+one comprehensive undo snapshot, so Undo restores the exact prior automatic
+strategy if Harvey changes his mind.

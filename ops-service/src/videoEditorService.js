@@ -537,7 +537,12 @@ function reconcileAutomaticRetakeCuts(project, decisions) {
   (decisions || []).filter(function (decision) {
     return decision.confidence === 'high' && !dismissed.has(decision.id);
   }).forEach(function (decision) {
-    decision.removeWordIndices.forEach(function (index) { removed.add(index); owned.add(index); });
+    decision.removeWordIndices.forEach(function (index) {
+      // If Harvey had already removed this word manually, automation can use
+      // the same resulting cut but must never claim ownership of it.
+      if (!removed.has(index)) owned.add(index);
+      removed.add(index);
+    });
   });
   project.removedWordIndices = Array.from(removed).sort(function (a, b) { return a - b; });
   project.autoRetakeRemovedWordIndices = Array.from(owned).sort(function (a, b) { return a - b; });

@@ -309,6 +309,17 @@ test('retake retries respect restored takes and replace only automation-owned cu
   assert.deepEqual(project.autoRetakeRemovedWordIndices, []);
 });
 
+test('automatic retakes never claim a pre-existing manual cut', function () {
+  const decision = { id: 'smart-retake-0-1-2', confidence: 'high', removeWordIndices: [1, 2] };
+  const project = { removedWordIndices: [1], autoRetakeRemovedWordIndices: [], dismissedRetakeIds: [] };
+  editor.reconcileAutomaticRetakeCuts(project, [decision]);
+  assert.deepEqual(project.removedWordIndices, [1, 2]);
+  assert.deepEqual(project.autoRetakeRemovedWordIndices, [2]);
+  project.dismissedRetakeIds = [decision.id];
+  editor.reconcileAutomaticRetakeCuts(project, [decision]);
+  assert.deepEqual(project.removedWordIndices, [1]);
+});
+
 test('editor queue summaries omit transcript-scale payload while retaining action state', function () {
   const project = {
     id: 'summary-1', name: 'Take 1', width: 1920, height: 1080,
