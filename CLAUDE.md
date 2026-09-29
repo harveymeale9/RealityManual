@@ -11650,3 +11650,22 @@ are rejected while that project's queued/running render is active, preventing a
 late encode from silently publishing settings different from those shown in
 the UI. Focused service and both Chromium workflows pass with the queued state
 included in polling and button feedback.
+
+---
+
+# 271. Approval Requires a Technically Verified Render (2026-09-29)
+
+FFmpeg exiting successfully is no longer enough to mark an Editor output ready.
+Every completed render is immediately re-probed and must pass four checks: a
+non-trivial playable file exists, the frame is exactly 1080x1920 or 1920x1080
+for the chosen composition, an audio stream is present, and encoded duration is
+within 350ms or one percent of the retained-segment duration. Only then does the
+project become Ready for approval and only then can the linked planning card
+advance to Edited.
+
+The measured dimensions, duration, timestamp and individual check results are
+stored as `renderQuality`; the review footer shows **Output verified**. A failed
+check becomes an ordinary retryable render error and cannot expose the approval
+button or the inline final preview. The generated-video integration asserts all
+four checks and the expected 1080x1920 portrait output before exercising the
+handoff.

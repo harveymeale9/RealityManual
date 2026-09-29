@@ -682,9 +682,25 @@ async function renderProject(id) {
       project = getProject(id);
       if (!project) return;
       const stat = fs.statSync(renderPath(id));
+      const expectedDuration = segments.reduce(function (sum, segment) { return sum + segment.end - segment.start; }, 0);
+      const renderedMedia = await probe(renderPath(id));
+      const durationTolerance = Math.max(0.35, expectedDuration * 0.01);
+      const qualityChecks = {
+        playableFile: stat.size > 1024,
+        correctFrame: renderedMedia.width === renderShape.width && renderedMedia.height === renderShape.height,
+        audioPresent: renderedMedia.hasAudio,
+        durationMatches: Math.abs(renderedMedia.duration - expectedDuration) <= durationTolerance
+      };
+      if (Object.keys(qualityChecks).some(function (key) { return !qualityChecks[key]; })) {
+        throw new Error('Rendered output failed technical verification: ' + Object.keys(qualityChecks).filter(function (key) { return !qualityChecks[key]; }).join(', '));
+      }
       project.renderStatus = 'ready';
       project.renderSizeBytes = stat.size;
-      project.editedDuration = segments.reduce(function (sum, segment) { return sum + segment.end - segment.start; }, 0);
+      project.editedDuration = expectedDuration;
+      project.renderQuality = {
+        status: 'passed', checkedAt: new Date().toISOString(), checks: qualityChecks,
+        width: renderedMedia.width, height: renderedMedia.height, duration: renderedMedia.duration
+      };
       project.lastRenderAt = new Date().toISOString();
       saveProject(project);
       if (typeof onRenderReady === 'function') {
@@ -702,6 +718,7 @@ async function renderProject(id) {
       if (project) {
         project.renderStatus = 'error';
         project.renderError = String(err.message || err).slice(0, 1000);
+        project.renderQuality = { status: 'failed', checkedAt: new Date().toISOString(), message: project.renderError };
         saveProject(project);
       }
     }).finally(function () { renderJobs.delete(id); });

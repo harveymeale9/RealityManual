@@ -241,6 +241,9 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   }
   assert.equal(project.renderStatus, 'ready', project.renderError);
   assert.equal(renderReadyCalls, 1);
+  assert.equal(project.renderQuality.status, 'passed');
+  assert.deepEqual(project.renderQuality.checks, { playableFile: true, correctFrame: true, audioPresent: true, durationMatches: true });
+  assert.deepEqual([project.renderQuality.width, project.renderQuality.height], [1080, 1920]);
   response = await fetch(base + '/api/editor/' + project.id + '/render');
   assert.equal(response.status, 200);
   const rendered = Buffer.from(await response.arrayBuffer());
