@@ -394,6 +394,10 @@ function setup(options) {
   const classificationJobs = new Map();
   const retakeJobs = new Map();
   const planningMatchJobs = new Map();
+  let transcriptionChain = Promise.resolve();
+  let classificationChain = Promise.resolve();
+  let retakeChain = Promise.resolve();
+  let planningMatchChain = Promise.resolve();
 
   function getProject(id) {
     const row = getStmt.get(STORE_NAME, id);
@@ -431,7 +435,7 @@ function setup(options) {
 
   async function transcribeProject(id) {
     if (transcriptionJobs.has(id)) return transcriptionJobs.get(id);
-    const job = (async function () {
+    const job = transcriptionChain.catch(function () {}).then(async function () {
       let project = getProject(id);
       if (!project) return;
       project.transcriptionStatus = 'running';
@@ -470,7 +474,8 @@ function setup(options) {
       } finally {
         fs.rm(audioPath, { force: true }, function () {});
       }
-    })().finally(function () { transcriptionJobs.delete(id); });
+    }).finally(function () { transcriptionJobs.delete(id); });
+    transcriptionChain = job.catch(function () {});
     transcriptionJobs.set(id, job);
     return job;
   }
@@ -478,7 +483,7 @@ function setup(options) {
   async function analyzeProjectRetakes(id) {
     if (retakeJobs.has(id)) return retakeJobs.get(id);
     if (typeof analyzeRetakes !== 'function') return;
-    const job = (async function () {
+    const job = retakeChain.catch(function () {}).then(async function () {
       let project = getProject(id);
       if (!project || project.transcriptionStatus !== 'ready') return;
       project.retakeAnalysisStatus = 'running';
@@ -518,7 +523,8 @@ function setup(options) {
           saveProject(project);
         }
       }
-    })().finally(function () { retakeJobs.delete(id); });
+    }).finally(function () { retakeJobs.delete(id); });
+    retakeChain = job.catch(function () {});
     retakeJobs.set(id, job);
     return job;
   }
@@ -526,7 +532,7 @@ function setup(options) {
   async function matchProjectPlanningPiece(id) {
     if (planningMatchJobs.has(id)) return planningMatchJobs.get(id);
     if (typeof matchPlanningPiece !== 'function' || typeof getPlanningCandidates !== 'function') return;
-    const job = (async function () {
+    const job = planningMatchChain.catch(function () {}).then(async function () {
       let project = getProject(id);
       if (!project || project.transcriptionStatus !== 'ready') return;
       project.planningMatchStatus = 'running';
@@ -568,7 +574,8 @@ function setup(options) {
           saveProject(project);
         }
       }
-    })().finally(function () { planningMatchJobs.delete(id); });
+    }).finally(function () { planningMatchJobs.delete(id); });
+    planningMatchChain = job.catch(function () {});
     planningMatchJobs.set(id, job);
     return job;
   }
@@ -576,7 +583,7 @@ function setup(options) {
   async function classifyProject(id) {
     if (classificationJobs.has(id)) return classificationJobs.get(id);
     if (typeof classifyVisualLayout !== 'function') return;
-    const job = (async function () {
+    const job = classificationChain.catch(function () {}).then(async function () {
       let project = getProject(id);
       if (!project) return;
       project.classificationStatus = 'running';
@@ -623,7 +630,8 @@ function setup(options) {
       } finally {
         fs.rm(sheetPath, { force: true }, function () {});
       }
-    })().finally(function () { classificationJobs.delete(id); });
+    }).finally(function () { classificationJobs.delete(id); });
+    classificationChain = job.catch(function () {});
     classificationJobs.set(id, job);
     return job;
   }
@@ -737,7 +745,7 @@ async function renderProject(id) {
   listStmt.all(STORE_NAME).forEach(function (row) {
     try {
       const project = JSON.parse(row.data);
-      if (project.transcriptionStatus === 'running') {
+      if (project.transcriptionStatus === 'running' || project.transcriptionStatus === 'pending') {
         project.transcriptionStatus = 'error';
         project.transcriptionError = 'Transcription was interrupted by a service restart. Press Retry transcription.';
         saveProject(project);
@@ -747,17 +755,17 @@ async function renderProject(id) {
         project.renderError = 'Rendering was interrupted by a service restart. Press Build final edit again.';
         saveProject(project);
       }
-      if (project.classificationStatus === 'running') {
+      if (project.classificationStatus === 'running' || project.classificationStatus === 'pending') {
         project.classificationStatus = 'error';
         project.classificationError = 'Frame analysis was interrupted by a service restart. Press Analyze again.';
         saveProject(project);
       }
-      if (project.retakeAnalysisStatus === 'running') {
+      if (['running', 'pending', 'pending_transcript'].includes(project.retakeAnalysisStatus)) {
         project.retakeAnalysisStatus = 'error';
         project.retakeAnalysisError = 'Retake analysis was interrupted by a service restart. Press Analyze retakes.';
         saveProject(project);
       }
-      if (project.planningMatchStatus === 'running') {
+      if (['running', 'pending', 'pending_transcript'].includes(project.planningMatchStatus)) {
         project.planningMatchStatus = 'error';
         project.planningMatchError = 'Planning-card matching was interrupted by a service restart. Press Match again.';
         saveProject(project);

@@ -11699,3 +11699,25 @@ Harvey's preferred review pace. It affects playback only and never changes the
 encoded production asset. Chromium verifies the media element receives the
 chosen rate, persistence is written, and the expanded toolbar still fits the
 390px mobile layout without horizontal overflow.
+
+---
+
+# 274. Batch Preprocessing Is Bounded, Not a Process Storm (2026-09-29)
+
+Filming-session intake previously uploaded files sequentially but immediately
+started every accepted project's server jobs, so 20 videos could still create
+20 audio extractions/transcriptions, 20 contact-sheet/vision passes and dozens
+of semantic one-shot processes at once. Each expensive phase now has a durable
+in-process chain: transcription, frame classification, retake analysis and
+planning-card matching each process one Editor project at a time. Retake and
+planning chains remain independent, allowing two safe structured calls in
+parallel without creating an unbounded process fan-out. Final encodes retain
+their separate single-file render queue.
+
+Queued preprocessing projects keep their existing Pending UI state until their
+turn begins. On restart, both Pending and Running work becomes an explicit
+retryable error rather than leaving a job that no longer exists behind a
+permanent spinner; sidebar status now surfaces errors from every phase as
+**Needs attention**. A two-video integration regression deliberately overlaps
+requests and proves maximum simultaneous transcription and classification are
+both one, while both jobs still complete their phase.

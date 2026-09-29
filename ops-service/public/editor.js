@@ -54,6 +54,7 @@
     if (item.productionPieceId) return 'Sent to Production';
     if (item.transcriptionStatus === 'pending' || item.transcriptionStatus === 'running') return 'Transcribing';
     if (item.transcriptionStatus === 'error') return 'Needs attention';
+    if (item.classificationStatus === 'error' || item.retakeAnalysisStatus === 'error' || item.planningMatchStatus === 'error' || item.renderStatus === 'error') return 'Needs attention';
     if (item.classificationStatus === 'pending' || item.classificationStatus === 'running') return 'Analyzing frame';
     if (item.retakeAnalysisStatus === 'pending' || item.retakeAnalysisStatus === 'running') return 'Checking retakes';
     if (item.planningMatchStatus === 'pending' || item.planningMatchStatus === 'running') return 'Matching plan';
