@@ -174,10 +174,15 @@
         '<div class="editor-transcript" id="editorTranscript">' + (project.words || []).map(function (word) {
           return '<span class="editor-word' + (removed.has(word.index) ? ' removed' : '') + '" data-index="' + word.index + '" data-start="' + word.start + '" data-end="' + word.end + '">' + esc(word.text) + '</span> ';
         }).join('') + '</div><p class="editor-selection-hint">Drag across text to select a sentence, or click individual words. Removed words remain visible so you can restore them.</p></section>' +
-      '<div class="editor-export"><div><strong>Captioned export</strong><span>Yellow captions sit below center and follow the edited speech.</span>' +
+      '<div class="editor-export"><div><strong>Next: Content Production</strong><span>' +
+        (project.productionPieceId ? 'This edit is ready in Content Production for titles, thumbnail, and ambient music.' :
+          project.renderStatus === 'ready' ? 'Send the finished edit across without uploading it again.' :
+          'Finish the edit first. Yellow captions will be baked in below center.') + '</span>' +
         (project.renderStatus === 'error' ? '<em>' + esc(project.renderError) + '</em>' : '') + '</div><div class="editor-export-actions">' +
-        (project.renderStatus === 'ready' ? '<a class="btn-secondary" href="/api/editor/' + project.id + '/render">Download MP4</a>' : '') +
-        '<button class="btn-primary" id="editorRender" ' + (project.renderStatus === 'running' ? 'disabled' : '') + '>' + (project.renderStatus === 'running' ? 'Rendering…' : 'Render captioned video') + '</button></div></div>';
+        (project.productionPieceId ? '<button class="btn-primary" id="editorOpenProduction">Open Content Production</button>' :
+          project.renderStatus === 'ready' ? '<button class="btn-primary" id="editorSendProduction">Send to Production</button>' :
+          '<button class="btn-primary" id="editorRender" ' + (project.renderStatus === 'running' ? 'disabled' : '') + '>' + (project.renderStatus === 'running' ? 'Finishing edit…' : 'Finish edit') + '</button>') +
+        '</div></div>';
     bindWorkspace();
   }
 
@@ -227,10 +232,29 @@
     root.querySelector('#editorAutoSilence').onchange = function () {
       save({ autoSilenceEnabled: this.checked }, true);
     };
-    root.querySelector('#editorRender').onclick = function () {
-      api('/api/editor/' + project.id + '/render', { method: 'POST' }).then(function () {
-        project.renderStatus = 'running'; renderWorkspace(); schedulePoll();
-      }).catch(function (error) { alert(error.message); });
+    var renderButton = root.querySelector('#editorRender');
+    if (renderButton) renderButton.onclick = function () {
+        api('/api/editor/' + project.id + '/render', { method: 'POST' }).then(function () {
+          project.renderStatus = 'running'; renderWorkspace(); schedulePoll();
+        }).catch(function (error) { alert(error.message); });
+      };
+    var sendButton = root.querySelector('#editorSendProduction');
+    if (sendButton) sendButton.onclick = function () {
+      sendButton.disabled = true;
+      sendButton.textContent = 'Sending…';
+      api('/api/editor/' + project.id + '/production', { method: 'POST' }).then(function (result) {
+        if (typeof window.__rmOpenContentProduction === 'function') return window.__rmOpenContentProduction(result.pieceId, result.piece);
+        location.hash = 'upload-files';
+      }).catch(function (error) {
+        sendButton.disabled = false;
+        sendButton.textContent = 'Send to Production';
+        alert(error.message);
+      });
+    };
+    var openButton = root.querySelector('#editorOpenProduction');
+    if (openButton) openButton.onclick = function () {
+      if (typeof window.__rmOpenContentProduction === 'function') window.__rmOpenContentProduction(project.productionPieceId);
+      else location.hash = 'upload-files';
     };
     root.querySelector('#editorDelete').onclick = function () {
       if (!confirm('Delete this recording and its rendered export?')) return;

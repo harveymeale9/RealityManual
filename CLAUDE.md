@@ -11282,3 +11282,17 @@ generated-video upload/transcribe/edit/FFmpeg-render/download flow. The full
 suite has 89 passing tests. A real Chromium test exercised the Editor tab,
 word/range selection, cut, Undo, render initiation, and the 390-pixel mobile
 layout with no page errors or horizontal overflow.
+
+The finished render is not a terminal download. **Finish edit** builds the
+captioned MP4; once ready, the primary action becomes **Send to Production**.
+That authenticated server-side handoff copies the render into the existing
+`videos` file store, creates the same Processing-stage piece a manual upload
+would have created (including orientation-based type/platform defaults), and
+starts the existing Content Production transcript/title analysis. The browser
+then opens Content Production with the item already present, ready for title
+selection, thumbnail capture, and ambient music. The editor project id is
+reused as the production piece id and persisted on the project, so retries and
+double-clicks cannot create duplicates; an already-sent edit shows **Open
+Content Production** instead. The handoff reuses the Editor's already-paid-for,
+post-cut transcript for outline matching and title generation rather than
+calling ElevenLabs a second time for the same recording.

@@ -76,6 +76,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
     '-f', 'lavfi', '-i', 'sine=frequency=440:duration=5', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', input]);
   const db = new Database(path.join(dir, 'test.sqlite'));
   db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
+  let handoffCalls = 0;
   const service = editor.setup({
     db: db,
     dataDir: dir,
@@ -84,6 +85,12 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
         { type: 'word', text: 'One', start: 0.5, end: 0.9 }, { type: 'word', text: 'two.', start: 0.95, end: 1.3 },
         { type: 'word', text: 'Three', start: 3.2, end: 3.7 }, { type: 'word', text: 'four.', start: 3.75, end: 4.2 }
       ] };
+    },
+    handoffToProduction: async function (input) {
+      handoffCalls++;
+      assert.equal(input.project.id.length > 0, true);
+      assert.equal(fs.existsSync(input.renderPath), true);
+      return { pieceId: input.project.id, alreadySent: false };
     }
   });
   const app = express();
@@ -120,4 +127,11 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   const rendered = Buffer.from(await response.arrayBuffer());
   assert.ok(rendered.length > 1000);
   assert.ok(project.editedDuration < project.duration);
+  response = await fetch(base + '/api/editor/' + project.id + '/production', { method: 'POST' });
+  assert.equal(response.status, 201);
+  assert.equal((await response.json()).pieceId, project.id);
+  response = await fetch(base + '/api/editor/' + project.id + '/production', { method: 'POST' });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).alreadySent, true);
+  assert.equal(handoffCalls, 1);
 });

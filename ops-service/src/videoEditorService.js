@@ -193,6 +193,7 @@ function setup(options) {
   const db = options.db;
   const dataDir = options.dataDir;
   const transcribeDetailed = options.transcribeDetailed;
+  const handoffToProduction = options.handoffToProduction;
   if (!db || !dataDir || typeof transcribeDetailed !== 'function') throw new Error('video editor setup is incomplete');
   const router = express.Router();
   const rootDir = path.join(dataDir, 'editor');
@@ -417,6 +418,31 @@ function setup(options) {
     if (project.transcriptionStatus !== 'ready') return res.status(409).json({ error: 'transcript_not_ready' });
     res.status(202).json({ ok: true, status: 'running' });
     renderProject(project.id);
+  });
+
+  router.post('/:id/production', async function (req, res) {
+    if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
+    let project = getProject(req.params.id);
+    if (!project) return res.status(404).json({ error: 'not_found' });
+    if (project.renderStatus !== 'ready' || !fs.existsSync(renderPath(project.id))) {
+      return res.status(409).json({ error: 'render_not_ready', message: 'Finish the edit before sending it to production.' });
+    }
+    if (project.productionPieceId) {
+      return res.json({ ok: true, pieceId: project.productionPieceId, alreadySent: true });
+    }
+    if (typeof handoffToProduction !== 'function') return res.status(501).json({ error: 'production_handoff_unavailable' });
+    try {
+      const result = await handoffToProduction({ project: project, renderPath: renderPath(project.id) });
+      project = getProject(project.id);
+      if (project) {
+        project.productionPieceId = result.pieceId;
+        project.sentToProductionAt = new Date().toISOString();
+        saveProject(project);
+      }
+      res.status(201).json({ ok: true, pieceId: result.pieceId, piece: result.piece || null, alreadySent: !!result.alreadySent });
+    } catch (err) {
+      res.status(422).json({ error: 'production_handoff_failed', message: String(err.message || err).slice(0, 1000) });
+    }
   });
 
   router.get('/:id/source', function (req, res) {

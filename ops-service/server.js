@@ -483,7 +483,8 @@ app.use('/api/tiktok', requireAuth);
 const videoEditor = videoEditorService.setup({
   db: db,
   dataDir: DATA_DIR,
-  transcribeDetailed: elevenlabs.transcribeAudioDetailed
+  transcribeDetailed: elevenlabs.transcribeAudioDetailed,
+  handoffToProduction: sendEditorProjectToProduction
 });
 app.use('/api/editor', requireAuth, videoEditor.router);
 // Content Ideation is an admin-only authoring/agent surface. It has its
@@ -1404,6 +1405,91 @@ function savePieceRecord(piece) {
   weeklyReports.recordStageChange(piece, previous && previous.stage, 'automation', stamp);
 }
 
+// Editor -> Content Production handoff. This is the server-side equivalent
+// of dropping an already-edited file into the uploader: copy the rendered
+// MP4 into the normal videos store, create its Processing-stage piece, then
+// let the existing analysis job populate transcript/title suggestions.
+// The editor project id is reused as the piece id, making retries naturally
+// idempotent and keeping one durable identity across both tools.
+function sendEditorProjectToProduction(input) {
+  const project = input && input.project;
+  const renderedPath = input && input.renderPath;
+  if (!project || !isValidId(project.id) || !renderedPath || !fs.existsSync(renderedPath)) {
+    throw new Error('The finished editor render could not be found.');
+  }
+  const existing = getPieceRecord(project.id);
+  if (existing) {
+    if (existing.editorProjectId === project.id && existing.hasVideo) {
+      return { pieceId: existing.id, alreadySent: true };
+    }
+    throw new Error('A different Content Production item already uses this recording id.');
+  }
+
+  const rows = stmts.getAll.all('pieces').map(function (row) {
+    try { return recordConcurrency.decodeRow(row); } catch (e) { return null; }
+  }).filter(Boolean);
+  const maxSeq = rows.reduce(function (max, piece) { return Math.max(max, Number(piece.seq) || 0); }, 0);
+  const maxProcessedOrder = rows.filter(function (piece) { return piece.stage === 'processed'; })
+    .reduce(function (max, piece) { return Math.max(max, Number(piece.order) || 0); }, 0);
+  const duration = Number(project.editedDuration || project.duration) || 0;
+  const vertical = Number(project.height) > Number(project.width);
+  const contentType = vertical ? (duration <= 25 ? 'ultra_short' : duration <= 60 ? 'short' : 'long_short') : 'longform';
+  const platforms = contentType === 'longform' ? ['ytlong', 'facebook'] : ['ytshort', 'tiktok', 'instagram', 'facebook'];
+  const now = new Date().toISOString();
+  const fileNameBase = String(project.name || path.parse(project.fileName || 'edited-video').name).replace(/[\\/]+/g, '-').slice(0, 180) || 'edited-video';
+  const piece = recordConcurrency.stampServerWrite({
+    id: project.id,
+    seq: maxSeq + 1,
+    title: fileNameBase,
+    stage: 'processed',
+    platforms: platforms,
+    contentType: contentType,
+    contentTypeSelectionExplicit: true,
+    videoIsVertical: vertical,
+    notesHtml: '',
+    hasVideo: true,
+    transcript: (project.words || []).filter(function (word) {
+      return (project.removedWordIndices || []).indexOf(word.index) === -1;
+    }).map(function (word) { return word.text; }).join(' '),
+    audioTrackId: '',
+    thumbnailDataUrl: '',
+    ytTitles: [],
+    tags: [],
+    analysisStatus: 'pending',
+    scheduledAt: '',
+    order: maxProcessedOrder + 10,
+    editorProjectId: project.id,
+    createdAt: now,
+    updatedAt: now
+  });
+  const videoDir = path.join(UPLOADS_DIR, 'videos');
+  const destination = path.join(videoDir, project.id);
+  fs.mkdirSync(videoDir, { recursive: true });
+  fs.copyFileSync(renderedPath, destination);
+  try {
+    const videoRecord = {
+      id: project.id,
+      fileName: fileNameBase + '.mp4',
+      mimeType: 'video/mp4',
+      sizeBytes: fs.statSync(destination).size,
+      createdAt: now
+    };
+    db.transaction(function () {
+      stmts.upsert.run('pieces', piece.id, JSON.stringify(piece), now);
+      stmts.upsert.run('videos', piece.id, JSON.stringify(videoRecord), now);
+    })();
+    weeklyReports.recordStageChange(piece, null, 'automation', now);
+    // The Editor already paid for a word-timed transcription and its text
+    // reflects Harvey's manual cuts. Reuse it for matching/title generation
+    // instead of retranscribing the rendered video through ElevenLabs.
+    setImmediate(function () { runVideoAnalysis(piece.id, piece.transcript); });
+    return { pieceId: piece.id, piece: piece, alreadySent: false };
+  } catch (error) {
+    fs.rm(destination, { force: true }, function () {});
+    throw error;
+  }
+}
+
 // Analysis (runVideoAnalysis, triggered right after upload) and the final
 // audio-splice build (runBuildFinalVideo, triggered by "Send to final
 // check") are two independent background jobs on the same piece, started
@@ -1459,7 +1545,7 @@ function withAnalysisTimeout(promise) {
   ]);
 }
 
-async function runVideoAnalysis(id) {
+async function runVideoAnalysis(id, existingTranscript) {
   const piece = getPieceRecord(id);
   if (!piece) return; // deleted before analysis started — nothing to do
   piece.analysisStatus = 'running';
@@ -1488,13 +1574,15 @@ async function runVideoAnalysis(id) {
     console.error('video codec normalization failed for ' + id + ':', e.message);
   }
 
-  let transcript = '';
-  try {
-    const tmpDir = path.join(DATA_DIR, 'tmp');
-    fs.mkdirSync(tmpDir, { recursive: true });
-    transcript = await withAnalysisTimeout(videoAnalysis.transcribeVideo(videoPath, tmpDir));
-  } catch (e) {
-    console.error('video transcription failed for ' + id + ':', e.message);
+  let transcript = typeof existingTranscript === 'string' ? existingTranscript.trim() : '';
+  if (!transcript) {
+    try {
+      const tmpDir = path.join(DATA_DIR, 'tmp');
+      fs.mkdirSync(tmpDir, { recursive: true });
+      transcript = await withAnalysisTimeout(videoAnalysis.transcribeVideo(videoPath, tmpDir));
+    } catch (e) {
+      console.error('video transcription failed for ' + id + ':', e.message);
+    }
   }
 
   try {

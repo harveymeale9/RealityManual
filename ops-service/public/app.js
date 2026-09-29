@@ -1251,6 +1251,18 @@
     return piecesLoadedPromise;
   }
 
+  // Editor creates its Processing-stage piece server-side. Inject the fresh
+  // record into this SPA's shared cache before navigating so Content
+  // Production shows it immediately rather than waiting for a page reload.
+  window.__rmOpenContentProduction = function (pieceId, freshPiece) {
+    function open(piece) {
+      if (piece && piece.id) pieces[piece.id] = piece;
+      location.hash = 'upload-files';
+    }
+    if (freshPiece && freshPiece.id) { open(freshPiece); return Promise.resolve(freshPiece); }
+    return Store.get('pieces', pieceId).then(function (piece) { open(piece); return piece; });
+  };
+
   function orderedIds(stageId) {
     return Object.keys(pieces)
       .filter(function (id) { return pieces[id].stage === stageId; })
