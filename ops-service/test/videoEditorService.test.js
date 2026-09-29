@@ -345,12 +345,16 @@ test('batch preprocessing serializes expensive transcription and frame analysis'
     transcribeDetailed: async function () {
       transcriptionCalls++; activeTranscriptions++; maxTranscriptions = Math.max(maxTranscriptions, activeTranscriptions);
       await new Promise(function (resolve) { setTimeout(resolve, 600); });
-      activeTranscriptions--; return { text: '', words: [] };
+      activeTranscriptions--;
+      if (transcriptionCalls === 1) throw new Error('Synthetic transient transcription failure');
+      return { text: '', words: [] };
     },
     classifyVisualLayout: async function () {
       classificationCalls++; activeClassifications++; maxClassifications = Math.max(maxClassifications, activeClassifications);
       await new Promise(function (resolve) { setTimeout(resolve, 600); });
-      activeClassifications--; return { layout: 'horizontal', confidence: 'high', cropCenterX: 0.5, explanation: 'Synthetic spread.' };
+      activeClassifications--;
+      if (classificationCalls === 1) throw new Error('Synthetic transient classification failure');
+      return { layout: 'horizontal', confidence: 'high', cropCenterX: 0.5, explanation: 'Synthetic spread.' };
     }
   });
   const app = express(); app.use('/api/editor', service.router);
@@ -368,10 +372,10 @@ test('batch preprocessing serializes expensive transcription and frame analysis'
   const secondQueued = await (await fetch(base + '/api/editor/' + second.id)).json();
   assert.ok(secondQueued.transcriptionQueuePosition >= 2);
   assert.ok(secondQueued.classificationQueuePosition >= 2);
-  for (let attempt = 0; attempt < 100 && (transcriptionCalls < 2 || classificationCalls < 2 || activeTranscriptions || activeClassifications); attempt++) {
+  for (let attempt = 0; attempt < 160 && (transcriptionCalls < 3 || classificationCalls < 3 || activeTranscriptions || activeClassifications); attempt++) {
     await new Promise(function (resolve) { setTimeout(resolve, 30); });
   }
-  assert.equal(transcriptionCalls, 2); assert.equal(classificationCalls, 2);
+  assert.equal(transcriptionCalls, 3); assert.equal(classificationCalls, 3);
   assert.equal(maxTranscriptions, 1); assert.equal(maxClassifications, 1);
   assert.equal((await (await fetch(base + '/api/editor/' + first.id)).json()).transcriptionStatus, 'error');
   assert.equal((await (await fetch(base + '/api/editor/' + second.id)).json()).transcriptionStatus, 'error');

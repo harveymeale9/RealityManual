@@ -806,7 +806,14 @@ function setup(options) {
       const audioPath = path.join(tempDir, 'editor-' + id + '-' + crypto.randomUUID() + '.mp3');
       try {
         await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', sourcePath(id), '-vn', '-ac', '1', '-ar', '16000', '-b:a', '64k', audioPath], 'editor audio extraction');
-        const result = await transcribeDetailed(fs.readFileSync(audioPath), 'audio/mpeg');
+        const audioBytes = fs.readFileSync(audioPath);
+        let result;
+        try {
+          result = await transcribeDetailed(audioBytes, 'audio/mpeg');
+        } catch (firstError) {
+          await new Promise(function (resolve) { setTimeout(resolve, 750); });
+          result = await transcribeDetailed(audioBytes, 'audio/mpeg');
+        }
         project = getProject(id);
         if (!project) return;
         project.transcriptText = String(result.text || '').trim();
@@ -971,7 +978,13 @@ function setup(options) {
         const sampleRate = Math.max(0.01, 3 / Math.max(1, Number(project.duration) || 1));
         await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', sourcePath(id), '-vf',
           'fps=' + sampleRate.toFixed(6) + ',scale=480:-2,tile=3x1', '-frames:v', '1', '-q:v', '3', sheetPath], 'classification frames');
-        const result = await classifyVisualLayout({ imagePath: sheetPath, width: project.width, height: project.height, duration: project.duration });
+        let result;
+        try {
+          result = await classifyVisualLayout({ imagePath: sheetPath, width: project.width, height: project.height, duration: project.duration });
+        } catch (firstError) {
+          await new Promise(function (resolve) { setTimeout(resolve, 750); });
+          result = await classifyVisualLayout({ imagePath: sheetPath, width: project.width, height: project.height, duration: project.duration });
+        }
         project = getProject(id);
         if (!project) return;
         if (!result || !['vertical', 'horizontal'].includes(result.layout)) throw new Error('The visual classifier returned no usable layout.');

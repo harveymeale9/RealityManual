@@ -13480,3 +13480,21 @@ already authoritative. Serial hashing avoids turning a large existing queue
 into a burst of competing disk reads. Coverage begins with a false Ready record
 and truncated MP4, then proves its digest, size, status, and file are all
 invalidated before review.
+
+---
+
+# 366. First-Stage Editor Providers Recover One Transient Failure (2026-09-29)
+
+Retake and planning analysis already retried one transient model/credential
+failure inside their durable job, but transcription and visual framing failed
+immediately. In an unattended filming batch, a one-off provider interruption
+therefore stranded an otherwise valid recording for manual intervention before
+the later automatic stages could even begin.
+
+Timed transcription and landscape frame classification now each retry once
+after a short backoff, using the already-extracted audio/contact sheet rather
+than repeating local FFmpeg work. A second failure remains visible and
+explicitly retryable; deterministic invalid media is unchanged. The batch
+concurrency test forces the first call of both providers to fail, proves each
+recovers on its second attempt, and still proves only one transcription and one
+classification job run concurrently across multiple recordings.
