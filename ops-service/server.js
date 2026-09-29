@@ -1635,8 +1635,8 @@ async function sendEditorProjectToProduction(input) {
   const videoDir = path.join(UPLOADS_DIR, 'videos');
   const destination = path.join(videoDir, project.id);
   fs.mkdirSync(videoDir, { recursive: true });
-  await fs.promises.copyFile(renderedPath, destination);
   try {
+    await fs.promises.copyFile(renderedPath, destination);
     const videoRecord = {
       id: project.id,
       fileName: fileNameBase + '.mp4',

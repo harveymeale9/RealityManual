@@ -12927,3 +12927,22 @@ the existing disk monitor and normal behavior remain the fallback rather than
 blocking work. The post-upload rejection removes its temp file immediately.
 Focused coverage proves a 2 GiB recording requires 10 GiB before ingest and
 8 GiB still free after storage.
+
+---
+
+# 340. Stale and Failed Outputs Release Their Disk Space Immediately (2026-09-29)
+
+Capacity admission prevents predictable exhaustion, but exceptional writes also
+need cleanup. The Production handoff awaited `copyFile` outside the `try` that
+removed its destination, so ENOSPC or another mid-copy failure could leave a
+large invisible partial video. FFmpeg failures likewise left their partial
+`render.mp4`, and changing a previously verified edit retained the now-stale
+master until its replacement happened to overwrite it.
+
+The Production copy now lives inside the existing cleanup boundary. Failed
+renders remove their partial output, and render invalidation unlinks the stale
+verified file immediately while preserving the original source master and every
+edit decision. This also makes the new capacity model accurate between edit
+bursts. The end-to-end test verifies that the prior render is physically gone
+as soon as a post-verification transcript decision invalidates it, before the
+debounced replacement begins.

@@ -549,7 +549,11 @@ function setup(options) {
       try { onRenderInvalidated({ project: project }); }
       catch (error) { project.workflowWarning = 'The edit changed safely, but its linked planning card could not be returned to Filmed.'; }
     }
-    return invalidateRender(project);
+    const invalidated = invalidateRender(project);
+    if (project && project.id && isId(project.id)) {
+      try { fs.rmSync(renderPath(project.id), { force: true }); } catch (error) {}
+    }
+    return invalidated;
   }
 
   function withQueuePositions(project) {
@@ -941,6 +945,7 @@ async function renderProject(id) {
       }
     }).catch(function (err) {
       const project = getProject(id);
+      fs.rm(renderPath(id), { force: true }, function () {});
       if (project) {
         project.renderStatus = 'error';
         project.renderProgress = 0;

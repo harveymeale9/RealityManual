@@ -545,6 +545,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.deepEqual(project.dismissedRetakeIds, ['smart-retake-0-0-1']);
   assert.equal(project.canUndoCut, true);
   assert.equal(renderInvalidatedCalls, 1);
+  assert.equal(fs.existsSync(path.join(dir, 'editor', project.id, 'render.mp4')), false);
   response = await fetch(base + '/api/editor/' + project.id + '/undo-cut', { method: 'POST' });
   assert.equal(response.status, 200);
   project = await response.json();
