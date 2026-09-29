@@ -13311,3 +13311,9 @@ was also inspected empirically during this pass: three source pauses totaling
 quiet beat was 0.36 seconds, consistent with the configured natural handles.
 Unit coverage protects loudness parsing, and the real FFmpeg end-to-end render
 must now report an audible peak as part of its passed quality record.
+
+Duration verification is also bounded rather than indefinitely proportional.
+The normal 1% allowance now has a 350 ms floor for short clips and a 1.5-second
+ceiling for long-form work. A one-hour export can no longer lose 36 seconds and
+still pass merely because that loss equals one percent, while ordinary AAC/VFR
+rounding remains comfortably tolerated.

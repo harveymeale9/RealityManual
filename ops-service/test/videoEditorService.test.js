@@ -105,6 +105,13 @@ test('render loudness parsing distinguishes audible output from digital silence'
   assert.equal(editor.parseMaxVolume('unrelated ffmpeg output'), -Infinity);
 });
 
+test('render duration tolerance stays strict for long-form output', function () {
+  assert.equal(editor.renderDurationTolerance(16), 0.35);
+  assert.equal(editor.renderDurationTolerance(60), 0.6);
+  assert.equal(editor.renderDurationTolerance(300), 1.5);
+  assert.equal(editor.renderDurationTolerance(3600), 1.5);
+});
+
 test('automatic cuts preserve natural handles around long pauses', function () {
   const cuts = editor.calculateAutoCuts(words, 9);
   assert.deepEqual(cuts.map(function (cut) { return cut.reason; }), ['leading_silence', 'long_pause', 'long_pause', 'trailing_silence']);

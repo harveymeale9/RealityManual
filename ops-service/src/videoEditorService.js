@@ -79,6 +79,10 @@ function parseMaxVolume(stderr) {
   return Number(value[1]);
 }
 
+function renderDurationTolerance(expectedSeconds) {
+  return Math.max(0.35, Math.min(1.5, Math.max(0, Number(expectedSeconds) || 0) * 0.01));
+}
+
 async function cleanStaleTempFiles(directory, olderThanMs, nowMs) {
   const cutoff = (Number(nowMs) || Date.now()) - Math.max(60000, Number(olderThanMs) || 24 * 60 * 60 * 1000);
   let entries;
@@ -1059,7 +1063,7 @@ async function renderProject(id) {
       const volumeResult = await run('ffmpeg', ['-hide_banner', '-nostats', '-i', renderPath(id), '-map', '0:a:0',
         '-af', 'volumedetect', '-f', 'null', '-'], 'render audio verification');
       const audioPeakDb = parseMaxVolume(volumeResult.stderr);
-      const durationTolerance = Math.max(0.35, expectedDuration * 0.01);
+      const durationTolerance = renderDurationTolerance(expectedDuration);
       const qualityChecks = {
         playableFile: stat.size > 1024,
         correctFrame: renderedMedia.width === renderShape.width && renderedMedia.height === renderShape.height,
@@ -1752,6 +1756,7 @@ module.exports = {
   patchNeedsAutoRender,
   hashFile,
   parseMaxVolume,
+  renderDurationTolerance,
   cleanStaleTempFiles,
   cleanOrphanedEditorTempFiles,
   gapDecisions,
