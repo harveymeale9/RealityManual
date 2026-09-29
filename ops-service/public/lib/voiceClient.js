@@ -346,6 +346,8 @@ window.RMVoice = (function () {
 
   var currentAudio = null;
   var currentAudioReader = null;
+  var currentSpeechController = null;
+  var TTS_LOAD_TIMEOUT_MS = 45000;
   var AUTO_SPEECH_KEY = 'rm_project_manager_auto_speech';
   var autoSpeechListeners = [];
   function readAutoSpeechPreference() {
@@ -438,6 +440,10 @@ window.RMVoice = (function () {
 
   function stopSpeaking() {
     playToken++;
+    if (currentSpeechController) {
+      try { currentSpeechController.abort(); } catch (e) { /* ignore */ }
+      currentSpeechController = null;
+    }
     if (currentAudioReader) {
       try { currentAudioReader.cancel(); } catch (e) { /* ignore */ }
       currentAudioReader = null;
@@ -456,7 +462,10 @@ window.RMVoice = (function () {
   // listeners registered via onSpeakingChange can highlight/un-highlight
   // the right UI element as playback starts and stops.
   function finishAudioLifecycle(audio, url) {
-    audio.addEventListener('ended', function () {
+    var finished = false;
+    function finish() {
+      if (finished) return;
+      finished = true;
       if (currentAudio === audio) {
         currentAudio = null;
         currentAudioReader = null;
@@ -464,21 +473,32 @@ window.RMVoice = (function () {
         notifySpeakingChange();
       }
       URL.revokeObjectURL(url);
-    });
+    }
+    // A decoded-media failure used to leave the shared speaking state set
+    // forever because only a normal `ended` event cleaned it up. Treat any
+    // terminal media event the same way so Play/Stop returns to Play even if
+    // the browser rejects or aborts the MP3 after audio.play() has resolved.
+    audio.addEventListener('ended', finish);
+    audio.addEventListener('error', finish);
+    audio.addEventListener('abort', finish);
+    return finish;
   }
 
-  function abandonAudio(audio, reader, url) {
+  function abandonAudio(audio, reader, url, finish) {
     if (reader) {
       try { reader.cancel().catch(function () {}); } catch (e) { /* ignore */ }
     }
     try { audio.pause(); } catch (e) { /* ignore */ }
-    if (currentAudio === audio) {
-      currentAudio = null;
-      if (currentAudioReader === reader) currentAudioReader = null;
-      speakingMsgId = null;
-      notifySpeakingChange();
+    if (finish) finish();
+    else {
+      if (currentAudio === audio) {
+        currentAudio = null;
+        if (currentAudioReader === reader) currentAudioReader = null;
+        speakingMsgId = null;
+        notifySpeakingChange();
+      }
+      URL.revokeObjectURL(url);
     }
-    URL.revokeObjectURL(url);
   }
 
   function playBufferedResponse(response, myToken, msgId) {
@@ -489,9 +509,9 @@ window.RMVoice = (function () {
       currentAudio = audio;
       speakingMsgId = (typeof msgId !== 'undefined') ? msgId : null;
       notifySpeakingChange();
-      finishAudioLifecycle(audio, url);
+      var finish = finishAudioLifecycle(audio, url);
       return audio.play().then(function () { return audio; }).catch(function (err) {
-        abandonAudio(audio, null, url);
+        abandonAudio(audio, null, url, finish);
         throw err;
       });
     });
@@ -514,7 +534,7 @@ window.RMVoice = (function () {
     currentAudioReader = reader;
     speakingMsgId = (typeof msgId !== 'undefined') ? msgId : null;
     notifySpeakingChange();
-    finishAudioLifecycle(audio, url);
+    var finishAudio = finishAudioLifecycle(audio, url);
 
     return new Promise(function (resolve, reject) {
       var sourceBuffer = null;
@@ -523,7 +543,7 @@ window.RMVoice = (function () {
       var settled = false;
 
       function fail(err) {
-        abandonAudio(audio, reader, url);
+        abandonAudio(audio, reader, url, finishAudio);
         if (!settled) {
           settled = true;
           reject(err);
@@ -578,10 +598,34 @@ window.RMVoice = (function () {
     agent = agent === 'codex' ? 'codex' : 'claude';
     stopSpeaking();
     var myToken = playToken;
-    return fetch(API_BASE + '/api/voice/tts', {
+    var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    currentSpeechController = controller;
+    var timedOut = false;
+    var timeoutError = null;
+    var timeoutId = null;
+    var timeoutPromise = new Promise(function (_, reject) {
+      timeoutId = setTimeout(function () {
+        timedOut = true;
+        timeoutError = new Error('Audio took too long to load. Please try again.');
+        timeoutError.code = 'tts_timeout';
+        // Settle the timeout branch before aborting the fetch. Some browsers
+        // dispatch AbortError synchronously enough to otherwise win the race
+        // and obscure the useful retry message.
+        reject(timeoutError);
+        if (controller) {
+          try { controller.abort(); } catch (e) { /* ignore */ }
+        }
+        // Invalidate the still-pending response as well as rejecting the
+        // caller. This matters in older browsers where aborting fetch may not
+        // actually stop response.blob() from eventually resolving.
+        if (myToken === playToken) stopSpeaking();
+      }, TTS_LOAD_TIMEOUT_MS);
+    });
+    var requestPromise = fetch(API_BASE + '/api/voice/tts', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
+      signal: controller ? controller.signal : undefined,
       body: JSON.stringify({
         text: clean,
         messageId: msgId,
@@ -612,7 +656,23 @@ window.RMVoice = (function () {
       // upstream transfer itself is uneven. playToken still prevents a stale
       // response from starting after Stop or a newer reply was requested.
       return playBufferedResponse(r, myToken, msgId);
-      });
+    });
+    return Promise.race([requestPromise, timeoutPromise]).catch(function (error) {
+      if (timedOut) throw timeoutError;
+      // Stop, recording start, disabling auto-speech, or a newer Play request
+      // deliberately aborts this request. Those are cancellations, not a
+      // playback error that should leave a red "Audio unavailable" button.
+      if (!timedOut && (myToken !== playToken || (error && error.name === 'AbortError'))) return null;
+      throw error;
+    }).then(function (result) {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (currentSpeechController === controller) currentSpeechController = null;
+      return result;
+    }, function (error) {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (currentSpeechController === controller) currentSpeechController = null;
+      throw error;
+    });
   }
 
   // Whether this device/tab looks like the one Harvey is actually looking

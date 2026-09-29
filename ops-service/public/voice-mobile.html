@@ -232,7 +232,7 @@
 
   <script src="lib/store.js"></script>
   <script src="lib/auth.js"></script>
-  <script src="lib/voiceClient.js?v=20260929-recording-preroll"></script>
+  <script src="lib/voiceClient.js?v=20260929-tts-timeout"></script>
   <script src="lib/usageDashboard.js?v=20260921-usage"></script>
   <script>
     (function () {
@@ -501,7 +501,7 @@
           }).catch(function (error) {
             playBtn.textContent = error && error.code === 'openai_tts_not_configured'
               ? 'OpenAI key needed'
-              : 'Audio unavailable';
+              : (error && error.code === 'tts_timeout' ? '↻ Try again' : 'Audio unavailable');
             playBtn.title = error && error.message ? error.message : 'Could not play this response.';
             playBtn.classList.add('pm-play-btn-error');
           });

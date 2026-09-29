@@ -662,7 +662,7 @@
         }).catch(function (error) {
           playBtn.textContent = error && error.code === 'openai_tts_not_configured'
             ? 'OpenAI key needed'
-            : 'Audio unavailable';
+            : (error && error.code === 'tts_timeout' ? '↻ Try again' : 'Audio unavailable');
           playBtn.title = error && error.message ? error.message : 'Could not play this response.';
           playBtn.classList.add('pm-play-btn-error');
         });

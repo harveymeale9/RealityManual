@@ -11065,3 +11065,35 @@ All 79 Node tests pass. The recorder regression additionally asserts at least
 Chromium checks verified green-to-red state and text transitions on desktop
 and at 390-pixel mobile width; the mobile live cue appeared after roughly 1.4
 seconds and introduced no horizontal overflow.
+
+---
+
+# 251. Project Manager Audio Loading Cannot Remain Stuck Forever (2026-09-29)
+
+Harvey reported that manually playing an earlier Project Manager reply could
+remain on **Loading audio…** indefinitely. The button was faithfully awaiting
+`Voice.speak()`, but that shared client had no deadline around either the TTS
+request or its full MP3 body download. If the provider stream, proxy, network,
+or browser body reader stalled without rejecting, the promise never settled
+and the UI had no path back to Play.
+
+Every TTS load is now bounded to 45 seconds. The client uses an
+`AbortController` to cancel the request, invalidates its playback token so a
+late response cannot begin speaking afterward, and rejects with a specific
+retryable timeout. Both desktop and mobile buttons recover to **↻ Try again**
+and expose “Audio took too long to load. Please try again.” as the tooltip.
+Starting a newer reply, beginning a recording, pressing Stop, or disabling
+automatic speech now aborts any request still being synthesized as an ordinary
+cancellation rather than showing a false playback error.
+
+The audio element lifecycle also cleans up on terminal `error` and `abort`
+events, not only normal `ended`, preventing a decoded-media failure after
+`audio.play()` resolves from leaving the bubble highlighted with a permanent
+Stop button. Object URLs are revoked exactly once.
+
+Two VM regressions cover a never-settling fetch and a later media error. A real
+390×844 Chromium pass used the actual mobile Project Manager UI and a deliberately
+unanswered `/api/voice/tts` request: it entered **Loading audio…**, recovered to
+**↻ Try again** after the deadline, displayed the timeout reason, and produced
+no page errors. The shared script cache key was bumped on both Project Manager
+pages so existing browsers fetch the fix immediately.

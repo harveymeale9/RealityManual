@@ -181,3 +181,109 @@ test('turning automatic speech off cancels pending audio and persists the prefer
   assert.equal(sandbox.window.RMVoice.isAutoSpeechEnabled(), false);
   assert.equal(saved.rm_project_manager_auto_speech, 'off');
 });
+
+test('voice playback times out and aborts a TTS response that never arrives', async () => {
+  let fetchAborted = false;
+  let timeoutDelay = null;
+
+  class FakeAbortController {
+    constructor() {
+      const listeners = [];
+      this.signal = {
+        addEventListener(name, callback) {
+          if (name === 'abort') listeners.push(callback);
+        }
+      };
+      this.abort = function () {
+        fetchAborted = true;
+        listeners.forEach((callback) => callback());
+      };
+    }
+  }
+
+  const sandbox = {
+    AbortController: FakeAbortController,
+    Blob,
+    clearTimeout() {},
+    console,
+    document: {},
+    FormData,
+    navigator: {},
+    setTimeout(callback, delay) {
+      timeoutDelay = delay;
+      queueMicrotask(callback);
+      return 1;
+    },
+    fetch(url, options) {
+      return new Promise((resolve, reject) => {
+        options.signal.addEventListener('abort', () => {
+          const error = new Error('aborted');
+          error.name = 'AbortError';
+          reject(error);
+        });
+      });
+    },
+    window: {}
+  };
+  sandbox.window.window = sandbox.window;
+  sandbox.window.navigator = sandbox.navigator;
+  vm.runInNewContext(source, sandbox);
+
+  let failure;
+  try {
+    await sandbox.window.RMVoice.speak('A response that stalls.', 'message-timeout', 'codex');
+  } catch (error) {
+    failure = error;
+  }
+
+  assert.equal(timeoutDelay, 45000);
+  assert.equal(fetchAborted, true);
+  assert.equal(failure && failure.code, 'tts_timeout');
+  assert.match(failure && failure.message, /too long to load/i);
+});
+
+test('a terminal audio media error clears the active speaking state', async () => {
+  let audioInstance;
+  let revoked = 0;
+
+  class FakeAudio {
+    constructor() {
+      this.listeners = Object.create(null);
+      audioInstance = this;
+    }
+    addEventListener(name, callback) {
+      (this.listeners[name] || (this.listeners[name] = [])).push(callback);
+    }
+    emit(name) {
+      (this.listeners[name] || []).forEach((callback) => callback());
+    }
+    play() { return Promise.resolve(); }
+    pause() {}
+  }
+
+  const sandbox = {
+    Audio: FakeAudio,
+    Blob,
+    clearTimeout,
+    console,
+    document: {},
+    fetch: async () => ({ ok: true, blob: async () => new Blob(['audio'], { type: 'audio/mpeg' }) }),
+    FormData,
+    navigator: {},
+    setTimeout,
+    URL: {
+      createObjectURL: () => 'blob:media-error',
+      revokeObjectURL() { revoked += 1; }
+    },
+    window: { Audio: FakeAudio }
+  };
+  sandbox.window.window = sandbox.window;
+  sandbox.window.navigator = sandbox.navigator;
+  vm.runInNewContext(source, sandbox);
+
+  await sandbox.window.RMVoice.speak('Audio which later fails.', 'message-media-error', 'codex');
+  assert.equal(sandbox.window.RMVoice.currentlySpeaking(), 'message-media-error');
+  audioInstance.emit('error');
+  assert.equal(sandbox.window.RMVoice.currentlySpeaking(), null);
+  assert.equal(revoked, 1);
+});
