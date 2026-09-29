@@ -555,7 +555,15 @@ function setup(options) {
   cleanStaleTempFiles(tempDir).catch(function () {});
   const tempCleanupTimer = setInterval(function () { cleanStaleTempFiles(tempDir).catch(function () {}); }, 6 * 60 * 60 * 1000);
   if (typeof tempCleanupTimer.unref === 'function') tempCleanupTimer.unref();
-  const upload = multer({ dest: tempDir, limits: { fileSize: MAX_UPLOAD_BYTES } });
+  const uploadStorage = multer.diskStorage({
+    destination: function (req, file, callback) { callback(null, tempDir); },
+    filename: function (req, file, callback) {
+      const name = 'editor-upload-' + crypto.randomUUID();
+      req.editorUploadTempPath = path.join(tempDir, name);
+      callback(null, name);
+    }
+  });
+  const upload = multer({ storage: uploadStorage, limits: { fileSize: MAX_UPLOAD_BYTES } });
   const getStmt = db.prepare('SELECT data FROM records WHERE store_name = ? AND id = ?');
   const listStmt = db.prepare('SELECT data FROM records WHERE store_name = ? ORDER BY updated_at DESC');
   const putStmt = db.prepare('INSERT INTO records (store_name, id, data, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(store_name, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at');
@@ -632,6 +640,13 @@ function setup(options) {
     if (Number.isFinite(contentLength) && contentLength > 0 && availableDiskBytes() < requiredEditorCapacity(contentLength, false)) {
       return res.status(507).json({ error: 'insufficient_storage', message: 'There is not enough free workspace to safely edit this recording. Clear old Editor files or VPS storage, then try again.' });
     }
+    next();
+  }
+
+  function cleanAbortedUpload(req, res, next) {
+    req.once('aborted', function () {
+      if (req.editorUploadTempPath) fs.rm(req.editorUploadTempPath, { force: true }, function () {});
+    });
     next();
   }
 
@@ -1192,7 +1207,7 @@ async function renderProject(id) {
     res.json(projects);
   });
 
-  router.post('/', ensureUploadCapacity, upload.single('video'), async function (req, res) {
+  router.post('/', ensureUploadCapacity, cleanAbortedUpload, upload.single('video'), async function (req, res) {
     if (!req.file || !req.file.path) return res.status(400).json({ error: 'missing_video' });
     if (availableDiskBytes() < requiredEditorCapacity(req.file.size, true)) {
       fs.rm(req.file.path, { force: true }, function () {});

@@ -471,6 +471,36 @@ test('an HEVC camera master receives a real browser-safe review proxy', { timeou
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
 
+test('an aborted multipart upload removes its partial file immediately', { timeout: 10000 }, async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-abort-'));
+  const db = new Database(path.join(dir, 'test.sqlite'));
+  db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
+  const service = editor.setup({ db: db, dataDir: dir, transcribeDetailed: async function () { return { text: '', words: [] }; } });
+  const app = express(); app.use('/api/editor', service.router);
+  const server = http.createServer(app);
+  await new Promise(function (resolve) { server.listen(0, '127.0.0.1', resolve); });
+  t.after(function () { server.close(); db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+  const boundary = '----rm-editor-abort';
+  const header = Buffer.from('--' + boundary + '\r\nContent-Disposition: form-data; name="video"; filename="abort.mp4"\r\nContent-Type: video/mp4\r\n\r\n');
+  const request = http.request({ hostname: '127.0.0.1', port: server.address().port, path: '/api/editor', method: 'POST', headers: {
+    'Content-Type': 'multipart/form-data; boundary=' + boundary,
+    'Content-Length': header.length + 2 * 1024 * 1024
+  }});
+  request.on('error', function () {});
+  request.write(header);
+  request.write(Buffer.alloc(512 * 1024));
+  const tempDir = path.join(dir, 'tmp');
+  for (let attempt = 0; attempt < 100 && fs.readdirSync(tempDir).length === 0; attempt++) {
+    await new Promise(function (resolve) { setTimeout(resolve, 10); });
+  }
+  assert.equal(fs.readdirSync(tempDir).length, 1);
+  request.destroy();
+  for (let attempt = 0; attempt < 100 && fs.readdirSync(tempDir).length > 0; attempt++) {
+    await new Promise(function (resolve) { setTimeout(resolve, 10); });
+  }
+  assert.deepEqual(fs.readdirSync(tempDir), []);
+});
+
 test('upload, timed transcription and FFmpeg captioned render work end to end', { timeout: 60000 }, async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-'));
   const input = path.join(dir, 'sample.mp4');

@@ -13126,3 +13126,19 @@ translated back to the corresponding original-master time and the working
 source preview resumes there. This applies consistently to transcript cuts and
 restores, smart-retake choices, pause restoration, pacing, captions, framing,
 crop changes, word corrections, and repeated undo.
+
+---
+
+# 350. Interrupted Camera Uploads Release Partial Files Immediately (2026-09-29)
+
+The 24-hour temp-file sweeper made abandoned uploads eventually safe, but a
+browser refresh or network loss near the 2 GiB limit could still leave that
+large partial allocation occupying the Editor workspace for the rest of the
+day. Multer's anonymous destination filenames also gave the request-abort path
+no reliable file target to remove.
+
+Editor now uses a UUID-named Multer storage target recorded on the request as
+soon as streaming begins. If Node receives the request's `aborted` event, that
+exact partial is unlinked immediately. Completed uploads follow the unchanged
+hash/probe/rename flow, invalid recordings still clean themselves, and the
+periodic sweeper remains as defense in depth for process-level interruptions.
