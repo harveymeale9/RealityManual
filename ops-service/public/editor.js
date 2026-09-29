@@ -13,6 +13,7 @@
   var previewSeekTimes = {};
   var saveQueues = {};
   var saveStates = {};
+  var restoreTranscriptFocus = false;
   var listFilter = localStorage.getItem('rmEditorListFilter') === 'sent' ? 'sent' : 'active';
   var reviewRate = Number(localStorage.getItem('rmEditorReviewRate')) || 1;
   if ([1, 1.25, 1.5, 2].indexOf(reviewRate) === -1) reviewRate = 1;
@@ -481,9 +482,9 @@
       '<section class="editor-transcript-panel"><div class="editor-transcript-head"><div><div class="eyebrow">Transcript editor</div><h3>Select words or sentences to cut them from the video</h3></div>' +
         '<div class="editor-transcript-actions"><button class="btn-secondary btn-tiny" id="editorUndo" ' + (!history.length ? 'disabled' : '') + '>Undo</button>' +
         '<button class="btn-secondary btn-tiny" id="editorRestore" disabled>Restore selected</button><button class="btn-primary btn-tiny" id="editorCut" disabled>Cut selected</button></div></div>' +
-        '<div class="editor-transcript' + (rendering ? ' locked' : '') + '" id="editorTranscript">' + (project.words || []).map(function (word) {
+        '<div class="editor-transcript' + (rendering ? ' locked' : '') + '" id="editorTranscript" tabindex="0">' + (project.words || []).map(function (word) {
           return '<span class="editor-word' + (removed.has(word.index) ? ' removed' : '') + '" data-index="' + word.index + '" data-start="' + word.start + '" data-end="' + word.end + '">' + esc(word.text) + '</span> ';
-        }).join('') + '</div><p class="editor-selection-hint">Drag across text to select a sentence, or click individual words. Removed words remain visible so you can restore them.</p></section>' +
+        }).join('') + '</div><p class="editor-selection-hint">Drag across text or click words. Press Delete to cut, Ctrl/⌘ Z to undo, or Escape to clear. Removed words remain visible so you can restore them.</p></section>' +
       '<div class="editor-export"><div><strong>Next: Content Production</strong><span>' +
         (project.productionPieceId ? 'This edit is ready in Content Production for titles, thumbnail, and ambient music.' :
           project.renderStatus === 'ready' ? 'Send the finished edit across without uploading it again.' :
@@ -505,6 +506,10 @@
     var previewingFinal = video.dataset.previewMode === 'final';
     var rendering = ['queued', 'running'].indexOf(project.renderStatus) !== -1;
     video.playbackRate = reviewRate;
+    if (restoreTranscriptFocus && !rendering) {
+      restoreTranscriptFocus = false;
+      transcript.focus({ preventScroll: true });
+    }
     var resumeTime = Number(video.dataset.seekTime) || 0;
     if (resumeTime > 0) {
       var resumePreview = function () {
@@ -600,6 +605,7 @@
         for (var i = start; i <= end; i++) selected.add(i);
       } else if (selected.has(index)) selected.delete(index); else selected.add(index);
       lastClicked = index;
+      transcript.focus({ preventScroll: true });
       paintSelection();
     });
     transcript.addEventListener('mouseup', function () {
@@ -614,7 +620,22 @@
       for (var i = start; i <= end; i++) selected.add(i);
       selection.removeAllRanges();
       ignoreNextClick = true;
+      transcript.focus({ preventScroll: true });
       paintSelection();
+    });
+    transcript.addEventListener('keydown', function (event) {
+      if (rendering) return;
+      if (history.length && (event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === 'z') {
+        event.preventDefault(); restoreTranscriptFocus = true; undo(); return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault(); selected.clear(); paintSelection(); return;
+      }
+      if ((event.key === 'Delete' || event.key === 'Backspace') && Array.from(selected).some(function (index) {
+        return (project.removedWordIndices || []).indexOf(index) === -1;
+      })) {
+        event.preventDefault(); restoreTranscriptFocus = true; alterSelected(true);
+      }
     });
     root.querySelector('#editorCut').onclick = function () { alterSelected(true); };
     root.querySelector('#editorRestore').onclick = function () { alterSelected(false); };
@@ -821,7 +842,7 @@
     mount: function (element) {
       mountToken++;
       clearTimeout(pollTimer);
-      root = element; projects = []; project = null; selected.clear(); history = []; saveQueues = {}; saveStates = {}; previewSeekTimes = {};
+      root = element; projects = []; project = null; selected.clear(); history = []; saveQueues = {}; saveStates = {}; previewSeekTimes = {}; restoreTranscriptFocus = false;
       shell();
       loadProjects().catch(function (error) {
         root.querySelector('#editorWorkspace').innerHTML = '<div class="editor-empty"><strong>Editor unavailable</strong><span>' + esc(error.message) + '</span></div>';

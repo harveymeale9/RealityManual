@@ -12108,3 +12108,22 @@ some upload time on a true duplicate but cannot silently discard unique footage.
 A browser regression selects three same-name, same-size files, proves both
 different payloads are uploaded, and proves the server-rejected repeated payload
 is the only one counted as skipped.
+
+---
+
+# 296. Transcript Editing Has a Fast Keyboard Path (2026-09-29)
+
+The transcript's reversible word selection already worked with visible buttons,
+but every cut required leaving the text and moving to the action row. A focused
+transcript now accepts Delete or Backspace to cut the selected words, Ctrl/⌘ Z
+to undo the last word edit, and Escape to clear the selection. The transcript
+regains focus after its saved state re-renders, so a user can cut, inspect and
+undo without the shortcut silently falling back to browser navigation. Mobile
+and pointer users retain the original buttons and individual restoration path.
+
+The hint beneath the text states the shortcuts and keyboard focus has a visible
+but restrained green outline. A browser regression performs a keyboard cut,
+waits for the persisted rerender, verifies focus restoration, undoes the cut,
+and clears another selection. This pass also consolidated two accidentally
+duplicated transcript CSS blocks so its locked and focus states have one source
+of truth.
