@@ -11357,3 +11357,50 @@ the caption node's entire text with the one current timed word, in the same
 centered position. Tests now cover rotation-normalized dimensions, exact
 one-word ASS events, live portrait word replacement, and assert that the
 caption rectangle stays within the video rectangle.
+
+---
+
+# 260. Editor Becomes an Automatic-First, Reversible Review Workflow (2026-09-29)
+
+The Editor now treats the camera master and publishing composition as separate
+decisions. New uploads generate a three-frame contact sheet and ask the
+existing private Claude one-shot runner to classify whether the book is framed
+around one page (vertical) or the complete open spread (horizontal). The model
+also estimates the horizontal centre of the featured page. This is a visual
+composition decision rather than an encoded-aspect-ratio guess, because Harvey
+will shoot both formats with the same overhead camera. Its short explanation
+and confidence are shown in the UI, and both layout and duration-derived
+Ultra-short/Short/Long-short/Longform remain explicitly overridable. Older
+projects can request the same analysis with **Analyze book framing**.
+
+Selecting vertical now changes the actual output, not only its label. The
+preview displays a movable 9:16 crop with a horizontal crop-position control,
+and FFmpeg applies that crop independently to every retained segment before
+scaling the finished edit to 1080x1920. Horizontal output is normalized to
+1920x1080. Caption dimensions follow the chosen publishing layout, and the
+effective layout/type travel through the existing idempotent Content Production
+handoff rather than being re-inferred from the physical source file.
+
+The earlier all-or-nothing silence toggle is now accompanied by a proportional
+speech map. Speech is green, removed silence is red, and retained silence is
+grey; clicking any segment seeks the source video. Every automatic leading,
+middle, and trailing silence decision is listed separately, and **Keep pause**
+restores only that interval without disabling the other good cuts. Three pacing
+presets adjust both the silence threshold and the small natural breath retained
+around edits. Captions also have an explicit default-on toggle. All choices
+invalidate a stale render and remain non-destructive because the source master
+is never rewritten.
+
+A conservative first retake detector now compares adjacent pause/sentence
+utterances. When a later take restarts with the same words and continues
+further, or two nearby lines substantially overlap, the UI shows both versions,
+explains the reason, and offers **Use latest take** or **Keep both**. It does not
+silently delete an ambiguous rhetorical repetition; dismissed decisions are
+durable. Manual transcript cutting and its Undo stack remain available below
+the higher-level review controls.
+
+The focused suite now covers per-gap restoration, composition/type overrides,
+retake-candidate generation, classification contact-sheet creation, vertical
+crop rendering, captions and the production handoff. All 95 repository tests
+pass, and the real Chromium workflow passes at desktop and 390px mobile widths
+with no page errors or horizontal overflow.

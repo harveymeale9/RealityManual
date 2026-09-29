@@ -55,17 +55,18 @@ function calculateAutoCuts(words, duration, options) {
   if (!words.length || !Number.isFinite(Number(duration)) || Number(duration) <= 0) return cuts;
   const total = Number(duration);
   const lead = words[0].start;
-  if (lead > 0.45) cuts.push({ start: 0, end: Math.max(0, lead - 0.18), reason: 'leading_silence' });
+  if (lead > 0.45) cuts.push({ id: 'lead', start: 0, end: Math.max(0, lead - 0.18), reason: 'leading_silence' });
   for (let i = 0; i < words.length - 1; i++) {
     const gapStart = words[i].end;
     const gapEnd = words[i + 1].start;
     const gap = gapEnd - gapStart;
     if (gap <= threshold) continue;
     const handle = retainedPause / 2;
-    cuts.push({ start: gapStart + handle, end: gapEnd - handle, reason: 'long_pause' });
+    cuts.push({ id: 'gap-' + i, gapIndex: i, start: gapStart + handle, end: gapEnd - handle, reason: 'long_pause' });
   }
   const tail = total - words[words.length - 1].end;
   if (tail > 0.55) cuts.push({
+    id: 'tail',
     start: Math.min(total, words[words.length - 1].end + 0.25),
     end: total,
     reason: 'trailing_silence'
@@ -96,7 +97,7 @@ function calculateManualCuts(words, removedWordIndices, duration) {
 function mergeCuts(cuts, duration) {
   const total = Math.max(0, Number(duration) || 0);
   const sorted = (cuts || []).map(function (cut) {
-    return { start: clamp(cut.start, 0, total), end: clamp(cut.end, 0, total), reason: cut.reason || 'cut' };
+    return { id: cut.id || '', start: clamp(cut.start, 0, total), end: clamp(cut.end, 0, total), reason: cut.reason || 'cut' };
   }).filter(function (cut) { return cut.end > cut.start; })
     .sort(function (a, b) { return a.start - b.start || a.end - b.end; });
   const merged = [];
@@ -105,14 +106,97 @@ function mergeCuts(cuts, duration) {
     if (!previous || cut.start > previous.end + 0.015) return merged.push(Object.assign({}, cut));
     previous.end = Math.max(previous.end, cut.end);
     if (previous.reason !== cut.reason) previous.reason = 'combined';
+    if (previous.id !== cut.id) previous.id = '';
   });
   return merged;
 }
 
 function cutsForProject(project) {
-  const auto = project.autoSilenceEnabled === false ? [] : calculateAutoCuts(project.words || [], project.duration);
+  const restored = new Set(Array.isArray(project.restoredAutoCutIds) ? project.restoredAutoCutIds : []);
+  const auto = project.autoSilenceEnabled === false ? [] : calculateAutoCuts(project.words || [], project.duration, {
+    thresholdSeconds: project.silenceThresholdSeconds,
+    retainedPauseSeconds: project.retainedPauseSeconds
+  }).filter(function (cut) { return !restored.has(cut.id); });
   const manual = calculateManualCuts(project.words || [], project.removedWordIndices || [], project.duration);
   return mergeCuts(auto.concat(manual), project.duration);
+}
+
+function sourceLayout(project) {
+  return Number(project && project.height) > Number(project && project.width) ? 'vertical' : 'horizontal';
+}
+
+function effectiveLayout(project) {
+  if (project && (project.layoutOverride === 'vertical' || project.layoutOverride === 'horizontal')) return project.layoutOverride;
+  if (project && project.visualClassification && (project.visualClassification.layout === 'vertical' || project.visualClassification.layout === 'horizontal')) {
+    return project.visualClassification.layout;
+  }
+  return sourceLayout(project);
+}
+
+function contentTypeForProject(project, cuts) {
+  if (project && ['ultra_short', 'short', 'long_short', 'longform'].includes(project.contentTypeOverride)) return project.contentTypeOverride;
+  if (effectiveLayout(project) === 'horizontal') return 'longform';
+  const duration = Math.max(0, Number(project && project.duration) - (cuts || cutsForProject(project)).reduce(function (sum, cut) {
+    return sum + Math.max(0, cut.end - cut.start);
+  }, 0));
+  if (duration <= 25) return 'ultra_short';
+  if (duration <= 60) return 'short';
+  return 'long_short';
+}
+
+function gapDecisions(project) {
+  const words = project.words || [];
+  const restored = new Set(Array.isArray(project.restoredAutoCutIds) ? project.restoredAutoCutIds : []);
+  return calculateAutoCuts(words, project.duration, {
+    thresholdSeconds: project.silenceThresholdSeconds,
+    retainedPauseSeconds: project.retainedPauseSeconds
+  }).map(function (cut) {
+    return Object.assign({}, cut, {
+      duration: Math.max(0, cut.end - cut.start),
+      restored: restored.has(cut.id),
+      label: cut.reason === 'leading_silence' ? 'Opening silence' : cut.reason === 'trailing_silence' ? 'Ending silence' : 'Pause after “' + String(words[cut.gapIndex] && words[cut.gapIndex].text || '').slice(0, 40) + '”'
+    });
+  });
+}
+
+function retakeCandidates(words) {
+  const utterances = [];
+  let current = [];
+  function flush() {
+    if (current.length) utterances.push(current);
+    current = [];
+  }
+  (words || []).forEach(function (word, index) {
+    const previous = current[current.length - 1];
+    if (previous && word.start - previous.end > 0.85) flush();
+    current.push(word);
+    if (/[.!?]["'’”)]*$/.test(word.text)) flush();
+    else if (index === words.length - 1) flush();
+  });
+  function clean(value) { return String(value || '').toLowerCase().replace(/[^a-z0-9']/g, ''); }
+  const output = [];
+  for (let index = 0; index < utterances.length - 1; index++) {
+    const first = utterances[index];
+    const second = utterances[index + 1];
+    if (first.length < 2 || second.length < 2 || second[0].start - first[first.length - 1].end > 5) continue;
+    const a = first.map(function (word) { return clean(word.text); }).filter(Boolean);
+    const b = second.map(function (word) { return clean(word.text); }).filter(Boolean);
+    let prefix = 0;
+    while (prefix < Math.min(a.length, b.length) && a[prefix] === b[prefix]) prefix++;
+    const overlap = a.filter(function (token) { return b.includes(token); }).length / Math.max(a.length, b.length);
+    const likelyRestart = prefix >= Math.min(3, a.length) && b.length > a.length;
+    const closeRepeat = overlap >= 0.68;
+    if (!likelyRestart && !closeRepeat) continue;
+    output.push({
+      id: 'retake-' + index,
+      removeWordIndices: first.map(function (word) { return word.index; }),
+      firstText: first.map(function (word) { return word.text; }).join(' '),
+      replacementText: second.map(function (word) { return word.text; }).join(' '),
+      confidence: likelyRestart && overlap >= 0.5 ? 'high' : 'review',
+      reason: likelyRestart ? 'The next take begins the same way and continues further.' : 'These adjacent lines substantially repeat one another.'
+    });
+  }
+  return output;
 }
 
 function keepSegments(duration, cuts) {
@@ -246,6 +330,7 @@ function setup(options) {
   const dataDir = options.dataDir;
   const transcribeDetailed = options.transcribeDetailed;
   const handoffToProduction = options.handoffToProduction;
+  const classifyVisualLayout = options.classifyVisualLayout;
   if (!db || !dataDir || typeof transcribeDetailed !== 'function') throw new Error('video editor setup is incomplete');
   const router = express.Router();
   const rootDir = path.join(dataDir, 'editor');
@@ -259,6 +344,7 @@ function setup(options) {
   const delStmt = db.prepare('DELETE FROM records WHERE store_name = ? AND id = ?');
   const transcriptionJobs = new Map();
   const renderJobs = new Map();
+  const classificationJobs = new Map();
 
   function getProject(id) {
     const row = getStmt.get(STORE_NAME, id);
@@ -311,6 +397,8 @@ function setup(options) {
         project.transcriptText = String(result.text || '').trim();
         project.words = normalizeWords(result.words);
         project.removedWordIndices = [];
+        project.dismissedRetakeIds = [];
+        project.restoredAutoCutIds = [];
         project.autoSilenceEnabled = true;
         project.transcriptionStatus = project.words.length ? 'ready' : 'error';
         project.transcriptionError = project.words.length ? '' : 'No timed speech was detected in this recording.';
@@ -330,7 +418,50 @@ function setup(options) {
     return job;
   }
 
-  async function renderProject(id) {
+  async function classifyProject(id) {
+    if (classificationJobs.has(id)) return classificationJobs.get(id);
+    if (typeof classifyVisualLayout !== 'function') return;
+    const job = (async function () {
+      let project = getProject(id);
+      if (!project) return;
+      project.classificationStatus = 'running';
+      project.classificationError = '';
+      saveProject(project);
+      const sheetPath = path.join(projectDir(id), 'classification.jpg');
+      try {
+        const sampleRate = Math.max(0.01, 3 / Math.max(1, Number(project.duration) || 1));
+        await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', sourcePath(id), '-vf',
+          'fps=' + sampleRate.toFixed(6) + ',scale=480:-2,tile=3x1', '-frames:v', '1', '-q:v', '3', sheetPath], 'classification frames');
+        const result = await classifyVisualLayout({ imagePath: sheetPath, width: project.width, height: project.height, duration: project.duration });
+        project = getProject(id);
+        if (!project) return;
+        if (!result || !['vertical', 'horizontal'].includes(result.layout)) throw new Error('The visual classifier returned no usable layout.');
+        project.visualClassification = {
+          layout: result.layout,
+          confidence: ['high', 'medium', 'low'].includes(result.confidence) ? result.confidence : 'low',
+          explanation: String(result.explanation || '').slice(0, 300),
+          cropCenterX: clamp(result.cropCenterX === undefined ? 0.5 : result.cropCenterX, 0, 1)
+        };
+        if (project.layoutOverride === 'auto' || !project.layoutOverride) project.cropCenterX = project.visualClassification.cropCenterX;
+        project.classificationStatus = 'ready';
+        project.classificationError = '';
+        saveProject(project);
+      } catch (err) {
+        project = getProject(id);
+        if (project) {
+          project.classificationStatus = 'error';
+          project.classificationError = String(err.message || err).slice(0, 500);
+          saveProject(project);
+        }
+      } finally {
+        fs.rm(sheetPath, { force: true }, function () {});
+      }
+    })().finally(function () { classificationJobs.delete(id); });
+    classificationJobs.set(id, job);
+    return job;
+  }
+
+async function renderProject(id) {
     if (renderJobs.has(id)) return renderJobs.get(id);
     const job = (async function () {
       let project = getProject(id);
@@ -342,15 +473,25 @@ function setup(options) {
       const segments = keepSegments(project.duration, cuts);
       if (!segments.length) throw new Error('Every part of the recording is currently cut. Restore some transcript first.');
       const assPath = path.join(projectDir(id), 'captions.ass');
-      fs.writeFileSync(assPath, buildAss(project, captionGroups(project, cuts)));
+      const layout = effectiveLayout(project);
+      const renderShape = layout === 'vertical' ? { width: 1080, height: 1920 } : { width: 1920, height: 1080 };
+      if (project.captionsEnabled !== false) fs.writeFileSync(assPath, buildAss(renderShape, captionGroups(project, cuts)));
       const filters = [];
+      const cropPosition = clamp(project.cropCenterX === undefined ? 0.5 : Number(project.cropCenterX), 0, 1);
       segments.forEach(function (segment, index) {
-        filters.push('[0:v]trim=start=' + segment.start.toFixed(3) + ':end=' + segment.end.toFixed(3) + ',setpts=PTS-STARTPTS[v' + index + ']');
+        let videoFilter = '[0:v]trim=start=' + segment.start.toFixed(3) + ':end=' + segment.end.toFixed(3) + ',setpts=PTS-STARTPTS';
+        if (layout === 'vertical') {
+          videoFilter += ",crop=w='min(iw\\,ih*9/16)':h='min(ih\\,iw*16/9)':x='(iw-ow)*" + cropPosition.toFixed(3) + "':y='(ih-oh)/2',scale=1080:1920,setsar=1";
+        } else {
+          videoFilter += ",crop=w='min(iw\\,ih*16/9)':h='min(ih\\,iw*9/16)':x='(iw-ow)/2':y='(ih-oh)/2',scale=1920:1080,setsar=1";
+        }
+        filters.push(videoFilter + '[v' + index + ']');
         filters.push('[0:a]atrim=start=' + segment.start.toFixed(3) + ':end=' + segment.end.toFixed(3) + ',asetpts=PTS-STARTPTS[a' + index + ']');
       });
       const concatInputs = segments.map(function (_, index) { return '[v' + index + '][a' + index + ']'; }).join('');
       filters.push(concatInputs + 'concat=n=' + segments.length + ':v=1:a=1[joinedv][outa]');
-      filters.push("[joinedv]subtitles='" + assPath.replace(/'/g, "'\\''") + "'[outv]");
+      if (project.captionsEnabled !== false) filters.push("[joinedv]subtitles='" + assPath.replace(/'/g, "'\\''") + "'[outv]");
+      else filters.push('[joinedv]null[outv]');
       await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', sourcePath(id), '-filter_complex', filters.join(';'),
         '-map', '[outv]', '-map', '[outa]', '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-c:a', 'aac', '-b:a', '192k',
         '-movflags', '+faststart', renderPath(id)], 'editor render');
@@ -388,6 +529,11 @@ function setup(options) {
       if (project.renderStatus === 'running') {
         project.renderStatus = 'error';
         project.renderError = 'Rendering was interrupted by a service restart. Press Render video again.';
+        saveProject(project);
+      }
+      if (project.classificationStatus === 'running') {
+        project.classificationStatus = 'error';
+        project.classificationError = 'Frame analysis was interrupted by a service restart. Press Analyze again.';
         saveProject(project);
       }
     } catch (e) {}
@@ -441,7 +587,18 @@ function setup(options) {
         transcriptText: '',
         words: [],
         removedWordIndices: [],
+        dismissedRetakeIds: [],
+        restoredAutoCutIds: [],
         autoSilenceEnabled: true,
+        silenceThresholdSeconds: 1,
+        retainedPauseSeconds: 0.38,
+        captionsEnabled: true,
+        layoutOverride: 'auto',
+        contentTypeOverride: 'auto',
+        cropCenterX: 0.5,
+        visualClassification: null,
+        classificationStatus: typeof classifyVisualLayout === 'function' ? 'pending' : 'unavailable',
+        classificationError: '',
         transcriptionStatus: 'pending',
         transcriptionError: '',
         renderStatus: '',
@@ -450,7 +607,7 @@ function setup(options) {
         updatedAt: now
       });
       res.status(202).json(project);
-      setImmediate(function () { transcribeProject(id); });
+      setImmediate(function () { transcribeProject(id); classifyProject(id); });
     } catch (err) {
       fs.rm(req.file.path, { force: true }, function () {});
       fs.rm(projectDir(id), { recursive: true, force: true }, function () {});
@@ -464,6 +621,10 @@ function setup(options) {
     if (!project) return res.status(404).json({ error: 'not_found' });
     project.cuts = cutsForProject(project);
     project.captionGroups = captionGroups(project, project.cuts);
+    project.gapDecisions = gapDecisions(project);
+    project.retakeCandidates = retakeCandidates(project.words || []);
+    project.effectiveLayout = effectiveLayout(project);
+    project.detectedContentType = contentTypeForProject(project, project.cuts);
     res.json(project);
   });
 
@@ -476,11 +637,31 @@ function setup(options) {
         .filter(function (index) { return Number.isInteger(index) && index >= 0 && index < (project.words || []).length; }))).sort(function (a, b) { return a - b; });
     }
     if (typeof (req.body && req.body.autoSilenceEnabled) === 'boolean') project.autoSilenceEnabled = req.body.autoSilenceEnabled;
+    if (Array.isArray(req.body && req.body.restoredAutoCutIds)) {
+      project.restoredAutoCutIds = Array.from(new Set(req.body.restoredAutoCutIds.map(String).filter(function (id) {
+        return /^(lead|tail|gap-\d+)$/.test(id);
+      })));
+    }
+    if (Array.isArray(req.body && req.body.dismissedRetakeIds)) {
+      project.dismissedRetakeIds = Array.from(new Set(req.body.dismissedRetakeIds.map(String).filter(function (id) {
+        return /^retake-\d+$/.test(id);
+      })));
+    }
+    if (typeof (req.body && req.body.captionsEnabled) === 'boolean') project.captionsEnabled = req.body.captionsEnabled;
+    if (['auto', 'vertical', 'horizontal'].includes(req.body && req.body.layoutOverride)) project.layoutOverride = req.body.layoutOverride;
+    if (['auto', 'ultra_short', 'short', 'long_short', 'longform'].includes(req.body && req.body.contentTypeOverride)) project.contentTypeOverride = req.body.contentTypeOverride;
+    if (Number.isFinite(Number(req.body && req.body.cropCenterX))) project.cropCenterX = clamp(req.body.cropCenterX, 0, 1);
+    if (Number.isFinite(Number(req.body && req.body.silenceThresholdSeconds))) project.silenceThresholdSeconds = clamp(req.body.silenceThresholdSeconds, 0.65, 5);
+    if (Number.isFinite(Number(req.body && req.body.retainedPauseSeconds))) project.retainedPauseSeconds = clamp(req.body.retainedPauseSeconds, 0.18, 1.2);
     project.renderStatus = '';
     project.renderError = '';
     saveProject(project);
     project.cuts = cutsForProject(project);
     project.captionGroups = captionGroups(project, project.cuts);
+    project.gapDecisions = gapDecisions(project);
+    project.retakeCandidates = retakeCandidates(project.words || []);
+    project.effectiveLayout = effectiveLayout(project);
+    project.detectedContentType = contentTypeForProject(project, project.cuts);
     res.json(project);
   });
 
@@ -490,6 +671,15 @@ function setup(options) {
     if (!project) return res.status(404).json({ error: 'not_found' });
     res.status(202).json({ ok: true, status: 'running' });
     transcribeProject(project.id);
+  });
+
+  router.post('/:id/classify', function (req, res) {
+    if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
+    const project = getProject(req.params.id);
+    if (!project) return res.status(404).json({ error: 'not_found' });
+    if (typeof classifyVisualLayout !== 'function') return res.status(501).json({ error: 'classification_unavailable' });
+    res.status(202).json({ ok: true, status: 'running' });
+    classifyProject(project.id);
   });
 
   router.post('/:id/render', function (req, res) {
@@ -513,6 +703,8 @@ function setup(options) {
     }
     if (typeof handoffToProduction !== 'function') return res.status(501).json({ error: 'production_handoff_unavailable' });
     try {
+      project.effectiveLayout = effectiveLayout(project);
+      project.detectedContentType = contentTypeForProject(project, cutsForProject(project));
       const result = await handoffToProduction({ project: project, renderPath: renderPath(project.id) });
       project = getProject(project.id);
       if (project) {
@@ -549,7 +741,7 @@ function setup(options) {
     res.json({ ok: true });
   });
 
-  return { router: router, transcribeProject: transcribeProject, renderProject: renderProject };
+  return { router: router, transcribeProject: transcribeProject, classifyProject: classifyProject, renderProject: renderProject };
 }
 
 module.exports = {
@@ -563,5 +755,9 @@ module.exports = {
   mapSourceTimeToEdited,
   captionGroups,
   buildAss,
-  displayDimensions
+  displayDimensions,
+  effectiveLayout,
+  contentTypeForProject,
+  gapDecisions,
+  retakeCandidates
 };

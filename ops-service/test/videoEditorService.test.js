@@ -44,6 +44,38 @@ test('automatic cuts preserve natural handles around long pauses', function () {
   assert.equal(cuts[1].end, 3.81);
 });
 
+test('individual automatic pauses can be restored without disabling the rest', function () {
+  const project = { words: words, duration: 9, autoSilenceEnabled: true, restoredAutoCutIds: ['gap-1'] };
+  const cuts = editor.cutsForProject(project);
+  assert.equal(cuts.some(function (cut) { return cut.start < 4 && cut.end > 2; }), false);
+  assert.equal(cuts.some(function (cut) { return cut.start > 5 && cut.start < 7; }), true);
+  const decisions = editor.gapDecisions(project);
+  assert.equal(decisions.find(function (cut) { return cut.id === 'gap-1'; }).restored, true);
+});
+
+test('format classification respects composition and explicit overrides', function () {
+  const project = { width: 3840, height: 2160, duration: 80, words: words, visualClassification: { layout: 'vertical' } };
+  assert.equal(editor.effectiveLayout(project), 'vertical');
+  assert.equal(editor.contentTypeForProject(project, []), 'long_short');
+  project.layoutOverride = 'horizontal';
+  assert.equal(editor.effectiveLayout(project), 'horizontal');
+  assert.equal(editor.contentTypeForProject(project, []), 'longform');
+  project.contentTypeOverride = 'short';
+  assert.equal(editor.contentTypeForProject(project, []), 'short');
+});
+
+test('likely restarted lines are surfaced without being automatically removed', function () {
+  const attempts = [
+    { index: 0, text: 'The', start: 0, end: 0.2 }, { index: 1, text: 'problem', start: 0.25, end: 0.6 },
+    { index: 2, text: 'The', start: 1.7, end: 1.9 }, { index: 3, text: 'problem', start: 1.95, end: 2.2 },
+    { index: 4, text: 'is', start: 2.25, end: 2.4 }, { index: 5, text: 'obvious.', start: 2.45, end: 2.9 }
+  ];
+  const candidates = editor.retakeCandidates(attempts);
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].confidence, 'high');
+  assert.deepEqual(candidates[0].removeWordIndices, [0, 1]);
+});
+
 test('adjacent removed transcript words become one manual cut', function () {
   const cuts = editor.calculateManualCuts(words, [2, 3], 9);
   assert.equal(cuts.length, 1);
@@ -107,6 +139,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   const db = new Database(path.join(dir, 'test.sqlite'));
   db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
   let handoffCalls = 0;
+  let classificationCalls = 0;
   const service = editor.setup({
     db: db,
     dataDir: dir,
@@ -115,6 +148,11 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
         { type: 'word', text: 'One', start: 0.5, end: 0.9 }, { type: 'word', text: 'two.', start: 0.95, end: 1.3 },
         { type: 'word', text: 'Three', start: 3.2, end: 3.7 }, { type: 'word', text: 'four.', start: 3.75, end: 4.2 }
       ] };
+    },
+    classifyVisualLayout: async function (input) {
+      classificationCalls++;
+      assert.equal(fs.existsSync(input.imagePath), true);
+      return { layout: 'vertical', confidence: 'high', cropCenterX: 0.55, explanation: 'One page fills all sampled frames.' };
     },
     handoffToProduction: async function (input) {
       handoffCalls++;
@@ -141,6 +179,14 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
     project = await (await fetch(base + '/api/editor/' + project.id)).json();
   }
   assert.equal(project.transcriptionStatus, 'ready');
+  for (let attempt = 0; attempt < 100 && project.classificationStatus !== 'ready'; attempt++) {
+    await new Promise(function (resolve) { setTimeout(resolve, 30); });
+    project = await (await fetch(base + '/api/editor/' + project.id)).json();
+  }
+  assert.equal(project.classificationStatus, 'ready', project.classificationError);
+  assert.equal(project.effectiveLayout, 'vertical');
+  assert.equal(project.cropCenterX, 0.55);
+  assert.equal(classificationCalls, 1);
   assert.ok(project.cuts.some(function (cut) { return cut.reason === 'long_pause'; }));
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ removedWordIndices: [2, 3] }) });
   project = await response.json();

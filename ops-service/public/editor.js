@@ -44,9 +44,60 @@
   function statusLabel(item) {
     if (item.transcriptionStatus === 'pending' || item.transcriptionStatus === 'running') return 'Transcribing';
     if (item.transcriptionStatus === 'error') return 'Needs attention';
+    if (item.classificationStatus === 'pending' || item.classificationStatus === 'running') return 'Analyzing frame';
     if (item.renderStatus === 'running') return 'Rendering';
     if (item.renderStatus === 'ready') return 'Export ready';
     return 'Ready to edit';
+  }
+
+  function typeLabel(value) {
+    return { ultra_short: 'Ultra-short', short: 'Short', long_short: 'Long-short', longform: 'Longform' }[value] || 'Automatic';
+  }
+
+  function timelineHtml(item) {
+    var total = Math.max(0.01, Number(item.duration) || 0.01);
+    var cuts = item.cuts || [];
+    var words = item.words || [];
+    function cutAt(start, end) {
+      return cuts.some(function (cut) { return cut.start < end && cut.end > start; });
+    }
+    var spans = [];
+    var cursor = 0;
+    words.forEach(function (word) {
+      if (word.start > cursor) spans.push({ kind: cutAt(cursor, word.start) ? 'cut' : 'pause', start: cursor, end: word.start, label: 'Pause ' + (word.start - cursor).toFixed(1) + 's' });
+      spans.push({ kind: 'speech', start: word.start, end: word.end, label: word.text });
+      cursor = Math.max(cursor, word.end);
+    });
+    if (cursor < total) spans.push({ kind: cutAt(cursor, total) ? 'cut' : 'pause', start: cursor, end: total, label: 'Pause ' + (total - cursor).toFixed(1) + 's' });
+    return '<div class="editor-timeline-track" id="editorTimelineTrack">' + spans.map(function (span) {
+      var left = span.start / total * 100;
+      var width = Math.max(0.18, (span.end - span.start) / total * 100);
+      return '<button type="button" class="editor-timeline-segment ' + span.kind + '" style="left:' + left.toFixed(4) + '%;width:' + width.toFixed(4) + '%" data-time="' + span.start + '" title="' + esc(span.label) + '"></button>';
+    }).join('') + '<i class="editor-playhead" id="editorPlayhead"></i></div>';
+  }
+
+  function gapReviewHtml(item) {
+    if (!item.autoSilenceEnabled) return '<div class="editor-review-empty">Pause removal is off. The original timing is preserved.</div>';
+    var decisions = item.gapDecisions || [];
+    if (!decisions.length) return '<div class="editor-review-empty">No long pauses need attention.</div>';
+    return decisions.map(function (gap) {
+      return '<div class="editor-decision ' + (gap.restored ? 'kept' : 'removed') + '"><div><strong>' + esc(gap.label) + '</strong><span>' + gap.duration.toFixed(1) + 's ' + (gap.restored ? 'kept in the edit' : 'removed') + '</span></div>' +
+        '<button type="button" class="btn-secondary btn-tiny editor-gap-toggle" data-gap-id="' + esc(gap.id) + '" data-restored="' + (gap.restored ? '1' : '0') + '">' + (gap.restored ? 'Remove pause' : 'Keep pause') + '</button></div>';
+    }).join('');
+  }
+
+  function retakeReviewHtml(item) {
+    var dismissed = new Set((item.dismissedRetakeIds || []).map(String));
+    var removed = new Set((item.removedWordIndices || []).map(Number));
+    var candidates = (item.retakeCandidates || []).filter(function (candidate) {
+      return !dismissed.has(candidate.id) && !candidate.removeWordIndices.every(function (index) { return removed.has(index); });
+    });
+    if (!candidates.length) return '<div class="editor-review-empty">No likely retakes need review.</div>';
+    return candidates.map(function (candidate) {
+      return '<div class="editor-retake-card"><div class="editor-retake-badge ' + esc(candidate.confidence) + '">' + (candidate.confidence === 'high' ? 'Likely retake' : 'Check repetition') + '</div>' +
+        '<p><del>“' + esc(candidate.firstText) + '”</del></p><p class="replacement">Latest take: “' + esc(candidate.replacementText) + '”</p><span>' + esc(candidate.reason) + '</span>' +
+        '<div><button type="button" class="btn-primary btn-tiny editor-retake-apply" data-id="' + esc(candidate.id) + '">Use latest take</button><button type="button" class="btn-secondary btn-tiny editor-retake-dismiss" data-id="' + esc(candidate.id) + '">Keep both</button></div></div>';
+    }).join('');
   }
 
   function shell() {
@@ -136,7 +187,8 @@
   function schedulePoll() {
     clearTimeout(pollTimer);
     if (!project) return;
-    var active = ['pending', 'running'].indexOf(project.transcriptionStatus) !== -1 || project.renderStatus === 'running';
+    var active = ['pending', 'running'].indexOf(project.transcriptionStatus) !== -1 ||
+      ['pending', 'running'].indexOf(project.classificationStatus) !== -1 || project.renderStatus === 'running';
     if (!active) return;
     var id = project.id;
     var token = mountToken;
@@ -161,13 +213,29 @@
     }
     var removed = new Set((project.removedWordIndices || []).map(Number));
     var cutSeconds = Math.max(0, Number(project.duration) - editedDuration(project));
+    var layout = project.effectiveLayout || (Number(project.height) > Number(project.width) ? 'vertical' : 'horizontal');
+    var cropPercent = Math.round((Number(project.cropCenterX) || 0.5) * 100);
+    var classificationCopy = project.classificationStatus === 'ready' && project.visualClassification
+      ? esc(project.visualClassification.explanation || ('Frame analysis: ' + project.visualClassification.confidence + ' confidence'))
+      : project.classificationStatus === 'running' || project.classificationStatus === 'pending'
+        ? 'Analyzing three frames to distinguish a single page from an open spread…'
+        : 'Using source dimensions until the book framing is analyzed.';
     workspace.innerHTML =
       '<div class="editor-topbar"><div><h2>' + esc(project.name) + '</h2><span>' + formatTime(project.duration) + ' original · ' + formatTime(editedDuration(project)) + ' edited · ' + cutSeconds.toFixed(1) + 's removed</span></div>' +
         '<button class="editor-delete" id="editorDelete">Delete recording</button></div>' +
-      '<div class="editor-preview"><div class="editor-video-frame"><video id="editorVideo" controls playsinline preload="metadata" src="/api/editor/' + encodeURIComponent(project.id) + '/source"></video>' +
+      '<section class="editor-classification"><div><div class="eyebrow">Automatic classification</div><strong>' + (layout === 'vertical' ? 'Single page · Vertical' : 'Open spread · Horizontal') + '</strong><span>' + classificationCopy + ' · ' + esc(typeLabel(project.detectedContentType)) + '</span>' +
+        (project.classificationStatus !== 'ready' && project.classificationStatus !== 'running' && project.classificationStatus !== 'pending' ? '<button type="button" class="editor-analyze" id="editorAnalyze">Analyze book framing</button>' : '') + '</div>' +
+        '<label>Frame<select id="editorLayout"><option value="auto"' + (project.layoutOverride === 'auto' || !project.layoutOverride ? ' selected' : '') + '>Auto detect</option><option value="vertical"' + (project.layoutOverride === 'vertical' ? ' selected' : '') + '>Vertical · single page</option><option value="horizontal"' + (project.layoutOverride === 'horizontal' ? ' selected' : '') + '>Horizontal · open spread</option></select></label>' +
+        '<label>Format<select id="editorContentType"><option value="auto"' + (project.contentTypeOverride === 'auto' || !project.contentTypeOverride ? ' selected' : '') + '>Auto · ' + esc(typeLabel(project.detectedContentType)) + '</option><option value="ultra_short"' + (project.contentTypeOverride === 'ultra_short' ? ' selected' : '') + '>Ultra-short</option><option value="short"' + (project.contentTypeOverride === 'short' ? ' selected' : '') + '>Short</option><option value="long_short"' + (project.contentTypeOverride === 'long_short' ? ' selected' : '') + '>Long-short</option><option value="longform"' + (project.contentTypeOverride === 'longform' ? ' selected' : '') + '>Longform</option></select></label></section>' +
+      '<div class="editor-preview"><div class="editor-video-frame ' + layout + '" style="--crop-x:' + cropPercent + '%"><video id="editorVideo" controls playsinline preload="metadata" src="/api/editor/' + encodeURIComponent(project.id) + '/source"></video>' +
         '<div class="editor-caption" id="editorCaption"></div></div></div>' +
-      '<div class="editor-controls"><label class="editor-toggle"><input type="checkbox" id="editorAutoSilence" ' + (project.autoSilenceEnabled !== false ? 'checked' : '') + '><span></span>Automatically remove long pauses</label>' +
-        '<span class="editor-help">Natural mode leaves a short breath between phrases.</span></div>' +
+      (layout === 'vertical' ? '<div class="editor-crop-control"><label>Horizontal crop position <input id="editorCropX" type="range" min="0" max="100" value="' + cropPercent + '"></label><span>Keep the single page centred inside the vertical frame.</span></div>' : '') +
+      '<section class="editor-automation"><div class="editor-automation-head"><div><div class="eyebrow">Automatic edit</div><h3>Speech and pause map</h3></div><div class="editor-legend"><span class="speech">Speech</span><span class="cut">Removed pause</span><span class="pause">Kept pause</span></div></div>' + timelineHtml(project) +
+        '<div class="editor-controls"><label class="editor-toggle"><input type="checkbox" id="editorAutoSilence" ' + (project.autoSilenceEnabled !== false ? 'checked' : '') + '><span></span>Remove long pauses</label>' +
+          '<label class="editor-toggle"><input type="checkbox" id="editorCaptions" ' + (project.captionsEnabled !== false ? 'checked' : '') + '><span></span>Add yellow captions</label>' +
+          '<label class="editor-mode">Pacing<select id="editorPacing"><option value="tight"' + (Number(project.silenceThresholdSeconds) < 0.85 ? ' selected' : '') + '>Tight</option><option value="natural"' + (Number(project.silenceThresholdSeconds || 1) >= 0.85 && Number(project.silenceThresholdSeconds || 1) < 1.3 ? ' selected' : '') + '>Natural</option><option value="gentle"' + (Number(project.silenceThresholdSeconds || 1) >= 1.3 ? ' selected' : '') + '>Gentle</option></select></label></div></section>' +
+      '<section class="editor-review"><div class="editor-review-column"><div class="editor-section-title"><div><div class="eyebrow">Pause decisions</div><h3>Every automatic silence cut</h3></div><span>Red means removed</span></div><div id="editorGapReview">' + gapReviewHtml(project) + '</div></div>' +
+        '<div class="editor-review-column"><div class="editor-section-title"><div><div class="eyebrow">Smart review</div><h3>Possible retakes</h3></div><span>Nothing is removed without approval</span></div><div id="editorRetakeReview">' + retakeReviewHtml(project) + '</div></div></section>' +
       '<section class="editor-transcript-panel"><div class="editor-transcript-head"><div><div class="eyebrow">Transcript editor</div><h3>Select words or sentences to cut them from the video</h3></div>' +
         '<div class="editor-transcript-actions"><button class="btn-secondary btn-tiny" id="editorUndo" ' + (!history.length ? 'disabled' : '') + '>Undo</button>' +
         '<button class="btn-secondary btn-tiny" id="editorRestore" disabled>Restore selected</button><button class="btn-primary btn-tiny" id="editorCut" disabled>Cut selected</button></div></div>' +
@@ -193,12 +261,7 @@
     var lastClicked = null;
     var ignoreNextClick = false;
     function isLongformVideo() {
-      // Project dimensions are FFprobe-normalized for display rotation. Some
-      // Chrome builds expose the physical encoded dimensions through
-      // videoWidth/videoHeight even while visually honoring a 90° matrix.
-      var width = Number(project.width) || video.videoWidth;
-      var height = Number(project.height) || video.videoHeight;
-      return width >= height;
+      return (project.effectiveLayout || 'horizontal') === 'horizontal';
     }
     video.addEventListener('timeupdate', function () {
       var cut = (project.cuts || []).filter(function (item) { return video.currentTime >= item.start && video.currentTime < item.end; })[0];
@@ -225,7 +288,12 @@
         })[0];
         caption.textContent = spokenWord ? spokenWord.text : '';
       } else if (group) caption.textContent = group.text;
-      caption.classList.toggle('visible', !!group);
+      caption.classList.toggle('visible', !!group && project.captionsEnabled !== false);
+      var playhead = root.querySelector('#editorPlayhead');
+      if (playhead && video.duration) playhead.style.left = Math.min(100, video.currentTime / video.duration * 100) + '%';
+    });
+    root.querySelectorAll('.editor-timeline-segment').forEach(function (segment) {
+      segment.onclick = function () { video.currentTime = Number(segment.dataset.time) || 0; video.play().catch(function () {}); };
     });
     transcript.addEventListener('click', function (event) {
       if (ignoreNextClick) { ignoreNextClick = false; return; }
@@ -258,6 +326,53 @@
     root.querySelector('#editorAutoSilence').onchange = function () {
       save({ autoSilenceEnabled: this.checked }, true);
     };
+    root.querySelector('#editorCaptions').onchange = function () { save({ captionsEnabled: this.checked }, true); };
+    root.querySelector('#editorLayout').onchange = function () { save({ layoutOverride: this.value }, true); };
+    root.querySelector('#editorContentType').onchange = function () { save({ contentTypeOverride: this.value }, true); };
+    var analyzeButton = root.querySelector('#editorAnalyze');
+    if (analyzeButton) analyzeButton.onclick = function () {
+      analyzeButton.disabled = true;
+      analyzeButton.textContent = 'Analyzing…';
+      api('/api/editor/' + project.id + '/classify', { method: 'POST' }).then(function () {
+        project.classificationStatus = 'running'; renderWorkspace(); schedulePoll();
+      }).catch(function (error) { alert(error.message); renderWorkspace(); });
+    };
+    root.querySelector('#editorPacing').onchange = function () {
+      var settings = { tight: [0.7, 0.22], natural: [1, 0.38], gentle: [1.5, 0.55] }[this.value] || [1, 0.38];
+      save({ silenceThresholdSeconds: settings[0], retainedPauseSeconds: settings[1] }, true);
+    };
+    var crop = root.querySelector('#editorCropX');
+    if (crop) {
+      crop.oninput = function () {
+        var frame = root.querySelector('.editor-video-frame');
+        if (frame) frame.style.setProperty('--crop-x', crop.value + '%');
+      };
+      crop.onchange = function () { save({ cropCenterX: Number(crop.value) / 100 }, true); };
+    }
+    root.querySelectorAll('.editor-gap-toggle').forEach(function (button) {
+      button.onclick = function () {
+        var next = new Set((project.restoredAutoCutIds || []).map(String));
+        if (button.dataset.restored === '1') next.delete(button.dataset.gapId); else next.add(button.dataset.gapId);
+        save({ restoredAutoCutIds: Array.from(next) }, true);
+      };
+    });
+    root.querySelectorAll('.editor-retake-apply').forEach(function (button) {
+      button.onclick = function () {
+        var candidate = (project.retakeCandidates || []).find(function (item) { return item.id === button.dataset.id; });
+        if (!candidate) return;
+        var next = new Set((project.removedWordIndices || []).map(Number));
+        candidate.removeWordIndices.forEach(function (index) { next.add(index); });
+        history.push((project.removedWordIndices || []).slice());
+        save({ removedWordIndices: Array.from(next).sort(function (a, b) { return a - b; }) });
+      };
+    });
+    root.querySelectorAll('.editor-retake-dismiss').forEach(function (button) {
+      button.onclick = function () {
+        var next = new Set((project.dismissedRetakeIds || []).map(String));
+        next.add(button.dataset.id);
+        save({ dismissedRetakeIds: Array.from(next) }, true);
+      };
+    });
     var renderButton = root.querySelector('#editorRender');
     if (renderButton) renderButton.onclick = function () {
         api('/api/editor/' + project.id + '/render', { method: 'POST' }).then(function () {
