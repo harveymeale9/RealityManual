@@ -12303,3 +12303,22 @@ saved transcript untouched. The service independently enforces the same rule
 using the project's effective layout, while horizontal longform corrections may
 still contain a short phrase if transcription tokenization genuinely requires
 it. Server and mobile-browser tests cover rejection at both boundaries.
+
+---
+
+# 307. Uncertain Retakes Are First-Class Batch Attention (2026-09-29)
+
+The Editor already prevented rendering while an ambiguous repeated line still
+needed Harvey's decision, but the recording list described that project as
+merely **Prepared** and the session summary counted it with ordinary setup work.
+In a large filming session this made the most important human-review items easy
+to overlook.
+
+The list API now derives and returns each project's unresolved-retake count from
+its current candidates and decisions. Any non-zero count receives a precise
+**Review 1 possible retake** (or plural) status, is counted under **needs
+attention**, and is selected ahead of routine prepared or working recordings by
+the existing next-action flow. The underlying safety rule remains unchanged:
+automation does not guess when a repetition may be deliberate. Browser coverage
+proves the label, summary bucket and next-action selection, and the focused
+21-test service suite remains green.

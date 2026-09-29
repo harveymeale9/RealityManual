@@ -102,6 +102,7 @@
     if (item.classificationStatus === 'running') return 'Analyzing frame';
     if (item.retakeAnalysisStatus === 'pending') return queued('Waiting for retake review', item.retakeQueuePosition);
     if (item.retakeAnalysisStatus === 'running') return 'Checking retakes';
+    if (Number(item.unresolvedRetakeCount) > 0) return 'Review ' + Number(item.unresolvedRetakeCount) + ' possible retake' + (Number(item.unresolvedRetakeCount) === 1 ? '' : 's');
     if (item.planningMatchStatus === 'pending') return queued('Waiting for plan match', item.planningQueuePosition);
     if (item.planningMatchStatus === 'running') return 'Matching plan';
     if (item.renderStatus === 'queued') return queued('Waiting to render', item.renderQueuePosition);
@@ -112,7 +113,7 @@
 
   function sessionBucket(item) {
     if (item.productionPieceId) return 'sent';
-    if (item.transcriptionStatus === 'error' || item.classificationStatus === 'error' || item.retakeAnalysisStatus === 'error' || item.planningMatchStatus === 'error' || item.renderStatus === 'error') return 'attention';
+    if (item.transcriptionStatus === 'error' || item.classificationStatus === 'error' || item.retakeAnalysisStatus === 'error' || item.planningMatchStatus === 'error' || item.renderStatus === 'error' || Number(item.unresolvedRetakeCount) > 0) return 'attention';
     if (item.renderStatus === 'ready') return 'ready';
     if (['pending', 'running'].indexOf(item.transcriptionStatus) !== -1 || ['pending', 'running'].indexOf(item.classificationStatus) !== -1 || ['pending', 'running', 'pending_transcript'].indexOf(item.retakeAnalysisStatus) !== -1 || ['pending', 'running', 'pending_transcript'].indexOf(item.planningMatchStatus) !== -1 || ['queued', 'running'].indexOf(item.renderStatus) !== -1) return 'working';
     return 'prepared';

@@ -920,7 +920,13 @@ async function renderProject(id) {
   });
 
   router.get('/', function (req, res) {
-    const projects = listStmt.all(STORE_NAME).map(function (row) { try { return withQueuePositions(JSON.parse(row.data)); } catch (e) { return null; } }).filter(Boolean);
+    const projects = listStmt.all(STORE_NAME).map(function (row) {
+      try {
+        const project = JSON.parse(row.data);
+        project.unresolvedRetakeCount = unresolvedRetakeCount(project);
+        return withQueuePositions(project);
+      } catch (e) { return null; }
+    }).filter(Boolean);
     res.json(projects);
   });
 
