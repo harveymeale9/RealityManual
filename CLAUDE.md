@@ -11855,3 +11855,21 @@ changes from transcription and render progress can no longer reshuffle cards.
 Pending work is labelled as waiting, separately from the recording that is
 actually transcribing/analyzing, so a large filming batch does not look like
 every resource-intensive job is running simultaneously.
+
+---
+
+# 282. Every Editor Decision Automatically Regenerates the Final File (2026-09-29)
+
+A stale `automaticRenderStartedAt` latch previously survived after the first
+successful encode. Changing a cut, pause, crop, format, pacing, caption setting
+or planning link correctly invalidated the old render, but the automatic render
+gate then treated the recording as already handled and left Harvey to press
+**Build final edit** manually. PATCH now resets the render latch and progress
+alongside the stale output status, allowing the normal readiness gate to queue
+a replacement encode immediately.
+
+Because that queue transition occurs just after the PATCH response, the client
+performs one guarded follow-up refresh when an edit response has no render
+status. The normal progress poll takes over from there. The generated-video
+integration now changes the caption setting after a verified render and proves
+that a second verified FFmpeg output completes with no render endpoint call.

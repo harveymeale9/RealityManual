@@ -771,7 +771,16 @@
       projects = projects.map(function (entry) { return entry.id === item.id ? item : entry; });
       if (!preserveHistory && history.length > 100) history.shift();
       renderList();
-      if (project && project.id === id) { project = item; renderWorkspace(); }
+      if (project && project.id === id) {
+        project = item; renderWorkspace();
+        // The server starts a replacement render immediately after an edit.
+        // Its PATCH response can arrive just before that queued status is
+        // persisted, so fetch once more rather than leaving a hands-off
+        // rebuild invisible until the page is revisited.
+        if (!item.renderStatus && !item.productionPieceId) setTimeout(function () {
+          if (project && project.id === id && !project.renderStatus) openProject(id, true);
+        }, 250);
+      }
       return item;
     }).catch(function (error) {
       saveStates[id] = 'error';

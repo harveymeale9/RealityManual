@@ -965,6 +965,8 @@ async function renderProject(id) {
     }
     project.renderStatus = '';
     project.renderError = '';
+    project.renderProgress = 0;
+    project.automaticRenderStartedAt = '';
     saveProject(project);
     project.cuts = cutsForProject(project);
     project.captionGroups = captionGroups(project, project.cuts);
