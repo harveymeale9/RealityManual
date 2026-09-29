@@ -11,16 +11,17 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   d1144f1..69587ef  main       -> origin/main
+   69587ef..4bb869d  main       -> origin/main
 + git merge --ff-only origin/main
-Updating d1144f1..69587ef
+Updating 69587ef..4bb869d
 Fast-forward
- CLAUDE.md                    |   6 +++
- ops-service/.ci/last-run.log | 106 +++++++------------------------------------
- ops-service/public/editor.js |  14 ++++--
- 3 files changed, 32 insertions(+), 94 deletions(-)
+ CLAUDE.md                    | 15 +++++++++++++++
+ ops-service/.ci/last-run.log | 20 ++++++++++----------
+ ops-service/public/editor.js | 41 ++++++++++++++++++++++++++++++++++++-----
+ ops-service/public/style.css |  4 ++--
+ 4 files changed, 63 insertions(+), 17 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=69587ef4ff35fd21f62c5e39630e32c618b416c0
++ NEW_HEAD=4bb869df58f2d7e00def5f9e0635328370f30ec2
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -33,12 +34,12 @@ Already up to date.
 + NEEDS_REBUILD=1
 + '[' -n 4af284b5659cdc9d72044f1fc13b9715d2cc0d69 ']'
 + git cat-file -e '4af284b5659cdc9d72044f1fc13b9715d2cc0d69^{commit}'
-++ git diff --name-only 4af284b5659cdc9d72044f1fc13b9715d2cc0d69 69587ef4ff35fd21f62c5e39630e32c618b416c0 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
+++ git diff --name-only 4af284b5659cdc9d72044f1fc13b9715d2cc0d69 4bb869df58f2d7e00def5f9e0635328370f30ec2 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z '' ']'
 + NEEDS_REBUILD=0
 + '[' 0 = 1 ']'
 + '[' 0 = 0 ']'
-+ echo 'no backend changes between 4af284b5659cdc9d72044f1fc13b9715d2cc0d69 and 69587ef4ff35fd21f62c5e39630e32c618b416c0 — already live via git pull, skipping rebuild/restart'
-no backend changes between 4af284b5659cdc9d72044f1fc13b9715d2cc0d69 and 69587ef4ff35fd21f62c5e39630e32c618b416c0 — already live via git pull, skipping rebuild/restart
++ echo 'no backend changes between 4af284b5659cdc9d72044f1fc13b9715d2cc0d69 and 4bb869df58f2d7e00def5f9e0635328370f30ec2 — already live via git pull, skipping rebuild/restart'
+no backend changes between 4af284b5659cdc9d72044f1fc13b9715d2cc0d69 and 4bb869df58f2d7e00def5f9e0635328370f30ec2 — already live via git pull, skipping rebuild/restart
 + exit 0
 ssh exit code: 0
