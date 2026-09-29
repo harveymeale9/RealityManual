@@ -11993,3 +11993,22 @@ database teardown in integration tests race those callbacks). The gate now
 runs synchronously after the response is formed; the expensive render itself
 remains asynchronous and queued. Read latency is unchanged in practice, while
 each request fully accounts for its own readiness check.
+
+---
+
+# 290. Vertical Captions Match the Requested One-Word Visual Treatment (2026-09-29)
+
+Visual inspection of an actual 1080×1920 rendered frame confirmed one-word
+replacement and clipping were correct, but the previous 92 px word sat at
+roughly 73% of frame height and read smaller/lower than Harvey's reference.
+Vertical output now uses a 120 px base (11.1% of frame width) at roughly 63.5%
+of frame height: clearly below centre, above common platform chrome, and large
+enough to exploit the one-word layout. Horizontal multi-word captions retain
+their separate size and spoken-word emphasis treatment.
+
+Words beyond 18 characters shrink proportionally down to a bounded 64% of the
+base size rather than clipping or wrapping into a second line. The live source
+preview now uses CSS container-relative units and the identical length-fitting
+formula, so it represents the eventual baked frame instead of showing a font
+whose apparent size changed with the browser viewport. Tests cover exact
+one-word timing, the new style/position and a 24-character fitted word.

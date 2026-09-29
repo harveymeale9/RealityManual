@@ -535,6 +535,7 @@
         return video.currentTime >= item.sourceStart && video.currentTime <= item.sourceEnd + 0.18;
       })[0];
       caption.replaceChildren();
+      caption.style.removeProperty('font-size');
       var isLongform = isLongformVideo();
       caption.classList.toggle('longform', isLongform);
       caption.classList.toggle('shortform', !isLongform);
@@ -552,6 +553,10 @@
           return video.currentTime >= word.sourceStart && video.currentTime < wordEnd;
         })[0];
         caption.textContent = spokenWord ? spokenWord.text : '';
+        if (spokenWord) {
+          var characters = Array.from(String(spokenWord.text || '')).length;
+          caption.style.fontSize = (Math.max(7.1, Math.min(11.1, 11.1 * 18 / Math.max(18, characters)))).toFixed(2) + 'cqw';
+        }
       } else if (group) caption.textContent = group.text;
       caption.classList.toggle('visible', !!group && project.captionsEnabled !== false);
       var playhead = root.querySelector('#editorPlayhead');

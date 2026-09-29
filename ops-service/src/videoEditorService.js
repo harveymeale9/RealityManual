@@ -352,9 +352,9 @@ function buildAss(project, groups) {
   const width = Math.max(360, Math.round(Number(project.width) || 1080));
   const height = Math.max(360, Math.round(Number(project.height) || 1920));
   const isLongform = width >= height;
-  const fontSize = Math.max(30, Math.round(Math.min(width, height) * (isLongform ? 0.06 : 0.085)));
+  const fontSize = Math.max(30, Math.round(Math.min(width, height) * (isLongform ? 0.06 : 0.111)));
   const emphasizedSize = Math.round(fontSize * 1.18);
-  const marginV = Math.round(height * 0.27);
+  const marginV = Math.round(height * (isLongform ? 0.27 : 0.365));
   const header = [
     '[Script Info]', 'ScriptType: v4.00+', 'PlayResX: ' + width, 'PlayResY: ' + height,
     'ScaledBorderAndShadow: yes', '', '[V4+ Styles]',
@@ -377,7 +377,11 @@ function buildAss(project, groups) {
         const eventStart = word.start;
         const eventEnd = wordIndex + 1 < group.words.length ? group.words[wordIndex + 1].start : group.end;
         if (eventEnd <= eventStart) return;
-        events.push('Dialogue: 0,' + assTime(eventStart) + ',' + assTime(eventEnd) + ',Default,,0,0,0,,' + escapeAss(word.text));
+        const escaped = escapeAss(word.text);
+        const characterCount = Array.from(String(word.text || '')).length;
+        const fittedSize = Math.max(Math.round(fontSize * 0.64), Math.min(fontSize, Math.round(fontSize * 18 / Math.max(18, characterCount))));
+        const fittedText = fittedSize < fontSize ? '{\\fs' + fittedSize + '}' + escaped + '{\\r}' : escaped;
+        events.push('Dialogue: 0,' + assTime(eventStart) + ',' + assTime(eventEnd) + ',Default,,0,0,0,,' + fittedText);
       });
       return;
     }
