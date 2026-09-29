@@ -12913,20 +12913,21 @@ This is live host configuration, not a repository-managed nginx file.
 # 339. Editor Rejects Recordings That Cannot Safely Finish the Pipeline (2026-09-29)
 
 A raw recording does not consume only its upload size. During the full workflow,
-the source, verified Editor render, Content Production copy, and later
-music-mixed final may coexist. With 19 GB currently free this is comfortable for
-normal 49 MB-style takes, but blindly accepting a maximum 2 GiB file on a fuller
-disk could defer failure until hours later during rendering or approval.
+the source, browser review proxy for incompatible camera codecs, verified Editor
+render, Content Production copy, and later music-mixed final may coexist. With
+19 GB currently free this is comfortable for normal 49 MB-style takes, but
+blindly accepting a maximum 2 GiB file on a fuller disk could defer failure
+until hours later during rendering or approval.
 
 The upload route now measures the filesystem before reading a known-length
 multipart body and again after Multer stores it. It reserves 2 GiB for normal
-service operation plus space for every downstream master: four file sizes before
-ingest, three additional sizes after the source already exists. Unsafe uploads
+service operation plus space for every downstream master: five file sizes before
+ingest, four additional sizes after the source already exists. Unsafe uploads
 receive HTTP 507 and a direct cleanup message; if capacity cannot be measured,
 the existing disk monitor and normal behavior remain the fallback rather than
 blocking work. The post-upload rejection removes its temp file immediately.
-Focused coverage proves a 2 GiB recording requires 10 GiB before ingest and
-8 GiB still free after storage.
+Focused coverage proves a 2 GiB recording requires 12 GiB before ingest and
+10 GiB still free after storage.
 
 ---
 
@@ -13042,3 +13043,29 @@ hands off its latest metadata only if it still references the exact render
 digest just checked. A concurrently completed planning match is therefore
 included, while a changed/rebuilt edit receives a clear 409 and must be reviewed
 again. An approval completed by another concurrent request remains idempotent.
+
+---
+
+# 346. HEVC Camera Masters Get Automatic Browser-Safe Review Proxies (2026-09-29)
+
+The actual `9259.mp4` filming master is HEVC/`hvc1`. FFmpeg can transcribe,
+classify, and render it correctly, but Chrome-class browsers do not reliably
+decode that codec. If automatic retake or framing analysis required Harvey's
+review before the final H.264 render existed, the source player could therefore
+be blank even though the recording itself was perfectly valid.
+
+Upload probing now records video/audio codecs and identifies masters that are
+not dependable browser playback sources, including HEVC, unsupported audio, and
+non-MP4/MOV containers. Only those recordings enter a serialized background
+proxy queue that makes a review-only H.264/AAC MP4; the original master remains
+untouched and is still the sole input to the final high-quality render. The
+source endpoint transparently serves the proxy once ready, progress and failures
+are visible and retryable in Editor, navigation/polling tracks the job, and
+interrupted conversions resume after deployment. Proxy conversions and final
+renders share one ordered encode chain so a filming batch cannot saturate the
+VPS with competing FFmpeg jobs; because proxy work begins at ingest, it
+naturally precedes that recording's final render. Legacy recordings are
+re-probed and backfilled automatically. Disk admission now reserves the extra
+worst-case copy. Unit coverage checks the codec/container policy, a real HEVC
+fixture must produce an H.264 proxy, and the full upload/render test confirms
+ordinary H.264 MOV recordings skip unnecessary conversion.

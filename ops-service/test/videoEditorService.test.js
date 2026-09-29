@@ -64,8 +64,15 @@ test('stale temporary media is removed without touching active uploads', async f
 
 test('upload capacity reserves every downstream master plus operating space', function () {
   const gib = 1024 * 1024 * 1024;
-  assert.equal(editor.requiredEditorCapacity(2 * gib, false), 10 * gib);
-  assert.equal(editor.requiredEditorCapacity(2 * gib, true), 8 * gib);
+  assert.equal(editor.requiredEditorCapacity(2 * gib, false), 12 * gib);
+  assert.equal(editor.requiredEditorCapacity(2 * gib, true), 10 * gib);
+});
+
+test('HEVC and non-browser containers receive an H.264 review proxy', function () {
+  assert.equal(editor.browserPreviewNeeded('camera.mp4', { videoCodec: 'hevc', audioCodec: 'aac' }), true);
+  assert.equal(editor.browserPreviewNeeded('camera.mkv', { videoCodec: 'h264', audioCodec: 'aac' }), true);
+  assert.equal(editor.browserPreviewNeeded('camera.MOV', { videoCodec: 'h264', audioCodec: 'aac' }), false);
+  assert.equal(editor.browserPreviewNeeded('camera.mp4', { videoCodec: 'h264', audioCodec: 'pcm_s16le' }), true);
 });
 
 test('approval only accepts the exact verified render bytes', async function (t) {
@@ -424,6 +431,46 @@ test('legacy ready recordings acquire missing analysis phases on startup', { tim
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
 
+test('an HEVC camera master receives a real browser-safe review proxy', { timeout: 30000 }, async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-hevc-'));
+  const id = 'hevc-1';
+  const projectDir = path.join(dir, 'editor', id);
+  fs.mkdirSync(projectDir, { recursive: true });
+  const source = path.join(projectDir, 'source');
+  try {
+    execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=320x180:d=1:r=24',
+      '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:v', 'libx265', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-f', 'mp4', source]);
+  } catch (error) {
+    fs.rmSync(dir, { recursive: true, force: true });
+    t.skip('This FFmpeg build has no HEVC encoder.');
+    return;
+  }
+  const db = new Database(path.join(dir, 'test.sqlite'));
+  db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
+  const now = new Date().toISOString();
+  db.prepare('INSERT INTO records VALUES (?, ?, ?, ?)').run('editorProjects', id, JSON.stringify({
+    id: id, name: 'HEVC take', fileName: 'camera.MOV', mimeType: 'video/quicktime', duration: 1,
+    width: 320, height: 180, videoCodec: 'hevc', audioCodec: 'aac', browserPreviewRequired: true,
+    browserPreviewStatus: 'pending', browserPreviewError: '', transcriptionStatus: 'ready',
+    classificationStatus: 'unavailable', retakeAnalysisStatus: 'unavailable', planningMatchStatus: 'unavailable',
+    automaticRenderStartedAt: 'held-for-test', renderStatus: '', renderProgress: 0, words: [],
+    removedWordIndices: [], createdAt: now, updatedAt: now
+  }), now);
+  editor.setup({ db: db, dataDir: dir, transcribeDetailed: async function () { return { text: '', words: [] }; } });
+  let stored;
+  for (let attempt = 0; attempt < 300; attempt++) {
+    stored = JSON.parse(db.prepare('SELECT data FROM records WHERE store_name=? AND id=?').get('editorProjects', id).data);
+    if (stored.browserPreviewStatus === 'ready' || stored.browserPreviewStatus === 'error') break;
+    await new Promise(function (resolve) { setTimeout(resolve, 30); });
+  }
+  assert.equal(stored.browserPreviewStatus, 'ready', stored.browserPreviewError);
+  const proxy = path.join(projectDir, 'preview.mp4');
+  assert.ok(fs.statSync(proxy).size > 1024);
+  const probe = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_name', '-of', 'json', proxy], { encoding: 'utf8' }));
+  assert.equal(probe.streams[0].codec_name, 'h264');
+  t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+});
+
 test('upload, timed transcription and FFmpeg captioned render work end to end', { timeout: 60000 }, async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-'));
   const input = path.join(dir, 'sample.mp4');
@@ -495,6 +542,9 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(response.status, 202);
   let project = await response.json();
   assert.equal(project.mimeType, 'video/quicktime');
+  assert.equal(project.videoCodec, 'h264');
+  assert.equal(project.browserPreviewRequired, false);
+  assert.equal(project.browserPreviewStatus, 'not_required');
   response = await fetch(base + '/api/editor/' + project.id + '/source');
   assert.equal(response.headers.get('content-type'), 'video/quicktime');
   const duplicateForm = new FormData();

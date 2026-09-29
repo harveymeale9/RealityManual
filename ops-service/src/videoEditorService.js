@@ -14,10 +14,11 @@ const EDITOR_DISK_RESERVE_BYTES = 2 * 1024 * 1024 * 1024;
 
 function requiredEditorCapacity(fileBytes, fileAlreadyStored) {
   const bytes = Math.max(0, Number(fileBytes) || 0);
-  // Source, Editor render, Production copy, and the later mixed final can all
-  // coexist. Once Multer has stored the source, only the latter three remain
-  // additional allocations.
-  return EDITOR_DISK_RESERVE_BYTES + bytes * (fileAlreadyStored ? 3 : 4);
+  // Source, browser review proxy, Editor render, Production copy, and the
+  // later mixed final can coexist. The proxy is only made for incompatible
+  // camera codecs and is normally smaller, but capacity admission assumes the
+  // safe worst case.
+  return EDITOR_DISK_RESERVE_BYTES + bytes * (fileAlreadyStored ? 4 : 5);
 }
 
 async function verifiedRenderMatches(project, filePath) {
@@ -112,6 +113,14 @@ function normalizedVideoMimeType(fileName, reportedType) {
     '.mkv': 'video/x-matroska',
     '.avi': 'video/x-msvideo'
   })[extension] || 'video/mp4';
+}
+
+function browserPreviewNeeded(fileName, media) {
+  const extension = path.extname(String(fileName || '')).toLowerCase();
+  const videoCodec = String(media && media.videoCodec || '').toLowerCase();
+  const audioCodec = String(media && media.audioCodec || '').toLowerCase();
+  if (!['.mp4', '.m4v', '.mov'].includes(extension)) return true;
+  return videoCodec !== 'h264' || !['aac', 'mp3'].includes(audioCodec);
 }
 
 function normalizeWords(rawWords) {
@@ -552,9 +561,13 @@ function setup(options) {
   const putStmt = db.prepare('INSERT INTO records (store_name, id, data, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(store_name, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at');
   const delStmt = db.prepare('DELETE FROM records WHERE store_name = ? AND id = ?');
   const transcriptionJobs = new Map();
+  const previewJobs = new Map();
   const renderJobs = new Map();
   const productionJobs = new Map();
-  let renderChain = Promise.resolve();
+  // Browser proxies and final masters are both sustained FFmpeg encodes. One
+  // shared chain prevents a filming batch from saturating the VPS by running
+  // those two classes of work concurrently.
+  let encodeChain = Promise.resolve();
   const classificationJobs = new Map();
   const retakeJobs = new Map();
   const planningMatchJobs = new Map();
@@ -585,6 +598,7 @@ function setup(options) {
       return index === -1 ? 0 : index + 1;
     }
     item.transcriptionQueuePosition = position(transcriptionJobs);
+    item.previewQueuePosition = position(previewJobs);
     item.classificationQueuePosition = position(classificationJobs);
     item.retakeQueuePosition = position(retakeJobs);
     item.planningQueuePosition = position(planningMatchJobs);
@@ -604,6 +618,7 @@ function setup(options) {
   }
   function projectDir(id) { return path.join(rootDir, id); }
   function sourcePath(id) { return path.join(projectDir(id), 'source'); }
+  function previewPath(id) { return path.join(projectDir(id), 'preview.mp4'); }
   function renderPath(id) { return path.join(projectDir(id), 'render.mp4'); }
   function isId(id) { return /^[A-Za-z0-9_-]{1,128}$/.test(String(id || '')); }
   function availableDiskBytes() {
@@ -622,7 +637,7 @@ function setup(options) {
 
   async function probe(filePath) {
     const result = await run('ffprobe', ['-v', 'error', '-show_entries',
-      'format=duration:stream=codec_type,width,height,pix_fmt:stream_tags=rotate:stream_side_data=rotation',
+      'format=duration:stream=codec_type,codec_name,width,height,pix_fmt:stream_tags=rotate:stream_side_data=rotation',
       '-of', 'json', filePath], 'video probe');
     const parsed = JSON.parse(result.stdout || '{}');
     const video = (parsed.streams || []).find(function (stream) { return stream.codec_type === 'video'; }) || {};
@@ -636,8 +651,47 @@ function setup(options) {
       width: dimensions.width,
       height: dimensions.height,
       pixelFormat: String(video.pix_fmt || ''),
+      videoCodec: String(video.codec_name || ''),
+      audioCodec: String(((parsed.streams || []).find(function (stream) { return stream.codec_type === 'audio'; }) || {}).codec_name || ''),
       hasAudio: (parsed.streams || []).some(function (stream) { return stream.codec_type === 'audio'; })
     };
+  }
+
+  async function generateBrowserPreview(id) {
+    if (previewJobs.has(id)) return previewJobs.get(id);
+    const initial = getProject(id);
+    if (!initial || !initial.browserPreviewRequired || initial.productionPieceId) return;
+    const job = encodeChain.catch(function () {}).then(async function () {
+      let project = getProject(id);
+      if (!project || !project.browserPreviewRequired || project.productionPieceId) return;
+      project.browserPreviewStatus = 'running';
+      project.browserPreviewError = '';
+      saveProject(project);
+      try {
+        await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', sourcePath(id),
+          '-map', '0:v:0', '-map', '0:a:0', '-vf', "scale=w='trunc(min(1280,iw)/2)*2':h=-2",
+          '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '24', '-pix_fmt', 'yuv420p',
+          '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', previewPath(id)], 'browser review proxy');
+        const media = await probe(previewPath(id));
+        if (media.videoCodec !== 'h264' || !media.hasAudio || !fs.statSync(previewPath(id)).size) throw new Error('The browser review proxy failed verification.');
+        project = getProject(id);
+        if (!project) return;
+        project.browserPreviewStatus = 'ready';
+        project.browserPreviewError = '';
+        saveProject(project);
+      } catch (error) {
+        fs.rm(previewPath(id), { force: true }, function () {});
+        project = getProject(id);
+        if (project) {
+          project.browserPreviewStatus = 'error';
+          project.browserPreviewError = String(error.message || error).slice(0, 500);
+          saveProject(project);
+        }
+      }
+    }).finally(function () { previewJobs.delete(id); });
+    encodeChain = job.catch(function () {});
+    previewJobs.set(id, job);
+    return job;
   }
 
   async function transcribeProject(id) {
@@ -875,7 +929,7 @@ async function renderProject(id) {
     queuedProject.renderError = '';
     queuedProject.renderProgress = 0;
     saveProject(queuedProject);
-    const job = renderChain.catch(function () {}).then(async function () {
+    const job = encodeChain.catch(function () {}).then(async function () {
       let project = getProject(id);
       if (!project) return;
       project.renderStatus = 'running';
@@ -974,7 +1028,7 @@ async function renderProject(id) {
         saveProject(project);
       }
     }).finally(function () { renderJobs.delete(id); });
-    renderChain = job.catch(function () {});
+    encodeChain = job.catch(function () {});
     renderJobs.set(id, job);
     return job;
   }
@@ -998,6 +1052,7 @@ async function renderProject(id) {
         return;
       }
       const resumeTranscription = project.transcriptionStatus === 'running' || project.transcriptionStatus === 'pending';
+      const resumePreview = project.browserPreviewRequired && ['running', 'pending'].includes(project.browserPreviewStatus);
       const resumeRender = project.renderStatus === 'running' || project.renderStatus === 'queued';
       const resumeClassification = project.classificationStatus === 'running' || project.classificationStatus === 'pending';
       const resumeRetakes = ['running', 'pending', 'pending_transcript'].includes(project.retakeAnalysisStatus);
@@ -1005,6 +1060,10 @@ async function renderProject(id) {
       if (project.transcriptionStatus === 'running' || project.transcriptionStatus === 'pending') {
         project.transcriptionStatus = 'pending';
         project.transcriptionError = '';
+      }
+      if (resumePreview) {
+        project.browserPreviewStatus = 'pending';
+        project.browserPreviewError = '';
       }
       if (project.renderStatus === 'running' || project.renderStatus === 'queued') {
         project.renderStatus = '';
@@ -1023,9 +1082,10 @@ async function renderProject(id) {
         project.planningMatchStatus = project.transcriptionStatus === 'ready' ? 'pending' : 'pending_transcript';
         project.planningMatchError = '';
       }
-      if (migrated || resumeTranscription || resumeRender || resumeClassification || resumeRetakes || resumePlanning) saveProject(project);
+      if (migrated || resumeTranscription || resumePreview || resumeRender || resumeClassification || resumeRetakes || resumePlanning) saveProject(project);
       setImmediate(function () {
         if (resumeTranscription) transcribeProject(project.id);
+        if (resumePreview) generateBrowserPreview(project.id);
         if (resumeClassification) classifyProject(project.id);
         if (!resumeTranscription && project.transcriptionStatus === 'ready' && resumeRetakes) analyzeProjectRetakes(project.id);
         if (!resumeTranscription && project.transcriptionStatus === 'ready' && resumePlanning) matchProjectPlanningPiece(project.id);
@@ -1034,11 +1094,10 @@ async function renderProject(id) {
     } catch (e) {}
   });
 
-  // Older Editor uploads were probed without display-matrix rotation. Phone
-  // recordings can therefore be physically 1920x1080 but displayed 1080x1920,
-  // which selected landscape captions even though the browser visibly showed
-  // a portrait video. Re-probe persisted sources once on startup and invalidate
-  // only a stale render when the display dimensions change.
+  // Re-probe legacy sources for rotation and codecs. This both repairs old
+  // display dimensions and creates a browser-safe H.264 review proxy when a
+  // camera master (notably iPhone HEVC) is valid for FFmpeg but unreliable in
+  // Chrome-class review browsers.
   setImmediate(function () {
     listStmt.all(STORE_NAME).forEach(function (row) {
       let project;
@@ -1046,11 +1105,31 @@ async function renderProject(id) {
       if (!project || project.productionPieceId || !isId(project.id) || !fs.existsSync(sourcePath(project.id))) return;
       probe(sourcePath(project.id)).then(function (media) {
         const current = getProject(project.id);
-        if (!current || (current.width === media.width && current.height === media.height)) return;
-        current.width = media.width;
-        current.height = media.height;
-        invalidateProjectRender(current);
+        if (!current) return;
+        const dimensionsChanged = current.width !== media.width || current.height !== media.height;
+        const needsPreview = browserPreviewNeeded(current.fileName, media);
+        const previewMetadataChanged = !current.videoCodec || current.browserPreviewRequired === undefined;
+        if (!dimensionsChanged && !previewMetadataChanged) return;
+        current.videoCodec = media.videoCodec;
+        current.audioCodec = media.audioCodec;
+        current.browserPreviewRequired = needsPreview;
+        if (needsPreview && !fs.existsSync(previewPath(current.id))) {
+          current.browserPreviewStatus = 'pending';
+          current.browserPreviewError = '';
+        } else if (needsPreview) {
+          current.browserPreviewStatus = 'ready';
+          current.browserPreviewError = '';
+        } else if (!needsPreview) {
+          current.browserPreviewStatus = 'not_required';
+          current.browserPreviewError = '';
+        }
+        if (dimensionsChanged) {
+          current.width = media.width;
+          current.height = media.height;
+          invalidateProjectRender(current);
+        }
         saveProject(current);
+        if (current.browserPreviewRequired && current.browserPreviewStatus === 'pending') generateBrowserPreview(current.id);
         setImmediate(function () { maybeAutoRender(current.id); });
       }).catch(function () {});
     });
@@ -1145,6 +1224,11 @@ async function renderProject(id) {
         duration: media.duration,
         width: media.width,
         height: media.height,
+        videoCodec: media.videoCodec,
+        audioCodec: media.audioCodec,
+        browserPreviewRequired: browserPreviewNeeded(req.file.originalname, media),
+        browserPreviewStatus: browserPreviewNeeded(req.file.originalname, media) ? 'pending' : 'not_required',
+        browserPreviewError: '',
         transcriptText: '',
         words: [],
         removedWordIndices: [],
@@ -1181,7 +1265,7 @@ async function renderProject(id) {
         updatedAt: now
       });
       res.status(202).json(project);
-      setImmediate(function () { transcribeProject(id); classifyProject(id); });
+      setImmediate(function () { transcribeProject(id); classifyProject(id); generateBrowserPreview(id); });
     } catch (err) {
       fs.rm(req.file.path, { force: true }, function () {});
       fs.rm(projectDir(id), { recursive: true, force: true }, function () {});
@@ -1405,6 +1489,9 @@ async function renderProject(id) {
     if (project.transcriptionStatus === 'error') {
       project.transcriptionStatus = 'pending'; project.transcriptionError = ''; retried.push('transcription');
     }
+    if (project.browserPreviewRequired && project.browserPreviewStatus === 'error') {
+      project.browserPreviewStatus = 'pending'; project.browserPreviewError = ''; retried.push('preview');
+    }
     if (project.classificationStatus === 'error' && typeof classifyVisualLayout === 'function') {
       project.classificationStatus = 'pending'; project.classificationError = ''; retried.push('classification');
     }
@@ -1421,6 +1508,7 @@ async function renderProject(id) {
     saveProject(project);
     res.status(202).json({ ok: true, retried: retried });
     if (retried.includes('transcription')) transcribeProject(project.id);
+    if (retried.includes('preview')) generateBrowserPreview(project.id);
     if (retried.includes('classification')) classifyProject(project.id);
     if (retried.includes('retakes')) analyzeProjectRetakes(project.id);
     if (retried.includes('planning')) matchProjectPlanningPiece(project.id);
@@ -1491,8 +1579,9 @@ async function renderProject(id) {
     if (!isId(req.params.id) || !fs.existsSync(sourcePath(req.params.id))) return res.status(404).end();
     const project = getProject(req.params.id);
     if (!project) return res.status(404).end();
-    res.type(normalizedVideoMimeType(project.fileName, project.mimeType));
-    res.sendFile(sourcePath(req.params.id));
+    const useProxy = project.browserPreviewRequired && project.browserPreviewStatus === 'ready' && fs.existsSync(previewPath(req.params.id));
+    res.type(useProxy ? 'video/mp4' : normalizedVideoMimeType(project.fileName, project.mimeType));
+    res.sendFile(useProxy ? previewPath(req.params.id) : sourcePath(req.params.id));
   });
 
   router.get('/:id/render', function (req, res) {
@@ -1520,7 +1609,7 @@ async function renderProject(id) {
     res.json({ ok: true });
   });
 
-  return { router: router, transcribeProject: transcribeProject, classifyProject: classifyProject, analyzeProjectRetakes: analyzeProjectRetakes, matchProjectPlanningPiece: matchProjectPlanningPiece, renderProject: renderProject };
+  return { router: router, transcribeProject: transcribeProject, generateBrowserPreview: generateBrowserPreview, classifyProject: classifyProject, analyzeProjectRetakes: analyzeProjectRetakes, matchProjectPlanningPiece: matchProjectPlanningPiece, renderProject: renderProject };
 }
 
 module.exports = {
@@ -1553,5 +1642,6 @@ module.exports = {
   blockingReviewFailure,
   automaticReviewReady,
   advanceEditRevision,
-  normalizedVideoMimeType
+  normalizedVideoMimeType,
+  browserPreviewNeeded
 };

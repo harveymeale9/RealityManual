@@ -148,6 +148,7 @@
     if (item.transcriptionStatus === 'pending') return queued('Waiting for transcript', item.transcriptionQueuePosition);
     if (item.transcriptionStatus === 'running') return 'Transcribing';
     if (item.transcriptionStatus === 'error') return 'Needs attention';
+    if (item.browserPreviewStatus === 'error' && item.renderStatus !== 'ready') return 'Needs attention';
     if (item.classificationStatus === 'error' || item.retakeAnalysisStatus === 'error' || item.planningMatchStatus === 'error' || item.renderStatus === 'error') return 'Needs attention';
     if (item.classificationStatus === 'pending') return queued('Waiting for frame analysis', item.classificationQueuePosition);
     if (item.classificationStatus === 'running') return 'Analyzing frame';
@@ -166,10 +167,10 @@
 
   function sessionBucket(item) {
     if (item.productionPieceId) return item.workflowWarning ? 'warning' : 'sent';
-    if (item.transcriptionStatus === 'error' || item.classificationStatus === 'error' || item.retakeAnalysisStatus === 'error' || item.planningMatchStatus === 'error' || item.renderStatus === 'error' || Number(item.unresolvedRetakeCount) > 0 || item.layoutReviewRequired) return 'attention';
+    if (item.transcriptionStatus === 'error' || (item.browserPreviewStatus === 'error' && item.renderStatus !== 'ready') || item.classificationStatus === 'error' || item.retakeAnalysisStatus === 'error' || item.planningMatchStatus === 'error' || item.renderStatus === 'error' || Number(item.unresolvedRetakeCount) > 0 || item.layoutReviewRequired) return 'attention';
     if (item.workflowWarning) return 'warning';
     if (item.renderStatus === 'ready') return 'ready';
-    if (['pending', 'running'].indexOf(item.transcriptionStatus) !== -1 || ['pending', 'running'].indexOf(item.classificationStatus) !== -1 || ['pending', 'running', 'pending_transcript'].indexOf(item.retakeAnalysisStatus) !== -1 || ['pending', 'running', 'pending_transcript'].indexOf(item.planningMatchStatus) !== -1 || ['queued', 'running'].indexOf(item.renderStatus) !== -1) return 'working';
+    if (['pending', 'running'].indexOf(item.transcriptionStatus) !== -1 || ['pending', 'running'].indexOf(item.browserPreviewStatus) !== -1 || ['pending', 'running'].indexOf(item.classificationStatus) !== -1 || ['pending', 'running', 'pending_transcript'].indexOf(item.retakeAnalysisStatus) !== -1 || ['pending', 'running', 'pending_transcript'].indexOf(item.planningMatchStatus) !== -1 || ['queued', 'running'].indexOf(item.renderStatus) !== -1) return 'working';
     return 'prepared';
   }
 
@@ -264,7 +265,9 @@
     var frameState = item.classificationStatus === 'error' ? 'error' : item.classificationStatus === 'ready' ? 'done' : item.classificationStatus === 'running' || item.classificationStatus === 'pending' ? 'active' : 'waiting';
     var retakeState = item.retakeAnalysisStatus === 'error' ? 'error' : item.retakeAnalysisStatus === 'ready' ? 'done' : item.retakeAnalysisStatus === 'running' || item.retakeAnalysisStatus === 'pending' ? 'active' : 'waiting';
     var planState = item.planningMatchStatus === 'error' ? 'error' : item.planningMatchStatus === 'ready' ? 'done' : item.planningMatchStatus === 'running' || item.planningMatchStatus === 'pending' ? 'active' : 'waiting';
+    var previewState = item.browserPreviewStatus === 'error' ? 'error' : item.browserPreviewStatus === 'ready' ? 'done' : item.browserPreviewRequired ? 'active' : '';
     return '<div class="editor-processing-steps">' + step('done', 'Recording secured', 'Original master preserved') +
+      (item.browserPreviewRequired ? step(previewState, 'Browser review copy', previewState === 'done' ? 'H.264 preview ready' : previewState === 'error' ? 'Can be retried' : Number(item.previewQueuePosition) > 1 ? (Number(item.previewQueuePosition) - 1) + ' recording(s) ahead' : 'Converting camera codec') : '') +
       step(transcriptState, 'Word-timed transcript', transcriptState === 'done' ? 'Speech mapped' : transcriptState === 'error' ? 'Needs retry' : item.transcriptionStatus === 'pending' && Number(item.transcriptionQueuePosition) > 1 ? (Number(item.transcriptionQueuePosition) - 1) + ' recording(s) ahead' : 'Listening for every word') +
       step(frameState, 'Publishing frame', frameState === 'done' ? 'Composition detected' : frameState === 'error' ? 'Manual choice available' : item.classificationStatus === 'pending' && Number(item.classificationQueuePosition) > 1 ? (Number(item.classificationQueuePosition) - 1) + ' recording(s) ahead' : frameState === 'active' ? 'Inspecting the book framing' : 'Waiting') +
       step(retakeState, 'Retake review', retakeState === 'done' ? 'Decisions ready' : retakeState === 'error' ? 'Can be retried' : item.retakeAnalysisStatus === 'pending' && Number(item.retakeQueuePosition) > 1 ? (Number(item.retakeQueuePosition) - 1) + ' recording(s) ahead' : retakeState === 'active' ? 'Comparing nearby takes' : 'Starts after transcription') +
@@ -274,6 +277,7 @@
   function failedSteps(item) {
     var labels = [];
     if (item.transcriptionStatus === 'error') labels.push('transcript');
+    if (item.browserPreviewStatus === 'error') labels.push('browser preview');
     if (item.classificationStatus === 'error') labels.push('framing');
     if (item.retakeAnalysisStatus === 'error') labels.push('retake review');
     if (item.planningMatchStatus === 'error') labels.push('planning match');
@@ -489,6 +493,7 @@
 
   function projectIsActive(item) {
     return !!item && (['pending', 'running'].indexOf(item.transcriptionStatus) !== -1 ||
+      ['pending', 'running'].indexOf(item.browserPreviewStatus) !== -1 ||
       ['pending', 'running'].indexOf(item.classificationStatus) !== -1 ||
       ['pending', 'running', 'pending_transcript'].indexOf(item.retakeAnalysisStatus) !== -1 ||
       ['pending', 'running', 'pending_transcript'].indexOf(item.planningMatchStatus) !== -1 ||
@@ -497,7 +502,7 @@
 
   function projectPollSignature(item) {
     if (!item) return '';
-    return [item.transcriptionStatus, item.classificationStatus, item.retakeAnalysisStatus, item.planningMatchStatus,
+    return [item.transcriptionStatus, item.browserPreviewStatus, item.classificationStatus, item.retakeAnalysisStatus, item.planningMatchStatus,
       item.renderStatus, Math.round(Number(item.renderProgress) || 0), item.productionPieceId || '', item.workflowWarning || ''].join('|');
   }
 
@@ -564,6 +569,7 @@
       '<div class="editor-topbar"><div><h2>' + esc(displayName(project)) + '</h2><span>' + (project.planningPieceTitle ? esc(project.name) + ' · ' : '') + formatTime(project.duration) + ' original · ' + formatTime(editedDuration(project)) + ' edited · ' + cutSeconds.toFixed(1) + 's removed' + (formatBytes(project.sizeBytes) ? ' · ' + formatBytes(project.sizeBytes) + ' source' : '') + '</span></div>' +
         '<div class="editor-topbar-actions"><span class="editor-save-state ' + esc(saveStates[project.id] || '') + '" id="editorSaveState">' + ({ saving: 'Saving…', saved: 'Saved', error: 'Save failed' }[saveStates[project.id]] || '') + '</span><button class="editor-delete" id="editorDelete">' + (sentToProduction ? 'Remove Editor files' : 'Delete recording') + '</button></div></div>' +
       (rendering ? '<div class="editor-lock-notice"><strong>Final edit is encoding</strong><span>Review remains available. Editing unlocks as soon as the verified file is ready.</span></div>' : '') +
+      (project.browserPreviewRequired && ['pending', 'running'].indexOf(project.browserPreviewStatus) !== -1 && previewMode === 'source' ? '<div class="editor-lock-notice"><strong>Preparing a browser-safe source preview</strong><span>The camera master is preserved and final editing continues. This view will switch to H.264 automatically when ready.</span></div>' : '') +
       (sentToProduction ? '<div class="editor-lock-notice approved"><strong>Approved version locked</strong><span>The exact reviewed file is now in Content Production. Source and final previews remain available here.</span></div>' : '') +
       (failures.length ? '<div class="editor-error-recovery"><div><strong>' + failures.join(', ') + ' need' + (failures.length === 1 ? 's' : '') + ' attention</strong><span>Retry the failed automatic work without changing the source recording or your edit decisions.</span></div><button type="button" class="btn-secondary btn-tiny" id="editorRetryFailed">Retry failed steps</button></div>' : '') +
       (project.workflowWarning ? '<div class="editor-workflow-warning"><strong>Video workflow needs attention</strong><span>' + esc(project.workflowWarning) + '</span></div>' : '') +
