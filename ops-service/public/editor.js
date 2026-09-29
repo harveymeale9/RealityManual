@@ -779,7 +779,7 @@
         // rebuild invisible until the page is revisited.
         if (!item.renderStatus && !item.productionPieceId) setTimeout(function () {
           if (project && project.id === id && !project.renderStatus) openProject(id, true);
-        }, 250);
+        }, 950);
       }
       return item;
     }).catch(function (error) {

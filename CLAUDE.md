@@ -11873,3 +11873,21 @@ performs one guarded follow-up refresh when an edit response has no render
 status. The normal progress poll takes over from there. The generated-video
 integration now changes the caption setting after a verified render and proves
 that a second verified FFmpeg output completes with no render endpoint call.
+
+---
+
+# 283. Rapid Editor Decisions Collapse Into One Safe Rebuild (2026-09-29)
+
+Automatic regeneration is now debounced per recording for 650ms after an edit.
+Without this, the first of two quick decisions could launch FFmpeg before the
+client's serialized second PATCH reached the server; the render lock would then
+reject that later decision. Each new save resets the short timer, so transcript
+cuts, pacing, captions and crop adjustments made as one interaction burst all
+persist before one replacement encode begins. Deleting a recording cancels its
+pending timer.
+
+The client waits just beyond that debounce before its one follow-up refresh,
+then resumes ordinary progress polling. The end-to-end regression applies two
+back-to-back changes after a completed render and proves both settings persist,
+only one additional verified render runs, and no explicit render request is
+needed.

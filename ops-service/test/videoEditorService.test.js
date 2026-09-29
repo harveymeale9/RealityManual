@@ -360,6 +360,8 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(response.status, 200);
   project = await response.json();
   assert.equal(project.renderStatus, '');
+  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ retainedPauseSeconds: 0.55 }) });
+  assert.equal(response.status, 200);
   for (let attempt = 0; attempt < 200 && (project.renderStatus !== 'ready' || renderReadyCalls < 2); attempt++) {
     await new Promise(function (resolve) { setTimeout(resolve, 50); });
     project = await (await fetch(base + '/api/editor/' + project.id)).json();
@@ -367,6 +369,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.renderStatus, 'ready', project.renderError);
   assert.equal(renderReadyCalls, 2);
   assert.equal(project.captionsEnabled, false);
+  assert.equal(project.retainedPauseSeconds, 0.55);
   response = await fetch(base + '/api/editor/' + project.id + '/render');
   assert.equal(response.status, 200);
   const rendered = Buffer.from(await response.arrayBuffer());

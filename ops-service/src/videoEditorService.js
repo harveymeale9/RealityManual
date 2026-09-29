@@ -416,6 +416,7 @@ function setup(options) {
   const classificationJobs = new Map();
   const retakeJobs = new Map();
   const planningMatchJobs = new Map();
+  const automaticRenderTimers = new Map();
   let transcriptionChain = Promise.resolve();
   let classificationChain = Promise.resolve();
   let retakeChain = Promise.resolve();
@@ -669,6 +670,15 @@ function setup(options) {
     saveProject(project);
     setImmediate(function () { renderProject(id); });
     return true;
+  }
+
+  function scheduleAutoRender(id, delayMs) {
+    if (automaticRenderTimers.has(id)) clearTimeout(automaticRenderTimers.get(id));
+    const timer = setTimeout(function () {
+      automaticRenderTimers.delete(id);
+      maybeAutoRender(id);
+    }, Math.max(0, Number(delayMs) || 0));
+    automaticRenderTimers.set(id, timer);
   }
 
 async function renderProject(id) {
@@ -977,7 +987,7 @@ async function renderProject(id) {
     project.detectedContentType = contentTypeForProject(project, project.cuts);
     project.planningCandidates = typeof getPlanningCandidates === 'function' ? getPlanningCandidates(project) : [];
     res.json(project);
-    setImmediate(function () { maybeAutoRender(project.id); });
+    scheduleAutoRender(project.id, 650);
   });
 
   router.post('/:id/transcribe', function (req, res) {
@@ -1109,6 +1119,7 @@ async function renderProject(id) {
   router.delete('/:id', function (req, res) {
     if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
     if (renderJobs.has(req.params.id)) return res.status(409).json({ error: 'render_in_progress', message: 'Wait for the final edit to finish before deleting this recording.' });
+    if (automaticRenderTimers.has(req.params.id)) { clearTimeout(automaticRenderTimers.get(req.params.id)); automaticRenderTimers.delete(req.params.id); }
     delStmt.run(STORE_NAME, req.params.id);
     fs.rm(projectDir(req.params.id), { recursive: true, force: true }, function () {});
     res.json({ ok: true });
