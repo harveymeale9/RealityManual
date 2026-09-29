@@ -247,6 +247,12 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   let response = await fetch(base + '/api/editor', { method: 'POST', body: form });
   assert.equal(response.status, 202);
   let project = await response.json();
+  const duplicateForm = new FormData();
+  duplicateForm.append('name', 'Synthetic take');
+  duplicateForm.append('video', new Blob([fs.readFileSync(input)], { type: 'video/mp4' }), 'sample.mp4');
+  response = await fetch(base + '/api/editor', { method: 'POST', body: duplicateForm });
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).existingProjectId, project.id);
   for (let attempt = 0; attempt < 100 && project.transcriptionStatus !== 'ready'; attempt++) {
     await new Promise(function (resolve) { setTimeout(resolve, 30); });
     project = await (await fetch(base + '/api/editor/' + project.id)).json();

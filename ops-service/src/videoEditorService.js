@@ -802,6 +802,13 @@ async function renderProject(id) {
 
   router.post('/', upload.single('video'), async function (req, res) {
     if (!req.file || !req.file.path) return res.status(400).json({ error: 'missing_video' });
+    const duplicate = listStmt.all(STORE_NAME).map(function (row) { try { return JSON.parse(row.data); } catch (e) { return null; } }).filter(Boolean).find(function (item) {
+      return item.fileName === String(req.file.originalname || 'recording.mp4').slice(0, 255) && Number(item.sizeBytes) === Number(req.file.size);
+    });
+    if (duplicate) {
+      fs.rm(req.file.path, { force: true }, function () {});
+      return res.status(409).json({ error: 'duplicate_recording', existingProjectId: duplicate.id, message: 'This exact filename and file size are already in the Editor.' });
+    }
     const id = crypto.randomUUID();
     try {
       fs.mkdirSync(projectDir(id), { recursive: true });

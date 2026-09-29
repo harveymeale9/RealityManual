@@ -248,7 +248,22 @@
   }
 
   function uploadFiles(fileList) {
-    var files = Array.prototype.slice.call(fileList || []).filter(function (file) { return String(file.type || '').indexOf('video') === 0; });
+    var seen = new Set(projects.map(function (item) { return String(item.fileName || '') + '::' + String(item.sizeBytes || 0); }));
+    var duplicateCount = 0;
+    var files = Array.prototype.slice.call(fileList || []).filter(function (file) {
+      if (String(file.type || '').indexOf('video') !== 0) return false;
+      var key = String(file.name || '') + '::' + String(file.size || 0);
+      if (seen.has(key)) { duplicateCount++; return false; }
+      seen.add(key); return true;
+    });
+    if (!files.length && duplicateCount) {
+      var duplicateProgress = root.querySelector('#editorUploadProgress');
+      duplicateProgress.hidden = false;
+      root.querySelector('#editorUploadBar').style.width = '100%';
+      root.querySelector('#editorUploadLabel').textContent = duplicateCount + ' duplicate recording' + (duplicateCount === 1 ? '' : 's') + ' already in Editor';
+      setTimeout(function () { duplicateProgress.hidden = true; }, 2200);
+      return;
+    }
     if (!files.length) return alert('Drop one or more video files.');
     var created = [];
     var failures = [];
@@ -265,7 +280,7 @@
     sequence.then(function () {
       var progress = root.querySelector('#editorUploadProgress');
       root.querySelector('#editorUploadBar').style.width = '100%';
-      root.querySelector('#editorUploadLabel').textContent = created.length + ' recording' + (created.length === 1 ? '' : 's') + ' added to the edit queue';
+      root.querySelector('#editorUploadLabel').textContent = created.length + ' recording' + (created.length === 1 ? '' : 's') + ' added to the edit queue' + (duplicateCount ? ' · ' + duplicateCount + ' duplicate skipped' : '');
       setTimeout(function () { if (progress) progress.hidden = true; }, 1400);
       if (created[0]) openProject(created[0].id);
       if (failures.length) alert('Some recordings could not be uploaded:\n\n' + failures.join('\n'));

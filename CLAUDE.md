@@ -11754,3 +11754,21 @@ The Chromium batch regression fires two changes without waiting, switches to a
 different recording during the artificial network delay, and proves maximum
 concurrent PATCHes for the original is one, server order is preserved, and the
 active workspace remains on the recording Harvey selected.
+
+---
+
+# 277. Duplicate Filming Uploads Are Rejected Before Processing (2026-09-29)
+
+Editor intake now deduplicates the selected batch and recordings already stored
+using the camera filename plus exact byte size. Mixed batches continue with the
+new files and report how many duplicates were skipped; an all-duplicate drop
+shows a concise inline result instead of opening alerts or starting work. The
+server independently enforces the same identity after upload and removes its
+temporary file before returning the existing Editor project id, so a stale or
+custom client cannot spend storage and downstream transcription/analysis on the
+same master twice.
+
+The generated-video integration submits the identical source a second time and
+proves the server returns a conflict pointing to the first project. The browser
+batch regression selects two distinct masters plus an exact duplicate and
+proves only two uploads occur while the queue reports the skipped copy.
