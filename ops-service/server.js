@@ -596,13 +596,19 @@ function tryAdvanceEditorPlanningPiece(input, targetStage) {
 function reconcileEditorPlanningPiece(input) {
   const project = input && input.project;
   const previousId = input && input.previousPlanningPieceId;
-  if (!project || !previousId || previousId === project.planningPieceId) return;
-  const previous = getPieceRecord(previousId);
-  if (!previous || previous.stage !== 'edited' || previous.editorProjectId !== project.id) return;
-  previous.stage = 'filmed';
-  previous.updatedAt = new Date().toISOString();
-  delete previous.editorProjectId;
-  savePieceRecord(previous);
+  if (!project) return;
+  if (previousId && previousId !== project.planningPieceId) {
+    const previous = getPieceRecord(previousId);
+    if (previous && previous.stage === 'edited' && previous.editorProjectId === project.id) {
+      previous.stage = 'filmed';
+      previous.updatedAt = new Date().toISOString();
+      delete previous.editorProjectId;
+      savePieceRecord(previous);
+    }
+  }
+  if (!input.renderWillChange && project.renderStatus === 'ready' && project.planningPieceId) {
+    advanceEditorPlanningPiece({ project: project }, 'edited');
+  }
 }
 
 function reconcileDeletedEditorProject(input) {

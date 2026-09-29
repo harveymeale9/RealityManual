@@ -85,6 +85,15 @@ test('invalidating an edit clears every stale output claim', function () {
   assert.deepEqual(project, { renderStatus: '', renderError: '', renderProgress: 0, automaticRenderStartedAt: '', renderQuality: null, renderSizeBytes: 0, editedDuration: 0 });
 });
 
+test('metadata-only editor changes preserve a verified render', function () {
+  assert.equal(editor.patchAffectsRender({ planningPieceId: 'plan-2' }), false);
+  assert.equal(editor.patchAffectsRender({ contentTypeOverride: 'short' }), false);
+  assert.equal(editor.patchAffectsRender({ dismissedRetakeIds: ['retake-1'] }), false);
+  assert.equal(editor.patchAffectsRender({ captionsEnabled: false }), true);
+  assert.equal(editor.patchAffectsRender({ removedWordIndices: [1, 2] }), true);
+  assert.equal(editor.patchAffectsRender({ layoutOverride: 'vertical' }), true);
+});
+
 test('likely restarted lines are surfaced without being automatically removed', function () {
   const attempts = [
     { index: 0, text: 'The', start: 0, end: 0.2 }, { index: 1, text: 'problem', start: 0.25, end: 0.6 },
@@ -366,7 +375,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
       if (renderReadyCalls === 1) throw new Error('Synthetic first workflow failure.');
     },
     onPlanningPieceChanged: function (input) {
-      planningChanges.push({ previous: input.previousPlanningPieceId, next: input.project.planningPieceId });
+      planningChanges.push({ previous: input.previousPlanningPieceId, next: input.project.planningPieceId, renderWillChange: input.renderWillChange });
     },
     onProjectDeleted: function (input) { deletedProjects.push(input.project); },
     handoffToProduction: async function (input) {
@@ -445,7 +454,8 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   project = await response.json();
   assert.equal(project.planningPieceId, 'plan-2');
   assert.equal(project.planningPieceTitle, 'Corrected outline');
-  assert.deepEqual(planningChanges, [{ previous: 'plan-1', next: 'plan-2' }]);
+  assert.equal(project.renderStatus, 'ready');
+  assert.deepEqual(planningChanges, [{ previous: 'plan-1', next: 'plan-2', renderWillChange: false }]);
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ removedWordIndices: [0, 1, 2, 3] }) });
   assert.equal(response.status, 200);
   project = await response.json();

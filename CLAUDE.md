@@ -12501,3 +12501,26 @@ different: its Production copy is authoritative and the linked card is already
 Uploaded, so removing Editor files leaves both untouched. Integration coverage
 proves the hook receives the complete Sent project and deletion still removes
 only the Editor record.
+
+---
+
+# 318. Metadata Corrections Do Not Re-Encode an Identical Video (2026-09-29)
+
+Every Editor PATCH previously invalidated the verified render. Correcting a
+planning-card link, changing Short vs Long-short, or choosing Keep both on a
+flagged repetition could trigger a complete FFmpeg encode even though no pixel,
+caption, cut or sound changed.
+
+The service now classifies mutations by whether they affect rendered media.
+Transcript cuts/corrections, pause settings, captions, framing and crop still
+invalidate and rebuild. Planning links, content-type metadata and retake
+dismissals preserve the verified file. A card-link callback receives this
+classification: if a ready recording changes links without a media edit, the
+old owned card is reconciled and the new card advances to Edited immediately,
+without encoding the same video again. If the same request also changes media,
+the new card waits for the replacement render as before.
+
+Unit coverage explicitly enumerates metadata-only versus render-affecting
+patches. Integration coverage changes a ready project from one card to another,
+proves the verified render remains ready, verifies the callback classification,
+and later proves a real cut still triggers the normal second render.

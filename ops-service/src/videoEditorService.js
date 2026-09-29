@@ -198,6 +198,14 @@ function invalidateRender(project) {
   return project;
 }
 
+function patchAffectsRender(body) {
+  body = body && typeof body === 'object' ? body : {};
+  return ['removedWordIndices', 'wordCorrection', 'autoSilenceEnabled', 'restoredAutoCutIds', 'captionsEnabled',
+    'layoutOverride', 'cropCenterX', 'silenceThresholdSeconds', 'retainedPauseSeconds'].some(function (key) {
+    return Object.prototype.hasOwnProperty.call(body, key);
+  });
+}
+
 function gapDecisions(project) {
   const words = project.words || [];
   const restored = new Set(Array.isArray(project.restoredAutoCutIds) ? project.restoredAutoCutIds : []);
@@ -1051,6 +1059,7 @@ async function renderProject(id) {
     if (!project) return res.status(404).json({ error: 'not_found' });
     if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked. Make downstream changes in Content Production.' });
     if (renderJobs.has(project.id)) return res.status(409).json({ error: 'render_in_progress', message: 'Wait for this final edit to finish before changing its cut settings.' });
+    const renderWillChange = patchAffectsRender(req.body);
     if (Array.isArray(req.body && req.body.removedWordIndices)) {
       const nextRemovedWordIndices = Array.from(new Set(req.body.removedWordIndices.map(Number)
         .filter(function (index) { return Number.isInteger(index) && index >= 0 && index < (project.words || []).length; }))).sort(function (a, b) { return a - b; });
@@ -1100,14 +1109,14 @@ async function renderProject(id) {
         project.planningPieceSeq = candidate ? Number(candidate.seq) || 0 : 0;
         project.planningPieceManuallySelected = true;
         if (requested !== previousPlanningPieceId && typeof onPlanningPieceChanged === 'function') {
-          try { onPlanningPieceChanged({ project: project, previousPlanningPieceId: previousPlanningPieceId }); }
+          try { onPlanningPieceChanged({ project: project, previousPlanningPieceId: previousPlanningPieceId, renderWillChange: renderWillChange }); }
           catch (error) {
             return res.status(422).json({ error: 'planning_link_update_failed', message: 'The prior planning-card stage could not be reconciled. Nothing was saved.' });
           }
         }
       }
     }
-    invalidateRender(project);
+    if (renderWillChange) invalidateRender(project);
     saveProject(project);
     project.cuts = cutsForProject(project);
     project.captionGroups = captionGroups(project, project.cuts);
@@ -1122,7 +1131,7 @@ async function renderProject(id) {
     project.canUndoCut = Array.isArray(project.cutDecisionHistory) && project.cutDecisionHistory.length > 0;
     delete project.cutDecisionHistory;
     res.json(project);
-    scheduleAutoRender(project.id, 650);
+    if (renderWillChange) scheduleAutoRender(project.id, 650);
   });
 
   router.post('/:id/undo-cut', function (req, res) {
@@ -1322,6 +1331,7 @@ module.exports = {
   effectiveLayout,
   contentTypeForProject,
   invalidateRender,
+  patchAffectsRender,
   hashFile,
   gapDecisions,
   retakeCandidates,
