@@ -13025,3 +13025,20 @@ batch is politely refused until the first finishes, the upload control visibly
 locks and later re-enables, and an actual page unload triggers the browser's
 standard unsaved-work warning only while bytes are in flight. Detached progress
 elements are never dereferenced, so background batch completion remains safe.
+
+---
+
+# 345. Approval Refreshes Metadata After Streaming Verification (2026-09-29)
+
+SHA-256 verification deliberately streams the final master and may take several
+seconds for a large camera recording. Planning-card matching is metadata-only
+and can legitimately finish during that window. Approval previously continued
+with the project object loaded before hashing, so Content Production could miss
+a planning link that had just been saved while the correct video was being
+verified.
+
+After fingerprinting, approval now reloads the authoritative project record and
+hands off its latest metadata only if it still references the exact render
+digest just checked. A concurrently completed planning match is therefore
+included, while a changed/rebuilt edit receives a clear 409 and must be reviewed
+again. An approval completed by another concurrent request remains idempotent.

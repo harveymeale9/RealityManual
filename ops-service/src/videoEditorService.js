@@ -1444,6 +1444,19 @@ async function renderProject(id) {
       scheduleAutoRender(project.id, 0);
       return;
     }
+    // Fingerprinting a large master is intentionally streamed and can take a
+    // few seconds. Planning linkage is allowed to finish during that window,
+    // so refresh metadata before handoff while requiring it still to reference
+    // the exact render digest that was just verified.
+    const verifiedRenderSha256 = project.renderSha256;
+    project = getProject(project.id);
+    if (!project) return res.status(404).json({ error: 'not_found' });
+    if (project.productionPieceId) {
+      return res.json({ ok: true, pieceId: project.productionPieceId, alreadySent: true });
+    }
+    if (project.renderStatus !== 'ready' || project.renderSha256 !== verifiedRenderSha256) {
+      return res.status(409).json({ error: 'render_changed_during_approval', message: 'The edit changed while it was being approved. Review the latest finished version, then approve again.' });
+    }
     if (typeof handoffToProduction !== 'function') return res.status(501).json({ error: 'production_handoff_unavailable' });
     const joinedExistingHandoff = productionJobs.has(project.id);
     let handoffJob = productionJobs.get(project.id);
