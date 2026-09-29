@@ -12391,3 +12391,19 @@ No-op saves do not manufacture history, internal history is not sent in list
 payloads, and Sent projects remain immutable. The headless browser deliberately
 reloads after a cut and proves Undo is still available; integration coverage
 proves the durable cut, restore, derived captions and `canUndoCut` state.
+
+---
+
+# 312. Workflow Warnings Remain Visible Across the Session (2026-09-29)
+
+A planning-card advancement warning was clearly shown inside an open recording,
+but disappeared into the generic **Ready for approval** or **Sent to Production**
+label in the sidebar and summary. Approving and moving to the next recording
+could therefore hide the only remaining follow-up.
+
+Warnings now have their own amber session bucket and explicit **Ready · workflow
+warning** / **Sent · workflow warning** list labels. They remain distinct from a
+failed video: the output is still safe and approvable, while the status makes the
+secondary workflow repair impossible to lose in a long filming session. Browser
+coverage verifies both the post-handoff session count and Sent-list label; clean
+handoffs retain the ordinary blue Sent state.

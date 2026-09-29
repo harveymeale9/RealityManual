@@ -94,7 +94,7 @@
       position = Number(position) || 0;
       return position > 1 ? label + ' · ' + (position - 1) + ' ahead' : position === 1 ? 'Next: ' + label.toLowerCase() : label;
     }
-    if (item.productionPieceId) return 'Sent to Production';
+    if (item.productionPieceId) return item.workflowWarning ? 'Sent · workflow warning' : 'Sent to Production';
     if (item.transcriptionStatus === 'pending') return queued('Waiting for transcript', item.transcriptionQueuePosition);
     if (item.transcriptionStatus === 'running') return 'Transcribing';
     if (item.transcriptionStatus === 'error') return 'Needs attention';
@@ -104,6 +104,7 @@
     if (item.retakeAnalysisStatus === 'pending') return queued('Waiting for retake review', item.retakeQueuePosition);
     if (item.retakeAnalysisStatus === 'running') return 'Checking retakes';
     if (Number(item.unresolvedRetakeCount) > 0) return 'Review ' + Number(item.unresolvedRetakeCount) + ' possible retake' + (Number(item.unresolvedRetakeCount) === 1 ? '' : 's');
+    if (item.workflowWarning) return item.renderStatus === 'ready' ? 'Ready · workflow warning' : 'Workflow warning';
     if (item.planningMatchStatus === 'pending') return queued('Waiting for plan match', item.planningQueuePosition);
     if (item.planningMatchStatus === 'running') return 'Matching plan';
     if (item.renderStatus === 'queued') return queued('Waiting to render', item.renderQueuePosition);
@@ -113,15 +114,16 @@
   }
 
   function sessionBucket(item) {
-    if (item.productionPieceId) return 'sent';
+    if (item.productionPieceId) return item.workflowWarning ? 'warning' : 'sent';
     if (item.transcriptionStatus === 'error' || item.classificationStatus === 'error' || item.retakeAnalysisStatus === 'error' || item.planningMatchStatus === 'error' || item.renderStatus === 'error' || Number(item.unresolvedRetakeCount) > 0) return 'attention';
+    if (item.workflowWarning) return 'warning';
     if (item.renderStatus === 'ready') return 'ready';
     if (['pending', 'running'].indexOf(item.transcriptionStatus) !== -1 || ['pending', 'running'].indexOf(item.classificationStatus) !== -1 || ['pending', 'running', 'pending_transcript'].indexOf(item.retakeAnalysisStatus) !== -1 || ['pending', 'running', 'pending_transcript'].indexOf(item.planningMatchStatus) !== -1 || ['queued', 'running'].indexOf(item.renderStatus) !== -1) return 'working';
     return 'prepared';
   }
 
   function nextActionableProject(excludedId) {
-    var priority = { ready: 0, attention: 1, prepared: 2, working: 3 };
+    var priority = { ready: 0, warning: 1, attention: 2, prepared: 3, working: 4 };
     return projects.filter(function (item) {
       return !item.productionPieceId && item.id !== excludedId;
     }).sort(function (a, b) {
@@ -134,9 +136,9 @@
     var summary = root && root.querySelector('#editorSessionSummary');
     if (!summary) return;
     if (!projects.length) { summary.hidden = true; summary.innerHTML = ''; return; }
-    var counts = { working: 0, ready: 0, attention: 0, prepared: 0, sent: 0 };
+    var counts = { working: 0, ready: 0, warning: 0, attention: 0, prepared: 0, sent: 0 };
     projects.forEach(function (item) { counts[sessionBucket(item)]++; });
-    var labels = { working: 'processing', ready: 'ready to approve', attention: 'need attention', prepared: 'prepared', sent: 'sent' };
+    var labels = { working: 'processing', ready: 'ready to approve', warning: 'workflow warning', attention: 'need attention', prepared: 'prepared', sent: 'sent' };
     summary.innerHTML = '<strong>' + projects.length + ' recording' + (projects.length === 1 ? '' : 's') + '</strong>' + Object.keys(counts).filter(function (key) { return counts[key]; }).map(function (key) {
       return '<span class="' + key + '"><i></i>' + counts[key] + ' ' + labels[key] + '</span>';
     }).join('');
