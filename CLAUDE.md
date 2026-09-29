@@ -13878,3 +13878,17 @@ error. This prevents Harvey from wondering whether a click registered and
 manually starting competing work after a harmless response-path interruption.
 The browser regression simulates the lost first response and requires exactly
 one bounded retry before the running state appears.
+
+---
+
+# 386. Mobile Session Queue and Recovery Readability (2026-09-29)
+
+The phone audit showed the horizontal recording queue centring one 180px card
+while leaving a distracting fragment of its neighbour (`ke 4`) at the edge.
+Mobile recording cards now divide the available strip into two equal columns,
+so Harvey can compare the current take with an adjacent take without clipped
+labels or extra scrolling. The failure-recovery banner also stacks its retry
+button beneath the explanation on narrow screens; `Retry failed steps` no
+longer collapses into a tall three-word sliver. Desktop layout is unchanged.
+The browser audit requires at least two recording cards to be fully visible in
+the mobile queue before capturing its screenshot.
