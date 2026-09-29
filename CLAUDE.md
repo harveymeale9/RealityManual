@@ -12070,3 +12070,23 @@ now demonstrates the actual edit Harvey is deciding whether to approve. A real
 browser regression enters final-preview mode, maps a 3.86-second edited moment
 back to the 7-second source position, and proves clicking that source word seeks
 back to 3.86 seconds in the rendered video.
+
+---
+
+# 294. Production Handoff Cannot Half-Succeed After Its Commit (2026-09-29)
+
+Editor approval used to wrap the database transaction, workflow reporting and
+linked-card advancement in one `try` whose catch deleted the copied Production
+master. If the video/card transaction had committed successfully but either of
+the later bookkeeping operations threw, the API reported failure and removed
+the file while leaving its database records behind. Retrying then found an
+existing Production card whose master had been deleted.
+
+The copy plus Production piece/video transaction is now the only rollback
+boundary. Once it commits, its file is authoritative and cannot be removed by a
+secondary reporting or Kanban-stage failure. Reporting failure is logged;
+planning advancement is retried idempotently and returns a non-blocking workflow
+warning. The Editor persists and visibly displays that warning while still
+confirming the safely completed handoff, instead of asking Harvey to repeat an
+approval that already succeeded. Route tests cover warning persistence and API
+delivery, and the browser workflow proves the warning is rendered after approval.

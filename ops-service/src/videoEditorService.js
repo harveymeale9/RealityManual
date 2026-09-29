@@ -1160,9 +1160,10 @@ async function renderProject(id) {
       if (project) {
         project.productionPieceId = result.pieceId;
         project.sentToProductionAt = new Date().toISOString();
+        project.workflowWarning = result.workflowWarning || '';
         saveProject(project);
       }
-      res.status(201).json({ ok: true, pieceId: result.pieceId, piece: result.piece || null, alreadySent: !!result.alreadySent });
+      res.status(201).json({ ok: true, pieceId: result.pieceId, piece: result.piece || null, alreadySent: !!result.alreadySent, workflowWarning: result.workflowWarning || '' });
     } catch (err) {
       res.status(422).json({ error: 'production_handoff_failed', message: String(err.message || err).slice(0, 1000) });
     }

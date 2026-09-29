@@ -352,7 +352,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
       handoffCalls++;
       assert.equal(input.project.id.length > 0, true);
       assert.equal(fs.existsSync(input.renderPath), true);
-      return { pieceId: input.project.id, alreadySent: false };
+      return { pieceId: input.project.id, alreadySent: false, workflowWarning: 'Synthetic planning-stage warning.' };
     }
   });
   const app = express();
@@ -440,7 +440,11 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.ok(project.editedDuration < project.duration);
   response = await fetch(base + '/api/editor/' + project.id + '/production', { method: 'POST' });
   assert.equal(response.status, 201);
-  assert.equal((await response.json()).pieceId, project.id);
+  const handoffResult = await response.json();
+  assert.equal(handoffResult.pieceId, project.id);
+  assert.equal(handoffResult.workflowWarning, 'Synthetic planning-stage warning.');
+  project = await (await fetch(base + '/api/editor/' + project.id)).json();
+  assert.equal(project.workflowWarning, 'Synthetic planning-stage warning.');
   response = await fetch(base + '/api/editor/' + project.id + '/production', { method: 'POST' });
   assert.equal(response.status, 200);
   assert.equal((await response.json()).alreadySent, true);

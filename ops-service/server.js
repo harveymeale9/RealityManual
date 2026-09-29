@@ -582,6 +582,16 @@ function advanceEditorPlanningPiece(input, targetStage) {
   piece.editorProjectId = project.id;
   savePieceRecord(piece);
 }
+
+function tryAdvanceEditorPlanningPiece(input, targetStage) {
+  try {
+    advanceEditorPlanningPiece(input, targetStage);
+    return '';
+  } catch (error) {
+    console.error('[editor] Production handoff could not advance the linked planning card:', String(error.message || error));
+    return 'The edited video reached Content Production, but its linked planning card could not be advanced automatically.';
+  }
+}
 const videoEditor = videoEditorService.setup({
   db: db,
   dataDir: DATA_DIR,
@@ -1527,8 +1537,7 @@ function sendEditorProjectToProduction(input) {
   const existing = getPieceRecord(project.id);
   if (existing) {
     if (existing.editorProjectId === project.id && existing.hasVideo) {
-      advanceEditorPlanningPiece({ project: project }, 'uploaded');
-      return { pieceId: existing.id, alreadySent: true };
+      return { pieceId: existing.id, alreadySent: true, workflowWarning: tryAdvanceEditorPlanningPiece({ project: project }, 'uploaded') };
     }
     throw new Error('A different Content Production item already uses this recording id.');
   }
@@ -1589,17 +1598,21 @@ function sendEditorProjectToProduction(input) {
       stmts.upsert.run('pieces', piece.id, JSON.stringify(piece), now);
       stmts.upsert.run('videos', piece.id, JSON.stringify(videoRecord), now);
     })();
-    weeklyReports.recordStageChange(piece, null, 'automation', now);
-    advanceEditorPlanningPiece({ project: project }, 'uploaded');
-    // The Editor already paid for a word-timed transcription and its text
-    // reflects Harvey's manual cuts. Reuse it for matching/title generation
-    // instead of retranscribing the rendered video through ElevenLabs.
-    setImmediate(function () { runVideoAnalysis(piece.id, piece.transcript); });
-    return { pieceId: piece.id, piece: piece, alreadySent: false };
   } catch (error) {
     fs.rm(destination, { force: true }, function () {});
     throw error;
   }
+  // From this point onward the Production record and copied master are the
+  // authoritative successful handoff. Secondary workflow/reporting failures
+  // must never delete that committed file and strand the new Production card.
+  try { weeklyReports.recordStageChange(piece, null, 'automation', now); }
+  catch (error) { console.error('[editor] Production handoff stage report failed:', String(error.message || error)); }
+  const workflowWarning = tryAdvanceEditorPlanningPiece({ project: project }, 'uploaded');
+  // The Editor already paid for a word-timed transcription and its text
+  // reflects Harvey's manual cuts. Reuse it for matching/title generation
+  // instead of retranscribing the rendered video through ElevenLabs.
+  setImmediate(function () { runVideoAnalysis(piece.id, piece.transcript); });
+  return { pieceId: piece.id, piece: piece, alreadySent: false, workflowWarning: workflowWarning };
 }
 
 // Analysis (runVideoAnalysis, triggered right after upload) and the final
