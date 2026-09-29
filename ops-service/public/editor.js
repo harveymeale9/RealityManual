@@ -11,6 +11,8 @@
   var editorNotice = '';
   var previewModes = {};
   var previewSeekTimes = {};
+  var previewAutoplay = {};
+  var previewStopTimes = {};
   var saveQueues = {};
   var saveStates = {};
   var restoreTranscriptFocus = false;
@@ -506,7 +508,7 @@
         '<div class="editor-review-column"><div class="editor-section-title"><div><div class="eyebrow">Smart review</div><h3>Possible retakes</h3></div>' +
           (project.retakeAnalysisStatus !== 'ready' && project.retakeAnalysisStatus !== 'pending' && project.retakeAnalysisStatus !== 'running' ? '<button type="button" class="editor-analyze" id="editorAnalyzeRetakes">Analyze retakes</button>' : '<span>Only clear failed takes are automatic</span>') + '</div><div id="editorRetakeReview">' + retakeReviewHtml(project) + '</div></div></section>' +
       '<section class="editor-transcript-panel"><div class="editor-transcript-head"><div><div class="eyebrow">Transcript editor</div><h3>Select words or sentences to cut them from the video</h3></div>' +
-        '<div class="editor-transcript-actions"><button class="btn-secondary btn-tiny" id="editorUndo" ' + (!history.length ? 'disabled' : '') + '>Undo</button>' +
+        '<div class="editor-transcript-actions"><button class="btn-secondary btn-tiny" id="editorUndo" ' + (!history.length ? 'disabled' : '') + '>Undo</button><button class="btn-secondary btn-tiny" id="editorPlaySelection" disabled>Play selected</button>' +
         '<button class="btn-secondary btn-tiny" id="editorCorrect" disabled>Correct word</button><button class="btn-secondary btn-tiny" id="editorRestore" disabled>Restore selected</button><button class="btn-primary btn-tiny" id="editorCut" disabled>Cut selected</button></div></div>' +
         '<div class="editor-correction-tray" id="editorCorrectionTray" hidden><div><strong>Correct caption word</strong><span id="editorCorrectionNote">Timing stays exactly where it is.</span><em id="editorCorrectionError" hidden></em></div><input id="editorCorrectionInput" maxlength="40" autocomplete="off" aria-label="Corrected caption word"><div><button type="button" class="btn-secondary btn-tiny" id="editorCorrectionCancel">Cancel</button><button type="button" class="btn-secondary btn-tiny" id="editorCorrectionOriginal" hidden>Use original</button><button type="button" class="btn-primary btn-tiny" id="editorCorrectionSave">Save correction</button></div></div>' +
         '<div class="editor-transcript' + (rendering || sentToProduction ? ' locked' : '') + '" id="editorTranscript" tabindex="0">' + (project.words || []).map(function (word) {
@@ -524,6 +526,7 @@
           '<button class="btn-primary" id="editorRender" ' + (['queued', 'running'].indexOf(project.renderStatus) !== -1 || renderBlocked ? 'disabled' : '') + '>' + (project.renderStatus === 'queued' ? 'Waiting in render queue…' : project.renderStatus === 'running' ? 'Building final edit… ' + Math.round(Number(project.renderProgress) || 0) + '%' : renderButtonText) + '</button>') +
         '</div></div>';
     bindWorkspace();
+    paintSelection();
   }
 
   function bindWorkspace() {
@@ -541,10 +544,15 @@
       transcript.focus({ preventScroll: true });
     }
     var resumeTime = Number(video.dataset.seekTime) || 0;
-    if (resumeTime > 0) {
+    var shouldAutoplay = !!previewAutoplay[project.id];
+    if (resumeTime > 0 || shouldAutoplay) {
       var resumePreview = function () {
         video.currentTime = Math.min(resumeTime, Math.max(0, Number(video.duration) || resumeTime));
         delete previewSeekTimes[project.id];
+        if (previewAutoplay[project.id]) {
+          delete previewAutoplay[project.id];
+          video.play().catch(function () {});
+        }
       };
       if (video.readyState >= 1) resumePreview(); else video.addEventListener('loadedmetadata', resumePreview, { once: true });
     }
@@ -554,6 +562,10 @@
       return (project.effectiveLayout || 'horizontal') === 'horizontal';
     }
     video.addEventListener('timeupdate', function () {
+      if (Number.isFinite(previewStopTimes[project.id]) && video.currentTime >= previewStopTimes[project.id]) {
+        video.pause();
+        delete previewStopTimes[project.id];
+      }
       var playhead = root.querySelector('#editorPlayhead');
       if (playhead && project.duration) {
         var sourcePlayheadTime = previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime;
@@ -684,6 +696,24 @@
     });
     root.querySelector('#editorCut').onclick = function () { alterSelected(true); };
     root.querySelector('#editorRestore').onclick = function () { alterSelected(false); };
+    root.querySelector('#editorPlaySelection').onclick = function () {
+      var chosen = Array.from(selected).sort(function (a, b) { return a - b; });
+      var firstWord = chosen.length ? (project.words || [])[chosen[0]] : null;
+      var lastWord = chosen.length ? (project.words || [])[chosen[chosen.length - 1]] : null;
+      if (!firstWord) return;
+      var sourceTime = Math.max(0, Number(firstWord.start) - 0.8);
+      previewStopTimes[project.id] = Math.min(Number(project.duration) || Infinity, Number(lastWord && lastWord.end || firstWord.end) + 0.8);
+      if (previewingFinal) {
+        previewModes[project.id] = 'source';
+        previewSeekTimes[project.id] = sourceTime;
+        previewAutoplay[project.id] = true;
+        renderWorkspace();
+        return;
+      }
+      video.currentTime = sourceTime;
+      video.play().catch(function () {});
+      video.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
     root.querySelector('#editorCorrect').onclick = correctSelectedWord;
     root.querySelector('#editorCorrectionCancel').onclick = closeWordCorrection;
     root.querySelector('#editorCorrectionOriginal').onclick = function () {
@@ -850,6 +880,7 @@
     root.querySelector('#editorCut').disabled = locked || !hasKept;
     root.querySelector('#editorRestore').disabled = locked || !hasRemoved;
     root.querySelector('#editorCorrect').disabled = locked || selected.size !== 1;
+    root.querySelector('#editorPlaySelection').disabled = selected.size === 0;
   }
 
   function correctSelectedWord() {

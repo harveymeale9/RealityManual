@@ -12357,3 +12357,19 @@ that final exists, **Original master** plays the untouched source without ever
 skipping a removed pause, word or take. Browser coverage deliberately parks the
 playhead inside a cut and proves that Working preview advances past it while
 Original master remains at the requested source timestamp.
+
+---
+
+# 310. Transcript Selections Can Be Auditioned in Source Context (2026-09-29)
+
+Cutting from text still required manually finding the same phrase in the video
+before Harvey could judge it. Any selected transcript word or range now enables
+**Play selected**. It starts 0.8 seconds before the first word, plays through
+0.8 seconds after the last, then pauses automatically so comparison stays
+focused.
+
+When a verified final is currently open, auditioning switches to the untouched
+Original master automatically, preserving the transcript selection and exact
+source timestamp. This is deliberate: a phrase being considered for restoration
+may not exist in the final edit at all. Browser coverage proves the mode switch,
+timestamp, retained visual selection and automatic endpoint pause.
