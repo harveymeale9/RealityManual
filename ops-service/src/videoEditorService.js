@@ -149,6 +149,13 @@ function browserPreviewNeeded(fileName, media) {
   return videoCodec !== 'h264' || !['aac', 'mp3'].includes(audioCodec);
 }
 
+function classificationSampleRate(durationSeconds) {
+  // Three evenly spaced frames across the whole recording. Do not clamp this
+  // to 0.01fps: that silently limits a long-form contact sheet to its first
+  // 200 seconds rather than representing the actual full take.
+  return Math.max(0.000001, 3 / Math.max(1, Number(durationSeconds) || 1));
+}
+
 function normalizeWords(rawWords) {
   return (Array.isArray(rawWords) ? rawWords : []).filter(function (word) {
     return word && word.type === 'word' && Number.isFinite(Number(word.start)) &&
@@ -975,7 +982,7 @@ function setup(options) {
           setImmediate(function () { maybeAutoRender(id); });
           return;
         }
-        const sampleRate = Math.max(0.01, 3 / Math.max(1, Number(project.duration) || 1));
+        const sampleRate = classificationSampleRate(project.duration);
         await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', sourcePath(id), '-vf',
           'fps=' + sampleRate.toFixed(6) + ',scale=480:-2,tile=3x1', '-frames:v', '1', '-q:v', '3', sheetPath], 'classification frames');
         let result;
@@ -1815,6 +1822,7 @@ module.exports = {
   advanceEditRevision,
   normalizedVideoMimeType,
   browserPreviewNeeded,
+  classificationSampleRate,
   reconcileAutomaticRetakeCuts,
   projectListSummary
 };

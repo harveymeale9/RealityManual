@@ -86,6 +86,13 @@ test('HEVC and non-browser containers receive an H.264 review proxy', function (
   assert.equal(editor.browserPreviewNeeded('camera.mp4', { videoCodec: 'h264', audioCodec: 'pcm_s16le' }), true);
 });
 
+test('classification samples stay distributed across long-form recordings', function () {
+  assert.equal(editor.classificationSampleRate(60), 0.05);
+  assert.equal(editor.classificationSampleRate(600), 0.005);
+  assert.equal(editor.classificationSampleRate(3600), 3 / 3600);
+  assert.equal(editor.classificationSampleRate(0), 3);
+});
+
 test('approval only accepts the exact verified render bytes', async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-verified-'));
   const file = path.join(dir, 'render.mp4');

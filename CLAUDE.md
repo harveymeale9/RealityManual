@@ -13498,3 +13498,11 @@ explicitly retryable; deterministic invalid media is unchanged. The batch
 concurrency test forces the first call of both providers to fail, proves each
 recovers on its second attempt, and still proves only one transcription and one
 classification job run concurrently across multiple recordings.
+
+Long-form contact sheets also retain their intended meaning at any duration.
+The former 0.01fps floor meant a ten-minute recording supplied frames only from
+roughly 0, 100, and 200 seconds, ignoring its final two thirds. The sampler now
+uses exactly three frames per complete duration, so ten-minute and hour-long
+takes are represented across their full timeline while short clips retain the
+same behavior. Unit coverage locks the sampling rate at one, ten, and sixty
+minutes.
