@@ -815,6 +815,7 @@ function setup(options) {
         project = getProject(id);
         if (!project) return;
         const matched = candidates.find(function (candidate) { return candidate.id === (result && result.pieceId); });
+        const previousPlanningPieceId = project.planningPieceId || '';
         if (matched && result.confidence === 'high' && !project.planningPieceManuallySelected) {
           project.planningPieceId = matched.id;
           project.planningPieceTitle = matched.title || '';
@@ -827,6 +828,9 @@ function setup(options) {
         };
         project.planningMatchStatus = 'ready';
         project.planningMatchError = '';
+        if (project.planningPieceId !== previousPlanningPieceId && typeof onPlanningPieceChanged === 'function') {
+          onPlanningPieceChanged({ project: project, previousPlanningPieceId: previousPlanningPieceId, renderWillChange: false });
+        }
         saveProject(project);
         setImmediate(function () { maybeAutoRender(id); });
       } catch (err) {

@@ -613,7 +613,10 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.planningPieceId, 'plan-2');
   assert.equal(project.planningPieceTitle, 'Corrected outline');
   assert.equal(project.renderStatus, 'ready');
-  assert.deepEqual(planningChanges, [{ previous: 'plan-1', next: 'plan-2', renderWillChange: false }]);
+  assert.deepEqual(planningChanges, [
+    { previous: '', next: 'plan-1', renderWillChange: false },
+    { previous: 'plan-1', next: 'plan-2', renderWillChange: false }
+  ]);
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ removedWordIndices: [], dismissedRetakeIds: ['smart-retake-0-0-1'] }) });
   assert.equal(response.status, 200);
   project = await response.json();

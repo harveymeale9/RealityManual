@@ -13092,3 +13092,21 @@ Downstream analysis continues to populate `ytTitles`, but only replaces the
 generic working title when that preservation flag is absent. Existing manual
 title editing remains authoritative over both fields. Coverage proves a linked
 outline keeps its name while still receiving generated title options.
+
+---
+
+# 348. Automatic Planning Links Reconcile Kanban Stages Too (2026-09-29)
+
+Manual planning-card selection invoked the Editor/Kanban reconciliation hook,
+but a high-confidence automatic match only stored the ids. Normally the later
+render callback still advanced that card, masking the difference. If matching
+succeeded on a retry after a verified render already existed, however, the card
+could remain at Filmed until Production approval instead of moving immediately
+to Edited.
+
+Every changed high-confidence automatic link now goes through the same
+non-render-changing reconciliation hook as manual selection. Before rendering
+it is harmless and the render callback advances normally; after rendering it
+immediately advances the newly linked card and safely releases any prior link.
+End-to-end coverage now observes both the automatic initial link and the later
+manual reassignment.
