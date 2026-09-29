@@ -12524,3 +12524,8 @@ Unit coverage explicitly enumerates metadata-only versus render-affecting
 patches. Integration coverage changes a ready project from one card to another,
 proves the verified render remains ready, verifies the callback classification,
 and later proves a real cut still triggers the normal second render.
+
+Metadata-only does not mean workflow-idle: if no verified output exists yet,
+such as when **Keep both** resolves the last ambiguous retake, the patch still
+schedules the now-unblocked first render. A ready output is the condition that
+suppresses redundant work, covered separately from patch classification.

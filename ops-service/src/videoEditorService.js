@@ -206,6 +206,10 @@ function patchAffectsRender(body) {
   });
 }
 
+function patchNeedsAutoRender(project, renderWillChange) {
+  return !!renderWillChange || !project || !project.renderStatus;
+}
+
 function gapDecisions(project) {
   const words = project.words || [];
   const restored = new Set(Array.isArray(project.restoredAutoCutIds) ? project.restoredAutoCutIds : []);
@@ -1131,7 +1135,7 @@ async function renderProject(id) {
     project.canUndoCut = Array.isArray(project.cutDecisionHistory) && project.cutDecisionHistory.length > 0;
     delete project.cutDecisionHistory;
     res.json(project);
-    if (renderWillChange) scheduleAutoRender(project.id, 650);
+    if (patchNeedsAutoRender(project, renderWillChange)) scheduleAutoRender(project.id, 650);
   });
 
   router.post('/:id/undo-cut', function (req, res) {
@@ -1332,6 +1336,7 @@ module.exports = {
   contentTypeForProject,
   invalidateRender,
   patchAffectsRender,
+  patchNeedsAutoRender,
   hashFile,
   gapDecisions,
   retakeCandidates,

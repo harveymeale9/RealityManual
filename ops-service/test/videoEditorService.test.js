@@ -92,6 +92,9 @@ test('metadata-only editor changes preserve a verified render', function () {
   assert.equal(editor.patchAffectsRender({ captionsEnabled: false }), true);
   assert.equal(editor.patchAffectsRender({ removedWordIndices: [1, 2] }), true);
   assert.equal(editor.patchAffectsRender({ layoutOverride: 'vertical' }), true);
+  assert.equal(editor.patchNeedsAutoRender({ renderStatus: 'ready' }, false), false);
+  assert.equal(editor.patchNeedsAutoRender({ renderStatus: '' }, false), true);
+  assert.equal(editor.patchNeedsAutoRender({ renderStatus: 'ready' }, true), true);
 });
 
 test('likely restarted lines are surfaced without being automatically removed', function () {
