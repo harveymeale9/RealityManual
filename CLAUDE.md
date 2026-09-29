@@ -12049,3 +12049,24 @@ as skipped rather than as a failed batch. Tests prove equal-size different
 content receives different identities, repeated content is stable, exact
 reuploads are rejected, and the concurrency fixture now uses two genuinely
 different synthetic videos instead of disguising one file with two names.
+
+---
+
+# 293. Final-Preview Navigation Stays on the Source Timeline (2026-09-29)
+
+The Editor timeline is intentionally drawn against the original recording so
+Harvey can see every spoken word, retained pause and removed interval. Once a
+final edit was ready, however, clicking that source-based timeline assigned the
+same number directly to the shorter rendered file. Every earlier cut therefore
+made later clicks and cut-preview actions land progressively too late. The
+playhead also measured edited playback time against source duration, so its
+visual position drifted from the words being reviewed.
+
+All final-preview seeks now pass through the cut-list source-to-edited mapping,
+while its playhead passes back through the inverse edited-to-source mapping.
+Source preview keeps direct source seconds. Previewing a pause or proposed
+retake no longer silently switches away from the finished render, so the button
+now demonstrates the actual edit Harvey is deciding whether to approve. A real
+browser regression enters final-preview mode, maps a 3.86-second edited moment
+back to the 7-second source position, and proves clicking that source word seeks
+back to 3.86 seconds in the rendered video.

@@ -530,6 +530,11 @@
       return (project.effectiveLayout || 'horizontal') === 'horizontal';
     }
     video.addEventListener('timeupdate', function () {
+      var playhead = root.querySelector('#editorPlayhead');
+      if (playhead && project.duration) {
+        var sourcePlayheadTime = previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime;
+        playhead.style.left = Math.min(100, sourcePlayheadTime / project.duration * 100) + '%';
+      }
       if (previewingFinal) {
         caption.classList.remove('visible');
         return;
@@ -564,21 +569,19 @@
         }
       } else if (group) caption.textContent = group.text;
       caption.classList.toggle('visible', !!group && project.captionsEnabled !== false);
-      var playhead = root.querySelector('#editorPlayhead');
-      if (playhead && video.duration) playhead.style.left = Math.min(100, video.currentTime / video.duration * 100) + '%';
     });
     root.querySelectorAll('.editor-timeline-segment').forEach(function (segment) {
-      segment.onclick = function () { video.currentTime = Number(segment.dataset.time) || 0; video.play().catch(function () {}); };
+      segment.onclick = function () {
+        var sourceTime = Number(segment.dataset.time) || 0;
+        video.currentTime = previewingFinal ? sourceToEditedTime(sourceTime, project.cuts) : sourceTime;
+        video.play().catch(function () {});
+      };
     });
     root.querySelectorAll('.editor-preview-cut').forEach(function (button) {
       button.onclick = function () {
         var time = Number(button.dataset.time) || 0;
-        if (previewingFinal) {
-          previewModes[project.id] = 'source';
-          renderWorkspace();
-          video = root.querySelector('#editorVideo');
-        }
-        var start = function () { video.currentTime = time; video.play().catch(function () {}); video.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+        var previewTime = previewingFinal ? sourceToEditedTime(time, project.cuts) : time;
+        var start = function () { video.currentTime = previewTime; video.play().catch(function () {}); video.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
         if (video.readyState >= 1) start(); else video.addEventListener('loadedmetadata', start, { once: true });
       };
     });
