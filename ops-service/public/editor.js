@@ -8,6 +8,7 @@
   var pollTimer = null;
   var mountToken = 0;
   var openRequestToken = 0;
+  var pendingExplicitOpenToken = 0;
   var editorNotice = '';
   var previewModes = {};
   var explicitSourcePreviews = {};
@@ -628,9 +629,16 @@
 
   function openProject(id, quiet) {
     clearTimeout(pollTimer);
-    var requestToken = ++openRequestToken;
-    return api('/api/editor/' + encodeURIComponent(id)).then(function (item) {
-      if (requestToken !== openRequestToken || !editorMounted()) return;
+    // A poll/render refresh is allowed to update the current recording, but it
+    // must never supersede a deliberate card or Next/Previous click. Quiet
+    // requests therefore share the current generation and stand down when an
+    // explicit navigation is already in flight.
+    var quietBlockedByExplicit = !!(quiet && pendingExplicitOpenToken);
+    var requestToken = quiet ? openRequestToken : ++openRequestToken;
+    if (!quiet) pendingExplicitOpenToken = requestToken;
+    return retryTransientOnce(function () { return api('/api/editor/' + encodeURIComponent(id)); }, 300).then(function (item) {
+      if (quietBlockedByExplicit || requestToken !== openRequestToken || !editorMounted()) return;
+      if (!quiet && pendingExplicitOpenToken === requestToken) pendingExplicitOpenToken = 0;
       var progressOnly = !!(quiet && project && project.id === item.id && project.renderStatus === 'running' && item.renderStatus === 'running');
       project = item;
       projectDetails[item.id] = item;
@@ -653,7 +661,10 @@
       renderWorkspace();
       schedulePoll();
     }).catch(function (error) {
-      if (requestToken === openRequestToken && !quiet) alert(error.message);
+      if (!quiet && pendingExplicitOpenToken === requestToken) pendingExplicitOpenToken = 0;
+      if (quietBlockedByExplicit || requestToken !== openRequestToken) return;
+      if (!quiet) alert(error.message);
+      else schedulePoll();
     });
   }
 
@@ -1460,6 +1471,7 @@
     mount: function (element) {
       mountToken++;
       openRequestToken++;
+      pendingExplicitOpenToken = 0;
       clearTimeout(pollTimer);
       Object.keys(renderRefreshTimers).forEach(function (id) { clearTimeout(renderRefreshTimers[id]); });
       // Save queues deliberately survive a tab round trip. A PATCH already in

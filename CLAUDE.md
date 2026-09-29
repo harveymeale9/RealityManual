@@ -13826,3 +13826,22 @@ frame just before the cut starts. Non-trailing cuts retain the seamless forward
 seek. The headless browser injects an ending cut, enters it, and requires the
 playhead to return to the kept boundary; the project's normal state is then
 restored for the rest of the workflow regression.
+
+---
+
+# 383. Transient Detail Failures Cannot Freeze Editor Polling (2026-09-29)
+
+The list poll re-arms itself on list failure, but when it saw a changed active
+project it delegated to `openProject(..., true)`. If that detail GET failed,
+`openProject` swallowed the quiet error and never scheduled another poll. A
+single brief network/VPS interruption could therefore leave Transcribing or
+Rendering visibly frozen until Harvey clicked or reloaded.
+
+Detail loads now retry one transient network, 408/425/429, or 5xx failure after
+300ms. If the quiet retry still fails and the request remains current, polling
+is explicitly re-armed; direct user navigation still surfaces a persistent
+error. Explicit card/Previous/Next navigation now also has priority over quiet
+poll and render-refresh loads: quiet requests no longer advance the navigation
+generation, and any that began while an explicit load was pending stand down.
+The browser regression deliberately races a stale automatic refresh against a
+first-attempt 503 on Next and requires the intended card to win on retry.
