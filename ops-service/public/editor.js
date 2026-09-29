@@ -636,6 +636,15 @@
     root.querySelectorAll('.editor-preview-cut').forEach(function (button) {
       button.onclick = function () {
         var time = Number(button.dataset.time) || 0;
+        if (project.renderStatus === 'ready' && !previewingFinal) {
+          previewModes[project.id] = 'final';
+          previewSeekTimes[project.id] = sourceToEditedTime(time, project.cuts);
+          previewAutoplay[project.id] = true;
+          renderWorkspace();
+          var replacementVideo = root.querySelector('#editorVideo');
+          if (replacementVideo) replacementVideo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          return;
+        }
         var previewTime = previewingFinal ? sourceToEditedTime(time, project.cuts) : time;
         var start = function () { video.currentTime = previewTime; video.play().catch(function () {}); video.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
         if (video.readyState >= 1) start(); else video.addEventListener('loadedmetadata', start, { once: true });

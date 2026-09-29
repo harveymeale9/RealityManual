@@ -12529,3 +12529,20 @@ Metadata-only does not mean workflow-idle: if no verified output exists yet,
 such as when **Keep both** resolves the last ambiguous retake, the patch still
 schedules the now-unblocked first render. A ready output is the condition that
 suppresses redundant work, covered separately from patch classification.
+
+---
+
+# 319. “Preview Edit” Always Plays the Edited Seam (2026-09-29)
+
+Pause and retake cards offer a contextual preview of the proposed jump cut. If
+Harvey had toggled to Original master first, those buttons inherited the current
+source mode and played the material being removed instead, contradicting their
+**Preview edit** purpose.
+
+Contextual cut previews now switch a ready project back to Final edit, translate
+the source cue through all preceding cuts, preserve the listening handle and
+autoplay the encoded seam. Working previews continue using their live cut
+simulation before a final exists. General timeline clicks still respect the
+chosen view, so Original master remains useful for deliberate source inspection.
+The browser regression begins inside an actual cut in Original master, invokes
+the contextual preview and proves playback switches to the rendered file.
