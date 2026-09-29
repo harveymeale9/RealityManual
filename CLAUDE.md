@@ -12831,3 +12831,20 @@ against someone else's newer history; it reloads and asks the user to decide
 again. Integration coverage sends simultaneous stale-revision PATCHes and proves
 only one commits, while the browser regression simulates an external revision
 and proves the intended pause changes are safely rebased and serialized.
+
+---
+
+# 335. Abandoned Large Uploads Cannot Accumulate Forever (2026-09-29)
+
+Multer and extracted transcription audio use an Editor-only temporary directory.
+Normal success and handled failure paths remove their files, but a disconnected
+browser, killed request, or process interruption can strand a partial upload.
+With a 2 GB per-recording limit, a handful of invisible orphans could consume
+meaningful VPS storage despite not appearing anywhere in the UI.
+
+Editor now removes only regular temp files older than 24 hours at service start
+and every six hours thereafter. The conservative age boundary leaves active
+uploads and current transcription extraction untouched; durable source masters
+and renders live in a different directory and are never candidates. The timer
+is unreferenced so it cannot hold shutdown open. Focused coverage creates old
+and active temp media and proves exactly the orphan is removed.

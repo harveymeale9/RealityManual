@@ -52,6 +52,24 @@ function hashFile(filePath) {
   });
 }
 
+async function cleanStaleTempFiles(directory, olderThanMs, nowMs) {
+  const cutoff = (Number(nowMs) || Date.now()) - Math.max(60000, Number(olderThanMs) || 24 * 60 * 60 * 1000);
+  let entries;
+  try { entries = await fs.promises.readdir(directory, { withFileTypes: true }); }
+  catch (error) { return 0; }
+  let removed = 0;
+  await Promise.all(entries.filter(function (entry) { return entry.isFile(); }).map(async function (entry) {
+    const filePath = path.join(directory, entry.name);
+    try {
+      const stat = await fs.promises.stat(filePath);
+      if (stat.mtimeMs >= cutoff) return;
+      await fs.promises.rm(filePath, { force: true });
+      removed++;
+    } catch (error) {}
+  }));
+  return removed;
+}
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, Number(value) || 0));
 }
@@ -489,6 +507,9 @@ function setup(options) {
   const tempDir = path.join(dataDir, 'tmp');
   fs.mkdirSync(rootDir, { recursive: true });
   fs.mkdirSync(tempDir, { recursive: true });
+  cleanStaleTempFiles(tempDir).catch(function () {});
+  const tempCleanupTimer = setInterval(function () { cleanStaleTempFiles(tempDir).catch(function () {}); }, 6 * 60 * 60 * 1000);
+  if (typeof tempCleanupTimer.unref === 'function') tempCleanupTimer.unref();
   const upload = multer({ dest: tempDir, limits: { fileSize: MAX_UPLOAD_BYTES } });
   const getStmt = db.prepare('SELECT data FROM records WHERE store_name = ? AND id = ?');
   const listStmt = db.prepare('SELECT data FROM records WHERE store_name = ? ORDER BY updated_at DESC');
@@ -1413,6 +1434,7 @@ module.exports = {
   patchAffectsRender,
   patchNeedsAutoRender,
   hashFile,
+  cleanStaleTempFiles,
   gapDecisions,
   retakeCandidates,
   normalizeRetakeDecisions,

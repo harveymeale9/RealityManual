@@ -47,6 +47,20 @@ test('recording identity uses bytes rather than camera name and size', async fun
   t.after(function () { fs.rmSync(dir, { recursive: true, force: true }); });
 });
 
+test('stale temporary media is removed without touching active uploads', async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-temp-'));
+  const stale = path.join(dir, 'stale-upload');
+  const active = path.join(dir, 'active-upload');
+  fs.writeFileSync(stale, 'old'); fs.writeFileSync(active, 'new');
+  const now = Date.now();
+  fs.utimesSync(stale, new Date(now - 25 * 60 * 60 * 1000), new Date(now - 25 * 60 * 60 * 1000));
+  fs.utimesSync(active, new Date(now - 10 * 60 * 1000), new Date(now - 10 * 60 * 1000));
+  assert.equal(await editor.cleanStaleTempFiles(dir, 24 * 60 * 60 * 1000, now), 1);
+  assert.equal(fs.existsSync(stale), false);
+  assert.equal(fs.existsSync(active), true);
+  t.after(function () { fs.rmSync(dir, { recursive: true, force: true }); });
+});
+
 test('automatic cuts preserve natural handles around long pauses', function () {
   const cuts = editor.calculateAutoCuts(words, 9);
   assert.deepEqual(cuts.map(function (cut) { return cut.reason; }), ['leading_silence', 'long_pause', 'long_pause', 'trailing_silence']);
