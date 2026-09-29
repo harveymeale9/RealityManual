@@ -7,17 +7,34 @@ const ELEVEN_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM
 const STT_MODEL = 'scribe_v1';
 const TTS_MODEL = process.env.ELEVENLABS_TTS_MODEL || 'eleven_turbo_v2_5';
 const TTS_SPEED = 1.2; // Harvey: default pace felt slow
+const STT_TIMEOUT_MS = timeoutSetting(process.env.ELEVENLABS_STT_TIMEOUT_MS, 10 * 60 * 1000);
+const TTS_TIMEOUT_MS = timeoutSetting(process.env.ELEVENLABS_TTS_TIMEOUT_MS, 90 * 1000);
+
+function timeoutSetting(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 1000 ? Math.min(parsed, 60 * 60 * 1000) : fallback;
+}
+
+async function fetchWithDeadline(fetchImpl, url, options, timeoutMs, errorCode) {
+  const signal = AbortSignal.timeout(timeoutMs);
+  try {
+    return await fetchImpl(url, Object.assign({}, options, { signal: signal }));
+  } catch (error) {
+    if (signal.aborted) throw new Error(errorCode + '_timeout');
+    throw error;
+  }
+}
 
 async function transcribeAudioDetailed(buffer, mimeType) {
   if (!ELEVEN_API_KEY) throw new Error('ELEVENLABS_API_KEY not configured');
   const form = new FormData();
   form.append('file', new Blob([buffer], { type: mimeType || 'audio/webm' }), 'audio.webm');
   form.append('model_id', STT_MODEL);
-  const res = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
+  const res = await fetchWithDeadline(fetch, 'https://api.elevenlabs.io/v1/speech-to-text', {
     method: 'POST',
     headers: { 'xi-api-key': ELEVEN_API_KEY },
     body: form
-  });
+  }, STT_TIMEOUT_MS, 'stt');
   if (!res.ok) throw new Error('stt_failed_' + res.status + ': ' + (await res.text()).slice(0, 500));
   return await res.json();
 }
@@ -29,14 +46,14 @@ async function transcribeAudio(buffer, mimeType) {
 
 async function synthesizeSpeech(text) {
   if (!ELEVEN_API_KEY) throw new Error('ELEVENLABS_API_KEY not configured');
-  const res = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + ELEVEN_VOICE_ID, {
+  const res = await fetchWithDeadline(fetch, 'https://api.elevenlabs.io/v1/text-to-speech/' + ELEVEN_VOICE_ID, {
     method: 'POST',
     headers: { 'xi-api-key': ELEVEN_API_KEY, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
     body: JSON.stringify({ text: text, model_id: TTS_MODEL, voice_settings: { speed: TTS_SPEED } })
-  });
+  }, TTS_TIMEOUT_MS, 'tts');
   if (!res.ok) throw new Error('tts_failed_' + res.status + ': ' + (await res.text()).slice(0, 500));
   const arrayBuffer = await res.arrayBuffer();
   return Buffer.from(arrayBuffer);
 }
 
-module.exports = { transcribeAudio, transcribeAudioDetailed, synthesizeSpeech };
+module.exports = { transcribeAudio, transcribeAudioDetailed, synthesizeSpeech, timeoutSetting, fetchWithDeadline };

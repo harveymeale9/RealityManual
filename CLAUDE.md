@@ -13606,3 +13606,22 @@ the definitive post-upload check still includes all other uploads in flight.
 Finish, disconnect, parse error, and duplicate release paths are idempotent, so
 failed requests cannot leak capacity. A focused unit test proves summing and
 exactly-once release behavior.
+
+---
+
+# 372. ElevenLabs Calls Have Bounded Waits (2026-09-29)
+
+Both Scribe transcription and spoken-response synthesis previously used a bare
+`fetch`. A lost upstream response could leave an Editor recording permanently
+Transcribing, or leave the Project Manager audio UI loading indefinitely, until
+the whole service restarted.
+
+The shared ElevenLabs client now applies an abort deadline to both operations:
+ten minutes for potentially long camera-recording transcription and 90 seconds
+for short TTS replies. `ELEVENLABS_STT_TIMEOUT_MS` and
+`ELEVENLABS_TTS_TIMEOUT_MS` can override those values, with a one-second floor
+and one-hour cap. A deadline produces the stable errors `stt_timeout` or
+`tts_timeout`; the Editor's existing one-retry path therefore gets a clean
+second attempt and then exposes a recoverable Needs attention state rather than
+hanging its serial transcription queue. Unit coverage proves validation,
+abort behavior, and successful response passthrough.
