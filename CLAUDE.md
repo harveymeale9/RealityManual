@@ -12564,3 +12564,20 @@ array-only history remains readable and the bounded 50-decision limit is
 unchanged. Integration coverage performs a combined restore-and-dismiss action,
 undoes it, and proves the word cut, dismissed ids, applied candidate and Undo
 availability all return coherently.
+
+---
+
+# 321. Final Masters Are Guaranteed Standard 8-bit H.264 (2026-09-29)
+
+The Editor encoded H.264 but allowed FFmpeg to inherit the source pixel format.
+Phone/camera masters can be 10-bit or use less portable chroma formats, producing
+a technically valid file that browsers or social platforms may decode
+inconsistently despite passing the existing dimensions/audio checks.
+
+Every final render now explicitly outputs `yuv420p`, the broadly compatible
+8-bit 4:2:0 H.264 format expected by the downstream Content Production player
+and publishing platforms. `ffprobe` now returns the encoded pixel format and
+technical verification refuses to mark a render ready unless it is exactly
+`yuv420p`; the verified format is also retained in `renderQuality` for diagnosis.
+The real FFmpeg integration test proves the generated 1080×1920 captioned master
+passes this additional check.

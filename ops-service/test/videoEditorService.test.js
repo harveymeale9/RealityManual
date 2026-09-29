@@ -449,8 +449,9 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(renderReadyCalls, 1);
   assert.equal(project.workflowWarning, 'Synthetic first workflow failure.');
   assert.equal(project.renderQuality.status, 'passed');
-  assert.deepEqual(project.renderQuality.checks, { playableFile: true, correctFrame: true, audioPresent: true, durationMatches: true });
+  assert.deepEqual(project.renderQuality.checks, { playableFile: true, correctFrame: true, standardPixelFormat: true, audioPresent: true, durationMatches: true });
   assert.deepEqual([project.renderQuality.width, project.renderQuality.height], [1080, 1920]);
+  assert.equal(project.renderQuality.pixelFormat, 'yuv420p');
   expectedPlanningPieceId = 'plan-2';
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planningPieceId: 'plan-2' }) });
   assert.equal(response.status, 200);

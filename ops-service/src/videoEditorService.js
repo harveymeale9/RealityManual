@@ -507,7 +507,7 @@ function setup(options) {
 
   async function probe(filePath) {
     const result = await run('ffprobe', ['-v', 'error', '-show_entries',
-      'format=duration:stream=codec_type,width,height:stream_tags=rotate:stream_side_data=rotation',
+      'format=duration:stream=codec_type,width,height,pix_fmt:stream_tags=rotate:stream_side_data=rotation',
       '-of', 'json', filePath], 'video probe');
     const parsed = JSON.parse(result.stdout || '{}');
     const video = (parsed.streams || []).find(function (stream) { return stream.codec_type === 'video'; }) || {};
@@ -520,6 +520,7 @@ function setup(options) {
       duration: Number(parsed.format && parsed.format.duration) || 0,
       width: dimensions.width,
       height: dimensions.height,
+      pixelFormat: String(video.pix_fmt || ''),
       hasAudio: (parsed.streams || []).some(function (stream) { return stream.codec_type === 'audio'; })
     };
   }
@@ -794,7 +795,7 @@ async function renderProject(id) {
       else filters.push('[joinedv]null[outv]');
       let lastReportedProgress = -1;
       await runWithProgress('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', sourcePath(id), '-filter_complex', filters.join(';'),
-        '-map', '[outv]', '-map', '[outa]', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-c:a', 'aac', '-b:a', '192k',
+        '-map', '[outv]', '-map', '[outa]', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k',
         '-movflags', '+faststart', '-progress', 'pipe:1', '-nostats', renderPath(id)], 'editor render', function (encodedSeconds) {
         const percent = Math.min(99, Math.max(0, Math.floor(encodedSeconds / Math.max(0.01, expectedDuration) * 100)));
         if (percent < lastReportedProgress + 2) return;
@@ -810,6 +811,7 @@ async function renderProject(id) {
       const qualityChecks = {
         playableFile: stat.size > 1024,
         correctFrame: renderedMedia.width === renderShape.width && renderedMedia.height === renderShape.height,
+        standardPixelFormat: renderedMedia.pixelFormat === 'yuv420p',
         audioPresent: renderedMedia.hasAudio,
         durationMatches: Math.abs(renderedMedia.duration - expectedDuration) <= durationTolerance
       };
@@ -822,7 +824,7 @@ async function renderProject(id) {
       project.editedDuration = expectedDuration;
       project.renderQuality = {
         status: 'passed', checkedAt: new Date().toISOString(), checks: qualityChecks,
-        width: renderedMedia.width, height: renderedMedia.height, duration: renderedMedia.duration
+        width: renderedMedia.width, height: renderedMedia.height, pixelFormat: renderedMedia.pixelFormat, duration: renderedMedia.duration
       };
       project.lastRenderAt = new Date().toISOString();
       saveProject(project);
