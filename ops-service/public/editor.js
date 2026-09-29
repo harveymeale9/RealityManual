@@ -198,7 +198,17 @@
       var group = (project.captionGroups || []).filter(function (item) {
         return video.currentTime >= item.sourceStart && video.currentTime <= item.sourceEnd + 0.18;
       })[0];
-      caption.textContent = group ? group.text : '';
+      caption.replaceChildren();
+      caption.classList.toggle('longform', Number(project.width) >= Number(project.height));
+      if (group && Array.isArray(group.words) && Number(project.width) >= Number(project.height)) {
+        group.words.forEach(function (word, index) {
+          var span = document.createElement('span');
+          span.textContent = word.text + (index + 1 < group.words.length ? ' ' : '');
+          var emphasisEnd = index + 1 < group.words.length ? group.words[index + 1].sourceStart : group.sourceEnd + 0.18;
+          span.className = video.currentTime >= word.sourceStart && video.currentTime < emphasisEnd ? 'active' : '';
+          caption.appendChild(span);
+        });
+      } else if (group) caption.textContent = group.text;
       caption.classList.toggle('visible', !!group);
     });
     transcript.addEventListener('click', function (event) {

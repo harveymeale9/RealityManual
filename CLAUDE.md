@@ -11296,3 +11296,19 @@ double-clicks cannot create duplicates; an already-sent edit shows **Open
 Content Production** instead. The handoff reuses the Editor's already-paid-for,
 post-cut transcript for outline matching and title generation rather than
 calling ElevenLabs a second time for the same recording.
+
+---
+
+# 257. Longform Captions Use Word-Timed Emphasis (2026-09-29)
+
+Landscape Editor renders now use a slightly larger caption base than vertical
+videos (6% rather than 5.2% of the shorter frame dimension). The entire short
+phrase remains stable below center, while the word currently being spoken is
+rendered 18% larger with a slightly heavier outline. This is driven by Scribe's
+real per-word timestamps after the edit timeline has been remapped, not by an
+estimated reading speed.
+
+The browser preview uses the same full-phrase/current-word behavior as the ASS
+caption track burned into the finished MP4. Vertical short-form renders retain
+the existing static yellow phrase treatment; animated word emphasis is limited
+to longform so it does not silently alter the established short-form style.

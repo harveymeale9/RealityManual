@@ -139,12 +139,22 @@ function captionGroups(project, cuts) {
     if (!current.length) return;
     const start = mapSourceTimeToEdited(current[0].start, cuts);
     const end = Math.max(start + 0.45, mapSourceTimeToEdited(current[current.length - 1].end, cuts));
+    const timedWords = current.map(function (word) {
+      return {
+        text: word.text,
+        sourceStart: word.start,
+        sourceEnd: word.end,
+        start: mapSourceTimeToEdited(word.start, cuts),
+        end: mapSourceTimeToEdited(word.end, cuts)
+      };
+    });
     groups.push({
       start: start,
       end: end,
       sourceStart: current[0].start,
       sourceEnd: current[current.length - 1].end,
-      text: current.map(function (word) { return word.text; }).join(' ')
+      text: current.map(function (word) { return word.text; }).join(' '),
+      words: timedWords
     });
     current = [];
   }
@@ -174,7 +184,9 @@ function escapeAss(text) {
 function buildAss(project, groups) {
   const width = Math.max(360, Math.round(Number(project.width) || 1080));
   const height = Math.max(360, Math.round(Number(project.height) || 1920));
-  const fontSize = Math.max(30, Math.round(Math.min(width, height) * 0.052));
+  const isLongform = width >= height;
+  const fontSize = Math.max(30, Math.round(Math.min(width, height) * (isLongform ? 0.06 : 0.052)));
+  const emphasizedSize = Math.round(fontSize * 1.18);
   const marginV = Math.round(height * 0.27);
   const header = [
     '[Script Info]', 'ScriptType: v4.00+', 'PlayResX: ' + width, 'PlayResY: ' + height,
@@ -183,9 +195,28 @@ function buildAss(project, groups) {
     'Style: Default,Arial,' + fontSize + ',&H0000FFFF,&H0000FFFF,&H00101010,&H80000000,-1,0,0,0,100,100,0,0,1,3,1,2,40,40,' + marginV + ',1',
     '', '[Events]', 'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text'
   ];
-  return header.concat((groups || []).map(function (group) {
-    return 'Dialogue: 0,' + assTime(group.start) + ',' + assTime(group.end) + ',Default,,0,0,0,,' + escapeAss(group.text);
-  })).join('\n') + '\n';
+  const events = [];
+  (groups || []).forEach(function (group) {
+    if (!isLongform || !Array.isArray(group.words) || !group.words.length) {
+      events.push('Dialogue: 0,' + assTime(group.start) + ',' + assTime(group.end) + ',Default,,0,0,0,,' + escapeAss(group.text));
+      return;
+    }
+    // Keep the complete phrase on screen while moving one stable emphasis
+    // through it. Segment boundaries use the next word's exact start, so the
+    // active word changes in lockstep with speech without relying on karaoke
+    // fill behavior that differs between ASS renderers.
+    group.words.forEach(function (activeWord, activeIndex) {
+      const eventStart = activeIndex === 0 ? group.start : activeWord.start;
+      const eventEnd = activeIndex + 1 < group.words.length ? group.words[activeIndex + 1].start : group.end;
+      if (eventEnd <= eventStart) return;
+      const text = group.words.map(function (word, wordIndex) {
+        const escaped = escapeAss(word.text);
+        return wordIndex === activeIndex ? '{\\fs' + emphasizedSize + '\\bord4}' + escaped + '{\\r}' : escaped;
+      }).join(' ');
+      events.push('Dialogue: 0,' + assTime(eventStart) + ',' + assTime(eventEnd) + ',Default,,0,0,0,,' + text);
+    });
+  });
+  return header.concat(events).join('\n') + '\n';
 }
 
 function setup(options) {

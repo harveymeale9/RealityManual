@@ -60,6 +60,7 @@ test('caption groups omit deleted words and carry raw and edited timing', functi
   assert.deepEqual(groups.map(function (group) { return group.text; }), ['This works.', 'Keep going.']);
   assert.equal(groups[1].sourceStart, 6.6);
   assert.ok(Math.abs(groups[1].start - 3.45) < 0.0001);
+  assert.deepEqual(groups[1].words.map(function (word) { return word.text; }), ['Keep', 'going.']);
 });
 
 test('ASS export uses bold yellow captions below centre', function () {
@@ -67,6 +68,17 @@ test('ASS export uses bold yellow captions below centre', function () {
   assert.match(ass, /PrimaryColour.*\nStyle: Default,Arial,56,&H0000FFFF/);
   assert.match(ass, /,2,40,40,518,1/);
   assert.match(ass, /Dialogue: 0,0:00:01\.00,0:00:02\.00.*A \\{real\\} caption/);
+});
+
+test('landscape captions are larger and advance spoken-word emphasis', function () {
+  const groups = [{ start: 1, end: 2, text: 'A wise move', words: [
+    { text: 'A', start: 1, end: 1.2 }, { text: 'wise', start: 1.2, end: 1.6 }, { text: 'move', start: 1.6, end: 2 }
+  ] }];
+  const ass = editor.buildAss({ width: 1920, height: 1080 }, groups);
+  assert.match(ass, /Style: Default,Arial,65,/);
+  assert.equal((ass.match(/^Dialogue:/gm) || []).length, 3);
+  assert.match(ass, /\\fs77\\bord4}A\{\\r} wise move/);
+  assert.match(ass, /A \{\\fs77\\bord4}wise\{\\r} move/);
 });
 
 test('upload, timed transcription and FFmpeg captioned render work end to end', { timeout: 30000 }, async function (t) {
