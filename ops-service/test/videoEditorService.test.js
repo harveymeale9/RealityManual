@@ -478,8 +478,9 @@ test('an HEVC camera master receives a real browser-safe review proxy', { timeou
   assert.equal(stored.browserPreviewStatus, 'ready', stored.browserPreviewError);
   const proxy = path.join(projectDir, 'preview.mp4');
   assert.ok(fs.statSync(proxy).size > 1024);
-  const probe = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_name', '-of', 'json', proxy], { encoding: 'utf8' }));
+  const probe = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_name,width,height', '-of', 'json', proxy], { encoding: 'utf8' }));
   assert.equal(probe.streams[0].codec_name, 'h264');
+  assert.ok(Math.max(probe.streams[0].width, probe.streams[0].height) <= 1280);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
 

@@ -695,9 +695,10 @@ function setup(options) {
       saveProject(project);
       try {
         await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', sourcePath(id),
-          '-map', '0:v:0', '-map', '0:a:0', '-vf', "scale=w='trunc(min(1280,iw)/2)*2':h=-2",
-          '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '24', '-pix_fmt', 'yuv420p',
-          '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', previewPath(id)], 'browser review proxy');
+          '-map', '0:v:0', '-map', '0:a:0', '-vf',
+          "scale=w='if(gte(iw,ih),trunc(min(1280,iw)/2)*2,-2)':h='if(gte(iw,ih),-2,trunc(min(1280,ih)/2)*2)'",
+          '-c:v', 'libx264', '-preset', 'superfast', '-crf', '28', '-pix_fmt', 'yuv420p',
+          '-c:a', 'aac', '-b:a', '96k', '-movflags', '+faststart', previewPath(id)], 'browser review proxy');
         const media = await probe(previewPath(id));
         if (media.videoCodec !== 'h264' || !media.hasAudio || !fs.statSync(previewPath(id)).size) throw new Error('The browser review proxy failed verification.');
         project = getProject(id);

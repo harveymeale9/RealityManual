@@ -13162,3 +13162,21 @@ takes remain valid, and every visible card can now be applied or restored
 without silently changing another card's owned words. Focused coverage lists an
 uncertain overlap first and proves the high-confidence plus independent ranges
 are the ones retained.
+
+---
+
+# 352. Review Proxies Are Optimized for Immediate Review (2026-09-29)
+
+The HEVC compatibility copy exists only to let Harvey inspect a recording while
+Editor works; it is never a production input. The first live proxy preserved the
+full 1080x1920 raster and occupied 19.9 MB for a 26.5-second recording, spending
+time and disk on detail that the embedded review player cannot meaningfully use.
+
+Browser proxies now preserve orientation while limiting the long edge to 1280
+pixels, encode H.264 with the `superfast` preset at CRF 28, and use 96 kbps AAC.
+A controlled pass over the same real HEVC camera master completed in 12.1
+seconds and produced a 6.5 MB 720x1280 review file; an extracted frame retained
+legible page text and clear framing. The untouched original still feeds the
+full-resolution CRF-18 final render, so this changes only how quickly a safe
+review player becomes available. The real proxy test now also enforces the
+1280-pixel review ceiling.
