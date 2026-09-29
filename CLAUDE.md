@@ -13892,3 +13892,16 @@ button beneath the explanation on narrow screens; `Retry failed steps` no
 longer collapses into a tall three-word sliver. Desktop layout is unchanged.
 The browser audit requires at least two recording cards to be fully visible in
 the mobile queue before capturing its screenshot.
+
+---
+
+# 387. Caption Preview Uses Encoded Timing Exactly (2026-09-29)
+
+The browser working preview added an undocumented 180ms tail after each caption
+group's final transcribed word, while the ASS file used by FFmpeg ends that
+caption at the word's actual mapped end. This made the supposedly faithful
+approval preview retain the final vertical word and long-form emphasis slightly
+longer than the delivered video. The browser now uses the same exact group end
+for visibility, final-word selection, and long-form emphasis as the encoder.
+The regression drives a one-word caption inside and then beyond its timestamp,
+requiring it to appear during speech and disappear immediately afterward.

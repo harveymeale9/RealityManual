@@ -954,7 +954,7 @@
         }
       }
       var group = (project.captionGroups || []).filter(function (item) {
-        return video.currentTime >= item.sourceStart && video.currentTime <= item.sourceEnd + 0.18;
+        return video.currentTime >= item.sourceStart && video.currentTime <= item.sourceEnd;
       })[0];
       caption.replaceChildren();
       caption.style.removeProperty('font-size');
@@ -965,13 +965,13 @@
         group.words.forEach(function (word, index) {
           var span = document.createElement('span');
           span.textContent = word.text + (index + 1 < group.words.length ? ' ' : '');
-          var emphasisEnd = index + 1 < group.words.length ? group.words[index + 1].sourceStart : group.sourceEnd + 0.18;
+          var emphasisEnd = index + 1 < group.words.length ? group.words[index + 1].sourceStart : group.sourceEnd;
           span.className = video.currentTime >= word.sourceStart && video.currentTime < emphasisEnd ? 'active' : '';
           caption.appendChild(span);
         });
       } else if (group && Array.isArray(group.words)) {
         var spokenWord = group.words.filter(function (word, index) {
-          var wordEnd = index + 1 < group.words.length ? group.words[index + 1].sourceStart : group.sourceEnd + 0.18;
+          var wordEnd = index + 1 < group.words.length ? group.words[index + 1].sourceStart : group.sourceEnd;
           return video.currentTime >= word.sourceStart && video.currentTime < wordEnd;
         })[0];
         caption.textContent = spokenWord ? spokenWord.text : '';
