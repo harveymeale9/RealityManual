@@ -714,11 +714,13 @@
         (isError ? '<button class="btn-primary" id="editorRetry">Retry transcription</button>' : '') + '</div>';
       if (isError) workspace.querySelector('#editorRetry').onclick = function () {
         var retryButton = workspace.querySelector('#editorRetry');
+        var retryProjectId = project.id;
         retryButton.disabled = true;
         retryButton.textContent = 'Starting transcription…';
         retryTransientOnce(function () {
-          return api('/api/editor/' + project.id + '/transcribe', { method: 'POST' });
+          return api('/api/editor/' + retryProjectId + '/transcribe', { method: 'POST' });
         }, 500).then(function () {
+          if (!project || project.id !== retryProjectId) return;
           project.transcriptionStatus = 'running'; renderWorkspace(); schedulePoll();
         }).catch(function (error) {
           if (retryButton.isConnected) { retryButton.disabled = false; retryButton.textContent = 'Retry transcription'; }
@@ -1134,31 +1136,37 @@
     root.querySelector('#editorPlanningPiece').onchange = function () { save({ planningPieceId: this.value }, true); };
     var analyzeButton = root.querySelector('#editorAnalyze');
     if (analyzeButton) analyzeButton.onclick = function () {
+      var analyzeProjectId = project.id;
       analyzeButton.disabled = true;
       analyzeButton.textContent = 'Analyzing…';
       retryTransientOnce(function () {
-        return api('/api/editor/' + project.id + '/classify', { method: 'POST' });
+        return api('/api/editor/' + analyzeProjectId + '/classify', { method: 'POST' });
       }, 500).then(function () {
+        if (!project || project.id !== analyzeProjectId) return;
         project.classificationStatus = 'running'; renderWorkspace(); schedulePoll();
       }).catch(function (error) { alert(error.message); renderWorkspace(); });
     };
     var retakeAnalyzeButton = root.querySelector('#editorAnalyzeRetakes');
     if (retakeAnalyzeButton) retakeAnalyzeButton.onclick = function () {
+      var analyzeProjectId = project.id;
       retakeAnalyzeButton.disabled = true;
       retakeAnalyzeButton.textContent = 'Analyzing…';
       retryTransientOnce(function () {
-        return api('/api/editor/' + project.id + '/analyze-retakes', { method: 'POST' });
+        return api('/api/editor/' + analyzeProjectId + '/analyze-retakes', { method: 'POST' });
       }, 500).then(function () {
+        if (!project || project.id !== analyzeProjectId) return;
         project.retakeAnalysisStatus = 'running'; renderWorkspace(); schedulePoll();
       }).catch(function (error) { alert(error.message); renderWorkspace(); });
     };
     var matchPlanButton = root.querySelector('#editorMatchPlan');
     if (matchPlanButton) matchPlanButton.onclick = function () {
+      var matchProjectId = project.id;
       matchPlanButton.disabled = true;
       matchPlanButton.textContent = 'Matching…';
       retryTransientOnce(function () {
-        return api('/api/editor/' + project.id + '/match-planning-piece', { method: 'POST' });
+        return api('/api/editor/' + matchProjectId + '/match-planning-piece', { method: 'POST' });
       }, 500).then(function () {
+        if (!project || project.id !== matchProjectId) return;
         project.planningMatchStatus = 'running'; renderWorkspace(); schedulePoll();
       }).catch(function (error) { alert(error.message); renderWorkspace(); });
     };
@@ -1234,11 +1242,13 @@
     });
     var renderButton = root.querySelector('#editorRender');
     if (renderButton) renderButton.onclick = function () {
+        var renderProjectId = project.id;
         renderButton.disabled = true;
         renderButton.textContent = 'Starting final edit…';
         retryTransientOnce(function () {
-          return api('/api/editor/' + project.id + '/render', { method: 'POST' });
+          return api('/api/editor/' + renderProjectId + '/render', { method: 'POST' });
         }, 500).then(function () {
+          if (!project || project.id !== renderProjectId) return;
           project.renderStatus = 'running'; renderWorkspace(); schedulePoll();
         }).catch(function (error) {
           if (renderButton.isConnected) { renderButton.disabled = false; renderButton.textContent = 'Build final edit'; }
@@ -1247,10 +1257,11 @@
       };
     var retryFailedButton = root.querySelector('#editorRetryFailed');
     if (retryFailedButton) retryFailedButton.onclick = function () {
+      var retryProjectId = project.id;
       retryFailedButton.disabled = true;
       retryFailedButton.textContent = 'Retrying…';
-      api('/api/editor/' + project.id + '/retry-failed', { method: 'POST' }).then(function () {
-        return openProject(project.id, true);
+      api('/api/editor/' + retryProjectId + '/retry-failed', { method: 'POST' }).then(function () {
+        if (project && project.id === retryProjectId) return openProject(retryProjectId, true);
       }).catch(function (error) { retryFailedButton.disabled = false; retryFailedButton.textContent = 'Retry failed steps'; alert(error.message); });
     };
     var approveButtons = Array.from(root.querySelectorAll('[data-editor-approve]'));

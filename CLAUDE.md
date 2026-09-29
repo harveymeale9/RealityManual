@@ -13972,6 +13972,25 @@ failed/rollback release.
 
 ---
 
+# 392. Delayed Editor Actions Stay Bound to Their Originating Recording (2026-09-29)
+
+The new bounded retries exposed a cross-recording race: transcription,
+framing, retake, planning, and final-render callbacks constructed their retry
+URL from the mutable global `project`. If Harvey clicked Next during the 500ms
+backoff, attempt two could start work on the newly opened recording instead of
+the one whose button he pressed. Even single-attempt `Retry failed steps`
+could reopen the wrong card after a slow response.
+
+Every asynchronous start now captures its immutable project ID before the
+first request. All retries use that ID, and completion callbacks update or
+refresh the workspace only if that same recording is still open. Background
+work continues safely if Harvey has moved on, and its normal list polling/detail
+load reveals the state when he returns. The browser test loses the first render
+response, navigates away during backoff, and requires both attempts to target
+the original recording without stealing selection.
+
+---
+
 # 390. Manual Analysis Restarts Survive Lost Responses (2026-09-29)
 
 The framing, possible-retake, and planning-card `Analyze/Match again` controls
