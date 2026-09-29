@@ -12888,3 +12888,22 @@ the media edit safe and surfaces a workflow warning instead of discarding the
 user's decision. The end-to-end service test proves one invalidation event for
 the first post-verification cut and no duplicates during subsequent changes in
 the same rebuild window.
+
+---
+
+# 338. nginx Streams Editor Uploads and Leaves Multipart Headroom (2026-09-29)
+
+The live `ops.realitymanual.com` vhost already declared a 2 GB request limit,
+matching Editor's 2 GiB file limit only superficially. A maximum-size file is
+wrapped in a multipart request, so its envelope can exceed nginx's exact `2G`
+cap before Multer gets to enforce the intended per-file boundary. nginx also
+used default request buffering, writing a second complete temporary copy before
+forwarding anything to Express. That doubled peak disk usage and let browser
+upload progress reach 100% while the proxy still had to replay the body.
+
+`/etc/nginx/sites-available/ops` now uses `client_max_body_size 2100M`, leaving
+small protocol headroom while Express remains authoritative at exactly 2 GiB,
+and its proxy location sets `proxy_request_buffering off` so camera data streams
+directly into Multer. `nginx -t` passed, the service reloaded cleanly, and the
+public authenticated boundary still returns the expected 401 without a session.
+This is live host configuration, not a repository-managed nginx file.
