@@ -13697,3 +13697,21 @@ deletion update it explicitly. The existing unload protection now also covers
 in-flight edit saves, and a duplicated upload-only unload listener was removed.
 This preserves rapid pause/retake/transcript decisions across project changes,
 tab changes, remounts, and compact background polling.
+
+---
+
+# 377. Byte-Identical Upload Retries Share One Project Claim (2026-09-29)
+
+Upload retry recovery already recognized an existing project's source hash, but
+there was a pre-persistence race: a response can disappear after the first body
+arrives yet before probe/save completes, allowing the automatic retry to hash
+the same bytes while no database row exists. Both requests could then pass the
+duplicate query and create separate Editor projects.
+
+After hashing and checking persisted projects, a request now claims that SHA-256
+inside the process. A concurrent identical request waits for the owner: success
+returns the owner's exact project id through the normal duplicate-recovery
+contract, while a failed invalid owner releases the key so the independently
+received copy can safely become the new claimant. Claims settle idempotently on
+every post-claim success/failure path. Unit coverage proves one owner, waiting
+recovery, exactly-once settlement, cleanup, and reacquisition after failure.

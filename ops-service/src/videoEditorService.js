@@ -49,6 +49,33 @@ function createByteReservationLedger() {
   };
 }
 
+function createKeyedClaimRegistry() {
+  const claims = new Map();
+  return {
+    claim: function (key) {
+      const existing = claims.get(key);
+      if (existing) return { owner: false, result: existing.promise };
+      let settle;
+      const promise = new Promise(function (resolve) { settle = resolve; });
+      const entry = { promise: promise };
+      claims.set(key, entry);
+      let finished = false;
+      return {
+        owner: true,
+        result: promise,
+        settle: function (value) {
+          if (finished) return false;
+          finished = true;
+          if (claims.get(key) === entry) claims.delete(key);
+          settle(value);
+          return true;
+        }
+      };
+    },
+    size: function () { return claims.size; }
+  };
+}
+
 function createPriorityTaskQueue() {
   const urgent = [];
   const normal = [];
@@ -716,6 +743,7 @@ function setup(options) {
   const planningMatchJobs = new Map();
   const automaticRenderTimers = new Map();
   const uploadCapacityReservations = createByteReservationLedger();
+  const sourceHashClaims = createKeyedClaimRegistry();
   let transcriptionChain = Promise.resolve();
   let classificationChain = Promise.resolve();
   let retakeChain = Promise.resolve();
@@ -1426,6 +1454,18 @@ async function renderProject(id) {
       fs.rm(req.file.path, { force: true }, function () {});
       return res.status(409).json({ error: 'duplicate_recording', existingProjectId: duplicate.id, message: 'These exact video bytes are already in the Editor.' });
     }
+    let sourceClaim;
+    while (true) {
+      sourceClaim = sourceHashClaims.claim(sourceSha256);
+      if (sourceClaim.owner) break;
+      const claimedProjectId = await sourceClaim.result;
+      if (claimedProjectId) {
+        fs.rm(req.file.path, { force: true }, function () {});
+        return res.status(409).json({ error: 'duplicate_recording', existingProjectId: claimedProjectId, message: 'These exact video bytes are already being added to the Editor.' });
+      }
+      // The first claimant rejected an invalid/incomplete file. Compete for a
+      // fresh claim so this independently received copy can still be probed.
+    }
     const id = crypto.randomUUID();
     try {
       fs.mkdirSync(projectDir(id), { recursive: true });
@@ -1484,9 +1524,11 @@ async function renderProject(id) {
         createdAt: now,
         updatedAt: now
       });
+      sourceClaim.settle(id);
       res.status(202).json(project);
       setImmediate(function () { transcribeProject(id); classifyProject(id); generateBrowserPreview(id); });
     } catch (err) {
+      sourceClaim.settle('');
       fs.rm(req.file.path, { force: true }, function () {});
       fs.rm(projectDir(id), { recursive: true, force: true }, function () {});
       res.status(422).json({ error: 'invalid_recording', message: String(err.message || err) });
@@ -1892,6 +1934,7 @@ module.exports = {
   requiredEditorCapacity,
   outstandingEditorCapacity,
   createByteReservationLedger,
+  createKeyedClaimRegistry,
   createPriorityTaskQueue,
   verifiedRenderMatches,
   normalizeWords,

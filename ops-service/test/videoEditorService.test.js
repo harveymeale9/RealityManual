@@ -102,6 +102,26 @@ test('concurrent upload reservations are counted and released exactly once', fun
   assert.equal(ledger.total(), 0);
 });
 
+test('concurrent byte-identical uploads share one creation claim', async function () {
+  const claims = editor.createKeyedClaimRegistry();
+  const first = claims.claim('same-sha');
+  const second = claims.claim('same-sha');
+  assert.equal(first.owner, true);
+  assert.equal(second.owner, false);
+  assert.equal(claims.size(), 1);
+  first.settle('project-1');
+  assert.equal(await second.result, 'project-1');
+  assert.equal(first.settle('project-2'), false);
+  assert.equal(claims.size(), 0);
+
+  const failed = claims.claim('retry-sha');
+  failed.settle('');
+  assert.equal(await failed.result, '');
+  const retry = claims.claim('retry-sha');
+  assert.equal(retry.owner, true);
+  retry.settle('project-3');
+});
+
 test('final renders take the next serial encoder slot ahead of waiting proxies', async function () {
   const queue = editor.createPriorityTaskQueue();
   const order = [];
