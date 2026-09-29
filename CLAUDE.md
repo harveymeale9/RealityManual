@@ -12616,3 +12616,11 @@ is unavailable to both AI matching and the manual dropdown. Existing/legacy
 links remain visible to their current project for diagnosis, while new claims
 cannot be created. This complements the stage reconciliation in §316 rather
 than relying on its later cleanup.
+
+Stage alone is not the reservation boundary. Candidate discovery also scans
+the durable `editorProjects` records and excludes any card already linked by a
+different recording, even while that card is still Filmed and the first render
+has not advanced it yet. Because planning analysis is serialized, the first
+saved high-confidence match becomes visible before the next match builds its
+candidate set, closing the concurrent-upload race as well as the post-render
+case.

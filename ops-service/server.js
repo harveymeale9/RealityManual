@@ -539,12 +539,18 @@ async function analyzeEditorRetakes(input) {
 }
 
 function editorPlanningCandidates(project) {
+  const claimedByOtherEditorProjects = new Set(stmts.getAll.all('editorProjects').map(function (row) {
+    try { return JSON.parse(row.data); } catch (e) { return null; }
+  }).filter(function (editorProject) {
+    return editorProject && editorProject.id !== (project && project.id) && editorProject.planningPieceId;
+  }).map(function (editorProject) { return editorProject.planningPieceId; }));
   return stmts.getAll.all('pieces').map(function (row) {
     try { return recordConcurrency.decodeRow(row); } catch (e) { return null; }
   }).filter(function (piece) {
     if (!piece) return false;
-    if (piece.stage === 'filmed') return true;
     if (piece.id === (project && project.planningPieceId)) return true;
+    if (claimedByOtherEditorProjects.has(piece.id)) return false;
+    if (piece.stage === 'filmed') return true;
     return piece.stage === 'edited' && piece.editorProjectId === (project && project.id);
   }).map(function (piece) {
     const text = String(piece.notesHtml || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
