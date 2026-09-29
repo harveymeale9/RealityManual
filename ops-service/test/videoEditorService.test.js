@@ -442,6 +442,34 @@ test('approved editor projects stay immutable during restart maintenance', { tim
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
 
+test('startup invalidates a corrupt active final before it can be reviewed', { timeout: 10000 }, async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-corrupt-final-'));
+  const projectDir = path.join(dir, 'editor', 'corrupt-final-1'); fs.mkdirSync(projectDir, { recursive: true });
+  fs.writeFileSync(path.join(projectDir, 'render.mp4'), 'truncated final');
+  const db = new Database(path.join(dir, 'test.sqlite'));
+  db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
+  const now = new Date().toISOString();
+  db.prepare('INSERT INTO records VALUES (?, ?, ?, ?)').run('editorProjects', 'corrupt-final-1', JSON.stringify({
+    id: 'corrupt-final-1', name: 'Corrupt final', duration: 10, width: 1920, height: 1080,
+    words: [{ index: 0, text: 'Hello.', start: 1, end: 2 }], removedWordIndices: [], dismissedRetakeIds: [], restoredAutoCutIds: [],
+    transcriptionStatus: 'ready', classificationStatus: 'ready', retakeAnalysisStatus: 'error', planningMatchStatus: 'ready',
+    renderStatus: 'ready', renderSizeBytes: 9999, renderSha256: 'a'.repeat(64), renderQuality: { status: 'passed' },
+    automaticRenderStartedAt: 'old-render', createdAt: now, updatedAt: now
+  }), now);
+  editor.setup({ db: db, dataDir: dir, transcribeDetailed: async function () { return { text: '', words: [] }; } });
+  let stored;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    stored = JSON.parse(db.prepare('SELECT data FROM records WHERE store_name=? AND id=?').get('editorProjects', 'corrupt-final-1').data);
+    if (stored.renderStatus !== 'ready') break;
+    await new Promise(function (resolve) { setTimeout(resolve, 20); });
+  }
+  assert.equal(stored.renderStatus, '');
+  assert.equal(stored.renderSha256, '');
+  assert.equal(stored.renderSizeBytes, 0);
+  assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), false);
+  t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+});
+
 test('one recovery endpoint retries failed automatic work without replacing the source', { timeout: 10000 }, async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-retry-'));
   const projectDir = path.join(dir, 'editor', 'retry-1'); fs.mkdirSync(projectDir, { recursive: true });

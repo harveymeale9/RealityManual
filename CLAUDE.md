@@ -13461,3 +13461,22 @@ approval or deletion removes it. The state survives refresh and same-tab
 navigation but naturally disappears when the browser tab is closed, avoiding a
 stale next-day review position. Browser coverage checkpoints an HEVC source
 review, reloads the application, and proves mode and exact position return.
+
+---
+
+# 365. Active Final Edits Self-Verify After Restart (2026-09-29)
+
+Approval already re-hashed the exact final bytes, but a truncated or externally
+altered render could remain labelled Ready after a host restart. Harvey would
+then encounter broken or stale playback and only discover the real issue when
+approval rejected it.
+
+Startup now walks active Ready finals serially and validates the recorded size,
+passed-quality record, and SHA-256 against the actual file. A mismatch clears
+every stale output claim, removes the bad file, reconciles the linked planning
+stage, and automatically rebuilds once framing/retake safety is ready. Approved
+projects are deliberately excluded because their immutable Production copy is
+already authoritative. Serial hashing avoids turning a large existing queue
+into a burst of competing disk reads. Coverage begins with a false Ready record
+and truncated MP4, then proves its digest, size, status, and file are all
+invalidated before review.

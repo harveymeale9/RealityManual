@@ -1268,6 +1268,25 @@ async function renderProject(id) {
     });
   });
 
+  // A ready flag is not enough after a host crash, manual disk operation, or
+  // filesystem fault. Verify fingerprints serially at startup so Harvey never
+  // reviews a truncated/stale final that approval would only reject later.
+  setImmediate(async function () {
+    const rows = listStmt.all(STORE_NAME);
+    for (const row of rows) {
+      let snapshot;
+      try { snapshot = JSON.parse(row.data); } catch (error) { continue; }
+      if (!snapshot || snapshot.productionPieceId || snapshot.renderStatus !== 'ready' || !snapshot.renderSha256 || !isId(snapshot.id)) continue;
+      const valid = await verifiedRenderMatches(snapshot, renderPath(snapshot.id));
+      if (valid) continue;
+      const current = getProject(snapshot.id);
+      if (!current || current.productionPieceId || current.renderStatus !== 'ready' || current.renderSha256 !== snapshot.renderSha256) continue;
+      invalidateProjectRender(current);
+      saveProject(current);
+      setImmediate(function () { maybeAutoRender(current.id); });
+    }
+  });
+
   // Older recordings predate byte-accurate duplicate detection. Hash their
   // durable masters once in the background so future uploads use content
   // identity rather than a camera filename/size guess.
