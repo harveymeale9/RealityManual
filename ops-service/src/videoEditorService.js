@@ -583,7 +583,7 @@ function setup(options) {
         saveProject(project);
         if (project.words.length && typeof analyzeRetakes === 'function') setImmediate(function () { analyzeProjectRetakes(id); });
         if (project.words.length && typeof matchPlanningPiece === 'function') setImmediate(function () { matchProjectPlanningPiece(id); });
-        setImmediate(function () { maybeAutoRender(id); });
+        if (project.words.length) setImmediate(function () { maybeAutoRender(id); });
       } catch (err) {
         project = getProject(id);
         if (project) {

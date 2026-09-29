@@ -12788,3 +12788,22 @@ workspace, next-recording, and refresh behavior becomes a safe no-op while its
 shell is absent. Returning to Editor reloads the authoritative server state as
 normal. Existing batch, cross-tab save, failure-state, and queue browser checks
 all pass with the detached-DOM guards.
+
+---
+
+# 333. Large Production Handoffs Do Not Freeze Content Studio (2026-09-29)
+
+`sendEditorProjectToProduction` copied the verified final master with
+`copyFileSync`. Editor accepts recordings up to 2 GB, so approval could block
+Node's only event-loop thread for the full disk copy: Project Manager, upload
+progress, polling, and every unrelated API request would appear frozen even
+though nothing had crashed.
+
+The handoff is now asynchronous and awaits `fs.promises.copyFile` before its
+existing transactional Production records are committed. The single-flight
+approval boundary from §328 ensures that making this I/O non-blocking cannot
+admit duplicate approvals. The full 105-test suite passes. That run also exposed
+and fixed an impossible post-transcription wake-up: a recording with no timed
+speech no longer schedules render eligibility after it has already entered the
+terminal transcription-error state, preventing stray work from outliving that
+failed job during shutdown/restart.

@@ -1566,7 +1566,7 @@ function savePieceRecord(piece) {
 // let the existing analysis job populate transcript/title suggestions.
 // The editor project id is reused as the piece id, making retries naturally
 // idempotent and keeping one durable identity across both tools.
-function sendEditorProjectToProduction(input) {
+async function sendEditorProjectToProduction(input) {
   const project = input && input.project;
   const renderedPath = input && input.renderPath;
   if (!project || !isValidId(project.id) || !renderedPath || !fs.existsSync(renderedPath)) {
@@ -1623,7 +1623,7 @@ function sendEditorProjectToProduction(input) {
   const videoDir = path.join(UPLOADS_DIR, 'videos');
   const destination = path.join(videoDir, project.id);
   fs.mkdirSync(videoDir, { recursive: true });
-  fs.copyFileSync(renderedPath, destination);
+  await fs.promises.copyFile(renderedPath, destination);
   try {
     const videoRecord = {
       id: project.id,
