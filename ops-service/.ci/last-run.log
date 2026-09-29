@@ -10,19 +10,19 @@
 + '[' -n '' ']'
 + git pull
 From https://github.com/harveymeale9/RealityManual
-   c09ba34..a144eb4  main       -> origin/main
-Updating c09ba34..a144eb4
+   a144eb4..d3589d5  main       -> origin/main
+Updating a144eb4..d3589d5
 Fast-forward
- CLAUDE.md                                     |  32 ++++++++
- ops-service/.ci/last-run.log                  | 114 +++++---------------------
- ops-service/public/app.js                     |   2 +-
- ops-service/public/index.html                 |   2 +-
- ops-service/public/lib/voiceClient.js         |  90 ++++++++++++++++----
- ops-service/public/voice-mobile.html          |   4 +-
- ops-service/test/voiceClientRecording.test.js | 106 ++++++++++++++++++++++++
- 7 files changed, 239 insertions(+), 111 deletions(-)
+ CLAUDE.md                                     | 37 +++++++++++
+ ops-service/.ci/last-run.log                  | 27 ++++----
+ ops-service/public/app.js                     |  4 +-
+ ops-service/public/index.html                 |  2 +-
+ ops-service/public/lib/voiceClient.js         | 37 +++++++++--
+ ops-service/public/voice-mobile.html          |  6 +-
+ ops-service/test/voiceClientRecording.test.js | 96 +++++++++++++++++++++++++++
+ 7 files changed, 185 insertions(+), 24 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=a144eb460d49ef6c90a0f51095a97e16f4884579
++ NEW_HEAD=d3589d5935bd72706c8f78509d239c12e37db427
 + git -C /srv/realitymanual-repo pull
 Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
@@ -32,12 +32,12 @@ Already up to date.
 + NEEDS_REBUILD=1
 + '[' -n bbceec1837a8378f0cf7b722977fde12aee8e9c7 ']'
 + git cat-file -e 'bbceec1837a8378f0cf7b722977fde12aee8e9c7^{commit}'
-++ git diff --name-only bbceec1837a8378f0cf7b722977fde12aee8e9c7 a144eb460d49ef6c90a0f51095a97e16f4884579 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
+++ git diff --name-only bbceec1837a8378f0cf7b722977fde12aee8e9c7 d3589d5935bd72706c8f78509d239c12e37db427 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z '' ']'
 + NEEDS_REBUILD=0
 + '[' 0 = 1 ']'
 + '[' 0 = 0 ']'
-+ echo 'no backend changes between bbceec1837a8378f0cf7b722977fde12aee8e9c7 and a144eb460d49ef6c90a0f51095a97e16f4884579 — already live via git pull, skipping rebuild/restart'
-no backend changes between bbceec1837a8378f0cf7b722977fde12aee8e9c7 and a144eb460d49ef6c90a0f51095a97e16f4884579 — already live via git pull, skipping rebuild/restart
++ echo 'no backend changes between bbceec1837a8378f0cf7b722977fde12aee8e9c7 and d3589d5935bd72706c8f78509d239c12e37db427 — already live via git pull, skipping rebuild/restart'
+no backend changes between bbceec1837a8378f0cf7b722977fde12aee8e9c7 and d3589d5935bd72706c8f78509d239c12e37db427 — already live via git pull, skipping rebuild/restart
 + exit 0
 ssh exit code: 0
