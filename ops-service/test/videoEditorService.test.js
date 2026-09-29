@@ -187,12 +187,12 @@ test('batch preprocessing serializes expensive transcription and frame analysis'
     db: db, dataDir: dir,
     transcribeDetailed: async function () {
       transcriptionCalls++; activeTranscriptions++; maxTranscriptions = Math.max(maxTranscriptions, activeTranscriptions);
-      await new Promise(function (resolve) { setTimeout(resolve, 250); });
+      await new Promise(function (resolve) { setTimeout(resolve, 600); });
       activeTranscriptions--; return { text: '', words: [] };
     },
     classifyVisualLayout: async function () {
       classificationCalls++; activeClassifications++; maxClassifications = Math.max(maxClassifications, activeClassifications);
-      await new Promise(function (resolve) { setTimeout(resolve, 250); });
+      await new Promise(function (resolve) { setTimeout(resolve, 600); });
       activeClassifications--; return { layout: 'horizontal', confidence: 'high', cropCenterX: 0.5, explanation: 'Synthetic spread.' };
     }
   });
@@ -262,7 +262,7 @@ test('one recovery endpoint retries failed automatic work without replacing the 
     duration: 1, width: 320, height: 180, words: [], removedWordIndices: [], dismissedRetakeIds: [], restoredAutoCutIds: [],
     autoSilenceEnabled: true, silenceThresholdSeconds: 1, retainedPauseSeconds: .38, captionsEnabled: true,
     layoutOverride: 'auto', contentTypeOverride: 'auto', cropCenterX: .5, classificationStatus: 'unavailable',
-    retakeAnalysisStatus: 'unavailable', planningMatchStatus: 'unavailable', transcriptionStatus: 'error', transcriptionError: 'Synthetic failure', renderStatus: '', productionPieceId: 'test-output-hold', createdAt: now, updatedAt: now
+    retakeAnalysisStatus: 'unavailable', planningMatchStatus: 'unavailable', transcriptionStatus: 'error', transcriptionError: 'Synthetic failure', renderStatus: '', createdAt: now, updatedAt: now
   }), now);
   const service = editor.setup({ db: db, dataDir: dir, transcribeDetailed: async function () { return { text: 'Recovered.', words: [{ type: 'word', text: 'Recovered.', start: .2, end: .8 }] }; } });
   const app = express(); app.use(express.json()); app.use('/api/editor', service.router);
@@ -272,12 +272,13 @@ test('one recovery endpoint retries failed automatic work without replacing the 
   let response = await fetch(base + '/api/editor/retry-1/retry-failed', { method: 'POST' });
   assert.equal(response.status, 202); assert.deepEqual((await response.json()).retried, ['transcription']);
   let project;
-  for (let attempt = 0; attempt < 100; attempt++) {
+  for (let attempt = 0; attempt < 200; attempt++) {
     project = await (await fetch(base + '/api/editor/retry-1')).json();
-    if (project.transcriptionStatus === 'ready') break;
+    if (project.transcriptionStatus === 'ready' && (project.renderStatus === 'ready' || project.renderStatus === 'error')) break;
     await new Promise(function (resolve) { setTimeout(resolve, 30); });
   }
   assert.equal(project.transcriptionStatus, 'ready'); assert.equal(project.transcriptText, 'Recovered.');
+  assert.equal(project.renderStatus, 'ready', project.renderError);
   response = await fetch(base + '/api/editor/retry-1/retry-failed', { method: 'POST' });
   assert.equal(response.status, 409);
 });
@@ -449,4 +450,10 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(response.status, 200);
   assert.equal((await response.json()).alreadySent, true);
   assert.equal(handoffCalls, 1);
+  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ captionsEnabled: true }) });
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).error, 'approved_read_only');
+  response = await fetch(base + '/api/editor/' + project.id + '/render', { method: 'POST' });
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).error, 'approved_read_only');
 });

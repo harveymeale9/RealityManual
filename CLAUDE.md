@@ -12144,3 +12144,22 @@ updates do not make cards jump around. Empty Active/Sent filters also remain
 truly empty rather than opening a hidden card from the other bucket. A browser
 queue regression reloads with an older running recording and a newer ready one
 and proves the ready recording opens automatically.
+
+---
+
+# 298. An Approved Editor Master Is an Immutable Review Artifact (2026-09-29)
+
+Content Production receives a copied version of the exact verified Editor
+render. The Sent archive previously left all Editor controls active, so changing
+captions, crop, pauses or words afterward produced a new Editor “final” while
+Production correctly retained the earlier approved copy. Both screens then
+appeared authoritative even though their videos differed.
+
+A project with `productionPieceId` is now read-only at both layers. The service
+rejects patch, transcription, classification, retake/planning analysis, retry
+and render mutations with `approved_read_only`; preview, download, deletion of
+the Editor archive, idempotent approval and opening Production remain allowed.
+The Sent UI disables every edit decision, clearly labels the approved version as
+locked, and explains that downstream work belongs in Content Production. Server
+tests prove post-approval patch/render rejection, while a browser regression
+proves the archive is visibly locked without disabling its cleanup action.

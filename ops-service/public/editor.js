@@ -460,6 +460,7 @@
     var renderBlocked = automaticEditRunning || unresolvedRetakes > 0;
     var renderButtonText = automaticEditRunning ? 'Preparing automatic edit…' : unresolvedRetakes ? 'Review ' + unresolvedRetakes + ' possible retake' + (unresolvedRetakes === 1 ? '' : 's') : 'Build final edit';
     var rendering = ['queued', 'running'].indexOf(project.renderStatus) !== -1;
+    var sentToProduction = !!project.productionPieceId;
     var failures = failedSteps(project);
     var previewMode = project.renderStatus === 'ready' && previewModes[project.id] !== 'source' ? 'final' : 'source';
     var previewUrl = previewMode === 'final' ? '/api/editor/' + encodeURIComponent(project.id) + '/render?inline=1' : '/api/editor/' + encodeURIComponent(project.id) + '/source';
@@ -468,6 +469,7 @@
       '<div class="editor-topbar"><div><h2>' + esc(displayName(project)) + '</h2><span>' + (project.planningPieceTitle ? esc(project.name) + ' · ' : '') + formatTime(project.duration) + ' original · ' + formatTime(editedDuration(project)) + ' edited · ' + cutSeconds.toFixed(1) + 's removed</span></div>' +
         '<div class="editor-topbar-actions"><span class="editor-save-state ' + esc(saveStates[project.id] || '') + '" id="editorSaveState">' + ({ saving: 'Saving…', saved: 'Saved', error: 'Save failed' }[saveStates[project.id]] || '') + '</span><button class="editor-delete" id="editorDelete">Delete recording</button></div></div>' +
       (rendering ? '<div class="editor-lock-notice"><strong>Final edit is encoding</strong><span>Review remains available. Editing unlocks as soon as the verified file is ready.</span></div>' : '') +
+      (sentToProduction ? '<div class="editor-lock-notice approved"><strong>Approved version locked</strong><span>The exact reviewed file is now in Content Production. Source and final previews remain available here.</span></div>' : '') +
       (failures.length ? '<div class="editor-error-recovery"><div><strong>' + failures.join(', ') + ' need' + (failures.length === 1 ? 's' : '') + ' attention</strong><span>Retry the failed automatic work without changing the source recording or your edit decisions.</span></div><button type="button" class="btn-secondary btn-tiny" id="editorRetryFailed">Retry failed steps</button></div>' : '') +
       (project.workflowWarning ? '<div class="editor-workflow-warning"><strong>Video workflow needs attention</strong><span>' + esc(project.workflowWarning) + '</span></div>' : '') +
       '<section class="editor-classification"><div><div class="eyebrow">Automatic classification</div><strong>' + (layout === 'vertical' ? 'Single page · Vertical' : 'Open spread · Horizontal') + '</strong><span>' + classificationCopy + ' · ' + esc(typeLabel(project.detectedContentType)) + '</span>' +
@@ -492,7 +494,7 @@
       '<section class="editor-transcript-panel"><div class="editor-transcript-head"><div><div class="eyebrow">Transcript editor</div><h3>Select words or sentences to cut them from the video</h3></div>' +
         '<div class="editor-transcript-actions"><button class="btn-secondary btn-tiny" id="editorUndo" ' + (!history.length ? 'disabled' : '') + '>Undo</button>' +
         '<button class="btn-secondary btn-tiny" id="editorRestore" disabled>Restore selected</button><button class="btn-primary btn-tiny" id="editorCut" disabled>Cut selected</button></div></div>' +
-        '<div class="editor-transcript' + (rendering ? ' locked' : '') + '" id="editorTranscript" tabindex="0">' + (project.words || []).map(function (word) {
+        '<div class="editor-transcript' + (rendering || sentToProduction ? ' locked' : '') + '" id="editorTranscript" tabindex="0">' + (project.words || []).map(function (word) {
           return '<span class="editor-word' + (removed.has(word.index) ? ' removed' : '') + '" data-index="' + word.index + '" data-start="' + word.start + '" data-end="' + word.end + '">' + esc(word.text) + '</span> ';
         }).join('') + '</div><p class="editor-selection-hint">Drag across text or click words. Press Delete to cut, Ctrl/⌘ Z to undo, or Escape to clear. Removed words remain visible so you can restore them.</p></section>' +
       '<div class="editor-export"><div><strong>Next: Content Production</strong><span>' +
@@ -515,8 +517,10 @@
     var transcript = root.querySelector('#editorTranscript');
     var previewingFinal = video.dataset.previewMode === 'final';
     var rendering = ['queued', 'running'].indexOf(project.renderStatus) !== -1;
+    var sentToProduction = !!project.productionPieceId;
+    var editingLocked = rendering || sentToProduction;
     video.playbackRate = reviewRate;
-    if (restoreTranscriptFocus && !rendering) {
+    if (restoreTranscriptFocus && !editingLocked) {
       restoreTranscriptFocus = false;
       transcript.focus({ preventScroll: true });
     }
@@ -605,7 +609,7 @@
       video.playbackRate = reviewRate;
     };
     transcript.addEventListener('click', function (event) {
-      if (rendering) return;
+      if (editingLocked) return;
       if (ignoreNextClick) { ignoreNextClick = false; return; }
       var word = event.target.closest('.editor-word');
       if (!word) return;
@@ -619,7 +623,7 @@
       paintSelection();
     });
     transcript.addEventListener('mouseup', function () {
-      if (rendering) return;
+      if (editingLocked) return;
       var selection = window.getSelection();
       if (!selection || selection.isCollapsed || !transcript.contains(selection.anchorNode) || !transcript.contains(selection.focusNode)) return;
       function spanFor(node) { return (node.nodeType === 1 ? node : node.parentElement).closest('.editor-word'); }
@@ -634,7 +638,7 @@
       paintSelection();
     });
     transcript.addEventListener('keydown', function (event) {
-      if (rendering) return;
+      if (editingLocked) return;
       if (history.length && (event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === 'z') {
         event.preventDefault(); restoreTranscriptFocus = true; undo(); return;
       }
@@ -778,12 +782,13 @@
         if (next) openProject(next.id);
       });
     };
-    if (rendering) {
-      ['#editorDelete', '#editorAnalyze', '#editorLayout', '#editorContentType', '#editorPlanningPiece', '#editorMatchPlan', '#editorCropX', '#editorAutoSilence', '#editorCaptions', '#editorPacing', '#editorAnalyzeRetakes', '#editorUndo', '#editorRestore', '#editorCut'].forEach(function (selector) {
+    if (editingLocked) {
+      ['#editorAnalyze', '#editorLayout', '#editorContentType', '#editorPlanningPiece', '#editorMatchPlan', '#editorCropX', '#editorAutoSilence', '#editorCaptions', '#editorPacing', '#editorAnalyzeRetakes', '#editorUndo', '#editorRestore', '#editorCut'].forEach(function (selector) {
         var control = root.querySelector(selector); if (control) control.disabled = true;
       });
       root.querySelectorAll('.editor-gap-toggle,.editor-retake-apply,.editor-retake-dismiss').forEach(function (control) { control.disabled = true; });
     }
+    if (rendering) root.querySelector('#editorDelete').disabled = true;
   }
 
   function paintSelection() {
@@ -793,7 +798,7 @@
     var removed = new Set((project.removedWordIndices || []).map(Number));
     var hasKept = Array.from(selected).some(function (index) { return !removed.has(index); });
     var hasRemoved = Array.from(selected).some(function (index) { return removed.has(index); });
-    var locked = project && ['queued', 'running'].indexOf(project.renderStatus) !== -1;
+    var locked = project && (project.productionPieceId || ['queued', 'running'].indexOf(project.renderStatus) !== -1);
     root.querySelector('#editorCut').disabled = locked || !hasKept;
     root.querySelector('#editorRestore').disabled = locked || !hasRemoved;
   }

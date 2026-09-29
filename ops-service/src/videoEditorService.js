@@ -1012,6 +1012,7 @@ async function renderProject(id) {
     if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
     const project = getProject(req.params.id);
     if (!project) return res.status(404).json({ error: 'not_found' });
+    if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked. Make downstream changes in Content Production.' });
     if (renderJobs.has(project.id)) return res.status(409).json({ error: 'render_in_progress', message: 'Wait for this final edit to finish before changing its cut settings.' });
     if (Array.isArray(req.body && req.body.removedWordIndices)) {
       project.removedWordIndices = Array.from(new Set(req.body.removedWordIndices.map(Number)
@@ -1063,6 +1064,7 @@ async function renderProject(id) {
     if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
     const project = getProject(req.params.id);
     if (!project) return res.status(404).json({ error: 'not_found' });
+    if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked.' });
     res.status(202).json({ ok: true, status: 'running' });
     transcribeProject(project.id);
   });
@@ -1071,6 +1073,7 @@ async function renderProject(id) {
     if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
     const project = getProject(req.params.id);
     if (!project) return res.status(404).json({ error: 'not_found' });
+    if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked.' });
     if (typeof classifyVisualLayout !== 'function') return res.status(501).json({ error: 'classification_unavailable' });
     res.status(202).json({ ok: true, status: 'running' });
     classifyProject(project.id);
@@ -1080,6 +1083,7 @@ async function renderProject(id) {
     if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
     const project = getProject(req.params.id);
     if (!project) return res.status(404).json({ error: 'not_found' });
+    if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked.' });
     if (project.transcriptionStatus !== 'ready') return res.status(409).json({ error: 'transcript_not_ready' });
     if (typeof analyzeRetakes !== 'function') return res.status(501).json({ error: 'retake_analysis_unavailable' });
     res.status(202).json({ ok: true, status: 'running' });
@@ -1090,6 +1094,7 @@ async function renderProject(id) {
     if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
     const project = getProject(req.params.id);
     if (!project) return res.status(404).json({ error: 'not_found' });
+    if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked.' });
     if (project.transcriptionStatus !== 'ready') return res.status(409).json({ error: 'transcript_not_ready' });
     if (typeof matchPlanningPiece !== 'function') return res.status(501).json({ error: 'planning_match_unavailable' });
     res.status(202).json({ ok: true, status: 'running' });
@@ -1100,6 +1105,7 @@ async function renderProject(id) {
     if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
     const project = getProject(req.params.id);
     if (!project) return res.status(404).json({ error: 'not_found' });
+    if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked. The approved video is already in Content Production.' });
     if (project.transcriptionStatus !== 'ready') return res.status(409).json({ error: 'transcript_not_ready' });
     if (['pending', 'running'].includes(project.classificationStatus) || ['pending', 'running', 'pending_transcript'].includes(project.retakeAnalysisStatus) || ['pending', 'running', 'pending_transcript'].includes(project.planningMatchStatus)) {
       return res.status(409).json({ error: 'automatic_edit_running', message: 'Wait for the automatic framing, retake, and planning checks to finish.' });
@@ -1115,6 +1121,7 @@ async function renderProject(id) {
     if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
     const project = getProject(req.params.id);
     if (!project) return res.status(404).json({ error: 'not_found' });
+    if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked.' });
     const retried = [];
     if (project.transcriptionStatus === 'error') {
       project.transcriptionStatus = 'pending'; project.transcriptionError = ''; retried.push('transcription');
