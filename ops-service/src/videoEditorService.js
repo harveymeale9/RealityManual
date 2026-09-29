@@ -1029,7 +1029,7 @@ async function renderProject(id) {
       const index = Number(req.body.wordCorrection.index);
       const word = Number.isInteger(index) && index >= 0 ? (project.words || [])[index] : null;
       const replacement = String(req.body.wordCorrection.text || '').replace(/[\r\n]+/g, ' ').trim();
-      if (!word || !replacement || replacement.length > 40) {
+      if (!word || !replacement || replacement.length > 40 || (effectiveLayout(project) === 'vertical' && /\s/.test(replacement))) {
         return res.status(400).json({ error: 'invalid_word_correction', message: 'Choose one transcript word and enter 1–40 characters.' });
       }
       if (!word.originalText) word.originalText = word.text;

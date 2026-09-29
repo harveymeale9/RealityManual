@@ -434,6 +434,9 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.words[0].originalText, 'One');
   assert.equal(project.transcriptText, 'Once two. Three four.');
   assert.deepEqual(project.captionGroups.map(function (group) { return group.text; }), ['Once two.']);
+  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wordCorrection: { index: 0, text: 'two words' } }) });
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error, 'invalid_word_correction');
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wordCorrection: { index: 0, text: 'x'.repeat(41) } }) });
   assert.equal(response.status, 400);
   assert.equal((await response.json()).error, 'invalid_word_correction');

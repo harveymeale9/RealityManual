@@ -506,7 +506,7 @@
       '<section class="editor-transcript-panel"><div class="editor-transcript-head"><div><div class="eyebrow">Transcript editor</div><h3>Select words or sentences to cut them from the video</h3></div>' +
         '<div class="editor-transcript-actions"><button class="btn-secondary btn-tiny" id="editorUndo" ' + (!history.length ? 'disabled' : '') + '>Undo</button>' +
         '<button class="btn-secondary btn-tiny" id="editorCorrect" disabled>Correct word</button><button class="btn-secondary btn-tiny" id="editorRestore" disabled>Restore selected</button><button class="btn-primary btn-tiny" id="editorCut" disabled>Cut selected</button></div></div>' +
-        '<div class="editor-correction-tray" id="editorCorrectionTray" hidden><div><strong>Correct caption word</strong><span id="editorCorrectionNote">Timing stays exactly where it is.</span></div><input id="editorCorrectionInput" maxlength="40" autocomplete="off" aria-label="Corrected caption word"><div><button type="button" class="btn-secondary btn-tiny" id="editorCorrectionCancel">Cancel</button><button type="button" class="btn-secondary btn-tiny" id="editorCorrectionOriginal" hidden>Use original</button><button type="button" class="btn-primary btn-tiny" id="editorCorrectionSave">Save correction</button></div></div>' +
+        '<div class="editor-correction-tray" id="editorCorrectionTray" hidden><div><strong>Correct caption word</strong><span id="editorCorrectionNote">Timing stays exactly where it is.</span><em id="editorCorrectionError" hidden></em></div><input id="editorCorrectionInput" maxlength="40" autocomplete="off" aria-label="Corrected caption word"><div><button type="button" class="btn-secondary btn-tiny" id="editorCorrectionCancel">Cancel</button><button type="button" class="btn-secondary btn-tiny" id="editorCorrectionOriginal" hidden>Use original</button><button type="button" class="btn-primary btn-tiny" id="editorCorrectionSave">Save correction</button></div></div>' +
         '<div class="editor-transcript' + (rendering || sentToProduction ? ' locked' : '') + '" id="editorTranscript" tabindex="0">' + (project.words || []).map(function (word) {
           return '<span class="editor-word' + (removed.has(word.index) ? ' removed' : '') + (word.originalText ? ' corrected' : '') + '" data-index="' + word.index + '" data-start="' + word.start + '" data-end="' + word.end + '"' + (word.originalText ? ' title="Originally transcribed as: ' + esc(word.originalText) + '"' : '') + '>' + esc(word.text) + '</span> ';
         }).join('') + '</div><p class="editor-selection-hint">Drag across text or click words. Press Delete to cut, Ctrl/⌘ Z to undo, or Escape to clear. Removed words remain visible so you can restore them.</p></section>' +
@@ -843,6 +843,7 @@
     var input = root.querySelector('#editorCorrectionInput');
     tray.dataset.index = String(index);
     root.querySelector('#editorCorrectionNote').textContent = word.originalText ? 'Originally transcribed as “' + word.originalText + '”. Timing stays unchanged.' : 'Timing stays exactly where it is.';
+    root.querySelector('#editorCorrectionError').hidden = true;
     root.querySelector('#editorCorrectionOriginal').hidden = !word.originalText;
     input.value = word.text;
     tray.hidden = false;
@@ -864,6 +865,13 @@
     var index = Number(tray.dataset.index);
     var word = Number.isInteger(index) ? (project.words || [])[index] : null;
     var replacement = String(input.value || '').replace(/[\r\n]+/g, ' ').trim();
+    var correctionError = root.querySelector('#editorCorrectionError');
+    if ((project.effectiveLayout || 'horizontal') === 'vertical' && /\s/.test(replacement)) {
+      correctionError.textContent = 'Vertical captions allow one word here, without spaces.';
+      correctionError.hidden = false;
+      input.focus();
+      return;
+    }
     if (!word || !replacement || replacement === word.text) return closeWordCorrection();
     tray.hidden = true;
     selected.clear();

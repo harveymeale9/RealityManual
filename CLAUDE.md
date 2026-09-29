@@ -12287,3 +12287,19 @@ The action is hidden for untouched words and remains unavailable in the locked
 Sent archive. Browser coverage now corrects a word, verifies its original cue,
 reopens the tray, restores the original with one click and proves both the text
 and visual correction marker return to their initial state.
+
+---
+
+# 306. Vertical Word Corrections Cannot Become Multi-Word Captions (2026-09-29)
+
+The correction field represented one timed transcript token but still accepted
+spaces. On a vertical project that could turn one caption event into “two words,”
+violating Harvey's explicit one-word replacement treatment even though the event
+timing itself remained singular.
+
+The correction tray now gives an inline, non-destructive validation message when
+a vertical correction contains whitespace, keeps the tray open and leaves the
+saved transcript untouched. The service independently enforces the same rule
+using the project's effective layout, while horizontal longform corrections may
+still contain a short phrase if transcription tokenization genuinely requires
+it. Server and mobile-browser tests cover rejection at both boundaries.
