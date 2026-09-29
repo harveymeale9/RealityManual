@@ -1197,6 +1197,77 @@ app.delete('/api/store/:storeName/:id', function (req, res) {
 // --- File-backed stores (videos, audioTracks) ---
 const upload = multer({ dest: path.join(DATA_DIR, 'tmp'), limits: { fileSize: 2 * 1024 * 1024 * 1024 } });
 
+// Multi-track audio auditions reuse one uploaded spoken sample instead of
+// uploading the same potentially-large video once per soundtrack. Sessions
+// and their rendered MP3s are scratch-only and expire automatically; nothing
+// enters Content Studio's persistent file stores.
+const AUDIO_TEST_SESSION_TTL_MS = 2 * 60 * 60 * 1000;
+const audioTestSessions = new Map();
+function removeAudioTestSession(id) {
+  const session = audioTestSessions.get(id);
+  if (!session) return;
+  audioTestSessions.delete(id);
+  fs.rm(session.dialoguePath, { force: true }, function () {});
+  session.previewPaths.forEach(function (previewPath) {
+    fs.rm(previewPath, { force: true }, function () {});
+  });
+}
+function pruneAudioTestSessions() {
+  const now = Date.now();
+  audioTestSessions.forEach(function (session, id) {
+    if (session.expiresAt <= now) removeAudioTestSession(id);
+  });
+}
+const audioTestPruneTimer = setInterval(pruneAudioTestSessions, 10 * 60 * 1000);
+if (audioTestPruneTimer.unref) audioTestPruneTimer.unref();
+
+app.post('/api/audio-test/sessions', requireAuth, upload.single('dialogue'), function (req, res) {
+  if (!req.file || !req.file.path) return res.status(400).json({ error: 'missing_dialogue' });
+  const id = crypto.randomUUID();
+  audioTestSessions.set(id, {
+    dialoguePath: req.file.path,
+    previewPaths: new Set(),
+    cache: new Map(),
+    expiresAt: Date.now() + AUDIO_TEST_SESSION_TTL_MS
+  });
+  res.json({ id: id, expiresInSeconds: AUDIO_TEST_SESSION_TTL_MS / 1000 });
+});
+
+app.post('/api/audio-test/sessions/:id/preview', requireAuth, async function (req, res) {
+  const session = audioTestSessions.get(req.params.id);
+  if (!session || session.expiresAt <= Date.now()) {
+    if (session) removeAudioTestSession(req.params.id);
+    return res.status(404).json({ error: 'audio_test_session_expired' });
+  }
+  const audioTrackId = req.body && req.body.audioTrackId;
+  const audioPath = isValidId(audioTrackId) ? path.join(UPLOADS_DIR, 'audioTracks', audioTrackId) : '';
+  if (!audioPath || !fs.existsSync(audioPath) || !stmts.getOne.get('audioTracks', audioTrackId)) {
+    return res.status(400).json({ error: 'invalid_audio_track' });
+  }
+  const settings = req.body && req.body.settings && typeof req.body.settings === 'object' ? req.body.settings : {};
+  const normalizedSettings = videoAnalysis.normalizeAudioMixSettings(settings);
+  const cacheKey = audioTrackId + ':' + crypto.createHash('sha256').update(JSON.stringify(normalizedSettings)).digest('hex');
+  session.expiresAt = Date.now() + AUDIO_TEST_SESSION_TTL_MS;
+  const cachedPath = session.cache.get(cacheKey);
+  if (cachedPath && fs.existsSync(cachedPath)) return res.type('audio/mpeg').sendFile(cachedPath);
+
+  const outPath = path.join(DATA_DIR, 'tmp', 'audio-preview-' + crypto.randomUUID() + '.mp3');
+  try {
+    await videoAnalysis.buildAudioPreview(session.dialoguePath, audioPath, outPath, normalizedSettings);
+    session.cache.set(cacheKey, outPath);
+    session.previewPaths.add(outPath);
+    res.type('audio/mpeg').sendFile(outPath);
+  } catch (err) {
+    fs.rm(outPath, { force: true }, function () {});
+    res.status(422).json({ error: 'audio_preview_failed', message: err.message });
+  }
+});
+
+app.delete('/api/audio-test/sessions/:id', requireAuth, function (req, res) {
+  removeAudioTestSession(req.params.id);
+  res.json({ ok: true });
+});
+
 // Ephemeral Content Settings audition: Harvey supplies a real spoken audio or
 // video sample, selects one library track, and gets back the exact audio mix
 // profile used by Final Check. The dialogue upload and rendered MP3 are both

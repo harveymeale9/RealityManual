@@ -11134,3 +11134,37 @@ Project Manager Play button and reproduced the same race: only the automatic
 request and the manually selected request reached TTS, the late automatic
 callback was suppressed, the selected response remained active, and its button
 showed **Stop**. The shared voice-client cache key was bumped on both views.
+
+---
+
+# 253. One Voice Upload Can Audition the Entire Soundtrack Library (2026-09-29)
+
+The Content Settings audio tester previously rendered only one selected track
+at a time. Comparing twenty ambient tracks therefore meant repeatedly choosing
+a track, rebuilding, waiting, and manually seeking the resulting audio back to
+the beginning. It also re-uploaded the same potentially large spoken video for
+every comparison.
+
+The tester now uploads the voice sample once into a temporary audition session
+and builds a separately mixed preview for every saved soundtrack. Two FFmpeg
+workers process the library concurrently, with the initially selected track
+prioritized so the first useful comparison becomes available quickly while the
+rest continue in the background. The dropdown marks building tracks with an
+ellipsis, completed tracks with a check, and failures with a cross. Harvey can
+use **Previous**, **Next**, or the dropdown to move among completed versions;
+every switch changes the soundtrack and restarts the same spoken sample at
+zero for a direct like-for-like comparison.
+
+Rendered browser blobs are cached for instant repeat listening. Their source
+upload and server MP3s never enter a persistent Content Studio store: the
+client deletes the audition session when it is replaced or the page closes,
+and the server independently expires abandoned sessions after two hours.
+Changing any loudness/mixing control invalidates the old batch so the UI cannot
+silently compare previews made with inconsistent settings.
+
+This workflow invokes no AI model and consumes no tokens or provider credits.
+Its only cost is temporary VPS CPU, disk, and elapsed FFmpeg time; the UI says
+so directly. All 82 Node tests pass. A real Chromium UI test with three tracks
+proved there was exactly one source upload and one preview per soundtrack, then
+proved both Previous and Next changed the audio URL and reset playback to the
+beginning. The app and stylesheet cache keys were bumped for immediate pickup.

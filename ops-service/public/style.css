@@ -1886,16 +1886,19 @@ body.role-reviewer #pmBackFab {
 .audio-test-panel { margin: 18px 0; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
 .audio-test-heading h4 { margin: 0 0 4px; color: var(--ink); font-size: .96rem; }
 .audio-test-heading p { margin: 0; max-width: 78ch; color: var(--ink-faint); font-size: .76rem; line-height: 1.5; }
-.audio-test-controls { display: grid; grid-template-columns: auto minmax(130px, 1fr) minmax(190px, 1fr) auto; gap: 10px; align-items: center; margin-top: 14px; }
+.audio-test-controls { display: grid; grid-template-columns: auto minmax(130px, 1fr) auto; gap: 10px; align-items: center; margin-top: 14px; }
 .audio-test-file { overflow: hidden; color: var(--ink-soft); font-size: .8rem; text-overflow: ellipsis; white-space: nowrap; }
 .audio-test-controls select { width: 100%; }
+.audio-test-switcher { display: grid; grid-template-columns: auto minmax(220px, 1fr) auto; gap: 10px; align-items: center; margin-top: 12px; }
+.audio-test-switcher select { width: 100%; }
 .audio-test-status { min-height: 1.2em; margin-top: 10px; color: var(--ink-faint); font-size: .76rem; }
 .audio-test-player { width: 100%; height: 36px; margin-top: 8px; }
+.audio-test-cost { margin: 8px 0 0; color: var(--ink-faint); font-size: .7rem; line-height: 1.4; }
 
 @media (max-width: 820px) {
   .audio-row { grid-template-columns: 1fr; }
   .audio-track-meta { grid-template-columns: 1fr; }
-  .audio-test-controls { grid-template-columns: 1fr; align-items: stretch; }
+  .audio-test-controls, .audio-test-switcher { grid-template-columns: 1fr; align-items: stretch; }
 }
 
 /* Real per-file upload feedback (§109-adjacent fix) — was previously

@@ -4218,11 +4218,16 @@
           '<div class="audio-test-controls">' +
             '<label class="btn-secondary file-btn">Choose voice sample<input type="file" id="audioTestDialogue" accept="audio/*,video/*" hidden /></label>' +
             '<span class="audio-test-file" id="audioTestFileName">No file chosen</span>' +
+            '<button type="button" class="btn-primary" id="audioTestBuild">Build all soundtrack previews</button>' +
+          '</div>' +
+          '<div class="audio-test-switcher" id="audioTestSwitcher">' +
+            '<button type="button" class="btn-secondary" id="audioTestPrevious" aria-label="Previous soundtrack">← Previous</button>' +
             '<select class="stage-select" id="audioTestTrack"><option value="">Choose an ambient track</option></select>' +
-            '<button type="button" class="btn-primary" id="audioTestBuild">Build test mix</button>' +
+            '<button type="button" class="btn-secondary" id="audioTestNext" aria-label="Next soundtrack">Next →</button>' +
           '</div>' +
           '<div class="audio-test-status" id="audioTestStatus"></div>' +
           '<audio class="audio-test-player" id="audioTestPlayer" controls hidden></audio>' +
+          '<p class="audio-test-cost">No AI tokens or credits are used. Preview building only uses temporary FFmpeg processing on the server.</p>' +
         '</div>' +
         '<label class="btn-secondary file-btn">Upload audio<input type="file" id="audioUpload" accept="audio/*" multiple hidden /></label>' +
         '<div class="audio-upload-progress" id="audioUploadProgress"></div>' +
@@ -4519,8 +4524,10 @@
 
   var audioListObjectUrls = [];
   var audioTestPreviewUrl = '';
+  var audioTestTracks = [];
 
   function refreshAudioTestTrackOptions(tracks) {
+    audioTestTracks = tracks.slice();
     var select = document.getElementById('audioTestTrack');
     if (!select) return;
     var selected = select.value;
@@ -4620,44 +4627,179 @@
     var fileName = document.getElementById('audioTestFileName');
     var trackSelect = document.getElementById('audioTestTrack');
     var buildBtn = document.getElementById('audioTestBuild');
+    var previousBtn = document.getElementById('audioTestPrevious');
+    var nextBtn = document.getElementById('audioTestNext');
     var status = document.getElementById('audioTestStatus');
     var player = document.getElementById('audioTestPlayer');
     var dialogueFile = null;
+    var sessionId = '';
+    var previewUrls = new Map();
+    var previewStates = new Map();
+    var buildRun = 0;
+
+    function cleanupSession() {
+      if (!sessionId) return;
+      var oldSessionId = sessionId;
+      sessionId = '';
+      fetch('/api/audio-test/sessions/' + encodeURIComponent(oldSessionId), {
+        method: 'DELETE', credentials: 'include', keepalive: true
+      }).catch(function () {});
+    }
+
+    function clearPreviews(message) {
+      buildRun++;
+      cleanupSession();
+      previewUrls.forEach(function (url) { URL.revokeObjectURL(url); });
+      previewUrls.clear();
+      previewStates.clear();
+      if (audioTestPreviewUrl) URL.revokeObjectURL(audioTestPreviewUrl);
+      audioTestPreviewUrl = '';
+      player.pause();
+      player.removeAttribute('src');
+      player.load();
+      player.hidden = true;
+      updateTrackLabels();
+      if (message) status.textContent = message;
+    }
+
+    function updateTrackLabels() {
+      Array.prototype.forEach.call(trackSelect.options, function (option) {
+        if (!option.value) return;
+        var track = audioTestTracks.find(function (candidate) { return candidate.id === option.value; });
+        var state = previewStates.get(option.value);
+        var prefix = state === 'ready' ? '✓ ' : (state === 'building' ? '… ' : (state === 'error' ? '✕ ' : ''));
+        option.textContent = prefix + ((track && track.name) || option.textContent.replace(/^[✓…✕]\s+/, ''));
+      });
+    }
+
+    function playSelected() {
+      var trackId = trackSelect.value;
+      if (!trackId) return;
+      var url = previewUrls.get(trackId);
+      if (!url) {
+        status.textContent = previewStates.get(trackId) === 'error'
+          ? 'That soundtrack preview could not be built.'
+          : 'That soundtrack is still being built…';
+        return;
+      }
+      audioTestPreviewUrl = url;
+      if (player.src !== url) player.src = url;
+      player.hidden = false;
+      player.currentTime = 0;
+      var track = audioTestTracks.find(function (candidate) { return candidate.id === trackId; });
+      status.textContent = 'Playing from the start with ' + ((track && track.name) || 'the selected soundtrack') + '.';
+      player.play().catch(function () {});
+    }
+
+    function moveSelection(direction) {
+      if (!audioTestTracks.length) return;
+      var index = audioTestTracks.findIndex(function (track) { return track.id === trackSelect.value; });
+      if (index < 0) index = 0;
+      else index = (index + direction + audioTestTracks.length) % audioTestTracks.length;
+      trackSelect.value = audioTestTracks[index].id;
+      playSelected();
+    }
+
+    function uploadSession(file) {
+      var fd = new FormData();
+      fd.append('dialogue', file, file.name);
+      return fetch('/api/audio-test/sessions', { method: 'POST', credentials: 'include', body: fd })
+        .then(function (response) {
+          if (response.ok) return response.json();
+          throw new Error('Could not upload the voice sample.');
+        });
+    }
+
+    function buildTrackPreview(track, settings, thisRun) {
+      if (thisRun !== buildRun) return Promise.resolve();
+      previewStates.set(track.id, 'building');
+      updateTrackLabels();
+      return fetch('/api/audio-test/sessions/' + encodeURIComponent(sessionId) + '/preview', {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audioTrackId: track.id, settings: settings })
+      }).then(function (response) {
+        if (response.ok) return response.blob();
+        return response.json().catch(function () { return {}; }).then(function (body) {
+          throw new Error(body.message || 'Could not build ' + track.name + '.');
+        });
+      }).then(function (blob) {
+        if (thisRun !== buildRun) return;
+        var url = URL.createObjectURL(blob);
+        previewUrls.set(track.id, url);
+        previewStates.set(track.id, 'ready');
+        updateTrackLabels();
+        if (trackSelect.value === track.id) playSelected();
+      }).catch(function () {
+        if (thisRun !== buildRun) return;
+        previewStates.set(track.id, 'error');
+        updateTrackLabels();
+      });
+    }
+
     input.disabled = IS_REVIEWER;
     trackSelect.disabled = IS_REVIEWER;
     buildBtn.disabled = IS_REVIEWER;
+    previousBtn.disabled = IS_REVIEWER;
+    nextBtn.disabled = IS_REVIEWER;
     input.addEventListener('change', function () {
       dialogueFile = input.files && input.files[0];
       fileName.textContent = dialogueFile ? dialogueFile.name : 'No file chosen';
-      status.textContent = '';
+      clearPreviews(dialogueFile ? 'Ready to build every soundtrack preview.' : '');
     });
+    trackSelect.addEventListener('change', playSelected);
+    previousBtn.addEventListener('click', function () { moveSelection(-1); });
+    nextBtn.addEventListener('click', function () { moveSelection(1); });
     buildBtn.addEventListener('click', function () {
       if (!dialogueFile) { status.textContent = 'Choose a voice recording first.'; return; }
-      if (!trackSelect.value) { status.textContent = 'Choose an ambient track first.'; return; }
-      var fd = new FormData();
-      fd.append('dialogue', dialogueFile, dialogueFile.name);
-      fd.append('audioTrackId', trackSelect.value);
-      fd.append('settings', JSON.stringify(settingsCache || {}));
+      if (!audioTestTracks.length) { status.textContent = 'Upload an ambient track first.'; return; }
+      clearPreviews();
+      var thisRun = ++buildRun;
+      var settings = Object.assign({}, settingsCache || {});
+      if (!trackSelect.value) trackSelect.value = audioTestTracks[0].id;
+      var selectedId = trackSelect.value;
+      var queue = audioTestTracks.slice().sort(function (a, b) {
+        return (a.id === selectedId ? -1 : 0) - (b.id === selectedId ? -1 : 0);
+      });
+      var completed = 0;
       buildBtn.disabled = true;
       player.hidden = true;
-      status.textContent = 'Measuring the voice, checking the track\'s loudest section, and building the mix…';
-      fetch('/api/audio-test/preview', { method: 'POST', credentials: 'include', body: fd })
-        .then(function (response) {
-          if (response.ok) return response.blob();
-          return response.json().catch(function () { return {}; }).then(function (body) {
-            throw new Error(body.message || 'Could not build the test mix.');
+      status.textContent = 'Uploading the voice sample once…';
+      uploadSession(dialogueFile).then(function (session) {
+        if (thisRun !== buildRun) return;
+        sessionId = session.id;
+        status.textContent = 'Building 0 of ' + queue.length + ' soundtrack previews…';
+        var cursor = 0;
+        function worker() {
+          if (cursor >= queue.length || thisRun !== buildRun) return Promise.resolve();
+          var track = queue[cursor++];
+          return buildTrackPreview(track, settings, thisRun).then(function () {
+            completed++;
+            if (thisRun === buildRun) status.textContent = 'Built ' + completed + ' of ' + queue.length + ' soundtrack previews. You can switch as they become ready.';
+            return worker();
           });
-        })
-        .then(function (blob) {
-          if (audioTestPreviewUrl) URL.revokeObjectURL(audioTestPreviewUrl);
-          audioTestPreviewUrl = URL.createObjectURL(blob);
-          player.src = audioTestPreviewUrl;
-          player.hidden = false;
-          status.textContent = 'Ready. This uses the same loudness settings as Final Check.';
-          return player.play().catch(function () {});
-        })
-        .catch(function (err) { status.textContent = (err && err.message) || 'Could not build the test mix.'; })
-        .finally(function () { buildBtn.disabled = IS_REVIEWER; });
+        }
+        return Promise.all([worker(), worker()]);
+      }).then(function () {
+        if (thisRun !== buildRun) return;
+        var readyCount = Array.from(previewStates.values()).filter(function (state) { return state === 'ready'; }).length;
+        status.textContent = readyCount + ' soundtrack previews ready. Previous, Next, or the dropdown always restarts the voice sample from the beginning.';
+        buildBtn.disabled = IS_REVIEWER;
+      }).catch(function (err) {
+        if (thisRun !== buildRun) return;
+        status.textContent = (err && err.message) || 'Could not build the soundtrack previews.';
+        buildBtn.disabled = IS_REVIEWER;
+      });
+    });
+
+    ['audioMixModeSelect', 'dialogueLufsSelect', 'musicBelowDialogueSelect', 'audioTruePeakSelect', 'musicDuckingToggle', 'ambientMusicVolumeSelect'].forEach(function (id) {
+      var control = document.getElementById(id);
+      if (control) control.addEventListener('change', function () {
+        if (previewUrls.size || sessionId) clearPreviews('Mix settings changed. Build the soundtrack previews again.');
+      });
+    });
+    window.addEventListener('beforeunload', function () {
+      cleanupSession();
+      previewUrls.forEach(function (url) { URL.revokeObjectURL(url); });
     });
   }
 
