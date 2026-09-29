@@ -933,7 +933,14 @@
       }
       if (!previewingOriginalMaster) {
         var cut = (project.cuts || []).filter(function (item) { return video.currentTime >= item.start && video.currentTime < item.end; })[0];
-        if (cut && cut.end < video.duration) { video.currentTime = cut.end + 0.01; return; }
+        if (cut && cut.end < video.duration - 0.02) { video.currentTime = cut.end + 0.01; return; }
+        if (cut) {
+          // A trailing cut has no retained timestamp to jump into. Stop on the
+          // final kept frame rather than playing silence absent from the render.
+          video.pause();
+          video.currentTime = Math.max(0, cut.start - 0.01);
+          return;
+        }
       }
       var group = (project.captionGroups || []).filter(function (item) {
         return video.currentTime >= item.sourceStart && video.currentTime <= item.sourceEnd + 0.18;

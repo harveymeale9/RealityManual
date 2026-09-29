@@ -13810,3 +13810,19 @@ may update global project/workspace state or show an error; remounting also
 invalidates every prior response. The regression deliberately overlaps saves,
 remounting, polling, and next-card navigation and requires the clicked card to
 remain selected.
+
+---
+
+# 382. Working Preview Honors Removed Ending Silence (2026-09-29)
+
+Instant cut preview skipped opening and middle cuts by seeking to each cut's
+end, but deliberately required `cut.end < video.duration`. A trailing-silence
+cut ends at the duration, so the working preview played that red section even
+though FFmpeg removes it from the final file. This undermined the purpose of
+reviewing pacing before an encode completed.
+
+When playback enters a trailing cut, the Editor now pauses on the last retained
+frame just before the cut starts. Non-trailing cuts retain the seamless forward
+seek. The headless browser injects an ending cut, enters it, and requires the
+playhead to return to the kept boundary; the project's normal state is then
+restored for the rest of the workflow regression.
