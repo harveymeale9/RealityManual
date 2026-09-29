@@ -12012,3 +12012,21 @@ preview now uses CSS container-relative units and the identical length-fitting
 formula, so it represents the eventual baked frame instead of showing a font
 whose apparent size changed with the browser viewport. Tests cover exact
 one-word timing, the new style/position and a 24-character fitted word.
+
+---
+
+# 291. Editor Approval Remains Available During Desktop Review (2026-09-29)
+
+The readiness/Production bar is now sticky at the bottom of desktop review.
+Long portrait previews, pause decisions and transcripts no longer force Harvey
+to scroll to the very end again merely to see whether the output is ready or
+approve it. The bar keeps its status chips, progress/error state and sole
+primary action, with a translucent backed surface and upper shadow so it stays
+legible over the workspace.
+
+The workspace changed from `overflow:hidden` to non-scroll-container
+`overflow:clip`, preserving rounded-boundary clipping without breaking sticky
+positioning. At phone width the action returns to normal document flow so a
+tall stacked bar never consumes the limited viewport. Browser checks assert
+the computed desktop/mobile positioning and retain the existing no-overflow
+guarantees.
