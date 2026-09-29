@@ -11172,3 +11172,30 @@ After deployment, the authenticated live API was also exercised with one
 uploaded voice sample and two real library tracks. It returned two playable
 four-second MP3s from the same session, then confirmed successful explicit
 session deletion.
+
+---
+
+# 254. Audio Audition Navigation Lists Only Playable Previews (2026-09-29)
+
+The first batch-audition UI exposed every soundtrack in its dropdown from the
+moment rendering began. Selecting one that was still building changed the
+visible name but had no new blob to assign to the audio element, so the old mix
+continued playing. This made Previous/Next appear broken during the exact
+incremental-build window the controls were meant to support.
+
+Once a batch starts, the switcher now contains only previews that have actually
+finished rendering. It initially says **Building the first preview…**, adds each
+track with a checkmark as its blob becomes available, and keeps Previous/Next
+disabled until at least two real alternatives can be played. Both buttons now
+cycle strictly through that completed subset; they never select a placeholder
+or leave the prior soundtrack playing under a different label. The first
+completed preview begins playing as before, and every later dropdown/button
+selection swaps the blob and resets playback to zero.
+
+All 82 Node tests pass. A deliberately staggered real Chromium run verified
+that the dropdown contained exactly one option after one of three renders,
+that navigation stayed disabled, that the second option appeared only after
+its render completed, and that Next then changed the audio source and restarted
+it. Previous returned to the first source at zero, the third preview appeared
+after completion, and the 390-pixel layout retained zero horizontal overflow.
+The app cache key was bumped so the corrected client loads immediately.

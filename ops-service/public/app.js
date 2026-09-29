@@ -4636,6 +4636,7 @@
     var previewUrls = new Map();
     var previewStates = new Map();
     var buildRun = 0;
+    var auditionStarted = false;
 
     function cleanupSession() {
       if (!sessionId) return;
@@ -4648,6 +4649,7 @@
 
     function clearPreviews(message) {
       buildRun++;
+      auditionStarted = false;
       cleanupSession();
       previewUrls.forEach(function (url) { URL.revokeObjectURL(url); });
       previewUrls.clear();
@@ -4663,6 +4665,20 @@
     }
 
     function updateTrackLabels() {
+      if (auditionStarted) {
+        var selected = previewStates.get(trackSelect.value) === 'ready' ? trackSelect.value : '';
+        var readyTracks = audioTestTracks.filter(function (track) { return previewStates.get(track.id) === 'ready'; });
+        trackSelect.innerHTML = readyTracks.length
+          ? readyTracks.map(function (track) {
+            return '<option value="' + escapeHtml(track.id) + '">✓ ' + escapeHtml(track.name || 'Untitled track') + '</option>';
+          }).join('')
+          : '<option value="">Building the first preview…</option>';
+        trackSelect.value = selected || (readyTracks[0] && readyTracks[0].id) || '';
+        trackSelect.disabled = IS_REVIEWER || !readyTracks.length;
+        previousBtn.disabled = IS_REVIEWER || readyTracks.length < 2;
+        nextBtn.disabled = IS_REVIEWER || readyTracks.length < 2;
+        return;
+      }
       Array.prototype.forEach.call(trackSelect.options, function (option) {
         if (!option.value) return;
         var track = audioTestTracks.find(function (candidate) { return candidate.id === option.value; });
@@ -4670,6 +4686,9 @@
         var prefix = state === 'ready' ? '✓ ' : (state === 'building' ? '… ' : (state === 'error' ? '✕ ' : ''));
         option.textContent = prefix + ((track && track.name) || option.textContent.replace(/^[✓…✕]\s+/, ''));
       });
+      trackSelect.disabled = IS_REVIEWER;
+      previousBtn.disabled = true;
+      nextBtn.disabled = true;
     }
 
     function playSelected() {
@@ -4692,11 +4711,14 @@
     }
 
     function moveSelection(direction) {
-      if (!audioTestTracks.length) return;
-      var index = audioTestTracks.findIndex(function (track) { return track.id === trackSelect.value; });
+      var availableTracks = auditionStarted
+        ? audioTestTracks.filter(function (track) { return previewStates.get(track.id) === 'ready'; })
+        : [];
+      if (!availableTracks.length) return;
+      var index = availableTracks.findIndex(function (track) { return track.id === trackSelect.value; });
       if (index < 0) index = 0;
-      else index = (index + direction + audioTestTracks.length) % audioTestTracks.length;
-      trackSelect.value = audioTestTracks[index].id;
+      else index = (index + direction + availableTracks.length) % availableTracks.length;
+      trackSelect.value = availableTracks[index].id;
       playSelected();
     }
 
@@ -4739,8 +4761,8 @@
     input.disabled = IS_REVIEWER;
     trackSelect.disabled = IS_REVIEWER;
     buildBtn.disabled = IS_REVIEWER;
-    previousBtn.disabled = IS_REVIEWER;
-    nextBtn.disabled = IS_REVIEWER;
+    previousBtn.disabled = true;
+    nextBtn.disabled = true;
     input.addEventListener('change', function () {
       dialogueFile = input.files && input.files[0];
       fileName.textContent = dialogueFile ? dialogueFile.name : 'No file chosen';
@@ -4760,6 +4782,8 @@
       var queue = audioTestTracks.slice().sort(function (a, b) {
         return (a.id === selectedId ? -1 : 0) - (b.id === selectedId ? -1 : 0);
       });
+      auditionStarted = true;
+      updateTrackLabels();
       var completed = 0;
       buildBtn.disabled = true;
       player.hidden = true;
