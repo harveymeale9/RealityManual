@@ -11412,3 +11412,33 @@ retake-candidate generation, classification contact-sheet creation, vertical
 crop rendering, captions and the production handoff. All 95 repository tests
 pass, and the real Chromium workflow passes at desktop and 390px mobile widths
 with no page errors or horizontal overflow.
+
+---
+
+# 261. Semantic Retake Decisions With Conservative Automatic Cuts (2026-09-29)
+
+Once word-timed transcription finishes, the Editor now runs a separate
+tool-free structured Claude review over the indexed transcript. Its only task
+is to distinguish an abandoned/stumbled take followed by a cleaner nearby
+replacement from intentional rhetorical repetition. It returns exact inclusive
+source-word ranges, the replacement range, a reason, and either `high` or
+`review` confidence. The prompt explicitly forbids treating emphasis,
+callbacks, or unique meaning as disposable and exposes no filesystem, shell, or
+network tools to transcript content.
+
+Only high-confidence failed attempts are cut automatically, matching Harvey's
+automatic-first workflow. They remain visible in Smart Review as **Removed
+automatically**, with the rejected and retained wording side by side and a
+one-click **Restore first take** action. Uncertain repetition is never removed;
+it remains a **Check repetition** card offering **Use latest take** or **Keep
+both**. Dismissals and restored words persist, the original recording remains
+untouched, and every accepted range still flows through the same word-timed
+manual-cut/FFmpeg path rather than a second lossy edit mechanism.
+
+Retake analysis has explicit pending/running/error/ready states, resumes as a
+retry rather than a spinner after a service restart, and can be requested for
+older Editor projects from the review panel. A deterministic adjacent-phrase
+detector remains as a no-cost UI fallback if no semantic decisions exist. Tests
+cover bounded semantic ranges, automatic application of high-confidence cuts,
+the async analysis lifecycle, and restoration alongside the existing complete
+render/handoff path.

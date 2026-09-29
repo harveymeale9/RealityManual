@@ -45,6 +45,7 @@
     if (item.transcriptionStatus === 'pending' || item.transcriptionStatus === 'running') return 'Transcribing';
     if (item.transcriptionStatus === 'error') return 'Needs attention';
     if (item.classificationStatus === 'pending' || item.classificationStatus === 'running') return 'Analyzing frame';
+    if (item.retakeAnalysisStatus === 'pending' || item.retakeAnalysisStatus === 'running') return 'Checking retakes';
     if (item.renderStatus === 'running') return 'Rendering';
     if (item.renderStatus === 'ready') return 'Export ready';
     return 'Ready to edit';
@@ -90,13 +91,15 @@
     var dismissed = new Set((item.dismissedRetakeIds || []).map(String));
     var removed = new Set((item.removedWordIndices || []).map(Number));
     var candidates = (item.retakeCandidates || []).filter(function (candidate) {
-      return !dismissed.has(candidate.id) && !candidate.removeWordIndices.every(function (index) { return removed.has(index); });
+      return !dismissed.has(candidate.id);
     });
+    if (!candidates.length && (item.retakeAnalysisStatus === 'pending' || item.retakeAnalysisStatus === 'running')) return '<div class="editor-review-empty editor-review-loading">Checking for false starts and repeated takes…</div>';
     if (!candidates.length) return '<div class="editor-review-empty">No likely retakes need review.</div>';
     return candidates.map(function (candidate) {
-      return '<div class="editor-retake-card"><div class="editor-retake-badge ' + esc(candidate.confidence) + '">' + (candidate.confidence === 'high' ? 'Likely retake' : 'Check repetition') + '</div>' +
+      var applied = candidate.removeWordIndices.every(function (index) { return removed.has(index); });
+      return '<div class="editor-retake-card' + (applied ? ' applied' : '') + '"><div class="editor-retake-badge ' + esc(candidate.confidence) + '">' + (applied ? 'Removed automatically' : candidate.confidence === 'high' ? 'Likely retake' : 'Check repetition') + '</div>' +
         '<p><del>“' + esc(candidate.firstText) + '”</del></p><p class="replacement">Latest take: “' + esc(candidate.replacementText) + '”</p><span>' + esc(candidate.reason) + '</span>' +
-        '<div><button type="button" class="btn-primary btn-tiny editor-retake-apply" data-id="' + esc(candidate.id) + '">Use latest take</button><button type="button" class="btn-secondary btn-tiny editor-retake-dismiss" data-id="' + esc(candidate.id) + '">Keep both</button></div></div>';
+        '<div>' + (applied ? '' : '<button type="button" class="btn-primary btn-tiny editor-retake-apply" data-id="' + esc(candidate.id) + '">Use latest take</button>') + '<button type="button" class="btn-secondary btn-tiny editor-retake-dismiss" data-id="' + esc(candidate.id) + '" data-applied="' + (applied ? '1' : '0') + '">' + (applied ? 'Restore first take' : 'Keep both') + '</button></div></div>';
     }).join('');
   }
 
@@ -188,7 +191,8 @@
     clearTimeout(pollTimer);
     if (!project) return;
     var active = ['pending', 'running'].indexOf(project.transcriptionStatus) !== -1 ||
-      ['pending', 'running'].indexOf(project.classificationStatus) !== -1 || project.renderStatus === 'running';
+      ['pending', 'running'].indexOf(project.classificationStatus) !== -1 ||
+      ['pending', 'running'].indexOf(project.retakeAnalysisStatus) !== -1 || project.renderStatus === 'running';
     if (!active) return;
     var id = project.id;
     var token = mountToken;
@@ -235,7 +239,8 @@
           '<label class="editor-toggle"><input type="checkbox" id="editorCaptions" ' + (project.captionsEnabled !== false ? 'checked' : '') + '><span></span>Add yellow captions</label>' +
           '<label class="editor-mode">Pacing<select id="editorPacing"><option value="tight"' + (Number(project.silenceThresholdSeconds) < 0.85 ? ' selected' : '') + '>Tight</option><option value="natural"' + (Number(project.silenceThresholdSeconds || 1) >= 0.85 && Number(project.silenceThresholdSeconds || 1) < 1.3 ? ' selected' : '') + '>Natural</option><option value="gentle"' + (Number(project.silenceThresholdSeconds || 1) >= 1.3 ? ' selected' : '') + '>Gentle</option></select></label></div></section>' +
       '<section class="editor-review"><div class="editor-review-column"><div class="editor-section-title"><div><div class="eyebrow">Pause decisions</div><h3>Every automatic silence cut</h3></div><span>Red means removed</span></div><div id="editorGapReview">' + gapReviewHtml(project) + '</div></div>' +
-        '<div class="editor-review-column"><div class="editor-section-title"><div><div class="eyebrow">Smart review</div><h3>Possible retakes</h3></div><span>Nothing is removed without approval</span></div><div id="editorRetakeReview">' + retakeReviewHtml(project) + '</div></div></section>' +
+        '<div class="editor-review-column"><div class="editor-section-title"><div><div class="eyebrow">Smart review</div><h3>Possible retakes</h3></div>' +
+          (project.retakeAnalysisStatus !== 'ready' && project.retakeAnalysisStatus !== 'pending' && project.retakeAnalysisStatus !== 'running' ? '<button type="button" class="editor-analyze" id="editorAnalyzeRetakes">Analyze retakes</button>' : '<span>Only clear failed takes are automatic</span>') + '</div><div id="editorRetakeReview">' + retakeReviewHtml(project) + '</div></div></section>' +
       '<section class="editor-transcript-panel"><div class="editor-transcript-head"><div><div class="eyebrow">Transcript editor</div><h3>Select words or sentences to cut them from the video</h3></div>' +
         '<div class="editor-transcript-actions"><button class="btn-secondary btn-tiny" id="editorUndo" ' + (!history.length ? 'disabled' : '') + '>Undo</button>' +
         '<button class="btn-secondary btn-tiny" id="editorRestore" disabled>Restore selected</button><button class="btn-primary btn-tiny" id="editorCut" disabled>Cut selected</button></div></div>' +
@@ -337,6 +342,14 @@
         project.classificationStatus = 'running'; renderWorkspace(); schedulePoll();
       }).catch(function (error) { alert(error.message); renderWorkspace(); });
     };
+    var retakeAnalyzeButton = root.querySelector('#editorAnalyzeRetakes');
+    if (retakeAnalyzeButton) retakeAnalyzeButton.onclick = function () {
+      retakeAnalyzeButton.disabled = true;
+      retakeAnalyzeButton.textContent = 'Analyzing…';
+      api('/api/editor/' + project.id + '/analyze-retakes', { method: 'POST' }).then(function () {
+        project.retakeAnalysisStatus = 'running'; renderWorkspace(); schedulePoll();
+      }).catch(function (error) { alert(error.message); renderWorkspace(); });
+    };
     root.querySelector('#editorPacing').onchange = function () {
       var settings = { tight: [0.7, 0.22], natural: [1, 0.38], gentle: [1.5, 0.55] }[this.value] || [1, 0.38];
       save({ silenceThresholdSeconds: settings[0], retainedPauseSeconds: settings[1] }, true);
@@ -370,7 +383,15 @@
       button.onclick = function () {
         var next = new Set((project.dismissedRetakeIds || []).map(String));
         next.add(button.dataset.id);
-        save({ dismissedRetakeIds: Array.from(next) }, true);
+        var patch = { dismissedRetakeIds: Array.from(next) };
+        if (button.dataset.applied === '1') {
+          var candidate = (project.retakeCandidates || []).find(function (item) { return item.id === button.dataset.id; });
+          var removed = new Set((project.removedWordIndices || []).map(Number));
+          if (candidate) candidate.removeWordIndices.forEach(function (index) { removed.delete(index); });
+          patch.removedWordIndices = Array.from(removed).sort(function (a, b) { return a - b; });
+          history.push((project.removedWordIndices || []).slice());
+        }
+        save(patch, true);
       };
     });
     var renderButton = root.querySelector('#editorRender');

@@ -204,6 +204,35 @@ function retakeCandidates(words) {
   return output;
 }
 
+function normalizeRetakeDecisions(raw, words) {
+  return (Array.isArray(raw) ? raw : []).map(function (decision, index) {
+    const start = Math.max(0, Math.floor(Number(decision.removeStartIndex)));
+    const end = Math.min(words.length - 1, Math.floor(Number(decision.removeEndIndex)));
+    if (!Number.isInteger(start) || !Number.isInteger(end) || end < start || end - start > 250) return null;
+    const removeWordIndices = [];
+    for (let wordIndex = start; wordIndex <= end; wordIndex++) removeWordIndices.push(wordIndex);
+    const replacementStart = Math.max(0, Math.floor(Number(decision.replacementStartIndex)));
+    const replacementEnd = Math.min(words.length - 1, Math.floor(Number(decision.replacementEndIndex)));
+    return {
+      id: 'smart-retake-' + index + '-' + start + '-' + end,
+      removeWordIndices: removeWordIndices,
+      firstText: words.slice(start, end + 1).map(function (word) { return word.text; }).join(' '),
+      replacementText: replacementEnd >= replacementStart
+        ? words.slice(replacementStart, replacementEnd + 1).map(function (word) { return word.text; }).join(' ')
+        : String(decision.replacementText || ''),
+      confidence: decision.confidence === 'high' ? 'high' : 'review',
+      reason: String(decision.reason || 'A nearby take may replace this wording.').slice(0, 300),
+      source: 'semantic'
+    };
+  }).filter(Boolean);
+}
+
+function retakeCandidatesForProject(project) {
+  return Array.isArray(project.retakeDecisions) && project.retakeDecisions.length
+    ? project.retakeDecisions
+    : retakeCandidates(project.words || []);
+}
+
 function keepSegments(duration, cuts) {
   const total = Math.max(0, Number(duration) || 0);
   const segments = [];
@@ -336,6 +365,7 @@ function setup(options) {
   const transcribeDetailed = options.transcribeDetailed;
   const handoffToProduction = options.handoffToProduction;
   const classifyVisualLayout = options.classifyVisualLayout;
+  const analyzeRetakes = options.analyzeRetakes;
   if (!db || !dataDir || typeof transcribeDetailed !== 'function') throw new Error('video editor setup is incomplete');
   const router = express.Router();
   const rootDir = path.join(dataDir, 'editor');
@@ -350,6 +380,7 @@ function setup(options) {
   const transcriptionJobs = new Map();
   const renderJobs = new Map();
   const classificationJobs = new Map();
+  const retakeJobs = new Map();
 
   function getProject(id) {
     const row = getStmt.get(STORE_NAME, id);
@@ -407,7 +438,11 @@ function setup(options) {
         project.autoSilenceEnabled = true;
         project.transcriptionStatus = project.words.length ? 'ready' : 'error';
         project.transcriptionError = project.words.length ? '' : 'No timed speech was detected in this recording.';
+        project.retakeAnalysisStatus = project.words.length && typeof analyzeRetakes === 'function' ? 'pending' : 'unavailable';
+        project.retakeAnalysisError = '';
+        project.retakeDecisions = [];
         saveProject(project);
+        if (project.words.length && typeof analyzeRetakes === 'function') setImmediate(function () { analyzeProjectRetakes(id); });
       } catch (err) {
         project = getProject(id);
         if (project) {
@@ -420,6 +455,44 @@ function setup(options) {
       }
     })().finally(function () { transcriptionJobs.delete(id); });
     transcriptionJobs.set(id, job);
+    return job;
+  }
+
+  async function analyzeProjectRetakes(id) {
+    if (retakeJobs.has(id)) return retakeJobs.get(id);
+    if (typeof analyzeRetakes !== 'function') return;
+    const job = (async function () {
+      let project = getProject(id);
+      if (!project || project.transcriptionStatus !== 'ready') return;
+      project.retakeAnalysisStatus = 'running';
+      project.retakeAnalysisError = '';
+      saveProject(project);
+      try {
+        const raw = await analyzeRetakes({ words: project.words || [], transcriptText: project.transcriptText || '' });
+        project = getProject(id);
+        if (!project) return;
+        const decisions = normalizeRetakeDecisions(raw && raw.decisions, project.words || []);
+        const removed = new Set((project.removedWordIndices || []).map(Number));
+        decisions.filter(function (decision) { return decision.confidence === 'high'; }).forEach(function (decision) {
+          decision.removeWordIndices.forEach(function (index) { removed.add(index); });
+        });
+        project.removedWordIndices = Array.from(removed).sort(function (a, b) { return a - b; });
+        project.retakeDecisions = decisions;
+        project.retakeAnalysisStatus = 'ready';
+        project.retakeAnalysisError = '';
+        project.renderStatus = '';
+        project.renderError = '';
+        saveProject(project);
+      } catch (err) {
+        project = getProject(id);
+        if (project) {
+          project.retakeAnalysisStatus = 'error';
+          project.retakeAnalysisError = String(err.message || err).slice(0, 500);
+          saveProject(project);
+        }
+      }
+    })().finally(function () { retakeJobs.delete(id); });
+    retakeJobs.set(id, job);
     return job;
   }
 
@@ -551,6 +624,11 @@ async function renderProject(id) {
         project.classificationError = 'Frame analysis was interrupted by a service restart. Press Analyze again.';
         saveProject(project);
       }
+      if (project.retakeAnalysisStatus === 'running') {
+        project.retakeAnalysisStatus = 'error';
+        project.retakeAnalysisError = 'Retake analysis was interrupted by a service restart. Press Analyze retakes.';
+        saveProject(project);
+      }
     } catch (e) {}
   });
 
@@ -614,6 +692,9 @@ async function renderProject(id) {
         visualClassification: null,
         classificationStatus: typeof classifyVisualLayout === 'function' ? 'pending' : 'unavailable',
         classificationError: '',
+        retakeAnalysisStatus: typeof analyzeRetakes === 'function' ? 'pending_transcript' : 'unavailable',
+        retakeAnalysisError: '',
+        retakeDecisions: [],
         transcriptionStatus: 'pending',
         transcriptionError: '',
         renderStatus: '',
@@ -637,7 +718,7 @@ async function renderProject(id) {
     project.cuts = cutsForProject(project);
     project.captionGroups = captionGroups(project, project.cuts);
     project.gapDecisions = gapDecisions(project);
-    project.retakeCandidates = retakeCandidates(project.words || []);
+    project.retakeCandidates = retakeCandidatesForProject(project);
     project.effectiveLayout = effectiveLayout(project);
     project.detectedContentType = contentTypeForProject(project, project.cuts);
     res.json(project);
@@ -674,7 +755,7 @@ async function renderProject(id) {
     project.cuts = cutsForProject(project);
     project.captionGroups = captionGroups(project, project.cuts);
     project.gapDecisions = gapDecisions(project);
-    project.retakeCandidates = retakeCandidates(project.words || []);
+    project.retakeCandidates = retakeCandidatesForProject(project);
     project.effectiveLayout = effectiveLayout(project);
     project.detectedContentType = contentTypeForProject(project, project.cuts);
     res.json(project);
@@ -695,6 +776,16 @@ async function renderProject(id) {
     if (typeof classifyVisualLayout !== 'function') return res.status(501).json({ error: 'classification_unavailable' });
     res.status(202).json({ ok: true, status: 'running' });
     classifyProject(project.id);
+  });
+
+  router.post('/:id/analyze-retakes', function (req, res) {
+    if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
+    const project = getProject(req.params.id);
+    if (!project) return res.status(404).json({ error: 'not_found' });
+    if (project.transcriptionStatus !== 'ready') return res.status(409).json({ error: 'transcript_not_ready' });
+    if (typeof analyzeRetakes !== 'function') return res.status(501).json({ error: 'retake_analysis_unavailable' });
+    res.status(202).json({ ok: true, status: 'running' });
+    analyzeProjectRetakes(project.id);
   });
 
   router.post('/:id/render', function (req, res) {
@@ -756,7 +847,7 @@ async function renderProject(id) {
     res.json({ ok: true });
   });
 
-  return { router: router, transcribeProject: transcribeProject, classifyProject: classifyProject, renderProject: renderProject };
+  return { router: router, transcribeProject: transcribeProject, classifyProject: classifyProject, analyzeProjectRetakes: analyzeProjectRetakes, renderProject: renderProject };
 }
 
 module.exports = {
@@ -775,4 +866,5 @@ module.exports = {
   contentTypeForProject,
   gapDecisions,
   retakeCandidates
+  ,normalizeRetakeDecisions
 };

@@ -77,6 +77,16 @@ test('likely restarted lines are surfaced without being automatically removed', 
   assert.deepEqual(candidates[0].removeWordIndices, [0, 1]);
 });
 
+test('semantic retake ranges become bounded exact word decisions', function () {
+  const decisions = editor.normalizeRetakeDecisions([{ removeStartIndex: 0, removeEndIndex: 1, replacementStartIndex: 2, replacementEndIndex: 5, confidence: 'high', reason: 'The first attempt stops early.' }], [
+    { index: 0, text: 'The' }, { index: 1, text: 'problem' }, { index: 2, text: 'The' }, { index: 3, text: 'problem' }, { index: 4, text: 'is' }, { index: 5, text: 'obvious.' }
+  ]);
+  assert.equal(decisions.length, 1);
+  assert.deepEqual(decisions[0].removeWordIndices, [0, 1]);
+  assert.equal(decisions[0].replacementText, 'The problem is obvious.');
+  assert.equal(decisions[0].source, 'semantic');
+});
+
 test('adjacent removed transcript words become one manual cut', function () {
   const cuts = editor.calculateManualCuts(words, [2, 3], 9);
   assert.equal(cuts.length, 1);
@@ -141,6 +151,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
   let handoffCalls = 0;
   let classificationCalls = 0;
+  let retakeCalls = 0;
   const service = editor.setup({
     db: db,
     dataDir: dir,
@@ -154,6 +165,10 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
       classificationCalls++;
       assert.equal(fs.existsSync(input.imagePath), true);
       return { layout: 'vertical', confidence: 'high', cropCenterX: 0.55, explanation: 'One page fills all sampled frames.' };
+    },
+    analyzeRetakes: async function () {
+      retakeCalls++;
+      return { decisions: [{ removeStartIndex: 0, removeEndIndex: 1, replacementStartIndex: 2, replacementEndIndex: 3, confidence: 'high', reason: 'Synthetic replaced take.' }] };
     },
     handoffToProduction: async function (input) {
       handoffCalls++;
@@ -188,6 +203,13 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.effectiveLayout, 'vertical');
   assert.equal(project.cropCenterX, 0.55);
   assert.equal(classificationCalls, 1);
+  for (let attempt = 0; attempt < 100 && project.retakeAnalysisStatus !== 'ready'; attempt++) {
+    await new Promise(function (resolve) { setTimeout(resolve, 30); });
+    project = await (await fetch(base + '/api/editor/' + project.id)).json();
+  }
+  assert.equal(project.retakeAnalysisStatus, 'ready', project.retakeAnalysisError);
+  assert.equal(retakeCalls, 1);
+  assert.deepEqual(project.removedWordIndices, [0, 1]);
   assert.ok(project.cuts.some(function (cut) { return cut.reason === 'long_pause'; }));
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ removedWordIndices: [2, 3] }) });
   project = await response.json();
