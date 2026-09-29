@@ -171,6 +171,17 @@ function contentTypeForProject(project, cuts) {
   return 'long_short';
 }
 
+function invalidateRender(project) {
+  project.renderStatus = '';
+  project.renderError = '';
+  project.renderProgress = 0;
+  project.automaticRenderStartedAt = '';
+  project.renderQuality = null;
+  project.renderSizeBytes = 0;
+  project.editedDuration = 0;
+  return project;
+}
+
 function gapDecisions(project) {
   const words = project.words || [];
   const restored = new Set(Array.isArray(project.restoredAutoCutIds) ? project.restoredAutoCutIds : []);
@@ -498,6 +509,7 @@ function setup(options) {
         project.retakeDecisions = [];
         project.planningMatchStatus = project.words.length && typeof matchPlanningPiece === 'function' ? 'pending' : 'unavailable';
         project.planningMatchError = '';
+        invalidateRender(project);
         saveProject(project);
         if (project.words.length && typeof analyzeRetakes === 'function') setImmediate(function () { analyzeProjectRetakes(id); });
         if (project.words.length && typeof matchPlanningPiece === 'function') setImmediate(function () { matchProjectPlanningPiece(id); });
@@ -549,8 +561,7 @@ function setup(options) {
         project.retakeDecisions = decisions;
         project.retakeAnalysisStatus = 'ready';
         project.retakeAnalysisError = '';
-        project.renderStatus = '';
-        project.renderError = '';
+        invalidateRender(project);
         saveProject(project);
         setImmediate(function () { maybeAutoRender(id); });
       } catch (err) {
@@ -656,6 +667,7 @@ function setup(options) {
         if (project.layoutOverride === 'auto' || !project.layoutOverride) project.cropCenterX = project.visualClassification.cropCenterX;
         project.classificationStatus = 'ready';
         project.classificationError = '';
+        invalidateRender(project);
         saveProject(project);
         setImmediate(function () { maybeAutoRender(id); });
       } catch (err) {
@@ -862,9 +874,9 @@ async function renderProject(id) {
         if (!current || (current.width === media.width && current.height === media.height)) return;
         current.width = media.width;
         current.height = media.height;
-        current.renderStatus = '';
-        current.renderError = '';
+        invalidateRender(current);
         saveProject(current);
+        setImmediate(function () { maybeAutoRender(current.id); });
       }).catch(function () {});
     });
   });
@@ -995,10 +1007,7 @@ async function renderProject(id) {
         project.planningPieceManuallySelected = true;
       }
     }
-    project.renderStatus = '';
-    project.renderError = '';
-    project.renderProgress = 0;
-    project.automaticRenderStartedAt = '';
+    invalidateRender(project);
     saveProject(project);
     project.cuts = cutsForProject(project);
     project.captionGroups = captionGroups(project, project.cuts);
@@ -1082,7 +1091,7 @@ async function renderProject(id) {
       project.planningMatchStatus = 'pending'; project.planningMatchError = ''; retried.push('planning');
     }
     if (project.renderStatus === 'error') {
-      project.renderStatus = ''; project.renderError = ''; project.automaticRenderStartedAt = ''; retried.push('render');
+      invalidateRender(project); retried.push('render');
     }
     if (!retried.length) return res.status(409).json({ error: 'nothing_to_retry', message: 'No failed Editor step needs retrying.' });
     saveProject(project);
@@ -1164,6 +1173,7 @@ module.exports = {
   displayDimensions,
   effectiveLayout,
   contentTypeForProject,
+  invalidateRender,
   gapDecisions,
   retakeCandidates,
   normalizeRetakeDecisions,

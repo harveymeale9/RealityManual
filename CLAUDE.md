@@ -11944,3 +11944,22 @@ store, so it covers future restarts and not merely the current browser session.
 A legacy-record regression starts with a timed transcript and no planning or
 progress fields, then proves planning resolves locally and the normalized state
 is persisted without an unnecessary AI call when no planning candidates exist.
+
+---
+
+# 287. No Changed Edit Can Retain a Stale “Verified” Output (2026-09-29)
+
+Render invalidation is now one shared operation rather than several partial
+field resets. A changed transcript, completed retake analysis, completed frame
+classification, corrected phone rotation, or manual edit clears the render
+status, error, progress, automatic-render latch, technical QC result, byte size
+and edited duration together. The old MP4 may remain on disk until FFmpeg
+atomically overwrites it, but the authenticated preview and Production handoff
+routes will not serve it unless the new render reaches `ready` and passes QC.
+
+This closes two edge cases where a retried classifier could change the crop or
+a retried retake analysis could change cuts while an earlier output still
+claimed to be ready. Rotation correction now also schedules the replacement
+render rather than merely invalidating it. A focused regression proves every
+stale output claim is removed by the shared operation; the full generated-video
+test continues to prove the replacement reaches verified readiness.

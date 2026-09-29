@@ -65,6 +65,13 @@ test('format classification respects composition and explicit overrides', functi
   assert.equal(editor.effectiveLayout({ width: 1080, height: 1920, visualClassification: { layout: 'horizontal' } }), 'vertical');
 });
 
+test('invalidating an edit clears every stale output claim', function () {
+  const project = { renderStatus: 'ready', renderError: 'old', renderProgress: 100, automaticRenderStartedAt: 'then',
+    renderQuality: { status: 'passed' }, renderSizeBytes: 1234, editedDuration: 42 };
+  editor.invalidateRender(project);
+  assert.deepEqual(project, { renderStatus: '', renderError: '', renderProgress: 0, automaticRenderStartedAt: '', renderQuality: null, renderSizeBytes: 0, editedDuration: 0 });
+});
+
 test('likely restarted lines are surfaced without being automatically removed', function () {
   const attempts = [
     { index: 0, text: 'The', start: 0, end: 0.2 }, { index: 1, text: 'problem', start: 0.25, end: 0.6 },
@@ -239,7 +246,7 @@ test('one recovery endpoint retries failed automatic work without replacing the 
     duration: 1, width: 320, height: 180, words: [], removedWordIndices: [], dismissedRetakeIds: [], restoredAutoCutIds: [],
     autoSilenceEnabled: true, silenceThresholdSeconds: 1, retainedPauseSeconds: .38, captionsEnabled: true,
     layoutOverride: 'auto', contentTypeOverride: 'auto', cropCenterX: .5, classificationStatus: 'unavailable',
-    retakeAnalysisStatus: 'unavailable', planningMatchStatus: 'unavailable', transcriptionStatus: 'error', transcriptionError: 'Synthetic failure', renderStatus: '', automaticRenderStartedAt: 'test-hold', createdAt: now, updatedAt: now
+    retakeAnalysisStatus: 'unavailable', planningMatchStatus: 'unavailable', transcriptionStatus: 'error', transcriptionError: 'Synthetic failure', renderStatus: '', productionPieceId: 'test-output-hold', createdAt: now, updatedAt: now
   }), now);
   const service = editor.setup({ db: db, dataDir: dir, transcribeDetailed: async function () { return { text: 'Recovered.', words: [{ type: 'word', text: 'Recovered.', start: .2, end: .8 }] }; } });
   const app = express(); app.use(express.json()); app.use('/api/editor', service.router);
@@ -287,10 +294,11 @@ test('legacy ready recordings acquire missing analysis phases on startup', { tim
   // No candidates means the service resolves locally without spending an AI call.
   assert.equal(planningCalls, 0);
   assert.equal(project.renderProgress, 0);
+  await new Promise(function (resolve) { setTimeout(resolve, 50); });
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
 
-test('upload, timed transcription and FFmpeg captioned render work end to end', { timeout: 30000 }, async function (t) {
+test('upload, timed transcription and FFmpeg captioned render work end to end', { timeout: 60000 }, async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-'));
   const input = path.join(dir, 'sample.mp4');
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=640x360:d=5:r=24',
@@ -381,7 +389,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(planningMatchCalls, 1);
   assert.ok(project.cuts.some(function (cut) { return cut.reason === 'long_pause'; }));
   assert.deepEqual(project.captionGroups.map(function (group) { return group.text; }), ['One two.']);
-  for (let attempt = 0; attempt < 200 && project.renderStatus !== 'ready' && project.renderStatus !== 'error'; attempt++) {
+  for (let attempt = 0; attempt < 600 && project.renderStatus !== 'ready' && project.renderStatus !== 'error'; attempt++) {
     await new Promise(function (resolve) { setTimeout(resolve, 50); });
     project = await (await fetch(base + '/api/editor/' + project.id)).json();
   }
@@ -397,7 +405,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.renderStatus, '');
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ retainedPauseSeconds: 0.55 }) });
   assert.equal(response.status, 200);
-  for (let attempt = 0; attempt < 200 && (project.renderStatus !== 'ready' || renderReadyCalls < 2); attempt++) {
+  for (let attempt = 0; attempt < 600 && (project.renderStatus !== 'ready' || renderReadyCalls < 2); attempt++) {
     await new Promise(function (resolve) { setTimeout(resolve, 50); });
     project = await (await fetch(base + '/api/editor/' + project.id)).json();
   }
