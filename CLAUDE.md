@@ -12581,3 +12581,21 @@ technical verification refuses to mark a render ready unless it is exactly
 `yuv420p`; the verified format is also retained in `renderQuality` for diagnosis.
 The real FFmpeg integration test proves the generated 1080×1920 captioned master
 passes this additional check.
+
+---
+
+# 322. Manual Edit Bursts Debounce Before Re-Encoding (2026-09-29)
+
+After any manual cut or caption change the replacement render began after only
+650 ms. That was fast for a single correction but hostile to a normal review
+burst: the first change could start FFmpeg and lock the transcript while Harvey
+was selecting the second sentence.
+
+Manual changes now wait for 2.5 seconds of quiet before automatic rendering,
+with each subsequent save or Undo resetting the timer. The explicit **Build
+final edit** action remains immediately available when Harvey really made only
+one change. The browser's delayed status refresh now follows the same window, so
+hands-off rendering still becomes visible as soon as it queues rather than
+leaving a blank state. Initial preprocessing renders remain immediate; only
+interactive edit bursts receive the debounce. Focused service and browser
+workflows pass with the longer quiet period.

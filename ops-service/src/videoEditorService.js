@@ -9,6 +9,7 @@ const { execFile, spawn } = require('child_process');
 
 const STORE_NAME = 'editorProjects';
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
+const EDIT_RENDER_DEBOUNCE_MS = 2500;
 
 function run(command, args, label) {
   return new Promise(function (resolve, reject) {
@@ -1137,7 +1138,7 @@ async function renderProject(id) {
     project.canUndoCut = Array.isArray(project.cutDecisionHistory) && project.cutDecisionHistory.length > 0;
     delete project.cutDecisionHistory;
     res.json(project);
-    if (patchNeedsAutoRender(project, renderWillChange)) scheduleAutoRender(project.id, 650);
+    if (patchNeedsAutoRender(project, renderWillChange)) scheduleAutoRender(project.id, EDIT_RENDER_DEBOUNCE_MS);
   });
 
   router.post('/:id/undo-cut', function (req, res) {
@@ -1170,7 +1171,7 @@ async function renderProject(id) {
     project.canUndoCut = history.length > 0;
     delete project.cutDecisionHistory;
     res.json(project);
-    scheduleAutoRender(project.id, 650);
+    scheduleAutoRender(project.id, EDIT_RENDER_DEBOUNCE_MS);
   });
 
   router.post('/:id/transcribe', function (req, res) {
