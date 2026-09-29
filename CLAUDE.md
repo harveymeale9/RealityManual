@@ -11586,3 +11586,26 @@ while title, thumbnail and ambient-music work remains available in the existing
 production screen. The Chromium batch regression now uploads two recordings,
 approves the first and proves the second becomes active automatically; the
 single-recording and mobile-overflow paths continue to pass.
+
+---
+
+# 268. The First Finished Edit Builds Without a Click (2026-09-29)
+
+The Editor now begins its first final-quality FFmpeg render automatically once
+the transcript, visual framing, semantic retake review and planning-card match
+are all in a safe terminal state. There is no longer an unnecessary gap where
+all automatic work is finished but Harvey must press **Build final edit** before
+he can review anything. If semantic review finds an uncertain repetition, the
+automatic build waits until **Use latest take** or **Keep both** resolves it.
+Errors in an upstream automatic check remain manual rather than silently
+rendering from uncertain inputs.
+
+`automaticRenderStartedAt` is persisted before the render is queued, making the
+automatic pass one-shot and restart-safe. Opening an older prepared project or
+resolving its final review decision can trigger that first pass as well. Manual
+changes after a completed render still invalidate it and expose the explicit
+rebuild control, preventing every small experiment from starting an expensive
+encode. The end-to-end service test now waits for the automatic render instead
+of posting the render route itself, proving upload can reach a reviewable MP4
+without another user action. All 97 repository tests and both Chromium Editor
+workflows pass.

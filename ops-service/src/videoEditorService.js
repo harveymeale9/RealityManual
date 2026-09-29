@@ -458,6 +458,7 @@ function setup(options) {
         saveProject(project);
         if (project.words.length && typeof analyzeRetakes === 'function') setImmediate(function () { analyzeProjectRetakes(id); });
         if (project.words.length && typeof matchPlanningPiece === 'function') setImmediate(function () { matchProjectPlanningPiece(id); });
+        setImmediate(function () { maybeAutoRender(id); });
       } catch (err) {
         project = getProject(id);
         if (project) {
@@ -507,6 +508,7 @@ function setup(options) {
         project.renderStatus = '';
         project.renderError = '';
         saveProject(project);
+        setImmediate(function () { maybeAutoRender(id); });
       } catch (err) {
         project = getProject(id);
         if (project) {
@@ -552,6 +554,7 @@ function setup(options) {
         project.planningMatchStatus = 'ready';
         project.planningMatchError = '';
         saveProject(project);
+        setImmediate(function () { maybeAutoRender(id); });
       } catch (err) {
         project = getProject(id);
         if (project) {
@@ -584,6 +587,7 @@ function setup(options) {
           project.classificationStatus = 'ready';
           project.classificationError = '';
           saveProject(project);
+          setImmediate(function () { maybeAutoRender(id); });
           return;
         }
         const sampleRate = Math.max(0.01, 3 / Math.max(1, Number(project.duration) || 1));
@@ -603,6 +607,7 @@ function setup(options) {
         project.classificationStatus = 'ready';
         project.classificationError = '';
         saveProject(project);
+        setImmediate(function () { maybeAutoRender(id); });
       } catch (err) {
         project = getProject(id);
         if (project) {
@@ -616,6 +621,19 @@ function setup(options) {
     })().finally(function () { classificationJobs.delete(id); });
     classificationJobs.set(id, job);
     return job;
+  }
+
+  function maybeAutoRender(id) {
+    const project = getProject(id);
+    if (!project || project.automaticRenderStartedAt || project.renderStatus || project.transcriptionStatus !== 'ready') return false;
+    if (!['ready', 'unavailable'].includes(project.classificationStatus)) return false;
+    if (!['ready', 'unavailable'].includes(project.retakeAnalysisStatus)) return false;
+    if (!['ready', 'unavailable'].includes(project.planningMatchStatus)) return false;
+    if (unresolvedRetakeCount(project) > 0) return false;
+    project.automaticRenderStartedAt = new Date().toISOString();
+    saveProject(project);
+    setImmediate(function () { renderProject(id); });
+    return true;
   }
 
 async function renderProject(id) {
@@ -787,6 +805,7 @@ async function renderProject(id) {
         planningMatchStatus: typeof matchPlanningPiece === 'function' ? 'pending_transcript' : 'unavailable',
         planningMatchError: '',
         planningMatch: null,
+        automaticRenderStartedAt: '',
         transcriptionStatus: 'pending',
         transcriptionError: '',
         renderStatus: '',
@@ -816,6 +835,7 @@ async function renderProject(id) {
     project.detectedContentType = contentTypeForProject(project, project.cuts);
     project.planningCandidates = typeof getPlanningCandidates === 'function' ? getPlanningCandidates(project) : [];
     res.json(project);
+    setImmediate(function () { maybeAutoRender(project.id); });
   });
 
   router.patch('/:id', function (req, res) {
@@ -863,6 +883,7 @@ async function renderProject(id) {
     project.detectedContentType = contentTypeForProject(project, project.cuts);
     project.planningCandidates = typeof getPlanningCandidates === 'function' ? getPlanningCandidates(project) : [];
     res.json(project);
+    setImmediate(function () { maybeAutoRender(project.id); });
   });
 
   router.post('/:id/transcribe', function (req, res) {

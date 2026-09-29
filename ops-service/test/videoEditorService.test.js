@@ -237,8 +237,6 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ removedWordIndices: [2, 3] }) });
   project = await response.json();
   assert.deepEqual(project.captionGroups.map(function (group) { return group.text; }), ['One two.']);
-  response = await fetch(base + '/api/editor/' + project.id + '/render', { method: 'POST' });
-  assert.equal(response.status, 202);
   for (let attempt = 0; attempt < 200 && project.renderStatus !== 'ready' && project.renderStatus !== 'error'; attempt++) {
     await new Promise(function (resolve) { setTimeout(resolve, 50); });
     project = await (await fetch(base + '/api/editor/' + project.id)).json();
