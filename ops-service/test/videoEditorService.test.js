@@ -67,6 +67,18 @@ test('upload capacity reserves every downstream master plus operating space', fu
   assert.equal(editor.requiredEditorCapacity(2 * gib, true), 8 * gib);
 });
 
+test('approval only accepts the exact verified render size', function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-verified-'));
+  const file = path.join(dir, 'render.mp4');
+  fs.writeFileSync(file, Buffer.alloc(2048));
+  const project = { renderStatus: 'ready', renderQuality: { status: 'passed' }, renderSizeBytes: 2048 };
+  assert.equal(editor.verifiedRenderMatches(project, file), true);
+  fs.appendFileSync(file, 'changed');
+  assert.equal(editor.verifiedRenderMatches(project, file), false);
+  assert.equal(editor.verifiedRenderMatches(Object.assign({}, project, { renderQuality: null }), file), false);
+  t.after(function () { fs.rmSync(dir, { recursive: true, force: true }); });
+});
+
 test('automatic cuts preserve natural handles around long pauses', function () {
   const cuts = editor.calculateAutoCuts(words, 9);
   assert.deepEqual(cuts.map(function (cut) { return cut.reason; }), ['leading_silence', 'long_pause', 'long_pause', 'trailing_silence']);
@@ -596,6 +608,19 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(response.headers.get('content-disposition'), null);
   assert.ok(Buffer.from(await response.arrayBuffer()).length > 1000);
   assert.ok(project.editedDuration < project.duration);
+  const verifiedRenderPath = path.join(dir, 'editor', project.id, 'render.mp4');
+  fs.appendFileSync(verifiedRenderPath, 'tampered-after-verification');
+  response = await fetch(base + '/api/editor/' + project.id + '/production', { method: 'POST' });
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).error, 'render_verification_stale');
+  assert.equal(fs.existsSync(verifiedRenderPath), false);
+  for (let attempt = 0; attempt < 600 && (project.renderStatus !== 'ready' || renderReadyCalls < 3); attempt++) {
+    await new Promise(function (resolve) { setTimeout(resolve, 50); });
+    project = await (await fetch(base + '/api/editor/' + project.id)).json();
+  }
+  assert.equal(project.renderStatus, 'ready', project.renderError);
+  assert.equal(renderReadyCalls, 3);
+  assert.equal(editor.verifiedRenderMatches(project, verifiedRenderPath), true);
   const simultaneousHandoffs = await Promise.all([
     fetch(base + '/api/editor/' + project.id + '/production', { method: 'POST' }),
     fetch(base + '/api/editor/' + project.id + '/production', { method: 'POST' })

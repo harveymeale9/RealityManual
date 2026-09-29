@@ -12966,3 +12966,22 @@ slot, approval naturally remembers the next Active edit, and opening the sent
 copy establishes Sent continuity. Browser coverage proves refresh retention and
 round-trip switching between the newly approved item and the current active
 one.
+
+---
+
+# 342. Production Approval Revalidates the Exact Verified Master (2026-09-29)
+
+A `ready` database flag and the existence of `render.mp4` were previously
+enough to approve an Editor project. If that file were truncated, replaced, or
+partially overwritten after quality verification, Production could receive a
+different master from the one that passed the duration, stream, and size
+checks.
+
+Approval now requires the file to remain a regular file larger than the minimum
+valid output and to match the exact byte count recorded by the successful
+verification pass. A mismatch invalidates and removes the stale master, returns
+a clear HTTP 409, and automatically schedules a clean rebuild; the client
+refreshes immediately so the rebuilding state is visible. Already-sent projects
+remain idempotent and return their existing Production piece even if their old
+Editor render is later cleaned up. Focused coverage mutates a verified render
+and proves it is rejected.

@@ -20,6 +20,14 @@ function requiredEditorCapacity(fileBytes, fileAlreadyStored) {
   return EDITOR_DISK_RESERVE_BYTES + bytes * (fileAlreadyStored ? 3 : 4);
 }
 
+function verifiedRenderMatches(project, filePath) {
+  if (!project || project.renderStatus !== 'ready' || !project.renderQuality || project.renderQuality.status !== 'passed') return false;
+  try {
+    const stat = fs.statSync(filePath);
+    return stat.isFile() && stat.size > 1024 && stat.size === Number(project.renderSizeBytes);
+  } catch (error) { return false; }
+}
+
 function run(command, args, label) {
   return new Promise(function (resolve, reject) {
     execFile(command, args, { maxBuffer: 20 * 1024 * 1024 }, function (err, stdout, stderr) {
@@ -1390,11 +1398,18 @@ async function renderProject(id) {
     if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
     let project = getProject(req.params.id);
     if (!project) return res.status(404).json({ error: 'not_found' });
+    if (project.productionPieceId) {
+      return res.json({ ok: true, pieceId: project.productionPieceId, alreadySent: true });
+    }
     if (project.renderStatus !== 'ready' || !fs.existsSync(renderPath(project.id))) {
       return res.status(409).json({ error: 'render_not_ready', message: 'Finish the edit before sending it to production.' });
     }
-    if (project.productionPieceId) {
-      return res.json({ ok: true, pieceId: project.productionPieceId, alreadySent: true });
+    if (!verifiedRenderMatches(project, renderPath(project.id))) {
+      invalidateProjectRender(project);
+      saveProject(project);
+      res.status(409).json({ error: 'render_verification_stale', message: 'The final file no longer matches its verified render. Editor is rebuilding it automatically before approval.' });
+      scheduleAutoRender(project.id, 0);
+      return;
     }
     if (typeof handoffToProduction !== 'function') return res.status(501).json({ error: 'production_handoff_unavailable' });
     const joinedExistingHandoff = productionJobs.has(project.id);
@@ -1465,6 +1480,7 @@ async function renderProject(id) {
 module.exports = {
   setup,
   requiredEditorCapacity,
+  verifiedRenderMatches,
   normalizeWords,
   calculateAutoCuts,
   calculateManualCuts,

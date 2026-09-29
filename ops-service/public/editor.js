@@ -925,6 +925,7 @@
         sendButton.disabled = false;
         sendButton.textContent = 'Approve & Send to Production';
         alert(error.message);
+        if (editorMounted()) openProject(approvedId, true);
       });
     };
     var openButton = root.querySelector('#editorOpenProduction');
