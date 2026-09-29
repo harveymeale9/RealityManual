@@ -491,6 +491,7 @@ function setup(options) {
   const delStmt = db.prepare('DELETE FROM records WHERE store_name = ? AND id = ?');
   const transcriptionJobs = new Map();
   const renderJobs = new Map();
+  const productionJobs = new Map();
   let renderChain = Promise.resolve();
   const classificationJobs = new Map();
   const retakeJobs = new Map();
@@ -1090,6 +1091,7 @@ async function renderProject(id) {
     const project = getProject(req.params.id);
     if (!project) return res.status(404).json({ error: 'not_found' });
     if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked. Make downstream changes in Content Production.' });
+    if (productionJobs.has(project.id)) return res.status(409).json({ error: 'approval_in_progress', message: 'This edit is currently being sent to Content Production.' });
     if (renderJobs.has(project.id)) return res.status(409).json({ error: 'render_in_progress', message: 'Wait for this final edit to finish before changing its cut settings.' });
     const renderWillChange = patchAffectsRender(req.body);
     const currentRemovedWordIndices = (project.removedWordIndices || []).map(Number).sort(function (a, b) { return a - b; });
@@ -1305,20 +1307,32 @@ async function renderProject(id) {
       return res.json({ ok: true, pieceId: project.productionPieceId, alreadySent: true });
     }
     if (typeof handoffToProduction !== 'function') return res.status(501).json({ error: 'production_handoff_unavailable' });
-    try {
+    const joinedExistingHandoff = productionJobs.has(project.id);
+    let handoffJob = productionJobs.get(project.id);
+    if (!handoffJob) {
       project.effectiveLayout = effectiveLayout(project);
       project.detectedContentType = contentTypeForProject(project, cutsForProject(project));
-      const result = await handoffToProduction({ project: project, renderPath: renderPath(project.id) });
-      project = getProject(project.id);
-      if (project) {
-        project.productionPieceId = result.pieceId;
-        project.sentToProductionAt = new Date().toISOString();
-        project.workflowWarning = result.workflowWarning || '';
-        saveProject(project);
-      }
-      res.status(201).json({ ok: true, pieceId: result.pieceId, piece: result.piece || null, alreadySent: !!result.alreadySent, workflowWarning: result.workflowWarning || '' });
+      handoffJob = Promise.resolve().then(function () {
+        return handoffToProduction({ project: project, renderPath: renderPath(project.id) });
+      }).then(function (result) {
+        const current = getProject(project.id);
+        if (current) {
+          current.productionPieceId = result.pieceId;
+          current.sentToProductionAt = new Date().toISOString();
+          current.workflowWarning = result.workflowWarning || '';
+          saveProject(current);
+        }
+        return result;
+      });
+      productionJobs.set(project.id, handoffJob);
+    }
+    try {
+      const result = await handoffJob;
+      res.status(joinedExistingHandoff ? 200 : 201).json({ ok: true, pieceId: result.pieceId, piece: result.piece || null, alreadySent: joinedExistingHandoff || !!result.alreadySent, workflowWarning: result.workflowWarning || '' });
     } catch (err) {
       res.status(422).json({ error: 'production_handoff_failed', message: String(err.message || err).slice(0, 1000) });
+    } finally {
+      if (productionJobs.get(project.id) === handoffJob) productionJobs.delete(project.id);
     }
   });
 
@@ -1342,6 +1356,7 @@ async function renderProject(id) {
   router.delete('/:id', function (req, res) {
     if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
     if (renderJobs.has(req.params.id)) return res.status(409).json({ error: 'render_in_progress', message: 'Wait for the final edit to finish before deleting this recording.' });
+    if (productionJobs.has(req.params.id)) return res.status(409).json({ error: 'approval_in_progress', message: 'Wait for this edit to finish entering Content Production before deleting it.' });
     const project = getProject(req.params.id);
     if (!project) return res.status(404).json({ error: 'not_found' });
     if (typeof onProjectDeleted === 'function') {

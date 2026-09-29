@@ -12693,3 +12693,22 @@ stating the exact recovery required. Planning-card matching remains metadata,
 so its failure is visible but does not unnecessarily prevent a correct media
 render. Focused service tests and a real browser failure-state check cover the
 new gate.
+
+---
+
+# 328. Editor Approval Is Single-Flight and Idempotent (2026-09-29)
+
+The browser disables **Approve & Send to Production** immediately, but that is
+not a concurrency boundary: two open tabs or duplicated HTTP requests could
+both observe an unsent edit and invoke the downstream handoff before either
+stored `productionPieceId`. The current production copy happens mostly
+synchronously, but the Editor service contract is asynchronous and must not
+depend on that implementation detail.
+
+The service now keeps one in-flight approval promise per Editor project.
+Concurrent approvals join that exact operation, receive the same Production
+piece id, and never invoke the handoff twice. Edit and deletion requests are
+also rejected while approval is crossing the boundary, preventing the reviewed
+master or its decisions from changing underneath the copy. Integration coverage
+holds the synthetic handoff open, issues two simultaneous approvals, and proves
+they return one created and one idempotent response from a single handoff call.

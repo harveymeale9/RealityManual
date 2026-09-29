@@ -390,6 +390,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
       assert.equal(input.project.words[0].text, 'Once');
       assert.equal(input.project.words[0].originalText, 'One');
       assert.equal(fs.existsSync(input.renderPath), true);
+      await new Promise(function (resolve) { setTimeout(resolve, 80); });
       return { pieceId: input.project.id, alreadySent: false, workflowWarning: 'Synthetic planning-stage warning.' };
     }
   });
@@ -522,10 +523,16 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(response.headers.get('content-disposition'), null);
   assert.ok(Buffer.from(await response.arrayBuffer()).length > 1000);
   assert.ok(project.editedDuration < project.duration);
-  response = await fetch(base + '/api/editor/' + project.id + '/production', { method: 'POST' });
-  assert.equal(response.status, 201);
-  const handoffResult = await response.json();
+  const simultaneousHandoffs = await Promise.all([
+    fetch(base + '/api/editor/' + project.id + '/production', { method: 'POST' }),
+    fetch(base + '/api/editor/' + project.id + '/production', { method: 'POST' })
+  ]);
+  assert.deepEqual(simultaneousHandoffs.map(function (item) { return item.status; }).sort(), [200, 201]);
+  const handoffResult = await simultaneousHandoffs[0].json();
+  const joinedHandoffResult = await simultaneousHandoffs[1].json();
   assert.equal(handoffResult.pieceId, project.id);
+  assert.equal(joinedHandoffResult.pieceId, project.id);
+  assert.equal(handoffResult.alreadySent || joinedHandoffResult.alreadySent, true);
   assert.equal(handoffResult.workflowWarning, 'Synthetic planning-stage warning.');
   project = await (await fetch(base + '/api/editor/' + project.id)).json();
   assert.equal(project.workflowWarning, 'Synthetic planning-stage warning.');
