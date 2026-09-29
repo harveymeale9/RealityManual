@@ -12770,3 +12770,21 @@ refresh is a safe no-op when the Editor DOM is detached. A browser regression
 starts a delayed edit, changes tabs, returns immediately, makes a second edit,
 and proves the server still sees a maximum of one PATCH at a time in the correct
 order.
+
+---
+
+# 332. Background Editor Work Does Not Manipulate Another Tab’s DOM (2026-09-29)
+
+Uploads, approval, deletion, and delayed render refreshes can legitimately
+finish after Harvey has navigated away from Editor. Their completion callbacks
+still queried Editor-only elements from the shared `panelMain`, which another
+tab had already replaced. Successful server operations could therefore end in
+detached/null DOM exceptions, and an approval could quietly open the next
+recording behind whatever tab Harvey was actually using.
+
+The client now has an explicit Editor-mounted check. Durable operations continue
+to completion and update their in-memory result, but Editor-only progress,
+workspace, next-recording, and refresh behavior becomes a safe no-op while its
+shell is absent. Returning to Editor reloads the authoritative server state as
+normal. Existing batch, cross-tab save, failure-state, and queue browser checks
+all pass with the detached-DOM guards.

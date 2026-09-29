@@ -66,6 +66,10 @@
     return (!mime || mime === 'application/octet-stream') && /\.(?:mp4|mov|m4v|webm|mkv|avi)$/i.test(String(file && file.name || ''));
   }
 
+  function editorMounted() {
+    return !!(root && root.querySelector('.video-editor'));
+  }
+
   function editedDuration(item) {
     return Math.max(0, Number(item.duration || 0) - (item.cuts || []).reduce(function (sum, cut) {
       return sum + Number(cut.end - cut.start || 0);
@@ -377,11 +381,13 @@
       });
     });
     sequence.then(function () {
-      var progress = root.querySelector('#editorUploadProgress');
-      root.querySelector('#editorUploadBar').style.width = '100%';
-      root.querySelector('#editorUploadLabel').textContent = created.length + ' recording' + (created.length === 1 ? '' : 's') + ' added to the edit queue' + (duplicateCount ? ' · ' + duplicateCount + ' duplicate skipped' : '');
+      var progress = root && root.querySelector('#editorUploadProgress');
+      var bar = root && root.querySelector('#editorUploadBar');
+      var label = root && root.querySelector('#editorUploadLabel');
+      if (bar) bar.style.width = '100%';
+      if (label) label.textContent = created.length + ' recording' + (created.length === 1 ? '' : 's') + ' added to the edit queue' + (duplicateCount ? ' · ' + duplicateCount + ' duplicate skipped' : '');
       setTimeout(function () { if (progress) progress.hidden = true; }, 1400);
-      if (created[0]) openProject(created[0].id);
+      if (created[0] && editorMounted()) openProject(created[0].id);
       if (failures.length) alert('Some recordings could not be uploaded:\n\n' + failures.join('\n'));
     });
   }
@@ -879,6 +885,7 @@
         project.workflowWarning = result.workflowWarning || '';
         projects = projects.map(function (item) { return item.id === approvedId ? Object.assign({}, item, { productionPieceId: result.pieceId, sentToProductionAt: project.sentToProductionAt, workflowWarning: project.workflowWarning }) : item; });
         editorNotice = approvedName + ' was approved and sent to Content Production.' + (project.workflowWarning ? ' The video is safe; check its planning-card warning when convenient.' : '');
+        if (!editorMounted()) return;
         var next = nextActionableProject(approvedId);
         if (next) return openProject(next.id).then(renderNotice);
         renderList();
@@ -905,9 +912,10 @@
         clearTimeout(renderRefreshTimers[id]); delete renderRefreshTimers[id];
         projects = projects.filter(function (item) { return item.id !== id; });
         project = null; selected.clear(); renderList();
-        root.querySelector('#editorWorkspace').innerHTML = '<div class="editor-empty"><strong>Recording deleted</strong><span>Select another recording or upload a new one.</span></div>';
+        var workspace = root && root.querySelector('#editorWorkspace');
+        if (workspace) workspace.innerHTML = '<div class="editor-empty"><strong>Recording deleted</strong><span>Select another recording or upload a new one.</span></div>';
         var next = listFilter === 'active' ? nextActionableProject() : projects.filter(function (item) { return !!item.productionPieceId; })[0];
-        if (next) openProject(next.id);
+        if (next && editorMounted()) openProject(next.id);
       });
     };
     if (editingLocked) {
@@ -1016,7 +1024,7 @@
           clearTimeout(renderRefreshTimers[id]);
           renderRefreshTimers[id] = setTimeout(function () {
             delete renderRefreshTimers[id];
-            if (project && project.id === id && !project.renderStatus) openProject(id, true);
+            if (editorMounted() && project && project.id === id && !project.renderStatus) openProject(id, true);
           }, 2900);
         }
       }
@@ -1052,7 +1060,8 @@
       root = element; projects = []; project = null; selected.clear(); renderRefreshTimers = {}; previewSeekTimes = {}; restoreTranscriptFocus = false;
       shell();
       loadProjects().catch(function (error) {
-        root.querySelector('#editorWorkspace').innerHTML = '<div class="editor-empty"><strong>Editor unavailable</strong><span>' + esc(error.message) + '</span></div>';
+        var workspace = root && root.querySelector('#editorWorkspace');
+        if (workspace) workspace.innerHTML = '<div class="editor-empty"><strong>Editor unavailable</strong><span>' + esc(error.message) + '</span></div>';
       });
     }
   };
