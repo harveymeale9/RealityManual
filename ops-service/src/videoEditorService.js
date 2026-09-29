@@ -316,20 +316,25 @@ function retakeCandidates(words) {
 
 function normalizeRetakeDecisions(raw, words) {
   return (Array.isArray(raw) ? raw : []).map(function (decision, index) {
-    const start = Math.max(0, Math.floor(Number(decision.removeStartIndex)));
-    const end = Math.min(words.length - 1, Math.floor(Number(decision.removeEndIndex)));
-    if (!Number.isInteger(start) || !Number.isInteger(end) || end < start || end - start > 250) return null;
+    const start = Number(decision.removeStartIndex);
+    const end = Number(decision.removeEndIndex);
+    const replacementStart = Number(decision.replacementStartIndex);
+    const replacementEnd = Number(decision.replacementEndIndex);
+    if (![start, end, replacementStart, replacementEnd].every(Number.isInteger)) return null;
+    if (start < 0 || end < start || end >= words.length || end - start > 250) return null;
+    // A semantic auto-cut is safe only when the model points to a concrete,
+    // later replacement. Never coerce hallucinated/out-of-range indices into
+    // the transcript or accept an overlapping range that deletes unique words.
+    if (replacementStart <= end || replacementEnd < replacementStart || replacementEnd >= words.length || replacementEnd - replacementStart > 250) return null;
+    const replacementGap = Number(words[replacementStart] && words[replacementStart].start) - Number(words[end] && words[end].end);
+    if (!Number.isFinite(replacementGap) || replacementGap < 0 || replacementGap > 30) return null;
     const removeWordIndices = [];
     for (let wordIndex = start; wordIndex <= end; wordIndex++) removeWordIndices.push(wordIndex);
-    const replacementStart = Math.max(0, Math.floor(Number(decision.replacementStartIndex)));
-    const replacementEnd = Math.min(words.length - 1, Math.floor(Number(decision.replacementEndIndex)));
     return {
       id: 'smart-retake-' + index + '-' + start + '-' + end,
       removeWordIndices: removeWordIndices,
       firstText: words.slice(start, end + 1).map(function (word) { return word.text; }).join(' '),
-      replacementText: replacementEnd >= replacementStart
-        ? words.slice(replacementStart, replacementEnd + 1).map(function (word) { return word.text; }).join(' ')
-        : String(decision.replacementText || ''),
+      replacementText: words.slice(replacementStart, replacementEnd + 1).map(function (word) { return word.text; }).join(' '),
       confidence: decision.confidence === 'high' ? 'high' : 'review',
       reason: String(decision.reason || 'A nearby take may replace this wording.').slice(0, 300),
       source: 'semantic'

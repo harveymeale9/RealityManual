@@ -128,12 +128,16 @@ test('likely restarted lines are surfaced without being automatically removed', 
 
 test('semantic retake ranges become bounded exact word decisions', function () {
   const decisions = editor.normalizeRetakeDecisions([{ removeStartIndex: 0, removeEndIndex: 1, replacementStartIndex: 2, replacementEndIndex: 5, confidence: 'high', reason: 'The first attempt stops early.' }], [
-    { index: 0, text: 'The' }, { index: 1, text: 'problem' }, { index: 2, text: 'The' }, { index: 3, text: 'problem' }, { index: 4, text: 'is' }, { index: 5, text: 'obvious.' }
+    { index: 0, text: 'The', start: 0, end: .2 }, { index: 1, text: 'problem', start: .25, end: .6 },
+    { index: 2, text: 'The', start: 1, end: 1.2 }, { index: 3, text: 'problem', start: 1.25, end: 1.6 },
+    { index: 4, text: 'is', start: 1.65, end: 1.8 }, { index: 5, text: 'obvious.', start: 1.85, end: 2.2 }
   ]);
   assert.equal(decisions.length, 1);
   assert.deepEqual(decisions[0].removeWordIndices, [0, 1]);
   assert.equal(decisions[0].replacementText, 'The problem is obvious.');
   assert.equal(decisions[0].source, 'semantic');
+  assert.equal(editor.normalizeRetakeDecisions([{ removeStartIndex: 0, removeEndIndex: 1, replacementStartIndex: 1, replacementEndIndex: 5, confidence: 'high' }], words).length, 0);
+  assert.equal(editor.normalizeRetakeDecisions([{ removeStartIndex: 0, removeEndIndex: 1, replacementStartIndex: 999, replacementEndIndex: 1000, confidence: 'high' }], words).length, 0);
 });
 
 test('unresolved retakes block approval until cut or explicitly dismissed', function () {
@@ -420,7 +424,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
     analyzeRetakes: async function () {
       retakeCalls++;
       if (retakeCalls === 1) throw new Error('synthetic transient classifier failure');
-      return { decisions: [{ removeStartIndex: 2, removeEndIndex: 3, replacementStartIndex: 0, replacementEndIndex: 1, confidence: 'high', reason: 'Synthetic replaced take.' }] };
+      return { decisions: [{ removeStartIndex: 0, removeEndIndex: 1, replacementStartIndex: 2, replacementEndIndex: 3, confidence: 'high', reason: 'Synthetic replaced take.' }] };
     },
     getPlanningCandidates: function () { return [{ id: 'plan-1', seq: 79, title: 'Synthetic outline', stage: 'filmed', notesSnippet: 'One two.' }, { id: 'plan-2', seq: 80, title: 'Corrected outline', stage: 'filmed', notesSnippet: 'Three four.' }]; },
     matchPlanningPiece: async function () { planningMatchCalls++; return { pieceId: 'plan-1', confidence: 'high', reason: 'The transcript matches the filmed outline.' }; },
@@ -484,7 +488,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   }
   assert.equal(project.retakeAnalysisStatus, 'ready', project.retakeAnalysisError);
   assert.equal(retakeCalls, 2);
-  assert.deepEqual(project.removedWordIndices, [2, 3]);
+  assert.deepEqual(project.removedWordIndices, [0, 1]);
   for (let attempt = 0; attempt < 100 && project.planningMatchStatus !== 'ready'; attempt++) {
     await new Promise(function (resolve) { setTimeout(resolve, 30); });
     project = await (await fetch(base + '/api/editor/' + project.id)).json();
@@ -495,7 +499,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.planningPieceSeq, 79);
   assert.equal(planningMatchCalls, 1);
   assert.ok(project.cuts.some(function (cut) { return cut.reason === 'long_pause'; }));
-  assert.deepEqual(project.captionGroups.map(function (group) { return group.text; }), ['One two.']);
+  assert.deepEqual(project.captionGroups.map(function (group) { return group.text; }), ['Three four.']);
   for (let attempt = 0; attempt < 600 && (project.renderStatus !== 'error' && (project.renderStatus !== 'ready' || renderReadyCalls < 1 || !project.workflowWarning)); attempt++) {
     await new Promise(function (resolve) { setTimeout(resolve, 50); });
     project = await (await fetch(base + '/api/editor/' + project.id)).json();
@@ -526,16 +530,16 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.planningPieceTitle, 'Corrected outline');
   assert.equal(project.renderStatus, 'ready');
   assert.deepEqual(planningChanges, [{ previous: 'plan-1', next: 'plan-2', renderWillChange: false }]);
-  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ removedWordIndices: [], dismissedRetakeIds: ['smart-retake-0-2-3'] }) });
+  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ removedWordIndices: [], dismissedRetakeIds: ['smart-retake-0-0-1'] }) });
   assert.equal(response.status, 200);
   project = await response.json();
   assert.deepEqual(project.removedWordIndices, []);
-  assert.deepEqual(project.dismissedRetakeIds, ['smart-retake-0-2-3']);
+  assert.deepEqual(project.dismissedRetakeIds, ['smart-retake-0-0-1']);
   assert.equal(project.canUndoCut, true);
   response = await fetch(base + '/api/editor/' + project.id + '/undo-cut', { method: 'POST' });
   assert.equal(response.status, 200);
   project = await response.json();
-  assert.deepEqual(project.removedWordIndices, [2, 3]);
+  assert.deepEqual(project.removedWordIndices, [0, 1]);
   assert.deepEqual(project.dismissedRetakeIds, []);
   assert.equal(project.canUndoCut, false);
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ removedWordIndices: [0, 1, 2, 3] }) });
@@ -546,7 +550,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   response = await fetch(base + '/api/editor/' + project.id + '/undo-cut', { method: 'POST' });
   assert.equal(response.status, 200);
   project = await response.json();
-  assert.deepEqual(project.removedWordIndices, [2, 3]);
+  assert.deepEqual(project.removedWordIndices, [0, 1]);
   assert.equal(project.canUndoCut, false);
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ captionsEnabled: false, wordCorrection: { index: 0, text: 'Once' } }) });
   assert.equal(response.status, 200);
@@ -555,7 +559,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.words[0].text, 'Once');
   assert.equal(project.words[0].originalText, 'One');
   assert.equal(project.transcriptText, 'Once two. Three four.');
-  assert.deepEqual(project.captionGroups.map(function (group) { return group.text; }), ['Once two.']);
+  assert.deepEqual(project.captionGroups.map(function (group) { return group.text; }), ['Three four.']);
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wordCorrection: { index: 0, text: 'two words' } }) });
   assert.equal(response.status, 400);
   assert.equal((await response.json()).error, 'invalid_word_correction');

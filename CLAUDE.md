@@ -12848,3 +12848,22 @@ uploads and current transcription extraction untouched; durable source masters
 and renders live in a different directory and are never candidates. The timer
 is unreferenced so it cannot hold shutdown open. Focused coverage creates old
 and active temp media and proves exactly the orphan is removed.
+
+---
+
+# 336. Semantic Retakes Require a Real Later Replacement (2026-09-29)
+
+The retake prompt is conservative, but its structured output still crosses an
+untrusted model boundary. Normalization previously clamped malformed indices.
+A valid removal range paired with an overlapping or wildly out-of-range
+replacement could therefore survive as `high` confidence and automatically cut
+real speech even though no concrete cleaner take existed.
+
+Semantic candidates are now accepted only when all four indices are exact
+integers inside the transcript, both ranges are bounded, the replacement begins
+strictly after the failed attempt, and its first word occurs within 30 seconds.
+Overlapping, reversed, oversized, out-of-range, or timestamp-less ranges are
+dropped rather than repaired. Replacement text is always derived from those
+verified timed words, never free-form model text. Focused tests cover a valid
+earlier-failed/later-cleaner take plus overlapping and hallucinated replacement
+ranges, and the end-to-end render test now models the same latest-take rule.
