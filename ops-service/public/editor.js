@@ -476,6 +476,7 @@
     var sentToProduction = !!project.productionPieceId;
     var failures = failedSteps(project);
     var previewMode = project.renderStatus === 'ready' && previewModes[project.id] !== 'source' ? 'final' : 'source';
+    var previewingWorkingEdit = previewMode === 'source' && project.renderStatus !== 'ready';
     var previewUrl = previewMode === 'final' ? '/api/editor/' + encodeURIComponent(project.id) + '/render?inline=1' : '/api/editor/' + encodeURIComponent(project.id) + '/source';
     var previewSeek = Math.max(0, Number(previewSeekTimes[project.id]) || 0);
     workspace.innerHTML =
@@ -491,7 +492,7 @@
         '<label>Format<select id="editorContentType"><option value="auto"' + (project.contentTypeOverride === 'auto' || !project.contentTypeOverride ? ' selected' : '') + '>Auto · ' + esc(typeLabel(project.detectedContentType)) + '</option><option value="ultra_short"' + (project.contentTypeOverride === 'ultra_short' ? ' selected' : '') + '>Ultra-short</option><option value="short"' + (project.contentTypeOverride === 'short' ? ' selected' : '') + '>Short</option><option value="long_short"' + (project.contentTypeOverride === 'long_short' ? ' selected' : '') + '>Long-short</option><option value="longform"' + (project.contentTypeOverride === 'longform' ? ' selected' : '') + '>Longform</option></select></label></section>' +
       '<section class="editor-plan-link"><div><div class="eyebrow">Planning workflow</div><strong>' + (project.planningPieceId ? 'Linked to ' + esc(displayName(project)) : 'No planning card linked') + '</strong><span>' + esc(project.planningMatch && project.planningMatch.reason || (project.planningMatchStatus === 'running' || project.planningMatchStatus === 'pending' ? 'Matching the transcript to Filmed cards…' : 'Choose a card manually if this recording came from the Kanban.')) + '</span></div><label>Content card<select id="editorPlanningPiece">' + planningOptionsHtml(project) + '</select></label>' +
         (project.planningMatchStatus !== 'running' && project.planningMatchStatus !== 'pending' ? '<button type="button" class="editor-analyze" id="editorMatchPlan">Match again</button>' : '') + '</section>' +
-      '<div class="editor-preview-mode"><div><strong>' + (previewMode === 'final' ? 'Final edit' : 'Original master') + '</strong><span>' + (previewMode === 'final' ? 'This is the actual encoded file that will go to production.' : 'Use this view to inspect or restore source material.') + '</span></div>' +
+      '<div class="editor-preview-mode"><div><strong>' + (previewMode === 'final' ? 'Final edit' : previewingWorkingEdit ? 'Working preview' : 'Original master') + '</strong><span>' + (previewMode === 'final' ? 'This is the actual encoded file that will go to production.' : previewingWorkingEdit ? 'Cuts and caption timing are previewed instantly while the verified edit builds.' : 'Untouched source playback for checking anything the edit removed.') + '</span></div>' +
         '<div class="editor-preview-actions"><span class="editor-review-keys">Space play/pause · ←/→ 2s</span><label>Review speed<select id="editorReviewRate"><option value="1"' + (reviewRate === 1 ? ' selected' : '') + '>1×</option><option value="1.25"' + (reviewRate === 1.25 ? ' selected' : '') + '>1.25×</option><option value="1.5"' + (reviewRate === 1.5 ? ' selected' : '') + '>1.5×</option><option value="2"' + (reviewRate === 2 ? ' selected' : '') + '>2×</option></select></label>' +
         (project.renderStatus === 'ready' ? '<button type="button" id="editorPreviewFinal" class="' + (previewMode === 'final' ? 'active' : '') + '">Final edit</button><button type="button" id="editorPreviewSource" class="' + (previewMode === 'source' ? 'active' : '') + '">Original master</button>' : '') + '</div></div>' +
       '<div class="editor-preview" id="editorPreview" tabindex="0" aria-label="Video review. Space plays or pauses. Left and right arrows move two seconds."><div class="editor-video-frame ' + layout + '" style="--crop-x:' + cropPercent + '%"><video id="editorVideo" data-preview-mode="' + previewMode + '" data-seek-time="' + previewSeek.toFixed(3) + '" controls playsinline preload="metadata" src="' + previewUrl + '"></video>' +
@@ -530,6 +531,7 @@
     var caption = root.querySelector('#editorCaption');
     var transcript = root.querySelector('#editorTranscript');
     var previewingFinal = video.dataset.previewMode === 'final';
+    var previewingOriginalMaster = !previewingFinal && project.renderStatus === 'ready';
     var rendering = ['queued', 'running'].indexOf(project.renderStatus) !== -1;
     var sentToProduction = !!project.productionPieceId;
     var editingLocked = rendering || sentToProduction;
@@ -561,8 +563,10 @@
         caption.classList.remove('visible');
         return;
       }
-      var cut = (project.cuts || []).filter(function (item) { return video.currentTime >= item.start && video.currentTime < item.end; })[0];
-      if (cut && cut.end < video.duration) { video.currentTime = cut.end + 0.01; return; }
+      if (!previewingOriginalMaster) {
+        var cut = (project.cuts || []).filter(function (item) { return video.currentTime >= item.start && video.currentTime < item.end; })[0];
+        if (cut && cut.end < video.duration) { video.currentTime = cut.end + 0.01; return; }
+      }
       var group = (project.captionGroups || []).filter(function (item) {
         return video.currentTime >= item.sourceStart && video.currentTime <= item.sourceEnd + 0.18;
       })[0];

@@ -12339,3 +12339,21 @@ hidden on phone layouts where hardware-key instructions would be noise. The
 headless browser workflow verifies both seek directions and playback, and a
 live authenticated phone-layout check confirms the real Editor remains free of
 horizontal overflow.
+
+---
+
+# 309. Original Master Playback Is Genuinely Uncut (2026-09-29)
+
+The source toggle was labelled **Original master**, but its `timeupdate`
+handler still jumped across every current cut. That behavior was useful while
+previewing an unrendered working edit, but wrong after a final render existed:
+Harvey could not listen to the exact material an edit removed before deciding
+whether to restore it.
+
+The Editor now distinguishes three truthful review states. **Working preview**
+uses the source file to simulate current cuts and live caption timing before an
+encoded output exists. **Final edit** plays the verified encoded file. Once
+that final exists, **Original master** plays the untouched source without ever
+skipping a removed pause, word or take. Browser coverage deliberately parks the
+playhead inside a cut and proves that Working preview advances past it while
+Original master remains at the requested source timestamp.
