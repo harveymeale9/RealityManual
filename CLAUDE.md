@@ -11737,3 +11737,20 @@ The Recordings sidebar also carries its current total. The Chromium batch flow
 now proves two ready recordings become one ready plus one sent immediately
 after approving the first, while the next recording automatically opens and the
 mobile layout remains overflow-free.
+
+---
+
+# 276. Editor Saves Are Ordered and Cannot Pull Review Backward (2026-09-29)
+
+Every Editor PATCH is now serialized per recording. Rapid crop, format, pacing
+or transcript changes therefore reach the server in the order Harvey made them
+instead of allowing a slower earlier response to overwrite a later choice.
+Each request also captures its recording id: if Harvey opens the next item while
+a previous save is in flight, that response updates the correct sidebar record
+but cannot replace the newly opened workspace. The top bar shows Saving, Saved
+or Save failed against the relevant recording.
+
+The Chromium batch regression fires two changes without waiting, switches to a
+different recording during the artificial network delay, and proves maximum
+concurrent PATCHes for the original is one, server order is preserved, and the
+active workspace remains on the recording Harvey selected.

@@ -10,6 +10,8 @@
   var mountToken = 0;
   var editorNotice = '';
   var previewModes = {};
+  var saveQueues = {};
+  var saveStates = {};
   var reviewRate = Number(localStorage.getItem('rmEditorReviewRate')) || 1;
   if ([1, 1.25, 1.5, 2].indexOf(reviewRate) === -1) reviewRate = 1;
 
@@ -342,7 +344,7 @@
     var previewUrl = previewMode === 'final' ? '/api/editor/' + encodeURIComponent(project.id) + '/render?inline=1' : '/api/editor/' + encodeURIComponent(project.id) + '/source';
     workspace.innerHTML =
       '<div class="editor-topbar"><div><h2>' + esc(displayName(project)) + '</h2><span>' + (project.planningPieceTitle ? esc(project.name) + ' · ' : '') + formatTime(project.duration) + ' original · ' + formatTime(editedDuration(project)) + ' edited · ' + cutSeconds.toFixed(1) + 's removed</span></div>' +
-        '<button class="editor-delete" id="editorDelete">Delete recording</button></div>' +
+        '<div class="editor-topbar-actions"><span class="editor-save-state ' + esc(saveStates[project.id] || '') + '" id="editorSaveState">' + ({ saving: 'Saving…', saved: 'Saved', error: 'Save failed' }[saveStates[project.id]] || '') + '</span><button class="editor-delete" id="editorDelete">Delete recording</button></div></div>' +
       '<section class="editor-classification"><div><div class="eyebrow">Automatic classification</div><strong>' + (layout === 'vertical' ? 'Single page · Vertical' : 'Open spread · Horizontal') + '</strong><span>' + classificationCopy + ' · ' + esc(typeLabel(project.detectedContentType)) + '</span>' +
         (project.classificationStatus !== 'ready' && project.classificationStatus !== 'running' && project.classificationStatus !== 'pending' ? '<button type="button" class="editor-analyze" id="editorAnalyze">Analyze book framing</button>' : '') + '</div>' +
         '<label>Frame<select id="editorLayout"><option value="auto"' + (project.layoutOverride === 'auto' || !project.layoutOverride ? ' selected' : '') + '>Auto detect</option><option value="vertical"' + (project.layoutOverride === 'vertical' ? ' selected' : '') + '>Vertical · single page</option><option value="horizontal"' + (project.layoutOverride === 'horizontal' ? ' selected' : '') + '>Horizontal · open spread</option></select></label>' +
@@ -626,19 +628,35 @@
   }
 
   function save(patch, preserveHistory) {
-    return api('/api/editor/' + project.id, { method: 'PATCH', body: JSON.stringify(patch) }).then(function (item) {
-      project = item;
+    var id = project.id;
+    saveStates[id] = 'saving';
+    var stateNode = root.querySelector('#editorSaveState');
+    if (stateNode && project && project.id === id) { stateNode.className = 'editor-save-state saving'; stateNode.textContent = 'Saving…'; }
+    var previous = saveQueues[id] || Promise.resolve();
+    var request = previous.catch(function () {}).then(function () {
+      return api('/api/editor/' + id, { method: 'PATCH', body: JSON.stringify(patch) });
+    }).then(function (item) {
+      saveStates[id] = 'saved';
       projects = projects.map(function (entry) { return entry.id === item.id ? item : entry; });
       if (!preserveHistory && history.length > 100) history.shift();
-      renderList(); renderWorkspace();
-    }).catch(function (error) { alert(error.message); });
+      renderList();
+      if (project && project.id === id) { project = item; renderWorkspace(); }
+      return item;
+    }).catch(function (error) {
+      saveStates[id] = 'error';
+      if (project && project.id === id) renderWorkspace();
+      alert(error.message);
+    });
+    saveQueues[id] = request;
+    request.finally(function () { if (saveQueues[id] === request) delete saveQueues[id]; });
+    return request;
   }
 
   window.RMEditor = {
     mount: function (element) {
       mountToken++;
       clearTimeout(pollTimer);
-      root = element; projects = []; project = null; selected.clear(); history = [];
+      root = element; projects = []; project = null; selected.clear(); history = []; saveQueues = {}; saveStates = {};
       shell();
       loadProjects().catch(function (error) {
         root.querySelector('#editorWorkspace').innerHTML = '<div class="editor-empty"><strong>Editor unavailable</strong><span>' + esc(error.message) + '</span></div>';
