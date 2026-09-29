@@ -13419,3 +13419,26 @@ a recording still loads its full authoritative record from `GET /api/editor/:id`
 This changes no editing semantics; it removes work proportional to the total
 spoken-word count from the hot polling path. Unit coverage proves summaries
 retain actionable state, exclude heavy fields, and never mutate durable data.
+
+---
+
+# 363. Filming Batches Recover One Transient Upload Failure (2026-09-29)
+
+A multi-gigabyte filming batch should not require manual reselection because one
+request briefly lost connectivity or received a retryable server response.
+Editor now retries each file once after a network error, timeout, rate limit,
+early-processing response, or 5xx failure. The progress panel explicitly says
+which recording is being retried, while cancellation remains authoritative
+during the short retry delay. Permanent validation, capacity, and format errors
+still fail immediately and the queue continues to the next file.
+
+There is also a subtle accepted-but-response-lost case: the first request may
+finish and persist the source after the browser connection dies. Its retry then
+receives the existing byte-identity duplicate. Editor recognizes that response,
+loads the already-secured project, and treats the upload as successful instead
+of reporting a false failure. Navigating or refreshing the whole page during an
+active browser upload now triggers the standard unsaved-work warning; moving
+between Content Studio tabs remains safe and does not interrupt the batch.
+Browser coverage forces both a 503-followed-by-success and a persisted-first-
+request-followed-by-duplicate response. It proves exactly one retry, one queue
+card, and no false failure in either case.

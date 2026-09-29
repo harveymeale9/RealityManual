@@ -27,6 +27,12 @@
   var reviewRate = Number(localStorage.getItem('rmEditorReviewRate')) || 1;
   if ([1, 1.25, 1.5, 2].indexOf(reviewRate) === -1) reviewRate = 1;
 
+  window.addEventListener('beforeunload', function (event) {
+    if (!uploadBatchInProgress) return;
+    event.preventDefault();
+    event.returnValue = '';
+  });
+
   function esc(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, function (char) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char];
@@ -449,6 +455,8 @@
       if (xhr.status < 200 || xhr.status >= 300) {
         var uploadError = new Error(body.message || (xhr.status === 413 ? 'This recording is larger than the 2 GB upload limit. Split or trim the raw take, then try again.' : 'The recording could not be uploaded.'));
         uploadError.duplicate = body.error === 'duplicate_recording';
+        uploadError.existingProjectId = body.existingProjectId || '';
+        uploadError.transient = xhr.status === 408 || xhr.status === 425 || xhr.status === 429 || xhr.status >= 500;
         return reject(uploadError);
       }
       projects.unshift(body);
@@ -457,7 +465,9 @@
     };
     xhr.onerror = function () {
       if (currentUploadXhr === xhr) currentUploadXhr = null;
-      reject(new Error('Upload failed. Check the connection and try again.'));
+      var error = new Error('Upload failed. Check the connection and try again.');
+      error.transient = true;
+      reject(error);
     };
     xhr.onabort = function () {
       if (currentUploadXhr === xhr) currentUploadXhr = null;
@@ -466,6 +476,32 @@
       reject(error);
     };
     xhr.send(data);
+    });
+  }
+
+  function uploadWithRetry(file, queueIndex, queueTotal, completedBytes, totalBytes) {
+    return upload(file, queueIndex, queueTotal, completedBytes, totalBytes).catch(function (firstError) {
+      if (firstError.cancelled || firstError.duplicate || !firstError.transient) throw firstError;
+      uploadStatusText = 'Connection interrupted · retrying ' + file.name + ' once…';
+      paintUploadStatus();
+      return new Promise(function (resolve) { setTimeout(resolve, 600); }).then(function () {
+        if (uploadBatchCancelled) {
+          var cancelled = new Error('Upload cancelled.');
+          cancelled.cancelled = true;
+          throw cancelled;
+        }
+        return upload(file, queueIndex, queueTotal, completedBytes, totalBytes);
+      }).catch(function (retryError) {
+        // The first request can finish server-side after the connection drops.
+        // Byte identity makes the retry a duplicate; recover that existing
+        // project as success instead of asking Harvey to upload it again.
+        if (!retryError.duplicate || !retryError.existingProjectId) throw retryError;
+        return api('/api/editor/' + encodeURIComponent(retryError.existingProjectId)).then(function (item) {
+          if (!projects.some(function (entry) { return entry.id === item.id; })) projects.unshift(item);
+          renderList();
+          return item;
+        });
+      });
     });
   }
 
@@ -505,7 +541,7 @@
     files.forEach(function (file, index) {
       sequence = sequence.then(function () {
         if (uploadBatchCancelled) return;
-        return upload(file, index, files.length, completedBytes, totalBytes).then(function (item) {
+        return uploadWithRetry(file, index, files.length, completedBytes, totalBytes).then(function (item) {
           created.push(item);
           // A fresh session can start showing automatic work as soon as its
           // first file is secured. Never steal selection from an edit Harvey
