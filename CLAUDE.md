@@ -12483,3 +12483,21 @@ cleanup, while Sent projects remain locked. Integration coverage starts with an
 automatic match, changes to a second valid card, verifies the prior/new ids
 delivered to reconciliation, and proves the subsequent render operates against
 the corrected link.
+
+---
+
+# 317. Deleting an Unsent Edit Cannot Strand Its Card at Edited (2026-09-29)
+
+The same stage-ownership issue applied when deleting an Editor recording. If a
+verified but unapproved project had already advanced its linked card to Edited,
+deleting the only edited file removed the Editor data but left the Kanban card
+claiming an edited asset still existed.
+
+Deletion now runs an injected workflow-cleanup hook before removing metadata or
+files. For an unsent project, a linked card is returned to Filmed only when its
+stage and `editorProjectId` prove this project owns the transition. If cleanup
+fails, deletion is refused and the recording remains intact. A Sent archive is
+different: its Production copy is authoritative and the linked card is already
+Uploaded, so removing Editor files leaves both untouched. Integration coverage
+proves the hook receives the complete Sent project and deletion still removes
+only the Editor record.

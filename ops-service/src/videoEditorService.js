@@ -439,6 +439,7 @@ function setup(options) {
   const matchPlanningPiece = options.matchPlanningPiece;
   const onRenderReady = options.onRenderReady;
   const onPlanningPieceChanged = options.onPlanningPieceChanged;
+  const onProjectDeleted = options.onProjectDeleted;
   if (!db || !dataDir || typeof transcribeDetailed !== 'function') throw new Error('video editor setup is incomplete');
   const router = express.Router();
   const rootDir = path.join(dataDir, 'editor');
@@ -1291,6 +1292,12 @@ async function renderProject(id) {
   router.delete('/:id', function (req, res) {
     if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
     if (renderJobs.has(req.params.id)) return res.status(409).json({ error: 'render_in_progress', message: 'Wait for the final edit to finish before deleting this recording.' });
+    const project = getProject(req.params.id);
+    if (!project) return res.status(404).json({ error: 'not_found' });
+    if (typeof onProjectDeleted === 'function') {
+      try { onProjectDeleted({ project: project }); }
+      catch (error) { return res.status(422).json({ error: 'workflow_cleanup_failed', message: 'The linked planning card could not be reconciled, so the recording was kept safely.' }); }
+    }
     if (automaticRenderTimers.has(req.params.id)) { clearTimeout(automaticRenderTimers.get(req.params.id)); automaticRenderTimers.delete(req.params.id); }
     delStmt.run(STORE_NAME, req.params.id);
     fs.rm(projectDir(req.params.id), { recursive: true, force: true }, function () {});

@@ -338,6 +338,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   let renderReadyCalls = 0;
   let expectedPlanningPieceId = 'plan-1';
   const planningChanges = [];
+  const deletedProjects = [];
   const service = editor.setup({
     db: db,
     dataDir: dir,
@@ -367,6 +368,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
     onPlanningPieceChanged: function (input) {
       planningChanges.push({ previous: input.previousPlanningPieceId, next: input.project.planningPieceId });
     },
+    onProjectDeleted: function (input) { deletedProjects.push(input.project); },
     handoffToProduction: async function (input) {
       handoffCalls++;
       assert.equal(input.project.id.length > 0, true);
@@ -505,4 +507,10 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   response = await fetch(base + '/api/editor/' + project.id + '/render', { method: 'POST' });
   assert.equal(response.status, 409);
   assert.equal((await response.json()).error, 'approved_read_only');
+  response = await fetch(base + '/api/editor/' + project.id, { method: 'DELETE' });
+  assert.equal(response.status, 200);
+  assert.equal(deletedProjects.length, 1);
+  assert.equal(deletedProjects[0].productionPieceId, project.id);
+  response = await fetch(base + '/api/editor/' + project.id);
+  assert.equal(response.status, 404);
 });

@@ -604,6 +604,15 @@ function reconcileEditorPlanningPiece(input) {
   delete previous.editorProjectId;
   savePieceRecord(previous);
 }
+
+function reconcileDeletedEditorProject(input) {
+  const project = input && input.project;
+  if (!project || project.productionPieceId || !project.planningPieceId) return;
+  reconcileEditorPlanningPiece({
+    project: Object.assign({}, project, { planningPieceId: '' }),
+    previousPlanningPieceId: project.planningPieceId
+  });
+}
 const videoEditor = videoEditorService.setup({
   db: db,
   dataDir: DATA_DIR,
@@ -614,6 +623,7 @@ const videoEditor = videoEditorService.setup({
   matchPlanningPiece: matchEditorPlanningPiece,
   onRenderReady: function (input) { advanceEditorPlanningPiece(input, 'edited'); },
   onPlanningPieceChanged: reconcileEditorPlanningPiece,
+  onProjectDeleted: reconcileDeletedEditorProject,
   handoffToProduction: sendEditorProjectToProduction
 });
 app.use('/api/editor', requireAuth, videoEditor.router);
