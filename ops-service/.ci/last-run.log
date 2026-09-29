@@ -11,17 +11,20 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   be62e0e..38598af  main       -> origin/main
+   38598af..7daf4e7  main       -> origin/main
 + git merge --ff-only origin/main
-Updating be62e0e..38598af
+Updating 38598af..7daf4e7
 Fast-forward
- CLAUDE.md                     |  18 ++++++
- ops-service/.ci/last-run.log  | 124 +++++++++++++++++++++++++++++++++++++++++-
- ops-service/public/editor.js  |  19 +++++--
- ops-service/public/index.html |   4 +-
- 4 files changed, 157 insertions(+), 8 deletions(-)
+ CLAUDE.md                                   |  25 ++++++
+ ops-service/.ci/last-run.log                | 113 +++++-----------------------
+ ops-service/public/editor.js                |  20 ++++-
+ ops-service/public/index.html               |   4 +-
+ ops-service/public/style.css                |   2 +-
+ ops-service/src/videoEditorService.js       |  12 +++
+ ops-service/test/videoEditorService.test.js |  13 +++-
+ 7 files changed, 85 insertions(+), 104 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=38598af5364dbd556b8decd5d2cfba1a84747bcf
++ NEW_HEAD=7daf4e7838f09868c9602ee40f55bed0a0980f40
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -34,12 +37,84 @@ Already up to date.
 + NEEDS_REBUILD=1
 + '[' -n be62e0ebeeaf6435ce8192eba6734c2bde360735 ']'
 + git cat-file -e 'be62e0ebeeaf6435ce8192eba6734c2bde360735^{commit}'
-++ git diff --name-only be62e0ebeeaf6435ce8192eba6734c2bde360735 38598af5364dbd556b8decd5d2cfba1a84747bcf -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
-+ '[' -z '' ']'
-+ NEEDS_REBUILD=0
+++ git diff --name-only be62e0ebeeaf6435ce8192eba6734c2bde360735 7daf4e7838f09868c9602ee40f55bed0a0980f40 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -z ops-service/src/videoEditorService.js ']'
 + '[' 0 = 1 ']'
-+ '[' 0 = 0 ']'
-+ echo 'no backend changes between be62e0ebeeaf6435ce8192eba6734c2bde360735 and 38598af5364dbd556b8decd5d2cfba1a84747bcf — already live via git pull, skipping rebuild/restart'
-no backend changes between be62e0ebeeaf6435ce8192eba6734c2bde360735 and 38598af5364dbd556b8decd5d2cfba1a84747bcf — already live via git pull, skipping rebuild/restart
-+ exit 0
++ '[' 1 = 0 ']'
++ docker tag rm-ops-service rm-ops-service:previous
++ docker build -t rm-ops-service ./ops-service
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 2.60kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/node:22-slim
+#2 DONE 0.2s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 136B done
+#3 DONE 0.0s
+
+#4 [ 1/11] FROM docker.io/library/node:22-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c
+#4 resolve docker.io/library/node:22-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c 0.0s done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 315.07kB 0.0s done
+#5 DONE 0.0s
+
+#6 [ 6/11] RUN npm install --omit=dev
+#6 CACHED
+
+#7 [ 2/11] RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && rm -rf /var/lib/apt/lists/*
+#7 CACHED
+
+#8 [ 3/11] RUN npm install -g @anthropic-ai/claude-code@2.1.276
+#8 CACHED
+
+#9 [ 4/11] WORKDIR /app
+#9 CACHED
+
+#10 [ 5/11] COPY package.json ./
+#10 CACHED
+
+#11 [ 7/11] COPY server.js ./
+#11 CACHED
+
+#12 [ 8/11] COPY src ./src
+#12 DONE 0.1s
+
+#13 [ 9/11] COPY public ./public
+#13 DONE 0.2s
+
+#14 [10/11] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
+#14 DONE 22.3s
+
+#15 [11/11] RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
+#15 DONE 0.3s
+
+#16 exporting to image
+#16 exporting layers
+#16 exporting layers 10.9s done
+#16 exporting manifest sha256:5ae01efea44f1883d604cb6b0ca21b2b29d9343885602a98b768ee09b5775347
+#16 exporting manifest sha256:5ae01efea44f1883d604cb6b0ca21b2b29d9343885602a98b768ee09b5775347 0.0s done
+#16 exporting config sha256:ed500056b10e3b618fa559a034d78307f8edc6b0485bbd3e2ffeb09fdba932c5 0.0s done
+#16 exporting attestation manifest sha256:ef313d9a1bb5a37f85b39e76fadc5c904827ed2c58bd69e0b415786ae87ebeaf 0.0s done
+#16 exporting manifest list sha256:b43363987f669bacf54a95606f9e48d7b8a59f6b2fdf8ddd0f5efc3a59f93956
+#16 exporting manifest list sha256:b43363987f669bacf54a95606f9e48d7b8a59f6b2fdf8ddd0f5efc3a59f93956 0.0s done
+#16 naming to docker.io/library/rm-ops-service:latest done
+#16 unpacking to docker.io/library/rm-ops-service:latest
+#16 unpacking to docker.io/library/rm-ops-service:latest 3.0s done
+#16 DONE 14.0s
++ docker stop rm-ops-service
+rm-ops-service
++ docker rm rm-ops-service
+rm-ops-service
++ docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-claude-home/claude-dir:/home/node/.claude -v /root/ops-service-claude-home/claude.json:/home/node/.claude.json -v /root/ops-service-data:/data -v /root/realitymanual-backend-data:/store-data:ro -v /srv/realitymanual-repo:/repo -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
+7982b94dff7541929881febcf4673e6bf697c42754431fb2b7561d182f7bb69d
++ echo 7daf4e7838f09868c9602ee40f55bed0a0980f40
+++ git -C /root/realitymanual-repo rev-parse --short HEAD
++ echo 'rm-ops-service redeployed at 7daf4e7'
+rm-ops-service redeployed at 7daf4e7
 ssh exit code: 0
