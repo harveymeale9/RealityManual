@@ -13073,4 +13073,6 @@ ordinary H.264 MOV recordings skip unnecessary conversion.
 The player labels this honestly as a **Browser-safe source copy**, identifies
 the preserved original codec, and explains that final rendering still uses the
 untouched camera master. It never presents the compatibility transcode as the
-original file.
+original file. Queue cards say **Preparing browser preview** (with position when
+applicable) rather than falling through to the misleading **Ready to edit**
+label while that conversion is still running.

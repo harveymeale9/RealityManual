@@ -148,6 +148,7 @@
     if (item.transcriptionStatus === 'pending') return queued('Waiting for transcript', item.transcriptionQueuePosition);
     if (item.transcriptionStatus === 'running') return 'Transcribing';
     if (item.transcriptionStatus === 'error') return 'Needs attention';
+    if (['pending', 'running'].indexOf(item.browserPreviewStatus) !== -1 && item.renderStatus !== 'ready') return queued('Preparing browser preview', item.previewQueuePosition);
     if (item.browserPreviewStatus === 'error' && item.renderStatus !== 'ready') return 'Needs attention';
     if (item.classificationStatus === 'error' || item.retakeAnalysisStatus === 'error' || item.planningMatchStatus === 'error' || item.renderStatus === 'error') return 'Needs attention';
     if (item.classificationStatus === 'pending') return queued('Waiting for frame analysis', item.classificationQueuePosition);
