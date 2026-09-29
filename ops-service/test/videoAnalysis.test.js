@@ -22,6 +22,11 @@ test('late analysis suggestions never replace a manually chosen title', function
   videoAnalysis.applyGeneratedTitleSuggestions(manual, generated);
   assert.equal(manual.title, 'demo vid');
   assert.deepEqual(manual.ytTitles, ['demo vid']);
+
+  const linkedOutline = { title: 'The linked planning-card title', ytTitles: [], preserveWorkingTitle: true };
+  videoAnalysis.applyGeneratedTitleSuggestions(linkedOutline, generated);
+  assert.equal(linkedOutline.title, 'The linked planning-card title');
+  assert.deepEqual(linkedOutline.ytTitles, ['Are You Ready?']);
 });
 
 test('final video mix uses the selected ambient percentage and clamps unsafe values', function () {

@@ -374,7 +374,7 @@ async function matchAndGenerateTitles(transcript, candidates) {
 function applyGeneratedTitleSuggestions(piece, result) {
   if (!piece || piece.ytTitlesManuallyEdited) return piece;
   if (result && Array.isArray(result.titleOptions) && result.titleOptions.length) piece.ytTitles = result.titleOptions;
-  if (result && result.workingTitle) piece.title = result.workingTitle;
+  if (result && result.workingTitle && !piece.preserveWorkingTitle) piece.title = result.workingTitle;
   return piece;
 }
 

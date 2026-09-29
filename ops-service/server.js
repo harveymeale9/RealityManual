@@ -1610,6 +1610,7 @@ async function sendEditorProjectToProduction(input) {
     id: project.id,
     seq: maxSeq + 1,
     title: project.planningPieceTitle || fileNameBase,
+    preserveWorkingTitle: !!project.planningPieceTitle,
     stage: 'processed',
     platforms: platforms,
     contentType: contentType,

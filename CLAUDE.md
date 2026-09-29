@@ -13076,3 +13076,19 @@ untouched camera master. It never presents the compatibility transcode as the
 original file. Queue cards say **Preparing browser preview** (with position when
 applicable) rather than falling through to the misleading **Ready to edit**
 label while that conversion is still running.
+
+---
+
+# 347. Linked Planning Titles Survive Production Analysis (2026-09-29)
+
+Editor correctly handed a linked planning card's title into Content Production,
+but the asynchronous downstream title analyzer treated it like an automatic
+camera filename and could replace it with its generated working title seconds
+later. That broke the durable identity between the Kanban outline and its filmed
+piece even though the useful YouTube title suggestions were still wanted.
+
+Editor handoffs now mark a planning-derived working title as preserved.
+Downstream analysis continues to populate `ytTitles`, but only replaces the
+generic working title when that preservation flag is absent. Existing manual
+title editing remains authoritative over both fields. Coverage proves a linked
+outline keeps its name while still receiving generated title options.
