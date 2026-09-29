@@ -10,6 +10,8 @@
   var mountToken = 0;
   var editorNotice = '';
   var previewModes = {};
+  var reviewRate = Number(localStorage.getItem('rmEditorReviewRate')) || 1;
+  if ([1, 1.25, 1.5, 2].indexOf(reviewRate) === -1) reviewRate = 1;
 
   function esc(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, function (char) {
@@ -322,7 +324,8 @@
       '<section class="editor-plan-link"><div><div class="eyebrow">Planning workflow</div><strong>' + (project.planningPieceId ? 'Linked to ' + esc(displayName(project)) : 'No planning card linked') + '</strong><span>' + esc(project.planningMatch && project.planningMatch.reason || (project.planningMatchStatus === 'running' || project.planningMatchStatus === 'pending' ? 'Matching the transcript to Filmed cards…' : 'Choose a card manually if this recording came from the Kanban.')) + '</span></div><label>Content card<select id="editorPlanningPiece">' + planningOptionsHtml(project) + '</select></label>' +
         (project.planningMatchStatus !== 'running' && project.planningMatchStatus !== 'pending' ? '<button type="button" class="editor-analyze" id="editorMatchPlan">Match again</button>' : '') + '</section>' +
       '<div class="editor-preview-mode"><div><strong>' + (previewMode === 'final' ? 'Final edit' : 'Original master') + '</strong><span>' + (previewMode === 'final' ? 'This is the actual encoded file that will go to production.' : 'Use this view to inspect or restore source material.') + '</span></div>' +
-        (project.renderStatus === 'ready' ? '<div><button type="button" id="editorPreviewFinal" class="' + (previewMode === 'final' ? 'active' : '') + '">Final edit</button><button type="button" id="editorPreviewSource" class="' + (previewMode === 'source' ? 'active' : '') + '">Original master</button></div>' : '') + '</div>' +
+        '<div class="editor-preview-actions"><label>Review speed<select id="editorReviewRate"><option value="1"' + (reviewRate === 1 ? ' selected' : '') + '>1×</option><option value="1.25"' + (reviewRate === 1.25 ? ' selected' : '') + '>1.25×</option><option value="1.5"' + (reviewRate === 1.5 ? ' selected' : '') + '>1.5×</option><option value="2"' + (reviewRate === 2 ? ' selected' : '') + '>2×</option></select></label>' +
+        (project.renderStatus === 'ready' ? '<button type="button" id="editorPreviewFinal" class="' + (previewMode === 'final' ? 'active' : '') + '">Final edit</button><button type="button" id="editorPreviewSource" class="' + (previewMode === 'source' ? 'active' : '') + '">Original master</button>' : '') + '</div></div>' +
       '<div class="editor-preview"><div class="editor-video-frame ' + layout + '" style="--crop-x:' + cropPercent + '%"><video id="editorVideo" data-preview-mode="' + previewMode + '" controls playsinline preload="metadata" src="' + previewUrl + '"></video>' +
         '<div class="editor-caption" id="editorCaption"></div></div></div>' +
       (layout === 'vertical' ? '<div class="editor-crop-control"><label>Horizontal crop position <input id="editorCropX" type="range" min="0" max="100" value="' + cropPercent + '"></label><span>Keep the single page centred inside the vertical frame.</span></div>' : '') +
@@ -357,6 +360,7 @@
     var caption = root.querySelector('#editorCaption');
     var transcript = root.querySelector('#editorTranscript');
     var previewingFinal = video.dataset.previewMode === 'final';
+    video.playbackRate = reviewRate;
     var lastClicked = null;
     var ignoreNextClick = false;
     function isLongformVideo() {
@@ -414,6 +418,11 @@
     if (finalPreviewButton) finalPreviewButton.onclick = function () { previewModes[project.id] = 'final'; renderWorkspace(); };
     var sourcePreviewButton = root.querySelector('#editorPreviewSource');
     if (sourcePreviewButton) sourcePreviewButton.onclick = function () { previewModes[project.id] = 'source'; renderWorkspace(); };
+    root.querySelector('#editorReviewRate').onchange = function () {
+      reviewRate = Number(this.value) || 1;
+      localStorage.setItem('rmEditorReviewRate', String(reviewRate));
+      video.playbackRate = reviewRate;
+    };
     transcript.addEventListener('click', function (event) {
       if (ignoreNextClick) { ignoreNextClick = false; return; }
       var word = event.target.closest('.editor-word');

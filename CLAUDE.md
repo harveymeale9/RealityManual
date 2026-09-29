@@ -11687,3 +11687,15 @@ Production item, while its physical media filename remains stable and safe.
 This makes a multi-video filming session traceable from Filmed through Editor
 and Production without relying on upload order or memory. Service integration
 asserts that the automatic match persists id, title and sequence together.
+
+---
+
+# 273. Review Speed Persists Across Editor Recordings (2026-09-29)
+
+The Final edit / Original master toolbar now includes 1x, 1.25x, 1.5x and 2x
+review speeds. The selection applies immediately to either media view and is
+stored locally, so moving to the next recording in a long filming session keeps
+Harvey's preferred review pace. It affects playback only and never changes the
+encoded production asset. Chromium verifies the media element receives the
+chosen rate, persistence is written, and the expanded toolbar still fits the
+390px mobile layout without horizontal overflow.
