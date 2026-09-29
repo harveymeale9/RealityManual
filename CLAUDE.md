@@ -12090,3 +12090,21 @@ warning. The Editor persists and visibly displays that warning while still
 confirming the safely completed handoff, instead of asking Harvey to repeat an
 approval that already succeeded. Route tests cover warning persistence and API
 delivery, and the browser workflow proves the warning is rendered after approval.
+
+---
+
+# 295. Batch Upload Never Guesses Duplicate Identity from Metadata (2026-09-29)
+
+The server's SHA-256 identity fix in §292 was still preceded by an old browser
+shortcut that removed files sharing a filename and byte count within one selected
+batch. That is not a content identity: reused camera names and coincidentally
+equal file sizes can represent different takes. Those files never reached the
+server and therefore never received the exact-byte comparison built to solve
+this problem.
+
+The browser now submits every selected video in sequence and treats a recording
+as duplicate only when the server reports an equal SHA-256 digest. This spends
+some upload time on a true duplicate but cannot silently discard unique footage.
+A browser regression selects three same-name, same-size files, proves both
+different payloads are uploaded, and proves the server-rejected repeated payload
+is the only one counted as skipped.

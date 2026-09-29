@@ -317,22 +317,10 @@
   }
 
   function uploadFiles(fileList) {
-    var seen = new Set();
     var duplicateCount = 0;
     var files = Array.prototype.slice.call(fileList || []).filter(function (file) {
-      if (String(file.type || '').indexOf('video') !== 0) return false;
-      var key = String(file.name || '') + '::' + String(file.size || 0);
-      if (seen.has(key)) { duplicateCount++; return false; }
-      seen.add(key); return true;
+      return String(file.type || '').indexOf('video') === 0;
     });
-    if (!files.length && duplicateCount) {
-      var duplicateProgress = root.querySelector('#editorUploadProgress');
-      duplicateProgress.hidden = false;
-      root.querySelector('#editorUploadBar').style.width = '100%';
-      root.querySelector('#editorUploadLabel').textContent = duplicateCount + ' duplicate recording' + (duplicateCount === 1 ? '' : 's') + ' already in Editor';
-      setTimeout(function () { duplicateProgress.hidden = true; }, 2200);
-      return;
-    }
     if (!files.length) return alert('Drop one or more video files.');
     var created = [];
     var failures = [];
