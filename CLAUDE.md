@@ -13069,3 +13069,8 @@ re-probed and backfilled automatically. Disk admission now reserves the extra
 worst-case copy. Unit coverage checks the codec/container policy, a real HEVC
 fixture must produce an H.264 proxy, and the full upload/render test confirms
 ordinary H.264 MOV recordings skip unnecessary conversion.
+
+The player labels this honestly as a **Browser-safe source copy**, identifies
+the preserved original codec, and explains that final rendering still uses the
+untouched camera master. It never presents the compatibility transcode as the
+original file.
