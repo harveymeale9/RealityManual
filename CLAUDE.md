@@ -12322,3 +12322,20 @@ the existing next-action flow. The underlying safety rule remains unchanged:
 automation does not guess when a repetition may be deliberate. Browser coverage
 proves the label, summary bucket and next-action selection, and the focused
 21-test service suite remains green.
+
+---
+
+# 308. Video Review Has Focused Keyboard Transport (2026-09-29)
+
+Repeatedly reaching for the small native video controls made checking cuts and
+retakes slower than the edit itself. The preview is now keyboard-focusable:
+**Space** toggles playback and the left/right arrows move exactly two seconds in
+either direction. The shortcuts work in both original and final-preview modes,
+while controls such as the review-speed selector retain their normal keyboard
+behavior.
+
+A compact shortcut reminder sits beside the desktop review controls and is
+hidden on phone layouts where hardware-key instructions would be noise. The
+headless browser workflow verifies both seek directions and playback, and a
+live authenticated phone-layout check confirms the real Editor remains free of
+horizontal overflow.
