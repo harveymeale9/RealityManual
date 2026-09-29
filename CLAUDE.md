@@ -13383,3 +13383,20 @@ of the phone carousel. After list repaint, Editor now horizontally centres the
 active card with `scrollLeft` only; it never calls vertical `scrollIntoView`, so
 background polling cannot yank Harvey away from the video or transcript he is
 reviewing.
+
+---
+
+# 361. Final Review Can Approve Without Re-Scrolling (2026-09-29)
+
+A complete Editor workspace can contain framing, video, cut decisions, retake
+review, and a long transcript. The canonical approval gate correctly follows
+all of that content, but after playing the final edit at the top Harvey had to
+scroll to the bottom merely to send an already verified file onward.
+
+When and only when the exact output is verified and ready, the recording header
+now offers **Approve & next** beside Previous/Next. It invokes the same guarded
+production handoff as the detailed bottom action, disables both entry points
+during the request, surfaces the same failure recovery, and advances to the
+highest-priority actionable recording after success. The bottom readiness gate
+remains in place for a transcript-first review. Browser coverage approves via
+the new fast path and proves both controls exist only in the eligible state.

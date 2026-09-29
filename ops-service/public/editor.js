@@ -659,7 +659,9 @@
     var previewSeek = Math.max(0, Number(previewSeekTimes[project.id]) || 0);
     workspace.innerHTML =
       '<div class="editor-topbar"><div><h2>' + esc(displayName(project)) + '</h2><span>' + (project.planningPieceTitle ? esc(project.name) + ' · ' : '') + formatTime(project.duration) + ' original · ' + formatTime(editedDuration(project)) + ' edited · ' + cutSeconds.toFixed(1) + 's removed' + (formatBytes(project.sizeBytes) ? ' · ' + formatBytes(project.sizeBytes) + ' source' : '') + '</span></div>' +
-        '<div class="editor-topbar-actions"><div class="editor-project-nav"><button type="button" class="btn-secondary btn-tiny" id="editorPreviousProject" ' + (reviewProjectIndex <= 0 ? 'disabled' : '') + '>← Previous</button><span id="editorProjectPosition">' + (reviewProjectIndex >= 0 ? (reviewProjectIndex + 1) + ' of ' + reviewProjects.length : '') + '</span><button type="button" class="btn-secondary btn-tiny" id="editorNextProject" ' + (reviewProjectIndex < 0 || reviewProjectIndex >= reviewProjects.length - 1 ? 'disabled' : '') + '>Next →</button></div><span class="editor-save-state ' + esc(saveStates[project.id] || '') + '" id="editorSaveState">' + ({ saving: 'Saving…', saved: 'Saved', error: 'Save failed' }[saveStates[project.id]] || '') + '</span><button class="editor-delete" id="editorDelete">' + (sentToProduction ? 'Remove Editor files' : 'Delete recording') + '</button></div></div>' +
+        '<div class="editor-topbar-actions"><div class="editor-project-nav"><button type="button" class="btn-secondary btn-tiny" id="editorPreviousProject" ' + (reviewProjectIndex <= 0 ? 'disabled' : '') + '>← Previous</button><span id="editorProjectPosition">' + (reviewProjectIndex >= 0 ? (reviewProjectIndex + 1) + ' of ' + reviewProjects.length : '') + '</span><button type="button" class="btn-secondary btn-tiny" id="editorNextProject" ' + (reviewProjectIndex < 0 || reviewProjectIndex >= reviewProjects.length - 1 ? 'disabled' : '') + '>Next →</button></div>' +
+          (!sentToProduction && project.renderStatus === 'ready' ? '<button type="button" class="btn-primary btn-tiny editor-quick-approve" data-editor-approve>Approve &amp; next</button>' : '') +
+          '<span class="editor-save-state ' + esc(saveStates[project.id] || '') + '" id="editorSaveState">' + ({ saving: 'Saving…', saved: 'Saved', error: 'Save failed' }[saveStates[project.id]] || '') + '</span><button class="editor-delete" id="editorDelete">' + (sentToProduction ? 'Remove Editor files' : 'Delete recording') + '</button></div></div>' +
       (rendering ? '<div class="editor-lock-notice"><strong>Final edit is encoding</strong><span>Review remains available. Editing unlocks as soon as the verified file is ready.</span></div>' : '') +
       (project.browserPreviewRequired && ['pending', 'running'].indexOf(project.browserPreviewStatus) !== -1 && previewMode === 'source' ? '<div class="editor-lock-notice"><strong>Preparing a browser-safe source preview</strong><span>The camera master is preserved and final editing continues. This view will switch to H.264 automatically when ready.</span></div>' : '') +
       (sentToProduction ? '<div class="editor-lock-notice approved"><strong>Approved version locked</strong><span>The exact reviewed file is now in Content Production. Source and final previews remain available here.</span></div>' : '') +
@@ -699,7 +701,7 @@
         (['queued', 'running'].indexOf(project.renderStatus) !== -1 ? '<div class="editor-render-progress"><span id="editorRenderProgressLabel">' + (project.renderStatus === 'queued' ? (Number(project.renderQueuePosition) > 1 ? (Number(project.renderQueuePosition) - 1) + ' recording(s) ahead in the render queue' : 'Next in the render queue') : 'Encoding final edit · ' + Math.round(Number(project.renderProgress) || 0) + '%') + '</span><div><i id="editorRenderProgressBar" style="width:' + (project.renderStatus === 'queued' ? 4 : Math.max(2, Number(project.renderProgress) || 0)) + '%"></i></div></div>' : '') +
         (project.renderStatus === 'error' ? '<em>' + esc(project.renderError) + '</em>' : '') + '</div><div class="editor-export-actions">' +
         (project.productionPieceId ? '<button class="btn-primary" id="editorOpenProduction">Open Content Production</button>' :
-          project.renderStatus === 'ready' ? '<button class="btn-primary" id="editorSendProduction">Approve &amp; Send to Production</button>' :
+          project.renderStatus === 'ready' ? '<button class="btn-primary" id="editorSendProduction" data-editor-approve>Approve &amp; Send to Production</button>' :
           '<button class="btn-primary" id="editorRender" ' + (['queued', 'running'].indexOf(project.renderStatus) !== -1 || renderBlocked ? 'disabled' : '') + '>' + (project.renderStatus === 'queued' ? 'Waiting in render queue…' : project.renderStatus === 'running' ? 'Building final edit… ' + Math.round(Number(project.renderProgress) || 0) + '%' : renderButtonText) + '</button>') +
         '</div></div>';
     bindWorkspace();
@@ -1069,12 +1071,11 @@
         return openProject(project.id, true);
       }).catch(function (error) { retryFailedButton.disabled = false; retryFailedButton.textContent = 'Retry failed steps'; alert(error.message); });
     };
-    var sendButton = root.querySelector('#editorSendProduction');
-    if (sendButton) sendButton.onclick = function () {
+    var approveButtons = Array.from(root.querySelectorAll('[data-editor-approve]'));
+    function approveCurrentProject() {
       var approvedId = project.id;
       var approvedName = project.name;
-      sendButton.disabled = true;
-      sendButton.textContent = 'Approving…';
+      approveButtons.forEach(function (button) { button.disabled = true; button.textContent = 'Approving…'; });
       api('/api/editor/' + project.id + '/production', { method: 'POST' }).then(function (result) {
         project.productionPieceId = result.pieceId;
         project.sentToProductionAt = new Date().toISOString();
@@ -1088,12 +1089,15 @@
         renderWorkspace();
         renderNotice();
       }).catch(function (error) {
-        sendButton.disabled = false;
-        sendButton.textContent = 'Approve & Send to Production';
+        approveButtons.forEach(function (button) {
+          button.disabled = false;
+          button.textContent = button.id === 'editorSendProduction' ? 'Approve & Send to Production' : 'Approve & next';
+        });
         alert(error.message);
         if (editorMounted()) openProject(approvedId, true);
       });
-    };
+    }
+    approveButtons.forEach(function (button) { button.onclick = approveCurrentProject; });
     var openButton = root.querySelector('#editorOpenProduction');
     if (openButton) openButton.onclick = function () {
       if (typeof window.__rmOpenContentProduction === 'function') window.__rmOpenContentProduction(project.productionPieceId);
