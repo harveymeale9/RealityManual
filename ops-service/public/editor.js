@@ -83,7 +83,7 @@
     if (!decisions.length) return '<div class="editor-review-empty">No long pauses need attention.</div>';
     return decisions.map(function (gap) {
       return '<div class="editor-decision ' + (gap.restored ? 'kept' : 'removed') + '"><div><strong>' + esc(gap.label) + '</strong><span>' + gap.duration.toFixed(1) + 's ' + (gap.restored ? 'kept in the edit' : 'removed') + '</span></div>' +
-        '<button type="button" class="btn-secondary btn-tiny editor-gap-toggle" data-gap-id="' + esc(gap.id) + '" data-restored="' + (gap.restored ? '1' : '0') + '">' + (gap.restored ? 'Remove pause' : 'Keep pause') + '</button></div>';
+        '<div class="editor-decision-actions"><button type="button" class="btn-secondary btn-tiny editor-preview-cut" data-time="' + Math.max(0, gap.start - 1.2) + '">Preview</button><button type="button" class="btn-secondary btn-tiny editor-gap-toggle" data-gap-id="' + esc(gap.id) + '" data-restored="' + (gap.restored ? '1' : '0') + '">' + (gap.restored ? 'Remove pause' : 'Keep pause') + '</button></div></div>';
     }).join('');
   }
 
@@ -97,10 +97,24 @@
     if (!candidates.length) return '<div class="editor-review-empty">No likely retakes need review.</div>';
     return candidates.map(function (candidate) {
       var applied = candidate.removeWordIndices.every(function (index) { return removed.has(index); });
+      var firstWord = (item.words || [])[candidate.removeWordIndices[0]];
       return '<div class="editor-retake-card' + (applied ? ' applied' : '') + '"><div class="editor-retake-badge ' + esc(candidate.confidence) + '">' + (applied ? 'Removed automatically' : candidate.confidence === 'high' ? 'Likely retake' : 'Check repetition') + '</div>' +
         '<p><del>“' + esc(candidate.firstText) + '”</del></p><p class="replacement">Latest take: “' + esc(candidate.replacementText) + '”</p><span>' + esc(candidate.reason) + '</span>' +
-        '<div>' + (applied ? '' : '<button type="button" class="btn-primary btn-tiny editor-retake-apply" data-id="' + esc(candidate.id) + '">Use latest take</button>') + '<button type="button" class="btn-secondary btn-tiny editor-retake-dismiss" data-id="' + esc(candidate.id) + '" data-applied="' + (applied ? '1' : '0') + '">' + (applied ? 'Restore first take' : 'Keep both') + '</button></div></div>';
+        '<div><button type="button" class="btn-secondary btn-tiny editor-preview-cut" data-time="' + Math.max(0, Number(firstWord && firstWord.start) - 1.2) + '">Preview edit</button>' + (applied ? '' : '<button type="button" class="btn-primary btn-tiny editor-retake-apply" data-id="' + esc(candidate.id) + '">Use latest take</button>') + '<button type="button" class="btn-secondary btn-tiny editor-retake-dismiss" data-id="' + esc(candidate.id) + '" data-applied="' + (applied ? '1' : '0') + '">' + (applied ? 'Restore first take' : 'Keep both') + '</button></div></div>';
     }).join('');
+  }
+
+  function processingStepsHtml(item) {
+    function step(state, label, detail) {
+      return '<div class="editor-process-step ' + state + '"><i></i><div><strong>' + esc(label) + '</strong><span>' + esc(detail) + '</span></div></div>';
+    }
+    var transcriptState = item.transcriptionStatus === 'error' ? 'error' : item.transcriptionStatus === 'ready' ? 'done' : 'active';
+    var frameState = item.classificationStatus === 'error' ? 'error' : item.classificationStatus === 'ready' ? 'done' : item.classificationStatus === 'running' || item.classificationStatus === 'pending' ? 'active' : 'waiting';
+    var retakeState = item.retakeAnalysisStatus === 'error' ? 'error' : item.retakeAnalysisStatus === 'ready' ? 'done' : item.retakeAnalysisStatus === 'running' || item.retakeAnalysisStatus === 'pending' ? 'active' : 'waiting';
+    return '<div class="editor-processing-steps">' + step('done', 'Recording secured', 'Original master preserved') +
+      step(transcriptState, 'Word-timed transcript', transcriptState === 'done' ? 'Speech mapped' : transcriptState === 'error' ? 'Needs retry' : 'Listening for every word') +
+      step(frameState, 'Publishing frame', frameState === 'done' ? 'Composition detected' : frameState === 'error' ? 'Manual choice available' : frameState === 'active' ? 'Inspecting the book framing' : 'Waiting') +
+      step(retakeState, 'Retake review', retakeState === 'done' ? 'Decisions ready' : retakeState === 'error' ? 'Can be retried' : retakeState === 'active' ? 'Comparing nearby takes' : 'Starts after transcription') + '</div>';
   }
 
   function shell() {
@@ -209,6 +223,7 @@
       workspace.innerHTML = '<div class="editor-processing"><div class="editor-processing-icon' + (isError ? ' error' : '') + '">' + (isError ? '!' : '') + '</div>' +
         '<h2>' + (isError ? 'Transcription needs attention' : 'Building the transcript…') + '</h2><p>' +
         esc(isError ? project.transcriptionError : 'We are finding every spoken word and its exact position in the recording.') + '</p>' +
+        processingStepsHtml(project) +
         (isError ? '<button class="btn-primary" id="editorRetry">Retry transcription</button>' : '') + '</div>';
       if (isError) workspace.querySelector('#editorRetry').onclick = function () {
         api('/api/editor/' + project.id + '/transcribe', { method: 'POST' }).then(function () { project.transcriptionStatus = 'running'; renderWorkspace(); schedulePoll(); });
@@ -305,6 +320,13 @@
     });
     root.querySelectorAll('.editor-timeline-segment').forEach(function (segment) {
       segment.onclick = function () { video.currentTime = Number(segment.dataset.time) || 0; video.play().catch(function () {}); };
+    });
+    root.querySelectorAll('.editor-preview-cut').forEach(function (button) {
+      button.onclick = function () {
+        video.currentTime = Number(button.dataset.time) || 0;
+        video.play().catch(function () {});
+        video.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      };
     });
     transcript.addEventListener('click', function (event) {
       if (ignoreNextClick) { ignoreNextClick = false; return; }

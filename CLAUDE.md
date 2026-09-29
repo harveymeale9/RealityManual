@@ -11469,3 +11469,28 @@ After rendering, the action is now **Approve & Send to Production**, which more
 accurately names Harvey's final review step. Project-list status says **Ready for
 approval** rather than the obsolete “Export ready.” Tests cover unresolved,
 accepted, and explicitly dismissed retake states plus the full browser flow.
+
+---
+
+# 263. Cut Auditioning, Processing Story and Click-Free Audio Joins (2026-09-29)
+
+Review no longer requires scrubbing through a complete recording to hear each
+decision. Every automatic pause and possible retake now has **Preview**: it
+starts the source about 1.2 seconds before the relevant boundary, scrolls the
+video into view, and the existing non-destructive playback skipper performs the
+same join the final edit will use. Harvey can therefore audition a cut, keep or
+restore it, and move down the decision list quickly.
+
+The pre-transcript waiting screen now explains the real four-step pipeline with
+live visual states: Recording secured, Word-timed transcript, Publishing frame,
+and Retake review. Completed stages are green, active work pulses gold, errors
+are explicit, and the layout collapses to two columns on mobile. This replaces
+the opaque single spinner while preserving the same restart-safe jobs.
+
+Final FFmpeg audio segments now receive an inaudible 8ms fade at both cut
+boundaries before concatenation. This removes clicks caused by joining two
+arbitrary waveform positions while remaining far too short to blur speech or
+behave like an editorial transition. The generated-video integration test still
+proves the complete trim, caption, encode, download and production-handoff path,
+and Chromium now also proves decision-preview controls at desktop and mobile
+widths.

@@ -584,6 +584,7 @@ async function renderProject(id) {
       const filters = [];
       const cropPosition = clamp(project.cropCenterX === undefined ? 0.5 : Number(project.cropCenterX), 0, 1);
       segments.forEach(function (segment, index) {
+        const segmentDuration = segment.end - segment.start;
         let videoFilter = '[0:v]trim=start=' + segment.start.toFixed(3) + ':end=' + segment.end.toFixed(3) + ',setpts=PTS-STARTPTS';
         if (layout === 'vertical') {
           videoFilter += ",crop=w='min(iw\\,ih*9/16)':h='min(ih\\,iw*16/9)':x='(iw-ow)*" + cropPosition.toFixed(3) + "':y='(ih-oh)/2',scale=1080:1920,setsar=1";
@@ -591,7 +592,9 @@ async function renderProject(id) {
           videoFilter += ",crop=w='min(iw\\,ih*16/9)':h='min(ih\\,iw*9/16)':x='(iw-ow)/2':y='(ih-oh)/2',scale=1920:1080,setsar=1";
         }
         filters.push(videoFilter + '[v' + index + ']');
-        filters.push('[0:a]atrim=start=' + segment.start.toFixed(3) + ':end=' + segment.end.toFixed(3) + ',asetpts=PTS-STARTPTS[a' + index + ']');
+        // Tiny boundary fades prevent waveform discontinuities from creating
+        // a click at transcript/jump cuts, without audibly crossfading words.
+        filters.push('[0:a]atrim=start=' + segment.start.toFixed(3) + ':end=' + segment.end.toFixed(3) + ',asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0.008,afade=t=out:st=' + Math.max(0, segmentDuration - 0.008).toFixed(3) + ':d=0.008[a' + index + ']');
       });
       const concatInputs = segments.map(function (_, index) { return '[v' + index + '][a' + index + ']'; }).join('');
       filters.push(concatInputs + 'concat=n=' + segments.length + ':v=1:a=1[joinedv][outa]');
