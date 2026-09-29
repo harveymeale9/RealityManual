@@ -32,6 +32,30 @@ function outstandingEditorCapacity(projects) {
   }, 0);
 }
 
+function createPriorityTaskQueue() {
+  const urgent = [];
+  const normal = [];
+  let running = false;
+  function pump() {
+    if (running) return;
+    const entry = urgent.shift() || normal.shift();
+    if (!entry) return;
+    running = true;
+    Promise.resolve().then(entry.task).then(entry.resolve, entry.reject).finally(function () {
+      running = false;
+      pump();
+    });
+  }
+  return {
+    enqueue: function (task, priority) {
+      return new Promise(function (resolve, reject) {
+        (priority === 'urgent' ? urgent : normal).push({ task: task, resolve: resolve, reject: reject });
+        setImmediate(pump);
+      });
+    }
+  };
+}
+
 async function verifiedRenderMatches(project, filePath) {
   if (!project || project.renderStatus !== 'ready' || !project.renderQuality || project.renderQuality.status !== 'passed') return false;
   try {
@@ -667,9 +691,9 @@ function setup(options) {
   const renderJobs = new Map();
   const productionJobs = new Map();
   // Browser proxies and final masters are both sustained FFmpeg encodes. One
-  // shared chain prevents a filming batch from saturating the VPS by running
-  // those two classes of work concurrently.
-  let encodeChain = Promise.resolve();
+  // priority queue prevents CPU contention while letting an approval-ready
+  // final take the next slot ahead of proxies that have not started yet.
+  const encodeQueue = createPriorityTaskQueue();
   const classificationJobs = new Map();
   const retakeJobs = new Map();
   const planningMatchJobs = new Map();
@@ -782,7 +806,7 @@ function setup(options) {
     if (previewJobs.has(id)) return previewJobs.get(id);
     const initial = getProject(id);
     if (!initial || !initial.browserPreviewRequired || initial.productionPieceId) return;
-    const job = encodeChain.catch(function () {}).then(async function () {
+    const job = encodeQueue.enqueue(async function () {
       let project = getProject(id);
       if (!project || !project.browserPreviewRequired || project.productionPieceId) return;
       project.browserPreviewStatus = 'running';
@@ -809,8 +833,7 @@ function setup(options) {
           saveProject(project);
         }
       }
-    }).finally(function () { previewJobs.delete(id); });
-    encodeChain = job.catch(function () {});
+    }, 'normal').finally(function () { previewJobs.delete(id); });
     previewJobs.set(id, job);
     return job;
   }
@@ -1063,7 +1086,7 @@ async function renderProject(id) {
     queuedProject.renderError = '';
     queuedProject.renderProgress = 0;
     saveProject(queuedProject);
-    const job = encodeChain.catch(function () {}).then(async function () {
+    const job = encodeQueue.enqueue(async function () {
       let project = getProject(id);
       if (!project) return;
       project.renderStatus = 'running';
@@ -1166,8 +1189,7 @@ async function renderProject(id) {
         project.renderQuality = { status: 'failed', checkedAt: new Date().toISOString(), message: project.renderError };
         saveProject(project);
       }
-    }).finally(function () { renderJobs.delete(id); });
-    encodeChain = job.catch(function () {});
+    }, 'urgent').finally(function () { renderJobs.delete(id); });
     renderJobs.set(id, job);
     return job;
   }
@@ -1805,6 +1827,7 @@ module.exports = {
   setup,
   requiredEditorCapacity,
   outstandingEditorCapacity,
+  createPriorityTaskQueue,
   verifiedRenderMatches,
   normalizeWords,
   calculateAutoCuts,

@@ -13526,3 +13526,21 @@ the fixed 2 GB operating reserve remains. The current host has roughly 15 GB
 free; this accounting lets a large filming session stop cleanly with an
 actionable 507 before later FFmpeg jobs can consume the safety margin. Unit
 coverage locks copy counts across pending, ready, and already-sent projects.
+
+---
+
+# 368. Verified Finals Leapfrog Waiting Review Proxies (2026-09-29)
+
+Browser-safe HEVC proxies and final renders deliberately share one FFmpeg lane
+so a filming batch cannot saturate the VPS. The original promise chain was pure
+FIFO, however: if twenty proxy jobs entered while the first transcript was
+being analyzed, that first recording's final could wait behind all twenty even
+though it was the next file Harvey could approve.
+
+The shared lane is now a two-priority serial queue. A running encode is never
+interrupted, but a newly ready final takes the next slot ahead of proxies that
+have not started. Remaining proxies continue afterward, failures cannot stall
+the pump, and concurrency remains exactly one. This improves time-to-first-
+approval without creating CPU contention or sacrificing browser compatibility.
+Unit coverage holds one proxy open, queues a second, inserts a final, and proves
+the exact execution order is running proxy, final, waiting proxy.

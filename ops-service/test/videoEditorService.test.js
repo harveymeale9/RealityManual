@@ -90,6 +90,20 @@ test('batch capacity includes unfinished copies owed to earlier recordings', fun
   ]), 200);
 });
 
+test('final renders take the next serial encoder slot ahead of waiting proxies', async function () {
+  const queue = editor.createPriorityTaskQueue();
+  const order = [];
+  let releaseFirst;
+  const firstGate = new Promise(function (resolve) { releaseFirst = resolve; });
+  const first = queue.enqueue(async function () { order.push('proxy-running'); await firstGate; }, 'normal');
+  const second = queue.enqueue(async function () { order.push('proxy-waiting'); }, 'normal');
+  await new Promise(function (resolve) { setImmediate(resolve); });
+  const final = queue.enqueue(async function () { order.push('final'); }, 'urgent');
+  releaseFirst();
+  await Promise.all([first, second, final]);
+  assert.deepEqual(order, ['proxy-running', 'final', 'proxy-waiting']);
+});
+
 test('HEVC and non-browser containers receive an H.264 review proxy', function () {
   assert.equal(editor.browserPreviewNeeded('camera.mp4', { videoCodec: 'hevc', audioCodec: 'aac' }), true);
   assert.equal(editor.browserPreviewNeeded('camera.mkv', { videoCodec: 'h264', audioCodec: 'aac' }), true);
