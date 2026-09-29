@@ -12599,3 +12599,20 @@ hands-off rendering still becomes visible as soon as it queues rather than
 leaving a blank state. Initial preprocessing renders remain immediate; only
 interactive edit bursts receive the debounce. Focused service and browser
 workflows pass with the longer quiet period.
+
+---
+
+# 323. Planning Cards Cannot Be Claimed by Two Editor Projects (2026-09-29)
+
+Planning-match candidates included every Filmed **and Edited** card. Once one
+recording rendered and advanced its card to Edited, a second recording could
+still auto-match or manually select that already-owned card, leaving two Editor
+projects apparently attached to one planning asset.
+
+Candidate discovery now exposes all genuinely Filmed cards, the current
+project's already-selected card, and an Edited card only when its
+`editorProjectId` identifies this same recording. Another project's Edited card
+is unavailable to both AI matching and the manual dropdown. Existing/legacy
+links remain visible to their current project for diagnosis, while new claims
+cannot be created. This complements the stage reconciliation in §316 rather
+than relying on its later cleanup.

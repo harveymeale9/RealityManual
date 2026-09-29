@@ -542,7 +542,10 @@ function editorPlanningCandidates(project) {
   return stmts.getAll.all('pieces').map(function (row) {
     try { return recordConcurrency.decodeRow(row); } catch (e) { return null; }
   }).filter(function (piece) {
-    return piece && (piece.stage === 'filmed' || piece.stage === 'edited' || piece.id === (project && project.planningPieceId));
+    if (!piece) return false;
+    if (piece.stage === 'filmed') return true;
+    if (piece.id === (project && project.planningPieceId)) return true;
+    return piece.stage === 'edited' && piece.editorProjectId === (project && project.id);
   }).map(function (piece) {
     const text = String(piece.notesHtml || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
     return { id: piece.id, seq: piece.seq, title: piece.title, stage: piece.stage, notesSnippet: text.slice(0, 700) };
