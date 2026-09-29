@@ -13339,3 +13339,18 @@ a 20 MB clip no longer each claim half the bar: progress reflects actual bytes
 transferred, while the label still identifies the current file, ordinal, and
 size. Duplicate/server-rejected files count as completed attempts once their
 transfer settles, and explicit cancellation preserves the honest partial point.
+
+Each ready workspace now also has **Previous** and **Next** recording controls
+with an `n of total` position. They follow the same deterministic order as the
+visible Active/Sent queue, disable cleanly at either edge, and make a large
+filming session reviewable on phone without repeatedly swiping the carousel.
+Approval still chooses the highest-priority next actionable recording rather
+than blindly advancing, so this navigation does not weaken the attention-first
+workflow.
+
+The counter and button state repaint when background uploads alter the visible
+queue, without rebuilding the workspace or resetting playback. Click handlers
+also resolve the current ordered list at click time, preventing a newly added or
+approved recording from leaving stale navigation closures behind. The browser
+regression adds a second recording after the first workspace exists, then moves
+forward and back to prove the live counter and both targets update correctly.

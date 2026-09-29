@@ -367,16 +367,32 @@
     notice.hidden = !editorNotice;
   }
 
+  function visibleProjectsForCurrentFilter() {
+    return projects.filter(function (item) { return listFilter === 'sent' ? !!item.productionPieceId : !item.productionPieceId; }).sort(function (a, b) {
+      if (listFilter === 'sent') return String(b.sentToProductionAt || b.updatedAt || '').localeCompare(String(a.sentToProductionAt || a.updatedAt || ''));
+      return String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
+    });
+  }
+
+  function paintProjectNavigation() {
+    if (!root || !project) return;
+    var items = visibleProjectsForCurrentFilter();
+    var index = items.findIndex(function (item) { return item.id === project.id; });
+    var previous = root.querySelector('#editorPreviousProject');
+    var next = root.querySelector('#editorNextProject');
+    var position = root.querySelector('#editorProjectPosition');
+    if (previous) previous.disabled = index <= 0;
+    if (next) next.disabled = index < 0 || index >= items.length - 1;
+    if (position) position.textContent = index >= 0 ? (index + 1) + ' of ' + items.length : '';
+  }
+
   function renderList() {
     var list = root && root.querySelector('#editorProjectList');
     if (!list) return;
     renderSessionSummary();
     var activeCount = projects.filter(function (item) { return !item.productionPieceId; }).length;
     var sentCount = projects.length - activeCount;
-    var visibleProjects = projects.filter(function (item) { return listFilter === 'sent' ? !!item.productionPieceId : !item.productionPieceId; }).sort(function (a, b) {
-      if (listFilter === 'sent') return String(b.sentToProductionAt || b.updatedAt || '').localeCompare(String(a.sentToProductionAt || a.updatedAt || ''));
-      return String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
-    });
+    var visibleProjects = visibleProjectsForCurrentFilter();
     var asideTitle = root.querySelector('.editor-aside-title');
     if (asideTitle) asideTitle.textContent = 'Recordings · ' + (listFilter === 'sent' ? sentCount : activeCount);
     root.querySelectorAll('.editor-list-filters button').forEach(function (button) {
@@ -398,6 +414,7 @@
     list.querySelectorAll('.editor-project').forEach(function (button) {
       button.addEventListener('click', function () { openProject(button.dataset.id); });
     });
+    paintProjectNavigation();
   }
 
   function upload(file, queueIndex, queueTotal, completedBytes, totalBytes) {
@@ -600,6 +617,8 @@
       return;
     }
     var removed = new Set((project.removedWordIndices || []).map(Number));
+    var reviewProjects = visibleProjectsForCurrentFilter();
+    var reviewProjectIndex = reviewProjects.findIndex(function (item) { return item.id === project.id; });
     var cutSeconds = Math.max(0, Number(project.duration) - editedDuration(project));
     var layout = project.effectiveLayout || (Number(project.height) > Number(project.width) ? 'vertical' : 'horizontal');
     var cropPercent = Math.round((Number(project.cropCenterX) || 0.5) * 100);
@@ -628,7 +647,7 @@
     var previewSeek = Math.max(0, Number(previewSeekTimes[project.id]) || 0);
     workspace.innerHTML =
       '<div class="editor-topbar"><div><h2>' + esc(displayName(project)) + '</h2><span>' + (project.planningPieceTitle ? esc(project.name) + ' · ' : '') + formatTime(project.duration) + ' original · ' + formatTime(editedDuration(project)) + ' edited · ' + cutSeconds.toFixed(1) + 's removed' + (formatBytes(project.sizeBytes) ? ' · ' + formatBytes(project.sizeBytes) + ' source' : '') + '</span></div>' +
-        '<div class="editor-topbar-actions"><span class="editor-save-state ' + esc(saveStates[project.id] || '') + '" id="editorSaveState">' + ({ saving: 'Saving…', saved: 'Saved', error: 'Save failed' }[saveStates[project.id]] || '') + '</span><button class="editor-delete" id="editorDelete">' + (sentToProduction ? 'Remove Editor files' : 'Delete recording') + '</button></div></div>' +
+        '<div class="editor-topbar-actions"><div class="editor-project-nav"><button type="button" class="btn-secondary btn-tiny" id="editorPreviousProject" ' + (reviewProjectIndex <= 0 ? 'disabled' : '') + '>← Previous</button><span id="editorProjectPosition">' + (reviewProjectIndex >= 0 ? (reviewProjectIndex + 1) + ' of ' + reviewProjects.length : '') + '</span><button type="button" class="btn-secondary btn-tiny" id="editorNextProject" ' + (reviewProjectIndex < 0 || reviewProjectIndex >= reviewProjects.length - 1 ? 'disabled' : '') + '>Next →</button></div><span class="editor-save-state ' + esc(saveStates[project.id] || '') + '" id="editorSaveState">' + ({ saving: 'Saving…', saved: 'Saved', error: 'Save failed' }[saveStates[project.id]] || '') + '</span><button class="editor-delete" id="editorDelete">' + (sentToProduction ? 'Remove Editor files' : 'Delete recording') + '</button></div></div>' +
       (rendering ? '<div class="editor-lock-notice"><strong>Final edit is encoding</strong><span>Review remains available. Editing unlocks as soon as the verified file is ready.</span></div>' : '') +
       (project.browserPreviewRequired && ['pending', 'running'].indexOf(project.browserPreviewStatus) !== -1 && previewMode === 'source' ? '<div class="editor-lock-notice"><strong>Preparing a browser-safe source preview</strong><span>The camera master is preserved and final editing continues. This view will switch to H.264 automatically when ready.</span></div>' : '') +
       (sentToProduction ? '<div class="editor-lock-notice approved"><strong>Approved version locked</strong><span>The exact reviewed file is now in Content Production. Source and final previews remain available here.</span></div>' : '') +
@@ -685,6 +704,18 @@
     var rendering = ['queued', 'running'].indexOf(project.renderStatus) !== -1;
     var sentToProduction = !!project.productionPieceId;
     var editingLocked = rendering || sentToProduction;
+    var previousProjectButton = root.querySelector('#editorPreviousProject');
+    var nextProjectButton = root.querySelector('#editorNextProject');
+    if (previousProjectButton) previousProjectButton.onclick = function () {
+      var items = visibleProjectsForCurrentFilter();
+      var index = items.findIndex(function (item) { return item.id === project.id; });
+      if (index > 0) openProject(items[index - 1].id);
+    };
+    if (nextProjectButton) nextProjectButton.onclick = function () {
+      var items = visibleProjectsForCurrentFilter();
+      var index = items.findIndex(function (item) { return item.id === project.id; });
+      if (index >= 0 && index + 1 < items.length) openProject(items[index + 1].id);
+    };
     video.playbackRate = reviewRate;
     var videoError = root.querySelector('#editorVideoError');
     video.addEventListener('loadeddata', function () {
