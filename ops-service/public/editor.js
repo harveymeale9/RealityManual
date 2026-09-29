@@ -617,7 +617,7 @@
   }
 
   function loadProjects() {
-    return api('/api/editor').then(function (items) {
+    return retryTransientOnce(function () { return api('/api/editor'); }, 300).then(function (items) {
       projects = items;
       renderList();
       if (!project && projects[0]) {
@@ -1271,6 +1271,8 @@
         : 'Permanently delete this original recording and its rendered edit? This cannot be undone.';
       if (!confirm(message)) return;
       var id = project.id;
+      var deleteButton = root.querySelector('#editorDelete');
+      if (deleteButton) { deleteButton.disabled = true; deleteButton.textContent = 'Deleting…'; }
       api('/api/editor/' + id, { method: 'DELETE' }).then(function () {
         clearTimeout(renderRefreshTimers[id]); delete renderRefreshTimers[id];
         ['active', 'sent'].forEach(function (filter) {
@@ -1286,6 +1288,12 @@
         if (workspace) workspace.innerHTML = '<div class="editor-empty"><strong>Recording deleted</strong><span>Select another recording or upload a new one.</span></div>';
         var next = listFilter === 'active' ? nextActionableProject() : projects.filter(function (item) { return !!item.productionPieceId; })[0];
         if (next && editorMounted()) openProject(next.id);
+      }).catch(function (error) {
+        if (deleteButton && deleteButton.isConnected) {
+          deleteButton.disabled = false;
+          deleteButton.textContent = project && project.productionPieceId ? 'Remove Editor files' : 'Delete recording';
+        }
+        alert('The recording was not deleted. ' + error.message);
       });
     };
     if (editingLocked) {

@@ -13845,3 +13845,21 @@ poll and render-refresh loads: quiet requests no longer advance the navigation
 generation, and any that began while an explicit load was pending stand down.
 The browser regression deliberately races a stale automatic refresh against a
 first-attempt 503 on Next and requires the intended card to win on retry.
+
+---
+
+# 384. Editor Entry and Delete Failure UX (2026-09-29)
+
+Two small transport failures previously produced disproportionate confusion.
+The initial recording-list request made only one attempt, so a momentary 503
+could replace the entire Editor with an unavailable message even though a
+reload would work. It now uses the same single bounded transient retry as
+detail reads. Persistent failures still surface normally rather than looping.
+
+Deletion is deliberately *not* retried because it is destructive, but its
+button is now disabled and labelled `Deleting…` while the request is in flight.
+If the request fails, the recording stays selected, the control is restored,
+and the alert explicitly says that nothing was deleted. This also prevents a
+double-click from issuing duplicate DELETE requests. The browser regression
+forces both the first initial-list request and a confirmed delete to return 503,
+then checks automatic list recovery and safe delete-control recovery.
