@@ -12272,3 +12272,18 @@ warning is therefore neither dismissed optimistically nor made sticky forever.
 The end-to-end Editor test deliberately fails the first workflow hook, proves
 the verified render carries its warning, rerenders successfully, and proves the
 warning disappears only after that second hook completes.
+
+---
+
+# 305. Caption Corrections Have a One-Click Original Restore (2026-09-29)
+
+Corrected words retained `originalText`, but reversal still required reading the
+tooltip/note and typing that wording back into the field. When an already
+corrected word opens in the tray, it now exposes **Use original**; choosing it
+saves the retained transcription through the normal correction path and removes
+the corrected marker without changing timing.
+
+The action is hidden for untouched words and remains unavailable in the locked
+Sent archive. Browser coverage now corrects a word, verifies its original cue,
+reopens the tray, restores the original with one click and proves both the text
+and visual correction marker return to their initial state.
