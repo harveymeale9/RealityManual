@@ -689,7 +689,7 @@ function projectListSummary(project) {
   // repeated word timing and analysis every 1.8 seconds.
   ['words', 'transcriptText', 'removedWordIndices', 'autoRetakeRemovedWordIndices',
     'dismissedRetakeIds', 'restoredAutoCutIds', 'retakeDecisions', 'cutDecisionHistory',
-    'renderQuality', 'visualClassification', 'planningMatch'].forEach(function (key) {
+    'recentMutationIds', 'renderQuality', 'visualClassification', 'planningMatch'].forEach(function (key) {
     delete summary[key];
   });
   return summary;
@@ -791,6 +791,22 @@ function setup(options) {
   function saveProject(project) {
     project.updatedAt = new Date().toISOString();
     putStmt.run(STORE_NAME, project.id, JSON.stringify(project), project.updatedAt);
+    return project;
+  }
+  function projectDetail(project) {
+    project.cuts = cutsForProject(project);
+    project.captionGroups = captionGroups(project, project.cuts);
+    project.gapDecisions = gapDecisions(project);
+    project.retakeCandidates = retakeCandidatesForProject(project);
+    project.unresolvedRetakeCount = unresolvedRetakeCount(project);
+    project.appliedRetakeCount = appliedRetakeCount(project);
+    project.layoutReviewRequired = layoutReviewRequired(project);
+    project.effectiveLayout = effectiveLayout(project);
+    project.detectedContentType = contentTypeForProject(project, project.cuts);
+    project.planningCandidates = typeof getPlanningCandidates === 'function' ? getPlanningCandidates(project) : [];
+    project.canUndoCut = Array.isArray(project.cutDecisionHistory) && project.cutDecisionHistory.length > 0;
+    delete project.cutDecisionHistory;
+    delete project.recentMutationIds;
     return project;
   }
   function projectDir(id) { return path.join(rootDir, id); }
@@ -1544,19 +1560,7 @@ async function renderProject(id) {
     if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
     const project = getProject(req.params.id);
     if (!project) return res.status(404).json({ error: 'not_found' });
-    project.cuts = cutsForProject(project);
-    project.captionGroups = captionGroups(project, project.cuts);
-    project.gapDecisions = gapDecisions(project);
-    project.retakeCandidates = retakeCandidatesForProject(project);
-    project.unresolvedRetakeCount = unresolvedRetakeCount(project);
-    project.appliedRetakeCount = appliedRetakeCount(project);
-    project.layoutReviewRequired = layoutReviewRequired(project);
-    project.effectiveLayout = effectiveLayout(project);
-    project.detectedContentType = contentTypeForProject(project, project.cuts);
-    project.planningCandidates = typeof getPlanningCandidates === 'function' ? getPlanningCandidates(project) : [];
-    project.canUndoCut = Array.isArray(project.cutDecisionHistory) && project.cutDecisionHistory.length > 0;
-    delete project.cutDecisionHistory;
-    res.json(withQueuePositions(project));
+    res.json(withQueuePositions(projectDetail(project)));
     maybeAutoRender(project.id);
   });
 
@@ -1564,6 +1568,10 @@ async function renderProject(id) {
     if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
     const project = getProject(req.params.id);
     if (!project) return res.status(404).json({ error: 'not_found' });
+    const mutationId = /^[A-Za-z0-9_-]{8,100}$/.test(String(req.body && req.body.mutationId || '')) ? String(req.body.mutationId) : '';
+    if (mutationId && (project.recentMutationIds || []).includes(mutationId)) {
+      return res.json(withQueuePositions(projectDetail(project)));
+    }
     if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked. Make downstream changes in Content Production.' });
     if (productionJobs.has(project.id)) return res.status(409).json({ error: 'approval_in_progress', message: 'This edit is currently being sent to Content Production.' });
     if (renderJobs.has(project.id)) return res.status(409).json({ error: 'render_in_progress', message: 'Wait for this final edit to finish before changing its cut settings.' });
@@ -1659,20 +1667,9 @@ async function renderProject(id) {
     }
     if (renderWillChange) invalidateProjectRender(project);
     advanceEditRevision(project);
+    if (mutationId) project.recentMutationIds = (Array.isArray(project.recentMutationIds) ? project.recentMutationIds : []).concat([mutationId]).slice(-100);
     saveProject(project);
-    project.cuts = cutsForProject(project);
-    project.captionGroups = captionGroups(project, project.cuts);
-    project.gapDecisions = gapDecisions(project);
-    project.retakeCandidates = retakeCandidatesForProject(project);
-    project.unresolvedRetakeCount = unresolvedRetakeCount(project);
-    project.appliedRetakeCount = appliedRetakeCount(project);
-    project.layoutReviewRequired = layoutReviewRequired(project);
-    project.effectiveLayout = effectiveLayout(project);
-    project.detectedContentType = contentTypeForProject(project, project.cuts);
-    project.planningCandidates = typeof getPlanningCandidates === 'function' ? getPlanningCandidates(project) : [];
-    project.canUndoCut = Array.isArray(project.cutDecisionHistory) && project.cutDecisionHistory.length > 0;
-    delete project.cutDecisionHistory;
-    res.json(project);
+    res.json(projectDetail(project));
     if (patchNeedsAutoRender(project, renderWillChange)) scheduleAutoRender(project.id, EDIT_RENDER_DEBOUNCE_MS);
   });
 

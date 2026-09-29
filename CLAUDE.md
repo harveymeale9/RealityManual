@@ -13735,3 +13735,24 @@ indices, and dismisses only the applied retakes it restored; manual transcript
 cuts and unresolved review-only candidates remain intact. The whole action is
 one comprehensive undo snapshot, so Undo restores the exact prior automatic
 strategy if Harvey changes his mind.
+
+---
+
+# 379. Editor Decisions Are Idempotent Across Lost Responses (2026-09-29)
+
+PATCH saves were serialized and revision-checked, but a mobile connection can
+drop after SQLite commits while the response is returning. Replaying a
+functional decision such as “toggle this pause” against the newer revision can
+apply the intent twice and end where it started; refusing to retry instead
+leaves Harvey unsure whether the visible click was saved.
+
+Every browser edit now carries one stable mutation id and retries a network,
+408/425/429, or 5xx failure once after 350ms using the exact same resolved
+payload. The service durably retains the latest 100 mutation ids per project
+and checks them before revision/render locks; a replay returns the current full
+project without modifying it or incrementing `editRevision`. These internal ids
+are stripped from detail and lightweight list responses. The shared project-
+detail builder also removes duplicated response-decoration logic. Integration
+coverage applies the same stale-revision mutation twice and proves one revision,
+while the headless browser forces a transient PATCH failure and proves the
+automatic retry reaches Saved.

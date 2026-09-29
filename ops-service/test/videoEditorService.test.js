@@ -844,6 +844,18 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.ok(project.renderQuality.audioPeakDb > -55);
   assert.deepEqual([project.renderQuality.width, project.renderQuality.height], [1080, 1920]);
   assert.equal(project.renderQuality.pixelFormat, 'yuv420p');
+  const idempotentMutation = {
+    contentTypeOverride: 'short', expectedEditRevision: project.editRevision, mutationId: 'mutation-idempotency-0001'
+  };
+  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(idempotentMutation) });
+  assert.equal(response.status, 200);
+  const firstMutation = await response.json();
+  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(idempotentMutation) });
+  assert.equal(response.status, 200);
+  project = await response.json();
+  assert.equal(project.editRevision, firstMutation.editRevision);
+  assert.equal(project.contentTypeOverride, 'short');
+  assert.equal(Object.prototype.hasOwnProperty.call(project, 'recentMutationIds'), false);
   const staleRevision = project.editRevision;
   const competingEdits = await Promise.all([
     fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contentTypeOverride: 'short', expectedEditRevision: staleRevision }) }),

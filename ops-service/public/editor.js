@@ -1382,6 +1382,9 @@
 
   function save(patch) {
     var id = project.id;
+    var mutationId = window.crypto && typeof window.crypto.randomUUID === 'function'
+      ? window.crypto.randomUUID()
+      : 'edit-' + Date.now() + '-' + Math.random().toString(36).slice(2);
     var renderKeys = ['removedWordIndices', 'wordCorrection', 'autoSilenceEnabled', 'restoredAutoCutIds', 'captionsEnabled',
       'layoutOverride', 'cropCenterX', 'silenceThresholdSeconds', 'retainedPauseSeconds'];
     var renderWillChange = typeof patch === 'function' || renderKeys.some(function (key) {
@@ -1392,8 +1395,15 @@
       var latest = project && project.id === id ? project : projectDetails[id] || projects.find(function (item) { return item.id === id; });
       function attempt(base, canRetryConflict) {
         var resolvedPatch = typeof patch === 'function' ? patch(base || {}) : patch;
-        var payload = Object.assign({}, resolvedPatch, { expectedEditRevision: Number(base && base.editRevision) || 0 });
-        return api('/api/editor/' + id, { method: 'PATCH', body: JSON.stringify(payload) }).catch(function (error) {
+        var payload = Object.assign({}, resolvedPatch, { expectedEditRevision: Number(base && base.editRevision) || 0, mutationId: mutationId });
+        function send(canRetryTransport) {
+          return api('/api/editor/' + id, { method: 'PATCH', body: JSON.stringify(payload) }).catch(function (error) {
+            var transient = !error.status || error.status === 408 || error.status === 425 || error.status === 429 || error.status >= 500;
+            if (!canRetryTransport || !transient) throw error;
+            return new Promise(function (resolve) { setTimeout(resolve, 350); }).then(function () { return send(false); });
+          });
+        }
+        return send(true).catch(function (error) {
           if (error.code !== 'edit_conflict' || !canRetryConflict) throw error;
           return api('/api/editor/' + id).then(function (fresh) {
             projects = projects.map(function (entry) { return entry.id === id ? fresh : entry; });
