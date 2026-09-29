@@ -11229,3 +11229,12 @@ new frame loaded, but no `seeked` handler ever enabled it again. The visible
 frame could therefore be ready while the button still showed the browser's
 not-allowed cursor. A successful seek now restores the frame controls as soon
 as decoded dimensions are available.
+
+All 82 Node tests pass. A real Chromium regression with generated five-second
+video and soundtrack fixtures proved that scrubbing to a new frame re-enables
+capture, one preview request is made for the chosen track, both the visible
+video and mixed-audio stream start from zero, and their playback clocks remain
+in sync. The same check passed against the deployed authenticated service and
+its real FFmpeg route, including the new cache-busted client; the temporary
+piece, video, and soundtrack records were deleted afterward. A 390-pixel pass
+also confirmed the new inline controls introduce no horizontal overflow.
