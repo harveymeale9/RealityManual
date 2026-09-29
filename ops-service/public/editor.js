@@ -505,9 +505,9 @@
           (project.retakeAnalysisStatus !== 'ready' && project.retakeAnalysisStatus !== 'pending' && project.retakeAnalysisStatus !== 'running' ? '<button type="button" class="editor-analyze" id="editorAnalyzeRetakes">Analyze retakes</button>' : '<span>Only clear failed takes are automatic</span>') + '</div><div id="editorRetakeReview">' + retakeReviewHtml(project) + '</div></div></section>' +
       '<section class="editor-transcript-panel"><div class="editor-transcript-head"><div><div class="eyebrow">Transcript editor</div><h3>Select words or sentences to cut them from the video</h3></div>' +
         '<div class="editor-transcript-actions"><button class="btn-secondary btn-tiny" id="editorUndo" ' + (!history.length ? 'disabled' : '') + '>Undo</button>' +
-        '<button class="btn-secondary btn-tiny" id="editorRestore" disabled>Restore selected</button><button class="btn-primary btn-tiny" id="editorCut" disabled>Cut selected</button></div></div>' +
+        '<button class="btn-secondary btn-tiny" id="editorCorrect" disabled>Correct word</button><button class="btn-secondary btn-tiny" id="editorRestore" disabled>Restore selected</button><button class="btn-primary btn-tiny" id="editorCut" disabled>Cut selected</button></div></div>' +
         '<div class="editor-transcript' + (rendering || sentToProduction ? ' locked' : '') + '" id="editorTranscript" tabindex="0">' + (project.words || []).map(function (word) {
-          return '<span class="editor-word' + (removed.has(word.index) ? ' removed' : '') + '" data-index="' + word.index + '" data-start="' + word.start + '" data-end="' + word.end + '">' + esc(word.text) + '</span> ';
+          return '<span class="editor-word' + (removed.has(word.index) ? ' removed' : '') + (word.originalText ? ' corrected' : '') + '" data-index="' + word.index + '" data-start="' + word.start + '" data-end="' + word.end + '"' + (word.originalText ? ' title="Originally transcribed as: ' + esc(word.originalText) + '"' : '') + '>' + esc(word.text) + '</span> ';
         }).join('') + '</div><p class="editor-selection-hint">Drag across text or click words. Press Delete to cut, Ctrl/⌘ Z to undo, or Escape to clear. Removed words remain visible so you can restore them.</p></section>' +
       '<div class="editor-export"><div><strong>Next: Content Production</strong><span>' +
         (project.productionPieceId ? 'This edit is ready in Content Production for titles, thumbnail, and ambient music.' :
@@ -665,6 +665,7 @@
     });
     root.querySelector('#editorCut').onclick = function () { alterSelected(true); };
     root.querySelector('#editorRestore').onclick = function () { alterSelected(false); };
+    root.querySelector('#editorCorrect').onclick = correctSelectedWord;
     root.querySelector('#editorUndo').onclick = undo;
     root.querySelector('#editorAutoSilence').onchange = function () {
       save({ autoSilenceEnabled: this.checked }, true);
@@ -798,7 +799,7 @@
       });
     };
     if (editingLocked) {
-      ['#editorAnalyze', '#editorLayout', '#editorContentType', '#editorPlanningPiece', '#editorMatchPlan', '#editorCropX', '#editorAutoSilence', '#editorCaptions', '#editorPacing', '#editorAnalyzeRetakes', '#editorUndo', '#editorRestore', '#editorCut'].forEach(function (selector) {
+      ['#editorAnalyze', '#editorLayout', '#editorContentType', '#editorPlanningPiece', '#editorMatchPlan', '#editorCropX', '#editorAutoSilence', '#editorCaptions', '#editorPacing', '#editorAnalyzeRetakes', '#editorUndo', '#editorCorrect', '#editorRestore', '#editorCut'].forEach(function (selector) {
         var control = root.querySelector(selector); if (control) control.disabled = true;
       });
       root.querySelectorAll('.editor-gap-toggle,.editor-retake-apply,.editor-retake-dismiss').forEach(function (control) { control.disabled = true; });
@@ -816,6 +817,19 @@
     var locked = project && (project.productionPieceId || ['queued', 'running'].indexOf(project.renderStatus) !== -1);
     root.querySelector('#editorCut').disabled = locked || !hasKept;
     root.querySelector('#editorRestore').disabled = locked || !hasRemoved;
+    root.querySelector('#editorCorrect').disabled = locked || selected.size !== 1;
+  }
+
+  function correctSelectedWord() {
+    if (selected.size !== 1 || !project || project.productionPieceId) return;
+    var index = Array.from(selected)[0];
+    var word = (project.words || [])[index];
+    if (!word) return;
+    var note = word.originalText ? '\n\nOriginal transcription: ' + word.originalText : '';
+    var replacement = prompt('Correct this caption word:' + note, word.text);
+    if (replacement === null || !String(replacement).trim() || String(replacement).trim() === word.text) return;
+    selected.clear();
+    save({ wordCorrection: { index: index, text: String(replacement).trim() } }, true);
   }
 
   function alterSelected(remove) {

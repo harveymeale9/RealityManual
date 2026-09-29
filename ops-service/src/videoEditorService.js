@@ -1018,6 +1018,18 @@ async function renderProject(id) {
       project.removedWordIndices = Array.from(new Set(req.body.removedWordIndices.map(Number)
         .filter(function (index) { return Number.isInteger(index) && index >= 0 && index < (project.words || []).length; }))).sort(function (a, b) { return a - b; });
     }
+    if (req.body && req.body.wordCorrection && typeof req.body.wordCorrection === 'object') {
+      const index = Number(req.body.wordCorrection.index);
+      const word = Number.isInteger(index) && index >= 0 ? (project.words || [])[index] : null;
+      const replacement = String(req.body.wordCorrection.text || '').replace(/[\r\n]+/g, ' ').trim();
+      if (!word || !replacement || replacement.length > 80) {
+        return res.status(400).json({ error: 'invalid_word_correction', message: 'Choose one transcript word and enter 1–80 characters.' });
+      }
+      if (!word.originalText) word.originalText = word.text;
+      word.text = replacement;
+      if (word.text === word.originalText) delete word.originalText;
+      project.transcriptText = (project.words || []).map(function (item) { return item.text; }).join(' ');
+    }
     if (typeof (req.body && req.body.autoSilenceEnabled) === 'boolean') project.autoSilenceEnabled = req.body.autoSilenceEnabled;
     if (Array.isArray(req.body && req.body.restoredAutoCutIds)) {
       project.restoredAutoCutIds = Array.from(new Set(req.body.restoredAutoCutIds.map(String).filter(function (id) {

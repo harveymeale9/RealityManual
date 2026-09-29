@@ -12199,3 +12199,28 @@ original and edit are permanently removed. No automatic cleanup policy was
 introduced: Harvey retains explicit control over his masters. The browser test
 verifies size rendering, the Sent action label and the non-destructive boundary
 communicated by its confirmation.
+
+---
+
+# 301. Caption Words Can Be Corrected Without Losing Their Timing or Original (2026-09-29)
+
+The transcript editor could remove bad takes but had no way to fix a single
+speech-to-text spelling error. That wrong word would flow into the preview,
+baked ASS captions, Production transcript and final published video even when
+the cut itself was perfect.
+
+Selecting one word now enables **Correct word**. Its replacement changes only
+the text: the original word timestamps and video remain untouched, the prior
+transcription is retained as `originalText`, and corrected words get a subtle
+dotted marker plus hover context. Entering the original wording again removes
+the correction marker. The corrected transcript invalidates any stale render,
+automatically rebuilds, and is the version passed to Content Production; Sent
+records remain immutable.
+
+Server validation accepts only one valid word index and 1–80 single-line
+characters. Integration coverage proves corrected text, original preservation,
+caption regeneration, transcript regeneration and handoff delivery. The browser
+test selects a word, completes the correction prompt, and verifies the saved
+word and original-text cue after the workspace rerenders. A restart test also
+now waits for its asynchronous legacy hash migration before closing SQLite,
+eliminating a real teardown race exposed by the expanded focused run.

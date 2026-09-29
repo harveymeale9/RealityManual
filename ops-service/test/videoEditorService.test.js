@@ -237,13 +237,14 @@ test('service restart automatically resumes an interrupted transcription', { tim
   }), now);
   let calls = 0;
   editor.setup({ db: db, dataDir: dir, transcribeDetailed: async function () { calls++; return { text: '', words: [] }; } });
-  for (let attempt = 0; attempt < 100; attempt++) {
+  for (let attempt = 0; attempt < 200; attempt++) {
     const stored = JSON.parse(db.prepare('SELECT data FROM records WHERE store_name=? AND id=?').get('editorProjects', 'recover-1').data);
-    if (stored.transcriptionStatus === 'error') break;
+    if (stored.transcriptionStatus === 'error' && typeof stored.sourceSha256 === 'string' && stored.sourceSha256.length === 64) break;
     await new Promise(function (resolve) { setTimeout(resolve, 30); });
   }
   const recovered = JSON.parse(db.prepare('SELECT data FROM records WHERE store_name=? AND id=?').get('editorProjects', 'recover-1').data);
   assert.equal(calls, 1);
+  assert.equal(recovered.sourceSha256.length, 64);
   assert.equal(recovered.transcriptionStatus, 'error');
   assert.equal(recovered.transcriptionError, 'No timed speech was detected in this recording.');
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
@@ -352,6 +353,8 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
     handoffToProduction: async function (input) {
       handoffCalls++;
       assert.equal(input.project.id.length > 0, true);
+      assert.equal(input.project.words[0].text, 'Once');
+      assert.equal(input.project.words[0].originalText, 'One');
       assert.equal(fs.existsSync(input.renderPath), true);
       return { pieceId: input.project.id, alreadySent: false, workflowWarning: 'Synthetic planning-stage warning.' };
     }
@@ -416,10 +419,14 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.renderQuality.status, 'passed');
   assert.deepEqual(project.renderQuality.checks, { playableFile: true, correctFrame: true, audioPresent: true, durationMatches: true });
   assert.deepEqual([project.renderQuality.width, project.renderQuality.height], [1080, 1920]);
-  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ captionsEnabled: false }) });
+  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ captionsEnabled: false, wordCorrection: { index: 0, text: 'Once' } }) });
   assert.equal(response.status, 200);
   project = await response.json();
   assert.equal(project.renderStatus, '');
+  assert.equal(project.words[0].text, 'Once');
+  assert.equal(project.words[0].originalText, 'One');
+  assert.equal(project.transcriptText, 'Once two. Three four.');
+  assert.deepEqual(project.captionGroups.map(function (group) { return group.text; }), ['Once two.']);
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ retainedPauseSeconds: 0.55 }) });
   assert.equal(response.status, 200);
   for (let attempt = 0; attempt < 600 && (project.renderStatus !== 'ready' || renderReadyCalls < 2); attempt++) {
