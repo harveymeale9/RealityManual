@@ -13905,3 +13905,29 @@ longer than the delivered video. The browser now uses the same exact group end
 for visibility, final-word selection, and long-form emphasis as the encoder.
 The regression drives a one-word caption inside and then beyond its timestamp,
 requiring it to appear during speech and disappear immediately afterward.
+
+---
+
+# 388. Semantic Retake Auto-Cuts Require Textual Support (2026-09-29)
+
+The retake model was prompted to reserve `high` confidence for obvious failed
+takes, and its ranges were structurally bounded, but a structurally valid model
+mistake could still label two unrelated nearby passages as replacement takes.
+Because all `high` decisions are applied automatically, that was an avoidable
+route to deleting unique speech.
+
+Normalization now independently checks that the later take shares either the
+opening (up to two words) or at least half of the earlier take's vocabulary.
+An unsupported model decision remains visible, with its exact ranges, but is
+downgraded to `review` and cannot enter automation-owned cuts. This is
+deliberately conservative: a genuine but substantially rephrased replacement
+costs Harvey one review click, while unique speech can never disappear solely
+because the model asserted high confidence. Unit coverage proves an unrelated
+high-confidence pair is downgraded and leaves both manual and automatic removed
+word sets empty.
+
+The end-to-end fixture now represents an actual repeated take rather than
+asserting that unrelated `One two` / `Three four` lines should be auto-cut. The
+recovery-render test also allows 12 seconds rather than 6 for its FFmpeg result
+when Node's full suite is running encoders concurrently; its functional
+assertions and endpoint timeout remain bounded.

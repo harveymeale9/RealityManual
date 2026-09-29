@@ -267,6 +267,25 @@ test('semantic retake ranges become bounded exact word decisions', function () {
   assert.equal(editor.normalizeRetakeDecisions([{ removeStartIndex: 0, removeEndIndex: 1, replacementStartIndex: 999, replacementEndIndex: 1000, confidence: 'high' }], words).length, 0);
 });
 
+test('unrelated semantic ranges can never become automatic retake cuts', function () {
+  const timed = [
+    { index: 0, text: 'Our', start: 0, end: .2 }, { index: 1, text: 'strategy', start: .25, end: .6 },
+    { index: 2, text: 'The', start: 1, end: 1.2 }, { index: 3, text: 'book', start: 1.25, end: 1.5 },
+    { index: 4, text: 'opens', start: 1.55, end: 1.8 }, { index: 5, text: 'here.', start: 1.85, end: 2.1 }
+  ];
+  const decisions = editor.normalizeRetakeDecisions([{
+    removeStartIndex: 0, removeEndIndex: 1, replacementStartIndex: 2, replacementEndIndex: 5,
+    confidence: 'high', reason: 'Synthetic mistaken replacement.'
+  }], timed);
+  assert.equal(decisions.length, 1);
+  assert.equal(decisions[0].confidence, 'review');
+  assert.match(decisions[0].reason, /wording differs enough/i);
+  const project = { removedWordIndices: [], autoRetakeRemovedWordIndices: [], dismissedRetakeIds: [] };
+  editor.reconcileAutomaticRetakeCuts(project, decisions);
+  assert.deepEqual(project.removedWordIndices, []);
+  assert.deepEqual(project.autoRetakeRemovedWordIndices, []);
+});
+
 test('overlapping semantic retake removals cannot create conflicting review cards', function () {
   const timed = Array.from({ length: 12 }, function (_, index) {
     return { index: index, text: 'w' + index, start: index, end: index + 0.4 };
@@ -578,7 +597,7 @@ test('startup invalidates a corrupt active final before it can be reviewed', { t
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
 
-test('one recovery endpoint retries failed automatic work without replacing the source', { timeout: 10000 }, async function (t) {
+test('one recovery endpoint retries failed automatic work without replacing the source', { timeout: 20000 }, async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-retry-'));
   const projectDir = path.join(dir, 'editor', 'retry-1'); fs.mkdirSync(projectDir, { recursive: true });
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=320x180:d=1:r=12',
@@ -601,7 +620,7 @@ test('one recovery endpoint retries failed automatic work without replacing the 
   let response = await fetch(base + '/api/editor/retry-1/retry-failed', { method: 'POST' });
   assert.equal(response.status, 202); assert.deepEqual((await response.json()).retried, ['transcription']);
   let project;
-  for (let attempt = 0; attempt < 200; attempt++) {
+  for (let attempt = 0; attempt < 400; attempt++) {
     project = await (await fetch(base + '/api/editor/retry-1')).json();
     if (project.transcriptionStatus === 'ready' && (project.renderStatus === 'ready' || project.renderStatus === 'error')) break;
     await new Promise(function (resolve) { setTimeout(resolve, 30); });
@@ -738,9 +757,9 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
     db: db,
     dataDir: dir,
     transcribeDetailed: async function () {
-      return { text: 'One two. Three four.', words: [
+      return { text: 'One two. One two.', words: [
         { type: 'word', text: 'One', start: 0.5, end: 0.9 }, { type: 'word', text: 'two.', start: 0.95, end: 1.3 },
-        { type: 'word', text: 'Three', start: 3.2, end: 3.7 }, { type: 'word', text: 'four.', start: 3.75, end: 4.2 }
+        { type: 'word', text: 'One', start: 3.2, end: 3.7 }, { type: 'word', text: 'two.', start: 3.75, end: 4.2 }
       ] };
     },
     classifyVisualLayout: async function (input) {
@@ -753,7 +772,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
       if (retakeCalls === 1) throw new Error('synthetic transient classifier failure');
       return { decisions: [{ removeStartIndex: 0, removeEndIndex: 1, replacementStartIndex: 2, replacementEndIndex: 3, confidence: 'high', reason: 'Synthetic replaced take.' }] };
     },
-    getPlanningCandidates: function () { return [{ id: 'plan-1', seq: 79, title: 'Synthetic outline', stage: 'filmed', notesSnippet: 'One two.' }, { id: 'plan-2', seq: 80, title: 'Corrected outline', stage: 'filmed', notesSnippet: 'Three four.' }]; },
+    getPlanningCandidates: function () { return [{ id: 'plan-1', seq: 79, title: 'Synthetic outline', stage: 'filmed', notesSnippet: 'One two.' }, { id: 'plan-2', seq: 80, title: 'Corrected outline', stage: 'filmed', notesSnippet: 'One two.' }]; },
     matchPlanningPiece: async function () { planningMatchCalls++; return { pieceId: 'plan-1', confidence: 'high', reason: 'The transcript matches the filmed outline.' }; },
     onRenderReady: function (input) {
       renderReadyCalls++;
@@ -830,7 +849,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.planningPieceSeq, 79);
   assert.equal(planningMatchCalls, 1);
   assert.ok(project.cuts.some(function (cut) { return cut.reason === 'long_pause'; }));
-  assert.deepEqual(project.captionGroups.map(function (group) { return group.text; }), ['Three four.']);
+  assert.deepEqual(project.captionGroups.map(function (group) { return group.text; }), ['One two.']);
   for (let attempt = 0; attempt < 600 && (project.renderStatus !== 'error' && (project.renderStatus !== 'ready' || renderReadyCalls < 1 || !project.workflowWarning)); attempt++) {
     await new Promise(function (resolve) { setTimeout(resolve, 50); });
     project = await (await fetch(base + '/api/editor/' + project.id)).json();
@@ -932,8 +951,8 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.renderStatus, '');
   assert.equal(project.words[0].text, 'Once');
   assert.equal(project.words[0].originalText, 'One');
-  assert.equal(project.transcriptText, 'Once two. Three four.');
-  assert.deepEqual(project.captionGroups.map(function (group) { return group.text; }), ['Three four.']);
+  assert.equal(project.transcriptText, 'Once two. One two.');
+  assert.deepEqual(project.captionGroups.map(function (group) { return group.text; }), ['One two.']);
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wordCorrection: { index: 0, text: 'two words' } }) });
   assert.equal(response.status, 400);
   assert.equal((await response.json()).error, 'invalid_word_correction');

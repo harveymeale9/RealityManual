@@ -492,13 +492,33 @@ function normalizeRetakeDecisions(raw, words) {
     for (let wordIndex = start; wordIndex <= end; wordIndex++) removeWordIndices.push(wordIndex);
     if (removeWordIndices.some(function (wordIndex) { return claimedRemovalIndices.has(wordIndex); })) return null;
     removeWordIndices.forEach(function (wordIndex) { claimedRemovalIndices.add(wordIndex); });
+    // The semantic reviewer is useful, but a hallucinated `high` must never
+    // be sufficient to delete unique speech. A real restarted take normally
+    // shares its opening or much of its wording with the later clean take.
+    // Unrelated ranges remain visible as review cards instead of being
+    // applied automatically.
+    function tokens(from, to) {
+      return words.slice(from, to + 1).map(function (word) {
+        return String(word.text || '').toLowerCase().replace(/[^a-z0-9']/g, '');
+      }).filter(Boolean);
+    }
+    const removedTokens = tokens(start, end);
+    const replacementTokens = tokens(replacementStart, replacementEnd);
+    let matchingPrefix = 0;
+    while (matchingPrefix < Math.min(removedTokens.length, replacementTokens.length) && removedTokens[matchingPrefix] === replacementTokens[matchingPrefix]) matchingPrefix++;
+    const sharedRatio = removedTokens.filter(function (token) { return replacementTokens.includes(token); }).length / Math.max(1, removedTokens.length);
+    const lexicalSupport = matchingPrefix >= Math.min(2, removedTokens.length) || sharedRatio >= 0.5;
+    const requestedHigh = decision.confidence === 'high';
+    const confidence = requestedHigh && lexicalSupport ? 'high' : 'review';
+    const reason = String(decision.reason || 'A nearby take may replace this wording.').slice(0, 260) +
+      (requestedHigh && !lexicalSupport ? ' The wording differs enough to require review.' : '');
     return {
       id: 'smart-retake-' + index + '-' + start + '-' + end,
       removeWordIndices: removeWordIndices,
       firstText: words.slice(start, end + 1).map(function (word) { return word.text; }).join(' '),
       replacementText: words.slice(replacementStart, replacementEnd + 1).map(function (word) { return word.text; }).join(' '),
-      confidence: decision.confidence === 'high' ? 'high' : 'review',
-      reason: String(decision.reason || 'A nearby take may replace this wording.').slice(0, 300),
+      confidence: confidence,
+      reason: reason.slice(0, 300),
       source: 'semantic'
     };
   }).filter(Boolean);
