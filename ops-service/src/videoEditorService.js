@@ -684,12 +684,20 @@ function buildAss(project, groups) {
     // through it. Segment boundaries use the next word's exact start, so the
     // active word changes in lockstep with speech without relying on karaoke
     // fill behavior that differs between ASS renderers.
+    const characterCount = Array.from(String(group.text || '')).length;
+    const fittedLongformSize = Math.max(Math.round(fontSize * 0.65), Math.min(fontSize, Math.round(fontSize * 50 / Math.max(50, characterCount))));
+    const fittedEmphasizedSize = Math.round(fittedLongformSize * 1.18);
     group.words.forEach(function (activeWord, activeIndex) {
       const eventStart = activeIndex === 0 ? group.start : activeWord.start;
       const eventEnd = activeIndex + 1 < group.words.length ? group.words[activeIndex + 1].start : group.end;
       if (eventEnd <= eventStart) return;
       const text = group.words.map(function (word, wordIndex) {
         const escaped = escapeAss(word.text);
+        if (fittedLongformSize < fontSize) {
+          return wordIndex === activeIndex
+            ? '{\\fs' + fittedEmphasizedSize + '\\bord4}' + escaped
+            : '{\\fs' + fittedLongformSize + '\\bord3}' + escaped;
+        }
         return wordIndex === activeIndex ? '{\\fs' + emphasizedSize + '\\bord4}' + escaped + '{\\r}' : escaped;
       }).join(' ');
       events.push('Dialogue: 0,' + assTime(eventStart) + ',' + assTime(eventEnd) + ',Default,,0,0,0,,' + text);

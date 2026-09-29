@@ -13991,6 +13991,23 @@ the original recording without stealing selection.
 
 ---
 
+# 393. Long-Form Caption Fitting Matches Preview and Export (2026-09-29)
+
+Normal long-form groups (up to five words) fit comfortably at the requested
+larger 65px/3.4cqw style, but an unusual run of long words could exceed the
+single-line browser overlay. The browser hid that overflow while libass could
+wrap it, creating another preview/export mismatch.
+
+Both paths now leave ordinary phrases unchanged and apply the same bounded
+scale only above 50 characters, never below 65% of the normal size. The active
+spoken word remains 18% larger in both paths. FFmpeg emits explicit fitted
+normal/emphasis sizes for every word in an oversized group, avoiding ASS style
+reset leakage after the highlighted word. Unit coverage keeps the existing
+normal 65/77px behavior and proves a five-long-word phrase uses the fitted
+42/50px pair.
+
+---
+
 # 390. Manual Analysis Restarts Survive Lost Responses (2026-09-29)
 
 The framing, possible-retake, and planning-card `Analyze/Match again` controls

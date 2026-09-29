@@ -404,6 +404,14 @@ test('landscape captions are larger and advance spoken-word emphasis', function 
   assert.equal((ass.match(/^Dialogue:/gm) || []).length, 3);
   assert.match(ass, /\\fs77\\bord4}A\{\\r} wise move/);
   assert.match(ass, /A \{\\fs77\\bord4}wise\{\\r} move/);
+  const longWords = Array.from({ length: 5 }, function (_, index) {
+    return { text: 'extraordinarylong' + index, start: index * .2, end: index * .2 + .18 };
+  });
+  const fitted = editor.buildAss({ width: 1920, height: 1080 }, [{
+    start: 0, end: 1, text: longWords.map(function (word) { return word.text; }).join(' '), words: longWords
+  }]);
+  assert.match(fitted, /\\fs42\\bord3/);
+  assert.match(fitted, /\\fs50\\bord4/);
 });
 
 test('vertical captions show one large yellow word at a time', function () {

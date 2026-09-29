@@ -974,6 +974,9 @@
       caption.classList.toggle('longform', isLongform);
       caption.classList.toggle('shortform', !isLongform);
       if (group && Array.isArray(group.words) && isLongform) {
+        var phraseCharacters = Array.from(String(group.text || '')).length;
+        var phraseScale = Math.max(0.65, Math.min(1, 50 / Math.max(50, phraseCharacters)));
+        if (phraseScale < 1) caption.style.fontSize = (3.4 * phraseScale).toFixed(2) + 'cqw';
         group.words.forEach(function (word, index) {
           var span = document.createElement('span');
           span.textContent = word.text + (index + 1 < group.words.length ? ' ' : '');
