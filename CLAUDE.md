@@ -12224,3 +12224,19 @@ test selects a word, completes the correction prompt, and verifies the saved
 word and original-text cue after the workspace rerenders. A restart test also
 now waits for its asynchronous legacy hash migration before closing SQLite,
 eliminating a real teardown race exposed by the expanded focused run.
+
+---
+
+# 302. Caption Correction Uses a Native Editor Tray, Not a Browser Prompt (2026-09-29)
+
+The first correction interface proved the data path but used `window.prompt`,
+which looked foreign, offered poor phone ergonomics and could not explain what
+would happen to timing. Correction now opens a compact tray inside the transcript
+panel with the selected word prefilled, the original wording shown when relevant,
+and explicit Cancel/Save actions. Enter saves and Escape cancels.
+
+The tray uses the Content Studio visual system, collapses to one column on phone
+screens, enforces the same 80-character bound as the server and tells Harvey that
+timing remains unchanged. The browser workflow now drives this real tray through
+selection, input, persistence and rerender instead of intercepting a synthetic
+native dialog.
