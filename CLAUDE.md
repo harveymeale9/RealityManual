@@ -13442,3 +13442,22 @@ between Content Studio tabs remains safe and does not interrupt the batch.
 Browser coverage forces both a 503-followed-by-success and a persisted-first-
 request-followed-by-duplicate response. It proves exactly one retry, one queue
 card, and no false failure in either case.
+
+---
+
+# 364. Editor Review Position Survives a Refresh (2026-09-29)
+
+Reviewing a long recording on a phone can be interrupted by an accidental
+refresh or the browser reclaiming the tab. Editor now checkpoints the current
+position into tab-scoped session storage every half second. It stores source
+time rather than raw player time, plus whether Harvey was checking the source
+or final edit, so cut-heavy finals resume on the same spoken moment rather than
+the same misleading timestamp.
+
+Opening the recording again restores that mode and maps source time through the
+current cut graph when necessary. Positions within the opening second or final
+second are deliberately ignored, completed playback clears its checkpoint, and
+approval or deletion removes it. The state survives refresh and same-tab
+navigation but naturally disappears when the browser tab is closed, avoiding a
+stale next-day review position. Browser coverage checkpoints an HEVC source
+review, reloads the application, and proves mode and exact position return.

@@ -108,6 +108,30 @@
     return filter === 'sent' ? 'rmEditorSentProjectId' : 'rmEditorActiveProjectId';
   }
 
+  function reviewProgressKey(id) {
+    return 'rmEditorReviewProgress:' + String(id || '');
+  }
+
+  function restoreReviewProgress(item) {
+    if (!item || Object.prototype.hasOwnProperty.call(previewSeekTimes, item.id)) return;
+    var saved;
+    try { saved = JSON.parse(sessionStorage.getItem(reviewProgressKey(item.id)) || 'null'); } catch (error) {}
+    var sourceTime = Number(saved && saved.sourceTime);
+    var duration = Number(item.duration) || 0;
+    if (!Number.isFinite(sourceTime) || sourceTime < 1 || (duration > 0 && sourceTime >= duration - 1)) return;
+    var mode = saved.mode === 'source' || item.renderStatus !== 'ready' ? 'source' : 'final';
+    previewModes[item.id] = mode;
+    previewSeekTimes[item.id] = mode === 'final' ? sourceToEditedTime(sourceTime, cutsForClient(item)) : sourceTime;
+  }
+
+  function cutsForClient(item) {
+    return Array.isArray(item && item.cuts) ? item.cuts : [];
+  }
+
+  function clearReviewProgress(id) {
+    try { sessionStorage.removeItem(reviewProgressKey(id)); } catch (error) {}
+  }
+
   function preferredProjectForFilter(filter) {
     var rememberedId = localStorage.getItem(rememberedProjectKey(filter)) || '';
     var remembered = projects.find(function (item) {
@@ -588,6 +612,7 @@
     return api('/api/editor/' + encodeURIComponent(id)).then(function (item) {
       var progressOnly = !!(quiet && project && project.id === item.id && project.renderStatus === 'running' && item.renderStatus === 'running');
       project = item;
+      restoreReviewProgress(item);
       localStorage.setItem(rememberedProjectKey(item.productionPieceId ? 'sent' : 'active'), item.id);
       projects = projects.map(function (entry) { return entry.id === item.id ? item : entry; });
       selected.clear();
@@ -816,6 +841,7 @@
     var lastClicked = null;
     var ignoreNextClick = false;
     var playingWordIndex = null;
+    var lastReviewProgressSaveAt = 0;
     function isLongformVideo() {
       return (project.effectiveLayout || 'horizontal') === 'horizontal';
     }
@@ -825,6 +851,16 @@
         delete previewStopTimes[project.id];
       }
       var sourcePlayheadTime = previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime;
+      var now = Date.now();
+      if (sourcePlayheadTime >= 1 && now - lastReviewProgressSaveAt >= 500) {
+        lastReviewProgressSaveAt = now;
+        try {
+          sessionStorage.setItem(reviewProgressKey(videoProjectId), JSON.stringify({
+            sourceTime: sourcePlayheadTime,
+            mode: previewingFinal ? 'final' : 'source'
+          }));
+        } catch (error) {}
+      }
       var currentWord = (project.words || []).find(function (word) {
         return sourcePlayheadTime >= Number(word.start) && sourcePlayheadTime <= Number(word.end) + 0.08;
       });
@@ -881,6 +917,7 @@
       } else if (group) caption.textContent = group.text;
       caption.classList.toggle('visible', !!group && project.captionsEnabled !== false);
     });
+    video.addEventListener('ended', function () { clearReviewProgress(videoProjectId); });
     root.querySelectorAll('.editor-timeline-segment').forEach(function (segment) {
       segment.onclick = function () {
         var sourceTime = Number(segment.dataset.time) || 0;
@@ -1114,6 +1151,7 @@
       approveButtons.forEach(function (button) { button.disabled = true; button.textContent = 'Approving…'; });
       api('/api/editor/' + project.id + '/production', { method: 'POST' }).then(function (result) {
         project.productionPieceId = result.pieceId;
+        clearReviewProgress(approvedId);
         project.sentToProductionAt = new Date().toISOString();
         project.workflowWarning = result.workflowWarning || '';
         projects = projects.map(function (item) { return item.id === approvedId ? Object.assign({}, item, { productionPieceId: result.pieceId, sentToProductionAt: project.sentToProductionAt, workflowWarning: project.workflowWarning }) : item; });
@@ -1152,6 +1190,7 @@
           if (localStorage.getItem(key) === id) localStorage.removeItem(key);
         });
         projects = projects.filter(function (item) { return item.id !== id; });
+        clearReviewProgress(id);
         project = null; selected.clear(); renderList();
         var workspace = root && root.querySelector('#editorWorkspace');
         if (workspace) workspace.innerHTML = '<div class="editor-empty"><strong>Recording deleted</strong><span>Select another recording or upload a new one.</span></div>';
