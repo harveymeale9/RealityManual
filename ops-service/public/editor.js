@@ -35,7 +35,13 @@
     return fetch(url, options).then(function (response) {
       if (response.status === 401) { location.reload(); throw new Error('Session expired'); }
       return response.json().catch(function () { return {}; }).then(function (body) {
-        if (!response.ok) throw new Error(body.message || body.error || 'Request failed');
+        if (!response.ok) {
+          var error = new Error(body.message || body.error || 'Request failed');
+          error.code = body.error || '';
+          error.status = response.status;
+          error.body = body;
+          throw error;
+        }
         return body;
       });
     });
@@ -999,7 +1005,15 @@
     if (!project || !project.canUndoCut) return;
     selected.clear();
     queueProjectUpdate(project.id, function (id) {
-      return api('/api/editor/' + id + '/undo-cut', { method: 'POST' });
+      var latest = project && project.id === id ? project : projects.find(function (item) { return item.id === id; });
+      return api('/api/editor/' + id + '/undo-cut', { method: 'POST', body: JSON.stringify({ expectedEditRevision: Number(latest && latest.editRevision) || 0 }) }).catch(function (error) {
+        if (error.code !== 'edit_conflict') throw error;
+        return api('/api/editor/' + id).then(function (fresh) {
+          projects = projects.map(function (entry) { return entry.id === id ? fresh : entry; });
+          if (project && project.id === id) { project = fresh; renderWorkspace(); }
+          throw error;
+        });
+      });
     });
   }
 
@@ -1043,8 +1057,19 @@
     var id = project.id;
     return queueProjectUpdate(id, function () {
       var latest = project && project.id === id ? project : projects.find(function (item) { return item.id === id; });
-      var resolvedPatch = typeof patch === 'function' ? patch(latest || {}) : patch;
-      return api('/api/editor/' + id, { method: 'PATCH', body: JSON.stringify(resolvedPatch) });
+      function attempt(base, canRetryConflict) {
+        var resolvedPatch = typeof patch === 'function' ? patch(base || {}) : patch;
+        var payload = Object.assign({}, resolvedPatch, { expectedEditRevision: Number(base && base.editRevision) || 0 });
+        return api('/api/editor/' + id, { method: 'PATCH', body: JSON.stringify(payload) }).catch(function (error) {
+          if (error.code !== 'edit_conflict' || !canRetryConflict) throw error;
+          return api('/api/editor/' + id).then(function (fresh) {
+            projects = projects.map(function (entry) { return entry.id === id ? fresh : entry; });
+            if (project && project.id === id) project = fresh;
+            return attempt(fresh, false);
+          });
+        });
+      }
+      return attempt(latest || {}, true);
     });
   }
 

@@ -12807,3 +12807,27 @@ and fixed an impossible post-transcription wake-up: a recording with no timed
 speech no longer schedules render eligibility after it has already entered the
 terminal transcription-error state, preventing stray work from outliving that
 failed job during shutdown/restart.
+
+---
+
+# 334. Phone and Desktop Cannot Silently Overwrite Editor Decisions (2026-09-29)
+
+The client queue protects rapid decisions in one browser, but Harvey routinely
+uses Content Studio from both phone and desktop. Two loaded copies could still
+submit full cut/restoration arrays from the same old state, allowing whichever
+device saved last to silently erase the other device's decision.
+
+Every project now carries a dedicated `editRevision`. User PATCH and Undo calls
+include the revision they were based on; the server atomically rejects stale
+ones. Transcript completion, automatic retake decisions, and frame/crop
+classification also advance the revision because they can change the editable
+media state in the background. Ordinary render progress does not, avoiding
+spurious conflicts.
+
+For normal edits, the client handles one conflict by fetching the authoritative
+project and reapplying the user's intended transformation once, so independent
+phone/desktop actions merge without ceremony. Undo is deliberately not replayed
+against someone else's newer history; it reloads and asks the user to decide
+again. Integration coverage sends simultaneous stale-revision PATCHes and proves
+only one commits, while the browser regression simulates an external revision
+and proves the intended pause changes are safely rebased and serialized.

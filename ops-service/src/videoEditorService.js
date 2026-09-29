@@ -224,6 +224,11 @@ function invalidateRender(project) {
   return project;
 }
 
+function advanceEditRevision(project) {
+  project.editRevision = Math.max(0, Number(project.editRevision) || 0) + 1;
+  return project.editRevision;
+}
+
 function patchAffectsRender(body) {
   body = body && typeof body === 'object' ? body : {};
   return ['removedWordIndices', 'wordCorrection', 'autoSilenceEnabled', 'restoredAutoCutIds', 'captionsEnabled',
@@ -580,6 +585,7 @@ function setup(options) {
         project.planningMatchStatus = project.words.length && typeof matchPlanningPiece === 'function' ? 'pending' : 'unavailable';
         project.planningMatchError = '';
         invalidateRender(project);
+        advanceEditRevision(project);
         saveProject(project);
         if (project.words.length && typeof analyzeRetakes === 'function') setImmediate(function () { analyzeProjectRetakes(id); });
         if (project.words.length && typeof matchPlanningPiece === 'function') setImmediate(function () { matchProjectPlanningPiece(id); });
@@ -632,6 +638,7 @@ function setup(options) {
         project.retakeAnalysisStatus = 'ready';
         project.retakeAnalysisError = '';
         invalidateRender(project);
+        advanceEditRevision(project);
         saveProject(project);
         setImmediate(function () { maybeAutoRender(id); });
       } catch (err) {
@@ -717,6 +724,7 @@ function setup(options) {
           };
           project.classificationStatus = 'ready';
           project.classificationError = '';
+          advanceEditRevision(project);
           saveProject(project);
           setImmediate(function () { maybeAutoRender(id); });
           return;
@@ -738,6 +746,7 @@ function setup(options) {
         project.classificationStatus = 'ready';
         project.classificationError = '';
         invalidateRender(project);
+        advanceEditRevision(project);
         saveProject(project);
         setImmediate(function () { maybeAutoRender(id); });
       } catch (err) {
@@ -896,6 +905,7 @@ async function renderProject(id) {
       let migrated = false;
       const canResumeWork = !project.productionPieceId;
       if (project.renderStatus === undefined || project.renderStatus === null) { project.renderStatus = ''; migrated = true; }
+      if (!Number.isFinite(Number(project.editRevision))) { project.editRevision = 0; migrated = true; }
       if (!Number.isFinite(Number(project.renderProgress))) { project.renderProgress = 0; migrated = true; }
       if (!project.classificationStatus) { project.classificationStatus = canResumeWork && typeof classifyVisualLayout === 'function' ? 'pending' : 'unavailable'; migrated = true; }
       if (!project.retakeAnalysisStatus) { project.retakeAnalysisStatus = canResumeWork && typeof analyzeRetakes === 'function' ? (project.transcriptionStatus === 'ready' ? 'pending' : 'pending_transcript') : 'unavailable'; migrated = true; }
@@ -1058,6 +1068,7 @@ async function renderProject(id) {
         transcriptionError: '',
         renderStatus: '',
         renderError: '',
+        editRevision: 0,
         createdAt: now,
         updatedAt: now
       });
@@ -1097,6 +1108,9 @@ async function renderProject(id) {
     if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked. Make downstream changes in Content Production.' });
     if (productionJobs.has(project.id)) return res.status(409).json({ error: 'approval_in_progress', message: 'This edit is currently being sent to Content Production.' });
     if (renderJobs.has(project.id)) return res.status(409).json({ error: 'render_in_progress', message: 'Wait for this final edit to finish before changing its cut settings.' });
+    if (Number.isFinite(Number(req.body && req.body.expectedEditRevision)) && Number(req.body.expectedEditRevision) !== (Number(project.editRevision) || 0)) {
+      return res.status(409).json({ error: 'edit_conflict', message: 'This recording changed on another screen. Its latest edit has been reloaded.', editRevision: Number(project.editRevision) || 0 });
+    }
     const renderWillChange = patchAffectsRender(req.body);
     const currentRemovedWordIndices = (project.removedWordIndices || []).map(Number).sort(function (a, b) { return a - b; });
     const currentDismissedRetakeIds = (project.dismissedRetakeIds || []).map(String).sort();
@@ -1155,6 +1169,7 @@ async function renderProject(id) {
       }
     }
     if (renderWillChange) invalidateRender(project);
+    advanceEditRevision(project);
     saveProject(project);
     project.cuts = cutsForProject(project);
     project.captionGroups = captionGroups(project, project.cuts);
@@ -1178,6 +1193,9 @@ async function renderProject(id) {
     if (!project) return res.status(404).json({ error: 'not_found' });
     if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked.' });
     if (renderJobs.has(project.id)) return res.status(409).json({ error: 'render_in_progress', message: 'Wait for this final edit to finish before undoing the decision.' });
+    if (Number.isFinite(Number(req.body && req.body.expectedEditRevision)) && Number(req.body.expectedEditRevision) !== (Number(project.editRevision) || 0)) {
+      return res.status(409).json({ error: 'edit_conflict', message: 'This recording changed on another screen. Reloaded the latest edit instead of undoing the wrong decision.', editRevision: Number(project.editRevision) || 0 });
+    }
     const history = Array.isArray(project.cutDecisionHistory) ? project.cutDecisionHistory.slice() : [];
     if (!history.length) return res.status(409).json({ error: 'nothing_to_undo', message: 'There is no earlier edit decision to restore.' });
     const snapshot = history.pop();
@@ -1188,6 +1206,7 @@ async function renderProject(id) {
     }
     project.cutDecisionHistory = history;
     invalidateRender(project);
+    advanceEditRevision(project);
     saveProject(project);
     project.cuts = cutsForProject(project);
     project.captionGroups = captionGroups(project, project.cuts);
@@ -1401,5 +1420,6 @@ module.exports = {
   appliedRetakeCount,
   layoutReviewRequired,
   blockingReviewFailure,
+  advanceEditRevision,
   normalizedVideoMimeType
 };

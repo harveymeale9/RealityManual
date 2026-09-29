@@ -494,6 +494,16 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.deepEqual(project.renderQuality.checks, { playableFile: true, correctFrame: true, standardPixelFormat: true, audioPresent: true, durationMatches: true });
   assert.deepEqual([project.renderQuality.width, project.renderQuality.height], [1080, 1920]);
   assert.equal(project.renderQuality.pixelFormat, 'yuv420p');
+  const staleRevision = project.editRevision;
+  const competingEdits = await Promise.all([
+    fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contentTypeOverride: 'short', expectedEditRevision: staleRevision }) }),
+    fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contentTypeOverride: 'long_short', expectedEditRevision: staleRevision }) })
+  ]);
+  assert.deepEqual(competingEdits.map(function (item) { return item.status; }).sort(), [200, 409]);
+  const rejectedEdit = competingEdits.find(function (item) { return item.status === 409; });
+  assert.equal((await rejectedEdit.json()).error, 'edit_conflict');
+  project = await (await fetch(base + '/api/editor/' + project.id)).json();
+  assert.equal(project.editRevision, staleRevision + 1);
   expectedPlanningPieceId = 'plan-2';
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planningPieceId: 'plan-2' }) });
   assert.equal(response.status, 200);
