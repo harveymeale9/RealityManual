@@ -89,6 +89,20 @@ async function cleanStaleTempFiles(directory, olderThanMs, nowMs) {
   return removed;
 }
 
+function cleanOrphanedEditorTempFiles(directory) {
+  let entries;
+  try { entries = fs.readdirSync(directory, { withFileTypes: true }); }
+  catch (error) { return 0; }
+  let removed = 0;
+  entries.filter(function (entry) {
+    return entry.isFile() && (/^editor-upload-/.test(entry.name) || /^editor-.+\.mp3$/.test(entry.name));
+  }).forEach(function (entry) {
+    try { fs.rmSync(path.join(directory, entry.name), { force: true }); removed++; }
+    catch (error) {}
+  });
+  return removed;
+}
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, Number(value) || 0));
 }
@@ -581,6 +595,10 @@ function setup(options) {
   const tempDir = path.join(dataDir, 'tmp');
   fs.mkdirSync(rootDir, { recursive: true });
   fs.mkdirSync(tempDir, { recursive: true });
+  // No Editor request or extraction process can survive a service restart.
+  // Remove only Editor-owned leftovers immediately; /data/tmp is shared with
+  // other Content Studio features and must not be swept wholesale.
+  cleanOrphanedEditorTempFiles(tempDir);
   cleanStaleTempFiles(tempDir).catch(function () {});
   const tempCleanupTimer = setInterval(function () { cleanStaleTempFiles(tempDir).catch(function () {}); }, 6 * 60 * 60 * 1000);
   if (typeof tempCleanupTimer.unref === 'function') tempCleanupTimer.unref();
@@ -1714,6 +1732,7 @@ module.exports = {
   patchNeedsAutoRender,
   hashFile,
   cleanStaleTempFiles,
+  cleanOrphanedEditorTempFiles,
   gapDecisions,
   retakeCandidates,
   normalizeRetakeDecisions,

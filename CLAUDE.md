@@ -13272,3 +13272,21 @@ showed the sticky approval bar covering part of the video while Harvey was
 supposed to review it. Approval now sits in normal document flow after the
 transcript, matching the intended review-then-approve sequence and never
 obscuring playback.
+
+---
+
+# 358. Restarts Immediately Reclaim Editor Upload Orphans (2026-09-29)
+
+Request-level abort cleanup handles refreshes and network loss, but a container
+restart kills both Node and the request before that handler can run. The shared
+24-hour temp sweeper deliberately retained fresh files, so a nearly complete
+2 GB upload interrupted by deployment could consume workspace until the next
+day and block a corrected upload.
+
+At startup, before any new Editor job exists, the service now removes every
+Editor-owned `editor-upload-*` partial and extracted `editor-*.mp3` file without
+an age delay. The cleanup is prefix-scoped because `/data/tmp` is shared with
+voice previews, chat attachments, and other Content Studio features. Coverage
+proves fresh Editor orphans disappear while same-directory files belonging to
+other features remain untouched; the periodic age sweeper remains defense in
+depth for ordinary runtime leftovers.

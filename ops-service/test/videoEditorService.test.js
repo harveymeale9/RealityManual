@@ -62,6 +62,17 @@ test('stale temporary media is removed without touching active uploads', async f
   t.after(function () { fs.rmSync(dir, { recursive: true, force: true }); });
 });
 
+test('restart cleanup removes only Editor-owned temporary files regardless of age', async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-orphans-'));
+  fs.writeFileSync(path.join(dir, 'editor-upload-partial'), 'partial camera upload');
+  fs.writeFileSync(path.join(dir, 'editor-project-random.mp3'), 'partial transcription audio');
+  fs.writeFileSync(path.join(dir, 'audio-preview-shared.mp3'), 'another feature');
+  fs.writeFileSync(path.join(dir, 'chat-attachment.png'), 'another feature');
+  assert.equal(await editor.cleanOrphanedEditorTempFiles(dir), 2);
+  assert.deepEqual(fs.readdirSync(dir).sort(), ['audio-preview-shared.mp3', 'chat-attachment.png']);
+  t.after(function () { fs.rmSync(dir, { recursive: true, force: true }); });
+});
+
 test('upload capacity reserves every downstream master plus operating space', function () {
   const gib = 1024 * 1024 * 1024;
   assert.equal(editor.requiredEditorCapacity(2 * gib, false), 12 * gib);
