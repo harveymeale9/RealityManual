@@ -273,6 +273,41 @@ test('service restart automatically resumes an interrupted transcription', { tim
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
 
+test('approved editor projects stay immutable during restart maintenance', { timeout: 10000 }, async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-approved-'));
+  const editorDir = path.join(dir, 'editor', 'approved-1'); fs.mkdirSync(editorDir, { recursive: true });
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=320x180:d=1:r=12',
+    '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-f', 'mp4', path.join(editorDir, 'source')]);
+  const db = new Database(path.join(dir, 'test.sqlite'));
+  db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
+  const now = new Date().toISOString();
+  const approved = {
+    id: 'approved-1', name: 'Approved take', productionPieceId: 'production-1', duration: 1, width: 180, height: 320,
+    words: [{ index: 0, text: 'Approved.', start: .2, end: .8 }], removedWordIndices: [], dismissedRetakeIds: [], restoredAutoCutIds: [],
+    transcriptionStatus: 'ready', classificationStatus: 'pending', retakeAnalysisStatus: 'running', planningMatchStatus: 'pending',
+    renderStatus: 'ready', createdAt: now, updatedAt: now
+  };
+  db.prepare('INSERT INTO records (store_name,id,data,updated_at) VALUES (?,?,?,?)').run('editorProjects', approved.id, JSON.stringify(approved), now);
+  let classifierCalls = 0;
+  editor.setup({
+    db: db, dataDir: dir,
+    transcribeDetailed: async function () { throw new Error('approved transcript must not restart'); },
+    classifyVisualLayout: async function () { classifierCalls++; return { layout: 'horizontal', confidence: 'high' }; },
+    analyzeRetakes: async function () { throw new Error('approved retake analysis must not restart'); },
+    matchPlanningPiece: async function () { throw new Error('approved matching must not restart'); }
+  });
+  await new Promise(function (resolve) { setTimeout(resolve, 250); });
+  const stored = JSON.parse(db.prepare('SELECT data FROM records WHERE store_name=? AND id=?').get('editorProjects', approved.id).data);
+  assert.equal(classifierCalls, 0);
+  assert.equal(stored.width, 180);
+  assert.equal(stored.height, 320);
+  assert.equal(stored.classificationStatus, 'pending');
+  assert.equal(stored.retakeAnalysisStatus, 'running');
+  assert.equal(stored.planningMatchStatus, 'pending');
+  assert.equal(stored.renderStatus, 'ready');
+  t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+});
+
 test('one recovery endpoint retries failed automatic work without replacing the source', { timeout: 10000 }, async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-retry-'));
   const projectDir = path.join(dir, 'editor', 'retry-1'); fs.mkdirSync(projectDir, { recursive: true });

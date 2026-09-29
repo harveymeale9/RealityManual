@@ -12731,3 +12731,23 @@ dismissal/restoration. The existing serialized network boundary remains. A
 browser regression clicks two pause decisions faster than the mocked 120 ms
 server round trip and proves both persist while concurrent PATCH count remains
 one.
+
+---
+
+# 330. Approved Editor Projects Stay Immutable Across Restarts (2026-09-29)
+
+The Editor promises that approval locks the exact reviewed version, but startup
+maintenance still examined every saved project. An approved project carrying an
+old pending/running phase could restart AI work; the display-rotation migration
+could also update its dimensions and invalidate its final render, after which
+automatic rendering correctly refused to touch the already-sent project. That
+left the archived Editor record internally inconsistent and removed its final
+preview even though the Production copy remained safe.
+
+Restart recovery and media-dimension migration now exclude projects that have a
+`productionPieceId`. Minimal schema backfills may still add missing inert
+fields, and byte hashing may add duplicate-detection metadata, but no analysis,
+orientation, cut, or render state can change after approval. A restart
+integration test seeds an approved project with deliberately stale dimensions
+and in-progress phase labels, then proves no classifier runs and every reviewed
+state remains byte-for-byte semantically unchanged.

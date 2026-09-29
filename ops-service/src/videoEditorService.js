@@ -900,6 +900,10 @@ async function renderProject(id) {
       if (!project.classificationStatus) { project.classificationStatus = canResumeWork && typeof classifyVisualLayout === 'function' ? 'pending' : 'unavailable'; migrated = true; }
       if (!project.retakeAnalysisStatus) { project.retakeAnalysisStatus = canResumeWork && typeof analyzeRetakes === 'function' ? (project.transcriptionStatus === 'ready' ? 'pending' : 'pending_transcript') : 'unavailable'; migrated = true; }
       if (!project.planningMatchStatus) { project.planningMatchStatus = canResumeWork && typeof matchPlanningPiece === 'function' ? (project.transcriptionStatus === 'ready' ? 'pending' : 'pending_transcript') : 'unavailable'; migrated = true; }
+      if (!canResumeWork) {
+        if (migrated) saveProject(project);
+        return;
+      }
       const resumeTranscription = project.transcriptionStatus === 'running' || project.transcriptionStatus === 'pending';
       const resumeRender = project.renderStatus === 'running' || project.renderStatus === 'queued';
       const resumeClassification = project.classificationStatus === 'running' || project.classificationStatus === 'pending';
@@ -946,7 +950,7 @@ async function renderProject(id) {
     listStmt.all(STORE_NAME).forEach(function (row) {
       let project;
       try { project = JSON.parse(row.data); } catch (e) { return; }
-      if (!project || !isId(project.id) || !fs.existsSync(sourcePath(project.id))) return;
+      if (!project || project.productionPieceId || !isId(project.id) || !fs.existsSync(sourcePath(project.id))) return;
       probe(sourcePath(project.id)).then(function (media) {
         const current = getProject(project.id);
         if (!current || (current.width === media.width && current.height === media.height)) return;
