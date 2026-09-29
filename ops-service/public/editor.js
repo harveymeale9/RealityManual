@@ -201,7 +201,7 @@
     if (item.transcriptionStatus === 'error') return 'Needs attention';
     if (['pending', 'running'].indexOf(item.browserPreviewStatus) !== -1 && item.renderStatus !== 'ready') return queued('Preparing browser preview', item.previewQueuePosition);
     if (item.browserPreviewStatus === 'error' && item.renderStatus !== 'ready') return 'Needs attention';
-    if (item.classificationStatus === 'error' || item.retakeAnalysisStatus === 'error' || item.planningMatchStatus === 'error' || item.renderStatus === 'error') return 'Needs attention';
+    if ((item.classificationStatus === 'error' && framingFailureIsBlocking(item)) || item.retakeAnalysisStatus === 'error' || item.renderStatus === 'error') return 'Needs attention';
     if (item.classificationStatus === 'pending') return queued('Waiting for frame analysis', item.classificationQueuePosition);
     if (item.classificationStatus === 'running') return 'Analyzing frame';
     if (item.layoutReviewRequired) return 'Review framing';
@@ -217,9 +217,14 @@
     return 'Ready to edit';
   }
 
+  function framingFailureIsBlocking(item) {
+    return !!item && item.classificationStatus === 'error' &&
+      (item.layoutOverride === 'auto' || !item.layoutOverride) && Number(item.width) >= Number(item.height);
+  }
+
   function sessionBucket(item) {
     if (item.productionPieceId) return item.workflowWarning ? 'warning' : 'sent';
-    if (item.transcriptionStatus === 'error' || (item.browserPreviewStatus === 'error' && item.renderStatus !== 'ready') || item.classificationStatus === 'error' || item.retakeAnalysisStatus === 'error' || item.planningMatchStatus === 'error' || item.renderStatus === 'error' || Number(item.unresolvedRetakeCount) > 0 || item.layoutReviewRequired) return 'attention';
+    if (item.transcriptionStatus === 'error' || (item.browserPreviewStatus === 'error' && item.renderStatus !== 'ready') || framingFailureIsBlocking(item) || item.retakeAnalysisStatus === 'error' || item.renderStatus === 'error' || Number(item.unresolvedRetakeCount) > 0 || item.layoutReviewRequired) return 'attention';
     if (item.workflowWarning) return 'warning';
     if (item.renderStatus === 'ready') return 'ready';
     if (['pending', 'running'].indexOf(item.transcriptionStatus) !== -1 || ['pending', 'running'].indexOf(item.browserPreviewStatus) !== -1 || ['pending', 'running'].indexOf(item.classificationStatus) !== -1 || ['pending', 'running', 'pending_transcript'].indexOf(item.retakeAnalysisStatus) !== -1 || ['pending', 'running', 'pending_transcript'].indexOf(item.planningMatchStatus) !== -1 || ['queued', 'running'].indexOf(item.renderStatus) !== -1) return 'working';
@@ -330,9 +335,8 @@
     var labels = [];
     if (item.transcriptionStatus === 'error') labels.push('transcript');
     if (item.browserPreviewStatus === 'error') labels.push('browser preview');
-    if (item.classificationStatus === 'error') labels.push('framing');
+    if (framingFailureIsBlocking(item)) labels.push('framing');
     if (item.retakeAnalysisStatus === 'error') labels.push('retake review');
-    if (item.planningMatchStatus === 'error') labels.push('planning match');
     if (item.renderStatus === 'error') labels.push('final render');
     return labels;
   }
@@ -694,13 +698,15 @@
       ? (project.layoutReviewRequired ? 'Low-confidence detection. Confirm Frame once. ' : '') + esc(project.visualClassification.explanation || ('Frame analysis: ' + project.visualClassification.confidence + ' confidence'))
       : project.classificationStatus === 'running' || project.classificationStatus === 'pending'
         ? 'Analyzing three frames to distinguish a single page from an open spread…'
-        : 'Using source dimensions until the book framing is analyzed.';
+        : project.classificationStatus === 'error'
+          ? (framingFailureIsBlocking(project) ? 'Automatic framing was unavailable. Choose Vertical or Horizontal once to continue.' : 'Automatic framing was unavailable. Your manual frame choice is being used.')
+          : 'Using source dimensions until the book framing is analyzed.';
     var automaticEditRunning = ['pending', 'running'].indexOf(project.classificationStatus) !== -1 ||
       ['pending', 'running', 'pending_transcript'].indexOf(project.retakeAnalysisStatus) !== -1 ||
       ['pending', 'running', 'pending_transcript'].indexOf(project.planningMatchStatus) !== -1;
     var unresolvedRetakes = Number(project.unresolvedRetakeCount) || 0;
     var appliedRetakes = Number(project.appliedRetakeCount) || 0;
-    var framingFailureBlocks = project.classificationStatus === 'error' && (project.layoutOverride === 'auto' || !project.layoutOverride) && Number(project.width) >= Number(project.height);
+    var framingFailureBlocks = framingFailureIsBlocking(project);
     var failedSafetyCheck = project.retakeAnalysisStatus === 'error' || framingFailureBlocks;
     var renderBlocked = automaticEditRunning || failedSafetyCheck || unresolvedRetakes > 0 || project.layoutReviewRequired;
     var renderButtonText = automaticEditRunning ? 'Preparing automatic edit…' : project.retakeAnalysisStatus === 'error' ? 'Retry failed retake check' : framingFailureBlocks ? 'Retry framing or choose a frame' : project.layoutReviewRequired ? 'Confirm Vertical or Horizontal frame' : unresolvedRetakes ? 'Review ' + unresolvedRetakes + ' possible retake' + (unresolvedRetakes === 1 ? '' : 's') : 'Build final edit';
@@ -718,6 +724,25 @@
       ? '/api/editor/' + encodeURIComponent(project.id) + '/render?inline=1&v=' + encodeURIComponent(previewVersion)
       : '/api/editor/' + encodeURIComponent(project.id) + '/source?v=' + encodeURIComponent(previewVersion);
     var previewSeek = Math.max(0, Number(previewSeekTimes[project.id]) || 0);
+    var framingReadiness = ['pending', 'running'].indexOf(project.classificationStatus) !== -1
+      ? '<i class="working">Framing checking</i>'
+      : framingFailureBlocks ? '<i class="error">Framing failed</i>'
+        : project.layoutReviewRequired ? '<i class="review">Framing confirm once</i>' : '<i class="ready">Framing ready</i>';
+    var retakeReadiness = ['pending', 'running', 'pending_transcript'].indexOf(project.retakeAnalysisStatus) !== -1
+      ? '<i class="working">Retakes checking</i>'
+      : project.retakeAnalysisStatus === 'error' ? '<i class="error">Retake check failed</i>'
+        : unresolvedRetakes ? '<i class="review">' + unresolvedRetakes + ' to review</i>'
+          : '<i class="ready">' + (appliedRetakes ? appliedRetakes + ' removed · resolved' : 'Retakes resolved') + '</i>';
+    var planReadiness = ['pending', 'running', 'pending_transcript'].indexOf(project.planningMatchStatus) !== -1
+      ? '<i class="working">Plan matching</i>'
+      : project.planningMatchStatus === 'error' ? '<i>Plan not linked · optional</i>'
+        : '<i class="ready">Plan ' + (project.planningPieceId ? 'linked' : 'not required') + '</i>';
+    var planningCopy = project.planningMatch && project.planningMatch.reason ||
+      (project.planningMatchStatus === 'running' || project.planningMatchStatus === 'pending'
+        ? 'Matching the transcript to Filmed cards…'
+        : project.planningMatchStatus === 'error'
+          ? 'Automatic matching was unavailable. Pick a card manually or retry when convenient; this does not block the edit.'
+          : 'Choose a card manually if this recording came from the Kanban.');
     workspace.innerHTML =
       '<div class="editor-topbar"><div><h2>' + esc(displayName(project)) + '</h2><span>' + (project.planningPieceTitle ? esc(project.name) + ' · ' : '') + formatTime(project.duration) + ' original · ' + formatTime(editedDuration(project)) + ' edited · ' + cutSeconds.toFixed(1) + 's removed' + (formatBytes(project.sizeBytes) ? ' · ' + formatBytes(project.sizeBytes) + ' source' : '') + '</span></div>' +
         '<div class="editor-topbar-actions"><div class="editor-project-nav"><button type="button" class="btn-secondary btn-tiny" id="editorPreviousProject" ' + (reviewProjectIndex <= 0 ? 'disabled' : '') + '>← Previous</button><span id="editorProjectPosition">' + (reviewProjectIndex >= 0 ? (reviewProjectIndex + 1) + ' of ' + reviewProjects.length : '') + '</span><button type="button" class="btn-secondary btn-tiny" id="editorNextProject" ' + (reviewProjectIndex < 0 || reviewProjectIndex >= reviewProjects.length - 1 ? 'disabled' : '') + '>Next →</button></div>' +
@@ -732,7 +757,7 @@
         (project.classificationStatus !== 'ready' && project.classificationStatus !== 'running' && project.classificationStatus !== 'pending' ? '<button type="button" class="editor-analyze" id="editorAnalyze">Analyze book framing</button>' : '') + '</div>' +
         '<label>Frame<select id="editorLayout"><option value="auto"' + (project.layoutOverride === 'auto' || !project.layoutOverride ? ' selected' : '') + '>Auto detect</option><option value="vertical"' + (project.layoutOverride === 'vertical' ? ' selected' : '') + '>Vertical · single page</option><option value="horizontal"' + (project.layoutOverride === 'horizontal' ? ' selected' : '') + '>Horizontal · open spread</option></select></label>' +
         '<label>Format<select id="editorContentType"><option value="auto"' + (project.contentTypeOverride === 'auto' || !project.contentTypeOverride ? ' selected' : '') + '>Auto · ' + esc(typeLabel(project.detectedContentType)) + '</option><option value="ultra_short"' + (project.contentTypeOverride === 'ultra_short' ? ' selected' : '') + '>Ultra-short</option><option value="short"' + (project.contentTypeOverride === 'short' ? ' selected' : '') + '>Short</option><option value="long_short"' + (project.contentTypeOverride === 'long_short' ? ' selected' : '') + '>Long-short</option><option value="longform"' + (project.contentTypeOverride === 'longform' ? ' selected' : '') + '>Longform</option></select></label></section>' +
-      '<section class="editor-plan-link"><div><div class="eyebrow">Planning workflow</div><strong>' + (project.planningPieceId ? 'Linked to ' + esc(displayName(project)) : 'No planning card linked') + '</strong><span>' + esc(project.planningMatch && project.planningMatch.reason || (project.planningMatchStatus === 'running' || project.planningMatchStatus === 'pending' ? 'Matching the transcript to Filmed cards…' : 'Choose a card manually if this recording came from the Kanban.')) + '</span></div><label>Content card<select id="editorPlanningPiece">' + planningOptionsHtml(project) + '</select></label>' +
+      '<section class="editor-plan-link"><div><div class="eyebrow">Planning workflow</div><strong>' + (project.planningPieceId ? 'Linked to ' + esc(displayName(project)) : 'No planning card linked') + '</strong><span>' + esc(planningCopy) + '</span></div><label>Content card<select id="editorPlanningPiece">' + planningOptionsHtml(project) + '</select></label>' +
         (project.planningMatchStatus !== 'running' && project.planningMatchStatus !== 'pending' ? '<button type="button" class="editor-analyze" id="editorMatchPlan">Match again</button>' : '') + '</section>' +
       '<div class="editor-preview-mode"><div><strong>' + (previewMode === 'final' ? 'Final edit' : previewingWorkingEdit ? 'Working preview' : sourcePreviewLabel) + '</strong><span>' + (previewMode === 'final' ? 'This is the actual encoded file that will go to production.' : previewingWorkingEdit ? 'Cuts and caption timing are previewed instantly while the verified edit builds.' : browserSafeSource ? 'H.264 review copy of the untouched take. The original ' + esc(String(project.videoCodec || 'camera').toUpperCase()) + ' master remains preserved for final rendering.' : 'Untouched source playback for checking anything the edit removed.') + '</span></div>' +
         '<div class="editor-preview-actions"><span class="editor-review-keys">Space play/pause · ←/→ 2s</span><label>Review speed<select id="editorReviewRate"><option value="1"' + (reviewRate === 1 ? ' selected' : '') + '>1×</option><option value="1.25"' + (reviewRate === 1.25 ? ' selected' : '') + '>1.25×</option><option value="1.5"' + (reviewRate === 1.5 ? ' selected' : '') + '>1.5×</option><option value="2"' + (reviewRate === 2 ? ' selected' : '') + '>2×</option></select></label>' +
@@ -758,7 +783,7 @@
         (project.productionPieceId ? 'This edit is ready in Content Production for titles, thumbnail, and ambient music.' :
           project.renderStatus === 'ready' ? 'Send the finished edit across without uploading it again.' :
           'Build the final edit first. Yellow captions will be baked in below center.') + '</span>' +
-        '<div class="editor-readiness"><i class="ready">Transcript ready</i><i class="' + (['pending', 'running'].indexOf(project.classificationStatus) !== -1 ? 'working' : project.layoutReviewRequired ? 'review' : 'ready') + '">Framing ' + (['pending', 'running'].indexOf(project.classificationStatus) !== -1 ? 'checking' : project.layoutReviewRequired ? 'confirm once' : 'ready') + '</i><i class="' + (['pending', 'running', 'pending_transcript'].indexOf(project.retakeAnalysisStatus) !== -1 ? 'working' : unresolvedRetakes ? 'review' : 'ready') + '">' + (['pending', 'running', 'pending_transcript'].indexOf(project.retakeAnalysisStatus) !== -1 ? 'Retakes checking' : unresolvedRetakes ? unresolvedRetakes + ' to review' : appliedRetakes ? appliedRetakes + ' removed · resolved' : 'Retakes resolved') + '</i><i class="' + (['pending', 'running', 'pending_transcript'].indexOf(project.planningMatchStatus) !== -1 ? 'working' : 'ready') + '">Plan ' + (['pending', 'running', 'pending_transcript'].indexOf(project.planningMatchStatus) !== -1 ? 'matching' : project.planningPieceId ? 'linked' : 'not required') + '</i>' + (project.renderStatus === 'ready' ? '<i class="ready">Output verified</i>' : '') + '</div>' +
+        '<div class="editor-readiness"><i class="ready">Transcript ready</i>' + framingReadiness + retakeReadiness + planReadiness + (project.renderStatus === 'ready' ? '<i class="ready">Output verified</i>' : '') + '</div>' +
         (['queued', 'running'].indexOf(project.renderStatus) !== -1 ? '<div class="editor-render-progress"><span id="editorRenderProgressLabel">' + (project.renderStatus === 'queued' ? (Number(project.renderQueuePosition) > 1 ? (Number(project.renderQueuePosition) - 1) + ' recording(s) ahead in the render queue' : 'Next in the render queue') : 'Encoding final edit · ' + Math.round(Number(project.renderProgress) || 0) + '%') + '</span><div><i id="editorRenderProgressBar" style="width:' + (project.renderStatus === 'queued' ? 4 : Math.max(2, Number(project.renderProgress) || 0)) + '%"></i></div></div>' : '') +
         (project.renderStatus === 'error' ? '<em>' + esc(project.renderError) + '</em>' : '') + '</div><div class="editor-export-actions">' +
         (project.productionPieceId ? '<button class="btn-primary" id="editorOpenProduction">Open Content Production</button>' :

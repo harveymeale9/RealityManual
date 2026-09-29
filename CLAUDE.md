@@ -13625,3 +13625,23 @@ and one-hour cap. A deadline produces the stable errors `stt_timeout` or
 second attempt and then exposes a recoverable Needs attention state rather than
 hanging its serial transcription queue. Unit coverage proves validation,
 abort behavior, and successful response passthrough.
+
+---
+
+# 373. Editor Readiness Never Calls a Failed Check Resolved (2026-09-29)
+
+The review footer could display a green `RETAKES RESOLVED` badge while the red
+banner above correctly said the retake review had failed. Planning-link errors,
+which are intentionally non-blocking, also changed the whole queue card to
+`Needs attention` and appeared in the blocking recovery banner. These mixed
+signals made an otherwise automated review harder to trust.
+
+Readiness badges now distinguish checking, failed, needs-review, and ready
+states for framing and retakes. A failed automatic planning match is explicitly
+labelled optional, explains that it does not block the edit, and can still be
+retried from its own panel without presenting the video as broken. A framing
+analysis failure is blocking only while a landscape source remains on Auto;
+once Harvey chooses a frame manually it is accurately described as the active
+fallback rather than a failed requirement. Shared predicates keep queue status,
+session counts and priority, the recovery banner, render blocking, and footer
+badges consistent.
