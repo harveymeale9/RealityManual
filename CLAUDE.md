@@ -13153,9 +13153,12 @@ cards would appear applied; restoring either one would restore shared indices
 still claimed by the other, making the cards non-independent and the UI state
 misleading.
 
-Semantic decision normalization now accepts candidates in model order while
-rejecting any later removal range that intersects an accepted one. Disjoint
-chains of failed takes remain valid, and every visible card can now be applied
-or restored without silently changing another card's owned words. Focused
-coverage supplies overlapping and adjacent ranges and retains only the two
-independent decisions.
+Semantic decision normalization now reserves high-confidence ranges first,
+then review-only ranges in their original order, rejecting any later removal
+range that intersects an accepted one. This ensures an uncertain suggestion
+cannot displace a clear failed take just because the model listed it first.
+Original model indices still form stable card ids. Disjoint chains of failed
+takes remain valid, and every visible card can now be applied or restored
+without silently changing another card's owned words. Focused coverage lists an
+uncertain overlap first and proves the high-confidence plus independent ranges
+are the ones retained.

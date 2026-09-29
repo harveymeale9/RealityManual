@@ -355,7 +355,15 @@ function retakeCandidates(words) {
 
 function normalizeRetakeDecisions(raw, words) {
   const claimedRemovalIndices = new Set();
-  return (Array.isArray(raw) ? raw : []).map(function (decision, index) {
+  const ordered = (Array.isArray(raw) ? raw : []).map(function (decision, index) {
+    return { decision: decision, index: index };
+  }).sort(function (left, right) {
+    const confidenceDifference = Number(right.decision && right.decision.confidence === 'high') - Number(left.decision && left.decision.confidence === 'high');
+    return confidenceDifference || left.index - right.index;
+  });
+  return ordered.map(function (entry) {
+    const decision = entry.decision;
+    const index = entry.index;
     const start = Number(decision.removeStartIndex);
     const end = Number(decision.removeEndIndex);
     const replacementStart = Number(decision.replacementStartIndex);

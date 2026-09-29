@@ -184,11 +184,11 @@ test('overlapping semantic retake removals cannot create conflicting review card
     return { index: index, text: 'w' + index, start: index, end: index + 0.4 };
   });
   const decisions = editor.normalizeRetakeDecisions([
-    { removeStartIndex: 0, removeEndIndex: 3, replacementStartIndex: 5, replacementEndIndex: 7, confidence: 'high', reason: 'First' },
-    { removeStartIndex: 2, removeEndIndex: 4, replacementStartIndex: 8, replacementEndIndex: 10, confidence: 'high', reason: 'Overlaps' },
-    { removeStartIndex: 4, removeEndIndex: 4, replacementStartIndex: 8, replacementEndIndex: 10, confidence: 'review', reason: 'Disjoint' }
+    { removeStartIndex: 0, removeEndIndex: 3, replacementStartIndex: 5, replacementEndIndex: 7, confidence: 'review', reason: 'Uncertain overlap listed first' },
+    { removeStartIndex: 2, removeEndIndex: 4, replacementStartIndex: 8, replacementEndIndex: 10, confidence: 'high', reason: 'Clear failed take' },
+    { removeStartIndex: 0, removeEndIndex: 1, replacementStartIndex: 8, replacementEndIndex: 10, confidence: 'review', reason: 'Disjoint' }
   ], timed);
-  assert.deepEqual(decisions.map(function (decision) { return decision.removeWordIndices; }), [[0, 1, 2, 3], [4]]);
+  assert.deepEqual(decisions.map(function (decision) { return decision.removeWordIndices; }), [[2, 3, 4], [0, 1]]);
 });
 
 test('unresolved retakes block approval until cut or explicitly dismissed', function () {
