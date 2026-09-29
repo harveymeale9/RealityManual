@@ -10,6 +10,7 @@
   var mountToken = 0;
   var editorNotice = '';
   var previewModes = {};
+  var previewSeekTimes = {};
   var saveQueues = {};
   var saveStates = {};
   var listFilter = localStorage.getItem('rmEditorListFilter') === 'sent' ? 'sent' : 'active';
@@ -53,14 +54,42 @@
     }, 0));
   }
 
+  function sourceToEditedTime(sourceTime, cuts) {
+    var removed = 0;
+    sourceTime = Math.max(0, Number(sourceTime) || 0);
+    (cuts || []).forEach(function (cut) {
+      if (sourceTime >= cut.end) removed += cut.end - cut.start;
+      else if (sourceTime > cut.start) removed += sourceTime - cut.start;
+    });
+    return Math.max(0, sourceTime - removed);
+  }
+
+  function editedToSourceTime(editedTime, item) {
+    var target = Math.max(0, Number(editedTime) || 0);
+    var cursor = 0;
+    var sourceCursor = 0;
+    var cuts = (item.cuts || []).slice().sort(function (a, b) { return a.start - b.start; });
+    for (var index = 0; index < cuts.length; index++) {
+      var kept = Math.max(0, cuts[index].start - sourceCursor);
+      if (target <= cursor + kept) return sourceCursor + (target - cursor);
+      cursor += kept;
+      sourceCursor = Math.max(sourceCursor, cuts[index].end);
+    }
+    return Math.min(Number(item.duration) || sourceCursor + target - cursor, sourceCursor + target - cursor);
+  }
+
   function statusLabel(item) {
     if (item.productionPieceId) return 'Sent to Production';
-    if (item.transcriptionStatus === 'pending' || item.transcriptionStatus === 'running') return 'Transcribing';
+    if (item.transcriptionStatus === 'pending') return 'Waiting for transcript';
+    if (item.transcriptionStatus === 'running') return 'Transcribing';
     if (item.transcriptionStatus === 'error') return 'Needs attention';
     if (item.classificationStatus === 'error' || item.retakeAnalysisStatus === 'error' || item.planningMatchStatus === 'error' || item.renderStatus === 'error') return 'Needs attention';
-    if (item.classificationStatus === 'pending' || item.classificationStatus === 'running') return 'Analyzing frame';
-    if (item.retakeAnalysisStatus === 'pending' || item.retakeAnalysisStatus === 'running') return 'Checking retakes';
-    if (item.planningMatchStatus === 'pending' || item.planningMatchStatus === 'running') return 'Matching plan';
+    if (item.classificationStatus === 'pending') return 'Waiting for frame analysis';
+    if (item.classificationStatus === 'running') return 'Analyzing frame';
+    if (item.retakeAnalysisStatus === 'pending') return 'Waiting for retake review';
+    if (item.retakeAnalysisStatus === 'running') return 'Checking retakes';
+    if (item.planningMatchStatus === 'pending') return 'Waiting for plan match';
+    if (item.planningMatchStatus === 'running') return 'Matching plan';
     if (item.renderStatus === 'queued') return 'Waiting to render';
     if (item.renderStatus === 'running') return 'Rendering' + (Number(item.renderProgress) > 0 ? ' · ' + Math.round(Number(item.renderProgress)) + '%' : '');
     if (item.renderStatus === 'ready') return 'Ready for approval';
@@ -222,7 +251,10 @@
     renderSessionSummary();
     var activeCount = projects.filter(function (item) { return !item.productionPieceId; }).length;
     var sentCount = projects.length - activeCount;
-    var visibleProjects = projects.filter(function (item) { return listFilter === 'sent' ? !!item.productionPieceId : !item.productionPieceId; });
+    var visibleProjects = projects.filter(function (item) { return listFilter === 'sent' ? !!item.productionPieceId : !item.productionPieceId; }).sort(function (a, b) {
+      if (listFilter === 'sent') return String(b.sentToProductionAt || b.updatedAt || '').localeCompare(String(a.sentToProductionAt || a.updatedAt || ''));
+      return String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
+    });
     var asideTitle = root.querySelector('.editor-aside-title');
     if (asideTitle) asideTitle.textContent = 'Recordings · ' + (listFilter === 'sent' ? sentCount : activeCount);
     root.querySelectorAll('.editor-list-filters button').forEach(function (button) {
@@ -320,7 +352,12 @@
     return api('/api/editor').then(function (items) {
       projects = items;
       renderList();
-      if (!project && projects[0]) return openProject(projects[0].id);
+      if (!project && projects[0]) {
+        var preferred = projects.filter(function (item) { return listFilter === 'sent' ? !!item.productionPieceId : !item.productionPieceId; }).sort(function (a, b) {
+          return listFilter === 'sent' ? String(b.sentToProductionAt || b.updatedAt || '').localeCompare(String(a.sentToProductionAt || a.updatedAt || '')) : String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
+        })[0] || projects[0];
+        return openProject(preferred.id);
+      }
     });
   }
 
@@ -400,6 +437,7 @@
     var failures = failedSteps(project);
     var previewMode = project.renderStatus === 'ready' && previewModes[project.id] !== 'source' ? 'final' : 'source';
     var previewUrl = previewMode === 'final' ? '/api/editor/' + encodeURIComponent(project.id) + '/render?inline=1' : '/api/editor/' + encodeURIComponent(project.id) + '/source';
+    var previewSeek = Math.max(0, Number(previewSeekTimes[project.id]) || 0);
     workspace.innerHTML =
       '<div class="editor-topbar"><div><h2>' + esc(displayName(project)) + '</h2><span>' + (project.planningPieceTitle ? esc(project.name) + ' · ' : '') + formatTime(project.duration) + ' original · ' + formatTime(editedDuration(project)) + ' edited · ' + cutSeconds.toFixed(1) + 's removed</span></div>' +
         '<div class="editor-topbar-actions"><span class="editor-save-state ' + esc(saveStates[project.id] || '') + '" id="editorSaveState">' + ({ saving: 'Saving…', saved: 'Saved', error: 'Save failed' }[saveStates[project.id]] || '') + '</span><button class="editor-delete" id="editorDelete">Delete recording</button></div></div>' +
@@ -414,7 +452,7 @@
       '<div class="editor-preview-mode"><div><strong>' + (previewMode === 'final' ? 'Final edit' : 'Original master') + '</strong><span>' + (previewMode === 'final' ? 'This is the actual encoded file that will go to production.' : 'Use this view to inspect or restore source material.') + '</span></div>' +
         '<div class="editor-preview-actions"><label>Review speed<select id="editorReviewRate"><option value="1"' + (reviewRate === 1 ? ' selected' : '') + '>1×</option><option value="1.25"' + (reviewRate === 1.25 ? ' selected' : '') + '>1.25×</option><option value="1.5"' + (reviewRate === 1.5 ? ' selected' : '') + '>1.5×</option><option value="2"' + (reviewRate === 2 ? ' selected' : '') + '>2×</option></select></label>' +
         (project.renderStatus === 'ready' ? '<button type="button" id="editorPreviewFinal" class="' + (previewMode === 'final' ? 'active' : '') + '">Final edit</button><button type="button" id="editorPreviewSource" class="' + (previewMode === 'source' ? 'active' : '') + '">Original master</button>' : '') + '</div></div>' +
-      '<div class="editor-preview"><div class="editor-video-frame ' + layout + '" style="--crop-x:' + cropPercent + '%"><video id="editorVideo" data-preview-mode="' + previewMode + '" controls playsinline preload="metadata" src="' + previewUrl + '"></video>' +
+      '<div class="editor-preview"><div class="editor-video-frame ' + layout + '" style="--crop-x:' + cropPercent + '%"><video id="editorVideo" data-preview-mode="' + previewMode + '" data-seek-time="' + previewSeek.toFixed(3) + '" controls playsinline preload="metadata" src="' + previewUrl + '"></video>' +
         '<div class="editor-caption" id="editorCaption"></div></div></div>' +
       (layout === 'vertical' ? '<div class="editor-crop-control"><label>Horizontal crop position <input id="editorCropX" type="range" min="0" max="100" value="' + cropPercent + '"></label><span>Keep the single page centred inside the vertical frame.</span></div>' : '') +
       '<section class="editor-automation"><div class="editor-automation-head"><div><div class="eyebrow">Automatic edit</div><h3>Speech and pause map</h3></div><div class="editor-legend"><span class="speech">Speech</span><span class="cut">Removed pause</span><span class="pause">Kept pause</span></div></div>' + timelineHtml(project) +
@@ -451,6 +489,14 @@
     var previewingFinal = video.dataset.previewMode === 'final';
     var rendering = ['queued', 'running'].indexOf(project.renderStatus) !== -1;
     video.playbackRate = reviewRate;
+    var resumeTime = Number(video.dataset.seekTime) || 0;
+    if (resumeTime > 0) {
+      var resumePreview = function () {
+        video.currentTime = Math.min(resumeTime, Math.max(0, Number(video.duration) || resumeTime));
+        delete previewSeekTimes[project.id];
+      };
+      if (video.readyState >= 1) resumePreview(); else video.addEventListener('loadedmetadata', resumePreview, { once: true });
+    }
     var lastClicked = null;
     var ignoreNextClick = false;
     function isLongformVideo() {
@@ -505,9 +551,15 @@
       };
     });
     var finalPreviewButton = root.querySelector('#editorPreviewFinal');
-    if (finalPreviewButton) finalPreviewButton.onclick = function () { previewModes[project.id] = 'final'; renderWorkspace(); };
+    if (finalPreviewButton) finalPreviewButton.onclick = function () {
+      previewSeekTimes[project.id] = previewingFinal ? video.currentTime : sourceToEditedTime(video.currentTime, project.cuts);
+      previewModes[project.id] = 'final'; renderWorkspace();
+    };
     var sourcePreviewButton = root.querySelector('#editorPreviewSource');
-    if (sourcePreviewButton) sourcePreviewButton.onclick = function () { previewModes[project.id] = 'source'; renderWorkspace(); };
+    if (sourcePreviewButton) sourcePreviewButton.onclick = function () {
+      previewSeekTimes[project.id] = previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime;
+      previewModes[project.id] = 'source'; renderWorkspace();
+    };
     root.querySelector('#editorReviewRate').onchange = function () {
       reviewRate = Number(this.value) || 1;
       localStorage.setItem('rmEditorReviewRate', String(reviewRate));
@@ -735,7 +787,7 @@
     mount: function (element) {
       mountToken++;
       clearTimeout(pollTimer);
-      root = element; projects = []; project = null; selected.clear(); history = []; saveQueues = {}; saveStates = {};
+      root = element; projects = []; project = null; selected.clear(); history = []; saveQueues = {}; saveStates = {}; previewSeekTimes = {};
       shell();
       loadProjects().catch(function (error) {
         root.querySelector('#editorWorkspace').innerHTML = '<div class="editor-empty"><strong>Editor unavailable</strong><span>' + esc(error.message) + '</span></div>';

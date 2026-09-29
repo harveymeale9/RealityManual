@@ -11836,3 +11836,22 @@ That prevents a save or removal racing FFmpeg. Progress-only polling updates
 the percentage in place rather than rebuilding the video element every 1.8
 seconds, so Harvey can continue reviewing the source uninterrupted while the
 final file encodes.
+
+---
+
+# 281. Editor Review Keeps Context Across Source and Final (2026-09-29)
+
+Switching between **Original master** and **Final edit** now stays on the same
+spoken moment. Source time is translated through the actual cut ranges when
+opening the final file, and edited time is translated back across removed
+sections when returning to the master. This makes before/after checking a true
+A/B review rather than forcing Harvey to seek from zero after every switch. A
+browser regression verifies both translations against two removed pauses.
+
+The Active queue is also stable across page loads and background updates:
+active recordings are always shown in original filming/upload order, while the
+Sent archive shows the most recently approved item first. Durable `updated_at`
+changes from transcription and render progress can no longer reshuffle cards.
+Pending work is labelled as waiting, separately from the recording that is
+actually transcribing/analyzing, so a large filming batch does not look like
+every resource-intensive job is running simultaneously.
