@@ -13180,3 +13180,19 @@ legible page text and clear framing. The untouched original still feeds the
 full-resolution CRF-18 final render, so this changes only how quickly a safe
 review player becomes available. The real proxy test now also enforces the
 1280-pixel review ceiling.
+
+---
+
+# 353. Review Playback Recovers Without Losing Edit Context (2026-09-29)
+
+Saving any edit rebuilt the workspace at the remembered timestamp, but it always
+returned paused even if Harvey had been actively playing through the recording.
+The editor now remembers that active-play state as well as mode and time, then
+resumes automatically after the replacement player has metadata. Paused review
+still remains paused, and final-to-source time translation is unchanged.
+
+A media decoding or transient network error now produces an explicit overlay
+inside the player instead of leaving a black, unexplained rectangle. **Reload
+preview** cache-busts and reloads only that media source, retaining the project,
+edit decisions, and generated files. It does not re-upload or re-encode the
+recording, and it resumes playback if the failed player had been active.

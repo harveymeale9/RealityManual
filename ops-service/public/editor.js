@@ -145,6 +145,7 @@
     if (!video || !Number.isFinite(Number(video.currentTime))) return;
     var time = Math.max(0, Number(video.currentTime) || 0);
     var mode = video.dataset.previewMode === 'final' ? 'final' : 'source';
+    if (!video.paused && !video.ended) previewAutoplay[id] = true;
     if (mode === 'final' && renderWillChange) {
       previewSeekTimes[id] = editedToSourceTime(time, project);
       previewModes[id] = 'source';
@@ -601,7 +602,7 @@
         '<div class="editor-preview-actions"><span class="editor-review-keys">Space play/pause · ←/→ 2s</span><label>Review speed<select id="editorReviewRate"><option value="1"' + (reviewRate === 1 ? ' selected' : '') + '>1×</option><option value="1.25"' + (reviewRate === 1.25 ? ' selected' : '') + '>1.25×</option><option value="1.5"' + (reviewRate === 1.5 ? ' selected' : '') + '>1.5×</option><option value="2"' + (reviewRate === 2 ? ' selected' : '') + '>2×</option></select></label>' +
         (project.renderStatus === 'ready' ? '<button type="button" id="editorPreviewFinal" class="' + (previewMode === 'final' ? 'active' : '') + '">Final edit</button><button type="button" id="editorPreviewSource" class="' + (previewMode === 'source' ? 'active' : '') + '">' + sourcePreviewLabel + '</button>' : '') + '</div></div>' +
       '<div class="editor-preview" id="editorPreview" tabindex="0" aria-label="Video review. Space plays or pauses. Left and right arrows move two seconds."><div class="editor-video-frame ' + layout + '" style="--crop-x:' + cropPercent + '%"><video id="editorVideo" data-preview-mode="' + previewMode + '" data-seek-time="' + previewSeek.toFixed(3) + '" controls playsinline preload="metadata" src="' + previewUrl + '"></video>' +
-        '<div class="editor-caption" id="editorCaption"></div></div></div>' +
+        '<div class="editor-caption" id="editorCaption"></div><div class="editor-video-error" id="editorVideoError" hidden><strong>Preview could not be played</strong><span>Your recording and edit are safe. Reload this review copy without rebuilding anything.</span><button type="button" class="btn-secondary btn-tiny" id="editorReloadVideo">Reload preview</button></div></div></div>' +
       (layout === 'vertical' ? '<div class="editor-crop-control"><label>Horizontal crop position <input id="editorCropX" type="range" min="0" max="100" value="' + cropPercent + '"></label><span>Keep the single page centred inside the vertical frame.</span></div>' : '') +
       '<section class="editor-automation"><div class="editor-automation-head"><div><div class="eyebrow">Automatic edit</div><h3>Speech and pause map</h3></div><div class="editor-legend"><span class="speech">Speech</span><span class="cut">Removed pause</span><span class="pause">Kept pause</span></div></div>' + timelineHtml(project) +
         '<div class="editor-controls"><label class="editor-toggle"><input type="checkbox" id="editorAutoSilence" ' + (project.autoSilenceEnabled !== false ? 'checked' : '') + '><span></span>Remove long pauses</label>' +
@@ -642,6 +643,18 @@
     var sentToProduction = !!project.productionPieceId;
     var editingLocked = rendering || sentToProduction;
     video.playbackRate = reviewRate;
+    var videoError = root.querySelector('#editorVideoError');
+    video.addEventListener('loadeddata', function () { if (videoError) videoError.hidden = true; });
+    video.addEventListener('error', function () { if (videoError) videoError.hidden = false; });
+    root.querySelector('#editorReloadVideo').onclick = function () {
+      var wasPlaying = !video.paused && !video.ended;
+      var retryUrl = new URL(video.currentSrc || video.src, window.location.href);
+      retryUrl.searchParams.set('retry', String(Date.now()));
+      if (videoError) videoError.hidden = true;
+      video.src = retryUrl.pathname + retryUrl.search;
+      video.load();
+      if (wasPlaying) video.addEventListener('loadeddata', function () { video.play().catch(function () {}); }, { once: true });
+    };
     if (restoreTranscriptFocus && !editingLocked) {
       restoreTranscriptFocus = false;
       transcript.focus({ preventScroll: true });
