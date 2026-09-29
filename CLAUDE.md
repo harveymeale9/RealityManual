@@ -11891,3 +11891,21 @@ then resumes ordinary progress polling. The end-to-end regression applies two
 back-to-back changes after a completed render and proves both settings persist,
 only one additional verified render runs, and no explicit render request is
 needed.
+
+---
+
+# 284. Editor Batch Queues Expose Their Real Position (2026-09-29)
+
+Every bounded Editor worker now exposes a transient queue position through the
+authenticated API: transcription, book-frame classification, retake review,
+planning match and final rendering. Pending sidebar cards distinguish “next”
+from a recording with one or more items ahead, and the initial processing panel
+shows the same position for its individual phases. A queued final encode names
+how many recordings are ahead instead of indefinitely saying only that it is
+waiting.
+
+These positions are derived from the in-memory job maps and never persisted as
+stale state; after a restart the self-resume queues establish fresh positions.
+The two-recording concurrency regression now captures the second recording
+while both expensive queues are occupied and proves both positions are at
+least two, in addition to its existing maximum-concurrency assertions.

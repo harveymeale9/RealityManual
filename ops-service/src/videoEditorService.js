@@ -422,6 +422,21 @@ function setup(options) {
   let retakeChain = Promise.resolve();
   let planningMatchChain = Promise.resolve();
 
+  function withQueuePositions(project) {
+    if (!project) return project;
+    const item = Object.assign({}, project);
+    function position(jobs) {
+      const index = Array.from(jobs.keys()).indexOf(project.id);
+      return index === -1 ? 0 : index + 1;
+    }
+    item.transcriptionQueuePosition = position(transcriptionJobs);
+    item.classificationQueuePosition = position(classificationJobs);
+    item.retakeQueuePosition = position(retakeJobs);
+    item.planningQueuePosition = position(planningMatchJobs);
+    item.renderQueuePosition = position(renderJobs);
+    return item;
+  }
+
   function getProject(id) {
     const row = getStmt.get(STORE_NAME, id);
     if (!row) return null;
@@ -848,7 +863,7 @@ async function renderProject(id) {
   });
 
   router.get('/', function (req, res) {
-    const projects = listStmt.all(STORE_NAME).map(function (row) { try { return JSON.parse(row.data); } catch (e) { return null; } }).filter(Boolean);
+    const projects = listStmt.all(STORE_NAME).map(function (row) { try { return withQueuePositions(JSON.parse(row.data)); } catch (e) { return null; } }).filter(Boolean);
     res.json(projects);
   });
 
@@ -932,7 +947,7 @@ async function renderProject(id) {
     project.effectiveLayout = effectiveLayout(project);
     project.detectedContentType = contentTypeForProject(project, project.cuts);
     project.planningCandidates = typeof getPlanningCandidates === 'function' ? getPlanningCandidates(project) : [];
-    res.json(project);
+    res.json(withQueuePositions(project));
     setImmediate(function () { maybeAutoRender(project.id); });
   });
 

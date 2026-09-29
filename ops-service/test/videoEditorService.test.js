@@ -165,12 +165,12 @@ test('batch preprocessing serializes expensive transcription and frame analysis'
     db: db, dataDir: dir,
     transcribeDetailed: async function () {
       transcriptionCalls++; activeTranscriptions++; maxTranscriptions = Math.max(maxTranscriptions, activeTranscriptions);
-      await new Promise(function (resolve) { setTimeout(resolve, 80); });
+      await new Promise(function (resolve) { setTimeout(resolve, 250); });
       activeTranscriptions--; return { text: '', words: [] };
     },
     classifyVisualLayout: async function () {
       classificationCalls++; activeClassifications++; maxClassifications = Math.max(maxClassifications, activeClassifications);
-      await new Promise(function (resolve) { setTimeout(resolve, 80); });
+      await new Promise(function (resolve) { setTimeout(resolve, 250); });
       activeClassifications--; return { layout: 'horizontal', confidence: 'high', cropCenterX: 0.5, explanation: 'Synthetic spread.' };
     }
   });
@@ -184,6 +184,10 @@ test('batch preprocessing serializes expensive transcription and frame analysis'
     const response = await fetch(base + '/api/editor', { method: 'POST', body: form }); assert.equal(response.status, 202); return response.json();
   }
   const first = await upload('First'); const second = await upload('Second');
+  await new Promise(function (resolve) { setTimeout(resolve, 30); });
+  const secondQueued = await (await fetch(base + '/api/editor/' + second.id)).json();
+  assert.ok(secondQueued.transcriptionQueuePosition >= 2);
+  assert.ok(secondQueued.classificationQueuePosition >= 2);
   for (let attempt = 0; attempt < 100 && (transcriptionCalls < 2 || classificationCalls < 2 || activeTranscriptions || activeClassifications); attempt++) {
     await new Promise(function (resolve) { setTimeout(resolve, 30); });
   }
