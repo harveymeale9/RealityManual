@@ -12127,3 +12127,20 @@ waits for the persisted rerender, verifies focus restoration, undoes the cut,
 and clears another selection. This pass also consolidated two accidentally
 duplicated transcript CSS blocks so its locked and focus states have one source
 of truth.
+
+---
+
+# 297. Batch Review Opens the Next Actionable Recording (2026-09-29)
+
+After a reload or approval, the Editor previously opened the oldest unsent
+recording even when that file was still transcribing/rendering and a later file
+was already ready for approval. This made a healthy batch queue look blocked and
+forced Harvey to scan the sidebar manually between every approval.
+
+Automatic selection now prioritizes `ready to approve`, then `needs attention`,
+then prepared items, and only then background work; creation time remains the
+tiebreaker within each state. The visible sidebar stays chronological so status
+updates do not make cards jump around. Empty Active/Sent filters also remain
+truly empty rather than opening a hidden card from the other bucket. A browser
+queue regression reloads with an older running recording and a newer ready one
+and proves the ready recording opens automatically.

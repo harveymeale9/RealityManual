@@ -109,6 +109,16 @@
     return 'prepared';
   }
 
+  function nextActionableProject(excludedId) {
+    var priority = { ready: 0, attention: 1, prepared: 2, working: 3 };
+    return projects.filter(function (item) {
+      return !item.productionPieceId && item.id !== excludedId;
+    }).sort(function (a, b) {
+      var bucketDifference = priority[sessionBucket(a)] - priority[sessionBucket(b)];
+      return bucketDifference || String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
+    })[0] || null;
+  }
+
   function renderSessionSummary() {
     var summary = root && root.querySelector('#editorSessionSummary');
     if (!summary) return;
@@ -351,10 +361,10 @@
       projects = items;
       renderList();
       if (!project && projects[0]) {
-        var preferred = projects.filter(function (item) { return listFilter === 'sent' ? !!item.productionPieceId : !item.productionPieceId; }).sort(function (a, b) {
-          return listFilter === 'sent' ? String(b.sentToProductionAt || b.updatedAt || '').localeCompare(String(a.sentToProductionAt || a.updatedAt || '')) : String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
-        })[0] || projects[0];
-        return openProject(preferred.id);
+        var preferred = listFilter === 'active' ? nextActionableProject() : projects.filter(function (item) { return !!item.productionPieceId; }).sort(function (a, b) {
+          return String(b.sentToProductionAt || b.updatedAt || '').localeCompare(String(a.sentToProductionAt || a.updatedAt || ''));
+        })[0];
+        if (preferred) return openProject(preferred.id);
       }
     });
   }
@@ -741,9 +751,7 @@
         project.workflowWarning = result.workflowWarning || '';
         projects = projects.map(function (item) { return item.id === approvedId ? Object.assign({}, item, { productionPieceId: result.pieceId, sentToProductionAt: project.sentToProductionAt, workflowWarning: project.workflowWarning }) : item; });
         editorNotice = approvedName + ' was approved and sent to Content Production.' + (project.workflowWarning ? ' The video is safe; check its planning-card warning when convenient.' : '');
-        var next = projects.filter(function (item) { return item.id !== approvedId && !item.productionPieceId; }).sort(function (a, b) {
-          return String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
-        })[0];
+        var next = nextActionableProject(approvedId);
         if (next) return openProject(next.id).then(renderNotice);
         renderList();
         renderWorkspace();
@@ -766,7 +774,8 @@
         projects = projects.filter(function (item) { return item.id !== id; });
         project = null; history = []; selected.clear(); renderList();
         root.querySelector('#editorWorkspace').innerHTML = '<div class="editor-empty"><strong>Recording deleted</strong><span>Select another recording or upload a new one.</span></div>';
-        if (projects[0]) openProject(projects[0].id);
+        var next = listFilter === 'active' ? nextActionableProject() : projects.filter(function (item) { return !!item.productionPieceId; })[0];
+        if (next) openProject(next.id);
       });
     };
     if (rendering) {
