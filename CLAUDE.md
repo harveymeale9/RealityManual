@@ -12447,3 +12447,20 @@ The visual-classifier prompt also now defines `cropCenterX` as crop-window pan:
 systematic under-panning toward the gutter on one-page landscape recordings.
 Unit and browser-batch coverage prove the review rule, explicit-override escape,
 portrait exemption, visible label and attention count.
+
+---
+
+# 315. Automatic Retake Decisions Stay Visible at Approval (2026-09-29)
+
+High-confidence failed takes are deliberately removed automatically, but once
+the final render completed the recording list collapsed that fact into a generic
+**Ready for approval**. A hands-off workflow should not require reopening every
+panel merely to discover whether the system made a substantive wording cut.
+
+The service now derives an applied-retake count from current candidates, cut
+indices and dismissals. Ready recordings say, for example, **Ready · 1 retake
+removed**, and the readiness strip says **1 removed · resolved**. This remains a
+green ready state rather than manufacturing human work; it simply makes the
+automation's meaningful decision visible before approval. Restoring or
+dismissing the candidate updates the count immediately. Unit coverage verifies
+unresolved, applied and dismissed states independently.

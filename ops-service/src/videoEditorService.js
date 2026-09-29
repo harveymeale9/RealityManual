@@ -290,6 +290,14 @@ function unresolvedRetakeCount(project) {
   }).length;
 }
 
+function appliedRetakeCount(project) {
+  const dismissed = new Set((project.dismissedRetakeIds || []).map(String));
+  const removed = new Set((project.removedWordIndices || []).map(Number));
+  return retakeCandidatesForProject(project).filter(function (candidate) {
+    return !dismissed.has(candidate.id) && candidate.removeWordIndices.length > 0 && candidate.removeWordIndices.every(function (index) { return removed.has(index); });
+  }).length;
+}
+
 function keepSegments(duration, cuts) {
   const total = Math.max(0, Number(duration) || 0);
   const segments = [];
@@ -930,6 +938,7 @@ async function renderProject(id) {
       try {
         const project = JSON.parse(row.data);
         project.unresolvedRetakeCount = unresolvedRetakeCount(project);
+        project.appliedRetakeCount = appliedRetakeCount(project);
         project.layoutReviewRequired = layoutReviewRequired(project);
         project.canUndoCut = Array.isArray(project.cutDecisionHistory) && project.cutDecisionHistory.length > 0;
         delete project.cutDecisionHistory;
@@ -1023,6 +1032,7 @@ async function renderProject(id) {
     project.gapDecisions = gapDecisions(project);
     project.retakeCandidates = retakeCandidatesForProject(project);
     project.unresolvedRetakeCount = unresolvedRetakeCount(project);
+    project.appliedRetakeCount = appliedRetakeCount(project);
     project.layoutReviewRequired = layoutReviewRequired(project);
     project.effectiveLayout = effectiveLayout(project);
     project.detectedContentType = contentTypeForProject(project, project.cuts);
@@ -1095,6 +1105,7 @@ async function renderProject(id) {
     project.gapDecisions = gapDecisions(project);
     project.retakeCandidates = retakeCandidatesForProject(project);
     project.unresolvedRetakeCount = unresolvedRetakeCount(project);
+    project.appliedRetakeCount = appliedRetakeCount(project);
     project.layoutReviewRequired = layoutReviewRequired(project);
     project.effectiveLayout = effectiveLayout(project);
     project.detectedContentType = contentTypeForProject(project, project.cuts);
@@ -1122,6 +1133,7 @@ async function renderProject(id) {
     project.gapDecisions = gapDecisions(project);
     project.retakeCandidates = retakeCandidatesForProject(project);
     project.unresolvedRetakeCount = unresolvedRetakeCount(project);
+    project.appliedRetakeCount = appliedRetakeCount(project);
     project.layoutReviewRequired = layoutReviewRequired(project);
     project.effectiveLayout = effectiveLayout(project);
     project.detectedContentType = contentTypeForProject(project, project.cuts);
@@ -1300,5 +1312,6 @@ module.exports = {
   retakeCandidates,
   normalizeRetakeDecisions,
   unresolvedRetakeCount,
+  appliedRetakeCount,
   layoutReviewRequired
 };

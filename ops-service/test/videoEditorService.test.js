@@ -110,11 +110,14 @@ test('semantic retake ranges become bounded exact word decisions', function () {
 test('unresolved retakes block approval until cut or explicitly dismissed', function () {
   const project = { words: words, removedWordIndices: [], dismissedRetakeIds: [], retakeDecisions: [{ id: 'smart-retake-0', removeWordIndices: [2, 3], confidence: 'review' }] };
   assert.equal(editor.unresolvedRetakeCount(project), 1);
+  assert.equal(editor.appliedRetakeCount(project), 0);
   project.removedWordIndices = [2, 3];
   assert.equal(editor.unresolvedRetakeCount(project), 0);
+  assert.equal(editor.appliedRetakeCount(project), 1);
   project.removedWordIndices = [];
   project.dismissedRetakeIds = ['smart-retake-0'];
   assert.equal(editor.unresolvedRetakeCount(project), 0);
+  assert.equal(editor.appliedRetakeCount(project), 0);
 });
 
 test('adjacent removed transcript words become one manual cut', function () {
