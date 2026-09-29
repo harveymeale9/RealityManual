@@ -5,7 +5,6 @@
   var projects = [];
   var project = null;
   var selected = new Set();
-  var history = [];
   var pollTimer = null;
   var mountToken = 0;
   var editorNotice = '';
@@ -391,7 +390,6 @@
       project = item;
       projects = projects.map(function (entry) { return entry.id === item.id ? item : entry; });
       selected.clear();
-      if (!quiet) history = [];
       renderList();
       if (progressOnly) {
         var percent = Math.round(Number(item.renderProgress) || 0);
@@ -508,7 +506,7 @@
         '<div class="editor-review-column"><div class="editor-section-title"><div><div class="eyebrow">Smart review</div><h3>Possible retakes</h3></div>' +
           (project.retakeAnalysisStatus !== 'ready' && project.retakeAnalysisStatus !== 'pending' && project.retakeAnalysisStatus !== 'running' ? '<button type="button" class="editor-analyze" id="editorAnalyzeRetakes">Analyze retakes</button>' : '<span>Only clear failed takes are automatic</span>') + '</div><div id="editorRetakeReview">' + retakeReviewHtml(project) + '</div></div></section>' +
       '<section class="editor-transcript-panel"><div class="editor-transcript-head"><div><div class="eyebrow">Transcript editor</div><h3>Select words or sentences to cut them from the video</h3></div>' +
-        '<div class="editor-transcript-actions"><button class="btn-secondary btn-tiny" id="editorUndo" ' + (!history.length ? 'disabled' : '') + '>Undo</button><button class="btn-secondary btn-tiny" id="editorPlaySelection" disabled>Play selected</button>' +
+        '<div class="editor-transcript-actions"><button class="btn-secondary btn-tiny" id="editorUndo" ' + (!project.canUndoCut ? 'disabled' : '') + '>Undo last cut</button><button class="btn-secondary btn-tiny" id="editorPlaySelection" disabled>Play selected</button>' +
         '<button class="btn-secondary btn-tiny" id="editorCorrect" disabled>Correct word</button><button class="btn-secondary btn-tiny" id="editorRestore" disabled>Restore selected</button><button class="btn-primary btn-tiny" id="editorCut" disabled>Cut selected</button></div></div>' +
         '<div class="editor-correction-tray" id="editorCorrectionTray" hidden><div><strong>Correct caption word</strong><span id="editorCorrectionNote">Timing stays exactly where it is.</span><em id="editorCorrectionError" hidden></em></div><input id="editorCorrectionInput" maxlength="40" autocomplete="off" aria-label="Corrected caption word"><div><button type="button" class="btn-secondary btn-tiny" id="editorCorrectionCancel">Cancel</button><button type="button" class="btn-secondary btn-tiny" id="editorCorrectionOriginal" hidden>Use original</button><button type="button" class="btn-primary btn-tiny" id="editorCorrectionSave">Save correction</button></div></div>' +
         '<div class="editor-transcript' + (rendering || sentToProduction ? ' locked' : '') + '" id="editorTranscript" tabindex="0">' + (project.words || []).map(function (word) {
@@ -682,7 +680,7 @@
     });
     transcript.addEventListener('keydown', function (event) {
       if (editingLocked) return;
-      if (history.length && (event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === 'z') {
+      if (project.canUndoCut && (event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === 'z') {
         event.preventDefault(); restoreTranscriptFocus = true; undo(); return;
       }
       if (event.key === 'Escape') {
@@ -785,7 +783,6 @@
         if (!candidate) return;
         var next = new Set((project.removedWordIndices || []).map(Number));
         candidate.removeWordIndices.forEach(function (index) { next.add(index); });
-        history.push((project.removedWordIndices || []).slice());
         save({ removedWordIndices: Array.from(next).sort(function (a, b) { return a - b; }) });
       };
     });
@@ -799,7 +796,6 @@
           var removed = new Set((project.removedWordIndices || []).map(Number));
           if (candidate) candidate.removeWordIndices.forEach(function (index) { removed.delete(index); });
           patch.removedWordIndices = Array.from(removed).sort(function (a, b) { return a - b; });
-          history.push((project.removedWordIndices || []).slice());
         }
         save(patch, true);
       };
@@ -854,7 +850,7 @@
       var id = project.id;
       api('/api/editor/' + id, { method: 'DELETE' }).then(function () {
         projects = projects.filter(function (item) { return item.id !== id; });
-        project = null; history = []; selected.clear(); renderList();
+        project = null; selected.clear(); renderList();
         root.querySelector('#editorWorkspace').innerHTML = '<div class="editor-empty"><strong>Recording deleted</strong><span>Select another recording or upload a new one.</span></div>';
         var next = listFilter === 'active' ? nextActionableProject() : projects.filter(function (item) { return !!item.productionPieceId; })[0];
         if (next) openProject(next.id);
@@ -931,29 +927,28 @@
     var prior = (project.removedWordIndices || []).slice();
     var next = new Set(prior.map(Number));
     selected.forEach(function (index) { if (remove) next.add(index); else next.delete(index); });
-    history.push(prior);
     selected.clear();
     save({ removedWordIndices: Array.from(next).sort(function (a, b) { return a - b; }) });
   }
 
   function undo() {
-    if (!history.length) return;
+    if (!project || !project.canUndoCut) return;
     selected.clear();
-    save({ removedWordIndices: history.pop() });
+    queueProjectUpdate(project.id, function (id) {
+      return api('/api/editor/' + id + '/undo-cut', { method: 'POST' });
+    });
   }
 
-  function save(patch, preserveHistory) {
-    var id = project.id;
+  function queueProjectUpdate(id, operation) {
     saveStates[id] = 'saving';
     var stateNode = root.querySelector('#editorSaveState');
     if (stateNode && project && project.id === id) { stateNode.className = 'editor-save-state saving'; stateNode.textContent = 'Saving…'; }
     var previous = saveQueues[id] || Promise.resolve();
     var request = previous.catch(function () {}).then(function () {
-      return api('/api/editor/' + id, { method: 'PATCH', body: JSON.stringify(patch) });
+      return operation(id);
     }).then(function (item) {
       saveStates[id] = 'saved';
       projects = projects.map(function (entry) { return entry.id === item.id ? item : entry; });
-      if (!preserveHistory && history.length > 100) history.shift();
       renderList();
       if (project && project.id === id) {
         project = item; renderWorkspace();
@@ -976,11 +971,18 @@
     return request;
   }
 
+  function save(patch) {
+    var id = project.id;
+    return queueProjectUpdate(id, function () {
+      return api('/api/editor/' + id, { method: 'PATCH', body: JSON.stringify(patch) });
+    });
+  }
+
   window.RMEditor = {
     mount: function (element) {
       mountToken++;
       clearTimeout(pollTimer);
-      root = element; projects = []; project = null; selected.clear(); history = []; saveQueues = {}; saveStates = {}; previewSeekTimes = {}; restoreTranscriptFocus = false;
+      root = element; projects = []; project = null; selected.clear(); saveQueues = {}; saveStates = {}; previewSeekTimes = {}; restoreTranscriptFocus = false;
       shell();
       loadProjects().catch(function (error) {
         root.querySelector('#editorWorkspace').innerHTML = '<div class="editor-empty"><strong>Editor unavailable</strong><span>' + esc(error.message) + '</span></div>';

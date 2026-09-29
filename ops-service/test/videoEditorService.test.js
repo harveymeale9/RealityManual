@@ -426,6 +426,16 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.renderQuality.status, 'passed');
   assert.deepEqual(project.renderQuality.checks, { playableFile: true, correctFrame: true, audioPresent: true, durationMatches: true });
   assert.deepEqual([project.renderQuality.width, project.renderQuality.height], [1080, 1920]);
+  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ removedWordIndices: [0, 1, 2, 3] }) });
+  assert.equal(response.status, 200);
+  project = await response.json();
+  assert.deepEqual(project.removedWordIndices, [0, 1, 2, 3]);
+  assert.equal(project.canUndoCut, true);
+  response = await fetch(base + '/api/editor/' + project.id + '/undo-cut', { method: 'POST' });
+  assert.equal(response.status, 200);
+  project = await response.json();
+  assert.deepEqual(project.removedWordIndices, [2, 3]);
+  assert.equal(project.canUndoCut, false);
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ captionsEnabled: false, wordCorrection: { index: 0, text: 'Once' } }) });
   assert.equal(response.status, 200);
   project = await response.json();

@@ -924,6 +924,8 @@ async function renderProject(id) {
       try {
         const project = JSON.parse(row.data);
         project.unresolvedRetakeCount = unresolvedRetakeCount(project);
+        project.canUndoCut = Array.isArray(project.cutDecisionHistory) && project.cutDecisionHistory.length > 0;
+        delete project.cutDecisionHistory;
         return withQueuePositions(project);
       } catch (e) { return null; }
     }).filter(Boolean);
@@ -1017,6 +1019,8 @@ async function renderProject(id) {
     project.effectiveLayout = effectiveLayout(project);
     project.detectedContentType = contentTypeForProject(project, project.cuts);
     project.planningCandidates = typeof getPlanningCandidates === 'function' ? getPlanningCandidates(project) : [];
+    project.canUndoCut = Array.isArray(project.cutDecisionHistory) && project.cutDecisionHistory.length > 0;
+    delete project.cutDecisionHistory;
     res.json(withQueuePositions(project));
     maybeAutoRender(project.id);
   });
@@ -1028,8 +1032,13 @@ async function renderProject(id) {
     if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked. Make downstream changes in Content Production.' });
     if (renderJobs.has(project.id)) return res.status(409).json({ error: 'render_in_progress', message: 'Wait for this final edit to finish before changing its cut settings.' });
     if (Array.isArray(req.body && req.body.removedWordIndices)) {
-      project.removedWordIndices = Array.from(new Set(req.body.removedWordIndices.map(Number)
+      const nextRemovedWordIndices = Array.from(new Set(req.body.removedWordIndices.map(Number)
         .filter(function (index) { return Number.isInteger(index) && index >= 0 && index < (project.words || []).length; }))).sort(function (a, b) { return a - b; });
+      const currentRemovedWordIndices = (project.removedWordIndices || []).map(Number).sort(function (a, b) { return a - b; });
+      if (JSON.stringify(nextRemovedWordIndices) !== JSON.stringify(currentRemovedWordIndices)) {
+        project.cutDecisionHistory = (Array.isArray(project.cutDecisionHistory) ? project.cutDecisionHistory : []).concat([currentRemovedWordIndices]).slice(-50);
+        project.removedWordIndices = nextRemovedWordIndices;
+      }
     }
     if (req.body && req.body.wordCorrection && typeof req.body.wordCorrection === 'object') {
       const index = Number(req.body.wordCorrection.index);
@@ -1081,6 +1090,34 @@ async function renderProject(id) {
     project.effectiveLayout = effectiveLayout(project);
     project.detectedContentType = contentTypeForProject(project, project.cuts);
     project.planningCandidates = typeof getPlanningCandidates === 'function' ? getPlanningCandidates(project) : [];
+    project.canUndoCut = Array.isArray(project.cutDecisionHistory) && project.cutDecisionHistory.length > 0;
+    delete project.cutDecisionHistory;
+    res.json(project);
+    scheduleAutoRender(project.id, 650);
+  });
+
+  router.post('/:id/undo-cut', function (req, res) {
+    if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
+    const project = getProject(req.params.id);
+    if (!project) return res.status(404).json({ error: 'not_found' });
+    if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked.' });
+    if (renderJobs.has(project.id)) return res.status(409).json({ error: 'render_in_progress', message: 'Wait for this final edit to finish before undoing a cut.' });
+    const history = Array.isArray(project.cutDecisionHistory) ? project.cutDecisionHistory.slice() : [];
+    if (!history.length) return res.status(409).json({ error: 'nothing_to_undo', message: 'There is no earlier cut decision to restore.' });
+    project.removedWordIndices = history.pop();
+    project.cutDecisionHistory = history;
+    invalidateRender(project);
+    saveProject(project);
+    project.cuts = cutsForProject(project);
+    project.captionGroups = captionGroups(project, project.cuts);
+    project.gapDecisions = gapDecisions(project);
+    project.retakeCandidates = retakeCandidatesForProject(project);
+    project.unresolvedRetakeCount = unresolvedRetakeCount(project);
+    project.effectiveLayout = effectiveLayout(project);
+    project.detectedContentType = contentTypeForProject(project, project.cuts);
+    project.planningCandidates = typeof getPlanningCandidates === 'function' ? getPlanningCandidates(project) : [];
+    project.canUndoCut = history.length > 0;
+    delete project.cutDecisionHistory;
     res.json(project);
     scheduleAutoRender(project.id, 650);
   });

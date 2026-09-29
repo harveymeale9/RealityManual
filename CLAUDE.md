@@ -12373,3 +12373,21 @@ Original master automatically, preserving the transcript selection and exact
 source timestamp. This is deliberate: a phrase being considered for restoration
 may not exist in the final edit at all. Browser coverage proves the mode switch,
 timestamp, retained visual selection and automatic endpoint pause.
+
+---
+
+# 311. Transcript-Cut Undo Survives Reloads and Reconnects (2026-09-29)
+
+The original Undo button stored prior cut arrays only in browser memory. A page
+reload, device switch or reconnect erased that safety net even though the cut
+itself was durable, which was exactly the wrong asymmetry for unattended batch
+editing.
+
+Each genuine manual change to removed transcript words now stores the preceding
+decision server-side, bounded to the latest 50 compact index arrays. **Undo last
+cut** and Ctrl/Cmd-Z call a dedicated serialized endpoint, restore the previous
+decision, invalidate the stale render and trigger the normal verified rebuild.
+No-op saves do not manufacture history, internal history is not sent in list
+payloads, and Sent projects remain immutable. The headless browser deliberately
+reloads after a cut and proves Undo is still available; integration coverage
+proves the durable cut, restore, derived captions and `canUndoCut` state.
