@@ -11609,3 +11609,23 @@ encode. The end-to-end service test now waits for the automatic render instead
 of posting the render route itself, proving upload can reach a reviewable MP4
 without another user action. All 97 repository tests and both Chromium Editor
 workflows pass.
+
+---
+
+# 269. Editor Review Plays the Real Encoded File (2026-09-29)
+
+Once a render is ready, the Editor player now defaults to the actual encoded
+MP4, served inline from the render endpoint. It no longer asks Harvey to approve
+a browser simulation of raw-video seeks and DOM caption overlays. A clear
+**Final edit / Original master** switch preserves both jobs: Final edit is the
+literal captioned/cropped/cut production asset, while Original master allows
+source-level cut auditioning and restoration. Pressing a cut's Preview button
+automatically moves to the source view because source timestamps do not map
+directly onto the shortened final file.
+
+The inline route keeps the existing attachment download behavior unchanged for
+normal render requests. Service integration proves the inline response is a
+playable body without an attachment header; Chromium proves Final edit is the
+default after rendering, both preview modes switch to the correct media, and
+the original one-word portrait caption behavior still works in source view at
+mobile width.

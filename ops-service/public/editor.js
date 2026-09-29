@@ -9,6 +9,7 @@
   var pollTimer = null;
   var mountToken = 0;
   var editorNotice = '';
+  var previewModes = {};
 
   function esc(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, function (char) {
@@ -303,6 +304,8 @@
     var unresolvedRetakes = Number(project.unresolvedRetakeCount) || 0;
     var renderBlocked = automaticEditRunning || unresolvedRetakes > 0;
     var renderButtonText = automaticEditRunning ? 'Preparing automatic edit…' : unresolvedRetakes ? 'Review ' + unresolvedRetakes + ' possible retake' + (unresolvedRetakes === 1 ? '' : 's') : 'Build final edit';
+    var previewMode = project.renderStatus === 'ready' && previewModes[project.id] !== 'source' ? 'final' : 'source';
+    var previewUrl = previewMode === 'final' ? '/api/editor/' + encodeURIComponent(project.id) + '/render?inline=1' : '/api/editor/' + encodeURIComponent(project.id) + '/source';
     workspace.innerHTML =
       '<div class="editor-topbar"><div><h2>' + esc(project.name) + '</h2><span>' + formatTime(project.duration) + ' original · ' + formatTime(editedDuration(project)) + ' edited · ' + cutSeconds.toFixed(1) + 's removed</span></div>' +
         '<button class="editor-delete" id="editorDelete">Delete recording</button></div>' +
@@ -312,7 +315,9 @@
         '<label>Format<select id="editorContentType"><option value="auto"' + (project.contentTypeOverride === 'auto' || !project.contentTypeOverride ? ' selected' : '') + '>Auto · ' + esc(typeLabel(project.detectedContentType)) + '</option><option value="ultra_short"' + (project.contentTypeOverride === 'ultra_short' ? ' selected' : '') + '>Ultra-short</option><option value="short"' + (project.contentTypeOverride === 'short' ? ' selected' : '') + '>Short</option><option value="long_short"' + (project.contentTypeOverride === 'long_short' ? ' selected' : '') + '>Long-short</option><option value="longform"' + (project.contentTypeOverride === 'longform' ? ' selected' : '') + '>Longform</option></select></label></section>' +
       '<section class="editor-plan-link"><div><div class="eyebrow">Planning workflow</div><strong>' + (project.planningPieceId ? 'Linked to its Filmed card' : 'No planning card linked') + '</strong><span>' + esc(project.planningMatch && project.planningMatch.reason || (project.planningMatchStatus === 'running' || project.planningMatchStatus === 'pending' ? 'Matching the transcript to Filmed cards…' : 'Choose a card manually if this recording came from the Kanban.')) + '</span></div><label>Content card<select id="editorPlanningPiece">' + planningOptionsHtml(project) + '</select></label>' +
         (project.planningMatchStatus !== 'running' && project.planningMatchStatus !== 'pending' ? '<button type="button" class="editor-analyze" id="editorMatchPlan">Match again</button>' : '') + '</section>' +
-      '<div class="editor-preview"><div class="editor-video-frame ' + layout + '" style="--crop-x:' + cropPercent + '%"><video id="editorVideo" controls playsinline preload="metadata" src="/api/editor/' + encodeURIComponent(project.id) + '/source"></video>' +
+      '<div class="editor-preview-mode"><div><strong>' + (previewMode === 'final' ? 'Final edit' : 'Original master') + '</strong><span>' + (previewMode === 'final' ? 'This is the actual encoded file that will go to production.' : 'Use this view to inspect or restore source material.') + '</span></div>' +
+        (project.renderStatus === 'ready' ? '<div><button type="button" id="editorPreviewFinal" class="' + (previewMode === 'final' ? 'active' : '') + '">Final edit</button><button type="button" id="editorPreviewSource" class="' + (previewMode === 'source' ? 'active' : '') + '">Original master</button></div>' : '') + '</div>' +
+      '<div class="editor-preview"><div class="editor-video-frame ' + layout + '" style="--crop-x:' + cropPercent + '%"><video id="editorVideo" data-preview-mode="' + previewMode + '" controls playsinline preload="metadata" src="' + previewUrl + '"></video>' +
         '<div class="editor-caption" id="editorCaption"></div></div></div>' +
       (layout === 'vertical' ? '<div class="editor-crop-control"><label>Horizontal crop position <input id="editorCropX" type="range" min="0" max="100" value="' + cropPercent + '"></label><span>Keep the single page centred inside the vertical frame.</span></div>' : '') +
       '<section class="editor-automation"><div class="editor-automation-head"><div><div class="eyebrow">Automatic edit</div><h3>Speech and pause map</h3></div><div class="editor-legend"><span class="speech">Speech</span><span class="cut">Removed pause</span><span class="pause">Kept pause</span></div></div>' + timelineHtml(project) +
@@ -345,12 +350,17 @@
     var video = root.querySelector('#editorVideo');
     var caption = root.querySelector('#editorCaption');
     var transcript = root.querySelector('#editorTranscript');
+    var previewingFinal = video.dataset.previewMode === 'final';
     var lastClicked = null;
     var ignoreNextClick = false;
     function isLongformVideo() {
       return (project.effectiveLayout || 'horizontal') === 'horizontal';
     }
     video.addEventListener('timeupdate', function () {
+      if (previewingFinal) {
+        caption.classList.remove('visible');
+        return;
+      }
       var cut = (project.cuts || []).filter(function (item) { return video.currentTime >= item.start && video.currentTime < item.end; })[0];
       if (cut && cut.end < video.duration) { video.currentTime = cut.end + 0.01; return; }
       var group = (project.captionGroups || []).filter(function (item) {
@@ -384,11 +394,20 @@
     });
     root.querySelectorAll('.editor-preview-cut').forEach(function (button) {
       button.onclick = function () {
-        video.currentTime = Number(button.dataset.time) || 0;
-        video.play().catch(function () {});
-        video.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        var time = Number(button.dataset.time) || 0;
+        if (previewingFinal) {
+          previewModes[project.id] = 'source';
+          renderWorkspace();
+          video = root.querySelector('#editorVideo');
+        }
+        var start = function () { video.currentTime = time; video.play().catch(function () {}); video.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+        if (video.readyState >= 1) start(); else video.addEventListener('loadedmetadata', start, { once: true });
       };
     });
+    var finalPreviewButton = root.querySelector('#editorPreviewFinal');
+    if (finalPreviewButton) finalPreviewButton.onclick = function () { previewModes[project.id] = 'final'; renderWorkspace(); };
+    var sourcePreviewButton = root.querySelector('#editorPreviewSource');
+    if (sourcePreviewButton) sourcePreviewButton.onclick = function () { previewModes[project.id] = 'source'; renderWorkspace(); };
     transcript.addEventListener('click', function (event) {
       if (ignoreNextClick) { ignoreNextClick = false; return; }
       var word = event.target.closest('.editor-word');

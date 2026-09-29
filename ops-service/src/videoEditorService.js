@@ -978,6 +978,7 @@ async function renderProject(id) {
     const project = getProject(req.params.id);
     if (!project || project.renderStatus !== 'ready') return res.status(404).end();
     res.type('video/mp4');
+    if (req.query.inline === '1') return res.sendFile(renderPath(req.params.id));
     res.download(renderPath(req.params.id), path.parse(project.fileName || 'recording').name + '-edited.mp4');
   });
 

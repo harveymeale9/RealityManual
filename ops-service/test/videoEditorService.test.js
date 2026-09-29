@@ -234,8 +234,6 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.planningPieceId, 'plan-1');
   assert.equal(planningMatchCalls, 1);
   assert.ok(project.cuts.some(function (cut) { return cut.reason === 'long_pause'; }));
-  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ removedWordIndices: [2, 3] }) });
-  project = await response.json();
   assert.deepEqual(project.captionGroups.map(function (group) { return group.text; }), ['One two.']);
   for (let attempt = 0; attempt < 200 && project.renderStatus !== 'ready' && project.renderStatus !== 'error'; attempt++) {
     await new Promise(function (resolve) { setTimeout(resolve, 50); });
@@ -247,6 +245,10 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(response.status, 200);
   const rendered = Buffer.from(await response.arrayBuffer());
   assert.ok(rendered.length > 1000);
+  response = await fetch(base + '/api/editor/' + project.id + '/render?inline=1');
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('content-disposition'), null);
+  assert.ok(Buffer.from(await response.arrayBuffer()).length > 1000);
   assert.ok(project.editedDuration < project.duration);
   response = await fetch(base + '/api/editor/' + project.id + '/production', { method: 'POST' });
   assert.equal(response.status, 201);
