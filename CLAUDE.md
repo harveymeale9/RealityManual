@@ -12712,3 +12712,22 @@ also rejected while approval is crossing the boundary, preventing the reviewed
 master or its decisions from changing underneath the copy. Integration coverage
 holds the synthetic handoff open, issues two simultaneous approvals, and proves
 they return one created and one idempotent response from a single handoff call.
+
+---
+
+# 329. Rapid Edit Decisions Compose Instead of Overwriting Each Other (2026-09-29)
+
+Editor PATCH requests were serialized, but some patches were calculated before
+they entered that queue. Two fast pause restores, transcript selections, or
+retake decisions could both start from the same old arrays; the second request
+then replaced the first successful decision even though the network writes ran
+one at a time.
+
+Set-based decisions are now queued as transformations, not precomputed arrays.
+When each request reaches the front, it derives its payload from the latest
+acknowledged project returned by the preceding save. This applies to transcript
+cut/restore, pause keep/remove, automatic-retake application, and retake
+dismissal/restoration. The existing serialized network boundary remains. A
+browser regression clicks two pause decisions faster than the mocked 120 ms
+server round trip and proves both persist while concurrent PATCH count remains
+one.

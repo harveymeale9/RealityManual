@@ -816,32 +816,41 @@
     }
     root.querySelectorAll('.editor-gap-toggle').forEach(function (button) {
       button.onclick = function () {
-        var next = new Set((project.restoredAutoCutIds || []).map(String));
-        if (button.dataset.restored === '1') next.delete(button.dataset.gapId); else next.add(button.dataset.gapId);
-        save({ restoredAutoCutIds: Array.from(next) }, true);
+        var gapId = button.dataset.gapId;
+        save(function (latest) {
+          var next = new Set((latest.restoredAutoCutIds || []).map(String));
+          if (next.has(gapId)) next.delete(gapId); else next.add(gapId);
+          return { restoredAutoCutIds: Array.from(next) };
+        }, true);
       };
     });
     root.querySelectorAll('.editor-retake-apply').forEach(function (button) {
       button.onclick = function () {
-        var candidate = (project.retakeCandidates || []).find(function (item) { return item.id === button.dataset.id; });
-        if (!candidate) return;
-        var next = new Set((project.removedWordIndices || []).map(Number));
-        candidate.removeWordIndices.forEach(function (index) { next.add(index); });
-        save({ removedWordIndices: Array.from(next).sort(function (a, b) { return a - b; }) });
+        var candidateId = button.dataset.id;
+        save(function (latest) {
+          var candidate = (latest.retakeCandidates || []).find(function (item) { return item.id === candidateId; });
+          var next = new Set((latest.removedWordIndices || []).map(Number));
+          if (candidate) candidate.removeWordIndices.forEach(function (index) { next.add(index); });
+          return { removedWordIndices: Array.from(next).sort(function (a, b) { return a - b; }) };
+        });
       };
     });
     root.querySelectorAll('.editor-retake-dismiss').forEach(function (button) {
       button.onclick = function () {
-        var next = new Set((project.dismissedRetakeIds || []).map(String));
-        next.add(button.dataset.id);
-        var patch = { dismissedRetakeIds: Array.from(next) };
-        if (button.dataset.applied === '1') {
-          var candidate = (project.retakeCandidates || []).find(function (item) { return item.id === button.dataset.id; });
-          var removed = new Set((project.removedWordIndices || []).map(Number));
-          if (candidate) candidate.removeWordIndices.forEach(function (index) { removed.delete(index); });
-          patch.removedWordIndices = Array.from(removed).sort(function (a, b) { return a - b; });
-        }
-        save(patch, true);
+        var candidateId = button.dataset.id;
+        var restoreAppliedTake = button.dataset.applied === '1';
+        save(function (latest) {
+          var next = new Set((latest.dismissedRetakeIds || []).map(String));
+          next.add(candidateId);
+          var patch = { dismissedRetakeIds: Array.from(next) };
+          if (restoreAppliedTake) {
+            var candidate = (latest.retakeCandidates || []).find(function (item) { return item.id === candidateId; });
+            var removed = new Set((latest.removedWordIndices || []).map(Number));
+            if (candidate) candidate.removeWordIndices.forEach(function (index) { removed.delete(index); });
+            patch.removedWordIndices = Array.from(removed).sort(function (a, b) { return a - b; });
+          }
+          return patch;
+        }, true);
       };
     });
     var renderButton = root.querySelector('#editorRender');
@@ -969,11 +978,13 @@
   }
 
   function alterSelected(remove) {
-    var prior = (project.removedWordIndices || []).slice();
-    var next = new Set(prior.map(Number));
-    selected.forEach(function (index) { if (remove) next.add(index); else next.delete(index); });
+    var chosen = Array.from(selected).map(Number);
     selected.clear();
-    save({ removedWordIndices: Array.from(next).sort(function (a, b) { return a - b; }) });
+    save(function (latest) {
+      var next = new Set((latest.removedWordIndices || []).map(Number));
+      chosen.forEach(function (index) { if (remove) next.add(index); else next.delete(index); });
+      return { removedWordIndices: Array.from(next).sort(function (a, b) { return a - b; }) };
+    });
   }
 
   function undo() {
@@ -1023,7 +1034,9 @@
   function save(patch) {
     var id = project.id;
     return queueProjectUpdate(id, function () {
-      return api('/api/editor/' + id, { method: 'PATCH', body: JSON.stringify(patch) });
+      var latest = project && project.id === id ? project : projects.find(function (item) { return item.id === id; });
+      var resolvedPatch = typeof patch === 'function' ? patch(latest || {}) : patch;
+      return api('/api/editor/' + id, { method: 'PATCH', body: JSON.stringify(resolvedPatch) });
     });
   }
 
