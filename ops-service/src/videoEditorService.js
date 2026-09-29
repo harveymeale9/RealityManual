@@ -701,6 +701,15 @@ function setup(options) {
     };
   }
 
+  async function browserPreviewIsValid(filePath) {
+    try {
+      const stat = fs.statSync(filePath);
+      if (!stat.isFile() || stat.size <= 1024) return false;
+      const media = await probe(filePath);
+      return media.videoCodec === 'h264' && media.hasAudio && media.width > 0 && media.height > 0;
+    } catch (error) { return false; }
+  }
+
   async function generateBrowserPreview(id) {
     if (previewJobs.has(id)) return previewJobs.get(id);
     const initial = getProject(id);
@@ -717,8 +726,7 @@ function setup(options) {
           "scale=w='if(gte(iw,ih),trunc(min(1280,iw)/2)*2,-2)':h='if(gte(iw,ih),-2,trunc(min(1280,ih)/2)*2)'",
           '-c:v', 'libx264', '-preset', 'superfast', '-crf', '28', '-pix_fmt', 'yuv420p',
           '-c:a', 'aac', '-b:a', '96k', '-movflags', '+faststart', previewPath(id)], 'browser review proxy');
-        const media = await probe(previewPath(id));
-        if (media.videoCodec !== 'h264' || !media.hasAudio || !fs.statSync(previewPath(id)).size) throw new Error('The browser review proxy failed verification.');
+        if (!await browserPreviewIsValid(previewPath(id))) throw new Error('The browser review proxy failed verification.');
         project = getProject(id);
         if (!project) return;
         project.browserPreviewStatus = 'ready';
@@ -1148,23 +1156,29 @@ async function renderProject(id) {
       let project;
       try { project = JSON.parse(row.data); } catch (e) { return; }
       if (!project || project.productionPieceId || !isId(project.id) || !fs.existsSync(sourcePath(project.id))) return;
-      probe(sourcePath(project.id)).then(function (media) {
+      probe(sourcePath(project.id)).then(async function (media) {
         const current = getProject(project.id);
         if (!current) return;
         const dimensionsChanged = current.width !== media.width || current.height !== media.height;
         const needsPreview = browserPreviewNeeded(current.fileName, media);
         const previewMetadataChanged = !current.videoCodec || current.browserPreviewRequired === undefined;
-        if (!dimensionsChanged && !previewMetadataChanged) return;
+        const previewFile = previewPath(current.id);
+        const previewValid = needsPreview && await browserPreviewIsValid(previewFile);
+        const expectedPreviewStatus = needsPreview ? (previewValid ? 'ready' : 'pending') : 'not_required';
+        const previewStateChanged = current.browserPreviewRequired !== needsPreview || current.browserPreviewStatus !== expectedPreviewStatus;
+        if (!dimensionsChanged && !previewMetadataChanged && !previewStateChanged) return;
         current.videoCodec = media.videoCodec;
         current.audioCodec = media.audioCodec;
         current.browserPreviewRequired = needsPreview;
-        if (needsPreview && !fs.existsSync(previewPath(current.id))) {
+        if (needsPreview && !previewValid) {
+          await fs.promises.rm(previewFile, { force: true });
           current.browserPreviewStatus = 'pending';
           current.browserPreviewError = '';
         } else if (needsPreview) {
           current.browserPreviewStatus = 'ready';
           current.browserPreviewError = '';
         } else if (!needsPreview) {
+          await fs.promises.rm(previewFile, { force: true });
           current.browserPreviewStatus = 'not_required';
           current.browserPreviewError = '';
         }
@@ -1632,7 +1646,21 @@ async function renderProject(id) {
     if (!isId(req.params.id) || !fs.existsSync(sourcePath(req.params.id))) return res.status(404).end();
     const project = getProject(req.params.id);
     if (!project) return res.status(404).end();
-    const useProxy = project.browserPreviewRequired && project.browserPreviewStatus === 'ready' && fs.existsSync(previewPath(req.params.id));
+    let proxyExists = false;
+    try { proxyExists = fs.statSync(previewPath(req.params.id)).size > 1024; } catch (error) {}
+    const useProxy = project.browserPreviewRequired && project.browserPreviewStatus === 'ready' && proxyExists;
+    if (project.browserPreviewRequired && !useProxy) {
+      if (project.browserPreviewStatus === 'ready') {
+        project.browserPreviewStatus = 'pending';
+        project.browserPreviewError = '';
+        saveProject(project);
+        generateBrowserPreview(project.id);
+      }
+      return res.status(project.browserPreviewStatus === 'error' ? 422 : 425).json({
+        error: project.browserPreviewStatus === 'error' ? 'browser_preview_failed' : 'browser_preview_preparing',
+        message: project.browserPreviewStatus === 'error' ? 'The browser review copy needs retrying.' : 'The browser review copy is still being prepared.'
+      });
+    }
     res.type(useProxy ? 'video/mp4' : normalizedVideoMimeType(project.fileName, project.mimeType));
     res.sendFile(useProxy ? previewPath(req.params.id) : sourcePath(req.params.id));
   });

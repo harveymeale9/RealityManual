@@ -474,13 +474,14 @@ test('an HEVC camera master receives a real browser-safe review proxy', { timeou
     t.skip('This FFmpeg build has no HEVC encoder.');
     return;
   }
+  fs.writeFileSync(path.join(projectDir, 'preview.mp4'), 'corrupt derived file');
   const db = new Database(path.join(dir, 'test.sqlite'));
   db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
   const now = new Date().toISOString();
   db.prepare('INSERT INTO records VALUES (?, ?, ?, ?)').run('editorProjects', id, JSON.stringify({
     id: id, name: 'HEVC take', fileName: 'camera.MOV', mimeType: 'video/quicktime', duration: 1,
     width: 320, height: 180, videoCodec: 'hevc', audioCodec: 'aac', browserPreviewRequired: true,
-    browserPreviewStatus: 'pending', browserPreviewError: '', transcriptionStatus: 'ready',
+    browserPreviewStatus: 'ready', browserPreviewError: '', transcriptionStatus: 'ready',
     classificationStatus: 'unavailable', retakeAnalysisStatus: 'unavailable', planningMatchStatus: 'unavailable',
     automaticRenderStartedAt: 'held-for-test', renderStatus: '', renderProgress: 0, words: [],
     removedWordIndices: [], createdAt: now, updatedAt: now
@@ -489,7 +490,9 @@ test('an HEVC camera master receives a real browser-safe review proxy', { timeou
   let stored;
   for (let attempt = 0; attempt < 300; attempt++) {
     stored = JSON.parse(db.prepare('SELECT data FROM records WHERE store_name=? AND id=?').get('editorProjects', id).data);
-    if (stored.browserPreviewStatus === 'ready' || stored.browserPreviewStatus === 'error') break;
+    let repairedSize = 0;
+    try { repairedSize = fs.statSync(path.join(projectDir, 'preview.mp4')).size; } catch (error) {}
+    if ((stored.browserPreviewStatus === 'ready' && repairedSize > 1024) || stored.browserPreviewStatus === 'error') break;
     await new Promise(function (resolve) { setTimeout(resolve, 30); });
   }
   assert.equal(stored.browserPreviewStatus, 'ready', stored.browserPreviewError);

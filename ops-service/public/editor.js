@@ -15,6 +15,7 @@
   var saveQueues = {};
   var saveStates = {};
   var renderRefreshTimers = {};
+  var mediaRecoveryChecks = {};
   var restoreTranscriptFocus = false;
   var uploadBatchInProgress = false;
   var uploadBatchCancelled = false;
@@ -665,6 +666,7 @@
 
   function bindWorkspace() {
     var video = root.querySelector('#editorVideo');
+    var videoProjectId = project.id;
     var caption = root.querySelector('#editorCaption');
     var transcript = root.querySelector('#editorTranscript');
     var previewingFinal = video.dataset.previewMode === 'final';
@@ -674,13 +676,26 @@
     var editingLocked = rendering || sentToProduction;
     video.playbackRate = reviewRate;
     var videoError = root.querySelector('#editorVideoError');
-    video.addEventListener('loadeddata', function () { if (videoError) videoError.hidden = true; });
-    video.addEventListener('error', function () { if (videoError) videoError.hidden = false; });
+    video.addEventListener('loadeddata', function () {
+      if (videoError) videoError.hidden = true;
+      if (mediaRecoveryChecks[videoProjectId]) clearTimeout(mediaRecoveryChecks[videoProjectId]);
+      delete mediaRecoveryChecks[videoProjectId];
+    });
+    video.addEventListener('error', function () {
+      if (videoError) videoError.hidden = false;
+      if (!mediaRecoveryChecks[videoProjectId]) {
+        mediaRecoveryChecks[videoProjectId] = setTimeout(function () {
+          if (editorMounted() && project && project.id === videoProjectId) openProject(videoProjectId, true);
+        }, 800);
+      }
+    });
     root.querySelector('#editorReloadVideo').onclick = function () {
       var wasPlaying = !video.paused && !video.ended;
       var retryUrl = new URL(video.currentSrc || video.src, window.location.href);
       retryUrl.searchParams.set('retry', String(Date.now()));
       if (videoError) videoError.hidden = true;
+      if (mediaRecoveryChecks[videoProjectId]) clearTimeout(mediaRecoveryChecks[videoProjectId]);
+      delete mediaRecoveryChecks[videoProjectId];
       video.src = retryUrl.pathname + retryUrl.search;
       video.load();
       if (wasPlaying) video.addEventListener('loadeddata', function () { video.play().catch(function () {}); }, { once: true });

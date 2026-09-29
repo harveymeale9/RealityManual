@@ -13231,3 +13231,24 @@ and the 50-step cut/retake undo snapshots retain that ownership metadata. A
 focused regression proves a dismissed take stays restored, an obsolete auto
 cut disappears, a new clear retake is applied, and an unrelated manual cut is
 never touched.
+
+---
+
+# 356. Browser Review Copies Self-Verify and Self-Heal (2026-09-29)
+
+The original camera master is durable, but the H.264 browser proxy is derived
+and replaceable. Startup previously trusted a stored `ready` flag plus mere file
+existence. A truncated or corrupt proxy could therefore leave Chrome on a black
+player even though Editor still had everything required to rebuild it.
+
+Active projects now probe an existing proxy on startup and require a nontrivial,
+playable H.264 file with audio and valid dimensions. Invalid derived media is
+removed, marked pending, and rebuilt through the serialized encode queue; stale
+proxies are also reclaimed when a re-probed source no longer needs one. The
+source route catches a ready-but-missing/tiny proxy at request time, requeues it,
+and explicitly reports preparation rather than serving incompatible HEVC as a
+silent fallback. On a player error, the client refreshes project state once so
+that a newly pending repair enters normal polling and replaces the player when
+ready; it does not hammer the media route in a failure loop. The real HEVC
+regression now begins with a corrupt proxy and a
+false `ready` record, then requires startup to replace it with verified H.264.
