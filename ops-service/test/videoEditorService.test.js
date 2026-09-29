@@ -232,6 +232,8 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   }
   assert.equal(project.planningMatchStatus, 'ready', project.planningMatchError);
   assert.equal(project.planningPieceId, 'plan-1');
+  assert.equal(project.planningPieceTitle, 'Synthetic outline');
+  assert.equal(project.planningPieceSeq, 79);
   assert.equal(planningMatchCalls, 1);
   assert.ok(project.cuts.some(function (cut) { return cut.reason === 'long_pause'; }));
   assert.deepEqual(project.captionGroups.map(function (group) { return group.text; }), ['One two.']);

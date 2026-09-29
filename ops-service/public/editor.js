@@ -37,6 +37,11 @@
     return minutes + ':' + String(Math.floor(seconds % 60)).padStart(2, '0');
   }
 
+  function displayName(item) {
+    if (!item || !item.planningPieceTitle) return item && item.name || 'Untitled recording';
+    return (item.planningPieceSeq ? '#' + String(item.planningPieceSeq).padStart(3, '0') + ' · ' : '') + item.planningPieceTitle;
+  }
+
   function editedDuration(item) {
     return Math.max(0, Number(item.duration || 0) - (item.cuts || []).reduce(function (sum, cut) {
       return sum + Number(cut.end - cut.start || 0);
@@ -175,7 +180,7 @@
     }
     list.innerHTML = projects.map(function (item) {
       return '<button class="editor-project' + (project && item.id === project.id ? ' active' : '') + '" data-id="' + esc(item.id) + '">' +
-        '<strong>' + esc(item.name) + '</strong><span>' + esc(statusLabel(item)) + ' · ' + formatTime(item.duration) + '</span></button>';
+        '<strong>' + esc(displayName(item)) + '</strong><span>' + esc(statusLabel(item)) + ' · ' + formatTime(item.duration) + '</span></button>';
     }).join('');
     list.querySelectorAll('.editor-project').forEach(function (button) {
       button.addEventListener('click', function () { openProject(button.dataset.id); });
@@ -308,13 +313,13 @@
     var previewMode = project.renderStatus === 'ready' && previewModes[project.id] !== 'source' ? 'final' : 'source';
     var previewUrl = previewMode === 'final' ? '/api/editor/' + encodeURIComponent(project.id) + '/render?inline=1' : '/api/editor/' + encodeURIComponent(project.id) + '/source';
     workspace.innerHTML =
-      '<div class="editor-topbar"><div><h2>' + esc(project.name) + '</h2><span>' + formatTime(project.duration) + ' original · ' + formatTime(editedDuration(project)) + ' edited · ' + cutSeconds.toFixed(1) + 's removed</span></div>' +
+      '<div class="editor-topbar"><div><h2>' + esc(displayName(project)) + '</h2><span>' + (project.planningPieceTitle ? esc(project.name) + ' · ' : '') + formatTime(project.duration) + ' original · ' + formatTime(editedDuration(project)) + ' edited · ' + cutSeconds.toFixed(1) + 's removed</span></div>' +
         '<button class="editor-delete" id="editorDelete">Delete recording</button></div>' +
       '<section class="editor-classification"><div><div class="eyebrow">Automatic classification</div><strong>' + (layout === 'vertical' ? 'Single page · Vertical' : 'Open spread · Horizontal') + '</strong><span>' + classificationCopy + ' · ' + esc(typeLabel(project.detectedContentType)) + '</span>' +
         (project.classificationStatus !== 'ready' && project.classificationStatus !== 'running' && project.classificationStatus !== 'pending' ? '<button type="button" class="editor-analyze" id="editorAnalyze">Analyze book framing</button>' : '') + '</div>' +
         '<label>Frame<select id="editorLayout"><option value="auto"' + (project.layoutOverride === 'auto' || !project.layoutOverride ? ' selected' : '') + '>Auto detect</option><option value="vertical"' + (project.layoutOverride === 'vertical' ? ' selected' : '') + '>Vertical · single page</option><option value="horizontal"' + (project.layoutOverride === 'horizontal' ? ' selected' : '') + '>Horizontal · open spread</option></select></label>' +
         '<label>Format<select id="editorContentType"><option value="auto"' + (project.contentTypeOverride === 'auto' || !project.contentTypeOverride ? ' selected' : '') + '>Auto · ' + esc(typeLabel(project.detectedContentType)) + '</option><option value="ultra_short"' + (project.contentTypeOverride === 'ultra_short' ? ' selected' : '') + '>Ultra-short</option><option value="short"' + (project.contentTypeOverride === 'short' ? ' selected' : '') + '>Short</option><option value="long_short"' + (project.contentTypeOverride === 'long_short' ? ' selected' : '') + '>Long-short</option><option value="longform"' + (project.contentTypeOverride === 'longform' ? ' selected' : '') + '>Longform</option></select></label></section>' +
-      '<section class="editor-plan-link"><div><div class="eyebrow">Planning workflow</div><strong>' + (project.planningPieceId ? 'Linked to its Filmed card' : 'No planning card linked') + '</strong><span>' + esc(project.planningMatch && project.planningMatch.reason || (project.planningMatchStatus === 'running' || project.planningMatchStatus === 'pending' ? 'Matching the transcript to Filmed cards…' : 'Choose a card manually if this recording came from the Kanban.')) + '</span></div><label>Content card<select id="editorPlanningPiece">' + planningOptionsHtml(project) + '</select></label>' +
+      '<section class="editor-plan-link"><div><div class="eyebrow">Planning workflow</div><strong>' + (project.planningPieceId ? 'Linked to ' + esc(displayName(project)) : 'No planning card linked') + '</strong><span>' + esc(project.planningMatch && project.planningMatch.reason || (project.planningMatchStatus === 'running' || project.planningMatchStatus === 'pending' ? 'Matching the transcript to Filmed cards…' : 'Choose a card manually if this recording came from the Kanban.')) + '</span></div><label>Content card<select id="editorPlanningPiece">' + planningOptionsHtml(project) + '</select></label>' +
         (project.planningMatchStatus !== 'running' && project.planningMatchStatus !== 'pending' ? '<button type="button" class="editor-analyze" id="editorMatchPlan">Match again</button>' : '') + '</section>' +
       '<div class="editor-preview-mode"><div><strong>' + (previewMode === 'final' ? 'Final edit' : 'Original master') + '</strong><span>' + (previewMode === 'final' ? 'This is the actual encoded file that will go to production.' : 'Use this view to inspect or restore source material.') + '</span></div>' +
         (project.renderStatus === 'ready' ? '<div><button type="button" id="editorPreviewFinal" class="' + (previewMode === 'final' ? 'active' : '') + '">Final edit</button><button type="button" id="editorPreviewSource" class="' + (previewMode === 'source' ? 'active' : '') + '">Original master</button></div>' : '') + '</div>' +

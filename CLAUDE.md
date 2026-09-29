@@ -11669,3 +11669,21 @@ check becomes an ordinary retryable render error and cannot expose the approval
 button or the inline final preview. The generated-video integration asserts all
 four checks and the expected 1080x1920 portrait output before exercising the
 handoff.
+
+---
+
+# 272. Matched Recordings Carry Their Planning Identity (2026-09-29)
+
+High-confidence and manually selected planning matches now persist the source
+card's sequence number and title alongside its id. Editor navigation and the
+review heading therefore show a useful identity such as
+`#079 · Rule of Innovation` instead of an opaque camera filename such as
+`9259`; the original filename remains visible as secondary provenance. Manual
+selection updates all three fields and clearing the selection clears the
+derived identity.
+
+The linked title also becomes the initial title of the generated Content
+Production item, while its physical media filename remains stable and safe.
+This makes a multi-video filming session traceable from Filmed through Editor
+and Production without relying on upload order or memory. Service integration
+asserts that the automatic match persists id, title and sequence together.

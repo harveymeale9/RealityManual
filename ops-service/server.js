@@ -1550,7 +1550,7 @@ function sendEditorProjectToProduction(input) {
   const piece = recordConcurrency.stampServerWrite({
     id: project.id,
     seq: maxSeq + 1,
-    title: fileNameBase,
+    title: project.planningPieceTitle || fileNameBase,
     stage: 'processed',
     platforms: platforms,
     contentType: contentType,

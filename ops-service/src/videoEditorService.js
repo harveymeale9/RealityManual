@@ -546,7 +546,11 @@ function setup(options) {
         project = getProject(id);
         if (!project) return;
         const matched = candidates.find(function (candidate) { return candidate.id === (result && result.pieceId); });
-        if (matched && result.confidence === 'high' && !project.planningPieceManuallySelected) project.planningPieceId = matched.id;
+        if (matched && result.confidence === 'high' && !project.planningPieceManuallySelected) {
+          project.planningPieceId = matched.id;
+          project.planningPieceTitle = matched.title || '';
+          project.planningPieceSeq = Number(matched.seq) || 0;
+        }
         project.planningMatch = {
           suggestedPieceId: matched ? matched.id : '',
           confidence: result && result.confidence || 'none',
@@ -825,6 +829,8 @@ async function renderProject(id) {
         retakeAnalysisError: '',
         retakeDecisions: [],
         planningPieceId: '',
+        planningPieceTitle: '',
+        planningPieceSeq: 0,
         planningPieceManuallySelected: false,
         planningMatchStatus: typeof matchPlanningPiece === 'function' ? 'pending_transcript' : 'unavailable',
         planningMatchError: '',
@@ -890,9 +896,12 @@ async function renderProject(id) {
     if (Number.isFinite(Number(req.body && req.body.retainedPauseSeconds))) project.retainedPauseSeconds = clamp(req.body.retainedPauseSeconds, 0.18, 1.2);
     if (typeof (req.body && req.body.planningPieceId) === 'string' && typeof getPlanningCandidates === 'function') {
       const requested = req.body.planningPieceId;
-      const valid = !requested || getPlanningCandidates(project).some(function (candidate) { return candidate.id === requested; });
+      const candidate = getPlanningCandidates(project).find(function (item) { return item.id === requested; });
+      const valid = !requested || !!candidate;
       if (valid) {
         project.planningPieceId = requested;
+        project.planningPieceTitle = candidate && candidate.title || '';
+        project.planningPieceSeq = candidate ? Number(candidate.seq) || 0 : 0;
         project.planningPieceManuallySelected = true;
       }
     }
