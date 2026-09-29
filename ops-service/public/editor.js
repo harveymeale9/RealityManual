@@ -193,8 +193,11 @@
     var lastClicked = null;
     var ignoreNextClick = false;
     function isLongformVideo() {
-      var width = video.videoWidth || Number(project.width);
-      var height = video.videoHeight || Number(project.height);
+      // Project dimensions are FFprobe-normalized for display rotation. Some
+      // Chrome builds expose the physical encoded dimensions through
+      // videoWidth/videoHeight even while visually honoring a 90° matrix.
+      var width = Number(project.width) || video.videoWidth;
+      var height = Number(project.height) || video.videoHeight;
       return width >= height;
     }
     video.addEventListener('timeupdate', function () {

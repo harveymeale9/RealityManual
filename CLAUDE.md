@@ -11343,8 +11343,10 @@ concatenated words across the panel even though the source looked vertical.
 
 The preview now wraps the video and overlay in the same shrink-wrapped frame,
 so caption bounds are always inset inside the actual displayed image. Runtime
-orientation prefers the browser's decoded `videoWidth`/`videoHeight`. Server
-probing now reads both display-matrix and legacy rotation metadata, swaps stored
+orientation uses the project's rotation-normalized display dimensions (with
+browser dimensions only as a fallback), because Chrome can expose physical
+landscape `videoWidth`/`videoHeight` while visibly applying a portrait matrix.
+Server probing now reads both display-matrix and legacy rotation metadata, swaps stored
 dimensions for quarter turns, and re-probes older Editor projects on startup;
 if their orientation changes, the stale caption render is invalidated for a
 clean rebuild. Final ASS rendering therefore uses the same display orientation
