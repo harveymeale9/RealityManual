@@ -13678,3 +13678,22 @@ transcripts now contribute 50% opening, 25% middle, and 25% ending samples with
 clear omission markers. Short transcripts remain unchanged. Focused coverage
 proves all three regions survive and the result never exceeds its fixed model
 budget.
+
+---
+
+# 376. Queued Editor Saves Keep a Full Decision Snapshot (2026-09-29)
+
+The queue list deliberately polls compact project summaries without transcript
+words or cut arrays (§362). Per-project PATCHes are serialized, but a narrow UI
+race remained: make two quick decisions, navigate/remount while the first save
+is in flight, and let a summary poll replace the list before the second queued
+operation resolves its functional patch. That second operation could then use
+an incomplete summary rather than the prior full edit as its base.
+
+The browser now maintains an independent full-detail cache populated only by
+upload/detail/PATCH responses. Queued functional edits fall back to that cache,
+never to a summary when a complete revision is available; conflict reloads and
+deletion update it explicitly. The existing unload protection now also covers
+in-flight edit saves, and a duplicated upload-only unload listener was removed.
+This preserves rapid pause/retake/transcript decisions across project changes,
+tab changes, remounts, and compact background polling.

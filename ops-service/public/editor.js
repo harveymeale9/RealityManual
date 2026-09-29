@@ -14,6 +14,7 @@
   var previewStopTimes = {};
   var saveQueues = {};
   var saveStates = {};
+  var projectDetails = {};
   var renderRefreshTimers = {};
   var mediaRecoveryChecks = {};
   var restoreTranscriptFocus = false;
@@ -28,7 +29,7 @@
   if ([1, 1.25, 1.5, 2].indexOf(reviewRate) === -1) reviewRate = 1;
 
   window.addEventListener('beforeunload', function (event) {
-    if (!uploadBatchInProgress) return;
+    if (!uploadBatchInProgress && !Object.keys(saveQueues).length) return;
     event.preventDefault();
     event.returnValue = '';
   });
@@ -487,6 +488,7 @@
         uploadError.transient = xhr.status === 408 || xhr.status === 425 || xhr.status === 429 || xhr.status >= 500;
         return reject(uploadError);
       }
+      projectDetails[body.id] = body;
       projects.unshift(body);
       renderList();
       resolve(body);
@@ -616,6 +618,7 @@
     return api('/api/editor/' + encodeURIComponent(id)).then(function (item) {
       var progressOnly = !!(quiet && project && project.id === item.id && project.renderStatus === 'running' && item.renderStatus === 'running');
       project = item;
+      projectDetails[item.id] = item;
       restoreReviewProgress(item);
       localStorage.setItem(rememberedProjectKey(item.productionPieceId ? 'sent' : 'active'), item.id);
       projects = projects.map(function (entry) { return entry.id === item.id ? item : entry; });
@@ -1215,6 +1218,7 @@
           if (localStorage.getItem(key) === id) localStorage.removeItem(key);
         });
         projects = projects.filter(function (item) { return item.id !== id; });
+        delete projectDetails[id];
         clearReviewProgress(id);
         project = null; selected.clear(); renderList();
         var workspace = root && root.querySelector('#editorWorkspace');
@@ -1326,6 +1330,7 @@
       return operation(id);
     }).then(function (item) {
       saveStates[id] = 'saved';
+      projectDetails[id] = item;
       projects = projects.map(function (entry) { return entry.id === item.id ? item : entry; });
       renderList();
       if (project && project.id === id) {
@@ -1362,7 +1367,7 @@
     });
     rememberPlaybackBeforeEdit(id, renderWillChange);
     return queueProjectUpdate(id, function () {
-      var latest = project && project.id === id ? project : projects.find(function (item) { return item.id === id; });
+      var latest = project && project.id === id ? project : projectDetails[id] || projects.find(function (item) { return item.id === id; });
       function attempt(base, canRetryConflict) {
         var resolvedPatch = typeof patch === 'function' ? patch(base || {}) : patch;
         var payload = Object.assign({}, resolvedPatch, { expectedEditRevision: Number(base && base.editRevision) || 0 });
@@ -1370,6 +1375,7 @@
           if (error.code !== 'edit_conflict' || !canRetryConflict) throw error;
           return api('/api/editor/' + id).then(function (fresh) {
             projects = projects.map(function (entry) { return entry.id === id ? fresh : entry; });
+            projectDetails[id] = fresh;
             if (project && project.id === id) project = fresh;
             return attempt(fresh, false);
           });
@@ -1397,9 +1403,4 @@
     }
   };
 
-  window.addEventListener('beforeunload', function (event) {
-    if (!uploadBatchInProgress) return;
-    event.preventDefault();
-    event.returnValue = '';
-  });
 })();
