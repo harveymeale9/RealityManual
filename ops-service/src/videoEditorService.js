@@ -1338,7 +1338,7 @@ async function renderProject(id) {
       if (!current || current.productionPieceId || current.renderStatus !== 'ready' || current.renderSha256 !== snapshot.renderSha256) continue;
       invalidateProjectRender(current);
       saveProject(current);
-      setImmediate(function () { maybeAutoRender(current.id); });
+      if (automaticReviewReady(current)) setImmediate(function () { maybeAutoRender(current.id); });
     }
   });
 

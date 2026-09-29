@@ -13481,6 +13481,10 @@ into a burst of competing disk reads. Coverage begins with a false Ready record
 and truncated MP4, then proves its digest, size, status, and file are all
 invalidated before review.
 
+Recovery schedules a rebuild only when the project's automatic safety gates are
+already satisfied. A failed retake/framing check remains visibly blocked and
+retryable without leaving an unnecessary deferred database callback behind.
+
 ---
 
 # 366. First-Stage Editor Providers Recover One Transient Failure (2026-09-29)
