@@ -1489,16 +1489,39 @@ async function renderProject(id) {
     const renderWillChange = patchAffectsRender(req.body);
     const currentRemovedWordIndices = (project.removedWordIndices || []).map(Number).sort(function (a, b) { return a - b; });
     const currentDismissedRetakeIds = (project.dismissedRetakeIds || []).map(String).sort();
+    const currentRestoredAutoCutIds = (project.restoredAutoCutIds || []).map(String).sort();
+    const currentAutoSilenceEnabled = project.autoSilenceEnabled !== false;
+    const currentSilenceThresholdSeconds = Number(project.silenceThresholdSeconds) || 1;
+    const currentRetainedPauseSeconds = Number(project.retainedPauseSeconds) || 0.38;
     const nextRemovedWordIndices = Array.isArray(req.body && req.body.removedWordIndices)
       ? Array.from(new Set(req.body.removedWordIndices.map(Number).filter(function (index) { return Number.isInteger(index) && index >= 0 && index < (project.words || []).length; }))).sort(function (a, b) { return a - b; })
       : currentRemovedWordIndices;
     const nextDismissedRetakeIds = Array.isArray(req.body && req.body.dismissedRetakeIds)
       ? Array.from(new Set(req.body.dismissedRetakeIds.map(String).filter(function (id) { return /^(?:retake-\d+|smart-retake-\d+-\d+-\d+)$/.test(id); }))).sort()
       : currentDismissedRetakeIds;
-    if (JSON.stringify(nextRemovedWordIndices) !== JSON.stringify(currentRemovedWordIndices) || JSON.stringify(nextDismissedRetakeIds) !== JSON.stringify(currentDismissedRetakeIds)) {
-      const snapshot = { removedWordIndices: currentRemovedWordIndices, dismissedRetakeIds: currentDismissedRetakeIds,
-        autoRetakeRemovedWordIndices: (project.autoRetakeRemovedWordIndices || []).map(Number) };
+    const nextRestoredAutoCutIds = Array.isArray(req.body && req.body.restoredAutoCutIds)
+      ? Array.from(new Set(req.body.restoredAutoCutIds.map(String).filter(function (id) { return /^(lead|tail|gap-\d+)$/.test(id); }))).sort()
+      : currentRestoredAutoCutIds;
+    const nextAutoSilenceEnabled = typeof (req.body && req.body.autoSilenceEnabled) === 'boolean' ? req.body.autoSilenceEnabled : currentAutoSilenceEnabled;
+    const nextSilenceThresholdSeconds = Number.isFinite(Number(req.body && req.body.silenceThresholdSeconds)) ? clamp(req.body.silenceThresholdSeconds, 0.65, 5) : currentSilenceThresholdSeconds;
+    const nextRetainedPauseSeconds = Number.isFinite(Number(req.body && req.body.retainedPauseSeconds)) ? clamp(req.body.retainedPauseSeconds, 0.18, 1.2) : currentRetainedPauseSeconds;
+    let decisionSnapshotSaved = false;
+    function saveDecisionSnapshot() {
+      if (decisionSnapshotSaved) return;
+      const snapshot = {
+        removedWordIndices: currentRemovedWordIndices,
+        dismissedRetakeIds: currentDismissedRetakeIds,
+        autoRetakeRemovedWordIndices: (project.autoRetakeRemovedWordIndices || []).map(Number),
+        restoredAutoCutIds: currentRestoredAutoCutIds,
+        autoSilenceEnabled: currentAutoSilenceEnabled,
+        silenceThresholdSeconds: currentSilenceThresholdSeconds,
+        retainedPauseSeconds: currentRetainedPauseSeconds
+      };
       project.cutDecisionHistory = (Array.isArray(project.cutDecisionHistory) ? project.cutDecisionHistory : []).concat([snapshot]).slice(-50);
+      decisionSnapshotSaved = true;
+    }
+    if (JSON.stringify(nextRemovedWordIndices) !== JSON.stringify(currentRemovedWordIndices) || JSON.stringify(nextDismissedRetakeIds) !== JSON.stringify(currentDismissedRetakeIds)) {
+      saveDecisionSnapshot();
       project.removedWordIndices = nextRemovedWordIndices;
       project.dismissedRetakeIds = nextDismissedRetakeIds;
       const dismissedOwnedIndices = new Set(retakeCandidatesForProject(project).filter(function (candidate) {
@@ -1508,6 +1531,10 @@ async function renderProject(id) {
         return nextRemovedWordIndices.includes(index) && !dismissedOwnedIndices.has(index);
       });
     }
+    if (JSON.stringify(nextRestoredAutoCutIds) !== JSON.stringify(currentRestoredAutoCutIds) ||
+        nextAutoSilenceEnabled !== currentAutoSilenceEnabled ||
+        Number(nextSilenceThresholdSeconds) !== currentSilenceThresholdSeconds ||
+        Number(nextRetainedPauseSeconds) !== currentRetainedPauseSeconds) saveDecisionSnapshot();
     if (req.body && req.body.wordCorrection && typeof req.body.wordCorrection === 'object') {
       const index = Number(req.body.wordCorrection.index);
       const word = Number.isInteger(index) && index >= 0 ? (project.words || [])[index] : null;
@@ -1520,18 +1547,14 @@ async function renderProject(id) {
       if (word.text === word.originalText) delete word.originalText;
       project.transcriptText = (project.words || []).map(function (item) { return item.text; }).join(' ');
     }
-    if (typeof (req.body && req.body.autoSilenceEnabled) === 'boolean') project.autoSilenceEnabled = req.body.autoSilenceEnabled;
-    if (Array.isArray(req.body && req.body.restoredAutoCutIds)) {
-      project.restoredAutoCutIds = Array.from(new Set(req.body.restoredAutoCutIds.map(String).filter(function (id) {
-        return /^(lead|tail|gap-\d+)$/.test(id);
-      })));
-    }
+    project.autoSilenceEnabled = nextAutoSilenceEnabled;
+    project.restoredAutoCutIds = nextRestoredAutoCutIds;
     if (typeof (req.body && req.body.captionsEnabled) === 'boolean') project.captionsEnabled = req.body.captionsEnabled;
     if (['auto', 'vertical', 'horizontal'].includes(req.body && req.body.layoutOverride)) project.layoutOverride = req.body.layoutOverride;
     if (['auto', 'ultra_short', 'short', 'long_short', 'longform'].includes(req.body && req.body.contentTypeOverride)) project.contentTypeOverride = req.body.contentTypeOverride;
     if (Number.isFinite(Number(req.body && req.body.cropCenterX))) project.cropCenterX = clamp(req.body.cropCenterX, 0, 1);
-    if (Number.isFinite(Number(req.body && req.body.silenceThresholdSeconds))) project.silenceThresholdSeconds = clamp(req.body.silenceThresholdSeconds, 0.65, 5);
-    if (Number.isFinite(Number(req.body && req.body.retainedPauseSeconds))) project.retainedPauseSeconds = clamp(req.body.retainedPauseSeconds, 0.18, 1.2);
+    project.silenceThresholdSeconds = nextSilenceThresholdSeconds;
+    project.retainedPauseSeconds = nextRetainedPauseSeconds;
     if (typeof (req.body && req.body.planningPieceId) === 'string' && typeof getPlanningCandidates === 'function') {
       const requested = req.body.planningPieceId;
       const candidate = getPlanningCandidates(project).find(function (item) { return item.id === requested; });
@@ -1592,6 +1615,10 @@ async function renderProject(id) {
       project.removedWordIndices = Array.isArray(snapshot && snapshot.removedWordIndices) ? snapshot.removedWordIndices : [];
       project.dismissedRetakeIds = Array.isArray(snapshot && snapshot.dismissedRetakeIds) ? snapshot.dismissedRetakeIds : [];
       project.autoRetakeRemovedWordIndices = Array.isArray(snapshot && snapshot.autoRetakeRemovedWordIndices) ? snapshot.autoRetakeRemovedWordIndices : [];
+      if (Array.isArray(snapshot && snapshot.restoredAutoCutIds)) project.restoredAutoCutIds = snapshot.restoredAutoCutIds;
+      if (typeof (snapshot && snapshot.autoSilenceEnabled) === 'boolean') project.autoSilenceEnabled = snapshot.autoSilenceEnabled;
+      if (Number.isFinite(Number(snapshot && snapshot.silenceThresholdSeconds))) project.silenceThresholdSeconds = Number(snapshot.silenceThresholdSeconds);
+      if (Number.isFinite(Number(snapshot && snapshot.retainedPauseSeconds))) project.retainedPauseSeconds = Number(snapshot.retainedPauseSeconds);
     }
     project.cutDecisionHistory = history;
     invalidateProjectRender(project);

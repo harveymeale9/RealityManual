@@ -817,6 +817,24 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   project = await response.json();
   assert.deepEqual(project.removedWordIndices, [0, 1]);
   assert.equal(project.canUndoCut, false);
+  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+    restoredAutoCutIds: ['gap-1'], autoSilenceEnabled: false, silenceThresholdSeconds: 1.5, retainedPauseSeconds: 0.55
+  }) });
+  assert.equal(response.status, 200);
+  project = await response.json();
+  assert.deepEqual(project.restoredAutoCutIds, ['gap-1']);
+  assert.equal(project.autoSilenceEnabled, false);
+  assert.equal(project.silenceThresholdSeconds, 1.5);
+  assert.equal(project.retainedPauseSeconds, 0.55);
+  assert.equal(project.canUndoCut, true);
+  response = await fetch(base + '/api/editor/' + project.id + '/undo-cut', { method: 'POST' });
+  assert.equal(response.status, 200);
+  project = await response.json();
+  assert.deepEqual(project.restoredAutoCutIds, []);
+  assert.equal(project.autoSilenceEnabled, true);
+  assert.equal(project.silenceThresholdSeconds, 1);
+  assert.equal(project.retainedPauseSeconds, 0.38);
+  assert.equal(project.canUndoCut, false);
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ captionsEnabled: false, wordCorrection: { index: 0, text: 'Once' } }) });
   assert.equal(response.status, 200);
   project = await response.json();

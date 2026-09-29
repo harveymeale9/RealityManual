@@ -13548,3 +13548,22 @@ the pump, and concurrency remains exactly one. This improves time-to-first-
 approval without creating CPU contention or sacrificing browser compatibility.
 Unit coverage holds one proxy open, queues a second, inserts a final, and proves
 the exact execution order is running proxy, final, waiting proxy.
+
+---
+
+# 369. Undo Covers Every Pause/Cut Decision (2026-09-29)
+
+The transcript editor's undo history originally captured removed words and
+retake dismissals only. **Keep pause**, the global long-pause toggle, and Tight /
+Natural / Gentle pacing all change the cut graph too, but the visible **Undo
+last decision** control could not reverse them. That made one class of editing
+mistake less safely reversible than another.
+
+One bounded 50-step decision history now snapshots manual word removals, retake
+decisions and automation ownership, individually restored pauses, pause removal
+on/off, silence threshold, and retained breathing room. A combined patch creates
+one atomic snapshot rather than several, and legacy snapshots remain readable.
+Undo restores the complete prior cut strategy, invalidates the stale render,
+and schedules the same debounced rebuild. End-to-end coverage changes all pause
+settings together, verifies the altered state, then proves one undo returns
+every field to the exact natural-mode baseline.
