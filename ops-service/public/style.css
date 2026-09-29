@@ -2355,6 +2355,7 @@ body.role-reviewer #pmBackFab {
 /* Transcript-driven video editor */
 .video-editor{max-width:1500px;margin:0 auto;padding:28px 30px 60px;color:var(--text,#eee)}
 .video-editor{position:relative}.editor-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:20px}
+.editor-notice{margin:-7px 0 14px;padding:10px 13px;border:1px solid #276440;background:#0e2418;color:#6fe8a0;border-radius:8px;font-size:12px}.editor-notice[hidden]{display:none}
 .editor-heading h1{font-family:"Fraunces",serif;font-size:38px;margin:4px 0 6px}
 .editor-heading p{margin:0;color:var(--muted,#8d9991);max-width:720px;line-height:1.55}
 .editor-upload{cursor:pointer;white-space:nowrap}

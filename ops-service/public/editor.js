@@ -8,6 +8,7 @@
   var history = [];
   var pollTimer = null;
   var mountToken = 0;
+  var editorNotice = '';
 
   function esc(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, function (char) {
@@ -42,6 +43,7 @@
   }
 
   function statusLabel(item) {
+    if (item.productionPieceId) return 'Sent to Production';
     if (item.transcriptionStatus === 'pending' || item.transcriptionStatus === 'running') return 'Transcribing';
     if (item.transcriptionStatus === 'error') return 'Needs attention';
     if (item.classificationStatus === 'pending' || item.classificationStatus === 'running') return 'Analyzing frame';
@@ -134,6 +136,7 @@
           '<p>Drop in a filming session. Each recording is framed, transcribed, cleaned and prepared for your approval.</p></div>' +
           '<label class="editor-upload btn-primary"><input id="editorFile" type="file" accept="video/*" multiple hidden>Upload raw videos</label></header>' +
         '<div class="editor-upload-progress" id="editorUploadProgress" hidden><span id="editorUploadLabel">Uploading…</span><div><i id="editorUploadBar"></i></div></div>' +
+        '<div class="editor-notice" id="editorNotice" hidden></div>' +
         '<div class="editor-layout"><aside class="editor-projects"><div class="editor-aside-title">Recordings</div><div id="editorProjectList"></div></aside>' +
           '<main class="editor-workspace" id="editorWorkspace"><div class="editor-empty"><strong>No recording selected</strong><span>Upload a raw video to begin.</span></div></main></div>' +
         '<div class="editor-drop-overlay" id="editorDropOverlay"><strong>Drop filming session</strong><span>Every video will enter the automatic edit queue</span></div>' +
@@ -152,6 +155,13 @@
       event.preventDefault(); dragDepth = 0; overlay.classList.remove('visible');
       if (event.dataTransfer && event.dataTransfer.files) uploadFiles(event.dataTransfer.files);
     });
+  }
+
+  function renderNotice() {
+    var notice = root && root.querySelector('#editorNotice');
+    if (!notice) return;
+    notice.textContent = editorNotice;
+    notice.hidden = !editorNotice;
   }
 
   function renderList() {
@@ -205,6 +215,8 @@
     if (!files.length) return alert('Drop one or more video files.');
     var created = [];
     var failures = [];
+    editorNotice = '';
+    renderNotice();
     var sequence = Promise.resolve();
     files.forEach(function (file, index) {
       sequence = sequence.then(function () {
@@ -488,14 +500,25 @@
       };
     var sendButton = root.querySelector('#editorSendProduction');
     if (sendButton) sendButton.onclick = function () {
+      var approvedId = project.id;
+      var approvedName = project.name;
       sendButton.disabled = true;
-      sendButton.textContent = 'Sending…';
+      sendButton.textContent = 'Approving…';
       api('/api/editor/' + project.id + '/production', { method: 'POST' }).then(function (result) {
-        if (typeof window.__rmOpenContentProduction === 'function') return window.__rmOpenContentProduction(result.pieceId, result.piece);
-        location.hash = 'upload-files';
+        project.productionPieceId = result.pieceId;
+        project.sentToProductionAt = new Date().toISOString();
+        projects = projects.map(function (item) { return item.id === approvedId ? Object.assign({}, item, { productionPieceId: result.pieceId, sentToProductionAt: project.sentToProductionAt }) : item; });
+        editorNotice = approvedName + ' was approved and sent to Content Production.';
+        renderList();
+        var next = projects.filter(function (item) { return item.id !== approvedId && !item.productionPieceId; }).sort(function (a, b) {
+          return String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
+        })[0];
+        if (next) return openProject(next.id).then(renderNotice);
+        renderWorkspace();
+        renderNotice();
       }).catch(function (error) {
         sendButton.disabled = false;
-        sendButton.textContent = 'Send to Production';
+        sendButton.textContent = 'Approve & Send to Production';
         alert(error.message);
       });
     };

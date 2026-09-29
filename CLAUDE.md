@@ -11567,3 +11567,22 @@ This work also fixed a latent Smart Review persistence bug: server validation
 accepted old deterministic IDs such as `retake-1` but silently discarded the
 new semantic IDs such as `smart-retake-4-8-10`. Both ID formats are now accepted,
 so **Keep both** and restored semantic takes remain resolved after refresh.
+
+---
+
+# 267. Approval Advances Through a Filming Session (2026-09-29)
+
+Approving an Editor result no longer opens Content Production and interrupts
+the review session. The handoff still happens immediately and durably, but the
+approved recording changes to **Sent to Production** in the sidebar and the
+Editor automatically opens the oldest remaining unapproved recording. A green
+confirmation names the recording just sent. If the queue is finished, the
+current recording stays open with **Open Content Production** available as the
+explicit next action.
+
+This preserves the requested division of labour: Harvey can review, approve and
+move through an entire filming session without navigating or re-uploading,
+while title, thumbnail and ambient-music work remains available in the existing
+production screen. The Chromium batch regression now uploads two recordings,
+approves the first and proves the second becomes active automatically; the
+single-recording and mobile-overflow paths continue to pass.
