@@ -13142,3 +13142,20 @@ soon as streaming begins. If Node receives the request's `aborted` event, that
 exact partial is unlinked immediately. Completed uploads follow the unchanged
 hash/probe/rename flow, invalid recordings still clean themselves, and the
 periodic sweeper remains as defense in depth for process-level interruptions.
+
+---
+
+# 351. Smart Retake Cards Own Disjoint Reversible Ranges (2026-09-29)
+
+Structured retake output already required valid earlier/later ranges, but two
+otherwise valid model decisions could still overlap the same failed words. Both
+cards would appear applied; restoring either one would restore shared indices
+still claimed by the other, making the cards non-independent and the UI state
+misleading.
+
+Semantic decision normalization now accepts candidates in model order while
+rejecting any later removal range that intersects an accepted one. Disjoint
+chains of failed takes remain valid, and every visible card can now be applied
+or restored without silently changing another card's owned words. Focused
+coverage supplies overlapping and adjacent ranges and retains only the two
+independent decisions.

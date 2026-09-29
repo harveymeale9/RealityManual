@@ -179,6 +179,18 @@ test('semantic retake ranges become bounded exact word decisions', function () {
   assert.equal(editor.normalizeRetakeDecisions([{ removeStartIndex: 0, removeEndIndex: 1, replacementStartIndex: 999, replacementEndIndex: 1000, confidence: 'high' }], words).length, 0);
 });
 
+test('overlapping semantic retake removals cannot create conflicting review cards', function () {
+  const timed = Array.from({ length: 12 }, function (_, index) {
+    return { index: index, text: 'w' + index, start: index, end: index + 0.4 };
+  });
+  const decisions = editor.normalizeRetakeDecisions([
+    { removeStartIndex: 0, removeEndIndex: 3, replacementStartIndex: 5, replacementEndIndex: 7, confidence: 'high', reason: 'First' },
+    { removeStartIndex: 2, removeEndIndex: 4, replacementStartIndex: 8, replacementEndIndex: 10, confidence: 'high', reason: 'Overlaps' },
+    { removeStartIndex: 4, removeEndIndex: 4, replacementStartIndex: 8, replacementEndIndex: 10, confidence: 'review', reason: 'Disjoint' }
+  ], timed);
+  assert.deepEqual(decisions.map(function (decision) { return decision.removeWordIndices; }), [[0, 1, 2, 3], [4]]);
+});
+
 test('unresolved retakes block approval until cut or explicitly dismissed', function () {
   const project = { words: words, removedWordIndices: [], dismissedRetakeIds: [], retakeDecisions: [{ id: 'smart-retake-0', removeWordIndices: [2, 3], confidence: 'review' }] };
   assert.equal(editor.unresolvedRetakeCount(project), 1);

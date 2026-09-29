@@ -354,6 +354,7 @@ function retakeCandidates(words) {
 }
 
 function normalizeRetakeDecisions(raw, words) {
+  const claimedRemovalIndices = new Set();
   return (Array.isArray(raw) ? raw : []).map(function (decision, index) {
     const start = Number(decision.removeStartIndex);
     const end = Number(decision.removeEndIndex);
@@ -369,6 +370,8 @@ function normalizeRetakeDecisions(raw, words) {
     if (!Number.isFinite(replacementGap) || replacementGap < 0 || replacementGap > 30) return null;
     const removeWordIndices = [];
     for (let wordIndex = start; wordIndex <= end; wordIndex++) removeWordIndices.push(wordIndex);
+    if (removeWordIndices.some(function (wordIndex) { return claimedRemovalIndices.has(wordIndex); })) return null;
+    removeWordIndices.forEach(function (wordIndex) { claimedRemovalIndices.add(wordIndex); });
     return {
       id: 'smart-retake-' + index + '-' + start + '-' + end,
       removeWordIndices: removeWordIndices,
