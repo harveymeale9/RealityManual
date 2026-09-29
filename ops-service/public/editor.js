@@ -76,6 +76,22 @@
     return !!(root && root.querySelector('.video-editor'));
   }
 
+  function rememberedProjectKey(filter) {
+    return filter === 'sent' ? 'rmEditorSentProjectId' : 'rmEditorActiveProjectId';
+  }
+
+  function preferredProjectForFilter(filter) {
+    var rememberedId = localStorage.getItem(rememberedProjectKey(filter)) || '';
+    var remembered = projects.find(function (item) {
+      return item.id === rememberedId && (filter === 'sent' ? !!item.productionPieceId : !item.productionPieceId);
+    });
+    if (remembered) return remembered;
+    if (filter === 'active') return nextActionableProject();
+    return projects.filter(function (item) { return !!item.productionPieceId; }).sort(function (a, b) {
+      return String(b.sentToProductionAt || b.updatedAt || '').localeCompare(String(a.sentToProductionAt || a.updatedAt || ''));
+    })[0] || null;
+  }
+
   function editedDuration(item) {
     return Math.max(0, Number(item.duration || 0) - (item.cuts || []).reduce(function (sum, cut) {
       return sum + Number(cut.end - cut.start || 0);
@@ -280,6 +296,15 @@
         listFilter = button.dataset.filter;
         localStorage.setItem('rmEditorListFilter', listFilter);
         renderList();
+        var currentBelongs = project && (listFilter === 'sent' ? !!project.productionPieceId : !project.productionPieceId);
+        if (currentBelongs) return;
+        project = null; selected.clear();
+        var preferred = preferredProjectForFilter(listFilter);
+        if (preferred) openProject(preferred.id);
+        else {
+          var workspace = root.querySelector('#editorWorkspace');
+          if (workspace) workspace.innerHTML = '<div class="editor-empty"><strong>No ' + (listFilter === 'sent' ? 'sent' : 'active') + ' recordings</strong><span>' + (listFilter === 'sent' ? 'Approved edits will appear here.' : 'Upload a raw video to begin.') + '</span></div>';
+        }
       });
     });
   }
@@ -403,9 +428,7 @@
       projects = items;
       renderList();
       if (!project && projects[0]) {
-        var preferred = listFilter === 'active' ? nextActionableProject() : projects.filter(function (item) { return !!item.productionPieceId; }).sort(function (a, b) {
-          return String(b.sentToProductionAt || b.updatedAt || '').localeCompare(String(a.sentToProductionAt || a.updatedAt || ''));
-        })[0];
+        var preferred = preferredProjectForFilter(listFilter);
         if (preferred) return openProject(preferred.id);
       }
     });
@@ -416,6 +439,7 @@
     return api('/api/editor/' + encodeURIComponent(id)).then(function (item) {
       var progressOnly = !!(quiet && project && project.id === item.id && project.renderStatus === 'running' && item.renderStatus === 'running');
       project = item;
+      localStorage.setItem(rememberedProjectKey(item.productionPieceId ? 'sent' : 'active'), item.id);
       projects = projects.map(function (entry) { return entry.id === item.id ? item : entry; });
       selected.clear();
       renderList();
@@ -916,6 +940,10 @@
       var id = project.id;
       api('/api/editor/' + id, { method: 'DELETE' }).then(function () {
         clearTimeout(renderRefreshTimers[id]); delete renderRefreshTimers[id];
+        ['active', 'sent'].forEach(function (filter) {
+          var key = rememberedProjectKey(filter);
+          if (localStorage.getItem(key) === id) localStorage.removeItem(key);
+        });
         projects = projects.filter(function (item) { return item.id !== id; });
         project = null; selected.clear(); renderList();
         var workspace = root && root.querySelector('#editorWorkspace');

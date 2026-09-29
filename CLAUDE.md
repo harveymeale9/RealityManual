@@ -12946,3 +12946,23 @@ edit decision. This also makes the new capacity model accurate between edit
 bursts. The end-to-end test verifies that the prior render is physically gone
 as soon as a post-verification transcript decision invalidates it, before the
 debounced replacement begins.
+
+---
+
+# 341. Review Position Survives Refresh and Active/Sent Switching (2026-09-29)
+
+Editor previously chose the queue's highest-priority recording on every mount.
+A phone browser suspension or deliberate refresh could move Harvey away from the
+take he was reviewing. Active/Sent filter buttons only changed the sidebar too,
+so the workspace could continue showing an Active edit while the list claimed
+to be Sent (or vice versa).
+
+The last opened Active and Sent project ids are now remembered independently in
+local storage. Mount/reload returns to the exact valid recording for the current
+filter, with the normal actionable sort as fallback if it was deleted or moved.
+Changing filters now opens that filter's remembered/fallback project and renders
+a clear empty state when none exists. Deletion clears either matching memory
+slot, approval naturally remembers the next Active edit, and opening the sent
+copy establishes Sent continuity. Browser coverage proves refresh retention and
+round-trip switching between the newly approved item and the current active
+one.
