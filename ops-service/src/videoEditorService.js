@@ -504,6 +504,7 @@ function setup(options) {
   const getPlanningCandidates = options.getPlanningCandidates;
   const matchPlanningPiece = options.matchPlanningPiece;
   const onRenderReady = options.onRenderReady;
+  const onRenderInvalidated = options.onRenderInvalidated;
   const onPlanningPieceChanged = options.onPlanningPieceChanged;
   const onProjectDeleted = options.onProjectDeleted;
   if (!db || !dataDir || typeof transcribeDetailed !== 'function') throw new Error('video editor setup is incomplete');
@@ -532,6 +533,15 @@ function setup(options) {
   let classificationChain = Promise.resolve();
   let retakeChain = Promise.resolve();
   let planningMatchChain = Promise.resolve();
+
+  function invalidateProjectRender(project) {
+    const hadVerifiedRender = project && project.renderStatus === 'ready';
+    if (hadVerifiedRender && typeof onRenderInvalidated === 'function') {
+      try { onRenderInvalidated({ project: project }); }
+      catch (error) { project.workflowWarning = 'The edit changed safely, but its linked planning card could not be returned to Filmed.'; }
+    }
+    return invalidateRender(project);
+  }
 
   function withQueuePositions(project) {
     if (!project) return project;
@@ -610,7 +620,7 @@ function setup(options) {
         project.retakeDecisions = [];
         project.planningMatchStatus = project.words.length && typeof matchPlanningPiece === 'function' ? 'pending' : 'unavailable';
         project.planningMatchError = '';
-        invalidateRender(project);
+        invalidateProjectRender(project);
         advanceEditRevision(project);
         saveProject(project);
         if (project.words.length && typeof analyzeRetakes === 'function') setImmediate(function () { analyzeProjectRetakes(id); });
@@ -663,7 +673,7 @@ function setup(options) {
         project.retakeDecisions = decisions;
         project.retakeAnalysisStatus = 'ready';
         project.retakeAnalysisError = '';
-        invalidateRender(project);
+        invalidateProjectRender(project);
         advanceEditRevision(project);
         saveProject(project);
         setImmediate(function () { maybeAutoRender(id); });
@@ -771,7 +781,7 @@ function setup(options) {
         if (project.layoutOverride === 'auto' || !project.layoutOverride) project.cropCenterX = project.visualClassification.cropCenterX;
         project.classificationStatus = 'ready';
         project.classificationError = '';
-        invalidateRender(project);
+        invalidateProjectRender(project);
         advanceEditRevision(project);
         saveProject(project);
         setImmediate(function () { maybeAutoRender(id); });
@@ -992,7 +1002,7 @@ async function renderProject(id) {
         if (!current || (current.width === media.width && current.height === media.height)) return;
         current.width = media.width;
         current.height = media.height;
-        invalidateRender(current);
+        invalidateProjectRender(current);
         saveProject(current);
         setImmediate(function () { maybeAutoRender(current.id); });
       }).catch(function () {});
@@ -1194,7 +1204,7 @@ async function renderProject(id) {
         }
       }
     }
-    if (renderWillChange) invalidateRender(project);
+    if (renderWillChange) invalidateProjectRender(project);
     advanceEditRevision(project);
     saveProject(project);
     project.cuts = cutsForProject(project);
@@ -1231,7 +1241,7 @@ async function renderProject(id) {
       project.dismissedRetakeIds = Array.isArray(snapshot && snapshot.dismissedRetakeIds) ? snapshot.dismissedRetakeIds : [];
     }
     project.cutDecisionHistory = history;
-    invalidateRender(project);
+    invalidateProjectRender(project);
     advanceEditRevision(project);
     saveProject(project);
     project.cuts = cutsForProject(project);
@@ -1333,7 +1343,7 @@ async function renderProject(id) {
       project.planningMatchStatus = 'pending'; project.planningMatchError = ''; retried.push('planning');
     }
     if (project.renderStatus === 'error') {
-      invalidateRender(project); retried.push('render');
+      invalidateProjectRender(project); retried.push('render');
     }
     if (!retried.length) return res.status(409).json({ error: 'nothing_to_retry', message: 'No failed Editor step needs retrying.' });
     saveProject(project);

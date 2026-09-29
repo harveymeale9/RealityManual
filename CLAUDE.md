@@ -12867,3 +12867,24 @@ dropped rather than repaired. Replacement text is always derived from those
 verified timed words, never free-form model text. Focused tests cover a valid
 earlier-failed/later-cleaner take plus overlapping and hallucinated replacement
 ranges, and the end-to-end render test now models the same latest-take rule.
+
+---
+
+# 337. Kanban Stage Tracks Final-Master Validity During Rebuilds (2026-09-29)
+
+Rendering a linked Editor project advances its planning card from Filmed to
+Edited. If Harvey then changed a cut, caption, crop, or pacing setting, the
+verified master was correctly invalidated and rebuilt, but the card stayed in
+Edited throughout. The Kanban could therefore claim an edit was complete while
+the Editor had no valid final file.
+
+The Editor service now emits an `onRenderInvalidated` lifecycle callback only
+when a previously verified render becomes stale. The Content Studio integration
+moves that card back to Filmed only when it is still in Edited and still owned
+by this exact Editor project. Once replacement encoding and verification pass,
+the existing ready callback advances it to Edited and restores ownership.
+Unrelated cards and later stages are never regressed. Callback failure leaves
+the media edit safe and surfaces a workflow warning instead of discarding the
+user's decision. The end-to-end service test proves one invalidation event for
+the first post-verification cut and no duplicates during subsequent changes in
+the same rebuild window.

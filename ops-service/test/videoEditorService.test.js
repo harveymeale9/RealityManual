@@ -404,6 +404,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   let retakeCalls = 0;
   let planningMatchCalls = 0;
   let renderReadyCalls = 0;
+  let renderInvalidatedCalls = 0;
   let expectedPlanningPieceId = 'plan-1';
   const planningChanges = [];
   const deletedProjects = [];
@@ -433,6 +434,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
       assert.equal(input.project.planningPieceId, expectedPlanningPieceId);
       if (renderReadyCalls === 1) throw new Error('Synthetic first workflow failure.');
     },
+    onRenderInvalidated: function () { renderInvalidatedCalls++; },
     onPlanningPieceChanged: function (input) {
       planningChanges.push({ previous: input.previousPlanningPieceId, next: input.project.planningPieceId, renderWillChange: input.renderWillChange });
     },
@@ -536,6 +538,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.deepEqual(project.removedWordIndices, []);
   assert.deepEqual(project.dismissedRetakeIds, ['smart-retake-0-0-1']);
   assert.equal(project.canUndoCut, true);
+  assert.equal(renderInvalidatedCalls, 1);
   response = await fetch(base + '/api/editor/' + project.id + '/undo-cut', { method: 'POST' });
   assert.equal(response.status, 200);
   project = await response.json();

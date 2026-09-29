@@ -628,6 +628,17 @@ function reconcileDeletedEditorProject(input) {
     previousPlanningPieceId: project.planningPieceId
   });
 }
+
+function regressEditorPlanningPieceForRebuild(input) {
+  const project = input && input.project;
+  if (!project || !project.planningPieceId) return;
+  const piece = getPieceRecord(project.planningPieceId);
+  if (!piece || piece.stage !== 'edited' || piece.editorProjectId !== project.id) return;
+  piece.stage = 'filmed';
+  piece.updatedAt = new Date().toISOString();
+  delete piece.editorProjectId;
+  savePieceRecord(piece);
+}
 const videoEditor = videoEditorService.setup({
   db: db,
   dataDir: DATA_DIR,
@@ -637,6 +648,7 @@ const videoEditor = videoEditorService.setup({
   getPlanningCandidates: editorPlanningCandidates,
   matchPlanningPiece: matchEditorPlanningPiece,
   onRenderReady: function (input) { advanceEditorPlanningPiece(input, 'edited'); },
+  onRenderInvalidated: regressEditorPlanningPieceForRebuild,
   onPlanningPieceChanged: reconcileEditorPlanningPiece,
   onProjectDeleted: reconcileDeletedEditorProject,
   handoffToProduction: sendEditorProjectToProduction
