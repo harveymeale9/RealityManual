@@ -11909,3 +11909,20 @@ stale state; after a restart the self-resume queues establish fresh positions.
 The two-recording concurrency regression now captures the second recording
 while both expensive queues are occupied and proves both positions are at
 least two, in addition to its existing maximum-concurrency assertions.
+
+---
+
+# 285. Editor Polling Follows the Whole Filming Session (2026-09-29)
+
+The Editor previously polled only the open recording and stopped as soon as
+that recording became idle. In a batch, every other card could finish
+transcription, analysis and rendering correctly on the server while its
+sidebar label and the session summary remained frozen until a reload or click.
+
+Polling now refreshes the lightweight project list whenever *any* recording is
+active. It updates all queue labels and summary counts, then fetches the full
+open project only while that project is active or when one of its material
+statuses changes. Render-progress-only updates still use the in-place path from
+§280, so session-wide accuracy does not reintroduce video playback resets.
+Network failures simply retry the session poll without erasing the last known
+state.

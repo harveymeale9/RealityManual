@@ -392,18 +392,36 @@
     });
   }
 
+  function projectIsActive(item) {
+    return !!item && (['pending', 'running'].indexOf(item.transcriptionStatus) !== -1 ||
+      ['pending', 'running'].indexOf(item.classificationStatus) !== -1 ||
+      ['pending', 'running', 'pending_transcript'].indexOf(item.retakeAnalysisStatus) !== -1 ||
+      ['pending', 'running', 'pending_transcript'].indexOf(item.planningMatchStatus) !== -1 ||
+      ['queued', 'running'].indexOf(item.renderStatus) !== -1);
+  }
+
+  function projectPollSignature(item) {
+    if (!item) return '';
+    return [item.transcriptionStatus, item.classificationStatus, item.retakeAnalysisStatus, item.planningMatchStatus,
+      item.renderStatus, Math.round(Number(item.renderProgress) || 0), item.productionPieceId || '', item.workflowWarning || ''].join('|');
+  }
+
   function schedulePoll() {
     clearTimeout(pollTimer);
-    if (!project) return;
-    var active = ['pending', 'running'].indexOf(project.transcriptionStatus) !== -1 ||
-      ['pending', 'running'].indexOf(project.classificationStatus) !== -1 ||
-      ['pending', 'running'].indexOf(project.retakeAnalysisStatus) !== -1 ||
-      ['pending', 'running'].indexOf(project.planningMatchStatus) !== -1 || ['queued', 'running'].indexOf(project.renderStatus) !== -1;
-    if (!active) return;
-    var id = project.id;
+    if (!project || !projects.some(projectIsActive)) return;
     var token = mountToken;
     pollTimer = setTimeout(function () {
-      if (token === mountToken && project && project.id === id) openProject(id, true);
+      if (token !== mountToken || !project) return;
+      var activeId = project.id;
+      var before = projectPollSignature(project);
+      api('/api/editor').then(function (items) {
+        if (token !== mountToken || !project || project.id !== activeId) return;
+        projects = items;
+        renderList();
+        var summary = items.find(function (item) { return item.id === activeId; });
+        if (summary && (projectIsActive(summary) || projectPollSignature(summary) !== before)) return openProject(activeId, true);
+        schedulePoll();
+      }).catch(function () { schedulePoll(); });
     }, 1800);
   }
 
