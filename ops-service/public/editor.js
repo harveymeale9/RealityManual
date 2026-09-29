@@ -121,15 +121,26 @@
     root.innerHTML =
       '<section class="video-editor">' +
         '<header class="editor-heading"><div><div class="eyebrow">Content production</div><h1>Editor</h1>' +
-          '<p>Upload a raw recording, remove dead air, cut mistakes from the transcript, and export a captioned video.</p></div>' +
-          '<label class="editor-upload btn-primary"><input id="editorFile" type="file" accept="video/*" hidden>Upload raw video</label></header>' +
+          '<p>Drop in a filming session. Each recording is framed, transcribed, cleaned and prepared for your approval.</p></div>' +
+          '<label class="editor-upload btn-primary"><input id="editorFile" type="file" accept="video/*" multiple hidden>Upload raw videos</label></header>' +
         '<div class="editor-upload-progress" id="editorUploadProgress" hidden><span id="editorUploadLabel">Uploading…</span><div><i id="editorUploadBar"></i></div></div>' +
         '<div class="editor-layout"><aside class="editor-projects"><div class="editor-aside-title">Recordings</div><div id="editorProjectList"></div></aside>' +
           '<main class="editor-workspace" id="editorWorkspace"><div class="editor-empty"><strong>No recording selected</strong><span>Upload a raw video to begin.</span></div></main></div>' +
+        '<div class="editor-drop-overlay" id="editorDropOverlay"><strong>Drop filming session</strong><span>Every video will enter the automatic edit queue</span></div>' +
       '</section>';
     root.querySelector('#editorFile').addEventListener('change', function () {
-      if (this.files && this.files[0]) upload(this.files[0]);
+      if (this.files && this.files[0]) uploadFiles(this.files);
       this.value = '';
+    });
+    var shellNode = root.querySelector('.video-editor');
+    var overlay = root.querySelector('#editorDropOverlay');
+    var dragDepth = 0;
+    shellNode.addEventListener('dragenter', function (event) { event.preventDefault(); dragDepth++; overlay.classList.add('visible'); });
+    shellNode.addEventListener('dragover', function (event) { event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'; });
+    shellNode.addEventListener('dragleave', function (event) { event.preventDefault(); dragDepth--; if (dragDepth <= 0) { dragDepth = 0; overlay.classList.remove('visible'); } });
+    shellNode.addEventListener('drop', function (event) {
+      event.preventDefault(); dragDepth = 0; overlay.classList.remove('visible');
+      if (event.dataTransfer && event.dataTransfer.files) uploadFiles(event.dataTransfer.files);
     });
   }
 
@@ -149,13 +160,14 @@
     });
   }
 
-  function upload(file) {
+  function upload(file, queueIndex, queueTotal) {
+    return new Promise(function (resolve, reject) {
     var progress = root.querySelector('#editorUploadProgress');
     var bar = root.querySelector('#editorUploadBar');
     var label = root.querySelector('#editorUploadLabel');
     progress.hidden = false;
-    bar.style.width = '0%';
-    label.textContent = 'Uploading ' + file.name + '…';
+    bar.style.width = Math.round(queueIndex / queueTotal * 100) + '%';
+    label.textContent = 'Uploading ' + (queueIndex + 1) + ' of ' + queueTotal + ' · ' + file.name;
     var data = new FormData();
     data.append('video', file);
     data.append('name', file.name.replace(/\.[^.]+$/, ''));
@@ -163,19 +175,42 @@
     xhr.open('POST', '/api/editor');
     xhr.withCredentials = true;
     xhr.upload.onprogress = function (event) {
-      if (event.lengthComputable) bar.style.width = Math.round(event.loaded / event.total * 100) + '%';
+      if (event.lengthComputable) bar.style.width = Math.round((queueIndex + event.loaded / event.total) / queueTotal * 100) + '%';
     };
     xhr.onload = function () {
-      progress.hidden = true;
       var body = {};
       try { body = JSON.parse(xhr.responseText || '{}'); } catch (e) {}
-      if (xhr.status < 200 || xhr.status >= 300) return alert(body.message || 'The recording could not be uploaded.');
+      if (xhr.status < 200 || xhr.status >= 300) return reject(new Error(body.message || 'The recording could not be uploaded.'));
       projects.unshift(body);
       renderList();
-      openProject(body.id);
+      resolve(body);
     };
-    xhr.onerror = function () { progress.hidden = true; alert('Upload failed. Check the connection and try again.'); };
+    xhr.onerror = function () { reject(new Error('Upload failed. Check the connection and try again.')); };
     xhr.send(data);
+    });
+  }
+
+  function uploadFiles(fileList) {
+    var files = Array.prototype.slice.call(fileList || []).filter(function (file) { return String(file.type || '').indexOf('video') === 0; });
+    if (!files.length) return alert('Drop one or more video files.');
+    var created = [];
+    var failures = [];
+    var sequence = Promise.resolve();
+    files.forEach(function (file, index) {
+      sequence = sequence.then(function () {
+        return upload(file, index, files.length).then(function (item) { created.push(item); }).catch(function (error) {
+          failures.push(file.name + ': ' + error.message);
+        });
+      });
+    });
+    sequence.then(function () {
+      var progress = root.querySelector('#editorUploadProgress');
+      root.querySelector('#editorUploadBar').style.width = '100%';
+      root.querySelector('#editorUploadLabel').textContent = created.length + ' recording' + (created.length === 1 ? '' : 's') + ' added to the edit queue';
+      setTimeout(function () { if (progress) progress.hidden = true; }, 1400);
+      if (created[0]) openProject(created[0].id);
+      if (failures.length) alert('Some recordings could not be uploaded:\n\n' + failures.join('\n'));
+    });
   }
 
   function loadProjects() {

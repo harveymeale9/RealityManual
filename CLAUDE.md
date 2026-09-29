@@ -11494,3 +11494,25 @@ behave like an editorial transition. The generated-video integration test still
 proves the complete trim, caption, encode, download and production-handoff path,
 and Chromium now also proves decision-preview controls at desktop and mobile
 widths.
+
+---
+
+# 264. A Filming Session Can Enter the Editor as One Queue (2026-09-29)
+
+Editor intake now accepts multiple videos from the file picker or a drag/drop
+anywhere over the Editor. Dragging files produces a full-screen branded drop
+target explaining that every video will enter the automatic edit queue. Uploads
+run sequentially so several large camera masters do not compete for the same
+browser/VPS connection, while the progress bar reflects aggregate queue
+progress and names the current file (`Uploading 2 of 6`). Each accepted project
+appears immediately in Recordings and starts its independent transcription,
+framing and retake jobs on the server; once intake finishes, the first recording
+opens for review while the others continue preparing.
+
+One bad file does not discard the rest of a filming session. The queue continues,
+then reports a concise per-file failure list while preserving every successful
+upload. The heading now describes the real workflow (“Drop in a filming
+session”) rather than the earlier single-file/export mental model. A dedicated
+Chromium regression submits two in-memory MP4 files through the real multi-file
+input, verifies two sequential POSTs, two project cards and the completed queue
+status; the existing desktop/mobile Editor regression still passes unchanged.
