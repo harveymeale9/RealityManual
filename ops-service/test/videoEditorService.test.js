@@ -399,13 +399,16 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   const base = 'http://127.0.0.1:' + server.address().port;
   const form = new FormData();
   form.append('name', 'Synthetic take');
-  form.append('video', new Blob([fs.readFileSync(input)], { type: 'video/mp4' }), 'sample.mp4');
+  form.append('video', new Blob([fs.readFileSync(input)], { type: 'application/octet-stream' }), 'CAMERA_9259.MOV');
   let response = await fetch(base + '/api/editor', { method: 'POST', body: form });
   assert.equal(response.status, 202);
   let project = await response.json();
+  assert.equal(project.mimeType, 'video/quicktime');
+  response = await fetch(base + '/api/editor/' + project.id + '/source');
+  assert.equal(response.headers.get('content-type'), 'video/quicktime');
   const duplicateForm = new FormData();
   duplicateForm.append('name', 'Synthetic take');
-  duplicateForm.append('video', new Blob([fs.readFileSync(input)], { type: 'video/mp4' }), 'sample.mp4');
+  duplicateForm.append('video', new Blob([fs.readFileSync(input)], { type: 'application/octet-stream' }), 'CAMERA_9259.MOV');
   response = await fetch(base + '/api/editor', { method: 'POST', body: duplicateForm });
   assert.equal(response.status, 409);
   assert.equal((await response.json()).existingProjectId, project.id);

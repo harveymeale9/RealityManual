@@ -64,6 +64,20 @@ function displayDimensions(width, height, rotation) {
   return quarterTurn ? { width: height, height: width } : { width: width, height: height };
 }
 
+function normalizedVideoMimeType(fileName, reportedType) {
+  const reported = String(reportedType || '').toLowerCase();
+  if (reported.startsWith('video/')) return reported;
+  const extension = path.extname(String(fileName || '')).toLowerCase();
+  return ({
+    '.mp4': 'video/mp4',
+    '.mov': 'video/quicktime',
+    '.m4v': 'video/x-m4v',
+    '.webm': 'video/webm',
+    '.mkv': 'video/x-matroska',
+    '.avi': 'video/x-msvideo'
+  })[extension] || 'video/mp4';
+}
+
 function normalizeWords(rawWords) {
   return (Array.isArray(rawWords) ? rawWords : []).filter(function (word) {
     return word && word.type === 'word' && Number.isFinite(Number(word.start)) &&
@@ -991,7 +1005,7 @@ async function renderProject(id) {
         id: id,
         name: String((req.body && req.body.name) || req.file.originalname || 'Untitled recording').slice(0, 200),
         fileName: String(req.file.originalname || 'recording.mp4').slice(0, 255),
-        mimeType: req.file.mimetype || 'video/mp4',
+        mimeType: normalizedVideoMimeType(req.file.originalname, req.file.mimetype),
         sizeBytes: req.file.size,
         sourceSha256: sourceSha256,
         duration: media.duration,
@@ -1297,7 +1311,7 @@ async function renderProject(id) {
     if (!isId(req.params.id) || !fs.existsSync(sourcePath(req.params.id))) return res.status(404).end();
     const project = getProject(req.params.id);
     if (!project) return res.status(404).end();
-    res.type(project.mimeType || 'video/mp4');
+    res.type(normalizedVideoMimeType(project.fileName, project.mimeType));
     res.sendFile(sourcePath(req.params.id));
   });
 
@@ -1351,5 +1365,6 @@ module.exports = {
   normalizeRetakeDecisions,
   unresolvedRetakeCount,
   appliedRetakeCount,
-  layoutReviewRequired
+  layoutReviewRequired,
+  normalizedVideoMimeType
 };

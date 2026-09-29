@@ -12657,3 +12657,20 @@ files are also named explicitly, including when mixed into an otherwise valid
 batch, rather than disappearing without explanation. Browser coverage uploads
 an uppercase `.MOV` marked `application/octet-stream` and proves it enters the
 edit queue.
+
+---
+
+# 326. Generic Camera Uploads Keep a Browser-Playable Source Preview (2026-09-29)
+
+Accepting a generic-MIME camera file was only half of the ingest boundary. The
+server persisted the browser's `application/octet-stream` label and later used
+it as the Content-Type for Original master playback. A correctly probed `.MOV`
+could therefore reach the Editor but fail to play inline in some browsers.
+
+The server now normalizes a non-video MIME label from the recording extension
+after `ffprobe` has validated the streams, using the correct video type for MOV,
+MP4, M4V, WebM, MKV and AVI. The source route repeats that normalization for
+older saved uploads too. The native file chooser explicitly lists the same
+extensions so camera MOV files remain selectable even when the OS cannot supply
+a useful MIME type. API integration coverage uploads a generic uppercase MOV
+and verifies both persisted metadata and the source response header.
