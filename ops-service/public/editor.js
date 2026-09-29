@@ -1218,9 +1218,16 @@
     });
     var renderButton = root.querySelector('#editorRender');
     if (renderButton) renderButton.onclick = function () {
-        api('/api/editor/' + project.id + '/render', { method: 'POST' }).then(function () {
+        renderButton.disabled = true;
+        renderButton.textContent = 'Starting final edit…';
+        retryTransientOnce(function () {
+          return api('/api/editor/' + project.id + '/render', { method: 'POST' });
+        }, 500).then(function () {
           project.renderStatus = 'running'; renderWorkspace(); schedulePoll();
-        }).catch(function (error) { alert(error.message); });
+        }).catch(function (error) {
+          if (renderButton.isConnected) { renderButton.disabled = false; renderButton.textContent = 'Build final edit'; }
+          alert(error.message);
+        });
       };
     var retryFailedButton = root.querySelector('#editorRetryFailed');
     if (retryFailedButton) retryFailedButton.onclick = function () {

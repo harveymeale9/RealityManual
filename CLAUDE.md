@@ -13863,3 +13863,18 @@ and the alert explicitly says that nothing was deleted. This also prevents a
 double-click from issuing duplicate DELETE requests. The browser regression
 forces both the first initial-list request and a confirmed delete to return 503,
 then checks automatic list recovery and safe delete-control recovery.
+
+---
+
+# 385. Final-Render Starts Survive Lost Responses (2026-09-29)
+
+`POST /api/editor/:id/render` is safely joinable: the server's per-project job
+map returns the existing render promise when the same recording is requested
+again. The Editor now uses that property when the initial response is lost or a
+transient 408/425/429/5xx occurs. It disables the build control immediately,
+shows `Starting final edit…`, retries once after 500ms, and then enters normal
+render polling. A persistent failure restores the control and reports the
+error. This prevents Harvey from wondering whether a click registered and
+manually starting competing work after a harmless response-path interruption.
+The browser regression simulates the lost first response and requires exactly
+one bounded retry before the running state appears.
