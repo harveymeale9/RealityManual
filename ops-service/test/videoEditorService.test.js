@@ -259,6 +259,37 @@ test('one recovery endpoint retries failed automatic work without replacing the 
   assert.equal(response.status, 409);
 });
 
+test('legacy ready recordings acquire missing analysis phases on startup', { timeout: 10000 }, async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-legacy-'));
+  const db = new Database(path.join(dir, 'test.sqlite'));
+  db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
+  const now = new Date().toISOString();
+  db.prepare('INSERT INTO records (store_name,id,data,updated_at) VALUES (?,?,?,?)').run('editorProjects', 'legacy-1', JSON.stringify({
+    id: 'legacy-1', name: 'Legacy take', duration: 5, width: 1920, height: 1080,
+    transcriptText: 'An existing transcript.', words: [{ index: 0, text: 'Existing.', start: .2, end: .8 }],
+    removedWordIndices: [], dismissedRetakeIds: [], restoredAutoCutIds: [], autoSilenceEnabled: true,
+    transcriptionStatus: 'ready', classificationStatus: 'ready', retakeAnalysisStatus: 'ready',
+    automaticRenderStartedAt: 'test-hold', createdAt: now, updatedAt: now
+  }), now);
+  let planningCalls = 0;
+  editor.setup({
+    db: db, dataDir: dir, transcribeDetailed: async function () { return { text: '', words: [] }; },
+    getPlanningCandidates: function () { return []; },
+    matchPlanningPiece: async function () { planningCalls++; return { pieceId: '', confidence: 'none', reason: 'No match.' }; }
+  });
+  let project;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    project = JSON.parse(db.prepare('SELECT data FROM records WHERE store_name=? AND id=?').get('editorProjects', 'legacy-1').data);
+    if (project.planningMatchStatus === 'ready') break;
+    await new Promise(function (resolve) { setTimeout(resolve, 20); });
+  }
+  assert.equal(project.planningMatchStatus, 'ready');
+  // No candidates means the service resolves locally without spending an AI call.
+  assert.equal(planningCalls, 0);
+  assert.equal(project.renderProgress, 0);
+  t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+});
+
 test('upload, timed transcription and FFmpeg captioned render work end to end', { timeout: 30000 }, async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-'));
   const input = path.join(dir, 'sample.mp4');

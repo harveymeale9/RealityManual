@@ -11926,3 +11926,21 @@ statuses changes. Render-progress-only updates still use the in-place path from
 §280, so session-wide accuracy does not reintroduce video playback resets.
 Network failures simply retry the session poll without erasing the last known
 state.
+
+---
+
+# 286. Pre-Workflow Editor Recordings Are Migrated Into the Automatic Pipeline (2026-09-29)
+
+The first real Editor recording predated planning-match and render-progress
+fields. Its transcript, framing and retake review were ready, but the missing
+planning status was neither `ready` nor `unavailable`, so the modern safety gate
+correctly refused to auto-render it forever. Startup now normalizes absent
+phase/progress fields and queues the missing classification, retake or planning
+work when the recording has not already been sent to Production. Completed
+archive items receive `unavailable` defaults without reopening background work.
+
+This is a durable data migration performed through the existing JSON record
+store, so it covers future restarts and not merely the current browser session.
+A legacy-record regression starts with a timed transcript and no planning or
+progress fields, then proves planning resolves locally and the normalized state
+is persisted without an unnecessary AI call when no planning candidates exist.

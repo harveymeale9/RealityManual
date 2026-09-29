@@ -803,6 +803,13 @@ async function renderProject(id) {
   listStmt.all(STORE_NAME).forEach(function (row) {
     try {
       const project = JSON.parse(row.data);
+      let migrated = false;
+      const canResumeWork = !project.productionPieceId;
+      if (project.renderStatus === undefined || project.renderStatus === null) { project.renderStatus = ''; migrated = true; }
+      if (!Number.isFinite(Number(project.renderProgress))) { project.renderProgress = 0; migrated = true; }
+      if (!project.classificationStatus) { project.classificationStatus = canResumeWork && typeof classifyVisualLayout === 'function' ? 'pending' : 'unavailable'; migrated = true; }
+      if (!project.retakeAnalysisStatus) { project.retakeAnalysisStatus = canResumeWork && typeof analyzeRetakes === 'function' ? (project.transcriptionStatus === 'ready' ? 'pending' : 'pending_transcript') : 'unavailable'; migrated = true; }
+      if (!project.planningMatchStatus) { project.planningMatchStatus = canResumeWork && typeof matchPlanningPiece === 'function' ? (project.transcriptionStatus === 'ready' ? 'pending' : 'pending_transcript') : 'unavailable'; migrated = true; }
       const resumeTranscription = project.transcriptionStatus === 'running' || project.transcriptionStatus === 'pending';
       const resumeRender = project.renderStatus === 'running' || project.renderStatus === 'queued';
       const resumeClassification = project.classificationStatus === 'running' || project.classificationStatus === 'pending';
@@ -829,7 +836,7 @@ async function renderProject(id) {
         project.planningMatchStatus = project.transcriptionStatus === 'ready' ? 'pending' : 'pending_transcript';
         project.planningMatchError = '';
       }
-      if (resumeTranscription || resumeRender || resumeClassification || resumeRetakes || resumePlanning) saveProject(project);
+      if (migrated || resumeTranscription || resumeRender || resumeClassification || resumeRetakes || resumePlanning) saveProject(project);
       setImmediate(function () {
         if (resumeTranscription) transcribeProject(project.id);
         if (resumeClassification) classifyProject(project.id);
