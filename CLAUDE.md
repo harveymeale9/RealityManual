@@ -13948,6 +13948,30 @@ requires exactly one retry plus the processing state.
 
 ---
 
+# 391. Docker Build Artifacts Can No Longer Exhaust Editor Storage (2026-09-29)
+
+The media-runtime audit found the VPS at **96% disk usage** with only 4.6GB
+free. The application data itself was modest; Docker held 108 dangling
+`rm-ops-service` images from rapid backend iteration plus 13.4GB of builder
+cache. That was not cosmetic: Editor capacity admission correctly reserves
+space for the camera master, review proxy, final render, and Production copy,
+so real filming uploads would soon have failed with `insufficient_storage`.
+
+After verifying all four containers were running and all 108 targets were
+unreferenced/dangling, `docker image prune -f` and `docker builder prune -f`
+reclaimed the obsolete artifacts. Disk usage fell from 92GB/96% to 26GB/27%,
+leaving 71GB free; all active images, containers, volumes, and application data
+remain intact.
+
+`ops-service/deploy.sh` now cleans dangling images after each *successful*
+rebuild and caps unused builder cache at 8GB. The deliberately tagged
+`rm-ops-service:previous` rollback image and every active container image are
+preserved. Cleanup is best-effort after health-preserving deployment, so a
+Docker housekeeping problem cannot falsely turn a working release into a
+failed/rollback release.
+
+---
+
 # 390. Manual Analysis Restarts Survive Lost Responses (2026-09-29)
 
 The framing, possible-retake, and planning-card `Analyze/Match again` controls

@@ -144,6 +144,14 @@ docker rm "$CONTAINER" 2>/dev/null || true
 if docker run "${RUN_ARGS[@]}" "$IMAGE"; then
   echo "$NEW_HEAD" > "$LAST_BUILD_FILE"
   echo "rm-ops-service redeployed at $(git -C "$REPO_DIR" rev-parse --short HEAD)"
+  # Every successful rebuild replaces the unversioned rm-ops-service tag and
+  # otherwise leaves the old 3+ GB image dangling. Frequent Editor iteration
+  # accumulated 108 unreferenced images and pushed the VPS to 96% disk use.
+  # Keep the explicitly tagged one-step rollback image and every active
+  # container image, but remove only dangling layers; cap unused builder cache
+  # without ever making cleanup failure turn a healthy deploy into an outage.
+  docker image prune -f || echo "warning: dangling image cleanup failed"
+  docker builder prune -f --max-used-space 8GB || echo "warning: build-cache cleanup failed"
 else
   echo "docker run failed on the new image — rolling back to the previous one"
   docker rm -f "$CONTAINER" 2>/dev/null || true
