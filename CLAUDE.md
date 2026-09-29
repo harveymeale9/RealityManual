@@ -11772,3 +11772,22 @@ The generated-video integration submits the identical source a second time and
 proves the server returns a conflict pointing to the first project. The browser
 batch regression selects two distinct masters plus an exact duplicate and
 proves only two uploads occur while the queue reports the skipped copy.
+
+---
+
+# 278. Editor Work Self-Resumes After Deploys (2026-09-29)
+
+Interrupted Editor phases no longer become manual errors on an ops-service
+restart. Pending/running transcription and frame analysis are returned to their
+bounded queues; retake and planning analysis resume immediately when a durable
+transcript already exists or wait for the resumed transcription; a queued or
+running render clears its partial state and re-enters automatic rendering once
+all gates are safe. FFmpeg still overwrites its partial target, and every
+original master plus Harvey decision remains unchanged.
+
+This matters because Content Studio deploys are routine while a filming session
+may take much longer to process. The recovery path excludes recordings already
+sent to Production, preventing background work from reopening completed items.
+A regression seeds a persisted in-flight transcription, constructs a fresh
+service instance, and proves it automatically retries the real source and
+reaches the correct terminal result without a button press.

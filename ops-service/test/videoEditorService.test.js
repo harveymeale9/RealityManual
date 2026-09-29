@@ -193,6 +193,35 @@ test('batch preprocessing serializes expensive transcription and frame analysis'
   assert.equal((await (await fetch(base + '/api/editor/' + second.id)).json()).transcriptionStatus, 'error');
 });
 
+test('service restart automatically resumes an interrupted transcription', { timeout: 10000 }, async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-resume-'));
+  const editorDir = path.join(dir, 'editor', 'recover-1'); fs.mkdirSync(editorDir, { recursive: true });
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=320x180:d=1:r=12',
+    '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-f', 'mp4', path.join(editorDir, 'source')]);
+  const db = new Database(path.join(dir, 'test.sqlite'));
+  db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
+  const now = new Date().toISOString();
+  db.prepare('INSERT INTO records (store_name,id,data,updated_at) VALUES (?,?,?,?)').run('editorProjects', 'recover-1', JSON.stringify({
+    id: 'recover-1', name: 'Interrupted take', fileName: 'recover.mp4', mimeType: 'video/mp4', sizeBytes: 1000,
+    duration: 1, width: 320, height: 180, words: [], removedWordIndices: [], dismissedRetakeIds: [], restoredAutoCutIds: [],
+    autoSilenceEnabled: true, silenceThresholdSeconds: 1, retainedPauseSeconds: .38, captionsEnabled: true,
+    layoutOverride: 'auto', contentTypeOverride: 'auto', cropCenterX: .5, classificationStatus: 'unavailable',
+    retakeAnalysisStatus: 'unavailable', planningMatchStatus: 'unavailable', transcriptionStatus: 'running', renderStatus: '', createdAt: now, updatedAt: now
+  }), now);
+  let calls = 0;
+  editor.setup({ db: db, dataDir: dir, transcribeDetailed: async function () { calls++; return { text: '', words: [] }; } });
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const stored = JSON.parse(db.prepare('SELECT data FROM records WHERE store_name=? AND id=?').get('editorProjects', 'recover-1').data);
+    if (stored.transcriptionStatus === 'error') break;
+    await new Promise(function (resolve) { setTimeout(resolve, 30); });
+  }
+  const recovered = JSON.parse(db.prepare('SELECT data FROM records WHERE store_name=? AND id=?').get('editorProjects', 'recover-1').data);
+  assert.equal(calls, 1);
+  assert.equal(recovered.transcriptionStatus, 'error');
+  assert.equal(recovered.transcriptionError, 'No timed speech was detected in this recording.');
+  t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+});
+
 test('upload, timed transcription and FFmpeg captioned render work end to end', { timeout: 30000 }, async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-'));
   const input = path.join(dir, 'sample.mp4');

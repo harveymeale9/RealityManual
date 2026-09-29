@@ -638,7 +638,7 @@ function setup(options) {
 
   function maybeAutoRender(id) {
     const project = getProject(id);
-    if (!project || project.automaticRenderStartedAt || project.renderStatus || project.transcriptionStatus !== 'ready') return false;
+    if (!project || project.productionPieceId || project.automaticRenderStartedAt || project.renderStatus || project.transcriptionStatus !== 'ready') return false;
     if (!['ready', 'unavailable'].includes(project.classificationStatus)) return false;
     if (!['ready', 'unavailable'].includes(project.retakeAnalysisStatus)) return false;
     if (!['ready', 'unavailable'].includes(project.planningMatchStatus)) return false;
@@ -739,37 +739,46 @@ async function renderProject(id) {
     return job;
   }
 
-  // A service restart cannot resume an external STT request or FFmpeg process.
-  // Make interrupted work explicitly retryable rather than displaying a
-  // permanent spinner.
+  // A deploy cannot continue an in-flight provider/FFmpeg process, but every
+  // source master and decision is durable. Requeue interrupted phases instead
+  // of turning a routine service restart into manual babysitting.
   listStmt.all(STORE_NAME).forEach(function (row) {
     try {
       const project = JSON.parse(row.data);
+      const resumeTranscription = project.transcriptionStatus === 'running' || project.transcriptionStatus === 'pending';
+      const resumeRender = project.renderStatus === 'running' || project.renderStatus === 'queued';
+      const resumeClassification = project.classificationStatus === 'running' || project.classificationStatus === 'pending';
+      const resumeRetakes = ['running', 'pending', 'pending_transcript'].includes(project.retakeAnalysisStatus);
+      const resumePlanning = ['running', 'pending', 'pending_transcript'].includes(project.planningMatchStatus);
       if (project.transcriptionStatus === 'running' || project.transcriptionStatus === 'pending') {
-        project.transcriptionStatus = 'error';
-        project.transcriptionError = 'Transcription was interrupted by a service restart. Press Retry transcription.';
-        saveProject(project);
+        project.transcriptionStatus = 'pending';
+        project.transcriptionError = '';
       }
       if (project.renderStatus === 'running' || project.renderStatus === 'queued') {
-        project.renderStatus = 'error';
-        project.renderError = 'Rendering was interrupted by a service restart. Press Build final edit again.';
-        saveProject(project);
+        project.renderStatus = '';
+        project.renderError = '';
+        project.automaticRenderStartedAt = '';
       }
       if (project.classificationStatus === 'running' || project.classificationStatus === 'pending') {
-        project.classificationStatus = 'error';
-        project.classificationError = 'Frame analysis was interrupted by a service restart. Press Analyze again.';
-        saveProject(project);
+        project.classificationStatus = 'pending';
+        project.classificationError = '';
       }
       if (['running', 'pending', 'pending_transcript'].includes(project.retakeAnalysisStatus)) {
-        project.retakeAnalysisStatus = 'error';
-        project.retakeAnalysisError = 'Retake analysis was interrupted by a service restart. Press Analyze retakes.';
-        saveProject(project);
+        project.retakeAnalysisStatus = project.transcriptionStatus === 'ready' ? 'pending' : 'pending_transcript';
+        project.retakeAnalysisError = '';
       }
       if (['running', 'pending', 'pending_transcript'].includes(project.planningMatchStatus)) {
-        project.planningMatchStatus = 'error';
-        project.planningMatchError = 'Planning-card matching was interrupted by a service restart. Press Match again.';
-        saveProject(project);
+        project.planningMatchStatus = project.transcriptionStatus === 'ready' ? 'pending' : 'pending_transcript';
+        project.planningMatchError = '';
       }
+      if (resumeTranscription || resumeRender || resumeClassification || resumeRetakes || resumePlanning) saveProject(project);
+      setImmediate(function () {
+        if (resumeTranscription) transcribeProject(project.id);
+        if (resumeClassification) classifyProject(project.id);
+        if (!resumeTranscription && project.transcriptionStatus === 'ready' && resumeRetakes) analyzeProjectRetakes(project.id);
+        if (!resumeTranscription && project.transcriptionStatus === 'ready' && resumePlanning) matchProjectPlanningPiece(project.id);
+        if (resumeRender) maybeAutoRender(project.id);
+      });
     } catch (e) {}
   });
 
