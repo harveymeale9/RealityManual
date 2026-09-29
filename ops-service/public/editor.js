@@ -558,6 +558,7 @@
     }
     var lastClicked = null;
     var ignoreNextClick = false;
+    var playingWordIndex = null;
     function isLongformVideo() {
       return (project.effectiveLayout || 'horizontal') === 'horizontal';
     }
@@ -566,9 +567,24 @@
         video.pause();
         delete previewStopTimes[project.id];
       }
+      var sourcePlayheadTime = previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime;
+      var currentWord = (project.words || []).find(function (word) {
+        return sourcePlayheadTime >= Number(word.start) && sourcePlayheadTime <= Number(word.end) + 0.08;
+      });
+      var nextPlayingWordIndex = currentWord ? Number(currentWord.index) : null;
+      if (playingWordIndex !== nextPlayingWordIndex) {
+        if (playingWordIndex !== null) {
+          var priorWord = transcript.querySelector('.editor-word[data-index="' + playingWordIndex + '"]');
+          if (priorWord) priorWord.classList.remove('playing');
+        }
+        if (nextPlayingWordIndex !== null) {
+          var nextWord = transcript.querySelector('.editor-word[data-index="' + nextPlayingWordIndex + '"]');
+          if (nextWord) nextWord.classList.add('playing');
+        }
+        playingWordIndex = nextPlayingWordIndex;
+      }
       var playhead = root.querySelector('#editorPlayhead');
       if (playhead && project.duration) {
-        var sourcePlayheadTime = previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime;
         playhead.style.left = Math.min(100, sourcePlayheadTime / project.duration * 100) + '%';
       }
       if (previewingFinal) {

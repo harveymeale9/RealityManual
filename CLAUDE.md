@@ -12407,3 +12407,18 @@ failed video: the output is still safe and approvable, while the status makes th
 secondary workflow repair impossible to lose in a long filming session. Browser
 coverage verifies both the post-handoff session count and Sent-list label; clean
 handoffs retain the ordinary blue Sent state.
+
+---
+
+# 313. Playback Tracks the Exact Spoken Transcript Word (2026-09-29)
+
+The timeline and captions followed playback, but the editable transcript itself
+remained visually static. During a wording review Harvey still had to infer
+which repeated or awkward phrase corresponded to the audio currently playing.
+
+Playback now maps final-edit time back to the original source timeline and adds
+a restrained green highlight to the exact timed transcript word. Source and
+working-preview playback use their native source time, and only the previously
+active word is touched when the playhead advances, avoiding a full transcript
+DOM repaint on every video event. The browser workflow verifies that the
+highlight lands on the expected word at an exact timestamp.
