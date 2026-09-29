@@ -21,6 +21,17 @@ function requiredEditorCapacity(fileBytes, fileAlreadyStored) {
   return EDITOR_DISK_RESERVE_BYTES + bytes * (fileAlreadyStored ? 4 : 5);
 }
 
+function outstandingEditorCapacity(projects) {
+  return (Array.isArray(projects) ? projects : []).reduce(function (total, project) {
+    if (!project || project.productionPieceId) return total;
+    const bytes = Math.max(0, Number(project.sizeBytes) || 0);
+    let copies = 2; // Production handoff plus its later soundtrack/final copy.
+    if (project.renderStatus !== 'ready') copies++;
+    if (project.browserPreviewRequired && project.browserPreviewStatus !== 'ready') copies++;
+    return total + bytes * copies;
+  }, 0);
+}
+
 async function verifiedRenderMatches(project, filePath) {
   if (!project || project.renderStatus !== 'ready' || !project.renderQuality || project.renderQuality.status !== 'passed') return false;
   try {
@@ -720,7 +731,9 @@ function setup(options) {
   }
   function ensureUploadCapacity(req, res, next) {
     const contentLength = Number(req.headers['content-length']);
-    if (Number.isFinite(contentLength) && contentLength > 0 && availableDiskBytes() < requiredEditorCapacity(contentLength, false)) {
+    const projects = listStmt.all(STORE_NAME).map(function (row) { try { return JSON.parse(row.data); } catch (error) { return null; } }).filter(Boolean);
+    const outstanding = outstandingEditorCapacity(projects);
+    if (Number.isFinite(contentLength) && contentLength > 0 && availableDiskBytes() < requiredEditorCapacity(contentLength, false) + outstanding) {
       return res.status(507).json({ error: 'insufficient_storage', message: 'There is not enough free workspace to safely edit this recording. Clear old Editor files or VPS storage, then try again.' });
     }
     next();
@@ -1336,7 +1349,8 @@ async function renderProject(id) {
 
   router.post('/', ensureUploadCapacity, cleanAbortedUpload, upload.single('video'), async function (req, res) {
     if (!req.file || !req.file.path) return res.status(400).json({ error: 'missing_video' });
-    if (availableDiskBytes() < requiredEditorCapacity(req.file.size, true)) {
+    const existingProjects = listStmt.all(STORE_NAME).map(function (row) { try { return JSON.parse(row.data); } catch (error) { return null; } }).filter(Boolean);
+    if (availableDiskBytes() < requiredEditorCapacity(req.file.size, true) + outstandingEditorCapacity(existingProjects)) {
       fs.rm(req.file.path, { force: true }, function () {});
       return res.status(507).json({ error: 'insufficient_storage', message: 'There is not enough free workspace to safely render and hand off this recording. Clear old Editor files or VPS storage, then try again.' });
     }
@@ -1790,6 +1804,7 @@ async function renderProject(id) {
 module.exports = {
   setup,
   requiredEditorCapacity,
+  outstandingEditorCapacity,
   verifiedRenderMatches,
   normalizeWords,
   calculateAutoCuts,

@@ -79,6 +79,17 @@ test('upload capacity reserves every downstream master plus operating space', fu
   assert.equal(editor.requiredEditorCapacity(2 * gib, true), 10 * gib);
 });
 
+test('batch capacity includes unfinished copies owed to earlier recordings', function () {
+  assert.equal(editor.outstandingEditorCapacity([
+    { sizeBytes: 100, browserPreviewRequired: true, browserPreviewStatus: 'pending', renderStatus: '' },
+    { sizeBytes: 200, browserPreviewRequired: false, renderStatus: 'ready' },
+    { sizeBytes: 1000, productionPieceId: 'already-sent', renderStatus: 'ready' }
+  ]), 100 * 4 + 200 * 2);
+  assert.equal(editor.outstandingEditorCapacity([
+    { sizeBytes: 100, browserPreviewRequired: true, browserPreviewStatus: 'ready', renderStatus: 'ready' }
+  ]), 200);
+});
+
 test('HEVC and non-browser containers receive an H.264 review proxy', function () {
   assert.equal(editor.browserPreviewNeeded('camera.mp4', { videoCodec: 'hevc', audioCodec: 'aac' }), true);
   assert.equal(editor.browserPreviewNeeded('camera.mkv', { videoCodec: 'h264', audioCodec: 'aac' }), true);

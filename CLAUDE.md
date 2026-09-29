@@ -13506,3 +13506,23 @@ uses exactly three frames per complete duration, so ten-minute and hour-long
 takes are represented across their full timeline while short clips retain the
 same behavior. Unit coverage locks the sampling rate at one, ten, and sixty
 minutes.
+
+---
+
+# 367. Upload Admission Reserves the Whole Batch's Downstream Work (2026-09-29)
+
+The original disk gate conservatively reserved source, proxy, Editor render,
+Production copy, later mixed final, and 2 GB operating headroom for the file
+currently being uploaded. It did not carry forward the not-yet-created copies
+owed to recordings accepted earlier in the same batch. A sequence of files
+could therefore each pass admission while collectively promising more output
+than the VPS could store.
+
+Both the pre-body and post-upload capacity gates now add reservations for every
+active project: a pending proxy when required, an unfinished Editor render, the
+Production handoff copy, and its later soundtrack/final copy. Copies already on
+disk are not counted twice, approved projects leave Editor's reservation, and
+the fixed 2 GB operating reserve remains. The current host has roughly 15 GB
+free; this accounting lets a large filming session stop cleanly with an
+actionable 507 before later FFmpeg jobs can consume the safety margin. Unit
+coverage locks copy counts across pending, ready, and already-sent projects.
