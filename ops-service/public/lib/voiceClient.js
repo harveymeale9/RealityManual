@@ -36,7 +36,12 @@ window.RMVoice = (function () {
   // proving window and retry one immediate interruption. This is deliberately
   // about recorder liveness, not Bluetooth routing: the three failed attempts
   // to suppress Android's headset call tone remain reverted (§106).
-  var RECORDING_STABILITY_MS = 600;
+  // One full second is intentional pre-roll: MediaRecorder is already
+  // capturing during this window, but callers do not receive the recorder
+  // (and therefore must not show "recording") until the stream has remained
+  // alive throughout it. This gives Harvey room to begin on the visible cue
+  // without losing the opening words to Android audio-session startup.
+  var RECORDING_STABILITY_MS = 1000;
   var RECORDING_START_ATTEMPTS = 2;
 
   function startRecording() {

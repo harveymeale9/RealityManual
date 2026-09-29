@@ -798,6 +798,7 @@ body.role-reviewer #pmBackFab {
   background: var(--surface-2); color: var(--ink-soft); display: flex; align-items: center; justify-content: center;
   cursor: pointer; flex-shrink: 0;
 }
+.pm-mic-btn.starting { background: var(--accent-soft); border-color: var(--accent-3); color: var(--accent); opacity: .7; }
 .pm-mic-btn.recording { background: var(--error-soft); border-color: var(--error); color: var(--error); animation: pm-rec-pulse 1.2s ease-in-out infinite; }
 @keyframes pm-rec-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
 .pm-send-btn {

@@ -64,20 +64,28 @@
       position: fixed; inset: 0; z-index: 20; background: var(--ivory);
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       gap: 22px; padding: 24px; text-align: center;
+      transition: background-color .22s ease, box-shadow .22s ease;
     }
+    .v-overlay.recording-live { background: #120c0a; box-shadow: inset 0 0 90px rgba(255,98,89,.09); }
     .v-pulse {
       width: 90px; height: 90px; border-radius: 50%;
-      background: var(--accent-soft); display: flex; align-items: center; justify-content: center;
-      animation: v-pulse 1.4s ease-in-out infinite;
+      background: var(--accent-soft); border: 2px solid var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      opacity: .62; transition: background-color .22s ease, border-color .22s ease, opacity .22s ease;
     }
-    .v-pulse.execute { background: var(--error-soft); }
     .v-pulse svg { width: 42px; height: 42px; color: var(--accent); }
-    .v-pulse.execute svg { color: var(--error); }
+    .v-pulse.is-live {
+      background: var(--error-soft); border-color: var(--error); opacity: 1;
+      animation: v-pulse 1.15s ease-in-out infinite;
+    }
+    .v-pulse.is-live svg { color: var(--error); }
     @keyframes v-pulse {
       0%, 100% { box-shadow: 0 0 0 0 var(--accent-soft-strong); }
       50% { box-shadow: 0 0 0 22px rgba(0,0,0,0); }
     }
     .v-status { font-family: var(--font-display); font-size: 1.3rem; color: var(--ink); }
+    .v-overlay.recording-live .v-status { color: #ff8d86; font-weight: 700; }
+    .v-overlay.recording-live .v-status::before { content: ''; display: inline-block; width: 9px; height: 9px; margin-right: 9px; border-radius: 50%; background: var(--error); box-shadow: 0 0 12px var(--error); vertical-align: .08em; }
     .v-status-sub { color: var(--ink-faint); font-size: 0.9rem; max-width: 320px; }
     .v-overlay .btn-secondary {
       padding: 14px 26px; border-radius: 8px; font-size: 1rem; border: 1px solid var(--border);
@@ -87,6 +95,7 @@
       padding: 16px 34px; border-radius: 999px; font-size: 1.05rem; font-weight: 600;
       background: var(--error); color: #fff; border: none; cursor: pointer;
     }
+    .v-finish-btn:disabled { opacity: .32; cursor: wait; }
 
     .v-attach-btn {
       width: 46px; height: 46px; border-radius: 8px; border: 1px solid var(--border);
@@ -211,8 +220,8 @@
     <div class="v-pulse" id="recordPulse">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/></svg>
     </div>
-    <div class="v-status" id="recordStatus">Listening…</div>
-    <button type="button" class="v-finish-btn" id="finishBtn">Finish Recording</button>
+    <div class="v-status" id="recordStatus" role="status" aria-live="polite">Starting microphone…</div>
+    <button type="button" class="v-finish-btn" id="finishBtn" disabled>Finish Recording</button>
     <button type="button" class="btn-secondary" id="cancelRecordBtn" style="background:none;border:none;color:var(--ink-faint);">Cancel</button>
   </div>
 
@@ -223,7 +232,7 @@
 
   <script src="lib/store.js"></script>
   <script src="lib/auth.js"></script>
-  <script src="lib/voiceClient.js?v=20260928-auto-voice-toggle"></script>
+  <script src="lib/voiceClient.js?v=20260929-recording-preroll"></script>
   <script src="lib/usageDashboard.js?v=20260921-usage"></script>
   <script>
     (function () {
@@ -803,8 +812,11 @@
 
       function startFlow(mode) {
         var thisFlow = ++activeRecordingFlow;
+        var readyTimer = null;
         recordPulse.className = 'v-pulse' + (mode === 'execute' ? ' execute' : '');
+        recordOverlay.classList.remove('recording-live');
         recordStatus.textContent = 'Starting microphone…';
+        finishBtn.disabled = true;
         hideAllOverlays();
         recordOverlay.hidden = false;
         // Don't talk over Harvey while he's dictating — see app.js's
@@ -822,7 +834,17 @@
             return;
           }
           activeRecorder = rec;
-          recordStatus.textContent = 'Listening…';
+          // Voice.startRecording() has already captured a full proving
+          // window. Keep capturing for one final short pre-roll before the
+          // visual go-ahead, so the cue means "safe to speak now" rather
+          // than merely "the browser is attempting to start".
+          readyTimer = setTimeout(function () {
+            if (thisFlow !== activeRecordingFlow || activeRecorder !== rec) return;
+            recordPulse.classList.add('is-live');
+            recordOverlay.classList.add('recording-live');
+            recordStatus.textContent = 'Recording now';
+            finishBtn.disabled = false;
+          }, 350);
         }).catch(function () {
           if (thisFlow !== activeRecordingFlow) return;
           hideAllOverlays();
@@ -831,8 +853,13 @@
         });
 
         function cleanup() {
+          if (readyTimer) clearTimeout(readyTimer);
+          readyTimer = null;
           if (thisFlow === activeRecordingFlow) activeRecordingFlow++;
           activeRecorder = null;
+          finishBtn.disabled = true;
+          recordOverlay.classList.remove('recording-live');
+          recordPulse.classList.remove('is-live');
           finishBtn.onclick = null;
           cancelRecordBtn.onclick = null;
           Voice.setRecordingActive(false);

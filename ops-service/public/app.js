@@ -1012,16 +1012,22 @@
     // "mic again or Send?" ambiguity Harvey flagged; showing it again the
     // moment recording stops means there's still a way to fix a stray word
     // before it goes out.
-    function setRecordingUI(isRecording) {
+    function setRecordingUI(state) {
+      if (state === true) state = 'recording';
+      if (!state) state = 'idle';
+      var isStarting = state === 'starting';
+      var isRecording = state === 'recording';
+      var isActive = isStarting || isRecording;
+      micBtn.classList.toggle('starting', isStarting);
       micBtn.classList.toggle('recording', isRecording);
-      micBtn.title = isRecording ? 'Stop recording and send' : 'Record voice message';
+      micBtn.title = isStarting ? 'Starting microphone…' : (isRecording ? 'Stop recording and send' : 'Record voice message');
       micBtn.setAttribute('aria-label', micBtn.title);
-      sendBtn.hidden = isRecording;
+      sendBtn.hidden = isActive;
       // Don't talk over Harvey while he's dictating a new message — both
       // recording paths below (live recognition and record-and-upload)
       // funnel through this one function on every start/stop, so this is
       // the single place to gate it.
-      Voice.setRecordingActive(isRecording);
+      Voice.setRecordingActive(isActive);
     }
 
     var SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1038,6 +1044,23 @@
       recognition.continuous = true;
       recognition.interimResults = true;
       var finalTranscript = '';
+      var readyTimer = null;
+      function clearReadyTimer() {
+        if (readyTimer) clearTimeout(readyTimer);
+        readyTimer = null;
+      }
+      function scheduleReadyCue(delay) {
+        if (readyTimer) return;
+        readyTimer = setTimeout(function () {
+          readyTimer = null;
+          if (activeRecognition === recognition) setRecordingUI('recording');
+        }, delay);
+      }
+      // `audiostart` is the trustworthy boundary: recognition is already
+      // receiving microphone audio. `start` supplies a conservative fallback
+      // for browsers that omit audiostart, still with a healthy pre-roll.
+      recognition.addEventListener('audiostart', function () { scheduleReadyCue(350); });
+      recognition.addEventListener('start', function () { scheduleReadyCue(650); });
       recognition.addEventListener('result', function (e) {
         var interim = '';
         for (var i = e.resultIndex; i < e.results.length; i++) {
@@ -1049,6 +1072,7 @@
         autoresize();
       });
       recognition.addEventListener('end', function () {
+        clearReadyTimer();
         activeRecognition = null;
         setRecordingUI(false);
         var text = textInput.value;
@@ -1057,6 +1081,7 @@
         if (text.trim()) { lastSendWasVoice = true; sendText(text, 'respond', { autoSpeak: true }); }
       });
       recognition.addEventListener('error', function (e) {
+        clearReadyTimer();
         activeRecognition = null;
         setRecordingUI(false);
         if (e.error !== 'aborted' && e.error !== 'no-speech') {
@@ -1064,17 +1089,25 @@
         }
       });
       activeRecognition = recognition;
-      setRecordingUI(true);
-      recognition.start();
+      setRecordingUI('starting');
+      try { recognition.start(); }
+      catch (error) {
+        clearReadyTimer();
+        activeRecognition = null;
+        setRecordingUI(false);
+        addMessage('error', 'Could not start the microphone.');
+      }
     }
 
     // Fallback for browsers without live recognition (e.g. Firefox): the
     // original record-then-upload-then-transcribe flow, no live preview.
     function startRecordAndUpload() {
+      setRecordingUI('starting');
       Voice.startRecording().then(function (rec) {
         activeRecorder = rec;
-        setRecordingUI(true);
+        setRecordingUI('recording');
       }).catch(function () {
+        setRecordingUI(false);
         alert('Could not access the microphone. Check the browser has mic permission.');
       });
     }

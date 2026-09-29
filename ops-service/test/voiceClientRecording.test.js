@@ -10,6 +10,7 @@ test('voice recorder retries an immediate fresh-stream interruption and returns 
   let mediaRequests = 0;
   let recorderInstances = 0;
   const tracks = [];
+  const recorderStartedAt = [];
 
   class FakeMediaRecorder {
     static isTypeSupported() { return true; }
@@ -32,6 +33,7 @@ test('voice recorder retries an immediate fresh-stream interruption and returns 
 
     start() {
       this.state = 'recording';
+      recorderStartedAt[this.instance] = Date.now();
       if (this.instance === 1) {
         setTimeout(() => {
           this.state = 'inactive';
@@ -76,6 +78,7 @@ test('voice recorder retries an immediate fresh-stream interruption and returns 
   assert.equal(mediaRequests, 2);
   assert.equal(recorderInstances, 2);
   assert.equal(tracks[0].readyState, 'ended');
+  assert.ok(Date.now() - recorderStartedAt[2] >= 900, 'stable audio must be captured before the UI receives the recorder');
 
   const blob = await recording.stop();
   assert.equal(blob.size, 12);

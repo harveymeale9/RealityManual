@@ -11034,3 +11034,34 @@ selected it from the tester, uploaded a voice sample, and received a playable
 six-second blob from the live preview route. A 390-pixel mobile pass confirmed
 the tester and editable track rows collapse to one column with no horizontal
 overflow.
+
+---
+
+# 250. Recording Cue Now Follows a Captured Pre-Roll (2026-09-29)
+
+Harvey was beginning to speak as soon as the Project Manager microphone said
+it was recording, but the opening words could still coincide with the browser
+or Android audio session settling. The shared MediaRecorder proving window is
+now one second rather than 600 ms. Audio is already being captured throughout
+that hidden window, while the caller is deliberately prevented from presenting
+the recorder as ready.
+
+The mobile voice view adds another 350 ms of captured pre-roll after that
+proof. During startup the overlay remains subdued green, says **Starting
+microphone…**, and disables Finish. Only after the pre-roll does it visibly
+switch to a red pulse and red-tinted overlay, say **Recording now**, and enable
+Finish. Cancel still works throughout startup, clears the delayed cue, and
+stops any recorder that resolves after cancellation.
+
+The desktop Project Manager now exposes the same two genuine states. Its mic
+is subdued green while the browser's SpeechRecognition service starts, then
+turns pulsing red only after an `audiostart`/conservative `start` delay. The
+record-and-upload fallback gets its green startup state before awaiting the
+shared one-second recorder proof. In either path, automatic speech is muted as
+soon as startup begins rather than waiting for the live cue.
+
+All 79 Node tests pass. The recorder regression additionally asserts at least
+900 ms of stable captured audio before `startRecording()` resolves. Real
+Chromium checks verified green-to-red state and text transitions on desktop
+and at 390-pixel mobile width; the mobile live cue appeared after roughly 1.4
+seconds and introduced no horizontal overflow.
