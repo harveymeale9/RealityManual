@@ -2356,6 +2356,7 @@ body.role-reviewer #pmBackFab {
 .video-editor{max-width:1500px;margin:0 auto;padding:28px 30px 60px;color:var(--text,#eee)}
 .video-editor{position:relative}.editor-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:20px}
 .editor-notice{margin:-7px 0 14px;padding:10px 13px;border:1px solid #276440;background:#0e2418;color:#6fe8a0;border-radius:8px;font-size:12px}.editor-notice[hidden]{display:none}
+.editor-session-summary{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:-7px 0 14px;padding:9px 12px;border:1px solid #1e3328;background:rgba(7,16,11,.78);border-radius:8px}.editor-session-summary[hidden]{display:none}.editor-session-summary strong{font-size:11px;color:#b9c4bd;margin-right:3px}.editor-session-summary span{display:flex;align-items:center;gap:5px;padding:4px 7px;border-radius:12px;background:#131e18;color:#829087;font-size:9px;text-transform:uppercase;letter-spacing:.05em}.editor-session-summary i{width:6px;height:6px;border-radius:50%;background:#718078}.editor-session-summary .working i{background:#e0bd52}.editor-session-summary .ready i{background:#42df87}.editor-session-summary .attention i{background:#e67569}.editor-session-summary .sent i{background:#549ccc}
 .editor-heading h1{font-family:"Fraunces",serif;font-size:38px;margin:4px 0 6px}
 .editor-heading p{margin:0;color:var(--muted,#8d9991);max-width:720px;line-height:1.55}
 .editor-upload{cursor:pointer;white-space:nowrap}

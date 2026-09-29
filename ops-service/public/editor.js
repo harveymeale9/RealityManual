@@ -64,6 +64,27 @@
     return 'Ready to edit';
   }
 
+  function sessionBucket(item) {
+    if (item.productionPieceId) return 'sent';
+    if (item.transcriptionStatus === 'error' || item.classificationStatus === 'error' || item.retakeAnalysisStatus === 'error' || item.planningMatchStatus === 'error' || item.renderStatus === 'error') return 'attention';
+    if (item.renderStatus === 'ready') return 'ready';
+    if (['pending', 'running'].indexOf(item.transcriptionStatus) !== -1 || ['pending', 'running'].indexOf(item.classificationStatus) !== -1 || ['pending', 'running', 'pending_transcript'].indexOf(item.retakeAnalysisStatus) !== -1 || ['pending', 'running', 'pending_transcript'].indexOf(item.planningMatchStatus) !== -1 || ['queued', 'running'].indexOf(item.renderStatus) !== -1) return 'working';
+    return 'prepared';
+  }
+
+  function renderSessionSummary() {
+    var summary = root && root.querySelector('#editorSessionSummary');
+    if (!summary) return;
+    if (!projects.length) { summary.hidden = true; summary.innerHTML = ''; return; }
+    var counts = { working: 0, ready: 0, attention: 0, prepared: 0, sent: 0 };
+    projects.forEach(function (item) { counts[sessionBucket(item)]++; });
+    var labels = { working: 'processing', ready: 'ready to approve', attention: 'need attention', prepared: 'prepared', sent: 'sent' };
+    summary.innerHTML = '<strong>' + projects.length + ' recording' + (projects.length === 1 ? '' : 's') + '</strong>' + Object.keys(counts).filter(function (key) { return counts[key]; }).map(function (key) {
+      return '<span class="' + key + '"><i></i>' + counts[key] + ' ' + labels[key] + '</span>';
+    }).join('');
+    summary.hidden = false;
+  }
+
   function typeLabel(value) {
     return { ultra_short: 'Ultra-short', short: 'Short', long_short: 'Long-short', longform: 'Longform' }[value] || 'Automatic';
   }
@@ -147,6 +168,7 @@
           '<label class="editor-upload btn-primary"><input id="editorFile" type="file" accept="video/*" multiple hidden>Upload raw videos</label></header>' +
         '<div class="editor-upload-progress" id="editorUploadProgress" hidden><span id="editorUploadLabel">Uploading…</span><div><i id="editorUploadBar"></i></div></div>' +
         '<div class="editor-notice" id="editorNotice" hidden></div>' +
+        '<div class="editor-session-summary" id="editorSessionSummary" hidden></div>' +
         '<div class="editor-layout"><aside class="editor-projects"><div class="editor-aside-title">Recordings</div><div id="editorProjectList"></div></aside>' +
           '<main class="editor-workspace" id="editorWorkspace"><div class="editor-empty"><strong>No recording selected</strong><span>Upload a raw video to begin.</span></div></main></div>' +
         '<div class="editor-drop-overlay" id="editorDropOverlay"><strong>Drop filming session</strong><span>Every video will enter the automatic edit queue</span></div>' +
@@ -177,6 +199,9 @@
   function renderList() {
     var list = root && root.querySelector('#editorProjectList');
     if (!list) return;
+    renderSessionSummary();
+    var asideTitle = root.querySelector('.editor-aside-title');
+    if (asideTitle) asideTitle.textContent = 'Recordings · ' + projects.length;
     if (!projects.length) {
       list.innerHTML = '<div class="editor-projects-empty">Your recordings will appear here.</div>';
       return;

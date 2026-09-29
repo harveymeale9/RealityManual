@@ -11721,3 +11721,19 @@ permanent spinner; sidebar status now surfaces errors from every phase as
 **Needs attention**. A two-video integration regression deliberately overlaps
 requests and proves maximum simultaneous transcription and classification are
 both one, while both jobs still complete their phase.
+
+---
+
+# 275. Editor Sessions Have an At-a-Glance Queue Summary (2026-09-29)
+
+The Editor header now summarizes the whole filming session rather than forcing
+Harvey to inspect every recording card: total recordings plus counts for
+Processing, Ready to approve, Needs attention, Prepared and Sent. States are
+derived from the same durable project fields used by the sidebar and approval
+gate, so the strip updates during polling, rendering and automatic move-to-next
+approval. Colour is supporting information only; every state remains named.
+
+The Recordings sidebar also carries its current total. The Chromium batch flow
+now proves two ready recordings become one ready plus one sent immediately
+after approving the first, while the next recording automatically opens and the
+mobile layout remains overflow-free.
