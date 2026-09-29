@@ -1,2 +1,122 @@
-ssh: connect to host 187.124.146.235 port 22: Connection timed out
-ssh exit code: 255
++ CLAUDE_HOST_HOME_DIR=/root/ops-service-claude-home/host-identity
++ mkdir -p /root/ops-service-claude-home/host-identity
++ ln -sfn ../claude-dir /root/ops-service-claude-home/host-identity/.claude
++ ln -sfn ../claude.json /root/ops-service-claude-home/host-identity/.claude.json
++ chown -h ubuntu:ubuntu /root/ops-service-claude-home/host-identity /root/ops-service-claude-home/host-identity/.claude /root/ops-service-claude-home/host-identity/.claude.json
++ ln -sfn /srv/realitymanual-repo /repo
++ RUN_ARGS=(-d --name "$CONTAINER" --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-claude-home/claude-dir:/home/node/.claude -v /root/ops-service-claude-home/claude.json:/home/node/.claude.json -v "$DATA_DIR:/data" -v /root/realitymanual-backend-data:/store-data:ro -v "$RUNTIME_REPO_DIR:/repo" -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file "$ENV_FILE")
++ cd /root/realitymanual-repo
+++ git status --porcelain
++ '[' -n '' ']'
++ git fetch origin main
+From https://github.com/harveymeale9/RealityManual
+ * branch            main       -> FETCH_HEAD
+   8506f38..266f452  main       -> origin/main
++ git merge --ff-only origin/main
+Updating 8506f38..266f452
+Fast-forward
+ CLAUDE.md                             |  37 +++++++++++
+ ops-service/.ci/last-run.log          | 120 +---------------------------------
+ ops-service/public/editor.js          |  25 ++++---
+ ops-service/public/index.html         |   4 +-
+ ops-service/server.js                 |   4 +-
+ ops-service/src/videoEditorService.js |   2 +-
+ 6 files changed, 61 insertions(+), 131 deletions(-)
+++ git rev-parse HEAD
++ NEW_HEAD=266f45247cb0b044418849d6af8bfe5aac45ea9b
++ git -C /srv/realitymanual-repo fetch origin main
+From https://github.com/harveymeale9/RealityManual
+ * branch            main       -> FETCH_HEAD
++ git -C /srv/realitymanual-repo merge --ff-only origin/main
+Already up to date.
++ chown -R 1000:1000 /srv/realitymanual-repo
++ LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
+++ cat /root/ops-service-data/last-image-commit.txt
++ LAST_BUILD_COMMIT=ab9164b134ac507237cd78e8a910cd287a877e95
++ NEEDS_REBUILD=1
++ '[' -n ab9164b134ac507237cd78e8a910cd287a877e95 ']'
++ git cat-file -e 'ab9164b134ac507237cd78e8a910cd287a877e95^{commit}'
+++ git diff --name-only ab9164b134ac507237cd78e8a910cd287a877e95 266f45247cb0b044418849d6af8bfe5aac45ea9b -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -z 'ops-service/server.js
+ops-service/src/videoEditorService.js' ']'
++ '[' 0 = 1 ']'
++ '[' 1 = 0 ']'
++ docker tag rm-ops-service rm-ops-service:previous
++ docker build -t rm-ops-service ./ops-service
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 DONE 0.0s
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 2.60kB 0.0s done
+#1 DONE 0.1s
+
+#2 [internal] load metadata for docker.io/library/node:22-slim
+#2 DONE 0.3s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 136B done
+#3 DONE 0.0s
+
+#4 [ 1/11] FROM docker.io/library/node:22-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c
+#4 resolve docker.io/library/node:22-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c 0.0s done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 350.29kB done
+#5 DONE 0.0s
+
+#6 [ 2/11] RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && rm -rf /var/lib/apt/lists/*
+#6 CACHED
+
+#7 [ 5/11] COPY package.json ./
+#7 CACHED
+
+#8 [ 3/11] RUN npm install -g @anthropic-ai/claude-code@2.1.276
+#8 CACHED
+
+#9 [ 4/11] WORKDIR /app
+#9 CACHED
+
+#10 [ 6/11] RUN npm install --omit=dev
+#10 CACHED
+
+#11 [ 7/11] COPY server.js ./
+#11 DONE 0.1s
+
+#12 [ 8/11] COPY src ./src
+#12 DONE 0.1s
+
+#13 [ 9/11] COPY public ./public
+#13 DONE 0.1s
+
+#14 [10/11] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
+#14 DONE 19.1s
+
+#15 [11/11] RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
+#15 DONE 0.3s
+
+#16 exporting to image
+#16 exporting layers
+#16 exporting layers 12.5s done
+#16 exporting manifest sha256:b5f8ff53e74f662b7034613fc8ab266cdfc1d79e8dddcde98080821951cc484d 0.0s done
+#16 exporting config sha256:8abfba65a8a29e524b31cc14cf4df828bcb91265b04c44bcf00c850f012aa64d 0.0s done
+#16 exporting attestation manifest sha256:88060d7c70b16bb44118f3e77ad2ab405d456f31add39ac3efefe202201511d5 0.0s done
+#16 exporting manifest list sha256:6171508446733a0332f62803516c2dee128052b71f440f624afeb3667144411c 0.0s done
+#16 naming to docker.io/library/rm-ops-service:latest
+#16 naming to docker.io/library/rm-ops-service:latest done
+#16 unpacking to docker.io/library/rm-ops-service:latest
+#16 unpacking to docker.io/library/rm-ops-service:latest 2.5s done
+#16 DONE 15.1s
++ docker stop rm-ops-service
+rm-ops-service
++ docker rm rm-ops-service
+rm-ops-service
++ docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-claude-home/claude-dir:/home/node/.claude -v /root/ops-service-claude-home/claude.json:/home/node/.claude.json -v /root/ops-service-data:/data -v /root/realitymanual-backend-data:/store-data:ro -v /srv/realitymanual-repo:/repo -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
+132292f8176741f6c7753b8b84d64b7675e793147a2edf9867103a23d7eaaefa
++ echo 266f45247cb0b044418849d6af8bfe5aac45ea9b
+++ git -C /root/realitymanual-repo rev-parse --short HEAD
++ echo 'rm-ops-service redeployed at 266f452'
+rm-ops-service redeployed at 266f452
+ssh exit code: 0
