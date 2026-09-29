@@ -60,6 +60,14 @@
     });
   }
 
+  function retryTransientOnce(operation, delayMs) {
+    return operation().catch(function (error) {
+      var transient = !error.status || error.status === 408 || error.status === 425 || error.status === 429 || error.status >= 500;
+      if (!transient) throw error;
+      return new Promise(function (resolve) { setTimeout(resolve, Math.max(0, Number(delayMs) || 0)); }).then(operation);
+    });
+  }
+
   function formatTime(seconds) {
     seconds = Math.max(0, Number(seconds) || 0);
     var minutes = Math.floor(seconds / 60);
@@ -1199,7 +1207,9 @@
       var approvedId = project.id;
       var approvedName = project.name;
       approveButtons.forEach(function (button) { button.disabled = true; button.textContent = 'Approving…'; });
-      api('/api/editor/' + project.id + '/production', { method: 'POST' }).then(function (result) {
+      retryTransientOnce(function () {
+        return api('/api/editor/' + approvedId + '/production', { method: 'POST' });
+      }, 500).then(function (result) {
         project.productionPieceId = result.pieceId;
         clearReviewProgress(approvedId);
         project.sentToProductionAt = new Date().toISOString();

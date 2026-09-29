@@ -13763,3 +13763,20 @@ checking history or render locks, and the client retries one transient failure
 with the same mutation id. The Undo fallback also uses the full-detail cache
 instead of a compact polling summary. Integration coverage replays one Undo and
 proves it consumes exactly one history entry and one revision.
+
+---
+
+# 380. Approval Recovers From a Lost Handoff Response (2026-09-29)
+
+The Production endpoint already makes duplicate approval safe: a concurrent
+request joins `productionJobs`, and a later request returns the persisted
+`productionPieceId`. The Editor UI did not use that guarantee. A network/5xx
+failure while returning a successful handoff showed an alarming error and left
+Harvey to reload and determine whether the click had worked.
+
+`Approve & next` now retries one transient network, 408/425/429, or 5xx failure
+after 500ms against the captured approved project id. The second request either
+joins the running copy or receives the durable already-sent result, then follows
+the normal notice/next-recording flow. Validation and business failures remain
+single-shot and visible. The browser regression forces the first approval
+response to fail and requires the retry to succeed exactly once.
