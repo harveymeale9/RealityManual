@@ -390,6 +390,7 @@ function setup(options) {
   const delStmt = db.prepare('DELETE FROM records WHERE store_name = ? AND id = ?');
   const transcriptionJobs = new Map();
   const renderJobs = new Map();
+  let renderChain = Promise.resolve();
   const classificationJobs = new Map();
   const retakeJobs = new Map();
   const planningMatchJobs = new Map();
@@ -638,7 +639,12 @@ function setup(options) {
 
 async function renderProject(id) {
     if (renderJobs.has(id)) return renderJobs.get(id);
-    const job = (async function () {
+    let queuedProject = getProject(id);
+    if (!queuedProject) return;
+    queuedProject.renderStatus = 'queued';
+    queuedProject.renderError = '';
+    saveProject(queuedProject);
+    const job = renderChain.catch(function () {}).then(async function () {
       let project = getProject(id);
       if (!project) return;
       project.renderStatus = 'running';
@@ -691,7 +697,7 @@ async function renderProject(id) {
           }
         }
       }
-    })().catch(function (err) {
+    }).catch(function (err) {
       const project = getProject(id);
       if (project) {
         project.renderStatus = 'error';
@@ -699,6 +705,7 @@ async function renderProject(id) {
         saveProject(project);
       }
     }).finally(function () { renderJobs.delete(id); });
+    renderChain = job.catch(function () {});
     renderJobs.set(id, job);
     return job;
   }
@@ -714,9 +721,9 @@ async function renderProject(id) {
         project.transcriptionError = 'Transcription was interrupted by a service restart. Press Retry transcription.';
         saveProject(project);
       }
-      if (project.renderStatus === 'running') {
+      if (project.renderStatus === 'running' || project.renderStatus === 'queued') {
         project.renderStatus = 'error';
-        project.renderError = 'Rendering was interrupted by a service restart. Press Render video again.';
+        project.renderError = 'Rendering was interrupted by a service restart. Press Build final edit again.';
         saveProject(project);
       }
       if (project.classificationStatus === 'running') {
@@ -842,6 +849,7 @@ async function renderProject(id) {
     if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
     const project = getProject(req.params.id);
     if (!project) return res.status(404).json({ error: 'not_found' });
+    if (renderJobs.has(project.id)) return res.status(409).json({ error: 'render_in_progress', message: 'Wait for this final edit to finish before changing its cut settings.' });
     if (Array.isArray(req.body && req.body.removedWordIndices)) {
       project.removedWordIndices = Array.from(new Set(req.body.removedWordIndices.map(Number)
         .filter(function (index) { return Number.isInteger(index) && index >= 0 && index < (project.words || []).length; }))).sort(function (a, b) { return a - b; });

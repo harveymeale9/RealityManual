@@ -11629,3 +11629,24 @@ playable body without an attachment header; Chromium proves Final edit is the
 default after rendering, both preview modes switch to the correct media, and
 the original one-word portrait caption behavior still works in source view at
 mobile width.
+
+---
+
+# 270. Filming Sessions Use a Single Final-Render Queue (2026-09-29)
+
+Automatic rendering is now serialized across Editor projects. A batch of
+camera masters may still transcribe and undergo lightweight analysis
+independently, but only one full-resolution FFmpeg encode runs at a time; later
+projects persist as `queued` and visibly say **Waiting in render queue** before
+becoming **Rendering**. This prevents a 10- or 20-video filming session from
+starting the same number of CPU- and memory-heavy encodes simultaneously on the
+VPS.
+
+The queue survives individual job failure because each item is chained through
+a swallowed predecessor result, while each project's real error remains stored
+normally. A service restart turns either queued or running work into an
+explicit retryable error instead of a permanent spinner. Edit-setting PATCHes
+are rejected while that project's queued/running render is active, preventing a
+late encode from silently publishing settings different from those shown in
+the UI. Focused service and both Chromium workflows pass with the queued state
+included in polling and button feedback.

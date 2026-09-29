@@ -50,6 +50,7 @@
     if (item.classificationStatus === 'pending' || item.classificationStatus === 'running') return 'Analyzing frame';
     if (item.retakeAnalysisStatus === 'pending' || item.retakeAnalysisStatus === 'running') return 'Checking retakes';
     if (item.planningMatchStatus === 'pending' || item.planningMatchStatus === 'running') return 'Matching plan';
+    if (item.renderStatus === 'queued') return 'Waiting to render';
     if (item.renderStatus === 'running') return 'Rendering';
     if (item.renderStatus === 'ready') return 'Ready for approval';
     return 'Ready to edit';
@@ -265,7 +266,7 @@
     var active = ['pending', 'running'].indexOf(project.transcriptionStatus) !== -1 ||
       ['pending', 'running'].indexOf(project.classificationStatus) !== -1 ||
       ['pending', 'running'].indexOf(project.retakeAnalysisStatus) !== -1 ||
-      ['pending', 'running'].indexOf(project.planningMatchStatus) !== -1 || project.renderStatus === 'running';
+      ['pending', 'running'].indexOf(project.planningMatchStatus) !== -1 || ['queued', 'running'].indexOf(project.renderStatus) !== -1;
     if (!active) return;
     var id = project.id;
     var token = mountToken;
@@ -341,7 +342,7 @@
         (project.renderStatus === 'error' ? '<em>' + esc(project.renderError) + '</em>' : '') + '</div><div class="editor-export-actions">' +
         (project.productionPieceId ? '<button class="btn-primary" id="editorOpenProduction">Open Content Production</button>' :
           project.renderStatus === 'ready' ? '<button class="btn-primary" id="editorSendProduction">Approve &amp; Send to Production</button>' :
-          '<button class="btn-primary" id="editorRender" ' + (project.renderStatus === 'running' || renderBlocked ? 'disabled' : '') + '>' + (project.renderStatus === 'running' ? 'Building final edit…' : renderButtonText) + '</button>') +
+          '<button class="btn-primary" id="editorRender" ' + (['queued', 'running'].indexOf(project.renderStatus) !== -1 || renderBlocked ? 'disabled' : '') + '>' + (project.renderStatus === 'queued' ? 'Waiting in render queue…' : project.renderStatus === 'running' ? 'Building final edit…' : renderButtonText) + '</button>') +
         '</div></div>';
     bindWorkspace();
   }
