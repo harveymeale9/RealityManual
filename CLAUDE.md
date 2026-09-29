@@ -12751,3 +12751,22 @@ orientation, cut, or render state can change after approval. A restart
 integration test seeds an approved project with deliberately stale dimensions
 and in-progress phase labels, then proves no classifier runs and every reviewed
 state remains byte-for-byte semantically unchanged.
+
+---
+
+# 331. Editor Saves Stay Serialized Across Tab Round Trips (2026-09-29)
+
+The Editor reset its per-project save queues every time its tab mounted. If
+Harvey made an edit, briefly visited another Content Studio tab, returned, and
+made another edit before the first network request completed, the new PATCH no
+longer knew about its predecessor. Those requests could overlap and restore the
+same stale-array overwrite problem fixed in §329. A successful old request
+could also call `renderWorkspace()` after its DOM had been replaced and report
+a false save error even though the server had persisted it.
+
+Per-project save promises and save state now survive Editor remounts for the
+life of the page, while poll/render-refresh timers remain mount-scoped. Workspace
+refresh is a safe no-op when the Editor DOM is detached. A browser regression
+starts a delayed edit, changes tabs, returns immediately, makes a second edit,
+and proves the server still sees a maximum of one PATCH at a time in the correct
+order.

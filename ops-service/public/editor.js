@@ -460,7 +460,7 @@
 
   function renderWorkspace() {
     var workspace = root.querySelector('#editorWorkspace');
-    if (!project) return;
+    if (!workspace || !project) return;
     if (project.transcriptionStatus !== 'ready') {
       var isError = project.transcriptionStatus === 'error';
       workspace.innerHTML = '<div class="editor-processing"><div class="editor-processing-icon' + (isError ? ' error' : '') + '">' + (isError ? '!' : '') + '</div>' +
@@ -1045,7 +1045,11 @@
       mountToken++;
       clearTimeout(pollTimer);
       Object.keys(renderRefreshTimers).forEach(function (id) { clearTimeout(renderRefreshTimers[id]); });
-      root = element; projects = []; project = null; selected.clear(); saveQueues = {}; saveStates = {}; renderRefreshTimers = {}; previewSeekTimes = {}; restoreTranscriptFocus = false;
+      // Save queues deliberately survive a tab round trip. A PATCH already in
+      // flight must remain the predecessor of any new edit made immediately
+      // after returning, or two browser requests can race despite serialization
+      // within each individual mount.
+      root = element; projects = []; project = null; selected.clear(); renderRefreshTimers = {}; previewSeekTimes = {}; restoreTranscriptFocus = false;
       shell();
       loadProjects().catch(function (error) {
         root.querySelector('#editorWorkspace').innerHTML = '<div class="editor-empty"><strong>Editor unavailable</strong><span>' + esc(error.message) + '</span></div>';
