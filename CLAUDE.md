@@ -14813,3 +14813,18 @@ Chromium session against the live API, with the
 fixed local script substituted, opened the existing recording without a dialog
 or runtime error and rendered the review player. The Editor script cache key was
 advanced so already-open browsers cannot retain the broken bundle.
+
+---
+
+# 420. Editor No Longer Shows the Automatic Classification Panel (2026-09-30)
+
+The full-width Automatic classification panel, including its Frame and Format
+dropdowns, was redundant now that recording orientation is authoritative and
+content format is derived automatically. It has been removed from the Editor,
+along with its event bindings and dedicated desktop styling. The underlying
+orientation and format classification still runs exactly as before and remains
+available to rendering, captions, scheduling, and existing project data; this
+is a removal of unnecessary review UI, not of automatic behavior.
+
+The Editor JavaScript and stylesheet cache keys were advanced together so the
+space is reclaimed immediately in existing browser sessions.
