@@ -14265,3 +14265,32 @@ layout immediately after reload. Live authenticated Playwright checks at
 desktop player, two side-control cards, no duplicate control IDs, no crop
 control, working speed/source/final controls, a 340×604 phone player, correct
 stack order, and no horizontal overflow.
+
+---
+
+# 404. Punch-Ins Are Fast Smooth Moves With Direct On-Video Framing (2026-09-30)
+
+Harvey clarified that a punch-in is not an instantaneous crop. It is a fast,
+smooth camera move into the selected framing, followed by the same move in
+reverse when that transcript section ends. Both the working browser preview
+and FFmpeg export now use matching smoothstep ramps over 280ms. Very short
+punches automatically use half their duration for each side, so the in/out
+motion remains symmetrical and never overlaps incorrectly. Browser playback
+updates the transform on animation frames rather than relying on the much
+slower media `timeupdate` event, keeping the short move visibly fluid.
+
+The separate zoom-strength and horizontal/vertical sliders have been removed.
+New punches use the standard restrained 118% framing. Each punch card now has
+**Position on video**, which pauses on the selected passage and overlays the
+actual crop rectangle on the source frame. The area outside it is dimmed and
+Harvey drags the rectangle directly to choose exactly what the zoom will retain;
+arrow keys provide an accessible fine adjustment. The rectangle dimensions and
+position are derived from the same zoom and normalized centre values used by
+the encoder, so it is a framing guide rather than an approximate decoration.
+**Preview** hides the guide and plays the working effect, or the verified baked
+render when one is ready.
+
+Render format version 5 invalidates active unapproved outputs made with the old
+hard cut. Approved Production inputs remain immutable. Unit coverage verifies
+the mirrored scale curve, generated dynamic FFmpeg filter, focal position, and
+a real end-to-end render. The full 140-test service suite passes.

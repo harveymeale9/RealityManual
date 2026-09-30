@@ -13,7 +13,8 @@ const EDIT_RENDER_DEBOUNCE_MS = 2500;
 const EDITOR_DISK_RESERVE_BYTES = 2 * 1024 * 1024 * 1024;
 const OPENING_PUSH_IN_SECONDS = 3;
 const OPENING_PUSH_IN_SCALE = 1.04;
-const EDITOR_RENDER_VERSION = 4;
+const PUNCH_TRANSITION_SECONDS = 0.28;
+const EDITOR_RENDER_VERSION = 5;
 
 function requiredEditorCapacity(fileBytes, fileAlreadyStored) {
   const bytes = Math.max(0, Number(fileBytes) || 0);
@@ -404,6 +405,40 @@ function openingPushInFilter(renderShape, editedStart) {
   const zoom = '(1+' + (OPENING_PUSH_IN_SCALE - 1).toFixed(3) + '*' + eased + ')';
   return ",scale=w='trunc(iw*" + zoom + "/2)*2':h='trunc(ih*" + zoom + "/2)*2':eval=frame" +
     ",crop=" + renderShape.width + ':' + renderShape.height + ":x='(iw-ow)/2':y='(ih-oh)/2',setsar=1";
+}
+
+function punchInScale(punch, sourceSeconds) {
+  if (!punch) return 1;
+  const start = Number(punch.start) || 0;
+  const end = Math.max(start, Number(punch.end) || 0);
+  const duration = end - start;
+  if (duration <= 0 || sourceSeconds < start || sourceSeconds >= end) return 1;
+  const transition = Math.max(0.001, Math.min(PUNCH_TRANSITION_SECONDS, duration / 2));
+  const ease = function (value) {
+    const progress = clamp(value, 0, 1);
+    return progress * progress * (3 - 2 * progress);
+  };
+  const weight = Math.min(
+    ease((sourceSeconds - start) / transition),
+    ease((end - sourceSeconds) / transition)
+  );
+  return 1 + ((Number(punch.zoom) || 1.18) - 1) * weight;
+}
+
+function punchInFilter(punch, renderShape, sourceStart) {
+  if (!punch) return '';
+  const start = Number(punch.start) || 0;
+  const end = Math.max(start, Number(punch.end) || 0);
+  const transition = Math.max(0.001, Math.min(PUNCH_TRANSITION_SECONDS, (end - start) / 2));
+  const sourceTime = '(t+' + Math.max(0, Number(sourceStart) || 0).toFixed(6) + ')';
+  const into = 'min(max((' + sourceTime + '-' + start.toFixed(6) + ')/' + transition.toFixed(6) + ',0),1)';
+  const out = 'min(max((' + end.toFixed(6) + '-' + sourceTime + ')/' + transition.toFixed(6) + ',0),1)';
+  const easedInto = '(' + into + '*' + into + '*(3-2*' + into + '))';
+  const easedOut = '(' + out + '*' + out + '*(3-2*' + out + '))';
+  const weight = 'min(' + easedInto + ',' + easedOut + ')';
+  const zoom = '(1+' + ((Number(punch.zoom) || 1.18) - 1).toFixed(3) + '*' + weight + ')';
+  return ",scale=w='trunc(iw*" + zoom + "/2)*2':h='trunc(ih*" + zoom + "/2)*2':eval=frame" +
+    ",crop=" + renderShape.width + ':' + renderShape.height + ":x='(iw-ow)*" + Number(punch.centerX === undefined ? 0.5 : punch.centerX).toFixed(3) + "':y='(ih-oh)*" + Number(punch.centerY === undefined ? 0.5 : punch.centerY).toFixed(3) + "',setsar=1";
 }
 
 function patchNeedsAutoRender(project, renderWillChange) {
@@ -1239,8 +1274,7 @@ async function renderProject(id) {
           videoFilter += ",crop=w='min(iw\\,ih*16/9)':h='min(ih\\,iw*9/16)':x='(iw-ow)/2':y='(ih-oh)/2',scale=1920:1080,setsar=1";
         }
         if (segment.punchIn) {
-          const punch = segment.punchIn;
-          videoFilter += ",crop=w='iw/" + punch.zoom.toFixed(3) + "':h='ih/" + punch.zoom.toFixed(3) + "':x='(iw-ow)*" + punch.centerX.toFixed(3) + "':y='(ih-oh)*" + punch.centerY.toFixed(3) + "',scale=" + renderShape.width + ':' + renderShape.height + ',setsar=1';
+          videoFilter += punchInFilter(segment.punchIn, renderShape, segment.start);
         }
         if (layout === 'vertical' && project.openingPushInEnabled !== false) {
           videoFilter += openingPushInFilter(renderShape, editedStart);
@@ -2059,6 +2093,8 @@ module.exports = {
   browserPreviewNeeded,
   openingPushInScale,
   openingPushInFilter,
+  punchInScale,
+  punchInFilter,
   reconcileAutomaticRetakeCuts,
   projectListSummary
 };

@@ -15,6 +15,7 @@
   var previewSeekTimes = {};
   var previewAutoplay = {};
   var previewStopTimes = {};
+  var focusedPunchIds = {};
   var saveQueues = {};
   var saveStates = {};
   var projectDetails = {};
@@ -343,12 +344,35 @@
         return Number(word.end) >= Number(punch.start) && Number(word.start) <= Number(punch.end);
       }).slice(0, 12).map(function (word) { return word.text; }).join(' ');
       if (!excerpt) excerpt = formatTime(punch.start) + ' to ' + formatTime(punch.end);
-      return '<div class="editor-punch-card" data-punch-id="' + esc(punch.id) + '"><div><strong>“' + esc(excerpt) + (excerpt.length >= 80 ? '…' : '') + '”</strong><span>' + formatTime(punch.start) + '–' + formatTime(punch.end) + '</span></div>' +
-        '<label>Zoom<select class="editor-punch-zoom"><option value="1.1"' + (punch.zoom < 1.13 ? ' selected' : '') + '>Subtle · 110%</option><option value="1.18"' + (punch.zoom >= 1.13 && punch.zoom < 1.215 ? ' selected' : '') + '>Standard · 118%</option><option value="1.25"' + (punch.zoom >= 1.215 && punch.zoom < 1.3 ? ' selected' : '') + '>Strong · 125%</option><option value="1.35"' + (punch.zoom >= 1.3 ? ' selected' : '') + '>Dramatic · 135%</option></select></label>' +
-        '<label>Left ↔ right<input class="editor-punch-x" type="range" min="0" max="100" value="' + Math.round(Number(punch.centerX) * 100) + '"></label>' +
-        '<label>Top ↕ bottom<input class="editor-punch-y" type="range" min="0" max="100" value="' + Math.round(Number(punch.centerY) * 100) + '"></label>' +
-        '<div class="editor-punch-actions"><button type="button" class="btn-secondary btn-tiny editor-punch-preview">Preview</button><button type="button" class="btn-secondary btn-tiny editor-punch-remove">Remove</button></div></div>';
+      var positioning = focusedPunchIds[item.id] === punch.id;
+      return '<div class="editor-punch-card' + (positioning ? ' positioning' : '') + '" data-punch-id="' + esc(punch.id) + '"><div><strong>“' + esc(excerpt) + (excerpt.length >= 80 ? '…' : '') + '”</strong><span>' + formatTime(punch.start) + '–' + formatTime(punch.end) + ' · smooth zoom in and out</span></div>' +
+        '<div class="editor-punch-actions"><button type="button" class="btn-secondary btn-tiny editor-punch-position">' + (positioning ? 'Positioning…' : 'Position on video') + '</button><button type="button" class="btn-secondary btn-tiny editor-punch-preview">Preview</button><button type="button" class="btn-secondary btn-tiny editor-punch-remove">Remove</button></div></div>';
     }).join('');
+  }
+
+  function punchFocusHtml(item, punchId) {
+    var punch = (item.punchIns || []).find(function (candidate) { return candidate.id === punchId; });
+    if (!punch) return '';
+    var zoom = Math.max(1.05, Number(punch.zoom) || 1.18);
+    var size = 100 / zoom;
+    var left = Math.max(0, Math.min(100 - size, Number(punch.centerX === undefined ? 0.5 : punch.centerX) * (100 - size)));
+    var top = Math.max(0, Math.min(100 - size, Number(punch.centerY === undefined ? 0.5 : punch.centerY) * (100 - size)));
+    return '<div class="editor-punch-focus" id="editorPunchFocus" tabindex="0" role="group" aria-label="Punch-in framing area. Drag to choose the zoomed area." data-punch-id="' + esc(punch.id) + '" style="width:' + size.toFixed(4) + '%;height:' + size.toFixed(4) + '%;left:' + left.toFixed(4) + '%;top:' + top.toFixed(4) + '%"><span>Drag the zoom area</span></div>';
+  }
+
+  function punchScaleAtTime(punch, sourceTime) {
+    if (!punch) return 1;
+    var start = Number(punch.start) || 0;
+    var end = Math.max(start, Number(punch.end) || 0);
+    var duration = end - start;
+    if (duration <= 0 || sourceTime < start || sourceTime >= end) return 1;
+    var transition = Math.max(0.001, Math.min(0.28, duration / 2));
+    function smooth(value) {
+      var progress = Math.max(0, Math.min(1, value));
+      return progress * progress * (3 - 2 * progress);
+    }
+    var weight = Math.min(smooth((sourceTime - start) / transition), smooth((end - sourceTime) / transition));
+    return 1 + ((Number(punch.zoom) || 1.18) - 1) * weight;
   }
 
   function processingStepsHtml(item) {
@@ -773,6 +797,11 @@
     var sentToProduction = !!project.productionPieceId;
     var failures = failedSteps(project);
     var previewMode = project.renderStatus === 'ready' && !(previewModes[project.id] === 'source' && explicitSourcePreviews[project.id]) ? 'final' : 'source';
+    var focusedPunchId = focusedPunchIds[project.id];
+    if (focusedPunchId && !(project.punchIns || []).some(function (punch) { return punch.id === focusedPunchId; })) {
+      delete focusedPunchIds[project.id];
+      focusedPunchId = '';
+    }
     var previewingWorkingEdit = previewMode === 'source' && project.renderStatus !== 'ready';
     var browserSafeSource = project.browserPreviewRequired && project.browserPreviewStatus === 'ready';
     var sourcePreviewLabel = browserSafeSource ? 'Browser-safe source copy' : 'Original master';
@@ -807,7 +836,7 @@
       '<label class="editor-mode">Pacing<select id="editorPacing"><option value="tight"' + (Number(project.silenceThresholdSeconds) < 0.85 ? ' selected' : '') + '>Tight</option><option value="natural"' + (Number(project.silenceThresholdSeconds || 1) >= 0.85 && Number(project.silenceThresholdSeconds || 1) < 1.3 ? ' selected' : '') + '>Natural</option><option value="gentle"' + (Number(project.silenceThresholdSeconds || 1) >= 1.3 ? ' selected' : '') + '>Gentle</option></select></label>' +
       '<button type="button" class="btn-secondary btn-tiny editor-clear-automation" id="editorClearAutomation" ' + (!automaticCutsPresent ? 'disabled' : '') + ' title="Restore every pause and retake removed automatically. Manual transcript cuts stay intact.">Restore automatic cuts</button></div>';
     var previewPlayerHtml = '<div class="editor-preview" id="editorPreview" tabindex="0" aria-label="Video review. Space plays or pauses. Left and right arrows move two seconds."><div class="editor-video-frame ' + layout + '"><video id="editorVideo" data-preview-mode="' + previewMode + '" data-seek-time="' + previewSeek.toFixed(3) + '" controls playsinline preload="metadata" src="' + previewUrl + '"></video>' +
-      '<div class="editor-caption" id="editorCaption"></div><div class="editor-video-error" id="editorVideoError" hidden><strong>Preview could not be played</strong><span>Your recording and edit are safe. Reload this review copy without rebuilding anything.</span><button type="button" class="btn-secondary btn-tiny" id="editorReloadVideo">Reload preview</button></div></div></div>';
+      (previewMode === 'source' ? punchFocusHtml(project, focusedPunchId) : '') + '<div class="editor-caption" id="editorCaption"></div><div class="editor-video-error" id="editorVideoError" hidden><strong>Preview could not be played</strong><span>Your recording and edit are safe. Reload this review copy without rebuilding anything.</span><button type="button" class="btn-secondary btn-tiny" id="editorReloadVideo">Reload preview</button></div></div></div>';
     var previewStageHtml = layout === 'vertical'
       ? '<div class="editor-preview-stage vertical"><aside class="editor-preview-side editor-preview-side-playback"><div class="eyebrow">Playback</div><h3>Review</h3>' + previewActionsHtml + '</aside>' + previewPlayerHtml + '<aside class="editor-preview-side editor-preview-side-settings"><div class="eyebrow">Edit settings</div><h3>Automatic treatment</h3>' + automaticControlsHtml + '</aside></div>'
       : '<div class="editor-preview-stage horizontal">' + previewPlayerHtml + '</div>';
@@ -866,6 +895,7 @@
     var previewingFinal = video.dataset.previewMode === 'final';
     var previewingOriginalMaster = !previewingFinal && project.renderStatus === 'ready';
     var previewingWorkingEdit = !previewingFinal && project.renderStatus !== 'ready';
+    var punchFocus = root.querySelector('#editorPunchFocus');
     var rendering = ['queued', 'running'].indexOf(project.renderStatus) !== -1;
     var sentToProduction = !!project.productionPieceId;
     var editingLocked = rendering || sentToProduction;
@@ -887,6 +917,7 @@
       if (videoError) videoError.hidden = true;
       if (mediaRecoveryChecks[videoProjectId]) clearTimeout(mediaRecoveryChecks[videoProjectId]);
       delete mediaRecoveryChecks[videoProjectId];
+      updatePreviewMotion(previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime);
     });
     video.addEventListener('error', function () {
       if (videoError) videoError.hidden = false;
@@ -935,26 +966,58 @@
     function isLongformVideo() {
       return (project.effectiveLayout || 'horizontal') === 'horizontal';
     }
+    var motionAnimationFrame = null;
+    function updatePreviewMotion(sourcePlayheadTime) {
+      var activePunch = previewingWorkingEdit && !punchFocus ? (project.punchIns || []).filter(function (punch) {
+        return sourcePlayheadTime >= Number(punch.start) && sourcePlayheadTime < Number(punch.end);
+      }).pop() : null;
+      var openingScale = 1;
+      if (previewingWorkingEdit && !punchFocus && (project.effectiveLayout || 'horizontal') === 'vertical' && project.openingPushInEnabled !== false) {
+        var editedPlayheadTime = sourceToEditedTime(sourcePlayheadTime, project.cuts || []);
+        var openingProgress = Math.max(0, Math.min(1, editedPlayheadTime / 3));
+        openingScale = 1 + 0.04 * openingProgress * openingProgress * (3 - 2 * openingProgress);
+      }
+      var punchScale = punchScaleAtTime(activePunch, sourcePlayheadTime);
+      var combinedScale = openingScale * punchScale;
+      var centerX = activePunch ? Number(activePunch.centerX === undefined ? 0.5 : activePunch.centerX) : 0.5;
+      var centerY = activePunch ? Number(activePunch.centerY === undefined ? 0.5 : activePunch.centerY) : 0.5;
+      var width = video.clientWidth || 0;
+      var height = video.clientHeight || 0;
+      var punchOffsetX = -width * (punchScale - 1) * centerX;
+      var punchOffsetY = -height * (punchScale - 1) * centerY;
+      var offsetX = openingScale * punchOffsetX + width * (1 - openingScale) / 2;
+      var offsetY = openingScale * punchOffsetY + height * (1 - openingScale) / 2;
+      video.style.transform = combinedScale > 1.0001 ? 'matrix(' + combinedScale.toFixed(5) + ',0,0,' + combinedScale.toFixed(5) + ',' + offsetX.toFixed(3) + ',' + offsetY.toFixed(3) + ')' : '';
+      video.style.transformOrigin = '0 0';
+      if (videoFrame) videoFrame.classList.toggle('punching', combinedScale > 1.0001);
+    }
+    function animatePreviewMotion() {
+      if (!video.isConnected || !project || project.id !== videoProjectId) {
+        motionAnimationFrame = null;
+        return;
+      }
+      updatePreviewMotion(previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime);
+      if (!video.paused && !video.ended) motionAnimationFrame = requestAnimationFrame(animatePreviewMotion);
+      else motionAnimationFrame = null;
+    }
+    video.addEventListener('play', function () {
+      if (motionAnimationFrame === null) motionAnimationFrame = requestAnimationFrame(animatePreviewMotion);
+    });
+    video.addEventListener('pause', function () {
+      if (motionAnimationFrame !== null) cancelAnimationFrame(motionAnimationFrame);
+      motionAnimationFrame = null;
+      updatePreviewMotion(previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime);
+    });
+    video.addEventListener('seeked', function () {
+      updatePreviewMotion(previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime);
+    });
     video.addEventListener('timeupdate', function () {
       if (Number.isFinite(previewStopTimes[project.id]) && video.currentTime >= previewStopTimes[project.id]) {
         video.pause();
         delete previewStopTimes[project.id];
       }
       var sourcePlayheadTime = previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime;
-      var activePunch = previewingWorkingEdit ? (project.punchIns || []).filter(function (punch) {
-        return sourcePlayheadTime >= Number(punch.start) && sourcePlayheadTime < Number(punch.end);
-      }).pop() : null;
-      var openingScale = 1;
-      if (previewingWorkingEdit && (project.effectiveLayout || 'horizontal') === 'vertical' && project.openingPushInEnabled !== false) {
-        var editedPlayheadTime = sourceToEditedTime(sourcePlayheadTime, project.cuts || []);
-        var openingProgress = Math.max(0, Math.min(1, editedPlayheadTime / 3));
-        openingScale = 1 + 0.04 * openingProgress * openingProgress * (3 - 2 * openingProgress);
-      }
-      var punchScale = activePunch ? Number(activePunch.zoom || 1.18) : 1;
-      var combinedScale = openingScale * punchScale;
-      video.style.transform = combinedScale > 1.0001 ? 'scale(' + combinedScale.toFixed(4) + ')' : '';
-      video.style.transformOrigin = activePunch ? (Number(activePunch.centerX === undefined ? 0.5 : activePunch.centerX) * 100).toFixed(1) + '% ' + (Number(activePunch.centerY === undefined ? 0.5 : activePunch.centerY) * 100).toFixed(1) + '%' : '50% 50%';
-      if (videoFrame) videoFrame.classList.toggle('punching', combinedScale > 1.0001);
+      updatePreviewMotion(sourcePlayheadTime);
       var now = Date.now();
       if (sourcePlayheadTime >= 1 && now - lastReviewProgressSaveAt >= 500) {
         lastReviewProgressSaveAt = now;
@@ -1156,9 +1219,11 @@
       selected.clear();
       save(function (latest) { return { punchIns: (latest.punchIns || []).concat([nextPunch]) }; }).then(function (item) {
         if (!item || !project || project.id !== item.id) return;
+        focusedPunchIds[item.id] = punchId;
         previewModes[item.id] = 'source';
-        previewSeekTimes[item.id] = Math.max(0, nextPunch.start - 0.35);
-        previewAutoplay[item.id] = true;
+        explicitSourcePreviews[item.id] = true;
+        previewSeekTimes[item.id] = nextPunch.start + Math.min(0.3, Math.max(0, (nextPunch.end - nextPunch.start) / 2));
+        delete previewAutoplay[item.id];
         renderWorkspace();
       });
     };
@@ -1264,27 +1329,123 @@
       });
     };
     function updatePunchIn(punchId, changes, remove) {
-      save(function (latest) {
+      return save(function (latest) {
         var next = (latest.punchIns || []).map(function (punch) {
           return punch.id === punchId ? Object.assign({}, punch, changes || {}) : punch;
         }).filter(function (punch) { return !remove || punch.id !== punchId; });
         return { punchIns: next };
       });
     }
+    if (punchFocus && !editingLocked) {
+      var focusPunchId = punchFocus.dataset.punchId;
+      var focusPunch = (project.punchIns || []).find(function (item) { return item.id === focusPunchId; });
+      if (focusPunch) {
+        var focusCenterX = Number(focusPunch.centerX === undefined ? 0.5 : focusPunch.centerX);
+        var focusCenterY = Number(focusPunch.centerY === undefined ? 0.5 : focusPunch.centerY);
+        function paintPunchFocus() {
+          var boxWidth = punchFocus.offsetWidth;
+          var boxHeight = punchFocus.offsetHeight;
+          var maxLeft = Math.max(0, videoFrame.clientWidth - boxWidth);
+          var maxTop = Math.max(0, videoFrame.clientHeight - boxHeight);
+          punchFocus.style.left = (maxLeft ? focusCenterX * maxLeft / videoFrame.clientWidth * 100 : 0) + '%';
+          punchFocus.style.top = (maxTop ? focusCenterY * maxTop / videoFrame.clientHeight * 100 : 0) + '%';
+        }
+        function savePunchFocus() {
+          updatePunchIn(focusPunchId, { centerX: focusCenterX, centerY: focusCenterY });
+        }
+        punchFocus.addEventListener('pointerdown', function (event) {
+          if (event.button !== undefined && event.button !== 0) return;
+          event.preventDefault();
+          video.pause();
+          var frameRect = videoFrame.getBoundingClientRect();
+          var boxRect = punchFocus.getBoundingClientRect();
+          var grabX = event.clientX - boxRect.left;
+          var grabY = event.clientY - boxRect.top;
+          var originalX = focusCenterX;
+          var originalY = focusCenterY;
+          punchFocus.classList.add('dragging');
+          punchFocus.setPointerCapture(event.pointerId);
+          function move(moveEvent) {
+            var maxLeft = Math.max(0, frameRect.width - boxRect.width);
+            var maxTop = Math.max(0, frameRect.height - boxRect.height);
+            var left = Math.max(0, Math.min(maxLeft, moveEvent.clientX - frameRect.left - grabX));
+            var top = Math.max(0, Math.min(maxTop, moveEvent.clientY - frameRect.top - grabY));
+            focusCenterX = maxLeft ? left / maxLeft : 0.5;
+            focusCenterY = maxTop ? top / maxTop : 0.5;
+            paintPunchFocus();
+          }
+          function finish(finishEvent) {
+            punchFocus.classList.remove('dragging');
+            punchFocus.removeEventListener('pointermove', move);
+            punchFocus.removeEventListener('pointerup', finish);
+            punchFocus.removeEventListener('pointercancel', cancel);
+            if (punchFocus.hasPointerCapture(finishEvent.pointerId)) punchFocus.releasePointerCapture(finishEvent.pointerId);
+            savePunchFocus();
+          }
+          function cancel(cancelEvent) {
+            focusCenterX = originalX;
+            focusCenterY = originalY;
+            paintPunchFocus();
+            punchFocus.classList.remove('dragging');
+            punchFocus.removeEventListener('pointermove', move);
+            punchFocus.removeEventListener('pointerup', finish);
+            punchFocus.removeEventListener('pointercancel', cancel);
+            if (punchFocus.hasPointerCapture(cancelEvent.pointerId)) punchFocus.releasePointerCapture(cancelEvent.pointerId);
+          }
+          punchFocus.addEventListener('pointermove', move);
+          punchFocus.addEventListener('pointerup', finish);
+          punchFocus.addEventListener('pointercancel', cancel);
+        });
+        punchFocus.addEventListener('keydown', function (event) {
+          var amount = event.shiftKey ? 0.1 : 0.025;
+          if (event.key === 'ArrowLeft') focusCenterX -= amount;
+          else if (event.key === 'ArrowRight') focusCenterX += amount;
+          else if (event.key === 'ArrowUp') focusCenterY -= amount;
+          else if (event.key === 'ArrowDown') focusCenterY += amount;
+          else return;
+          event.preventDefault();
+          focusCenterX = Math.max(0, Math.min(1, focusCenterX));
+          focusCenterY = Math.max(0, Math.min(1, focusCenterY));
+          paintPunchFocus();
+          savePunchFocus();
+        });
+      }
+    }
     root.querySelectorAll('.editor-punch-card').forEach(function (card) {
       var punchId = card.dataset.punchId;
       var punch = (project.punchIns || []).find(function (item) { return item.id === punchId; });
+      card.querySelector('.editor-punch-position').onclick = function () {
+        if (!punch) return;
+        focusedPunchIds[project.id] = punchId;
+        previewModes[project.id] = 'source';
+        explicitSourcePreviews[project.id] = true;
+        previewSeekTimes[project.id] = Number(punch.start) + Math.min(0.3, Math.max(0, (Number(punch.end) - Number(punch.start)) / 2));
+        delete previewAutoplay[project.id];
+        renderWorkspace();
+        var replacementVideo = root.querySelector('#editorVideo');
+        if (replacementVideo) replacementVideo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      };
       card.querySelector('.editor-punch-preview').onclick = function () {
         if (!punch) return;
-        var time = previewingFinal ? sourceToEditedTime(punch.start, project.cuts) : punch.start;
-        video.currentTime = Math.max(0, time - 0.35);
-        video.play().catch(function () {});
-        video.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        delete focusedPunchIds[project.id];
+        if (project.renderStatus === 'ready') {
+          previewModes[project.id] = 'final';
+          delete explicitSourcePreviews[project.id];
+          previewSeekTimes[project.id] = Math.max(0, sourceToEditedTime(Number(punch.start), project.cuts || []) - 0.35);
+        } else {
+          previewModes[project.id] = 'source';
+          explicitSourcePreviews[project.id] = true;
+          previewSeekTimes[project.id] = Math.max(0, Number(punch.start) - 0.35);
+        }
+        previewAutoplay[project.id] = true;
+        renderWorkspace();
+        var replacementVideo = root.querySelector('#editorVideo');
+        if (replacementVideo) replacementVideo.scrollIntoView({ behavior: 'smooth', block: 'center' });
       };
-      card.querySelector('.editor-punch-remove').onclick = function () { updatePunchIn(punchId, null, true); };
-      card.querySelector('.editor-punch-zoom').onchange = function () { updatePunchIn(punchId, { zoom: Number(this.value) }); };
-      card.querySelector('.editor-punch-x').onchange = function () { updatePunchIn(punchId, { centerX: Number(this.value) / 100 }); };
-      card.querySelector('.editor-punch-y').onchange = function () { updatePunchIn(punchId, { centerY: Number(this.value) / 100 }); };
+      card.querySelector('.editor-punch-remove').onclick = function () {
+        if (focusedPunchIds[project.id] === punchId) delete focusedPunchIds[project.id];
+        updatePunchIn(punchId, null, true);
+      };
     });
     root.querySelectorAll('.editor-gap-toggle').forEach(function (button) {
       button.onclick = function () {
@@ -1401,6 +1562,7 @@
         projects = projects.filter(function (item) { return item.id !== id; });
         delete projectDetails[id];
         delete explicitSourcePreviews[id];
+        delete focusedPunchIds[id];
         clearReviewProgress(id);
         project = null; selected.clear(); renderList();
         var workspace = root && root.querySelector('#editorWorkspace');
