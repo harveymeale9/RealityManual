@@ -14008,6 +14008,23 @@ normal 65/77px behavior and proves a five-long-word phrase uses the fitted
 
 ---
 
+# 394. Slow Multi-Gigabyte Filming Uploads Are Allowed to Finish (2026-09-29)
+
+The Editor and nginx intentionally agree on a 2GiB per-recording limit, nginx
+streams request bodies rather than buffering another copy, and the backend
+reserves disk for every downstream artifact. However, Node's HTTP server still
+used its default five-minute timeout for receiving the *entire* request body.
+A maximum-size take would need roughly 55Mbps sustained upload speed to avoid a
+server-side 408, which is not a safe assumption for Harvey's phone/home path.
+
+The HTTP server now allows two hours by default for a continuously progressing
+request body. `REQUEST_BODY_TIMEOUT_MS` documents an optional override bounded
+between five minutes and four hours. This does not raise the 2GiB Multer limit,
+bypass storage admission, weaken nginx streaming, or extend idle gaps at the
+proxy; it only removes the inappropriate whole-upload wall-clock cutoff.
+
+---
+
 # 390. Manual Analysis Restarts Survive Lost Responses (2026-09-29)
 
 The framing, possible-retake, and planning-card `Analyze/Match again` controls

@@ -2854,7 +2854,16 @@ async function processVoiceMessage(id, mode, text, agent, imagePath) {
     ? /thread|session|rollout/i.test(result.error || '') && /not found|no .*found|unknown|missing/i.test(result.error || '')
     : /no conversation found/i.test(result.error || '');
   const writerConflict = agent === 'codex' && /active writer|thread-store conflict/i.test(result.error || '');
-  if (!result.ok && sessionId && (missingSession || writerConflict)) {
+  // A long-running resumed session accumulates conversation history on top
+  // of the full CLAUDE.md this project auto-loads plus the cross-agent
+  // context bridge — after enough turns (a long Editor-build session is the
+  // real case that triggered this) the combined prompt can exceed the
+  // model's context window outright. There is no way to trim a resumed
+  // session's own history from here, so the same self-healing move as a
+  // lost/invalid session applies: drop it and retry once completely fresh,
+  // rather than leaving Harvey looking at a bare "Prompt is too long" error.
+  const promptTooLong = /prompt is too long|prompt too long|context.{0,20}(window|length).{0,20}(exceed|too long)/i.test(result.error || '');
+  if (!result.ok && sessionId && (missingSession || writerConflict || promptTooLong)) {
     console.error('voice ' + agent + ' session ' + sessionId + ' cannot be resumed, starting fresh:', result.error);
     if (agent === 'codex') stmts.upsertCodexSession.run(null, new Date().toISOString());
     else {
@@ -2863,7 +2872,9 @@ async function processVoiceMessage(id, mode, text, agent, imagePath) {
     }
     activity.push(writerConflict
       ? '— previous Codex writer was still attached; isolated it and started a clean session —'
-      : '— previous session was lost, starting a new one —');
+      : promptTooLong
+        ? '— previous session had grown too large for the model context; starting a fresh session —'
+        : '— previous session was lost, starting a new one —');
     result = await runSelectedAgent(null);
   }
   const now = new Date().toISOString();
@@ -3275,7 +3286,7 @@ function recoverInflightVideoJobs() {
   }
 }
 
-app.listen(PORT, function () {
+const httpServer = app.listen(PORT, function () {
   console.log('rm-ops-service listening on ' + PORT);
   recoverInflightVoiceMessages();
   recoverInflightVideoJobs();
@@ -3284,3 +3295,12 @@ app.listen(PORT, function () {
     releaseDueDirectPosts().catch(function (error) { console.error('direct release check failed:', error.message); });
   }, 30000);
 });
+// Node's default requestTimeout is five minutes for receiving the complete
+// request body. That is far shorter than a legitimate multi-gigabyte camera
+// upload over an ordinary home/mobile connection. Multer's 2 GiB cap and the
+// Editor's disk-capacity reservation remain authoritative; this only prevents
+// elapsed wall time from killing a continuously progressing upload.
+const configuredRequestTimeout = Number(process.env.REQUEST_BODY_TIMEOUT_MS);
+httpServer.requestTimeout = Number.isFinite(configuredRequestTimeout)
+  ? Math.max(5 * 60 * 1000, Math.min(4 * 60 * 60 * 1000, configuredRequestTimeout))
+  : 2 * 60 * 60 * 1000;

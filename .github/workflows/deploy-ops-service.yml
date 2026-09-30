@@ -9,6 +9,26 @@ on:
 permissions:
   contents: write
 
+# Rapid successive pushes to ops-service/** (e.g. a Project Manager agent
+# committing one small fix after another) used to launch one fully parallel
+# GitHub-hosted job per push, each independently SSHing into the same VPS
+# and running deploy.sh concurrently. Two or more overlapping runs could
+# race on the same `docker run --name rm-ops-service` (the second one fails
+# outright with "container name already in use" while the first's
+# stop/rm hasn't finished yet) and on the same `git pull` in
+# /root/realitymanual-repo — this is the real cause behind a burst of
+# "all runs failed" emails during a fast run of commits, not a problem
+# with any individual commit. Queuing (not cancelling) is correct here:
+# deploy.sh's own fetch + ff-only-merge always picks up whatever is
+# actually current on main by the time a queued run's turn comes, and its
+# commit-range rebuild check (see deploy.sh) already skips Docker entirely
+# if a prior queued run already built the latest backend change — so a
+# queued-but-now-redundant run finishes as a fast no-op rather than being
+# wasted work.
+concurrency:
+  group: deploy-ops-service
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
