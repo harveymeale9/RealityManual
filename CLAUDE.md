@@ -14795,3 +14795,21 @@ message without changing desktop behavior or the underlying API's mode support.
 A real mobile-sized Chromium check confirmed that the recording control remains
 visible and the removed button is absent, with no page errors. The complete
 142-test suite continues to pass.
+
+---
+
+# 419. Editor Preview Lock Is Available During Player Binding (2026-09-30)
+
+The preview-rebuild lock added in §414 was calculated as a local variable in
+`renderWorkspace()`, but the player and soundtrack controls are wired by the
+separate `bindWorkspace()` function. That function referenced `previewLocked`
+without defining or receiving it, so opening an existing Editor recording
+threw `ReferenceError: previewLocked is not defined`; `openProject()` caught the
+exception and displayed it as an alert on the first visit.
+
+`renderWorkspace()` now passes that calculated lock explicitly into
+`bindWorkspace()` before any player or audio control is initialized. A real
+Chromium session against the live API, with the
+fixed local script substituted, opened the existing recording without a dialog
+or runtime error and rendered the review player. The Editor script cache key was
+advanced so already-open browsers cannot retain the broken bundle.

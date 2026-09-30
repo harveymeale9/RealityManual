@@ -977,11 +977,11 @@
           project.renderStatus === 'ready' ? '<button class="btn-primary" id="editorSendProduction" data-editor-approve ' + (!audioSelectionReady || previewLocked ? 'disabled title="Wait for the updated preview before approval"' : '') + '>Approve &amp; Send to Production</button>' :
           '<button class="btn-primary" id="editorRender" ' + (['queued', 'running'].indexOf(project.renderStatus) !== -1 || renderBlocked ? 'disabled' : '') + '>' + (project.renderStatus === 'queued' ? 'Waiting in render queue…' : project.renderStatus === 'running' ? 'Building final edit… ' + Math.round(Number(project.renderProgress) || 0) + '%' : renderButtonText) + '</button>') +
         '</div></div>';
-    bindWorkspace();
+    bindWorkspace(previewLocked);
     paintSelection();
   }
 
-  function bindWorkspace() {
+  function bindWorkspace(previewLocked) {
     var video = root.querySelector('#editorVideo');
     var videoFrame = root.querySelector('.editor-video-frame');
     var videoProjectId = project.id;
