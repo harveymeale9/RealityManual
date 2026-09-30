@@ -15140,3 +15140,46 @@ compete for space. Video cards retain their existing media modal, and the
 existing mobile full-screen behavior remains intact. Chromium checks at
 1366x768 and 1024x700 showed Notes areas of 1004x564 and 732x503 respectively,
 with equal body scroll/client heights and no page errors.
+
+---
+
+# 433. Project Manager Messages Preserve and Display Multiple Images (2026-09-30)
+
+Project Manager image attachment was single-file and temporary end to end.
+Desktop paste/drop stopped after the first clipboard item or file, mobile's
+picker did not permit multiple selection, the shared client sent one `image`
+field, and the backend passed one temporary path to the selected agent before
+deleting it. The message row stored no attachment metadata at all. This meant a
+second screenshot was silently omitted and even the first screenshot vanished
+from the visible chat after a reload.
+
+Desktop and mobile now accept up to eight PNG/JPEG/GIF/WebP images in one
+message. Desktop has a visible multi-file paperclip in addition to multi-image
+paste and drop; mobile's native picker uses multi-select. The compose tray shows
+small individual thumbnails with per-image removal, and sent/history bubbles
+show every attachment as a compact 92px thumbnail grid instead of allowing one
+image to dominate the conversation.
+
+The multipart endpoint accepts the new repeated `images` field while retaining
+the old singular `image` field for compatibility. Valid uploads are moved from
+temporary storage into `DATA_DIR/voice-attachments/<message-id>/`, and a new
+`voice_messages.attachments_json` column records bounded, non-secret metadata.
+Authenticated attachment routes serve those durable files and hydrated message
+rows return safe URLs, so both devices reconstruct the complete image set from
+normal thread sync after any reload. Pending-message restart recovery also
+rebuilds the host paths from this stored metadata.
+
+Every stored path is now handed to the chosen agent: Codex receives one `-i`
+argument per image and Claude receives an explicit numbered list of paths to
+read. Runner tests cover two-image forwarding for both agents. The complete 147
+test suite passes. Real Chromium checks confirmed two thumbnails before send,
+two multipart file fields, two optimistic images in the sent bubble on desktop
+and mobile, and two 92x92 persisted-history thumbnails without page errors. A
+local authenticated backend integration also uploaded two real screenshots,
+returned both in message history, and served both byte-for-byte from their
+attachment URLs.
+
+Images from messages sent before this migration cannot be reconstructed: the
+old system never stored their metadata and deleted its one accepted temporary
+file when the agent turn ended. Harvey must attach any missing older screenshot
+again; all messages sent after this change retain every selected image.

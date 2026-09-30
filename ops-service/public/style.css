@@ -737,7 +737,11 @@ body.role-reviewer #pmBackFab {
 /* Thumbnail for a user message that attached an image — sent messages
    were previously rendered as a bare "(image)" placeholder with no
    actual picture, so there was no way to confirm what was sent. */
-.pm-msg-image { display: block; max-width: 100%; max-height: 260px; border-radius: 7px; object-fit: contain; }
+.pm-msg-images { display: flex; flex-wrap: wrap; gap: 6px; }
+.pm-msg-image {
+  display: block; width: 92px; height: 92px; border-radius: 7px;
+  object-fit: cover; border: 1px solid var(--border-soft); background: var(--surface-2);
+}
 .pm-msg-caption { margin-top: 8px; }
 /* Quoted reference to the user message a reply answers — a reply can land
    well after Harvey has sent other messages in the meantime, so it's not
@@ -793,11 +797,12 @@ body.role-reviewer #pmBackFab {
   padding: 12px 14px; border-radius: 8px; max-height: 160px;
 }
 .pm-textarea:focus { outline: none; border-color: var(--accent); }
-.pm-mic-btn, .pm-send-btn {
+.pm-attach-btn, .pm-mic-btn, .pm-send-btn {
   width: 46px; height: 46px; border-radius: 8px; border: 1px solid var(--border);
   background: var(--surface-2); color: var(--ink-soft); display: flex; align-items: center; justify-content: center;
   cursor: pointer; flex-shrink: 0;
 }
+.pm-attach-btn:hover, .pm-mic-btn:hover { border-color: var(--accent); color: var(--accent); }
 .pm-mic-btn.starting { background: var(--accent-soft); border-color: var(--accent-3); color: var(--accent); opacity: .7; }
 .pm-mic-btn.recording { background: var(--error-soft); border-color: var(--error); color: var(--error); animation: pm-rec-pulse 1.2s ease-in-out infinite; }
 @keyframes pm-rec-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
@@ -823,11 +828,14 @@ body.role-reviewer #pmBackFab {
 }
 .pm-reply-preview-cancel:hover { color: var(--error); }
 
-.pm-image-preview { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.pm-image-preview { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .pm-image-preview img { height: 56px; width: 56px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); }
+.pm-image-preview-item { position: relative; width: 56px; height: 56px; }
 .pm-image-preview-remove {
+  position: absolute; top: -6px; right: -6px; width: 20px; height: 20px;
+  display: grid; place-items: center; padding: 0; border-radius: 50%;
   background: var(--surface-2); border: 1px solid var(--border); color: var(--ink-soft);
-  border-radius: 6px; padding: 4px 10px; font-size: 0.75rem; cursor: pointer;
+  font-size: 0.85rem; line-height: 1; cursor: pointer;
 }
 .pm-image-preview-remove:hover { border-color: var(--error); color: var(--error); }
 .pm-input-row.pm-drag-over .pm-textarea { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }

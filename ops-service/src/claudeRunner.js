@@ -245,7 +245,9 @@ function runClaude(opts) {
   const prompt = String(opts.prompt || '');
   const sessionId = opts.sessionId && SESSION_ID_RE.test(opts.sessionId) ? opts.sessionId : null;
   const appendSystemPrompt = opts.appendSystemPrompt ? String(opts.appendSystemPrompt) : null;
-  const imagePath = opts.imagePath ? String(opts.imagePath) : null;
+  const imagePaths = Array.isArray(opts.imagePaths)
+    ? opts.imagePaths.map(String).filter(Boolean).slice(0, 8)
+    : (opts.imagePath ? [String(opts.imagePath)] : []);
   const timeoutMs = opts.timeoutMs || DEFAULT_TIMEOUT_MS;
   const runId = crypto.randomBytes(12).toString('hex');
   const ownerKey = opts.ownerKey && OWNER_KEY_RE.test(opts.ownerKey) ? opts.ownerKey : runId;
@@ -258,8 +260,10 @@ function runClaude(opts) {
   // `-i <path>`) — the simplest robust option is pointing the agent's own
   // Read tool (which already supports images) at a host-reachable path
   // instead of inlining base64 into the prompt.
-  const fullPrompt = imagePath
-    ? prompt + '\n\n[An image was attached to this message. Use your Read tool on this exact path to view it: ' + imagePath + ']'
+  const fullPrompt = imagePaths.length
+    ? prompt + '\n\n[' + imagePaths.length + ' image' + (imagePaths.length === 1 ? ' was' : 's were') +
+      ' attached to this message. Use your Read tool to view every exact path below before responding:\n' +
+      imagePaths.map(function (imagePath, index) { return (index + 1) + '. ' + imagePath; }).join('\n') + ']'
     : prompt;
 
   return new Promise(function (resolve) {

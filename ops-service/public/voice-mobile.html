@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=20260928-auto-voice-toggle" />
+  <link rel="stylesheet" href="style.css?v=20260930-multi-image-chat-v100" />
   <style>
     html, body { height: 100%; overflow: hidden; }
     body { display: flex; }
@@ -186,7 +186,7 @@
             <button type="button" class="v-attach-btn" id="vAttachBtn" title="Attach an image" aria-label="Attach an image">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21.44 11.05 12.25 20.24a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95L9.83 18.5a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
             </button>
-            <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" id="vImageInput" hidden />
+            <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" id="vImageInput" multiple hidden />
             <textarea id="vTextInput" class="pm-textarea" rows="1" placeholder="Can't speak? Type here…"></textarea>
             <button type="button" class="pm-send-btn" id="vSendBtn" title="Send" aria-label="Send">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4Z"/></svg>
@@ -222,7 +222,7 @@
 
   <script src="lib/store.js"></script>
   <script src="lib/auth.js"></script>
-  <script src="lib/voiceClient.js?v=20260930-ready-before-reveal"></script>
+  <script src="lib/voiceClient.js?v=20260930-multi-image-chat"></script>
   <script src="lib/usageDashboard.js?v=20260921-usage"></script>
   <script>
     (function () {
@@ -407,12 +407,13 @@
         }
         thread.scrollTop = thread.scrollHeight;
       }
-      function addMessage(kind, text, msgId, imageFile, replyToText, insertBeforeEl) {
+      function addMessage(kind, text, msgId, images, replyToText, insertBeforeEl) {
         clearEmptyNote();
+        images = Array.isArray(images) ? images.filter(Boolean) : (images ? [images] : []);
         var el = document.createElement('div');
         el.className = 'pm-msg pm-msg-' + kind;
         if (msgId) el.dataset.msgId = msgId;
-        if (!imageFile && !replyToText) {
+        if (!images.length && !replyToText) {
           el.textContent = text;
           insertMessageEl(el, insertBeforeEl);
           return el;
@@ -423,17 +424,26 @@
           replyTo.textContent = replyToSnippet(replyToText);
           el.appendChild(replyTo);
         }
-        if (imageFile) {
-          var img = document.createElement('img');
-          img.className = 'pm-msg-image';
-          var reader = new FileReader();
-          reader.onload = function () { img.src = reader.result; };
-          reader.readAsDataURL(imageFile);
-          el.appendChild(img);
+        if (images.length) {
+          var imageGrid = document.createElement('div');
+          imageGrid.className = 'pm-msg-images';
+          images.forEach(function (image, index) {
+            var img = document.createElement('img');
+            img.className = 'pm-msg-image';
+            img.alt = image.name || ('Attached image ' + (index + 1));
+            if (image.url) img.src = image.url;
+            else {
+              var reader = new FileReader();
+              reader.onload = function () { img.src = reader.result; };
+              reader.readAsDataURL(image);
+            }
+            imageGrid.appendChild(img);
+          });
+          el.appendChild(imageGrid);
         }
         if (text) {
           var textEl = document.createElement('div');
-          if (imageFile) textEl.className = 'pm-msg-caption';
+          if (images.length) textEl.className = 'pm-msg-caption';
           textEl.textContent = text;
           el.appendChild(textEl);
         }
@@ -589,37 +599,50 @@
         }
       }
 
-      // --- Image attach: no paste/drop gesture on mobile, so a dedicated
-      // button + file picker (works for both camera roll and, on most
-      // browsers, the camera itself).
-      var pendingImage = null;
-      function clearPendingImage() {
-        pendingImage = null;
+      // --- Image attach: the native picker supports multi-select and each
+      // compact thumbnail can be removed independently before sending.
+      var pendingImages = [];
+      function clearPendingImages() {
+        pendingImages = [];
         imagePreviewEl.hidden = true;
         imagePreviewEl.innerHTML = '';
         imageInput.value = '';
       }
-      function setPendingImage(file) {
-        pendingImage = file;
-        var reader = new FileReader();
-        reader.onload = function () {
-          imagePreviewEl.innerHTML = '';
+      function renderPendingImages() {
+        imagePreviewEl.innerHTML = '';
+        pendingImages.forEach(function (file, index) {
+          var item = document.createElement('div');
+          item.className = 'pm-image-preview-item';
           var img = document.createElement('img');
-          img.src = reader.result;
-          imagePreviewEl.appendChild(img);
+          img.alt = file.name || ('Image ' + (index + 1));
+          var reader = new FileReader();
+          reader.onload = function () { img.src = reader.result; };
+          reader.readAsDataURL(file);
+          item.appendChild(img);
           var removeBtn = document.createElement('button');
           removeBtn.type = 'button';
           removeBtn.className = 'pm-image-preview-remove';
-          removeBtn.textContent = 'Remove';
-          removeBtn.addEventListener('click', clearPendingImage);
-          imagePreviewEl.appendChild(removeBtn);
-          imagePreviewEl.hidden = false;
-        };
-        reader.readAsDataURL(file);
+          removeBtn.textContent = '×';
+          removeBtn.setAttribute('aria-label', 'Remove ' + img.alt);
+          removeBtn.addEventListener('click', function () {
+            pendingImages.splice(index, 1);
+            renderPendingImages();
+          });
+          item.appendChild(removeBtn);
+          imagePreviewEl.appendChild(item);
+        });
+        imagePreviewEl.hidden = !pendingImages.length;
+      }
+      function addPendingImages(files) {
+        Array.prototype.slice.call(files || []).forEach(function (file) {
+          if (pendingImages.length < 8 && file.type && file.type.indexOf('image/') === 0) pendingImages.push(file);
+        });
+        renderPendingImages();
       }
       attachBtn.addEventListener('click', function () { imageInput.click(); });
       imageInput.addEventListener('change', function () {
-        if (imageInput.files && imageInput.files[0]) setPendingImage(imageInput.files[0]);
+        addPendingImages(imageInput.files);
+        imageInput.value = '';
       });
 
       function addTyping(msgId, agent) {
@@ -673,7 +696,7 @@
           if (btn) { btn.textContent = '■ Stop'; btn.classList.add('pm-stop-btn'); }
         });
         sync = Voice.syncThread({
-          onNewMessage: function (row) { if (row.notification_kind !== 'mail_alert') addMessage('user', row.transcript, row.id, null, row.reply_to_snippet); },
+          onNewMessage: function (row) { if (row.notification_kind !== 'mail_alert') addMessage('user', row.transcript, row.id, row.attachments, row.reply_to_snippet); },
           onPending: function (row) { if (row.notification_kind !== 'mail_alert') addTyping(row.id, row.agent); },
           onEarlyAck: function (row) {
             // Swap the generic "CC is working on it…" placeholder for CC's
@@ -748,15 +771,15 @@
       // primary interaction the way desktop's chat is — no voice-carryover
       // rule here). Can still carry an attached image.
       function sendTyped(text) {
-        var image = pendingImage;
-        if (!text.trim() && !image) return;
+        var images = pendingImages.slice();
+        if (!text.trim() && !images.length) return;
         var replyTo = pendingReplyTo;
         clearPendingReplyTo();
-        addMessage('user', text.trim(), null, image, replyTo ? replyTo.snippet : null);
+        addMessage('user', text.trim(), null, images, replyTo ? replyTo.snippet : null);
         var agent = selectedAgent;
         var typingEl = addTyping(null, agent);
-        clearPendingImage();
-        Voice.sendMessage(text.trim(), 'respond', image, replyTo ? replyTo.id : null, agent).then(function (created) {
+        clearPendingImages();
+        Voice.sendMessage(text.trim(), 'respond', images, replyTo ? replyTo.id : null, agent).then(function (created) {
           typingEl.dataset.msgId = created.id;
           sync.markKnown(created);
         }).catch(function (err) {

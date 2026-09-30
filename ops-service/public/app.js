@@ -395,6 +395,10 @@
             '</div>' +
             '<div class="pm-image-preview" id="pmImagePreview" hidden></div>' +
             '<div class="pm-input-row">' +
+              '<button type="button" class="pm-attach-btn" id="pmAttachBtn" title="Attach images" aria-label="Attach images">' +
+                '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21.44 11.05 12.25 20.24a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95L9.83 18.5a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>' +
+              '</button>' +
+              '<input type="file" accept="image/png,image/jpeg,image/gif,image/webp" id="pmImageInput" multiple hidden />' +
               '<button type="button" class="pm-mic-btn" id="pmMicBtn" title="Record voice message" aria-label="Record voice message">' +
                 '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/></svg>' +
               '</button>' +
@@ -430,6 +434,8 @@
     var micBtn = document.getElementById('pmMicBtn');
     var resetBtn = document.getElementById('pmResetBtn');
     var imagePreviewEl = document.getElementById('pmImagePreview');
+    var imageInput = document.getElementById('pmImageInput');
+    var attachBtn = document.getElementById('pmAttachBtn');
     var inputRow = textInput.closest('.pm-input-row');
     var replyPreviewEl = document.getElementById('pmReplyPreview');
     var replyPreviewTextEl = document.getElementById('pmReplyPreviewText');
@@ -561,12 +567,13 @@
       }
       thread.scrollTop = thread.scrollHeight;
     }
-    function addMessage(kind, text, msgId, imageFile, replyToText, insertBeforeEl) {
+    function addMessage(kind, text, msgId, images, replyToText, insertBeforeEl) {
       clearEmptyNote();
+      images = Array.isArray(images) ? images.filter(Boolean) : (images ? [images] : []);
       var el = document.createElement('div');
       el.className = 'pm-msg pm-msg-' + kind;
       if (msgId) el.dataset.msgId = msgId;
-      if (!imageFile && !replyToText) {
+      if (!images.length && !replyToText) {
         el.textContent = text;
         insertMessageEl(el, insertBeforeEl);
         return el;
@@ -577,17 +584,26 @@
         replyTo.textContent = replyToSnippet(replyToText);
         el.appendChild(replyTo);
       }
-      if (imageFile) {
-        var img = document.createElement('img');
-        img.className = 'pm-msg-image';
-        var reader = new FileReader();
-        reader.onload = function () { img.src = reader.result; };
-        reader.readAsDataURL(imageFile);
-        el.appendChild(img);
+      if (images.length) {
+        var imageGrid = document.createElement('div');
+        imageGrid.className = 'pm-msg-images';
+        images.forEach(function (image, index) {
+          var img = document.createElement('img');
+          img.className = 'pm-msg-image';
+          img.alt = image.name || ('Attached image ' + (index + 1));
+          if (image.url) img.src = image.url;
+          else {
+            var reader = new FileReader();
+            reader.onload = function () { img.src = reader.result; };
+            reader.readAsDataURL(image);
+          }
+          imageGrid.appendChild(img);
+        });
+        el.appendChild(imageGrid);
       }
       if (text) {
         var textEl = document.createElement('div');
-        if (imageFile) textEl.className = 'pm-msg-caption';
+        if (images.length) textEl.className = 'pm-msg-caption';
         textEl.textContent = text;
         el.appendChild(textEl);
       }
@@ -702,43 +718,58 @@
       return wrap;
     }
 
-    // --- Image attach: paste into the textarea or drop onto the input row.
-    // Desktop only needs these two per Harvey (no dedicated button) — a
-    // visible attach button is the mobile-specific gap (no paste gesture
-    // there), added in voice-mobile.html instead.
-    var pendingImage = null;
-    function clearPendingImage() {
-      pendingImage = null;
+    // --- Image attach: picker, paste, and drop all append to the same
+    // eight-image tray. Each thumbnail can be removed independently.
+    var pendingImages = [];
+    function clearPendingImages() {
+      pendingImages = [];
       imagePreviewEl.hidden = true;
       imagePreviewEl.innerHTML = '';
+      imageInput.value = '';
     }
-    function setPendingImage(file) {
-      pendingImage = file;
-      var reader = new FileReader();
-      reader.onload = function () {
-        imagePreviewEl.innerHTML = '';
+    function renderPendingImages() {
+      imagePreviewEl.innerHTML = '';
+      pendingImages.forEach(function (file, index) {
+        var item = document.createElement('div');
+        item.className = 'pm-image-preview-item';
         var img = document.createElement('img');
-        img.src = reader.result;
-        imagePreviewEl.appendChild(img);
+        img.alt = file.name || ('Image ' + (index + 1));
+        var reader = new FileReader();
+        reader.onload = function () { img.src = reader.result; };
+        reader.readAsDataURL(file);
+        item.appendChild(img);
         var removeBtn = document.createElement('button');
         removeBtn.type = 'button';
         removeBtn.className = 'pm-image-preview-remove';
-        removeBtn.textContent = 'Remove image';
-        removeBtn.addEventListener('click', clearPendingImage);
-        imagePreviewEl.appendChild(removeBtn);
-        imagePreviewEl.hidden = false;
-      };
-      reader.readAsDataURL(file);
+        removeBtn.textContent = '×';
+        removeBtn.setAttribute('aria-label', 'Remove ' + img.alt);
+        removeBtn.addEventListener('click', function () {
+          pendingImages.splice(index, 1);
+          renderPendingImages();
+        });
+        item.appendChild(removeBtn);
+        imagePreviewEl.appendChild(item);
+      });
+      imagePreviewEl.hidden = !pendingImages.length;
     }
+    function addPendingImages(files) {
+      Array.prototype.slice.call(files || []).forEach(function (file) {
+        if (pendingImages.length < 8 && file.type && file.type.indexOf('image/') === 0) pendingImages.push(file);
+      });
+      renderPendingImages();
+    }
+    attachBtn.addEventListener('click', function () { imageInput.click(); });
+    imageInput.addEventListener('change', function () { addPendingImages(imageInput.files); imageInput.value = ''; });
     textInput.addEventListener('paste', function (e) {
       var items = (e.clipboardData && e.clipboardData.items) || [];
+      var pasted = [];
       for (var i = 0; i < items.length; i++) {
         if (items[i].type && items[i].type.indexOf('image/') === 0) {
           var file = items[i].getAsFile();
-          if (file) { setPendingImage(file); e.preventDefault(); }
-          break;
+          if (file) pasted.push(file);
         }
       }
+      if (pasted.length) { addPendingImages(pasted); e.preventDefault(); }
     });
     if (inputRow) {
       inputRow.addEventListener('dragover', function (e) { e.preventDefault(); inputRow.classList.add('pm-drag-over'); });
@@ -747,7 +778,7 @@
         e.preventDefault();
         inputRow.classList.remove('pm-drag-over');
         var files = e.dataTransfer && e.dataTransfer.files;
-        if (files && files.length && files[0].type.indexOf('image/') === 0) setPendingImage(files[0]);
+        if (files && files.length) addPendingImages(files);
       });
     }
 
@@ -876,7 +907,7 @@
     var lastAlertRefresh = 0;
 
     pmSync = Voice.syncThread({
-      onNewMessage: function (row) { if (row.notification_kind !== 'mail_alert') addMessage('user', row.transcript, row.id, null, row.reply_to_snippet); },
+      onNewMessage: function (row) { if (row.notification_kind !== 'mail_alert') addMessage('user', row.transcript, row.id, row.attachments, row.reply_to_snippet); },
       onPending: function (row) { if (row.notification_kind !== 'mail_alert') addTyping(row.id, row.agent); },
       onEarlyAck: function (row) {
         // Swap the generic "CC is working on it…" placeholder for CC's own
@@ -958,15 +989,15 @@
     function sendText(text, mode, opts) {
       opts = opts || {};
       var autoSpeak = !!opts.autoSpeak;
-      var image = opts.image || null;
-      if (!text.trim() && !image) return;
+      var images = opts.images || [];
+      if (!text.trim() && !images.length) return;
       var replyTo = pendingReplyTo;
       clearPendingReplyTo();
-      addMessage('user', text.trim(), null, image, replyTo ? replyTo.snippet : null);
+      addMessage('user', text.trim(), null, images, replyTo ? replyTo.snippet : null);
       var agent = selectedAgent;
       var typingEl = addTyping(null, agent);
       renderActivity(null);
-      Voice.sendMessage(text.trim(), mode, image, replyTo ? replyTo.id : null, agent).then(function (created) {
+      Voice.sendMessage(text.trim(), mode, images, replyTo ? replyTo.id : null, agent).then(function (created) {
         typingEl.dataset.msgId = created.id;
         if (autoSpeak) voiceAutoSpeak[created.id] = true;
         pmSync.markKnown(created);
@@ -986,13 +1017,13 @@
 
     sendBtn.addEventListener('click', function () {
       var text = textInput.value;
-      var image = pendingImage;
+      var images = pendingImages.slice();
       textInput.value = '';
       textInput.style.height = 'auto';
       var carryVoice = lastSendWasVoice;
       lastSendWasVoice = false;
-      clearPendingImage();
-      sendText(text, 'respond', { autoSpeak: carryVoice, image: image });
+      clearPendingImages();
+      sendText(text, 'respond', { autoSpeak: carryVoice, images: images });
     });
     textInput.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey) {

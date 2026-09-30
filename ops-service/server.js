@@ -45,6 +45,7 @@ const r2StorageService = require('./src/r2Storage');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
+const VOICE_ATTACHMENTS_DIR = path.join(DATA_DIR, 'voice-attachments');
 const DB_PATH = path.join(DATA_DIR, 'db.sqlite');
 const WORK_LOG_PATH = path.join(DATA_DIR, 'work-log.md');
 // Despite the name, this is the shared host-side data dir both Codex's and
@@ -75,6 +76,7 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://realitymanual.c
   .split(',').map(function (s) { return s.trim(); }).filter(Boolean);
 
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+fs.mkdirSync(VOICE_ATTACHMENTS_DIR, { recursive: true });
 
 const STORE_NAMES = ['pieces', 'videos', 'audioTracks', 'settings', 'errors'];
 const FILE_STORES = ['videos', 'audioTracks'];
@@ -220,6 +222,11 @@ try { db.exec("ALTER TABLE voice_messages ADD COLUMN agent TEXT NOT NULL DEFAULT
 try { db.exec("ALTER TABLE voice_messages ADD COLUMN notification_kind TEXT NOT NULL DEFAULT 'conversation'"); } catch (e) { /* already exists */ }
 try { db.exec('ALTER TABLE voice_messages ADD COLUMN notification_unread INTEGER NOT NULL DEFAULT 0'); } catch (e) { /* already exists */ }
 try { db.exec('ALTER TABLE voice_messages ADD COLUMN source_ref TEXT'); } catch (e) { /* already exists */ }
+// JSON metadata for every image attached to a Project Manager message.
+// The actual files live under DATA_DIR/voice-attachments so chat history can
+// still show them after a reload (the old single upload was temporary and was
+// deleted as soon as the agent turn finished).
+try { db.exec('ALTER TABLE voice_messages ADD COLUMN attachments_json TEXT'); } catch (e) { /* already exists */ }
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_mail_alert_source ON voice_messages(source_ref) WHERE notification_kind='mail_alert' AND source_ref IS NOT NULL");
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_email_instruction_source ON voice_messages(source_ref) WHERE notification_kind='conversation' AND source_ref IS NOT NULL");
 // Claude and Codex maintain independent resumable conversations. Keeping
@@ -243,7 +250,7 @@ const stmts = {
   getReviewerSession: db.prepare('SELECT * FROM reviewer_sessions WHERE token = ?'),
   delReviewerSession: db.prepare('DELETE FROM reviewer_sessions WHERE token = ?'),
   purgeReviewerSessions: db.prepare('DELETE FROM reviewer_sessions WHERE expires_at < ?'),
-  insertVoiceMessage: db.prepare('INSERT INTO voice_messages (id, mode, transcript, status, created_at, reply_to_id, agent) VALUES (?, ?, ?, ?, ?, ?, ?)'),
+  insertVoiceMessage: db.prepare('INSERT INTO voice_messages (id, mode, transcript, status, created_at, reply_to_id, agent, attachments_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'),
   insertEmailInstruction: db.prepare("INSERT INTO voice_messages (id,mode,transcript,status,created_at,reply_to_id,agent,notification_kind,notification_unread,source_ref) VALUES(?,'execute',?,'pending',?,NULL,?,'conversation',0,?)"),
   setVoiceMessageStatus: db.prepare('UPDATE voice_messages SET status = ? WHERE id = ?'),
   setVoiceActivityLog: db.prepare('UPDATE voice_messages SET activity_log = ? WHERE id = ?'),
@@ -2885,7 +2892,7 @@ function drainVoiceQueue() {
   voiceProcessing = true;
   const work = next.recoverAgent
     ? recoverAgentVoiceMessage(next.id, next.recoverAgent)
-    : processVoiceMessage(next.id, next.mode, next.text, next.agent, next.imagePath);
+    : processVoiceMessage(next.id, next.mode, next.text, next.agent, next.imagePaths || (next.imagePath ? [next.imagePath] : []));
   work
     .catch(function (err) {
       stmts.finishVoiceMessage.run('error', null, String((err && err.message) || err).slice(0, 2000), new Date().toISOString(), next.id);
@@ -2963,7 +2970,7 @@ function buildSystemPromptForSession(sessionId) {
     'log, for context on what you and Harvey were doing recently:\n' + recentLog;
 }
 
-async function processVoiceMessage(id, mode, text, agent, imagePath) {
+async function processVoiceMessage(id, mode, text, agent, imagePaths) {
   stmts.setVoiceMessageStatus.run('running', id);
   agent = normalizeVoiceAgent(agent);
   const messageRow = stmts.getVoiceMessage.get(id);
@@ -3001,7 +3008,7 @@ async function processVoiceMessage(id, mode, text, agent, imagePath) {
         runKey: id,
         onActivity: onActivity,
         onEarlyAck: onEarlyAck,
-        imagePath: imagePath
+        imagePaths: imagePaths
       });
     }
     return claudeRunner.runClaude({
@@ -3012,7 +3019,7 @@ async function processVoiceMessage(id, mode, text, agent, imagePath) {
       appendSystemPrompt: buildSystemPromptForSession(resumeId),
       onActivity: onActivity,
       onEarlyAck: onEarlyAck,
-      imagePath: imagePath
+      imagePaths: imagePaths
     });
   };
 
@@ -3088,7 +3095,7 @@ const backgroundMonitors = backgroundMonitorService.setup(db, {
     // recovery already owns the existing pending row; do not insert or queue
     // it twice when the watcher retries its claim.
     if (stmts.getVoiceMessage.get(id)) return id;
-    stmts.insertVoiceMessage.run(id, 'execute', transcript, 'pending', stamp, null, normalizeVoiceAgent(item.agent));
+    stmts.insertVoiceMessage.run(id, 'execute', transcript, 'pending', stamp, null, normalizeVoiceAgent(item.agent), null);
     voiceQueue.push({ id: id, mode: 'execute', text: prompt, agent: normalizeVoiceAgent(item.agent), imagePath: null, uploadPath: null });
     drainVoiceQueue();
     return id;
@@ -3109,9 +3116,43 @@ app.post('/api/voice/monitors/:id/cancel', function (req, res) {
 // Images pasted/dropped/attached into the chat (desktop paste-and-drop,
 // mobile's attach button) — multipart so a text field and an optional
 // file can arrive together in one request.
-const voiceMessageUpload = multer({ dest: path.join(DATA_DIR, 'tmp'), limits: { fileSize: 15 * 1024 * 1024 } });
+const VOICE_IMAGE_TYPES = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/gif': '.gif',
+  'image/webp': '.webp'
+};
+const voiceMessageUpload = multer({
+  dest: path.join(DATA_DIR, 'tmp'),
+  limits: { fileSize: 15 * 1024 * 1024, files: 8 }
+});
 
-app.post('/api/voice/messages', voiceMessageUpload.single('image'), function (req, res) {
+function voiceAttachmentRecords(row) {
+  try {
+    const parsed = row && row.attachments_json ? JSON.parse(row.attachments_json) : [];
+    return Array.isArray(parsed) ? parsed.filter(function (item) {
+      return item && typeof item.file === 'string' && /^[0-9]+\.(?:jpg|png|gif|webp)$/.test(item.file);
+    }).slice(0, 8) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function hostAttachmentPaths(row) {
+  return voiceAttachmentRecords(row).map(function (item) {
+    return path.join(CODEX_HOST_DATA_DIR, 'voice-attachments', row.id, item.file);
+  });
+}
+
+function removeUploadedFiles(files) {
+  (files || []).forEach(function (file) { fs.rm(file.path, { force: true }, function () {}); });
+}
+
+app.post('/api/voice/messages', voiceMessageUpload.fields([
+  { name: 'images', maxCount: 8 },
+  { name: 'image', maxCount: 1 }
+]), function (req, res) {
+  const uploadedFiles = [].concat((req.files && req.files.images) || [], (req.files && req.files.image) || []).slice(0, 8);
   const rawText = (req.body && req.body.text) || '';
   const mode = req.body && req.body.mode;
   const trimmed = rawText.trim().slice(0, 4000);
@@ -3119,30 +3160,43 @@ app.post('/api/voice/messages', voiceMessageUpload.single('image'), function (re
   const replyToId = (typeof rawReplyToId === 'string' && rawReplyToId.trim()) ? rawReplyToId.trim().slice(0, 64) : null;
   const preference = stmts.getVoicePreference.get();
   const agent = normalizeVoiceAgent((req.body && req.body.agent) || (preference && preference.selected_agent));
-  function cleanupUpload() { if (req.file) fs.rm(req.file.path, { force: true }, function () {}); }
-  if (!trimmed && !req.file) { cleanupUpload(); return res.status(400).json({ error: 'invalid_text' }); }
+  function cleanupUpload() { removeUploadedFiles(uploadedFiles); }
+  if (!trimmed && !uploadedFiles.length) { cleanupUpload(); return res.status(400).json({ error: 'invalid_text' }); }
   if (mode !== 'respond' && mode !== 'execute') { cleanupUpload(); return res.status(400).json({ error: 'invalid_mode' }); }
+  if (uploadedFiles.some(function (file) { return !VOICE_IMAGE_TYPES[file.mimetype]; })) {
+    cleanupUpload();
+    return res.status(415).json({ error: 'unsupported_image_type' });
+  }
 
   const id = crypto.randomBytes(16).toString('hex');
   const now = new Date().toISOString();
-  const finalText = trimmed || '(image attached, no caption)';
-  stmts.insertVoiceMessage.run(id, mode, finalText, 'pending', now, replyToId, agent);
-  stmts.upsertVoicePreference.run(agent, now);
-  res.json({ id: id, status: 'pending', reply_to_id: replyToId, agent: agent });
-
-  const SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-  let imagePath = null;
-  if (req.file && SUPPORTED_IMAGE_TYPES.indexOf(req.file.mimetype) !== -1) {
-    // Both agents now run on the VPS host, not in-process — an uploaded
-    // image is handed to either as a host-reachable path (Codex via its
-    // native `-i` flag, Claude via a Read-tool pointer in the prompt; see
-    // claudeRunner.js) rather than inlined base64.
-    const relativeUploadPath = path.relative(DATA_DIR, req.file.path);
-    if (!relativeUploadPath.startsWith('..')) imagePath = path.join(CODEX_HOST_DATA_DIR, relativeUploadPath);
-  } else if (req.file) {
-    console.error('unsupported attached image type: ' + req.file.mimetype);
+  const finalText = trimmed || '(' + uploadedFiles.length + ' image' + (uploadedFiles.length === 1 ? '' : 's') + ' attached, no caption)';
+  const attachmentDir = path.join(VOICE_ATTACHMENTS_DIR, id);
+  const attachmentRecords = [];
+  try {
+    if (uploadedFiles.length) fs.mkdirSync(attachmentDir, { recursive: true });
+    uploadedFiles.forEach(function (file, index) {
+      const storedName = String(index) + VOICE_IMAGE_TYPES[file.mimetype];
+      fs.renameSync(file.path, path.join(attachmentDir, storedName));
+      attachmentRecords.push({
+        file: storedName,
+        name: String(file.originalname || ('image-' + (index + 1))).slice(0, 200),
+        mime: file.mimetype,
+        size: Number(file.size) || 0
+      });
+    });
+    stmts.insertVoiceMessage.run(id, mode, finalText, 'pending', now, replyToId, agent,
+      attachmentRecords.length ? JSON.stringify(attachmentRecords) : null);
+  } catch (error) {
+    cleanupUpload();
+    fs.rmSync(attachmentDir, { recursive: true, force: true });
+    console.error('voice attachment storage failed:', error.message);
+    return res.status(500).json({ error: 'attachment_storage_failed' });
   }
-  if (!imagePath) cleanupUpload();
+  stmts.upsertVoicePreference.run(agent, now);
+  const insertedRow = stmts.getVoiceMessage.get(id);
+  const imagePaths = hostAttachmentPaths(insertedRow);
+  res.json(hydrateVoiceMessageRow(insertedRow));
 
   // Reply-to context is woven into the prompt CC actually sees (not into
   // the stored transcript — that stays exactly what Harvey typed/said, for
@@ -3163,8 +3217,8 @@ app.post('/api/voice/messages', voiceMessageUpload.single('image'), function (re
     mode: mode,
     text: promptText,
     agent: agent,
-    imagePath: imagePath,
-    uploadPath: imagePath && req.file ? req.file.path : null
+    imagePaths: imagePaths,
+    uploadPath: null
   });
   drainVoiceQueue();
 });
@@ -3172,6 +3226,15 @@ app.post('/api/voice/messages', voiceMessageUpload.single('image'), function (re
 function hydrateVoiceMessageRow(row) {
   if (!row) return row;
   try { row.activity_log = row.activity_log ? JSON.parse(row.activity_log) : []; } catch (e) { row.activity_log = []; }
+  row.attachments = voiceAttachmentRecords(row).map(function (item, index) {
+    return {
+      name: item.name,
+      mime: item.mime,
+      size: item.size,
+      url: '/api/voice/messages/' + encodeURIComponent(row.id) + '/attachments/' + index
+    };
+  });
+  delete row.attachments_json;
   // reply_to_snippet: resolved server-side (rather than left for the client
   // to cross-reference against whatever it happens to already have loaded)
   // so the quoted preview renders correctly even after a page reload, on a
@@ -3195,6 +3258,22 @@ app.get('/api/voice/messages/:id', function (req, res) {
   const row = stmts.getVoiceMessage.get(req.params.id);
   if (!row) return res.status(404).json({ error: 'not_found' });
   res.json(hydrateVoiceMessageRow(row));
+});
+
+app.get('/api/voice/messages/:id/attachments/:index', function (req, res) {
+  const row = stmts.getVoiceMessage.get(req.params.id);
+  const index = Number(req.params.index);
+  const attachments = voiceAttachmentRecords(row);
+  if (!row || !Number.isInteger(index) || index < 0 || index >= attachments.length) {
+    return res.status(404).json({ error: 'not_found' });
+  }
+  const attachment = attachments[index];
+  const filePath = path.join(VOICE_ATTACHMENTS_DIR, row.id, attachment.file);
+  res.type(attachment.mime || 'application/octet-stream');
+  res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+  res.sendFile(filePath, function (error) {
+    if (error && !res.headersSent) res.status(error.statusCode || 404).json({ error: 'not_found' });
+  });
 });
 
 app.get('/api/voice/notifications/status', function (req, res) {
@@ -3374,7 +3453,7 @@ function recoverInflightVoiceMessages() {
         mode: row.mode,
         text: row.transcript,
         agent: normalizeVoiceAgent(row.agent),
-        imagePath: null,
+        imagePaths: hostAttachmentPaths(row),
         uploadPath: null
       });
       requeued++;

@@ -107,3 +107,34 @@ test('forwards the container OAuth token to the host-side Claude process', async
     fs.rmSync(fakeBin, { recursive: true, force: true });
   }
 });
+
+test('includes every attached image path in the Claude prompt', async function () {
+  const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-claude-images-'));
+  const fakeSsh = path.join(fakeBin, 'ssh');
+  fs.writeFileSync(fakeSsh, [
+    '#!/bin/sh',
+    'prompt=$(cat)',
+    'case "$prompt" in (*"/tmp/first.png"*"/tmp/second.jpg"*) ;; (*) echo "missing image paths" >&2; exit 45 ;; esac',
+    "printf '%s\\n' '{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"session_images_test\"}'",
+    "printf '%s\\n' '{\"type\":\"result\",\"is_error\":false,\"session_id\":\"session_images_test\",\"result\":\"saw both\"}'"
+  ].join('\n') + '\n', { mode: 0o755 });
+
+  const originalPath = process.env.PATH;
+  const originalToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  process.env.PATH = fakeBin + path.delimiter + originalPath;
+  process.env.CLAUDE_CODE_OAUTH_TOKEN = 'test-image-token';
+  try {
+    const result = await claudeRunner.runClaude({
+      prompt: 'inspect these',
+      imagePaths: ['/tmp/first.png', '/tmp/second.jpg'],
+      timeoutMs: 1000
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.replyText, 'saw both');
+  } finally {
+    process.env.PATH = originalPath;
+    if (originalToken === undefined) delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+    else process.env.CLAUDE_CODE_OAUTH_TOKEN = originalToken;
+    fs.rmSync(fakeBin, { recursive: true, force: true });
+  }
+});

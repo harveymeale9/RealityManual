@@ -124,15 +124,16 @@ function cleanupRun(runKey) {
   });
 }
 
-function buildRemoteCommand(sessionId, imagePath, pidFile, paths) {
+function buildRemoteCommand(sessionId, imagePaths, pidFile, paths) {
   const args = [HOST_BIN, 'exec'];
+  imagePaths = Array.isArray(imagePaths) ? imagePaths : [];
   if (sessionId) {
     args.push('resume', '--all', '--json', '--dangerously-bypass-approvals-and-sandbox');
-    if (imagePath) args.push('-i', imagePath);
+    imagePaths.forEach(function (imagePath) { args.push('-i', imagePath); });
     args.push(sessionId, '-');
   } else {
     args.push('--json', '--dangerously-bypass-approvals-and-sandbox', '-C', HOST_REPO);
-    if (imagePath) args.push('-i', imagePath);
+    imagePaths.forEach(function (imagePath) { args.push('-i', imagePath); });
     args.push('-');
   }
   let command = args.map(shellQuote).join(' ');
@@ -175,7 +176,9 @@ function runCodex(opts) {
   opts = opts || {};
   const prompt = String(opts.prompt || '');
   const sessionId = opts.sessionId && SESSION_ID_RE.test(opts.sessionId) ? opts.sessionId : null;
-  const imagePath = opts.imagePath ? String(opts.imagePath) : null;
+  const imagePaths = Array.isArray(opts.imagePaths)
+    ? opts.imagePaths.map(String).filter(Boolean).slice(0, 8)
+    : (opts.imagePath ? [String(opts.imagePath)] : []);
   const timeoutMs = opts.timeoutMs || DEFAULT_TIMEOUT_MS;
   const runId = crypto.randomBytes(12).toString('hex');
   const ownerKey = opts.ownerKey && OWNER_KEY_RE.test(opts.ownerKey) ? opts.ownerKey : runId;
@@ -188,7 +191,7 @@ function runCodex(opts) {
   return new Promise(function (resolve) {
     initializeRunFiles(paths);
     onActivity('\u25cf Starting Codex on the VPS');
-    const child = spawn('ssh', ['-o', 'LogLevel=ERROR', HOST, buildRemoteCommand(sessionId, imagePath, pidFile, paths)], {
+    const child = spawn('ssh', ['-o', 'LogLevel=ERROR', HOST, buildRemoteCommand(sessionId, imagePaths, pidFile, paths)], {
       stdio: ['pipe', 'pipe', 'pipe']
     });
     let stdoutBuffer = '';

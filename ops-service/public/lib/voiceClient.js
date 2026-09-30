@@ -141,21 +141,24 @@ window.RMVoice = (function () {
       .then(function (data) { return data.text || ''; });
   }
 
-  // imageFile (optional): a File/Blob — sent as multipart alongside text/mode
-  // when present. The endpoint accepts both plain JSON (text-only, as
-  // before) and multipart (image attached) — see server.js.
+  // imageFiles (optional): one File/Blob or an array of up to eight — sent
+  // as multipart alongside text/mode. Accepting one value keeps older callers
+  // compatible while the Project Manager composer now preserves every image.
   // replyToId (optional): the id of an earlier voice_messages row this
   // message is a tap-to-reply response to — see server.js's promptText
   // wiring for how it's used.
-  function sendMessage(text, mode, imageFile, replyToId, agent) {
+  function sendMessage(text, mode, imageFiles, replyToId, agent) {
     agent = agent === 'codex' ? 'codex' : 'claude';
-    if (imageFile) {
+    imageFiles = Array.isArray(imageFiles) ? imageFiles.filter(Boolean).slice(0, 8) : (imageFiles ? [imageFiles] : []);
+    if (imageFiles.length) {
       var form = new FormData();
       form.append('text', text || '');
       form.append('mode', mode);
       form.append('agent', agent);
       if (replyToId) form.append('replyToId', replyToId);
-      form.append('image', imageFile, imageFile.name || 'pasted-image.png');
+      imageFiles.forEach(function (imageFile, index) {
+        form.append('images', imageFile, imageFile.name || ('pasted-image-' + (index + 1) + '.png'));
+      });
       return fetch(API_BASE + '/api/voice/messages', { method: 'POST', credentials: 'include', body: form })
         .then(function (r) { if (!r.ok) throw new Error('Could not send message'); return r.json(); });
     }

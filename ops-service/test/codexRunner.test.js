@@ -74,3 +74,34 @@ test('surfaces a persisted host-run failure instead of inventing a completion', 
   assert.equal(result.ok, false);
   assert.match(result.error, /provider stopped the turn/);
 });
+
+test('passes every attached image to the Codex CLI', async function () {
+  const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-codex-fake-ssh-'));
+  const fakeSsh = path.join(fakeBin, 'ssh');
+  fs.writeFileSync(fakeSsh, [
+    '#!/bin/sh',
+    'case "$*" in',
+    '  *"-i"*"/tmp/first image.png"*"-i"*"/tmp/second.jpg"*) ;;',
+    '  *) echo "all images were not forwarded" >&2; exit 44 ;;',
+    'esac',
+    'cat >/dev/null',
+    "printf '%s\\n' '{\"type\":\"thread.started\",\"thread_id\":\"thread_images_test\"}'",
+    "printf '%s\\n' '{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"saw both\"}}'",
+    "printf '%s\\n' '{\"type\":\"turn.completed\"}'"
+  ].join('\n') + '\n', { mode: 0o755 });
+
+  const originalPath = process.env.PATH;
+  process.env.PATH = fakeBin + path.delimiter + originalPath;
+  try {
+    const result = await codexRunner.runCodex({
+      prompt: 'inspect these',
+      imagePaths: ['/tmp/first image.png', '/tmp/second.jpg'],
+      timeoutMs: 1000
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.replyText, 'saw both');
+  } finally {
+    process.env.PATH = originalPath;
+    fs.rmSync(fakeBin, { recursive: true, force: true });
+  }
+});
