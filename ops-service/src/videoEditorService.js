@@ -11,14 +11,15 @@ const STORE_NAME = 'editorProjects';
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
 const EDIT_RENDER_DEBOUNCE_MS = 2500;
 const EDITOR_DISK_RESERVE_BYTES = 2 * 1024 * 1024 * 1024;
-const OPENING_PUSH_IN_SECONDS = 3;
+const PAGE_ZOOM_SECONDS = 3;
+const HORIZONTAL_OPENING_ZOOM_SECONDS = 5;
+const PAGE_CHANGE_CUT_SECONDS = 1.25;
 // Vertical footage is deliberately recorded a little wide. The opening move
 // settles into the normal book framing and that 110% composition remains the
-// baseline for the rest of the edit; timed punches multiply on top of it and
-// return to it, never to the original wide frame.
+// baseline for the rest of the shot. Substantial automatic long-pause cuts are
+// treated as page changes and start the move again from the wide camera frame.
 const OPENING_PUSH_IN_SCALE = 1.10;
-const PUNCH_TRANSITION_SECONDS = 0.45;
-const EDITOR_RENDER_VERSION = 8;
+const EDITOR_RENDER_VERSION = 9;
 const BROWSER_PREVIEW_VERSION = 2;
 const AUDIO_PREVIEW_MIX_VERSION = 3;
 const AUDIO_PREVIEW_TTL_MS = 2 * 60 * 60 * 1000;
@@ -418,90 +419,70 @@ function advanceEditRevision(project) {
 function patchAffectsRender(body) {
   body = body && typeof body === 'object' ? body : {};
   return ['removedWordIndices', 'wordCorrection', 'autoSilenceEnabled', 'restoredAutoCutIds', 'captionsEnabled',
-    'layoutOverride', 'punchIns', 'openingPushInEnabled', 'silenceThresholdSeconds', 'retainedPauseSeconds'].some(function (key) {
+    'layoutOverride', 'openingPushInEnabled', 'silenceThresholdSeconds', 'retainedPauseSeconds'].some(function (key) {
     return Object.prototype.hasOwnProperty.call(body, key);
   });
 }
 
-function openingPushInScale(editedSeconds) {
-  const progress = clamp((Number(editedSeconds) || 0) / OPENING_PUSH_IN_SECONDS, 0, 1);
+function openingPushInScale(editedSeconds, durationSeconds) {
+  const duration = Math.max(0.001, Number(durationSeconds) || PAGE_ZOOM_SECONDS);
+  const progress = clamp((Number(editedSeconds) || 0) / duration, 0, 1);
   const eased = progress * progress * (3 - 2 * progress);
   return 1 + (OPENING_PUSH_IN_SCALE - 1) * eased;
 }
 
-function easeInOutCubic(value) {
-  const progress = clamp(value, 0, 1);
-  return progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-}
-
-function ffmpegEaseInOutCubic(progressExpression) {
-  const progress = '(' + progressExpression + ')';
-  return 'if(lt(' + progress + ',0.5),4*' + progress + '*' + progress + '*' + progress + ',1-pow(-2*' + progress + '+2,3)/2)';
-}
-
-function openingZoomExpression(editedStart, framesPerSecond) {
-  const frameOffset = (Math.max(0, Number(editedStart) || 0) * framesPerSecond).toFixed(6);
-  const progress = 'min(max((on+' + frameOffset + ')/(' + framesPerSecond.toFixed(8) + '*' + OPENING_PUSH_IN_SECONDS + '),0),1)';
+function openingZoomExpression(elapsedStart, framesPerSecond, durationSeconds) {
+  const frameOffset = (Math.max(0, Number(elapsedStart) || 0) * framesPerSecond).toFixed(6);
+  const duration = Math.max(0.001, Number(durationSeconds) || PAGE_ZOOM_SECONDS);
+  const progress = 'min(max((on+' + frameOffset + ')/(' + framesPerSecond.toFixed(8) + '*' + duration.toFixed(6) + '),0),1)';
   const eased = '(' + progress + '*' + progress + '*(3-2*' + progress + '))';
   return '(1+' + (OPENING_PUSH_IN_SCALE - 1).toFixed(3) + '*' + eased + ')';
 }
 
-function punchZoomExpression(punch, sourceStart, framesPerSecond) {
-  if (!punch) return '1';
-  const start = Number(punch.start) || 0;
-  const end = Math.max(start, Number(punch.end) || 0);
-  const transition = Math.max(0.001, Math.min(PUNCH_TRANSITION_SECONDS, (end - start) / 2));
-  const sourceFrame = '(on+' + (Math.max(0, Number(sourceStart) || 0) * framesPerSecond).toFixed(6) + ')';
-  const into = 'min(max((' + sourceFrame + '-' + (start * framesPerSecond).toFixed(6) + ')/' + (transition * framesPerSecond).toFixed(6) + ',0),1)';
-  const out = 'min(max((' + (end * framesPerSecond).toFixed(6) + '-' + sourceFrame + ')/' + (transition * framesPerSecond).toFixed(6) + ',0),1)';
-  const weight = 'min((' + ffmpegEaseInOutCubic(into) + '),(' + ffmpegEaseInOutCubic(out) + '))';
-  return '(1+' + ((Number(punch.zoom) || 1.18) - 1).toFixed(3) + '*' + weight + ')';
+function cameraResetStarts(cuts) {
+  const resetStarts = [0];
+  (cuts || []).forEach(function (cut) {
+    if (cut.reason !== 'long_pause' && cut.reason !== 'combined') return;
+    // Sentence pauses are also tightened automatically. Only a substantial
+    // removed silence is a reliable voice-only signal that Harvey turned the
+    // page; otherwise the camera would restart throughout ordinary speech.
+    if (Number(cut.end) - Number(cut.start) < PAGE_CHANGE_CUT_SECONDS) return;
+    const boundary = mapSourceTimeToEdited(cut.end, cuts);
+    if (boundary > resetStarts[resetStarts.length - 1] + 0.001) resetStarts.push(boundary);
+  });
+  return resetStarts;
 }
 
-// One deterministic camera-motion stage drives every scale and focal-point
-// change. Keeping opening and punch motion in one zoompan pass avoids both the
-// integer-sized scale staircase and quality loss from resampling twice when
-// the two effects overlap.
+function cameraMotionState(sourceSeconds, cuts, layout) {
+  const editedTime = mapSourceTimeToEdited(sourceSeconds, cuts || []);
+  const resetStarts = cameraResetStarts(cuts || []);
+  let resetAt = 0;
+  resetStarts.forEach(function (candidate) { if (candidate <= editedTime + 0.001) resetAt = candidate; });
+  return {
+    editedTime: editedTime,
+    resetAt: resetAt,
+    elapsed: Math.max(0, editedTime - resetAt),
+    duration: layout === 'horizontal' && resetAt === 0 ? HORIZONTAL_OPENING_ZOOM_SECONDS : PAGE_ZOOM_SECONDS
+  };
+}
+
+// One high-quality fractional resampling stage handles the centred camera
+// settle for each retained shot.
 function cameraMotionFilter(options) {
   options = options || {};
-  const punch = options.punch || null;
   const openingEnabled = options.openingEnabled === true;
-  if (!punch && !openingEnabled) return '';
+  if (!openingEnabled) return '';
   const renderShape = options.renderShape;
   const framesPerSecond = 30000 / 1001;
-  const openingZoom = openingEnabled ? openingZoomExpression(options.editedStart, framesPerSecond) : '1';
-  const punchZoom = punchZoomExpression(punch, options.sourceStart, framesPerSecond);
-  const centerX = Number(punch && punch.centerX !== undefined ? punch.centerX : 0.5).toFixed(6);
-  const centerY = Number(punch && punch.centerY !== undefined ? punch.centerY : 0.5).toFixed(6);
-  const zoom = '(' + openingZoom + '*' + punchZoom + ')';
-  // Equivalent to applying the anchored punch first, then the centred opening
-  // move, but calculated from the source once so both axes share one matrix.
-  const x = '(iw-iw/' + punchZoom + ')*' + centerX + '+(iw-iw/' + openingZoom + ')*0.5/' + punchZoom;
-  const y = '(ih-ih/' + punchZoom + ')*' + centerY + '+(ih-ih/' + openingZoom + ')*0.5/' + punchZoom;
+  const zoom = openingZoomExpression(options.elapsedStart, framesPerSecond, options.durationSeconds);
+  const x = '(iw-iw/' + zoom + ')*0.5';
+  const y = '(ih-ih/' + zoom + ')*0.5';
   return ",zoompan=z='" + zoom + "':x='" + x + "':y='" + y + "':d=1:s=" +
     renderShape.width + 'x' + renderShape.height + ':fps=30000/1001,setsar=1';
 }
 
-function openingPushInFilter(renderShape, editedStart) {
-  return cameraMotionFilter({ renderShape: renderShape, editedStart: editedStart, openingEnabled: true });
-}
-
-function punchInScale(punch, sourceSeconds) {
-  if (!punch) return 1;
-  const start = Number(punch.start) || 0;
-  const end = Math.max(start, Number(punch.end) || 0);
-  const duration = end - start;
-  if (duration <= 0 || sourceSeconds < start || sourceSeconds >= end) return 1;
-  const transition = Math.max(0.001, Math.min(PUNCH_TRANSITION_SECONDS, duration / 2));
-  const weight = Math.min(
-    easeInOutCubic((sourceSeconds - start) / transition),
-    easeInOutCubic((end - sourceSeconds) / transition)
-  );
-  return 1 + ((Number(punch.zoom) || 1.18) - 1) * weight;
-}
-
-function punchInFilter(punch, renderShape, sourceStart) {
-  return cameraMotionFilter({ punch: punch, renderShape: renderShape, sourceStart: sourceStart });
+function openingPushInFilter(renderShape, elapsedStart, durationSeconds) {
+  return cameraMotionFilter({ renderShape: renderShape, elapsedStart: elapsedStart, durationSeconds: durationSeconds, openingEnabled: true });
 }
 
 function patchNeedsAutoRender(project, renderWillChange) {
@@ -679,60 +660,12 @@ function keepSegments(duration, cuts) {
   return segments;
 }
 
-function normalizePunchIns(rawPunchIns, duration) {
-  const total = Math.max(0, Number(duration) || 0);
-  return (Array.isArray(rawPunchIns) ? rawPunchIns : []).slice(0, 100).map(function (item, index) {
-    const start = clamp(item && item.start, 0, total);
-    const end = clamp(item && item.end, 0, total);
-    const suppliedId = String(item && item.id || '');
-    return {
-      id: /^punch-[A-Za-z0-9_-]{4,80}$/.test(suppliedId) ? suppliedId : 'punch-' + index + '-' + Math.round(start * 1000),
-      start: start,
-      end: end,
-      zoom: clamp(item && item.zoom === undefined ? 1.18 : item.zoom, 1.05, 1.5),
-      centerX: clamp(item && item.centerX === undefined ? 0.5 : item.centerX, 0, 1),
-      centerY: clamp(item && item.centerY === undefined ? 0.5 : item.centerY, 0, 1)
-    };
-  }).filter(function (item) {
-    return item.end - item.start >= 0.08;
-  }).sort(function (a, b) {
-    return a.start - b.start || a.end - b.end;
-  });
-}
-
-// Splitting at each punch boundary makes the exported zoom frame-exact. If
-// two ranges overlap, the later sorted range wins in the overlap.
-function applyPunchInsToSegments(segments, rawPunchIns, duration) {
-  const punchIns = normalizePunchIns(rawPunchIns, duration);
-  const output = [];
-  (segments || []).forEach(function (segment) {
-    const boundaries = [segment.start, segment.end];
-    punchIns.forEach(function (punch) {
-      if (punch.start > segment.start && punch.start < segment.end) boundaries.push(punch.start);
-      if (punch.end > segment.start && punch.end < segment.end) boundaries.push(punch.end);
-    });
-    boundaries.sort(function (a, b) { return a - b; });
-    boundaries.forEach(function (start, index) {
-      const end = boundaries[index + 1];
-      if (!Number.isFinite(end) || end <= start) return;
-      const midpoint = start + (end - start) / 2;
-      const active = punchIns.filter(function (punch) {
-        return midpoint >= punch.start && midpoint < punch.end;
-      }).pop() || null;
-      output.push({ start: start, end: end, punchIn: active });
-    });
-  });
-  return output;
-}
-
 function segmentAudioFades(segments, index, duration) {
   const segment = (segments || [])[index];
   if (!segment) return { fadeIn: false, fadeOut: false };
   const previous = index > 0 ? segments[index - 1] : null;
   const next = index + 1 < segments.length ? segments[index + 1] : null;
-  // A contiguous boundary exists only to change the picture for a punch-in.
-  // Fade audio at genuine source jumps, including a removed opening or tail,
-  // but preserve sample continuity across visual-only segment boundaries.
+  // Fade audio at genuine source jumps, including a removed opening or tail.
   return {
     fadeIn: segment.start > 0.015 && (!previous || segment.start - previous.end > 0.015),
     fadeOut: segment.end < Math.max(0, Number(duration) || 0) - 0.015 && (!next || next.start - segment.end > 0.015)
@@ -1439,7 +1372,7 @@ async function renderProject(id) {
       project.renderProgress = 0;
       saveProject(project);
       const cuts = cutsForProject(project);
-      const segments = applyPunchInsToSegments(keepSegments(project.duration, cuts), project.punchIns, project.duration);
+      const segments = keepSegments(project.duration, cuts);
       if (!segments.length) throw new Error('Every part of the recording is currently cut. Restore some transcript first.');
       const expectedDuration = segments.reduce(function (sum, segment) { return sum + segment.end - segment.start; }, 0);
       const assPath = path.join(projectDir(id), 'captions.ass');
@@ -1447,23 +1380,20 @@ async function renderProject(id) {
       const renderShape = layout === 'vertical' ? { width: 1080, height: 1920 } : { width: 1920, height: 1080 };
       if (project.captionsEnabled !== false) fs.writeFileSync(assPath, buildAss(renderShape, captionGroups(project, cuts)));
       const filters = [];
-      let editedCursor = 0;
       segments.forEach(function (segment, index) {
         const segmentDuration = segment.end - segment.start;
-        const editedStart = editedCursor;
-        editedCursor += segmentDuration;
         let videoFilter = '[0:v]trim=start=' + segment.start.toFixed(3) + ':end=' + segment.end.toFixed(3) + ',setpts=PTS-STARTPTS';
         if (layout === 'vertical') {
           videoFilter += ",crop=w='min(iw\\,ih*9/16)':h='min(ih\\,iw*16/9)':x='(iw-ow)/2':y='(ih-oh)/2',scale=1080:1920,setsar=1";
         } else {
           videoFilter += ",crop=w='min(iw\\,ih*16/9)':h='min(ih\\,iw*9/16)':x='(iw-ow)/2':y='(ih-oh)/2',scale=1920:1080,setsar=1";
         }
+        const motion = cameraMotionState(segment.start, cuts, layout);
         videoFilter += cameraMotionFilter({
-          punch: segment.punchIn,
           renderShape: renderShape,
-          sourceStart: segment.start,
-          editedStart: editedStart,
-          openingEnabled: layout === 'vertical' && project.openingPushInEnabled !== false
+          elapsedStart: motion.elapsed,
+          durationSeconds: motion.duration,
+          openingEnabled: project.openingPushInEnabled !== false
         });
         filters.push(videoFilter + '[v' + index + ']');
         // Tiny boundary fades prevent waveform discontinuities from creating
@@ -1593,7 +1523,12 @@ async function renderProject(id) {
       }
       if (project.openingPushInEnabled === undefined) {
         project.openingPushInEnabled = true;
-        migrationRequiresRender = migrationRequiresRender || effectiveLayout(project) === 'vertical';
+        migrationRequiresRender = true;
+        migrated = true;
+      }
+      if (Array.isArray(project.punchIns) && project.punchIns.length) {
+        project.punchIns = [];
+        migrationRequiresRender = true;
         migrated = true;
       }
       // Older Editor projects finished transcript matching before that pass
@@ -1876,7 +1811,6 @@ async function renderProject(id) {
         layoutOverride: 'auto',
         contentTypeOverride: 'auto',
         cropCenterX: 0.5,
-        punchIns: [],
         visualClassification: {
           layout: media.height > media.width ? 'vertical' : 'horizontal', confidence: 'high', cropCenterX: 0.5,
           explanation: media.height > media.width ? 'Portrait camera orientation detected from the recording.' : 'Landscape camera orientation detected from the recording.'
@@ -2020,7 +1954,6 @@ async function renderProject(id) {
     if (typeof (req.body && req.body.openingPushInEnabled) === 'boolean') project.openingPushInEnabled = req.body.openingPushInEnabled;
     if (['auto', 'vertical', 'horizontal'].includes(req.body && req.body.layoutOverride)) project.layoutOverride = req.body.layoutOverride;
     if (['auto', 'ultra_short', 'short', 'long_short', 'longform'].includes(req.body && req.body.contentTypeOverride)) project.contentTypeOverride = req.body.contentTypeOverride;
-    if (Array.isArray(req.body && req.body.punchIns)) project.punchIns = normalizePunchIns(req.body.punchIns, project.duration);
     if (typeof (req.body && req.body.audioTrackId) === 'string') {
       const requestedTrackId = req.body.audioTrackId;
       const available = typeof getAudioTracks === 'function' ? (getAudioTracks() || []) : [];
@@ -2356,10 +2289,10 @@ module.exports = {
   mergeCuts,
   cutsForProject,
   keepSegments,
-  normalizePunchIns,
-  applyPunchInsToSegments,
   segmentAudioFades,
   mapSourceTimeToEdited,
+  cameraResetStarts,
+  cameraMotionState,
   captionGroups,
   buildAss,
   displayDimensions,
@@ -2386,10 +2319,7 @@ module.exports = {
   browserPreviewNeeded,
   openingPushInScale,
   openingPushInFilter,
-  easeInOutCubic,
   cameraMotionFilter,
-  punchInScale,
-  punchInFilter,
   reconcileAutomaticRetakeCuts,
   projectListSummary
 };

@@ -144,11 +144,13 @@ test('every camera recording receives a scrub-optimized review proxy', function 
   assert.equal(editor.browserPreviewNeeded('camera.mp4', { videoCodec: 'h264', audioCodec: 'pcm_s16le' }), true);
 });
 
-test('opening zoom eases to a permanent 110 percent base over three seconds', function () {
+test('camera zoom eases to a permanent 110 percent base over three or five seconds', function () {
   assert.equal(editor.openingPushInScale(0), 1);
   assert.equal(editor.openingPushInScale(1.5), 1.05);
   assert.equal(editor.openingPushInScale(3), 1.1);
   assert.equal(editor.openingPushInScale(20), 1.1);
+  assert.equal(editor.openingPushInScale(2.5, 5), 1.05);
+  assert.equal(editor.openingPushInScale(5, 5), 1.1);
   const filter = editor.openingPushInFilter({ width: 1080, height: 1920 }, 1.25);
   assert.match(filter, /zoompan=/);
   assert.match(filter, /on\+37\.462537/);
@@ -156,40 +158,31 @@ test('opening zoom eases to a permanent 110 percent base over three seconds', fu
   assert.doesNotMatch(filter, /scale=w='trunc/);
 });
 
-test('punch-ins use matching fast smooth zoom-in and zoom-out ramps', function () {
-  const punch = { start: 2, end: 4, zoom: 1.25, centerX: 0.3, centerY: 0.7 };
-  assert.equal(editor.punchInScale(punch, 1.99), 1);
-  assert.equal(editor.punchInScale(punch, 2), 1);
-  assert.ok(Math.abs(editor.punchInScale(punch, 2.225) - 1.125) < 0.000001);
-  assert.equal(editor.punchInScale(punch, 2.45), 1.25);
-  assert.equal(editor.punchInScale(punch, 3.55), 1.25);
-  assert.ok(Math.abs(editor.punchInScale(punch, 3.775) - 1.125) < 0.000001);
-  assert.equal(editor.punchInScale(punch, 4), 1);
-  // Once the temporary punch has exited, its neutral multiplier composes
-  // with the held opening base rather than returning to the original wide shot.
-  assert.equal(editor.openingPushInScale(20) * editor.punchInScale(punch, 4), 1.1);
-  const filter = editor.punchInFilter(punch, { width: 1080, height: 1920 }, 2);
-  assert.match(filter, /zoompan=/);
-  assert.match(filter, /pow\(/);
-  assert.match(filter, /s=1080x1920/);
-  assert.match(filter, /\*0\.300000/);
-  assert.match(filter, /\*0\.700000/);
-  assert.doesNotMatch(filter, /scale=w='trunc/);
-});
-
-test('opening and punch motion share one fractional resampling stage', function () {
+test('page-change zoom uses one centred fractional resampling stage', function () {
   const filter = editor.cameraMotionFilter({
-    punch: { start: 0.5, end: 2.5, zoom: 1.18, centerX: 0.4, centerY: 0.6 },
     renderShape: { width: 1080, height: 1920 },
-    sourceStart: 0.5,
-    editedStart: 0.5,
+    elapsedStart: 0.5,
+    durationSeconds: 3,
     openingEnabled: true
   });
   assert.equal((filter.match(/zoompan=/g) || []).length, 1);
   assert.match(filter, /0\.100/);
-  assert.match(filter, /0\.180/);
-  assert.match(filter, /0\.400000/);
-  assert.match(filter, /0\.600000/);
+  assert.match(filter, /\*0\.5/);
+});
+
+test('camera motion restarts after automatic long-pause cuts but not manual cuts', function () {
+  const cuts = [
+    { start: 4, end: 7, reason: 'long_pause' },
+    { start: 10, end: 11, reason: 'transcript_cut' },
+    { start: 12, end: 12.8, reason: 'long_pause' },
+    { start: 14, end: 17, reason: 'combined' }
+  ];
+  assert.deepEqual(editor.cameraResetStarts(cuts), [0, 4, 9.2]);
+  assert.deepEqual(editor.cameraMotionState(0, cuts, 'vertical'), { editedTime: 0, resetAt: 0, elapsed: 0, duration: 3 });
+  assert.deepEqual(editor.cameraMotionState(7, cuts, 'vertical'), { editedTime: 4, resetAt: 4, elapsed: 0, duration: 3 });
+  assert.deepEqual(editor.cameraMotionState(11, cuts, 'vertical'), { editedTime: 7, resetAt: 4, elapsed: 3, duration: 3 });
+  assert.deepEqual(editor.cameraMotionState(17, cuts, 'horizontal'), { editedTime: 9.2, resetAt: 9.2, elapsed: 0, duration: 3 });
+  assert.equal(editor.cameraMotionState(2.5, cuts, 'horizontal').duration, 5);
 });
 
 test('approval only accepts the exact verified render bytes', async function (t) {
@@ -281,7 +274,7 @@ test('metadata-only editor changes preserve a verified render', function () {
   assert.equal(editor.patchAffectsRender({ removedWordIndices: [1, 2] }), true);
   assert.equal(editor.patchAffectsRender({ layoutOverride: 'vertical' }), true);
   assert.equal(editor.patchAffectsRender({ openingPushInEnabled: false }), true);
-  assert.equal(editor.patchAffectsRender({ punchIns: [{ start: 1, end: 2 }] }), true);
+  assert.equal(editor.patchAffectsRender({ punchIns: [{ start: 1, end: 2 }] }), false);
   assert.equal(editor.patchNeedsAutoRender({ renderStatus: 'ready' }, false), false);
   assert.equal(editor.patchNeedsAutoRender({ renderStatus: '' }, false), true);
   assert.equal(editor.patchNeedsAutoRender({ renderStatus: 'ready' }, true), true);
@@ -424,15 +417,7 @@ test('overlapping cuts merge and retained segments fill the rest', function () {
   assert.equal(editor.mapSourceTimeToEdited(9, cuts), 5);
 });
 
-test('punch-ins split retained footage without changing its duration', function () {
-  const punchIns = editor.normalizePunchIns([{ id: 'punch-line-one', start: 2, end: 4, zoom: 1.25, centerX: .3, centerY: .7 }], 10);
-  assert.deepEqual(punchIns, [{ id: 'punch-line-one', start: 2, end: 4, zoom: 1.25, centerX: .3, centerY: .7 }]);
-  const segments = editor.applyPunchInsToSegments([{ start: 0, end: 3 }, { start: 5, end: 10 }], punchIns, 10);
-  assert.deepEqual(segments.map(function (segment) { return [segment.start, segment.end, !!segment.punchIn]; }), [[0, 2, false], [2, 3, true], [5, 10, false]]);
-  assert.equal(segments.reduce(function (sum, segment) { return sum + segment.end - segment.start; }, 0), 8);
-});
-
-test('visual-only punch boundaries never fade continuous dialogue audio', function () {
+test('only genuine source jumps receive tiny audio boundary fades', function () {
   const segments = [{ start: 0, end: 2 }, { start: 2, end: 4 }, { start: 6, end: 8 }, { start: 8, end: 10 }];
   assert.deepEqual(editor.segmentAudioFades(segments, 0, 10), { fadeIn: false, fadeOut: false });
   assert.deepEqual(editor.segmentAudioFades(segments, 1, 10), { fadeIn: false, fadeOut: true });
@@ -592,7 +577,7 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.equal(stored.renderQuality.status, 'passed');
-  assert.equal(stored.renderVersion, 8);
+  assert.equal(stored.renderVersion, 9);
   assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), true);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
@@ -641,7 +626,7 @@ test('startup invalidates a corrupt active final before it can be reviewed', { t
     words: [{ index: 0, text: 'Hello.', start: 1, end: 2 }], removedWordIndices: [], dismissedRetakeIds: [], restoredAutoCutIds: [],
     transcriptionStatus: 'ready', classificationStatus: 'ready', retakeAnalysisStatus: 'error', planningMatchStatus: 'ready',
     renderStatus: 'ready', renderSizeBytes: 9999, renderSha256: 'a'.repeat(64), renderQuality: { status: 'passed' },
-    automaticRenderStartedAt: 'old-render', createdAt: now, updatedAt: now
+    renderVersion: 9, openingPushInEnabled: true, automaticRenderStartedAt: 'old-render', createdAt: now, updatedAt: now
   }), now);
   editor.setup({ db: db, dataDir: dir, transcribeDetailed: async function () { return { text: '', words: [] }; } });
   let stored;
@@ -1061,8 +1046,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(response.status, 400);
   assert.equal((await response.json()).error, 'invalid_word_correction');
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-    retainedPauseSeconds: 0.55,
-    punchIns: [{ id: 'punch-second-take', start: 2, end: 2.8, zoom: 1.25, centerX: .4, centerY: .6 }]
+    retainedPauseSeconds: 0.55
   }) });
   assert.equal(response.status, 200);
   for (let attempt = 0; attempt < 600 && (project.renderStatus !== 'ready' || renderReadyCalls < 2 || project.workflowWarning); attempt++) {
@@ -1077,7 +1061,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.workflowWarning, undefined);
   assert.equal(project.captionsEnabled, false);
   assert.equal(project.retainedPauseSeconds, 0.55);
-  assert.deepEqual(project.punchIns, [{ id: 'punch-second-take', start: 2, end: 2.8, zoom: 1.25, centerX: .4, centerY: .6 }]);
+  assert.deepEqual(project.punchIns, undefined);
   response = await fetch(base + '/api/editor/' + project.id + '/render');
   assert.equal(response.status, 200);
   const rendered = Buffer.from(await response.arrayBuffer());

@@ -15229,3 +15229,39 @@ version 8 invalidates active unapproved renders made with the old 104% framing
 so preview and final output cannot silently disagree. Tests explicitly cover
 the three-second settle, the long-duration hold, the punch return to the held
 base, and the single-pass opening/punch filter. All 147 service tests pass.
+
+---
+
+# 436. Page Changes Now Drive Camera Motion; Manual Punch-Ins Are Removed (2026-09-30)
+
+Harvey simplified the Reality Manual filming language: his hands, spoken words,
+and large captions carry emphasis, so transcript-selected punch-ins and their
+manual focus-box workflow are no longer useful. The Editor no longer exposes
+punch markers, punch controls, positioning overlays, or a punch review panel;
+the renderer ignores punch payloads, new projects do not create them, and
+startup clears any legacy punch ranges from active projects.
+
+Camera movement is now derived from the same word-timed silence cuts already
+used to remove page-turn dead air. Both orientations begin on the completely
+wide camera frame and ease to the centred 110% resting frame. Vertical videos
+use three seconds for the opening. Horizontal/long-form videos use five seconds
+for the opening. After a detected page-turn cut, both orientations restart from
+the wide frame and use three seconds to return to 110%, then hold there until
+the next page.
+
+Not every automatic pause cut is treated as a page change. The real current
+recording contains short sentence-pacing cuts as well as multi-second page
+gaps; restarting on every one would leave the picture perpetually zooming.
+Therefore only an automatic `long_pause` (or a merged cut containing one) that
+removes at least 1.25 seconds resets the camera. Manual transcript cuts and
+short automatic pacing cuts preserve the current camera position. This is a
+voice-timing heuristic, matching Harvey's instruction that page movement will
+happen silently, without reintroducing visual page recognition.
+
+Preview and export share the same source-to-edited reset timeline and smooth
+per-frame curve. Render format version 9 invalidates old active outputs. A real
+Chromium check against the current 26-second vertical recording confirmed the
+opening 100→105→110 progression, a reset to 100 after its first multi-second
+pause, and no reset across its short 800ms pacing cut. The complete 146-test
+suite passes, including three-/five-second timing, page-reset qualification,
+manual-cut exclusion, renderer output, and restart recovery.

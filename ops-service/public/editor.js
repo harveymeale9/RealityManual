@@ -15,7 +15,6 @@
   var previewSeekTimes = {};
   var previewAutoplay = {};
   var previewStopTimes = {};
-  var focusedPunchIds = {};
   var saveQueues = {};
   var saveStates = {};
   var projectDetails = {};
@@ -239,6 +238,22 @@
     return Math.max(0, sourceTime - removed);
   }
 
+  function cameraMotionState(sourceTime, item) {
+    var cuts = cutsForClient(item);
+    var editedTime = sourceToEditedTime(sourceTime, cuts);
+    var resetAt = 0;
+    cuts.forEach(function (cut) {
+      if (cut.reason !== 'long_pause' && cut.reason !== 'combined') return;
+      if (Number(cut.end) - Number(cut.start) < 1.25) return;
+      var boundary = sourceToEditedTime(cut.end, cuts);
+      if (boundary <= editedTime + 0.001) resetAt = Math.max(resetAt, boundary);
+    });
+    return {
+      elapsed: Math.max(0, editedTime - resetAt),
+      duration: (item.effectiveLayout || 'horizontal') === 'horizontal' && resetAt === 0 ? 5 : 3
+    };
+  }
+
   function editedToSourceTime(editedTime, item) {
     var target = Math.max(0, Number(editedTime) || 0);
     var cursor = 0;
@@ -350,16 +365,11 @@
       cursor = Math.max(cursor, word.end);
     });
     if (cursor < total) spans.push({ kind: cutAt(cursor, total) ? 'cut' : 'pause', start: cursor, end: total, label: 'Pause ' + (total - cursor).toFixed(1) + 's' });
-    var punchMarkers = (item.punchIns || []).map(function (punch) {
-      var left = Number(punch.start) / total * 100;
-      var width = Math.max(0.35, (Number(punch.end) - Number(punch.start)) / total * 100);
-      return '<button type="button" class="editor-timeline-punch" style="left:' + left.toFixed(4) + '%;width:' + width.toFixed(4) + '%" data-time="' + punch.start + '" title="Punch-in · ' + Math.round(Number(punch.zoom || 1.18) * 100) + '%"></button>';
-    }).join('');
     return '<div class="editor-timeline-track" id="editorTimelineTrack">' + spans.map(function (span) {
       var left = span.start / total * 100;
       var width = Math.max(0.18, (span.end - span.start) / total * 100);
       return '<button type="button" class="editor-timeline-segment ' + span.kind + '" style="left:' + left.toFixed(4) + '%;width:' + width.toFixed(4) + '%" data-time="' + span.start + '" title="' + esc(span.label) + '"></button>';
-    }).join('') + punchMarkers + '<i class="editor-playhead" id="editorPlayhead"></i></div>';
+    }).join('') + '<i class="editor-playhead" id="editorPlayhead"></i></div>';
   }
 
   function gapReviewHtml(item) {
@@ -387,46 +397,6 @@
         '<p><del>“' + esc(candidate.firstText) + '”</del></p><p class="replacement">Latest take: “' + esc(candidate.replacementText) + '”</p><span>' + esc(candidate.reason) + '</span>' +
         '<div><button type="button" class="btn-secondary btn-tiny editor-preview-cut" data-time="' + Math.max(0, Number(firstWord && firstWord.start) - 1.2) + '">Preview edit</button>' + (applied ? '' : '<button type="button" class="btn-primary btn-tiny editor-retake-apply" data-id="' + esc(candidate.id) + '">Use latest take</button>') + '<button type="button" class="btn-secondary btn-tiny editor-retake-dismiss" data-id="' + esc(candidate.id) + '" data-applied="' + (applied ? '1' : '0') + '">' + (applied ? 'Restore first take' : 'Keep both') + '</button></div></div>';
     }).join('');
-  }
-
-  function punchInsHtml(item) {
-    var words = item.words || [];
-    var punchIns = item.punchIns || [];
-    if (!punchIns.length) return '<div class="editor-review-empty">No punch-ins yet. Select a line in the transcript and choose Punch in selected.</div>';
-    return punchIns.map(function (punch) {
-      var excerpt = words.filter(function (word) {
-        return Number(word.end) >= Number(punch.start) && Number(word.start) <= Number(punch.end);
-      }).slice(0, 12).map(function (word) { return word.text; }).join(' ');
-      if (!excerpt) excerpt = formatTime(punch.start) + ' to ' + formatTime(punch.end);
-      var positioning = focusedPunchIds[item.id] === punch.id;
-      return '<div class="editor-punch-card' + (positioning ? ' positioning' : '') + '" data-punch-id="' + esc(punch.id) + '"><div><strong>“' + esc(excerpt) + (excerpt.length >= 80 ? '…' : '') + '”</strong><span>' + formatTime(punch.start) + '–' + formatTime(punch.end) + ' · smooth zoom in and out</span></div>' +
-        '<div class="editor-punch-actions"><button type="button" class="btn-secondary btn-tiny editor-punch-position">' + (positioning ? 'Positioning…' : 'Position on video') + '</button><button type="button" class="btn-secondary btn-tiny editor-punch-preview">Preview</button><button type="button" class="btn-secondary btn-tiny editor-punch-remove">Remove</button></div></div>';
-    }).join('');
-  }
-
-  function punchFocusHtml(item, punchId) {
-    var punch = (item.punchIns || []).find(function (candidate) { return candidate.id === punchId; });
-    if (!punch) return '';
-    var zoom = Math.max(1.05, Number(punch.zoom) || 1.18);
-    var size = 100 / zoom;
-    var left = Math.max(0, Math.min(100 - size, Number(punch.centerX === undefined ? 0.5 : punch.centerX) * (100 - size)));
-    var top = Math.max(0, Math.min(100 - size, Number(punch.centerY === undefined ? 0.5 : punch.centerY) * (100 - size)));
-    return '<div class="editor-punch-focus" id="editorPunchFocus" tabindex="0" role="group" aria-label="Punch-in framing area. Drag to choose the zoomed area." data-punch-id="' + esc(punch.id) + '" style="width:' + size.toFixed(4) + '%;height:' + size.toFixed(4) + '%;left:' + left.toFixed(4) + '%;top:' + top.toFixed(4) + '%"><span>Drag the zoom area</span></div>';
-  }
-
-  function punchScaleAtTime(punch, sourceTime) {
-    if (!punch) return 1;
-    var start = Number(punch.start) || 0;
-    var end = Math.max(start, Number(punch.end) || 0);
-    var duration = end - start;
-    if (duration <= 0 || sourceTime < start || sourceTime >= end) return 1;
-    var transition = Math.max(0.001, Math.min(0.45, duration / 2));
-    function smooth(value) {
-      var progress = Math.max(0, Math.min(1, value));
-      return progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-    }
-    var weight = Math.min(smooth((sourceTime - start) / transition), smooth((end - sourceTime) / transition));
-    return 1 + ((Number(punch.zoom) || 1.18) - 1) * weight;
   }
 
   function processingStepsHtml(item) {
@@ -876,11 +846,6 @@
     var sentToProduction = !!project.productionPieceId;
     var failures = failedSteps(project);
     var previewMode = project.renderStatus === 'ready' && !(previewModes[project.id] === 'source' && explicitSourcePreviews[project.id]) ? 'final' : 'source';
-    var focusedPunchId = focusedPunchIds[project.id];
-    if (focusedPunchId && !(project.punchIns || []).some(function (punch) { return punch.id === focusedPunchId; })) {
-      delete focusedPunchIds[project.id];
-      focusedPunchId = '';
-    }
     var previewingWorkingEdit = previewMode === 'source' && project.renderStatus !== 'ready';
     var browserSafeSource = project.browserPreviewRequired && project.browserPreviewStatus === 'ready';
     var sourcePreviewLabel = browserSafeSource ? 'Browser-safe source copy' : 'Original master';
@@ -901,7 +866,7 @@
       (project.renderStatus === 'ready' ? '<button type="button" id="editorPreviewFinal" class="' + (previewMode === 'final' ? 'active' : '') + '"' + (previewLocked ? ' disabled' : '') + '>Final edit</button><button type="button" id="editorPreviewSource" class="' + (previewMode === 'source' ? 'active' : '') + '"' + (previewLocked ? ' disabled' : '') + '>' + sourcePreviewLabel + '</button>' : '') + '</div>';
     var automaticControlsHtml = '<div class="editor-controls"><label class="editor-toggle"><input type="checkbox" id="editorAutoSilence" ' + (project.autoSilenceEnabled !== false ? 'checked' : '') + '><span></span>Remove long pauses</label>' +
       '<label class="editor-toggle"><input type="checkbox" id="editorCaptions" ' + (project.captionsEnabled !== false ? 'checked' : '') + '><span></span>Add yellow captions</label>' +
-      (layout === 'vertical' ? '<label class="editor-toggle" title="Smoothly settles from the wider camera frame to 110% over three seconds, then stays there."><input type="checkbox" id="editorOpeningPushIn" ' + (project.openingPushInEnabled !== false ? 'checked' : '') + '><span></span>Opening zoom to base framing</label>' : '') +
+      '<label class="editor-toggle" title="Starts wide, settles to 110%, and repeats after each removed page-turn pause. Horizontal openings use five seconds; every other move uses three."><input type="checkbox" id="editorOpeningPushIn" ' + (project.openingPushInEnabled !== false ? 'checked' : '') + '><span></span>Page-change camera zooms</label>' +
       '<label class="editor-mode">Pacing<select id="editorPacing"><option value="tight"' + (Number(project.silenceThresholdSeconds) < 0.85 ? ' selected' : '') + '>Tight</option><option value="natural"' + (Number(project.silenceThresholdSeconds || 1) >= 0.85 && Number(project.silenceThresholdSeconds || 1) < 1.3 ? ' selected' : '') + '>Natural</option><option value="gentle"' + (Number(project.silenceThresholdSeconds || 1) >= 1.3 ? ' selected' : '') + '>Gentle</option></select></label>' +
       '<button type="button" class="btn-secondary btn-tiny editor-clear-automation" id="editorClearAutomation" ' + (!automaticCutsPresent ? 'disabled' : '') + ' title="Restore every pause and retake removed automatically. Manual transcript cuts stay intact.">Restore automatic cuts</button></div>';
     var selectedAudioExists = project.audioTrackId === '__none__' || audioTracks.some(function (track) { return track.id === project.audioTrackId; });
@@ -921,7 +886,7 @@
       : '';
     var initialLoadingOverlayHtml = previewLocked ? '' : '<div class="editor-preview-loading" id="editorPreviewLoading" role="status" aria-live="polite"><div></div><strong>Loading preview…</strong></div>';
     var previewPlayerHtml = '<div class="editor-preview' + (previewLocked ? ' rebuilding' : '') + '" id="editorPreview" tabindex="' + (previewLocked ? '-1' : '0') + '" aria-busy="true" aria-label="Video review. Space plays or pauses. Left and right arrows move two seconds."><div class="editor-video-frame ' + layout + '"><video id="editorVideo" data-preview-mode="' + previewMode + '" data-seek-time="' + previewSeek.toFixed(3) + '" playsinline preload="auto" src="' + previewUrl + '"></video>' +
-      (previewMode === 'source' ? punchFocusHtml(project, focusedPunchId) : '') + '<div class="editor-caption" id="editorCaption"></div>' +
+      '<div class="editor-caption" id="editorCaption"></div>' +
       '<div class="editor-player-controls" id="editorPlayerControls"><button type="button" class="editor-player-icon" id="editorPlayerPlay" aria-label="Play" disabled>▶</button><span id="editorPlayerCurrent">0:00</span><input type="range" id="editorPlayerSeek" min="0" max="1" step="0.01" value="0" aria-label="Video position" disabled><span id="editorPlayerDuration">' + formatTime(previewMode === 'final' ? editedDuration(project) : project.duration) + '</span><i id="editorPlayerBuffering" hidden>Loading</i><button type="button" class="editor-player-icon" id="editorPlayerMute" aria-label="Mute" disabled>VOL</button><button type="button" class="editor-player-icon" id="editorPlayerFullscreen" aria-label="Full screen" disabled>⛶</button></div>' +
       '<div class="editor-video-error" id="editorVideoError" hidden><strong>Preview could not be played</strong><span>Your recording and edit are safe. Reload this review copy without rebuilding anything.</span><button type="button" class="btn-secondary btn-tiny" id="editorReloadVideo">Reload preview</button></div>' + initialLoadingOverlayHtml + rebuildOverlayHtml + '</div></div>';
     var previewStageHtml = layout === 'vertical'
@@ -940,19 +905,18 @@
       (layout === 'horizontal' ? '<div class="editor-preview-toolbar">' + previewActionsHtml + '</div>' : '') +
       previewStageHtml +
       audioPanelHtml +
-      '<section class="editor-automation"><div class="editor-automation-head"><div><div class="eyebrow">Automatic edit</div><h3>Speech and pause map</h3></div><div class="editor-legend"><span class="speech">Speech</span><span class="cut">Removed pause</span><span class="pause">Kept pause</span><span class="punch">Punch-in</span></div></div>' + timelineHtml(project) +
+      '<section class="editor-automation"><div class="editor-automation-head"><div><div class="eyebrow">Automatic edit</div><h3>Speech and pause map</h3></div><div class="editor-legend"><span class="speech">Speech</span><span class="cut">Removed pause</span><span class="pause">Kept pause</span></div></div>' + timelineHtml(project) +
         (layout === 'horizontal' ? automaticControlsHtml : '') + '</section>' +
       '<section class="editor-review"><div class="editor-review-column"><div class="editor-section-title"><div><div class="eyebrow">Pause decisions</div><h3>Every automatic silence cut</h3></div><span>Red means removed</span></div><div id="editorGapReview">' + gapReviewHtml(project) + '</div></div>' +
         '<div class="editor-review-column"><div class="editor-section-title"><div><div class="eyebrow">Smart review</div><h3>Possible retakes</h3></div>' +
           (project.retakeAnalysisStatus !== 'ready' && project.retakeAnalysisStatus !== 'pending' && project.retakeAnalysisStatus !== 'running' ? '<button type="button" class="editor-analyze" id="editorAnalyzeRetakes">Analyze retakes</button>' : '<span>Only clear failed takes are automatic</span>') + '</div><div id="editorRetakeReview">' + retakeReviewHtml(project) + '</div></div></section>' +
-      '<section class="editor-punch-panel"><div class="editor-section-title"><div><div class="eyebrow">Camera movement</div><h3>Punch-ins</h3></div><span>Select transcript text to add a timed zoom</span></div><div id="editorPunchIns">' + punchInsHtml(project) + '</div></section>' +
-      '<section class="editor-transcript-panel"><div class="editor-transcript-head"><div><div class="eyebrow">Transcript editor</div><h3>Select words to cut footage or add a punch-in</h3></div>' +
+      '<section class="editor-transcript-panel"><div class="editor-transcript-head"><div><div class="eyebrow">Transcript editor</div><h3>Select words to cut footage</h3></div>' +
         '<div class="editor-transcript-actions"><button class="btn-secondary btn-tiny" id="editorUndo" ' + (!project.canUndoCut ? 'disabled' : '') + '>Undo last decision</button><button class="btn-secondary btn-tiny" id="editorPlaySelection" disabled>Play selected</button>' +
-        '<button class="btn-secondary btn-tiny" id="editorCorrect" disabled>Correct word</button><button class="btn-secondary btn-tiny" id="editorPunch" disabled>Punch in selected</button><button class="btn-secondary btn-tiny" id="editorRestore" disabled>Restore selected</button><button class="btn-primary btn-tiny" id="editorCut" disabled>Cut selected</button></div></div>' +
+        '<button class="btn-secondary btn-tiny" id="editorCorrect" disabled>Correct word</button><button class="btn-secondary btn-tiny" id="editorRestore" disabled>Restore selected</button><button class="btn-primary btn-tiny" id="editorCut" disabled>Cut selected</button></div></div>' +
         '<div class="editor-correction-tray" id="editorCorrectionTray" hidden><div><strong>Correct caption word</strong><span id="editorCorrectionNote">Timing stays exactly where it is.</span><em id="editorCorrectionError" hidden></em></div><input id="editorCorrectionInput" maxlength="40" autocomplete="off" aria-label="Corrected caption word"><div><button type="button" class="btn-secondary btn-tiny" id="editorCorrectionCancel">Cancel</button><button type="button" class="btn-secondary btn-tiny" id="editorCorrectionOriginal" hidden>Use original</button><button type="button" class="btn-primary btn-tiny" id="editorCorrectionSave">Save correction</button></div></div>' +
         '<div class="editor-transcript' + (rendering || sentToProduction ? ' locked' : '') + '" id="editorTranscript" tabindex="0">' + (project.words || []).map(function (word) {
           return '<span class="editor-word' + (removed.has(word.index) ? ' removed' : '') + (word.originalText ? ' corrected' : '') + '" data-index="' + word.index + '" data-start="' + word.start + '" data-end="' + word.end + '"' + (word.originalText ? ' title="Originally transcribed as: ' + esc(word.originalText) + '"' : '') + '>' + esc(word.text) + '</span> ';
-        }).join('') + '</div><p class="editor-selection-hint">Drag across text or click words, then cut or punch in. Press Delete to cut, Ctrl/⌘ Z to undo, or Escape to clear.</p></section>' +
+        }).join('') + '</div><p class="editor-selection-hint">Drag across text or click words, then cut. Press Delete to cut, Ctrl/⌘ Z to undo, or Escape to clear.</p></section>' +
       '<div class="editor-export"><div><strong>Next: Content Production</strong><span>' +
         (project.productionPieceId ? 'This edit is ready in Content Production for titles and thumbnail selection.' :
           project.renderStatus === 'ready' ? (audioSelectionReady ? 'Soundtrack selected. Send the finished edit across without uploading it again.' : 'Choose a backing track or No backing music before approval.') :
@@ -977,7 +941,6 @@
     var previewingFinal = video.dataset.previewMode === 'final';
     var previewingOriginalMaster = !previewingFinal && project.renderStatus === 'ready';
     var previewingWorkingEdit = !previewingFinal && project.renderStatus !== 'ready';
-    var punchFocus = root.querySelector('#editorPunchFocus');
     var rendering = ['queued', 'running'].indexOf(project.renderStatus) !== -1;
     var sentToProduction = !!project.productionPieceId;
     var editingLocked = rendering || sentToProduction;
@@ -1357,31 +1320,18 @@
     }
     var motionAnimationFrame = null;
     function updatePreviewMotion(sourcePlayheadTime) {
-      var activePunch = previewingWorkingEdit && !punchFocus ? (project.punchIns || []).filter(function (punch) {
-        return sourcePlayheadTime >= Number(punch.start) && sourcePlayheadTime < Number(punch.end);
-      }).pop() : null;
       var openingScale = 1;
-      if (previewingWorkingEdit && !punchFocus && (project.effectiveLayout || 'horizontal') === 'vertical' && project.openingPushInEnabled !== false) {
-        var editedPlayheadTime = sourceToEditedTime(sourcePlayheadTime, project.cuts || []);
-        var openingProgress = Math.max(0, Math.min(1, editedPlayheadTime / 3));
-        // The settled 110% framing is permanent. Punch-ins are a second,
-        // temporary multiplier, so their mirrored exit lands back here rather
-        // than revealing the original wide camera frame again.
+      if (previewingWorkingEdit && project.openingPushInEnabled !== false) {
+        var motion = cameraMotionState(sourcePlayheadTime, project);
+        var openingProgress = Math.max(0, Math.min(1, motion.elapsed / motion.duration));
         openingScale = 1 + 0.10 * openingProgress * openingProgress * (3 - 2 * openingProgress);
       }
-      var punchScale = punchScaleAtTime(activePunch, sourcePlayheadTime);
-      var combinedScale = openingScale * punchScale;
-      var centerX = activePunch ? Number(activePunch.centerX === undefined ? 0.5 : activePunch.centerX) : 0.5;
-      var centerY = activePunch ? Number(activePunch.centerY === undefined ? 0.5 : activePunch.centerY) : 0.5;
       var width = video.clientWidth || 0;
       var height = video.clientHeight || 0;
-      var punchOffsetX = -width * (punchScale - 1) * centerX;
-      var punchOffsetY = -height * (punchScale - 1) * centerY;
-      var offsetX = openingScale * punchOffsetX + width * (1 - openingScale) / 2;
-      var offsetY = openingScale * punchOffsetY + height * (1 - openingScale) / 2;
-      video.style.transform = combinedScale > 1.0001 ? 'matrix(' + combinedScale.toFixed(5) + ',0,0,' + combinedScale.toFixed(5) + ',' + offsetX.toFixed(3) + ',' + offsetY.toFixed(3) + ')' : '';
+      var offsetX = width * (1 - openingScale) / 2;
+      var offsetY = height * (1 - openingScale) / 2;
+      video.style.transform = openingScale > 1.0001 ? 'matrix(' + openingScale.toFixed(5) + ',0,0,' + openingScale.toFixed(5) + ',' + offsetX.toFixed(3) + ',' + offsetY.toFixed(3) + ')' : '';
       video.style.transformOrigin = '0 0';
-      if (videoFrame) videoFrame.classList.toggle('punching', combinedScale > 1.0001);
     }
     function animatePreviewMotion() {
       if (!video.isConnected || !project || project.id !== videoProjectId) {
@@ -1519,14 +1469,6 @@
         startPlayerPlayback();
       };
     });
-    root.querySelectorAll('.editor-timeline-punch').forEach(function (marker) {
-      marker.onclick = function () {
-        if (previewLocked) return;
-        var sourceTime = Math.max(0, Number(marker.dataset.time) - 0.35);
-        video.currentTime = previewingFinal ? sourceToEditedTime(sourceTime, project.cuts) : sourceTime;
-        startPlayerPlayback();
-      };
-    });
     root.querySelectorAll('.editor-preview-cut').forEach(function (button) {
       button.onclick = function () {
         if (previewLocked) return;
@@ -1622,31 +1564,6 @@
     });
     root.querySelector('#editorCut').onclick = function () { alterSelected(true); };
     root.querySelector('#editorRestore').onclick = function () { alterSelected(false); };
-    root.querySelector('#editorPunch').onclick = function () {
-      var chosen = Array.from(selected).sort(function (a, b) { return a - b; });
-      var firstWord = chosen.length ? (project.words || [])[chosen[0]] : null;
-      var lastWord = chosen.length ? (project.words || [])[chosen[chosen.length - 1]] : null;
-      if (!firstWord || !lastWord) return;
-      var punchId = 'punch-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
-      var nextPunch = {
-        id: punchId,
-        start: Math.max(0, Number(firstWord.start) - 0.1),
-        end: Math.min(Number(project.duration) || Infinity, Number(lastWord.end) + 0.15),
-        zoom: 1.18,
-        centerX: 0.5,
-        centerY: 0.5
-      };
-      selected.clear();
-      save(function (latest) { return { punchIns: (latest.punchIns || []).concat([nextPunch]) }; }).then(function (item) {
-        if (!item || !project || project.id !== item.id) return;
-        focusedPunchIds[item.id] = punchId;
-        previewModes[item.id] = 'source';
-        explicitSourcePreviews[item.id] = true;
-        previewSeekTimes[item.id] = nextPunch.start + Math.min(0.3, Math.max(0, (nextPunch.end - nextPunch.start) / 2));
-        delete previewAutoplay[item.id];
-        renderWorkspace();
-      });
-    };
     root.querySelector('#editorPlaySelection').onclick = function () {
       var chosen = Array.from(selected).sort(function (a, b) { return a - b; });
       var firstWord = chosen.length ? (project.words || [])[chosen[0]] : null;
@@ -1733,125 +1650,6 @@
         renderNotice();
       });
     };
-    function updatePunchIn(punchId, changes, remove) {
-      return save(function (latest) {
-        var next = (latest.punchIns || []).map(function (punch) {
-          return punch.id === punchId ? Object.assign({}, punch, changes || {}) : punch;
-        }).filter(function (punch) { return !remove || punch.id !== punchId; });
-        return { punchIns: next };
-      });
-    }
-    if (punchFocus && !editingLocked) {
-      var focusPunchId = punchFocus.dataset.punchId;
-      var focusPunch = (project.punchIns || []).find(function (item) { return item.id === focusPunchId; });
-      if (focusPunch) {
-        var focusCenterX = Number(focusPunch.centerX === undefined ? 0.5 : focusPunch.centerX);
-        var focusCenterY = Number(focusPunch.centerY === undefined ? 0.5 : focusPunch.centerY);
-        function paintPunchFocus() {
-          var boxWidth = punchFocus.offsetWidth;
-          var boxHeight = punchFocus.offsetHeight;
-          var maxLeft = Math.max(0, videoFrame.clientWidth - boxWidth);
-          var maxTop = Math.max(0, videoFrame.clientHeight - boxHeight);
-          punchFocus.style.left = (maxLeft ? focusCenterX * maxLeft / videoFrame.clientWidth * 100 : 0) + '%';
-          punchFocus.style.top = (maxTop ? focusCenterY * maxTop / videoFrame.clientHeight * 100 : 0) + '%';
-        }
-        function savePunchFocus() {
-          updatePunchIn(focusPunchId, { centerX: focusCenterX, centerY: focusCenterY });
-        }
-        punchFocus.addEventListener('pointerdown', function (event) {
-          if (event.button !== undefined && event.button !== 0) return;
-          event.preventDefault();
-          video.pause();
-          var frameRect = videoFrame.getBoundingClientRect();
-          var boxRect = punchFocus.getBoundingClientRect();
-          var grabX = event.clientX - boxRect.left;
-          var grabY = event.clientY - boxRect.top;
-          var originalX = focusCenterX;
-          var originalY = focusCenterY;
-          punchFocus.classList.add('dragging');
-          punchFocus.setPointerCapture(event.pointerId);
-          function move(moveEvent) {
-            var maxLeft = Math.max(0, frameRect.width - boxRect.width);
-            var maxTop = Math.max(0, frameRect.height - boxRect.height);
-            var left = Math.max(0, Math.min(maxLeft, moveEvent.clientX - frameRect.left - grabX));
-            var top = Math.max(0, Math.min(maxTop, moveEvent.clientY - frameRect.top - grabY));
-            focusCenterX = maxLeft ? left / maxLeft : 0.5;
-            focusCenterY = maxTop ? top / maxTop : 0.5;
-            paintPunchFocus();
-          }
-          function finish(finishEvent) {
-            punchFocus.classList.remove('dragging');
-            punchFocus.removeEventListener('pointermove', move);
-            punchFocus.removeEventListener('pointerup', finish);
-            punchFocus.removeEventListener('pointercancel', cancel);
-            if (punchFocus.hasPointerCapture(finishEvent.pointerId)) punchFocus.releasePointerCapture(finishEvent.pointerId);
-            savePunchFocus();
-          }
-          function cancel(cancelEvent) {
-            focusCenterX = originalX;
-            focusCenterY = originalY;
-            paintPunchFocus();
-            punchFocus.classList.remove('dragging');
-            punchFocus.removeEventListener('pointermove', move);
-            punchFocus.removeEventListener('pointerup', finish);
-            punchFocus.removeEventListener('pointercancel', cancel);
-            if (punchFocus.hasPointerCapture(cancelEvent.pointerId)) punchFocus.releasePointerCapture(cancelEvent.pointerId);
-          }
-          punchFocus.addEventListener('pointermove', move);
-          punchFocus.addEventListener('pointerup', finish);
-          punchFocus.addEventListener('pointercancel', cancel);
-        });
-        punchFocus.addEventListener('keydown', function (event) {
-          var amount = event.shiftKey ? 0.1 : 0.025;
-          if (event.key === 'ArrowLeft') focusCenterX -= amount;
-          else if (event.key === 'ArrowRight') focusCenterX += amount;
-          else if (event.key === 'ArrowUp') focusCenterY -= amount;
-          else if (event.key === 'ArrowDown') focusCenterY += amount;
-          else return;
-          event.preventDefault();
-          focusCenterX = Math.max(0, Math.min(1, focusCenterX));
-          focusCenterY = Math.max(0, Math.min(1, focusCenterY));
-          paintPunchFocus();
-          savePunchFocus();
-        });
-      }
-    }
-    root.querySelectorAll('.editor-punch-card').forEach(function (card) {
-      var punchId = card.dataset.punchId;
-      var punch = (project.punchIns || []).find(function (item) { return item.id === punchId; });
-      card.querySelector('.editor-punch-position').onclick = function () {
-        if (!punch) return;
-        focusedPunchIds[project.id] = punchId;
-        previewModes[project.id] = 'source';
-        explicitSourcePreviews[project.id] = true;
-        previewSeekTimes[project.id] = Number(punch.start) + Math.min(0.3, Math.max(0, (Number(punch.end) - Number(punch.start)) / 2));
-        delete previewAutoplay[project.id];
-        renderWorkspace();
-        var replacementVideo = root.querySelector('#editorVideo');
-        if (replacementVideo) replacementVideo.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      };
-      card.querySelector('.editor-punch-preview').onclick = function () {
-        if (!punch) return;
-        delete focusedPunchIds[project.id];
-        if (project.renderStatus === 'ready') {
-          previewModes[project.id] = 'final';
-          delete explicitSourcePreviews[project.id];
-          previewSeekTimes[project.id] = Math.max(0, sourceToEditedTime(Number(punch.start), project.cuts || []) - 0.35);
-        } else {
-          previewModes[project.id] = 'source';
-          explicitSourcePreviews[project.id] = true;
-          previewSeekTimes[project.id] = Math.max(0, Number(punch.start) - 0.35);
-        }
-        previewAutoplay[project.id] = true;
-        renderWorkspace();
-        var replacementVideo = root.querySelector('#editorVideo');
-        if (replacementVideo) replacementVideo.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      };
-      card.querySelector('.editor-punch-remove').onclick = function () {
-        if (focusedPunchIds[project.id] === punchId) delete focusedPunchIds[project.id];
-        updatePunchIn(punchId, null, true);
-      };
-    });
     root.querySelectorAll('.editor-gap-toggle').forEach(function (button) {
       button.onclick = function () {
         var gapId = button.dataset.gapId;
@@ -1969,7 +1767,6 @@
         delete projectDetails[id];
         delete localPreviewRebuilds[id];
         delete explicitSourcePreviews[id];
-        delete focusedPunchIds[id];
         clearReviewProgress(id);
         project = null; selected.clear(); renderList();
         var workspace = root && root.querySelector('#editorWorkspace');
@@ -1985,14 +1782,13 @@
       });
     };
     if (editingLocked) {
-      ['#editorAnalyze', '#editorAutoSilence', '#editorCaptions', '#editorOpeningPushIn', '#editorClearAutomation', '#editorPacing', '#editorAnalyzeRetakes', '#editorUndo', '#editorCorrect', '#editorPunch', '#editorRestore', '#editorCut'].forEach(function (selector) {
+      ['#editorAnalyze', '#editorAutoSilence', '#editorCaptions', '#editorOpeningPushIn', '#editorClearAutomation', '#editorPacing', '#editorAnalyzeRetakes', '#editorUndo', '#editorCorrect', '#editorRestore', '#editorCut'].forEach(function (selector) {
         var control = root.querySelector(selector); if (control) control.disabled = true;
       });
       root.querySelectorAll('.editor-gap-toggle,.editor-retake-apply,.editor-retake-dismiss').forEach(function (control) { control.disabled = true; });
-      root.querySelectorAll('.editor-punch-card button,.editor-punch-card select,.editor-punch-card input').forEach(function (control) { control.disabled = true; });
     }
     if (previewLocked) {
-      root.querySelectorAll('.editor-timeline-segment,.editor-timeline-punch,.editor-preview-cut,.editor-punch-preview,#editorPlaySelection').forEach(function (control) { control.disabled = true; });
+      root.querySelectorAll('.editor-timeline-segment,.editor-preview-cut,#editorPlaySelection').forEach(function (control) { control.disabled = true; });
     }
     if (rendering) root.querySelector('#editorDelete').disabled = true;
   }
@@ -2008,7 +1804,6 @@
     root.querySelector('#editorCut').disabled = locked || !hasKept;
     root.querySelector('#editorRestore').disabled = locked || !hasRemoved;
     root.querySelector('#editorCorrect').disabled = locked || selected.size !== 1;
-    root.querySelector('#editorPunch').disabled = locked || !hasKept;
     var previewLocked = project && (!!localPreviewRebuilds[project.id] || !!project.renderRebuildPending || ['queued', 'running'].indexOf(project.renderStatus) !== -1);
     root.querySelector('#editorPlaySelection').disabled = previewLocked || selected.size === 0;
   }
@@ -2150,7 +1945,7 @@
       ? window.crypto.randomUUID()
       : 'edit-' + Date.now() + '-' + Math.random().toString(36).slice(2);
     var renderKeys = ['removedWordIndices', 'wordCorrection', 'autoSilenceEnabled', 'restoredAutoCutIds', 'captionsEnabled',
-      'layoutOverride', 'punchIns', 'openingPushInEnabled', 'silenceThresholdSeconds', 'retainedPauseSeconds'];
+      'layoutOverride', 'openingPushInEnabled', 'silenceThresholdSeconds', 'retainedPauseSeconds'];
     var renderWillChange = typeof patch === 'function' || renderKeys.some(function (key) {
       return patch && Object.prototype.hasOwnProperty.call(patch, key);
     });
