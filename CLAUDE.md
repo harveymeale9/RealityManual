@@ -14444,3 +14444,12 @@ internal direct-video start back through the same gate. Single-stream source or
 no-music playback remains a normal immediate video start.
 
 The complete 140-test suite passes and the Editor asset cache key was advanced.
+
+The frontend-only deployment completed without restarting the service.
+Authenticated Chromium then measured the real Editor rather than a synthetic
+player. On first soundtrack selection, audio reached `playing` before video;
+the picture followed 18ms later instead of escaping first. A pause/resume began
+audio 1.3ms before the video's `play` event, both reached steady playback within
+62ms of the click, and ongoing timeline drift was about 0.03 seconds. The test
+restored the project's original empty soundtrack choice and produced no page
+errors.
