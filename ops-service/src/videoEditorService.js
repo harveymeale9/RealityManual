@@ -401,7 +401,7 @@ function advanceEditRevision(project) {
 function patchAffectsRender(body) {
   body = body && typeof body === 'object' ? body : {};
   return ['removedWordIndices', 'wordCorrection', 'autoSilenceEnabled', 'restoredAutoCutIds', 'captionsEnabled',
-    'layoutOverride', 'cropCenterX', 'silenceThresholdSeconds', 'retainedPauseSeconds'].some(function (key) {
+    'layoutOverride', 'cropCenterX', 'punchIns', 'silenceThresholdSeconds', 'retainedPauseSeconds'].some(function (key) {
     return Object.prototype.hasOwnProperty.call(body, key);
   });
 }
@@ -581,6 +581,52 @@ function keepSegments(duration, cuts) {
   return segments;
 }
 
+function normalizePunchIns(rawPunchIns, duration) {
+  const total = Math.max(0, Number(duration) || 0);
+  return (Array.isArray(rawPunchIns) ? rawPunchIns : []).slice(0, 100).map(function (item, index) {
+    const start = clamp(item && item.start, 0, total);
+    const end = clamp(item && item.end, 0, total);
+    const suppliedId = String(item && item.id || '');
+    return {
+      id: /^punch-[A-Za-z0-9_-]{4,80}$/.test(suppliedId) ? suppliedId : 'punch-' + index + '-' + Math.round(start * 1000),
+      start: start,
+      end: end,
+      zoom: clamp(item && item.zoom === undefined ? 1.18 : item.zoom, 1.05, 1.5),
+      centerX: clamp(item && item.centerX === undefined ? 0.5 : item.centerX, 0, 1),
+      centerY: clamp(item && item.centerY === undefined ? 0.5 : item.centerY, 0, 1)
+    };
+  }).filter(function (item) {
+    return item.end - item.start >= 0.08;
+  }).sort(function (a, b) {
+    return a.start - b.start || a.end - b.end;
+  });
+}
+
+// Splitting at each punch boundary makes the exported zoom frame-exact. If
+// two ranges overlap, the later sorted range wins in the overlap.
+function applyPunchInsToSegments(segments, rawPunchIns, duration) {
+  const punchIns = normalizePunchIns(rawPunchIns, duration);
+  const output = [];
+  (segments || []).forEach(function (segment) {
+    const boundaries = [segment.start, segment.end];
+    punchIns.forEach(function (punch) {
+      if (punch.start > segment.start && punch.start < segment.end) boundaries.push(punch.start);
+      if (punch.end > segment.start && punch.end < segment.end) boundaries.push(punch.end);
+    });
+    boundaries.sort(function (a, b) { return a - b; });
+    boundaries.forEach(function (start, index) {
+      const end = boundaries[index + 1];
+      if (!Number.isFinite(end) || end <= start) return;
+      const midpoint = start + (end - start) / 2;
+      const active = punchIns.filter(function (punch) {
+        return midpoint >= punch.start && midpoint < punch.end;
+      }).pop() || null;
+      output.push({ start: start, end: end, punchIn: active });
+    });
+  });
+  return output;
+}
+
 function mapSourceTimeToEdited(time, cuts) {
   const value = Math.max(0, Number(time) || 0);
   let removed = 0;
@@ -647,8 +693,8 @@ function buildAss(project, groups) {
   const width = Math.max(360, Math.round(Number(project.width) || 1080));
   const height = Math.max(360, Math.round(Number(project.height) || 1920));
   const isLongform = width >= height;
-  const fontSize = Math.max(30, Math.round(Math.min(width, height) * (isLongform ? 0.06 : 0.111)));
-  const emphasizedSize = Math.round(fontSize * 1.18);
+  const fontSize = Math.max(30, Math.round(Math.min(width, height) * (isLongform ? 0.048 : 0.08)));
+  const emphasizedSize = Math.round(fontSize * 1.12);
   const marginV = Math.round(height * (isLongform ? 0.27 : 0.365));
   const header = [
     '[Script Info]', 'ScriptType: v4.00+', 'PlayResX: ' + width, 'PlayResY: ' + height,
@@ -686,7 +732,7 @@ function buildAss(project, groups) {
     // fill behavior that differs between ASS renderers.
     const characterCount = Array.from(String(group.text || '')).length;
     const fittedLongformSize = Math.max(Math.round(fontSize * 0.65), Math.min(fontSize, Math.round(fontSize * 50 / Math.max(50, characterCount))));
-    const fittedEmphasizedSize = Math.round(fittedLongformSize * 1.18);
+    const fittedEmphasizedSize = Math.round(fittedLongformSize * 1.12);
     group.words.forEach(function (activeWord, activeIndex) {
       const eventStart = activeIndex === 0 ? group.start : activeWord.start;
       const eventEnd = activeIndex + 1 < group.words.length ? group.words[activeIndex + 1].start : group.end;
@@ -715,7 +761,7 @@ function projectListSummary(project) {
   // Queue cards and status polling need lifecycle metadata, not the complete
   // transcript/edit graph. A filming batch can otherwise resend megabytes of
   // repeated word timing and analysis every 1.8 seconds.
-  ['words', 'transcriptText', 'removedWordIndices', 'autoRetakeRemovedWordIndices',
+  ['words', 'transcriptText', 'removedWordIndices', 'autoRetakeRemovedWordIndices', 'punchIns',
     'dismissedRetakeIds', 'restoredAutoCutIds', 'retakeDecisions', 'cutDecisionHistory',
     'recentMutationIds', 'renderQuality', 'visualClassification', 'planningMatch'].forEach(function (key) {
     delete summary[key];
@@ -1201,7 +1247,7 @@ async function renderProject(id) {
       project.renderProgress = 0;
       saveProject(project);
       const cuts = cutsForProject(project);
-      const segments = keepSegments(project.duration, cuts);
+      const segments = applyPunchInsToSegments(keepSegments(project.duration, cuts), project.punchIns, project.duration);
       if (!segments.length) throw new Error('Every part of the recording is currently cut. Restore some transcript first.');
       const expectedDuration = segments.reduce(function (sum, segment) { return sum + segment.end - segment.start; }, 0);
       const assPath = path.join(projectDir(id), 'captions.ass');
@@ -1217,6 +1263,10 @@ async function renderProject(id) {
           videoFilter += ",crop=w='min(iw\\,ih*9/16)':h='min(ih\\,iw*16/9)':x='(iw-ow)*" + cropPosition.toFixed(3) + "':y='(ih-oh)/2',scale=1080:1920,setsar=1";
         } else {
           videoFilter += ",crop=w='min(iw\\,ih*16/9)':h='min(ih\\,iw*9/16)':x='(iw-ow)/2':y='(ih-oh)/2',scale=1920:1080,setsar=1";
+        }
+        if (segment.punchIn) {
+          const punch = segment.punchIn;
+          videoFilter += ",crop=w='iw/" + punch.zoom.toFixed(3) + "':h='ih/" + punch.zoom.toFixed(3) + "':x='(iw-ow)*" + punch.centerX.toFixed(3) + "':y='(ih-oh)*" + punch.centerY.toFixed(3) + "',scale=" + renderShape.width + ':' + renderShape.height + ',setsar=1';
         }
         filters.push(videoFilter + '[v' + index + ']');
         // Tiny boundary fades prevent waveform discontinuities from creating
@@ -1550,6 +1600,7 @@ async function renderProject(id) {
         layoutOverride: 'auto',
         contentTypeOverride: 'auto',
         cropCenterX: 0.5,
+        punchIns: [],
         visualClassification: null,
         classificationStatus: typeof classifyVisualLayout === 'function' ? 'pending' : 'unavailable',
         classificationError: '',
@@ -1673,6 +1724,7 @@ async function renderProject(id) {
     if (['auto', 'vertical', 'horizontal'].includes(req.body && req.body.layoutOverride)) project.layoutOverride = req.body.layoutOverride;
     if (['auto', 'ultra_short', 'short', 'long_short', 'longform'].includes(req.body && req.body.contentTypeOverride)) project.contentTypeOverride = req.body.contentTypeOverride;
     if (Number.isFinite(Number(req.body && req.body.cropCenterX))) project.cropCenterX = clamp(req.body.cropCenterX, 0, 1);
+    if (Array.isArray(req.body && req.body.punchIns)) project.punchIns = normalizePunchIns(req.body.punchIns, project.duration);
     project.silenceThresholdSeconds = nextSilenceThresholdSeconds;
     project.retainedPauseSeconds = nextRetainedPauseSeconds;
     if (typeof (req.body && req.body.planningPieceId) === 'string' && typeof getPlanningCandidates === 'function') {
@@ -1966,6 +2018,8 @@ module.exports = {
   mergeCuts,
   cutsForProject,
   keepSegments,
+  normalizePunchIns,
+  applyPunchInsToSegments,
   mapSourceTimeToEdited,
   captionGroups,
   buildAss,

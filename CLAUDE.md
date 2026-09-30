@@ -14035,3 +14035,38 @@ All three controls now use one bounded transient retry after 500ms, preserving
 the existing error restoration for persistent failures. The browser workflow
 forces the first manual retake-analysis response to fail with 503, then requires
 one retry and a visible running-analysis state.
+
+---
+
+# 395. Transcript-Timed Punch-Ins and Smaller Caption Defaults (2026-09-30)
+
+Harvey reported that Editor captions were still substantially too large and
+asked for the other major part of his normal edit: timed camera punch-ins for
+both horizontal and vertical videos.
+
+Caption sizing is now reduced consistently in the working browser preview and
+the baked ASS export. Horizontal captions use a 52px export base with a gentler
+12% spoken-word emphasis; vertical one-word captions use an 86px base. The
+preview uses the exact proportional equivalents, including long-word fitting,
+so approval does not change at encode time. The video frame clips the video
+itself while caption overflow remains visible, keeping zoomed footage and text
+inside their intended safe areas.
+
+Punch-ins are transcript-driven. Harvey can select any words or sentence and
+choose `Punch in selected`; the Editor creates a timed zoom with short speech
+handles, previews it immediately in the working edit, and exposes controls for
+subtle through dramatic zoom plus horizontal and vertical focal position. Each
+punch-in has a direct Preview and Remove action. The settings are durable,
+revision-protected Editor state and invalidate/rebuild the verified render like
+other visual edits.
+
+The final encoder does not approximate these with CSS. It splits retained
+footage at the exact source-time punch boundaries, applies a second crop and
+scale at the chosen focal point, then concatenates those segments through the
+existing audio-boundary and caption pipeline. Punch boundaries never remove
+source duration and continue to work when silence/transcript cuts intersect
+them. Unit coverage proves normalization, duration preservation, API
+persistence, and a real FFmpeg export. A dedicated headless-browser workflow
+selects transcript words, creates a punch-in, observes the live scale, changes
+its strength, and removes it; the complete existing Editor browser regression
+also remains green.

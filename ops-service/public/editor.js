@@ -329,6 +329,23 @@
     }).join('');
   }
 
+  function punchInsHtml(item) {
+    var words = item.words || [];
+    var punchIns = item.punchIns || [];
+    if (!punchIns.length) return '<div class="editor-review-empty">No punch-ins yet. Select a line in the transcript and choose Punch in selected.</div>';
+    return punchIns.map(function (punch) {
+      var excerpt = words.filter(function (word) {
+        return Number(word.end) >= Number(punch.start) && Number(word.start) <= Number(punch.end);
+      }).slice(0, 12).map(function (word) { return word.text; }).join(' ');
+      if (!excerpt) excerpt = formatTime(punch.start) + ' to ' + formatTime(punch.end);
+      return '<div class="editor-punch-card" data-punch-id="' + esc(punch.id) + '"><div><strong>“' + esc(excerpt) + (excerpt.length >= 80 ? '…' : '') + '”</strong><span>' + formatTime(punch.start) + '–' + formatTime(punch.end) + '</span></div>' +
+        '<label>Zoom<select class="editor-punch-zoom"><option value="1.1"' + (punch.zoom < 1.13 ? ' selected' : '') + '>Subtle · 110%</option><option value="1.18"' + (punch.zoom >= 1.13 && punch.zoom < 1.215 ? ' selected' : '') + '>Standard · 118%</option><option value="1.25"' + (punch.zoom >= 1.215 && punch.zoom < 1.3 ? ' selected' : '') + '>Strong · 125%</option><option value="1.35"' + (punch.zoom >= 1.3 ? ' selected' : '') + '>Dramatic · 135%</option></select></label>' +
+        '<label>Left ↔ right<input class="editor-punch-x" type="range" min="0" max="100" value="' + Math.round(Number(punch.centerX) * 100) + '"></label>' +
+        '<label>Top ↕ bottom<input class="editor-punch-y" type="range" min="0" max="100" value="' + Math.round(Number(punch.centerY) * 100) + '"></label>' +
+        '<div class="editor-punch-actions"><button type="button" class="btn-secondary btn-tiny editor-punch-preview">Preview</button><button type="button" class="btn-secondary btn-tiny editor-punch-remove">Remove</button></div></div>';
+    }).join('');
+  }
+
   function processingStepsHtml(item) {
     function step(state, label, detail) {
       return '<div class="editor-process-step ' + state + '"><i></i><div><strong>' + esc(label) + '</strong><span>' + esc(detail) + '</span></div></div>';
@@ -816,13 +833,14 @@
       '<section class="editor-review"><div class="editor-review-column"><div class="editor-section-title"><div><div class="eyebrow">Pause decisions</div><h3>Every automatic silence cut</h3></div><span>Red means removed</span></div><div id="editorGapReview">' + gapReviewHtml(project) + '</div></div>' +
         '<div class="editor-review-column"><div class="editor-section-title"><div><div class="eyebrow">Smart review</div><h3>Possible retakes</h3></div>' +
           (project.retakeAnalysisStatus !== 'ready' && project.retakeAnalysisStatus !== 'pending' && project.retakeAnalysisStatus !== 'running' ? '<button type="button" class="editor-analyze" id="editorAnalyzeRetakes">Analyze retakes</button>' : '<span>Only clear failed takes are automatic</span>') + '</div><div id="editorRetakeReview">' + retakeReviewHtml(project) + '</div></div></section>' +
-      '<section class="editor-transcript-panel"><div class="editor-transcript-head"><div><div class="eyebrow">Transcript editor</div><h3>Select words or sentences to cut them from the video</h3></div>' +
+      '<section class="editor-punch-panel"><div class="editor-section-title"><div><div class="eyebrow">Camera movement</div><h3>Punch-ins</h3></div><span>Select transcript text to add a timed zoom</span></div><div id="editorPunchIns">' + punchInsHtml(project) + '</div></section>' +
+      '<section class="editor-transcript-panel"><div class="editor-transcript-head"><div><div class="eyebrow">Transcript editor</div><h3>Select words to cut footage or add a punch-in</h3></div>' +
         '<div class="editor-transcript-actions"><button class="btn-secondary btn-tiny" id="editorUndo" ' + (!project.canUndoCut ? 'disabled' : '') + '>Undo last decision</button><button class="btn-secondary btn-tiny" id="editorPlaySelection" disabled>Play selected</button>' +
-        '<button class="btn-secondary btn-tiny" id="editorCorrect" disabled>Correct word</button><button class="btn-secondary btn-tiny" id="editorRestore" disabled>Restore selected</button><button class="btn-primary btn-tiny" id="editorCut" disabled>Cut selected</button></div></div>' +
+        '<button class="btn-secondary btn-tiny" id="editorCorrect" disabled>Correct word</button><button class="btn-secondary btn-tiny" id="editorPunch" disabled>Punch in selected</button><button class="btn-secondary btn-tiny" id="editorRestore" disabled>Restore selected</button><button class="btn-primary btn-tiny" id="editorCut" disabled>Cut selected</button></div></div>' +
         '<div class="editor-correction-tray" id="editorCorrectionTray" hidden><div><strong>Correct caption word</strong><span id="editorCorrectionNote">Timing stays exactly where it is.</span><em id="editorCorrectionError" hidden></em></div><input id="editorCorrectionInput" maxlength="40" autocomplete="off" aria-label="Corrected caption word"><div><button type="button" class="btn-secondary btn-tiny" id="editorCorrectionCancel">Cancel</button><button type="button" class="btn-secondary btn-tiny" id="editorCorrectionOriginal" hidden>Use original</button><button type="button" class="btn-primary btn-tiny" id="editorCorrectionSave">Save correction</button></div></div>' +
         '<div class="editor-transcript' + (rendering || sentToProduction ? ' locked' : '') + '" id="editorTranscript" tabindex="0">' + (project.words || []).map(function (word) {
           return '<span class="editor-word' + (removed.has(word.index) ? ' removed' : '') + (word.originalText ? ' corrected' : '') + '" data-index="' + word.index + '" data-start="' + word.start + '" data-end="' + word.end + '"' + (word.originalText ? ' title="Originally transcribed as: ' + esc(word.originalText) + '"' : '') + '>' + esc(word.text) + '</span> ';
-        }).join('') + '</div><p class="editor-selection-hint">Drag across text or click words. Press Delete to cut, Ctrl/⌘ Z to undo, or Escape to clear. Removed words remain visible so you can restore them.</p></section>' +
+        }).join('') + '</div><p class="editor-selection-hint">Drag across text or click words, then cut or punch in. Press Delete to cut, Ctrl/⌘ Z to undo, or Escape to clear.</p></section>' +
       '<div class="editor-export"><div><strong>Next: Content Production</strong><span>' +
         (project.productionPieceId ? 'This edit is ready in Content Production for titles, thumbnail, and ambient music.' :
           project.renderStatus === 'ready' ? 'Send the finished edit across without uploading it again.' :
@@ -840,11 +858,13 @@
 
   function bindWorkspace() {
     var video = root.querySelector('#editorVideo');
+    var videoFrame = root.querySelector('.editor-video-frame');
     var videoProjectId = project.id;
     var caption = root.querySelector('#editorCaption');
     var transcript = root.querySelector('#editorTranscript');
     var previewingFinal = video.dataset.previewMode === 'final';
     var previewingOriginalMaster = !previewingFinal && project.renderStatus === 'ready';
+    var previewingWorkingEdit = !previewingFinal && project.renderStatus !== 'ready';
     var rendering = ['queued', 'running'].indexOf(project.renderStatus) !== -1;
     var sentToProduction = !!project.productionPieceId;
     var editingLocked = rendering || sentToProduction;
@@ -920,6 +940,12 @@
         delete previewStopTimes[project.id];
       }
       var sourcePlayheadTime = previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime;
+      var activePunch = previewingWorkingEdit ? (project.punchIns || []).filter(function (punch) {
+        return sourcePlayheadTime >= Number(punch.start) && sourcePlayheadTime < Number(punch.end);
+      }).pop() : null;
+      video.style.transform = activePunch ? 'scale(' + Number(activePunch.zoom || 1.18).toFixed(3) + ')' : '';
+      video.style.transformOrigin = activePunch ? (Number(activePunch.centerX === undefined ? 0.5 : activePunch.centerX) * 100).toFixed(1) + '% ' + (Number(activePunch.centerY === undefined ? 0.5 : activePunch.centerY) * 100).toFixed(1) + '%' : '';
+      if (videoFrame) videoFrame.classList.toggle('punching', !!activePunch);
       var now = Date.now();
       if (sourcePlayheadTime >= 1 && now - lastReviewProgressSaveAt >= 500) {
         lastReviewProgressSaveAt = now;
@@ -976,7 +1002,7 @@
       if (group && Array.isArray(group.words) && isLongform) {
         var phraseCharacters = Array.from(String(group.text || '')).length;
         var phraseScale = Math.max(0.65, Math.min(1, 50 / Math.max(50, phraseCharacters)));
-        if (phraseScale < 1) caption.style.fontSize = (3.4 * phraseScale).toFixed(2) + 'cqw';
+        if (phraseScale < 1) caption.style.fontSize = (2.7 * phraseScale).toFixed(2) + 'cqw';
         group.words.forEach(function (word, index) {
           var span = document.createElement('span');
           span.textContent = word.text + (index + 1 < group.words.length ? ' ' : '');
@@ -992,7 +1018,7 @@
         caption.textContent = spokenWord ? spokenWord.text : '';
         if (spokenWord) {
           var characters = Array.from(String(spokenWord.text || '')).length;
-          caption.style.fontSize = (Math.max(4, Math.min(11.1, 11.1 * 15 / Math.max(15, characters)))).toFixed(2) + 'cqw';
+          caption.style.fontSize = (Math.max(3, Math.min(8, 8 * 15 / Math.max(15, characters)))).toFixed(2) + 'cqw';
         }
       } else if (group) caption.textContent = group.text;
       caption.classList.toggle('visible', !!group && project.captionsEnabled !== false);
@@ -1097,6 +1123,23 @@
     });
     root.querySelector('#editorCut').onclick = function () { alterSelected(true); };
     root.querySelector('#editorRestore').onclick = function () { alterSelected(false); };
+    root.querySelector('#editorPunch').onclick = function () {
+      var chosen = Array.from(selected).sort(function (a, b) { return a - b; });
+      var firstWord = chosen.length ? (project.words || [])[chosen[0]] : null;
+      var lastWord = chosen.length ? (project.words || [])[chosen[chosen.length - 1]] : null;
+      if (!firstWord || !lastWord) return;
+      var punchId = 'punch-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+      var nextPunch = {
+        id: punchId,
+        start: Math.max(0, Number(firstWord.start) - 0.1),
+        end: Math.min(Number(project.duration) || Infinity, Number(lastWord.end) + 0.15),
+        zoom: 1.18,
+        centerX: 0.5,
+        centerY: 0.5
+      };
+      selected.clear();
+      save(function (latest) { return { punchIns: (latest.punchIns || []).concat([nextPunch]) }; });
+    };
     root.querySelector('#editorPlaySelection').onclick = function () {
       var chosen = Array.from(selected).sort(function (a, b) { return a - b; });
       var firstWord = chosen.length ? (project.words || [])[chosen[0]] : null;
@@ -1204,6 +1247,29 @@
       };
       crop.onchange = function () { save({ cropCenterX: Number(crop.value) / 100 }, true); };
     }
+    function updatePunchIn(punchId, changes, remove) {
+      save(function (latest) {
+        var next = (latest.punchIns || []).map(function (punch) {
+          return punch.id === punchId ? Object.assign({}, punch, changes || {}) : punch;
+        }).filter(function (punch) { return !remove || punch.id !== punchId; });
+        return { punchIns: next };
+      });
+    }
+    root.querySelectorAll('.editor-punch-card').forEach(function (card) {
+      var punchId = card.dataset.punchId;
+      var punch = (project.punchIns || []).find(function (item) { return item.id === punchId; });
+      card.querySelector('.editor-punch-preview').onclick = function () {
+        if (!punch) return;
+        var time = previewingFinal ? sourceToEditedTime(punch.start, project.cuts) : punch.start;
+        video.currentTime = Math.max(0, time - 0.35);
+        video.play().catch(function () {});
+        video.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      };
+      card.querySelector('.editor-punch-remove').onclick = function () { updatePunchIn(punchId, null, true); };
+      card.querySelector('.editor-punch-zoom').onchange = function () { updatePunchIn(punchId, { zoom: Number(this.value) }); };
+      card.querySelector('.editor-punch-x').onchange = function () { updatePunchIn(punchId, { centerX: Number(this.value) / 100 }); };
+      card.querySelector('.editor-punch-y').onchange = function () { updatePunchIn(punchId, { centerY: Number(this.value) / 100 }); };
+    });
     root.querySelectorAll('.editor-gap-toggle').forEach(function (button) {
       button.onclick = function () {
         var gapId = button.dataset.gapId;
@@ -1334,10 +1400,11 @@
       });
     };
     if (editingLocked) {
-      ['#editorAnalyze', '#editorLayout', '#editorContentType', '#editorPlanningPiece', '#editorMatchPlan', '#editorCropX', '#editorAutoSilence', '#editorCaptions', '#editorClearAutomation', '#editorPacing', '#editorAnalyzeRetakes', '#editorUndo', '#editorCorrect', '#editorRestore', '#editorCut'].forEach(function (selector) {
+      ['#editorAnalyze', '#editorLayout', '#editorContentType', '#editorPlanningPiece', '#editorMatchPlan', '#editorCropX', '#editorAutoSilence', '#editorCaptions', '#editorClearAutomation', '#editorPacing', '#editorAnalyzeRetakes', '#editorUndo', '#editorCorrect', '#editorPunch', '#editorRestore', '#editorCut'].forEach(function (selector) {
         var control = root.querySelector(selector); if (control) control.disabled = true;
       });
       root.querySelectorAll('.editor-gap-toggle,.editor-retake-apply,.editor-retake-dismiss').forEach(function (control) { control.disabled = true; });
+      root.querySelectorAll('.editor-punch-card button,.editor-punch-card select,.editor-punch-card input').forEach(function (control) { control.disabled = true; });
     }
     if (rendering) root.querySelector('#editorDelete').disabled = true;
   }
@@ -1353,6 +1420,7 @@
     root.querySelector('#editorCut').disabled = locked || !hasKept;
     root.querySelector('#editorRestore').disabled = locked || !hasRemoved;
     root.querySelector('#editorCorrect').disabled = locked || selected.size !== 1;
+    root.querySelector('#editorPunch').disabled = locked || !hasKept;
     root.querySelector('#editorPlaySelection').disabled = selected.size === 0;
   }
 
@@ -1481,7 +1549,7 @@
       ? window.crypto.randomUUID()
       : 'edit-' + Date.now() + '-' + Math.random().toString(36).slice(2);
     var renderKeys = ['removedWordIndices', 'wordCorrection', 'autoSilenceEnabled', 'restoredAutoCutIds', 'captionsEnabled',
-      'layoutOverride', 'cropCenterX', 'silenceThresholdSeconds', 'retainedPauseSeconds'];
+      'layoutOverride', 'cropCenterX', 'punchIns', 'silenceThresholdSeconds', 'retainedPauseSeconds'];
     var renderWillChange = typeof patch === 'function' || renderKeys.some(function (key) {
       return patch && Object.prototype.hasOwnProperty.call(patch, key);
     });

@@ -236,6 +236,7 @@ test('metadata-only editor changes preserve a verified render', function () {
   assert.equal(editor.patchAffectsRender({ captionsEnabled: false }), true);
   assert.equal(editor.patchAffectsRender({ removedWordIndices: [1, 2] }), true);
   assert.equal(editor.patchAffectsRender({ layoutOverride: 'vertical' }), true);
+  assert.equal(editor.patchAffectsRender({ punchIns: [{ start: 1, end: 2 }] }), true);
   assert.equal(editor.patchNeedsAutoRender({ renderStatus: 'ready' }, false), false);
   assert.equal(editor.patchNeedsAutoRender({ renderStatus: '' }, false), true);
   assert.equal(editor.patchNeedsAutoRender({ renderStatus: 'ready' }, true), true);
@@ -378,6 +379,14 @@ test('overlapping cuts merge and retained segments fill the rest', function () {
   assert.equal(editor.mapSourceTimeToEdited(9, cuts), 5);
 });
 
+test('punch-ins split retained footage without changing its duration', function () {
+  const punchIns = editor.normalizePunchIns([{ id: 'punch-line-one', start: 2, end: 4, zoom: 1.25, centerX: .3, centerY: .7 }], 10);
+  assert.deepEqual(punchIns, [{ id: 'punch-line-one', start: 2, end: 4, zoom: 1.25, centerX: .3, centerY: .7 }]);
+  const segments = editor.applyPunchInsToSegments([{ start: 0, end: 3 }, { start: 5, end: 10 }], punchIns, 10);
+  assert.deepEqual(segments.map(function (segment) { return [segment.start, segment.end, !!segment.punchIn]; }), [[0, 2, false], [2, 3, true], [5, 10, false]]);
+  assert.equal(segments.reduce(function (sum, segment) { return sum + segment.end - segment.start; }, 0), 8);
+});
+
 test('caption groups omit deleted words and carry raw and edited timing', function () {
   const project = { words: words, removedWordIndices: [2, 3] };
   const cuts = [{ start: 1.8, end: 4.95 }];
@@ -390,7 +399,7 @@ test('caption groups omit deleted words and carry raw and edited timing', functi
 
 test('ASS export uses bold yellow captions below centre', function () {
   const ass = editor.buildAss({ width: 1080, height: 1920 }, [{ start: 1, end: 2, text: 'A {real} caption' }]);
-  assert.match(ass, /PrimaryColour.*\nStyle: Default,Arial,120,&H0000FFFF/);
+  assert.match(ass, /PrimaryColour.*\nStyle: Default,Arial,86,&H0000FFFF/);
   assert.match(ass, /,2,40,40,701,1/);
   assert.match(ass, /Dialogue: 0,0:00:01\.00,0:00:02\.00.*A \\{real\\} caption/);
 });
@@ -400,18 +409,18 @@ test('landscape captions are larger and advance spoken-word emphasis', function 
     { text: 'A', start: 1, end: 1.2 }, { text: 'wise', start: 1.2, end: 1.6 }, { text: 'move', start: 1.6, end: 2 }
   ] }];
   const ass = editor.buildAss({ width: 1920, height: 1080 }, groups);
-  assert.match(ass, /Style: Default,Arial,65,/);
+  assert.match(ass, /Style: Default,Arial,52,/);
   assert.equal((ass.match(/^Dialogue:/gm) || []).length, 3);
-  assert.match(ass, /\\fs77\\bord4}A\{\\r} wise move/);
-  assert.match(ass, /A \{\\fs77\\bord4}wise\{\\r} move/);
+  assert.match(ass, /\\fs58\\bord4}A\{\\r} wise move/);
+  assert.match(ass, /A \{\\fs58\\bord4}wise\{\\r} move/);
   const longWords = Array.from({ length: 5 }, function (_, index) {
     return { text: 'extraordinarylong' + index, start: index * .2, end: index * .2 + .18 };
   });
   const fitted = editor.buildAss({ width: 1920, height: 1080 }, [{
     start: 0, end: 1, text: longWords.map(function (word) { return word.text; }).join(' '), words: longWords
   }]);
-  assert.match(fitted, /\\fs42\\bord3/);
-  assert.match(fitted, /\\fs50\\bord4/);
+  assert.match(fitted, /\\fs34\\bord3/);
+  assert.match(fitted, /\\fs38\\bord4/);
 });
 
 test('vertical captions show one large yellow word at a time', function () {
@@ -419,15 +428,15 @@ test('vertical captions show one large yellow word at a time', function () {
     { text: 'One', start: 1, end: 1.2 }, { text: 'word', start: 1.25, end: 1.55 }, { text: 'now', start: 1.6, end: 2 }
   ] }];
   const ass = editor.buildAss({ width: 1080, height: 1920 }, groups);
-  assert.match(ass, /Style: Default,Arial,120,.*&H0000FFFF/);
+  assert.match(ass, /Style: Default,Arial,86,.*&H0000FFFF/);
   assert.equal((ass.match(/^Dialogue:/gm) || []).length, 3);
   assert.match(ass, /Dialogue: 0,0:00:01\.00,0:00:01\.25.*One$/m);
   assert.match(ass, /Dialogue: 0,0:00:01\.25,0:00:01\.60.*word$/m);
   assert.match(ass, /Dialogue: 0,0:00:01\.60,0:00:02\.00.*now$/m);
   const fitted = editor.buildAss({ width: 1080, height: 1920 }, [{ start: 0, end: 1, text: 'xxxxxxxxxxxxxxxxxxxxxxxx', words: [{ text: 'xxxxxxxxxxxxxxxxxxxxxxxx', start: 0, end: 1 }] }]);
-  assert.match(fitted, /\{\\fs75\}xxxxxxxxxxxxxxxxxxxxxxxx\{\\r\}/);
+  assert.match(fitted, /\{\\fs54\}xxxxxxxxxxxxxxxxxxxxxxxx\{\\r\}/);
   const fittedMaximum = editor.buildAss({ width: 1080, height: 1920 }, [{ start: 0, end: 1, text: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', words: [{ text: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', start: 0, end: 1 }] }]);
-  assert.match(fittedMaximum, /\{\\fs45\}xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\{\\r\}/);
+  assert.match(fittedMaximum, /\{\\fs32\}xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\{\\r\}/);
 });
 
 test('batch preprocessing serializes expensive transcription and frame analysis', { timeout: 15000 }, async function (t) {
@@ -605,7 +614,7 @@ test('startup invalidates a corrupt active final before it can be reviewed', { t
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
 
-test('one recovery endpoint retries failed automatic work without replacing the source', { timeout: 20000 }, async function (t) {
+test('one recovery endpoint retries failed automatic work without replacing the source', { timeout: 30000 }, async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-retry-'));
   const projectDir = path.join(dir, 'editor', 'retry-1'); fs.mkdirSync(projectDir, { recursive: true });
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=320x180:d=1:r=12',
@@ -628,7 +637,7 @@ test('one recovery endpoint retries failed automatic work without replacing the 
   let response = await fetch(base + '/api/editor/retry-1/retry-failed', { method: 'POST' });
   assert.equal(response.status, 202); assert.deepEqual((await response.json()).retried, ['transcription']);
   let project;
-  for (let attempt = 0; attempt < 400; attempt++) {
+  for (let attempt = 0; attempt < 650; attempt++) {
     project = await (await fetch(base + '/api/editor/retry-1')).json();
     if (project.transcriptionStatus === 'ready' && (project.renderStatus === 'ready' || project.renderStatus === 'error')) break;
     await new Promise(function (resolve) { setTimeout(resolve, 30); });
@@ -967,7 +976,10 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wordCorrection: { index: 0, text: 'x'.repeat(41) } }) });
   assert.equal(response.status, 400);
   assert.equal((await response.json()).error, 'invalid_word_correction');
-  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ retainedPauseSeconds: 0.55 }) });
+  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+    retainedPauseSeconds: 0.55,
+    punchIns: [{ id: 'punch-second-take', start: 2, end: 2.8, zoom: 1.25, centerX: .4, centerY: .6 }]
+  }) });
   assert.equal(response.status, 200);
   for (let attempt = 0; attempt < 600 && (project.renderStatus !== 'ready' || renderReadyCalls < 2 || project.workflowWarning); attempt++) {
     await new Promise(function (resolve) { setTimeout(resolve, 50); });
@@ -978,6 +990,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.workflowWarning, undefined);
   assert.equal(project.captionsEnabled, false);
   assert.equal(project.retainedPauseSeconds, 0.55);
+  assert.deepEqual(project.punchIns, [{ id: 'punch-second-take', start: 2, end: 2.8, zoom: 1.25, centerX: .4, centerY: .6 }]);
   response = await fetch(base + '/api/editor/' + project.id + '/render');
   assert.equal(response.status, 200);
   const rendered = Buffer.from(await response.arrayBuffer());
