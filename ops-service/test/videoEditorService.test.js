@@ -143,11 +143,13 @@ test('HEVC and non-browser containers receive an H.264 review proxy', function (
   assert.equal(editor.browserPreviewNeeded('camera.mp4', { videoCodec: 'h264', audioCodec: 'pcm_s16le' }), true);
 });
 
-test('classification samples stay distributed across long-form recordings', function () {
-  assert.equal(editor.classificationSampleRate(60), 0.05);
-  assert.equal(editor.classificationSampleRate(600), 0.005);
-  assert.equal(editor.classificationSampleRate(3600), 3 / 3600);
-  assert.equal(editor.classificationSampleRate(0), 3);
+test('opening push-in eases from 100 to 104 percent over three seconds', function () {
+  assert.equal(editor.openingPushInScale(0), 1);
+  assert.equal(editor.openingPushInScale(1.5), 1.02);
+  assert.equal(editor.openingPushInScale(3), 1.04);
+  assert.equal(editor.openingPushInScale(20), 1.04);
+  assert.match(editor.openingPushInFilter({ width: 1080, height: 1920 }, 1.25), /t\+1\.250000/);
+  assert.match(editor.openingPushInFilter({ width: 1080, height: 1920 }, 1.25), /crop=1080:1920/);
 });
 
 test('approval only accepts the exact verified render bytes', async function (t) {
@@ -192,11 +194,14 @@ test('individual automatic pauses can be restored without disabling the rest', f
   assert.equal(decisions.find(function (cut) { return cut.id === 'gap-1'; }).restored, true);
 });
 
-test('format classification respects composition and explicit overrides', function () {
+test('format classification trusts recording orientation and explicit overrides', function () {
   const project = { width: 3840, height: 2160, duration: 80, words: words, visualClassification: { layout: 'vertical', confidence: 'low' } };
+  assert.equal(editor.effectiveLayout(project), 'horizontal');
+  assert.equal(editor.contentTypeForProject(project, []), 'longform');
+  assert.equal(editor.layoutReviewRequired(project), false);
+  project.layoutOverride = 'vertical';
   assert.equal(editor.effectiveLayout(project), 'vertical');
   assert.equal(editor.contentTypeForProject(project, []), 'long_short');
-  assert.equal(editor.layoutReviewRequired(project), true);
   project.layoutOverride = 'horizontal';
   assert.equal(editor.effectiveLayout(project), 'horizontal');
   assert.equal(editor.contentTypeForProject(project, []), 'longform');
@@ -205,8 +210,7 @@ test('format classification respects composition and explicit overrides', functi
   assert.equal(editor.contentTypeForProject(project, []), 'short');
   assert.equal(editor.effectiveLayout({ width: 1080, height: 1920, visualClassification: { layout: 'horizontal' } }), 'vertical');
   assert.equal(editor.layoutReviewRequired({ width: 1080, height: 1920, visualClassification: { layout: 'horizontal', confidence: 'low' } }), false);
-  assert.match(editor.blockingReviewFailure({ width: 1920, height: 1080, layoutOverride: 'auto', classificationStatus: 'error' }), /framing failed/i);
-  assert.equal(editor.blockingReviewFailure({ width: 1920, height: 1080, layoutOverride: 'vertical', classificationStatus: 'error' }), '');
+  assert.equal(editor.blockingReviewFailure({ width: 1920, height: 1080, layoutOverride: 'auto', classificationStatus: 'error' }), '');
   assert.match(editor.blockingReviewFailure({ width: 1920, height: 1080, retakeAnalysisStatus: 'error' }), /retake check failed/i);
 });
 
@@ -219,7 +223,7 @@ test('planning linkage failures do not block an otherwise safe automatic edit', 
   assert.equal(editor.automaticReviewReady(safe), true);
   assert.equal(editor.automaticReviewReady(Object.assign({}, safe, { planningMatchStatus: 'running' })), false);
   assert.equal(editor.automaticReviewReady(Object.assign({}, safe, { retakeAnalysisStatus: 'error' })), false);
-  assert.equal(editor.automaticReviewReady(Object.assign({}, safe, { classificationStatus: 'error' })), false);
+  assert.equal(editor.automaticReviewReady(Object.assign({}, safe, { classificationStatus: 'error' })), true);
 });
 
 test('invalidating an edit clears every stale output claim', function () {
@@ -236,6 +240,7 @@ test('metadata-only editor changes preserve a verified render', function () {
   assert.equal(editor.patchAffectsRender({ captionsEnabled: false }), true);
   assert.equal(editor.patchAffectsRender({ removedWordIndices: [1, 2] }), true);
   assert.equal(editor.patchAffectsRender({ layoutOverride: 'vertical' }), true);
+  assert.equal(editor.patchAffectsRender({ openingPushInEnabled: false }), true);
   assert.equal(editor.patchAffectsRender({ punchIns: [{ start: 1, end: 2 }] }), true);
   assert.equal(editor.patchNeedsAutoRender({ renderStatus: 'ready' }, false), false);
   assert.equal(editor.patchNeedsAutoRender({ renderStatus: '' }, false), true);
@@ -447,7 +452,7 @@ test('vertical captions show one large yellow word at a time', function () {
   assert.match(fittedMaximum, /\{\\fs32\}xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\{\\r\}/);
 });
 
-test('batch preprocessing serializes expensive transcription and frame analysis', { timeout: 15000 }, async function (t) {
+test('batch preprocessing serializes expensive transcription', { timeout: 15000 }, async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-queue-'));
   const input = path.join(dir, 'sample.mp4');
   const secondInput = path.join(dir, 'sample-two.mp4');
@@ -458,7 +463,6 @@ test('batch preprocessing serializes expensive transcription and frame analysis'
   const db = new Database(path.join(dir, 'test.sqlite'));
   db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
   let activeTranscriptions = 0; let maxTranscriptions = 0; let transcriptionCalls = 0;
-  let activeClassifications = 0; let maxClassifications = 0; let classificationCalls = 0;
   const service = editor.setup({
     db: db, dataDir: dir,
     transcribeDetailed: async function () {
@@ -467,13 +471,6 @@ test('batch preprocessing serializes expensive transcription and frame analysis'
       activeTranscriptions--;
       if (transcriptionCalls === 1) throw new Error('Synthetic transient transcription failure');
       return { text: '', words: [] };
-    },
-    classifyVisualLayout: async function () {
-      classificationCalls++; activeClassifications++; maxClassifications = Math.max(maxClassifications, activeClassifications);
-      await new Promise(function (resolve) { setTimeout(resolve, 600); });
-      activeClassifications--;
-      if (classificationCalls === 1) throw new Error('Synthetic transient classification failure');
-      return { layout: 'horizontal', confidence: 'high', cropCenterX: 0.5, explanation: 'Synthetic spread.' };
     }
   });
   const app = express(); app.use('/api/editor', service.router);
@@ -490,12 +487,12 @@ test('batch preprocessing serializes expensive transcription and frame analysis'
   await new Promise(function (resolve) { setTimeout(resolve, 30); });
   const secondQueued = await (await fetch(base + '/api/editor/' + second.id)).json();
   assert.ok(secondQueued.transcriptionQueuePosition >= 2);
-  assert.ok(secondQueued.classificationQueuePosition >= 2);
-  for (let attempt = 0; attempt < 160 && (transcriptionCalls < 3 || classificationCalls < 3 || activeTranscriptions || activeClassifications); attempt++) {
+  assert.equal(secondQueued.classificationStatus, 'ready');
+  for (let attempt = 0; attempt < 160 && (transcriptionCalls < 3 || activeTranscriptions); attempt++) {
     await new Promise(function (resolve) { setTimeout(resolve, 30); });
   }
-  assert.equal(transcriptionCalls, 3); assert.equal(classificationCalls, 3);
-  assert.equal(maxTranscriptions, 1); assert.equal(maxClassifications, 1);
+  assert.equal(transcriptionCalls, 3);
+  assert.equal(maxTranscriptions, 1);
   assert.equal((await (await fetch(base + '/api/editor/' + first.id)).json()).transcriptionStatus, 'error');
   assert.equal((await (await fetch(base + '/api/editor/' + second.id)).json()).transcriptionStatus, 'error');
 });
@@ -574,17 +571,14 @@ test('approved editor projects stay immutable during restart maintenance', { tim
     renderStatus: 'ready', createdAt: now, updatedAt: now
   };
   db.prepare('INSERT INTO records (store_name,id,data,updated_at) VALUES (?,?,?,?)').run('editorProjects', approved.id, JSON.stringify(approved), now);
-  let classifierCalls = 0;
   editor.setup({
     db: db, dataDir: dir,
     transcribeDetailed: async function () { throw new Error('approved transcript must not restart'); },
-    classifyVisualLayout: async function () { classifierCalls++; return { layout: 'horizontal', confidence: 'high' }; },
     analyzeRetakes: async function () { throw new Error('approved retake analysis must not restart'); },
     matchPlanningPiece: async function () { throw new Error('approved matching must not restart'); }
   });
   await new Promise(function (resolve) { setTimeout(resolve, 250); });
   const stored = JSON.parse(db.prepare('SELECT data FROM records WHERE store_name=? AND id=?').get('editorProjects', approved.id).data);
-  assert.equal(classifierCalls, 0);
   assert.equal(stored.width, 180);
   assert.equal(stored.height, 320);
   assert.equal(stored.classificationStatus, 'pending');
@@ -765,12 +759,11 @@ test('an aborted multipart upload removes its partial file immediately', { timeo
 test('upload, timed transcription and FFmpeg captioned render work end to end', { timeout: 60000 }, async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-'));
   const input = path.join(dir, 'sample.mp4');
-  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=640x360:d=5:r=24',
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=360x640:d=5:r=24',
     '-f', 'lavfi', '-i', 'sine=frequency=440:duration=5', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', input]);
   const db = new Database(path.join(dir, 'test.sqlite'));
   db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
   let handoffCalls = 0;
-  let classificationCalls = 0;
   let retakeCalls = 0;
   let planningMatchCalls = 0;
   let renderReadyCalls = 0;
@@ -786,11 +779,6 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
         { type: 'word', text: 'One', start: 0.5, end: 0.9 }, { type: 'word', text: 'two.', start: 0.95, end: 1.3 },
         { type: 'word', text: 'One', start: 3.2, end: 3.7 }, { type: 'word', text: 'two.', start: 3.75, end: 4.2 }
       ] };
-    },
-    classifyVisualLayout: async function (input) {
-      classificationCalls++;
-      assert.equal(fs.existsSync(input.imagePath), true);
-      return { layout: 'vertical', confidence: 'high', cropCenterX: 0.55, explanation: 'One page fills all sampled frames.' };
     },
     analyzeRetakes: async function () {
       retakeCalls++;
@@ -855,8 +843,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   }
   assert.equal(project.classificationStatus, 'ready', project.classificationError);
   assert.equal(project.effectiveLayout, 'vertical');
-  assert.equal(project.cropCenterX, 0.55);
-  assert.equal(classificationCalls, 1);
+  assert.equal(project.cropCenterX, 0.5);
   for (let attempt = 0; attempt < 100 && project.retakeAnalysisStatus !== 'ready'; attempt++) {
     await new Promise(function (resolve) { setTimeout(resolve, 30); });
     project = await (await fetch(base + '/api/editor/' + project.id)).json();

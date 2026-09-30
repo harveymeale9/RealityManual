@@ -11,6 +11,8 @@ const STORE_NAME = 'editorProjects';
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
 const EDIT_RENDER_DEBOUNCE_MS = 2500;
 const EDITOR_DISK_RESERVE_BYTES = 2 * 1024 * 1024 * 1024;
+const OPENING_PUSH_IN_SECONDS = 3;
+const OPENING_PUSH_IN_SCALE = 1.04;
 
 function requiredEditorCapacity(fileBytes, fileAlreadyStored) {
   const bytes = Math.max(0, Number(fileBytes) || 0);
@@ -228,13 +230,6 @@ function browserPreviewNeeded(fileName, media) {
   return videoCodec !== 'h264' || !['aac', 'mp3'].includes(audioCodec);
 }
 
-function classificationSampleRate(durationSeconds) {
-  // Three evenly spaced frames across the whole recording. Do not clamp this
-  // to 0.01fps: that silently limits a long-form contact sheet to its first
-  // 200 seconds rather than representing the actual full take.
-  return Math.max(0.000001, 3 / Math.max(1, Number(durationSeconds) || 1));
-}
-
 function normalizeWords(rawWords) {
   return (Array.isArray(rawWords) ? rawWords : []).filter(function (word) {
     return word && word.type === 'word' && Number.isFinite(Number(word.start)) &&
@@ -331,37 +326,22 @@ function sourceLayout(project) {
 
 function effectiveLayout(project) {
   if (project && (project.layoutOverride === 'vertical' || project.layoutOverride === 'horizontal')) return project.layoutOverride;
-  // A physically portrait master is already an unambiguous vertical piece.
-  // Visual analysis is for Harvey's shared landscape overhead-camera setup,
-  // where one dominant page means crop vertically and two full pages means
-  // preserve the spread horizontally.
-  if (sourceLayout(project) === 'vertical') return 'vertical';
-  if (project && project.visualClassification && (project.visualClassification.layout === 'vertical' || project.visualClassification.layout === 'horizontal')) {
-    return project.visualClassification.layout;
-  }
   return sourceLayout(project);
 }
 
 function layoutReviewRequired(project) {
-  return !!(sourceLayout(project) === 'horizontal' &&
-    (!project.layoutOverride || project.layoutOverride === 'auto') &&
-    project.visualClassification && project.visualClassification.confidence === 'low');
+  return false;
 }
 
 function blockingReviewFailure(project) {
   if (project && project.retakeAnalysisStatus === 'error') {
     return 'The automatic retake check failed. Retry it before building the final edit.';
   }
-  if (project && sourceLayout(project) === 'horizontal' &&
-      (!project.layoutOverride || project.layoutOverride === 'auto') && project.classificationStatus === 'error') {
-    return 'Automatic framing failed. Retry it or choose Vertical or Horizontal yourself.';
-  }
   return '';
 }
 
 function automaticReviewReady(project) {
   if (!project || project.transcriptionStatus !== 'ready') return false;
-  if (!['ready', 'unavailable'].includes(project.classificationStatus)) return false;
   if (!['ready', 'unavailable'].includes(project.retakeAnalysisStatus)) return false;
   // Planning linkage controls workflow bookkeeping, never the safety or bytes
   // of the video. A failed matcher must remain visible and retryable without
@@ -401,9 +381,24 @@ function advanceEditRevision(project) {
 function patchAffectsRender(body) {
   body = body && typeof body === 'object' ? body : {};
   return ['removedWordIndices', 'wordCorrection', 'autoSilenceEnabled', 'restoredAutoCutIds', 'captionsEnabled',
-    'layoutOverride', 'cropCenterX', 'punchIns', 'silenceThresholdSeconds', 'retainedPauseSeconds'].some(function (key) {
+    'layoutOverride', 'cropCenterX', 'punchIns', 'openingPushInEnabled', 'silenceThresholdSeconds', 'retainedPauseSeconds'].some(function (key) {
     return Object.prototype.hasOwnProperty.call(body, key);
   });
+}
+
+function openingPushInScale(editedSeconds) {
+  const progress = clamp((Number(editedSeconds) || 0) / OPENING_PUSH_IN_SECONDS, 0, 1);
+  const eased = progress * progress * (3 - 2 * progress);
+  return 1 + (OPENING_PUSH_IN_SCALE - 1) * eased;
+}
+
+function openingPushInFilter(renderShape, editedStart) {
+  const offset = Math.max(0, Number(editedStart) || 0).toFixed(6);
+  const progress = 'min(max((t+' + offset + ')/' + OPENING_PUSH_IN_SECONDS + ',0),1)';
+  const eased = '(' + progress + '*' + progress + '*(3-2*' + progress + '))';
+  const zoom = '(1+' + (OPENING_PUSH_IN_SCALE - 1).toFixed(3) + '*' + eased + ')';
+  return ",scale=w='trunc(iw*" + zoom + "/2)*2':h='trunc(ih*" + zoom + "/2)*2':eval=frame" +
+    ",crop=" + renderShape.width + ':' + renderShape.height + ":x='(iw-ow)/2':y='(ih-oh)/2',setsar=1";
 }
 
 function patchNeedsAutoRender(project, renderWillChange) {
@@ -789,7 +784,6 @@ function setup(options) {
   const dataDir = options.dataDir;
   const transcribeDetailed = options.transcribeDetailed;
   const handoffToProduction = options.handoffToProduction;
-  const classifyVisualLayout = options.classifyVisualLayout;
   const analyzeRetakes = options.analyzeRetakes;
   const getPlanningCandidates = options.getPlanningCandidates;
   const matchPlanningPiece = options.matchPlanningPiece;
@@ -838,7 +832,6 @@ function setup(options) {
   const uploadCapacityReservations = createByteReservationLedger();
   const sourceHashClaims = createKeyedClaimRegistry();
   let transcriptionChain = Promise.resolve();
-  let classificationChain = Promise.resolve();
   let retakeChain = Promise.resolve();
   let planningMatchChain = Promise.resolve();
 
@@ -1164,65 +1157,21 @@ function setup(options) {
 
   async function classifyProject(id) {
     if (classificationJobs.has(id)) return classificationJobs.get(id);
-    if (typeof classifyVisualLayout !== 'function') return;
-    const job = classificationChain.catch(function () {}).then(async function () {
+    const job = Promise.resolve().then(async function () {
       let project = getProject(id);
       if (!project) return;
-      project.classificationStatus = 'running';
+      const layout = sourceLayout(project);
+      project.visualClassification = {
+        layout: layout, confidence: 'high', cropCenterX: 0.5,
+        explanation: layout === 'vertical'
+          ? 'Portrait camera orientation detected from the recording.'
+          : 'Landscape camera orientation detected from the recording.'
+      };
+      project.classificationStatus = 'ready';
       project.classificationError = '';
       saveProject(project);
-      const sheetPath = path.join(projectDir(id), 'classification.jpg');
-      try {
-        if (sourceLayout(project) === 'vertical') {
-          project.visualClassification = {
-            layout: 'vertical', confidence: 'high', cropCenterX: 0.5,
-            explanation: 'The camera master is already portrait, so this is an unambiguous vertical composition.'
-          };
-          project.classificationStatus = 'ready';
-          project.classificationError = '';
-          advanceEditRevision(project);
-          saveProject(project);
-          setImmediate(function () { maybeAutoRender(id); });
-          return;
-        }
-        const sampleRate = classificationSampleRate(project.duration);
-        await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', sourcePath(id), '-vf',
-          'fps=' + sampleRate.toFixed(6) + ',scale=480:-2,tile=3x1', '-frames:v', '1', '-q:v', '3', sheetPath], 'classification frames');
-        let result;
-        try {
-          result = await classifyVisualLayout({ imagePath: sheetPath, width: project.width, height: project.height, duration: project.duration });
-        } catch (firstError) {
-          await new Promise(function (resolve) { setTimeout(resolve, 750); });
-          result = await classifyVisualLayout({ imagePath: sheetPath, width: project.width, height: project.height, duration: project.duration });
-        }
-        project = getProject(id);
-        if (!project) return;
-        if (!result || !['vertical', 'horizontal'].includes(result.layout)) throw new Error('The visual classifier returned no usable layout.');
-        project.visualClassification = {
-          layout: result.layout,
-          confidence: ['high', 'medium', 'low'].includes(result.confidence) ? result.confidence : 'low',
-          explanation: String(result.explanation || '').slice(0, 300),
-          cropCenterX: clamp(result.cropCenterX === undefined ? 0.5 : result.cropCenterX, 0, 1)
-        };
-        if (project.layoutOverride === 'auto' || !project.layoutOverride) project.cropCenterX = project.visualClassification.cropCenterX;
-        project.classificationStatus = 'ready';
-        project.classificationError = '';
-        invalidateProjectRender(project);
-        advanceEditRevision(project);
-        saveProject(project);
-        setImmediate(function () { maybeAutoRender(id); });
-      } catch (err) {
-        project = getProject(id);
-        if (project) {
-          project.classificationStatus = 'error';
-          project.classificationError = String(err.message || err).slice(0, 500);
-          saveProject(project);
-        }
-      } finally {
-        fs.rm(sheetPath, { force: true }, function () {});
-      }
+      setImmediate(function () { maybeAutoRender(id); });
     }).finally(function () { classificationJobs.delete(id); });
-    classificationChain = job.catch(function () {});
     classificationJobs.set(id, job);
     return job;
   }
@@ -1270,8 +1219,11 @@ async function renderProject(id) {
       if (project.captionsEnabled !== false) fs.writeFileSync(assPath, buildAss(renderShape, captionGroups(project, cuts)));
       const filters = [];
       const cropPosition = clamp(project.cropCenterX === undefined ? 0.5 : Number(project.cropCenterX), 0, 1);
+      let editedCursor = 0;
       segments.forEach(function (segment, index) {
         const segmentDuration = segment.end - segment.start;
+        const editedStart = editedCursor;
+        editedCursor += segmentDuration;
         let videoFilter = '[0:v]trim=start=' + segment.start.toFixed(3) + ':end=' + segment.end.toFixed(3) + ',setpts=PTS-STARTPTS';
         if (layout === 'vertical') {
           videoFilter += ",crop=w='min(iw\\,ih*9/16)':h='min(ih\\,iw*16/9)':x='(iw-ow)*" + cropPosition.toFixed(3) + "':y='(ih-oh)/2',scale=1080:1920,setsar=1";
@@ -1281,6 +1233,9 @@ async function renderProject(id) {
         if (segment.punchIn) {
           const punch = segment.punchIn;
           videoFilter += ",crop=w='iw/" + punch.zoom.toFixed(3) + "':h='ih/" + punch.zoom.toFixed(3) + "':x='(iw-ow)*" + punch.centerX.toFixed(3) + "':y='(ih-oh)*" + punch.centerY.toFixed(3) + "',scale=" + renderShape.width + ':' + renderShape.height + ',setsar=1';
+        }
+        if (layout === 'vertical' && project.openingPushInEnabled !== false) {
+          videoFilter += openingPushInFilter(renderShape, editedStart);
         }
         filters.push(videoFilter + '[v' + index + ']');
         // Tiny boundary fades prevent waveform discontinuities from creating
@@ -1380,17 +1335,35 @@ async function renderProject(id) {
       if (project.renderStatus === undefined || project.renderStatus === null) { project.renderStatus = ''; migrated = true; }
       if (!Number.isFinite(Number(project.editRevision))) { project.editRevision = 0; migrated = true; }
       if (!Number.isFinite(Number(project.renderProgress))) { project.renderProgress = 0; migrated = true; }
-      if (!project.classificationStatus) { project.classificationStatus = canResumeWork && typeof classifyVisualLayout === 'function' ? 'pending' : 'unavailable'; migrated = true; }
       if (!project.retakeAnalysisStatus) { project.retakeAnalysisStatus = canResumeWork && typeof analyzeRetakes === 'function' ? (project.transcriptionStatus === 'ready' ? 'pending' : 'pending_transcript') : 'unavailable'; migrated = true; }
       if (!project.planningMatchStatus) { project.planningMatchStatus = canResumeWork && typeof matchPlanningPiece === 'function' ? (project.transcriptionStatus === 'ready' ? 'pending' : 'pending_transcript') : 'unavailable'; migrated = true; }
       if (!canResumeWork) {
         if (migrated) saveProject(project);
         return;
       }
+      const recordedLayout = sourceLayout(project);
+      const previousAutomaticLayout = project.layoutOverride === 'vertical' || project.layoutOverride === 'horizontal'
+        ? project.layoutOverride
+        : (sourceLayout(project) === 'vertical' ? 'vertical' : project.visualClassification && project.visualClassification.layout || recordedLayout);
+      let migrationRequiresRender = previousAutomaticLayout !== recordedLayout && (!project.layoutOverride || project.layoutOverride === 'auto');
+      if (project.classificationStatus !== 'ready' || !project.visualClassification || project.visualClassification.layout !== recordedLayout) {
+        project.classificationStatus = 'ready';
+        project.classificationError = '';
+        project.visualClassification = {
+          layout: recordedLayout, confidence: 'high', cropCenterX: 0.5,
+          explanation: recordedLayout === 'vertical' ? 'Portrait camera orientation detected from the recording.' : 'Landscape camera orientation detected from the recording.'
+        };
+        migrated = true;
+      }
+      if (project.openingPushInEnabled === undefined) {
+        project.openingPushInEnabled = true;
+        migrationRequiresRender = migrationRequiresRender || effectiveLayout(project) === 'vertical';
+        migrated = true;
+      }
+      if (migrationRequiresRender && project.renderStatus === 'ready') invalidateProjectRender(project);
       const resumeTranscription = project.transcriptionStatus === 'running' || project.transcriptionStatus === 'pending';
       const resumePreview = project.browserPreviewRequired && ['running', 'pending'].includes(project.browserPreviewStatus);
       const resumeRender = project.renderStatus === 'running' || project.renderStatus === 'queued';
-      const resumeClassification = project.classificationStatus === 'running' || project.classificationStatus === 'pending';
       const resumeRetakes = ['running', 'pending', 'pending_transcript'].includes(project.retakeAnalysisStatus);
       const resumePlanning = ['running', 'pending', 'pending_transcript'].includes(project.planningMatchStatus);
       const orphanedRenderKickoff = !project.renderStatus && !!project.automaticRenderStartedAt;
@@ -1408,10 +1381,6 @@ async function renderProject(id) {
         project.automaticRenderStartedAt = '';
       }
       if (orphanedRenderKickoff) project.automaticRenderStartedAt = '';
-      if (project.classificationStatus === 'running' || project.classificationStatus === 'pending') {
-        project.classificationStatus = 'pending';
-        project.classificationError = '';
-      }
       if (['running', 'pending', 'pending_transcript'].includes(project.retakeAnalysisStatus)) {
         project.retakeAnalysisStatus = project.transcriptionStatus === 'ready' ? 'pending' : 'pending_transcript';
         project.retakeAnalysisError = '';
@@ -1421,11 +1390,10 @@ async function renderProject(id) {
         project.planningMatchError = '';
       }
       const resumeAutomaticRender = (resumeRender || !project.renderStatus) && automaticReviewReady(project);
-      if (migrated || resumeTranscription || resumePreview || resumeRender || resumeClassification || resumeRetakes || resumePlanning || orphanedRenderKickoff || resumeAutomaticRender) saveProject(project);
+      if (migrated || resumeTranscription || resumePreview || resumeRender || resumeRetakes || resumePlanning || orphanedRenderKickoff || resumeAutomaticRender) saveProject(project);
       setImmediate(function () {
         if (resumeTranscription) transcribeProject(project.id);
         if (resumePreview) generateBrowserPreview(project.id);
-        if (resumeClassification) classifyProject(project.id);
         if (!resumeTranscription && project.transcriptionStatus === 'ready' && resumeRetakes) analyzeProjectRetakes(project.id);
         if (!resumeTranscription && project.transcriptionStatus === 'ready' && resumePlanning) matchProjectPlanningPiece(project.id);
         if (resumeAutomaticRender) maybeAutoRender(project.id);
@@ -1471,6 +1439,13 @@ async function renderProject(id) {
         if (dimensionsChanged) {
           current.width = media.width;
           current.height = media.height;
+          const layout = sourceLayout(current);
+          current.visualClassification = {
+            layout: layout, confidence: 'high', cropCenterX: 0.5,
+            explanation: layout === 'vertical' ? 'Portrait camera orientation detected from the recording.' : 'Landscape camera orientation detected from the recording.'
+          };
+          current.classificationStatus = 'ready';
+          current.classificationError = '';
           invalidateProjectRender(current);
         }
         saveProject(current);
@@ -1615,12 +1590,16 @@ async function renderProject(id) {
         silenceThresholdSeconds: 1,
         retainedPauseSeconds: 0.38,
         captionsEnabled: true,
+        openingPushInEnabled: true,
         layoutOverride: 'auto',
         contentTypeOverride: 'auto',
         cropCenterX: 0.5,
         punchIns: [],
-        visualClassification: null,
-        classificationStatus: typeof classifyVisualLayout === 'function' ? 'pending' : 'unavailable',
+        visualClassification: {
+          layout: media.height > media.width ? 'vertical' : 'horizontal', confidence: 'high', cropCenterX: 0.5,
+          explanation: media.height > media.width ? 'Portrait camera orientation detected from the recording.' : 'Landscape camera orientation detected from the recording.'
+        },
+        classificationStatus: 'ready',
         classificationError: '',
         retakeAnalysisStatus: typeof analyzeRetakes === 'function' ? 'pending_transcript' : 'unavailable',
         retakeAnalysisError: '',
@@ -1644,7 +1623,7 @@ async function renderProject(id) {
       });
       sourceClaim.settle(id);
       res.status(202).json(project);
-      setImmediate(function () { transcribeProject(id); classifyProject(id); generateBrowserPreview(id); });
+      setImmediate(function () { transcribeProject(id); generateBrowserPreview(id); });
     } catch (err) {
       sourceClaim.settle('');
       fs.rm(req.file.path, { force: true }, function () {});
@@ -1739,6 +1718,7 @@ async function renderProject(id) {
     project.autoSilenceEnabled = nextAutoSilenceEnabled;
     project.restoredAutoCutIds = nextRestoredAutoCutIds;
     if (typeof (req.body && req.body.captionsEnabled) === 'boolean') project.captionsEnabled = req.body.captionsEnabled;
+    if (typeof (req.body && req.body.openingPushInEnabled) === 'boolean') project.openingPushInEnabled = req.body.openingPushInEnabled;
     if (['auto', 'vertical', 'horizontal'].includes(req.body && req.body.layoutOverride)) project.layoutOverride = req.body.layoutOverride;
     if (['auto', 'ultra_short', 'short', 'long_short', 'longform'].includes(req.body && req.body.contentTypeOverride)) project.contentTypeOverride = req.body.contentTypeOverride;
     if (Number.isFinite(Number(req.body && req.body.cropCenterX))) project.cropCenterX = clamp(req.body.cropCenterX, 0, 1);
@@ -1826,8 +1806,7 @@ async function renderProject(id) {
     const project = getProject(req.params.id);
     if (!project) return res.status(404).json({ error: 'not_found' });
     if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked.' });
-    if (typeof classifyVisualLayout !== 'function') return res.status(501).json({ error: 'classification_unavailable' });
-    res.status(202).json({ ok: true, status: 'running' });
+    res.status(202).json({ ok: true, status: 'ready' });
     classifyProject(project.id);
   });
 
@@ -1859,8 +1838,8 @@ async function renderProject(id) {
     if (!project) return res.status(404).json({ error: 'not_found' });
     if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked. The approved video is already in Content Production.' });
     if (project.transcriptionStatus !== 'ready') return res.status(409).json({ error: 'transcript_not_ready' });
-    if (['pending', 'running'].includes(project.classificationStatus) || ['pending', 'running', 'pending_transcript'].includes(project.retakeAnalysisStatus) || ['pending', 'running', 'pending_transcript'].includes(project.planningMatchStatus)) {
-      return res.status(409).json({ error: 'automatic_edit_running', message: 'Wait for the automatic framing, retake, and planning checks to finish.' });
+    if (['pending', 'running', 'pending_transcript'].includes(project.retakeAnalysisStatus) || ['pending', 'running', 'pending_transcript'].includes(project.planningMatchStatus)) {
+      return res.status(409).json({ error: 'automatic_edit_running', message: 'Wait for the automatic retake and planning checks to finish.' });
     }
     if (unresolvedRetakeCount(project) > 0) {
       return res.status(409).json({ error: 'retake_review_required', message: 'Review each possible retake before building the final edit.' });
@@ -1888,9 +1867,6 @@ async function renderProject(id) {
     if (project.browserPreviewRequired && project.browserPreviewStatus === 'error') {
       project.browserPreviewStatus = 'pending'; project.browserPreviewError = ''; retried.push('preview');
     }
-    if (project.classificationStatus === 'error' && typeof classifyVisualLayout === 'function') {
-      project.classificationStatus = 'pending'; project.classificationError = ''; retried.push('classification');
-    }
     if (project.transcriptionStatus === 'ready' && project.retakeAnalysisStatus === 'error' && typeof analyzeRetakes === 'function') {
       project.retakeAnalysisStatus = 'pending'; project.retakeAnalysisError = ''; retried.push('retakes');
     }
@@ -1905,7 +1881,6 @@ async function renderProject(id) {
     res.status(202).json({ ok: true, retried: retried });
     if (retried.includes('transcription')) transcribeProject(project.id);
     if (retried.includes('preview')) generateBrowserPreview(project.id);
-    if (retried.includes('classification')) classifyProject(project.id);
     if (retried.includes('retakes')) analyzeProjectRetakes(project.id);
     if (retried.includes('planning')) matchProjectPlanningPiece(project.id);
     if (retried.includes('render')) setImmediate(function () { maybeAutoRender(project.id); });
@@ -2064,7 +2039,8 @@ module.exports = {
   advanceEditRevision,
   normalizedVideoMimeType,
   browserPreviewNeeded,
-  classificationSampleRate,
+  openingPushInScale,
+  openingPushInFilter,
   reconcileAutomaticRetakeCuts,
   projectListSummary
 };

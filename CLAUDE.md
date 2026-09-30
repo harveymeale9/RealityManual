@@ -14148,3 +14148,35 @@ reloads. Cache keys were bumped on desktop and mobile. Unit coverage proves
 lossless sentence/word splitting and a three-part browser sequence that starts,
 prefetches, advances, retains ownership and releases cleanly; all 139 service
 tests pass.
+
+---
+
+# 399. Editor Trusts Camera Orientation and Adds a Default Vertical Opening Push-In (2026-09-30)
+
+Harvey will now record vertical pieces with the Sony camera physically rotated
+and horizontal pieces in landscape. The Editor therefore no longer creates a
+three-frame contact sheet or asks an AI vision turn to infer whether the book
+shows one page or a spread. FFprobe's rotation-aware display dimensions are the
+single automatic source of truth: portrait means vertical, landscape means
+horizontal, and the existing manual Frame selector remains available as a
+deliberate override. Existing active projects are migrated to the same
+orientation result; already-approved projects remain immutable. This removes a
+slow, fallible preprocessing phase and its failure/review gate without changing
+duration-based short/long-short classification or the retake workflow.
+
+Vertical projects now expose a **Subtle opening push-in** switch in Automatic
+Edit. It is enabled by default for new and existing active projects, absent on
+horizontal projects, revision-protected, and treated as a render-affecting
+choice. The effect uses smoothstep easing from 100% to 104% over the first
+three seconds of the edited timeline, then holds at 104%. That restrained
+amount was selected from common editorial guidance that places subtle social
+push-ins around 102–105%. Because timing is based on retained edited footage,
+an automatically removed opening pause cannot consume the effect. It composes
+with transcript-timed punch-ins rather than replacing them.
+
+The working browser preview applies the same easing and combined zoom as the
+FFmpeg export. The final render performs a frame-evaluated scale and centered
+crop after the portrait frame and any manual punch-in, retaining an exact
+1080×1920 output. Unit tests cover the easing, filter shape, orientation-only
+classification and render invalidation; the end-to-end upload/transcribe/render
+test now uses a portrait master and exercises the real animated FFmpeg path.

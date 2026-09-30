@@ -363,7 +363,7 @@
     return '<div class="editor-processing-steps">' + step('done', 'Recording secured', 'Original master preserved') +
       (item.browserPreviewRequired ? step(previewState, 'Browser review copy', previewState === 'done' ? 'H.264 preview ready' : previewState === 'error' ? 'Can be retried' : Number(item.previewQueuePosition) > 1 ? (Number(item.previewQueuePosition) - 1) + ' recording(s) ahead' : 'Converting camera codec') : '') +
       step(transcriptState, 'Word-timed transcript', transcriptState === 'done' ? 'Speech mapped' : transcriptState === 'error' ? 'Needs retry' : item.transcriptionStatus === 'pending' && Number(item.transcriptionQueuePosition) > 1 ? (Number(item.transcriptionQueuePosition) - 1) + ' recording(s) ahead' : 'Listening for every word') +
-      step(frameState, 'Publishing frame', frameState === 'done' ? 'Composition detected' : frameState === 'error' ? 'Manual choice available' : item.classificationStatus === 'pending' && Number(item.classificationQueuePosition) > 1 ? (Number(item.classificationQueuePosition) - 1) + ' recording(s) ahead' : frameState === 'active' ? 'Inspecting the book framing' : 'Waiting') +
+      step(frameState, 'Camera orientation', frameState === 'done' ? (Number(item.height) > Number(item.width) ? 'Portrait detected' : 'Landscape detected') : 'Reading recording dimensions') +
       step(retakeState, 'Retake review', retakeState === 'done' ? 'Decisions ready' : retakeState === 'error' ? 'Can be retried' : item.retakeAnalysisStatus === 'pending' && Number(item.retakeQueuePosition) > 1 ? (Number(item.retakeQueuePosition) - 1) + ' recording(s) ahead' : retakeState === 'active' ? 'Comparing nearby takes' : 'Starts after transcription') +
       step(planState, 'Planning card', planState === 'done' ? 'Workflow linked' : planState === 'error' ? 'Manual choice available' : item.planningMatchStatus === 'pending' && Number(item.planningQueuePosition) > 1 ? (Number(item.planningQueuePosition) - 1) + ' recording(s) ahead' : planState === 'active' ? 'Matching filmed content' : 'Starts after transcription') + '</div>';
   }
@@ -757,15 +757,10 @@
     var cutSeconds = Math.max(0, Number(project.duration) - editedDuration(project));
     var layout = project.effectiveLayout || (Number(project.height) > Number(project.width) ? 'vertical' : 'horizontal');
     var cropPercent = Math.round((Number(project.cropCenterX) || 0.5) * 100);
-    var classificationCopy = project.classificationStatus === 'ready' && project.visualClassification
-      ? (project.layoutReviewRequired ? 'Low-confidence detection. Confirm Frame once. ' : '') + esc(project.visualClassification.explanation || ('Frame analysis: ' + project.visualClassification.confidence + ' confidence'))
-      : project.classificationStatus === 'running' || project.classificationStatus === 'pending'
-        ? 'Analyzing three frames to distinguish a single page from an open spread…'
-        : project.classificationStatus === 'error'
-          ? (framingFailureIsBlocking(project) ? 'Automatic framing was unavailable. Choose Vertical or Horizontal once to continue.' : 'Automatic framing was unavailable. Your manual frame choice is being used.')
-          : 'Using source dimensions until the book framing is analyzed.';
-    var automaticEditRunning = ['pending', 'running'].indexOf(project.classificationStatus) !== -1 ||
-      ['pending', 'running', 'pending_transcript'].indexOf(project.retakeAnalysisStatus) !== -1 ||
+    var classificationCopy = layout === 'vertical'
+      ? 'Portrait orientation detected from the recording.'
+      : 'Landscape orientation detected from the recording.';
+    var automaticEditRunning = ['pending', 'running', 'pending_transcript'].indexOf(project.retakeAnalysisStatus) !== -1 ||
       ['pending', 'running', 'pending_transcript'].indexOf(project.planningMatchStatus) !== -1;
     var unresolvedRetakes = Number(project.unresolvedRetakeCount) || 0;
     var appliedRetakes = Number(project.appliedRetakeCount) || 0;
@@ -789,10 +784,7 @@
       ? '/api/editor/' + encodeURIComponent(project.id) + '/render?inline=1&v=' + encodeURIComponent(previewVersion)
       : '/api/editor/' + encodeURIComponent(project.id) + '/source?v=' + encodeURIComponent(previewVersion);
     var previewSeek = Math.max(0, Number(previewSeekTimes[project.id]) || 0);
-    var framingReadiness = ['pending', 'running'].indexOf(project.classificationStatus) !== -1
-      ? '<i class="working">Framing checking</i>'
-      : framingFailureBlocks ? '<i class="error">Framing failed</i>'
-        : project.layoutReviewRequired ? '<i class="review">Framing confirm once</i>' : '<i class="ready">Framing ready</i>';
+    var framingReadiness = '<i class="ready">Orientation detected</i>';
     var retakeReadiness = ['pending', 'running', 'pending_transcript'].indexOf(project.retakeAnalysisStatus) !== -1
       ? '<i class="working">Retakes checking</i>'
       : project.retakeAnalysisStatus === 'error' ? '<i class="error">Retake check failed</i>'
@@ -818,9 +810,8 @@
       (sentToProduction ? '<div class="editor-lock-notice approved"><strong>Approved version locked</strong><span>The exact reviewed file is now in Content Production. Source and final previews remain available here.</span></div>' : '') +
       (failures.length ? '<div class="editor-error-recovery"><div><strong>' + failures.join(', ') + ' need' + (failures.length === 1 ? 's' : '') + ' attention</strong><span>Retry the failed automatic work without changing the source recording or your edit decisions.</span></div><button type="button" class="btn-secondary btn-tiny" id="editorRetryFailed">Retry failed steps</button></div>' : '') +
       (project.workflowWarning ? '<div class="editor-workflow-warning"><strong>Video workflow needs attention</strong><span>' + esc(project.workflowWarning) + '</span></div>' : '') +
-      '<section class="editor-classification"><div><div class="eyebrow">Automatic classification</div><strong>' + (layout === 'vertical' ? 'Single page · Vertical' : 'Open spread · Horizontal') + '</strong><span>' + classificationCopy + ' · ' + esc(typeLabel(project.detectedContentType)) + '</span>' +
-        (project.classificationStatus !== 'ready' && project.classificationStatus !== 'running' && project.classificationStatus !== 'pending' ? '<button type="button" class="editor-analyze" id="editorAnalyze">Analyze book framing</button>' : '') + '</div>' +
-        '<label>Frame<select id="editorLayout"><option value="auto"' + (project.layoutOverride === 'auto' || !project.layoutOverride ? ' selected' : '') + '>Auto detect</option><option value="vertical"' + (project.layoutOverride === 'vertical' ? ' selected' : '') + '>Vertical · single page</option><option value="horizontal"' + (project.layoutOverride === 'horizontal' ? ' selected' : '') + '>Horizontal · open spread</option></select></label>' +
+      '<section class="editor-classification"><div><div class="eyebrow">Automatic classification</div><strong>' + (layout === 'vertical' ? 'Portrait · Vertical' : 'Landscape · Horizontal') + '</strong><span>' + classificationCopy + ' · ' + esc(typeLabel(project.detectedContentType)) + '</span></div>' +
+        '<label>Frame<select id="editorLayout"><option value="auto"' + (project.layoutOverride === 'auto' || !project.layoutOverride ? ' selected' : '') + '>Use camera orientation</option><option value="vertical"' + (project.layoutOverride === 'vertical' ? ' selected' : '') + '>Vertical</option><option value="horizontal"' + (project.layoutOverride === 'horizontal' ? ' selected' : '') + '>Horizontal</option></select></label>' +
         '<label>Format<select id="editorContentType"><option value="auto"' + (project.contentTypeOverride === 'auto' || !project.contentTypeOverride ? ' selected' : '') + '>Auto · ' + esc(typeLabel(project.detectedContentType)) + '</option><option value="ultra_short"' + (project.contentTypeOverride === 'ultra_short' ? ' selected' : '') + '>Ultra-short</option><option value="short"' + (project.contentTypeOverride === 'short' ? ' selected' : '') + '>Short</option><option value="long_short"' + (project.contentTypeOverride === 'long_short' ? ' selected' : '') + '>Long-short</option><option value="longform"' + (project.contentTypeOverride === 'longform' ? ' selected' : '') + '>Longform</option></select></label></section>' +
       '<section class="editor-plan-link"><div><div class="eyebrow">Planning workflow</div><strong>' + (project.planningPieceId ? 'Linked to ' + esc(displayName(project)) : 'No planning card linked') + '</strong><span>' + esc(planningCopy) + '</span></div><label>Content card<select id="editorPlanningPiece">' + planningOptionsHtml(project) + '</select></label>' +
         (project.planningMatchStatus !== 'running' && project.planningMatchStatus !== 'pending' ? '<button type="button" class="editor-analyze" id="editorMatchPlan">Match again</button>' : '') + '</section>' +
@@ -833,6 +824,7 @@
       '<section class="editor-automation"><div class="editor-automation-head"><div><div class="eyebrow">Automatic edit</div><h3>Speech and pause map</h3></div><div class="editor-legend"><span class="speech">Speech</span><span class="cut">Removed pause</span><span class="pause">Kept pause</span><span class="punch">Punch-in</span></div></div>' + timelineHtml(project) +
         '<div class="editor-controls"><label class="editor-toggle"><input type="checkbox" id="editorAutoSilence" ' + (project.autoSilenceEnabled !== false ? 'checked' : '') + '><span></span>Remove long pauses</label>' +
           '<label class="editor-toggle"><input type="checkbox" id="editorCaptions" ' + (project.captionsEnabled !== false ? 'checked' : '') + '><span></span>Add yellow captions</label>' +
+          (layout === 'vertical' ? '<label class="editor-toggle" title="A smooth 4% push-in over the first three seconds."><input type="checkbox" id="editorOpeningPushIn" ' + (project.openingPushInEnabled !== false ? 'checked' : '') + '><span></span>Subtle opening push-in</label>' : '') +
           '<button type="button" class="btn-secondary btn-tiny editor-clear-automation" id="editorClearAutomation" ' + (!automaticCutsPresent ? 'disabled' : '') + ' title="Restore every pause and retake removed automatically. Manual transcript cuts stay intact.">Restore automatic cuts</button>' +
           '<label class="editor-mode">Pacing<select id="editorPacing"><option value="tight"' + (Number(project.silenceThresholdSeconds) < 0.85 ? ' selected' : '') + '>Tight</option><option value="natural"' + (Number(project.silenceThresholdSeconds || 1) >= 0.85 && Number(project.silenceThresholdSeconds || 1) < 1.3 ? ' selected' : '') + '>Natural</option><option value="gentle"' + (Number(project.silenceThresholdSeconds || 1) >= 1.3 ? ' selected' : '') + '>Gentle</option></select></label></div></section>' +
       '<section class="editor-review"><div class="editor-review-column"><div class="editor-section-title"><div><div class="eyebrow">Pause decisions</div><h3>Every automatic silence cut</h3></div><span>Red means removed</span></div><div id="editorGapReview">' + gapReviewHtml(project) + '</div></div>' +
@@ -948,9 +940,17 @@
       var activePunch = previewingWorkingEdit ? (project.punchIns || []).filter(function (punch) {
         return sourcePlayheadTime >= Number(punch.start) && sourcePlayheadTime < Number(punch.end);
       }).pop() : null;
-      video.style.transform = activePunch ? 'scale(' + Number(activePunch.zoom || 1.18).toFixed(3) + ')' : '';
-      video.style.transformOrigin = activePunch ? (Number(activePunch.centerX === undefined ? 0.5 : activePunch.centerX) * 100).toFixed(1) + '% ' + (Number(activePunch.centerY === undefined ? 0.5 : activePunch.centerY) * 100).toFixed(1) + '%' : '';
-      if (videoFrame) videoFrame.classList.toggle('punching', !!activePunch);
+      var openingScale = 1;
+      if (previewingWorkingEdit && (project.effectiveLayout || 'horizontal') === 'vertical' && project.openingPushInEnabled !== false) {
+        var editedPlayheadTime = sourceToEditedTime(sourcePlayheadTime, project.cuts || []);
+        var openingProgress = Math.max(0, Math.min(1, editedPlayheadTime / 3));
+        openingScale = 1 + 0.04 * openingProgress * openingProgress * (3 - 2 * openingProgress);
+      }
+      var punchScale = activePunch ? Number(activePunch.zoom || 1.18) : 1;
+      var combinedScale = openingScale * punchScale;
+      video.style.transform = combinedScale > 1.0001 ? 'scale(' + combinedScale.toFixed(4) + ')' : '';
+      video.style.transformOrigin = activePunch ? (Number(activePunch.centerX === undefined ? 0.5 : activePunch.centerX) * 100).toFixed(1) + '% ' + (Number(activePunch.centerY === undefined ? 0.5 : activePunch.centerY) * 100).toFixed(1) + '%' : '50% 50%';
+      if (videoFrame) videoFrame.classList.toggle('punching', combinedScale > 1.0001);
       var now = Date.now();
       if (sourcePlayheadTime >= 1 && now - lastReviewProgressSaveAt >= 500) {
         lastReviewProgressSaveAt = now;
@@ -1195,6 +1195,8 @@
       save({ autoSilenceEnabled: this.checked }, true);
     };
     root.querySelector('#editorCaptions').onchange = function () { save({ captionsEnabled: this.checked }, true); };
+    var openingPushIn = root.querySelector('#editorOpeningPushIn');
+    if (openingPushIn) openingPushIn.onchange = function () { save({ openingPushInEnabled: this.checked }, true); };
     root.querySelector('#editorLayout').onchange = function () { save({ layoutOverride: this.value }, true); };
     root.querySelector('#editorContentType').onchange = function () { save({ contentTypeOverride: this.value }, true); };
     root.querySelector('#editorPlanningPiece').onchange = function () { save({ planningPieceId: this.value }, true); };
@@ -1418,7 +1420,7 @@
       });
     };
     if (editingLocked) {
-      ['#editorAnalyze', '#editorLayout', '#editorContentType', '#editorPlanningPiece', '#editorMatchPlan', '#editorCropX', '#editorAutoSilence', '#editorCaptions', '#editorClearAutomation', '#editorPacing', '#editorAnalyzeRetakes', '#editorUndo', '#editorCorrect', '#editorPunch', '#editorRestore', '#editorCut'].forEach(function (selector) {
+      ['#editorAnalyze', '#editorLayout', '#editorContentType', '#editorPlanningPiece', '#editorMatchPlan', '#editorCropX', '#editorAutoSilence', '#editorCaptions', '#editorOpeningPushIn', '#editorClearAutomation', '#editorPacing', '#editorAnalyzeRetakes', '#editorUndo', '#editorCorrect', '#editorPunch', '#editorRestore', '#editorCut'].forEach(function (selector) {
         var control = root.querySelector(selector); if (control) control.disabled = true;
       });
       root.querySelectorAll('.editor-gap-toggle,.editor-retake-apply,.editor-retake-dismiss').forEach(function (control) { control.disabled = true; });
@@ -1567,7 +1569,7 @@
       ? window.crypto.randomUUID()
       : 'edit-' + Date.now() + '-' + Math.random().toString(36).slice(2);
     var renderKeys = ['removedWordIndices', 'wordCorrection', 'autoSilenceEnabled', 'restoredAutoCutIds', 'captionsEnabled',
-      'layoutOverride', 'cropCenterX', 'punchIns', 'silenceThresholdSeconds', 'retainedPauseSeconds'];
+      'layoutOverride', 'cropCenterX', 'punchIns', 'openingPushInEnabled', 'silenceThresholdSeconds', 'retainedPauseSeconds'];
     var renderWillChange = typeof patch === 'function' || renderKeys.some(function (key) {
       return patch && Object.prototype.hasOwnProperty.call(patch, key);
     });
