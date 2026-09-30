@@ -15202,3 +15202,30 @@ post-publication retention window. A disposable object was then uploaded,
 headed, downloaded byte-for-byte, and deleted through the same S3 credentials,
 confirming actual read/write/delete capability rather than relying only on a
 bucket-existence check. No credential values were printed or committed.
+
+---
+
+# 435. Vertical Opening Zoom Establishes a Permanent Base Frame (2026-09-30)
+
+Harvey will film vertical pieces deliberately wider, with a little blank table
+around the page. The first three seconds should move from that establishing
+frame into the normal book composition and then remain there for the rest of
+the video. There must be no opening-effect zoom back out. Any later timed punch
+is temporary, but its exit returns to the settled post-opening composition—not
+to the original wide camera frame.
+
+The motion engine already clamped its original 104% opening scale after three
+seconds rather than reversing it, and punch scale was already multiplicative,
+so the underlying composition model was correct. The settled framing was too
+subtle for the newly specified wider camera setup, however. The vertical base
+now eases from 100% to 110% over three seconds and holds at 110%. Punch-ins
+continue to multiply above that base using their mirrored fast entrance/exit;
+when their multiplier returns to neutral, the combined frame is exactly 110%.
+The live browser preview and FFmpeg export use the same values.
+
+The Editor control is renamed from **Subtle opening push-in** to **Opening zoom
+to base framing**, with a tooltip that states it stays at 110%. Render format
+version 8 invalidates active unapproved renders made with the old 104% framing
+so preview and final output cannot silently disagree. Tests explicitly cover
+the three-second settle, the long-duration hold, the punch return to the held
+base, and the single-pass opening/punch filter. All 147 service tests pass.

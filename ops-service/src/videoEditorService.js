@@ -12,9 +12,13 @@ const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
 const EDIT_RENDER_DEBOUNCE_MS = 2500;
 const EDITOR_DISK_RESERVE_BYTES = 2 * 1024 * 1024 * 1024;
 const OPENING_PUSH_IN_SECONDS = 3;
-const OPENING_PUSH_IN_SCALE = 1.04;
+// Vertical footage is deliberately recorded a little wide. The opening move
+// settles into the normal book framing and that 110% composition remains the
+// baseline for the rest of the edit; timed punches multiply on top of it and
+// return to it, never to the original wide frame.
+const OPENING_PUSH_IN_SCALE = 1.10;
 const PUNCH_TRANSITION_SECONDS = 0.45;
-const EDITOR_RENDER_VERSION = 7;
+const EDITOR_RENDER_VERSION = 8;
 const BROWSER_PREVIEW_VERSION = 2;
 const AUDIO_PREVIEW_MIX_VERSION = 3;
 const AUDIO_PREVIEW_TTL_MS = 2 * 60 * 60 * 1000;

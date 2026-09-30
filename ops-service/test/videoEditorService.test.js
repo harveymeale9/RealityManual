@@ -144,11 +144,11 @@ test('every camera recording receives a scrub-optimized review proxy', function 
   assert.equal(editor.browserPreviewNeeded('camera.mp4', { videoCodec: 'h264', audioCodec: 'pcm_s16le' }), true);
 });
 
-test('opening push-in eases from 100 to 104 percent over three seconds', function () {
+test('opening zoom eases to a permanent 110 percent base over three seconds', function () {
   assert.equal(editor.openingPushInScale(0), 1);
-  assert.equal(editor.openingPushInScale(1.5), 1.02);
-  assert.equal(editor.openingPushInScale(3), 1.04);
-  assert.equal(editor.openingPushInScale(20), 1.04);
+  assert.equal(editor.openingPushInScale(1.5), 1.05);
+  assert.equal(editor.openingPushInScale(3), 1.1);
+  assert.equal(editor.openingPushInScale(20), 1.1);
   const filter = editor.openingPushInFilter({ width: 1080, height: 1920 }, 1.25);
   assert.match(filter, /zoompan=/);
   assert.match(filter, /on\+37\.462537/);
@@ -165,6 +165,9 @@ test('punch-ins use matching fast smooth zoom-in and zoom-out ramps', function (
   assert.equal(editor.punchInScale(punch, 3.55), 1.25);
   assert.ok(Math.abs(editor.punchInScale(punch, 3.775) - 1.125) < 0.000001);
   assert.equal(editor.punchInScale(punch, 4), 1);
+  // Once the temporary punch has exited, its neutral multiplier composes
+  // with the held opening base rather than returning to the original wide shot.
+  assert.equal(editor.openingPushInScale(20) * editor.punchInScale(punch, 4), 1.1);
   const filter = editor.punchInFilter(punch, { width: 1080, height: 1920 }, 2);
   assert.match(filter, /zoompan=/);
   assert.match(filter, /pow\(/);
@@ -183,7 +186,7 @@ test('opening and punch motion share one fractional resampling stage', function 
     openingEnabled: true
   });
   assert.equal((filter.match(/zoompan=/g) || []).length, 1);
-  assert.match(filter, /0\.040/);
+  assert.match(filter, /0\.100/);
   assert.match(filter, /0\.180/);
   assert.match(filter, /0\.400000/);
   assert.match(filter, /0\.600000/);
@@ -589,7 +592,7 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.equal(stored.renderQuality.status, 'passed');
-  assert.equal(stored.renderVersion, 7);
+  assert.equal(stored.renderVersion, 8);
   assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), true);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });

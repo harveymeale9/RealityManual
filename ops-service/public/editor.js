@@ -901,7 +901,7 @@
       (project.renderStatus === 'ready' ? '<button type="button" id="editorPreviewFinal" class="' + (previewMode === 'final' ? 'active' : '') + '"' + (previewLocked ? ' disabled' : '') + '>Final edit</button><button type="button" id="editorPreviewSource" class="' + (previewMode === 'source' ? 'active' : '') + '"' + (previewLocked ? ' disabled' : '') + '>' + sourcePreviewLabel + '</button>' : '') + '</div>';
     var automaticControlsHtml = '<div class="editor-controls"><label class="editor-toggle"><input type="checkbox" id="editorAutoSilence" ' + (project.autoSilenceEnabled !== false ? 'checked' : '') + '><span></span>Remove long pauses</label>' +
       '<label class="editor-toggle"><input type="checkbox" id="editorCaptions" ' + (project.captionsEnabled !== false ? 'checked' : '') + '><span></span>Add yellow captions</label>' +
-      (layout === 'vertical' ? '<label class="editor-toggle" title="A smooth 4% push-in over the first three seconds."><input type="checkbox" id="editorOpeningPushIn" ' + (project.openingPushInEnabled !== false ? 'checked' : '') + '><span></span>Subtle opening push-in</label>' : '') +
+      (layout === 'vertical' ? '<label class="editor-toggle" title="Smoothly settles from the wider camera frame to 110% over three seconds, then stays there."><input type="checkbox" id="editorOpeningPushIn" ' + (project.openingPushInEnabled !== false ? 'checked' : '') + '><span></span>Opening zoom to base framing</label>' : '') +
       '<label class="editor-mode">Pacing<select id="editorPacing"><option value="tight"' + (Number(project.silenceThresholdSeconds) < 0.85 ? ' selected' : '') + '>Tight</option><option value="natural"' + (Number(project.silenceThresholdSeconds || 1) >= 0.85 && Number(project.silenceThresholdSeconds || 1) < 1.3 ? ' selected' : '') + '>Natural</option><option value="gentle"' + (Number(project.silenceThresholdSeconds || 1) >= 1.3 ? ' selected' : '') + '>Gentle</option></select></label>' +
       '<button type="button" class="btn-secondary btn-tiny editor-clear-automation" id="editorClearAutomation" ' + (!automaticCutsPresent ? 'disabled' : '') + ' title="Restore every pause and retake removed automatically. Manual transcript cuts stay intact.">Restore automatic cuts</button></div>';
     var selectedAudioExists = project.audioTrackId === '__none__' || audioTracks.some(function (track) { return track.id === project.audioTrackId; });
@@ -1364,7 +1364,10 @@
       if (previewingWorkingEdit && !punchFocus && (project.effectiveLayout || 'horizontal') === 'vertical' && project.openingPushInEnabled !== false) {
         var editedPlayheadTime = sourceToEditedTime(sourcePlayheadTime, project.cuts || []);
         var openingProgress = Math.max(0, Math.min(1, editedPlayheadTime / 3));
-        openingScale = 1 + 0.04 * openingProgress * openingProgress * (3 - 2 * openingProgress);
+        // The settled 110% framing is permanent. Punch-ins are a second,
+        // temporary multiplier, so their mirrored exit lands back here rather
+        // than revealing the original wide camera frame again.
+        openingScale = 1 + 0.10 * openingProgress * openingProgress * (3 - 2 * openingProgress);
       }
       var punchScale = punchScaleAtTime(activePunch, sourcePlayheadTime);
       var combinedScale = openingScale * punchScale;
