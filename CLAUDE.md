@@ -14054,9 +14054,10 @@ inside their intended safe areas.
 
 Punch-ins are transcript-driven. Harvey can select any words or sentence and
 choose `Punch in selected`; the Editor creates a timed zoom with short speech
-handles, previews it immediately in the working edit, and exposes controls for
+handles, jumps directly into its working preview, and exposes controls for
 subtle through dramatic zoom plus horizontal and vertical focal position. Each
-punch-in has a direct Preview and Remove action. The settings are durable,
+punch-in has a direct Preview and Remove action and a bright marker on the
+speech timeline that also starts playback just before the zoom. The settings are durable,
 revision-protected Editor state and invalidate/rebuild the verified render like
 other visual edits.
 

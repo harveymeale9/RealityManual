@@ -295,11 +295,16 @@
       cursor = Math.max(cursor, word.end);
     });
     if (cursor < total) spans.push({ kind: cutAt(cursor, total) ? 'cut' : 'pause', start: cursor, end: total, label: 'Pause ' + (total - cursor).toFixed(1) + 's' });
+    var punchMarkers = (item.punchIns || []).map(function (punch) {
+      var left = Number(punch.start) / total * 100;
+      var width = Math.max(0.35, (Number(punch.end) - Number(punch.start)) / total * 100);
+      return '<button type="button" class="editor-timeline-punch" style="left:' + left.toFixed(4) + '%;width:' + width.toFixed(4) + '%" data-time="' + punch.start + '" title="Punch-in · ' + Math.round(Number(punch.zoom || 1.18) * 100) + '%"></button>';
+    }).join('');
     return '<div class="editor-timeline-track" id="editorTimelineTrack">' + spans.map(function (span) {
       var left = span.start / total * 100;
       var width = Math.max(0.18, (span.end - span.start) / total * 100);
       return '<button type="button" class="editor-timeline-segment ' + span.kind + '" style="left:' + left.toFixed(4) + '%;width:' + width.toFixed(4) + '%" data-time="' + span.start + '" title="' + esc(span.label) + '"></button>';
-    }).join('') + '<i class="editor-playhead" id="editorPlayhead"></i></div>';
+    }).join('') + punchMarkers + '<i class="editor-playhead" id="editorPlayhead"></i></div>';
   }
 
   function gapReviewHtml(item) {
@@ -825,7 +830,7 @@
       '<div class="editor-preview" id="editorPreview" tabindex="0" aria-label="Video review. Space plays or pauses. Left and right arrows move two seconds."><div class="editor-video-frame ' + layout + '" style="--crop-x:' + cropPercent + '%"><video id="editorVideo" data-preview-mode="' + previewMode + '" data-seek-time="' + previewSeek.toFixed(3) + '" controls playsinline preload="metadata" src="' + previewUrl + '"></video>' +
         '<div class="editor-caption" id="editorCaption"></div><div class="editor-video-error" id="editorVideoError" hidden><strong>Preview could not be played</strong><span>Your recording and edit are safe. Reload this review copy without rebuilding anything.</span><button type="button" class="btn-secondary btn-tiny" id="editorReloadVideo">Reload preview</button></div></div></div>' +
       (layout === 'vertical' ? '<div class="editor-crop-control"><label>Horizontal crop position <input id="editorCropX" type="range" min="0" max="100" value="' + cropPercent + '"></label><span>Keep the single page centred inside the vertical frame.</span></div>' : '') +
-      '<section class="editor-automation"><div class="editor-automation-head"><div><div class="eyebrow">Automatic edit</div><h3>Speech and pause map</h3></div><div class="editor-legend"><span class="speech">Speech</span><span class="cut">Removed pause</span><span class="pause">Kept pause</span></div></div>' + timelineHtml(project) +
+      '<section class="editor-automation"><div class="editor-automation-head"><div><div class="eyebrow">Automatic edit</div><h3>Speech and pause map</h3></div><div class="editor-legend"><span class="speech">Speech</span><span class="cut">Removed pause</span><span class="pause">Kept pause</span><span class="punch">Punch-in</span></div></div>' + timelineHtml(project) +
         '<div class="editor-controls"><label class="editor-toggle"><input type="checkbox" id="editorAutoSilence" ' + (project.autoSilenceEnabled !== false ? 'checked' : '') + '><span></span>Remove long pauses</label>' +
           '<label class="editor-toggle"><input type="checkbox" id="editorCaptions" ' + (project.captionsEnabled !== false ? 'checked' : '') + '><span></span>Add yellow captions</label>' +
           '<button type="button" class="btn-secondary btn-tiny editor-clear-automation" id="editorClearAutomation" ' + (!automaticCutsPresent ? 'disabled' : '') + ' title="Restore every pause and retake removed automatically. Manual transcript cuts stay intact.">Restore automatic cuts</button>' +
@@ -1031,6 +1036,13 @@
         video.play().catch(function () {});
       };
     });
+    root.querySelectorAll('.editor-timeline-punch').forEach(function (marker) {
+      marker.onclick = function () {
+        var sourceTime = Math.max(0, Number(marker.dataset.time) - 0.35);
+        video.currentTime = previewingFinal ? sourceToEditedTime(sourceTime, project.cuts) : sourceTime;
+        video.play().catch(function () {});
+      };
+    });
     root.querySelectorAll('.editor-preview-cut').forEach(function (button) {
       button.onclick = function () {
         var time = Number(button.dataset.time) || 0;
@@ -1138,7 +1150,13 @@
         centerY: 0.5
       };
       selected.clear();
-      save(function (latest) { return { punchIns: (latest.punchIns || []).concat([nextPunch]) }; });
+      save(function (latest) { return { punchIns: (latest.punchIns || []).concat([nextPunch]) }; }).then(function (item) {
+        if (!item || !project || project.id !== item.id) return;
+        previewModes[item.id] = 'source';
+        previewSeekTimes[item.id] = Math.max(0, nextPunch.start - 0.35);
+        previewAutoplay[item.id] = true;
+        renderWorkspace();
+      });
     };
     root.querySelector('#editorPlaySelection').onclick = function () {
       var chosen = Array.from(selected).sort(function (a, b) { return a - b; });
