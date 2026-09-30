@@ -149,8 +149,11 @@ test('opening push-in eases from 100 to 104 percent over three seconds', functio
   assert.equal(editor.openingPushInScale(1.5), 1.02);
   assert.equal(editor.openingPushInScale(3), 1.04);
   assert.equal(editor.openingPushInScale(20), 1.04);
-  assert.match(editor.openingPushInFilter({ width: 1080, height: 1920 }, 1.25), /t\+1\.250000/);
-  assert.match(editor.openingPushInFilter({ width: 1080, height: 1920 }, 1.25), /crop=1080:1920/);
+  const filter = editor.openingPushInFilter({ width: 1080, height: 1920 }, 1.25);
+  assert.match(filter, /zoompan=/);
+  assert.match(filter, /on\+37\.462537/);
+  assert.match(filter, /s=1080x1920/);
+  assert.doesNotMatch(filter, /scale=w='trunc/);
 });
 
 test('punch-ins use matching fast smooth zoom-in and zoom-out ramps', function () {

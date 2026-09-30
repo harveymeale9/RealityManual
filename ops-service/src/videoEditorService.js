@@ -425,12 +425,17 @@ function openingPushInScale(editedSeconds) {
 }
 
 function openingPushInFilter(renderShape, editedStart) {
-  const offset = Math.max(0, Number(editedStart) || 0).toFixed(6);
-  const progress = 'min(max((t+' + offset + ')/' + OPENING_PUSH_IN_SECONDS + ',0),1)';
+  // `scale` can only change its output dimensions in whole/even pixels. At a
+  // 4% move across 90 frames that made 37 adjacent frame pairs identical,
+  // followed by visible two-pixel catches. zoompan keeps a fixed output frame
+  // and resamples the source at a fractional zoom every frame instead.
+  const framesPerSecond = 30000 / 1001;
+  const frameOffset = (Math.max(0, Number(editedStart) || 0) * framesPerSecond).toFixed(6);
+  const progress = 'min(max((on+' + frameOffset + ')/(' + framesPerSecond.toFixed(8) + '*' + OPENING_PUSH_IN_SECONDS + '),0),1)';
   const eased = '(' + progress + '*' + progress + '*(3-2*' + progress + '))';
   const zoom = '(1+' + (OPENING_PUSH_IN_SCALE - 1).toFixed(3) + '*' + eased + ')';
-  return ",scale=w='trunc(iw*" + zoom + "/2)*2':h='trunc(ih*" + zoom + "/2)*2':eval=frame" +
-    ",crop=" + renderShape.width + ':' + renderShape.height + ":x='(iw-ow)/2':y='(ih-oh)/2',setsar=1";
+  return ",zoompan=z='" + zoom + "':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=" +
+    renderShape.width + 'x' + renderShape.height + ':fps=30000/1001,setsar=1';
 }
 
 function punchInScale(punch, sourceSeconds) {

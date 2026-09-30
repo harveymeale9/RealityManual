@@ -14491,3 +14491,32 @@ DOM checks confirmed its queue/review title became **Consciousness Is
 Fundamental to the Game of Life**, its `workingTitle` and `nameSource` persisted
 as transcript-derived, and the untouched source provenance remained
 `fileName: 9259.mp4`.
+
+---
+
+# 410. Opening Push-In Uses Fractional Per-Frame Resampling (2026-09-30)
+
+The opening portrait push-in had the correct three-second smoothstep easing in
+both browser preview and export, but its rendered movement still looked jagged.
+The cause was spatial quantization rather than the easing curve: FFmpeg's
+dynamic `scale` filter was forced to round the growing 1080-wide frame to even
+integer dimensions. Across a subtle four-percent move, many consecutive frames
+therefore repeated exactly before catching up in a visible two-pixel step.
+
+The render path now uses a fixed-output `zoompan` resample. Its crop window is
+evaluated at a fractional zoom on every 30000/1001 output frame, centered on the
+same point, and driven by the same 0–4% smoothstep used in the browser. Segment
+offsets are converted to output-frame offsets, so edits containing cuts continue
+one uninterrupted opening curve rather than restarting the motion at every
+segment. Output dimensions remain fixed throughout, avoiding both dimension
+stair-stepping and concat instability.
+
+On a static high-contrast 1080x1920 diagnostic source, the old filter produced
+only 53 distinct frames over the 90-frame opening and 37 adjacent duplicate
+pairs. The fixed-output resample produced 73 distinct frames and only 17
+adjacent duplicates; the remaining identical frames occur at the intentionally
+near-zero velocity ends of the easing rather than in two-pixel catches. A
+five-second benchmark took 2.68 seconds versus 1.94 seconds for the old path,
+substantially cheaper than the equivalent two-times supersampled workaround at
+5.42 seconds. The browser preview already uses a fractional CSS transform and
+GPU transform hint, so no separate visual curve is introduced there.
