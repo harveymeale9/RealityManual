@@ -14697,3 +14697,26 @@ and scrub proxy are ready. A real Chromium hit-test confirmed the overlay covers
 the whole frame, wins pointer targeting, and exposes disabled player controls.
 The complete 141-test suite passes. Both Editor CSS and JS cache keys were
 advanced to v85.
+
+---
+
+# 415. Content Pipeline Uses Laptop Space for Cards, Not Board Chrome (2026-09-30)
+
+The Content Pipeline's existing laptop treatment scaled the board to 75%, but
+left its original 400px stage columns, 800px Final Check column, tall stacked
+stage headings, and generous internal gutters intact. On a normal laptop this
+still exposed only about four standard stages at once and spent an unnecessary
+share of the limited height on headings and spacing instead of content cards.
+
+The pipeline now has its own `ops-panel--pipeline` density scope at desktop and
+laptop widths below 1600px. Standard columns are 330px before the established
+75% board scale (247.5 rendered pixels), Final Check remains exactly twice that
+width, the three heading values share one compact row, and toolbar, overview,
+column, and card gutters are tightened. At 1366px the board itself now exposes
+about 5.2 normal columns before accounting for the app rail, versus roughly
+4.2 previously, while also gaining vertical card room. At 1280px it exposes
+about 4.9 columns and at 1024px about 3.9. The change is deliberately scoped to
+Content Pipeline: other analytics pages which reuse `.ops-panel`, the 1600px+
+large-screen sizing, Final Check's 2:1 width relationship, and the existing
+mobile 86vw single-column behavior are unchanged. CSS and app cache keys were
+advanced to v86.

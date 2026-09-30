@@ -901,6 +901,48 @@ body.role-reviewer #pmBackFab {
 @media (min-width: 1600px) { .ops-panel { zoom: 0.9; } }
 @media (min-width: 2000px) { .ops-panel { zoom: 1; } }
 
+/* A laptop has enough physical width for a genuinely useful multi-column
+   board, but the original 400px stage columns and tall, three-line headers
+   spent too much of it on chrome. Keep the 75% density that Harvey chose,
+   then use that reclaimed room: five normal stages fit across a typical
+   1366px laptop instead of roughly four, and the shorter headers/summary
+   strip leave materially more height for actual cards. This is deliberately
+   scoped to the pipeline so analytics pages which also use .ops-panel retain
+   their existing reading width. */
+@media (min-width: 641px) and (max-width: 1599px) {
+  .ops-panel--pipeline { padding: 12px clamp(12px, 2vw, 24px) 0; }
+  .ops-panel--pipeline .ops-toolbar { gap: 10px; padding-bottom: 8px; }
+  .ops-panel--pipeline .overview-row {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 7px;
+    padding-bottom: 9px;
+  }
+  .ops-panel--pipeline .overview-tile { padding: 8px 10px; border-radius: 9px; }
+  .ops-panel--pipeline .overview-tile-head { margin-bottom: 3px; }
+  .ops-panel--pipeline .overview-tile-sub2 { margin-top: 3px; padding-top: 3px; }
+  .ops-panel--pipeline .board { gap: 10px; }
+  .ops-panel--pipeline .column { width: 330px; }
+  .ops-panel--pipeline .column[data-stage="final_check"] { width: 660px; }
+  .ops-panel--pipeline .column-head {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 12px;
+    text-align: left;
+  }
+  .ops-panel--pipeline .column-title {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 1.1rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ops-panel--pipeline .column-count { padding-inline: 8px; }
+  .ops-panel--pipeline .column-body { gap: 7px; padding: 8px; }
+  .ops-panel--pipeline .card { gap: 7px; padding: 10px 11px 9px; }
+}
+
 .ops-toolbar {
   display: flex;
   align-items: center;

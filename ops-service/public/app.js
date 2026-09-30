@@ -2358,7 +2358,7 @@
      ============================================================ */
 
   var OPS_MARKUP =
-    '<div class="ops-panel">' +
+    '<div class="ops-panel ops-panel--pipeline">' +
       '<div class="ops-toolbar">' +
         '<div class="ops-stats" id="statStrip"></div>' +
         '<div class="ops-filters">' +
