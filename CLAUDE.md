@@ -14631,3 +14631,27 @@ within a completed export, because that could make the approved preview and
 final visual treatment disagree. After that foundation is stable, new visual
 effects belong in deterministic Remotion components rather than increasingly
 complex FFmpeg filter graphs.
+
+---
+
+# 413. Editor Preview Is Capped by the Live Viewport (2026-09-30)
+
+The enlarged Editor preview previously used fixed portrait limits of 764px on
+desktop and 620px on mobile. That made the footage easier to inspect on a tall
+display, but could make the video itself taller than the usable browser area on
+a smaller laptop and force scrolling merely to reach the player's lower edge.
+
+Preview dimensions now retain the existing 9:16 or 16:9 aspect ratio while also
+being capped with dynamic viewport units. Portrait footage uses the smaller of
+the design maximum and the height remaining after the preview stage's own
+vertical padding; landscape footage similarly cannot exceed one viewport. The
+width is derived from the resulting height, so the frame scales down as one
+unit rather than being distorted or clipped. The existing larger dimensions
+remain available automatically on taller screens, and fullscreen mode remains
+unrestricted.
+
+A real headless Chromium layout check covered 1366x768, 1280x720, 1024x600,
+and the browser's 500px-wide narrow layout. In every case the video frame stayed within
+the browser's reported viewport and retained its intended aspect ratio. The
+complete 141-test suite also passes. The stylesheet cache key was advanced so
+the new constraint reaches existing Editor sessions immediately.
