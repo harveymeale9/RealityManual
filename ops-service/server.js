@@ -633,6 +633,19 @@ const videoEditor = videoEditorService.setup({
   onRenderInvalidated: regressEditorPlanningPieceForRebuild,
   onPlanningPieceChanged: reconcileEditorPlanningPiece,
   onProjectDeleted: reconcileDeletedEditorProject,
+  getAudioTracks: function () {
+    return stmts.getAll.all('audioTracks').map(function (row) {
+      try { return JSON.parse(row.data); } catch (error) { return null; }
+    }).filter(Boolean);
+  },
+  getAudioTrackPath: function (id) {
+    return isValidId(id) && stmts.getOne.get('audioTracks', id) ? path.join(UPLOADS_DIR, 'audioTracks', id) : '';
+  },
+  getAudioMixSettings: function () {
+    const row = stmts.getOne.get('settings', 'settings');
+    return row ? JSON.parse(row.data) : {};
+  },
+  buildAudioPreview: videoAnalysis.buildAudioPreview,
   handoffToProduction: sendEditorProjectToProduction
 });
 app.use('/api/editor', requireAuth, videoEditor.router);
@@ -1603,7 +1616,8 @@ async function sendEditorProjectToProduction(input) {
     transcript: (project.words || []).filter(function (word) {
       return (project.removedWordIndices || []).indexOf(word.index) === -1;
     }).map(function (word) { return word.text; }).join(' '),
-    audioTrackId: '',
+    audioTrackId: project.audioTrackId,
+    audioMixSettings: project.audioMixSettings || {},
     thumbnailDataUrl: '',
     ytTitles: [],
     tags: [],
@@ -1818,11 +1832,13 @@ async function runBuildFinalVideo(id) {
     }
     const finalId = id + FINAL_VIDEO_SUFFIX;
     const outPath = path.join(UPLOADS_DIR, 'videos', finalId);
-    // Resolve the complete mix profile at build time rather than copying it
-    // onto every piece. Loudness mode measures dialogue, music, and the mixed
-    // result; Legacy mode remains available for direct percentage A/B tests.
+    // Editor-origin videos retain the exact mix profile used for their audio
+    // auditions. Legacy/direct uploads fall back to the current global profile.
+    // Loudness mode still measures dialogue, music, and the completed mix.
     const settingsRow = stmts.getOne.get('settings', 'settings');
-    const settings = settingsRow ? JSON.parse(settingsRow.data) : {};
+    const settings = piece.audioMixSettings && typeof piece.audioMixSettings === 'object'
+      ? piece.audioMixSettings
+      : settingsRow ? JSON.parse(settingsRow.data) : {};
     const mixProfile = videoAnalysis.normalizeAudioMixSettings(settings);
     const mixResult = await videoAnalysis.buildFinalVideo(videoPath, audioPath, outPath, settings);
 

@@ -218,16 +218,21 @@ function measuredFinalVideoArgs(videoPath, tempAudioPath, outPath, settings, mix
     '-shortest', '-movflags', '+faststart', '-f', 'mp4', outPath];
 }
 
-function measuredFinalAudioArgs(tempAudioPath, outPath, settings, mixMeasurement) {
-  return ['-y', '-i', tempAudioPath, '-af', finalLoudnormFilter(settings, mixMeasurement),
-    '-c:a', 'libmp3lame', '-b:a', '192k', '-f', 'mp3', outPath];
+function previewBitrate(options) {
+  const requested = String(options && options.bitrate || '192k');
+  return ['48k', '64k', '96k', '128k', '192k'].includes(requested) ? requested : '192k';
 }
 
-function legacyAudioPreviewArgs(dialoguePath, audioPath, outPath, ambientVolumePercent) {
+function measuredFinalAudioArgs(tempAudioPath, outPath, settings, mixMeasurement, options) {
+  return ['-y', '-i', tempAudioPath, '-af', finalLoudnormFilter(settings, mixMeasurement),
+    '-c:a', 'libmp3lame', '-b:a', previewBitrate(options), '-f', 'mp3', outPath];
+}
+
+function legacyAudioPreviewArgs(dialoguePath, audioPath, outPath, ambientVolumePercent, options) {
   const volume = (normalizeAmbientVolumePercent(ambientVolumePercent) / 100).toFixed(2);
   return ['-y', '-i', dialoguePath, '-stream_loop', '-1', '-i', audioPath,
     '-filter_complex', '[1:a]volume=' + volume + '[bg];[0:a][bg]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]',
-    '-map', '[aout]', '-c:a', 'libmp3lame', '-b:a', '192k', '-f', 'mp3', outPath];
+    '-map', '[aout]', '-c:a', 'libmp3lame', '-b:a', previewBitrate(options), '-f', 'mp3', outPath];
 }
 
 function runFfmpeg(args, label) {
@@ -280,10 +285,10 @@ async function buildFinalVideo(videoPath, audioPath, outPath, mixInput) {
 // Audio-only audition used by Content Settings. It deliberately calls the
 // same measurement and mix helpers as Final Check, so a test is representative
 // of the production render rather than a lighter browser approximation.
-async function buildAudioPreview(dialoguePath, audioPath, outPath, mixInput) {
+async function buildAudioPreview(dialoguePath, audioPath, outPath, mixInput, outputOptions) {
   const settings = normalizeAudioMixSettings(mixInput);
   if (settings.mode === 'legacy_percent') {
-    await runFfmpeg(legacyAudioPreviewArgs(dialoguePath, audioPath, outPath, settings.legacyPercent), 'legacy audio preview');
+    await runFfmpeg(legacyAudioPreviewArgs(dialoguePath, audioPath, outPath, settings.legacyPercent, outputOptions), 'legacy audio preview');
     return { mode: settings.mode };
   }
   const tempAudioPath = outPath + '.loudness-mix.flac';
@@ -292,7 +297,7 @@ async function buildAudioPreview(dialoguePath, audioPath, outPath, mixInput) {
     const musicMeasurement = await measureMusicPeak(audioPath);
     await runFfmpeg(measuredMixAudioArgs(dialoguePath, audioPath, tempAudioPath, settings, dialogueMeasurement, musicMeasurement), 'preview audio mix');
     const mixMeasurement = await measureLoudness(tempAudioPath, settings);
-    await runFfmpeg(measuredFinalAudioArgs(tempAudioPath, outPath, settings, mixMeasurement), 'loudness-normalized audio preview');
+    await runFfmpeg(measuredFinalAudioArgs(tempAudioPath, outPath, settings, mixMeasurement, outputOptions), 'loudness-normalized audio preview');
     return { mode: settings.mode, dialogue: dialogueMeasurement, music: musicMeasurement, mix: mixMeasurement };
   } finally {
     fs.rmSync(tempAudioPath, { force: true });

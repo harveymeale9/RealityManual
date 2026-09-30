@@ -795,6 +795,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   let planningMatchCalls = 0;
   let renderReadyCalls = 0;
   let renderInvalidatedCalls = 0;
+  let audioPreviewCalls = 0;
   let expectedPlanningPieceId = 'plan-1';
   const planningChanges = [];
   const deletedProjects = [];
@@ -824,11 +825,25 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
       planningChanges.push({ previous: input.previousPlanningPieceId, next: input.project.planningPieceId, renderWillChange: input.renderWillChange });
     },
     onProjectDeleted: function (input) { deletedProjects.push(input.project); },
+    getAudioTracks: function () { return [{ id: 'track-1', name: 'Test ambience', note: 'Quiet test bed' }]; },
+    getAudioTrackPath: function (id) { return id === 'track-1' ? input : ''; },
+    getAudioMixSettings: function () { return { audioMixMode: 'loudness', musicBelowDialogueDb: 20 }; },
+    buildAudioPreview: async function (videoPath, audioPath, outPath, settings, outputOptions) {
+      audioPreviewCalls++;
+      assert.equal(fs.existsSync(videoPath), true);
+      assert.equal(audioPath, input);
+      assert.equal(settings.musicBelowDialogueDb, 20);
+      assert.equal(outputOptions.bitrate, '48k');
+      await new Promise(function (resolve) { setTimeout(resolve, 40); });
+      fs.writeFileSync(outPath, Buffer.alloc(2048, 7));
+    },
     handoffToProduction: async function (input) {
       handoffCalls++;
       assert.equal(input.project.id.length > 0, true);
       assert.equal(input.project.words[0].text, 'Once');
       assert.equal(input.project.words[0].originalText, 'One');
+      assert.equal(input.project.audioTrackId, 'track-1');
+      assert.equal(input.project.audioMixSettings.musicBelowDialogueDb, 20);
       assert.equal(fs.existsSync(input.renderPath), true);
       await new Promise(function (resolve) { setTimeout(resolve, 80); });
       return { pieceId: input.project.id, alreadySent: false, workflowWarning: 'Synthetic planning-stage warning.' };
@@ -1046,6 +1061,25 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.match(response.headers.get('content-range') || '', /^bytes 0-1023\//);
   assert.ok(project.editedDuration < project.duration);
   const verifiedRenderPath = path.join(dir, 'editor', project.id, 'render.mp4');
+  response = await fetch(base + '/api/editor/' + project.id + '/production', { method: 'POST' });
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).error, 'audio_track_required');
+  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ audioTrackId: 'missing-track' }) });
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error, 'invalid_audio_track');
+  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ audioTrackId: 'track-1' }) });
+  assert.equal(response.status, 200);
+  project = await response.json();
+  assert.equal(project.audioTrackId, 'track-1');
+  assert.equal(project.audioMixSettings.musicBelowDialogueDb, 20);
+  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ audioTrackId: '' }) });
+  assert.equal(response.status, 200);
+  project = await response.json();
+  assert.equal(project.audioTrackId, '');
+  assert.equal(project.audioMixSettings, undefined);
+  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ audioTrackId: 'track-1' }) });
+  assert.equal(response.status, 200);
+  project = await response.json();
   fs.appendFileSync(verifiedRenderPath, 'tampered-after-verification');
   response = await fetch(base + '/api/editor/' + project.id + '/production', { method: 'POST' });
   assert.equal(response.status, 409);
@@ -1058,6 +1092,19 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.renderStatus, 'ready', project.renderError);
   assert.equal(renderReadyCalls, 3);
   assert.equal(await editor.verifiedRenderMatches(project, verifiedRenderPath), true);
+  response = await fetch(base + '/api/editor/audio-tracks');
+  assert.equal(response.status, 200);
+  const audioLibrary = await response.json();
+  assert.deepEqual(audioLibrary.tracks, [{ id: 'track-1', name: 'Test ambience', note: 'Quiet test bed' }]);
+  assert.equal(audioLibrary.mixVersion.length, 16);
+  const audioPreviews = await Promise.all([
+    fetch(base + '/api/editor/' + project.id + '/audio-preview/track-1', { method: 'POST' }),
+    fetch(base + '/api/editor/' + project.id + '/audio-preview/track-1', { method: 'POST' })
+  ]);
+  assert.deepEqual(audioPreviews.map(function (item) { return item.status; }), [200, 200]);
+  assert.ok(Buffer.from(await audioPreviews[0].arrayBuffer()).length > 1000);
+  assert.ok(Buffer.from(await audioPreviews[1].arrayBuffer()).length > 1000);
+  assert.equal(audioPreviewCalls, 1, 'simultaneous requests must share one cached mix');
   const simultaneousHandoffs = await Promise.all([
     fetch(base + '/api/editor/' + project.id + '/production', { method: 'POST' }),
     fetch(base + '/api/editor/' + project.id + '/production', { method: 'POST' })

@@ -88,4 +88,8 @@ test('measured final pass uses two-pass loudnorm values and a true-peak safeguar
   assert.match(filter, /alimiter=limit=0.841395:level=false/);
   const ducked = videoAnalysis.measuredMixAudioArgs('/video', '/music', '/mix.flac', { musicDuckingEnabled: true }, { inputI: -16 }, { inputI: -16 });
   assert.match(ducked.join(' '), /sidechaincompress/);
+  const compressed = videoAnalysis.measuredFinalAudioArgs('/mix.flac', '/preview.mp3', {}, measurement, { bitrate: '48k' });
+  assert.equal(compressed[compressed.indexOf('-b:a') + 1], '48k');
+  const safeFallback = videoAnalysis.legacyAudioPreviewArgs('/voice', '/music', '/preview.mp3', 10, { bitrate: '12k' });
+  assert.equal(safeFallback[safeFallback.indexOf('-b:a') + 1], '192k');
 });

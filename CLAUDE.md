@@ -14359,3 +14359,53 @@ the strip at all. Horizontal review still needs its speed and source/final
 controls, so those remain in a compact action-only toolbar without the repeated
 heading or explanatory copy. The old preview-mode CSS and its mobile layout rule
 were removed, and both Editor asset cache keys were advanced.
+
+---
+
+# 407. Backing-Audio Choice and Instant Loudness-Matched Auditions Move Into Editor (2026-09-30)
+
+Soundtrack selection for Editor-origin videos now happens while reviewing the
+edit rather than later in Content Production. Once a verified edit is ready,
+the Editor automatically requests one audio-only audition for every playable
+ambient-library track. A visible **Loading audio previews X/N** indicator tracks
+the batch. Two mixes run concurrently so a large library cannot launch an
+unbounded FFmpeg storm, duplicate requests share one in-flight/cache result,
+and server scratch results expire after two hours or immediately when that
+project's render changes. The browser downloads each result completely and
+holds a blob URL, making Previous, Next, and dropdown switching instant after
+the batch completes.
+
+These are not duplicate video renders. The browser keeps the lightweight final
+video proxy and plays a separate mixed-audio stream beside it. Play, pause,
+seek, playback speed, restart, mute, and drift correction control both streams
+as one player. Selecting a track restarts the comparison at zero. Selecting
+**No backing music** restores the edit's own audio. Source-view playback never
+misapplies an edited-timeline mix; choosing music there returns review to the
+verified final timeline.
+
+Each audition goes through the same dialogue measurement, loudest sustained
+music calibration, optional ducking, two-pass final normalization, and
+true-peak limiting as the published final. Only its delivery codec is cheaper:
+48kbps MP3 rather than the final video's 192kbps AAC. Thus compression reduces
+browser memory/network cost without changing the relative loudness decision.
+The selected global mix profile is snapshotted with the Editor choice and
+carried into the Production piece, so a later Settings change cannot make the
+published mix differ from what Harvey approved.
+
+Approval is now blocked until a real track or **No backing music** is selected.
+An uncommitted choice can still be cleared safely through the Editor API, while
+the explicit **No backing music** state remains the reviewable, approvable
+choice for a deliberately silent edit.
+The Editor handoff copies that choice and mix snapshot into the Processing
+piece. Content Production no longer shows a second backing-audio picker for
+Editor-origin videos; it retains the picker only for legacy/direct uploads that
+bypass Editor. That field is also hidden from the shared legacy piece modal for
+Editor-origin videos, so there is no second UI capable of contradicting the
+reviewed choice. Production therefore remains responsible for titles and the
+thumbnail frame, while the existing final builder receives the already-reviewed
+soundtrack automatically.
+
+Backend coverage verifies the library response, 48kbps option, one shared build
+for simultaneous identical auditions, persisted selection and mix settings,
+missing-track rejection, and the approval gate. The complete 140-test suite
+passes, and Editor/app/stylesheet cache keys were advanced.

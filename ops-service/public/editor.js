@@ -21,6 +21,10 @@
   var projectDetails = {};
   var renderRefreshTimers = {};
   var mediaRecoveryChecks = {};
+  var audioTracks = [];
+  var audioMixVersion = '';
+  var audioPreviewBatches = {};
+  var activeAudioPanelRefresh = null;
   var restoreTranscriptFocus = false;
   var uploadBatchInProgress = false;
   var uploadBatchCancelled = false;
@@ -36,6 +40,10 @@
     if (!uploadBatchInProgress && !Object.keys(saveQueues).length) return;
     event.preventDefault();
     event.returnValue = '';
+  });
+
+  window.addEventListener('beforeunload', function () {
+    Object.keys(audioPreviewBatches).forEach(releaseAudioPreviewBatch);
   });
 
   function esc(value) {
@@ -76,6 +84,61 @@
     seconds = Math.max(0, Number(seconds) || 0);
     var minutes = Math.floor(seconds / 60);
     return minutes + ':' + String(Math.floor(seconds % 60)).padStart(2, '0');
+  }
+
+  function releaseAudioPreviewBatch(id) {
+    var batch = audioPreviewBatches[id];
+    if (!batch) return;
+    batch.cancelled = true;
+    Object.keys(batch.urls || {}).forEach(function (trackId) { URL.revokeObjectURL(batch.urls[trackId]); });
+    delete audioPreviewBatches[id];
+  }
+
+  function audioPreviewFingerprint(item) {
+    return [item && item.renderSha256 || '', audioMixVersion, audioTracks.map(function (track) { return track.id; }).join(',')].join(':');
+  }
+
+  function notifyAudioPreviewProgress(id) {
+    if (project && project.id === id && typeof activeAudioPanelRefresh === 'function') activeAudioPanelRefresh();
+  }
+
+  function ensureAudioPreviewBatch(item) {
+    if (!item || item.renderStatus !== 'ready' || !item.renderSha256) return null;
+    var fingerprint = audioPreviewFingerprint(item);
+    var existing = audioPreviewBatches[item.id];
+    if (existing && existing.fingerprint === fingerprint) return existing;
+    if (existing) releaseAudioPreviewBatch(item.id);
+    var batch = {
+      fingerprint: fingerprint, total: audioTracks.length, completed: 0, failed: 0,
+      urls: {}, errors: {}, building: audioTracks.length > 0, cancelled: false
+    };
+    audioPreviewBatches[item.id] = batch;
+    if (!audioTracks.length) return batch;
+    var queue = audioTracks.slice();
+    function worker() {
+      var track = queue.shift();
+      if (!track || batch.cancelled) return Promise.resolve();
+      return fetch('/api/editor/' + encodeURIComponent(item.id) + '/audio-preview/' + encodeURIComponent(track.id), {
+        method: 'POST', credentials: 'same-origin'
+      }).then(function (response) {
+        if (!response.ok) return response.json().catch(function () { return {}; }).then(function (body) { throw new Error(body.message || body.error || 'Preview failed'); });
+        return response.blob();
+      }).then(function (blob) {
+        if (batch.cancelled) return;
+        batch.urls[track.id] = URL.createObjectURL(blob);
+      }).catch(function (error) {
+        if (!batch.cancelled) { batch.failed++; batch.errors[track.id] = error.message || 'Preview failed'; }
+      }).finally(function () {
+        if (batch.cancelled) return;
+        batch.completed++;
+        batch.building = batch.completed < batch.total;
+        notifyAudioPreviewProgress(item.id);
+      }).then(worker);
+    }
+    Promise.all([worker(), worker()]).then(function () {
+      if (!batch.cancelled) { batch.building = false; notifyAudioPreviewProgress(item.id); }
+    });
+    return batch;
   }
 
   function formatBytes(bytes) {
@@ -663,8 +726,13 @@
   }
 
   function loadProjects() {
-    return retryTransientOnce(function () { return api('/api/editor'); }, 300).then(function (items) {
-      projects = items;
+    return Promise.all([
+      retryTransientOnce(function () { return api('/api/editor'); }, 300),
+      retryTransientOnce(function () { return api('/api/editor/audio-tracks'); }, 300)
+    ]).then(function (results) {
+      projects = results[0];
+      audioTracks = Array.isArray(results[1].tracks) ? results[1].tracks : [];
+      audioMixVersion = results[1].mixVersion || '';
       renderList();
       if (!project && projects[0]) {
         var preferred = preferredProjectForFilter(listFilter);
@@ -749,6 +817,7 @@
   }
 
   function renderWorkspace() {
+    activeAudioPanelRefresh = null;
     var workspace = root.querySelector('#editorWorkspace');
     if (!workspace || !project) return;
     if (project.transcriptionStatus !== 'ready') {
@@ -835,6 +904,11 @@
       (layout === 'vertical' ? '<label class="editor-toggle" title="A smooth 4% push-in over the first three seconds."><input type="checkbox" id="editorOpeningPushIn" ' + (project.openingPushInEnabled !== false ? 'checked' : '') + '><span></span>Subtle opening push-in</label>' : '') +
       '<label class="editor-mode">Pacing<select id="editorPacing"><option value="tight"' + (Number(project.silenceThresholdSeconds) < 0.85 ? ' selected' : '') + '>Tight</option><option value="natural"' + (Number(project.silenceThresholdSeconds || 1) >= 0.85 && Number(project.silenceThresholdSeconds || 1) < 1.3 ? ' selected' : '') + '>Natural</option><option value="gentle"' + (Number(project.silenceThresholdSeconds || 1) >= 1.3 ? ' selected' : '') + '>Gentle</option></select></label>' +
       '<button type="button" class="btn-secondary btn-tiny editor-clear-automation" id="editorClearAutomation" ' + (!automaticCutsPresent ? 'disabled' : '') + ' title="Restore every pause and retake removed automatically. Manual transcript cuts stay intact.">Restore automatic cuts</button></div>';
+    var selectedAudioExists = project.audioTrackId === '__none__' || audioTracks.some(function (track) { return track.id === project.audioTrackId; });
+    var audioSelectionReady = !!project.audioTrackId && selectedAudioExists;
+    var audioPanelHtml = '<section class="editor-audio-panel"><div><div class="eyebrow">Backing audio</div><h3>Choose the soundtrack against this edit</h3><span>Every preview uses the saved production loudness settings. Switching tracks restarts the same video from the beginning.</span></div>' +
+      '<div class="editor-audio-picker"><button type="button" class="btn-secondary btn-tiny" id="editorAudioPrevious" disabled>← Previous</button><select id="editorAudioTrack" class="stage-select" ' + (project.renderStatus !== 'ready' || sentToProduction ? 'disabled' : '') + '><option value="">Preparing soundtrack previews…</option></select><button type="button" class="btn-secondary btn-tiny" id="editorAudioNext" disabled>Next →</button></div>' +
+      '<div class="editor-audio-progress loading" id="editorAudioProgress"><i></i><span>' + (project.renderStatus === 'ready' ? 'Loading audio previews 0/' + audioTracks.length : 'Available when the final edit is ready') + '</span></div><audio id="editorMixedAudio" preload="auto" hidden></audio></section>';
     var previewPlayerHtml = '<div class="editor-preview" id="editorPreview" tabindex="0" aria-label="Video review. Space plays or pauses. Left and right arrows move two seconds."><div class="editor-video-frame ' + layout + '"><video id="editorVideo" data-preview-mode="' + previewMode + '" data-seek-time="' + previewSeek.toFixed(3) + '" playsinline preload="metadata" src="' + previewUrl + '"></video>' +
       (previewMode === 'source' ? punchFocusHtml(project, focusedPunchId) : '') + '<div class="editor-caption" id="editorCaption"></div>' +
       '<div class="editor-player-controls" id="editorPlayerControls"><button type="button" class="editor-player-icon" id="editorPlayerPlay" aria-label="Play">▶</button><span id="editorPlayerCurrent">0:00</span><input type="range" id="editorPlayerSeek" min="0" max="1" step="0.01" value="0" aria-label="Video position"><span id="editorPlayerDuration">' + formatTime(previewMode === 'final' ? editedDuration(project) : project.duration) + '</span><i id="editorPlayerBuffering" hidden>Loading</i><button type="button" class="editor-player-icon" id="editorPlayerMute" aria-label="Mute">VOL</button><button type="button" class="editor-player-icon" id="editorPlayerFullscreen" aria-label="Full screen">⛶</button></div>' +
@@ -845,7 +919,7 @@
     workspace.innerHTML =
       '<div class="editor-topbar"><div><h2>' + esc(displayName(project)) + '</h2><span>' + (project.planningPieceTitle ? esc(project.name) + ' · ' : '') + formatTime(project.duration) + ' original · ' + formatTime(editedDuration(project)) + ' edited · ' + cutSeconds.toFixed(1) + 's removed' + (formatBytes(project.sizeBytes) ? ' · ' + formatBytes(project.sizeBytes) + ' source' : '') + '</span></div>' +
         '<div class="editor-topbar-actions"><div class="editor-project-nav"><button type="button" class="btn-secondary btn-tiny" id="editorPreviousProject" ' + (reviewProjectIndex <= 0 ? 'disabled' : '') + '>← Previous</button><span id="editorProjectPosition">' + (reviewProjectIndex >= 0 ? (reviewProjectIndex + 1) + ' of ' + reviewProjects.length : '') + '</span><button type="button" class="btn-secondary btn-tiny" id="editorNextProject" ' + (reviewProjectIndex < 0 || reviewProjectIndex >= reviewProjects.length - 1 ? 'disabled' : '') + '>Next →</button></div>' +
-          (!sentToProduction && project.renderStatus === 'ready' ? '<button type="button" class="btn-primary btn-tiny editor-quick-approve" data-editor-approve>Approve &amp; next</button>' : '') +
+          (!sentToProduction && project.renderStatus === 'ready' ? '<button type="button" class="btn-primary btn-tiny editor-quick-approve" data-editor-approve ' + (!audioSelectionReady ? 'disabled title="Choose backing audio first"' : '') + '>Approve &amp; next</button>' : '') +
           '<span class="editor-save-state ' + esc(saveStates[project.id] || '') + '" id="editorSaveState">' + ({ saving: 'Saving…', saved: 'Saved', error: 'Save failed' }[saveStates[project.id]] || '') + '</span><button class="editor-delete" id="editorDelete">' + (sentToProduction ? 'Remove Editor files' : 'Delete recording') + '</button></div></div>' +
       (rendering ? '<div class="editor-lock-notice"><strong>Final edit is encoding</strong><span>Review remains available. Editing unlocks as soon as the verified file is ready.</span></div>' : '') +
       (project.browserPreviewRequired && ['pending', 'running'].indexOf(project.browserPreviewStatus) !== -1 && previewMode === 'source' ? '<div class="editor-lock-notice"><strong>Preparing a browser-safe source preview</strong><span>The camera master is preserved and final editing continues. This view will switch to H.264 automatically when ready.</span></div>' : '') +
@@ -859,6 +933,7 @@
         (project.planningMatchStatus !== 'running' && project.planningMatchStatus !== 'pending' ? '<button type="button" class="editor-analyze" id="editorMatchPlan">Match again</button>' : '') + '</section>' +
       (layout === 'horizontal' ? '<div class="editor-preview-toolbar">' + previewActionsHtml + '</div>' : '') +
       previewStageHtml +
+      audioPanelHtml +
       '<section class="editor-automation"><div class="editor-automation-head"><div><div class="eyebrow">Automatic edit</div><h3>Speech and pause map</h3></div><div class="editor-legend"><span class="speech">Speech</span><span class="cut">Removed pause</span><span class="pause">Kept pause</span><span class="punch">Punch-in</span></div></div>' + timelineHtml(project) +
         (layout === 'horizontal' ? automaticControlsHtml : '') + '</section>' +
       '<section class="editor-review"><div class="editor-review-column"><div class="editor-section-title"><div><div class="eyebrow">Pause decisions</div><h3>Every automatic silence cut</h3></div><span>Red means removed</span></div><div id="editorGapReview">' + gapReviewHtml(project) + '</div></div>' +
@@ -873,14 +948,14 @@
           return '<span class="editor-word' + (removed.has(word.index) ? ' removed' : '') + (word.originalText ? ' corrected' : '') + '" data-index="' + word.index + '" data-start="' + word.start + '" data-end="' + word.end + '"' + (word.originalText ? ' title="Originally transcribed as: ' + esc(word.originalText) + '"' : '') + '>' + esc(word.text) + '</span> ';
         }).join('') + '</div><p class="editor-selection-hint">Drag across text or click words, then cut or punch in. Press Delete to cut, Ctrl/⌘ Z to undo, or Escape to clear.</p></section>' +
       '<div class="editor-export"><div><strong>Next: Content Production</strong><span>' +
-        (project.productionPieceId ? 'This edit is ready in Content Production for titles, thumbnail, and ambient music.' :
-          project.renderStatus === 'ready' ? 'Send the finished edit across without uploading it again.' :
+        (project.productionPieceId ? 'This edit is ready in Content Production for titles and thumbnail selection.' :
+          project.renderStatus === 'ready' ? (audioSelectionReady ? 'Soundtrack selected. Send the finished edit across without uploading it again.' : 'Choose a backing track or No backing music before approval.') :
           'Build the final edit first. Yellow captions will be baked in below center.') + '</span>' +
-        '<div class="editor-readiness"><i class="ready">Transcript ready</i>' + framingReadiness + retakeReadiness + planReadiness + (project.renderStatus === 'ready' ? '<i class="ready">Output verified</i>' : '') + '</div>' +
+        '<div class="editor-readiness"><i class="ready">Transcript ready</i>' + framingReadiness + retakeReadiness + planReadiness + (project.renderStatus === 'ready' ? '<i class="ready">Output verified</i>' : '') + (audioSelectionReady ? '<i class="ready">Soundtrack chosen</i>' : '<i class="review">Soundtrack needed</i>') + '</div>' +
         (['queued', 'running'].indexOf(project.renderStatus) !== -1 ? '<div class="editor-render-progress"><span id="editorRenderProgressLabel">' + (project.renderStatus === 'queued' ? (Number(project.renderQueuePosition) > 1 ? (Number(project.renderQueuePosition) - 1) + ' recording(s) ahead in the render queue' : 'Next in the render queue') : 'Encoding final edit · ' + Math.round(Number(project.renderProgress) || 0) + '%') + '</span><div><i id="editorRenderProgressBar" style="width:' + (project.renderStatus === 'queued' ? 4 : Math.max(2, Number(project.renderProgress) || 0)) + '%"></i></div></div>' : '') +
         (project.renderStatus === 'error' ? '<em>' + esc(project.renderError) + '</em>' : '') + '</div><div class="editor-export-actions">' +
         (project.productionPieceId ? '<button class="btn-primary" id="editorOpenProduction">Open Content Production</button>' :
-          project.renderStatus === 'ready' ? '<button class="btn-primary" id="editorSendProduction" data-editor-approve>Approve &amp; Send to Production</button>' :
+          project.renderStatus === 'ready' ? '<button class="btn-primary" id="editorSendProduction" data-editor-approve ' + (!audioSelectionReady ? 'disabled title="Choose backing audio first"' : '') + '>Approve &amp; Send to Production</button>' :
           '<button class="btn-primary" id="editorRender" ' + (['queued', 'running'].indexOf(project.renderStatus) !== -1 || renderBlocked ? 'disabled' : '') + '>' + (project.renderStatus === 'queued' ? 'Waiting in render queue…' : project.renderStatus === 'running' ? 'Building final edit… ' + Math.round(Number(project.renderProgress) || 0) + '%' : renderButtonText) + '</button>') +
         '</div></div>';
     bindWorkspace();
@@ -907,8 +982,110 @@
     var playerBuffering = root.querySelector('#editorPlayerBuffering');
     var playerMute = root.querySelector('#editorPlayerMute');
     var playerFullscreen = root.querySelector('#editorPlayerFullscreen');
+    var mixedAudio = root.querySelector('#editorMixedAudio');
+    var audioTrackSelect = root.querySelector('#editorAudioTrack');
+    var audioPrevious = root.querySelector('#editorAudioPrevious');
+    var audioNext = root.querySelector('#editorAudioNext');
+    var audioProgress = root.querySelector('#editorAudioProgress');
+    var audioBatch = project.renderStatus === 'ready' ? ensureAudioPreviewBatch(project) : null;
     var playerScrubbing = false;
     var bufferingTimer = null;
+    function activeMixedPreviewUrl() {
+      return previewingFinal && project.audioTrackId && project.audioTrackId !== '__none__' && audioBatch && audioBatch.urls[project.audioTrackId] || '';
+    }
+    function mixedPreviewActive() {
+      return !!(mixedAudio && mixedAudio.src && activeMixedPreviewUrl());
+    }
+    function playerIsMuted() {
+      return mixedPreviewActive() ? mixedAudio.muted : video.muted;
+    }
+    function configureSelectedAudio(restart, playNow) {
+      var url = activeMixedPreviewUrl();
+      if (!url) {
+        if (mixedAudio) { mixedAudio.pause(); mixedAudio.removeAttribute('src'); mixedAudio.load(); }
+        video.muted = false;
+        if (restart) video.currentTime = 0;
+        if (playNow) video.play().catch(function () {});
+        return;
+      }
+      if (mixedAudio.src !== url) mixedAudio.src = url;
+      mixedAudio.playbackRate = reviewRate;
+      video.muted = true;
+      if (restart) video.currentTime = 0;
+      try { mixedAudio.currentTime = video.currentTime || 0; } catch (error) {}
+      if (playNow) {
+        Promise.all([video.play(), mixedAudio.play()]).catch(function () { video.pause(); mixedAudio.pause(); });
+      }
+    }
+    function readyAudioTracks() {
+      return audioTracks.filter(function (track) { return audioBatch && audioBatch.urls[track.id]; });
+    }
+    function paintAudioPanel() {
+      if (!audioTrackSelect || !audioProgress) return;
+      if (!project || project.id !== videoProjectId || !audioTrackSelect.isConnected) return;
+      var sent = !!project.productionPieceId;
+      var ready = readyAudioTracks();
+      var options = [];
+      if (!project.audioTrackId) options.push('<option value="">Choose backing audio</option>');
+      options.push('<option value="__none__">No backing music</option>');
+      ready.forEach(function (track) { options.push('<option value="' + esc(track.id) + '" title="' + esc(track.note || '') + '">' + esc(track.name) + '</option>'); });
+      if (project.audioTrackId && project.audioTrackId !== '__none__' && !ready.some(function (track) { return track.id === project.audioTrackId; })) {
+        var pendingTrack = audioTracks.find(function (track) { return track.id === project.audioTrackId; });
+        options.push('<option value="' + esc(project.audioTrackId) + '" disabled>' + esc(pendingTrack ? pendingTrack.name + ' · preparing…' : 'Selected track unavailable') + '</option>');
+      }
+      audioTrackSelect.innerHTML = options.join('');
+      audioTrackSelect.value = project.audioTrackId || '';
+      if (project.renderStatus !== 'ready') {
+        audioTrackSelect.disabled = true;
+        audioProgress.className = 'editor-audio-progress';
+        audioProgress.querySelector('span').textContent = 'Available when the final edit is ready';
+      } else if (!audioTracks.length) {
+        audioTrackSelect.disabled = sent;
+        audioProgress.className = 'editor-audio-progress';
+        audioProgress.querySelector('span').textContent = 'No backing tracks are currently in the library';
+      } else if (audioBatch && audioBatch.building) {
+        audioTrackSelect.disabled = true;
+        audioProgress.className = 'editor-audio-progress loading';
+        audioProgress.querySelector('span').textContent = 'Loading audio previews ' + audioBatch.completed + '/' + audioBatch.total;
+      } else {
+        audioTrackSelect.disabled = sent;
+        audioProgress.className = 'editor-audio-progress ready';
+        audioProgress.querySelector('span').textContent = ready.length + ' soundtrack preview' + (ready.length === 1 ? '' : 's') + ' ready' + (audioBatch && audioBatch.failed ? ' · ' + audioBatch.failed + ' failed' : '') + '. Switching is instant.';
+      }
+      var currentIndex = ready.findIndex(function (track) { return track.id === project.audioTrackId; });
+      audioPrevious.disabled = sent || ready.length < 2 || currentIndex < 0;
+      audioNext.disabled = sent || ready.length < 2 || currentIndex < 0;
+      configureSelectedAudio(false, !video.paused);
+      syncPlayerControls();
+    }
+    activeAudioPanelRefresh = paintAudioPanel;
+    paintAudioPanel();
+    function selectReadyTrack(offset) {
+      var ready = readyAudioTracks();
+      if (!ready.length) return;
+      var index = ready.findIndex(function (track) { return track.id === project.audioTrackId; });
+      index = index < 0 ? 0 : (index + offset + ready.length) % ready.length;
+      audioTrackSelect.value = ready[index].id;
+      audioTrackSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    if (audioPrevious) audioPrevious.onclick = function () { selectReadyTrack(-1); };
+    if (audioNext) audioNext.onclick = function () { selectReadyTrack(1); };
+    if (audioTrackSelect) audioTrackSelect.onchange = function () {
+      var selectedTrackId = audioTrackSelect.value;
+      if (!selectedTrackId) return;
+      project.audioTrackId = selectedTrackId;
+      if (!previewingFinal && selectedTrackId !== '__none__') {
+        save({ audioTrackId: selectedTrackId }, { skipWorkspaceRender: true });
+        previewModes[project.id] = 'final';
+        delete explicitSourcePreviews[project.id];
+        previewSeekTimes[project.id] = 0;
+        renderWorkspace();
+        return;
+      }
+      configureSelectedAudio(true, true);
+      paintAudioPanel();
+      save({ audioTrackId: selectedTrackId }, { skipWorkspaceRender: true });
+    };
     function syncPlayerControls() {
       var duration = Number(video.duration) || Number(previewingFinal ? project.editedDuration : project.duration) || 0;
       if (playerSeek) {
@@ -924,8 +1101,9 @@
         playerPlay.setAttribute('aria-label', video.paused ? 'Play' : 'Pause');
       }
       if (playerMute) {
-        playerMute.textContent = video.muted ? 'MUTED' : 'VOL';
-        playerMute.setAttribute('aria-label', video.muted ? 'Unmute' : 'Mute');
+        var muted = playerIsMuted();
+        playerMute.textContent = muted ? 'MUTED' : 'VOL';
+        playerMute.setAttribute('aria-label', muted ? 'Unmute' : 'Mute');
       }
     }
     function hideBuffering() {
@@ -937,7 +1115,7 @@
       if (!playerBuffering || bufferingTimer) return;
       bufferingTimer = setTimeout(function () {
         bufferingTimer = null;
-        if (!video.paused && video.readyState < 3) playerBuffering.hidden = false;
+        if (!video.paused && (video.readyState < 3 || (mixedPreviewActive() && mixedAudio.readyState < 3))) playerBuffering.hidden = false;
       }, 160);
     }
     if (playerPlay) playerPlay.onclick = function () {
@@ -956,7 +1134,11 @@
         playerSeek.addEventListener(name, function () { playerScrubbing = false; syncPlayerControls(); });
       });
     }
-    if (playerMute) playerMute.onclick = function () { video.muted = !video.muted; syncPlayerControls(); };
+    if (playerMute) playerMute.onclick = function () {
+      if (mixedPreviewActive()) mixedAudio.muted = !mixedAudio.muted;
+      else video.muted = !video.muted;
+      syncPlayerControls();
+    };
     if (playerFullscreen) playerFullscreen.onclick = function () {
       if (document.fullscreenElement) document.exitFullscreen().catch(function () {});
       else if (videoFrame.requestFullscreen) videoFrame.requestFullscreen().catch(function () {});
@@ -970,6 +1152,14 @@
     video.addEventListener('canplay', hideBuffering);
     video.addEventListener('durationchange', syncPlayerControls);
     video.addEventListener('volumechange', syncPlayerControls);
+    if (mixedAudio) {
+      mixedAudio.addEventListener('volumechange', syncPlayerControls);
+      mixedAudio.addEventListener('waiting', showBufferingSoon);
+      mixedAudio.addEventListener('stalled', showBufferingSoon);
+      mixedAudio.addEventListener('playing', hideBuffering);
+      mixedAudio.addEventListener('canplay', hideBuffering);
+      mixedAudio.addEventListener('ended', function () { video.pause(); });
+    }
     var previousProjectButton = root.querySelector('#editorPreviousProject');
     var nextProjectButton = root.querySelector('#editorNextProject');
     if (previousProjectButton) previousProjectButton.onclick = function () {
@@ -1075,19 +1265,30 @@
     }
     video.addEventListener('play', function () {
       hideBuffering();
+      if (mixedPreviewActive()) {
+        if (Math.abs((mixedAudio.currentTime || 0) - (video.currentTime || 0)) > 0.15) mixedAudio.currentTime = video.currentTime || 0;
+        mixedAudio.play().catch(function () { video.pause(); });
+      }
       syncPlayerControls();
       if (motionAnimationFrame === null) motionAnimationFrame = requestAnimationFrame(animatePreviewMotion);
     });
     video.addEventListener('pause', function () {
+      if (mixedPreviewActive()) mixedAudio.pause();
       if (motionAnimationFrame !== null) cancelAnimationFrame(motionAnimationFrame);
       motionAnimationFrame = null;
       updatePreviewMotion(previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime);
       syncPlayerControls();
     });
     video.addEventListener('seeked', function () {
+      if (mixedPreviewActive()) {
+        try { mixedAudio.currentTime = video.currentTime || 0; } catch (error) {}
+      }
       updatePreviewMotion(previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime);
     });
     video.addEventListener('timeupdate', function () {
+      if (mixedPreviewActive() && !video.paused && Math.abs((mixedAudio.currentTime || 0) - (video.currentTime || 0)) > 0.25) {
+        try { mixedAudio.currentTime = video.currentTime || 0; } catch (error) {}
+      }
       if (Number.isFinite(previewStopTimes[project.id]) && video.currentTime >= previewStopTimes[project.id]) {
         video.pause();
         delete previewStopTimes[project.id];
@@ -1220,6 +1421,7 @@
       reviewRate = Number(this.value) || 1;
       localStorage.setItem('rmEditorReviewRate', String(reviewRate));
       video.playbackRate = reviewRate;
+      if (mixedAudio) mixedAudio.playbackRate = reviewRate;
     };
     root.querySelector('#editorPreview').addEventListener('keydown', function (event) {
       if (event.target.closest('select, button, input')) return;
@@ -1761,7 +1963,8 @@
     });
   }
 
-  function queueProjectUpdate(id, operation) {
+  function queueProjectUpdate(id, operation, options) {
+    options = options || {};
     saveStates[id] = 'saving';
     var stateNode = root.querySelector('#editorSaveState');
     if (stateNode && project && project.id === id) { stateNode.className = 'editor-save-state saving'; stateNode.textContent = 'Saving…'; }
@@ -1774,7 +1977,12 @@
       projects = projects.map(function (entry) { return entry.id === item.id ? item : entry; });
       renderList();
       if (project && project.id === id) {
-        project = item; renderWorkspace();
+        project = item;
+        if (!options.skipWorkspaceRender) renderWorkspace();
+        else {
+          var stateNode = root.querySelector('#editorSaveState');
+          if (stateNode) { stateNode.className = 'editor-save-state saved'; stateNode.textContent = 'Saved'; }
+        }
         // The server starts a replacement render immediately after an edit.
         // Its PATCH response can arrive just before that queued status is
         // persisted, so fetch once more rather than leaving a hands-off
@@ -1798,7 +2006,7 @@
     return request;
   }
 
-  function save(patch) {
+  function save(patch, options) {
     var id = project.id;
     var mutationId = window.crypto && typeof window.crypto.randomUUID === 'function'
       ? window.crypto.randomUUID()
@@ -1808,6 +2016,7 @@
     var renderWillChange = typeof patch === 'function' || renderKeys.some(function (key) {
       return patch && Object.prototype.hasOwnProperty.call(patch, key);
     });
+    if (renderWillChange) releaseAudioPreviewBatch(id);
     rememberPlaybackBeforeEdit(id, renderWillChange);
     return queueProjectUpdate(id, function () {
       var latest = project && project.id === id ? project : projectDetails[id] || projects.find(function (item) { return item.id === id; });
@@ -1832,7 +2041,7 @@
         });
       }
       return attempt(latest || {}, true);
-    });
+    }, options);
   }
 
   window.RMEditor = {
@@ -1846,7 +2055,7 @@
       // flight must remain the predecessor of any new edit made immediately
       // after returning, or two browser requests can race despite serialization
       // within each individual mount.
-      root = element; projects = []; project = null; selected.clear(); renderRefreshTimers = {}; previewSeekTimes = {}; restoreTranscriptFocus = false;
+      root = element; projects = []; project = null; selected.clear(); renderRefreshTimers = {}; previewSeekTimes = {}; restoreTranscriptFocus = false; activeAudioPanelRefresh = null;
       shell();
       loadProjects().catch(function (error) {
         var workspace = root && root.querySelector('#editorWorkspace');

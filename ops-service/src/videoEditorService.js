@@ -16,6 +16,7 @@ const OPENING_PUSH_IN_SCALE = 1.04;
 const PUNCH_TRANSITION_SECONDS = 0.28;
 const EDITOR_RENDER_VERSION = 5;
 const BROWSER_PREVIEW_VERSION = 2;
+const AUDIO_PREVIEW_TTL_MS = 2 * 60 * 60 * 1000;
 
 function requiredEditorCapacity(fileBytes, fileAlreadyStored) {
   const bytes = Math.max(0, Number(fileBytes) || 0);
@@ -99,6 +100,30 @@ function createPriorityTaskQueue() {
     enqueue: function (task, priority) {
       return new Promise(function (resolve, reject) {
         (priority === 'urgent' ? urgent : normal).push({ task: task, resolve: resolve, reject: reject });
+        setImmediate(pump);
+      });
+    }
+  };
+}
+
+function createConcurrentTaskQueue(limit) {
+  const waiting = [];
+  let running = 0;
+  limit = Math.max(1, Math.floor(Number(limit) || 1));
+  function pump() {
+    while (running < limit && waiting.length) {
+      const entry = waiting.shift();
+      running++;
+      Promise.resolve().then(entry.task).then(entry.resolve, entry.reject).finally(function () {
+        running--;
+        pump();
+      });
+    }
+  }
+  return {
+    enqueue: function (task) {
+      return new Promise(function (resolve, reject) {
+        waiting.push({ task: task, resolve: resolve, reject: reject });
         setImmediate(pump);
       });
     }
@@ -827,6 +852,10 @@ function setup(options) {
   const onRenderInvalidated = options.onRenderInvalidated;
   const onPlanningPieceChanged = options.onPlanningPieceChanged;
   const onProjectDeleted = options.onProjectDeleted;
+  const getAudioTracks = options.getAudioTracks;
+  const getAudioTrackPath = options.getAudioTrackPath;
+  const getAudioMixSettings = options.getAudioMixSettings;
+  const buildAudioPreview = options.buildAudioPreview;
   if (!db || !dataDir || typeof transcribeDetailed !== 'function') throw new Error('video editor setup is incomplete');
   const router = express.Router();
   const rootDir = path.join(dataDir, 'editor');
@@ -858,6 +887,9 @@ function setup(options) {
   const renderPreviewJobs = new Map();
   const renderJobs = new Map();
   const productionJobs = new Map();
+  const audioPreviewJobs = new Map();
+  const audioPreviewCache = new Map();
+  const audioPreviewQueue = createConcurrentTaskQueue(2);
   // Browser proxies and final masters are both sustained FFmpeg encodes. One
   // priority queue prevents CPU contention while letting an approval-ready
   // final take the next slot ahead of proxies that have not started yet.
@@ -872,6 +904,51 @@ function setup(options) {
   let retakeChain = Promise.resolve();
   let planningMatchChain = Promise.resolve();
 
+  function pruneAudioPreviewCache(projectId) {
+    const now = Date.now();
+    audioPreviewCache.forEach(function (entry, key) {
+      if ((projectId && entry.projectId === projectId) || entry.expiresAt <= now || !fs.existsSync(entry.path)) {
+        audioPreviewCache.delete(key);
+        fs.rm(entry.path, { force: true }, function () {});
+      }
+    });
+  }
+  const audioPreviewCleanupTimer = setInterval(function () { pruneAudioPreviewCache(); }, 10 * 60 * 1000);
+  if (typeof audioPreviewCleanupTimer.unref === 'function') audioPreviewCleanupTimer.unref();
+
+  async function editorAudioPreview(project, trackId) {
+    if (typeof getAudioTrackPath !== 'function' || typeof getAudioMixSettings !== 'function' || typeof buildAudioPreview !== 'function') {
+      throw new Error('Backing-audio previews are unavailable.');
+    }
+    const trackPath = getAudioTrackPath(trackId);
+    if (!trackPath || !fs.existsSync(trackPath)) throw new Error('That backing track is no longer available.');
+    const settings = getAudioMixSettings() || {};
+    const settingsHash = crypto.createHash('sha256').update(JSON.stringify(settings)).digest('hex');
+    const key = [project.id, project.renderSha256, trackId, settingsHash].join(':');
+    pruneAudioPreviewCache();
+    const cached = audioPreviewCache.get(key);
+    if (cached && fs.existsSync(cached.path)) {
+      cached.expiresAt = Date.now() + AUDIO_PREVIEW_TTL_MS;
+      return cached.path;
+    }
+    if (audioPreviewJobs.has(key)) return audioPreviewJobs.get(key);
+    const job = audioPreviewQueue.enqueue(async function () {
+      const outPath = path.join(tempDir, 'editor-audio-preview-' + crypto.randomUUID() + '.mp3');
+      try {
+        await buildAudioPreview(renderPath(project.id), trackPath, outPath, settings, { bitrate: '48k' });
+        const stat = fs.statSync(outPath);
+        if (!stat.isFile() || stat.size <= 512) throw new Error('The backing-audio preview was empty.');
+        audioPreviewCache.set(key, { path: outPath, projectId: project.id, expiresAt: Date.now() + AUDIO_PREVIEW_TTL_MS });
+        return outPath;
+      } catch (error) {
+        fs.rm(outPath, { force: true }, function () {});
+        throw error;
+      }
+    }).finally(function () { audioPreviewJobs.delete(key); });
+    audioPreviewJobs.set(key, job);
+    return job;
+  }
+
   function invalidateProjectRender(project) {
     const hadVerifiedRender = project && project.renderStatus === 'ready';
     if (hadVerifiedRender && typeof onRenderInvalidated === 'function') {
@@ -880,6 +957,7 @@ function setup(options) {
     }
     const invalidated = invalidateRender(project);
     if (project && project.id && isId(project.id)) {
+      pruneAudioPreviewCache(project.id);
       try { fs.rmSync(renderPath(project.id), { force: true }); } catch (error) {}
       try { fs.rmSync(renderPreviewPath(project.id), { force: true }); } catch (error) {}
       project.renderPreviewStatus = '';
@@ -1753,6 +1831,7 @@ async function renderProject(id) {
         renderPreviewStatus: '',
         renderPreviewError: '',
         renderPreviewVersion: 0,
+        audioTrackId: '',
         editRevision: 0,
         createdAt: now,
         updatedAt: now
@@ -1766,6 +1845,18 @@ async function renderProject(id) {
       fs.rm(projectDir(id), { recursive: true, force: true }, function () {});
       res.status(422).json({ error: 'invalid_recording', message: String(err.message || err) });
     }
+  });
+
+  router.get('/audio-tracks', function (req, res) {
+    if (typeof getAudioTracks !== 'function') return res.status(501).json({ error: 'audio_library_unavailable' });
+    const tracks = (getAudioTracks() || []).filter(function (track) {
+      return track && isId(track.id) && typeof getAudioTrackPath === 'function' && fs.existsSync(getAudioTrackPath(track.id) || '');
+    }).map(function (track) {
+      return { id: track.id, name: String(track.name || track.fileName || 'Untitled track').slice(0, 200), note: String(track.note || '').slice(0, 500) };
+    }).sort(function (a, b) { return a.name.localeCompare(b.name); });
+    const settings = typeof getAudioMixSettings === 'function' ? getAudioMixSettings() || {} : {};
+    const mixVersion = crypto.createHash('sha256').update(JSON.stringify(settings)).digest('hex').slice(0, 16);
+    res.json({ tracks: tracks, mixVersion: mixVersion });
   });
 
   router.get('/:id', function (req, res) {
@@ -1858,6 +1949,16 @@ async function renderProject(id) {
     if (['auto', 'vertical', 'horizontal'].includes(req.body && req.body.layoutOverride)) project.layoutOverride = req.body.layoutOverride;
     if (['auto', 'ultra_short', 'short', 'long_short', 'longform'].includes(req.body && req.body.contentTypeOverride)) project.contentTypeOverride = req.body.contentTypeOverride;
     if (Array.isArray(req.body && req.body.punchIns)) project.punchIns = normalizePunchIns(req.body.punchIns, project.duration);
+    if (typeof (req.body && req.body.audioTrackId) === 'string') {
+      const requestedTrackId = req.body.audioTrackId;
+      const available = typeof getAudioTracks === 'function' ? (getAudioTracks() || []) : [];
+      if (requestedTrackId && requestedTrackId !== '__none__' && !available.some(function (track) { return track && track.id === requestedTrackId; })) {
+        return res.status(400).json({ error: 'invalid_audio_track', message: 'Choose an available backing track or No backing music.' });
+      }
+      project.audioTrackId = requestedTrackId;
+      if (requestedTrackId && typeof getAudioMixSettings === 'function') project.audioMixSettings = getAudioMixSettings() || {};
+      if (!requestedTrackId) delete project.audioMixSettings;
+    }
     project.silenceThresholdSeconds = nextSilenceThresholdSeconds;
     project.retainedPauseSeconds = nextRetainedPauseSeconds;
     if (typeof (req.body && req.body.planningPieceId) === 'string' && typeof getPlanningCandidates === 'function') {
@@ -2031,6 +2132,12 @@ async function renderProject(id) {
     if (project.renderStatus !== 'ready' || !fs.existsSync(renderPath(project.id))) {
       return res.status(409).json({ error: 'render_not_ready', message: 'Finish the edit before sending it to production.' });
     }
+    if (!project.audioTrackId) {
+      return res.status(409).json({ error: 'audio_track_required', message: 'Choose a backing track or No backing music before sending this edit to Production.' });
+    }
+    if (project.audioTrackId !== '__none__' && (typeof getAudioTrackPath !== 'function' || !fs.existsSync(getAudioTrackPath(project.audioTrackId) || ''))) {
+      return res.status(409).json({ error: 'audio_track_missing', message: 'The selected backing track is no longer available. Choose another track.' });
+    }
     if (!(await verifiedRenderMatches(project, renderPath(project.id)))) {
       invalidateProjectRender(project);
       saveProject(project);
@@ -2105,6 +2212,28 @@ async function renderProject(id) {
     res.sendFile(useProxy ? previewPath(req.params.id) : sourcePath(req.params.id));
   });
 
+  router.post('/:id/audio-preview/:trackId', async function (req, res) {
+    if (!isId(req.params.id) || !isId(req.params.trackId)) return res.status(400).json({ error: 'invalid_params' });
+    const project = getProject(req.params.id);
+    if (!project) return res.status(404).json({ error: 'not_found' });
+    if (project.renderStatus !== 'ready' || !project.renderSha256 || !fs.existsSync(renderPath(project.id))) {
+      return res.status(409).json({ error: 'render_not_ready', message: 'The verified final edit must be ready before its soundtrack previews can be mixed.' });
+    }
+    const renderSha256 = project.renderSha256;
+    try {
+      const previewPath = await editorAudioPreview(project, req.params.trackId);
+      const current = getProject(project.id);
+      if (!current || current.renderStatus !== 'ready' || current.renderSha256 !== renderSha256) {
+        return res.status(409).json({ error: 'render_changed', message: 'The edit changed while this soundtrack preview was building.' });
+      }
+      res.type('audio/mpeg');
+      res.set('Cache-Control', 'private, max-age=7200');
+      res.sendFile(previewPath);
+    } catch (error) {
+      res.status(422).json({ error: 'audio_preview_failed', message: String(error.message || error).slice(0, 500) });
+    }
+  });
+
   router.get('/:id/render', function (req, res) {
     if (!isId(req.params.id) || !fs.existsSync(renderPath(req.params.id))) return res.status(404).end();
     const project = getProject(req.params.id);
@@ -2132,6 +2261,7 @@ async function renderProject(id) {
       catch (error) { return res.status(422).json({ error: 'workflow_cleanup_failed', message: 'The linked planning card could not be reconciled, so the recording was kept safely.' }); }
     }
     if (automaticRenderTimers.has(req.params.id)) { clearTimeout(automaticRenderTimers.get(req.params.id)); automaticRenderTimers.delete(req.params.id); }
+    pruneAudioPreviewCache(req.params.id);
     delStmt.run(STORE_NAME, req.params.id);
     fs.rm(projectDir(req.params.id), { recursive: true, force: true }, function () {});
     res.json({ ok: true });

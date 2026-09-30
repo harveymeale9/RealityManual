@@ -2014,10 +2014,10 @@
       scheduleStatus.textContent = p.scheduledAt ? ('Posted ' + fmtFull(p.scheduledAt)) : 'Posted — connect an API in Settings to confirm.';
     } else if (p.stage === 'final_check') {
       scheduleStatus.textContent = 'In Final Check — review the video, then approve to schedule it.';
-    } else if (!p.audioTrackId) {
+    } else if (!p.audioTrackId && !p.editorProjectId) {
       scheduleStatus.textContent = 'Pick a backing audio track and a thumbnail, then send it to Final Check.';
     } else if (!p.thumbnailDataUrl) {
-      scheduleStatus.textContent = 'Audio picked — pick a thumbnail frame, then send it to Final Check.';
+      scheduleStatus.textContent = (p.editorProjectId ? 'Backing audio came from Editor' : 'Audio picked') + ' — pick a thumbnail frame, then send it to Final Check.';
     } else {
       scheduleStatus.textContent = 'Ready — head to the Upload Files list to send this to Final Check.';
     }
@@ -2047,11 +2047,16 @@
 
     if (!p.hasVideo) {
       videoSection.hidden = true;
+      fieldAudioTrack.closest('.field').hidden = false;
       videoPreview.removeAttribute('src');
       return Promise.resolve();
     }
 
     videoSection.hidden = false;
+    // Editor-origin videos already carry the soundtrack Harvey auditioned and
+    // approved there. The shared legacy modal must not offer a second place
+    // to contradict that choice, but it retains the saved value underneath.
+    fieldAudioTrack.closest('.field').hidden = !!p.editorProjectId;
     thumbScrub.hidden = true;
     fieldTranscript.value = p.transcript || '';
     thumbPreview.innerHTML = p.thumbnailDataUrl ? ('<img src="' + p.thumbnailDataUrl + '" alt="" />') : '<span class="thumb-empty">No thumbnail yet</span>';
@@ -3945,7 +3950,9 @@
 
     row.appendChild(head);
     row.appendChild(frameSection);
-    row.appendChild(audioSection);
+    // Editor-origin videos already carry the reviewed soundtrack choice.
+    // Keep this picker only for legacy/direct uploads that bypass Editor.
+    if (!p.editorProjectId) row.appendChild(audioSection);
     row.appendChild(titlesSection);
     row.appendChild(actionSection);
     return row;
