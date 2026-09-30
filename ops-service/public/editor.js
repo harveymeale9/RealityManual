@@ -429,10 +429,10 @@
     var end = Math.max(start, Number(punch.end) || 0);
     var duration = end - start;
     if (duration <= 0 || sourceTime < start || sourceTime >= end) return 1;
-    var transition = Math.max(0.001, Math.min(0.28, duration / 2));
+    var transition = Math.max(0.001, Math.min(0.45, duration / 2));
     function smooth(value) {
       var progress = Math.max(0, Math.min(1, value));
-      return progress * progress * (3 - 2 * progress);
+      return progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
     }
     var weight = Math.min(smooth((sourceTime - start) / transition), smooth((end - sourceTime) / transition));
     return 1 + ((Number(punch.zoom) || 1.18) - 1) * weight;

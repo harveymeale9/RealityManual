@@ -14520,3 +14520,46 @@ five-second benchmark took 2.68 seconds versus 1.94 seconds for the old path,
 substantially cheaper than the equivalent two-times supersampled workaround at
 5.42 seconds. The browser preview already uses a fractional CSS transform and
 GPU transform hint, so no separate visual curve is introduced there.
+
+---
+
+# 411. Punch-In Motion Engine and Remotion Evaluation (2026-09-30)
+
+Harvey reported that the Editor's punch-in still looked jagged and asked for a
+real Remotion trial rather than another assumption about FFmpeg. A Remotion
+4.0.530 prototype was built against the live 1080×1920 Reality Manual clip,
+using its frame clock, `interpolate()`, cubic Bézier easing, an anchored CSS
+transform, `OffthreadVideo`, and the server renderer. The output was visually
+clean and validated the right animation model, but it also established that a
+wholesale renderer replacement would be the wrong trade here: five seconds of
+video took 28.27 seconds on this two-core VPS and required roughly 600MB of
+Remotion/Chromium dependencies. The equivalent fixed-output FFmpeg prototype
+took 6.29 seconds. Applying Remotion to a possible twenty-minute long-form edit
+would add considerable render latency, image size, browser lifecycle failure
+modes, and a second media pipeline for no visible benefit in this constrained
+transform use case. No Remotion dependency or prototype artifact is committed.
+
+The useful part of the Remotion architecture is now in the production Editor.
+Punches remain a structured effect (`start`, `end`, `zoom`, and normalized
+anchor), while one deterministic camera-motion function owns the interpolation
+and rendering expression. The entrance and exit now use the same mirrored
+ease-in-out cubic curve as the evaluated Remotion composition. Their motion
+window is 450ms instead of 280ms, giving a 29.97fps export roughly fourteen
+meaningful animation frames rather than eight while still reading as a fast
+punch. The working browser preview uses the identical duration and equation.
+
+The export no longer grows the source in even integer dimensions and crops it,
+which was the remaining staircase that the opening-move fix had not addressed.
+Punch scale and focal position are now evaluated together in a fixed-output
+fractional `zoompan` transform on every output frame. When an opening push and a
+punch overlap, their zooms and X/Y offsets are composed mathematically and the
+source is sampled once, avoiding both wobble from independently rounded axes
+and softness from two resampling passes. Render format version 6 invalidates
+active unapproved files created by the previous punch renderer; approved
+Production inputs remain immutable.
+
+Coverage verifies the matching cubic midpoint and mirrored exit, anchored
+fractional filter, absence of the old integer `scale` path, and the single-pass
+composition of simultaneous opening and punch motion. The existing real
+upload/transcription/cut/punch/caption/render integration test executes the new
+filter and passes its 1080×1920 output checks.

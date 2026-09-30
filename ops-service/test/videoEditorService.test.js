@@ -160,16 +160,33 @@ test('punch-ins use matching fast smooth zoom-in and zoom-out ramps', function (
   const punch = { start: 2, end: 4, zoom: 1.25, centerX: 0.3, centerY: 0.7 };
   assert.equal(editor.punchInScale(punch, 1.99), 1);
   assert.equal(editor.punchInScale(punch, 2), 1);
-  assert.ok(Math.abs(editor.punchInScale(punch, 2.14) - 1.125) < 0.000001);
-  assert.equal(editor.punchInScale(punch, 2.28), 1.25);
-  assert.equal(editor.punchInScale(punch, 3.72), 1.25);
-  assert.ok(Math.abs(editor.punchInScale(punch, 3.86) - 1.125) < 0.000001);
+  assert.ok(Math.abs(editor.punchInScale(punch, 2.225) - 1.125) < 0.000001);
+  assert.equal(editor.punchInScale(punch, 2.45), 1.25);
+  assert.equal(editor.punchInScale(punch, 3.55), 1.25);
+  assert.ok(Math.abs(editor.punchInScale(punch, 3.775) - 1.125) < 0.000001);
   assert.equal(editor.punchInScale(punch, 4), 1);
   const filter = editor.punchInFilter(punch, { width: 1080, height: 1920 }, 2);
-  assert.match(filter, /eval=frame/);
-  assert.match(filter, /crop=1080:1920/);
-  assert.match(filter, /\(iw-ow\)\*0\.300/);
-  assert.match(filter, /\(ih-oh\)\*0\.700/);
+  assert.match(filter, /zoompan=/);
+  assert.match(filter, /pow\(/);
+  assert.match(filter, /s=1080x1920/);
+  assert.match(filter, /\*0\.300000/);
+  assert.match(filter, /\*0\.700000/);
+  assert.doesNotMatch(filter, /scale=w='trunc/);
+});
+
+test('opening and punch motion share one fractional resampling stage', function () {
+  const filter = editor.cameraMotionFilter({
+    punch: { start: 0.5, end: 2.5, zoom: 1.18, centerX: 0.4, centerY: 0.6 },
+    renderShape: { width: 1080, height: 1920 },
+    sourceStart: 0.5,
+    editedStart: 0.5,
+    openingEnabled: true
+  });
+  assert.equal((filter.match(/zoompan=/g) || []).length, 1);
+  assert.match(filter, /0\.040/);
+  assert.match(filter, /0\.180/);
+  assert.match(filter, /0\.400000/);
+  assert.match(filter, /0\.600000/);
 });
 
 test('approval only accepts the exact verified render bytes', async function (t) {
@@ -572,7 +589,7 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.equal(stored.renderQuality.status, 'passed');
-  assert.equal(stored.renderVersion, 5);
+  assert.equal(stored.renderVersion, 6);
   assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), true);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });

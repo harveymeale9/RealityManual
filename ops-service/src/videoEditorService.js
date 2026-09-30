@@ -13,8 +13,8 @@ const EDIT_RENDER_DEBOUNCE_MS = 2500;
 const EDITOR_DISK_RESERVE_BYTES = 2 * 1024 * 1024 * 1024;
 const OPENING_PUSH_IN_SECONDS = 3;
 const OPENING_PUSH_IN_SCALE = 1.04;
-const PUNCH_TRANSITION_SECONDS = 0.28;
-const EDITOR_RENDER_VERSION = 5;
+const PUNCH_TRANSITION_SECONDS = 0.45;
+const EDITOR_RENDER_VERSION = 6;
 const BROWSER_PREVIEW_VERSION = 2;
 const AUDIO_PREVIEW_TTL_MS = 2 * 60 * 60 * 1000;
 
@@ -424,18 +424,61 @@ function openingPushInScale(editedSeconds) {
   return 1 + (OPENING_PUSH_IN_SCALE - 1) * eased;
 }
 
-function openingPushInFilter(renderShape, editedStart) {
-  // `scale` can only change its output dimensions in whole/even pixels. At a
-  // 4% move across 90 frames that made 37 adjacent frame pairs identical,
-  // followed by visible two-pixel catches. zoompan keeps a fixed output frame
-  // and resamples the source at a fractional zoom every frame instead.
-  const framesPerSecond = 30000 / 1001;
+function easeInOutCubic(value) {
+  const progress = clamp(value, 0, 1);
+  return progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+}
+
+function ffmpegEaseInOutCubic(progressExpression) {
+  const progress = '(' + progressExpression + ')';
+  return 'if(lt(' + progress + ',0.5),4*' + progress + '*' + progress + '*' + progress + ',1-pow(-2*' + progress + '+2,3)/2)';
+}
+
+function openingZoomExpression(editedStart, framesPerSecond) {
   const frameOffset = (Math.max(0, Number(editedStart) || 0) * framesPerSecond).toFixed(6);
   const progress = 'min(max((on+' + frameOffset + ')/(' + framesPerSecond.toFixed(8) + '*' + OPENING_PUSH_IN_SECONDS + '),0),1)';
   const eased = '(' + progress + '*' + progress + '*(3-2*' + progress + '))';
-  const zoom = '(1+' + (OPENING_PUSH_IN_SCALE - 1).toFixed(3) + '*' + eased + ')';
-  return ",zoompan=z='" + zoom + "':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=" +
+  return '(1+' + (OPENING_PUSH_IN_SCALE - 1).toFixed(3) + '*' + eased + ')';
+}
+
+function punchZoomExpression(punch, sourceStart, framesPerSecond) {
+  if (!punch) return '1';
+  const start = Number(punch.start) || 0;
+  const end = Math.max(start, Number(punch.end) || 0);
+  const transition = Math.max(0.001, Math.min(PUNCH_TRANSITION_SECONDS, (end - start) / 2));
+  const sourceFrame = '(on+' + (Math.max(0, Number(sourceStart) || 0) * framesPerSecond).toFixed(6) + ')';
+  const into = 'min(max((' + sourceFrame + '-' + (start * framesPerSecond).toFixed(6) + ')/' + (transition * framesPerSecond).toFixed(6) + ',0),1)';
+  const out = 'min(max((' + (end * framesPerSecond).toFixed(6) + '-' + sourceFrame + ')/' + (transition * framesPerSecond).toFixed(6) + ',0),1)';
+  const weight = 'min((' + ffmpegEaseInOutCubic(into) + '),(' + ffmpegEaseInOutCubic(out) + '))';
+  return '(1+' + ((Number(punch.zoom) || 1.18) - 1).toFixed(3) + '*' + weight + ')';
+}
+
+// One deterministic camera-motion stage drives every scale and focal-point
+// change. Keeping opening and punch motion in one zoompan pass avoids both the
+// integer-sized scale staircase and quality loss from resampling twice when
+// the two effects overlap.
+function cameraMotionFilter(options) {
+  options = options || {};
+  const punch = options.punch || null;
+  const openingEnabled = options.openingEnabled === true;
+  if (!punch && !openingEnabled) return '';
+  const renderShape = options.renderShape;
+  const framesPerSecond = 30000 / 1001;
+  const openingZoom = openingEnabled ? openingZoomExpression(options.editedStart, framesPerSecond) : '1';
+  const punchZoom = punchZoomExpression(punch, options.sourceStart, framesPerSecond);
+  const centerX = Number(punch && punch.centerX !== undefined ? punch.centerX : 0.5).toFixed(6);
+  const centerY = Number(punch && punch.centerY !== undefined ? punch.centerY : 0.5).toFixed(6);
+  const zoom = '(' + openingZoom + '*' + punchZoom + ')';
+  // Equivalent to applying the anchored punch first, then the centred opening
+  // move, but calculated from the source once so both axes share one matrix.
+  const x = '(iw-iw/' + punchZoom + ')*' + centerX + '+(iw-iw/' + openingZoom + ')*0.5/' + punchZoom;
+  const y = '(ih-ih/' + punchZoom + ')*' + centerY + '+(ih-ih/' + openingZoom + ')*0.5/' + punchZoom;
+  return ",zoompan=z='" + zoom + "':x='" + x + "':y='" + y + "':d=1:s=" +
     renderShape.width + 'x' + renderShape.height + ':fps=30000/1001,setsar=1';
+}
+
+function openingPushInFilter(renderShape, editedStart) {
+  return cameraMotionFilter({ renderShape: renderShape, editedStart: editedStart, openingEnabled: true });
 }
 
 function punchInScale(punch, sourceSeconds) {
@@ -445,31 +488,15 @@ function punchInScale(punch, sourceSeconds) {
   const duration = end - start;
   if (duration <= 0 || sourceSeconds < start || sourceSeconds >= end) return 1;
   const transition = Math.max(0.001, Math.min(PUNCH_TRANSITION_SECONDS, duration / 2));
-  const ease = function (value) {
-    const progress = clamp(value, 0, 1);
-    return progress * progress * (3 - 2 * progress);
-  };
   const weight = Math.min(
-    ease((sourceSeconds - start) / transition),
-    ease((end - sourceSeconds) / transition)
+    easeInOutCubic((sourceSeconds - start) / transition),
+    easeInOutCubic((end - sourceSeconds) / transition)
   );
   return 1 + ((Number(punch.zoom) || 1.18) - 1) * weight;
 }
 
 function punchInFilter(punch, renderShape, sourceStart) {
-  if (!punch) return '';
-  const start = Number(punch.start) || 0;
-  const end = Math.max(start, Number(punch.end) || 0);
-  const transition = Math.max(0.001, Math.min(PUNCH_TRANSITION_SECONDS, (end - start) / 2));
-  const sourceTime = '(t+' + Math.max(0, Number(sourceStart) || 0).toFixed(6) + ')';
-  const into = 'min(max((' + sourceTime + '-' + start.toFixed(6) + ')/' + transition.toFixed(6) + ',0),1)';
-  const out = 'min(max((' + end.toFixed(6) + '-' + sourceTime + ')/' + transition.toFixed(6) + ',0),1)';
-  const easedInto = '(' + into + '*' + into + '*(3-2*' + into + '))';
-  const easedOut = '(' + out + '*' + out + '*(3-2*' + out + '))';
-  const weight = 'min(' + easedInto + ',' + easedOut + ')';
-  const zoom = '(1+' + ((Number(punch.zoom) || 1.18) - 1).toFixed(3) + '*' + weight + ')';
-  return ",scale=w='trunc(iw*" + zoom + "/2)*2':h='trunc(ih*" + zoom + "/2)*2':eval=frame" +
-    ",crop=" + renderShape.width + ':' + renderShape.height + ":x='(iw-ow)*" + Number(punch.centerX === undefined ? 0.5 : punch.centerX).toFixed(3) + "':y='(ih-oh)*" + Number(punch.centerY === undefined ? 0.5 : punch.centerY).toFixed(3) + "',setsar=1";
+  return cameraMotionFilter({ punch: punch, renderShape: renderShape, sourceStart: sourceStart });
 }
 
 function patchNeedsAutoRender(project, renderWillChange) {
@@ -1413,12 +1440,13 @@ async function renderProject(id) {
         } else {
           videoFilter += ",crop=w='min(iw\\,ih*16/9)':h='min(ih\\,iw*9/16)':x='(iw-ow)/2':y='(ih-oh)/2',scale=1920:1080,setsar=1";
         }
-        if (segment.punchIn) {
-          videoFilter += punchInFilter(segment.punchIn, renderShape, segment.start);
-        }
-        if (layout === 'vertical' && project.openingPushInEnabled !== false) {
-          videoFilter += openingPushInFilter(renderShape, editedStart);
-        }
+        videoFilter += cameraMotionFilter({
+          punch: segment.punchIn,
+          renderShape: renderShape,
+          sourceStart: segment.start,
+          editedStart: editedStart,
+          openingEnabled: layout === 'vertical' && project.openingPushInEnabled !== false
+        });
         filters.push(videoFilter + '[v' + index + ']');
         // Tiny boundary fades prevent waveform discontinuities from creating
         // a click at transcript/jump cuts, without audibly crossfading words.
@@ -2337,6 +2365,8 @@ module.exports = {
   browserPreviewNeeded,
   openingPushInScale,
   openingPushInFilter,
+  easeInOutCubic,
+  cameraMotionFilter,
   punchInScale,
   punchInFilter,
   reconcileAutomaticRetakeCuts,
