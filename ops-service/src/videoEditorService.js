@@ -708,7 +708,7 @@ function buildAss(project, groups) {
   const isLongform = width >= height;
   const fontSize = Math.max(30, Math.round(Math.min(width, height) * (isLongform ? 0.048 : 0.08)));
   const emphasizedSize = Math.round(fontSize * 1.12);
-  const marginV = Math.round(height * (isLongform ? 0.27 : 0.365));
+  const marginV = Math.round(height * (isLongform ? 0.27 : 0.33));
   const header = [
     '[Script Info]', 'ScriptType: v4.00+', 'PlayResX: ' + width, 'PlayResY: ' + height,
     'ScaledBorderAndShadow: yes', '', '[V4+ Styles]',

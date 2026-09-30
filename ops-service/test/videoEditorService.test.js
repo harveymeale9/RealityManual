@@ -414,7 +414,7 @@ test('caption groups omit deleted words and carry raw and edited timing', functi
 test('ASS export uses bold yellow captions below centre', function () {
   const ass = editor.buildAss({ width: 1080, height: 1920 }, [{ start: 1, end: 2, text: 'A {real} caption' }]);
   assert.match(ass, /PrimaryColour.*\nStyle: Default,Arial,86,&H0000FFFF/);
-  assert.match(ass, /,2,40,40,701,1/);
+  assert.match(ass, /,2,40,40,634,1/);
   assert.match(ass, /Dialogue: 0,0:00:01\.00,0:00:02\.00.*A \\{real\\} caption/);
 });
 

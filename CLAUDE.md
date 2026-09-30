@@ -14205,3 +14205,17 @@ The end-to-end Editor test now constructs the real edge case: a 640×360 coded
 video carrying a 90-degree display matrix. It proves upload detection reports a
 portrait project, the normalized H.264 review file becomes available, and the
 captioned final passes the existing 1080×1920 technical verification.
+
+---
+
+# 401. Vertical Captions Sit Lower in the Frame (2026-09-30)
+
+Harvey's real portrait preview showed the one-word yellow captions sitting too
+high above the visual focus area. Vertical captions now use a 33% bottom margin
+instead of 36.5%, moving them modestly downward to sit just above the lower
+page/hand area he marked. Horizontal captions are unchanged.
+
+The browser working preview and baked ASS render use the same proportional
+position, and the stylesheet cache key was bumped so an already-open device
+receives the new placement after reload. Unit coverage verifies the exact
+1080×1920 export margin.
