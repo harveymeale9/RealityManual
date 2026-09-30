@@ -14865,3 +14865,16 @@ links, and Production handoff behavior remain intact in the backend. Existing
 linked cards still provide the recording's meaningful display title; the Editor
 simply no longer asks Harvey to inspect or manage that relationship. Editor CSS
 and JavaScript cache keys were advanced together.
+
+---
+
+# 423. Vertical Captions Sit Lower in the Frame (2026-09-30)
+
+Vertical one-word captions were still visibly above the intended book-page
+position. Their baseline has moved from 33% to 30% of frame height above the
+bottom in both the live Editor preview and the ASS captions baked into final
+renders. At 1080×1920 this changes the final caption margin from 634px to 576px,
+placing the word just above the marked lower-page area while retaining clearance
+from the player controls and platform UI. Landscape caption placement is
+unchanged. The stylesheet cache key was advanced and ASS regression coverage
+was updated to lock preview/output parity.
