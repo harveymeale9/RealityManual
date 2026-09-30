@@ -75,8 +75,8 @@ test('restart cleanup removes only Editor-owned temporary files regardless of ag
 
 test('upload capacity reserves every downstream master plus operating space', function () {
   const gib = 1024 * 1024 * 1024;
-  assert.equal(editor.requiredEditorCapacity(2 * gib, false), 12 * gib);
-  assert.equal(editor.requiredEditorCapacity(2 * gib, true), 10 * gib);
+  assert.equal(editor.requiredEditorCapacity(2 * gib, false), 14 * gib);
+  assert.equal(editor.requiredEditorCapacity(2 * gib, true), 12 * gib);
 });
 
 test('batch capacity includes unfinished copies owed to earlier recordings', function () {
@@ -84,7 +84,7 @@ test('batch capacity includes unfinished copies owed to earlier recordings', fun
     { sizeBytes: 100, browserPreviewRequired: true, browserPreviewStatus: 'pending', renderStatus: '' },
     { sizeBytes: 200, browserPreviewRequired: false, renderStatus: 'ready' },
     { sizeBytes: 1000, productionPieceId: 'already-sent', renderStatus: 'ready' }
-  ]), 100 * 4 + 200 * 2);
+  ]), 100 * 5 + 200 * 2);
   assert.equal(editor.outstandingEditorCapacity([
     { sizeBytes: 100, browserPreviewRequired: true, browserPreviewStatus: 'ready', renderStatus: 'ready' }
   ]), 200);
@@ -136,10 +136,10 @@ test('final renders take the next serial encoder slot ahead of waiting proxies',
   assert.deepEqual(order, ['proxy-running', 'final', 'proxy-waiting']);
 });
 
-test('HEVC and non-browser containers receive an H.264 review proxy', function () {
+test('every camera recording receives a scrub-optimized review proxy', function () {
   assert.equal(editor.browserPreviewNeeded('camera.mp4', { videoCodec: 'hevc', audioCodec: 'aac' }), true);
   assert.equal(editor.browserPreviewNeeded('camera.mkv', { videoCodec: 'h264', audioCodec: 'aac' }), true);
-  assert.equal(editor.browserPreviewNeeded('camera.MOV', { videoCodec: 'h264', audioCodec: 'aac' }), false);
+  assert.equal(editor.browserPreviewNeeded('camera.MOV', { videoCodec: 'h264', audioCodec: 'aac' }), true);
   assert.equal(editor.browserPreviewNeeded('camera.MOV', { videoCodec: 'h264', audioCodec: 'aac', rotation: -90 }), true);
   assert.equal(editor.browserPreviewNeeded('camera.mp4', { videoCodec: 'h264', audioCodec: 'pcm_s16le' }), true);
 });
@@ -736,11 +736,16 @@ test('an HEVC camera master receives a real browser-safe review proxy', { timeou
     await new Promise(function (resolve) { setTimeout(resolve, 30); });
   }
   assert.equal(stored.browserPreviewStatus, 'ready', stored.browserPreviewError);
+  assert.equal(stored.browserPreviewVersion, 2);
   const proxy = path.join(projectDir, 'preview.mp4');
   assert.ok(fs.statSync(proxy).size > 1024);
-  const probe = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_name,width,height', '-of', 'json', proxy], { encoding: 'utf8' }));
+  const probe = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_name,width,height,r_frame_rate', '-of', 'json', proxy], { encoding: 'utf8' }));
   assert.equal(probe.streams[0].codec_name, 'h264');
-  assert.ok(Math.max(probe.streams[0].width, probe.streams[0].height) <= 1280);
+  assert.ok(Math.max(probe.streams[0].width, probe.streams[0].height) <= 854);
+  assert.equal(probe.streams[0].r_frame_rate, '30/1');
+  const keyframes = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-skip_frame', 'nokey', '-select_streams', 'v:0', '-show_entries', 'frame=pts_time', '-of', 'json', proxy], { encoding: 'utf8' })).frames;
+  assert.ok(keyframes.length >= 2);
+  assert.ok(Number(keyframes[1].pts_time) - Number(keyframes[0].pts_time) <= 0.51);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
 
@@ -862,6 +867,9 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   response = await fetch(base + '/api/editor/' + project.id + '/source');
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('content-type'), 'video/mp4');
+  response = await fetch(base + '/api/editor/' + project.id + '/source', { headers: { Range: 'bytes=0-1023' } });
+  assert.equal(response.status, 206);
+  assert.match(response.headers.get('content-range') || '', /^bytes 0-1023\//);
   for (let attempt = 0; attempt < 100 && project.transcriptionStatus !== 'ready'; attempt++) {
     await new Promise(function (resolve) { setTimeout(resolve, 30); });
     project = await (await fetch(base + '/api/editor/' + project.id)).json();
@@ -902,6 +910,9 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   }
   assert.equal(project.renderStatus, 'ready', project.renderError);
   assert.equal(project.renderProgress, 100);
+  assert.equal(project.renderPreviewStatus, 'ready', project.renderPreviewError);
+  assert.equal(project.renderPreviewVersion, 2);
+  assert.ok(fs.statSync(path.join(dir, 'editor', project.id, 'render-preview.mp4')).size > 1024);
   assert.equal(renderReadyCalls, 1);
   assert.equal(project.workflowWarning, 'Synthetic first workflow failure.');
   assert.equal(project.renderQuality.status, 'passed');
@@ -1015,6 +1026,8 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
     project = await (await fetch(base + '/api/editor/' + project.id)).json();
   }
   assert.equal(project.renderStatus, 'ready', project.renderError);
+  assert.equal(project.renderPreviewStatus, 'ready', project.renderPreviewError);
+  assert.equal(project.renderPreviewVersion, 2);
   assert.equal(renderReadyCalls, 2);
   assert.equal(project.workflowWarning, undefined);
   assert.equal(project.captionsEnabled, false);
@@ -1028,6 +1041,9 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('content-disposition'), null);
   assert.ok(Buffer.from(await response.arrayBuffer()).length > 1000);
+  response = await fetch(base + '/api/editor/' + project.id + '/render?inline=1', { headers: { Range: 'bytes=0-1023' } });
+  assert.equal(response.status, 206);
+  assert.match(response.headers.get('content-range') || '', /^bytes 0-1023\//);
   assert.ok(project.editedDuration < project.duration);
   const verifiedRenderPath = path.join(dir, 'editor', project.id, 'render.mp4');
   fs.appendFileSync(verifiedRenderPath, 'tampered-after-verification');

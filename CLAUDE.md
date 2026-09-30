@@ -14298,3 +14298,43 @@ successful live deployment, an authenticated Chromium run verified the real
 portrait project has no legacy zoom/X/Y controls, opens an 84.75%-sized framing
 rectangle inside the 430×764 player, responds to a real pointer drag, and hides
 the guide before switching Preview back to the verified final edit.
+
+---
+
+# 405. Editor Review Uses Small, Scrub-Optimized Proxies and Custom Playback Controls (2026-09-30)
+
+Harvey found that seeking backward in the browser's native player could show a
+fresh loading state even in a 16-second recording. Replacing the visible controls
+alone could not fix the media-level cause: the Editor sometimes served the full
+camera master whenever its codecs happened to be browser-compatible, while both
+camera and rendered files could have widely spaced keyframes. A browser then had
+to fetch and decode much more video than the requested frame required.
+
+Every active recording now receives a dedicated H.264 editing proxy regardless
+of its camera codec. It is capped at 854 pixels on its long edge (approximately
+480p), normalized to 30fps, encoded at CRF 30 with 64kbps AAC, fast-started, and
+given a keyframe every 15 frames, or half a second. Verified final edits receive
+a separate proxy with the same properties. The source camera master and the
+authoritative 1080×1920 or 1920×1080 Editor render remain untouched and continue
+to be the inputs used for final output and Production handoff. Both proxy routes
+retain Express byte-range support, so seeking fetches only the required portion.
+Existing active sources and verified renders acquire version-2 proxies in the
+background after deployment; new renders build and verify their review proxy
+before becoming ready. Conservative disk-capacity admission now reserves space
+for both additional proxy artifacts even though their real size is much smaller
+than a master.
+
+The native controls have been replaced by an Editor-owned overlay with immediate
+play/pause, scrub rail, elapsed and total time, mute, fullscreen, and a delayed
+Loading indicator that only appears for a real stall. The existing keyboard
+shortcuts and preview motion/caption synchronization remain intact. Desktop and
+mobile receive new asset cache keys.
+
+During full-suite verification, the new startup migration exposed an existing
+stale-write race: its asynchronous FFprobe validation could finish after resumed
+transcription and save the older `running` snapshot back over the completed
+state. The migration now re-reads the current project immediately after every
+asynchronous validation before mutating or saving it. The focused recovery test
+and the complete 140-test suite pass. Real FFmpeg coverage verifies the 854-pixel
+cap, 30fps rate, half-second keyframe spacing, final-review proxy creation, and
+HTTP 206 range responses for both source and final review media.

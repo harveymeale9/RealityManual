@@ -835,8 +835,10 @@
       (layout === 'vertical' ? '<label class="editor-toggle" title="A smooth 4% push-in over the first three seconds."><input type="checkbox" id="editorOpeningPushIn" ' + (project.openingPushInEnabled !== false ? 'checked' : '') + '><span></span>Subtle opening push-in</label>' : '') +
       '<label class="editor-mode">Pacing<select id="editorPacing"><option value="tight"' + (Number(project.silenceThresholdSeconds) < 0.85 ? ' selected' : '') + '>Tight</option><option value="natural"' + (Number(project.silenceThresholdSeconds || 1) >= 0.85 && Number(project.silenceThresholdSeconds || 1) < 1.3 ? ' selected' : '') + '>Natural</option><option value="gentle"' + (Number(project.silenceThresholdSeconds || 1) >= 1.3 ? ' selected' : '') + '>Gentle</option></select></label>' +
       '<button type="button" class="btn-secondary btn-tiny editor-clear-automation" id="editorClearAutomation" ' + (!automaticCutsPresent ? 'disabled' : '') + ' title="Restore every pause and retake removed automatically. Manual transcript cuts stay intact.">Restore automatic cuts</button></div>';
-    var previewPlayerHtml = '<div class="editor-preview" id="editorPreview" tabindex="0" aria-label="Video review. Space plays or pauses. Left and right arrows move two seconds."><div class="editor-video-frame ' + layout + '"><video id="editorVideo" data-preview-mode="' + previewMode + '" data-seek-time="' + previewSeek.toFixed(3) + '" controls playsinline preload="metadata" src="' + previewUrl + '"></video>' +
-      (previewMode === 'source' ? punchFocusHtml(project, focusedPunchId) : '') + '<div class="editor-caption" id="editorCaption"></div><div class="editor-video-error" id="editorVideoError" hidden><strong>Preview could not be played</strong><span>Your recording and edit are safe. Reload this review copy without rebuilding anything.</span><button type="button" class="btn-secondary btn-tiny" id="editorReloadVideo">Reload preview</button></div></div></div>';
+    var previewPlayerHtml = '<div class="editor-preview" id="editorPreview" tabindex="0" aria-label="Video review. Space plays or pauses. Left and right arrows move two seconds."><div class="editor-video-frame ' + layout + '"><video id="editorVideo" data-preview-mode="' + previewMode + '" data-seek-time="' + previewSeek.toFixed(3) + '" playsinline preload="metadata" src="' + previewUrl + '"></video>' +
+      (previewMode === 'source' ? punchFocusHtml(project, focusedPunchId) : '') + '<div class="editor-caption" id="editorCaption"></div>' +
+      '<div class="editor-player-controls" id="editorPlayerControls"><button type="button" class="editor-player-icon" id="editorPlayerPlay" aria-label="Play">▶</button><span id="editorPlayerCurrent">0:00</span><input type="range" id="editorPlayerSeek" min="0" max="1" step="0.01" value="0" aria-label="Video position"><span id="editorPlayerDuration">' + formatTime(previewMode === 'final' ? editedDuration(project) : project.duration) + '</span><i id="editorPlayerBuffering" hidden>Loading</i><button type="button" class="editor-player-icon" id="editorPlayerMute" aria-label="Mute">VOL</button><button type="button" class="editor-player-icon" id="editorPlayerFullscreen" aria-label="Full screen">⛶</button></div>' +
+      '<div class="editor-video-error" id="editorVideoError" hidden><strong>Preview could not be played</strong><span>Your recording and edit are safe. Reload this review copy without rebuilding anything.</span><button type="button" class="btn-secondary btn-tiny" id="editorReloadVideo">Reload preview</button></div></div></div>';
     var previewStageHtml = layout === 'vertical'
       ? '<div class="editor-preview-stage vertical"><aside class="editor-preview-side editor-preview-side-playback"><div class="eyebrow">Playback</div><h3>Review</h3>' + previewActionsHtml + '</aside>' + previewPlayerHtml + '<aside class="editor-preview-side editor-preview-side-settings"><div class="eyebrow">Edit settings</div><h3>Automatic treatment</h3>' + automaticControlsHtml + '</aside></div>'
       : '<div class="editor-preview-stage horizontal">' + previewPlayerHtml + '</div>';
@@ -899,6 +901,76 @@
     var rendering = ['queued', 'running'].indexOf(project.renderStatus) !== -1;
     var sentToProduction = !!project.productionPieceId;
     var editingLocked = rendering || sentToProduction;
+    var playerPlay = root.querySelector('#editorPlayerPlay');
+    var playerSeek = root.querySelector('#editorPlayerSeek');
+    var playerCurrent = root.querySelector('#editorPlayerCurrent');
+    var playerDuration = root.querySelector('#editorPlayerDuration');
+    var playerBuffering = root.querySelector('#editorPlayerBuffering');
+    var playerMute = root.querySelector('#editorPlayerMute');
+    var playerFullscreen = root.querySelector('#editorPlayerFullscreen');
+    var playerScrubbing = false;
+    var bufferingTimer = null;
+    function syncPlayerControls() {
+      var duration = Number(video.duration) || Number(previewingFinal ? project.editedDuration : project.duration) || 0;
+      if (playerSeek) {
+        playerSeek.max = Math.max(0.01, duration);
+        if (!playerScrubbing) playerSeek.value = Math.min(duration, Number(video.currentTime) || 0);
+        var played = duration ? Math.max(0, Math.min(100, Number(video.currentTime) / duration * 100)) : 0;
+        playerSeek.style.setProperty('--editor-played', played.toFixed(3) + '%');
+      }
+      if (playerCurrent) playerCurrent.textContent = formatTime(video.currentTime || 0);
+      if (playerDuration) playerDuration.textContent = formatTime(duration);
+      if (playerPlay) {
+        playerPlay.textContent = video.paused ? '▶' : '❚❚';
+        playerPlay.setAttribute('aria-label', video.paused ? 'Play' : 'Pause');
+      }
+      if (playerMute) {
+        playerMute.textContent = video.muted ? 'MUTED' : 'VOL';
+        playerMute.setAttribute('aria-label', video.muted ? 'Unmute' : 'Mute');
+      }
+    }
+    function hideBuffering() {
+      if (bufferingTimer) clearTimeout(bufferingTimer);
+      bufferingTimer = null;
+      if (playerBuffering) playerBuffering.hidden = true;
+    }
+    function showBufferingSoon() {
+      if (!playerBuffering || bufferingTimer) return;
+      bufferingTimer = setTimeout(function () {
+        bufferingTimer = null;
+        if (!video.paused && video.readyState < 3) playerBuffering.hidden = false;
+      }, 160);
+    }
+    if (playerPlay) playerPlay.onclick = function () {
+      if (video.paused) video.play().catch(function () {}); else video.pause();
+    };
+    if (playerSeek) {
+      playerSeek.addEventListener('pointerdown', function () { playerScrubbing = true; });
+      playerSeek.addEventListener('input', function () {
+        video.currentTime = Math.max(0, Math.min(Number(video.duration) || Infinity, Number(playerSeek.value) || 0));
+        if (playerCurrent) playerCurrent.textContent = formatTime(video.currentTime);
+        var duration = Number(video.duration) || 0;
+        var played = duration ? video.currentTime / duration * 100 : 0;
+        playerSeek.style.setProperty('--editor-played', played.toFixed(3) + '%');
+      });
+      ['pointerup', 'pointercancel', 'change'].forEach(function (name) {
+        playerSeek.addEventListener(name, function () { playerScrubbing = false; syncPlayerControls(); });
+      });
+    }
+    if (playerMute) playerMute.onclick = function () { video.muted = !video.muted; syncPlayerControls(); };
+    if (playerFullscreen) playerFullscreen.onclick = function () {
+      if (document.fullscreenElement) document.exitFullscreen().catch(function () {});
+      else if (videoFrame.requestFullscreen) videoFrame.requestFullscreen().catch(function () {});
+    };
+    video.addEventListener('click', function () {
+      if (video.paused) video.play().catch(function () {}); else video.pause();
+    });
+    video.addEventListener('waiting', showBufferingSoon);
+    video.addEventListener('stalled', showBufferingSoon);
+    video.addEventListener('playing', hideBuffering);
+    video.addEventListener('canplay', hideBuffering);
+    video.addEventListener('durationchange', syncPlayerControls);
+    video.addEventListener('volumechange', syncPlayerControls);
     var previousProjectButton = root.querySelector('#editorPreviousProject');
     var nextProjectButton = root.querySelector('#editorNextProject');
     if (previousProjectButton) previousProjectButton.onclick = function () {
@@ -918,6 +990,7 @@
       if (mediaRecoveryChecks[videoProjectId]) clearTimeout(mediaRecoveryChecks[videoProjectId]);
       delete mediaRecoveryChecks[videoProjectId];
       updatePreviewMotion(previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime);
+      syncPlayerControls();
     });
     video.addEventListener('error', function () {
       if (videoError) videoError.hidden = false;
@@ -997,16 +1070,20 @@
         return;
       }
       updatePreviewMotion(previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime);
+      syncPlayerControls();
       if (!video.paused && !video.ended) motionAnimationFrame = requestAnimationFrame(animatePreviewMotion);
       else motionAnimationFrame = null;
     }
     video.addEventListener('play', function () {
+      hideBuffering();
+      syncPlayerControls();
       if (motionAnimationFrame === null) motionAnimationFrame = requestAnimationFrame(animatePreviewMotion);
     });
     video.addEventListener('pause', function () {
       if (motionAnimationFrame !== null) cancelAnimationFrame(motionAnimationFrame);
       motionAnimationFrame = null;
       updatePreviewMotion(previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime);
+      syncPlayerControls();
     });
     video.addEventListener('seeked', function () {
       updatePreviewMotion(previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime);
@@ -1018,6 +1095,7 @@
       }
       var sourcePlayheadTime = previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime;
       updatePreviewMotion(sourcePlayheadTime);
+      syncPlayerControls();
       var now = Date.now();
       if (sourcePlayheadTime >= 1 && now - lastReviewProgressSaveAt >= 500) {
         lastReviewProgressSaveAt = now;
@@ -1095,7 +1173,7 @@
       } else if (group) caption.textContent = group.text;
       caption.classList.toggle('visible', !!group && project.captionsEnabled !== false);
     });
-    video.addEventListener('ended', function () { clearReviewProgress(videoProjectId); });
+    video.addEventListener('ended', function () { clearReviewProgress(videoProjectId); syncPlayerControls(); });
     root.querySelectorAll('.editor-timeline-segment').forEach(function (segment) {
       segment.onclick = function () {
         var sourceTime = Number(segment.dataset.time) || 0;

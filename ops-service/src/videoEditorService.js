@@ -15,14 +15,15 @@ const OPENING_PUSH_IN_SECONDS = 3;
 const OPENING_PUSH_IN_SCALE = 1.04;
 const PUNCH_TRANSITION_SECONDS = 0.28;
 const EDITOR_RENDER_VERSION = 5;
+const BROWSER_PREVIEW_VERSION = 2;
 
 function requiredEditorCapacity(fileBytes, fileAlreadyStored) {
   const bytes = Math.max(0, Number(fileBytes) || 0);
-  // Source, browser review proxy, Editor render, Production copy, and the
-  // later mixed final can coexist. The proxy is only made for incompatible
-  // camera codecs and is normally smaller, but capacity admission assumes the
-  // safe worst case.
-  return EDITOR_DISK_RESERVE_BYTES + bytes * (fileAlreadyStored ? 4 : 5);
+  // Source, source scrub proxy, Editor render, final-render scrub proxy,
+  // Production copy, and the later mixed final can coexist. The proxies are
+  // much smaller, but capacity admission deliberately assumes the safe worst
+  // case rather than gambling on compression ratios.
+  return EDITOR_DISK_RESERVE_BYTES + bytes * (fileAlreadyStored ? 5 : 6);
 }
 
 function outstandingEditorCapacity(projects) {
@@ -30,7 +31,7 @@ function outstandingEditorCapacity(projects) {
     if (!project || project.productionPieceId) return total;
     const bytes = Math.max(0, Number(project.sizeBytes) || 0);
     let copies = 2; // Production handoff plus its later soundtrack/final copy.
-    if (project.renderStatus !== 'ready') copies++;
+    if (project.renderStatus !== 'ready') copies += 2;
     if (project.browserPreviewRequired && project.browserPreviewStatus !== 'ready') copies++;
     return total + bytes * copies;
   }, 0);
@@ -225,15 +226,10 @@ function normalizedVideoMimeType(fileName, reportedType) {
 }
 
 function browserPreviewNeeded(fileName, media) {
-  const extension = path.extname(String(fileName || '')).toLowerCase();
-  const videoCodec = String(media && media.videoCodec || '').toLowerCase();
-  const audioCodec = String(media && media.audioCodec || '').toLowerCase();
-  // Always bake display-matrix rotation into a browser-safe proxy. Browsers
-  // differ in how reliably they honor camera rotation metadata on MOV/MP4,
-  // while FFmpeg produces physically upright portrait pixels deterministically.
-  if (Math.abs(Number(media && media.rotation) || 0) % 180 === 90) return true;
-  if (!['.mp4', '.m4v', '.mov'].includes(extension)) return true;
-  return videoCodec !== 'h264' || !['aac', 'mp3'].includes(audioCodec);
+  // Every camera master gets a small, densely-keyframed editing proxy. Codec
+  // compatibility alone is not enough: a browser-playable 4K H.264 file can
+  // still seek very slowly when its keyframes are far apart.
+  return true;
 }
 
 function normalizeWords(rawWords) {
@@ -859,6 +855,7 @@ function setup(options) {
   const delStmt = db.prepare('DELETE FROM records WHERE store_name = ? AND id = ?');
   const transcriptionJobs = new Map();
   const previewJobs = new Map();
+  const renderPreviewJobs = new Map();
   const renderJobs = new Map();
   const productionJobs = new Map();
   // Browser proxies and final masters are both sustained FFmpeg encodes. One
@@ -884,6 +881,10 @@ function setup(options) {
     const invalidated = invalidateRender(project);
     if (project && project.id && isId(project.id)) {
       try { fs.rmSync(renderPath(project.id), { force: true }); } catch (error) {}
+      try { fs.rmSync(renderPreviewPath(project.id), { force: true }); } catch (error) {}
+      project.renderPreviewStatus = '';
+      project.renderPreviewError = '';
+      project.renderPreviewVersion = 0;
     }
     return invalidated;
   }
@@ -934,6 +935,7 @@ function setup(options) {
   function sourcePath(id) { return path.join(projectDir(id), 'source'); }
   function previewPath(id) { return path.join(projectDir(id), 'preview.mp4'); }
   function renderPath(id) { return path.join(projectDir(id), 'render.mp4'); }
+  function renderPreviewPath(id) { return path.join(projectDir(id), 'render-preview.mp4'); }
   function isId(id) { return /^[A-Za-z0-9_-]{1,128}$/.test(String(id || '')); }
   function availableDiskBytes() {
     try {
@@ -1002,43 +1004,88 @@ function setup(options) {
       const media = await probe(filePath);
       const durationValid = !Number(expectedDuration) || Math.abs(media.duration - Number(expectedDuration)) <= renderDurationTolerance(expectedDuration);
       const rotationBakedIn = Math.abs(Number(media.rotation) || 0) % 180 !== 90;
-      return media.videoCodec === 'h264' && media.hasAudio && media.width > 0 && media.height > 0 && rotationBakedIn && durationValid;
+      return media.videoCodec === 'h264' && media.hasAudio && media.width > 0 && media.height > 0 &&
+        Math.max(media.width, media.height) <= 854 && rotationBakedIn && durationValid;
     } catch (error) { return false; }
+  }
+
+  async function buildScrubProxy(inputPath, outputPath, expectedDuration, label) {
+    await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-autorotate', '1', '-i', inputPath,
+      '-map', '0:v:0', '-map', '0:a:0', '-vf',
+      "scale=w='if(gte(iw,ih),trunc(min(854,iw)/2)*2,-2)':h='if(gte(iw,ih),-2,trunc(min(854,ih)/2)*2)',fps=30",
+      '-c:v', 'libx264', '-preset', 'superfast', '-tune', 'fastdecode', '-crf', '30', '-pix_fmt', 'yuv420p',
+      '-g', '15', '-keyint_min', '15', '-sc_threshold', '0',
+      '-c:a', 'aac', '-b:a', '64k', '-movflags', '+faststart', outputPath], label);
+    if (!await browserPreviewIsValid(outputPath, expectedDuration)) throw new Error('The scrub-optimized browser preview failed verification.');
   }
 
   async function generateBrowserPreview(id) {
     if (previewJobs.has(id)) return previewJobs.get(id);
-    const initial = getProject(id);
+    let initial;
+    try { initial = getProject(id); } catch (error) { return; }
     if (!initial || !initial.browserPreviewRequired || initial.productionPieceId) return;
     const job = encodeQueue.enqueue(async function () {
-      let project = getProject(id);
+      let project;
+      try { project = getProject(id); } catch (error) { return; }
       if (!project || !project.browserPreviewRequired || project.productionPieceId) return;
       project.browserPreviewStatus = 'running';
       project.browserPreviewError = '';
-      saveProject(project);
+      try { saveProject(project); } catch (error) { return; }
       try {
-        await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-autorotate', '1', '-i', sourcePath(id),
-          '-map', '0:v:0', '-map', '0:a:0', '-vf',
-          "scale=w='if(gte(iw,ih),trunc(min(1280,iw)/2)*2,-2)':h='if(gte(iw,ih),-2,trunc(min(1280,ih)/2)*2)'",
-          '-c:v', 'libx264', '-preset', 'superfast', '-crf', '28', '-pix_fmt', 'yuv420p',
-          '-c:a', 'aac', '-b:a', '96k', '-movflags', '+faststart', previewPath(id)], 'browser review proxy');
-        if (!await browserPreviewIsValid(previewPath(id), project.duration)) throw new Error('The browser review proxy failed verification.');
-        project = getProject(id);
+        await buildScrubProxy(sourcePath(id), previewPath(id), project.duration, 'source scrub proxy');
+        try { project = getProject(id); } catch (error) { return; }
         if (!project) return;
         project.browserPreviewStatus = 'ready';
         project.browserPreviewError = '';
-        saveProject(project);
+        project.browserPreviewVersion = BROWSER_PREVIEW_VERSION;
+        try { saveProject(project); } catch (error) { return; }
       } catch (error) {
         fs.rm(previewPath(id), { force: true }, function () {});
-        project = getProject(id);
+        try { project = getProject(id); } catch (readError) { return; }
         if (project) {
           project.browserPreviewStatus = 'error';
           project.browserPreviewError = String(error.message || error).slice(0, 500);
-          saveProject(project);
+          project.browserPreviewVersion = 0;
+          try { saveProject(project); } catch (saveError) { return; }
         }
       }
     }, 'normal').finally(function () { previewJobs.delete(id); });
     previewJobs.set(id, job);
+    return job;
+  }
+
+  async function generateRenderPreview(id) {
+    if (renderPreviewJobs.has(id)) return renderPreviewJobs.get(id);
+    let initial;
+    try { initial = getProject(id); } catch (error) { return; }
+    if (!initial || initial.renderStatus !== 'ready' || !fs.existsSync(renderPath(id))) return;
+    const job = encodeQueue.enqueue(async function () {
+      let project;
+      try { project = getProject(id); } catch (error) { return; }
+      if (!project || project.renderStatus !== 'ready' || !fs.existsSync(renderPath(id))) return;
+      project.renderPreviewStatus = 'running';
+      project.renderPreviewError = '';
+      try { saveProject(project); } catch (error) { return; }
+      try {
+        await buildScrubProxy(renderPath(id), renderPreviewPath(id), project.editedDuration || project.duration, 'final edit scrub proxy');
+        try { project = getProject(id); } catch (error) { return; }
+        if (!project || project.renderStatus !== 'ready') return;
+        project.renderPreviewStatus = 'ready';
+        project.renderPreviewError = '';
+        project.renderPreviewVersion = BROWSER_PREVIEW_VERSION;
+        try { saveProject(project); } catch (error) { return; }
+      } catch (error) {
+        fs.rm(renderPreviewPath(id), { force: true }, function () {});
+        try { project = getProject(id); } catch (readError) { return; }
+        if (project) {
+          project.renderPreviewStatus = 'error';
+          project.renderPreviewError = String(error.message || error).slice(0, 500);
+          project.renderPreviewVersion = 0;
+          try { saveProject(project); } catch (saveError) { return; }
+        }
+      }
+    }, 'normal').finally(function () { renderPreviewJobs.delete(id); });
+    renderPreviewJobs.set(id, job);
     return job;
   }
 
@@ -1321,12 +1368,16 @@ async function renderProject(id) {
       if (Object.keys(qualityChecks).some(function (key) { return !qualityChecks[key]; })) {
         throw new Error('Rendered output failed technical verification: ' + Object.keys(qualityChecks).filter(function (key) { return !qualityChecks[key]; }).join(', '));
       }
+      await buildScrubProxy(renderPath(id), renderPreviewPath(id), expectedDuration, 'final edit scrub proxy');
       const renderSha256 = await hashFile(renderPath(id));
       project.renderStatus = 'ready';
       project.renderVersion = EDITOR_RENDER_VERSION;
       project.renderProgress = 100;
       project.renderSizeBytes = stat.size;
       project.renderSha256 = renderSha256;
+      project.renderPreviewStatus = 'ready';
+      project.renderPreviewError = '';
+      project.renderPreviewVersion = BROWSER_PREVIEW_VERSION;
       project.editedDuration = expectedDuration;
       project.renderQuality = {
         status: 'passed', checkedAt: new Date().toISOString(), checks: qualityChecks,
@@ -1355,6 +1406,7 @@ async function renderProject(id) {
     }).catch(function (err) {
       const project = getProject(id);
       fs.rm(renderPath(id), { force: true }, function () {});
+      fs.rm(renderPreviewPath(id), { force: true }, function () {});
       if (project) {
         project.renderStatus = 'error';
         project.renderProgress = 0;
@@ -1454,13 +1506,18 @@ async function renderProject(id) {
       try { project = JSON.parse(row.data); } catch (e) { return; }
       if (!project || project.productionPieceId || !isId(project.id) || !fs.existsSync(sourcePath(project.id))) return;
       probe(sourcePath(project.id)).then(async function (media) {
-        const current = getProject(project.id);
+        let current = getProject(project.id);
         if (!current) return;
-        const dimensionsChanged = current.width !== media.width || current.height !== media.height;
         const needsPreview = browserPreviewNeeded(current.fileName, media);
-        const previewMetadataChanged = !current.videoCodec || current.browserPreviewRequired === undefined || current.sourceRotation === undefined;
         const previewFile = previewPath(current.id);
-        const previewValid = needsPreview && await browserPreviewIsValid(previewFile, current.duration);
+        const previewValid = needsPreview && Number(current.browserPreviewVersion) === BROWSER_PREVIEW_VERSION && await browserPreviewIsValid(previewFile, current.duration);
+        // Proxy validation performs asynchronous ffprobe work. Transcription or
+        // another startup recovery can finish while it is in flight, so never
+        // save the pre-await snapshot over that newer state.
+        current = getProject(project.id);
+        if (!current || current.productionPieceId) return;
+        const dimensionsChanged = current.width !== media.width || current.height !== media.height;
+        const previewMetadataChanged = !current.videoCodec || current.browserPreviewRequired === undefined || current.sourceRotation === undefined;
         const expectedPreviewStatus = needsPreview ? (previewValid ? 'ready' : 'pending') : 'not_required';
         const previewStateChanged = current.browserPreviewRequired !== needsPreview || current.browserPreviewStatus !== expectedPreviewStatus;
         if (!dimensionsChanged && !previewMetadataChanged && !previewStateChanged) return;
@@ -1472,13 +1529,16 @@ async function renderProject(id) {
           await fs.promises.rm(previewFile, { force: true });
           current.browserPreviewStatus = 'pending';
           current.browserPreviewError = '';
+          current.browserPreviewVersion = 0;
         } else if (needsPreview) {
           current.browserPreviewStatus = 'ready';
           current.browserPreviewError = '';
+          current.browserPreviewVersion = BROWSER_PREVIEW_VERSION;
         } else if (!needsPreview) {
           await fs.promises.rm(previewFile, { force: true });
           current.browserPreviewStatus = 'not_required';
           current.browserPreviewError = '';
+          current.browserPreviewVersion = 0;
         }
         if (dimensionsChanged) {
           current.width = media.width;
@@ -1496,6 +1556,25 @@ async function renderProject(id) {
         if (current.browserPreviewRequired && current.browserPreviewStatus === 'pending') generateBrowserPreview(current.id);
         setImmediate(function () { maybeAutoRender(current.id); });
       }).catch(function () {});
+    });
+  });
+
+  // Existing verified edits predate the dedicated low-resolution final-review
+  // file. Build it in the background without touching or re-encoding the
+  // authoritative final master.
+  setImmediate(function () {
+    listStmt.all(STORE_NAME).forEach(function (row) {
+      let project;
+      try { project = JSON.parse(row.data); } catch (error) { return; }
+      if (!project || project.productionPieceId || project.renderStatus !== 'ready' || !isId(project.id) || !fs.existsSync(renderPath(project.id))) return;
+      let previewExists = false;
+      try { previewExists = fs.statSync(renderPreviewPath(project.id)).size > 1024; } catch (error) {}
+      if (previewExists && Number(project.renderPreviewVersion) === BROWSER_PREVIEW_VERSION) return;
+      project.renderPreviewStatus = 'pending';
+      project.renderPreviewError = '';
+      project.renderPreviewVersion = 0;
+      saveProject(project);
+      generateRenderPreview(project.id);
     });
   });
 
@@ -1633,6 +1712,7 @@ async function renderProject(id) {
         browserPreviewRequired: browserPreviewNeeded(req.file.originalname, media),
         browserPreviewStatus: browserPreviewNeeded(req.file.originalname, media) ? 'pending' : 'not_required',
         browserPreviewError: '',
+        browserPreviewVersion: 0,
         transcriptText: '',
         words: [],
         removedWordIndices: [],
@@ -1670,6 +1750,9 @@ async function renderProject(id) {
         transcriptionError: '',
         renderStatus: '',
         renderError: '',
+        renderPreviewStatus: '',
+        renderPreviewError: '',
+        renderPreviewVersion: 0,
         editRevision: 0,
         createdAt: now,
         updatedAt: now
@@ -2004,7 +2087,8 @@ async function renderProject(id) {
     if (!project) return res.status(404).end();
     let proxyExists = false;
     try { proxyExists = fs.statSync(previewPath(req.params.id)).size > 1024; } catch (error) {}
-    const useProxy = project.browserPreviewRequired && project.browserPreviewStatus === 'ready' && proxyExists;
+    const useProxy = project.browserPreviewRequired && project.browserPreviewStatus === 'ready' &&
+      Number(project.browserPreviewVersion) === BROWSER_PREVIEW_VERSION && proxyExists;
     if (project.browserPreviewRequired && !useProxy) {
       if (project.browserPreviewStatus === 'ready') {
         project.browserPreviewStatus = 'pending';
@@ -2026,7 +2110,14 @@ async function renderProject(id) {
     const project = getProject(req.params.id);
     if (!project || project.renderStatus !== 'ready') return res.status(404).end();
     res.type('video/mp4');
-    if (req.query.inline === '1') return res.sendFile(renderPath(req.params.id));
+    if (req.query.inline === '1') {
+      let previewExists = false;
+      try { previewExists = fs.statSync(renderPreviewPath(req.params.id)).size > 1024; } catch (error) {}
+      if (previewExists && project.renderPreviewStatus === 'ready' && Number(project.renderPreviewVersion) === BROWSER_PREVIEW_VERSION) {
+        return res.sendFile(renderPreviewPath(req.params.id));
+      }
+      return res.sendFile(renderPath(req.params.id));
+    }
     res.download(renderPath(req.params.id), path.parse(project.fileName || 'recording').name + '-edited.mp4');
   });
 
