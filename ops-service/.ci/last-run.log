@@ -11,20 +11,16 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   23c27e6..aa388ba  main       -> origin/main
+   aa388ba..4a6617b  main       -> origin/main
 + git merge --ff-only origin/main
-Updating 23c27e6..aa388ba
+Updating aa388ba..4a6617b
 Fast-forward
- CLAUDE.md                                     |  34 ++++
- ops-service/.ci/last-run.log                  |  24 +--
- ops-service/public/app.js                     |  73 ++++-----
- ops-service/public/index.html                 |   4 +-
- ops-service/public/lib/voiceClient.js         | 215 ++++++++++++++++++++++----
- ops-service/public/voice-mobile.html          |  55 ++++---
- ops-service/test/voiceClientRecording.test.js |  45 ++++++
- 7 files changed, 338 insertions(+), 112 deletions(-)
+ CLAUDE.md                            | 16 +++++++++++
+ ops-service/.ci/last-run.log         | 26 +++++++++---------
+ ops-service/public/voice-mobile.html | 51 ++++++------------------------------
+ 3 files changed, 38 insertions(+), 55 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=aa388ba4510c5169ad46df4903531b8828183548
++ NEW_HEAD=4a6617bff418fa5307afe08391917084f77a2ace
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -37,12 +33,12 @@ Already up to date.
 + NEEDS_REBUILD=1
 + '[' -n bd6ed4192b8aedd95cee6d332a1c993d66f2b549 ']'
 + git cat-file -e 'bd6ed4192b8aedd95cee6d332a1c993d66f2b549^{commit}'
-++ git diff --name-only bd6ed4192b8aedd95cee6d332a1c993d66f2b549 aa388ba4510c5169ad46df4903531b8828183548 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
+++ git diff --name-only bd6ed4192b8aedd95cee6d332a1c993d66f2b549 4a6617bff418fa5307afe08391917084f77a2ace -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z '' ']'
 + NEEDS_REBUILD=0
 + '[' 0 = 1 ']'
 + '[' 0 = 0 ']'
-+ echo 'no backend changes between bd6ed4192b8aedd95cee6d332a1c993d66f2b549 and aa388ba4510c5169ad46df4903531b8828183548 — already live via git pull, skipping rebuild/restart'
-no backend changes between bd6ed4192b8aedd95cee6d332a1c993d66f2b549 and aa388ba4510c5169ad46df4903531b8828183548 — already live via git pull, skipping rebuild/restart
++ echo 'no backend changes between bd6ed4192b8aedd95cee6d332a1c993d66f2b549 and 4a6617bff418fa5307afe08391917084f77a2ace — already live via git pull, skipping rebuild/restart'
+no backend changes between bd6ed4192b8aedd95cee6d332a1c993d66f2b549 and 4a6617bff418fa5307afe08391917084f77a2ace — already live via git pull, skipping rebuild/restart
 + exit 0
 ssh exit code: 0
