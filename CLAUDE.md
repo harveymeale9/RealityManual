@@ -14563,3 +14563,12 @@ fractional filter, absence of the old integer `scale` path, and the single-pass
 composition of simultaneous opening and punch motion. The existing real
 upload/transcription/cut/punch/caption/render integration test executes the new
 filter and passes its 1080×1920 output checks.
+
+The complete 141-test suite passes. After the successful full-container
+deployment, startup render-version reconciliation rebuilt the real active
+portrait project, including its existing 2.03-second punch focused at
+`centerY: 0.68`. The new full-quality file and scrub proxy both reached ready;
+FFprobe confirmed 1080×1920, 30000/1001fps, yuv420p, 15.033 seconds, and the
+service's audio/duration/frame verification passed. Frame samples across both
+the 450ms entrance and mirrored exit showed the focal point held steadily while
+scale advanced through the intended cubic ramp.
