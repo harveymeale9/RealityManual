@@ -14850,3 +14850,18 @@ the browser blocks that asynchronous audio start, dialogue continues instead of
 the whole preview stopping. Explicit soundtrack changes still restart from the
 beginning as designed. The Editor cache key was advanced so the race fix reaches
 existing sessions.
+
+---
+
+# 422. Editor No Longer Shows the Planning Workflow Panel (2026-09-30)
+
+The Planning workflow panel and its manual Content card and Match again controls
+were another internal bookkeeping surface that Harvey does not need while
+reviewing an edit. They have been removed together with their client event
+handlers, option renderer, readiness badge, and dedicated desktop styling.
+
+Automatic transcript-to-planning-card matching, derived working titles, stored
+links, and Production handoff behavior remain intact in the backend. Existing
+linked cards still provide the recording's meaningful display title; the Editor
+simply no longer asks Harvey to inspect or manage that relationship. Editor CSS
+and JavaScript cache keys were advanced together.

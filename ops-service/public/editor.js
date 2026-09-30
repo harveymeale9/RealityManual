@@ -335,17 +335,6 @@
     summary.hidden = false;
   }
 
-  function typeLabel(value) {
-    return { ultra_short: 'Ultra-short', short: 'Short', long_short: 'Long-short', longform: 'Longform' }[value] || 'Automatic';
-  }
-
-  function planningOptionsHtml(item) {
-    var selected = item.planningPieceId || '';
-    return '<option value=""' + (!selected ? ' selected' : '') + '>No linked planning card</option>' + (item.planningCandidates || []).map(function (candidate) {
-      return '<option value="' + esc(candidate.id) + '"' + (candidate.id === selected ? ' selected' : '') + '>#' + String(candidate.seq || '').padStart(3, '0') + ' · ' + esc(candidate.title || 'Untitled') + ' · ' + esc(candidate.stage || '') + '</option>';
-    }).join('');
-  }
-
   function timelineHtml(item) {
     var total = Math.max(0.01, Number(item.duration) || 0.01);
     var cuts = item.cuts || [];
@@ -893,16 +882,6 @@
       : project.retakeAnalysisStatus === 'error' ? '<i class="error">Retake check failed</i>'
         : unresolvedRetakes ? '<i class="review">' + unresolvedRetakes + ' to review</i>'
           : '<i class="ready">' + (appliedRetakes ? appliedRetakes + ' removed · resolved' : 'Retakes resolved') + '</i>';
-    var planReadiness = ['pending', 'running', 'pending_transcript'].indexOf(project.planningMatchStatus) !== -1
-      ? '<i class="working">Plan matching</i>'
-      : project.planningMatchStatus === 'error' ? '<i>Plan not linked · optional</i>'
-        : '<i class="ready">Plan ' + (project.planningPieceId ? 'linked' : 'not required') + '</i>';
-    var planningCopy = project.planningMatch && project.planningMatch.reason ||
-      (project.planningMatchStatus === 'running' || project.planningMatchStatus === 'pending'
-        ? 'Matching the transcript to Filmed cards…'
-        : project.planningMatchStatus === 'error'
-          ? 'Automatic matching was unavailable. Pick a card manually or retry when convenient; this does not block the edit.'
-          : 'Choose a card manually if this recording came from the Kanban.');
     var previewActionsHtml = '<div class="editor-preview-actions"><span class="editor-review-keys">Space play/pause · ←/→ 2s</span><label>Review speed<select id="editorReviewRate"' + (previewLocked ? ' disabled' : '') + '><option value="1"' + (reviewRate === 1 ? ' selected' : '') + '>1×</option><option value="1.25"' + (reviewRate === 1.25 ? ' selected' : '') + '>1.25×</option><option value="1.5"' + (reviewRate === 1.5 ? ' selected' : '') + '>1.5×</option><option value="2"' + (reviewRate === 2 ? ' selected' : '') + '>2×</option></select></label>' +
       (project.renderStatus === 'ready' ? '<button type="button" id="editorPreviewFinal" class="' + (previewMode === 'final' ? 'active' : '') + '"' + (previewLocked ? ' disabled' : '') + '>Final edit</button><button type="button" id="editorPreviewSource" class="' + (previewMode === 'source' ? 'active' : '') + '"' + (previewLocked ? ' disabled' : '') + '>' + sourcePreviewLabel + '</button>' : '') + '</div>';
     var automaticControlsHtml = '<div class="editor-controls"><label class="editor-toggle"><input type="checkbox" id="editorAutoSilence" ' + (project.autoSilenceEnabled !== false ? 'checked' : '') + '><span></span>Remove long pauses</label>' +
@@ -942,8 +921,6 @@
       (sentToProduction ? '<div class="editor-lock-notice approved"><strong>Approved version locked</strong><span>The exact reviewed file is now in Content Production. Source and final previews remain available here.</span></div>' : '') +
       (failures.length ? '<div class="editor-error-recovery"><div><strong>' + failures.join(', ') + ' need' + (failures.length === 1 ? 's' : '') + ' attention</strong><span>Retry the failed automatic work without changing the source recording or your edit decisions.</span></div><button type="button" class="btn-secondary btn-tiny" id="editorRetryFailed">Retry failed steps</button></div>' : '') +
       (project.workflowWarning ? '<div class="editor-workflow-warning"><strong>Video workflow needs attention</strong><span>' + esc(project.workflowWarning) + '</span></div>' : '') +
-      '<section class="editor-plan-link"><div><div class="eyebrow">Planning workflow</div><strong>' + (project.planningPieceId ? 'Linked to ' + esc(displayName(project)) : 'No planning card linked') + '</strong><span>' + esc(planningCopy) + '</span></div><label>Content card<select id="editorPlanningPiece">' + planningOptionsHtml(project) + '</select></label>' +
-        (project.planningMatchStatus !== 'running' && project.planningMatchStatus !== 'pending' ? '<button type="button" class="editor-analyze" id="editorMatchPlan">Match again</button>' : '') + '</section>' +
       (layout === 'horizontal' ? '<div class="editor-preview-toolbar">' + previewActionsHtml + '</div>' : '') +
       previewStageHtml +
       audioPanelHtml +
@@ -964,7 +941,7 @@
         (project.productionPieceId ? 'This edit is ready in Content Production for titles and thumbnail selection.' :
           project.renderStatus === 'ready' ? (audioSelectionReady ? 'Soundtrack selected. Send the finished edit across without uploading it again.' : 'Choose a backing track or No backing music before approval.') :
           'Build the final edit first. Yellow captions will be baked in below center.') + '</span>' +
-        '<div class="editor-readiness"><i class="ready">Transcript ready</i>' + framingReadiness + retakeReadiness + planReadiness + (project.renderStatus === 'ready' ? '<i class="ready">Output verified</i>' : '') + (audioSelectionReady ? '<i class="ready">Soundtrack chosen</i>' : '<i class="review">Soundtrack needed</i>') + '</div>' +
+        '<div class="editor-readiness"><i class="ready">Transcript ready</i>' + framingReadiness + retakeReadiness + (project.renderStatus === 'ready' ? '<i class="ready">Output verified</i>' : '') + (audioSelectionReady ? '<i class="ready">Soundtrack chosen</i>' : '<i class="review">Soundtrack needed</i>') + '</div>' +
         (['queued', 'running'].indexOf(project.renderStatus) !== -1 ? '<div class="editor-render-progress"><span id="editorRenderProgressLabel">' + (project.renderStatus === 'queued' ? (Number(project.renderQueuePosition) > 1 ? (Number(project.renderQueuePosition) - 1) + ' recording(s) ahead in the render queue' : 'Next in the render queue') : 'Encoding final edit · ' + Math.round(Number(project.renderProgress) || 0) + '%') + '</span><div><i id="editorRenderProgressBar" style="width:' + (project.renderStatus === 'queued' ? 4 : Math.max(2, Number(project.renderProgress) || 0)) + '%"></i></div></div>' : '') +
         (project.renderStatus === 'error' ? '<em>' + esc(project.renderError) + '</em>' : '') + '</div><div class="editor-export-actions">' +
         (project.productionPieceId ? '<button class="btn-primary" id="editorOpenProduction">Open Content Production</button>' :
@@ -1639,7 +1616,6 @@
     root.querySelector('#editorCaptions').onchange = function () { save({ captionsEnabled: this.checked }, true); };
     var openingPushIn = root.querySelector('#editorOpeningPushIn');
     if (openingPushIn) openingPushIn.onchange = function () { save({ openingPushInEnabled: this.checked }, true); };
-    root.querySelector('#editorPlanningPiece').onchange = function () { save({ planningPieceId: this.value }, true); };
     var analyzeButton = root.querySelector('#editorAnalyze');
     if (analyzeButton) analyzeButton.onclick = function () {
       var analyzeProjectId = project.id;
@@ -1662,18 +1638,6 @@
       }, 500).then(function () {
         if (!project || project.id !== analyzeProjectId) return;
         project.retakeAnalysisStatus = 'running'; renderWorkspace(); schedulePoll();
-      }).catch(function (error) { alert(error.message); renderWorkspace(); });
-    };
-    var matchPlanButton = root.querySelector('#editorMatchPlan');
-    if (matchPlanButton) matchPlanButton.onclick = function () {
-      var matchProjectId = project.id;
-      matchPlanButton.disabled = true;
-      matchPlanButton.textContent = 'Matching…';
-      retryTransientOnce(function () {
-        return api('/api/editor/' + matchProjectId + '/match-planning-piece', { method: 'POST' });
-      }, 500).then(function () {
-        if (!project || project.id !== matchProjectId) return;
-        project.planningMatchStatus = 'running'; renderWorkspace(); schedulePoll();
       }).catch(function (error) { alert(error.message); renderWorkspace(); });
     };
     root.querySelector('#editorPacing').onchange = function () {
@@ -1951,7 +1915,7 @@
       });
     };
     if (editingLocked) {
-      ['#editorAnalyze', '#editorPlanningPiece', '#editorMatchPlan', '#editorAutoSilence', '#editorCaptions', '#editorOpeningPushIn', '#editorClearAutomation', '#editorPacing', '#editorAnalyzeRetakes', '#editorUndo', '#editorCorrect', '#editorPunch', '#editorRestore', '#editorCut'].forEach(function (selector) {
+      ['#editorAnalyze', '#editorAutoSilence', '#editorCaptions', '#editorOpeningPushIn', '#editorClearAutomation', '#editorPacing', '#editorAnalyzeRetakes', '#editorUndo', '#editorCorrect', '#editorPunch', '#editorRestore', '#editorCut'].forEach(function (selector) {
         var control = root.querySelector(selector); if (control) control.disabled = true;
       });
       root.querySelectorAll('.editor-gap-toggle,.editor-retake-apply,.editor-retake-dismiss').forEach(function (control) { control.disabled = true; });
