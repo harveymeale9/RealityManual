@@ -14572,3 +14572,62 @@ FFprobe confirmed 1080×1920, 30000/1001fps, yuv420p, 15.033 seconds, and the
 service's audio/duration/frame verification passed. Frame samples across both
 the 450ms entrance and mirrored exit showed the focal point held steadily while
 scale advanced through the intended cubic ramp.
+
+---
+
+# 412. Remotion Is the Planned Animation Layer, Not the Whole Media Pipeline (2026-09-30)
+
+The first Remotion evaluation in section 411 answered the wrong architectural
+question too broadly. A cold five-second full-frame render showed that replacing
+the Editor's entire FFmpeg pipeline with Remotion would be wasteful, but it did
+not test the hybrid design that actually suits this product: render only the
+short spans containing creative animation in Remotion, then let FFmpeg continue
+to do the work it is already good at.
+
+A second prototype therefore bundled the composition once, opened Chromium
+once, reused that browser for consecutive renders, and reduced the unit of work
+to an actual 61-frame / 2.03-second portrait punch segment. On this two-core VPS,
+bundling took 3.09 seconds, browser startup took 0.16 seconds, and the first and
+second warm 1080x1920 renders took 11.29 and 10.79 seconds respectively. This is
+still inappropriate for a whole twenty-minute source, but entirely reasonable
+for a small number of animated spans rendered in the background. The reusable
+browser is an officially supported Remotion server-rendering optimization.
+
+The planned production architecture is now:
+
+1. **AI/director -> versioned edit-decision JSON.** The model chooses effects and
+   timing, but never emits arbitrary Remotion code or raw FFmpeg expressions.
+2. **Deterministic motion vocabulary.** Stable components such as `PUNCH_IN`,
+   `SLOW_PUSH`, `PAN`, `REFRAME`, `TEXT`, `IMAGE_OVERLAY`, `BROLL`, and
+   `TRANSITION` own their curves, anchors, durations, and house style. The
+   existing punch records (`start`, `end`, `zoom`, normalized anchor) already
+   form the first member of that vocabulary.
+3. **FFmpeg prepares and assembles.** It remains responsible for source
+   autorotation, cutting retakes and silences, crop/layout normalization, proxy
+   generation, audio fades and normalization, soundtrack mixing, concatenation,
+   captions, final encoding, and technical verification.
+4. **Remotion renders only visual animation spans.** Contiguous or overlapping
+   effects are merged into one span and rendered once at final dimensions and
+   frame rate, without audio. A punch span begins and ends at the neutral frame,
+   so it can be concatenated seamlessly with adjacent FFmpeg-rendered spans.
+   The opening portrait push is another natural Remotion span. Static footage is
+   never sent through Chromium.
+5. **One prebuilt bundle and one reusable browser.** The service should lazily
+   prepare them once per container lifecycle, serialize motion renders through
+   the existing encode queue, and close/recreate the browser after a crash. This
+   avoids paying startup cost per effect while keeping browser memory bounded.
+6. **One specification for preview and output.** The browser preview and final
+   renderer consume the same effect JSON and named easing presets. Remotion
+   Player is a possible later way to guarantee component parity, but the initial
+   integration does not need Remotion's experimental editor/canvas APIs or a
+   React rewrite of the current vanilla UI.
+
+The implementation should be incremental and test-gated. First move the opening
+push and punch spans behind a renderer adapter and compare exact entry, hold,
+exit, anchor, frame count, audio sync, and cut-boundary behavior against real
+Sony footage. Keep the current FFmpeg motion renderer as a temporary rollback
+backend until the Remotion output passes those checks; do not silently fall back
+within a completed export, because that could make the approved preview and
+final visual treatment disagree. After that foundation is stable, new visual
+effects belong in deterministic Remotion components rather than increasingly
+complex FFmpeg filter graphs.
