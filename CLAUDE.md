@@ -14453,3 +14453,34 @@ audio 1.3ms before the video's `play` event, both reached steady playback within
 62ms of the click, and ongoing timeline drift was about 0.03 seconds. The test
 restored the project's original empty soundtrack choice and produced no page
 errors.
+
+---
+
+# 409. Editor Working Titles Come From the Transcript, Never Camera Filenames (2026-09-30)
+
+The Editor previously displayed an opaque camera basename such as `9259` when
+its transcript did not confidently match a Filmed planning card. Production's
+later analyzer could generate a useful label, but that was too late: the Editor
+queue and review header still required Harvey to remember which numbered clip
+contained which idea.
+
+The existing post-transcription planning-match pass now has two inseparable
+jobs. It still links a planning card when confidence is high, and it always
+returns a concise 3–10 word working title describing the transcript's central
+idea, even when the candidate list is empty or nothing matches. The structured
+schema requires that title. Newline/whitespace/quote cleanup and a strict
+length bound are applied before it becomes the project's visible `name` and
+durable `workingTitle`. The original uploaded camera name remains untouched in
+`fileName` as provenance and as the stable source-master identity.
+
+Because the Editor's queue, heading, navigation and Production handoff already
+consume `project.name`, they receive the meaningful transcript label without a
+second naming system. A matched planning card remains the primary visible
+identity (`#079 · Rule of Innovation`), while the transcript title remains
+useful secondary context. Existing active transcribed projects without a
+working title are automatically queued through the text pass once on service
+startup, so legacy numeric filenames are backfilled rather than only fixing
+future uploads.
+
+Service coverage now proves both the no-candidate and high-confidence-match
+paths persist a working title and name source, including the startup backfill.

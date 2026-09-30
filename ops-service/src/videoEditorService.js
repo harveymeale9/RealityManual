@@ -228,6 +228,11 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, Number(value) || 0));
 }
 
+function normalizeWorkingTitle(value) {
+  return String(value || '').replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim()
+    .replace(/^["'`]+|["'`]+$/g, '').slice(0, 80).trim();
+}
+
 function displayDimensions(width, height, rotation) {
   width = Number(width) || 0;
   height = Number(height) || 0;
@@ -1279,18 +1284,23 @@ function setup(options) {
       saveProject(project);
       try {
         const candidates = await Promise.resolve(getPlanningCandidates(project));
-        let result = { pieceId: '', confidence: 'none', reason: candidates.length ? 'No confident planning-card match.' : 'No Filmed cards are waiting.' };
-        if (candidates.length) {
-          try {
-            result = await matchPlanningPiece({ project: project, candidates: candidates });
-          } catch (firstError) {
-            await new Promise(function (resolve) { setTimeout(resolve, 750); });
-            result = await matchPlanningPiece({ project: project, candidates: candidates });
-          }
+        let result;
+        try {
+          result = await matchPlanningPiece({ project: project, candidates: candidates });
+        } catch (firstError) {
+          await new Promise(function (resolve) { setTimeout(resolve, 750); });
+          result = await matchPlanningPiece({ project: project, candidates: candidates });
         }
         project = getProject(id);
         if (!project) return;
         const matched = candidates.find(function (candidate) { return candidate.id === (result && result.pieceId); });
+        const workingTitle = normalizeWorkingTitle(result && result.workingTitle || matched && matched.title);
+        if (workingTitle) {
+          project.workingTitle = workingTitle;
+          project.name = workingTitle;
+          project.nameSource = matched && result.confidence === 'high' ? 'planning_transcript' : 'transcript';
+          project.workingTitleGeneratedAt = new Date().toISOString();
+        }
         const previousPlanningPieceId = project.planningPieceId || '';
         if (matched && result.confidence === 'high' && !project.planningPieceManuallySelected) {
           project.planningPieceId = matched.id;
@@ -1531,6 +1541,14 @@ async function renderProject(id) {
       if (project.openingPushInEnabled === undefined) {
         project.openingPushInEnabled = true;
         migrationRequiresRender = migrationRequiresRender || effectiveLayout(project) === 'vertical';
+        migrated = true;
+      }
+      // Older Editor projects finished transcript matching before that pass
+      // also generated a useful queue label. Re-run only that lightweight
+      // text phase once, retaining the camera filename separately in fileName.
+      if (project.transcriptionStatus === 'ready' && typeof matchPlanningPiece === 'function' && !project.workingTitle) {
+        project.planningMatchStatus = 'pending';
+        project.planningMatchError = '';
         migrated = true;
       }
       if (migrationRequiresRender && project.renderStatus === 'ready') invalidateProjectRender(project);

@@ -684,7 +684,7 @@ test('legacy ready recordings acquire missing analysis phases on startup', { tim
   editor.setup({
     db: db, dataDir: dir, transcribeDetailed: async function () { return { text: '', words: [] }; },
     getPlanningCandidates: function () { return []; },
-    matchPlanningPiece: async function () { planningCalls++; return { pieceId: '', confidence: 'none', reason: 'No match.' }; }
+    matchPlanningPiece: async function () { planningCalls++; return { pieceId: '', confidence: 'none', reason: 'No match.', workingTitle: 'Existing Transcript Explained' }; }
   });
   let project;
   for (let attempt = 0; attempt < 100; attempt++) {
@@ -693,8 +693,10 @@ test('legacy ready recordings acquire missing analysis phases on startup', { tim
     await new Promise(function (resolve) { setTimeout(resolve, 20); });
   }
   assert.equal(project.planningMatchStatus, 'ready');
-  // No candidates means the service resolves locally without spending an AI call.
-  assert.equal(planningCalls, 0);
+  assert.equal(planningCalls, 1, 'a transcript still needs a meaningful title when no planning cards exist');
+  assert.equal(project.name, 'Existing Transcript Explained');
+  assert.equal(project.workingTitle, 'Existing Transcript Explained');
+  assert.equal(project.nameSource, 'transcript');
   assert.equal(project.renderProgress, 0);
   await new Promise(function (resolve) { setTimeout(resolve, 50); });
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
@@ -814,7 +816,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
       return { decisions: [{ removeStartIndex: 0, removeEndIndex: 1, replacementStartIndex: 2, replacementEndIndex: 3, confidence: 'high', reason: 'Synthetic replaced take.' }] };
     },
     getPlanningCandidates: function () { return [{ id: 'plan-1', seq: 79, title: 'Synthetic outline', stage: 'filmed', notesSnippet: 'One two.' }, { id: 'plan-2', seq: 80, title: 'Corrected outline', stage: 'filmed', notesSnippet: 'One two.' }]; },
-    matchPlanningPiece: async function () { planningMatchCalls++; return { pieceId: 'plan-1', confidence: 'high', reason: 'The transcript matches the filmed outline.' }; },
+    matchPlanningPiece: async function () { planningMatchCalls++; return { pieceId: 'plan-1', confidence: 'high', reason: 'The transcript matches the filmed outline.', workingTitle: 'Synthetic Outline' }; },
     onRenderReady: function (input) {
       renderReadyCalls++;
       assert.equal(input.project.planningPieceId, expectedPlanningPieceId);
@@ -916,6 +918,9 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.planningPieceId, 'plan-1');
   assert.equal(project.planningPieceTitle, 'Synthetic outline');
   assert.equal(project.planningPieceSeq, 79);
+  assert.equal(project.name, 'Synthetic Outline');
+  assert.equal(project.workingTitle, 'Synthetic Outline');
+  assert.equal(project.nameSource, 'planning_transcript');
   assert.equal(planningMatchCalls, 1);
   assert.ok(project.cuts.some(function (cut) { return cut.reason === 'long_pause'; }));
   assert.deepEqual(project.captionGroups.map(function (group) { return group.text; }), ['One two.']);
