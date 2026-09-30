@@ -14346,3 +14346,16 @@ real portrait project serves both source and final review at 480×854. A seek to
 backward. Both live routes returned HTTP 206 for a requested byte range, the
 custom slider moved the real playhead, its Play control started playback, and
 no page errors occurred.
+
+---
+
+# 406. Redundant Editor Preview Description Removed (2026-09-30)
+
+The full-width strip above the player repeated whether the current view was the
+final edit or source copy and explained that Production receives the full-quality
+file. That distinction was already evident from the selected source/final control
+and added height without enabling any action. Portrait review no longer renders
+the strip at all. Horizontal review still needs its speed and source/final
+controls, so those remain in a compact action-only toolbar without the repeated
+heading or explanatory copy. The old preview-mode CSS and its mobile layout rule
+were removed, and both Editor asset cache keys were advanced.
