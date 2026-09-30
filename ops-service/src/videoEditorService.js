@@ -13,6 +13,7 @@ const EDIT_RENDER_DEBOUNCE_MS = 2500;
 const EDITOR_DISK_RESERVE_BYTES = 2 * 1024 * 1024 * 1024;
 const OPENING_PUSH_IN_SECONDS = 3;
 const OPENING_PUSH_IN_SCALE = 1.04;
+const EDITOR_RENDER_VERSION = 2;
 
 function requiredEditorCapacity(fileBytes, fileAlreadyStored) {
   const bytes = Math.max(0, Number(fileBytes) || 0);
@@ -1289,6 +1290,7 @@ async function renderProject(id) {
       }
       const renderSha256 = await hashFile(renderPath(id));
       project.renderStatus = 'ready';
+      project.renderVersion = EDITOR_RENDER_VERSION;
       project.renderProgress = 100;
       project.renderSizeBytes = stat.size;
       project.renderSha256 = renderSha256;
@@ -1494,6 +1496,14 @@ async function renderProject(id) {
       let snapshot;
       try { snapshot = JSON.parse(row.data); } catch (error) { continue; }
       if (!snapshot || snapshot.productionPieceId || snapshot.renderStatus !== 'ready' || !snapshot.renderSha256 || !isId(snapshot.id)) continue;
+      if (Number(snapshot.renderVersion) !== EDITOR_RENDER_VERSION) {
+        const current = getProject(snapshot.id);
+        if (!current || current.productionPieceId || current.renderStatus !== 'ready' || current.renderSha256 !== snapshot.renderSha256) continue;
+        invalidateProjectRender(current);
+        saveProject(current);
+        if (automaticReviewReady(current)) setImmediate(function () { maybeAutoRender(current.id); });
+        continue;
+      }
       const valid = await verifiedRenderMatches(snapshot, renderPath(snapshot.id));
       if (valid) continue;
       const current = getProject(snapshot.id);

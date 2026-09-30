@@ -14218,4 +14218,6 @@ page/hand area he marked. Horizontal captions are unchanged.
 The browser working preview and baked ASS render use the same proportional
 position, and the stylesheet cache key was bumped so an already-open device
 receives the new placement after reload. Unit coverage verifies the exact
-1080×1920 export margin.
+1080×1920 export margin. Render format version 2 also invalidates and
+automatically rebuilds any unapproved ready edit made with the earlier caption
+position; approved Production inputs remain immutable.
