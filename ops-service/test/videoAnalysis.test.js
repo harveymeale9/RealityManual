@@ -77,7 +77,13 @@ test('music calibration uses the loudest valid three-second EBU R128 window', fu
     loudestShortTermLufs: -18.2,
     usedMomentaryFallback: false
   });
-  assert.match(videoAnalysis.musicPeakMeasureArgs('/music').join(' '), /ebur128=peak=true:framelog=verbose/);
+  const boundedArgs = videoAnalysis.musicPeakMeasureArgs('/music', 15.033);
+  assert.match(boundedArgs.join(' '), /ebur128=peak=true:framelog=verbose/);
+  assert.equal(boundedArgs[boundedArgs.indexOf('-t') + 1], '15.033');
+  assert.equal(boundedArgs.includes('-stream_loop'), true);
+  const unboundedArgs = videoAnalysis.musicPeakMeasureArgs('/music');
+  assert.equal(unboundedArgs.includes('-t'), false);
+  assert.equal(unboundedArgs.includes('-stream_loop'), false);
 });
 
 test('measured final pass uses two-pass loudnorm values and a true-peak safeguard', function () {

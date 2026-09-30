@@ -14878,3 +14878,31 @@ placing the word just above the marked lower-page area while retaining clearance
 from the player controls and platform UI. Landscape caption placement is
 unchanged. The stylesheet cache key was advanced and ASS regression coverage
 was updated to lock preview/output parity.
+
+---
+
+# 424. Soundtrack Loudness Is Calibrated Against the Passage the Video Uses (2026-09-30)
+
+Editor soundtrack previews could make a correctly configured music bed almost
+inaudible even though the saved loudness settings had not changed. The measured
+mixer was finding the loudest sustained three-second passage across the entire
+source track, then applying that gain to the track from its beginning. A short
+video which used only a quiet musical introduction was therefore attenuated as
+if a much louder, unused build later in the song were present in the edit.
+
+Music analysis is now bounded to the finished video's actual programme duration
+and loops short tracks exactly as the final mix does. The configured
+`musicBelowDialogueDb` relationship therefore applies to the loudest sustained
+passage the viewer will really hear, while still protecting dialogue from a
+later build when that build is long enough to occur in the video. Editor audio
+previews and final production renders share this same path. The audio-preview
+engine version was advanced so open browsers discard previously prepared mixes
+even though Harvey's saved LUFS values themselves correctly remain unchanged.
+
+On the current 15.033-second vertical edit and selected piano track, the old
+whole-file scan calibrated against `-17.5 LUFS`, while the passage actually used
+tops out at `-23.1 LUFS`. The corrected mix therefore restores 5.6 dB of music
+without changing the `-16 LUFS` dialogue, `20 dB below dialogue`, or `-1.5 dBTP`
+settings. A real corrected preview measured its final programme at essentially
+the intended target (`-15.99 LUFS` before the final pass), and unit coverage now
+locks bounded, looping music analysis as well as the safe unbounded helper.

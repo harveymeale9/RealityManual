@@ -4350,12 +4350,12 @@
       '</section>' +
       '<section class="settings-section">' +
         '<h3>Ambient audio library</h3>' +
-        '<p class="settings-hint">Backing tracks offered in the audio dropdown when editing an uploaded video. Loudness matching anchors each track\'s loudest sustained three-second passage to the selected level below dialogue, so a soft intro stays soft without letting the later build overwhelm your voice.</p>' +
+        '<p class="settings-hint">Backing tracks offered in the audio dropdown when editing an uploaded video. Loudness matching anchors the loudest sustained three-second passage actually used by the video to the selected level below dialogue, so a soft intro stays soft without an unused later build making the whole preview too quiet.</p>' +
         '<div class="ambient-mix-controls">' +
           '<div class="ambient-volume-row"><label for="audioMixModeSelect"><span>Mixing method</span><small>Loudness matched is recommended; Legacy preserves the old percentage control for comparison</small></label><select class="stage-select" id="audioMixModeSelect"><option value="loudness">Loudness matched</option><option value="legacy_percent">Legacy percentage</option></select></div>' +
           '<div id="loudnessMixSettings">' +
             '<div class="ambient-volume-row"><label for="dialogueLufsSelect"><span>Finished dialogue loudness</span><small>Integrated programme target; −16 LUFS is the spoken-video default</small></label><select class="stage-select" id="dialogueLufsSelect"></select></div>' +
-            '<div class="ambient-volume-row"><label for="musicBelowDialogueSelect"><span>Music level below dialogue</span><small>Applied to the track\'s loudest sustained passage; larger negative values make music quieter</small></label><select class="stage-select" id="musicBelowDialogueSelect"></select></div>' +
+            '<div class="ambient-volume-row"><label for="musicBelowDialogueSelect"><span>Music level below dialogue</span><small>Applied to the loudest sustained passage used in this video; larger negative values make music quieter</small></label><select class="stage-select" id="musicBelowDialogueSelect"></select></div>' +
             '<div class="ambient-volume-row"><label for="audioTruePeakSelect"><span>True-peak ceiling</span><small>Final safety limit after the completed mix is measured</small></label><select class="stage-select" id="audioTruePeakSelect"></select></div>' +
             '<div class="ambient-volume-row"><label for="musicDuckingToggle"><span>Gentle speech ducking</span><small>Slightly lowers music while dialogue is active</small></label><input type="checkbox" id="musicDuckingToggle"></div>' +
           '</div>' +

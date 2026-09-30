@@ -16,6 +16,7 @@ const OPENING_PUSH_IN_SCALE = 1.04;
 const PUNCH_TRANSITION_SECONDS = 0.45;
 const EDITOR_RENDER_VERSION = 6;
 const BROWSER_PREVIEW_VERSION = 2;
+const AUDIO_PREVIEW_MIX_VERSION = 2;
 const AUDIO_PREVIEW_TTL_MS = 2 * 60 * 60 * 1000;
 
 function requiredEditorCapacity(fileBytes, fileAlreadyStored) {
@@ -1915,7 +1916,7 @@ async function renderProject(id) {
       return { id: track.id, name: String(track.name || track.fileName || 'Untitled track').slice(0, 200), note: String(track.note || '').slice(0, 500) };
     }).sort(function (a, b) { return a.name.localeCompare(b.name); });
     const settings = typeof getAudioMixSettings === 'function' ? getAudioMixSettings() || {} : {};
-    const mixVersion = crypto.createHash('sha256').update(JSON.stringify(settings)).digest('hex').slice(0, 16);
+    const mixVersion = crypto.createHash('sha256').update(AUDIO_PREVIEW_MIX_VERSION + ':' + JSON.stringify(settings)).digest('hex').slice(0, 16);
     res.json({ tracks: tracks, mixVersion: mixVersion });
   });
 

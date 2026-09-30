@@ -120,9 +120,20 @@ function loudnessMeasureArgs(inputPath, settings) {
 // loudness uses a rolling three-second window, which is long enough to ignore
 // isolated transients but catches a musical build that stays loud. Momentary
 // loudness is retained as a fallback for clips shorter than three seconds.
-function musicPeakMeasureArgs(inputPath) {
-  return ['-hide_banner', '-loglevel', 'verbose', '-nostats', '-i', inputPath, '-vn', '-af',
-    'ebur128=peak=true:framelog=verbose', '-f', 'null', '-'];
+function musicPeakMeasureArgs(inputPath, usedDurationSeconds) {
+  const duration = Number(usedDurationSeconds);
+  const bounded = Number.isFinite(duration) && duration > 0;
+  const args = ['-hide_banner', '-loglevel', 'verbose', '-nostats'];
+  // Calibrate the passage which will actually be present in the finished
+  // video. Measuring an entire three-minute track for a fifteen-second edit
+  // can otherwise find a much louder later build and turn the soft opening
+  // down again, making the selected bed effectively inaudible. Looping here
+  // mirrors the real mix when the video is longer than the music file.
+  if (bounded) args.push('-stream_loop', '-1');
+  args.push('-i', inputPath);
+  if (bounded) args.push('-t', duration.toFixed(3));
+  return args.concat(['-vn', '-af',
+    'ebur128=peak=true:framelog=verbose', '-f', 'null', '-']);
 }
 
 function parseMusicPeakMeasurement(stderr) {
@@ -249,8 +260,21 @@ async function measureLoudness(inputPath, settings) {
   return parseLoudnessMeasurement(result.stderr);
 }
 
-async function measureMusicPeak(inputPath) {
-  const result = await runFfmpeg(musicPeakMeasureArgs(inputPath), 'music peak measurement');
+async function mediaDuration(inputPath) {
+  return new Promise(function (resolve, reject) {
+    execFile('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', inputPath],
+      { maxBuffer: 1024 * 1024 }, function (err, stdout) {
+        const duration = Number(String(stdout || '').trim());
+        if (err || !Number.isFinite(duration) || duration <= 0) {
+          return reject(new Error('ffprobe could not determine the programme duration'));
+        }
+        resolve(duration);
+      });
+  });
+}
+
+async function measureMusicPeak(inputPath, usedDurationSeconds) {
+  const result = await runFfmpeg(musicPeakMeasureArgs(inputPath, usedDurationSeconds), 'music peak measurement');
   return parseMusicPeakMeasurement(result.stderr);
 }
 
@@ -272,7 +296,8 @@ async function buildFinalVideo(videoPath, audioPath, outPath, mixInput) {
   const tempAudioPath = outPath + '.loudness-mix.flac';
   try {
     const dialogueMeasurement = await measureLoudness(videoPath, settings);
-    const musicMeasurement = audioPath ? await measureMusicPeak(audioPath) : null;
+    const programmeDuration = audioPath ? await mediaDuration(videoPath) : null;
+    const musicMeasurement = audioPath ? await measureMusicPeak(audioPath, programmeDuration) : null;
     await runFfmpeg(measuredMixAudioArgs(videoPath, audioPath, tempAudioPath, settings, dialogueMeasurement, musicMeasurement), 'measured audio mix');
     const mixMeasurement = await measureLoudness(tempAudioPath, settings);
     await runFfmpeg(measuredFinalVideoArgs(videoPath, tempAudioPath, outPath, settings, mixMeasurement), 'loudness-normalized final-video build');
@@ -294,7 +319,8 @@ async function buildAudioPreview(dialoguePath, audioPath, outPath, mixInput, out
   const tempAudioPath = outPath + '.loudness-mix.flac';
   try {
     const dialogueMeasurement = await measureLoudness(dialoguePath, settings);
-    const musicMeasurement = await measureMusicPeak(audioPath);
+    const programmeDuration = await mediaDuration(dialoguePath);
+    const musicMeasurement = await measureMusicPeak(audioPath, programmeDuration);
     await runFfmpeg(measuredMixAudioArgs(dialoguePath, audioPath, tempAudioPath, settings, dialogueMeasurement, musicMeasurement), 'preview audio mix');
     const mixMeasurement = await measureLoudness(tempAudioPath, settings);
     await runFfmpeg(measuredFinalAudioArgs(tempAudioPath, outPath, settings, mixMeasurement, outputOptions), 'loudness-normalized audio preview');
