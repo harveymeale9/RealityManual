@@ -14260,4 +14260,8 @@ row and the two control cards sit beneath it; on phones the player and cards
 stack into one usable column.
 
 Both changed assets have new cache keys, so existing browsers receive the new
-layout immediately after reload.
+layout immediately after reload. Live authenticated Playwright checks at
+1440×1000 and 390×844 verified the real portrait project has a 430×764
+desktop player, two side-control cards, no duplicate control IDs, no crop
+control, working speed/source/final controls, a 340×604 phone player, correct
+stack order, and no horizontal overflow.
