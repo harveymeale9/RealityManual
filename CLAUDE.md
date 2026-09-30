@@ -14779,3 +14779,19 @@ the completed bubble back while TTS was delayed, displayed the preparation
 state, revealed and autostarted it after the response arrived, and then began a
 second manual playback from memory in 75ms with the TTS request count unchanged.
 Desktop and mobile cache keys were advanced together.
+
+---
+
+# 418. Mobile Project Manager Has One Recording Action (2026-09-30)
+
+The mobile Project Manager no longer shows the unused “Just Execute” button at
+the bottom of the screen. Its execute-only styling, event listener, canned
+acknowledgment, and mode branch were removed with it rather than leaving dead
+behavior behind. The remaining primary recording button always uses the normal
+respond flow, including contextual acknowledgment and prepared final voice
+playback, so the mobile interface now presents one clear way to dictate a
+message without changing desktop behavior or the underlying API's mode support.
+
+A real mobile-sized Chromium check confirmed that the recording control remains
+visible and the removed button is absent, with no page errors. The complete
+142-test suite continues to pass.

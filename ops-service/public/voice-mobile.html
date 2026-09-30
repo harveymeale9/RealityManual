@@ -46,15 +46,9 @@
       color: var(--accent-ink);
       background: linear-gradient(135deg, var(--accent-2) 0%, var(--accent) 55%, var(--accent-3) 100%);
     }
-    .v-btn-execute {
-      color: var(--ink);
-      background: var(--surface-2);
-      border: 1.5px solid var(--error);
-    }
-    .v-btn-execute svg { stroke: var(--error); }
     .v-btn:active { transform: scale(0.98); }
 
-    /* The always-visible chat, sandwiched between the two buttons — no more
+    /* The always-visible chat beneath the one recording action — no more
        history hidden behind a separate icon/overlay. */
     .v-chat { flex: 1; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--border-soft); border-radius: 14px; overflow: hidden; }
     .v-chat .pm-thread { padding: 14px; max-width: none; }
@@ -201,10 +195,6 @@
         </div>
       </div>
 
-      <button type="button" class="v-btn v-btn-execute" id="executeBtn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg>
-        <span class="v-btn-text"><span class="v-btn-label">Just Execute</span><span class="v-btn-sub">Speak — text reply only, not read aloud</span></span>
-      </button>
     </div>
 
     <button type="button" class="v-queue-tab" id="queueTab" aria-label="Show task list">
@@ -248,7 +238,6 @@
       var vApp = document.getElementById('vApp');
 
       var askBtn = document.getElementById('askBtn');
-      var executeBtn = document.getElementById('executeBtn');
       var recordOverlay = document.getElementById('recordOverlay');
       var recordPulse = document.getElementById('recordPulse');
       var recordStatus = document.getElementById('recordStatus');
@@ -373,13 +362,6 @@
         replyPreviewEl.hidden = true;
       }
       replyPreviewCancelBtn.addEventListener('click', clearPendingReplyTo);
-
-      // Still used for the immediate, synchronous ack spoken the instant an
-      // execute-mode message is sent from the mic-recording flow below —
-      // that one is unambiguously always a task by construction (that's the
-      // whole distinction the two buttons encode), so it doesn't need to
-      // wait on a real early_ack the way respond-mode now does.
-      var EXECUTE_ACK_TEXT = 'Got it — I’ll take care of that now.';
 
       function showApp() {
         authChecking.hidden = true; loginGate.hidden = true; vApp.hidden = false;
@@ -807,10 +789,10 @@
       var activeRecorder = null;
       var activeRecordingFlow = 0;
 
-      function startFlow(mode) {
+      function startFlow() {
         var thisFlow = ++activeRecordingFlow;
         var readyTimer = null;
-        recordPulse.className = 'v-pulse' + (mode === 'execute' ? ' execute' : '');
+        recordPulse.className = 'v-pulse';
         recordOverlay.classList.remove('recording-live');
         recordStatus.textContent = 'Starting microphone…';
         finishBtn.disabled = true;
@@ -884,31 +866,15 @@
             addMessage('user', text);
             var agent = selectedAgent;
             var typingEl = addTyping(null, agent);
-            return Voice.sendMessage(text, mode, null, null, agent).then(function (created) {
+            return Voice.sendMessage(text, 'respond', null, null, agent).then(function (created) {
               // Mark it known on the shared sync engine right away so its
               // next tick doesn't treat this same row as new (duplicate user
               // bubble/typing indicator) once it catches up to it.
               typingEl.dataset.msgId = created.id;
               sync.markKnown(created);
-              // Never block this screen on the real completion (that's what
-              // made a 5-10 minute task feel broken, per Harvey) — speak an
-              // immediate ack and let it run in the background. The shared
-              // sync engine's onDone (above) renders the real reply and
-              // decides whether it's still worth speaking once it lands.
-              if (mode === 'execute') {
-                // Execute is unambiguously always a task by construction, so
-                // it always gets this immediate "I'll take care of that"
-                // ack — no need to wait on a real early_ack the way respond
-                // mode does, and execute never speaks the real result either
-                // way, so there's no "redundant double-speak" risk.
-                if (Voice.isAutoSpeechEnabled() && agent !== 'codex') Voice.speak(EXECUTE_ACK_TEXT, created.id, agent).catch(function () {});
-              } else {
-                // Same as desktop: mark it eligible for auto-speak and let
-                // the shared sync engine's onEarlyAck/onDone (above) decide
-                // what actually gets spoken and when — no fallback timer,
-                // no canned phrase.
-                voiceAutoSpeak[created.id] = true;
-              }
+              // Mark it eligible for the contextual acknowledgment while
+              // the shared sync engine handles the prepared final reply.
+              voiceAutoSpeak[created.id] = true;
             });
           }).then(function () {
             hideAllOverlays();
@@ -919,8 +885,7 @@
         };
       }
 
-      askBtn.addEventListener('click', function () { startFlow('respond'); });
-      executeBtn.addEventListener('click', function () { startFlow('execute'); });
+      askBtn.addEventListener('click', startFlow);
     })();
   </script>
 </body>
