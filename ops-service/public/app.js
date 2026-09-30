@@ -2019,6 +2019,11 @@
   }
 
   function populateFields(p) {
+    // Planning cards are primarily writing workspaces. Give them a denser,
+    // viewport-filling layout; Production cards retain the scrollable media
+    // form because they have several video-specific controls below Notes.
+    pieceModal.classList.toggle('text-piece', !p.hasVideo);
+    pieceModal.classList.toggle('video-piece', !!p.hasVideo);
     fieldTitle.value = p.title || '';
     fieldContentType.value = p.contentType || '';
     stageField.hidden = !!p.hasVideo;

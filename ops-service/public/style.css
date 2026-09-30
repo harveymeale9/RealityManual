@@ -1514,6 +1514,62 @@ body.role-reviewer #pmBackFab {
   border-top: 1px solid var(--border-soft);
   flex-shrink: 0;
 }
+
+/* A planning card is a writing surface, not a narrow settings dialog. On a
+   laptop the former 760px modal stacked ~230px of controls above Notes and
+   left much of the viewport unused. Keep the metadata available, but compress
+   it into one row and let the editor own every remaining pixel. Video cards
+   intentionally retain the conventional scrolling form below. */
+@media (min-width: 801px) {
+  .modal.text-piece {
+    width: min(1120px, calc(100vw - 112px));
+    height: calc(100dvh - 24px);
+    max-height: 920px;
+  }
+  .modal.text-piece .modal-head { padding: 10px 18px; }
+  .modal.text-piece .modal-body {
+    min-height: 0;
+    overflow: hidden;
+    padding: 14px 18px;
+    gap: 11px;
+  }
+  .modal.text-piece .title-input {
+    padding: 1px 0 8px;
+    font-size: clamp(1.35rem, 2vw, 1.75rem);
+  }
+  .modal.text-piece .toolbar-row {
+    display: grid;
+    grid-template-columns: minmax(150px, 180px) minmax(160px, 200px) minmax(0, 1fr);
+    gap: 12px;
+    align-items: end;
+  }
+  .modal.text-piece .toolbar-row .field,
+  .modal.text-piece .toolbar-row .field.grow { min-width: 0; }
+  .modal.text-piece .field label,
+  .modal.text-piece .field-label { margin-bottom: 5px; }
+  .modal.text-piece .stage-select,
+  .modal.text-piece .format-select { padding-block: 7px; }
+  .modal.text-piece .platform-grid { gap: 5px; }
+  .modal.text-piece .platform-toggle { padding: 6px 9px; }
+  .modal.text-piece .notes-field {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: column;
+  }
+  .modal.text-piece .notes-input {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    padding: 16px 18px;
+    resize: none;
+    font-size: 1rem;
+    line-height: 1.62;
+  }
+  .modal.text-piece .modal-foot { padding: 8px 18px; }
+  .modal.text-piece .meta-row { flex-direction: row; gap: 14px; }
+  .modal.text-piece .btn-delete { padding: 7px 12px; }
+}
 .meta-row { display: flex; flex-direction: column; gap: 2px; font-size: 0.72rem; color: var(--ink-faint); }
 .btn-delete {
   background: none;

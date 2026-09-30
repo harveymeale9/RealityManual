@@ -15072,3 +15072,23 @@ Regression coverage includes missing configuration, a complete multipart
 upload/head/download/sign/delete lifecycle, and rejection of a remote object
 whose byte count differs from the final render. All 145 Node tests pass, along
 with syntax and whitespace checks.
+
+---
+
+# 430. Planning Card Modal Is Now a Laptop-Sized Writing Workspace (2026-09-30)
+
+Harvey reported that the Content Pipeline card editor spent too much of a
+laptop viewport on padding and controls, leaving the actual writing surface
+feeling like a narrow sliver. The planning-card modal was still designed as a
+760px-wide generic form: its title, three metadata groups, 24-28px gutters,
+header and footer all stacked around a fixed 340px Notes box.
+
+Text-only planning cards now receive a dedicated `text-piece` presentation;
+video/Production cards keep their existing media form. Above 800px, the text
+editor expands to at most 1120px and the available viewport height, compresses
+the modal chrome, places Stage, Content Type and Platforms in one compact row,
+and lets Notes consume every remaining pixel with its own internal scrolling.
+The existing full-screen mobile layout is untouched. At a 1366x768 laptop
+viewport the usable Notes area increased from 702x340 to 1082x480; at
+1024x700 it remains 874x419 with no modal-body overflow. Both viewports were
+exercised in Chromium against a real Content Pipeline card with no page errors.
