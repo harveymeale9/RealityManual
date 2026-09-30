@@ -299,7 +299,8 @@
     renderSubtabs(active);
     if (sideRail) {
       sideRail.querySelectorAll('.side-rail-btn').forEach(function (btn) {
-        btn.classList.toggle('active', btn.dataset.tab === active);
+        var ids = (btn.dataset.tabs || btn.dataset.tab || '').split(',');
+        btn.classList.toggle('active', ids.indexOf(active) !== -1);
       });
     }
     var backFab = document.getElementById('pmBackFab');

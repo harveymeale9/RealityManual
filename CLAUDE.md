@@ -14720,3 +14720,28 @@ Content Pipeline: other analytics pages which reuse `.ops-panel`, the 1600px+
 large-screen sizing, Final Check's 2:1 width relationship, and the existing
 mobile 86vw single-column behavior are unchanged. CSS and app cache keys were
 advanced to v86.
+
+---
+
+# 416. The Vertical Rail No Longer Duplicates Every Child Tool (2026-09-30)
+
+The shared left rail had grown to fifteen icons because Content Ops, Research,
+and Analytics each rendered both a parent icon and every child tool beneath it.
+Those child destinations were already present, with readable labels, in the
+horizontal sub-navigation shown after entering the parent area. On a laptop the
+duplicated rail consumed almost the entire viewport height, visually crowded
+every section, and left no room for the navigation to grow safely.
+
+The rail now exposes six stable area-level destinations only: Project Manager,
+Content Ops, Research, Analytics, Mailbox, and Manuscript. Content Pipeline,
+Ideation, Production, Editor, Settings, Outlier Analysis, Idea Research, Sales,
+and Website Analytics remain available from their existing horizontal
+sub-navigation. Parent rail buttons carry the full list of their child route
+IDs, so Content Ops remains highlighted while Editor or any other Content tool
+is open, with the same behavior for Research and Analytics.
+
+A real 1366x768 Chromium session verified the six visible icons fit without
+shrinking or overflow, Project Manager and Pipeline still occupy the complete
+shared shell, and navigating directly to Editor activates both the Content Ops
+rail parent and Editor's horizontal tab. App and stylesheet cache keys were
+advanced to v87.

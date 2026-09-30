@@ -265,14 +265,14 @@ a { color: var(--accent); }
   padding-top: 8px;
 }
 
-/* Content Ops / Research / Analytics groups: a full-size parent icon, then its real
-   leaf tabs nested underneath — smaller, under a thin divider, per
-   Harvey's "nested sub-icons" request. Deliberately not indented
-   sideways (the rail is only 76px wide, not much room), so the nesting
-   reads through size + the divider + proximity instead. */
+/* One rail icon per product area. Child tools stay in the labelled
+   horizontal sub-navigation instead of consuming laptop height here. */
 .side-rail-group { display: flex; flex-direction: column; align-items: center; }
 .side-rail-sub {
-  display: flex;
+  /* Child tools already appear in the horizontal sub-navigation. Repeating
+     all of them here made the shared rail exceed a laptop-height viewport
+     and crowded every section of the app. */
+  display: none;
   flex-direction: column;
   align-items: center;
   gap: 2px;
