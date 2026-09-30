@@ -997,6 +997,8 @@
     var audioProgress = root.querySelector('#editorAudioProgress');
     var audioBatch = project.renderStatus === 'ready' && !previewLocked ? ensureAudioPreviewBatch(project) : null;
     var playerScrubbing = false;
+    var resumeAfterScrub = false;
+    var scrubResumeToken = 0;
     var bufferingTimer = null;
     var synchronizedStartToken = 0;
     var synchronizedStartInProgress = false;
@@ -1207,16 +1209,52 @@
       togglePlayerPlayback();
     };
     if (playerSeek) {
-      playerSeek.addEventListener('pointerdown', function () { playerScrubbing = true; });
-      playerSeek.addEventListener('input', function () {
-        video.currentTime = Math.max(0, Math.min(Number(video.duration) || Infinity, Number(playerSeek.value) || 0));
-        if (playerCurrent) playerCurrent.textContent = formatTime(video.currentTime);
+      function beginScrub() {
+        if (playerScrubbing) return;
+        playerScrubbing = true;
+        resumeAfterScrub = !video.paused;
+        scrubResumeToken++;
+        pausePlayerPlayback();
+        hideBuffering();
+      }
+      function moveScrubPlayhead() {
+        var target = Math.max(0, Math.min(Number(video.duration) || Infinity, Number(playerSeek.value) || 0));
+        try { video.currentTime = target; } catch (error) {}
+        if (mixedPreviewActive()) {
+          mixedAudio.pause();
+          try { mixedAudio.currentTime = target; } catch (error) {}
+        }
+        if (playerCurrent) playerCurrent.textContent = formatTime(target);
         var duration = Number(video.duration) || 0;
-        var played = duration ? video.currentTime / duration * 100 : 0;
+        var played = duration ? target / duration * 100 : 0;
         playerSeek.style.setProperty('--editor-played', played.toFixed(3) + '%');
+      }
+      function finishScrub() {
+        if (!playerScrubbing) return;
+        playerScrubbing = false;
+        moveScrubPlayhead();
+        var shouldResume = resumeAfterScrub;
+        resumeAfterScrub = false;
+        var token = ++scrubResumeToken;
+        function resumeWhenReady() {
+          if (token !== scrubResumeToken || !shouldResume || playerScrubbing) return;
+          startPlayerPlayback();
+        }
+        // Seeking against the dense-keyframe review proxy normally resolves
+        // immediately. When the media element still has a pending decode,
+        // wait silently with both clocks paused rather than allowing the old
+        // soundtrack position to keep playing under a stalled picture.
+        if (video.seeking || video.readyState < 2) video.addEventListener('seeked', resumeWhenReady, { once: true });
+        else resumeWhenReady();
+        syncPlayerControls();
+      }
+      playerSeek.addEventListener('pointerdown', beginScrub);
+      playerSeek.addEventListener('input', function () {
+        beginScrub();
+        moveScrubPlayhead();
       });
       ['pointerup', 'pointercancel', 'change'].forEach(function (name) {
-        playerSeek.addEventListener(name, function () { playerScrubbing = false; syncPlayerControls(); });
+        playerSeek.addEventListener(name, finishScrub);
       });
     }
     if (playerMute) playerMute.onclick = function () {

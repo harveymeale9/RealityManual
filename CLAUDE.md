@@ -14957,3 +14957,29 @@ seconds. During the delay the spinner was visible, `aria-busy` was true and the
 controls were disabled. After the 480×854 frame decoded, the overlay was hidden,
 `aria-busy` became false, controls unlocked and Play started immediately with
 no page errors. Editor JS and CSS cache keys were advanced to v94.
+
+---
+
+# 427. Editor Backward Seeking Moves Picture and Mixed Audio as One Clock (2026-09-30)
+
+The Editor's custom seek bar previously changed only the video element during
+scrubbing. When backing music was selected, its separate fully prepared mixed
+audio element kept playing at the old timestamp until the video emitted
+`seeked`. A backward jump could therefore show the player's delayed “Loading”
+label while stale sound continued, even though the scrub proxy already has an
+H.264 keyframe every 0.5 seconds.
+
+Scrubbing is now one coordinated transport operation. Pointer-down (or the
+first keyboard/input change) remembers whether playback was active and pauses
+both media elements immediately. Every slider update moves the video and mixed
+audio clocks to the same target. Releasing the slider resumes only if the video
+was playing beforehand, and only after any pending frame decode has reached the
+new timestamp. A paused video remains paused. The ordinary buffering label is
+cleared during this bounded seek, so it cannot imply that old audio should keep
+running.
+
+A real browser test started the selected mixed soundtrack around 8.7 seconds,
+dragged backward to 3 seconds, held the scrubber, then released it. During the
+hold both elements were paused exactly at 3.0 with no Loading state; after
+release both resumed within 0.05 seconds of each other and produced no page
+errors. The Editor cache key was advanced to v95.
