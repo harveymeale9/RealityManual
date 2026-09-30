@@ -23,4 +23,36 @@ function stripMarkdownForSpeech(text) {
   return out.replace(/\n{2,}/g, '. ').replace(/\n/g, ' ').trim();
 }
 
-module.exports = { stripMarkdownForSpeech };
+// Speech providers accept only bounded inputs, and a multi-minute reply should
+// not make the Play button wait for the complete recording before it can start.
+// Keep punctuation on the preceding part so independently synthesized parts
+// still sound like one continuous reading.
+function splitForSpeech(text, maxChars) {
+  const source = String(text || '').trim();
+  const limit = Math.max(200, Math.floor(Number(maxChars) || 1800));
+  if (!source) return [];
+  const parts = [];
+  let remaining = source;
+  while (remaining.length > limit) {
+    const window = remaining.slice(0, limit + 1);
+    const minimum = Math.floor(limit * 0.55);
+    let cut = -1;
+    const sentence = /[.!?]["')\]]?\s+/g;
+    let match;
+    while ((match = sentence.exec(window))) {
+      const candidate = match.index + match[0].length;
+      if (candidate >= minimum && candidate <= limit) cut = candidate;
+    }
+    if (cut < minimum) {
+      const whitespace = window.lastIndexOf(' ', limit);
+      if (whitespace >= minimum) cut = whitespace + 1;
+    }
+    if (cut < 1) cut = limit;
+    parts.push(remaining.slice(0, cut).trim());
+    remaining = remaining.slice(cut).trim();
+  }
+  if (remaining) parts.push(remaining);
+  return parts;
+}
+
+module.exports = { stripMarkdownForSpeech, splitForSpeech };

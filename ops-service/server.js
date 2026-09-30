@@ -3132,9 +3132,23 @@ app.post('/api/voice/tts', async function (req, res) {
   }
 
   if (typeof text !== 'string' || !text.trim()) return res.status(400).json({ error: 'invalid_text' });
+  // New clients request one bounded speech part at a time. This lets playback
+  // begin after roughly a paragraph of audio is ready while the following part
+  // is prepared in the background, instead of leaving a long reply on
+  // "Loading audio" until several minutes of MP3 have downloaded. Keep the
+  // old single-request behavior for a stale tab, but never silently truncate a
+  // current client's reply.
+  const fullSpeechText = text.trim().slice(0, 50000);
+  const speechParts = speechText.splitForSpeech(fullSpeechText, 1800);
+  const hasPartIndex = Number.isInteger(req.body && req.body.partIndex);
+  const partIndex = hasPartIndex ? req.body.partIndex : 0;
+  if (partIndex < 0 || partIndex >= speechParts.length) return res.status(416).json({ error: 'tts_part_out_of_range' });
+  const speechPart = hasPartIndex ? speechParts[partIndex] : fullSpeechText.slice(0, 4096);
   res.setHeader('X-RM-TTS-Provider', ttsRouter.providerForAgent(agent));
+  res.setHeader('X-RM-TTS-Part-Index', String(partIndex));
+  res.setHeader('X-RM-TTS-Part-Count', String(hasPartIndex ? speechParts.length : 1));
   try {
-    const audio = await ttsRouter.synthesizeSpeech(agent, text.trim().slice(0, 4096));
+    const audio = await ttsRouter.synthesizeSpeech(agent, speechPart);
     res.setHeader('Content-Type', audio.contentType);
     res.setHeader('X-RM-TTS-Streaming', audio.streaming ? '1' : '0');
     if (Buffer.isBuffer(audio.body)) return res.send(audio.body);

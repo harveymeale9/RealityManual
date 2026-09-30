@@ -345,6 +345,7 @@ window.RMVoice = (function () {
   }
 
   var currentAudio = null;
+  var currentAudioCleanup = null;
   var currentAudioReader = null;
   var currentSpeechController = null;
   // A manual per-message Play click owns the speech channel until that
@@ -457,9 +458,11 @@ window.RMVoice = (function () {
       currentAudioReader = null;
     }
     if (currentAudio) {
-      try { currentAudio.pause(); } catch (e) { /* ignore */ }
+      if (currentAudioCleanup) currentAudioCleanup();
+      else try { currentAudio.pause(); } catch (e) { /* ignore */ }
       currentAudio = null;
     }
+    currentAudioCleanup = null;
     if (speakingMsgId !== null) {
       speakingMsgId = null;
       notifySpeakingChange();
@@ -476,10 +479,12 @@ window.RMVoice = (function () {
       finished = true;
       if (currentAudio === audio) {
         currentAudio = null;
+        currentAudioCleanup = null;
         currentAudioReader = null;
         if (currentSpeechToken === myToken) {
           currentSpeechMode = null;
           currentSpeechToken = null;
+          currentSpeechController = null;
         }
         speakingMsgId = null;
         notifySpeakingChange();
@@ -493,6 +498,10 @@ window.RMVoice = (function () {
     audio.addEventListener('ended', finish);
     audio.addEventListener('error', finish);
     audio.addEventListener('abort', finish);
+    currentAudioCleanup = function () {
+      try { audio.pause(); } catch (e) { /* ignore */ }
+      finish();
+    };
     return finish;
   }
 
@@ -527,6 +536,84 @@ window.RMVoice = (function () {
         throw err;
       });
     });
+  }
+
+  // Long replies are requested as sentence-bounded parts. Start the first as
+  // soon as it is complete, prefetch exactly one part ahead while Harvey is
+  // listening, and retain the same speaking owner across part boundaries.
+  // This avoids both the old 4,096-character truncation and a multi-minute
+  // all-or-nothing loading screen without returning to fragile raw streaming.
+  function playBufferedSequence(firstResponse, fetchPart, myToken, msgId) {
+    var count = Math.max(1, parseInt(firstResponse.headers && firstResponse.headers.get('X-RM-TTS-Part-Count'), 10) || 1);
+    if (count === 1) return playBufferedResponse(firstResponse, myToken, msgId);
+
+    function releaseSpeech() {
+      if (currentSpeechToken !== myToken) return;
+      currentAudio = null;
+      currentAudioCleanup = null;
+      currentSpeechController = null;
+      currentSpeechMode = null;
+      currentSpeechToken = null;
+      if (speakingMsgId !== null) {
+        speakingMsgId = null;
+        notifySpeakingChange();
+      }
+    }
+
+    function loadBlob(index) {
+      var responsePromise = index === 0 ? Promise.resolve(firstResponse) : fetchPart(index);
+      return responsePromise.then(function (response) { return response.blob(); });
+    }
+
+    function playPart(index, blob) {
+      if (myToken !== playToken || recordingActive) return null;
+      var next = index + 1 < count
+        ? loadBlob(index + 1).then(function (value) { return { blob: value }; }, function (error) { return { error: error }; })
+        : null;
+      var url = URL.createObjectURL(blob);
+      var audio = new Audio(url);
+      var finished = false;
+      currentAudio = audio;
+      speakingMsgId = (typeof msgId !== 'undefined') ? msgId : null;
+      notifySpeakingChange();
+
+      function cleanPart() {
+        if (finished) return;
+        finished = true;
+        URL.revokeObjectURL(url);
+        if (currentAudio === audio) {
+          currentAudio = null;
+          currentAudioCleanup = null;
+        }
+      }
+      function failPart() {
+        cleanPart();
+        releaseSpeech();
+      }
+      function finishPart() {
+        cleanPart();
+        if (myToken !== playToken || recordingActive) return releaseSpeech();
+        if (!next) return releaseSpeech();
+        next.then(function (loaded) {
+          if (loaded.error) return releaseSpeech();
+          var started = playPart(index + 1, loaded.blob);
+          if (started && typeof started.catch === 'function') started.catch(releaseSpeech);
+        });
+      }
+      audio.addEventListener('ended', finishPart);
+      audio.addEventListener('error', failPart);
+      audio.addEventListener('abort', failPart);
+      currentAudioCleanup = function () {
+        try { audio.pause(); } catch (e) { /* ignore */ }
+        cleanPart();
+      };
+      return audio.play().then(function () { return audio; }).catch(function (error) {
+        failPart();
+        throw error;
+      });
+    }
+
+    return loadBlob(0).then(function (blob) { return playPart(0, blob); });
   }
 
   // OpenAI's Speech API returns chunked MP3. MediaSource lets a supporting
@@ -642,22 +729,24 @@ window.RMVoice = (function () {
         if (myToken === playToken) stopSpeaking();
       }, TTS_LOAD_TIMEOUT_MS);
     });
-    var requestPromise = fetch(API_BASE + '/api/voice/tts', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      signal: controller ? controller.signal : undefined,
-      body: JSON.stringify({
-        text: clean,
-        messageId: msgId,
-        agent: agent,
-        // The backend still resolves Codex speech from the canonical DB
-        // row. This flag only tells it whether the requested stored text is
-        // the live contextual acknowledgment or the completed final reply.
-        speechKind: speechKind === 'early_ack' ? 'early_ack' : 'reply'
-      })
-    }).then(function (r) {
-      if (!r.ok) {
+    function fetchSpeechPart(partIndex) {
+      return fetch(API_BASE + '/api/voice/tts', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller ? controller.signal : undefined,
+        body: JSON.stringify({
+          text: clean,
+          messageId: msgId,
+          agent: agent,
+          // The backend still resolves Codex speech from the canonical DB
+          // row. This flag only tells it whether the requested stored text is
+          // the live contextual acknowledgment or the completed final reply.
+          speechKind: speechKind === 'early_ack' ? 'early_ack' : 'reply',
+          partIndex: partIndex
+        })
+      }).then(function (r) {
+        if (r.ok) return r;
         return r.json().catch(function () { return {}; }).then(function (payload) {
           var code = payload && payload.error ? payload.error : 'tts_failed';
           var message = code === 'openai_tts_not_configured'
@@ -667,7 +756,9 @@ window.RMVoice = (function () {
           error.code = code;
           throw error;
         });
-      }
+      });
+    }
+    var requestPromise = fetchSpeechPart(0).then(function (r) {
       // Do not hand a provider's network chunks straight to the audio
       // element. OpenAI can occasionally deliver a short sentence as small
       // bursts with long gaps between them; starting after the first burst
@@ -676,7 +767,7 @@ window.RMVoice = (function () {
       // full, which guarantees one continuous playback even when the
       // upstream transfer itself is uneven. playToken still prevents a stale
       // response from starting after Stop or a newer reply was requested.
-      return playBufferedResponse(r, myToken, msgId);
+      return playBufferedSequence(r, fetchSpeechPart, myToken, msgId);
     });
     return Promise.race([requestPromise, timeoutPromise]).catch(function (error) {
       if (timedOut) throw timeoutError;
@@ -687,8 +778,8 @@ window.RMVoice = (function () {
       throw error;
     }).then(function (result) {
       if (timeoutId) clearTimeout(timeoutId);
-      if (currentSpeechController === controller) currentSpeechController = null;
       if (!result && currentSpeechToken === myToken) {
+        if (currentSpeechController === controller) currentSpeechController = null;
         currentSpeechMode = null;
         currentSpeechToken = null;
       }

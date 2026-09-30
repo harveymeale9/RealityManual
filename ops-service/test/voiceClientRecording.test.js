@@ -146,6 +146,80 @@ test('voice playback buffers the complete response instead of playing uneven pro
   assert.equal(playCalls, 1);
 });
 
+test('long voice playback starts the first bounded part and continues through every part', async () => {
+  const audioInstances = [];
+  const requestedParts = [];
+  let revoked = 0;
+
+  class FakeAudio {
+    constructor() {
+      this.listeners = Object.create(null);
+      audioInstances.push(this);
+    }
+    addEventListener(name, callback) {
+      (this.listeners[name] || (this.listeners[name] = [])).push(callback);
+    }
+    emit(name) {
+      (this.listeners[name] || []).slice().forEach((callback) => callback());
+    }
+    play() { return Promise.resolve(); }
+    pause() {}
+  }
+
+  function response(part) {
+    return {
+      ok: true,
+      headers: { get: (name) => name === 'X-RM-TTS-Part-Count' ? '3' : null },
+      blob: async () => new Blob(['part-' + part], { type: 'audio/mpeg' })
+    };
+  }
+
+  const sandbox = {
+    AbortController,
+    Audio: FakeAudio,
+    Blob,
+    clearTimeout,
+    console,
+    document: {},
+    fetch: async (url, options) => {
+      const body = JSON.parse(options.body);
+      requestedParts.push(body.partIndex);
+      return response(body.partIndex);
+    },
+    FormData,
+    navigator: {},
+    setTimeout,
+    URL: {
+      createObjectURL: (blob) => 'blob:' + blob.size + ':' + audioInstances.length,
+      revokeObjectURL() { revoked += 1; }
+    },
+    window: { Audio: FakeAudio }
+  };
+  sandbox.window.window = sandbox.window;
+  sandbox.window.navigator = sandbox.navigator;
+  vm.runInNewContext(source, sandbox);
+
+  await sandbox.window.RMVoice.speak('A deliberately long response.', 'message-long', 'codex', 'reply', { manual: true });
+  assert.deepEqual(requestedParts, [0, 1]);
+  assert.equal(audioInstances.length, 1);
+  assert.equal(sandbox.window.RMVoice.currentlySpeaking(), 'message-long');
+
+  audioInstances[0].emit('ended');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(requestedParts, [0, 1, 2]);
+  assert.equal(audioInstances.length, 2);
+  assert.equal(sandbox.window.RMVoice.currentlySpeaking(), 'message-long');
+
+  audioInstances[1].emit('ended');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(audioInstances.length, 3);
+  assert.equal(sandbox.window.RMVoice.currentlySpeaking(), 'message-long');
+
+  audioInstances[2].emit('ended');
+  assert.equal(sandbox.window.RMVoice.currentlySpeaking(), null);
+  assert.equal(revoked, 3);
+});
+
 test('turning automatic speech off cancels pending audio and persists the preference', async () => {
   let resolveResponse;
   let playCalls = 0;

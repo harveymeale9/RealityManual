@@ -14120,3 +14120,31 @@ After cleanup, disk use was 20GB/96GB (21%) with 77GB available. Docker builder
 cache was 0B, the three production containers were still running, both public
 health endpoints returned `ok`, and `PRAGMA quick_check` returned `ok` for the
 Content Studio database.
+
+---
+
+# 398. Long Project Manager Replies Play Completely Without a Long Initial Stall (2026-09-30)
+
+Harvey pressed Play on an 8,000-character Codex reply and the button appeared
+stuck on **Loading audio…**. A live request reproduced the underlying behavior:
+the TTS route silently truncated every reply to 4,096 characters, and preparing
+even that truncated half took roughly 33 seconds before the browser could play
+its four-minute MP3. The existing 45-second deadline prevented a permanent
+hang, but it did not make long replies usable or complete.
+
+Current Project Manager clients now request sentence-bounded speech parts of at
+most 1,800 characters. The browser buffers the first part completely so uneven
+provider delivery cannot cause the old stop-start playback, begins speaking as
+soon as that first part is ready, and preloads exactly one following part while
+the current one plays. It retains the same manual-play ownership and Stop state
+across every boundary. Starting a recording, pressing Stop, muting voice, or
+selecting another response still cancels the complete sequence immediately.
+
+Codex parts remain resolved from the canonical completed database row, never
+from browser-supplied text. The route exposes only the requested bounded part
+and its total count, supports replies up to 50,000 spoken characters, and keeps
+the legacy 4,096-character response for an already-open stale client until it
+reloads. Cache keys were bumped on desktop and mobile. Unit coverage proves
+lossless sentence/word splitting and a three-part browser sequence that starts,
+prefetches, advances, retains ownership and releases cleanly; all 139 service
+tests pass.
