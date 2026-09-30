@@ -387,6 +387,14 @@ test('punch-ins split retained footage without changing its duration', function 
   assert.equal(segments.reduce(function (sum, segment) { return sum + segment.end - segment.start; }, 0), 8);
 });
 
+test('visual-only punch boundaries never fade continuous dialogue audio', function () {
+  const segments = [{ start: 0, end: 2 }, { start: 2, end: 4 }, { start: 6, end: 8 }, { start: 8, end: 10 }];
+  assert.deepEqual(editor.segmentAudioFades(segments, 0, 10), { fadeIn: false, fadeOut: false });
+  assert.deepEqual(editor.segmentAudioFades(segments, 1, 10), { fadeIn: false, fadeOut: true });
+  assert.deepEqual(editor.segmentAudioFades(segments, 2, 10), { fadeIn: true, fadeOut: false });
+  assert.deepEqual(editor.segmentAudioFades(segments, 3, 10), { fadeIn: false, fadeOut: false });
+});
+
 test('caption groups omit deleted words and carry raw and edited timing', function () {
   const project = { words: words, removedWordIndices: [2, 3] };
   const cuts = [{ start: 1.8, end: 4.95 }];

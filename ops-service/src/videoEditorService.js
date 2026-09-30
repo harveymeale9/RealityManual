@@ -627,6 +627,20 @@ function applyPunchInsToSegments(segments, rawPunchIns, duration) {
   return output;
 }
 
+function segmentAudioFades(segments, index, duration) {
+  const segment = (segments || [])[index];
+  if (!segment) return { fadeIn: false, fadeOut: false };
+  const previous = index > 0 ? segments[index - 1] : null;
+  const next = index + 1 < segments.length ? segments[index + 1] : null;
+  // A contiguous boundary exists only to change the picture for a punch-in.
+  // Fade audio at genuine source jumps, including a removed opening or tail,
+  // but preserve sample continuity across visual-only segment boundaries.
+  return {
+    fadeIn: segment.start > 0.015 && (!previous || segment.start - previous.end > 0.015),
+    fadeOut: segment.end < Math.max(0, Number(duration) || 0) - 0.015 && (!next || next.start - segment.end > 0.015)
+  };
+}
+
 function mapSourceTimeToEdited(time, cuts) {
   const value = Math.max(0, Number(time) || 0);
   let removed = 0;
@@ -1271,7 +1285,11 @@ async function renderProject(id) {
         filters.push(videoFilter + '[v' + index + ']');
         // Tiny boundary fades prevent waveform discontinuities from creating
         // a click at transcript/jump cuts, without audibly crossfading words.
-        filters.push('[0:a]atrim=start=' + segment.start.toFixed(3) + ':end=' + segment.end.toFixed(3) + ',asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0.008,afade=t=out:st=' + Math.max(0, segmentDuration - 0.008).toFixed(3) + ':d=0.008[a' + index + ']');
+        const fades = segmentAudioFades(segments, index, project.duration);
+        let audioFilter = '[0:a]atrim=start=' + segment.start.toFixed(3) + ':end=' + segment.end.toFixed(3) + ',asetpts=PTS-STARTPTS';
+        if (fades.fadeIn) audioFilter += ',afade=t=in:st=0:d=0.008';
+        if (fades.fadeOut) audioFilter += ',afade=t=out:st=' + Math.max(0, segmentDuration - 0.008).toFixed(3) + ':d=0.008';
+        filters.push(audioFilter + '[a' + index + ']');
       });
       const concatInputs = segments.map(function (_, index) { return '[v' + index + '][a' + index + ']'; }).join('');
       filters.push(concatInputs + 'concat=n=' + segments.length + ':v=1:a=1[joinedv][outa]');
@@ -2020,6 +2038,7 @@ module.exports = {
   keepSegments,
   normalizePunchIns,
   applyPunchInsToSegments,
+  segmentAudioFades,
   mapSourceTimeToEdited,
   captionGroups,
   buildAss,

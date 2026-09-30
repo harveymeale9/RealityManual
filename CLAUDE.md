@@ -14066,7 +14066,9 @@ footage at the exact source-time punch boundaries, applies a second crop and
 scale at the chosen focal point, then concatenates those segments through the
 existing audio-boundary and caption pipeline. Punch boundaries never remove
 source duration and continue to work when silence/transcript cuts intersect
-them. Unit coverage proves normalization, duration preservation, API
+them. Contiguous visual-only boundaries preserve the original dialogue samples;
+the 8ms click-prevention fades are now applied only across genuine source jumps,
+not whenever the picture punches in or out. Unit coverage proves normalization, duration preservation, API
 persistence, and a real FFmpeg export. A dedicated headless-browser workflow
 selects transcript words, creates a punch-in, observes the live scale, changes
 its strength, and removes it; the complete existing Editor browser regression
