@@ -14293,4 +14293,8 @@ render when one is ready.
 Render format version 5 invalidates active unapproved outputs made with the old
 hard cut. Approved Production inputs remain immutable. Unit coverage verifies
 the mirrored scale curve, generated dynamic FFmpeg filter, focal position, and
-a real end-to-end render. The full 140-test service suite passes.
+a real end-to-end render. The full 140-test service suite passes. After the
+successful live deployment, an authenticated Chromium run verified the real
+portrait project has no legacy zoom/X/Y controls, opens an 84.75%-sized framing
+rectangle inside the 430×764 player, responds to a real pointer drag, and hides
+the guide before switching Preview back to the verified final edit.
