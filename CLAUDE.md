@@ -14338,3 +14338,11 @@ asynchronous validation before mutating or saving it. The focused recovery test
 and the complete 140-test suite pass. Real FFmpeg coverage verifies the 854-pixel
 cap, 30fps rate, half-second keyframe spacing, final-review proxy creation, and
 HTTP 206 range responses for both source and final review media.
+
+After the successful deployment, authenticated Chromium verified the migrated
+real portrait project serves both source and final review at 480×854. A seek to
+15 seconds completed in 75ms and a backward seek to 3 seconds completed in
+51ms on the 16-second final; the longer source measured 53ms forward and 46ms
+backward. Both live routes returned HTTP 206 for a requested byte range, the
+custom slider moved the real playhead, its Play control started playback, and
+no page errors occurred.
