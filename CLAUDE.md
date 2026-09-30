@@ -291,7 +291,7 @@ I have another company installed at n8n.tattoogrowth.co on that VPS (it's my n8n
 
 **Infrastructure note (confirmed 2026-08-15):** the actual frontend hosting
 is **GitHub Pages** (via `.github/workflows/static.yml`, publishing the
-`/frontend` directory on every push to `main`), with Cloudflare sitting in
+`/frontend` directory when storefront files change on `main`), with Cloudflare sitting in
 front purely as a DNS/CDN proxy — not the separate "Cloudflare Pages"
 hosting product. Don't remove or replace `static.yml` without checking with
 Harvey first; a prior session deleted it assuming Cloudflare Pages was the
@@ -14073,3 +14073,25 @@ persistence, and a real FFmpeg export. A dedicated headless-browser workflow
 selects transcript words, creates a punch-in, observes the live scale, changes
 its strength, and removes it; the complete existing Editor browser regression
 also remains green.
+
+---
+
+# 396. Storefront Deploys Ignore Internal-Tool-Only Commits (2026-09-30)
+
+After the ops-service deployment race was fixed, Harvey received another
+GitHub “run failed” email around 11:05 Bangkok time. GitHub's Actions API
+confirmed that every post-fix `Deploy ops-service` run (370–373) succeeded.
+The new notification came from a different workflow: storefront `Deploy` run
+716 attempted a GitHub Pages publication for commit `f2ef44e`, even though
+that commit changed only the internal Editor and project documentation. Its
+`actions/deploy-pages` step failed while the actual ops-service deployment for
+the same commit succeeded.
+
+`.github/workflows/static.yml` previously ran on every push to `main`, so every
+backend, internal-tool, documentation, and CI-log commit unnecessarily tried to
+republish an unchanged storefront. It now triggers only for `frontend/**` or
+the workflow file itself. Real storefront deployments also share a
+`deploy-storefront-pages` concurrency group with queuing enabled, preventing
+two genuine Pages publications from competing for the same environment. The
+workflow and GitHub Pages hosting remain intact; unrelated changes simply stop
+creating redundant Pages runs and failure emails.

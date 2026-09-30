@@ -2,6 +2,17 @@ name: Deploy
 on:
   push:
     branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/static.yml'
+
+# Only one Pages publication may own the github-pages environment at a time.
+# Queue real storefront changes; ops-service/backend-only pushes no longer
+# launch a redundant storefront deployment at all.
+concurrency:
+  group: deploy-storefront-pages
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
