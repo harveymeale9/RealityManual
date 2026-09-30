@@ -226,6 +226,10 @@ function browserPreviewNeeded(fileName, media) {
   const extension = path.extname(String(fileName || '')).toLowerCase();
   const videoCodec = String(media && media.videoCodec || '').toLowerCase();
   const audioCodec = String(media && media.audioCodec || '').toLowerCase();
+  // Always bake display-matrix rotation into a browser-safe proxy. Browsers
+  // differ in how reliably they honor camera rotation metadata on MOV/MP4,
+  // while FFmpeg produces physically upright portrait pixels deterministically.
+  if (Math.abs(Number(media && media.rotation) || 0) % 180 === 90) return true;
   if (!['.mp4', '.m4v', '.mov'].includes(extension)) return true;
   return videoCodec !== 'h264' || !['aac', 'mp3'].includes(audioCodec);
 }
@@ -939,12 +943,15 @@ function setup(options) {
     const sideRotation = (video.side_data_list || []).map(function (entry) { return Number(entry.rotation); })
       .find(function (value) { return Number.isFinite(value); });
     const tagRotation = video.tags && Number(video.tags.rotate);
-    const dimensions = displayDimensions(video.width, video.height,
-      Number.isFinite(sideRotation) ? sideRotation : Number.isFinite(tagRotation) ? tagRotation : 0);
+    const rotation = Number.isFinite(sideRotation) ? sideRotation : Number.isFinite(tagRotation) ? tagRotation : 0;
+    const dimensions = displayDimensions(video.width, video.height, rotation);
     return {
       duration: Number(parsed.format && parsed.format.duration) || 0,
       width: dimensions.width,
       height: dimensions.height,
+      codedWidth: Number(video.width) || 0,
+      codedHeight: Number(video.height) || 0,
+      rotation: rotation,
       pixelFormat: String(video.pix_fmt || ''),
       videoCodec: String(video.codec_name || ''),
       audioCodec: String(((parsed.streams || []).find(function (stream) { return stream.codec_type === 'audio'; }) || {}).codec_name || ''),
@@ -958,7 +965,8 @@ function setup(options) {
       if (!stat.isFile() || stat.size <= 1024) return false;
       const media = await probe(filePath);
       const durationValid = !Number(expectedDuration) || Math.abs(media.duration - Number(expectedDuration)) <= renderDurationTolerance(expectedDuration);
-      return media.videoCodec === 'h264' && media.hasAudio && media.width > 0 && media.height > 0 && durationValid;
+      const rotationBakedIn = Math.abs(Number(media.rotation) || 0) % 180 !== 90;
+      return media.videoCodec === 'h264' && media.hasAudio && media.width > 0 && media.height > 0 && rotationBakedIn && durationValid;
     } catch (error) { return false; }
   }
 
@@ -973,7 +981,7 @@ function setup(options) {
       project.browserPreviewError = '';
       saveProject(project);
       try {
-        await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', sourcePath(id),
+        await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-autorotate', '1', '-i', sourcePath(id),
           '-map', '0:v:0', '-map', '0:a:0', '-vf',
           "scale=w='if(gte(iw,ih),trunc(min(1280,iw)/2)*2,-2)':h='if(gte(iw,ih),-2,trunc(min(1280,ih)/2)*2)'",
           '-c:v', 'libx264', '-preset', 'superfast', '-crf', '28', '-pix_fmt', 'yuv420p',
@@ -1251,7 +1259,7 @@ async function renderProject(id) {
       if (project.captionsEnabled !== false) filters.push("[joinedv]subtitles='" + assPath.replace(/'/g, "'\\''") + "'[outv]");
       else filters.push('[joinedv]null[outv]');
       let lastReportedProgress = -1;
-      await runWithProgress('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', sourcePath(id), '-filter_complex', filters.join(';'),
+      await runWithProgress('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-autorotate', '1', '-i', sourcePath(id), '-filter_complex', filters.join(';'),
         '-map', '[outv]', '-map', '[outa]', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k',
         '-movflags', '+faststart', '-progress', 'pipe:1', '-nostats', renderPath(id)], 'editor render', function (encodedSeconds) {
         const percent = Math.min(99, Math.max(0, Math.floor(encodedSeconds / Math.max(0.01, expectedDuration) * 100)));
@@ -1415,7 +1423,7 @@ async function renderProject(id) {
         if (!current) return;
         const dimensionsChanged = current.width !== media.width || current.height !== media.height;
         const needsPreview = browserPreviewNeeded(current.fileName, media);
-        const previewMetadataChanged = !current.videoCodec || current.browserPreviewRequired === undefined;
+        const previewMetadataChanged = !current.videoCodec || current.browserPreviewRequired === undefined || current.sourceRotation === undefined;
         const previewFile = previewPath(current.id);
         const previewValid = needsPreview && await browserPreviewIsValid(previewFile, current.duration);
         const expectedPreviewStatus = needsPreview ? (previewValid ? 'ready' : 'pending') : 'not_required';
@@ -1423,6 +1431,7 @@ async function renderProject(id) {
         if (!dimensionsChanged && !previewMetadataChanged && !previewStateChanged) return;
         current.videoCodec = media.videoCodec;
         current.audioCodec = media.audioCodec;
+        current.sourceRotation = media.rotation;
         current.browserPreviewRequired = needsPreview;
         if (needsPreview && !previewValid) {
           await fs.promises.rm(previewFile, { force: true });
@@ -1577,6 +1586,7 @@ async function renderProject(id) {
         height: media.height,
         videoCodec: media.videoCodec,
         audioCodec: media.audioCodec,
+        sourceRotation: media.rotation,
         browserPreviewRequired: browserPreviewNeeded(req.file.originalname, media),
         browserPreviewStatus: browserPreviewNeeded(req.file.originalname, media) ? 'pending' : 'not_required',
         browserPreviewError: '',

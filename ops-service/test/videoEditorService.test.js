@@ -140,6 +140,7 @@ test('HEVC and non-browser containers receive an H.264 review proxy', function (
   assert.equal(editor.browserPreviewNeeded('camera.mp4', { videoCodec: 'hevc', audioCodec: 'aac' }), true);
   assert.equal(editor.browserPreviewNeeded('camera.mkv', { videoCodec: 'h264', audioCodec: 'aac' }), true);
   assert.equal(editor.browserPreviewNeeded('camera.MOV', { videoCodec: 'h264', audioCodec: 'aac' }), false);
+  assert.equal(editor.browserPreviewNeeded('camera.MOV', { videoCodec: 'h264', audioCodec: 'aac', rotation: -90 }), true);
   assert.equal(editor.browserPreviewNeeded('camera.mp4', { videoCodec: 'h264', audioCodec: 'pcm_s16le' }), true);
 });
 
@@ -758,9 +759,13 @@ test('an aborted multipart upload removes its partial file immediately', { timeo
 
 test('upload, timed transcription and FFmpeg captioned render work end to end', { timeout: 60000 }, async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-'));
+  const encodedInput = path.join(dir, 'sample-landscape.mp4');
   const input = path.join(dir, 'sample.mp4');
-  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=360x640:d=5:r=24',
-    '-f', 'lavfi', '-i', 'sine=frequency=440:duration=5', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', input]);
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=640x360:d=5:r=24',
+    '-f', 'lavfi', '-i', 'sine=frequency=440:duration=5', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', encodedInput]);
+  // Camera-style portrait: landscape-coded pixels plus a 90-degree display
+  // matrix. Upload, browser proxy, and final render must all normalize it.
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-display_rotation', '90', '-i', encodedInput, '-map', '0', '-c', 'copy', input]);
   const db = new Database(path.join(dir, 'test.sqlite'));
   db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
   let handoffCalls = 0;
@@ -822,16 +827,24 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   let project = await response.json();
   assert.equal(project.mimeType, 'video/quicktime');
   assert.equal(project.videoCodec, 'h264');
-  assert.equal(project.browserPreviewRequired, false);
-  assert.equal(project.browserPreviewStatus, 'not_required');
+  assert.equal(project.browserPreviewRequired, true);
+  assert.equal(project.sourceRotation, 90);
   response = await fetch(base + '/api/editor/' + project.id + '/source');
-  assert.equal(response.headers.get('content-type'), 'video/quicktime');
+  assert.equal(response.status, 425);
   const duplicateForm = new FormData();
   duplicateForm.append('name', 'Synthetic take');
   duplicateForm.append('video', new Blob([fs.readFileSync(input)], { type: 'application/octet-stream' }), 'CAMERA_9259.MOV');
   response = await fetch(base + '/api/editor', { method: 'POST', body: duplicateForm });
   assert.equal(response.status, 409);
   assert.equal((await response.json()).existingProjectId, project.id);
+  for (let attempt = 0; attempt < 200 && project.browserPreviewStatus !== 'ready'; attempt++) {
+    await new Promise(function (resolve) { setTimeout(resolve, 30); });
+    project = await (await fetch(base + '/api/editor/' + project.id)).json();
+  }
+  assert.equal(project.browserPreviewStatus, 'ready', project.browserPreviewError);
+  response = await fetch(base + '/api/editor/' + project.id + '/source');
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('content-type'), 'video/mp4');
   for (let attempt = 0; attempt < 100 && project.transcriptionStatus !== 'ready'; attempt++) {
     await new Promise(function (resolve) { setTimeout(resolve, 30); });
     project = await (await fetch(base + '/api/editor/' + project.id)).json();

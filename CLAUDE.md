@@ -14180,3 +14180,28 @@ crop after the portrait frame and any manual punch-in, retaining an exact
 1080×1920 output. Unit tests cover the easing, filter shape, orientation-only
 classification and render invalidation; the end-to-end upload/transcribe/render
 test now uses a portrait master and exercises the real animated FFmpeg path.
+
+---
+
+# 400. Camera Rotation Metadata Is Baked In Automatically (2026-09-30)
+
+Harvey will rotate the Sony ZV-E10 physically for vertical recordings and does
+not want a rotation setting in the Editor. Camera files may still contain
+landscape-coded pixels plus a 90-degree display matrix; Sony's own ZV-E10 guide
+also notes that vertically shot movies can play horizontally on the camera.
+The Editor now records the stream's display-matrix or rotate-tag value during
+FFprobe and treats those rotation-aware display dimensions as authoritative.
+
+Any quarter-turned camera master is always given a browser review proxy, even
+when its original MOV/MP4 codecs would otherwise play directly. FFmpeg
+explicitly enables autorotation while building that proxy, so the proxy has
+physically upright portrait pixels rather than relying on browser support for
+the camera tag. Proxy verification rejects any output that still carries a
+quarter-turn. The final Editor render also explicitly enables autorotation
+before framing, captions, opening push-in, and punch-ins. There is no checkbox
+or manual rotation step; the original camera master remains untouched.
+
+The end-to-end Editor test now constructs the real edge case: a 640×360 coded
+video carrying a 90-degree display matrix. It proves upload detection reports a
+portrait project, the normalized H.264 review file becomes available, and the
+captioned final passes the existing 1080×1920 technical verification.
