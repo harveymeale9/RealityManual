@@ -14409,3 +14409,16 @@ Backend coverage verifies the library response, 48kbps option, one shared build
 for simultaneous identical auditions, persisted selection and mix settings,
 missing-track rejection, and the approval gate. The complete 140-test suite
 passes, and Editor/app/stylesheet cache keys were advanced.
+
+After the successful full-container deployment, authenticated Chromium tested
+the real portrait Editor project and its real 27-track library. The visible
+counter advanced from 0/27 to all 27 ready in 33 seconds, then unlocked a
+29-option selector (placeholder, explicit no-music choice, and 27 tracks).
+Selecting and stepping to another track created no replacement video: the same
+browser-safe video played beside the preloaded blob audio, both restarted at
+zero, playback drift stayed around 0.05 seconds, and an eight-second seek
+realigned them exactly. The project's original empty selection was restored by
+API afterward. The 27 compressed auditions occupied 2,450,844 bytes total
+(about 91KB each), versus duplicating the full video 27 times. A 390px-wide
+browser then loaded the complete ready panel with no horizontal overflow or
+page errors.
