@@ -146,6 +146,51 @@ test('voice playback buffers the complete response instead of playing uneven pro
   assert.equal(playCalls, 1);
 });
 
+test('a prepared reply plays from memory without another TTS request', async () => {
+  let fetchCalls = 0;
+  let playCalls = 0;
+
+  class FakeAudio {
+    addEventListener() {}
+    play() { playCalls += 1; return Promise.resolve(); }
+    pause() {}
+  }
+
+  const sandbox = {
+    AbortController,
+    Audio: FakeAudio,
+    Blob,
+    clearTimeout,
+    console,
+    document: {},
+    fetch: async () => {
+      fetchCalls += 1;
+      return {
+        ok: true,
+        headers: { get: (name) => name === 'X-RM-TTS-Part-Count' ? '1' : null },
+        blob: async () => new Blob(['prepared audio'], { type: 'audio/mpeg' })
+      };
+    },
+    FormData,
+    navigator: {},
+    setTimeout,
+    URL: { createObjectURL: () => 'blob:prepared-audio', revokeObjectURL() {} },
+    window: { Audio: FakeAudio }
+  };
+  sandbox.window.window = sandbox.window;
+  sandbox.window.navigator = sandbox.navigator;
+  vm.runInNewContext(source, sandbox);
+
+  await sandbox.window.RMVoice.prepareSpeech('The completed answer.', 'message-ready', 'codex', 'reply');
+  assert.equal(fetchCalls, 1);
+  assert.equal(playCalls, 0, 'preparation must remain silent');
+
+  await sandbox.window.RMVoice.speak('The completed answer.', 'message-ready', 'codex', 'reply', { manual: true });
+  assert.equal(fetchCalls, 1, 'Play must reuse the prepared MP3');
+  assert.equal(playCalls, 1);
+  assert.equal(sandbox.window.RMVoice.currentlySpeaking(), 'message-ready');
+});
+
 test('long voice playback starts the first bounded part and continues through every part', async () => {
   const audioInstances = [];
   const requestedParts = [];

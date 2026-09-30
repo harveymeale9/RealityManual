@@ -853,18 +853,10 @@
       activityEl.scrollTop = activityEl.scrollHeight;
     }
 
-    // Ids this device sent via voice on itself and wants spoken aloud —
-    // never applied to a reply that shows up because another device (or an
-    // earlier page load) triggered it. No fallback timer/canned phrase
-    // anymore (removed per Harvey: the repeated generic line was worse than
-    // the problem it solved) — CC's own real early_ack (server.js's
-    // unconditional acknowledgment rule) is spoken the moment it arrives,
-    // full stop, no race against a timeout. Whether the final reply is
-    // *also* spoken depends on whether the turn actually did any work: a
-    // quick, no-tool-call turn's early_ack more or less IS its answer, so
-    // onDone speaks the real reply too (the common case, feels instant); a
-    // turn that used tools only gets the one spoken acknowledgment, with
-    // the real answer landing as text — see onDone below.
+    // Ids this device sent via voice on itself and therefore wants its
+    // contextual early acknowledgment spoken while work is still underway.
+    // Final replies use the global Auto voice preference regardless of which
+    // input mode/device created them; see onDone below.
     var voiceAutoSpeak = {};
 
     // The single source of truth for the thread: on first tick it loads
@@ -902,36 +894,37 @@
         // not be the most recently-sent one anymore if Harvey started
         // another before this reply landed.
         var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
-        // Execute-mode replies are a real completion summary now (see
-        // server.js buildVoicePrompt), not a throwaway line — show it like
-        // any other reply instead of a generic "Done" placeholder.
-        addAssistantMessage(row.reply_text || '', row.transcript, row.id, typingEl, row.agent, row.notification_kind, !!row.notification_unread);
-        if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
-        if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
-        if (voiceAutoSpeak[row.id]) {
-          delete voiceAutoSpeak[row.id];
-          if (!Voice.isAutoSpeechEnabled()) return;
-          // Whether the final answer also gets spoken, on top of the
-          // acknowledgment already spoken by onEarlyAck, depends on
-          // whether this turn actually needed real work — Harvey's own
-          // instruction: a quick/easy turn should just get its answer
-          // spoken directly (no separate ack needed, and this is exactly
-          // that case, since a turn with no tool calls has nothing left
-          // to add beyond what the acknowledgment already said); a turn
-          // that needed real thinking/execution should only get the
-          // spoken acknowledgment ("I'll look into it"), with the actual
-          // answer landing as text, not a second spoken message stacked
-          // on top of the first.
-          var replyText = row.reply_text || '';
-          if (row.agent === 'codex' && row.mode !== 'execute') {
+        var replyText = row.reply_text || '';
+        var newlyArrived = pastFirstTick;
+        var shouldAutoplay = newlyArrived && Voice.isAutoSpeechEnabled() && Voice.isActiveHere() &&
+          row.notification_kind !== 'mail_alert';
+        delete voiceAutoSpeak[row.id];
+
+        function revealReply() {
+          // Execute-mode replies are real completion summaries now (see
+          // server.js buildVoicePrompt), not throwaway placeholders.
+          addAssistantMessage(replyText, row.transcript, row.id, typingEl, row.agent,
+            row.notification_kind, !!row.notification_unread);
+          if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
+          if (shouldAutoplay) {
+            // prepareSpeech has already placed the first MP3 part in memory,
+            // so this starts from the same event turn as the bubble reveal.
             Voice.speak(replyText, row.id, row.agent).catch(function () {});
-          } else {
-            var usedTools = !!(row.activity_log && row.activity_log.length);
-            var alreadySaidIt = row.early_ack && replyText.trim() === row.early_ack.trim();
-            if (!usedTools && !alreadySaidIt && row.mode !== 'execute') {
-              Voice.speak(replyText, row.id, row.agent).catch(function () {});
-            }
+          } else if (newlyArrived && Voice.isActiveHere()) {
+            Voice.playPing();
           }
+        }
+
+        if (newlyArrived && row.notification_kind !== 'mail_alert' && replyText) {
+          if (typingEl) typingEl.textContent = agentName(row.agent) + ' is preparing voice playback…';
+          // Do not expose a Play button that still has to synthesize audio.
+          // If the provider is unavailable, fail open after the bounded TTS
+          // request and reveal the readable answer rather than hiding it.
+          Voice.prepareSpeech(replyText, row.id, row.agent, 'reply')
+            .catch(function () { return null; })
+            .then(revealReply);
+        } else {
+          revealReply();
         }
       },
       onError: function (row) {

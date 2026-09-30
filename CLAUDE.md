@@ -14745,3 +14745,37 @@ shrinking or overflow, Project Manager and Pipeline still occupy the complete
 shared shell, and navigating directly to Editor activates both the Content Ops
 rail parent and Editor's horizontal tab. App and stylesheet cache keys were
 advanced to v87.
+
+---
+
+# 417. Project Manager Replies Are Voice-Ready Before They Appear (2026-09-30)
+
+Completed Project Manager replies previously became visible before their TTS
+request began. Pressing Play therefore changed the button to “Loading audio…”
+while the first bounded speech part was synthesized, and automatic voice used
+the same late request after the bubble had already arrived.
+
+The shared desktop/mobile voice client now has a bounded prepared-speech cache.
+For a newly completed conversational reply, each interface keeps the existing
+working placeholder visible as “preparing voice playback,” requests and fully
+buffers the first sentence-bounded MP3 part, starts warming the next part for a
+long response, and only then reveals the final message bubble. Both autoplay
+and later manual Play use that same in-memory Blob, so neither path performs a
+second TTS request before playback. The cache retains only the forty most
+recent replies, while long replies continue loading one bounded part ahead
+rather than retaining an unbounded amount of audio.
+
+Automatic voice now applies consistently to every newly arriving Project
+Manager response in the active tab when the existing Auto voice toggle is on,
+not only to voice messages initiated on that exact device. Historical messages
+loaded on page open do not autoplay or delay the thread, mailbox alerts remain
+silent, a manual playback still owns the speech channel, and a provider failure
+fails open to the readable text after the existing bounded request timeout.
+
+The complete 142-test suite passes, including a new regression proving a
+prepared reply is silent during preparation and plays without another network
+request. A real 390×844 Chromium run against the actual mobile interface held
+the completed bubble back while TTS was delayed, displayed the preparation
+state, revealed and autostarted it after the response arrived, and then began a
+second manual playback from memory in 75ms with the TTS request count unchanged.
+Desktop and mobile cache keys were advanced together.

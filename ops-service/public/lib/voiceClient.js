@@ -355,6 +355,13 @@ window.RMVoice = (function () {
   var currentSpeechMode = null;
   var currentSpeechToken = null;
   var TTS_LOAD_TIMEOUT_MS = 45000;
+  // Newly-completed replies are warmed before their bubble is revealed. The
+  // first bounded MP3 part then lives here so autoplay and a later manual Play
+  // tap can both begin from a local Blob instead of starting another TTS
+  // request while Harvey is already waiting to hear it.
+  var preparedSpeechCache = Object.create(null);
+  var preparedSpeechOrder = [];
+  var PREPARED_SPEECH_LIMIT = 40;
   var AUTO_SPEECH_KEY = 'rm_project_manager_auto_speech';
   var autoSpeechListeners = [];
   function readAutoSpeechPreference() {
@@ -616,6 +623,176 @@ window.RMVoice = (function () {
     return loadBlob(0).then(function (blob) { return playPart(0, blob); });
   }
 
+  function speechCacheKey(msgId, agent, speechKind) {
+    return String(msgId || '') + '|' + (agent === 'codex' ? 'codex' : 'claude') + '|' +
+      (speechKind === 'early_ack' ? 'early_ack' : 'reply');
+  }
+
+  function rememberPreparedSpeech(key, entry) {
+    preparedSpeechCache[key] = entry;
+    var oldIndex = preparedSpeechOrder.indexOf(key);
+    if (oldIndex !== -1) preparedSpeechOrder.splice(oldIndex, 1);
+    preparedSpeechOrder.push(key);
+    while (preparedSpeechOrder.length > PREPARED_SPEECH_LIMIT) {
+      delete preparedSpeechCache[preparedSpeechOrder.shift()];
+    }
+  }
+
+  function speechRequest(clean, msgId, agent, speechKind, partIndex, signal) {
+    return fetch(API_BASE + '/api/voice/tts', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      signal: signal,
+      body: JSON.stringify({
+        text: clean,
+        messageId: msgId,
+        agent: agent,
+        speechKind: speechKind === 'early_ack' ? 'early_ack' : 'reply',
+        partIndex: partIndex
+      })
+    }).then(function (r) {
+      if (r.ok) return r;
+      return r.json().catch(function () { return {}; }).then(function (payload) {
+        var code = payload && payload.error ? payload.error : 'tts_failed';
+        var message = code === 'openai_tts_not_configured'
+          ? 'Codex voice needs an OpenAI API key on the server.'
+          : 'Could not synthesize speech.';
+        var error = new Error(message);
+        error.code = code;
+        throw error;
+      });
+    });
+  }
+
+  function ensurePreparedPart(entry, index) {
+    if (entry.parts[index]) return Promise.resolve(entry.parts[index]);
+    if (entry.partPromises[index]) return entry.partPromises[index];
+    entry.partPromises[index] = speechRequest(entry.text, entry.msgId, entry.agent,
+      entry.speechKind, index).then(function (response) {
+        return response.blob();
+      }).then(function (blob) {
+        entry.parts[index] = blob;
+        return blob;
+      });
+    return entry.partPromises[index];
+  }
+
+  function prepareSpeech(text, msgId, agent, speechKind) {
+    var clean = stripMarkdownForSpeech(text);
+    if (!clean || !msgId) return Promise.resolve(null);
+    agent = agent === 'codex' ? 'codex' : 'claude';
+    speechKind = speechKind === 'early_ack' ? 'early_ack' : 'reply';
+    var key = speechCacheKey(msgId, agent, speechKind);
+    var existing = preparedSpeechCache[key];
+    if (existing && existing.text === clean) {
+      if (existing.parts[0]) return Promise.resolve(existing);
+      if (existing.readyPromise) return existing.readyPromise;
+    }
+
+    var entry = {
+      key: key,
+      text: clean,
+      msgId: msgId,
+      agent: agent,
+      speechKind: speechKind,
+      count: 1,
+      parts: [],
+      partPromises: []
+    };
+    rememberPreparedSpeech(key, entry);
+    var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var timeoutId = setTimeout(function () {
+      if (controller) {
+        try { controller.abort(); } catch (e) { /* ignore */ }
+      }
+    }, TTS_LOAD_TIMEOUT_MS);
+    entry.readyPromise = speechRequest(clean, msgId, agent, speechKind, 0,
+      controller ? controller.signal : undefined).then(function (response) {
+        entry.count = Math.max(1, parseInt(response.headers && response.headers.get('X-RM-TTS-Part-Count'), 10) || 1);
+        return response.blob();
+      }).then(function (blob) {
+        entry.parts[0] = blob;
+        // Warm the next part while Harvey reads the newly-revealed bubble.
+        // Playback therefore has a full paragraph of runway without loading
+        // every long response into browser memory up front.
+        if (entry.count > 1) ensurePreparedPart(entry, 1).catch(function () {});
+        return entry;
+      }).catch(function (error) {
+        if (preparedSpeechCache[key] === entry) delete preparedSpeechCache[key];
+        throw error;
+      }).then(function (result) {
+        clearTimeout(timeoutId);
+        return result;
+      }, function (error) {
+        clearTimeout(timeoutId);
+        throw error;
+      });
+    return entry.readyPromise;
+  }
+
+  function playPreparedSequence(entry, myToken, msgId) {
+    function releaseSpeech() {
+      if (currentSpeechToken !== myToken) return;
+      currentAudio = null;
+      currentAudioCleanup = null;
+      currentSpeechController = null;
+      currentSpeechMode = null;
+      currentSpeechToken = null;
+      if (speakingMsgId !== null) {
+        speakingMsgId = null;
+        notifySpeakingChange();
+      }
+    }
+
+    function playPart(index, blob) {
+      if (myToken !== playToken || recordingActive) return null;
+      var next = index + 1 < entry.count
+        ? ensurePreparedPart(entry, index + 1).then(function (value) { return { blob: value }; }, function (error) { return { error: error }; })
+        : null;
+      var url = URL.createObjectURL(blob);
+      var audio = new Audio(url);
+      var finished = false;
+      currentAudio = audio;
+      speakingMsgId = (typeof msgId !== 'undefined') ? msgId : null;
+      notifySpeakingChange();
+
+      function cleanPart() {
+        if (finished) return;
+        finished = true;
+        URL.revokeObjectURL(url);
+        if (currentAudio === audio) {
+          currentAudio = null;
+          currentAudioCleanup = null;
+        }
+      }
+      function failPart() { cleanPart(); releaseSpeech(); }
+      function finishPart() {
+        cleanPart();
+        if (myToken !== playToken || recordingActive) return releaseSpeech();
+        if (!next) return releaseSpeech();
+        next.then(function (loaded) {
+          if (loaded.error) return releaseSpeech();
+          var started = playPart(index + 1, loaded.blob);
+          if (started && typeof started.catch === 'function') started.catch(releaseSpeech);
+        });
+      }
+      audio.addEventListener('ended', finishPart);
+      audio.addEventListener('error', failPart);
+      audio.addEventListener('abort', failPart);
+      currentAudioCleanup = function () {
+        try { audio.pause(); } catch (e) { /* ignore */ }
+        cleanPart();
+      };
+      return audio.play().then(function () { return audio; }).catch(function (error) {
+        failPart();
+        throw error;
+      });
+    }
+
+    return playPart(0, entry.parts[0]);
+  }
+
   // OpenAI's Speech API returns chunked MP3. MediaSource lets a supporting
   // browser start after the first decodable chunk instead of waiting for a
   // complete Blob; browsers without audio/mpeg MediaSource support use the
@@ -730,35 +907,14 @@ window.RMVoice = (function () {
       }, TTS_LOAD_TIMEOUT_MS);
     });
     function fetchSpeechPart(partIndex) {
-      return fetch(API_BASE + '/api/voice/tts', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller ? controller.signal : undefined,
-        body: JSON.stringify({
-          text: clean,
-          messageId: msgId,
-          agent: agent,
-          // The backend still resolves Codex speech from the canonical DB
-          // row. This flag only tells it whether the requested stored text is
-          // the live contextual acknowledgment or the completed final reply.
-          speechKind: speechKind === 'early_ack' ? 'early_ack' : 'reply',
-          partIndex: partIndex
-        })
-      }).then(function (r) {
-        if (r.ok) return r;
-        return r.json().catch(function () { return {}; }).then(function (payload) {
-          var code = payload && payload.error ? payload.error : 'tts_failed';
-          var message = code === 'openai_tts_not_configured'
-            ? 'Codex voice needs an OpenAI API key on the server.'
-            : 'Could not synthesize speech.';
-          var error = new Error(message);
-          error.code = code;
-          throw error;
-        });
-      });
+      return speechRequest(clean, msgId, agent, speechKind, partIndex,
+        controller ? controller.signal : undefined);
     }
-    var requestPromise = fetchSpeechPart(0).then(function (r) {
+    var cacheKey = speechCacheKey(msgId, agent, speechKind);
+    var prepared = preparedSpeechCache[cacheKey];
+    var requestPromise = prepared && prepared.text === clean && prepared.parts[0]
+      ? Promise.resolve(playPreparedSequence(prepared, myToken, msgId))
+      : fetchSpeechPart(0).then(function (r) {
       // Do not hand a provider's network chunks straight to the audio
       // element. OpenAI can occasionally deliver a short sentence as small
       // bursts with long gaps between them; starting after the first burst
@@ -768,7 +924,7 @@ window.RMVoice = (function () {
       // upstream transfer itself is uneven. playToken still prevents a stale
       // response from starting after Stop or a newer reply was requested.
       return playBufferedSequence(r, fetchSpeechPart, myToken, msgId);
-    });
+      });
     return Promise.race([requestPromise, timeoutPromise]).catch(function (error) {
       if (timedOut) throw timeoutError;
       // Stop, recording start, disabling auto-speech, or a newer Play request
@@ -942,6 +1098,7 @@ window.RMVoice = (function () {
     getAgentPreference: getAgentPreference,
     setAgentPreference: setAgentPreference,
     pollMessage: pollMessage,
+    prepareSpeech: prepareSpeech,
     speak: speak,
     stopSpeaking: stopSpeaking,
     onSpeakingChange: onSpeakingChange,
