@@ -13,7 +13,7 @@ const EDIT_RENDER_DEBOUNCE_MS = 2500;
 const EDITOR_DISK_RESERVE_BYTES = 2 * 1024 * 1024 * 1024;
 const OPENING_PUSH_IN_SECONDS = 3;
 const OPENING_PUSH_IN_SCALE = 1.04;
-const EDITOR_RENDER_VERSION = 2;
+const EDITOR_RENDER_VERSION = 3;
 
 function requiredEditorCapacity(fileBytes, fileAlreadyStored) {
   const bytes = Math.max(0, Number(fileBytes) || 0);
@@ -714,7 +714,7 @@ function buildAss(project, groups) {
     '[Script Info]', 'ScriptType: v4.00+', 'PlayResX: ' + width, 'PlayResY: ' + height,
     'ScaledBorderAndShadow: yes', '', '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
-    'Style: Default,Arial,' + fontSize + ',&H0000FFFF,&H0000FFFF,&H00101010,&H80000000,-1,0,0,0,100,100,0,0,1,3,1,2,40,40,' + marginV + ',1',
+    'Style: Default,Arial,' + fontSize + ',&H0063DFF4,&H0063DFF4,&H00101010,&H80000000,-1,0,0,0,100,100,0,0,1,3,2,2,40,40,' + marginV + ',1',
     '', '[Events]', 'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text'
   ];
   const events = [];

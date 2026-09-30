@@ -14221,3 +14221,19 @@ receives the new placement after reload. Unit coverage verifies the exact
 1080×1920 export margin. Render format version 2 also invalidates and
 automatically rebuilds any unapproved ready edit made with the earlier caption
 position; approved Production inputs remain immutable.
+
+---
+
+# 402. Caption Yellow and Shadow Are Softer (2026-09-30)
+
+Harvey wanted the yellow captions slightly less vivid and the reference's
+subtle depth behind the lettering. Preview captions now use muted warm yellow
+`#f4df63`, retain the dark readability edge, and finish with a softer blurred
+black drop shadow. Baked ASS captions use the exact corresponding BGR colour
+and a two-pixel shadow in addition to their existing outline, rather than the
+old one-pixel offset.
+
+The stylesheet cache key and Editor render version were advanced together.
+Active unapproved edits therefore rebuild automatically and cannot show the
+new preview styling while retaining an older baked export; approved Production
+inputs remain immutable.
