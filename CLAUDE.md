@@ -15009,3 +15009,66 @@ temporarily available for compatibility but has no UI entry point.
 Regression coverage asserts the Editor requests the 192 kbps shared profile,
 all 142 Node tests pass, and the public asset keys were advanced so the Settings
 cleanup reaches existing browser sessions immediately.
+
+---
+
+# 429. R2-Backed Durable Publishing Queue (2026-09-30)
+
+The existing publication scheduler already owned the required cadence and
+platform behavior: TikTok is queued through Buffer, short-form YouTube/
+Instagram/Facebook share that exact release instant, and long-form YouTube/
+Facebook use the independent three-day Bangkok rhythm. The missing layer was
+durable media storage. Scheduled cards still depended on large files living on
+the 100 GB VPS until their due date.
+
+`src/r2Storage.js` now provides a private Cloudflare R2/S3 adapter using the
+official AWS SDK. Final videos are uploaded with resumable 16 MiB multipart
+parts, a maximum of three concurrent parts, and abandoned parts cleaned on
+failure. A successful transfer is not trusted until a `HeadObject` verifies the
+remote byte count. Downloads are streamed to a unique temporary file rather
+than buffered in Node memory, and presigned GET URLs are bounded to Cloudflare's
+seven-day maximum.
+
+The coordinated `/api/publish/:id` path now archives the exact final MP4 before
+assigning its future release time. Once the verified R2 object and schedule are
+durable, the duplicate Production raw/final files and that approved Editor
+project's large media directory are removed from local disk; their metadata and
+Kanban history remain. At release time:
+
+- YouTube and Facebook obtain one temporary local download from R2 only for the
+  duration of their direct streaming upload;
+- Instagram and Buffer receive the existing app-authenticated media URL, which
+  redirects to a short-lived R2 presigned object URL when the local copy has
+  already been reclaimed;
+- a retry after a restart or platform failure reuses the same verified R2
+  object rather than requiring a new browser upload;
+- if R2 is not configured, publishing deliberately retains the prior local-only
+  behavior rather than breaking the queue.
+
+R2 is working storage, not an indefinite archive. Scheduled objects are never
+eligible for deletion. Once a piece is confirmed Live and its `postedAt` is at
+least `R2_PUBLISHED_RETENTION_DAYS` old (14 days by default), a daily retention
+job deletes the object and records that release on the piece. An interrupted R2
+upload is recovered as a visible error on restart, never assumed complete.
+
+Content Settings now has a read-only **Publishing storage · Cloudflare R2**
+health card showing missing configuration, a failed bucket check, or the
+connected bucket plus current scheduled-object count. Kanban cards show
+**Storing video…** and **Cloud stored** chips. Admin YouTube scheduling now
+defaults to Public so a due-time upload actually publishes; the restricted API
+reviewer still defaults to Private.
+
+Required live environment values are documented in `.env.example`:
+`R2_ENDPOINT`, `R2_BUCKET_NAME`, `R2_ACCESS_KEY_ID`,
+`R2_SECRET_ACCESS_KEY`, and optional `R2_PUBLISHED_RETENTION_DAYS`. Per the
+repository's hard credential boundary in `AGENTS.md`, an agent did not write or
+exercise credentials supplied through chat. Those disclosed values must be
+rotated and pasted by Harvey into the gitignored live `.env`; the app uses the
+S3 access-key pair and endpoint, not the broader Cloudflare administrative API
+token. Until that one human step is complete, the deployed health card will
+honestly say Setup needed and the existing local fallback remains active.
+
+Regression coverage includes missing configuration, a complete multipart
+upload/head/download/sign/delete lifecycle, and rejection of a remote object
+whose byte count differs from the final render. All 145 Node tests pass, along
+with syntax and whitespace checks.

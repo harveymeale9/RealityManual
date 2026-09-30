@@ -2436,6 +2436,8 @@
     var ct = contentTypeOf(piece.contentType);
     out += '<span class="chip format"><span class="dot" style="background:' + ct.color + '"></span>' + ct.label + '</span>';
     if (piece.hasVideo && !opts.hideVideoChip) out += '<span class="chip video-chip">▶ video</span>';
+    if (piece.storageStatus === 'ready') out += '<span class="chip storage-chip">Cloud stored</span>';
+    if (piece.storageStatus === 'uploading') out += '<span class="chip storage-chip">Storing video…</span>';
     return out;
   }
 
@@ -2747,9 +2749,9 @@
     var privacySelectHtml = (wired.indexOf('ytlong') !== -1 || wired.indexOf('ytshort') !== -1)
       ? '' +
         '<select class="fc-yt-privacy" data-id="' + id + '" title="YouTube visibility">' +
-          '<option value="private" selected>Private</option>' +
+          '<option value="private"' + (IS_REVIEWER ? ' selected' : '') + '>Private</option>' +
           '<option value="unlisted">Unlisted</option>' +
-          '<option value="public">Public</option>' +
+          '<option value="public"' + (IS_REVIEWER ? '' : ' selected') + '>Public</option>' +
         '</select>'
       : '';
     // TikTok's Content Sharing Guidelines require showing a Music Usage
@@ -4401,6 +4403,13 @@
       '<section class="settings-section">' +
         '<h3>Platform connections</h3>' +
         '<p class="settings-hint">YouTube publishes directly through Google. Facebook and Instagram connect directly through Meta. TikTok alone is scheduled through Buffer.</p>' +
+        '<div class="platform-connect-card" id="r2StorageCard">' +
+          '<div class="platform-connect-info">' +
+            '<span class="platform-connect-name">Publishing storage · Cloudflare R2</span>' +
+            '<span class="platform-connect-status" id="r2StorageStatus">Checking…</span>' +
+          '</div>' +
+          '<span class="auto-stage-badge" id="r2StorageBadge">…</span>' +
+        '</div>' +
         '<div class="platform-connect-card" id="youtubeConnectCard">' +
           '<div class="platform-connect-info">' +
             '<span class="platform-connect-name">YouTube</span>' +
@@ -4451,6 +4460,30 @@
   // YouTube's OAuth and Buffer's server-only API key are represented by the
   // connection cards above. Neither credential belongs in this browser-side
   // settings record, so there is no duplicate plain-text field here.
+  function renderR2StorageCard() {
+    var card = document.getElementById('r2StorageCard');
+    var statusEl = document.getElementById('r2StorageStatus');
+    var badge = document.getElementById('r2StorageBadge');
+    if (!card || !statusEl || !badge) return;
+    if (IS_REVIEWER) { card.remove(); return; }
+    fetch('/api/storage/status', { credentials: 'include' })
+      .then(function (r) { if (!r.ok) throw new Error('unavailable'); return r.json(); })
+      .then(function (status) {
+        if (status.connected) {
+          var archived = Number(status.archived || 0);
+          statusEl.textContent = 'Connected to ' + status.bucket + ' · ' + archived + ' scheduled file' + (archived === 1 ? '' : 's') + ' stored · released ' + status.retentionDays + ' days after publishing.';
+          badge.textContent = 'Ready';
+        } else if (status.configured) {
+          statusEl.textContent = 'Configured, but the bucket check failed' + (status.error ? ': ' + status.error : '.');
+          badge.textContent = 'Check setup';
+        } else {
+          statusEl.textContent = 'Not configured yet. Scheduled videos remain on the VPS until the R2 environment values are added.';
+          badge.textContent = 'Setup needed';
+        }
+      })
+      .catch(function () { statusEl.textContent = 'Storage status could not be checked.'; badge.textContent = 'Unavailable'; });
+  }
+
   function renderYoutubeConnectCard() {
     var statusEl = document.getElementById('youtubeConnectStatus');
     var btn = document.getElementById('youtubeConnectBtn');
@@ -4772,6 +4805,7 @@
       renderCadenceGrid();
       renderAudioList();
       renderKeyGrid();
+      renderR2StorageCard();
       renderYoutubeConnectCard();
       renderTiktokConnectCard();
       renderMetaConnectCard();

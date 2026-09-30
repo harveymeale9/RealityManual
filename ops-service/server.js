@@ -41,6 +41,7 @@ const shortformSchedule = require('./src/shortformSchedule');
 const videoEditorService = require('./src/videoEditorService');
 const editorRetakeAnalysis = require('./src/editorRetakeAnalysis');
 const editorTranscriptSampling = require('./src/editorTranscriptSampling');
+const r2StorageService = require('./src/r2Storage');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
@@ -80,6 +81,13 @@ const FILE_STORES = ['videos', 'audioTracks'];
 const ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const FINAL_VIDEO_SUFFIX = '-final';
+const R2_PUBLISHED_RETENTION_DAYS = Math.max(1, Math.min(365, Number(process.env.R2_PUBLISHED_RETENTION_DAYS) || 14));
+const r2Storage = r2StorageService.setup({
+  endpoint: process.env.R2_ENDPOINT,
+  bucket: process.env.R2_BUCKET_NAME,
+  accessKeyId: process.env.R2_ACCESS_KEY_ID,
+  secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+});
 const buffer = bufferService.setup({
   apiKey: process.env.BUFFER_API_KEY,
   tiktokChannelId: process.env.BUFFER_TIKTOK_CHANNEL_ID,
@@ -1511,11 +1519,20 @@ app.post('/api/files/:storeName/:id', upload.single('file'), function (req, res)
   });
 });
 
-app.get('/api/files/:storeName/:id', function (req, res) {
+app.get('/api/files/:storeName/:id', async function (req, res) {
   const { storeName, id } = req.params;
   if (FILE_STORES.indexOf(storeName) === -1 || !isValidId(id)) return res.status(400).json({ error: 'invalid_params' });
   const filePath = path.join(UPLOADS_DIR, storeName, id);
-  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'not_found' });
+  if (!fs.existsSync(filePath)) {
+    if (storeName === 'videos' && id.endsWith(FINAL_VIDEO_SUFFIX)) {
+      const piece = getPieceRecord(id.slice(0, -FINAL_VIDEO_SUFFIX.length));
+      try {
+        const remoteUrl = await storedMediaUrl(piece, 15 * 60);
+        if (remoteUrl) return res.redirect(302, remoteUrl);
+      } catch (error) { return res.status(502).json({ error: 'stored_media_unavailable' }); }
+    }
+    return res.status(404).json({ error: 'not_found' });
+  }
   const row = stmts.getOne.get(storeName, id);
   const meta = row ? JSON.parse(row.data) : {};
   res.setHeader('Content-Type', meta.mimeType || 'application/octet-stream');
@@ -1537,30 +1554,36 @@ function getPieceRecord(id) {
 // Buffer requires a publicly fetchable URL for video assets. This narrowly
 // scoped route exposes only a finished video, for a short HMAC-signed window,
 // and never exposes directory listing or the API key itself.
-app.get('/api/buffer/media/:id', function (req, res) {
+app.get('/api/buffer/media/:id', async function (req, res) {
   const id = req.params.id;
   if (!isValidId(id) || !buffer.verifyMediaSignature(id, req.query.expires, req.query.sig)) return res.status(403).end();
   const piece = getPieceRecord(id);
   if (!piece || (piece.platforms || []).indexOf('tiktok') === -1) return res.status(404).end();
   const filePath = path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX);
-  if (!fs.existsSync(filePath)) return res.status(404).end();
-  res.type('video/mp4');
-  res.sendFile(filePath);
+  if (fs.existsSync(filePath)) return res.type('video/mp4').sendFile(filePath);
+  try {
+    const remoteUrl = await storedMediaUrl(piece, 60 * 60);
+    if (!remoteUrl) return res.status(404).end();
+    return res.redirect(302, remoteUrl);
+  } catch (error) { return res.status(502).end(); }
 });
 
 // Instagram's container API fetches the finished Reel from a URL. This is
 // separate from the Buffer URL/signature so neither external service can
 // reuse the other's credential or fetch an unrelated upload.
-app.get('/api/meta/media/:id', function (req, res) {
+app.get('/api/meta/media/:id', async function (req, res) {
   const id = req.params.id;
   const auth = stmts.getMetaAuth.get();
   if (!isValidId(id) || !auth || !metaPublisher.verifyMediaSignature(id, req.query.expires, req.query.sig, auth.app_secret)) return res.status(403).end();
   const piece = getPieceRecord(id);
   if (!piece || (piece.platforms || []).indexOf('instagram') === -1) return res.status(404).end();
   const filePath = path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX);
-  if (!fs.existsSync(filePath)) return res.status(404).end();
-  res.type('video/mp4');
-  res.sendFile(filePath);
+  if (fs.existsSync(filePath)) return res.type('video/mp4').sendFile(filePath);
+  try {
+    const remoteUrl = await storedMediaUrl(piece, 60 * 60);
+    if (!remoteUrl) return res.status(404).end();
+    return res.redirect(302, remoteUrl);
+  } catch (error) { return res.status(502).end(); }
 });
 function savePieceRecord(piece) {
   const previous = getPieceRecord(piece.id);
@@ -1568,6 +1591,119 @@ function savePieceRecord(piece) {
   recordConcurrency.stampServerWrite(piece);
   stmts.upsert.run('pieces', piece.id, JSON.stringify(piece), stamp);
   weeklyReports.recordStageChange(piece, previous && previous.stage, 'automation', stamp);
+}
+
+// R2 is the durable source of publish-ready media once a card is scheduled.
+// Uploads are claimed per piece so a retry/double click cannot start two large
+// multipart transfers. The local final remains available during Final Check;
+// after the verified R2 copy is scheduled, redundant Production + Editor
+// media can be reclaimed from the small VPS disk.
+const r2ArchiveJobs = new Map();
+async function ensurePublishMediaArchived(id) {
+  const piece = getPieceRecord(id);
+  if (!piece) throw new Error('Content piece not found.');
+  if (!r2Storage.configured) {
+    if (piece.storageStatus !== 'local_only') {
+      piece.storageStatus = 'local_only';
+      piece.storageError = 'R2 is not configured; the publish-ready video remains on the VPS.';
+      savePieceRecord(piece);
+    }
+    return { stored: false, localOnly: true };
+  }
+  if (piece.storageStatus === 'ready' && piece.storageObjectKey) {
+    try {
+      const remote = await r2Storage.headKey(piece.storageObjectKey);
+      if (!piece.storageSizeBytes || remote.sizeBytes === Number(piece.storageSizeBytes)) {
+        return Object.assign({ stored: true }, remote);
+      }
+    } catch (error) { /* re-upload below when the verified local final exists */ }
+  }
+  if (r2ArchiveJobs.has(id)) return r2ArchiveJobs.get(id);
+  const job = (async function () {
+    const finalPath = path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX);
+    if (!fs.existsSync(finalPath)) throw new Error('The publish-ready video is missing locally and has no verified R2 copy.');
+    updatePieceFields(id, { storageStatus: 'uploading', storageError: '' });
+    try {
+      const remote = await r2Storage.uploadFile(id, finalPath, 'video/mp4');
+      updatePieceFields(id, {
+        storageStatus: 'ready', storageError: '', storageProvider: 'cloudflare_r2',
+        storageObjectKey: remote.key, storageSizeBytes: remote.sizeBytes,
+        storageEtag: remote.etag, storageMimeType: remote.contentType,
+        storageStoredAt: new Date().toISOString(), storageDeletedAt: ''
+      });
+      return Object.assign({ stored: true }, remote);
+    } catch (error) {
+      updatePieceFields(id, { storageStatus: 'error', storageError: String(error.message || error).slice(0, 500) });
+      throw error;
+    }
+  })().finally(function () { r2ArchiveJobs.delete(id); });
+  r2ArchiveJobs.set(id, job);
+  return job;
+}
+
+function releaseLocalPublishMedia(id) {
+  const piece = getPieceRecord(id);
+  if (!piece || piece.storageStatus !== 'ready' || !piece.storageObjectKey) return false;
+  [path.join(UPLOADS_DIR, 'videos', id), path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX)]
+    .forEach(function (filePath) { fs.rm(filePath, { force: true }, function () {}); });
+  // The approved Editor project remains in its durable database row/history,
+  // but its large camera master, proxy and render are no longer needed after
+  // the exact publish-ready output has been verified in R2.
+  fs.rm(path.join(DATA_DIR, 'editor', id), { recursive: true, force: true }, function () {});
+  updatePieceFields(id, { localMediaReleasedAt: new Date().toISOString() });
+  return true;
+}
+
+async function localPublishMedia(id) {
+  const finalPath = path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX);
+  const piece = getPieceRecord(id);
+  if (fs.existsSync(finalPath)) {
+    return { path: finalPath, mimeType: piece && piece.storageMimeType || 'video/mp4', temporary: false, cleanup: function () {} };
+  }
+  if (!piece || piece.storageStatus !== 'ready' || !piece.storageObjectKey || !r2Storage.configured) {
+    throw new Error('The publish-ready video is unavailable locally and in R2.');
+  }
+  const destination = path.join(DATA_DIR, 'tmp', 'r2-publish-' + id + '-' + crypto.randomUUID() + '.mp4');
+  const downloaded = await r2Storage.downloadKey(piece.storageObjectKey, destination);
+  if (piece.storageSizeBytes && downloaded.sizeBytes !== Number(piece.storageSizeBytes)) {
+    fs.rmSync(destination, { force: true });
+    throw new Error('The R2 download did not match the verified publish-ready video size.');
+  }
+  return {
+    path: destination,
+    mimeType: piece.storageMimeType || downloaded.contentType || 'video/mp4',
+    temporary: true,
+    cleanup: function () { fs.rm(destination, { force: true }, function () {}); }
+  };
+}
+
+async function storedMediaUrl(piece, lifetimeSeconds) {
+  if (!piece || piece.storageStatus !== 'ready' || !piece.storageObjectKey || !r2Storage.configured) return '';
+  return r2Storage.signedGetUrl(piece.storageObjectKey, lifetimeSeconds || 3600);
+}
+
+async function purgeExpiredPublishedMedia() {
+  if (!r2Storage.configured) return { removed: 0 };
+  const cutoff = Date.now() - R2_PUBLISHED_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  let removed = 0;
+  for (const row of stmts.getAll.all('pieces')) {
+    const piece = recordConcurrency.decodeRow(row);
+    const publishedAt = Date.parse(piece && piece.postedAt || '');
+    if (!piece || piece.stage !== 'live' || piece.storageStatus !== 'ready' || !piece.storageObjectKey ||
+        !Number.isFinite(publishedAt) || publishedAt > cutoff) continue;
+    try {
+      await r2Storage.deleteKey(piece.storageObjectKey);
+      piece.storageStatus = 'released';
+      piece.storageDeletedAt = new Date().toISOString();
+      piece.storageError = '';
+      savePieceRecord(piece);
+      removed++;
+    } catch (error) {
+      piece.storageError = String(error.message || error).slice(0, 500);
+      savePieceRecord(piece);
+    }
+  }
+  return { removed: removed };
 }
 
 // Editor -> Content Production handoff. This is the server-side equivalent
@@ -2101,6 +2237,17 @@ app.get('/api/buffer/status', requireAuth, async function (req, res) {
   res.json(status);
 });
 
+app.get('/api/storage/status', requireAuth, async function (req, res) {
+  const status = await r2Storage.health();
+  status.provider = 'cloudflare_r2';
+  status.retentionDays = R2_PUBLISHED_RETENTION_DAYS;
+  status.archived = stmts.getAll.all('pieces').reduce(function (count, row) {
+    try { return count + (recordConcurrency.decodeRow(row).storageStatus === 'ready' ? 1 : 0); }
+    catch (error) { return count; }
+  }, 0);
+  res.json(status);
+});
+
 async function runBufferTiktokPublish(id, opts) {
   const piece = getPieceRecord(id);
   if (!piece) return;
@@ -2194,16 +2341,33 @@ function uniquePublishDestinations(destinations) {
 
 async function runPlatformPublishBatch(id, destinations) {
   const finalPath = path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX);
-  if (!fs.existsSync(finalPath)) {
+  const openingPiece = getPieceRecord(id);
+  const hasStoredFinal = openingPiece && openingPiece.storageStatus === 'ready' && openingPiece.storageObjectKey;
+  if (!fs.existsSync(finalPath) && !hasStoredFinal) {
     destinations.forEach(function (destination) {
       const fields = {}; fields[publishStatusField(destination.platform)] = 'error'; fields[publishErrorField(destination.platform)] = 'finished video not found on disk';
       updatePieceFields(id, fields);
     });
     return;
   }
+  // Archive before assigning a future release time. A schedule is only
+  // durable when its bytes are durable too; if R2 is not configured yet the
+  // established local-only path remains available without breaking posts.
+  try { await ensurePublishMediaArchived(id); }
+  catch (error) {
+    destinations.forEach(function (destination) {
+      const fields = {};
+      fields[publishStatusField(destination.platform)] = 'error';
+      fields[publishErrorField(destination.platform)] = 'R2 storage failed: ' + String(error.message || error).slice(0, 450);
+      updatePieceFields(id, fields);
+    });
+    updatePieceFields(id, { stage: 'final_check' });
+    return;
+  }
   const videoRow = stmts.getOne.get('videos', id + FINAL_VIDEO_SUFFIX);
   const videoMeta = videoRow ? JSON.parse(videoRow.data) : {};
-  const mimeType = videoMeta.mimeType || 'video/mp4';
+  const archivedPiece = getPieceRecord(id);
+  const mimeType = archivedPiece && archivedPiece.storageMimeType || videoMeta.mimeType || 'video/mp4';
 
   // Shorts use one shared release instant across every destination. Buffer is
   // authoritative whenever TikTok is selected: enqueue TikTok first, retain
@@ -2247,6 +2411,7 @@ async function runPlatformPublishBatch(id, destinations) {
     });
     latest.updatedAt = new Date().toISOString();
     savePieceRecord(latest);
+    releaseLocalPublishMedia(id);
     return;
   }
   const isScheduledShortRelease = shortformSchedule.isShortform(initialPiece) &&
@@ -2313,6 +2478,7 @@ async function runPlatformPublishBatch(id, destinations) {
     });
     latest.updatedAt = new Date().toISOString();
     savePieceRecord(latest);
+    releaseLocalPublishMedia(id);
     return;
   }
 
@@ -2322,11 +2488,15 @@ async function runPlatformPublishBatch(id, destinations) {
     updatePieceFields(id, running);
     try {
       if (platform === 'ytlong' || platform === 'ytshort') {
-        const accessToken = await getValidYoutubeAccessToken();
-        const result = await youtubeAuth.uploadVideo(accessToken, finalPath, mimeType, {
-          title: destination.title || 'Untitled', description: destination.caption || '',
-          privacyStatus: destination.privacyStatus || 'private'
-        });
+        const media = await localPublishMedia(id);
+        let result;
+        try {
+          const accessToken = await getValidYoutubeAccessToken();
+          result = await youtubeAuth.uploadVideo(accessToken, media.path, mimeType, {
+            title: destination.title || 'Untitled', description: destination.caption || '',
+            privacyStatus: destination.privacyStatus || 'private'
+          });
+        } finally { media.cleanup(); }
         updatePieceFields(id, {
           youtubePublishStatus: 'done', youtubePublishError: '', youtubeVideoId: result.videoId,
           youtubeUrl: 'https://www.youtube.com/watch?v=' + result.videoId,
@@ -2348,10 +2518,14 @@ async function runPlatformPublishBatch(id, destinations) {
         const auth = stmts.getMetaAuth.get();
         if (!auth || !auth.page_access_token || !auth.page_id) throw new Error('Facebook + Instagram is not connected to a publishing Page.');
         if (platform === 'facebook') {
-          const result = await metaPublisher.publishFacebookVideo({
-            pageId: auth.page_id, pageToken: auth.page_access_token, videoPath: finalPath, mimeType: mimeType,
-            title: destination.title || 'Untitled', description: destination.caption || ''
-          });
+          const media = await localPublishMedia(id);
+          let result;
+          try {
+            result = await metaPublisher.publishFacebookVideo({
+              pageId: auth.page_id, pageToken: auth.page_access_token, videoPath: media.path, mimeType: mimeType,
+              title: destination.title || 'Untitled', description: destination.caption || ''
+            });
+          } finally { media.cleanup(); }
           updatePieceFields(id, {
             facebookPublishStatus: 'done', facebookPublishError: '', facebookVideoId: result.id, facebookUrl: result.url
           });
@@ -2397,6 +2571,7 @@ async function runPlatformPublishBatch(id, destinations) {
   }
   latest.updatedAt = new Date().toISOString();
   savePieceRecord(latest);
+  if (allDone) releaseLocalPublishMedia(id);
 }
 
 const directReleasesInFlight = new Set();
@@ -3258,6 +3433,12 @@ function recoverInflightVideoJobs() {
       piece.finalBuildError = 'Service restarted while this was in progress — try "Send to final check" again.';
       changed = true;
     }
+    if (piece.storageStatus === 'uploading') {
+      piece.storageStatus = 'error';
+      piece.storageError = 'Service restarted during the R2 upload. Schedule the piece again to retry safely.';
+      piece.stage = 'final_check';
+      changed = true;
+    }
     ['youtube', 'tiktok', 'instagram', 'facebook'].forEach(function (platform) {
       const statusField = platform + 'PublishStatus';
       const errorField = platform + 'PublishError';
@@ -3304,6 +3485,18 @@ const httpServer = app.listen(PORT, function () {
   setInterval(function () {
     releaseDueDirectPosts().catch(function (error) { console.error('direct release check failed:', error.message); });
   }, 30000);
+  // R2 is working storage, not a permanent archive: after every selected
+  // platform has published and the grace period has elapsed, remove the
+  // object. Scheduled media is never eligible, regardless of how far ahead
+  // its release is. Run shortly after boot and then daily.
+  const firstR2Cleanup = setTimeout(function () {
+    purgeExpiredPublishedMedia().catch(function (error) { console.error('R2 retention cleanup failed:', error.message); });
+  }, 60 * 1000);
+  const r2CleanupTimer = setInterval(function () {
+    purgeExpiredPublishedMedia().catch(function (error) { console.error('R2 retention cleanup failed:', error.message); });
+  }, 24 * 60 * 60 * 1000);
+  if (firstR2Cleanup.unref) firstR2Cleanup.unref();
+  if (r2CleanupTimer.unref) r2CleanupTimer.unref();
 });
 // Node's default requestTimeout is five minutes for receiving the complete
 // request body. That is far shorter than a legitimate multi-gigabyte camera
