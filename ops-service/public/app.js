@@ -1148,6 +1148,62 @@
   var pieces = {};
   var piecesLoadedPromise = null;
   var conflictToastTimer = null;
+  var PIECE_DRAFTS_KEY = 'rm-content-piece-drafts-v1';
+
+  function readPieceDrafts() {
+    try { return JSON.parse(localStorage.getItem(PIECE_DRAFTS_KEY) || '{}') || {}; }
+    catch (error) { return {}; }
+  }
+
+  function writePieceDrafts(drafts) {
+    try { localStorage.setItem(PIECE_DRAFTS_KEY, JSON.stringify(drafts)); return true; }
+    catch (error) { return false; }
+  }
+
+  function storePieceDraftSnapshot(piece) {
+    if (!piece || !piece.id) return '';
+    var drafts = readPieceDrafts();
+    var revision = Date.now() + '-' + Math.random().toString(36).slice(2);
+    drafts[piece.id] = { revision: revision, piece: Object.assign({}, piece) };
+    return writePieceDrafts(drafts) ? revision : '';
+  }
+
+  function clearPieceDraftSnapshot(id, revision) {
+    var drafts = readPieceDrafts();
+    if (!drafts[id] || (revision && drafts[id].revision !== revision)) return;
+    delete drafts[id];
+    writePieceDrafts(drafts);
+  }
+
+  // Network autosave is deliberately debounced, but a reload can happen
+  // inside that delay. Recover the synchronous local snapshot first, then
+  // immediately persist it through the normal version-checked API. A draft
+  // is only cleared when the exact revision that was sent is acknowledged.
+  function recoverPieceDrafts(rows) {
+    var drafts = readPieceDrafts();
+    var jobs = [];
+    Object.keys(drafts).forEach(function (id) {
+      var draft = drafts[id];
+      if (!draft || !draft.piece || !draft.piece.id) return;
+      var existing = pieces[id];
+      var draftTime = Date.parse(draft.piece.updatedAt || 0);
+      var serverTime = Date.parse(existing && existing.updatedAt || 0);
+      if (existing && (!Number.isFinite(draftTime) || draftTime <= serverTime)) {
+        clearPieceDraftSnapshot(id, draft.revision);
+        return;
+      }
+      var recovered = Object.assign({}, existing || {}, draft.piece);
+      pieces[id] = recovered;
+      if (!existing) rows.push(recovered);
+      jobs.push(Store.put('pieces', recovered).then(function () {
+        clearPieceDraftSnapshot(id, draft.revision);
+      }).catch(function () {
+        // Retain the local recovery copy. A later reload can retry it and,
+        // crucially, the user's words are never silently discarded.
+      }));
+    });
+    return Promise.allSettled(jobs);
+  }
 
   function showPieceConflict(message) {
     var toast = document.getElementById('pieceConflictToast');
@@ -1238,10 +1294,12 @@
     if (!piecesLoadedPromise) {
       piecesLoadedPromise = Store.getAll('pieces').then(function (rows) {
         rows.forEach(function (r) { pieces[r.id] = r; });
-        backfillMissingSeqs(rows);
-        migrateThumbnailStage(rows);
-        migrateUnbuiltFinalChecks(rows);
-        return maybeSeedExamples();
+        return recoverPieceDrafts(rows).then(function () {
+          backfillMissingSeqs(rows);
+          migrateThumbnailStage(rows);
+          migrateUnbuiltFinalChecks(rows);
+          return maybeSeedExamples();
+        });
       });
     }
     return piecesLoadedPromise;
@@ -1731,20 +1789,20 @@
     bindNotesPaste();
 
     [fieldTitle].forEach(function (el) {
-      el.addEventListener('input', debounceSync);
+      el.addEventListener('input', captureDraftAndDebounceSync);
       el.addEventListener('blur', function () { clearTimeout(saveTimer); syncFromForm(); });
     });
-    fieldNotes.addEventListener('input', debounceSync);
+    fieldNotes.addEventListener('input', captureDraftAndDebounceSync);
     fieldNotes.addEventListener('blur', function () { clearTimeout(saveTimer); syncFromForm(); });
     fieldTitle.addEventListener('focus', function () { setKanbanDictationTarget(fieldTitle); });
     fieldNotes.addEventListener('focus', function () { setKanbanDictationTarget(fieldNotes); });
     kanbanDictateBtn.addEventListener('pointerdown', function (event) { event.preventDefault(); });
     kanbanDictateBtn.addEventListener('click', startKanbanDictation);
     setKanbanDictationTarget(fieldNotes);
-    fieldTranscript.addEventListener('input', debounceSync);
+    fieldTranscript.addEventListener('input', captureDraftAndDebounceSync);
     fieldTranscript.addEventListener('blur', function () { clearTimeout(saveTimer); syncFromForm(); });
     [fieldYtTitle1, fieldYtTitle2, fieldYtTitle3].forEach(function (el) {
-      el.addEventListener('input', debounceSync);
+      el.addEventListener('input', captureDraftAndDebounceSync);
       el.addEventListener('blur', function () { clearTimeout(saveTimer); syncFromForm(); });
     });
     fieldStage.addEventListener('change', function () { clearTimeout(saveTimer); syncFromForm(); });
@@ -1825,6 +1883,7 @@
     btnDelete.addEventListener('click', function () {
       if (!activeId) return;
       if (isNewUnsaved) {
+        clearPieceDraftSnapshot(activeId);
         delete pieces[activeId];
         var closingId1 = activeId;
         activeId = null; isNewUnsaved = false;
@@ -1843,6 +1902,7 @@
       var p = pieces[id];
       disarmDelete();
       Store.del('pieces', id, p).then(function () {
+        clearPieceDraftSnapshot(id);
         delete pieces[id];
         if (p && p.hasVideo) Store.del('videos', id);
         activeId = null;
@@ -2024,6 +2084,7 @@
     // form because they have several video-specific controls below Notes.
     pieceModal.classList.toggle('text-piece', !p.hasVideo);
     pieceModal.classList.toggle('video-piece', !!p.hasVideo);
+    modalWrap.classList.toggle('text-workspace', !p.hasVideo);
     fieldTitle.value = p.title || '';
     fieldContentType.value = p.contentType || '';
     stageField.hidden = !!p.hasVideo;
@@ -2190,6 +2251,7 @@
   function hideModal() {
     if (activeKanbanDictationStop) activeKanbanDictationStop();
     modalWrap.classList.remove('open');
+    modalWrap.classList.remove('text-workspace');
     pieceModal.setAttribute('aria-hidden', 'true');
     scrim.classList.remove('show');
     if (currentVideoObjectUrl) { URL.revokeObjectURL(currentVideoObjectUrl); currentVideoObjectUrl = null; }
@@ -2241,6 +2303,7 @@
     var vals = currentFormValues();
     Object.assign(p, vals);
     p.updatedAt = nowIso();
+    var draftRevision = storePieceDraftSnapshot(p);
     metaUpdated.textContent = 'Updated ' + fmtFull(p.updatedAt);
 
     if (isNewUnsaved) {
@@ -2248,7 +2311,11 @@
         isNewUnsaved = false;
         modalEyebrowText.textContent = 'Editing piece';
         metaCreated.textContent = 'Created ' + fmtFull(p.createdAt);
-        Store.put('pieces', p).then(function () { flashSaved(); notifyPiecesChanged(); });
+        Store.put('pieces', p).then(function () {
+          clearPieceDraftSnapshot(p.id, draftRevision);
+          flashSaved();
+          notifyPiecesChanged();
+        }).catch(function () { showPieceConflict('That note could not be saved yet. Your local recovery copy has been kept.'); });
       } else {
         notifyPiecesChanged();
       }
@@ -2264,10 +2331,13 @@
     }
 
     Store.put('pieces', p).then(function () {
+      clearPieceDraftSnapshot(p.id, draftRevision);
       if (p.hasVideo) updateStageAndScheduleUI(p);
       flashSaved();
       if (p.stage !== prevStage) notifyPieceMoved(p.id);
       else notifyPiecesChanged();
+    }).catch(function (error) {
+      if (!error || error.code !== 'stale_write') showPieceConflict('That note could not be saved yet. Your local recovery copy has been kept.');
     });
   }
 
@@ -2276,12 +2346,23 @@
     saveTimer = setTimeout(syncFromForm, 500);
   }
 
+  function captureDraftAndDebounceSync() {
+    if (activeId && pieces[activeId]) {
+      var snapshot = Object.assign({}, pieces[activeId], currentFormValues(), { updatedAt: nowIso() });
+      storePieceDraftSnapshot(snapshot);
+    }
+    debounceSync();
+  }
+
   function closeModal() {
     clearTimeout(saveTimer);
     disarmDelete();
     if (activeId) {
       syncFromForm();
-      if (isNewUnsaved) delete pieces[activeId];
+      if (isNewUnsaved) {
+        clearPieceDraftSnapshot(activeId);
+        delete pieces[activeId];
+      }
     }
     activeId = null;
     isNewUnsaved = false;

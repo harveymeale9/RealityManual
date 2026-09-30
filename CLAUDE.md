@@ -15109,3 +15109,34 @@ to approximately the 36px movement in the supplied scaled preview.
 render is invalidated and rebuilt once after deployment; otherwise an old MP4
 could continue showing the obsolete placement even though the browser overlay
 was correct. The ASS regression test now asserts the new exact 422px margin.
+
+---
+
+# 432. Content Cards Use a Full-Page Writer and Survive Immediate Reloads (2026-09-30)
+
+Harvey reported two related failures in the planning-card editor: the expanded
+modal still floated over an entirely unused board and its panels felt cramped/
+overlapping, while a newly typed note disappeared after a page reload.
+
+The data-loss path was reproduced against a disposable live card. Waiting for
+the 500ms network debounce preserved `normal save survives`; typing
+`fast reload should survive` and immediately reloading left the older server
+text behind. The browser was being unloaded before its save timer fired.
+
+Every title, Notes, transcript, and title-option input now writes a synchronous
+versioned recovery snapshot to localStorage before scheduling the network save.
+On boot, snapshots newer than the server record are restored into the shared
+piece cache and immediately sent through the normal version-checked API. Only
+the exact acknowledged draft revision is cleared, so an earlier request can
+never erase a newer keystroke. Failed writes retain the recovery copy and show
+an explicit warning rather than pretending the note was saved. Confirmed saves
+and deliberate deletes clear their matching snapshot.
+
+Text planning cards are also no longer presented as centered modals. On laptop
+and desktop they become an opaque full-viewport writing workspace: title and
+Notes occupy the main column, while Stage, Content Type and Platforms live in
+a dedicated scroll-safe right rail. The underlying board cannot overlap or
+compete for space. Video cards retain their existing media modal, and the
+existing mobile full-screen behavior remains intact. Chromium checks at
+1366x768 and 1024x700 showed Notes areas of 1004x564 and 732x503 respectively,
+with equal body scroll/client heights and no page errors.
