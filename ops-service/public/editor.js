@@ -990,6 +990,8 @@
     var audioBatch = project.renderStatus === 'ready' ? ensureAudioPreviewBatch(project) : null;
     var playerScrubbing = false;
     var bufferingTimer = null;
+    var synchronizedStartToken = 0;
+    var synchronizedStartInProgress = false;
     function activeMixedPreviewUrl() {
       return previewingFinal && project.audioTrackId && project.audioTrackId !== '__none__' && audioBatch && audioBatch.urls[project.audioTrackId] || '';
     }
@@ -999,13 +1001,49 @@
     function playerIsMuted() {
       return mixedPreviewActive() ? mixedAudio.muted : video.muted;
     }
+    function startPlayerPlayback() {
+      if (!mixedPreviewActive()) return video.play().catch(function () {});
+      // Audio can need a few milliseconds longer than the lightweight video
+      // proxy to wake its decoder. Make audio the start clock: hold the
+      // picture, start audible playback from the shared timestamp, then
+      // release the muted picture at audio's actual position.
+      var token = ++synchronizedStartToken;
+      var target = Math.max(0, Number(video.currentTime) || 0);
+      synchronizedStartInProgress = true;
+      video.pause();
+      mixedAudio.pause();
+      try { video.currentTime = target; mixedAudio.currentTime = target; } catch (error) {}
+      showBufferingSoon();
+      return mixedAudio.play().then(function () {
+        if (token !== synchronizedStartToken || !mixedPreviewActive()) {
+          mixedAudio.pause();
+          return;
+        }
+        try { video.currentTime = mixedAudio.currentTime || target; } catch (error) {}
+        return video.play();
+      }).catch(function () {
+        video.pause();
+        mixedAudio.pause();
+      }).finally(function () {
+        if (token === synchronizedStartToken) synchronizedStartInProgress = false;
+      });
+    }
+    function pausePlayerPlayback() {
+      synchronizedStartToken++;
+      synchronizedStartInProgress = false;
+      video.pause();
+      if (mixedAudio) mixedAudio.pause();
+    }
+    function togglePlayerPlayback() {
+      if (video.paused) startPlayerPlayback(); else pausePlayerPlayback();
+    }
     function configureSelectedAudio(restart, playNow) {
       var url = activeMixedPreviewUrl();
       if (!url) {
         if (mixedAudio) { mixedAudio.pause(); mixedAudio.removeAttribute('src'); mixedAudio.load(); }
         video.muted = false;
         if (restart) video.currentTime = 0;
-        if (playNow) video.play().catch(function () {});
+        if (playNow) startPlayerPlayback();
         return;
       }
       if (mixedAudio.src !== url) mixedAudio.src = url;
@@ -1013,9 +1051,7 @@
       video.muted = true;
       if (restart) video.currentTime = 0;
       try { mixedAudio.currentTime = video.currentTime || 0; } catch (error) {}
-      if (playNow) {
-        Promise.all([video.play(), mixedAudio.play()]).catch(function () { video.pause(); mixedAudio.pause(); });
-      }
+      if (playNow) startPlayerPlayback();
     }
     function readyAudioTracks() {
       return audioTracks.filter(function (track) { return audioBatch && audioBatch.urls[track.id]; });
@@ -1119,7 +1155,7 @@
       }, 160);
     }
     if (playerPlay) playerPlay.onclick = function () {
-      if (video.paused) video.play().catch(function () {}); else video.pause();
+      togglePlayerPlayback();
     };
     if (playerSeek) {
       playerSeek.addEventListener('pointerdown', function () { playerScrubbing = true; });
@@ -1144,7 +1180,7 @@
       else if (videoFrame.requestFullscreen) videoFrame.requestFullscreen().catch(function () {});
     };
     video.addEventListener('click', function () {
-      if (video.paused) video.play().catch(function () {}); else video.pause();
+      togglePlayerPlayback();
     });
     video.addEventListener('waiting', showBufferingSoon);
     video.addEventListener('stalled', showBufferingSoon);
@@ -1202,7 +1238,7 @@
       delete mediaRecoveryChecks[videoProjectId];
       video.src = retryUrl.pathname + retryUrl.search;
       video.load();
-      if (wasPlaying) video.addEventListener('loadeddata', function () { video.play().catch(function () {}); }, { once: true });
+      if (wasPlaying) video.addEventListener('loadeddata', function () { startPlayerPlayback(); }, { once: true });
     };
     if (restoreTranscriptFocus && !editingLocked) {
       restoreTranscriptFocus = false;
@@ -1216,7 +1252,7 @@
         delete previewSeekTimes[project.id];
         if (previewAutoplay[project.id]) {
           delete previewAutoplay[project.id];
-          video.play().catch(function () {});
+          startPlayerPlayback();
         }
       };
       if (video.readyState >= 1) resumePreview(); else video.addEventListener('loadedmetadata', resumePreview, { once: true });
@@ -1266,8 +1302,15 @@
     video.addEventListener('play', function () {
       hideBuffering();
       if (mixedPreviewActive()) {
+        // Route any remaining internal direct-play call through the same
+        // audio-first gate instead of allowing the picture to escape early.
+        if (mixedAudio.paused && !synchronizedStartInProgress) {
+          video.pause();
+          startPlayerPlayback();
+          return;
+        }
         if (Math.abs((mixedAudio.currentTime || 0) - (video.currentTime || 0)) > 0.15) mixedAudio.currentTime = video.currentTime || 0;
-        mixedAudio.play().catch(function () { video.pause(); });
+        if (mixedAudio.paused) mixedAudio.play().catch(function () { video.pause(); });
       }
       syncPlayerControls();
       if (motionAnimationFrame === null) motionAnimationFrame = requestAnimationFrame(animatePreviewMotion);
@@ -1378,14 +1421,14 @@
       segment.onclick = function () {
         var sourceTime = Number(segment.dataset.time) || 0;
         video.currentTime = previewingFinal ? sourceToEditedTime(sourceTime, project.cuts) : sourceTime;
-        video.play().catch(function () {});
+        startPlayerPlayback();
       };
     });
     root.querySelectorAll('.editor-timeline-punch').forEach(function (marker) {
       marker.onclick = function () {
         var sourceTime = Math.max(0, Number(marker.dataset.time) - 0.35);
         video.currentTime = previewingFinal ? sourceToEditedTime(sourceTime, project.cuts) : sourceTime;
-        video.play().catch(function () {});
+        startPlayerPlayback();
       };
     });
     root.querySelectorAll('.editor-preview-cut').forEach(function (button) {
@@ -1401,7 +1444,7 @@
           return;
         }
         var previewTime = previewingFinal ? sourceToEditedTime(time, project.cuts) : time;
-        var start = function () { video.currentTime = previewTime; video.play().catch(function () {}); video.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+        var start = function () { video.currentTime = previewTime; startPlayerPlayback(); video.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
         if (video.readyState >= 1) start(); else video.addEventListener('loadedmetadata', start, { once: true });
       };
     });
@@ -1427,7 +1470,7 @@
       if (event.target.closest('select, button, input')) return;
       if (event.code === 'Space') {
         event.preventDefault();
-        if (video.paused) video.play().catch(function () {}); else video.pause();
+        togglePlayerPlayback();
         return;
       }
       if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
@@ -1521,7 +1564,7 @@
         return;
       }
       video.currentTime = sourceTime;
-      video.play().catch(function () {});
+      startPlayerPlayback();
       video.scrollIntoView({ behavior: 'smooth', block: 'center' });
     };
     root.querySelector('#editorCorrect').onclick = correctSelectedWord;

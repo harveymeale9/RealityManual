@@ -14422,3 +14422,25 @@ API afterward. The 27 compressed auditions occupied 2,450,844 bytes total
 (about 91KB each), versus duplicating the full video 27 times. A 390px-wide
 browser then loaded the complete ready panel with no horizontal overflow or
 page errors.
+
+---
+
+# 408. Editor Soundtrack Playback Uses an Audio-First Start Gate (2026-09-30)
+
+Harvey noticed the failure mode inherent in starting the lightweight video and
+the separate loudness-matched audio preview with one `Promise.all`: the video
+decoder could enter playback before the audio decoder, so the picture visibly
+started while the voice lagged behind. Drift correction after playback began
+could not repair that initial perceptual miss.
+
+The Editor now treats the mixed-audio stream as the start clock. Play holds the
+muted video on its current frame, aligns both streams to the same timestamp,
+starts the fully preloaded audio, then releases the video at the audio element's
+actual position. This applies to the player button, clicking the picture,
+keyboard playback, timeline jumps, cut previews, transcript-selection review,
+autoplay after view changes, and track switching. A token cancels obsolete
+starts, Pause explicitly stops both streams, and a guard routes any remaining
+internal direct-video start back through the same gate. Single-stream source or
+no-music playback remains a normal immediate video start.
+
+The complete 140-test suite passes and the Editor asset cache key was advanced.
