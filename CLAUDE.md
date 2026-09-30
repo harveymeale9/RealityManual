@@ -14095,3 +14095,28 @@ the workflow file itself. Real storefront deployments also share a
 two genuine Pages publications from competing for the same environment. The
 workflow and GitHub Pages hosting remain intact; unrelated changes simply stop
 creating redundant Pages runs and failure emails.
+
+---
+
+# 397. Second VPS Storage Cleanup Preserves All Content Data (2026-09-30)
+
+Harvey received a 90%-disk warning after the earlier Docker cleanup. Direct
+host measurement showed that warning was stale: the live filesystem was already
+at 31GB/96GB (33%), and the durable Content Studio data occupied only 2.3GB.
+The Kanban SQLite database itself was about 9MB; the complete active Editor
+workspace was about 99MB. Neither was responsible for storage pressure.
+
+The remaining disposable usage was 8.528GB of Docker builder cache, a nine-day
+old `rm-ops-usage-test-224285` test container plus its uniquely tagged
+`rm-ops-service:usage-test` image, 1.8GB of npm download cache, its 2.7MB
+temporary test data directory, and stale generated `audio-preview-*.mp3` files
+older than twelve hours. Those targets were verified individually and removed.
+The running ops-service, storefront backend, n8n container/volume, the current
+and rollback ops images, `/root/ops-service-data`, all source recordings,
+manuscript assets, audio-library files, production media, and both repository
+clones were preserved.
+
+After cleanup, disk use was 20GB/96GB (21%) with 77GB available. Docker builder
+cache was 0B, the three production containers were still running, both public
+health endpoints returned `ok`, and `PRAGMA quick_check` returned `ok` for the
+Content Studio database.
