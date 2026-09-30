@@ -919,10 +919,11 @@
     var rebuildOverlayHtml = previewLocked
       ? '<div class="editor-preview-rebuild' + (rebuildFailed ? ' error' : '') + '" id="editorPreviewRebuild" role="status" aria-live="polite"><div class="editor-preview-rebuild-spinner">' + (rebuildFailed ? '!' : '') + '</div><strong id="editorPreviewRebuildLabel">' + rebuildLabel + '</strong><span>' + (rebuildFailed ? 'Playback remains locked because this file was not regenerated. Use Retry failed steps above.' : 'Your latest edit is being applied. Playback will unlock when the regenerated preview is ready.') + '</span>' + (rebuildFailed ? '' : '<div><i id="editorPreviewRebuildBar" style="width:' + (project.renderStatus === 'running' ? Math.max(2, rebuildPercent) : 4) + '%"></i></div>') + '</div>'
       : '';
-    var previewPlayerHtml = '<div class="editor-preview' + (previewLocked ? ' rebuilding' : '') + '" id="editorPreview" tabindex="' + (previewLocked ? '-1' : '0') + '" aria-busy="' + (previewLocked ? 'true' : 'false') + '" aria-label="Video review. Space plays or pauses. Left and right arrows move two seconds."><div class="editor-video-frame ' + layout + '"><video id="editorVideo" data-preview-mode="' + previewMode + '" data-seek-time="' + previewSeek.toFixed(3) + '" playsinline preload="auto" src="' + previewUrl + '"></video>' +
+    var initialLoadingOverlayHtml = previewLocked ? '' : '<div class="editor-preview-loading" id="editorPreviewLoading" role="status" aria-live="polite"><div></div><strong>Loading preview…</strong></div>';
+    var previewPlayerHtml = '<div class="editor-preview' + (previewLocked ? ' rebuilding' : '') + '" id="editorPreview" tabindex="' + (previewLocked ? '-1' : '0') + '" aria-busy="true" aria-label="Video review. Space plays or pauses. Left and right arrows move two seconds."><div class="editor-video-frame ' + layout + '"><video id="editorVideo" data-preview-mode="' + previewMode + '" data-seek-time="' + previewSeek.toFixed(3) + '" playsinline preload="auto" src="' + previewUrl + '"></video>' +
       (previewMode === 'source' ? punchFocusHtml(project, focusedPunchId) : '') + '<div class="editor-caption" id="editorCaption"></div>' +
-      '<div class="editor-player-controls" id="editorPlayerControls"><button type="button" class="editor-player-icon" id="editorPlayerPlay" aria-label="Play"' + (previewLocked ? ' disabled' : '') + '>▶</button><span id="editorPlayerCurrent">0:00</span><input type="range" id="editorPlayerSeek" min="0" max="1" step="0.01" value="0" aria-label="Video position"' + (previewLocked ? ' disabled' : '') + '><span id="editorPlayerDuration">' + formatTime(previewMode === 'final' ? editedDuration(project) : project.duration) + '</span><i id="editorPlayerBuffering" hidden>Loading</i><button type="button" class="editor-player-icon" id="editorPlayerMute" aria-label="Mute"' + (previewLocked ? ' disabled' : '') + '>VOL</button><button type="button" class="editor-player-icon" id="editorPlayerFullscreen" aria-label="Full screen"' + (previewLocked ? ' disabled' : '') + '>⛶</button></div>' +
-      '<div class="editor-video-error" id="editorVideoError" hidden><strong>Preview could not be played</strong><span>Your recording and edit are safe. Reload this review copy without rebuilding anything.</span><button type="button" class="btn-secondary btn-tiny" id="editorReloadVideo">Reload preview</button></div>' + rebuildOverlayHtml + '</div></div>';
+      '<div class="editor-player-controls" id="editorPlayerControls"><button type="button" class="editor-player-icon" id="editorPlayerPlay" aria-label="Play" disabled>▶</button><span id="editorPlayerCurrent">0:00</span><input type="range" id="editorPlayerSeek" min="0" max="1" step="0.01" value="0" aria-label="Video position" disabled><span id="editorPlayerDuration">' + formatTime(previewMode === 'final' ? editedDuration(project) : project.duration) + '</span><i id="editorPlayerBuffering" hidden>Loading</i><button type="button" class="editor-player-icon" id="editorPlayerMute" aria-label="Mute" disabled>VOL</button><button type="button" class="editor-player-icon" id="editorPlayerFullscreen" aria-label="Full screen" disabled>⛶</button></div>' +
+      '<div class="editor-video-error" id="editorVideoError" hidden><strong>Preview could not be played</strong><span>Your recording and edit are safe. Reload this review copy without rebuilding anything.</span><button type="button" class="btn-secondary btn-tiny" id="editorReloadVideo">Reload preview</button></div>' + initialLoadingOverlayHtml + rebuildOverlayHtml + '</div></div>';
     var previewStageHtml = layout === 'vertical'
       ? '<div class="editor-preview-stage vertical"><aside class="editor-preview-side editor-preview-side-playback"><div class="eyebrow">Playback</div><h3>Review</h3>' + previewActionsHtml + '</aside>' + previewPlayerHtml + '<aside class="editor-preview-side editor-preview-side-settings"><div class="eyebrow">Edit settings</div><h3>Automatic treatment</h3>' + automaticControlsHtml + '</aside></div>'
       : '<div class="editor-preview-stage horizontal">' + previewPlayerHtml + '</div>';
@@ -987,6 +988,8 @@
     var playerBuffering = root.querySelector('#editorPlayerBuffering');
     var playerMute = root.querySelector('#editorPlayerMute');
     var playerFullscreen = root.querySelector('#editorPlayerFullscreen');
+    var playerLoading = root.querySelector('#editorPreviewLoading');
+    var playerRoot = root.querySelector('#editorPreview');
     var mixedAudio = root.querySelector('#editorMixedAudio');
     var audioTrackSelect = root.querySelector('#editorAudioTrack');
     var audioPrevious = root.querySelector('#editorAudioPrevious');
@@ -997,6 +1000,13 @@
     var bufferingTimer = null;
     var synchronizedStartToken = 0;
     var synchronizedStartInProgress = false;
+    function setInitialPlayerLoading(loading) {
+      if (playerLoading) playerLoading.hidden = !loading;
+      if (playerRoot) playerRoot.setAttribute('aria-busy', loading || previewLocked ? 'true' : 'false');
+      [playerPlay, playerSeek, playerMute, playerFullscreen].forEach(function (control) {
+        if (control) control.disabled = !!(loading || previewLocked);
+      });
+    }
     function activeMixedPreviewUrl() {
       return previewingFinal && project.audioTrackId && project.audioTrackId !== '__none__' && audioBatch && audioBatch.urls[project.audioTrackId] || '';
     }
@@ -1007,7 +1017,7 @@
       return mixedPreviewActive() ? mixedAudio.muted : video.muted;
     }
     function startPlayerPlayback() {
-      if (previewLocked) return Promise.resolve();
+      if (previewLocked || video.readyState < 2) return Promise.resolve();
       if (!mixedPreviewActive()) return video.play().catch(function () {});
       // Audio can need a few milliseconds longer than the lightweight video
       // proxy to wake its decoder. Make audio the start clock: hold the
@@ -1250,6 +1260,7 @@
     video.playbackRate = reviewRate;
     var videoError = root.querySelector('#editorVideoError');
     video.addEventListener('loadeddata', function () {
+      setInitialPlayerLoading(false);
       if (videoError) videoError.hidden = true;
       if (mediaRecoveryChecks[videoProjectId]) clearTimeout(mediaRecoveryChecks[videoProjectId]);
       delete mediaRecoveryChecks[videoProjectId];
@@ -1257,6 +1268,7 @@
       syncPlayerControls();
     });
     video.addEventListener('error', function () {
+      setInitialPlayerLoading(false);
       if (videoError) videoError.hidden = false;
       if (!mediaRecoveryChecks[videoProjectId]) {
         mediaRecoveryChecks[videoProjectId] = setTimeout(function () {
@@ -1275,6 +1287,7 @@
       if (videoError) videoError.hidden = true;
       if (mediaRecoveryChecks[videoProjectId]) clearTimeout(mediaRecoveryChecks[videoProjectId]);
       delete mediaRecoveryChecks[videoProjectId];
+      setInitialPlayerLoading(true);
       video.src = retryUrl.pathname + retryUrl.search;
       video.load();
       if (wasPlaying) video.addEventListener('loadeddata', function () { startPlayerPlayback(); }, { once: true });
@@ -1296,6 +1309,7 @@
       };
       if (video.readyState >= 1) resumePreview(); else video.addEventListener('loadedmetadata', resumePreview, { once: true });
     }
+    if (video.readyState >= 2) setInitialPlayerLoading(false);
     var lastClicked = null;
     var ignoreNextClick = false;
     var playingWordIndex = null;
@@ -1509,7 +1523,7 @@
       if (mixedAudio) mixedAudio.playbackRate = reviewRate;
     };
     root.querySelector('#editorPreview').addEventListener('keydown', function (event) {
-      if (previewLocked) return;
+      if (previewLocked || video.readyState < 2) return;
       if (event.target.closest('select, button, input')) return;
       if (event.code === 'Space') {
         event.preventDefault();

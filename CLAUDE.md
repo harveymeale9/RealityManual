@@ -14937,3 +14937,23 @@ A real Chromium regression repeatedly cycled Settings → Editor six times. Each
 return painted the player immediately, reached a decoded 480×854 frame, kept the
 same media element through background reconciliation, and produced zero page
 errors. Editor and app cache keys were advanced together.
+
+---
+
+# 426. Editor Player Has an Explicit First-Frame Loading Gate (2026-09-30)
+
+The Editor no longer presents an unexplained black, clickable player while its
+review proxy is still loading. Every newly mounted or explicitly reloaded video
+starts behind a centered loading overlay with a real spinner and `aria-busy`
+state. Play, seek, mute and fullscreen are disabled, and keyboard playback is
+ignored, until the browser fires `loadeddata` and therefore has decoded the
+first usable frame. At that exact point the overlay disappears and all player
+controls unlock; an error removes the loading layer so the existing recovery
+panel remains reachable. Render-rebuild locking continues to use its stronger
+existing progress overlay.
+
+A real Chromium test deliberately delayed the live render response by 1.8
+seconds. During the delay the spinner was visible, `aria-busy` was true and the
+controls were disabled. After the 480×854 frame decoded, the overlay was hidden,
+`aria-busy` became false, controls unlocked and Play started immediately with
+no page errors. Editor JS and CSS cache keys were advanced to v94.
