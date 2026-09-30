@@ -14,7 +14,7 @@ const EDITOR_DISK_RESERVE_BYTES = 2 * 1024 * 1024 * 1024;
 const OPENING_PUSH_IN_SECONDS = 3;
 const OPENING_PUSH_IN_SCALE = 1.04;
 const PUNCH_TRANSITION_SECONDS = 0.45;
-const EDITOR_RENDER_VERSION = 6;
+const EDITOR_RENDER_VERSION = 7;
 const BROWSER_PREVIEW_VERSION = 2;
 const AUDIO_PREVIEW_MIX_VERSION = 3;
 const AUDIO_PREVIEW_TTL_MS = 2 * 60 * 60 * 1000;
@@ -803,7 +803,10 @@ function buildAss(project, groups) {
   const isLongform = width >= height;
   const fontSize = Math.max(30, Math.round(Math.min(width, height) * (isLongform ? 0.048 : 0.08)));
   const emphasizedSize = Math.round(fontSize * 1.12);
-  const marginV = Math.round(height * (isLongform ? 0.27 : 0.30));
+  // Vertical captions sit low over the otherwise-unused lower page area.
+  // 22% from the bottom matches the Editor preview and Harvey's marked
+  // reference line; the former 30% placement sat visibly over the page text.
+  const marginV = Math.round(height * (isLongform ? 0.27 : 0.22));
   const header = [
     '[Script Info]', 'ScriptType: v4.00+', 'PlayResX: ' + width, 'PlayResY: ' + height,
     'ScaledBorderAndShadow: yes', '', '[V4+ Styles]',

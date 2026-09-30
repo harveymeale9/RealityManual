@@ -15092,3 +15092,20 @@ The existing full-screen mobile layout is untouched. At a 1366x768 laptop
 viewport the usable Notes area increased from 702x340 to 1082x480; at
 1024x700 it remains 874x419 with no modal-body overflow. Both viewports were
 exercised in Chromium against a real Content Pipeline card with no page errors.
+
+---
+
+# 431. Vertical Captions Moved to the Marked Lower Baseline (2026-09-30)
+
+Harvey marked the intended caption baseline directly on the vertical preview:
+the one-word caption was still covering manuscript text and needed to move
+roughly another 8% of the frame downward. Vertical caption placement is now
+22% from the bottom instead of 30% in both representations: the live Editor
+overlay and the ASS subtitles burned into final output. On the 1920px render
+that changes `MarginV` from 576px to 422px, a 154px downward shift which maps
+to approximately the 36px movement in the supplied scaled preview.
+
+`EDITOR_RENDER_VERSION` advanced from 6 to 7 so any existing ready vertical
+render is invalidated and rebuilt once after deployment; otherwise an old MP4
+could continue showing the obsolete placement even though the browser overlay
+was correct. The ASS regression test now asserts the new exact 422px margin.

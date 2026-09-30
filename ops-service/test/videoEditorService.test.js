@@ -450,7 +450,7 @@ test('caption groups omit deleted words and carry raw and edited timing', functi
 test('ASS export uses bold yellow captions below centre', function () {
   const ass = editor.buildAss({ width: 1080, height: 1920 }, [{ start: 1, end: 2, text: 'A {real} caption' }]);
   assert.match(ass, /PrimaryColour.*\nStyle: Default,Arial,86,&H0063DFF4,&H0063DFF4,&H00101010,&H80000000,-1,0,0,0,100,100,0,0,1,3,2,2/);
-  assert.match(ass, /,2,40,40,576,1/);
+  assert.match(ass, /,2,40,40,422,1/);
   assert.match(ass, /Dialogue: 0,0:00:01\.00,0:00:02\.00.*A \\{real\\} caption/);
 });
 
@@ -589,7 +589,7 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.equal(stored.renderQuality.status, 'passed');
-  assert.equal(stored.renderVersion, 6);
+  assert.equal(stored.renderVersion, 7);
   assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), true);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
