@@ -1029,7 +1029,10 @@
       try { video.currentTime = target; mixedAudio.currentTime = target; } catch (error) {}
       showBufferingSoon();
       return mixedAudio.play().then(function () {
-        if (token !== synchronizedStartToken || !mixedPreviewActive()) {
+        // A newer synchronized start owns the shared audio element now. An
+        // older play promise must not pause that newer playback when it settles.
+        if (token !== synchronizedStartToken) return;
+        if (!mixedPreviewActive()) {
           mixedAudio.pause();
           return;
         }
@@ -1060,12 +1063,38 @@
         if (playNow) startPlayerPlayback();
         return;
       }
-      if (mixedAudio.src !== url) mixedAudio.src = url;
+      var sourceChanged = mixedAudio.src !== url;
+      if (sourceChanged) mixedAudio.src = url;
       mixedAudio.playbackRate = reviewRate;
-      video.muted = true;
       if (restart) video.currentTime = 0;
       try { mixedAudio.currentTime = video.currentTime || 0; } catch (error) {}
-      if (playNow) startPlayerPlayback();
+      // The selected soundtrack may finish preloading after the user has
+      // already started the video. Join it to the running picture without
+      // pausing that picture; only mute the video's own audio after the mixed
+      // track really starts. If the browser blocks the asynchronous audio
+      // start, dialogue playback continues and the next explicit Play click
+      // can start the synchronized mix under a fresh user gesture.
+      if (playNow && sourceChanged && !restart && !video.paused) {
+        var handoffUrl = url;
+        mixedAudio.play().then(function () {
+          if (video.paused || activeMixedPreviewUrl() !== handoffUrl) {
+            mixedAudio.pause();
+            return;
+          }
+          if (Math.abs((mixedAudio.currentTime || 0) - (video.currentTime || 0)) > 0.15) mixedAudio.currentTime = video.currentTime || 0;
+          video.muted = true;
+          syncPlayerControls();
+        }).catch(function () {
+          video.muted = false;
+          syncPlayerControls();
+        });
+        return;
+      }
+      video.muted = true;
+      // paintAudioPanel runs once for every soundtrack that finishes
+      // preloading. Only the selected soundtrack becoming available should
+      // restart an in-progress preview; unrelated completions must be inert.
+      if (playNow && (sourceChanged || restart)) startPlayerPlayback();
     }
     function readyAudioTracks() {
       return audioTracks.filter(function (track) { return audioBatch && audioBatch.urls[track.id]; });

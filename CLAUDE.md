@@ -14828,3 +14828,25 @@ is a removal of unnecessary review UI, not of automatic behavior.
 
 The Editor JavaScript and stylesheet cache keys were advanced together so the
 space is reclaimed immediately in existing browser sessions.
+
+---
+
+# 421. Soundtrack Preloading Cannot Interrupt Editor Playback (2026-09-30)
+
+Starting the Editor player while its soundtrack previews were still loading
+could appear to do nothing. Every individual soundtrack completion repainted
+the audio picker and called the synchronization routine again. Those overlapping
+starts invalidated one another, and an older audio `play()` promise could then
+pause the shared audio element owned by the newest start, leaving both audio and
+video stopped at zero.
+
+Audio-panel refreshes now start synchronization only when the currently selected
+soundtrack becomes available, not when unrelated tracks finish preloading. A
+superseded start promise also exits without pausing media owned by its successor.
+When that selected track becomes available after picture playback has already
+begun, it joins at the current timestamp without pausing the picture and only
+mutes the video's original audio after the mixed track is genuinely playing. If
+the browser blocks that asynchronous audio start, dialogue continues instead of
+the whole preview stopping. Explicit soundtrack changes still restart from the
+beginning as designed. The Editor cache key was advanced so the race fix reaches
+existing sessions.
