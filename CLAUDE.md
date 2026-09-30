@@ -14655,3 +14655,45 @@ and the browser's 500px-wide narrow layout. In every case the video frame stayed
 the browser's reported viewport and retained its intended aspect ratio. The
 complete 141-test suite also passes. The stylesheet cache key was advanced so
 the new constraint reaches existing Editor sessions immediately.
+
+---
+
+# 414. Render-Invalidating Edits Lock the Preview Until Its Replacement Is Verified (2026-09-30)
+
+Changing cut pacing, captions, transcript cuts, corrected caption words,
+orientation, punch-ins, opening motion, or any other render-affecting decision
+invalidates the bytes currently shown in the Editor. The old lifecycle removed
+the verified render immediately but did not set `renderStatus` to `queued` until
+after the 2.5-second edit debounce. During that gap the player remained usable,
+then changed to the browser's source approximation while the real file encoded.
+This made a stale or approximate preview look authoritative.
+
+The server now persists `renderRebuildPending` whenever an already-verified
+render is invalidated. It remains true through debounce, queueing, FFmpeg,
+scrub-proxy creation, and technical verification, and is cleared only alongside
+the final `ready` state. It survives reloads and service restarts, is included in
+queue summaries, keeps polling alive during the pre-queue debounce, and remains
+visible in a failed state if regeneration errors instead of silently unlocking
+the old player.
+
+The browser also applies a local rebuild lock synchronously when the edit is
+made, before waiting for the PATCH response. A full-frame overlay now intercepts
+the player and shows a spinner plus the actual lifecycle: preparing, queue
+position, encoding percentage, and finalising. Play, seek, mute, fullscreen,
+review speed, source/final switching, timeline playback, selection playback,
+punch previews, pause previews, and soundtrack audition controls are disabled
+during this state. Approval and Production handoff are also blocked immediately,
+including while the PATCH request itself is still in flight, so the invalidated
+bytes cannot win a race and become the approved version. Other edit controls may
+still be adjusted
+during the short debounce so several settings can be batched into one render;
+the existing server lock continues to freeze edits once encoding actually
+starts. If saving the edit fails, the local lock is removed and the still-valid
+preview is restored.
+
+Backend integration coverage verifies the durable pending flag appears as soon
+as a reviewed render is invalidated and clears only after the replacement render
+and scrub proxy are ready. A real Chromium hit-test confirmed the overlay covers
+the whole frame, wins pointer targeting, and exposes disabled player controls.
+The complete 141-test suite passes. Both Editor CSS and JS cache keys were
+advanced to v85.

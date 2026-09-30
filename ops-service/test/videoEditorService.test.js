@@ -998,6 +998,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   project = await response.json();
   assert.deepEqual(project.removedWordIndices, []);
   assert.deepEqual(project.dismissedRetakeIds, ['smart-retake-0-0-1']);
+  assert.equal(project.renderRebuildPending, true, 'an invalidated reviewed preview stays explicitly locked throughout the debounce');
   assert.equal(project.canUndoCut, true);
   assert.equal(renderInvalidatedCalls, 1);
   assert.equal(fs.existsSync(path.join(dir, 'editor', project.id, 'render.mp4')), false);
@@ -1066,6 +1067,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
     project = await (await fetch(base + '/api/editor/' + project.id)).json();
   }
   assert.equal(project.renderStatus, 'ready', project.renderError);
+  assert.equal(project.renderRebuildPending, false, 'the preview unlocks only after the replacement render and scrub proxy are both ready');
   assert.equal(project.renderPreviewStatus, 'ready', project.renderPreviewError);
   assert.equal(project.renderPreviewVersion, 2);
   assert.equal(renderReadyCalls, 2);

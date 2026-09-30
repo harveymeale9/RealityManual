@@ -20,6 +20,7 @@
   var saveStates = {};
   var projectDetails = {};
   var renderRefreshTimers = {};
+  var localPreviewRebuilds = {};
   var mediaRecoveryChecks = {};
   var audioTracks = [];
   var audioMixVersion = '';
@@ -290,6 +291,7 @@
     if (item.workflowWarning) return item.renderStatus === 'ready' ? 'Ready · workflow warning' : 'Workflow warning';
     if (item.planningMatchStatus === 'pending') return queued('Waiting for plan match', item.planningQueuePosition);
     if (item.planningMatchStatus === 'running') return 'Matching plan';
+    if (item.renderRebuildPending && !item.renderStatus) return 'Preparing preview rebuild';
     if (item.renderStatus === 'queued') return queued('Waiting to render', item.renderQueuePosition);
     if (item.renderStatus === 'running') return 'Rendering' + (Number(item.renderProgress) > 0 ? ' · ' + Math.round(Number(item.renderProgress)) + '%' : '');
     if (item.renderStatus === 'ready') return Number(item.appliedRetakeCount) > 0 ? 'Ready · ' + Number(item.appliedRetakeCount) + ' retake' + (Number(item.appliedRetakeCount) === 1 ? '' : 's') + ' removed' : 'Ready for approval';
@@ -306,7 +308,7 @@
     if (item.transcriptionStatus === 'error' || (item.browserPreviewStatus === 'error' && item.renderStatus !== 'ready') || framingFailureIsBlocking(item) || item.retakeAnalysisStatus === 'error' || item.renderStatus === 'error' || Number(item.unresolvedRetakeCount) > 0 || item.layoutReviewRequired) return 'attention';
     if (item.workflowWarning) return 'warning';
     if (item.renderStatus === 'ready') return 'ready';
-    if (['pending', 'running'].indexOf(item.transcriptionStatus) !== -1 || ['pending', 'running'].indexOf(item.browserPreviewStatus) !== -1 || ['pending', 'running'].indexOf(item.classificationStatus) !== -1 || ['pending', 'running', 'pending_transcript'].indexOf(item.retakeAnalysisStatus) !== -1 || ['pending', 'running', 'pending_transcript'].indexOf(item.planningMatchStatus) !== -1 || ['queued', 'running'].indexOf(item.renderStatus) !== -1) return 'working';
+    if (['pending', 'running'].indexOf(item.transcriptionStatus) !== -1 || ['pending', 'running'].indexOf(item.browserPreviewStatus) !== -1 || ['pending', 'running'].indexOf(item.classificationStatus) !== -1 || ['pending', 'running', 'pending_transcript'].indexOf(item.retakeAnalysisStatus) !== -1 || ['pending', 'running', 'pending_transcript'].indexOf(item.planningMatchStatus) !== -1 || ['queued', 'running'].indexOf(item.renderStatus) !== -1 || item.renderRebuildPending) return 'working';
     return 'prepared';
   }
 
@@ -754,6 +756,7 @@
       if (quietBlockedByExplicit || requestToken !== openRequestToken || !editorMounted()) return;
       if (!quiet && pendingExplicitOpenToken === requestToken) pendingExplicitOpenToken = 0;
       var progressOnly = !!(quiet && project && project.id === item.id && project.renderStatus === 'running' && item.renderStatus === 'running');
+      if (item.renderStatus === 'ready') delete localPreviewRebuilds[item.id];
       project = item;
       projectDetails[item.id] = item;
       restoreReviewProgress(item);
@@ -769,6 +772,10 @@
         if (label) label.textContent = 'Encoding final edit · ' + percent + '%';
         if (bar) bar.style.width = Math.max(2, percent) + '%';
         if (button) button.textContent = 'Building final edit… ' + percent + '%';
+        var overlayLabel = root.querySelector('#editorPreviewRebuildLabel');
+        var overlayBar = root.querySelector('#editorPreviewRebuildBar');
+        if (overlayLabel) overlayLabel.textContent = percent >= 99 ? 'Finalising updated preview…' : 'Rebuilding preview… ' + percent + '%';
+        if (overlayBar) overlayBar.style.width = Math.max(2, percent) + '%';
         schedulePoll();
         return;
       }
@@ -788,13 +795,13 @@
       ['pending', 'running'].indexOf(item.classificationStatus) !== -1 ||
       ['pending', 'running', 'pending_transcript'].indexOf(item.retakeAnalysisStatus) !== -1 ||
       ['pending', 'running', 'pending_transcript'].indexOf(item.planningMatchStatus) !== -1 ||
-      ['queued', 'running'].indexOf(item.renderStatus) !== -1);
+      ['queued', 'running'].indexOf(item.renderStatus) !== -1 || (item.renderRebuildPending && item.renderStatus !== 'error'));
   }
 
   function projectPollSignature(item) {
     if (!item) return '';
     return [item.transcriptionStatus, item.browserPreviewStatus, item.classificationStatus, item.retakeAnalysisStatus, item.planningMatchStatus,
-      item.renderStatus, Math.round(Number(item.renderProgress) || 0), item.productionPieceId || '', item.workflowWarning || ''].join('|');
+      item.renderStatus, Math.round(Number(item.renderProgress) || 0), item.renderRebuildPending ? 'rebuild' : '', item.productionPieceId || '', item.workflowWarning || ''].join('|');
   }
 
   function schedulePoll() {
@@ -863,6 +870,8 @@
     var renderBlocked = automaticEditRunning || failedSafetyCheck || unresolvedRetakes > 0 || project.layoutReviewRequired;
     var renderButtonText = automaticEditRunning ? 'Preparing automatic edit…' : project.retakeAnalysisStatus === 'error' ? 'Retry failed retake check' : framingFailureBlocks ? 'Retry framing or choose a frame' : project.layoutReviewRequired ? 'Confirm Vertical or Horizontal frame' : unresolvedRetakes ? 'Review ' + unresolvedRetakes + ' possible retake' + (unresolvedRetakes === 1 ? '' : 's') : 'Build final edit';
     var rendering = ['queued', 'running'].indexOf(project.renderStatus) !== -1;
+    var previewRebuildPending = !!localPreviewRebuilds[project.id] || !!project.renderRebuildPending;
+    var previewLocked = rendering || previewRebuildPending;
     var sentToProduction = !!project.productionPieceId;
     var failures = failedSteps(project);
     var previewMode = project.renderStatus === 'ready' && !(previewModes[project.id] === 'source' && explicitSourcePreviews[project.id]) ? 'final' : 'source';
@@ -897,8 +906,8 @@
         : project.planningMatchStatus === 'error'
           ? 'Automatic matching was unavailable. Pick a card manually or retry when convenient; this does not block the edit.'
           : 'Choose a card manually if this recording came from the Kanban.');
-    var previewActionsHtml = '<div class="editor-preview-actions"><span class="editor-review-keys">Space play/pause · ←/→ 2s</span><label>Review speed<select id="editorReviewRate"><option value="1"' + (reviewRate === 1 ? ' selected' : '') + '>1×</option><option value="1.25"' + (reviewRate === 1.25 ? ' selected' : '') + '>1.25×</option><option value="1.5"' + (reviewRate === 1.5 ? ' selected' : '') + '>1.5×</option><option value="2"' + (reviewRate === 2 ? ' selected' : '') + '>2×</option></select></label>' +
-      (project.renderStatus === 'ready' ? '<button type="button" id="editorPreviewFinal" class="' + (previewMode === 'final' ? 'active' : '') + '">Final edit</button><button type="button" id="editorPreviewSource" class="' + (previewMode === 'source' ? 'active' : '') + '">' + sourcePreviewLabel + '</button>' : '') + '</div>';
+    var previewActionsHtml = '<div class="editor-preview-actions"><span class="editor-review-keys">Space play/pause · ←/→ 2s</span><label>Review speed<select id="editorReviewRate"' + (previewLocked ? ' disabled' : '') + '><option value="1"' + (reviewRate === 1 ? ' selected' : '') + '>1×</option><option value="1.25"' + (reviewRate === 1.25 ? ' selected' : '') + '>1.25×</option><option value="1.5"' + (reviewRate === 1.5 ? ' selected' : '') + '>1.5×</option><option value="2"' + (reviewRate === 2 ? ' selected' : '') + '>2×</option></select></label>' +
+      (project.renderStatus === 'ready' ? '<button type="button" id="editorPreviewFinal" class="' + (previewMode === 'final' ? 'active' : '') + '"' + (previewLocked ? ' disabled' : '') + '>Final edit</button><button type="button" id="editorPreviewSource" class="' + (previewMode === 'source' ? 'active' : '') + '"' + (previewLocked ? ' disabled' : '') + '>' + sourcePreviewLabel + '</button>' : '') + '</div>';
     var automaticControlsHtml = '<div class="editor-controls"><label class="editor-toggle"><input type="checkbox" id="editorAutoSilence" ' + (project.autoSilenceEnabled !== false ? 'checked' : '') + '><span></span>Remove long pauses</label>' +
       '<label class="editor-toggle"><input type="checkbox" id="editorCaptions" ' + (project.captionsEnabled !== false ? 'checked' : '') + '><span></span>Add yellow captions</label>' +
       (layout === 'vertical' ? '<label class="editor-toggle" title="A smooth 4% push-in over the first three seconds."><input type="checkbox" id="editorOpeningPushIn" ' + (project.openingPushInEnabled !== false ? 'checked' : '') + '><span></span>Subtle opening push-in</label>' : '') +
@@ -907,21 +916,31 @@
     var selectedAudioExists = project.audioTrackId === '__none__' || audioTracks.some(function (track) { return track.id === project.audioTrackId; });
     var audioSelectionReady = !!project.audioTrackId && selectedAudioExists;
     var audioPanelHtml = '<section class="editor-audio-panel"><div><div class="eyebrow">Backing audio</div><h3>Choose the soundtrack against this edit</h3><span>Every preview uses the saved production loudness settings. Switching tracks restarts the same video from the beginning.</span></div>' +
-      '<div class="editor-audio-picker"><button type="button" class="btn-secondary btn-tiny" id="editorAudioPrevious" disabled>← Previous</button><select id="editorAudioTrack" class="stage-select" ' + (project.renderStatus !== 'ready' || sentToProduction ? 'disabled' : '') + '><option value="">Preparing soundtrack previews…</option></select><button type="button" class="btn-secondary btn-tiny" id="editorAudioNext" disabled>Next →</button></div>' +
+      '<div class="editor-audio-picker"><button type="button" class="btn-secondary btn-tiny" id="editorAudioPrevious" disabled>← Previous</button><select id="editorAudioTrack" class="stage-select" ' + (project.renderStatus !== 'ready' || sentToProduction || previewLocked ? 'disabled' : '') + '><option value="">Preparing soundtrack previews…</option></select><button type="button" class="btn-secondary btn-tiny" id="editorAudioNext" disabled>Next →</button></div>' +
       '<div class="editor-audio-progress loading" id="editorAudioProgress"><i></i><span>' + (project.renderStatus === 'ready' ? 'Loading audio previews 0/' + audioTracks.length : 'Available when the final edit is ready') + '</span></div><audio id="editorMixedAudio" preload="auto" hidden></audio></section>';
-    var previewPlayerHtml = '<div class="editor-preview" id="editorPreview" tabindex="0" aria-label="Video review. Space plays or pauses. Left and right arrows move two seconds."><div class="editor-video-frame ' + layout + '"><video id="editorVideo" data-preview-mode="' + previewMode + '" data-seek-time="' + previewSeek.toFixed(3) + '" playsinline preload="metadata" src="' + previewUrl + '"></video>' +
+    var rebuildPercent = Math.max(0, Math.min(99, Math.round(Number(project.renderProgress) || 0)));
+    var rebuildLabel = project.renderStatus === 'running'
+      ? (rebuildPercent >= 99 ? 'Finalising updated preview…' : 'Rebuilding preview… ' + rebuildPercent + '%')
+      : project.renderStatus === 'queued'
+        ? (Number(project.renderQueuePosition) > 1 ? 'Preview queued · ' + (Number(project.renderQueuePosition) - 1) + ' recording(s) ahead' : 'Preview queued for rebuild…')
+        : project.renderStatus === 'error' ? 'Preview rebuild needs attention' : 'Preparing updated preview…';
+    var rebuildFailed = project.renderStatus === 'error';
+    var rebuildOverlayHtml = previewLocked
+      ? '<div class="editor-preview-rebuild' + (rebuildFailed ? ' error' : '') + '" id="editorPreviewRebuild" role="status" aria-live="polite"><div class="editor-preview-rebuild-spinner">' + (rebuildFailed ? '!' : '') + '</div><strong id="editorPreviewRebuildLabel">' + rebuildLabel + '</strong><span>' + (rebuildFailed ? 'Playback remains locked because this file was not regenerated. Use Retry failed steps above.' : 'Your latest edit is being applied. Playback will unlock when the regenerated preview is ready.') + '</span>' + (rebuildFailed ? '' : '<div><i id="editorPreviewRebuildBar" style="width:' + (project.renderStatus === 'running' ? Math.max(2, rebuildPercent) : 4) + '%"></i></div>') + '</div>'
+      : '';
+    var previewPlayerHtml = '<div class="editor-preview' + (previewLocked ? ' rebuilding' : '') + '" id="editorPreview" tabindex="' + (previewLocked ? '-1' : '0') + '" aria-busy="' + (previewLocked ? 'true' : 'false') + '" aria-label="Video review. Space plays or pauses. Left and right arrows move two seconds."><div class="editor-video-frame ' + layout + '"><video id="editorVideo" data-preview-mode="' + previewMode + '" data-seek-time="' + previewSeek.toFixed(3) + '" playsinline preload="metadata" src="' + previewUrl + '"></video>' +
       (previewMode === 'source' ? punchFocusHtml(project, focusedPunchId) : '') + '<div class="editor-caption" id="editorCaption"></div>' +
-      '<div class="editor-player-controls" id="editorPlayerControls"><button type="button" class="editor-player-icon" id="editorPlayerPlay" aria-label="Play">▶</button><span id="editorPlayerCurrent">0:00</span><input type="range" id="editorPlayerSeek" min="0" max="1" step="0.01" value="0" aria-label="Video position"><span id="editorPlayerDuration">' + formatTime(previewMode === 'final' ? editedDuration(project) : project.duration) + '</span><i id="editorPlayerBuffering" hidden>Loading</i><button type="button" class="editor-player-icon" id="editorPlayerMute" aria-label="Mute">VOL</button><button type="button" class="editor-player-icon" id="editorPlayerFullscreen" aria-label="Full screen">⛶</button></div>' +
-      '<div class="editor-video-error" id="editorVideoError" hidden><strong>Preview could not be played</strong><span>Your recording and edit are safe. Reload this review copy without rebuilding anything.</span><button type="button" class="btn-secondary btn-tiny" id="editorReloadVideo">Reload preview</button></div></div></div>';
+      '<div class="editor-player-controls" id="editorPlayerControls"><button type="button" class="editor-player-icon" id="editorPlayerPlay" aria-label="Play"' + (previewLocked ? ' disabled' : '') + '>▶</button><span id="editorPlayerCurrent">0:00</span><input type="range" id="editorPlayerSeek" min="0" max="1" step="0.01" value="0" aria-label="Video position"' + (previewLocked ? ' disabled' : '') + '><span id="editorPlayerDuration">' + formatTime(previewMode === 'final' ? editedDuration(project) : project.duration) + '</span><i id="editorPlayerBuffering" hidden>Loading</i><button type="button" class="editor-player-icon" id="editorPlayerMute" aria-label="Mute"' + (previewLocked ? ' disabled' : '') + '>VOL</button><button type="button" class="editor-player-icon" id="editorPlayerFullscreen" aria-label="Full screen"' + (previewLocked ? ' disabled' : '') + '>⛶</button></div>' +
+      '<div class="editor-video-error" id="editorVideoError" hidden><strong>Preview could not be played</strong><span>Your recording and edit are safe. Reload this review copy without rebuilding anything.</span><button type="button" class="btn-secondary btn-tiny" id="editorReloadVideo">Reload preview</button></div>' + rebuildOverlayHtml + '</div></div>';
     var previewStageHtml = layout === 'vertical'
       ? '<div class="editor-preview-stage vertical"><aside class="editor-preview-side editor-preview-side-playback"><div class="eyebrow">Playback</div><h3>Review</h3>' + previewActionsHtml + '</aside>' + previewPlayerHtml + '<aside class="editor-preview-side editor-preview-side-settings"><div class="eyebrow">Edit settings</div><h3>Automatic treatment</h3>' + automaticControlsHtml + '</aside></div>'
       : '<div class="editor-preview-stage horizontal">' + previewPlayerHtml + '</div>';
     workspace.innerHTML =
       '<div class="editor-topbar"><div><h2>' + esc(displayName(project)) + '</h2><span>' + (project.planningPieceTitle ? esc(project.name) + ' · ' : '') + formatTime(project.duration) + ' original · ' + formatTime(editedDuration(project)) + ' edited · ' + cutSeconds.toFixed(1) + 's removed' + (formatBytes(project.sizeBytes) ? ' · ' + formatBytes(project.sizeBytes) + ' source' : '') + '</span></div>' +
         '<div class="editor-topbar-actions"><div class="editor-project-nav"><button type="button" class="btn-secondary btn-tiny" id="editorPreviousProject" ' + (reviewProjectIndex <= 0 ? 'disabled' : '') + '>← Previous</button><span id="editorProjectPosition">' + (reviewProjectIndex >= 0 ? (reviewProjectIndex + 1) + ' of ' + reviewProjects.length : '') + '</span><button type="button" class="btn-secondary btn-tiny" id="editorNextProject" ' + (reviewProjectIndex < 0 || reviewProjectIndex >= reviewProjects.length - 1 ? 'disabled' : '') + '>Next →</button></div>' +
-          (!sentToProduction && project.renderStatus === 'ready' ? '<button type="button" class="btn-primary btn-tiny editor-quick-approve" data-editor-approve ' + (!audioSelectionReady ? 'disabled title="Choose backing audio first"' : '') + '>Approve &amp; next</button>' : '') +
+          (!sentToProduction && project.renderStatus === 'ready' && !previewLocked ? '<button type="button" class="btn-primary btn-tiny editor-quick-approve" data-editor-approve ' + (!audioSelectionReady ? 'disabled title="Choose backing audio first"' : '') + '>Approve &amp; next</button>' : '') +
           '<span class="editor-save-state ' + esc(saveStates[project.id] || '') + '" id="editorSaveState">' + ({ saving: 'Saving…', saved: 'Saved', error: 'Save failed' }[saveStates[project.id]] || '') + '</span><button class="editor-delete" id="editorDelete">' + (sentToProduction ? 'Remove Editor files' : 'Delete recording') + '</button></div></div>' +
-      (rendering ? '<div class="editor-lock-notice"><strong>Final edit is encoding</strong><span>Review remains available. Editing unlocks as soon as the verified file is ready.</span></div>' : '') +
+      (previewLocked ? '<div class="editor-lock-notice"><strong>Preview is rebuilding</strong><span>Playback is locked until the updated file has encoded and passed verification.</span></div>' : '') +
       (project.browserPreviewRequired && ['pending', 'running'].indexOf(project.browserPreviewStatus) !== -1 && previewMode === 'source' ? '<div class="editor-lock-notice"><strong>Preparing a browser-safe source preview</strong><span>The camera master is preserved and final editing continues. This view will switch to H.264 automatically when ready.</span></div>' : '') +
       (sentToProduction ? '<div class="editor-lock-notice approved"><strong>Approved version locked</strong><span>The exact reviewed file is now in Content Production. Source and final previews remain available here.</span></div>' : '') +
       (failures.length ? '<div class="editor-error-recovery"><div><strong>' + failures.join(', ') + ' need' + (failures.length === 1 ? 's' : '') + ' attention</strong><span>Retry the failed automatic work without changing the source recording or your edit decisions.</span></div><button type="button" class="btn-secondary btn-tiny" id="editorRetryFailed">Retry failed steps</button></div>' : '') +
@@ -955,7 +974,7 @@
         (['queued', 'running'].indexOf(project.renderStatus) !== -1 ? '<div class="editor-render-progress"><span id="editorRenderProgressLabel">' + (project.renderStatus === 'queued' ? (Number(project.renderQueuePosition) > 1 ? (Number(project.renderQueuePosition) - 1) + ' recording(s) ahead in the render queue' : 'Next in the render queue') : 'Encoding final edit · ' + Math.round(Number(project.renderProgress) || 0) + '%') + '</span><div><i id="editorRenderProgressBar" style="width:' + (project.renderStatus === 'queued' ? 4 : Math.max(2, Number(project.renderProgress) || 0)) + '%"></i></div></div>' : '') +
         (project.renderStatus === 'error' ? '<em>' + esc(project.renderError) + '</em>' : '') + '</div><div class="editor-export-actions">' +
         (project.productionPieceId ? '<button class="btn-primary" id="editorOpenProduction">Open Content Production</button>' :
-          project.renderStatus === 'ready' ? '<button class="btn-primary" id="editorSendProduction" data-editor-approve ' + (!audioSelectionReady ? 'disabled title="Choose backing audio first"' : '') + '>Approve &amp; Send to Production</button>' :
+          project.renderStatus === 'ready' ? '<button class="btn-primary" id="editorSendProduction" data-editor-approve ' + (!audioSelectionReady || previewLocked ? 'disabled title="Wait for the updated preview before approval"' : '') + '>Approve &amp; Send to Production</button>' :
           '<button class="btn-primary" id="editorRender" ' + (['queued', 'running'].indexOf(project.renderStatus) !== -1 || renderBlocked ? 'disabled' : '') + '>' + (project.renderStatus === 'queued' ? 'Waiting in render queue…' : project.renderStatus === 'running' ? 'Building final edit… ' + Math.round(Number(project.renderProgress) || 0) + '%' : renderButtonText) + '</button>') +
         '</div></div>';
     bindWorkspace();
@@ -987,7 +1006,7 @@
     var audioPrevious = root.querySelector('#editorAudioPrevious');
     var audioNext = root.querySelector('#editorAudioNext');
     var audioProgress = root.querySelector('#editorAudioProgress');
-    var audioBatch = project.renderStatus === 'ready' ? ensureAudioPreviewBatch(project) : null;
+    var audioBatch = project.renderStatus === 'ready' && !previewLocked ? ensureAudioPreviewBatch(project) : null;
     var playerScrubbing = false;
     var bufferingTimer = null;
     var synchronizedStartToken = 0;
@@ -1002,6 +1021,7 @@
       return mixedPreviewActive() ? mixedAudio.muted : video.muted;
     }
     function startPlayerPlayback() {
+      if (previewLocked) return Promise.resolve();
       if (!mixedPreviewActive()) return video.play().catch(function () {});
       // Audio can need a few milliseconds longer than the lightweight video
       // proxy to wake its decoder. Make audio the start clock: hold the
@@ -1071,7 +1091,11 @@
       }
       audioTrackSelect.innerHTML = options.join('');
       audioTrackSelect.value = project.audioTrackId || '';
-      if (project.renderStatus !== 'ready') {
+      if (previewLocked) {
+        audioTrackSelect.disabled = true;
+        audioProgress.className = 'editor-audio-progress loading';
+        audioProgress.querySelector('span').textContent = 'Available when the updated preview is ready';
+      } else if (project.renderStatus !== 'ready') {
         audioTrackSelect.disabled = true;
         audioProgress.className = 'editor-audio-progress';
         audioProgress.querySelector('span').textContent = 'Available when the final edit is ready';
@@ -1089,8 +1113,8 @@
         audioProgress.querySelector('span').textContent = ready.length + ' soundtrack preview' + (ready.length === 1 ? '' : 's') + ' ready' + (audioBatch && audioBatch.failed ? ' · ' + audioBatch.failed + ' failed' : '') + '. Switching is instant.';
       }
       var currentIndex = ready.findIndex(function (track) { return track.id === project.audioTrackId; });
-      audioPrevious.disabled = sent || ready.length < 2 || currentIndex < 0;
-      audioNext.disabled = sent || ready.length < 2 || currentIndex < 0;
+      audioPrevious.disabled = sent || previewLocked || ready.length < 2 || currentIndex < 0;
+      audioNext.disabled = sent || previewLocked || ready.length < 2 || currentIndex < 0;
       configureSelectedAudio(false, !video.paused);
       syncPlayerControls();
     }
@@ -1419,6 +1443,7 @@
     video.addEventListener('ended', function () { clearReviewProgress(videoProjectId); syncPlayerControls(); });
     root.querySelectorAll('.editor-timeline-segment').forEach(function (segment) {
       segment.onclick = function () {
+        if (previewLocked) return;
         var sourceTime = Number(segment.dataset.time) || 0;
         video.currentTime = previewingFinal ? sourceToEditedTime(sourceTime, project.cuts) : sourceTime;
         startPlayerPlayback();
@@ -1426,6 +1451,7 @@
     });
     root.querySelectorAll('.editor-timeline-punch').forEach(function (marker) {
       marker.onclick = function () {
+        if (previewLocked) return;
         var sourceTime = Math.max(0, Number(marker.dataset.time) - 0.35);
         video.currentTime = previewingFinal ? sourceToEditedTime(sourceTime, project.cuts) : sourceTime;
         startPlayerPlayback();
@@ -1433,6 +1459,7 @@
     });
     root.querySelectorAll('.editor-preview-cut').forEach(function (button) {
       button.onclick = function () {
+        if (previewLocked) return;
         var time = Number(button.dataset.time) || 0;
         if (project.renderStatus === 'ready' && !previewingFinal) {
           previewModes[project.id] = 'final';
@@ -1467,6 +1494,7 @@
       if (mixedAudio) mixedAudio.playbackRate = reviewRate;
     };
     root.querySelector('#editorPreview').addEventListener('keydown', function (event) {
+      if (previewLocked) return;
       if (event.target.closest('select, button, input')) return;
       if (event.code === 'Space') {
         event.preventDefault();
@@ -1834,6 +1862,7 @@
     };
     var approveButtons = Array.from(root.querySelectorAll('[data-editor-approve]'));
     function approveCurrentProject() {
+      if (previewLocked) return;
       var approvedId = project.id;
       var approvedName = project.name;
       approveButtons.forEach(function (button) { button.disabled = true; button.textContent = 'Approving…'; });
@@ -1883,6 +1912,7 @@
         });
         projects = projects.filter(function (item) { return item.id !== id; });
         delete projectDetails[id];
+        delete localPreviewRebuilds[id];
         delete explicitSourcePreviews[id];
         delete focusedPunchIds[id];
         clearReviewProgress(id);
@@ -1906,6 +1936,9 @@
       root.querySelectorAll('.editor-gap-toggle,.editor-retake-apply,.editor-retake-dismiss').forEach(function (control) { control.disabled = true; });
       root.querySelectorAll('.editor-punch-card button,.editor-punch-card select,.editor-punch-card input').forEach(function (control) { control.disabled = true; });
     }
+    if (previewLocked) {
+      root.querySelectorAll('.editor-timeline-segment,.editor-timeline-punch,.editor-preview-cut,.editor-punch-preview,#editorPlaySelection').forEach(function (control) { control.disabled = true; });
+    }
     if (rendering) root.querySelector('#editorDelete').disabled = true;
   }
 
@@ -1921,7 +1954,8 @@
     root.querySelector('#editorRestore').disabled = locked || !hasRemoved;
     root.querySelector('#editorCorrect').disabled = locked || selected.size !== 1;
     root.querySelector('#editorPunch').disabled = locked || !hasKept;
-    root.querySelector('#editorPlaySelection').disabled = selected.size === 0;
+    var previewLocked = project && (!!localPreviewRebuilds[project.id] || !!project.renderRebuildPending || ['queued', 'running'].indexOf(project.renderStatus) !== -1);
+    root.querySelector('#editorPlaySelection').disabled = previewLocked || selected.size === 0;
   }
 
   function correctSelectedWord() {
@@ -1981,6 +2015,11 @@
   function undo() {
     if (!project || !project.canUndoCut) return;
     rememberPlaybackBeforeEdit(project.id, true);
+    var undoStartedPreviewRebuild = project.renderStatus === 'ready' || project.renderRebuildPending;
+    if (undoStartedPreviewRebuild) {
+      localPreviewRebuilds[project.id] = true;
+      renderWorkspace();
+    }
     selected.clear();
     var mutationId = window.crypto && typeof window.crypto.randomUUID === 'function'
       ? window.crypto.randomUUID()
@@ -2003,7 +2042,7 @@
           throw error;
         });
       });
-    });
+    }, { previewRebuildStarted: undoStartedPreviewRebuild });
   }
 
   function queueProjectUpdate(id, operation, options) {
@@ -2041,6 +2080,7 @@
       return item;
     }).catch(function (error) {
       saveStates[id] = 'error';
+      if (options.previewRebuildStarted) delete localPreviewRebuilds[id];
       if (project && project.id === id) renderWorkspace();
       alert(error.message);
     });
@@ -2061,6 +2101,11 @@
     });
     if (renderWillChange) releaseAudioPreviewBatch(id);
     rememberPlaybackBeforeEdit(id, renderWillChange);
+    var previewRebuildStarted = renderWillChange && project && (project.renderStatus === 'ready' || project.renderRebuildPending);
+    if (previewRebuildStarted) {
+      localPreviewRebuilds[id] = true;
+      renderWorkspace();
+    }
     return queueProjectUpdate(id, function () {
       var latest = project && project.id === id ? project : projectDetails[id] || projects.find(function (item) { return item.id === id; });
       function attempt(base, canRetryConflict) {
@@ -2084,7 +2129,7 @@
         });
       }
       return attempt(latest || {}, true);
-    }, options);
+    }, Object.assign({}, options || {}, { previewRebuildStarted: previewRebuildStarted }));
   }
 
   window.RMEditor = {

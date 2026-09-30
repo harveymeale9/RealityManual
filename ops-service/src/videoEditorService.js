@@ -988,11 +988,17 @@ function setup(options) {
 
   function invalidateProjectRender(project) {
     const hadVerifiedRender = project && project.renderStatus === 'ready';
+    const rebuildPending = hadVerifiedRender || !!(project && project.renderRebuildPending);
     if (hadVerifiedRender && typeof onRenderInvalidated === 'function') {
       try { onRenderInvalidated({ project: project }); }
       catch (error) { project.workflowWarning = 'The edit changed safely, but its linked planning card could not be returned to Filmed.'; }
     }
     const invalidated = invalidateRender(project);
+    // Preserve an explicit distinction between a first render and an edit
+    // which invalidated a preview Harvey had already reviewed. The browser
+    // uses this throughout the debounce window, before renderStatus becomes
+    // queued/running, so the stale player can be covered and made inert.
+    if (project) project.renderRebuildPending = rebuildPending;
     if (project && project.id && isId(project.id)) {
       pruneAudioPreviewCache(project.id);
       try { fs.rmSync(renderPath(project.id), { force: true }); } catch (error) {}
@@ -1492,6 +1498,7 @@ async function renderProject(id) {
       await buildScrubProxy(renderPath(id), renderPreviewPath(id), expectedDuration, 'final edit scrub proxy');
       const renderSha256 = await hashFile(renderPath(id));
       project.renderStatus = 'ready';
+      project.renderRebuildPending = false;
       project.renderVersion = EDITOR_RENDER_VERSION;
       project.renderProgress = 100;
       project.renderSizeBytes = stat.size;
@@ -1549,6 +1556,7 @@ async function renderProject(id) {
       let migrated = false;
       const canResumeWork = !project.productionPieceId;
       if (project.renderStatus === undefined || project.renderStatus === null) { project.renderStatus = ''; migrated = true; }
+      if (typeof project.renderRebuildPending !== 'boolean') { project.renderRebuildPending = false; migrated = true; }
       if (!Number.isFinite(Number(project.editRevision))) { project.editRevision = 0; migrated = true; }
       if (!Number.isFinite(Number(project.renderProgress))) { project.renderProgress = 0; migrated = true; }
       if (!project.retakeAnalysisStatus) { project.retakeAnalysisStatus = canResumeWork && typeof analyzeRetakes === 'function' ? (project.transcriptionStatus === 'ready' ? 'pending' : 'pending_transcript') : 'unavailable'; migrated = true; }
@@ -1878,6 +1886,7 @@ async function renderProject(id) {
         transcriptionStatus: 'pending',
         transcriptionError: '',
         renderStatus: '',
+        renderRebuildPending: false,
         renderError: '',
         renderPreviewStatus: '',
         renderPreviewError: '',
