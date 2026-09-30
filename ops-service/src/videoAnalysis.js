@@ -307,9 +307,9 @@ async function buildFinalVideo(videoPath, audioPath, outPath, mixInput) {
   }
 }
 
-// Audio-only audition used by Content Settings. It deliberately calls the
-// same measurement and mix helpers as Final Check, so a test is representative
-// of the production render rather than a lighter browser approximation.
+// Audio-only audition used by Editor soundtrack previews. It deliberately
+// calls the same measurement and mix helpers as Final Check, so a preview is
+// representative of the production render rather than a lighter browser mix.
 async function buildAudioPreview(dialoguePath, audioPath, outPath, mixInput, outputOptions) {
   const settings = normalizeAudioMixSettings(mixInput);
   if (settings.mode === 'legacy_percent') {

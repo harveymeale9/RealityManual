@@ -16,7 +16,7 @@ const OPENING_PUSH_IN_SCALE = 1.04;
 const PUNCH_TRANSITION_SECONDS = 0.45;
 const EDITOR_RENDER_VERSION = 6;
 const BROWSER_PREVIEW_VERSION = 2;
-const AUDIO_PREVIEW_MIX_VERSION = 2;
+const AUDIO_PREVIEW_MIX_VERSION = 3;
 const AUDIO_PREVIEW_TTL_MS = 2 * 60 * 60 * 1000;
 
 function requiredEditorCapacity(fileBytes, fileAlreadyStored) {
@@ -973,7 +973,11 @@ function setup(options) {
     const job = audioPreviewQueue.enqueue(async function () {
       const outPath = path.join(tempDir, 'editor-audio-preview-' + crypto.randomUUID() + '.mp3');
       try {
-        await buildAudioPreview(renderPath(project.id), trackPath, outPath, settings, { bitrate: '48k' });
+        // Keep Editor auditioning byte-for-byte on the same output profile as
+        // the proven Content Settings tester: same measured mix and the
+        // mixer's normal 192 kbps MP3 preview, rather than a separate 48 kbps
+        // approximation that made quieter ambience sound thin and indistinct.
+        await buildAudioPreview(renderPath(project.id), trackPath, outPath, settings, { bitrate: '192k' });
         const stat = fs.statSync(outPath);
         if (!stat.isFile() || stat.size <= 512) throw new Error('The backing-audio preview was empty.');
         audioPreviewCache.set(key, { path: outPath, projectId: project.id, expiresAt: Date.now() + AUDIO_PREVIEW_TTL_MS });

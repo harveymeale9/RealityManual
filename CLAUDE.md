@@ -14983,3 +14983,29 @@ dragged backward to 3 seconds, held the scrubber, then released it. During the
 hold both elements were paused exactly at 3.0 with no Loading state; after
 release both resumed within 0.05 seconds of each other and produced no page
 errors. The Editor cache key was advanced to v95.
+
+---
+
+# 428. Editor Soundtrack Auditions Match the Proven Settings Tester (2026-09-30)
+
+Harvey reported that the old Content Settings voice-sample auditions sounded
+correct while the Editor soundtrack previews did not. Both paths already used
+the same measured dialogue/music mixer and saved LUFS controls, including the
+used-duration calibration from §424, but their output profiles still diverged:
+the Settings tester used the mixer's normal 192 kbps MP3 while the Editor
+explicitly reduced its previews to 48 kbps. That extra approximation has been
+removed. Editor auditions now use the same 192 kbps preview profile as the
+proven tester, and the audio mix version was advanced so previously cached
+48 kbps previews cannot survive the change.
+
+The duplicate **Test a voice recording** panel has been removed from Content
+Settings now that soundtrack comparison belongs in the Editor itself. Its
+markup, client session/batch builder, object-URL lifecycle and dedicated CSS
+were deleted rather than left dormant. The Ambient audio library, track upload,
+rename/delete/note controls, and global loudness controls remain in Settings;
+only the redundant audition surface is gone. The old authenticated API remains
+temporarily available for compatibility but has no UI entry point.
+
+Regression coverage asserts the Editor requests the 192 kbps shared profile,
+all 142 Node tests pass, and the public asset keys were advanced so the Settings
+cleanup reaches existing browser sessions immediately.

@@ -855,7 +855,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
       assert.equal(fs.existsSync(videoPath), true);
       assert.equal(audioPath, input);
       assert.equal(settings.musicBelowDialogueDb, 20);
-      assert.equal(outputOptions.bitrate, '48k');
+      assert.equal(outputOptions.bitrate, '192k');
       await new Promise(function (resolve) { setTimeout(resolve, 40); });
       fs.writeFileSync(outPath, Buffer.alloc(2048, 7));
     },
