@@ -15183,3 +15183,22 @@ Images from messages sent before this migration cannot be reconstructed: the
 old system never stored their metadata and deleted its one accepted temporary
 file when the agent turn ended. Harvey must attach any missing older screenshot
 again; all messages sent after this change retain every selected image.
+
+---
+
+# 434. Cloudflare R2 Is Connected Live (2026-09-30)
+
+Harvey added the R2 S3 credentials to the live gitignored environment file.
+The endpoint and credentials were valid, but the configured bucket name was
+`reality-manual-content` while the account's existing bucket was actually
+`reality-manual-media`; the storage health endpoint therefore returned a 404
+`NoSuchBucket`. The non-secret `R2_BUCKET_NAME` value was corrected to the
+existing bucket and `rm-ops-service` was recreated so Node loaded the new
+environment.
+
+The live authenticated `/api/storage/status` endpoint now reports configured
+and connected for `reality-manual-media`, with the intended 14-day
+post-publication retention window. A disposable object was then uploaded,
+headed, downloaded byte-for-byte, and deleted through the same S3 credentials,
+confirming actual read/write/delete capability rather than relying only on a
+bucket-existence check. No credential values were printed or committed.
