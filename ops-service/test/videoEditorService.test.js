@@ -553,7 +553,7 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.equal(stored.renderQuality.status, 'passed');
-  assert.equal(stored.renderVersion, 3);
+  assert.equal(stored.renderVersion, 4);
   assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), true);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
@@ -858,6 +858,10 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.classificationStatus, 'ready', project.classificationError);
   assert.equal(project.effectiveLayout, 'vertical');
   assert.equal(project.cropCenterX, 0.5);
+  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cropCenterX: 0.1 }) });
+  assert.equal(response.status, 200);
+  project = await response.json();
+  assert.equal(project.cropCenterX, 0.5, 'retired crop-pan input must not alter centred portrait framing');
   for (let attempt = 0; attempt < 100 && project.retakeAnalysisStatus !== 'ready'; attempt++) {
     await new Promise(function (resolve) { setTimeout(resolve, 30); });
     project = await (await fetch(base + '/api/editor/' + project.id)).json();

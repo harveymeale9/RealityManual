@@ -14237,3 +14237,27 @@ The stylesheet cache key and Editor render version were advanced together.
 Active unapproved edits therefore rebuild automatically and cannot show the
 new preview styling while retaining an older baked export; approved Production
 inputs remain immutable.
+
+---
+
+# 403. Portrait Review Uses Its Side Space and No Longer Exposes Crop Pan (2026-09-30)
+
+Now that portrait recordings come from the physically rotated Sony camera,
+the old **Horizontal crop position** slider was both confusing and redundant.
+It has been removed from the Editor UI and accepted PATCH fields, and portrait
+framing now uses the camera's centre deterministically in both the browser and
+FFmpeg output. Old stored crop-pan values are ignored. Render format version 4
+automatically rebuilds active unapproved outputs under the centred policy;
+approved Production inputs remain immutable.
+
+Portrait review no longer places a narrow 332×590 player in the middle of a
+wide empty black strip. The player is now up to 430×764 on desktop. The former
+empty sides contain real controls: playback speed and source/final switching
+on the left, with captions, pause removal, opening push-in, pacing and restore
+controls on the right. Those controls remain with the speech map for landscape
+videos. At narrower desktop widths the enlarged player takes the full first
+row and the two control cards sit beneath it; on phones the player and cards
+stack into one usable column.
+
+Both changed assets have new cache keys, so existing browsers receive the new
+layout immediately after reload.
