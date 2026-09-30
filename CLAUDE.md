@@ -14484,3 +14484,10 @@ future uploads.
 
 Service coverage now proves both the no-candidate and high-confidence-match
 paths persist a working title and name source, including the startup backfill.
+
+After the successful full-container deployment, the startup migration sent the
+real active `9259` project through the new text pass. Authenticated live API and
+DOM checks confirmed its queue/review title became **Consciousness Is
+Fundamental to the Game of Life**, its `workingTitle` and `nameSource` persisted
+as transcript-derived, and the untouched source provenance remained
+`fileName: 9259.mp4`.
