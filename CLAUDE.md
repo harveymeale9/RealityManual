@@ -14906,3 +14906,34 @@ without changing the `-16 LUFS` dialogue, `20 dB below dialogue`, or `-1.5 dBTP`
 settings. A real corrected preview measured its final programme at essentially
 the intended target (`-15.99 LUFS` before the final pass), and unit coverage now
 locks bounded, looping music analysis as well as the safe unbounded helper.
+
+---
+
+# 425. Editor Tab Re-entry Keeps the Verified Preview Visible (2026-09-30)
+
+Leaving the Editor and returning to it unnecessarily discarded the complete
+in-memory project/list state, painted the generic empty workspace, and waited
+for both list APIs plus a fresh project-detail request before reconstructing the
+player. The video element used metadata-only preload as well, so a newly created
+player was allowed to have dimensions without decoding a visible frame. A quick
+tab round-trip could therefore present an empty workspace or black preview even
+though the verified render was healthy.
+
+The Editor now paints its last verified in-memory project immediately on remount
+and reconciles it with the server in the background. Mount generations prevent
+a response started by an older Editor visit from writing into a newer tool. If
+the refreshed project's timestamp, edit revision and render hash are unchanged,
+the existing remounted media element stays alive instead of being replaced by a
+second loading player. Review proxies now use automatic preload so a real frame
+is decoded rather than stopping at metadata.
+
+The investigation also found a separate cross-tab race: a delayed Content
+Settings fetch could call `renderCadenceGrid()` after the shared panel had
+already become the Editor, throwing while trying to write to a missing node.
+Settings now abandons that late render cleanly when its DOM is no longer
+mounted.
+
+A real Chromium regression repeatedly cycled Settings → Editor six times. Each
+return painted the player immediately, reached a decoded 480×854 frame, kept the
+same media element through background reconciliation, and produced zero page
+errors. Editor and app cache keys were advanced together.

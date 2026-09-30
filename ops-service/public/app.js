@@ -4655,6 +4655,7 @@
 
   function renderCadenceGrid() {
     var grid = document.getElementById('cadenceGrid');
+    if (!grid) return;
     var dis = IS_REVIEWER ? ' disabled' : '';
     grid.innerHTML = '<div class="cadence-row" data-key="longform">' +
       '<span class="cadence-label">Direct longform <span class="ink-faint">(YouTube / Facebook)</span></span>' +
@@ -4999,6 +5000,10 @@
 
   function bootSettings() {
     Store.getSettings().then(function (settings) {
+      // The user may leave Settings while this request is in flight. The
+      // shared panel has already been replaced in that case, so none of the
+      // Settings renderers should write into the next tool's DOM.
+      if (!document.getElementById('cadenceGrid')) return;
       settingsCache = settings;
       renderCadenceGrid();
       renderAudioList();

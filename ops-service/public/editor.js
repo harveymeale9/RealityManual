@@ -716,16 +716,19 @@
     });
   }
 
-  function loadProjects() {
+  function loadProjects(expectedMountToken) {
     return Promise.all([
       retryTransientOnce(function () { return api('/api/editor'); }, 300),
       retryTransientOnce(function () { return api('/api/editor/audio-tracks'); }, 300)
     ]).then(function (results) {
+      if (expectedMountToken !== mountToken || !editorMounted()) return;
       projects = results[0];
       audioTracks = Array.isArray(results[1].tracks) ? results[1].tracks : [];
       audioMixVersion = results[1].mixVersion || '';
+      if (project && !projects.some(function (item) { return item.id === project.id; })) project = null;
       renderList();
-      if (!project && projects[0]) {
+      if (project) return openProject(project.id, true);
+      if (projects[0]) {
         var preferred = preferredProjectForFilter(listFilter);
         if (preferred) return openProject(preferred.id);
       }
@@ -744,7 +747,12 @@
     return retryTransientOnce(function () { return api('/api/editor/' + encodeURIComponent(id)); }, 300).then(function (item) {
       if (quietBlockedByExplicit || requestToken !== openRequestToken || !editorMounted()) return;
       if (!quiet && pendingExplicitOpenToken === requestToken) pendingExplicitOpenToken = 0;
-      var progressOnly = !!(quiet && project && project.id === item.id && project.renderStatus === 'running' && item.renderStatus === 'running');
+      var previousProject = project;
+      var progressOnly = !!(quiet && previousProject && previousProject.id === item.id && previousProject.renderStatus === 'running' && item.renderStatus === 'running');
+      var unchanged = !!(quiet && previousProject && previousProject.id === item.id &&
+        String(previousProject.updatedAt || '') === String(item.updatedAt || '') &&
+        String(previousProject.renderSha256 || '') === String(item.renderSha256 || '') &&
+        Number(previousProject.editRevision || 0) === Number(item.editRevision || 0));
       if (item.renderStatus === 'ready') delete localPreviewRebuilds[item.id];
       project = item;
       projectDetails[item.id] = item;
@@ -753,6 +761,13 @@
       projects = projects.map(function (entry) { return entry.id === item.id ? item : entry; });
       selected.clear();
       renderList();
+      // Re-entry paints the cached verified project immediately. If the
+      // authoritative record is byte-for-byte the same edit, keep that media
+      // element alive instead of replacing it with a second loading player.
+      if (unchanged) {
+        schedulePoll();
+        return;
+      }
       if (progressOnly) {
         var percent = Math.round(Number(item.renderProgress) || 0);
         var label = root.querySelector('#editorRenderProgressLabel');
@@ -904,7 +919,7 @@
     var rebuildOverlayHtml = previewLocked
       ? '<div class="editor-preview-rebuild' + (rebuildFailed ? ' error' : '') + '" id="editorPreviewRebuild" role="status" aria-live="polite"><div class="editor-preview-rebuild-spinner">' + (rebuildFailed ? '!' : '') + '</div><strong id="editorPreviewRebuildLabel">' + rebuildLabel + '</strong><span>' + (rebuildFailed ? 'Playback remains locked because this file was not regenerated. Use Retry failed steps above.' : 'Your latest edit is being applied. Playback will unlock when the regenerated preview is ready.') + '</span>' + (rebuildFailed ? '' : '<div><i id="editorPreviewRebuildBar" style="width:' + (project.renderStatus === 'running' ? Math.max(2, rebuildPercent) : 4) + '%"></i></div>') + '</div>'
       : '';
-    var previewPlayerHtml = '<div class="editor-preview' + (previewLocked ? ' rebuilding' : '') + '" id="editorPreview" tabindex="' + (previewLocked ? '-1' : '0') + '" aria-busy="' + (previewLocked ? 'true' : 'false') + '" aria-label="Video review. Space plays or pauses. Left and right arrows move two seconds."><div class="editor-video-frame ' + layout + '"><video id="editorVideo" data-preview-mode="' + previewMode + '" data-seek-time="' + previewSeek.toFixed(3) + '" playsinline preload="metadata" src="' + previewUrl + '"></video>' +
+    var previewPlayerHtml = '<div class="editor-preview' + (previewLocked ? ' rebuilding' : '') + '" id="editorPreview" tabindex="' + (previewLocked ? '-1' : '0') + '" aria-busy="' + (previewLocked ? 'true' : 'false') + '" aria-label="Video review. Space plays or pauses. Left and right arrows move two seconds."><div class="editor-video-frame ' + layout + '"><video id="editorVideo" data-preview-mode="' + previewMode + '" data-seek-time="' + previewSeek.toFixed(3) + '" playsinline preload="auto" src="' + previewUrl + '"></video>' +
       (previewMode === 'source' ? punchFocusHtml(project, focusedPunchId) : '') + '<div class="editor-caption" id="editorCaption"></div>' +
       '<div class="editor-player-controls" id="editorPlayerControls"><button type="button" class="editor-player-icon" id="editorPlayerPlay" aria-label="Play"' + (previewLocked ? ' disabled' : '') + '>▶</button><span id="editorPlayerCurrent">0:00</span><input type="range" id="editorPlayerSeek" min="0" max="1" step="0.01" value="0" aria-label="Video position"' + (previewLocked ? ' disabled' : '') + '><span id="editorPlayerDuration">' + formatTime(previewMode === 'final' ? editedDuration(project) : project.duration) + '</span><i id="editorPlayerBuffering" hidden>Loading</i><button type="button" class="editor-player-icon" id="editorPlayerMute" aria-label="Mute"' + (previewLocked ? ' disabled' : '') + '>VOL</button><button type="button" class="editor-player-icon" id="editorPlayerFullscreen" aria-label="Full screen"' + (previewLocked ? ' disabled' : '') + '>⛶</button></div>' +
       '<div class="editor-video-error" id="editorVideoError" hidden><strong>Preview could not be played</strong><span>Your recording and edit are safe. Reload this review copy without rebuilding anything.</span><button type="button" class="btn-secondary btn-tiny" id="editorReloadVideo">Reload preview</button></div>' + rebuildOverlayHtml + '</div></div>';
@@ -2128,9 +2143,16 @@
       // flight must remain the predecessor of any new edit made immediately
       // after returning, or two browser requests can race despite serialization
       // within each individual mount.
-      root = element; projects = []; project = null; selected.clear(); renderRefreshTimers = {}; previewSeekTimes = {}; restoreTranscriptFocus = false; activeAudioPanelRefresh = null;
+      root = element; selected.clear(); renderRefreshTimers = {}; restoreTranscriptFocus = false; activeAudioPanelRefresh = null;
       shell();
-      loadProjects().catch(function (error) {
+      // A tab round-trip should feel like returning to an open edit, not like
+      // starting the Editor again. Paint the in-memory project immediately,
+      // then reconcile it with the server in the background.
+      if (projects.length) renderList();
+      if (project) renderWorkspace();
+      var expectedMountToken = mountToken;
+      loadProjects(expectedMountToken).catch(function (error) {
+        if (expectedMountToken !== mountToken || !editorMounted()) return;
         var workspace = root && root.querySelector('#editorWorkspace');
         if (workspace) workspace.innerHTML = '<div class="editor-empty"><strong>Editor unavailable</strong><span>' + esc(error.message) + '</span></div>';
       });
