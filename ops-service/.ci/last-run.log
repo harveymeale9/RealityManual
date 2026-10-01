@@ -11,21 +11,15 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   216e7d3..39290e6  main       -> origin/main
+   39290e6..2baf4b8  main       -> origin/main
 + git merge --ff-only origin/main
-Updating 216e7d3..39290e6
+Updating 39290e6..2baf4b8
 Fast-forward
- CLAUDE.md                                   |   50 +
- ops-service/.ci/last-run.log                | 1647 ++++++++++++++++++++++++++-
- ops-service/Dockerfile                      |    3 +-
- ops-service/public/editor.js                |   78 +-
- ops-service/public/style.css                |    1 +
- ops-service/server.js                       |   26 +-
- ops-service/src/videoEditorService.js       |  251 +++-
- ops-service/test/videoEditorService.test.js |   54 +-
- 8 files changed, 2016 insertions(+), 94 deletions(-)
+ ops-service/.ci/last-run.log  | 1659 ++---------------------------------------
+ ops-service/public/index.html |    4 +-
+ 2 files changed, 70 insertions(+), 1593 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=39290e605436bb9c96f68b533cf7f4494da0874b
++ NEW_HEAD=2baf4b8f212483dbdb16532809161002c417d46d
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -34,116 +28,16 @@ Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
 + LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
 ++ cat /root/ops-service-data/last-image-commit.txt
-+ LAST_BUILD_COMMIT=216e7d3aa742b39ce5781a193084b9a1c6990cf0
++ LAST_BUILD_COMMIT=39290e605436bb9c96f68b533cf7f4494da0874b
 + NEEDS_REBUILD=1
-+ '[' -n 216e7d3aa742b39ce5781a193084b9a1c6990cf0 ']'
-+ git cat-file -e '216e7d3aa742b39ce5781a193084b9a1c6990cf0^{commit}'
-++ git diff --name-only 216e7d3aa742b39ce5781a193084b9a1c6990cf0 39290e605436bb9c96f68b533cf7f4494da0874b -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
-+ '[' -z 'ops-service/Dockerfile
-ops-service/server.js
-ops-service/src/videoEditorService.js' ']'
++ '[' -n 39290e605436bb9c96f68b533cf7f4494da0874b ']'
++ git cat-file -e '39290e605436bb9c96f68b533cf7f4494da0874b^{commit}'
+++ git diff --name-only 39290e605436bb9c96f68b533cf7f4494da0874b 2baf4b8f212483dbdb16532809161002c417d46d -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -z '' ']'
++ NEEDS_REBUILD=0
 + '[' 0 = 1 ']'
-+ '[' 1 = 0 ']'
-+ docker tag rm-ops-service rm-ops-service:previous
-+ docker build -t rm-ops-service ./ops-service
-#0 building with "default" instance using docker driver
-
-#1 [internal] load build definition from Dockerfile
-#1 transferring dockerfile: 2.70kB done
-#1 DONE 0.0s
-
-#2 [internal] load metadata for docker.io/library/node:22-slim
-#2 DONE 0.2s
-
-#3 [internal] load .dockerignore
-#3 transferring context: 136B done
-#3 DONE 0.0s
-
-#4 [ 1/11] FROM docker.io/library/node:22-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c
-#4 resolve docker.io/library/node:22-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c 0.0s done
-#4 DONE 0.0s
-
-#5 [internal] load build context
-#5 transferring context: 33.19MB 0.2s done
-#5 DONE 0.2s
-
-#6 [ 2/11] RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && python3 -m pip install --break-system-packages --no-cache-dir yt-dlp==2026.8.19     && rm -rf /var/lib/apt/lists/*
-#6 CACHED
-
-#7 [ 3/11] RUN npm install -g @anthropic-ai/claude-code@2.1.276
-#7 CACHED
-
-#8 [ 4/11] WORKDIR /app
-#8 CACHED
-
-#9 [ 5/11] COPY package.json ./
-#9 DONE 0.1s
-
-#10 [ 6/11] RUN npm install --omit=dev
-#10 17.61 npm warn deprecated prebuild-install@7.1.3: No longer maintained. Please contact the author of the relevant native addon; alternatives are available.
-#10 18.10 npm warn deprecated multer@1.4.5-lts.2: Multer 1.x is impacted by a number of vulnerabilities, which have been patched in 2.x. You should upgrade to the latest 2.x version.
-#10 22.74 
-#10 22.74 added 263 packages, and audited 264 packages in 22s
-#10 22.74 
-#10 22.74 59 packages are looking for funding
-#10 22.74   run `npm fund` for details
-#10 22.74 
-#10 22.74 found 0 vulnerabilities
-#10 DONE 23.8s
-
-#11 [ 7/11] COPY server.js ./
-#11 DONE 0.2s
-
-#12 [ 8/11] COPY src ./src
-#12 DONE 0.1s
-
-#13 [ 9/11] COPY public ./public
-#13 DONE 0.3s
-
-#14 [10/11] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
-#14 DONE 31.5s
-
-#15 [11/11] RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
-#15 DONE 0.2s
-
-#16 exporting to image
-#16 exporting layers
-#16 exporting layers 22.7s done
-#16 exporting manifest sha256:c17e5376cc315bf37b57aab4405a682d3173d38b122c339cf2685184f9b5818a 0.0s done
-#16 exporting config sha256:bca44128a8d213ebfd22ba543a9da825912e4d449ab5bc1c09ab7b6761e97e1b 0.0s done
-#16 exporting attestation manifest sha256:586c36121996fa45f6df08c16e0cd3a0d5eebabdde830fe6995f4d5ef70efd9e 0.0s done
-#16 exporting manifest list sha256:750a2223486735c7de12786cf04da2768d02b54aa06194dc739cf0523736d065 0.0s done
-#16 naming to docker.io/library/rm-ops-service:latest done
-#16 unpacking to docker.io/library/rm-ops-service:latest
-#16 unpacking to docker.io/library/rm-ops-service:latest 8.5s done
-#16 DONE 31.3s
-+ docker stop rm-ops-service
-rm-ops-service
-+ docker rm rm-ops-service
-rm-ops-service
-+ docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-claude-home/claude-dir:/home/node/.claude -v /root/ops-service-claude-home/claude.json:/home/node/.claude.json -v /root/ops-service-data:/data -v /root/realitymanual-backend-data:/store-data:ro -v /srv/realitymanual-repo:/repo -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
-9613bbc89710d791275b6e2f4680676ba3ef15cb532c80a1e79db55ba08c2765
-+ echo 39290e605436bb9c96f68b533cf7f4494da0874b
-++ git -C /root/realitymanual-repo rev-parse --short HEAD
-+ echo 'rm-ops-service redeployed at 39290e6'
-rm-ops-service redeployed at 39290e6
-+ docker image prune -f
-Deleted Images:
-untagged: sha256:11c18d734e6e6bcb766bf1f41de01ad9cf4a62cde395c3e2752a040342687aa8
-deleted: sha256:11c18d734e6e6bcb766bf1f41de01ad9cf4a62cde395c3e2752a040342687aa8
-deleted: sha256:9473d28f71e1c9732d4cda3b3c307e033c42fdd02824ff176964088580ba3215
-deleted: sha256:d0c6bcd95d94319c5d08cc6b3a807b58347a93490711287b73ecb5c4be3bfcfe
-
-Total reclaimed space: 16kB
-+ docker builder prune -f --max-used-space 8GB
-ID						RECLAIMABLE	SIZE		LAST ACCESSED
-t98vbl99qf9vrjpjqp39vh9m0               	true 		56.16MB   	12 hours ago
-oayz0yp6binqojh2mjhfn60u0               	true 	805.3kB   	12 hours ago
-0xvzybo89pwqk0hbikdiiiajb               	true 	33.02kB   	12 hours ago
-v1gs9dbr6kwy1ierxu60idx25               	true 	537.8MB   	12 hours ago
-vnnbipfn8gdom8mvr1izf95m9               	true 	56.16MB   	12 hours ago
-f0nu786725pg7m7d6jwqmxv6c               	true 	809.5kB   	12 hours ago
-u8pzddhkmkoqx9kkkj2qnvf05               	true 	246.7kB   	13 hours ago
-7yduoyvuxkk8asqjqk556o4xt               	true 	801.8MB   	13 hours ago
-Total:	1.454GB
++ '[' 0 = 0 ']'
++ echo 'no backend changes between 39290e605436bb9c96f68b533cf7f4494da0874b and 2baf4b8f212483dbdb16532809161002c417d46d — already live via git pull, skipping rebuild/restart'
+no backend changes between 39290e605436bb9c96f68b533cf7f4494da0874b and 2baf4b8f212483dbdb16532809161002c417d46d — already live via git pull, skipping rebuild/restart
++ exit 0
 ssh exit code: 0
