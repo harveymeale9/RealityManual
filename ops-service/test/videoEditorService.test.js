@@ -845,6 +845,55 @@ test('an aborted multipart upload removes its partial file immediately', { timeo
   assert.deepEqual(fs.readdirSync(tempDir), []);
 });
 
+test('chunked Editor upload crosses proxy-sized files with accurate idempotent assembly', { timeout: 20000 }, async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-chunks-'));
+  const source = path.join(dir, 'large-camera.mp4');
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=320x180:d=1:r=12',
+    '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', source]);
+  fs.appendFileSync(source, Buffer.alloc(17 * 1024 * 1024));
+  const bytes = fs.readFileSync(source);
+  const db = new Database(path.join(dir, 'test.sqlite'));
+  db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
+  const service = editor.setup({ db: db, dataDir: dir, transcribeDetailed: async function () { return { text: '', words: [] }; } });
+  const app = express(); app.use(express.json()); app.use('/api/editor', service.router);
+  const server = http.createServer(app);
+  await new Promise(function (resolve) { server.listen(0, '127.0.0.1', resolve); });
+  t.after(function () { server.close(); db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+  const base = 'http://127.0.0.1:' + server.address().port;
+  let response = await fetch(base + '/api/editor/uploads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+    fileName: 'CAMERA_LARGE.MP4', mimeType: 'video/mp4', sizeBytes: bytes.length, name: 'Large camera take'
+  }) });
+  assert.equal(response.status, 201);
+  const session = await response.json();
+  assert.equal(session.chunkSize, 16 * 1024 * 1024);
+  const first = bytes.subarray(0, session.chunkSize);
+  const second = bytes.subarray(session.chunkSize);
+  response = await fetch(base + '/api/editor/uploads/' + session.id + '/chunks/0', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'X-Upload-Offset': '0' }, body: first });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).receivedBytes, first.length);
+  response = await fetch(base + '/api/editor/uploads/' + session.id + '/chunks/0', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'X-Upload-Offset': '0' }, body: first });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).duplicate, true);
+  response = await fetch(base + '/api/editor/uploads/' + session.id + '/chunks/1', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'X-Upload-Offset': String(first.length) }, body: second });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).receivedBytes, bytes.length);
+  response = await fetch(base + '/api/editor/uploads/' + session.id + '/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  assert.equal(response.status, 202);
+  const project = await response.json();
+  assert.equal(project.sizeBytes, bytes.length);
+  assert.equal(project.name, 'Large camera take');
+  assert.equal(fs.statSync(path.join(dir, 'editor', project.id, 'source')).size, bytes.length);
+  assert.equal(project.sourceSha256, crypto.createHash('sha256').update(bytes).digest('hex'));
+  let settled = project;
+  for (let attempt = 0; attempt < 200; attempt++) {
+    settled = await (await fetch(base + '/api/editor/' + project.id)).json();
+    if (settled.transcriptionStatus === 'error' && ['ready', 'error'].includes(settled.browserPreviewStatus)) break;
+    await new Promise(function (resolve) { setTimeout(resolve, 20); });
+  }
+  assert.equal(settled.transcriptionStatus, 'error');
+  assert.equal(['ready', 'error'].includes(settled.browserPreviewStatus), true);
+});
+
 test('upload, timed transcription and FFmpeg captioned render work end to end', { timeout: 60000 }, async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-'));
   const encodedInput = path.join(dir, 'sample-landscape.mp4');

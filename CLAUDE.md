@@ -15341,3 +15341,35 @@ new timeline. Unit coverage verifies directive parsing and caption timing, a
 real FFmpeg integration renders source→clip→source with the external caption,
 the production image builds with the pinned downloader, and a live two-second
 YouTube range download was verified before deployment.
+
+---
+
+# 438. Editor Camera Uploads Are Chunked Through Cloudflare (2026-10-01)
+
+Harvey reported that starting a real camera upload produced a crushed green
+progress panel and apparently made no progress. These were two separate faults.
+The CSS selector intended for the progress track targeted every direct child
+`div`, including the label/actions row, forcing that row to four pixels high
+and clipping its text. More importantly, the browser posted the whole camera
+master in one request through the proxied `ops.realitymanual.com` hostname.
+nginx was already configured for 2 GB streaming, but Cloudflare Free/Pro caps a
+single proxied request at 100 MB before it reaches nginx. The VPS therefore had
+no temporary upload and no request log while the browser appeared stuck.
+
+The Editor now opens a server-side upload session and sends each recording as
+sequential 16 MiB binary chunks, comfortably below the proxy ceiling. The UI
+shows the true whole-batch percentage and filename continuously, then switches
+to an explicit **Securing … on the server** state while the assembled bytes are
+hashed, duplicate-checked, probed, and admitted to the existing processing
+pipeline. Each chunk is offset-checked; a chunk whose response was lost may be
+retried idempotently without duplicating bytes. A transient interruption gets
+one automatic retry, cancellation aborts the active request and removes the
+partial server file, inactive sessions expire after six hours, and the prior
+2 GB/file plus disk-capacity safeguards still apply to the full recording.
+The legacy single-request endpoint remains for compatibility and tests.
+
+The progress markup now has a dedicated track class, a six-pixel visible bar,
+and an unclipped 28px label row with safe ellipsis on narrow screens. A real
+17+ MiB two-chunk integration test verifies byte-exact assembly, idempotent
+chunk replay, SHA-256 identity, media probing, and normal Editor project
+creation. All 150 service tests pass.

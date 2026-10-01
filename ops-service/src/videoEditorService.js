@@ -9,6 +9,8 @@ const { execFile, spawn } = require('child_process');
 
 const STORE_NAME = 'editorProjects';
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
+const EDITOR_UPLOAD_CHUNK_BYTES = 16 * 1024 * 1024;
+const EDITOR_UPLOAD_SESSION_TTL_MS = 6 * 60 * 60 * 1000;
 const EDIT_RENDER_DEBOUNCE_MS = 2500;
 const EDITOR_DISK_RESERVE_BYTES = 2 * 1024 * 1024 * 1024;
 const PAGE_ZOOM_SECONDS = 3;
@@ -982,6 +984,7 @@ function setup(options) {
   const automaticRenderTimers = new Map();
   const uploadCapacityReservations = createByteReservationLedger();
   const sourceHashClaims = createKeyedClaimRegistry();
+  const chunkUploadSessions = new Map();
   let transcriptionChain = Promise.resolve();
   let retakeChain = Promise.resolve();
   let planningMatchChain = Promise.resolve();
@@ -1930,7 +1933,7 @@ async function renderProject(id) {
     res.json(projects);
   });
 
-  router.post('/', ensureUploadCapacity, cleanAbortedUpload, upload.single('video'), async function (req, res) {
+  async function acceptStoredEditorUpload(req, res) {
     // Multer has now materialized this request on disk. Release only its
     // admission reservation; reservations for other concurrent uploads stay
     // included in the definitive post-upload capacity check below.
@@ -2047,6 +2050,110 @@ async function renderProject(id) {
       fs.rm(projectDir(id), { recursive: true, force: true }, function () {});
       res.status(422).json({ error: 'invalid_recording', message: String(err.message || err) });
     }
+  }
+
+  router.post('/', ensureUploadCapacity, cleanAbortedUpload, upload.single('video'), acceptStoredEditorUpload);
+
+  function releaseChunkUploadSession(uploadId, removeFile) {
+    const session = chunkUploadSessions.get(uploadId);
+    if (!session) return false;
+    chunkUploadSessions.delete(uploadId);
+    if (session.reservationToken) uploadCapacityReservations.release(session.reservationToken);
+    if (removeFile) fs.rm(session.path, { force: true }, function () {});
+    return true;
+  }
+
+  const chunkUploadCleanupTimer = setInterval(function () {
+    const cutoff = Date.now() - EDITOR_UPLOAD_SESSION_TTL_MS;
+    chunkUploadSessions.forEach(function (session, uploadId) {
+      if (session.touchedAt < cutoff) releaseChunkUploadSession(uploadId, true);
+    });
+  }, 15 * 60 * 1000);
+  if (typeof chunkUploadCleanupTimer.unref === 'function') chunkUploadCleanupTimer.unref();
+
+  router.post('/uploads', function (req, res) {
+    const fileName = String(req.body && req.body.fileName || 'recording.mp4').slice(0, 255);
+    const mimeType = normalizedVideoMimeType(fileName, req.body && req.body.mimeType);
+    const sizeBytes = Number(req.body && req.body.sizeBytes);
+    if (!Number.isInteger(sizeBytes) || sizeBytes <= 0 || sizeBytes > MAX_UPLOAD_BYTES) {
+      return res.status(413).json({ error: 'invalid_upload_size', message: 'This recording is empty or larger than the 2 GB upload limit.' });
+    }
+    const projects = listStmt.all(STORE_NAME).map(function (row) { try { return JSON.parse(row.data); } catch (error) { return null; } }).filter(Boolean);
+    const requestedCapacity = requiredEditorCapacity(sizeBytes, false);
+    if (availableDiskBytes() < requestedCapacity + outstandingEditorCapacity(projects) + uploadCapacityReservations.total()) {
+      return res.status(507).json({ error: 'insufficient_storage', message: 'There is not enough free workspace to safely edit this recording. Clear old Editor files or VPS storage, then try again.' });
+    }
+    const uploadId = crypto.randomUUID();
+    const tempPath = path.join(tempDir, 'editor-upload-' + uploadId);
+    try { fs.writeFileSync(tempPath, Buffer.alloc(0), { flag: 'wx' }); }
+    catch (error) { return res.status(500).json({ error: 'upload_start_failed', message: 'The upload workspace could not be prepared. Please try again.' }); }
+    const reservationToken = uploadCapacityReservations.reserve(requestedCapacity);
+    chunkUploadSessions.set(uploadId, {
+      id: uploadId,
+      path: tempPath,
+      fileName: fileName,
+      mimeType: mimeType,
+      name: String(req.body && req.body.name || fileName.replace(/\.[^.]+$/, '')).slice(0, 200),
+      sizeBytes: sizeBytes,
+      receivedBytes: 0,
+      nextChunkIndex: 0,
+      reservationToken: reservationToken,
+      touchedAt: Date.now()
+    });
+    res.status(201).json({ id: uploadId, chunkSize: EDITOR_UPLOAD_CHUNK_BYTES, receivedBytes: 0 });
+  });
+
+  router.post('/uploads/:uploadId/chunks/:chunkIndex', express.raw({ type: 'application/octet-stream', limit: EDITOR_UPLOAD_CHUNK_BYTES + 1024 }), async function (req, res) {
+    const session = chunkUploadSessions.get(req.params.uploadId);
+    if (!session) return res.status(404).json({ error: 'upload_session_missing', message: 'This upload session expired. The Editor will restart it automatically.' });
+    const chunkIndex = Number(req.params.chunkIndex);
+    const offset = Number(req.headers['x-upload-offset']);
+    if (!Number.isInteger(chunkIndex) || chunkIndex < 0 || !Number.isInteger(offset) || offset < 0) {
+      return res.status(400).json({ error: 'invalid_upload_chunk' });
+    }
+    // A response can be lost after the bytes were safely appended. Treat a
+    // repeated completed chunk as success so the browser can retry without
+    // duplicating any bytes in the camera master.
+    if (chunkIndex < session.nextChunkIndex && offset + Buffer.byteLength(req.body || Buffer.alloc(0)) <= session.receivedBytes) {
+      session.touchedAt = Date.now();
+      return res.json({ receivedBytes: session.receivedBytes, nextChunkIndex: session.nextChunkIndex, duplicate: true });
+    }
+    if (chunkIndex !== session.nextChunkIndex || offset !== session.receivedBytes) {
+      return res.status(409).json({ error: 'upload_chunk_out_of_order', receivedBytes: session.receivedBytes, nextChunkIndex: session.nextChunkIndex });
+    }
+    const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    const expectedBytes = Math.min(EDITOR_UPLOAD_CHUNK_BYTES, session.sizeBytes - session.receivedBytes);
+    if (!body.length || body.length !== expectedBytes) {
+      return res.status(400).json({ error: 'invalid_upload_chunk_size', message: 'A video chunk arrived incomplete. The Editor will retry it.' });
+    }
+    try { await fs.promises.appendFile(session.path, body); }
+    catch (error) {
+      releaseChunkUploadSession(session.id, true);
+      return res.status(507).json({ error: 'upload_write_failed', message: 'The server could not store the next part of this recording.' });
+    }
+    session.receivedBytes += body.length;
+    session.nextChunkIndex++;
+    session.touchedAt = Date.now();
+    res.json({ receivedBytes: session.receivedBytes, nextChunkIndex: session.nextChunkIndex });
+  });
+
+  router.post('/uploads/:uploadId/complete', async function (req, res) {
+    const session = chunkUploadSessions.get(req.params.uploadId);
+    if (!session) return res.status(404).json({ error: 'upload_session_missing', message: 'This upload session expired. Please try the recording again.' });
+    if (session.receivedBytes !== session.sizeBytes) {
+      return res.status(409).json({ error: 'upload_incomplete', receivedBytes: session.receivedBytes, sizeBytes: session.sizeBytes });
+    }
+    chunkUploadSessions.delete(session.id);
+    uploadCapacityReservations.release(session.reservationToken);
+    return acceptStoredEditorUpload({
+      file: { path: session.path, size: session.sizeBytes, originalname: session.fileName, mimetype: session.mimeType },
+      body: { name: session.name }
+    }, res);
+  });
+
+  router.delete('/uploads/:uploadId', function (req, res) {
+    releaseChunkUploadSession(req.params.uploadId, true);
+    res.status(204).end();
   });
 
   router.get('/audio-tracks', function (req, res) {

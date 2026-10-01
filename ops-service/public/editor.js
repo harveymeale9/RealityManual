@@ -29,6 +29,7 @@
   var uploadBatchInProgress = false;
   var uploadBatchCancelled = false;
   var currentUploadXhr = null;
+  var currentUploadSessionId = '';
   var uploadStatusText = '';
   var uploadStatusPercent = 0;
   var MAX_RECORDING_BYTES = 2 * 1024 * 1024 * 1024;
@@ -447,7 +448,7 @@
         '<header class="editor-heading"><div><div class="eyebrow">Content production</div><h1>Editor</h1>' +
           '<p>Drop in a filming session. Each recording is framed, transcribed, cleaned and prepared for your approval.</p></div>' +
           '<div class="editor-heading-actions"><a href="voice-mobile.html" class="editor-pm-mobile btn-secondary">Project Manager</a><label class="editor-upload btn-primary"><input id="editorFile" type="file" accept="video/*,.mp4,.mov,.m4v,.webm,.mkv,.avi" multiple hidden>Upload raw videos</label></div></header>' +
-        '<div class="editor-upload-progress" id="editorUploadProgress" hidden><div class="editor-upload-progress-head"><span id="editorUploadLabel">Uploading…</span><button type="button" class="btn-secondary btn-tiny" id="editorCancelUpload" hidden>Cancel batch</button></div><div><i id="editorUploadBar"></i></div></div>' +
+        '<div class="editor-upload-progress" id="editorUploadProgress" hidden><div class="editor-upload-progress-head"><span id="editorUploadLabel">Uploading…</span><button type="button" class="btn-secondary btn-tiny" id="editorCancelUpload" hidden>Cancel batch</button></div><div class="editor-upload-progress-track"><i id="editorUploadBar"></i></div></div>' +
         '<div class="editor-notice" id="editorNotice" hidden></div>' +
         '<div class="editor-session-summary" id="editorSessionSummary" hidden></div>' +
         '<div class="editor-layout"><aside class="editor-projects"><div class="editor-aside-head"><div class="editor-aside-title">Recordings</div><div class="editor-list-filters"><button type="button" data-filter="active">Active</button><button type="button" data-filter="sent">Sent</button></div></div><div id="editorProjectList"></div></aside>' +
@@ -464,6 +465,7 @@
       uploadStatusText = 'Cancelling upload…';
       paintUploadStatus();
       if (currentUploadXhr) currentUploadXhr.abort();
+      if (currentUploadSessionId) api('/api/editor/uploads/' + encodeURIComponent(currentUploadSessionId), { method: 'DELETE' }).catch(function () {});
     });
     var shellNode = root.querySelector('.video-editor');
     var overlay = root.querySelector('#editorDropOverlay');
@@ -558,53 +560,107 @@
     paintProjectNavigation();
   }
 
+  function normalizeUploadError(error) {
+    error = error || new Error('The recording could not be uploaded.');
+    error.duplicate = error.duplicate || error.code === 'duplicate_recording' || !!(error.body && error.body.error === 'duplicate_recording');
+    error.existingProjectId = error.existingProjectId || error.body && error.body.existingProjectId || '';
+    error.transient = error.transient || error.code === 'upload_session_missing' || !error.status || error.status === 408 || error.status === 425 || error.status === 429 || error.status >= 500;
+    return error;
+  }
+
+  function uploadChunk(uploadId, chunkIndex, offset, blob, file, queueIndex, queueTotal, completedBytes, totalBytes) {
+    function once() {
+      return new Promise(function (resolve, reject) {
+        var xhr = new XMLHttpRequest();
+        currentUploadXhr = xhr;
+        xhr.open('POST', '/api/editor/uploads/' + encodeURIComponent(uploadId) + '/chunks/' + chunkIndex);
+        xhr.withCredentials = true;
+        xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+        xhr.setRequestHeader('X-Upload-Offset', String(offset));
+        xhr.upload.onprogress = function (event) {
+          var chunkLoaded = event.lengthComputable ? Math.min(blob.size, event.loaded) : 0;
+          uploadStatusPercent = Math.round((completedBytes + offset + chunkLoaded) / Math.max(1, totalBytes) * 100);
+          uploadStatusText = 'Uploading ' + (queueIndex + 1) + ' of ' + queueTotal + ' · ' + file.name + ' · ' + uploadStatusPercent + '%';
+          paintUploadStatus();
+        };
+        xhr.onload = function () {
+          if (currentUploadXhr === xhr) currentUploadXhr = null;
+          var body = {};
+          try { body = JSON.parse(xhr.responseText || '{}'); } catch (error) {}
+          if (xhr.status >= 200 && xhr.status < 300) return resolve(body);
+          var failure = new Error(body.message || 'A part of the recording could not be uploaded.');
+          failure.code = body.error || '';
+          failure.status = xhr.status;
+          failure.body = body;
+          reject(normalizeUploadError(failure));
+        };
+        xhr.onerror = function () {
+          if (currentUploadXhr === xhr) currentUploadXhr = null;
+          var failure = new Error('Upload interrupted. Check the connection and try again.');
+          failure.transient = true;
+          reject(failure);
+        };
+        xhr.onabort = function () {
+          if (currentUploadXhr === xhr) currentUploadXhr = null;
+          var failure = new Error('Upload cancelled.');
+          failure.cancelled = true;
+          reject(failure);
+        };
+        xhr.send(blob);
+      });
+    }
+    return once().catch(function (error) {
+      if (error.cancelled || !error.transient || uploadBatchCancelled) throw error;
+      uploadStatusText = 'Connection interrupted · retrying ' + file.name + '…';
+      paintUploadStatus();
+      return new Promise(function (resolve) { setTimeout(resolve, 500); }).then(once);
+    });
+  }
+
   function upload(file, queueIndex, queueTotal, completedBytes, totalBytes) {
-    return new Promise(function (resolve, reject) {
     uploadStatusPercent = Math.round(completedBytes / Math.max(1, totalBytes) * 100);
-    uploadStatusText = 'Uploading ' + (queueIndex + 1) + ' of ' + queueTotal + ' · ' + file.name + (formatBytes(file.size) ? ' · ' + formatBytes(file.size) : '');
+    uploadStatusText = 'Preparing ' + file.name + '…';
     paintUploadStatus();
-    var data = new FormData();
-    data.append('video', file);
-    data.append('name', file.name.replace(/\.[^.]+$/, ''));
-    var xhr = new XMLHttpRequest();
-    currentUploadXhr = xhr;
-    xhr.open('POST', '/api/editor');
-    xhr.withCredentials = true;
-    xhr.upload.onprogress = function (event) {
-      if (event.lengthComputable) {
-        uploadStatusPercent = Math.round((completedBytes + Math.min(Number(file.size) || event.loaded, event.loaded)) / Math.max(1, totalBytes) * 100);
+    var uploadId = '';
+    return api('/api/editor/uploads', {
+      method: 'POST',
+      body: JSON.stringify({ fileName: file.name, mimeType: file.type, sizeBytes: file.size, name: file.name.replace(/\.[^.]+$/, '') })
+    }).then(function (session) {
+      uploadId = session.id;
+      currentUploadSessionId = uploadId;
+      var chunkSize = Math.max(1024 * 1024, Number(session.chunkSize) || 16 * 1024 * 1024);
+      var offset = Math.max(0, Number(session.receivedBytes) || 0);
+      var chunkIndex = Math.floor(offset / chunkSize);
+      var sequence = Promise.resolve();
+      while (offset < file.size) {
+        (function (partOffset, partIndex) {
+          var blob = file.slice(partOffset, Math.min(file.size, partOffset + chunkSize));
+          sequence = sequence.then(function () {
+            if (uploadBatchCancelled) {
+              var cancelled = new Error('Upload cancelled.'); cancelled.cancelled = true; throw cancelled;
+            }
+            return uploadChunk(uploadId, partIndex, partOffset, blob, file, queueIndex, queueTotal, completedBytes, totalBytes);
+          });
+        })(offset, chunkIndex);
+        offset += chunkSize;
+        chunkIndex++;
+      }
+      return sequence.then(function () {
+        uploadStatusPercent = Math.round((completedBytes + file.size) / Math.max(1, totalBytes) * 100);
+        uploadStatusText = 'Securing ' + file.name + ' on the server…';
         paintUploadStatus();
-      }
-    };
-    xhr.onload = function () {
-      if (currentUploadXhr === xhr) currentUploadXhr = null;
-      var body = {};
-      try { body = JSON.parse(xhr.responseText || '{}'); } catch (e) {}
-      if (xhr.status < 200 || xhr.status >= 300) {
-        var uploadError = new Error(body.message || (xhr.status === 413 ? 'This recording is larger than the 2 GB upload limit. Split or trim the raw take, then try again.' : 'The recording could not be uploaded.'));
-        uploadError.duplicate = body.error === 'duplicate_recording';
-        uploadError.existingProjectId = body.existingProjectId || '';
-        uploadError.transient = xhr.status === 408 || xhr.status === 425 || xhr.status === 429 || xhr.status >= 500;
-        return reject(uploadError);
-      }
+        return api('/api/editor/uploads/' + encodeURIComponent(uploadId) + '/complete', { method: 'POST', body: '{}' });
+      });
+    }).then(function (body) {
+      currentUploadSessionId = '';
       projectDetails[body.id] = body;
       projects.unshift(body);
       renderList();
-      resolve(body);
-    };
-    xhr.onerror = function () {
-      if (currentUploadXhr === xhr) currentUploadXhr = null;
-      var error = new Error('Upload failed. Check the connection and try again.');
-      error.transient = true;
-      reject(error);
-    };
-    xhr.onabort = function () {
-      if (currentUploadXhr === xhr) currentUploadXhr = null;
-      var error = new Error('Upload cancelled.');
-      error.cancelled = true;
-      reject(error);
-    };
-    xhr.send(data);
+      return body;
+    }).catch(function (error) {
+      if (uploadId) api('/api/editor/uploads/' + encodeURIComponent(uploadId), { method: 'DELETE' }).catch(function () {});
+      currentUploadSessionId = '';
+      throw normalizeUploadError(error);
     });
   }
 
@@ -690,6 +746,7 @@
       uploadBatchInProgress = false;
       uploadBatchCancelled = false;
       currentUploadXhr = null;
+      currentUploadSessionId = '';
       uploadStatusPercent = wasCancelled ? uploadStatusPercent : 100;
       uploadStatusText = wasCancelled
         ? 'Batch cancelled' + (created.length ? ' · ' + created.length + ' recording' + (created.length === 1 ? '' : 's') + ' safely added before cancellation' : ' · no recordings added')
