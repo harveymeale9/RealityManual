@@ -28,6 +28,10 @@ test('inserted clips split the source timeline and supply their own timed captio
   };
   const segments = editor.editorTimelineSegments(project, []);
   assert.deepEqual(segments.map(function (segment) { return segment.type; }), ['source', 'insert', 'source']);
+  assert.equal(segments[2].cameraResetAfterInsert, true);
+  assert.deepEqual(editor.cameraMotionForSegment(segments[2], [], 'horizontal'), {
+    editedTime: 0.8, resetAt: 0.8, elapsed: 0, duration: 3
+  });
   const groups = editor.renderCaptionGroups(project, [], segments);
   assert.deepEqual(groups.map(function (group) { return group.text; }), ['before', 'external', 'after']);
   assert.ok(groups[2].start >= 3.19);
@@ -598,7 +602,7 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.equal(stored.renderQuality.status, 'passed');
-  assert.equal(stored.renderVersion, 10);
+  assert.equal(stored.renderVersion, 11);
   assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), true);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
@@ -617,7 +621,7 @@ test('final render splices an inserted clip and its caption timeline between sou
     words: [{ index: 0, text: 'Before', start: 0.1, end: 0.5 }, { index: 1, text: 'after.', start: 0.55, end: 0.9 }],
     insertedClips: [{ id: 'clip-1', directiveId: 'directive-1', status: 'ready', duration: 1, afterWordIndex: 0, afterSourceTime: 0.5, words: [{ index: 0, text: 'External.', start: 0.1, end: 0.8 }] }],
     clipInsertStatus: 'ready', removedWordIndices: [], dismissedRetakeIds: [], restoredAutoCutIds: [], autoSilenceEnabled: false,
-    silenceThresholdSeconds: 1, retainedPauseSeconds: 0.38, captionsEnabled: true, openingPushInEnabled: false,
+    silenceThresholdSeconds: 1, retainedPauseSeconds: 0.38, captionsEnabled: true, openingPushInEnabled: true,
     layoutOverride: 'horizontal', cropCenterX: 0.5, transcriptionStatus: 'ready', classificationStatus: 'unavailable',
     retakeAnalysisStatus: 'unavailable', planningMatchStatus: 'unavailable', renderStatus: '', automaticRenderStartedAt: 'start', createdAt: now, updatedAt: now
   }), now);

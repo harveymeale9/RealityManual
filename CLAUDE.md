@@ -15320,11 +15320,23 @@ speaker's words replace Harvey's captions for exactly that excerpt and every
 later source caption is shifted by the inserted duration. Source/final seek
 mapping also accounts for the new time span.
 
+When an inserted excerpt ends, the resumed book-camera segment is a fresh
+camera reveal. It returns on the completely wide frame, performs the same
+smooth three-second 100% to 110% move used after page changes, and holds that
+resting composition until the next reset. This is stored on the explicit
+edit-decision segment rather than inferred from source time, because the clip
+advances the final timeline without advancing the source recording. Render
+format version 11 invalidates pre-change active outputs so an old clip return
+cannot remain in review. Unit coverage checks that the resumed segment carries
+the reset and resolves to a three-second motion, while the FFmpeg integration
+test now renders the source→clip→zoomed-source path with motion enabled. All
+149 service tests pass.
+
 The transcript shows a purple `CLIP` marker at the insertion boundary and a
 compact card containing the resulting clip transcript and a Remove action.
 Preparation and the subsequent verified render use the existing locked-preview
 and progress behavior; the clip remains editable until Production approval.
-Render format version 10 prevents an older output from masquerading as this
+Render format version 11 prevents an older output from masquerading as this
 new timeline. Unit coverage verifies directive parsing and caption timing, a
 real FFmpeg integration renders source→clip→source with the external caption,
 the production image builds with the pinned downloader, and a live two-second

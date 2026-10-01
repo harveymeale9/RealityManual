@@ -19,7 +19,7 @@ const PAGE_CHANGE_CUT_SECONDS = 1.25;
 // baseline for the rest of the shot. Substantial automatic long-pause cuts are
 // treated as page changes and start the move again from the wide camera frame.
 const OPENING_PUSH_IN_SCALE = 1.10;
-const EDITOR_RENDER_VERSION = 10;
+const EDITOR_RENDER_VERSION = 11;
 const BROWSER_PREVIEW_VERSION = 2;
 const AUDIO_PREVIEW_MIX_VERSION = 3;
 const AUDIO_PREVIEW_TTL_MS = 2 * 60 * 60 * 1000;
@@ -502,6 +502,20 @@ function cameraMotionState(sourceSeconds, cuts, layout) {
   };
 }
 
+function cameraMotionForSegment(segment, cuts, layout) {
+  // Returning from an external full-screen excerpt is a new camera reveal,
+  // just like returning after a page turn: begin on the completely wide book
+  // frame, ease to the 110% base over three seconds, then hold. This must be
+  // attached to the edit-decision segment rather than inferred from source
+  // time, because the inserted clip advances the final timeline without
+  // changing the camera recording's own timestamps.
+  if (segment && segment.cameraResetAfterInsert) {
+    const editedTime = mapSourceTimeToEdited(segment.start, cuts || []);
+    return { editedTime: editedTime, resetAt: editedTime, elapsed: 0, duration: PAGE_ZOOM_SECONDS };
+  }
+  return cameraMotionState(segment && segment.start, cuts, layout);
+}
+
 // One high-quality fractional resampling stage handles the centred camera
 // settle for each retained shot.
 function cameraMotionFilter(options) {
@@ -769,7 +783,7 @@ function editorTimelineSegments(project, cuts) {
     const replacement = [];
     if (at - containing.start >= 0.04) replacement.push({ type: 'source', start: containing.start, end: at });
     replacement.push({ type: 'insert', clipId: clip.id, start: 0, end: Number(clip.duration), clip: clip });
-    if (containing.end - at >= 0.04) replacement.push({ type: 'source', start: at, end: containing.end });
+    if (containing.end - at >= 0.04) replacement.push({ type: 'source', start: at, end: containing.end, cameraResetAfterInsert: true });
     base.splice.apply(base, [containingIndex, 1].concat(replacement));
   });
   return base;
@@ -1564,7 +1578,7 @@ async function renderProject(id) {
           videoFilter += ",crop=w='min(iw\\,ih*16/9)':h='min(ih\\,iw*9/16)':x='(iw-ow)/2':y='(ih-oh)/2',scale=1920:1080,setsar=1";
         }
         if (segment.type === 'source') {
-          const motion = cameraMotionState(segment.start, cuts, layout);
+          const motion = cameraMotionForSegment(segment, cuts, layout);
           videoFilter += cameraMotionFilter({ renderShape: renderShape, elapsedStart: motion.elapsed, durationSeconds: motion.duration, openingEnabled: project.openingPushInEnabled !== false });
         }
         videoFilter += ',format=yuv420p';
@@ -2510,6 +2524,7 @@ module.exports = {
   mapSourceTimeToEdited,
   cameraResetStarts,
   cameraMotionState,
+  cameraMotionForSegment,
   captionGroups,
   buildAss,
   displayDimensions,
