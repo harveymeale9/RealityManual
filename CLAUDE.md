@@ -15581,7 +15581,10 @@ final render advances it to Edited; invalidating that render returns it to
 Uploaded; sending it to Content Production leaves it at the terminal Edited
 planning state. Unlinking or deleting an unfinished Editor recording still
 returns its card to Filmed. Existing planning cards in the old terminal
-Uploaded state are migrated once to Edited, with a durable migration marker so
-future genuinely in-progress Uploaded cards are never rewritten on restart.
+Uploaded state are migrated once to Edited. The migration also repairs a linked
+planning card when a durable Editor-created Production record proves its
+handoff already completed, even if that planning card had separately fallen
+back to an earlier stage. A durable migration marker ensures future genuinely
+in-progress Uploaded cards are never rewritten on restart.
 The manual/automatic Kanban boundary now follows Edited rather than relying on
 Uploaded being the last planning column.

@@ -1626,13 +1626,23 @@ function savePieceRecord(piece) {
 // Translate old terminal planning cards once; the marker prevents future
 // in-progress Uploaded cards from being mistaken for legacy data on restart.
 function migrateUploadBeforeEditStageOrder() {
-  const migrationId = 'upload-before-edit-stage-order-v1';
+  const migrationId = 'upload-before-edit-stage-order-v2';
   if (stmts.getOne.get('systemMigrations', migrationId)) return;
   const migratedAt = new Date().toISOString();
   db.transaction(function () {
-    stmts.getAll.all('pieces').forEach(function (row) {
+    const rows = stmts.getAll.all('pieces');
+    const handedOffPlanningIds = new Set(rows.map(function (row) {
+      return recordConcurrency.decodeRow(row);
+    }).filter(function (piece) {
+      return piece && piece.hasVideo && piece.editorProjectId && piece.sourcePlanningPieceId;
+    }).map(function (piece) { return piece.sourcePlanningPieceId; }));
+    rows.forEach(function (row) {
       const piece = recordConcurrency.decodeRow(row);
-      if (!piece || piece.hasVideo || piece.stage !== 'uploaded') return;
+      if (!piece || piece.hasVideo) return;
+      const legacyTerminal = piece.stage === 'uploaded';
+      const provenEditorHandoff = handedOffPlanningIds.has(piece.id) &&
+        ['outline_completed', 'filmed', 'uploaded'].includes(piece.stage);
+      if (!legacyTerminal && !provenEditorHandoff) return;
       piece.stage = 'edited';
       recordConcurrency.stampServerWrite(piece);
       stmts.upsert.run('pieces', piece.id, JSON.stringify(piece), row.updated_at || migratedAt);
