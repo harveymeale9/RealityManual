@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const express = require('express');
 const defaultProviders = require('./ideationProviders');
 
-const TRACKED_STAGES = ['big_ideas', 'outline_started', 'outline_completed'];
+const TRACKED_STAGES = ['big_ideas', 'outline_started', 'active_pieces', 'outline_completed'];
 const DEFAULT_PROFILE = {
   summary: 'No completed Big Idea-to-outline trajectories have been learned yet.',
   principles: [],
@@ -106,7 +106,7 @@ function setup(db, options) {
     CREATE TABLE IF NOT EXISTS outline_learning_trajectories (
       piece_id TEXT PRIMARY KEY, status TEXT NOT NULL,
       initial_snapshot_id TEXT, outline_started_snapshot_id TEXT,
-      completed_snapshot_id TEXT, latest_snapshot_id TEXT NOT NULL,
+      active_pieces_snapshot_id TEXT, completed_snapshot_id TEXT, latest_snapshot_id TEXT NOT NULL,
       analysis_status TEXT NOT NULL DEFAULT 'not_ready', analysis_revision INTEGER NOT NULL DEFAULT 0,
       analysis TEXT NOT NULL DEFAULT '{}', analysis_error TEXT,
       created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT
@@ -122,6 +122,14 @@ function setup(db, options) {
       error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
     );
   `);
+  // Existing installations predate the Active Pieces stage. SQLite's
+  // CREATE TABLE IF NOT EXISTS does not add later columns, so preserve the
+  // trajectory history and extend it in place rather than rebuilding it.
+  const trajectoryColumns = db.prepare('PRAGMA table_info(outline_learning_trajectories)').all()
+    .map(function (column) { return column.name; });
+  if (trajectoryColumns.indexOf('active_pieces_snapshot_id') === -1) {
+    db.exec('ALTER TABLE outline_learning_trajectories ADD COLUMN active_pieces_snapshot_id TEXT');
+  }
   db.prepare('INSERT OR IGNORE INTO outline_learning_profile (id,profile,example_count,updated_at) VALUES (1,?,?,?)')
     .run(stringify(DEFAULT_PROFILE), 0, now());
   db.prepare("UPDATE outline_learning_jobs SET status='pending',updated_at=? WHERE status='running'").run(now());
@@ -155,11 +163,12 @@ function setup(db, options) {
     let trajectory = q.trajectory.get(snapshotRow.piece_id);
     if (!trajectory) {
       db.prepare(`INSERT INTO outline_learning_trajectories
-        (piece_id,status,initial_snapshot_id,outline_started_snapshot_id,completed_snapshot_id,latest_snapshot_id,created_at,updated_at,completed_at)
-        VALUES (?,?,?,?,?,?,?,?,?)`).run(
+        (piece_id,status,initial_snapshot_id,outline_started_snapshot_id,active_pieces_snapshot_id,completed_snapshot_id,latest_snapshot_id,created_at,updated_at,completed_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?)`).run(
           snapshotRow.piece_id, snapshotRow.stage,
           snapshotRow.stage === 'big_ideas' ? snapshotRow.id : null,
           snapshotRow.stage === 'outline_started' ? snapshotRow.id : null,
+          snapshotRow.stage === 'active_pieces' ? snapshotRow.id : null,
           snapshotRow.stage === 'outline_completed' ? snapshotRow.id : null,
           snapshotRow.id, stamp, stamp, snapshotRow.stage === 'outline_completed' ? stamp : null
         );
@@ -167,10 +176,11 @@ function setup(db, options) {
     }
     const initial = trajectory.initial_snapshot_id || (snapshotRow.stage === 'big_ideas' ? snapshotRow.id : null);
     const started = snapshotRow.stage === 'outline_started' ? snapshotRow.id : trajectory.outline_started_snapshot_id;
+    const active = snapshotRow.stage === 'active_pieces' ? snapshotRow.id : trajectory.active_pieces_snapshot_id;
     const completed = snapshotRow.stage === 'outline_completed' ? snapshotRow.id : trajectory.completed_snapshot_id;
     db.prepare(`UPDATE outline_learning_trajectories SET status=?,initial_snapshot_id=?,outline_started_snapshot_id=?,
-      completed_snapshot_id=?,latest_snapshot_id=?,updated_at=?,completed_at=COALESCE(completed_at,?) WHERE piece_id=?`)
-      .run(snapshotRow.stage, initial, started, completed, snapshotRow.id, stamp,
+      active_pieces_snapshot_id=?,completed_snapshot_id=?,latest_snapshot_id=?,updated_at=?,completed_at=COALESCE(completed_at,?) WHERE piece_id=?`)
+      .run(snapshotRow.stage, initial, started, active, completed, snapshotRow.id, stamp,
         snapshotRow.stage === 'outline_completed' ? stamp : null, snapshotRow.piece_id);
   }
 
@@ -271,7 +281,8 @@ function setup(db, options) {
     if (!trajectory) return null;
     const rows = q.snapshots.all(pieceId).map(decodedSnapshot);
     function stageRows(stage) { return rows.filter(function (row) { return row.stage === stage; }); }
-    const big = stageRows('big_ideas'), started = stageRows('outline_started'), completed = stageRows('outline_completed');
+    const big = stageRows('big_ideas'), started = stageRows('outline_started');
+    const active = stageRows('active_pieces'), completed = stageRows('outline_completed');
     const meaningfulBig = big.filter(function (row) { return row.snapshot.title || row.snapshot.notesText; });
     return {
       trajectory: Object.assign({}, trajectory, { analysis: json(trajectory.analysis, {}) }),
@@ -283,7 +294,8 @@ function setup(db, options) {
         originalBigIdea: meaningfulBig.length ? meaningfulBig[0].snapshot : (big.length ? big[0].snapshot : null),
         developedBigIdea: big.length ? big[big.length - 1].snapshot : null,
         outlineStarted: started.length ? started[0].snapshot : null,
-        developedOutline: started.length ? started[started.length - 1].snapshot : null,
+        activePiece: active.length ? active[0].snapshot : null,
+        developedOutline: active.length ? active[active.length - 1].snapshot : (started.length ? started[started.length - 1].snapshot : null),
         completedOutline: completed.length ? completed[completed.length - 1].snapshot : null
       }
     };
@@ -391,10 +403,11 @@ TRAJECTORY=${JSON.stringify(payload.learningSet)}`;
   function publicState() {
     const profileRow = q.profile.get();
     const trajectories = q.trajectories.all();
-    const counts = { tracked: trajectories.length, bigIdeas: 0, outlineStarted: 0, completed: 0, analyzed: 0, pending: 0, errors: 0 };
+    const counts = { tracked: trajectories.length, bigIdeas: 0, outlineStarted: 0, activePieces: 0, completed: 0, analyzed: 0, pending: 0, errors: 0 };
     trajectories.forEach(function (row) {
       if (row.status === 'big_ideas') counts.bigIdeas++;
       if (row.status === 'outline_started') counts.outlineStarted++;
+      if (row.status === 'active_pieces') counts.activePieces++;
       if (row.status === 'outline_completed') counts.completed++;
       if (row.analysis_status === 'done') counts.analyzed++;
       if (row.analysis_status === 'pending' || row.analysis_status === 'running') counts.pending++;

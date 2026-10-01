@@ -15729,3 +15729,19 @@ The compiled executable is not committed. The server exposes
 that route. The build is unsigned, so Windows SmartScreen may require **More
 info → Run anyway** on the first launch. Source builds require the .NET 8 SDK
 and target self-contained `win-x64`.
+
+---
+
+# 452. Active Pieces Sits Between Outline Started and Outline Completed (2026-10-01)
+
+The planning pipeline now includes **Active Pieces** immediately after
+**Outline Started** and before **Outline Completed**. It is a normal manual
+Kanban stage: cards can be created there, moved into or out of it, and selected
+from the shared card editor. No existing cards are moved by this change.
+
+The stage is also part of ideation progression and weekly milestone reporting.
+Most importantly, the outline-learning system tracks entry, edits, and exit in
+Active Pieces rather than treating that development period as a gap. Existing
+outline-learning databases gain an `active_pieces_snapshot_id` column in place;
+the learner uses the latest Active Pieces snapshot as the developed outline
+when comparing Harvey's original Big Idea with the completed result.

@@ -57,13 +57,19 @@ test('tracks a coalesced Big Idea-to-completed-outline trajectory and learns fro
   service.recordPieceWrite(edit2, started, 'kanban', '2026-09-28T11:00:00.000Z');
   const developed = piece('outline_started', '<h3>Opening</h3><p>Everyone wants certainty.</p><h3>Mechanism</h3><p>Certainty hides assumptions.</p><h3>Objection</h3><p>Doubt is not paralysis.</p>');
   service.recordPieceWrite(started, developed, 'kanban', '2026-09-28T11:20:00.000Z');
+  const active = piece('active_pieces', developed.notesHtml + '<h3>Application</h3><p>Act once the evidence favors one path.</p>');
+  service.recordPieceWrite(developed, active, 'kanban', '2026-09-28T11:30:00.000Z');
+  const developedActive = piece('active_pieces', active.notesHtml + '<h3>Closing</h3><p>Do not disguise paralysis as wisdom.</p>');
+  service.recordPieceWrite(active, developedActive, 'kanban', '2026-09-28T11:40:00.000Z');
   const completed = piece('outline_completed', '<h3>Hook</h3><p>The beliefs you never question control you.</p><h3>Mechanism</h3><p>Certainty hides assumptions.</p><h3>Resolution</h3><p>Strategic doubt reveals better moves.</p>');
-  service.recordPieceWrite(developed, completed, 'kanban', '2026-09-28T12:00:00.000Z');
+  service.recordPieceWrite(developedActive, completed, 'kanban', '2026-09-28T12:00:00.000Z');
 
   const beforeRun = service.piece('piece-1');
   assert.equal(beforeRun.snapshots.filter(function (row) { return row.stage === 'big_ideas' && row.event_type === 'edit_checkpoint'; }).length, 1);
   assert.match(beforeRun.learningSet.originalBigIdea.notesText, /Wisdom begins when certainty/);
   assert.match(beforeRun.learningSet.developedBigIdea.notesText, /not by collecting more answers/);
+  assert.match(beforeRun.learningSet.activePiece.notesText, /Act once the evidence favors/);
+  assert.match(beforeRun.learningSet.developedOutline.notesText, /Do not disguise paralysis/);
   assert.match(beforeRun.learningSet.completedOutline.notesText, /Strategic doubt/);
   assert.equal(beforeRun.trajectory.analysis_status, 'pending');
 
@@ -101,5 +107,29 @@ test('backfills current Big Ideas as a baseline without inventing historical sta
   assert.equal(tracked.snapshots[0].event_type, 'tracking_baseline');
   assert.equal(tracked.snapshots[0].stage, 'big_ideas');
   assert.equal(service.state().counts.bigIdeas, 1);
+  db.close();
+});
+
+test('migrates existing outline trajectories and tracks Active Pieces as its own stage', function () {
+  const db = new Database(':memory:');
+  db.exec(`CREATE TABLE records(store_name TEXT,id TEXT,data TEXT,updated_at TEXT,PRIMARY KEY(store_name,id));
+    CREATE TABLE outline_learning_trajectories (
+      piece_id TEXT PRIMARY KEY, status TEXT NOT NULL,
+      initial_snapshot_id TEXT, outline_started_snapshot_id TEXT,
+      completed_snapshot_id TEXT, latest_snapshot_id TEXT NOT NULL,
+      analysis_status TEXT NOT NULL DEFAULT 'not_ready', analysis_revision INTEGER NOT NULL DEFAULT 0,
+      analysis TEXT NOT NULL DEFAULT '{}', analysis_error TEXT,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT
+    );`);
+  const service = serviceModule.setup(db, { autoStart: false });
+  const columns = db.prepare('PRAGMA table_info(outline_learning_trajectories)').all().map(function (column) { return column.name; });
+  assert.ok(columns.includes('active_pieces_snapshot_id'));
+
+  const active = piece('active_pieces', '<p>This piece is under active development.</p>');
+  service.recordPieceWrite(null, active, 'kanban', '2026-09-28T11:30:00.000Z');
+  const tracked = service.piece(active.id);
+  assert.equal(tracked.trajectory.status, 'active_pieces');
+  assert.equal(tracked.trajectory.active_pieces_snapshot_id, tracked.snapshots[0].id);
+  assert.equal(service.state().counts.activePieces, 1);
   db.close();
 });

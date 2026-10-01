@@ -911,7 +911,7 @@ app.use('/api/editor', requireEditorAuth, videoEditor.router);
 // pieces record/Kanban model.
 const ideation = ideationService.setup(db);
 app.use('/api/ideation', requireAuth, ideation.router);
-// Durable Big Idea -> Outline Started -> Outline Completed snapshots and
+// Durable Big Idea -> Outline Started -> Active Pieces -> Outline Completed snapshots and
 // learned drafting guidance. Admin-only: snapshots contain Harvey's private
 // in-progress writing, and the analyzer uses the same private agent boundary
 // as Content Ideation.

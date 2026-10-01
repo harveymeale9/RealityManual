@@ -5,6 +5,12 @@ const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
 const weeklyReportService = require('../src/weeklyReportService');
 
+test('Active Pieces is a named weekly pipeline milestone', function () {
+  assert.equal(weeklyReportService.STAGE_LABELS.active_pieces, 'Active Pieces');
+  assert.ok(weeklyReportService.MILESTONE_STAGES.indexOf('active_pieces') !== -1);
+  assert.ok(weeklyReportService.MILESTONE_STAGES.indexOf('active_pieces') < weeklyReportService.MILESTONE_STAGES.indexOf('outline_completed'));
+});
+
 function storefront(start, end, previous) {
   return {
     period: { start: start, end: end },

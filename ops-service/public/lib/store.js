@@ -133,6 +133,7 @@ window.RMStore = (function () {
     { id: 'ideation', label: 'Rough Ideas' },
     { id: 'big_ideas', label: 'Big Ideas' },
     { id: 'outline_started', label: 'Outline Started' },
+    { id: 'active_pieces', label: 'Active Pieces' },
     { id: 'outline_completed', label: 'Outline Completed' },
     { id: 'filmed', label: 'Filmed' },
     { id: 'uploaded', label: 'Uploaded' },
