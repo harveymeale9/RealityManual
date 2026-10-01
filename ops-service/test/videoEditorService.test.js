@@ -12,6 +12,27 @@ const express = require('express');
 const Database = require('better-sqlite3');
 const editor = require('../src/videoEditorService');
 
+test('INSERT CLIP directives parse YouTube ranges and preserve the caption cue', function () {
+  const directives = editor.parseInsertClipDirectives('<p>INSERT CLIP: https://youtu.be/abc123 0:24-0:28, “The problem we face is that we do not understand God.”</p>');
+  assert.equal(directives.length, 1);
+  assert.equal(directives[0].sourceStart, 24);
+  assert.equal(directives[0].sourceEnd, 28);
+  assert.match(directives[0].quote, /problem we face/);
+});
+
+test('inserted clips split the source timeline and supply their own timed captions', function () {
+  const project = {
+    duration: 4, removedWordIndices: [],
+    words: [{ index: 0, text: 'before', start: 0.2, end: 0.8 }, { index: 1, text: 'after', start: 1.2, end: 1.8 }],
+    insertedClips: [{ id: 'clip-1', status: 'ready', duration: 2, afterSourceTime: 0.8, words: [{ text: 'external', start: 0.1, end: 0.8 }] }]
+  };
+  const segments = editor.editorTimelineSegments(project, []);
+  assert.deepEqual(segments.map(function (segment) { return segment.type; }), ['source', 'insert', 'source']);
+  const groups = editor.renderCaptionGroups(project, [], segments);
+  assert.deepEqual(groups.map(function (group) { return group.text; }), ['before', 'external', 'after']);
+  assert.ok(groups[2].start >= 3.19);
+});
+
 const words = [
   { index: 0, text: 'This', start: 1.0, end: 1.3 },
   { index: 1, text: 'works.', start: 1.35, end: 1.8 },
@@ -577,8 +598,39 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.equal(stored.renderQuality.status, 'passed');
-  assert.equal(stored.renderVersion, 9);
+  assert.equal(stored.renderVersion, 10);
   assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), true);
+  t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+});
+
+test('final render splices an inserted clip and its caption timeline between source words', { timeout: 20000 }, async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-insert-render-'));
+  const projectDir = path.join(dir, 'editor', 'insert-render-1'); fs.mkdirSync(projectDir, { recursive: true });
+  const mediaArgs = function (color, frequency, output) { return ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=' + color + ':s=320x180:d=1:r=12', '-f', 'lavfi', '-i', 'sine=frequency=' + frequency + ':duration=1', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-f', 'mp4', output]; };
+  execFileSync('ffmpeg', mediaArgs('black', 440, path.join(projectDir, 'source')));
+  execFileSync('ffmpeg', mediaArgs('blue', 660, path.join(projectDir, 'inserted-clip-clip-1.mp4')));
+  const db = new Database(path.join(dir, 'test.sqlite'));
+  db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
+  const now = new Date().toISOString();
+  db.prepare('INSERT INTO records VALUES (?, ?, ?, ?)').run('editorProjects', 'insert-render-1', JSON.stringify({
+    id: 'insert-render-1', name: 'Insert render', fileName: 'take.mp4', duration: 1, width: 320, height: 180,
+    words: [{ index: 0, text: 'Before', start: 0.1, end: 0.5 }, { index: 1, text: 'after.', start: 0.55, end: 0.9 }],
+    insertedClips: [{ id: 'clip-1', directiveId: 'directive-1', status: 'ready', duration: 1, afterWordIndex: 0, afterSourceTime: 0.5, words: [{ index: 0, text: 'External.', start: 0.1, end: 0.8 }] }],
+    clipInsertStatus: 'ready', removedWordIndices: [], dismissedRetakeIds: [], restoredAutoCutIds: [], autoSilenceEnabled: false,
+    silenceThresholdSeconds: 1, retainedPauseSeconds: 0.38, captionsEnabled: true, openingPushInEnabled: false,
+    layoutOverride: 'horizontal', cropCenterX: 0.5, transcriptionStatus: 'ready', classificationStatus: 'unavailable',
+    retakeAnalysisStatus: 'unavailable', planningMatchStatus: 'unavailable', renderStatus: '', automaticRenderStartedAt: 'start', createdAt: now, updatedAt: now
+  }), now);
+  editor.setup({ db: db, dataDir: dir, transcribeDetailed: async function () { return { text: '', words: [] }; } });
+  let stored;
+  for (let attempt = 0; attempt < 400; attempt++) {
+    stored = JSON.parse(db.prepare('SELECT data FROM records WHERE store_name=? AND id=?').get('editorProjects', 'insert-render-1').data);
+    if (stored.renderStatus === 'ready' || stored.renderStatus === 'error') break;
+    await new Promise(function (resolve) { setTimeout(resolve, 30); });
+  }
+  assert.equal(stored.renderStatus, 'ready', stored.renderError);
+  assert.ok(stored.editedDuration > 1.9 && stored.editedDuration < 2.1);
+  assert.match(fs.readFileSync(path.join(projectDir, 'captions.ass'), 'utf8'), /External/);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
 

@@ -15265,3 +15265,53 @@ opening 100→105→110 progression, a reset to 100 after its first multi-second
 pause, and no reset across its short 800ms pacing cut. The complete 146-test
 suite passes, including three-/five-second timing, page-reset qualification,
 manual-cut exclusion, renderer output, and restart recovery.
+
+---
+
+# 437. Editor Can Insert Planned YouTube Excerpts at a Transcript Word (2026-10-01)
+
+The Editor transcript now has a one-click **Insert clip here** action. Harvey
+selects the single word the external clip should follow and presses the button.
+The server reuses the recording's existing planning matcher, now considering
+the 40 most recent unclaimed **Outline Completed** as well as Filmed cards. A
+high-confidence match advances that card to Filmed and the full stored outline
+is then read server-side. The supported directive is:
+
+`INSERT CLIP: https://youtube.com/... 0:24-0:28, "Fallback caption text"`
+
+Only `youtube.com` and `youtu.be` URLs are accepted. Timestamps may be
+MM:SS or HH:MM:SS, end must follow start, and one excerpt is capped at 60
+seconds. This deliberately avoids turning an outline into an arbitrary server
+download/SSRF surface. The next unused directive is chosen, which keeps the
+common one-directive workflow one click; repeated clicks consume later
+directives in outline order.
+
+The backend uses pinned `yt-dlp` 2026.8.19 plus FFmpeg's section downloader to
+fetch only the requested range, forces accurate cut keyframes, normalizes the
+excerpt to a local H.264/AAC asset, and transcribes its own audio with the same
+word-timed transcription service. If that provider is temporarily unavailable,
+the quoted directive text becomes the bounded timing fallback; without either
+timed speech or a quote, insertion fails visibly rather than producing an
+uncaptioned clip. Partial downloads are removed on success or failure, a
+service restart reports an interrupted insertion as retryable, and recordings
+cannot be deleted while their clip job is live.
+
+Rendering now builds one explicit edit-decision timeline from retained camera
+segments plus inserted excerpts. It splits the source immediately after the
+selected word, fills the output frame with the external clip, normalizes audio
+formats at every boundary, applies 8ms anti-click fades, and then resumes the
+camera recording. Inserted video does not receive the book-camera zoom. Caption
+events are rebuilt from both sources on the final timeline, so the external
+speaker's words replace Harvey's captions for exactly that excerpt and every
+later source caption is shifted by the inserted duration. Source/final seek
+mapping also accounts for the new time span.
+
+The transcript shows a purple `CLIP` marker at the insertion boundary and a
+compact card containing the resulting clip transcript and a Remove action.
+Preparation and the subsequent verified render use the existing locked-preview
+and progress behavior; the clip remains editable until Production approval.
+Render format version 10 prevents an older output from masquerading as this
+new timeline. Unit coverage verifies directive parsing and caption timing, a
+real FFmpeg integration renders source→clip→source with the external caption,
+the production image builds with the pinned downloader, and a live two-second
+YouTube range download was verified before deployment.

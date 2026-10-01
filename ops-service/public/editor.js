@@ -199,7 +199,7 @@
     if (mode === 'source' && item.renderStatus === 'ready' && saved.explicitSource) explicitSourcePreviews[item.id] = true;
     else delete explicitSourcePreviews[item.id];
     previewModes[item.id] = mode;
-    previewSeekTimes[item.id] = mode === 'final' ? sourceToEditedTime(sourceTime, cutsForClient(item)) : sourceTime;
+    previewSeekTimes[item.id] = mode === 'final' ? sourceToEditedTime(sourceTime, cutsForClient(item), item) : sourceTime;
   }
 
   function cutsForClient(item) {
@@ -223,19 +223,23 @@
   }
 
   function editedDuration(item) {
-    return Math.max(0, Number(item.duration || 0) - (item.cuts || []).reduce(function (sum, cut) {
+    var insertedSeconds = (item.insertedClips || []).filter(function (clip) { return clip.status === 'ready'; }).reduce(function (sum, clip) { return sum + Number(clip.duration || 0); }, 0);
+    return Math.max(0, Number(item.duration || 0) + insertedSeconds - (item.cuts || []).reduce(function (sum, cut) {
       return sum + Number(cut.end - cut.start || 0);
     }, 0));
   }
 
-  function sourceToEditedTime(sourceTime, cuts) {
+  function sourceToEditedTime(sourceTime, cuts, item) {
     var removed = 0;
     sourceTime = Math.max(0, Number(sourceTime) || 0);
     (cuts || []).forEach(function (cut) {
       if (sourceTime >= cut.end) removed += cut.end - cut.start;
       else if (sourceTime > cut.start) removed += sourceTime - cut.start;
     });
-    return Math.max(0, sourceTime - removed);
+    var base = Math.max(0, sourceTime - removed);
+    var inserted = (item && item.insertedClips || []).filter(function (clip) { return clip.status === 'ready' && Number(clip.afterSourceTime) <= sourceTime + 0.001; })
+      .reduce(function (sum, clip) { return sum + Number(clip.duration || 0); }, 0);
+    return base + inserted;
   }
 
   function cameraMotionState(sourceTime, item) {
@@ -256,6 +260,15 @@
 
   function editedToSourceTime(editedTime, item) {
     var target = Math.max(0, Number(editedTime) || 0);
+    var insertedBefore = 0;
+    var clips = (item.insertedClips || []).filter(function (clip) { return clip.status === 'ready'; }).sort(function (a, b) { return Number(a.afterSourceTime) - Number(b.afterSourceTime); });
+    for (var clipIndex = 0; clipIndex < clips.length; clipIndex++) {
+      var clipStart = sourceToEditedTime(clips[clipIndex].afterSourceTime, item.cuts || [], null) + insertedBefore;
+      var clipEnd = clipStart + Number(clips[clipIndex].duration || 0);
+      if (target >= clipStart && target <= clipEnd) return Number(clips[clipIndex].afterSourceTime) || 0;
+      if (target > clipEnd) insertedBefore += Number(clips[clipIndex].duration || 0);
+    }
+    target = Math.max(0, target - insertedBefore);
     var cursor = 0;
     var sourceCursor = 0;
     var cuts = (item.cuts || []).slice().sort(function (a, b) { return a.start - b.start; });
@@ -306,6 +319,8 @@
     if (item.workflowWarning) return item.renderStatus === 'ready' ? 'Ready · workflow warning' : 'Workflow warning';
     if (item.planningMatchStatus === 'pending') return queued('Waiting for plan match', item.planningQueuePosition);
     if (item.planningMatchStatus === 'running') return 'Matching plan';
+    if (item.clipInsertStatus === 'queued' || item.clipInsertStatus === 'preparing') return 'Preparing inserted clip';
+    if (item.clipInsertStatus === 'error') return 'Inserted clip needs attention';
     if (item.renderRebuildPending && !item.renderStatus) return 'Preparing preview rebuild';
     if (item.renderStatus === 'queued') return queued('Waiting to render', item.renderQueuePosition);
     if (item.renderStatus === 'running') return 'Rendering' + (Number(item.renderProgress) > 0 ? ' · ' + Math.round(Number(item.renderProgress)) + '%' : '');
@@ -320,10 +335,10 @@
 
   function sessionBucket(item) {
     if (item.productionPieceId) return item.workflowWarning ? 'warning' : 'sent';
-    if (item.transcriptionStatus === 'error' || (item.browserPreviewStatus === 'error' && item.renderStatus !== 'ready') || framingFailureIsBlocking(item) || item.retakeAnalysisStatus === 'error' || item.renderStatus === 'error' || Number(item.unresolvedRetakeCount) > 0 || item.layoutReviewRequired) return 'attention';
+    if (item.transcriptionStatus === 'error' || (item.browserPreviewStatus === 'error' && item.renderStatus !== 'ready') || framingFailureIsBlocking(item) || item.retakeAnalysisStatus === 'error' || item.clipInsertStatus === 'error' || item.renderStatus === 'error' || Number(item.unresolvedRetakeCount) > 0 || item.layoutReviewRequired) return 'attention';
     if (item.workflowWarning) return 'warning';
     if (item.renderStatus === 'ready') return 'ready';
-    if (['pending', 'running'].indexOf(item.transcriptionStatus) !== -1 || ['pending', 'running'].indexOf(item.browserPreviewStatus) !== -1 || ['pending', 'running'].indexOf(item.classificationStatus) !== -1 || ['pending', 'running', 'pending_transcript'].indexOf(item.retakeAnalysisStatus) !== -1 || ['pending', 'running', 'pending_transcript'].indexOf(item.planningMatchStatus) !== -1 || ['queued', 'running'].indexOf(item.renderStatus) !== -1 || item.renderRebuildPending) return 'working';
+    if (['pending', 'running'].indexOf(item.transcriptionStatus) !== -1 || ['pending', 'running'].indexOf(item.browserPreviewStatus) !== -1 || ['pending', 'running'].indexOf(item.classificationStatus) !== -1 || ['pending', 'running', 'pending_transcript'].indexOf(item.retakeAnalysisStatus) !== -1 || ['pending', 'running', 'pending_transcript'].indexOf(item.planningMatchStatus) !== -1 || ['queued', 'preparing'].indexOf(item.clipInsertStatus) !== -1 || ['queued', 'running'].indexOf(item.renderStatus) !== -1 || item.renderRebuildPending) return 'working';
     return 'prepared';
   }
 
@@ -769,13 +784,14 @@
       ['pending', 'running'].indexOf(item.classificationStatus) !== -1 ||
       ['pending', 'running', 'pending_transcript'].indexOf(item.retakeAnalysisStatus) !== -1 ||
       ['pending', 'running', 'pending_transcript'].indexOf(item.planningMatchStatus) !== -1 ||
+      ['queued', 'preparing'].indexOf(item.clipInsertStatus) !== -1 ||
       ['queued', 'running'].indexOf(item.renderStatus) !== -1 || (item.renderRebuildPending && item.renderStatus !== 'error'));
   }
 
   function projectPollSignature(item) {
     if (!item) return '';
     return [item.transcriptionStatus, item.browserPreviewStatus, item.classificationStatus, item.retakeAnalysisStatus, item.planningMatchStatus,
-      item.renderStatus, Math.round(Number(item.renderProgress) || 0), item.renderRebuildPending ? 'rebuild' : '', item.productionPieceId || '', item.workflowWarning || ''].join('|');
+      item.clipInsertStatus || '', item.renderStatus, Math.round(Number(item.renderProgress) || 0), item.renderRebuildPending ? 'rebuild' : '', item.productionPieceId || '', item.workflowWarning || ''].join('|');
   }
 
   function schedulePoll() {
@@ -826,12 +842,14 @@
       return;
     }
     var removed = new Set((project.removedWordIndices || []).map(Number));
+    var clipsByWord = {};
+    (project.insertedClips || []).forEach(function (clip) { (clipsByWord[clip.afterWordIndex] || (clipsByWord[clip.afterWordIndex] = [])).push(clip); });
     var reviewProjects = visibleProjectsForCurrentFilter();
     var reviewProjectIndex = reviewProjects.findIndex(function (item) { return item.id === project.id; });
     var cutSeconds = Math.max(0, Number(project.duration) - editedDuration(project));
     var layout = project.effectiveLayout || (Number(project.height) > Number(project.width) ? 'vertical' : 'horizontal');
     var automaticEditRunning = ['pending', 'running', 'pending_transcript'].indexOf(project.retakeAnalysisStatus) !== -1 ||
-      ['pending', 'running', 'pending_transcript'].indexOf(project.planningMatchStatus) !== -1;
+      ['pending', 'running', 'pending_transcript'].indexOf(project.planningMatchStatus) !== -1 || ['queued', 'preparing'].indexOf(project.clipInsertStatus) !== -1;
     var unresolvedRetakes = Number(project.unresolvedRetakeCount) || 0;
     var appliedRetakes = Number(project.appliedRetakeCount) || 0;
     var automaticRetakeIndices = new Set((project.autoRetakeRemovedWordIndices || []).map(Number));
@@ -912,11 +930,16 @@
           (project.retakeAnalysisStatus !== 'ready' && project.retakeAnalysisStatus !== 'pending' && project.retakeAnalysisStatus !== 'running' ? '<button type="button" class="editor-analyze" id="editorAnalyzeRetakes">Analyze retakes</button>' : '<span>Only clear failed takes are automatic</span>') + '</div><div id="editorRetakeReview">' + retakeReviewHtml(project) + '</div></div></section>' +
       '<section class="editor-transcript-panel"><div class="editor-transcript-head"><div><div class="eyebrow">Transcript editor</div><h3>Select words to cut footage</h3></div>' +
         '<div class="editor-transcript-actions"><button class="btn-secondary btn-tiny" id="editorUndo" ' + (!project.canUndoCut ? 'disabled' : '') + '>Undo last decision</button><button class="btn-secondary btn-tiny" id="editorPlaySelection" disabled>Play selected</button>' +
+        '<button class="btn-secondary btn-tiny editor-insert-clip" id="editorInsertClip" disabled>Insert clip here</button>' +
         '<button class="btn-secondary btn-tiny" id="editorCorrect" disabled>Correct word</button><button class="btn-secondary btn-tiny" id="editorRestore" disabled>Restore selected</button><button class="btn-primary btn-tiny" id="editorCut" disabled>Cut selected</button></div></div>' +
         '<div class="editor-correction-tray" id="editorCorrectionTray" hidden><div><strong>Correct caption word</strong><span id="editorCorrectionNote">Timing stays exactly where it is.</span><em id="editorCorrectionError" hidden></em></div><input id="editorCorrectionInput" maxlength="40" autocomplete="off" aria-label="Corrected caption word"><div><button type="button" class="btn-secondary btn-tiny" id="editorCorrectionCancel">Cancel</button><button type="button" class="btn-secondary btn-tiny" id="editorCorrectionOriginal" hidden>Use original</button><button type="button" class="btn-primary btn-tiny" id="editorCorrectionSave">Save correction</button></div></div>' +
         '<div class="editor-transcript' + (rendering || sentToProduction ? ' locked' : '') + '" id="editorTranscript" tabindex="0">' + (project.words || []).map(function (word) {
-          return '<span class="editor-word' + (removed.has(word.index) ? ' removed' : '') + (word.originalText ? ' corrected' : '') + '" data-index="' + word.index + '" data-start="' + word.start + '" data-end="' + word.end + '"' + (word.originalText ? ' title="Originally transcribed as: ' + esc(word.originalText) + '"' : '') + '>' + esc(word.text) + '</span> ';
-        }).join('') + '</div><p class="editor-selection-hint">Drag across text or click words, then cut. Press Delete to cut, Ctrl/⌘ Z to undo, or Escape to clear.</p></section>' +
+          var markers = (clipsByWord[word.index] || []).map(function (clip) { return '<span class="editor-clip-marker" title="Inserted from ' + esc(clip.sourceUrl || 'planning clip') + '">CLIP</span> '; }).join('');
+          return '<span class="editor-word' + (removed.has(word.index) ? ' removed' : '') + (word.originalText ? ' corrected' : '') + '" data-index="' + word.index + '" data-start="' + word.start + '" data-end="' + word.end + '"' + (word.originalText ? ' title="Originally transcribed as: ' + esc(word.originalText) + '"' : '') + '>' + esc(word.text) + '</span> ' + markers;
+        }).join('') + '</div>' +
+        ((project.insertedClips || []).length ? '<div class="editor-inserted-clips">' + (project.insertedClips || []).map(function (clip) { return '<div><span><strong>' + (clip.status === 'ready' ? 'Inserted clip' : 'Preparing clip…') + '</strong>' + esc(clip.transcriptText || clip.quote || clip.sourceUrl) + '</span><button type="button" class="btn-secondary btn-tiny editor-remove-clip" data-clip-id="' + esc(clip.id) + '" ' + (clip.status !== 'ready' ? 'disabled' : '') + '>Remove</button></div>'; }).join('') + '</div>' : '') +
+        (project.clipInsertStatus === 'error' ? '<div class="editor-clip-error">' + esc(project.clipInsertError || 'The clip could not be prepared.') + '</div>' : '') +
+        '<p class="editor-selection-hint">Select the word a clip should follow, or drag across words to cut footage. Press Delete to cut, Ctrl/⌘ Z to undo, or Escape to clear.</p></section>' +
       '<div class="editor-export"><div><strong>Next: Content Production</strong><span>' +
         (project.productionPieceId ? 'This edit is ready in Content Production for titles and thumbnail selection.' :
           project.renderStatus === 'ready' ? (audioSelectionReady ? 'Soundtrack selected. Send the finished edit across without uploading it again.' : 'Choose a backing track or No backing music before approval.') :
@@ -1465,7 +1488,7 @@
       segment.onclick = function () {
         if (previewLocked) return;
         var sourceTime = Number(segment.dataset.time) || 0;
-        video.currentTime = previewingFinal ? sourceToEditedTime(sourceTime, project.cuts) : sourceTime;
+        video.currentTime = previewingFinal ? sourceToEditedTime(sourceTime, project.cuts, project) : sourceTime;
         startPlayerPlayback();
       };
     });
@@ -1475,21 +1498,21 @@
         var time = Number(button.dataset.time) || 0;
         if (project.renderStatus === 'ready' && !previewingFinal) {
           previewModes[project.id] = 'final';
-          previewSeekTimes[project.id] = sourceToEditedTime(time, project.cuts);
+          previewSeekTimes[project.id] = sourceToEditedTime(time, project.cuts, project);
           previewAutoplay[project.id] = true;
           renderWorkspace();
           var replacementVideo = root.querySelector('#editorVideo');
           if (replacementVideo) replacementVideo.scrollIntoView({ behavior: 'smooth', block: 'center' });
           return;
         }
-        var previewTime = previewingFinal ? sourceToEditedTime(time, project.cuts) : time;
+        var previewTime = previewingFinal ? sourceToEditedTime(time, project.cuts, project) : time;
         var start = function () { video.currentTime = previewTime; startPlayerPlayback(); video.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
         if (video.readyState >= 1) start(); else video.addEventListener('loadedmetadata', start, { once: true });
       };
     });
     var finalPreviewButton = root.querySelector('#editorPreviewFinal');
     if (finalPreviewButton) finalPreviewButton.onclick = function () {
-      previewSeekTimes[project.id] = previewingFinal ? video.currentTime : sourceToEditedTime(video.currentTime, project.cuts);
+      previewSeekTimes[project.id] = previewingFinal ? video.currentTime : sourceToEditedTime(video.currentTime, project.cuts, project);
       delete explicitSourcePreviews[project.id];
       previewModes[project.id] = 'final'; renderWorkspace();
     };
@@ -1583,6 +1606,32 @@
       video.scrollIntoView({ behavior: 'smooth', block: 'center' });
     };
     root.querySelector('#editorCorrect').onclick = correctSelectedWord;
+    root.querySelector('#editorInsertClip').onclick = function () {
+      if (selected.size !== 1 || !project) return;
+      var insertProjectId = project.id;
+      var afterWordIndex = Number(Array.from(selected)[0]);
+      var button = root.querySelector('#editorInsertClip');
+      button.disabled = true; button.textContent = 'Matching & preparing…';
+      rememberPlaybackBeforeEdit(insertProjectId, true); releaseAudioPreviewBatch(insertProjectId); localPreviewRebuilds[insertProjectId] = true;
+      project.clipInsertStatus = 'queued'; project.clipInsertError = '';
+      projects = projects.map(function (entry) { return entry.id === insertProjectId ? Object.assign({}, entry, { clipInsertStatus: 'queued', clipInsertError: '' }) : entry; });
+      selected.clear(); renderWorkspace(); schedulePoll();
+      api('/api/editor/' + encodeURIComponent(insertProjectId) + '/insert-clip', { method: 'POST', body: JSON.stringify({ afterWordIndex: afterWordIndex }) }).catch(function (error) {
+        delete localPreviewRebuilds[insertProjectId];
+        if (project && project.id === insertProjectId) { project.clipInsertStatus = 'error'; project.clipInsertError = error.message; renderWorkspace(); }
+        alert(error.message);
+      });
+    };
+    root.querySelectorAll('.editor-remove-clip').forEach(function (button) {
+      button.onclick = function () {
+        var id = project.id; var clipId = button.dataset.clipId;
+        rememberPlaybackBeforeEdit(id, true); localPreviewRebuilds[id] = true; renderWorkspace();
+        api('/api/editor/' + encodeURIComponent(id) + '/inserted-clips/' + encodeURIComponent(clipId), { method: 'DELETE' }).then(function (item) {
+          if (!project || project.id !== id) return;
+          project = item; projectDetails[id] = item; projects = projects.map(function (entry) { return entry.id === id ? item : entry; }); renderList(); renderWorkspace(); schedulePoll();
+        }).catch(function (error) { delete localPreviewRebuilds[id]; alert(error.message); openProject(id, true); });
+      };
+    });
     root.querySelector('#editorCorrectionCancel').onclick = closeWordCorrection;
     root.querySelector('#editorCorrectionOriginal').onclick = function () {
       var index = Number(root.querySelector('#editorCorrectionTray').dataset.index);
@@ -1804,6 +1853,7 @@
     root.querySelector('#editorCut').disabled = locked || !hasKept;
     root.querySelector('#editorRestore').disabled = locked || !hasRemoved;
     root.querySelector('#editorCorrect').disabled = locked || selected.size !== 1;
+    root.querySelector('#editorInsertClip').disabled = locked || selected.size !== 1 || ['queued', 'preparing'].indexOf(project.clipInsertStatus) !== -1;
     var previewLocked = project && (!!localPreviewRebuilds[project.id] || !!project.renderRebuildPending || ['queued', 'running'].indexOf(project.renderStatus) !== -1);
     root.querySelector('#editorPlaySelection').disabled = previewLocked || selected.size === 0;
   }

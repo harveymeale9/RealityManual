@@ -19,7 +19,7 @@ const PAGE_CHANGE_CUT_SECONDS = 1.25;
 // baseline for the rest of the shot. Substantial automatic long-pause cuts are
 // treated as page changes and start the move again from the wide camera frame.
 const OPENING_PUSH_IN_SCALE = 1.10;
-const EDITOR_RENDER_VERSION = 9;
+const EDITOR_RENDER_VERSION = 10;
 const BROWSER_PREVIEW_VERSION = 2;
 const AUDIO_PREVIEW_MIX_VERSION = 3;
 const AUDIO_PREVIEW_TTL_MS = 2 * 60 * 60 * 1000;
@@ -173,6 +173,41 @@ function runWithProgress(command, args, label, onProgress) {
       if (code !== 0) return reject(new Error(label + ' failed: ' + stderr.slice(-2000)));
       resolve();
     });
+  });
+}
+
+function clipTimestampSeconds(value) {
+  const parts = String(value || '').trim().split(':').map(Number);
+  if (!parts.length || parts.some(function (part) { return !Number.isFinite(part) || part < 0; }) || parts.length > 3) return NaN;
+  return parts.reduce(function (total, part) { return total * 60 + part; }, 0);
+}
+
+function parseInsertClipDirectives(notesHtml) {
+  const text = String(notesHtml || '')
+    .replace(/<br\s*\/?>/gi, '\n').replace(/<\/p\s*>/gi, '\n').replace(/<[^>]+>/g, ' ')
+    .replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/&amp;/gi, '&').replace(/&nbsp;/gi, ' ');
+  const pattern = /INSERT\s+CLIP\s*:\s*(https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)\/[^\s,]+)\s+(\d+(?::\d+){1,2}(?:\.\d+)?)\s*-\s*(\d+(?::\d+){1,2}(?:\.\d+)?)(?:\s*,?\s*[“"]([^”"\n]+)[”"])?/gi;
+  const directives = [];
+  let match;
+  while ((match = pattern.exec(text))) {
+    const start = clipTimestampSeconds(match[2]);
+    const end = clipTimestampSeconds(match[3]);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || end - start > 60) continue;
+    const sourceUrl = match[1].replace(/[.)\]]+$/, '');
+    directives.push({
+      id: crypto.createHash('sha256').update([sourceUrl, start, end, match.index].join('|')).digest('hex').slice(0, 16),
+      sourceUrl: sourceUrl, sourceStart: start, sourceEnd: end, duration: end - start,
+      quote: String(match[4] || '').trim()
+    });
+  }
+  return directives;
+}
+
+function approximateWords(text, duration) {
+  const tokens = String(text || '').trim().split(/\s+/).filter(Boolean);
+  const step = Math.max(0.08, Math.max(0, Number(duration) || 0) / Math.max(1, tokens.length));
+  return tokens.map(function (token, index) {
+    return { index: index, text: token, start: index * step, end: Math.min(Number(duration) || step, (index + 1) * step) };
   });
 }
 
@@ -380,6 +415,7 @@ function blockingReviewFailure(project) {
 
 function automaticReviewReady(project) {
   if (!project || project.transcriptionStatus !== 'ready') return false;
+  if (['queued', 'preparing'].includes(project.clipInsertStatus)) return false;
   if (!['ready', 'unavailable'].includes(project.retakeAnalysisStatus)) return false;
   // Planning linkage controls workflow bookkeeping, never the safety or bytes
   // of the video. A failed matcher must remain visible and retryable without
@@ -721,6 +757,55 @@ function captionGroups(project, cuts) {
   return groups;
 }
 
+function editorTimelineSegments(project, cuts) {
+  const base = keepSegments(project.duration, cuts).map(function (segment) { return Object.assign({ type: 'source' }, segment); });
+  const ready = (project.insertedClips || []).filter(function (clip) { return clip.status === 'ready' && Number(clip.duration) > 0; })
+    .sort(function (a, b) { return Number(a.afterSourceTime) - Number(b.afterSourceTime); });
+  ready.forEach(function (clip) {
+    const at = Number(clip.afterSourceTime);
+    const containingIndex = base.findIndex(function (segment) { return segment.type === 'source' && at >= segment.start - 0.001 && at <= segment.end + 0.001; });
+    if (containingIndex < 0) return;
+    const containing = base[containingIndex];
+    const replacement = [];
+    if (at - containing.start >= 0.04) replacement.push({ type: 'source', start: containing.start, end: at });
+    replacement.push({ type: 'insert', clipId: clip.id, start: 0, end: Number(clip.duration), clip: clip });
+    if (containing.end - at >= 0.04) replacement.push({ type: 'source', start: at, end: containing.end });
+    base.splice.apply(base, [containingIndex, 1].concat(replacement));
+  });
+  return base;
+}
+
+function renderCaptionGroups(project, cuts, segments) {
+  const removed = new Set((project.removedWordIndices || []).map(Number));
+  const timed = [];
+  let cursor = 0;
+  (segments || []).forEach(function (segment, segmentIndex) {
+    const duration = segment.end - segment.start;
+    const words = segment.type === 'insert' ? (segment.clip.words || []) : (project.words || []).filter(function (word) {
+      return !removed.has(Number(word.index)) && Number(word.start) >= segment.start - 0.001 && Number(word.end) <= segment.end + 0.001;
+    });
+    words.forEach(function (word) {
+      const base = segment.type === 'insert' ? 0 : segment.start;
+      timed.push({ text: word.text, start: cursor + Math.max(0, Number(word.start) - base), end: cursor + Math.min(duration, Number(word.end) - base), segmentIndex: segmentIndex });
+    });
+    cursor += duration;
+  });
+  const groups = []; let current = [];
+  function flush() {
+    if (!current.length) return;
+    groups.push({ start: current[0].start, end: Math.max(current[0].start + 0.2, current[current.length - 1].end), text: current.map(function (word) { return word.text; }).join(' '), words: current });
+    current = [];
+  }
+  timed.forEach(function (word) {
+    const previous = current[current.length - 1];
+    if (previous && (word.segmentIndex !== previous.segmentIndex || word.start - previous.end > 0.7 || current.length >= 5 || word.end - current[0].start > 2.4)) flush();
+    current.push(word);
+    if (/[.!?][\"'’”)]*$/.test(word.text)) flush();
+  });
+  flush();
+  return groups;
+}
+
 function assTime(seconds) {
   const centiseconds = Math.max(0, Math.round(Number(seconds || 0) * 100));
   const hours = Math.floor(centiseconds / 360000);
@@ -802,6 +887,9 @@ function buildAss(project, groups) {
 
 function projectListSummary(project) {
   const summary = Object.assign({}, project);
+  summary.insertedClips = (project.insertedClips || []).map(function (clip) {
+    const item = Object.assign({}, clip); delete item.words; return item;
+  });
   summary.unresolvedRetakeCount = unresolvedRetakeCount(project);
   summary.appliedRetakeCount = appliedRetakeCount(project);
   summary.layoutReviewRequired = layoutReviewRequired(project);
@@ -825,6 +913,7 @@ function setup(options) {
   const handoffToProduction = options.handoffToProduction;
   const analyzeRetakes = options.analyzeRetakes;
   const getPlanningCandidates = options.getPlanningCandidates;
+  const getPlanningPiece = options.getPlanningPiece;
   const matchPlanningPiece = options.matchPlanningPiece;
   const onRenderReady = options.onRenderReady;
   const onRenderInvalidated = options.onRenderInvalidated;
@@ -875,6 +964,7 @@ function setup(options) {
   const classificationJobs = new Map();
   const retakeJobs = new Map();
   const planningMatchJobs = new Map();
+  const clipInsertJobs = new Map();
   const automaticRenderTimers = new Map();
   const uploadCapacityReservations = createByteReservationLedger();
   const sourceHashClaims = createKeyedClaimRegistry();
@@ -1002,6 +1092,7 @@ function setup(options) {
   function previewPath(id) { return path.join(projectDir(id), 'preview.mp4'); }
   function renderPath(id) { return path.join(projectDir(id), 'render.mp4'); }
   function renderPreviewPath(id) { return path.join(projectDir(id), 'render-preview.mp4'); }
+  function insertedClipPath(id, clipId) { return path.join(projectDir(id), 'inserted-clip-' + clipId + '.mp4'); }
   function isId(id) { return /^[A-Za-z0-9_-]{1,128}$/.test(String(id || '')); }
   function availableDiskBytes() {
     try {
@@ -1317,6 +1408,87 @@ function setup(options) {
     return job;
   }
 
+  async function prepareInsertedClip(id, request) {
+    if (clipInsertJobs.has(id)) return clipInsertJobs.get(id);
+    const job = Promise.resolve().then(async function () {
+      let project = getProject(id);
+      let tempPrefix = '';
+      if (!project) return;
+      try {
+        if (!project.planningPieceId) {
+          project.planningMatchStatus = 'pending'; saveProject(project);
+          await matchProjectPlanningPiece(id);
+          project = getProject(id);
+        }
+        const planningPiece = project && project.planningPieceId && typeof getPlanningPiece === 'function' ? getPlanningPiece(project.planningPieceId) : null;
+        if (!planningPiece) throw new Error('I could not confidently match this recording to an Outline Completed card.');
+        const directives = parseInsertClipDirectives(planningPiece.notesHtml);
+        const used = new Set((project.insertedClips || []).map(function (clip) { return clip.directiveId; }));
+        const directive = directives.find(function (item) { return item.id === request.directiveId; }) || directives.find(function (item) { return !used.has(item.id); });
+        if (!directive) throw new Error(directives.length ? 'Every INSERT CLIP instruction on the matched card is already in this edit.' : 'The matched planning card has no valid INSERT CLIP instruction.');
+        const word = (project.words || []).find(function (item) { return Number(item.index) === Number(request.afterWordIndex); });
+        if (!word || (project.removedWordIndices || []).map(Number).includes(Number(word.index))) throw new Error('Select a retained transcript word to insert the clip after.');
+        const clipId = crypto.randomUUID();
+        const clip = Object.assign({}, directive, { id: clipId, directiveId: directive.id, afterWordIndex: Number(word.index), afterSourceTime: Number(word.end), status: 'preparing', planningPieceId: planningPiece.id, planningPieceTitle: planningPiece.title || '', createdAt: new Date().toISOString() });
+        project.insertedClips = (project.insertedClips || []).concat([clip]);
+        project.clipInsertStatus = 'preparing'; project.clipInsertError = '';
+        invalidateProjectRender(project); advanceEditRevision(project); saveProject(project);
+
+        const prefix = 'editor-youtube-' + clipId;
+        tempPrefix = prefix;
+        const template = path.join(tempDir, prefix + '.%(ext)s');
+        await run('yt-dlp', ['--no-playlist', '--no-warnings', '--download-sections', '*' + directive.sourceStart + '-' + directive.sourceEnd,
+          '--force-keyframes-at-cuts', '-f', 'bv*[height<=1080]+ba/b[height<=1080]', '--merge-output-format', 'mp4', '-o', template, directive.sourceUrl], 'YouTube clip download');
+        const downloadedName = fs.readdirSync(tempDir).find(function (name) { return name.indexOf(prefix + '.') === 0; });
+        if (!downloadedName) throw new Error('YouTube returned no downloadable clip.');
+        const downloaded = path.join(tempDir, downloadedName);
+        const target = insertedClipPath(id, clipId);
+        const requestedDuration = directive.sourceEnd - directive.sourceStart;
+        await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', downloaded, '-t', requestedDuration.toFixed(3),
+          '-map', '0:v:0', '-map', '0:a:0', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', target], 'clip normalization');
+        fs.rmSync(downloaded, { force: true });
+        const media = await probe(target);
+        if (!media.hasAudio || media.duration < 0.2) throw new Error('The selected YouTube range did not contain usable video and audio.');
+        const audioPath = path.join(tempDir, 'editor-clip-audio-' + clipId + '.mp3');
+        let words = [];
+        try {
+          await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', target, '-vn', '-ac', '1', '-ar', '16000', '-b:a', '64k', audioPath], 'clip audio extraction');
+          const transcription = await transcribeDetailed(fs.readFileSync(audioPath), 'audio/mpeg');
+          words = normalizeWords(transcription.words).filter(function (item) { return item.start < media.duration + 0.1; });
+        } catch (error) {
+          words = approximateWords(directive.quote, media.duration);
+        } finally { fs.rmSync(audioPath, { force: true }); }
+        if (!words.length) throw new Error('The clip downloaded, but its speech could not be transcribed and the outline did not include a quoted caption fallback.');
+        project = getProject(id);
+        if (!project) return;
+        const stored = (project.insertedClips || []).find(function (item) { return item.id === clipId; });
+        if (!stored) { fs.rmSync(target, { force: true }); return; }
+        stored.duration = media.duration;
+        stored.words = words.length ? words : approximateWords(stored.quote, media.duration);
+        stored.transcriptText = stored.words.map(function (item) { return item.text; }).join(' ');
+        stored.status = 'ready'; stored.readyAt = new Date().toISOString();
+        project.clipInsertStatus = 'ready'; project.clipInsertError = '';
+        invalidateProjectRender(project); advanceEditRevision(project); saveProject(project);
+        scheduleAutoRender(id, 50);
+      } catch (error) {
+        project = getProject(id);
+        if (project) {
+          const preparing = (project.insertedClips || []).filter(function (clip) { return clip.status === 'preparing'; });
+          preparing.forEach(function (clip) { fs.rmSync(insertedClipPath(id, clip.id), { force: true }); });
+          project.insertedClips = (project.insertedClips || []).filter(function (clip) { return clip.status !== 'preparing'; });
+          project.clipInsertStatus = 'error'; project.clipInsertError = String(error.message || error).slice(0, 500); saveProject(project);
+          scheduleAutoRender(id, 50);
+        }
+      } finally {
+        if (tempPrefix) {
+          try { fs.readdirSync(tempDir).filter(function (name) { return name.indexOf(tempPrefix + '.') === 0; }).forEach(function (name) { fs.rmSync(path.join(tempDir, name), { force: true }); }); } catch (error) {}
+        }
+      }
+    }).finally(function () { clipInsertJobs.delete(id); });
+    clipInsertJobs.set(id, job);
+    return job;
+  }
+
   async function classifyProject(id) {
     if (classificationJobs.has(id)) return classificationJobs.get(id);
     const job = Promise.resolve().then(async function () {
@@ -1372,36 +1544,36 @@ async function renderProject(id) {
       project.renderProgress = 0;
       saveProject(project);
       const cuts = cutsForProject(project);
-      const segments = keepSegments(project.duration, cuts);
+      const segments = editorTimelineSegments(project, cuts);
       if (!segments.length) throw new Error('Every part of the recording is currently cut. Restore some transcript first.');
       const expectedDuration = segments.reduce(function (sum, segment) { return sum + segment.end - segment.start; }, 0);
       const assPath = path.join(projectDir(id), 'captions.ass');
       const layout = effectiveLayout(project);
       const renderShape = layout === 'vertical' ? { width: 1080, height: 1920 } : { width: 1920, height: 1080 };
-      if (project.captionsEnabled !== false) fs.writeFileSync(assPath, buildAss(renderShape, captionGroups(project, cuts)));
+      if (project.captionsEnabled !== false) fs.writeFileSync(assPath, buildAss(renderShape, renderCaptionGroups(project, cuts, segments)));
       const filters = [];
+      const readyClips = (project.insertedClips || []).filter(function (clip) { return clip.status === 'ready'; });
+      const clipInputIndex = new Map(readyClips.map(function (clip, index) { return [clip.id, index + 1]; }));
       segments.forEach(function (segment, index) {
         const segmentDuration = segment.end - segment.start;
-        let videoFilter = '[0:v]trim=start=' + segment.start.toFixed(3) + ':end=' + segment.end.toFixed(3) + ',setpts=PTS-STARTPTS';
+        const inputIndex = segment.type === 'insert' ? clipInputIndex.get(segment.clipId) : 0;
+        let videoFilter = '[' + inputIndex + ':v]trim=start=' + segment.start.toFixed(3) + ':end=' + segment.end.toFixed(3) + ',setpts=PTS-STARTPTS';
         if (layout === 'vertical') {
           videoFilter += ",crop=w='min(iw\\,ih*9/16)':h='min(ih\\,iw*16/9)':x='(iw-ow)/2':y='(ih-oh)/2',scale=1080:1920,setsar=1";
         } else {
           videoFilter += ",crop=w='min(iw\\,ih*16/9)':h='min(ih\\,iw*9/16)':x='(iw-ow)/2':y='(ih-oh)/2',scale=1920:1080,setsar=1";
         }
-        const motion = cameraMotionState(segment.start, cuts, layout);
-        videoFilter += cameraMotionFilter({
-          renderShape: renderShape,
-          elapsedStart: motion.elapsed,
-          durationSeconds: motion.duration,
-          openingEnabled: project.openingPushInEnabled !== false
-        });
+        if (segment.type === 'source') {
+          const motion = cameraMotionState(segment.start, cuts, layout);
+          videoFilter += cameraMotionFilter({ renderShape: renderShape, elapsedStart: motion.elapsed, durationSeconds: motion.duration, openingEnabled: project.openingPushInEnabled !== false });
+        }
+        videoFilter += ',format=yuv420p';
         filters.push(videoFilter + '[v' + index + ']');
         // Tiny boundary fades prevent waveform discontinuities from creating
         // a click at transcript/jump cuts, without audibly crossfading words.
-        const fades = segmentAudioFades(segments, index, project.duration);
-        let audioFilter = '[0:a]atrim=start=' + segment.start.toFixed(3) + ':end=' + segment.end.toFixed(3) + ',asetpts=PTS-STARTPTS';
-        if (fades.fadeIn) audioFilter += ',afade=t=in:st=0:d=0.008';
-        if (fades.fadeOut) audioFilter += ',afade=t=out:st=' + Math.max(0, segmentDuration - 0.008).toFixed(3) + ':d=0.008';
+        let audioFilter = '[' + inputIndex + ':a]atrim=start=' + segment.start.toFixed(3) + ':end=' + segment.end.toFixed(3) + ',asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo';
+        if (index > 0) audioFilter += ',afade=t=in:st=0:d=0.008';
+        if (index + 1 < segments.length) audioFilter += ',afade=t=out:st=' + Math.max(0, segmentDuration - 0.008).toFixed(3) + ':d=0.008';
         filters.push(audioFilter + '[a' + index + ']');
       });
       const concatInputs = segments.map(function (_, index) { return '[v' + index + '][a' + index + ']'; }).join('');
@@ -1409,9 +1581,11 @@ async function renderProject(id) {
       if (project.captionsEnabled !== false) filters.push("[joinedv]subtitles='" + assPath.replace(/'/g, "'\\''") + "'[outv]");
       else filters.push('[joinedv]null[outv]');
       let lastReportedProgress = -1;
-      await runWithProgress('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-autorotate', '1', '-i', sourcePath(id), '-filter_complex', filters.join(';'),
+      const ffmpegInputs = ['-hide_banner', '-loglevel', 'error', '-y', '-autorotate', '1', '-i', sourcePath(id)];
+      readyClips.forEach(function (clip) { ffmpegInputs.push('-i', insertedClipPath(id, clip.id)); });
+      await runWithProgress('ffmpeg', ffmpegInputs.concat(['-filter_complex', filters.join(';'),
         '-map', '[outv]', '-map', '[outa]', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k',
-        '-movflags', '+faststart', '-progress', 'pipe:1', '-nostats', renderPath(id)], 'editor render', function (encodedSeconds) {
+        '-movflags', '+faststart', '-progress', 'pipe:1', '-nostats', renderPath(id)]), 'editor render', function (encodedSeconds) {
         const percent = Math.min(99, Math.max(0, Math.floor(encodedSeconds / Math.max(0.01, expectedDuration) * 100)));
         if (percent < lastReportedProgress + 2) return;
         lastReportedProgress = percent;
@@ -1501,6 +1675,11 @@ async function renderProject(id) {
       if (typeof project.renderRebuildPending !== 'boolean') { project.renderRebuildPending = false; migrated = true; }
       if (!Number.isFinite(Number(project.editRevision))) { project.editRevision = 0; migrated = true; }
       if (!Number.isFinite(Number(project.renderProgress))) { project.renderProgress = 0; migrated = true; }
+      if (!Array.isArray(project.insertedClips)) { project.insertedClips = []; migrated = true; }
+      if (['queued', 'preparing'].includes(project.clipInsertStatus)) {
+        project.insertedClips = project.insertedClips.filter(function (clip) { return clip.status === 'ready'; });
+        project.clipInsertStatus = 'error'; project.clipInsertError = 'Clip preparation was interrupted by a service restart. Press Insert clip to retry.'; migrated = true;
+      }
       if (!project.retakeAnalysisStatus) { project.retakeAnalysisStatus = canResumeWork && typeof analyzeRetakes === 'function' ? (project.transcriptionStatus === 'ready' ? 'pending' : 'pending_transcript') : 'unavailable'; migrated = true; }
       if (!project.planningMatchStatus) { project.planningMatchStatus = canResumeWork && typeof matchPlanningPiece === 'function' ? (project.transcriptionStatus === 'ready' ? 'pending' : 'pending_transcript') : 'unavailable'; migrated = true; }
       if (!canResumeWork) {
@@ -1838,6 +2017,9 @@ async function renderProject(id) {
         renderPreviewError: '',
         renderPreviewVersion: 0,
         audioTrackId: '',
+        insertedClips: [],
+        clipInsertStatus: '',
+        clipInsertError: '',
         editRevision: 0,
         createdAt: now,
         updatedAt: now
@@ -2073,12 +2255,42 @@ async function renderProject(id) {
     matchProjectPlanningPiece(project.id);
   });
 
+  router.post('/:id/insert-clip', function (req, res) {
+    if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
+    const project = getProject(req.params.id);
+    if (!project) return res.status(404).json({ error: 'not_found' });
+    if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked.' });
+    if (clipInsertJobs.has(project.id)) return res.status(409).json({ error: 'clip_insert_running', message: 'The current external clip is still being prepared.' });
+    const afterWordIndex = Number(req.body && req.body.afterWordIndex);
+    if (!Number.isInteger(afterWordIndex)) return res.status(400).json({ error: 'word_required', message: 'Select the transcript word the clip should follow.' });
+    project.clipInsertStatus = 'queued'; project.clipInsertError = ''; saveProject(project);
+    res.status(202).json({ ok: true, status: 'queued' });
+    prepareInsertedClip(project.id, { afterWordIndex: afterWordIndex, directiveId: String(req.body && req.body.directiveId || '') });
+  });
+
+  router.delete('/:id/inserted-clips/:clipId', function (req, res) {
+    if (!isId(req.params.id) || !isId(req.params.clipId)) return res.status(400).json({ error: 'invalid_id' });
+    const project = getProject(req.params.id);
+    if (!project) return res.status(404).json({ error: 'not_found' });
+    if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked.' });
+    const before = project.insertedClips || [];
+    const target = before.find(function (clip) { return clip.id === req.params.clipId; });
+    if (!target) return res.status(404).json({ error: 'clip_not_found' });
+    project.insertedClips = before.filter(function (clip) { return clip.id !== req.params.clipId; });
+    project.clipInsertStatus = ''; project.clipInsertError = '';
+    fs.rmSync(insertedClipPath(project.id, target.id), { force: true });
+    invalidateProjectRender(project); advanceEditRevision(project); saveProject(project);
+    res.json(projectDetail(project));
+    scheduleAutoRender(project.id, 50);
+  });
+
   router.post('/:id/render', function (req, res) {
     if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
     const project = getProject(req.params.id);
     if (!project) return res.status(404).json({ error: 'not_found' });
     if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked. The approved video is already in Content Production.' });
     if (project.transcriptionStatus !== 'ready') return res.status(409).json({ error: 'transcript_not_ready' });
+    if (['queued', 'preparing'].includes(project.clipInsertStatus)) return res.status(409).json({ error: 'clip_insert_running', message: 'Wait for the inserted clip to finish preparing.' });
     if (['pending', 'running', 'pending_transcript'].includes(project.retakeAnalysisStatus) || ['pending', 'running', 'pending_transcript'].includes(project.planningMatchStatus)) {
       return res.status(409).json({ error: 'automatic_edit_running', message: 'Wait for the automatic retake and planning checks to finish.' });
     }
@@ -2258,6 +2470,7 @@ async function renderProject(id) {
   router.delete('/:id', function (req, res) {
     if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
     if (renderJobs.has(req.params.id)) return res.status(409).json({ error: 'render_in_progress', message: 'Wait for the final edit to finish before deleting this recording.' });
+    if (clipInsertJobs.has(req.params.id)) return res.status(409).json({ error: 'clip_insert_running', message: 'Wait for the inserted clip to finish preparing before deleting this recording.' });
     if (productionJobs.has(req.params.id)) return res.status(409).json({ error: 'approval_in_progress', message: 'Wait for this edit to finish entering Content Production before deleting it.' });
     const project = getProject(req.params.id);
     if (!project) return res.status(404).json({ error: 'not_found' });
@@ -2289,6 +2502,10 @@ module.exports = {
   mergeCuts,
   cutsForProject,
   keepSegments,
+  editorTimelineSegments,
+  renderCaptionGroups,
+  parseInsertClipDirectives,
+  clipTimestampSeconds,
   segmentAudioFades,
   mapSourceTimeToEdited,
   cameraResetStarts,

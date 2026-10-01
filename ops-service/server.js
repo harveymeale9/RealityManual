@@ -548,12 +548,22 @@ function editorPlanningCandidates(project) {
     if (!piece) return false;
     if (piece.id === (project && project.planningPieceId)) return true;
     if (claimedByOtherEditorProjects.has(piece.id)) return false;
-    if (piece.stage === 'filmed') return true;
+    if (piece.stage === 'outline_completed' || piece.stage === 'filmed') return true;
     return piece.stage === 'edited' && piece.editorProjectId === (project && project.id);
-  }).map(function (piece) {
+  }).sort(function (a, b) {
+    if (a.id === (project && project.planningPieceId)) return -1;
+    if (b.id === (project && project.planningPieceId)) return 1;
+    return String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''));
+  }).slice(0, 40).map(function (piece) {
     const text = String(piece.notesHtml || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    return { id: piece.id, seq: piece.seq, title: piece.title, stage: piece.stage, notesSnippet: text.slice(0, 700) };
+    return { id: piece.id, seq: piece.seq, title: piece.title, stage: piece.stage, notesSnippet: text.slice(0, 4000) };
   });
+}
+
+function editorPlanningPiece(id) {
+  const piece = getPieceRecord(id);
+  if (!piece || !['outline_completed', 'filmed', 'edited'].includes(piece.stage)) return null;
+  return { id: piece.id, seq: piece.seq, title: piece.title, stage: piece.stage, notesHtml: String(piece.notesHtml || '') };
 }
 
 async function matchEditorPlanningPiece(input) {
@@ -616,6 +626,15 @@ function reconcileEditorPlanningPiece(input) {
       savePieceRecord(previous);
     }
   }
+  if (project.planningPieceId) {
+    const current = getPieceRecord(project.planningPieceId);
+    if (current && current.stage === 'outline_completed') {
+      current.stage = 'filmed';
+      current.updatedAt = new Date().toISOString();
+      current.editorProjectId = project.id;
+      savePieceRecord(current);
+    }
+  }
   if (!input.renderWillChange && project.renderStatus === 'ready' && project.planningPieceId) {
     advanceEditorPlanningPiece({ project: project }, 'edited');
   }
@@ -646,6 +665,7 @@ const videoEditor = videoEditorService.setup({
   transcribeDetailed: elevenlabs.transcribeAudioDetailed,
   analyzeRetakes: analyzeEditorRetakes,
   getPlanningCandidates: editorPlanningCandidates,
+  getPlanningPiece: editorPlanningPiece,
   matchPlanningPiece: matchEditorPlanningPiece,
   onRenderReady: function (input) { advanceEditorPlanningPiece(input, 'edited'); },
   onRenderInvalidated: regressEditorPlanningPieceForRebuild,
