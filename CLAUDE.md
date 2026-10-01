@@ -15638,7 +15638,10 @@ A one-time durable migration converts old non-video Edited cards back to
 Uploaded and old video cards into In Editor or In Production according to
 whether they still have an active Editor project. Startup also backfills
 missing In Editor cards for active pre-split Editor projects without
-duplicating already-sent work. The
+duplicating already-sent work. Durable Editor/video linkages also restore any
+legacy planning card that had fallen back to Outline Completed or Filmed to
+its terminal Uploaded state; this specifically repaired live card #032, whose
+sent video already existed while its plan had regressed. The
 frontend manual/automatic boundary now ends at Uploaded, Content Production
 filters In Production, outline matching searches terminal Uploaded planning
 cards only, and weekly reporting/ideation progression use the same vocabulary.

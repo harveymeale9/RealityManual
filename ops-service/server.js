@@ -1674,24 +1674,45 @@ function savePieceRecord(piece) {
 // them once: plans stop permanently at Uploaded, while video cards occupy the
 // automatic Editor/Production/Final Check/publishing half of the board.
 function migrateSplitPlanningAndVideoStages() {
-  const migrationId = 'split-planning-video-stages-v1';
+  const migrationId = 'split-planning-video-stages-v2';
   if (stmts.getOne.get('systemMigrations', migrationId)) return;
   const migratedAt = new Date().toISOString();
   db.transaction(function () {
-    const activeEditorIds = new Set(stmts.getAll.all('editorProjects').map(function (row) {
+    const editorProjects = stmts.getAll.all('editorProjects').map(function (row) {
       try { return JSON.parse(row.data); } catch (error) { return null; }
-    }).filter(function (project) { return project && !project.productionPieceId; })
+    }).filter(Boolean);
+    const activeEditorIds = new Set(editorProjects.filter(function (project) { return !project.productionPieceId; })
       .map(function (project) { return project.id; }));
-    stmts.getAll.all('pieces').forEach(function (row) {
+    const rows = stmts.getAll.all('pieces');
+    const linkedPlanningEditors = new Map();
+    editorProjects.forEach(function (project) {
+      if (project.planningPieceId) linkedPlanningEditors.set(project.planningPieceId, project.id);
+    });
+    rows.map(function (row) { return recordConcurrency.decodeRow(row); }).forEach(function (piece) {
+      if (piece && piece.hasVideo && piece.sourcePlanningPieceId) {
+        linkedPlanningEditors.set(piece.sourcePlanningPieceId, piece.editorProjectId || piece.id);
+      }
+    });
+    rows.forEach(function (row) {
       const piece = recordConcurrency.decodeRow(row);
       if (!piece) return;
       let nextStage = piece.stage;
+      let changed = false;
       if (!piece.hasVideo && piece.stage === 'edited') nextStage = 'uploaded';
+      if (!piece.hasVideo && linkedPlanningEditors.has(piece.id) &&
+          ['outline_completed', 'filmed', 'uploaded', 'edited'].includes(piece.stage)) {
+        nextStage = 'uploaded';
+        const editorProjectId = linkedPlanningEditors.get(piece.id);
+        if (piece.editorProjectId !== editorProjectId) {
+          piece.editorProjectId = editorProjectId;
+          changed = true;
+        }
+      }
       if (piece.hasVideo && ['filmed', 'uploaded', 'edited'].includes(piece.stage)) {
         nextStage = activeEditorIds.has(piece.editorProjectId || piece.id) ? 'in_editor' : 'in_production';
       }
       if (piece.hasVideo && piece.stage === 'processed') nextStage = 'in_production';
-      if (nextStage === piece.stage) return;
+      if (nextStage === piece.stage && !changed) return;
       piece.stage = nextStage;
       piece.updatedAt = migratedAt;
       recordConcurrency.stampServerWrite(piece);
