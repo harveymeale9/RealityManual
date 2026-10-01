@@ -170,13 +170,13 @@ test('every camera recording receives a scrub-optimized review proxy', function 
   assert.equal(editor.browserPreviewNeeded('camera.mp4', { videoCodec: 'h264', audioCodec: 'pcm_s16le' }), true);
 });
 
-test('camera zoom eases to a permanent 110 percent base over three or five seconds', function () {
+test('camera zoom eases to a permanent 125 percent book-filling base over three or five seconds', function () {
   assert.equal(editor.openingPushInScale(0), 1);
-  assert.equal(editor.openingPushInScale(1.5), 1.05);
-  assert.equal(editor.openingPushInScale(3), 1.1);
-  assert.equal(editor.openingPushInScale(20), 1.1);
-  assert.equal(editor.openingPushInScale(2.5, 5), 1.05);
-  assert.equal(editor.openingPushInScale(5, 5), 1.1);
+  assert.equal(editor.openingPushInScale(1.5), 1.125);
+  assert.equal(editor.openingPushInScale(3), 1.25);
+  assert.equal(editor.openingPushInScale(20), 1.25);
+  assert.equal(editor.openingPushInScale(2.5, 5), 1.125);
+  assert.equal(editor.openingPushInScale(5, 5), 1.25);
   const filter = editor.openingPushInFilter({ width: 1080, height: 1920 }, 1.25);
   assert.match(filter, /zoompan=/);
   assert.match(filter, /on\+37\.462537/);
@@ -192,8 +192,21 @@ test('page-change zoom uses one centred fractional resampling stage', function (
     openingEnabled: true
   });
   assert.equal((filter.match(/zoompan=/g) || []).length, 1);
-  assert.match(filter, /0\.100/);
+  assert.match(filter, /0\.250/);
   assert.match(filter, /\*0\.5/);
+});
+
+test('horizontal resting crop follows the open book instead of the desk centre', function () {
+  const filter = editor.cameraMotionFilter({
+    renderShape: { width: 1920, height: 1080 },
+    layout: 'horizontal',
+    elapsedStart: 5,
+    durationSeconds: 5,
+    openingEnabled: true
+  });
+  assert.match(filter, /\*0\.25/);
+  assert.match(filter, /\*0\.34/);
+  assert.match(filter, /0\.250/);
 });
 
 test('camera motion restarts after automatic long-pause cuts but not manual cuts', function () {
@@ -603,7 +616,7 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.equal(stored.renderQuality.status, 'passed');
-  assert.equal(stored.renderVersion, 11);
+  assert.equal(stored.renderVersion, 12);
   assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), true);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });

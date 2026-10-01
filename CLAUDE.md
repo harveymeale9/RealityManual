@@ -15384,3 +15384,28 @@ the visible state read `Uploading 1 of 1 · large-camera.mp4 · 80%`, the label
 row measured 28px, the track measured 6px, the browser emitted exactly one
 16 MiB and one 4 MiB request, and the mocked completion returned cleanly with
 no page errors.
+
+---
+
+# 439. Resting Camera Crop Now Fills the Frame with the Book (2026-10-01)
+
+Harvey marked the intended resting composition on the real horizontal **Why
+Wise People Believe Consciousness Is Fundamental** recording: once the opening
+move finishes, the top of the pages should sit close to the top of the video
+and the bottom book edge should sit close to the bottom, leaving only a small
+amount of desk visible. The prior 110% base was visibly too wide for that
+filming setup.
+
+Both the browser preview and deterministic FFmpeg renderer now use a 125%
+resting scale. Horizontal footage also uses a fixed crop bias measured from the
+real setup (25% across the available X crop and 34% down the available Y crop),
+keeping the open book centred and both page edges inside the frame rather than
+centering the surrounding desk. Portrait footage remains centred around its
+deliberately framed single page. The existing smoothstep timing is unchanged: horizontal
+openings still take five seconds, vertical openings and page/clip-return resets
+take three seconds, and the tighter crop remains held afterward. This scale
+matches the marked crop closely while retaining enough lateral room for the
+open spread at 16:9. Render format version 12 invalidates active unapproved
+110% outputs so the review player cannot present the old composition as
+current. The camera-motion regression test now proves the 100→112.5→125%
+curve and permanent hold.

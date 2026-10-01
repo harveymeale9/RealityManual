@@ -33,6 +33,7 @@
   var uploadStatusText = '';
   var uploadStatusPercent = 0;
   var MAX_RECORDING_BYTES = Math.floor(4.5 * 1024 * 1024 * 1024);
+  var RESTING_CAMERA_SCALE = 1.25;
   var listFilter = localStorage.getItem('rmEditorListFilter') === 'sent' ? 'sent' : 'active';
   var reviewRate = Number(localStorage.getItem('rmEditorReviewRate')) || 1;
   if ([1, 1.25, 1.5, 2].indexOf(reviewRate) === -1) reviewRate = 1;
@@ -945,7 +946,7 @@
       (project.renderStatus === 'ready' ? '<button type="button" id="editorPreviewFinal" class="' + (previewMode === 'final' ? 'active' : '') + '"' + (previewLocked ? ' disabled' : '') + '>Final edit</button><button type="button" id="editorPreviewSource" class="' + (previewMode === 'source' ? 'active' : '') + '"' + (previewLocked ? ' disabled' : '') + '>' + sourcePreviewLabel + '</button>' : '') + '</div>';
     var automaticControlsHtml = '<div class="editor-controls"><label class="editor-toggle"><input type="checkbox" id="editorAutoSilence" ' + (project.autoSilenceEnabled !== false ? 'checked' : '') + '><span></span>Remove long pauses</label>' +
       '<label class="editor-toggle"><input type="checkbox" id="editorCaptions" ' + (project.captionsEnabled !== false ? 'checked' : '') + '><span></span>Add yellow captions</label>' +
-      '<label class="editor-toggle" title="Starts wide, settles to 110%, and repeats after each removed page-turn pause or inserted clip. Horizontal openings use five seconds; every other move uses three."><input type="checkbox" id="editorOpeningPushIn" ' + (project.openingPushInEnabled !== false ? 'checked' : '') + '><span></span>Page-change camera zooms</label>' +
+      '<label class="editor-toggle" title="Starts wide, settles to a tight 125% book framing, and repeats after each removed page-turn pause or inserted clip. Horizontal openings use five seconds; every other move uses three."><input type="checkbox" id="editorOpeningPushIn" ' + (project.openingPushInEnabled !== false ? 'checked' : '') + '><span></span>Page-change camera zooms</label>' +
       '<label class="editor-mode">Pacing<select id="editorPacing"><option value="tight"' + (Number(project.silenceThresholdSeconds) < 0.85 ? ' selected' : '') + '>Tight</option><option value="natural"' + (Number(project.silenceThresholdSeconds || 1) >= 0.85 && Number(project.silenceThresholdSeconds || 1) < 1.3 ? ' selected' : '') + '>Natural</option><option value="gentle"' + (Number(project.silenceThresholdSeconds || 1) >= 1.3 ? ' selected' : '') + '>Gentle</option></select></label>' +
       '<button type="button" class="btn-secondary btn-tiny editor-clear-automation" id="editorClearAutomation" ' + (!automaticCutsPresent ? 'disabled' : '') + ' title="Restore every pause and retake removed automatically. Manual transcript cuts stay intact.">Restore automatic cuts</button></div>';
     var selectedAudioExists = project.audioTrackId === '__none__' || audioTracks.some(function (track) { return track.id === project.audioTrackId; });
@@ -1408,12 +1409,13 @@
       if (previewingWorkingEdit && project.openingPushInEnabled !== false) {
         var motion = cameraMotionState(sourcePlayheadTime, project);
         var openingProgress = Math.max(0, Math.min(1, motion.elapsed / motion.duration));
-        openingScale = 1 + 0.10 * openingProgress * openingProgress * (3 - 2 * openingProgress);
+        openingScale = 1 + (RESTING_CAMERA_SCALE - 1) * openingProgress * openingProgress * (3 - 2 * openingProgress);
       }
       var width = video.clientWidth || 0;
       var height = video.clientHeight || 0;
-      var offsetX = width * (1 - openingScale) / 2;
-      var offsetY = height * (1 - openingScale) / 2;
+      var horizontalBookFrame = (project.effectiveLayout || 'horizontal') === 'horizontal';
+      var offsetX = width * (1 - openingScale) * (horizontalBookFrame ? 0.25 : 0.5);
+      var offsetY = height * (1 - openingScale) * (horizontalBookFrame ? 0.34 : 0.5);
       video.style.transform = openingScale > 1.0001 ? 'matrix(' + openingScale.toFixed(5) + ',0,0,' + openingScale.toFixed(5) + ',' + offsetX.toFixed(3) + ',' + offsetY.toFixed(3) + ')' : '';
       video.style.transformOrigin = '0 0';
     }

@@ -16,12 +16,13 @@ const EDITOR_DISK_RESERVE_BYTES = 2 * 1024 * 1024 * 1024;
 const PAGE_ZOOM_SECONDS = 3;
 const HORIZONTAL_OPENING_ZOOM_SECONDS = 5;
 const PAGE_CHANGE_CUT_SECONDS = 1.25;
-// Vertical footage is deliberately recorded a little wide. The opening move
-// settles into the normal book framing and that 110% composition remains the
-// baseline for the rest of the shot. Substantial automatic long-pause cuts are
-// treated as page changes and start the move again from the wide camera frame.
-const OPENING_PUSH_IN_SCALE = 1.10;
-const EDITOR_RENDER_VERSION = 11;
+// Footage is deliberately recorded wide enough to show a little table. The
+// opening move settles into a tight book-first framing and that 125%
+// composition remains the baseline for the rest of the shot. Substantial
+// automatic long-pause cuts are treated as page changes and start the move
+// again from the wide camera frame.
+const OPENING_PUSH_IN_SCALE = 1.25;
+const EDITOR_RENDER_VERSION = 12;
 const BROWSER_PREVIEW_VERSION = 2;
 const AUDIO_PREVIEW_MIX_VERSION = 3;
 const AUDIO_PREVIEW_TTL_MS = 2 * 60 * 60 * 1000;
@@ -507,7 +508,7 @@ function cameraMotionState(sourceSeconds, cuts, layout) {
 function cameraMotionForSegment(segment, cuts, layout) {
   // Returning from an external full-screen excerpt is a new camera reveal,
   // just like returning after a page turn: begin on the completely wide book
-  // frame, ease to the 110% base over three seconds, then hold. This must be
+  // frame, ease to the 125% base over three seconds, then hold. This must be
   // attached to the edit-decision segment rather than inferred from source
   // time, because the inserted clip advances the final timeline without
   // changing the camera recording's own timestamps.
@@ -527,8 +528,13 @@ function cameraMotionFilter(options) {
   const renderShape = options.renderShape;
   const framesPerSecond = 30000 / 1001;
   const zoom = openingZoomExpression(options.elapsedStart, framesPerSecond, options.durationSeconds);
-  const x = '(iw-iw/' + zoom + ')*0.5';
-  const y = '(ih-ih/' + zoom + ')*0.5';
+  // The open book sits left and slightly high in the fixed horizontal camera
+  // setup. Bias the crop toward its measured centre so 125% keeps both page
+  // edges visible instead of enlarging the surrounding desk. Portrait footage
+  // is deliberately framed around its single page and remains centred.
+  const horizontal = options.layout === 'horizontal';
+  const x = '(iw-iw/' + zoom + ')*' + (horizontal ? '0.25' : '0.5');
+  const y = '(ih-ih/' + zoom + ')*' + (horizontal ? '0.34' : '0.5');
   return ",zoompan=z='" + zoom + "':x='" + x + "':y='" + y + "':d=1:s=" +
     renderShape.width + 'x' + renderShape.height + ':fps=30000/1001,setsar=1';
 }
@@ -1582,7 +1588,7 @@ async function renderProject(id) {
         }
         if (segment.type === 'source') {
           const motion = cameraMotionForSegment(segment, cuts, layout);
-          videoFilter += cameraMotionFilter({ renderShape: renderShape, elapsedStart: motion.elapsed, durationSeconds: motion.duration, openingEnabled: project.openingPushInEnabled !== false });
+          videoFilter += cameraMotionFilter({ renderShape: renderShape, layout: layout, elapsedStart: motion.elapsed, durationSeconds: motion.duration, openingEnabled: project.openingPushInEnabled !== false });
         }
         videoFilter += ',format=yuv420p';
         filters.push(videoFilter + '[v' + index + ']');
