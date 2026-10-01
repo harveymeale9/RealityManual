@@ -928,7 +928,7 @@ body.role-reviewer #pmBackFab {
   .ops-panel--pipeline .overview-tile { padding: 8px 10px; border-radius: 9px; }
   .ops-panel--pipeline .overview-tile-head { margin-bottom: 3px; }
   .ops-panel--pipeline .overview-tile-sub2 { margin-top: 3px; padding-top: 3px; }
-  .ops-panel--pipeline .board { gap: 10px; }
+  .ops-panel--pipeline .board { gap: 18px; }
   .ops-panel--pipeline .column { width: 330px; }
   .ops-panel--pipeline .column[data-stage="final_check"] { width: 660px; }
   .ops-panel--pipeline .column-head {
@@ -983,7 +983,7 @@ body.role-reviewer #pmBackFab {
 }
 .board-wrap.panning { cursor: grabbing; user-select: none; }
 
-.board { display: flex; gap: 16px; height: 100%; min-width: max-content; }
+.board { display: flex; gap: 20px; height: 100%; min-width: max-content; }
 
 .column {
   width: 400px;

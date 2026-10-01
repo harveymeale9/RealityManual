@@ -15588,3 +15588,14 @@ back to an earlier stage. A durable migration marker ensures future genuinely
 in-progress Uploaded cards are never rewritten on restart.
 The manual/automatic Kanban boundary now follows Edited rather than relying on
 Uploaded being the last planning column.
+
+---
+
+# 448. Wider Kanban Gutters Provide a Reliable Horizontal-Drag Target (2026-10-01)
+
+The narrow gap between Content Pipeline stages was the intended blank surface
+for click-drag horizontal scrolling, but at the laptop board's 75% density its
+10px CSS gap rendered too small to grab comfortably. Pipeline gutters are now
+18px at laptop widths and 20px at the general/large-screen layout. Cards retain
+their existing widths and density; only the safe draggable strip between them
+has grown.
