@@ -639,7 +639,11 @@
             if (uploadBatchCancelled) {
               var cancelled = new Error('Upload cancelled.'); cancelled.cancelled = true; throw cancelled;
             }
-            return uploadChunk(uploadId, partIndex, partOffset, blob, file, queueIndex, queueTotal, completedBytes, totalBytes);
+            return uploadChunk(uploadId, partIndex, partOffset, blob, file, queueIndex, queueTotal, completedBytes, totalBytes).then(function () {
+              uploadStatusPercent = Math.round((completedBytes + partOffset + blob.size) / Math.max(1, totalBytes) * 100);
+              uploadStatusText = 'Uploading ' + (queueIndex + 1) + ' of ' + queueTotal + ' · ' + file.name + ' · ' + uploadStatusPercent + '%';
+              paintUploadStatus();
+            });
           });
         })(offset, chunkIndex);
         offset += chunkSize;
