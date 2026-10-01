@@ -248,9 +248,11 @@
     var cuts = cutsForClient(item);
     var editedTime = sourceToEditedTime(sourceTime, cuts);
     var resetAt = 0;
+    var confirmedPageChanges = new Set((item.pageChangeCutIds || []).map(String));
     cuts.forEach(function (cut) {
       if (cut.reason !== 'long_pause' && cut.reason !== 'combined') return;
       if (Number(cut.end) - Number(cut.start) < 3) return;
+      if (!confirmedPageChanges.has(String(cut.id))) return;
       var boundary = sourceToEditedTime(cut.end, cuts);
       if (boundary <= editedTime + 0.001) resetAt = Math.max(resetAt, boundary);
     });

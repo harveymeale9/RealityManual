@@ -15433,3 +15433,28 @@ the long-form caption line into Harvey's marked area just above the bottom book
 edge. Portrait captions remain at their separately tuned 22% position. Render
 format version 13 invalidates active unapproved outputs so both changes rebuild
 into review rather than leaving the previous video cached.
+
+---
+
+# 441. Camera Resets Require Visual Proof of a Page Change (2026-10-01)
+
+Harvey found that using silence duration alone could still make a same-page
+speech gap restart the camera. Silence remains the correct signal for cutting
+dead air, but it is not sufficient evidence that the visible page changed.
+The two decisions are now deliberately independent.
+
+For each automatic silence cut long enough to be a possible page turn, the
+renderer samples the source immediately before and after the removed interval,
+normalizes both frames to a small grayscale comparison image, and measures
+structural similarity with FFmpeg's SSIM filter. A camera reset is persisted
+only when similarity is below 0.50. A failed comparison safely produces no
+camera movement; it never affects the useful audio/silence cut itself. The
+browser preview consumes the same persisted cut-ID allowlist as the final
+renderer, eliminating separate inference paths.
+
+The detector was exercised against every qualifying gap in both real active
+recordings. It confirmed the four genuine page changes with SSIM scores from
+0.18–0.41 and rejected the same-page gaps, whose scores were 0.60–0.73. Render
+format version 14 rebuilds active review files through this visually confirmed
+path. Unit coverage also proves that an otherwise qualifying three-second cut
+cannot reset unless its exact cut ID is confirmed.

@@ -22,7 +22,8 @@ const PAGE_CHANGE_CUT_SECONDS = 3;
 // automatic long-pause cuts are treated as page changes and start the move
 // again from the wide camera frame.
 const OPENING_PUSH_IN_SCALE = 1.25;
-const EDITOR_RENDER_VERSION = 13;
+const EDITOR_RENDER_VERSION = 14;
+const PAGE_CHANGE_SSIM_THRESHOLD = 0.5;
 const BROWSER_PREVIEW_VERSION = 2;
 const AUDIO_PREVIEW_MIX_VERSION = 3;
 const AUDIO_PREVIEW_TTL_MS = 2 * 60 * 60 * 1000;
@@ -447,6 +448,7 @@ function invalidateRender(project) {
   project.renderSizeBytes = 0;
   project.renderSha256 = '';
   project.editedDuration = 0;
+  project.pageChangeCutIds = [];
   return project;
 }
 
@@ -478,23 +480,25 @@ function openingZoomExpression(elapsedStart, framesPerSecond, durationSeconds) {
   return '(1+' + (OPENING_PUSH_IN_SCALE - 1).toFixed(3) + '*' + eased + ')';
 }
 
-function cameraResetStarts(cuts) {
+function cameraResetStarts(cuts, confirmedCutIds) {
   const resetStarts = [0];
+  const confirmed = Array.isArray(confirmedCutIds) ? new Set(confirmedCutIds.map(String)) : null;
   (cuts || []).forEach(function (cut) {
     if (cut.reason !== 'long_pause' && cut.reason !== 'combined') return;
     // Sentence pauses are also tightened automatically. Only a substantial
     // removed silence is a reliable voice-only signal that Harvey turned the
     // page; otherwise the camera would restart throughout ordinary speech.
     if (Number(cut.end) - Number(cut.start) < PAGE_CHANGE_CUT_SECONDS) return;
+    if (confirmed && !confirmed.has(String(cut.id))) return;
     const boundary = mapSourceTimeToEdited(cut.end, cuts);
     if (boundary > resetStarts[resetStarts.length - 1] + 0.001) resetStarts.push(boundary);
   });
   return resetStarts;
 }
 
-function cameraMotionState(sourceSeconds, cuts, layout) {
+function cameraMotionState(sourceSeconds, cuts, layout, confirmedCutIds) {
   const editedTime = mapSourceTimeToEdited(sourceSeconds, cuts || []);
-  const resetStarts = cameraResetStarts(cuts || []);
+  const resetStarts = cameraResetStarts(cuts || [], confirmedCutIds);
   let resetAt = 0;
   resetStarts.forEach(function (candidate) { if (candidate <= editedTime + 0.001) resetAt = candidate; });
   return {
@@ -505,7 +509,7 @@ function cameraMotionState(sourceSeconds, cuts, layout) {
   };
 }
 
-function cameraMotionForSegment(segment, cuts, layout) {
+function cameraMotionForSegment(segment, cuts, layout, confirmedCutIds) {
   // Returning from an external full-screen excerpt is a new camera reveal,
   // just like returning after a page turn: begin on the completely wide book
   // frame, ease to the 125% base over three seconds, then hold. This must be
@@ -516,7 +520,35 @@ function cameraMotionForSegment(segment, cuts, layout) {
     const editedTime = mapSourceTimeToEdited(segment.start, cuts || []);
     return { editedTime: editedTime, resetAt: editedTime, elapsed: 0, duration: PAGE_ZOOM_SECONDS };
   }
-  return cameraMotionState(segment && segment.start, cuts, layout);
+  return cameraMotionState(segment && segment.start, cuts, layout, confirmedCutIds);
+}
+
+function visualPageChangeFromSsim(score) {
+  return Number.isFinite(Number(score)) && Number(score) < PAGE_CHANGE_SSIM_THRESHOLD;
+}
+
+async function detectVisualPageChangeCutIds(filePath, cuts) {
+  const confirmed = [];
+  const candidates = (cuts || []).filter(function (cut) {
+    return (cut.reason === 'long_pause' || cut.reason === 'combined') &&
+      Number(cut.end) - Number(cut.start) >= PAGE_CHANGE_CUT_SECONDS;
+  });
+  for (const cut of candidates) {
+    const before = Math.max(0, Number(cut.start) - 0.1).toFixed(3);
+    const after = Math.max(0, Number(cut.end) + 0.1).toFixed(3);
+    try {
+      const result = await run('ffmpeg', ['-hide_banner', '-loglevel', 'info',
+        '-ss', before, '-i', filePath, '-ss', after, '-i', filePath,
+        '-filter_complex', '[0:v]scale=320:180,format=gray[a];[1:v]scale=320:180,format=gray[b];[a][b]ssim',
+        '-frames:v', '1', '-an', '-f', 'null', '-'], 'Page-change frame comparison');
+      const match = String(result.stderr || '').match(/All:([0-9.]+)/);
+      if (match && visualPageChangeFromSsim(Number(match[1]))) confirmed.push(String(cut.id));
+    } catch (error) {
+      // A failed visual check must not invent camera movement. The silence cut
+      // remains valid; only its optional page-reveal motion is omitted.
+    }
+  }
+  return confirmed;
 }
 
 // One high-quality fractional resampling stage handles the centred camera
@@ -1570,6 +1602,8 @@ async function renderProject(id) {
       project.renderProgress = 0;
       saveProject(project);
       const cuts = cutsForProject(project);
+      project.pageChangeCutIds = await detectVisualPageChangeCutIds(sourcePath(id), cuts);
+      saveProject(project);
       const segments = editorTimelineSegments(project, cuts);
       if (!segments.length) throw new Error('Every part of the recording is currently cut. Restore some transcript first.');
       const expectedDuration = segments.reduce(function (sum, segment) { return sum + segment.end - segment.start; }, 0);
@@ -1590,7 +1624,7 @@ async function renderProject(id) {
           videoFilter += ",crop=w='min(iw\\,ih*16/9)':h='min(ih\\,iw*9/16)':x='(iw-ow)/2':y='(ih-oh)/2',scale=1920:1080,setsar=1";
         }
         if (segment.type === 'source') {
-          const motion = cameraMotionForSegment(segment, cuts, layout);
+          const motion = cameraMotionForSegment(segment, cuts, layout, project.pageChangeCutIds);
           videoFilter += cameraMotionFilter({ renderShape: renderShape, layout: layout, elapsedStart: motion.elapsed, durationSeconds: motion.duration, openingEnabled: project.openingPushInEnabled !== false });
         }
         videoFilter += ',format=yuv420p';
@@ -2642,6 +2676,8 @@ module.exports = {
   cameraResetStarts,
   cameraMotionState,
   cameraMotionForSegment,
+  visualPageChangeFromSsim,
+  detectVisualPageChangeCutIds,
   captionGroups,
   buildAss,
   displayDimensions,

@@ -211,13 +211,17 @@ test('horizontal resting crop follows the open book instead of the desk centre',
 
 test('camera motion restarts after automatic long-pause cuts but not manual cuts', function () {
   const cuts = [
-    { start: 4, end: 7, reason: 'long_pause' },
-    { start: 10, end: 11, reason: 'transcript_cut' },
-    { start: 12, end: 12.8, reason: 'long_pause' },
-    { start: 14, end: 17, reason: 'combined' },
-    { start: 18, end: 19.9, reason: 'long_pause' }
+    { id: 'page-one', start: 4, end: 7, reason: 'long_pause' },
+    { id: 'manual', start: 10, end: 11, reason: 'transcript_cut' },
+    { id: 'brief', start: 12, end: 12.8, reason: 'long_pause' },
+    { id: 'page-two', start: 14, end: 17, reason: 'combined' },
+    { id: 'hesitation', start: 18, end: 19.9, reason: 'long_pause' }
   ];
   assert.deepEqual(editor.cameraResetStarts(cuts), [0, 4, 9.2]);
+  assert.deepEqual(editor.cameraResetStarts(cuts, ['page-two']), [0, 9.2]);
+  assert.equal(editor.visualPageChangeFromSsim(0.49), true);
+  assert.equal(editor.visualPageChangeFromSsim(0.5), false);
+  assert.equal(editor.visualPageChangeFromSsim(0.72), false);
   assert.deepEqual(editor.cameraMotionState(0, cuts, 'vertical'), { editedTime: 0, resetAt: 0, elapsed: 0, duration: 3 });
   assert.deepEqual(editor.cameraMotionState(7, cuts, 'vertical'), { editedTime: 4, resetAt: 4, elapsed: 0, duration: 3 });
   assert.deepEqual(editor.cameraMotionState(11, cuts, 'vertical'), { editedTime: 7, resetAt: 4, elapsed: 3, duration: 3 });
@@ -303,7 +307,7 @@ test('invalidating an edit clears every stale output claim', function () {
   const project = { renderStatus: 'ready', renderError: 'old', renderProgress: 100, automaticRenderStartedAt: 'then',
     renderQuality: { status: 'passed' }, renderSizeBytes: 1234, editedDuration: 42 };
   editor.invalidateRender(project);
-  assert.deepEqual(project, { renderStatus: '', renderError: '', renderProgress: 0, automaticRenderStartedAt: '', renderQuality: null, renderSizeBytes: 0, renderSha256: '', editedDuration: 0 });
+  assert.deepEqual(project, { renderStatus: '', renderError: '', renderProgress: 0, automaticRenderStartedAt: '', renderQuality: null, renderSizeBytes: 0, renderSha256: '', editedDuration: 0, pageChangeCutIds: [] });
 });
 
 test('metadata-only editor changes preserve a verified render', function () {
@@ -618,7 +622,7 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.equal(stored.renderQuality.status, 'passed');
-  assert.equal(stored.renderVersion, 13);
+  assert.equal(stored.renderVersion, 14);
   assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), true);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
