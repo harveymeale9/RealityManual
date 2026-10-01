@@ -250,7 +250,7 @@
     var resetAt = 0;
     cuts.forEach(function (cut) {
       if (cut.reason !== 'long_pause' && cut.reason !== 'combined') return;
-      if (Number(cut.end) - Number(cut.start) < 1.25) return;
+      if (Number(cut.end) - Number(cut.start) < 3) return;
       var boundary = sourceToEditedTime(cut.end, cuts);
       if (boundary <= editedTime + 0.001) resetAt = Math.max(resetAt, boundary);
     });

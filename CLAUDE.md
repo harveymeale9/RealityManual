@@ -15409,3 +15409,27 @@ open spread at 16:9. Render format version 12 invalidates active unapproved
 110% outputs so the review player cannot present the old composition as
 current. The camera-motion regression test now proves the 100→112.5→125%
 curve and permanent hold.
+
+---
+
+# 440. Page Resets Ignore Spoken Hesitations; Long-Form Captions Sit Lower (2026-10-01)
+
+The rebuilt horizontal **Why Consciousness Is Fundamental** video widened
+again around 14 edited seconds even though Harvey had not turned the page.
+Inspection of its actual word and cut timeline found the precise cause: the
+speaker paused from source 15.65–17.55, producing a 1.9-second automatic cut.
+The former 1.25-second camera-reset threshold classified that ordinary spoken
+hesitation as a page turn. The same recording's real page changes produce
+5.84- and 8.6-second removed gaps.
+
+Camera resets now require at least three seconds of removed automatic silence.
+That keeps normal hesitations at the held 125% composition while still
+recognizing the substantially longer silent page-turn gaps. The browser
+working preview and final renderer use the same threshold. Regression coverage
+includes a 1.9-second non-reset and three-second qualifying resets.
+
+Landscape caption `MarginV` is now 12% of frame height instead of 27%, moving
+the long-form caption line into Harvey's marked area just above the bottom book
+edge. Portrait captions remain at their separately tuned 22% position. Render
+format version 13 invalidates active unapproved outputs so both changes rebuild
+into review rather than leaving the previous video cached.

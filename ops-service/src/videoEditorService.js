@@ -15,14 +15,14 @@ const EDIT_RENDER_DEBOUNCE_MS = 2500;
 const EDITOR_DISK_RESERVE_BYTES = 2 * 1024 * 1024 * 1024;
 const PAGE_ZOOM_SECONDS = 3;
 const HORIZONTAL_OPENING_ZOOM_SECONDS = 5;
-const PAGE_CHANGE_CUT_SECONDS = 1.25;
+const PAGE_CHANGE_CUT_SECONDS = 3;
 // Footage is deliberately recorded wide enough to show a little table. The
 // opening move settles into a tight book-first framing and that 125%
 // composition remains the baseline for the rest of the shot. Substantial
 // automatic long-pause cuts are treated as page changes and start the move
 // again from the wide camera frame.
 const OPENING_PUSH_IN_SCALE = 1.25;
-const EDITOR_RENDER_VERSION = 12;
+const EDITOR_RENDER_VERSION = 13;
 const BROWSER_PREVIEW_VERSION = 2;
 const AUDIO_PREVIEW_MIX_VERSION = 3;
 const AUDIO_PREVIEW_TTL_MS = 2 * 60 * 60 * 1000;
@@ -850,7 +850,10 @@ function buildAss(project, groups) {
   // Vertical captions sit low over the otherwise-unused lower page area.
   // 22% from the bottom matches the Editor preview and Harvey's marked
   // reference line; the former 30% placement sat visibly over the page text.
-  const marginV = Math.round(height * (isLongform ? 0.27 : 0.22));
+  // Landscape captions sit just above the lower book edge. The old 27%
+  // margin put them across the middle of the page; 12% matches Harvey's
+  // marked lower-third target while retaining a safe gap above the frame.
+  const marginV = Math.round(height * (isLongform ? 0.12 : 0.22));
   const header = [
     '[Script Info]', 'ScriptType: v4.00+', 'PlayResX: ' + width, 'PlayResY: ' + height,
     'ScaledBorderAndShadow: yes', '', '[V4+ Styles]',

@@ -214,7 +214,8 @@ test('camera motion restarts after automatic long-pause cuts but not manual cuts
     { start: 4, end: 7, reason: 'long_pause' },
     { start: 10, end: 11, reason: 'transcript_cut' },
     { start: 12, end: 12.8, reason: 'long_pause' },
-    { start: 14, end: 17, reason: 'combined' }
+    { start: 14, end: 17, reason: 'combined' },
+    { start: 18, end: 19.9, reason: 'long_pause' }
   ];
   assert.deepEqual(editor.cameraResetStarts(cuts), [0, 4, 9.2]);
   assert.deepEqual(editor.cameraMotionState(0, cuts, 'vertical'), { editedTime: 0, resetAt: 0, elapsed: 0, duration: 3 });
@@ -487,6 +488,7 @@ test('landscape captions are larger and advance spoken-word emphasis', function 
   ] }];
   const ass = editor.buildAss({ width: 1920, height: 1080 }, groups);
   assert.match(ass, /Style: Default,Arial,52,/);
+  assert.match(ass, /,2,40,40,130,1/);
   assert.equal((ass.match(/^Dialogue:/gm) || []).length, 3);
   assert.match(ass, /\\fs58\\bord4}A\{\\r} wise move/);
   assert.match(ass, /A \{\\fs58\\bord4}wise\{\\r} move/);
@@ -616,7 +618,7 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.equal(stored.renderQuality.status, 'passed');
-  assert.equal(stored.renderVersion, 12);
+  assert.equal(stored.renderVersion, 13);
   assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), true);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
