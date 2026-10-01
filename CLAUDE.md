@@ -15365,7 +15365,13 @@ pipeline. Each chunk is offset-checked; a chunk whose response was lost may be
 retried idempotently without duplicating bytes. A transient interruption gets
 one automatic retry, cancellation aborts the active request and removes the
 partial server file, inactive sessions expire after six hours, and the prior
-2 GB/file plus disk-capacity safeguards still apply to the full recording.
+4.5 GiB/file plus disk-capacity safeguards apply to the full recording. The
+ceiling was raised from 2 GiB after Harvey noted that long-form camera masters
+can exceed it; because transport is chunked, this does not increase any single
+Cloudflare request. The admission calculation remains conservative, so a
+4.5 GiB file is accepted only when there is also enough working space for its
+proxies, renders, Production handoff, later mixed final, and the operating
+reserve.
 The legacy single-request endpoint remains for compatibility and tests.
 
 The progress markup now has a dedicated track class, a six-pixel visible bar,

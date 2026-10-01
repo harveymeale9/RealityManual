@@ -100,6 +100,7 @@ test('restart cleanup removes only Editor-owned temporary files regardless of ag
 
 test('upload capacity reserves every downstream master plus operating space', function () {
   const gib = 1024 * 1024 * 1024;
+  assert.equal(editor.maxUploadBytes, 4.5 * gib);
   assert.equal(editor.requiredEditorCapacity(2 * gib, false), 14 * gib);
   assert.equal(editor.requiredEditorCapacity(2 * gib, true), 12 * gib);
 });

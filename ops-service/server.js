@@ -3599,7 +3599,7 @@ const httpServer = app.listen(PORT, function () {
 });
 // Node's default requestTimeout is five minutes for receiving the complete
 // request body. That is far shorter than a legitimate multi-gigabyte camera
-// upload over an ordinary home/mobile connection. Multer's 2 GiB cap and the
+// upload over an ordinary home/mobile connection. The Editor's 4.5 GiB cap and
 // Editor's disk-capacity reservation remain authoritative; this only prevents
 // elapsed wall time from killing a continuously progressing upload.
 const configuredRequestTimeout = Number(process.env.REQUEST_BODY_TIMEOUT_MS);

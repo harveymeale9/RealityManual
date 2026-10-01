@@ -32,7 +32,7 @@
   var currentUploadSessionId = '';
   var uploadStatusText = '';
   var uploadStatusPercent = 0;
-  var MAX_RECORDING_BYTES = 2 * 1024 * 1024 * 1024;
+  var MAX_RECORDING_BYTES = Math.floor(4.5 * 1024 * 1024 * 1024);
   var listFilter = localStorage.getItem('rmEditorListFilter') === 'sent' ? 'sent' : 'active';
   var reviewRate = Number(localStorage.getItem('rmEditorReviewRate')) || 1;
   if ([1, 1.25, 1.5, 2].indexOf(reviewRate) === -1) reviewRate = 1;
@@ -709,13 +709,13 @@
       return true;
     });
     if (!files.length) {
-      if (oversized.length) return alert('These recordings are larger than the 2 GB per-file limit:\n\n' + oversized.join('\n') + '\n\nSplit or trim each raw take, then try again.');
+      if (oversized.length) return alert('These recordings are larger than the 4.5 GB per-file limit:\n\n' + oversized.join('\n') + '\n\nSplit or trim each raw take, then try again.');
       if (unsupported.length) return alert('These files do not look like supported recordings:\n\n' + unsupported.join('\n') + '\n\nUse MP4, MOV, M4V, WebM, MKV, or AVI.');
       return alert('Drop one or more video files.');
     }
     var created = [];
     var projectAtBatchStart = project && project.id || '';
-    var failures = oversized.map(function (name) { return name + ': larger than the 2 GB per-file limit'; });
+    var failures = oversized.map(function (name) { return name + ': larger than the 4.5 GB per-file limit'; });
     unsupported.forEach(function (name) { failures.push(name + ': unsupported file type'); });
     editorNotice = '';
     renderNotice();
