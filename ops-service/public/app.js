@@ -21,9 +21,9 @@
   // publish a piece should gate on this, not just IS_REVIEWER alone.
   function canEditPiece(p) { return !IS_REVIEWER || isOwnedByReviewer(p); }
 
-  var EDITED_INDEX = window.RMStore.STAGES.map(function (s) { return s.id; }).indexOf('edited');
-  var MANUAL_STAGE_IDS = window.RMStore.STAGES.slice(0, EDITED_INDEX + 1).map(function (s) { return s.id; });
-  var AUTO_STAGE_IDS = window.RMStore.STAGES.slice(EDITED_INDEX + 1).map(function (s) { return s.id; });
+  var UPLOADED_INDEX = window.RMStore.STAGES.map(function (s) { return s.id; }).indexOf('uploaded');
+  var MANUAL_STAGE_IDS = window.RMStore.STAGES.slice(0, UPLOADED_INDEX + 1).map(function (s) { return s.id; });
+  var AUTO_STAGE_IDS = window.RMStore.STAGES.slice(UPLOADED_INDEX + 1).map(function (s) { return s.id; });
 
   // Platform preset applied when the content-type dropdown changes in the
   // editor, per Harvey: any shortform type defaults to YT Shorts +
@@ -1292,13 +1292,13 @@
 
   // One-time migration for the removed "Thumbnail Selected" stage (§ see
   // CLAUDE.md uploader-tool section) — anything still sitting there moves
-  // back to Processing and picks up the "thumbnail selected" tag that
+  // back to In Production and picks up the "thumbnail selected" tag that
   // replaces it, so nothing gets silently stranded on a stage id that no
   // longer exists in Store.STAGES.
   function migrateThumbnailStage(rows) {
     var stragglers = rows.filter(function (r) { return r.stage === 'thumbnail'; });
     stragglers.forEach(function (r) {
-      r.stage = 'processed';
+      r.stage = 'in_production';
       syncTags(r);
       r.updatedAt = nowIso();
       Store.put('pieces', r);
@@ -1309,13 +1309,13 @@
   // its stage set directly (no separate audio-spliced video ever built —
   // that pipeline didn't exist yet). Its Final Check card would now try
   // to play a "<id>-final" file that was never created. Sending it back
-  // to Processing means it goes through the real build the next time
+  // to In Production means it goes through the real build the next time
   // Harvey hits "Send to final check," same as any new upload — rather
   // than leaving a stale entry with a broken/missing video preview.
   function migrateUnbuiltFinalChecks(rows) {
     var stragglers = rows.filter(function (r) { return r.stage === 'final_check' && r.finalBuildStatus !== 'done'; });
     stragglers.forEach(function (r) {
-      r.stage = 'processed';
+      r.stage = 'in_production';
       r.updatedAt = nowIso();
       Store.put('pieces', r);
     });
@@ -1336,7 +1336,7 @@
     return piecesLoadedPromise;
   }
 
-  // Editor creates its Processing-stage piece server-side. Inject the fresh
+  // Editor advances its existing video card to In Production server-side. Inject the fresh
   // record into this SPA's shared cache before navigating so Content
   // Production shows it immediately rather than waiting for a page reload.
   window.__rmOpenContentProduction = function (pieceId, freshPiece) {
@@ -1349,12 +1349,18 @@
   };
 
   // Editor handoff happens server-side, outside this SPA cache. Register both
-  // records from the authoritative response immediately so the new Processing
+  // records from the authoritative response immediately so the new In Production
   // item and the linked planning card's Uploaded move appear without a reload.
   window.__rmRegisterEditorHandoff = function (result) {
     result = result || {};
     if (result.piece && result.piece.id) pieces[result.piece.id] = result.piece;
     if (result.planningPiece && result.planningPiece.id) pieces[result.planningPiece.id] = result.planningPiece;
+    notifyPiecesChanged();
+  };
+
+  window.__rmRegisterEditorVideoCard = function (piece) {
+    if (!piece || !piece.id) return;
+    pieces[piece.id] = piece;
     notifyPiecesChanged();
   };
 
@@ -1417,7 +1423,7 @@
   /* ---------- tags + scheduling ---------- */
 
   // Replaces the old "Thumbnail Selected" stage-derivation (deriveAndApplyStage) —
-  // a video piece's *stage* is now fully explicit (Processing -> Final Check
+  // a video piece's *stage* is now fully explicit (In Production -> Final Check
   // -> Scheduled -> Live, moved only by Harvey hitting "Send to final
   // check" / "Approve," never automatically), but these three tags still
   // want to reflect field state automatically, recomputed from scratch
@@ -1556,7 +1562,7 @@
       },
       {
         title: 'Example — 3 ideas from the book, explained in 60s each',
-        stage: 'edited', platforms: ['ytshort', 'tiktok'], contentType: 'ultra_short',
+        stage: 'uploaded', platforms: ['ytshort', 'tiktok'], contentType: 'ultra_short',
         notesHtml: 'Delete or edit me. Edit is locked, waiting on audio pass.'
       }
     ];
@@ -2613,7 +2619,7 @@
         })();
     var idBadge = typeof piece.seq === 'number' ? '<span class="card-id">#' + String(piece.seq).padStart(3, '0') + '</span>' : '';
     // Plain ideas never have one; a video piece almost always does once
-    // it's past Processing (§128's auto-capture) — Harvey asked for this
+    // it's past In Production (§128's auto-capture) — Harvey asked for this
     // after noticing a normal (non-Final-Check) kanban card gave no
     // visual hint at all of which video it actually was.
     var thumbHtml = piece.thumbnailDataUrl ? '<div class="card-thumb"><img src="' + piece.thumbnailDataUrl + '" alt="" /></div>' : '';
@@ -2976,7 +2982,7 @@
 
   // A real move animation, originally built (2026-09-20) for just one
   // case — a card's *stage* changing because a background job finished
-  // (Processing -> Final Check once a video build completes, Final Check
+    // (In Production -> Final Check once a video build completes, Final Check
   // -> Posted/Live once a publish succeeds) — then generalized the same
   // day to every other stage-changing action too: manual drag-and-drop,
   // the .card-move dropdown, and the shared modal's Approve button /
@@ -3036,6 +3042,13 @@
     board.querySelectorAll('.card').forEach(function (el) {
       el.addEventListener('click', function (e) {
         if (e.target.closest('.card-move, .card-external-link')) return;
+        var piece = pieces[el.dataset.id];
+        if (piece && piece.stage === 'in_editor' && piece.editorProjectId) {
+          localStorage.setItem('rmEditorListFilter', 'active');
+          localStorage.setItem('rmEditorActiveProjectId', piece.editorProjectId);
+          location.hash = 'editor';
+          return;
+        }
         openPiece(el.dataset.id, render);
       });
       el.addEventListener('dragstart', function (e) {
@@ -3279,6 +3292,17 @@
       confirmBtn.addEventListener('click', function (e) {
         e.stopPropagation();
         var p = pieces[id];
+        if (p && p.stage === 'in_editor' && p.editorProjectId) {
+          fetch('/api/editor/' + encodeURIComponent(p.editorProjectId), {
+            method: 'DELETE', credentials: 'include'
+          }).then(function (response) {
+            if (!response.ok) throw new Error('Could not delete the Editor recording.');
+            delete pieces[id];
+            closeKanbanCtxMenu();
+            render();
+          }).catch(function () { closeKanbanCtxMenu(); });
+          return;
+        }
         Store.del('pieces', id, p).then(function () {
           delete pieces[id];
           if (p && p.hasVideo) { Store.del('videos', id); Store.del('videos', id + '-final'); }
@@ -3581,7 +3605,7 @@
       titleId.appendChild(matchEl);
     }
     // The real, audio-spliced video Final Check reviews — has to exist
-    // before the piece is allowed to leave Processing (see CLAUDE.md's
+    // before the piece is allowed to leave In Production (see CLAUDE.md's
     // uploader-tool section on why), so this status line is what Harvey
     // actually watches after clicking "Send to final check."
     if (p.finalBuildStatus === 'running' || p.finalBuildStatus === 'pending') {
@@ -3602,7 +3626,7 @@
       // long as *either* job is pending, so the video kept getting torn
       // down and rebuilt mid-interaction, which read as the thumbnail
       // repeatedly vanishing/reappearing. server.js now holds a piece here
-      // in Processing until analysis also settles (maybeAdvanceToFinalCheck)
+      // In Production until analysis also settles (maybeAdvanceToFinalCheck)
       // — this line is what actually explains the wait to Harvey, rather
       // than a done-looking row with no visible reason to still be here.
       var waitingOnAnalysis = document.createElement('div');
@@ -4117,12 +4141,12 @@
   // between (what Harvey saw as the whole panel flashing/disappearing).
   function renderUploadLists() {
     var items = Object.keys(pieces).map(function (k) { return pieces[k]; }).filter(function (p) { return p.hasVideo; });
-    // Only still-in-Processing pieces get the editable row treatment here
+    // Only In Production pieces get the editable row treatment here
     // — once a piece reaches Final Check it has its own dedicated review
     // card on the kanban board instead (§113), so showing it here too
     // would just be a redundant, stale-looking duplicate of the same
     // piece in two places.
-    var inProgress = items.filter(function (p) { return p.stage === 'processed'; }).sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
+    var inProgress = items.filter(function (p) { return p.stage === 'in_production'; }).sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
 
     function swapIn(audioTracks) {
       var oldObjectUrls = uploadRowObjectUrls;
@@ -4161,9 +4185,9 @@
   // own row once something changes, rather than a full
   // renderUploadLists() (which would re-fetch every other row's video
   // blob and flash the whole panel, §112). A piece whose build finished
-  // (stage moved off 'processed') gets the same instant-tick removal
+  // (stage moved off In Production) gets the same instant-tick removal
   // animation the button itself used to fake instantly; one still in
-  // Processing with a changed status (analysis landed, or a build
+  // In Production with a changed status (analysis landed, or a build
   // failed) just gets its own head refreshed in place. Stops itself once
   // nothing's waiting, rather than polling forever in the background.
   var analysisPollTimer = null;
@@ -4198,7 +4222,7 @@
         rows.forEach(function (r) {
           if (!r) return;
           var existing = pieces[r.id];
-          var wasProcessed = existing && existing.stage === 'processed';
+          var wasInProduction = existing && existing.stage === 'in_production';
           var prevStage = existing && existing.stage;
           // Real bug Harvey hit (2026-09-20, §142): this poll tick's own
           // GET can easily be a snapshot taken from *before* an in-progress
@@ -4273,7 +4297,7 @@
           // otherwise, so whatever tab Harvey's actually looking at —
           // most likely the Kanban board — redraws itself for real.
           if (currentTabId() !== 'upload-files') return;
-          if (wasProcessed && r.stage !== 'processed') {
+          if (wasInProduction && r.stage !== 'in_production') {
             removeUploadRowAnimated(r.id);
           } else if (r.finalBuildStatus === 'error' && !uploadRows.querySelector('.upload-row[data-id="' + r.id + '"]')) {
             // The row was already removed by "Send to final check"'s own
@@ -4356,7 +4380,7 @@
           id: id,
           seq: Store.nextSeq(allPiecesArray()),
           title: file.name.replace(/\.[^.]+$/, ''),
-          stage: 'processed', // "Processing" — a brand-new opportunity, not the same thing as any plan in "Uploaded"
+          stage: 'in_production', // a finished external edit bypasses the raw-footage Editor stage
           // Pre-selected per the same type->platform default the shared
           // modal's content-type dropdown already applies (see
           // PLATFORM_PRESET_BY_TYPE up top) — Harvey's ask: platforms
@@ -4387,7 +4411,7 @@
           tags: [],
           analysisStatus: 'pending',
           scheduledAt: '',
-          order: maxOrder('processed') + 10,
+          order: maxOrder('in_production') + 10,
           createdAt: nowIso(),
           updatedAt: nowIso()
         };

@@ -660,6 +660,10 @@
       });
     }).then(function (body) {
       currentUploadSessionId = '';
+      if (body.videoPiece && typeof window.__rmRegisterEditorVideoCard === 'function') {
+        window.__rmRegisterEditorVideoCard(body.videoPiece);
+      }
+      delete body.videoPiece;
       projectDetails[body.id] = body;
       projects.unshift(body);
       renderList();

@@ -122,7 +122,7 @@ window.RMStore = (function () {
   // "Thumbnail Selected" used to be its own stage — replaced (Harvey's
   // call) with a "thumbnail selected" tag shown on the card instead (see
   // TAGS below and app.js's cardHtml/tagsFor), since it was really a
-  // sub-state of "Processing," not a genuinely separate stage worth its
+  // sub-state of "In Production," not a genuinely separate stage worth its
   // own kanban column. "Final Check" is new — a video sits here after
   // Harvey explicitly sends it for review (thumbnail/audio/titles all
   // picked) and before he approves it into "Scheduled"; approving is what
@@ -136,8 +136,8 @@ window.RMStore = (function () {
     { id: 'outline_completed', label: 'Outline Completed' },
     { id: 'filmed', label: 'Filmed' },
     { id: 'uploaded', label: 'Uploaded' },
-    { id: 'edited', label: 'Edited' },
-    { id: 'processed', label: 'Processing' },
+    { id: 'in_editor', label: 'In Editor' },
+    { id: 'in_production', label: 'In Production' },
     { id: 'final_check', label: 'Final Check' },
     { id: 'scheduled', label: 'Scheduled' },
     { id: 'live', label: 'Posted / Live' },

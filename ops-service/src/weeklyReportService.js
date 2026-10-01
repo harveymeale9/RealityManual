@@ -6,10 +6,10 @@ const DAY_MS = 86400000;
 const STAGE_LABELS = {
   archived: 'Archived', ideation: 'Rough Ideas', big_ideas: 'Big Ideas',
   outline_started: 'Outlines started', outline_completed: 'Outlines completed',
-  filmed: 'Filmed', edited: 'Edited', uploaded: 'Uploaded', processed: 'Processing',
+  filmed: 'Filmed', uploaded: 'Uploaded', in_editor: 'In Editor', in_production: 'In Production',
   final_check: 'Final Check', scheduled: 'Scheduled', live: 'Published'
 };
-const MILESTONE_STAGES = ['big_ideas', 'outline_started', 'outline_completed', 'filmed', 'edited', 'final_check', 'scheduled', 'live'];
+const MILESTONE_STAGES = ['big_ideas', 'outline_started', 'outline_completed', 'filmed', 'uploaded', 'in_editor', 'in_production', 'final_check', 'scheduled', 'live'];
 
 function clean(value, max) { return String(value == null ? '' : value).trim().slice(0, max || 100000); }
 function json(value, fallback) { try { return JSON.parse(value); } catch (error) { return fallback; } }

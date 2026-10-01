@@ -993,6 +993,8 @@ function setup(options) {
   const getPlanningCandidates = options.getPlanningCandidates;
   const getPlanningPiece = options.getPlanningPiece;
   const matchPlanningPiece = options.matchPlanningPiece;
+  const onProjectCreated = options.onProjectCreated;
+  const onProjectMetadataChanged = options.onProjectMetadataChanged;
   const onRenderReady = options.onRenderReady;
   const onRenderInvalidated = options.onRenderInvalidated;
   const onPlanningPieceChanged = options.onPlanningPieceChanged;
@@ -1470,6 +1472,7 @@ function setup(options) {
         if (project.planningPieceId !== previousPlanningPieceId && typeof onPlanningPieceChanged === 'function') {
           onPlanningPieceChanged({ project: project, previousPlanningPieceId: previousPlanningPieceId, renderWillChange: false });
         }
+        if (typeof onProjectMetadataChanged === 'function') onProjectMetadataChanged({ project: project });
         saveProject(project);
         setImmediate(function () { maybeAutoRender(id); });
       } catch (err) {
@@ -2135,11 +2138,19 @@ async function renderProject(id) {
         createdAt: now,
         updatedAt: now
       });
+      const videoPiece = typeof onProjectCreated === 'function'
+        ? await Promise.resolve(onProjectCreated({ project: project }))
+        : null;
       sourceClaim.settle(id);
-      res.status(202).json(project);
+      res.status(202).json(Object.assign({}, project, { videoPiece: videoPiece }));
       setImmediate(function () { transcribeProject(id); generateBrowserPreview(id); });
     } catch (err) {
       sourceClaim.settle('');
+      const failedProject = getProject(id);
+      if (failedProject && typeof onProjectDeleted === 'function') {
+        try { onProjectDeleted({ project: failedProject }); } catch (cleanupError) {}
+      }
+      delStmt.run(STORE_NAME, id);
       fs.rm(req.file.path, { force: true }, function () {});
       fs.rm(projectDir(id), { recursive: true, force: true }, function () {});
       res.status(422).json({ error: 'invalid_recording', message: String(err.message || err) });
@@ -2384,6 +2395,7 @@ async function renderProject(id) {
     if (renderWillChange) invalidateProjectRender(project);
     advanceEditRevision(project);
     if (mutationId) project.recentMutationIds = (Array.isArray(project.recentMutationIds) ? project.recentMutationIds : []).concat([mutationId]).slice(-100);
+    if (typeof onProjectMetadataChanged === 'function') onProjectMetadataChanged({ project: project });
     saveProject(project);
     res.json(projectDetail(project));
     if (patchNeedsAutoRender(project, renderWillChange)) scheduleAutoRender(project.id, EDIT_RENDER_DEBOUNCE_MS);

@@ -954,6 +954,8 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   let expectedPlanningPieceId = 'plan-1';
   const planningChanges = [];
   const deletedProjects = [];
+  const createdProjects = [];
+  const metadataProjects = [];
   const service = editor.setup({
     db: db,
     dataDir: dir,
@@ -970,6 +972,8 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
     },
     getPlanningCandidates: function () { return [{ id: 'plan-1', seq: 79, title: 'Synthetic outline', stage: 'filmed', notesSnippet: 'One two.' }, { id: 'plan-2', seq: 80, title: 'Corrected outline', stage: 'filmed', notesSnippet: 'One two.' }]; },
     matchPlanningPiece: async function () { planningMatchCalls++; return { pieceId: 'plan-1', confidence: 'high', reason: 'The transcript matches the filmed outline.', workingTitle: 'Synthetic Outline' }; },
+    onProjectCreated: function (input) { createdProjects.push(input.project); },
+    onProjectMetadataChanged: function (input) { metadataProjects.push(input.project); },
     onRenderReady: function (input) {
       renderReadyCalls++;
       assert.equal(input.project.planningPieceId, expectedPlanningPieceId);
@@ -1005,8 +1009,8 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
       await new Promise(function (resolve) { setTimeout(resolve, 80); });
       return {
         pieceId: input.project.id,
-        piece: { id: input.project.id, stage: 'processed', hasVideo: true },
-        planningPiece: { id: 'plan-2', stage: 'edited' },
+        piece: { id: input.project.id, stage: 'in_production', hasVideo: true },
+        planningPiece: { id: 'plan-2', stage: 'uploaded' },
         alreadySent: alreadySent,
         workflowWarning: 'Synthetic planning-stage warning.'
       };
@@ -1025,6 +1029,8 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   let response = await fetch(base + '/api/editor', { method: 'POST', body: form });
   assert.equal(response.status, 202);
   let project = await response.json();
+  assert.equal(createdProjects.length, 1);
+  assert.equal(createdProjects[0].id, project.id);
   assert.equal(project.audioTrackId, '__none__');
   assert.equal(project.mimeType, 'video/quicktime');
   assert.equal(project.videoCodec, 'h264');
@@ -1084,6 +1090,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.workingTitle, 'Synthetic Outline');
   assert.equal(project.nameSource, 'planning_transcript');
   assert.equal(planningMatchCalls, 1);
+  assert.ok(metadataProjects.some(function (item) { return item.id === project.id && item.workingTitle === 'Synthetic Outline'; }));
   assert.ok(project.cuts.some(function (cut) { return cut.reason === 'long_pause'; }));
   assert.deepEqual(project.captionGroups.map(function (group) { return group.text; }), ['One two.']);
   for (let attempt = 0; attempt < 600 && (project.renderStatus !== 'error' && (project.renderStatus !== 'ready' || renderReadyCalls < 1 || !project.workflowWarning)); attempt++) {
@@ -1284,8 +1291,8 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   const joinedHandoffResult = await simultaneousHandoffs[1].json();
   assert.equal(handoffResult.pieceId, project.id);
   assert.equal(joinedHandoffResult.pieceId, project.id);
-  assert.equal(handoffResult.piece.stage, 'processed');
-  assert.equal(handoffResult.planningPiece.stage, 'edited');
+  assert.equal(handoffResult.piece.stage, 'in_production');
+  assert.equal(handoffResult.planningPiece.stage, 'uploaded');
   assert.equal(handoffResult.alreadySent || joinedHandoffResult.alreadySent, true);
   assert.equal(handoffResult.workflowWarning, 'Synthetic planning-stage warning.');
   project = await (await fetch(base + '/api/editor/' + project.id)).json();

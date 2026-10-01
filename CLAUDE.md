@@ -15599,3 +15599,48 @@ for click-drag horizontal scrolling, but at the laptop board's 75% density its
 18px at laptop widths and 20px at the general/large-screen layout. Cards retain
 their existing widths and density; only the safe draggable strip between them
 has grown.
+
+---
+
+# 449. Planning Cards and Video Files Now Have Separate Lifecycles (2026-10-01)
+
+Harvey clarified that one content idea must deliberately produce two related
+Kanban records rather than one card changing meaning halfway through the
+pipeline. The planning card contains the outline and production notes and now
+ends permanently at **Uploaded**. Receiving an actual raw recording creates a
+separate lightweight video card immediately in **In Editor**. That video card
+then moves automatically through **In Production → Final Check → Scheduled →
+Posted / Live**. This supersedes §447's short-lived attempt to treat Edited as
+a terminal planning stage.
+
+The server creates the In Editor card transactionally with Editor project
+admission, reusing the Editor project ID so retries and approval remain
+idempotent. Automatic or manual planning linkage advances only the planning
+card to Uploaded and records the relationship on both identities; it never
+moves that planning card into the video lifecycle. The video card intentionally
+contains no outline notes. Its title, format, platforms, soundtrack choice, and
+planning relationship stay synchronized while the raw recording is active.
+Clicking it on the board opens that exact recording in Editor. Deleting an
+unapproved Editor project removes its video card and safely returns its linked
+planning card to Filmed.
+
+Editor approval no longer creates a late duplicate. It advances the existing
+video card from In Editor to In Production while copying the verified Editor
+render into the Production media store. Direct uploads of externally edited
+files still enter In Production because they deliberately bypass the raw
+Editor stage. The existing Final Check boundary remains strict: moving from In
+Production to Final Check requires the actual final visual plus the selected,
+loudness-normalized audio mix to finish building, as well as analysis to
+settle. Consequently the Final Check player is still the real publishable
+file, not a proxy or unfinished intermediate.
+
+A one-time durable migration converts old non-video Edited cards back to
+Uploaded and old video cards into In Editor or In Production according to
+whether they still have an active Editor project. Startup also backfills
+missing In Editor cards for active pre-split Editor projects without
+duplicating already-sent work. The
+frontend manual/automatic boundary now ends at Uploaded, Content Production
+filters In Production, outline matching searches terminal Uploaded planning
+cards only, and weekly reporting/ideation progression use the same vocabulary.
+The upload response immediately registers the new card in the open SPA cache,
+so navigating to Kanban after an upload does not require a page reload.

@@ -545,11 +545,10 @@ function editorPlanningCandidates(project) {
   return stmts.getAll.all('pieces').map(function (row) {
     try { return recordConcurrency.decodeRow(row); } catch (e) { return null; }
   }).filter(function (piece) {
-    if (!piece) return false;
+    if (!piece || piece.hasVideo) return false;
     if (piece.id === (project && project.planningPieceId)) return true;
     if (claimedByOtherEditorProjects.has(piece.id)) return false;
-    if (piece.stage === 'outline_completed' || piece.stage === 'filmed' || piece.stage === 'uploaded') return true;
-    return piece.stage === 'edited' && piece.editorProjectId === (project && project.id);
+    return piece.stage === 'outline_completed' || piece.stage === 'filmed' || piece.stage === 'uploaded';
   }).sort(function (a, b) {
     if (a.id === (project && project.planningPieceId)) return -1;
     if (b.id === (project && project.planningPieceId)) return 1;
@@ -562,7 +561,7 @@ function editorPlanningCandidates(project) {
 
 function editorPlanningPiece(id) {
   const piece = getPieceRecord(id);
-  if (!piece || !['outline_completed', 'filmed', 'uploaded', 'edited'].includes(piece.stage)) return null;
+  if (!piece || piece.hasVideo || !['outline_completed', 'filmed', 'uploaded'].includes(piece.stage)) return null;
   return { id: piece.id, seq: piece.seq, title: piece.title, stage: piece.stage, notesHtml: String(piece.notesHtml || '') };
 }
 
@@ -590,27 +589,91 @@ async function matchEditorPlanningPiece(input) {
   return claudeRunner.runTextOnlyStructured(prompt, schema, 120000);
 }
 
-function advanceEditorPlanningPiece(input, targetStage) {
+function editorVideoContentType(project) {
+  const duration = Number(project && (project.editedDuration || project.duration)) || 0;
+  const vertical = project && (project.effectiveLayout === 'vertical' ||
+    (!project.effectiveLayout && Number(project.height) > Number(project.width)));
+  if (['ultra_short', 'short', 'long_short', 'longform'].includes(project && project.detectedContentType)) {
+    return project.detectedContentType;
+  }
+  return vertical ? (duration <= 25 ? 'ultra_short' : duration <= 60 ? 'short' : 'long_short') : 'longform';
+}
+
+function editorVideoTitle(project) {
+  return String(project && (project.planningPieceTitle || project.workingTitle || project.name) ||
+    path.parse(project && project.fileName || 'Untitled recording').name).trim().slice(0, 200) || 'Untitled recording';
+}
+
+function createEditorVideoCard(input) {
+  const project = input && input.project;
+  if (!project || !isValidId(project.id)) throw new Error('The Editor recording has no valid identity.');
+  const existing = getPieceRecord(project.id);
+  if (existing) {
+    if (existing.editorProjectId !== project.id) throw new Error('A different card already uses this Editor recording id.');
+    return syncEditorVideoCard(input);
+  }
+  const rows = stmts.getAll.all('pieces').map(function (row) {
+    try { return recordConcurrency.decodeRow(row); } catch (error) { return null; }
+  }).filter(Boolean);
+  const contentType = editorVideoContentType(project);
+  const now = new Date().toISOString();
+  const piece = {
+    id: project.id,
+    seq: rows.reduce(function (max, item) { return Math.max(max, Number(item.seq) || 0); }, 0) + 1,
+    title: editorVideoTitle(project),
+    preserveWorkingTitle: !!project.planningPieceTitle,
+    stage: 'in_editor',
+    platforms: contentType === 'longform' ? ['ytlong', 'facebook'] : ['ytshort', 'tiktok', 'instagram', 'facebook'],
+    contentType: contentType,
+    contentTypeSelectionExplicit: true,
+    videoIsVertical: contentType !== 'longform',
+    notesHtml: '',
+    hasVideo: true,
+    transcript: '',
+    audioTrackId: project.audioTrackId || '__none__',
+    thumbnailDataUrl: '',
+    ytTitles: [],
+    tags: [],
+    analysisStatus: 'editor',
+    scheduledAt: '',
+    order: rows.filter(function (item) { return item.stage === 'in_editor'; })
+      .reduce(function (max, item) { return Math.max(max, Number(item.order) || 0); }, 0) + 10,
+    editorProjectId: project.id,
+    sourcePlanningPieceId: project.planningPieceId || '',
+    createdAt: project.createdAt || now,
+    updatedAt: now
+  };
+  savePieceRecord(piece);
+  return piece;
+}
+
+function syncEditorVideoCard(input) {
+  const project = input && input.project;
+  if (!project) return null;
+  const piece = getPieceRecord(project.id);
+  if (!piece || piece.editorProjectId !== project.id || piece.stage !== 'in_editor') return piece;
+  const contentType = editorVideoContentType(project);
+  piece.title = editorVideoTitle(project);
+  piece.preserveWorkingTitle = !!project.planningPieceTitle;
+  piece.contentType = contentType;
+  piece.videoIsVertical = contentType !== 'longform';
+  piece.platforms = contentType === 'longform' ? ['ytlong', 'facebook'] : ['ytshort', 'tiktok', 'instagram', 'facebook'];
+  piece.sourcePlanningPieceId = project.planningPieceId || '';
+  piece.audioTrackId = project.audioTrackId || '__none__';
+  piece.updatedAt = new Date().toISOString();
+  savePieceRecord(piece);
+  return piece;
+}
+
+function advanceEditorPlanningPiece(input) {
   const project = input && input.project;
   if (!project || !project.planningPieceId) return;
   const piece = getPieceRecord(project.planningPieceId);
-  if (!piece) return;
-  if (targetStage === 'uploaded' && piece.stage !== 'filmed') return;
-  if (targetStage === 'edited' && piece.stage !== 'filmed' && piece.stage !== 'uploaded') return;
-  piece.stage = targetStage;
+  if (!piece || piece.hasVideo || !['outline_completed', 'filmed', 'uploaded'].includes(piece.stage)) return;
+  piece.stage = 'uploaded';
   piece.updatedAt = new Date().toISOString();
   piece.editorProjectId = project.id;
   savePieceRecord(piece);
-}
-
-function tryAdvanceEditorPlanningPiece(input, targetStage) {
-  try {
-    advanceEditorPlanningPiece(input, targetStage);
-    return '';
-  } catch (error) {
-    console.error('[editor] Production handoff could not advance the linked planning card:', String(error.message || error));
-    return 'The edited video reached Content Production, but its linked planning card could not be advanced automatically.';
-  }
 }
 
 function reconcileEditorPlanningPiece(input) {
@@ -619,7 +682,7 @@ function reconcileEditorPlanningPiece(input) {
   if (!project) return;
   if (previousId && previousId !== project.planningPieceId) {
     const previous = getPieceRecord(previousId);
-    if (previous && (previous.stage === 'uploaded' || previous.stage === 'edited') && previous.editorProjectId === project.id) {
+    if (previous && previous.stage === 'uploaded' && previous.editorProjectId === project.id) {
       previous.stage = 'filmed';
       previous.updatedAt = new Date().toISOString();
       delete previous.editorProjectId;
@@ -627,37 +690,24 @@ function reconcileEditorPlanningPiece(input) {
     }
   }
   if (project.planningPieceId) {
-    const current = getPieceRecord(project.planningPieceId);
-    if (current && current.stage === 'outline_completed') {
-      current.stage = 'filmed';
-      current.updatedAt = new Date().toISOString();
-      current.editorProjectId = project.id;
-      savePieceRecord(current);
-    }
-    advanceEditorPlanningPiece({ project: project }, 'uploaded');
+    advanceEditorPlanningPiece({ project: project });
   }
-  if (!input.renderWillChange && project.renderStatus === 'ready' && project.planningPieceId) {
-    advanceEditorPlanningPiece({ project: project }, 'edited');
-  }
+  syncEditorVideoCard({ project: project });
 }
 
 function reconcileDeletedEditorProject(input) {
   const project = input && input.project;
-  if (!project || project.productionPieceId || !project.planningPieceId) return;
-  reconcileEditorPlanningPiece({
-    project: Object.assign({}, project, { planningPieceId: '' }),
-    previousPlanningPieceId: project.planningPieceId
-  });
-}
-
-function regressEditorPlanningPieceForRebuild(input) {
-  const project = input && input.project;
-  if (!project || !project.planningPieceId) return;
-  const piece = getPieceRecord(project.planningPieceId);
-  if (!piece || piece.stage !== 'edited' || piece.editorProjectId !== project.id) return;
-  piece.stage = 'uploaded';
-  piece.updatedAt = new Date().toISOString();
-  savePieceRecord(piece);
+  if (!project || project.productionPieceId) return;
+  if (project.planningPieceId) {
+    reconcileEditorPlanningPiece({
+      project: Object.assign({}, project, { planningPieceId: '' }),
+      previousPlanningPieceId: project.planningPieceId
+    });
+  }
+  const videoPiece = getPieceRecord(project.id);
+  if (videoPiece && videoPiece.stage === 'in_editor' && videoPiece.editorProjectId === project.id) {
+    stmts.del.run('pieces', project.id);
+  }
 }
 const videoEditor = videoEditorService.setup({
   db: db,
@@ -667,8 +717,8 @@ const videoEditor = videoEditorService.setup({
   getPlanningCandidates: editorPlanningCandidates,
   getPlanningPiece: editorPlanningPiece,
   matchPlanningPiece: matchEditorPlanningPiece,
-  onRenderReady: function (input) { advanceEditorPlanningPiece(input, 'edited'); },
-  onRenderInvalidated: regressEditorPlanningPieceForRebuild,
+  onProjectCreated: createEditorVideoCard,
+  onProjectMetadataChanged: syncEditorVideoCard,
   onPlanningPieceChanged: reconcileEditorPlanningPiece,
   onProjectDeleted: reconcileDeletedEditorProject,
   getAudioTracks: function () {
@@ -1567,7 +1617,7 @@ app.get('/api/files/:storeName/:id', async function (req, res) {
 });
 
 // --- Uploader tool: transcribe a freshly-uploaded video, match it to the
-// right "Edited"-stage outline, and pull title candidates from it. See
+// right terminal "Uploaded" planning card, and pull title candidates from it. See
 // src/videoAnalysis.js for the actual work; this route just validates,
 // responds immediately (the same "kick off the real work, respond 202,
 // let the client poll the piece record" pattern the voice app already
@@ -1620,37 +1670,51 @@ function savePieceRecord(piece) {
   weeklyReports.recordStageChange(piece, previous && previous.stage, 'automation', stamp);
 }
 
-// "Uploaded" and "Edited" originally appeared in the opposite order. Once
-// the Editor became the raw-footage intake, Uploaded acquired its literal
-// meaning (recording received) and Edited became the final planning state.
-// Translate old terminal planning cards once; the marker prevents future
-// in-progress Uploaded cards from being mistaken for legacy data on restart.
-function migrateUploadBeforeEditStageOrder() {
-  const migrationId = 'upload-before-edit-stage-order-v2';
+// Planning cards and physical video files used to share one lifecycle. Split
+// them once: plans stop permanently at Uploaded, while video cards occupy the
+// automatic Editor/Production/Final Check/publishing half of the board.
+function migrateSplitPlanningAndVideoStages() {
+  const migrationId = 'split-planning-video-stages-v1';
   if (stmts.getOne.get('systemMigrations', migrationId)) return;
   const migratedAt = new Date().toISOString();
   db.transaction(function () {
-    const rows = stmts.getAll.all('pieces');
-    const handedOffPlanningIds = new Set(rows.map(function (row) {
-      return recordConcurrency.decodeRow(row);
-    }).filter(function (piece) {
-      return piece && piece.hasVideo && piece.editorProjectId && piece.sourcePlanningPieceId;
-    }).map(function (piece) { return piece.sourcePlanningPieceId; }));
-    rows.forEach(function (row) {
+    const activeEditorIds = new Set(stmts.getAll.all('editorProjects').map(function (row) {
+      try { return JSON.parse(row.data); } catch (error) { return null; }
+    }).filter(function (project) { return project && !project.productionPieceId; })
+      .map(function (project) { return project.id; }));
+    stmts.getAll.all('pieces').forEach(function (row) {
       const piece = recordConcurrency.decodeRow(row);
-      if (!piece || piece.hasVideo) return;
-      const legacyTerminal = piece.stage === 'uploaded';
-      const provenEditorHandoff = handedOffPlanningIds.has(piece.id) &&
-        ['outline_completed', 'filmed', 'uploaded'].includes(piece.stage);
-      if (!legacyTerminal && !provenEditorHandoff) return;
-      piece.stage = 'edited';
+      if (!piece) return;
+      let nextStage = piece.stage;
+      if (!piece.hasVideo && piece.stage === 'edited') nextStage = 'uploaded';
+      if (piece.hasVideo && ['filmed', 'uploaded', 'edited'].includes(piece.stage)) {
+        nextStage = activeEditorIds.has(piece.editorProjectId || piece.id) ? 'in_editor' : 'in_production';
+      }
+      if (piece.hasVideo && piece.stage === 'processed') nextStage = 'in_production';
+      if (nextStage === piece.stage) return;
+      piece.stage = nextStage;
+      piece.updatedAt = migratedAt;
       recordConcurrency.stampServerWrite(piece);
-      stmts.upsert.run('pieces', piece.id, JSON.stringify(piece), row.updated_at || migratedAt);
+      stmts.upsert.run('pieces', piece.id, JSON.stringify(piece), migratedAt);
     });
     stmts.upsert.run('systemMigrations', migrationId, JSON.stringify({ id: migrationId, appliedAt: migratedAt }), migratedAt);
   })();
 }
-migrateUploadBeforeEditStageOrder();
+migrateSplitPlanningAndVideoStages();
+
+// Active Editor projects created before the split need the same lightweight
+// video card as a newly uploaded recording. Sent projects already own their
+// downstream card and are deliberately left alone.
+function ensureMissingEditorVideoCards() {
+  stmts.getAll.all('editorProjects').forEach(function (row) {
+    let project;
+    try { project = JSON.parse(row.data); } catch (error) { return; }
+    if (!project || project.productionPieceId || getPieceRecord(project.id)) return;
+    try { createEditorVideoCard({ project: project }); }
+    catch (error) { console.error('[editor] Could not backfill an In Editor card:', String(error.message || error)); }
+  });
+}
+ensureMissingEditorVideoCards();
 
 // R2 is the durable source of publish-ready media once a card is scheduled.
 // Uploads are claimed per piece so a retry/double click cannot start two large
@@ -1765,12 +1829,9 @@ async function purgeExpiredPublishedMedia() {
   return { removed: removed };
 }
 
-// Editor -> Content Production handoff. This is the server-side equivalent
-// of dropping an already-edited file into the uploader: copy the rendered
-// MP4 into the normal videos store, create its Processing-stage piece, then
-// let the existing analysis job populate transcript/title suggestions.
-// The editor project id is reused as the piece id, making retries naturally
-// idempotent and keeping one durable identity across both tools.
+// Editor -> Content Production handoff. Raw upload already created the video
+// card in In Editor; approval keeps that identity, copies the verified render
+// into the normal media store, and advances the card to In Production.
 async function sendEditorProjectToProduction(input) {
   const project = input && input.project;
   const renderedPath = input && input.renderPath;
@@ -1781,27 +1842,23 @@ async function sendEditorProjectToProduction(input) {
   if (existing) {
     const videoRow = stmts.getOne.get('videos', project.id);
     const existingMediaPath = path.join(UPLOADS_DIR, 'videos', project.id);
-    if (existing.editorProjectId === project.id && existing.hasVideo && videoRow && fs.existsSync(existingMediaPath)) {
-      const workflowWarning = tryAdvanceEditorPlanningPiece({ project: project }, 'edited');
+    if (existing.editorProjectId === project.id && existing.stage !== 'in_editor' && existing.hasVideo && videoRow && fs.existsSync(existingMediaPath)) {
       return {
         pieceId: existing.id,
         piece: existing,
         planningPiece: project.planningPieceId ? getPieceRecord(project.planningPieceId) : null,
         alreadySent: true,
-        workflowWarning: workflowWarning
+        workflowWarning: ''
       };
     }
-    if (existing.editorProjectId === project.id) {
-      throw new Error('The Content Production item exists but its copied video is missing. Remove that incomplete item, then approve this Editor recording again.');
-    }
-    throw new Error('A different Content Production item already uses this recording id.');
+    if (existing.editorProjectId !== project.id) throw new Error('A different Content Production item already uses this recording id.');
   }
 
   const rows = stmts.getAll.all('pieces').map(function (row) {
     try { return recordConcurrency.decodeRow(row); } catch (e) { return null; }
   }).filter(Boolean);
   const maxSeq = rows.reduce(function (max, piece) { return Math.max(max, Number(piece.seq) || 0); }, 0);
-  const maxProcessedOrder = rows.filter(function (piece) { return piece.stage === 'processed'; })
+  const maxProductionOrder = rows.filter(function (piece) { return piece.stage === 'in_production'; })
     .reduce(function (max, piece) { return Math.max(max, Number(piece.order) || 0); }, 0);
   const duration = Number(project.editedDuration || project.duration) || 0;
   const vertical = project.effectiveLayout === 'vertical';
@@ -1811,12 +1868,13 @@ async function sendEditorProjectToProduction(input) {
   const platforms = contentType === 'longform' ? ['ytlong', 'facebook'] : ['ytshort', 'tiktok', 'instagram', 'facebook'];
   const now = new Date().toISOString();
   const fileNameBase = String(project.name || path.parse(project.fileName || 'edited-video').name).replace(/[\\/]+/g, '-').slice(0, 180) || 'edited-video';
-  const piece = recordConcurrency.stampServerWrite({
+  const previousStage = existing && existing.stage;
+  const piece = recordConcurrency.stampServerWrite(Object.assign({}, existing || {}, {
     id: project.id,
-    seq: maxSeq + 1,
+    seq: existing && existing.seq || maxSeq + 1,
     title: project.planningPieceTitle || fileNameBase,
     preserveWorkingTitle: !!project.planningPieceTitle,
-    stage: 'processed',
+    stage: 'in_production',
     platforms: platforms,
     contentType: contentType,
     contentTypeSelectionExplicit: true,
@@ -1833,12 +1891,12 @@ async function sendEditorProjectToProduction(input) {
     tags: [],
     analysisStatus: 'pending',
     scheduledAt: '',
-    order: maxProcessedOrder + 10,
+    order: previousStage === 'in_production' && Number(existing.order) || maxProductionOrder + 10,
     editorProjectId: project.id,
     sourcePlanningPieceId: project.planningPieceId || '',
-    createdAt: now,
+    createdAt: existing && existing.createdAt || now,
     updatedAt: now
-  });
+  }));
   const videoDir = path.join(UPLOADS_DIR, 'videos');
   const destination = path.join(videoDir, project.id);
   fs.mkdirSync(videoDir, { recursive: true });
@@ -1862,15 +1920,14 @@ async function sendEditorProjectToProduction(input) {
   // From this point onward the Production record and copied master are the
   // authoritative successful handoff. Secondary workflow/reporting failures
   // must never delete that committed file and strand the new Production card.
-  try { weeklyReports.recordStageChange(piece, null, 'automation', now); }
+  try { weeklyReports.recordStageChange(piece, previousStage || null, 'automation', now); }
   catch (error) { console.error('[editor] Production handoff stage report failed:', String(error.message || error)); }
-  const workflowWarning = tryAdvanceEditorPlanningPiece({ project: project }, 'edited');
   const planningPiece = project.planningPieceId ? getPieceRecord(project.planningPieceId) : null;
   // The Editor already paid for a word-timed transcription and its text
   // reflects Harvey's manual cuts. Reuse it for matching/title generation
   // instead of retranscribing the rendered video through ElevenLabs.
   setImmediate(function () { runVideoAnalysis(piece.id, piece.transcript); });
-  return { pieceId: piece.id, piece: piece, planningPiece: planningPiece, alreadySent: false, workflowWarning: workflowWarning };
+  return { pieceId: piece.id, piece: piece, planningPiece: planningPiece, alreadySent: false, workflowWarning: '' };
 }
 
 // Analysis (runVideoAnalysis, triggered right after upload) and the final
@@ -1903,7 +1960,7 @@ async function sendEditorProjectToProduction(input) {
 function maybeAdvanceToFinalCheck(id) {
   const piece = getPieceRecord(id);
   if (!piece) return;
-  if (piece.stage !== 'processed') return; // already moved on, or never got this far
+  if (piece.stage !== 'in_production') return; // already moved on, or never got this far
   if (piece.finalBuildStatus !== 'done') return;
   if (piece.analysisStatus === 'pending' || piece.analysisStatus === 'running') return;
   piece.stage = 'final_check';
@@ -1971,7 +2028,7 @@ async function runVideoAnalysis(id, existingTranscript) {
   try {
     const candidates = stmts.getAll.all('pieces')
       .map(function (r) { try { return JSON.parse(r.data); } catch (e) { return null; } })
-      .filter(function (p) { return p && p.stage === 'edited'; })
+      .filter(function (p) { return p && !p.hasVideo && p.stage === 'uploaded'; })
       .map(function (p) {
         const probe = (p.notesHtml || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
         return { id: p.id, seq: p.seq, title: p.title, notesSnippet: probe.slice(0, 400) };
@@ -2021,7 +2078,7 @@ app.post('/api/videos/:id/analyze', requireAuthOrReviewer, function (req, res) {
 // --- Building the actual final video (audio spliced in) before a piece
 // is allowed into Final Check — Harvey's rule: the Final Check preview
 // has to already be the real thing, audio and all, not the raw upload,
-// so the piece stays in Processing until this finishes. The output lives
+// so the piece stays In Production until this finishes. The output lives
 // at a separate `<id>-final` id in the same `videos` store (never
 // overwriting the raw upload) specifically so re-running this later
 // (Harvey picks a different audio track and sends it again) always
@@ -2080,7 +2137,7 @@ async function runBuildFinalVideo(id) {
     if (!latest) return;
     latest.finalBuildStatus = 'error';
     latest.finalBuildError = String(e.message || e).slice(0, 500);
-    // Deliberately NOT touching stage here — it stays in Processing so
+    // Deliberately NOT touching stage here — it stays In Production so
     // Harvey can just try again (e.g. pick a different track) rather
     // than getting stuck on a stage that doesn't have a real video yet.
     latest.updatedAt = new Date().toISOString();

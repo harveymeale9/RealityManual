@@ -25,7 +25,7 @@ test('Big Idea queue, verified support, and Ideation-stage transfer work togethe
   const seedRecord = db.prepare('INSERT INTO records(store_name,id,data,updated_at) VALUES (?,?,?,?)');
   seedRecord.run('pieces', 'old-rough-default', JSON.stringify({ id: 'old-rough-default', seq: 1, stage: 'ideation', contentType: 'short', hasVideo: false }), '2026-01-01T00:00:00Z');
   seedRecord.run('pieces', 'chosen-completed-short', JSON.stringify({ id: 'chosen-completed-short', seq: 2, stage: 'outline_completed', contentType: 'short', hasVideo: false }), '2026-01-01T00:00:00Z');
-  seedRecord.run('pieces', 'real-short-video', JSON.stringify({ id: 'real-short-video', seq: 3, stage: 'processed', contentType: 'short', hasVideo: true }), '2026-01-01T00:00:00Z');
+  seedRecord.run('pieces', 'real-short-video', JSON.stringify({ id: 'real-short-video', seq: 3, stage: 'in_production', contentType: 'short', hasVideo: true }), '2026-01-01T00:00:00Z');
   let generation = 0;
   let generationPrompt = '';
   const profilePrompts = [];
