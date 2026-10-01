@@ -15141,6 +15141,16 @@ existing mobile full-screen behavior remains intact. Chromium checks at
 1366x768 and 1024x700 showed Notes areas of 1004x564 and 732x503 respectively,
 with equal body scroll/client heights and no page errors.
 
+The full-viewport presentation was subsequently softened after Harvey used it
+on his laptop: it made returning to the board depend on finding a small corner
+X, and the body copy felt undersized relative to the enormous canvas. Desktop
+planning cards now use a large but inset workspace (up to 1180x840px), leaving
+a clearly visible Kanban gutter which retains the existing safe click-outside
+close behavior. The close control is also labelled **Back to Kanban**, and the
+Notes type is now a responsive 17.3-18.9px. The two-column writing/metadata
+layout and synchronous draft recovery remain unchanged; phones still use the
+existing full-screen presentation.
+
 ---
 
 # 433. Project Manager Messages Preserve and Display Multiple Images (2026-09-30)
