@@ -15149,7 +15149,11 @@ a clearly visible Kanban gutter which retains the existing safe click-outside
 close behavior. The close control is also labelled **Back to Kanban**, and the
 Notes type is now a responsive 17.3-18.9px. The two-column writing/metadata
 layout and synchronous draft recovery remain unchanged; phones still use the
-existing full-screen presentation.
+existing full-screen presentation. A routed-data Chromium check against the
+deployed UI at 1366x768 and 1024x700 confirmed 100px and 40px side gutters,
+17.28px Notes type, zero document overflow, the visible Back to Kanban label,
+and a real backdrop click returning to the still-visible board with no page
+errors.
 
 ---
 
