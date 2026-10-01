@@ -15647,3 +15647,32 @@ filters In Production, outline matching searches terminal Uploaded planning
 cards only, and weekly reporting/ideation progression use the same vocabulary.
 The upload response immediately registers the new card in the open SPA cache,
 so navigating to Kanban after an upload does not require a page reload.
+
+---
+
+# 450. Storage Pressure Policy for Automatic OBS Intake (2026-10-01)
+
+Harvey may occasionally record a large batch in one day (for example, ten
+3 GB long-form masters) while the VPS has only about 100 GB total storage. He
+explicitly authorizes liberal use of the configured R2 bucket whenever it is
+useful; do not treat R2 capacity as scarce or preserve local copies merely to
+avoid using it. In normal operation, fast movement through Editor will likely
+make raw-media pressure uncommon, so this is a flexible pressure-relief policy
+rather than a requirement to route every master through R2.
+
+Automatic laptop intake must preserve enough VPS headroom for the next
+recording plus its proxies/renders. If local space becomes tight, reclaim safe
+space in this order: prune reclaimable Docker build cache and unused image
+layers first; remove redundant local media only after its R2 copy has been
+verified; then spill large inactive/queued media to R2 and rehydrate it when
+Editor actually needs it. Never delete the only verified copy of a recording,
+and never count an incomplete multipart upload as durable. The laptop listener
+should retain or queue a completed OBS file until server admission is verified,
+rather than losing it when the VPS temporarily lacks workspace.
+
+Docker build cache has historically consumed multiple gigabytes and is not
+valuable enough to crowd out recordings. Agents are authorized to prune old,
+reclaimable Docker cache proactively under storage pressure, while preserving
+running containers and currently used images. Disk monitoring and upload
+admission should therefore treat Docker cache as the first elastic reserve and
+R2 as the second, with safe local working space as the invariant.
