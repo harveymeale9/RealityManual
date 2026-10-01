@@ -2558,9 +2558,9 @@ async function renderProject(id) {
     if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
     let project = getProject(req.params.id);
     if (!project) return res.status(404).json({ error: 'not_found' });
-    if (project.productionPieceId) {
-      return res.json({ ok: true, pieceId: project.productionPieceId, alreadySent: true });
-    }
+    // Do not trust productionPieceId as proof that the downstream record and
+    // media still exist. The handoff callback is idempotent and also repairs
+    // an orphaned "Sent" Editor project if its Production item was removed.
     if (project.renderStatus !== 'ready' || !fs.existsSync(renderPath(project.id))) {
       return res.status(409).json({ error: 'render_not_ready', message: 'Finish the edit before sending it to production.' });
     }
@@ -2584,9 +2584,6 @@ async function renderProject(id) {
     const verifiedRenderSha256 = project.renderSha256;
     project = getProject(project.id);
     if (!project) return res.status(404).json({ error: 'not_found' });
-    if (project.productionPieceId) {
-      return res.json({ ok: true, pieceId: project.productionPieceId, alreadySent: true });
-    }
     if (project.renderStatus !== 'ready' || project.renderSha256 !== verifiedRenderSha256) {
       return res.status(409).json({ error: 'render_changed_during_approval', message: 'The edit changed while it was being approved. Review the latest finished version, then approve again.' });
     }
@@ -2612,7 +2609,12 @@ async function renderProject(id) {
     }
     try {
       const result = await handoffJob;
-      res.status(joinedExistingHandoff ? 200 : 201).json({ ok: true, pieceId: result.pieceId, piece: result.piece || null, alreadySent: joinedExistingHandoff || !!result.alreadySent, workflowWarning: result.workflowWarning || '' });
+      res.status(joinedExistingHandoff || result.alreadySent ? 200 : 201).json({
+        ok: true, pieceId: result.pieceId, piece: result.piece || null,
+        planningPiece: result.planningPiece || null,
+        alreadySent: joinedExistingHandoff || !!result.alreadySent,
+        workflowWarning: result.workflowWarning || ''
+      });
     } catch (err) {
       res.status(422).json({ error: 'production_handoff_failed', message: String(err.message || err).slice(0, 1000) });
     } finally {

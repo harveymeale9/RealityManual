@@ -1852,6 +1852,7 @@
       retryTransientOnce(function () {
         return api('/api/editor/' + approvedId + '/production', { method: 'POST' });
       }, 500).then(function (result) {
+        if (typeof window.__rmRegisterEditorHandoff === 'function') window.__rmRegisterEditorHandoff(result);
         project.productionPieceId = result.pieceId;
         clearReviewProgress(approvedId);
         project.sentToProductionAt = new Date().toISOString();

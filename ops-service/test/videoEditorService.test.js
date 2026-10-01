@@ -950,6 +950,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   let renderReadyCalls = 0;
   let renderInvalidatedCalls = 0;
   let audioPreviewCalls = 0;
+  let downstreamProductionExists = false;
   let expectedPlanningPieceId = 'plan-1';
   const planningChanges = [];
   const deletedProjects = [];
@@ -993,6 +994,8 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
     },
     handoffToProduction: async function (input) {
       handoffCalls++;
+      const alreadySent = downstreamProductionExists;
+      downstreamProductionExists = true;
       assert.equal(input.project.id.length > 0, true);
       assert.equal(input.project.words[0].text, 'Once');
       assert.equal(input.project.words[0].originalText, 'One');
@@ -1000,7 +1003,13 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
       assert.equal(input.project.audioMixSettings.musicBelowDialogueDb, 20);
       assert.equal(fs.existsSync(input.renderPath), true);
       await new Promise(function (resolve) { setTimeout(resolve, 80); });
-      return { pieceId: input.project.id, alreadySent: false, workflowWarning: 'Synthetic planning-stage warning.' };
+      return {
+        pieceId: input.project.id,
+        piece: { id: input.project.id, stage: 'processed', hasVideo: true },
+        planningPiece: { id: 'plan-2', stage: 'uploaded' },
+        alreadySent: alreadySent,
+        workflowWarning: 'Synthetic planning-stage warning.'
+      };
     }
   });
   const app = express();
@@ -1275,6 +1284,8 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   const joinedHandoffResult = await simultaneousHandoffs[1].json();
   assert.equal(handoffResult.pieceId, project.id);
   assert.equal(joinedHandoffResult.pieceId, project.id);
+  assert.equal(handoffResult.piece.stage, 'processed');
+  assert.equal(handoffResult.planningPiece.stage, 'uploaded');
   assert.equal(handoffResult.alreadySent || joinedHandoffResult.alreadySent, true);
   assert.equal(handoffResult.workflowWarning, 'Synthetic planning-stage warning.');
   project = await (await fetch(base + '/api/editor/' + project.id)).json();
@@ -1282,7 +1293,12 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   response = await fetch(base + '/api/editor/' + project.id + '/production', { method: 'POST' });
   assert.equal(response.status, 200);
   assert.equal((await response.json()).alreadySent, true);
-  assert.equal(handoffCalls, 1);
+  assert.equal(handoffCalls, 2);
+  downstreamProductionExists = false;
+  response = await fetch(base + '/api/editor/' + project.id + '/production', { method: 'POST' });
+  assert.equal(response.status, 201);
+  assert.equal((await response.json()).alreadySent, false);
+  assert.equal(handoffCalls, 3, 'an orphaned Sent marker must recreate the downstream handoff');
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ captionsEnabled: true }) });
   assert.equal(response.status, 409);
   assert.equal((await response.json()).error, 'approved_read_only');

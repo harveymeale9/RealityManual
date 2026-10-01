@@ -15524,3 +15524,31 @@ inserted clips are rebuilt through the matched path. The FFmpeg integration
 test deliberately makes the external source 20 dB quieter than the main
 recording and verifies both the expected corrective gain and that the actual
 rendered source/clip passages finish within 1 LUFS of one another.
+
+---
+
+# 445. Editor Handoffs Update the Live SPA and Self-Heal Orphaned Sent State (2026-10-01)
+
+Harvey approved Editor recording `63f86e84…` at 07:01. The server correctly
+created its Processing record and moved linked planning card #032 from Edited
+to Uploaded, but the already-open single-page app had loaded its `pieces`
+cache earlier and never merged either server-side change. Navigating normally
+to Kanban or Content Production therefore showed the old board until a full
+page reload, despite the Editor immediately claiming success.
+
+The production response now includes both authoritative records: the new
+Processing item and the updated planning card. Editor registers both in the
+shared SPA cache before painting its success state, then notifies the active
+view. A real Chromium regression begins with only the old planning card in the
+one-time cache, approves in Editor, navigates directly to Content Production,
+and sees the new row without reloading.
+
+Investigation also found that the Production record and copied media were
+subsequently absent while the Editor retained `productionPieceId`, leaving a
+false permanent **Sent** state. Approval no longer treats that marker alone as
+proof of a durable handoff. It always goes through the idempotent server
+handoff: intact records return normally, while a fully orphaned downstream
+handoff is recreated from the still-verified Editor render. Concurrent clicks
+continue to share one job. Integration coverage explicitly removes the
+simulated downstream handoff while retaining the Sent marker and proves the
+next approval recreates it.

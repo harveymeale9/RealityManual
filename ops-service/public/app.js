@@ -1348,6 +1348,16 @@
     return Store.get('pieces', pieceId).then(function (piece) { open(piece); return piece; });
   };
 
+  // Editor handoff happens server-side, outside this SPA cache. Register both
+  // records from the authoritative response immediately so the new Processing
+  // item and the linked planning card's Uploaded move appear without a reload.
+  window.__rmRegisterEditorHandoff = function (result) {
+    result = result || {};
+    if (result.piece && result.piece.id) pieces[result.piece.id] = result.piece;
+    if (result.planningPiece && result.planningPiece.id) pieces[result.planningPiece.id] = result.planningPiece;
+    notifyPiecesChanged();
+  };
+
   function orderedIds(stageId) {
     return Object.keys(pieces)
       .filter(function (id) { return pieces[id].stage === stageId; })

@@ -1747,8 +1747,20 @@ async function sendEditorProjectToProduction(input) {
   }
   const existing = getPieceRecord(project.id);
   if (existing) {
-    if (existing.editorProjectId === project.id && existing.hasVideo) {
-      return { pieceId: existing.id, alreadySent: true, workflowWarning: tryAdvanceEditorPlanningPiece({ project: project }, 'uploaded') };
+    const videoRow = stmts.getOne.get('videos', project.id);
+    const existingMediaPath = path.join(UPLOADS_DIR, 'videos', project.id);
+    if (existing.editorProjectId === project.id && existing.hasVideo && videoRow && fs.existsSync(existingMediaPath)) {
+      const workflowWarning = tryAdvanceEditorPlanningPiece({ project: project }, 'uploaded');
+      return {
+        pieceId: existing.id,
+        piece: existing,
+        planningPiece: project.planningPieceId ? getPieceRecord(project.planningPieceId) : null,
+        alreadySent: true,
+        workflowWarning: workflowWarning
+      };
+    }
+    if (existing.editorProjectId === project.id) {
+      throw new Error('The Content Production item exists but its copied video is missing. Remove that incomplete item, then approve this Editor recording again.');
     }
     throw new Error('A different Content Production item already uses this recording id.');
   }
@@ -1821,11 +1833,12 @@ async function sendEditorProjectToProduction(input) {
   try { weeklyReports.recordStageChange(piece, null, 'automation', now); }
   catch (error) { console.error('[editor] Production handoff stage report failed:', String(error.message || error)); }
   const workflowWarning = tryAdvanceEditorPlanningPiece({ project: project }, 'uploaded');
+  const planningPiece = project.planningPieceId ? getPieceRecord(project.planningPieceId) : null;
   // The Editor already paid for a word-timed transcription and its text
   // reflects Harvey's manual cuts. Reuse it for matching/title generation
   // instead of retranscribing the rendered video through ElevenLabs.
   setImmediate(function () { runVideoAnalysis(piece.id, piece.transcript); });
-  return { pieceId: piece.id, piece: piece, alreadySent: false, workflowWarning: workflowWarning };
+  return { pieceId: piece.id, piece: piece, planningPiece: planningPiece, alreadySent: false, workflowWarning: workflowWarning };
 }
 
 // Analysis (runVideoAnalysis, triggered right after upload) and the final
