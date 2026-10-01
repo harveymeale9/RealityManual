@@ -997,6 +997,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   let response = await fetch(base + '/api/editor', { method: 'POST', body: form });
   assert.equal(response.status, 202);
   let project = await response.json();
+  assert.equal(project.audioTrackId, '__none__');
   assert.equal(project.mimeType, 'video/quicktime');
   assert.equal(project.videoCodec, 'h264');
   assert.equal(project.browserPreviewRequired, true);
@@ -1200,6 +1201,8 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.match(response.headers.get('content-range') || '', /^bytes 0-1023\//);
   assert.ok(project.editedDuration < project.duration);
   const verifiedRenderPath = path.join(dir, 'editor', project.id, 'render.mp4');
+  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ audioTrackId: '' }) });
+  assert.equal(response.status, 200);
   response = await fetch(base + '/api/editor/' + project.id + '/production', { method: 'POST' });
   assert.equal(response.status, 409);
   assert.equal((await response.json()).error, 'audio_track_required');

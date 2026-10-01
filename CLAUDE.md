@@ -15458,3 +15458,21 @@ recordings. It confirmed the four genuine page changes with SSIM scores from
 format version 14 rebuilds active review files through this visually confirmed
 path. Unit coverage also proves that an otherwise qualifying three-second cut
 cannot reset unless its exact cut ID is confirmed.
+
+---
+
+# 442. New Editor Recordings Default to No Backing Audio (2026-10-01)
+
+The soundtrack selector previously opened on a non-choice placeholder,
+**Choose backing audio**, which forced Harvey to make an unnecessary selection
+even when the desired result was silence. New Editor projects now persist
+`audioTrackId: "__none__"` from creation, and startup migration maps any legacy
+blank selection to the same explicit value. The selector always begins with
+**No backing audio** and no longer renders the placeholder option.
+
+Choosing a library track still switches and previews exactly as before. The
+production handoff retains its defensive validation for malformed/API-created
+blank values, but an ordinary untouched Editor project is now immediately
+valid as a no-music edit. The end-to-end upload/render test verifies the new
+persisted default before exercising the existing validation and soundtrack
+paths.

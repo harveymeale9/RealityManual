@@ -1006,7 +1006,7 @@
         '<p class="editor-selection-hint">Select the word a clip should follow, or drag across words to cut footage. Press Delete to cut, Ctrl/⌘ Z to undo, or Escape to clear.</p></section>' +
       '<div class="editor-export"><div><strong>Next: Content Production</strong><span>' +
         (project.productionPieceId ? 'This edit is ready in Content Production for titles and thumbnail selection.' :
-          project.renderStatus === 'ready' ? (audioSelectionReady ? 'Soundtrack selected. Send the finished edit across without uploading it again.' : 'Choose a backing track or No backing music before approval.') :
+          project.renderStatus === 'ready' ? (audioSelectionReady ? 'Soundtrack selected. Send the finished edit across without uploading it again.' : 'Choose a backing track or No backing audio before approval.') :
           'Build the final edit first. Yellow captions will be baked in below center.') + '</span>' +
         '<div class="editor-readiness"><i class="ready">Transcript ready</i>' + framingReadiness + retakeReadiness + (project.renderStatus === 'ready' ? '<i class="ready">Output verified</i>' : '') + (audioSelectionReady ? '<i class="ready">Soundtrack chosen</i>' : '<i class="review">Soundtrack needed</i>') + '</div>' +
         (['queued', 'running'].indexOf(project.renderStatus) !== -1 ? '<div class="editor-render-progress"><span id="editorRenderProgressLabel">' + (project.renderStatus === 'queued' ? (Number(project.renderQueuePosition) > 1 ? (Number(project.renderQueuePosition) - 1) + ' recording(s) ahead in the render queue' : 'Next in the render queue') : 'Encoding final edit · ' + Math.round(Number(project.renderProgress) || 0) + '%') + '</span><div><i id="editorRenderProgressBar" style="width:' + (project.renderStatus === 'queued' ? 4 : Math.max(2, Number(project.renderProgress) || 0)) + '%"></i></div></div>' : '') +
@@ -1159,15 +1159,14 @@
       var sent = !!project.productionPieceId;
       var ready = readyAudioTracks();
       var options = [];
-      if (!project.audioTrackId) options.push('<option value="">Choose backing audio</option>');
-      options.push('<option value="__none__">No backing music</option>');
+      options.push('<option value="__none__">No backing audio</option>');
       ready.forEach(function (track) { options.push('<option value="' + esc(track.id) + '" title="' + esc(track.note || '') + '">' + esc(track.name) + '</option>'); });
       if (project.audioTrackId && project.audioTrackId !== '__none__' && !ready.some(function (track) { return track.id === project.audioTrackId; })) {
         var pendingTrack = audioTracks.find(function (track) { return track.id === project.audioTrackId; });
         options.push('<option value="' + esc(project.audioTrackId) + '" disabled>' + esc(pendingTrack ? pendingTrack.name + ' · preparing…' : 'Selected track unavailable') + '</option>');
       }
       audioTrackSelect.innerHTML = options.join('');
-      audioTrackSelect.value = project.audioTrackId || '';
+      audioTrackSelect.value = project.audioTrackId || '__none__';
       if (previewLocked) {
         audioTrackSelect.disabled = true;
         audioProgress.className = 'editor-audio-progress loading';

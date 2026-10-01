@@ -1740,6 +1740,7 @@ async function renderProject(id) {
         project.insertedClips = project.insertedClips.filter(function (clip) { return clip.status === 'ready'; });
         project.clipInsertStatus = 'error'; project.clipInsertError = 'Clip preparation was interrupted by a service restart. Press Insert clip to retry.'; migrated = true;
       }
+      if (!project.audioTrackId) { project.audioTrackId = '__none__'; migrated = true; }
       if (!project.retakeAnalysisStatus) { project.retakeAnalysisStatus = canResumeWork && typeof analyzeRetakes === 'function' ? (project.transcriptionStatus === 'ready' ? 'pending' : 'pending_transcript') : 'unavailable'; migrated = true; }
       if (!project.planningMatchStatus) { project.planningMatchStatus = canResumeWork && typeof matchPlanningPiece === 'function' ? (project.transcriptionStatus === 'ready' ? 'pending' : 'pending_transcript') : 'unavailable'; migrated = true; }
       if (!canResumeWork) {
@@ -2076,7 +2077,7 @@ async function renderProject(id) {
         renderPreviewStatus: '',
         renderPreviewError: '',
         renderPreviewVersion: 0,
-        audioTrackId: '',
+        audioTrackId: '__none__',
         insertedClips: [],
         clipInsertStatus: '',
         clipInsertError: '',
@@ -2304,7 +2305,7 @@ async function renderProject(id) {
       const requestedTrackId = req.body.audioTrackId;
       const available = typeof getAudioTracks === 'function' ? (getAudioTracks() || []) : [];
       if (requestedTrackId && requestedTrackId !== '__none__' && !available.some(function (track) { return track && track.id === requestedTrackId; })) {
-        return res.status(400).json({ error: 'invalid_audio_track', message: 'Choose an available backing track or No backing music.' });
+        return res.status(400).json({ error: 'invalid_audio_track', message: 'Choose an available backing track or No backing audio.' });
       }
       project.audioTrackId = requestedTrackId;
       if (requestedTrackId && typeof getAudioMixSettings === 'function') project.audioMixSettings = getAudioMixSettings() || {};
@@ -2514,7 +2515,7 @@ async function renderProject(id) {
       return res.status(409).json({ error: 'render_not_ready', message: 'Finish the edit before sending it to production.' });
     }
     if (!project.audioTrackId) {
-      return res.status(409).json({ error: 'audio_track_required', message: 'Choose a backing track or No backing music before sending this edit to Production.' });
+      return res.status(409).json({ error: 'audio_track_required', message: 'Choose a backing track or No backing audio before sending this edit to Production.' });
     }
     if (project.audioTrackId !== '__none__' && (typeof getAudioTrackPath !== 'function' || !fs.existsSync(getAudioTrackPath(project.audioTrackId) || ''))) {
       return res.status(409).json({ error: 'audio_track_missing', message: 'The selected backing track is no longer available. Choose another track.' });
