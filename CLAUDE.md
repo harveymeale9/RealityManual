@@ -15476,3 +15476,26 @@ blank values, but an ordinary untouched Editor project is now immediately
 valid as a no-music edit. The end-to-end upload/render test verifies the new
 persisted default before exercising the existing validation and soundtrack
 paths.
+
+---
+
+# 443. Soundtrack Changes Restart with the Newly Selected Audio (2026-10-01)
+
+Changing the backing-audio dropdown could restart the picture at zero without
+the selected music. Three browser timing races combined to make this
+intermittent. The player compared the resolved absolute `audio.src` property
+with a stored relative/blob URL and could therefore reload an unchanged track;
+seeking the video to zero briefly lowered its `readyState` and made the start
+routine silently return; and, when replacing music during active playback, the
+old video's asynchronous `pause` event could abort the new audio element's
+pending `play()` promise.
+
+The player now compares the literal `src` attribute, lets the media element's
+own `play()` promise wait through a momentary post-seek readiness change, and
+prevents synchronization-owned pause events or stale start promises from
+stopping a newer soundtrack. Audio remains the master start clock: the newly
+selected track starts at zero first, then releases the muted picture at the
+same time. A real Chromium regression switched from no music to one track and
+then directly to a second track; after both changes, video and the correct new
+audio were playing, remained within 0.09 seconds, and each selection was
+persisted.

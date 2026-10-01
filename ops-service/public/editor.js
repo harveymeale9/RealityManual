@@ -1069,7 +1069,11 @@
       return mixedPreviewActive() ? mixedAudio.muted : video.muted;
     }
     function startPlayerPlayback() {
-      if (previewLocked || video.readyState < 2) return Promise.resolve();
+      // Seeking back to zero can momentarily drop readyState below HAVE_CURRENT_DATA
+      // even though this browser-safe preview is already loaded. `play()` is
+      // designed to wait for data; returning here instead made soundtrack
+      // switches intermittently stop before either clock had started.
+      if (previewLocked) return Promise.resolve();
       if (!mixedPreviewActive()) return video.play().catch(function () {});
       // Audio can need a few milliseconds longer than the lightweight video
       // proxy to wake its decoder. Make audio the start clock: hold the
@@ -1093,6 +1097,7 @@
         try { video.currentTime = mixedAudio.currentTime || target; } catch (error) {}
         return video.play();
       }).catch(function () {
+        if (token !== synchronizedStartToken) return;
         video.pause();
         mixedAudio.pause();
       }).finally(function () {
@@ -1117,8 +1122,17 @@
         if (playNow) startPlayerPlayback();
         return;
       }
-      var sourceChanged = mixedAudio.src !== url;
-      if (sourceChanged) mixedAudio.src = url;
+      // `HTMLMediaElement.src` is resolved to an absolute URL while our
+      // preview map stores a relative one. Comparing the property made every
+      // repaint look like a track change, reloaded the same audio, and aborted
+      // the play promise started by the dropdown gesture. Compare the literal
+      // attribute instead so a selected track is loaded exactly once.
+      var sourceChanged = mixedAudio.getAttribute('src') !== url;
+      if (sourceChanged) {
+        mixedAudio.pause();
+        mixedAudio.setAttribute('src', url);
+        mixedAudio.load();
+      }
       mixedAudio.playbackRate = reviewRate;
       if (restart) video.currentTime = 0;
       try { mixedAudio.currentTime = video.currentTime || 0; } catch (error) {}
@@ -1447,7 +1461,10 @@
       if (motionAnimationFrame === null) motionAnimationFrame = requestAnimationFrame(animatePreviewMotion);
     });
     video.addEventListener('pause', function () {
-      if (mixedPreviewActive()) mixedAudio.pause();
+      // startPlayerPlayback deliberately pauses the old picture before it
+      // starts the replacement soundtrack. The resulting asynchronous pause
+      // event must not abort that new audio play request.
+      if (mixedPreviewActive() && !synchronizedStartInProgress) mixedAudio.pause();
       if (motionAnimationFrame !== null) cancelAnimationFrame(motionAnimationFrame);
       motionAnimationFrame = null;
       updatePreviewMotion(previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime);
