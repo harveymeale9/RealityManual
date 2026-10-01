@@ -15676,3 +15676,56 @@ reclaimable Docker cache proactively under storage pressure, while preserving
 running containers and currently used images. Disk monitoring and upload
 admission should therefore treat Docker cache as the first elastic reserve and
 R2 as the second, with safe local working space as the invariant.
+
+---
+
+# 451. Windows OBS Recordings Automatically Enter Editor (2026-10-01)
+
+The repository now contains a native self-contained Windows tray uploader in
+`tools/windows-uploader`. On first launch it installs itself under the current
+user's Local AppData directory and registers a per-user startup entry. Setup
+clones the currently selected OBS profile as **Reality Manual**, preserves its
+recording/encoding configuration, and changes only the Simple and Advanced
+recording paths to `Videos\Reality Manual` (or Harvey's chosen folder). After
+OBS is reopened once, choosing Profile → Reality Manual is therefore the only
+manual routing step before recording.
+
+The listener combines a filesystem watcher with a ten-second safety scan. It
+does not accept a recording until its byte length has remained unchanged for
+at least twelve seconds and Windows grants an exclusive read handle, which
+prevents a still-open OBS recording from being uploaded. Each file enters the
+existing 16 MB chunked Editor intake API. The laptop persists its queue,
+upload-session ID, and last acknowledged byte after every chunk; network,
+application, or laptop restarts therefore resume from the server-confirmed
+offset. If a server restart has expired the in-memory upload session, the
+laptop safely starts a new session from the retained source. Successfully
+uploaded recordings remain on the laptop and exact duplicate server uploads
+are still rejected by the Editor's SHA-256 identity check.
+
+Pairing is deliberately separate from the panel password. Content Settings
+issues a random one-use code that expires after ten minutes; exchanging it
+returns an opaque device token whose SHA-256 hash is the only form stored on
+the server. That token is accepted only for creating, resuming, chunking,
+completing, or cancelling an Editor upload and for its own status heartbeat.
+It cannot list/read Editor projects, access Store records, or reach any other
+Content Studio API. Content Settings lists paired laptops and can revoke them.
+
+Recordings admitted by a paired laptop create their ordinary lightweight **In
+Editor** video card with an unread marker. The Editor rail icon polls a narrow
+count-only endpoint and shows the number; opening that exact recording marks
+it seen. There are no Windows toast notifications. The tray icon exposes only
+status, Open Editor, Settings, and Exit.
+
+While bytes are actively uploading, the process requests Windows' system-awake
+state, handles `WM_QUERYENDSESSION` by rejecting an ordinary shutdown, and
+registers a visible shutdown-block reason. Windows can always force an app to
+close, so this is intentionally backed by the durable resumable queue rather
+than presented as an absolute guarantee. Choosing Exit during an upload also
+requires an explicit confirmation.
+
+The compiled executable is not committed. The server exposes
+`/downloads/reality-manual-uploader.exe` from the persistent
+`DATA_DIR/downloads/RealityManualUploader.exe`; the Content Settings link uses
+that route. The build is unsigned, so Windows SmartScreen may require **More
+info → Run anyway** on the first launch. Source builds require the .NET 8 SDK
+and target self-contained `win-x64`.

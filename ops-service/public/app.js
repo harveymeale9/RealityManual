@@ -353,11 +353,33 @@
     renderTabs();
     bindSideRail();
     window.RMMailbox.startBadgePolling();
+    startEditorUnreadBadgePolling();
     bootModal();
     window.addEventListener('hashchange', renderActiveTab);
     if (!location.hash) location.hash = IS_REVIEWER ? 'content-ops' : TABS[0].id;
     renderActiveTab();
   }
+
+  var editorUnreadTimer = null;
+  function refreshEditorUnreadBadge() {
+    if (IS_REVIEWER) return Promise.resolve();
+    return fetch('/api/desktop-uploader/unread-count', { credentials: 'include' }).then(function (response) {
+      if (!response.ok) throw new Error('unavailable');
+      return response.json();
+    }).then(function (result) {
+      var badge = document.getElementById('editorUnreadBadge');
+      if (!badge) return;
+      var count = Math.max(0, Number(result.count) || 0);
+      badge.textContent = count > 99 ? '99+' : String(count);
+      badge.hidden = count === 0;
+    }).catch(function () {});
+  }
+  function startEditorUnreadBadgePolling() {
+    if (editorUnreadTimer || IS_REVIEWER) return;
+    refreshEditorUnreadBadge();
+    editorUnreadTimer = setInterval(refreshEditorUnreadBadge, 15000);
+  }
+  window.__rmRefreshEditorUnreadBadge = refreshEditorUnreadBadge;
 
   /* ============================================================
      PROJECT MANAGER (chat with CC) — the default tab. Talks to the same
@@ -4460,6 +4482,17 @@
 
   var SETTINGS_MARKUP =
     '<div class="settings-panel">' +
+      '<section class="settings-section" id="desktopUploaderSettings">' +
+        '<h3>Automatic OBS upload</h3>' +
+        '<p class="settings-hint">Use the <strong>Reality Manual</strong> OBS profile, recording to <code>Videos\\Reality Manual</code>. The Windows tray app waits until OBS finishes the file, then uploads it safely into Editor. Your laptop copy is never deleted.</p>' +
+        '<div class="desktop-uploader-actions">' +
+          '<a class="btn-secondary" href="/downloads/reality-manual-uploader.exe">Download Windows uploader</a>' +
+          '<button type="button" class="btn-secondary" id="desktopPairBtn">Generate pairing code</button>' +
+          '<span class="desktop-pairing-code" id="desktopPairCode" hidden></span>' +
+        '</div>' +
+        '<p class="settings-hint" id="desktopPairHint">Download and run the app, then generate a one-time code here and enter it on your laptop.</p>' +
+        '<div class="desktop-device-list" id="desktopDeviceList"><span class="ink-faint">Checking paired laptops…</span></div>' +
+      '</section>' +
       '<section class="settings-section">' +
         '<h3>Publishing cadence</h3>' +
         '<p class="settings-hint">Every short-form piece uses one shared slot across TikTok, YouTube Shorts, Instagram and Facebook. ' +
@@ -4922,6 +4955,51 @@
     });
   }
 
+  function renderDesktopUploaderSettings() {
+    var section = document.getElementById('desktopUploaderSettings');
+    if (!section) return;
+    if (IS_REVIEWER) { section.remove(); return; }
+    var list = document.getElementById('desktopDeviceList');
+    var pairButton = document.getElementById('desktopPairBtn');
+    var pairCode = document.getElementById('desktopPairCode');
+    var pairHint = document.getElementById('desktopPairHint');
+    function refreshDevices() {
+      return fetch('/api/desktop-uploader/devices', { credentials: 'include' }).then(function (response) {
+        if (!response.ok) throw new Error('Could not load paired laptops.');
+        return response.json();
+      }).then(function (result) {
+        var devices = (result.devices || []).filter(function (device) { return !device.revokedAt; });
+        if (!devices.length) { list.innerHTML = '<span class="ink-faint">No laptop paired yet.</span>'; return; }
+        list.innerHTML = devices.map(function (device) {
+          var state = device.status || 'offline';
+          var detail = state === 'uploading'
+            ? 'Uploading ' + (device.currentFileName || 'recording') + ' · ' + Math.round(device.uploadProgress || 0) + '%'
+            : state.charAt(0).toUpperCase() + state.slice(1) + (device.queuedCount ? ' · ' + device.queuedCount + ' queued' : '');
+          return '<div class="desktop-device-row"><div class="desktop-device-main"><strong>' + escapeHtml(device.name || 'Windows laptop') + '</strong><span>' + escapeHtml(detail) + '</span></div>' +
+            '<button type="button" class="btn-secondary btn-tiny" data-revoke-device="' + escapeHtml(device.id) + '">Revoke</button></div>';
+        }).join('');
+        list.querySelectorAll('[data-revoke-device]').forEach(function (button) {
+          button.addEventListener('click', function () {
+            if (!confirm('Disconnect this laptop uploader?')) return;
+            fetch('/api/desktop-uploader/devices/' + encodeURIComponent(button.dataset.revokeDevice), { method: 'DELETE', credentials: 'include' }).then(refreshDevices);
+          });
+        });
+      }).catch(function (error) { list.textContent = error.message; });
+    }
+    pairButton.addEventListener('click', function () {
+      pairButton.disabled = true;
+      fetch('/api/desktop-uploader/pairing-code', { method: 'POST', credentials: 'include' }).then(function (response) {
+        if (!response.ok) throw new Error('Could not create a pairing code.');
+        return response.json();
+      }).then(function (result) {
+        pairCode.hidden = false;
+        pairCode.textContent = result.code;
+        pairHint.textContent = 'Enter this code in the Windows app within 10 minutes. It can only be used once.';
+      }).catch(function (error) { pairHint.textContent = error.message; }).finally(function () { pairButton.disabled = false; });
+    });
+    refreshDevices();
+  }
+
   function bootSettings() {
     Store.getSettings().then(function (settings) {
       // The user may leave Settings while this request is in flight. The
@@ -4932,6 +5010,7 @@
       renderCadenceGrid();
       renderAudioList();
       renderKeyGrid();
+      renderDesktopUploaderSettings();
       renderR2StorageCard();
       renderYoutubeConnectCard();
       renderTiktokConnectCard();

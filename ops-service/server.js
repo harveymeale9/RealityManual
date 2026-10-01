@@ -48,6 +48,7 @@ const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 const VOICE_ATTACHMENTS_DIR = path.join(DATA_DIR, 'voice-attachments');
 const DB_PATH = path.join(DATA_DIR, 'db.sqlite');
 const WORK_LOG_PATH = path.join(DATA_DIR, 'work-log.md');
+const DOWNLOADS_DIR = path.join(DATA_DIR, 'downloads');
 // Despite the name, this is the shared host-side data dir both Codex's and
 // Claude's host-side runners resolve attached-image paths against (both
 // read from the same bind-mounted DATA_DIR, just from outside the
@@ -77,6 +78,7 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://realitymanual.c
 
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 fs.mkdirSync(VOICE_ATTACHMENTS_DIR, { recursive: true });
+fs.mkdirSync(DOWNLOADS_DIR, { recursive: true });
 
 const STORE_NAMES = ['pieces', 'videos', 'audioTracks', 'settings', 'errors'];
 const FILE_STORES = ['videos', 'audioTracks'];
@@ -462,6 +464,81 @@ function requireAuth(req, res, next) {
   next();
 }
 
+const DESKTOP_PAIR_TTL_MS = 10 * 60 * 1000;
+const DESKTOP_TOKEN_PREFIX = 'rmu_';
+const desktopPairAttempts = new Map();
+
+function recordData(storeName, id) {
+  const row = stmts.getOne.get(storeName, id);
+  if (!row) return null;
+  try { return JSON.parse(row.data); } catch (error) { return null; }
+}
+
+function putRecordData(storeName, id, data) {
+  const now = new Date().toISOString();
+  stmts.upsert.run(storeName, id, JSON.stringify(data), now);
+  return data;
+}
+
+function publicDesktopUploader(device) {
+  if (!device) return null;
+  return {
+    id: device.id,
+    name: device.name,
+    createdAt: device.createdAt,
+    lastSeenAt: device.lastSeenAt || '',
+    status: device.status || 'offline',
+    currentFileName: device.currentFileName || '',
+    uploadProgress: Number(device.uploadProgress) || 0,
+    queuedCount: Number(device.queuedCount) || 0,
+    revokedAt: device.revokedAt || ''
+  };
+}
+
+function desktopTokenHash(secret) {
+  return crypto.createHash('sha256').update(secret).digest('hex');
+}
+
+function desktopTokenFromRequest(req) {
+  const authorization = String(req.get('authorization') || '');
+  return authorization.indexOf('Bearer ') === 0 ? authorization.slice(7).trim() : '';
+}
+
+function authenticateDesktopUploader(req) {
+  const token = desktopTokenFromRequest(req);
+  const match = token.match(/^rmu_([A-Za-z0-9_-]{1,128})\.([A-Za-z0-9_-]{32,})$/);
+  if (!match) return null;
+  const device = recordData('desktopUploaders', match[1]);
+  if (!device || device.revokedAt || !device.tokenHash) return null;
+  const actual = Buffer.from(desktopTokenHash(match[2]), 'hex');
+  const expected = Buffer.from(String(device.tokenHash), 'hex');
+  if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return null;
+  device.lastSeenAt = new Date().toISOString();
+  putRecordData('desktopUploaders', device.id, device);
+  req.desktopUploader = device;
+  req.desktopUploaderDeviceId = device.id;
+  return device;
+}
+
+function requireDesktopUploader(req, res, next) {
+  if (!authenticateDesktopUploader(req)) return res.status(401).json({ error: 'unauthorized_device' });
+  next();
+}
+
+function desktopEditorUploadPathAllowed(req) {
+  return (req.method === 'POST' && req.path === '/uploads') ||
+    (req.method === 'GET' && /^\/uploads\/[A-Za-z0-9_-]+$/.test(req.path)) ||
+    (req.method === 'POST' && /^\/uploads\/[A-Za-z0-9_-]+\/chunks\/\d+$/.test(req.path)) ||
+    (req.method === 'POST' && /^\/uploads\/[A-Za-z0-9_-]+\/complete$/.test(req.path)) ||
+    (req.method === 'DELETE' && /^\/uploads\/[A-Za-z0-9_-]+$/.test(req.path));
+}
+
+function requireEditorAuth(req, res, next) {
+  if (hasValidSession(req)) { req.sessionRole = 'admin'; return next(); }
+  if (desktopEditorUploadPathAllowed(req) && authenticateDesktopUploader(req)) return next();
+  return res.status(401).json({ error: 'unauthorized' });
+}
+
 // Accepts EITHER a real admin session OR a reviewer session, and attaches
 // req.sessionRole so downstream route handlers can tell which — used on
 // every route a reviewer might legitimately reach (Content Ops/Production/
@@ -485,6 +562,87 @@ app.get('/api/me', function (req, res) {
 });
 app.get('/api/health', function (req, res) { res.json({ ok: true }); });
 app.get('/robots.txt', function (req, res) { res.type('text/plain').send('User-agent: *\nDisallow: /\n'); });
+app.get('/downloads/reality-manual-uploader.exe', function (req, res) {
+  const filePath = path.join(DOWNLOADS_DIR, 'RealityManualUploader.exe');
+  if (!fs.existsSync(filePath)) return res.status(404).send('The Windows uploader is still being built.');
+  res.download(filePath, 'RealityManualUploader.exe');
+});
+
+app.post('/api/desktop-uploader/pairing-code', requireAuth, function (req, res) {
+  const code = crypto.randomBytes(4).toString('hex').toUpperCase();
+  const id = desktopTokenHash(code);
+  const now = Date.now();
+  putRecordData('desktopPairingCodes', id, {
+    id: id,
+    expiresAt: new Date(now + DESKTOP_PAIR_TTL_MS).toISOString(),
+    createdAt: new Date(now).toISOString()
+  });
+  res.status(201).json({ code: code, expiresAt: new Date(now + DESKTOP_PAIR_TTL_MS).toISOString(), profileName: 'Reality Manual', folderName: 'Reality Manual', downloadUrl: '/downloads/reality-manual-uploader.exe' });
+});
+
+app.post('/api/desktop-uploader/pair', function (req, res) {
+  const ip = req.ip || 'unknown';
+  const now = Date.now();
+  const attempts = desktopPairAttempts.get(ip) || { count: 0, startedAt: now };
+  if (now - attempts.startedAt > 15 * 60 * 1000) { attempts.count = 0; attempts.startedAt = now; }
+  attempts.count++;
+  desktopPairAttempts.set(ip, attempts);
+  if (attempts.count > 20) return res.status(429).json({ error: 'too_many_attempts' });
+  const code = String(req.body && req.body.code || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  const pairingId = desktopTokenHash(code);
+  const pairing = recordData('desktopPairingCodes', pairingId);
+  if (!pairing || new Date(pairing.expiresAt).getTime() < now) return res.status(401).json({ error: 'invalid_or_expired_code' });
+  stmts.del.run('desktopPairingCodes', pairingId);
+  const deviceId = crypto.randomUUID();
+  const secret = crypto.randomBytes(32).toString('base64url');
+  const device = {
+    id: deviceId,
+    name: String(req.body && req.body.deviceName || 'Harvey\'s laptop').trim().slice(0, 100) || 'Harvey\'s laptop',
+    tokenHash: desktopTokenHash(secret),
+    createdAt: new Date(now).toISOString(),
+    lastSeenAt: new Date(now).toISOString(),
+    status: 'ready', currentFileName: '', uploadProgress: 0, queuedCount: 0, revokedAt: ''
+  };
+  putRecordData('desktopUploaders', deviceId, device);
+  res.status(201).json({ token: DESKTOP_TOKEN_PREFIX + deviceId + '.' + secret, device: publicDesktopUploader(device) });
+});
+
+app.get('/api/desktop-uploader/devices', requireAuth, function (req, res) {
+  const devices = stmts.getAll.all('desktopUploaders').map(function (row) {
+    try { return publicDesktopUploader(JSON.parse(row.data)); } catch (error) { return null; }
+  }).filter(Boolean);
+  res.json({ devices: devices });
+});
+
+app.delete('/api/desktop-uploader/devices/:id', requireAuth, function (req, res) {
+  const device = isValidId(req.params.id) && recordData('desktopUploaders', req.params.id);
+  if (!device) return res.status(404).json({ error: 'not_found' });
+  device.revokedAt = new Date().toISOString();
+  device.status = 'revoked';
+  putRecordData('desktopUploaders', device.id, device);
+  res.status(204).end();
+});
+
+app.post('/api/desktop-uploader/heartbeat', requireDesktopUploader, function (req, res) {
+  const device = req.desktopUploader;
+  device.status = ['ready', 'watching', 'uploading', 'waiting', 'error'].includes(req.body && req.body.status) ? req.body.status : 'watching';
+  device.currentFileName = String(req.body && req.body.currentFileName || '').slice(0, 255);
+  device.uploadProgress = Math.max(0, Math.min(100, Number(req.body && req.body.uploadProgress) || 0));
+  device.queuedCount = Math.max(0, Math.min(9999, Number(req.body && req.body.queuedCount) || 0));
+  device.lastSeenAt = new Date().toISOString();
+  putRecordData('desktopUploaders', device.id, device);
+  res.json({ ok: true });
+});
+
+app.get('/api/desktop-uploader/unread-count', requireAuth, function (req, res) {
+  const count = stmts.getAll.all('pieces').reduce(function (total, row) {
+    try {
+      const piece = recordConcurrency.decodeRow(row);
+      return total + (piece && piece.stage === 'in_editor' && piece.editorUnread ? 1 : 0);
+    } catch (error) { return total; }
+  }, 0);
+  res.json({ count: count });
+});
 
 // /api/store and /api/files now admit a reviewer session too — the fine-
 // grained ownership/field checks are inside each route handler below, not
@@ -640,6 +798,8 @@ function createEditorVideoCard(input) {
       .reduce(function (max, item) { return Math.max(max, Number(item.order) || 0); }, 0) + 10,
     editorProjectId: project.id,
     sourcePlanningPieceId: project.planningPieceId || '',
+    editorUnread: project.ingestSource === 'desktop_listener',
+    ingestSource: project.ingestSource || 'browser',
     createdAt: project.createdAt || now,
     updatedAt: now
   };
@@ -718,6 +878,15 @@ const videoEditor = videoEditorService.setup({
   getPlanningPiece: editorPlanningPiece,
   matchPlanningPiece: matchEditorPlanningPiece,
   onProjectCreated: createEditorVideoCard,
+  onProjectSeen: function (input) {
+    const project = input && input.project;
+    const piece = project && getPieceRecord(project.id);
+    if (!piece || !piece.editorUnread) return piece;
+    piece.editorUnread = false;
+    piece.editorSeenAt = new Date().toISOString();
+    savePieceRecord(piece);
+    return piece;
+  },
   onProjectMetadataChanged: syncEditorVideoCard,
   onPlanningPieceChanged: reconcileEditorPlanningPiece,
   onProjectDeleted: reconcileDeletedEditorProject,
@@ -736,7 +905,7 @@ const videoEditor = videoEditorService.setup({
   buildAudioPreview: videoAnalysis.buildAudioPreview,
   handoffToProduction: sendEditorProjectToProduction
 });
-app.use('/api/editor', requireAuth, videoEditor.router);
+app.use('/api/editor', requireEditorAuth, videoEditor.router);
 // Content Ideation is an admin-only authoring/agent surface. It has its
 // own normalized tables but transfers accepted work into the existing
 // pieces record/Kanban model.

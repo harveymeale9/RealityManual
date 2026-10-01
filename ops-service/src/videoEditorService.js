@@ -994,6 +994,7 @@ function setup(options) {
   const getPlanningPiece = options.getPlanningPiece;
   const matchPlanningPiece = options.matchPlanningPiece;
   const onProjectCreated = options.onProjectCreated;
+  const onProjectSeen = options.onProjectSeen;
   const onProjectMetadataChanged = options.onProjectMetadataChanged;
   const onRenderReady = options.onRenderReady;
   const onRenderInvalidated = options.onRenderInvalidated;
@@ -2135,6 +2136,8 @@ async function renderProject(id) {
         clipInsertStatus: '',
         clipInsertError: '',
         editRevision: 0,
+        ingestSource: req.desktopUploaderDeviceId ? 'desktop_listener' : 'browser',
+        desktopUploaderDeviceId: req.desktopUploaderDeviceId || '',
         createdAt: now,
         updatedAt: now
       });
@@ -2203,14 +2206,25 @@ async function renderProject(id) {
       receivedBytes: 0,
       nextChunkIndex: 0,
       reservationToken: reservationToken,
-      touchedAt: Date.now()
+      touchedAt: Date.now(),
+      desktopUploaderDeviceId: req.desktopUploaderDeviceId || ''
     });
     res.status(201).json({ id: uploadId, chunkSize: EDITOR_UPLOAD_CHUNK_BYTES, receivedBytes: 0 });
+  });
+
+  router.get('/uploads/:uploadId', function (req, res) {
+    const session = chunkUploadSessions.get(req.params.uploadId);
+    if (!session || (req.desktopUploaderDeviceId && session.desktopUploaderDeviceId !== req.desktopUploaderDeviceId)) {
+      return res.status(404).json({ error: 'upload_session_missing' });
+    }
+    session.touchedAt = Date.now();
+    res.json({ id: session.id, chunkSize: EDITOR_UPLOAD_CHUNK_BYTES, receivedBytes: session.receivedBytes, sizeBytes: session.sizeBytes, nextChunkIndex: session.nextChunkIndex });
   });
 
   router.post('/uploads/:uploadId/chunks/:chunkIndex', express.raw({ type: 'application/octet-stream', limit: EDITOR_UPLOAD_CHUNK_BYTES + 1024 }), async function (req, res) {
     const session = chunkUploadSessions.get(req.params.uploadId);
     if (!session) return res.status(404).json({ error: 'upload_session_missing', message: 'This upload session expired. The Editor will restart it automatically.' });
+    if (req.desktopUploaderDeviceId && session.desktopUploaderDeviceId !== req.desktopUploaderDeviceId) return res.status(404).json({ error: 'upload_session_missing' });
     const chunkIndex = Number(req.params.chunkIndex);
     const offset = Number(req.headers['x-upload-offset']);
     if (!Number.isInteger(chunkIndex) || chunkIndex < 0 || !Number.isInteger(offset) || offset < 0) {
@@ -2245,6 +2259,7 @@ async function renderProject(id) {
   router.post('/uploads/:uploadId/complete', async function (req, res) {
     const session = chunkUploadSessions.get(req.params.uploadId);
     if (!session) return res.status(404).json({ error: 'upload_session_missing', message: 'This upload session expired. Please try the recording again.' });
+    if (req.desktopUploaderDeviceId && session.desktopUploaderDeviceId !== req.desktopUploaderDeviceId) return res.status(404).json({ error: 'upload_session_missing' });
     if (session.receivedBytes !== session.sizeBytes) {
       return res.status(409).json({ error: 'upload_incomplete', receivedBytes: session.receivedBytes, sizeBytes: session.sizeBytes });
     }
@@ -2252,13 +2267,23 @@ async function renderProject(id) {
     uploadCapacityReservations.release(session.reservationToken);
     return acceptStoredEditorUpload({
       file: { path: session.path, size: session.sizeBytes, originalname: session.fileName, mimetype: session.mimeType },
-      body: { name: session.name }
+      body: { name: session.name },
+      desktopUploaderDeviceId: session.desktopUploaderDeviceId || ''
     }, res);
   });
 
   router.delete('/uploads/:uploadId', function (req, res) {
+    const session = chunkUploadSessions.get(req.params.uploadId);
+    if (session && req.desktopUploaderDeviceId && session.desktopUploaderDeviceId !== req.desktopUploaderDeviceId) return res.status(404).json({ error: 'upload_session_missing' });
     releaseChunkUploadSession(req.params.uploadId, true);
     res.status(204).end();
+  });
+
+  router.post('/:id/seen', function (req, res) {
+    const project = getProject(req.params.id);
+    if (!project) return res.status(404).json({ error: 'not_found' });
+    const piece = typeof onProjectSeen === 'function' ? onProjectSeen({ project: project }) : null;
+    res.json({ ok: true, videoPiece: piece || null });
   });
 
   router.get('/audio-tracks', function (req, res) {

@@ -808,6 +808,11 @@
         Number(previousProject.editRevision || 0) === Number(item.editRevision || 0));
       if (item.renderStatus === 'ready') delete localPreviewRebuilds[item.id];
       project = item;
+      if (item.ingestSource === 'desktop_listener') {
+        fetch('/api/editor/' + encodeURIComponent(item.id) + '/seen', { method: 'POST', credentials: 'include' })
+          .then(function () { if (typeof window.__rmRefreshEditorUnreadBadge === 'function') window.__rmRefreshEditorUnreadBadge(); })
+          .catch(function () {});
+      }
       projectDetails[item.id] = item;
       restoreReviewProgress(item);
       localStorage.setItem(rememberedProjectKey(item.productionPieceId ? 'sent' : 'active'), item.id);

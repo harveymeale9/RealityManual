@@ -254,7 +254,7 @@ a { color: var(--accent); }
   text-decoration: none;
   position: relative;
 }
-.mail-unread-badge { position: absolute; top: 3px; right: 2px; min-width: 18px; height: 18px; padding: 0 4px; display: grid; place-items: center; border: 2px solid var(--surface); border-radius: 99px; background: var(--error); color: #fff; font: 700 .58rem var(--font-mono); }
+.mail-unread-badge, .editor-unread-badge { position: absolute; top: 3px; right: 2px; min-width: 18px; height: 18px; padding: 0 4px; display: grid; place-items: center; border: 2px solid var(--surface); border-radius: 99px; background: var(--error); color: #fff; font: 700 .58rem var(--font-mono); }
 .side-rail-btn svg { width: 24px; height: 24px; }
 .side-rail-btn:hover { color: var(--ink-soft); background: var(--surface-2); }
 .side-rail-btn.active { color: var(--accent); background: var(--accent-soft); }
@@ -2017,6 +2017,13 @@ body.role-reviewer #pmBackFab {
 .platform-connect-info { display: flex; flex-direction: column; gap: 2px; }
 .platform-connect-name { font-size: 0.9rem; font-weight: 600; color: var(--ink); }
 .platform-connect-status { font-size: 0.78rem; color: var(--ink-faint); }
+.desktop-uploader-actions { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.desktop-pairing-code { min-width: 112px; padding: 9px 12px; border: 1px solid var(--accent); border-radius: var(--radius); color: var(--accent); background: var(--accent-soft); font: 700 1rem var(--font-mono); letter-spacing: .12em; text-align: center; }
+.desktop-device-list { display: grid; gap: 8px; }
+.desktop-device-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--border-soft); border-radius: var(--radius); background: var(--surface); }
+.desktop-device-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.desktop-device-main strong { font-size: .86rem; font-weight: 600; }
+.desktop-device-main span { font-size: .75rem; color: var(--ink-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .meta-connect-card { flex-wrap: wrap; }
 .meta-connect-card > .platform-connect-info { flex: 1; min-width: 220px; }
 .meta-credential-fields { width: 100%; display: grid; grid-template-columns: minmax(150px, 0.8fr) minmax(220px, 1.2fr) auto; gap: 9px; align-items: end; padding-top: 10px; border-top: 1px solid var(--border-soft); }

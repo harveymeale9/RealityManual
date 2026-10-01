@@ -4,5 +4,7 @@ backend/data/
 npm-debug.log*
 .DS_Store
 Thumbs.db
+tools/windows-uploader/bin/
+tools/windows-uploader/obj/
 Manual Pages/
 Manual Pages Compressed/
