@@ -1006,7 +1006,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
       return {
         pieceId: input.project.id,
         piece: { id: input.project.id, stage: 'processed', hasVideo: true },
-        planningPiece: { id: 'plan-2', stage: 'uploaded' },
+        planningPiece: { id: 'plan-2', stage: 'edited' },
         alreadySent: alreadySent,
         workflowWarning: 'Synthetic planning-stage warning.'
       };
@@ -1285,7 +1285,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(handoffResult.pieceId, project.id);
   assert.equal(joinedHandoffResult.pieceId, project.id);
   assert.equal(handoffResult.piece.stage, 'processed');
-  assert.equal(handoffResult.planningPiece.stage, 'uploaded');
+  assert.equal(handoffResult.planningPiece.stage, 'edited');
   assert.equal(handoffResult.alreadySent || joinedHandoffResult.alreadySent, true);
   assert.equal(handoffResult.workflowWarning, 'Synthetic planning-stage warning.');
   project = await (await fetch(base + '/api/editor/' + project.id)).json();

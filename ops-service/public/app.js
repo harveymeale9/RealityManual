@@ -21,9 +21,9 @@
   // publish a piece should gate on this, not just IS_REVIEWER alone.
   function canEditPiece(p) { return !IS_REVIEWER || isOwnedByReviewer(p); }
 
-  var UPLOADED_INDEX = window.RMStore.STAGES.map(function (s) { return s.id; }).indexOf('uploaded');
-  var MANUAL_STAGE_IDS = window.RMStore.STAGES.slice(0, UPLOADED_INDEX + 1).map(function (s) { return s.id; });
-  var AUTO_STAGE_IDS = window.RMStore.STAGES.slice(UPLOADED_INDEX + 1).map(function (s) { return s.id; });
+  var EDITED_INDEX = window.RMStore.STAGES.map(function (s) { return s.id; }).indexOf('edited');
+  var MANUAL_STAGE_IDS = window.RMStore.STAGES.slice(0, EDITED_INDEX + 1).map(function (s) { return s.id; });
+  var AUTO_STAGE_IDS = window.RMStore.STAGES.slice(EDITED_INDEX + 1).map(function (s) { return s.id; });
 
   // Platform preset applied when the content-type dropdown changes in the
   // editor, per Harvey: any shortform type defaults to YT Shorts +

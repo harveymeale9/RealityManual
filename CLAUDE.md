@@ -15564,3 +15564,24 @@ wasted production-page space. The entire Posted heading, grid, renderer, event
 bindings, and dedicated card styles have been removed. Content Production now
 ends after its in-production rows, keeping the page focused on work that still
 needs production decisions.
+
+---
+
+# 447. Uploaded Now Correctly Precedes Edited (2026-10-01)
+
+The planning board still showed the legacy sequence **Filmed → Edited →
+Uploaded → Processing**, even though the integrated Editor now receives raw
+camera footage before producing the finished edit. The real sequence is now
+**Filmed → Uploaded → Edited → Processing** everywhere: Kanban columns and
+selectors, ideation progression ranks, automatic Editor transitions, and the
+Content Production outline matcher.
+
+Linking an Editor recording advances its planning card to Uploaded. A verified
+final render advances it to Edited; invalidating that render returns it to
+Uploaded; sending it to Content Production leaves it at the terminal Edited
+planning state. Unlinking or deleting an unfinished Editor recording still
+returns its card to Filmed. Existing planning cards in the old terminal
+Uploaded state are migrated once to Edited, with a durable migration marker so
+future genuinely in-progress Uploaded cards are never rewritten on restart.
+The manual/automatic Kanban boundary now follows Edited rather than relying on
+Uploaded being the last planning column.

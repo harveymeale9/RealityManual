@@ -233,7 +233,7 @@ function setup(db, options) {
   }
 
   function capturePipelineSignals() {
-    const ranks = ['archived','ideation','big_ideas','outline_started','outline_completed','filmed','edited','uploaded','processed','final_check','scheduled','live'];
+    const ranks = ['archived','ideation','big_ideas','outline_started','outline_completed','filmed','uploaded','edited','processed','final_check','scheduled','live'];
     const pieces = new Map(q.pieces.all().map(function (row) { const piece = json(row.data, {}); return [piece.id, piece]; }));
     db.prepare("SELECT id,destination_piece_id,exit_reason FROM ideation_ideas WHERE status='transferred' AND destination_piece_id IS NOT NULL").all().forEach(function (idea) {
       const piece = pieces.get(idea.destination_piece_id);

@@ -345,9 +345,8 @@ async function transcribeVideo(videoPath, tmpDir) {
 }
 
 // candidates: [{ id, seq, title, notesSnippet }] — pieces currently in the
-// "uploaded" stage (Harvey's own plan archive — see CLAUDE.md §62 on why
-// that stage means "planned and filmed," which is exactly what a freshly
-// uploaded video corresponds to). notesSnippet is deliberately just the
+// "edited" stage (the terminal planning state immediately before Content
+// Production). notesSnippet is deliberately just the
 // first ~400 chars of notesHtml stripped to plain text — that's where
 // Harvey's own titles typically sit at the top of an outline, and keeping
 // full outlines out of the prompt keeps this fast and cheap.
@@ -358,9 +357,9 @@ function buildMatchPrompt(transcript, candidates) {
   }).join('\n');
   return 'A video was just uploaded to the Reality Manual content pipeline. Here is its transcript ' +
     '(may be empty or partial if transcription failed):\n\n"""\n' + (transcript || '(no transcript available)').slice(0, 6000) + '\n"""\n\n' +
-    'Here are the candidate outlines/ideas currently sitting in the "Uploaded" stage of the Content Ops ' +
-    'board (Harvey\'s own planning stage — a piece here has already been outlined and filmed, waiting to ' +
-    'be matched to its actual uploaded video file):\n\n' + (candidateBlock || '(no candidates)') + '\n\n' +
+    'Here are the candidate outlines/ideas currently sitting in the "Edited" stage of the Content Ops ' +
+    'board (a piece here has already been outlined, filmed, uploaded, and edited, waiting to enter Content ' +
+    'Production):\n\n' + (candidateBlock || '(no candidates)') + '\n\n' +
     'Your job: decide which single candidate (if any) this video most likely corresponds to, based on how ' +
     'well the transcript\'s actual content matches that candidate\'s title/outline. If nothing is a ' +
     'plausible match, matchedPieceId should be null. Then produce title options for this video: if the ' +

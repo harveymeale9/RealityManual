@@ -548,7 +548,7 @@ function editorPlanningCandidates(project) {
     if (!piece) return false;
     if (piece.id === (project && project.planningPieceId)) return true;
     if (claimedByOtherEditorProjects.has(piece.id)) return false;
-    if (piece.stage === 'outline_completed' || piece.stage === 'filmed') return true;
+    if (piece.stage === 'outline_completed' || piece.stage === 'filmed' || piece.stage === 'uploaded') return true;
     return piece.stage === 'edited' && piece.editorProjectId === (project && project.id);
   }).sort(function (a, b) {
     if (a.id === (project && project.planningPieceId)) return -1;
@@ -562,7 +562,7 @@ function editorPlanningCandidates(project) {
 
 function editorPlanningPiece(id) {
   const piece = getPieceRecord(id);
-  if (!piece || !['outline_completed', 'filmed', 'edited'].includes(piece.stage)) return null;
+  if (!piece || !['outline_completed', 'filmed', 'uploaded', 'edited'].includes(piece.stage)) return null;
   return { id: piece.id, seq: piece.seq, title: piece.title, stage: piece.stage, notesHtml: String(piece.notesHtml || '') };
 }
 
@@ -595,8 +595,8 @@ function advanceEditorPlanningPiece(input, targetStage) {
   if (!project || !project.planningPieceId) return;
   const piece = getPieceRecord(project.planningPieceId);
   if (!piece) return;
-  if (targetStage === 'edited' && piece.stage !== 'filmed') return;
-  if (targetStage === 'uploaded' && piece.stage !== 'filmed' && piece.stage !== 'edited') return;
+  if (targetStage === 'uploaded' && piece.stage !== 'filmed') return;
+  if (targetStage === 'edited' && piece.stage !== 'filmed' && piece.stage !== 'uploaded') return;
   piece.stage = targetStage;
   piece.updatedAt = new Date().toISOString();
   piece.editorProjectId = project.id;
@@ -619,7 +619,7 @@ function reconcileEditorPlanningPiece(input) {
   if (!project) return;
   if (previousId && previousId !== project.planningPieceId) {
     const previous = getPieceRecord(previousId);
-    if (previous && previous.stage === 'edited' && previous.editorProjectId === project.id) {
+    if (previous && (previous.stage === 'uploaded' || previous.stage === 'edited') && previous.editorProjectId === project.id) {
       previous.stage = 'filmed';
       previous.updatedAt = new Date().toISOString();
       delete previous.editorProjectId;
@@ -634,6 +634,7 @@ function reconcileEditorPlanningPiece(input) {
       current.editorProjectId = project.id;
       savePieceRecord(current);
     }
+    advanceEditorPlanningPiece({ project: project }, 'uploaded');
   }
   if (!input.renderWillChange && project.renderStatus === 'ready' && project.planningPieceId) {
     advanceEditorPlanningPiece({ project: project }, 'edited');
@@ -654,9 +655,8 @@ function regressEditorPlanningPieceForRebuild(input) {
   if (!project || !project.planningPieceId) return;
   const piece = getPieceRecord(project.planningPieceId);
   if (!piece || piece.stage !== 'edited' || piece.editorProjectId !== project.id) return;
-  piece.stage = 'filmed';
+  piece.stage = 'uploaded';
   piece.updatedAt = new Date().toISOString();
-  delete piece.editorProjectId;
   savePieceRecord(piece);
 }
 const videoEditor = videoEditorService.setup({
@@ -1567,7 +1567,7 @@ app.get('/api/files/:storeName/:id', async function (req, res) {
 });
 
 // --- Uploader tool: transcribe a freshly-uploaded video, match it to the
-// right "Uploaded"-stage outline, and pull title candidates from it. See
+// right "Edited"-stage outline, and pull title candidates from it. See
 // src/videoAnalysis.js for the actual work; this route just validates,
 // responds immediately (the same "kick off the real work, respond 202,
 // let the client poll the piece record" pattern the voice app already
@@ -1619,6 +1619,28 @@ function savePieceRecord(piece) {
   stmts.upsert.run('pieces', piece.id, JSON.stringify(piece), stamp);
   weeklyReports.recordStageChange(piece, previous && previous.stage, 'automation', stamp);
 }
+
+// "Uploaded" and "Edited" originally appeared in the opposite order. Once
+// the Editor became the raw-footage intake, Uploaded acquired its literal
+// meaning (recording received) and Edited became the final planning state.
+// Translate old terminal planning cards once; the marker prevents future
+// in-progress Uploaded cards from being mistaken for legacy data on restart.
+function migrateUploadBeforeEditStageOrder() {
+  const migrationId = 'upload-before-edit-stage-order-v1';
+  if (stmts.getOne.get('systemMigrations', migrationId)) return;
+  const migratedAt = new Date().toISOString();
+  db.transaction(function () {
+    stmts.getAll.all('pieces').forEach(function (row) {
+      const piece = recordConcurrency.decodeRow(row);
+      if (!piece || piece.hasVideo || piece.stage !== 'uploaded') return;
+      piece.stage = 'edited';
+      recordConcurrency.stampServerWrite(piece);
+      stmts.upsert.run('pieces', piece.id, JSON.stringify(piece), row.updated_at || migratedAt);
+    });
+    stmts.upsert.run('systemMigrations', migrationId, JSON.stringify({ id: migrationId, appliedAt: migratedAt }), migratedAt);
+  })();
+}
+migrateUploadBeforeEditStageOrder();
 
 // R2 is the durable source of publish-ready media once a card is scheduled.
 // Uploads are claimed per piece so a retry/double click cannot start two large
@@ -1750,7 +1772,7 @@ async function sendEditorProjectToProduction(input) {
     const videoRow = stmts.getOne.get('videos', project.id);
     const existingMediaPath = path.join(UPLOADS_DIR, 'videos', project.id);
     if (existing.editorProjectId === project.id && existing.hasVideo && videoRow && fs.existsSync(existingMediaPath)) {
-      const workflowWarning = tryAdvanceEditorPlanningPiece({ project: project }, 'uploaded');
+      const workflowWarning = tryAdvanceEditorPlanningPiece({ project: project }, 'edited');
       return {
         pieceId: existing.id,
         piece: existing,
@@ -1832,7 +1854,7 @@ async function sendEditorProjectToProduction(input) {
   // must never delete that committed file and strand the new Production card.
   try { weeklyReports.recordStageChange(piece, null, 'automation', now); }
   catch (error) { console.error('[editor] Production handoff stage report failed:', String(error.message || error)); }
-  const workflowWarning = tryAdvanceEditorPlanningPiece({ project: project }, 'uploaded');
+  const workflowWarning = tryAdvanceEditorPlanningPiece({ project: project }, 'edited');
   const planningPiece = project.planningPieceId ? getPieceRecord(project.planningPieceId) : null;
   // The Editor already paid for a word-timed transcription and its text
   // reflects Harvey's manual cuts. Reuse it for matching/title generation
@@ -1939,7 +1961,7 @@ async function runVideoAnalysis(id, existingTranscript) {
   try {
     const candidates = stmts.getAll.all('pieces')
       .map(function (r) { try { return JSON.parse(r.data); } catch (e) { return null; } })
-      .filter(function (p) { return p && p.stage === 'uploaded'; })
+      .filter(function (p) { return p && p.stage === 'edited'; })
       .map(function (p) {
         const probe = (p.notesHtml || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
         return { id: p.id, seq: p.seq, title: p.title, notesSnippet: probe.slice(0, 400) };
