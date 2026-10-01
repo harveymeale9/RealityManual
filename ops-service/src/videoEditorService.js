@@ -22,7 +22,7 @@ const PAGE_CHANGE_CUT_SECONDS = 3;
 // automatic long-pause cuts are treated as page changes and start the move
 // again from the wide camera frame.
 const OPENING_PUSH_IN_SCALE = 1.25;
-const EDITOR_RENDER_VERSION = 14;
+const EDITOR_RENDER_VERSION = 15;
 const PAGE_CHANGE_SSIM_THRESHOLD = 0.5;
 const BROWSER_PREVIEW_VERSION = 2;
 const AUDIO_PREVIEW_MIX_VERSION = 3;
@@ -156,6 +156,27 @@ function run(command, args, label) {
       resolve({ stdout: stdout, stderr: stderr });
     });
   });
+}
+
+function parseIntegratedLoudness(stderr) {
+  const matches = String(stderr || '').match(/\{\s*"input_i"[\s\S]*?\}/g);
+  if (!matches || !matches.length) throw new Error('FFmpeg returned no integrated loudness measurement.');
+  const value = Number(JSON.parse(matches[matches.length - 1]).input_i);
+  if (!Number.isFinite(value) || value <= -70) throw new Error('The audio was too quiet to measure safely.');
+  return Math.round(value * 100) / 100;
+}
+
+async function measureIntegratedLoudness(filePath, label) {
+  const result = await run('ffmpeg', ['-hide_banner', '-nostats', '-i', filePath, '-vn', '-af',
+    'loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json', '-f', 'null', '-'], label || 'audio loudness measurement');
+  return parseIntegratedLoudness(result.stderr);
+}
+
+function insertedClipGainDb(referenceLufs, clipLufs) {
+  const reference = Number(referenceLufs);
+  const measured = Number(clipLufs);
+  if (!Number.isFinite(reference) || !Number.isFinite(measured)) throw new Error('Inserted-clip loudness could not be matched.');
+  return Math.round(Math.max(-30, Math.min(30, reference - measured)) * 100) / 100;
 }
 
 function runWithProgress(command, args, label, onProgress) {
@@ -1614,6 +1635,21 @@ async function renderProject(id) {
       const filters = [];
       const readyClips = (project.insertedClips || []).filter(function (clip) { return clip.status === 'ready'; });
       const clipInputIndex = new Map(readyClips.map(function (clip, index) { return [clip.id, index + 1]; }));
+      const clipAudioBalance = new Map();
+      let mainVoiceLufs = null;
+      if (readyClips.length) {
+        // Match each external speaker to Harvey's actual recording before the
+        // timeline is concatenated. Normalizing only the completed programme
+        // cannot remove a local volume jump at a clip boundary.
+        mainVoiceLufs = await measureIntegratedLoudness(sourcePath(id), 'main voice loudness measurement');
+        for (const clip of readyClips) {
+          const measuredLufs = await measureIntegratedLoudness(insertedClipPath(id, clip.id), 'inserted clip loudness measurement');
+          clipAudioBalance.set(clip.id, {
+            measuredLufs: measuredLufs,
+            gainDb: insertedClipGainDb(mainVoiceLufs, measuredLufs)
+          });
+        }
+      }
       segments.forEach(function (segment, index) {
         const segmentDuration = segment.end - segment.start;
         const inputIndex = segment.type === 'insert' ? clipInputIndex.get(segment.clipId) : 0;
@@ -1632,6 +1668,13 @@ async function renderProject(id) {
         // Tiny boundary fades prevent waveform discontinuities from creating
         // a click at transcript/jump cuts, without audibly crossfading words.
         let audioFilter = '[' + inputIndex + ':a]atrim=start=' + segment.start.toFixed(3) + ':end=' + segment.end.toFixed(3) + ',asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo';
+        if (segment.type === 'insert') {
+          const balance = clipAudioBalance.get(segment.clipId);
+          // Preserve the measured speech relationship while catching peaks
+          // introduced by a positive gain. The later production loudness pass
+          // can then move the whole programme without changing this match.
+          audioFilter += ',volume=' + balance.gainDb.toFixed(2) + 'dB,alimiter=limit=0.841395:level=false';
+        }
         if (index > 0) audioFilter += ',afade=t=in:st=0:d=0.008';
         if (index + 1 < segments.length) audioFilter += ',afade=t=out:st=' + Math.max(0, segmentDuration - 0.008).toFixed(3) + ':d=0.008';
         filters.push(audioFilter + '[a' + index + ']');
@@ -1686,7 +1729,14 @@ async function renderProject(id) {
       project.renderQuality = {
         status: 'passed', checkedAt: new Date().toISOString(), checks: qualityChecks,
         width: renderedMedia.width, height: renderedMedia.height, pixelFormat: renderedMedia.pixelFormat,
-        duration: renderedMedia.duration, audioPeakDb: audioPeakDb
+        duration: renderedMedia.duration, audioPeakDb: audioPeakDb,
+        insertedClipLoudness: mainVoiceLufs === null ? null : {
+          mainVoiceLufs: mainVoiceLufs,
+          clips: readyClips.map(function (clip) {
+            const balance = clipAudioBalance.get(clip.id);
+            return { id: clip.id, measuredLufs: balance.measuredLufs, gainDb: balance.gainDb };
+          })
+        }
       };
       project.lastRenderAt = new Date().toISOString();
       saveProject(project);
@@ -2662,6 +2712,8 @@ module.exports = {
   createKeyedClaimRegistry,
   createPriorityTaskQueue,
   verifiedRenderMatches,
+  parseIntegratedLoudness,
+  insertedClipGainDb,
   normalizeWords,
   calculateAutoCuts,
   calculateManualCuts,

@@ -7,7 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
 const crypto = require('node:crypto');
-const { execFileSync } = require('node:child_process');
+const { execFileSync, spawnSync } = require('node:child_process');
 const express = require('express');
 const Database = require('better-sqlite3');
 const editor = require('../src/videoEditorService');
@@ -18,6 +18,14 @@ test('INSERT CLIP directives parse YouTube ranges and preserve the caption cue',
   assert.equal(directives[0].sourceStart, 24);
   assert.equal(directives[0].sourceEnd, 28);
   assert.match(directives[0].quote, /problem we face/);
+});
+
+test('inserted clips are gain-matched to the main voice loudness', function () {
+  const measured = editor.parseIntegratedLoudness('noise\n{\n  "input_i" : "-24.37",\n  "input_tp" : "-8.00"\n}\n');
+  assert.equal(measured, -24.37);
+  assert.equal(editor.insertedClipGainDb(-16.2, -25.75), 9.55);
+  assert.equal(editor.insertedClipGainDb(-30, -80), 30);
+  assert.throws(function () { editor.parseIntegratedLoudness('{ "input_i" : "-inf" }'); }, /too quiet/);
 });
 
 test('inserted clips split the source timeline and supply their own timed captions', function () {
@@ -622,7 +630,7 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.equal(stored.renderQuality.status, 'passed');
-  assert.equal(stored.renderVersion, 14);
+  assert.equal(stored.renderVersion, 15);
   assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), true);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
@@ -630,9 +638,9 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
 test('final render splices an inserted clip and its caption timeline between source words', { timeout: 20000 }, async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-insert-render-'));
   const projectDir = path.join(dir, 'editor', 'insert-render-1'); fs.mkdirSync(projectDir, { recursive: true });
-  const mediaArgs = function (color, frequency, output) { return ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=' + color + ':s=320x180:d=1:r=12', '-f', 'lavfi', '-i', 'sine=frequency=' + frequency + ':duration=1', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-f', 'mp4', output]; };
-  execFileSync('ffmpeg', mediaArgs('black', 440, path.join(projectDir, 'source')));
-  execFileSync('ffmpeg', mediaArgs('blue', 660, path.join(projectDir, 'inserted-clip-clip-1.mp4')));
+  const mediaArgs = function (color, frequency, volume, output) { return ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=' + color + ':s=320x180:d=1:r=12', '-f', 'lavfi', '-i', 'sine=frequency=' + frequency + ':duration=1', '-filter:a', 'volume=' + volume, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-f', 'mp4', output]; };
+  execFileSync('ffmpeg', mediaArgs('black', 440, 0.5, path.join(projectDir, 'source')));
+  execFileSync('ffmpeg', mediaArgs('blue', 660, 0.05, path.join(projectDir, 'inserted-clip-clip-1.mp4')));
   const db = new Database(path.join(dir, 'test.sqlite'));
   db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
   const now = new Date().toISOString();
@@ -654,6 +662,17 @@ test('final render splices an inserted clip and its caption timeline between sou
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.ok(stored.editedDuration > 1.9 && stored.editedDuration < 2.1);
+  assert.equal(stored.renderVersion, 15);
+  assert.ok(stored.renderQuality.insertedClipLoudness.clips[0].gainDb > 18);
+  assert.ok(stored.renderQuality.insertedClipLoudness.clips[0].gainDb < 22);
+  const rendered = path.join(projectDir, 'render.mp4');
+  function rangeLufs(start, duration) {
+    const measured = spawnSync('ffmpeg', ['-hide_banner', '-nostats', '-ss', String(start), '-t', String(duration), '-i', rendered,
+      '-vn', '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json', '-f', 'null', '-'], { encoding: 'utf8' });
+    assert.equal(measured.status, 0, measured.stderr);
+    return editor.parseIntegratedLoudness(measured.stderr);
+  }
+  assert.ok(Math.abs(rangeLufs(0.05, 0.4) - rangeLufs(0.55, 0.9)) < 1);
   assert.match(fs.readFileSync(path.join(projectDir, 'captions.ass'), 'utf8'), /External/);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });

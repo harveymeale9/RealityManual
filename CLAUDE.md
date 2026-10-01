@@ -15499,3 +15499,28 @@ same time. A real Chromium regression switched from no music to one track and
 then directly to a second track; after both changes, video and the correct new
 audio were playing, remained within 0.09 seconds, and each selection was
 persisted.
+
+---
+
+# 444. Inserted Clips Match the Main Voice Loudness Before Concatenation (2026-10-01)
+
+Inserted YouTube excerpts were previously concatenated at their source volume.
+Although Content Production later normalizes the completed programme, one
+global pass cannot remove a local jump between Harvey's camera audio and an
+external speaker. A quiet clip could therefore remain suddenly quiet, and a
+loud source could remain startlingly loud.
+
+Every Editor render containing an inserted clip now measures the camera
+recording and each external clip independently using FFmpeg's EBU R128
+integrated-loudness analysis. Each inserted audio segment receives the bounded
+gain required to match Harvey's measured LUFS before concatenation, followed
+by a -1.5 dBTP peak limiter. The ordinary final-programme normalization can
+then move the complete edit as one unit without changing that established
+voice-to-voice relationship. The measured source LUFS, clip LUFS, and applied
+gain are retained in render-quality metadata for diagnosis.
+
+Render format version 15 invalidates active unapproved outputs so previously
+inserted clips are rebuilt through the matched path. The FFmpeg integration
+test deliberately makes the external source 20 dB quieter than the main
+recording and verifies both the expected corrective gain and that the actual
+rendered source/clip passages finish within 1 LUFS of one another.
