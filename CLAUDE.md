@@ -15372,4 +15372,9 @@ The progress markup now has a dedicated track class, a six-pixel visible bar,
 and an unclipped 28px label row with safe ellipsis on narrow screens. A real
 17+ MiB two-chunk integration test verifies byte-exact assembly, idempotent
 chunk replay, SHA-256 identity, media probing, and normal Editor project
-creation. All 150 service tests pass.
+creation. All 150 service tests pass. A routed live Chromium check at 1280x720
+then selected a synthetic 20 MiB recording through the real deployed Editor:
+the visible state read `Uploading 1 of 1 · large-camera.mp4 · 80%`, the label
+row measured 28px, the track measured 6px, the browser emitted exactly one
+16 MiB and one 4 MiB request, and the mocked completion returned cleanly with
+no page errors.
