@@ -3513,11 +3513,9 @@
       '</div>' +
       '<h3 class="upload-heading">In production</h3>' +
       '<div class="upload-rows" id="uploadRows"></div>' +
-      '<h3 class="upload-heading">Posted</h3>' +
-      '<div class="upload-grid" id="postedGrid"></div>' +
     '</div>';
 
-  var dropzone, fileInput, uploadRows, postedGrid;
+  var dropzone, fileInput, uploadRows;
   var uploadRowObjectUrls = {}; // pieceId -> object URL, revoked/rebuilt on each render pass
   // pieceId -> { trackId: mixed-audio object URL }. These are on-demand,
   // temporary uploader auditions, never persistent media-library records.
@@ -3525,21 +3523,6 @@
   // pieceId -> pending debounce timer for the platform-checkbox save
   // below — see that handler's own comment for why this exists.
   var platformSaveTimers = {};
-
-  function videoCardHtml(id, p) {
-    var thumb = p.thumbnailDataUrl ? '<img src="' + p.thumbnailDataUrl + '" alt="" />' : '<span class="video-card-noThumb">No thumbnail</span>';
-    var ct = contentTypeOf(p.contentType);
-    var scheduledLine = p.scheduledAt ? (p.stage === 'live' ? 'Posted ' : 'Scheduled ') + fmtFull(p.scheduledAt) : '';
-    return '<div class="video-card" data-id="' + id + '">' +
-      '<div class="video-card-thumb">' + thumb + '</div>' +
-      '<div class="video-card-body">' +
-        '<div class="video-card-title">' + escapeHtml(p.title || 'Untitled') + '</div>' +
-        '<div class="video-card-meta"><span class="chip format"><span class="dot" style="background:' + ct.color + '"></span>' + ct.label + '</span><span class="video-card-stage">' + stageLabelOf(p.stage) + '</span></div>' +
-        (scheduledLine ? '<div class="video-card-sched">' + scheduledLine + '</div>' : '') +
-        tiktokPerformanceHtml(p) +
-      '</div>' +
-    '</div>';
-  }
 
   // One row per in-production video, everything Harvey needs inline —
   // thumbnail/title/id, a real scrubbable frame picker, the backing-audio
@@ -4140,7 +4123,6 @@
     // would just be a redundant, stale-looking duplicate of the same
     // piece in two places.
     var inProgress = items.filter(function (p) { return p.stage === 'processed'; }).sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
-    var posted = items.filter(function (p) { return p.stage === 'live'; }).sort(function (a, b) { return new Date(b.updatedAt) - new Date(a.updatedAt); });
 
     function swapIn(audioTracks) {
       var oldObjectUrls = uploadRowObjectUrls;
@@ -4169,11 +4151,6 @@
     } else {
       Store.getAll('audioTracks').then(swapIn);
     }
-
-    postedGrid.innerHTML = posted.length ? posted.map(function (p) { return videoCardHtml(p.id, p); }).join('') : '<div class="empty-slot wide">Nothing posted yet.</div>';
-    postedGrid.querySelectorAll('.video-card').forEach(function (el) {
-      el.addEventListener('click', function () { openPiece(el.dataset.id, renderUploadLists); });
-    });
 
     maybeStartAnalysisPolling();
   }
@@ -4435,7 +4412,6 @@
     dropzone = document.getElementById('dropzone');
     fileInput = document.getElementById('fileInput');
     uploadRows = document.getElementById('uploadRows');
-    postedGrid = document.getElementById('postedGrid');
 
     dropzone.addEventListener('click', function () { fileInput.click(); });
     fileInput.addEventListener('change', function () { handleFiles(fileInput.files); fileInput.value = ''; });

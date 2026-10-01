@@ -15552,3 +15552,15 @@ handoff is recreated from the still-verified Editor render. Concurrent clicks
 continue to share one job. Integration coverage explicitly removes the
 simulated downstream handoff while retaining the Sent marker and proves the
 next approval recreates it.
+
+---
+
+# 446. Content Production No Longer Duplicates Posted Work (2026-10-01)
+
+The Content Production page previously ended with a separate **Posted** grid,
+including a large empty **Nothing posted yet** placeholder. Published work is
+already represented in Content Ops, so this duplicated lifecycle state and
+wasted production-page space. The entire Posted heading, grid, renderer, event
+bindings, and dedicated card styles have been removed. Content Production now
+ends after its in-production rows, keeping the page focused on work that still
+needs production decisions.
