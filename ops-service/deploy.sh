@@ -31,6 +31,8 @@ set -x
 RUN_ARGS=(-d --name "$CONTAINER" --restart unless-stopped
   -p 127.0.0.1:4001:4001
   --add-host=host.docker.internal:host-gateway
+  # Agent credentials remain host-side; the service mounts only its data,
+  # shared repositories, and the scoped SSH key used by the Codex runner.
   -v "$DATA_DIR:/data"
   # Aggregate weekly reporting reads this separate service's SQLite files but
   # must never be able to alter order, customer, or analytics data.
