@@ -16073,3 +16073,33 @@ preferences. Results now preserve the mode Harvey is currently using. In
 copy**, it opens and highlights the same passage inside the continuous
 180-page document. Search no longer forces Book users into Text mode, and the
 finder's explanatory copy states this behavior explicitly.
+
+---
+
+# 464. Two-Second Editor Outro and Soundtrack Fade (2026-10-02)
+
+Every newly generated Editor master now ends with a deliberate two-second
+outro instead of cutting off on Harvey's final word. The automatic trailing
+silence trim still leaves its existing short natural speech handle; after the
+edited content ends, FFmpeg holds the final composed frame and fades it all the
+way to black while padding the dialogue track with silence. Captions finish
+with the spoken content and do not linger over the outro. The final constant-
+rate normalization is important: the preceding zoom/concat filters can retain
+a coarse time base, which caused initial implementations either to discard the
+held frames or to interpret two seconds as hundreds of seconds.
+
+When backing audio is selected, both the Editor's generated soundtrack preview
+and Content Production's final loudness-normalized render use the same ending:
+music continues into the silent tail and fades to silence across those final
+two seconds. This is applied in both the current measured-loudness mix and the
+legacy percentage fallback. With **No backing audio**, the picture still fades
+to black over two seconds with silence beneath it. The held frame is a
+temporary visual that can later be replaced by Harvey's book photography
+without changing the timeline or audio behavior.
+
+Editor render format version 16 invalidates and automatically rebuilds active,
+unsent older renders so their review copy includes the outro; already-approved
+handoffs remain immutable. Runtime FFmpeg coverage verifies the full visual
+stream duration, a visible final content frame, near-black ending pixels,
+silent dialogue padding, and the two-second soundtrack fade filters. The full
+ops-service suite passes (152 tests).

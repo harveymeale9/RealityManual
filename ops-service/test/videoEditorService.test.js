@@ -605,7 +605,7 @@ test('service restart automatically resumes an interrupted transcription', { tim
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
 
-test('restart resumes a safe render whose kickoff died before FFmpeg queued', { timeout: 15000 }, async function (t) {
+test('restart resumes a safe render whose kickoff died before FFmpeg queued', { timeout: 60000 }, async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-render-kickoff-'));
   const projectDir = path.join(dir, 'editor', 'kickoff-1'); fs.mkdirSync(projectDir, { recursive: true });
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=320x180:d=1:r=12',
@@ -623,23 +623,23 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
   }), now);
   editor.setup({ db: db, dataDir: dir, transcribeDetailed: async function () { return { text: '', words: [] }; } });
   let stored;
-  for (let attempt = 0; attempt < 300; attempt++) {
+  for (let attempt = 0; attempt < 1600; attempt++) {
     stored = JSON.parse(db.prepare('SELECT data FROM records WHERE store_name=? AND id=?').get('editorProjects', 'kickoff-1').data);
     if (stored.renderStatus === 'ready' || stored.renderStatus === 'error') break;
     await new Promise(function (resolve) { setTimeout(resolve, 30); });
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.equal(stored.renderQuality.status, 'passed');
-  assert.equal(stored.renderVersion, 15);
+  assert.equal(stored.renderVersion, 16);
   assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), true);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
 
-test('final render splices an inserted clip and its caption timeline between source words', { timeout: 20000 }, async function (t) {
+test('final render splices an inserted clip and its caption timeline between source words', { timeout: 45000 }, async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-insert-render-'));
   const projectDir = path.join(dir, 'editor', 'insert-render-1'); fs.mkdirSync(projectDir, { recursive: true });
-  const mediaArgs = function (color, frequency, volume, output) { return ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=' + color + ':s=320x180:d=1:r=12', '-f', 'lavfi', '-i', 'sine=frequency=' + frequency + ':duration=1', '-filter:a', 'volume=' + volume, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-f', 'mp4', output]; };
-  execFileSync('ffmpeg', mediaArgs('black', 440, 0.5, path.join(projectDir, 'source')));
+  const mediaArgs = function (color, frequency, volume, output) { return ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=' + color + ':s=320x180:d=1:r=30000/1001', '-f', 'lavfi', '-i', 'sine=frequency=' + frequency + ':duration=1', '-filter:a', 'volume=' + volume, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-f', 'mp4', output]; };
+  execFileSync('ffmpeg', mediaArgs('red', 440, 0.5, path.join(projectDir, 'source')));
   execFileSync('ffmpeg', mediaArgs('blue', 660, 0.05, path.join(projectDir, 'inserted-clip-clip-1.mp4')));
   const db = new Database(path.join(dir, 'test.sqlite'));
   db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
@@ -655,17 +655,23 @@ test('final render splices an inserted clip and its caption timeline between sou
   }), now);
   editor.setup({ db: db, dataDir: dir, transcribeDetailed: async function () { return { text: '', words: [] }; } });
   let stored;
-  for (let attempt = 0; attempt < 400; attempt++) {
+  for (let attempt = 0; attempt < 1200; attempt++) {
     stored = JSON.parse(db.prepare('SELECT data FROM records WHERE store_name=? AND id=?').get('editorProjects', 'insert-render-1').data);
     if (stored.renderStatus === 'ready' || stored.renderStatus === 'error') break;
     await new Promise(function (resolve) { setTimeout(resolve, 30); });
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
-  assert.ok(stored.editedDuration > 1.9 && stored.editedDuration < 2.1);
-  assert.equal(stored.renderVersion, 15);
+  assert.ok(stored.editedDuration > 3.9 && stored.editedDuration < 4.1);
+  assert.equal(stored.renderVersion, 16);
+  assert.equal(stored.renderQuality.contentDuration, 2);
+  assert.equal(stored.renderQuality.outroSeconds, 2);
   assert.ok(stored.renderQuality.insertedClipLoudness.clips[0].gainDb > 18);
   assert.ok(stored.renderQuality.insertedClipLoudness.clips[0].gainDb < 22);
   const rendered = path.join(projectDir, 'render.mp4');
+  const renderedStreams = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type,duration',
+    '-of', 'json', rendered], { encoding: 'utf8' })).streams;
+  const renderedVideo = renderedStreams.find(function (stream) { return stream.codec_type === 'video'; });
+  assert.ok(Number(renderedVideo.duration) > 3.9, 'the visual stream itself includes the complete outro: ' + renderedVideo.duration);
   function rangeLufs(start, duration) {
     const measured = spawnSync('ffmpeg', ['-hide_banner', '-nostats', '-ss', String(start), '-t', String(duration), '-i', rendered,
       '-vn', '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json', '-f', 'null', '-'], { encoding: 'utf8' });
@@ -673,6 +679,18 @@ test('final render splices an inserted clip and its caption timeline between sou
     return editor.parseIntegratedLoudness(measured.stderr);
   }
   assert.ok(Math.abs(rangeLufs(0.05, 0.4) - rangeLufs(0.55, 0.9)) < 1);
+  function frameRgb(at) {
+    const frame = execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', rendered,
+      '-frames:v', '1', '-vf', "select='gte(t," + at + ")',scale=1:1", '-pix_fmt', 'rgb24', '-f', 'rawvideo', 'pipe:1']);
+    return Array.from(frame.subarray(0, 3));
+  }
+  const beforeOutro = frameRgb(1.75);
+  const nearEnd = frameRgb(3.9);
+  assert.ok(beforeOutro.reduce(function (sum, channel) { return sum + channel; }, 0) >
+    nearEnd.reduce(function (sum, channel) { return sum + channel; }, 0) + 80,
+  'the last content frame remains visibly brighter before the outro: ' + JSON.stringify({ beforeOutro: beforeOutro, nearEnd: nearEnd }));
+  assert.ok(nearEnd.every(function (channel) { return channel < 30; }),
+    'the held final frame fades fully to black: ' + JSON.stringify(nearEnd));
   assert.match(fs.readFileSync(path.join(projectDir, 'captions.ass'), 'utf8'), /External/);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });

@@ -16,13 +16,14 @@ const EDITOR_DISK_RESERVE_BYTES = 2 * 1024 * 1024 * 1024;
 const PAGE_ZOOM_SECONDS = 3;
 const HORIZONTAL_OPENING_ZOOM_SECONDS = 5;
 const PAGE_CHANGE_CUT_SECONDS = 3;
+const VIDEO_OUTRO_SECONDS = 2;
 // Footage is deliberately recorded wide enough to show a little table. The
 // opening move settles into a tight book-first framing and that 125%
 // composition remains the baseline for the rest of the shot. Substantial
 // automatic long-pause cuts are treated as page changes and start the move
 // again from the wide camera frame.
 const OPENING_PUSH_IN_SCALE = 1.25;
-const EDITOR_RENDER_VERSION = 15;
+const EDITOR_RENDER_VERSION = 16;
 const PAGE_CHANGE_SSIM_THRESHOLD = 0.5;
 const BROWSER_PREVIEW_VERSION = 2;
 const AUDIO_PREVIEW_MIX_VERSION = 3;
@@ -1631,7 +1632,8 @@ async function renderProject(id) {
       saveProject(project);
       const segments = editorTimelineSegments(project, cuts);
       if (!segments.length) throw new Error('Every part of the recording is currently cut. Restore some transcript first.');
-      const expectedDuration = segments.reduce(function (sum, segment) { return sum + segment.end - segment.start; }, 0);
+      const contentDuration = segments.reduce(function (sum, segment) { return sum + segment.end - segment.start; }, 0);
+      const expectedDuration = contentDuration + VIDEO_OUTRO_SECONDS;
       const assPath = path.join(projectDir(id), 'captions.ass');
       const layout = effectiveLayout(project);
       const renderShape = layout === 'vertical' ? { width: 1080, height: 1920 } : { width: 1920, height: 1080 };
@@ -1685,13 +1687,23 @@ async function renderProject(id) {
       });
       const concatInputs = segments.map(function (_, index) { return '[v' + index + '][a' + index + ']'; }).join('');
       filters.push(concatInputs + 'concat=n=' + segments.length + ':v=1:a=1[joinedv][outa]');
-      if (project.captionsEnabled !== false) filters.push("[joinedv]subtitles='" + assPath.replace(/'/g, "'\\''") + "'[outv]");
-      else filters.push('[joinedv]null[outv]');
+      // zoompan/concat can leave a coarse inherited time base. Normalize it
+      // before extending the stream, otherwise FFmpeg may drop the held frames
+      // or interpret a two-second pad as hundreds of seconds.
+      filters.push('[joinedv]settb=AVTB,setpts=N/(30000/1001*TB)[normalizedv]');
+      if (project.captionsEnabled !== false) filters.push("[normalizedv]subtitles='" + assPath.replace(/'/g, "'\\''") + "'[captionedv]");
+      else filters.push('[normalizedv]null[captionedv]');
+      // Avoid the abrupt end-card cut: hold the final composed frame, fade it
+      // to black, and keep a silent dialogue bed beneath the soundtrack tail.
+      filters.push('[captionedv]tpad=stop_mode=clone:stop_duration=' + VIDEO_OUTRO_SECONDS.toFixed(3) +
+        ',fade=t=out:st=' + contentDuration.toFixed(3) + ':d=' + VIDEO_OUTRO_SECONDS.toFixed(3) +
+        ',fps=30000/1001[outv]');
+      filters.push('[outa]apad=pad_dur=' + VIDEO_OUTRO_SECONDS.toFixed(3) + '[outaextended]');
       let lastReportedProgress = -1;
       const ffmpegInputs = ['-hide_banner', '-loglevel', 'error', '-y', '-autorotate', '1', '-i', sourcePath(id)];
       readyClips.forEach(function (clip) { ffmpegInputs.push('-i', insertedClipPath(id, clip.id)); });
       await runWithProgress('ffmpeg', ffmpegInputs.concat(['-filter_complex', filters.join(';'),
-        '-map', '[outv]', '-map', '[outa]', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k',
+        '-map', '[outv]', '-map', '[outaextended]', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k',
         '-movflags', '+faststart', '-progress', 'pipe:1', '-nostats', renderPath(id)]), 'editor render', function (encodedSeconds) {
         const percent = Math.min(99, Math.max(0, Math.floor(encodedSeconds / Math.max(0.01, expectedDuration) * 100)));
         if (percent < lastReportedProgress + 2) return;
@@ -1716,7 +1728,10 @@ async function renderProject(id) {
         durationMatches: Math.abs(renderedMedia.duration - expectedDuration) <= durationTolerance
       };
       if (Object.keys(qualityChecks).some(function (key) { return !qualityChecks[key]; })) {
-        throw new Error('Rendered output failed technical verification: ' + Object.keys(qualityChecks).filter(function (key) { return !qualityChecks[key]; }).join(', '));
+        const failedChecks = Object.keys(qualityChecks).filter(function (key) { return !qualityChecks[key]; });
+        const durationDetail = failedChecks.includes('durationMatches')
+          ? ' (expected ' + expectedDuration.toFixed(3) + 's, received ' + Number(renderedMedia.duration).toFixed(3) + 's)' : '';
+        throw new Error('Rendered output failed technical verification: ' + failedChecks.join(', ') + durationDetail);
       }
       await buildScrubProxy(renderPath(id), renderPreviewPath(id), expectedDuration, 'final edit scrub proxy');
       const renderSha256 = await hashFile(renderPath(id));
@@ -1733,7 +1748,7 @@ async function renderProject(id) {
       project.renderQuality = {
         status: 'passed', checkedAt: new Date().toISOString(), checks: qualityChecks,
         width: renderedMedia.width, height: renderedMedia.height, pixelFormat: renderedMedia.pixelFormat,
-        duration: renderedMedia.duration, audioPeakDb: audioPeakDb,
+        duration: renderedMedia.duration, contentDuration: contentDuration, outroSeconds: VIDEO_OUTRO_SECONDS, audioPeakDb: audioPeakDb,
         insertedClipLoudness: mainVoiceLufs === null ? null : {
           mainVoiceLufs: mainVoiceLufs,
           clips: readyClips.map(function (clip) {

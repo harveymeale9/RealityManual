@@ -20,6 +20,7 @@ const openaiStructured = require('./openaiStructured');
 // frame capture (drawImage no-ops rather than throwing) and can't be
 // worked around client-side.
 var BROWSER_SAFE_VIDEO_CODECS = ['h264', 'vp8', 'vp9', 'av1'];
+var VIDEO_OUTRO_SECONDS = 2;
 
 function probeVideoCodec(videoPath) {
   return new Promise(function (resolve) {
@@ -92,11 +93,19 @@ function normalizeAudioMixSettings(input) {
   };
 }
 
-function legacyFinalVideoArgs(videoPath, audioPath, outPath, ambientVolumePercent) {
+function musicOutroFade(programmeDuration, outroSeconds) {
+  const duration = Number(programmeDuration);
+  if (!Number.isFinite(duration) || duration <= 0) return '';
+  const fadeDuration = Math.min(duration, Math.max(0, Number(outroSeconds) || 0));
+  if (!fadeDuration) return '';
+  return ',afade=t=out:st=' + Math.max(0, duration - fadeDuration).toFixed(3) + ':d=' + fadeDuration.toFixed(3);
+}
+
+function legacyFinalVideoArgs(videoPath, audioPath, outPath, ambientVolumePercent, programmeDuration, outroSeconds) {
   if (!audioPath) return ['-y', '-i', videoPath, '-c', 'copy', '-movflags', '+faststart', '-f', 'mp4', outPath];
   const volume = (normalizeAmbientVolumePercent(ambientVolumePercent) / 100).toFixed(2);
   return ['-y', '-i', videoPath, '-stream_loop', '-1', '-i', audioPath,
-    '-filter_complex', '[1:a]volume=' + volume + '[bg];[0:a][bg]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]',
+    '-filter_complex', '[1:a]volume=' + volume + musicOutroFade(programmeDuration, outroSeconds) + '[bg];[0:a][bg]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]',
     '-map', '0:v', '-map', '[aout]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k',
     '-movflags', '+faststart', '-f', 'mp4', outPath];
 }
@@ -183,7 +192,7 @@ function musicDbGain(target, measured) {
   return baseline === null ? 0 : clampNumber(target - baseline, 0, -30, 30, 0.01);
 }
 
-function measuredMixAudioArgs(videoPath, audioPath, tempAudioPath, settings, dialogueMeasurement, musicMeasurement) {
+function measuredMixAudioArgs(videoPath, audioPath, tempAudioPath, settings, dialogueMeasurement, musicMeasurement, programmeDuration, outroSeconds) {
   settings = normalizeAudioMixSettings(settings);
   const dialogueGain = dbGain(settings.dialogueLufs, dialogueMeasurement).toFixed(2);
   const args = ['-y', '-i', videoPath];
@@ -199,10 +208,10 @@ function measuredMixAudioArgs(videoPath, audioPath, tempAudioPath, settings, dia
     // A mild sidechain pass lowers music only while dialogue is active. The
     // final relative baseline remains controlled by musicBelowDialogueDb.
     filter = '[0:a]volume=' + dialogueGain + 'dB,asplit=2[dialogue][key];' +
-      '[1:a]volume=' + musicGain + 'dB[bg];[bg][key]sidechaincompress=threshold=0.035:ratio=3:attack=20:release=300[ducked];' +
+      '[1:a]volume=' + musicGain + 'dB' + musicOutroFade(programmeDuration, outroSeconds) + '[bg];[bg][key]sidechaincompress=threshold=0.035:ratio=3:attack=20:release=300[ducked];' +
       '[dialogue][ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[mix]';
   } else {
-    filter = '[0:a]volume=' + dialogueGain + 'dB[dialogue];[1:a]volume=' + musicGain + 'dB[bg];' +
+    filter = '[0:a]volume=' + dialogueGain + 'dB[dialogue];[1:a]volume=' + musicGain + 'dB' + musicOutroFade(programmeDuration, outroSeconds) + '[bg];' +
       '[dialogue][bg]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[mix]';
   }
   args.push('-filter_complex', filter, '-map', '[mix]', '-c:a', 'flac', tempAudioPath);
@@ -239,10 +248,10 @@ function measuredFinalAudioArgs(tempAudioPath, outPath, settings, mixMeasurement
     '-c:a', 'libmp3lame', '-b:a', previewBitrate(options), '-f', 'mp3', outPath];
 }
 
-function legacyAudioPreviewArgs(dialoguePath, audioPath, outPath, ambientVolumePercent, options) {
+function legacyAudioPreviewArgs(dialoguePath, audioPath, outPath, ambientVolumePercent, options, programmeDuration, outroSeconds) {
   const volume = (normalizeAmbientVolumePercent(ambientVolumePercent) / 100).toFixed(2);
   return ['-y', '-i', dialoguePath, '-stream_loop', '-1', '-i', audioPath,
-    '-filter_complex', '[1:a]volume=' + volume + '[bg];[0:a][bg]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]',
+    '-filter_complex', '[1:a]volume=' + volume + musicOutroFade(programmeDuration, outroSeconds) + '[bg];[0:a][bg]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]',
     '-map', '[aout]', '-c:a', 'libmp3lame', '-b:a', previewBitrate(options), '-f', 'mp3', outPath];
 }
 
@@ -289,16 +298,18 @@ async function measureMusicPeak(inputPath, usedDurationSeconds) {
 // comparison until Harvey is happy with the measured workflow.
 async function buildFinalVideo(videoPath, audioPath, outPath, mixInput) {
   const settings = normalizeAudioMixSettings(mixInput);
+  const programmeDuration = audioPath ? await mediaDuration(videoPath) : null;
   if (settings.mode === 'legacy_percent') {
-    await runFfmpeg(legacyFinalVideoArgs(videoPath, audioPath, outPath, settings.legacyPercent), 'legacy final-video build');
+    await runFfmpeg(legacyFinalVideoArgs(videoPath, audioPath, outPath, settings.legacyPercent,
+      programmeDuration, VIDEO_OUTRO_SECONDS), 'legacy final-video build');
     return { mode: settings.mode };
   }
   const tempAudioPath = outPath + '.loudness-mix.flac';
   try {
     const dialogueMeasurement = await measureLoudness(videoPath, settings);
-    const programmeDuration = audioPath ? await mediaDuration(videoPath) : null;
     const musicMeasurement = audioPath ? await measureMusicPeak(audioPath, programmeDuration) : null;
-    await runFfmpeg(measuredMixAudioArgs(videoPath, audioPath, tempAudioPath, settings, dialogueMeasurement, musicMeasurement), 'measured audio mix');
+    await runFfmpeg(measuredMixAudioArgs(videoPath, audioPath, tempAudioPath, settings, dialogueMeasurement,
+      musicMeasurement, programmeDuration, VIDEO_OUTRO_SECONDS), 'measured audio mix');
     const mixMeasurement = await measureLoudness(tempAudioPath, settings);
     await runFfmpeg(measuredFinalVideoArgs(videoPath, tempAudioPath, outPath, settings, mixMeasurement), 'loudness-normalized final-video build');
     return { mode: settings.mode, dialogue: dialogueMeasurement, music: musicMeasurement, mix: mixMeasurement };
@@ -312,16 +323,18 @@ async function buildFinalVideo(videoPath, audioPath, outPath, mixInput) {
 // representative of the production render rather than a lighter browser mix.
 async function buildAudioPreview(dialoguePath, audioPath, outPath, mixInput, outputOptions) {
   const settings = normalizeAudioMixSettings(mixInput);
+  const programmeDuration = await mediaDuration(dialoguePath);
   if (settings.mode === 'legacy_percent') {
-    await runFfmpeg(legacyAudioPreviewArgs(dialoguePath, audioPath, outPath, settings.legacyPercent, outputOptions), 'legacy audio preview');
+    await runFfmpeg(legacyAudioPreviewArgs(dialoguePath, audioPath, outPath, settings.legacyPercent, outputOptions,
+      programmeDuration, VIDEO_OUTRO_SECONDS), 'legacy audio preview');
     return { mode: settings.mode };
   }
   const tempAudioPath = outPath + '.loudness-mix.flac';
   try {
     const dialogueMeasurement = await measureLoudness(dialoguePath, settings);
-    const programmeDuration = await mediaDuration(dialoguePath);
     const musicMeasurement = await measureMusicPeak(audioPath, programmeDuration);
-    await runFfmpeg(measuredMixAudioArgs(dialoguePath, audioPath, tempAudioPath, settings, dialogueMeasurement, musicMeasurement), 'preview audio mix');
+    await runFfmpeg(measuredMixAudioArgs(dialoguePath, audioPath, tempAudioPath, settings, dialogueMeasurement,
+      musicMeasurement, programmeDuration, VIDEO_OUTRO_SECONDS), 'preview audio mix');
     const mixMeasurement = await measureLoudness(tempAudioPath, settings);
     await runFfmpeg(measuredFinalAudioArgs(tempAudioPath, outPath, settings, mixMeasurement, outputOptions), 'loudness-normalized audio preview');
     return { mode: settings.mode, dialogue: dialogueMeasurement, music: musicMeasurement, mix: mixMeasurement };
@@ -424,5 +437,6 @@ module.exports = {
   finalLoudnormFilter,
   measuredFinalVideoArgs,
   measuredFinalAudioArgs,
-  legacyAudioPreviewArgs
+  legacyAudioPreviewArgs,
+  musicOutroFade
 };

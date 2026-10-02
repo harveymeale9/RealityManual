@@ -41,6 +41,9 @@ test('final video mix uses the selected ambient percentage and clamps unsafe val
   assert.equal(defaulted.includes('[1:a]volume=0.10[bg];[0:a][bg]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]'), true);
   const noMusic = videoAnalysis.finalVideoArgs('/video', null, '/out', 30);
   assert.deepEqual(noMusic, ['-y', '-i', '/video', '-c', 'copy', '-movflags', '+faststart', '-f', 'mp4', '/out']);
+
+  const withOutro = videoAnalysis.legacyFinalVideoArgs('/video', '/music', '/out', 13, 12, 2);
+  assert.match(withOutro.join(' '), /volume=0\.13,afade=t=out:st=10\.000:d=2\.000\[bg\]/);
 });
 
 test('measured audio profile normalizes safe settings and builds independent dialogue/music gains', function () {
@@ -62,8 +65,8 @@ test('measured audio profile normalizes safe settings and builds independent dia
 
   const builtTrack = videoAnalysis.measuredMixAudioArgs('/video', '/music', '/mix.flac', {
     dialogueLufsTarget: -16, musicBelowDialogueDb: 20
-  }, { inputI: -16 }, { loudestShortTermLufs: -24, inputI: -40 });
-  assert.match(builtTrack.join(' '), /\[1:a\]volume=-12\.00dB\[bg\]/);
+  }, { inputI: -16 }, { loudestShortTermLufs: -24, inputI: -40 }, 12, 2);
+  assert.match(builtTrack.join(' '), /\[1:a\]volume=-12\.00dB,afade=t=out:st=10\.000:d=2\.000\[bg\]/);
 });
 
 test('music calibration uses the loudest valid three-second EBU R128 window', function () {
@@ -94,8 +97,12 @@ test('measured final pass uses two-pass loudnorm values and a true-peak safeguar
   assert.match(filter, /alimiter=limit=0.841395:level=false/);
   const ducked = videoAnalysis.measuredMixAudioArgs('/video', '/music', '/mix.flac', { musicDuckingEnabled: true }, { inputI: -16 }, { inputI: -16 });
   assert.match(ducked.join(' '), /sidechaincompress/);
+  const duckedOutro = videoAnalysis.measuredMixAudioArgs('/video', '/music', '/mix.flac', { musicDuckingEnabled: true }, { inputI: -16 }, { inputI: -16 }, 8, 2);
+  assert.match(duckedOutro.join(' '), /afade=t=out:st=6\.000:d=2\.000\[bg\].*sidechaincompress/);
   const compressed = videoAnalysis.measuredFinalAudioArgs('/mix.flac', '/preview.mp3', {}, measurement, { bitrate: '48k' });
   assert.equal(compressed[compressed.indexOf('-b:a') + 1], '48k');
   const safeFallback = videoAnalysis.legacyAudioPreviewArgs('/voice', '/music', '/preview.mp3', 10, { bitrate: '12k' });
   assert.equal(safeFallback[safeFallback.indexOf('-b:a') + 1], '192k');
+  const previewOutro = videoAnalysis.legacyAudioPreviewArgs('/voice', '/music', '/preview.mp3', 10, {}, 8, 2);
+  assert.match(previewOutro.join(' '), /afade=t=out:st=6\.000:d=2\.000/);
 });
