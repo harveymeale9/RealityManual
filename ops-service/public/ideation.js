@@ -258,7 +258,7 @@
     if (hash === lastHash) return;
     lastHash = hash;
     root.innerHTML = '<div class="ideation-workspace"><header class="ideation-hero"><div><div class="eyebrow">Manuscript-grounded Big Ideas</div><h2>Content Ideation</h2><p>Practical, distinctive premises from the book—no titles, hooks, scripts, outlines, or production instructions.</p></div>' +
-      '<div class="idea-provider"><span>Generation model</span><div role="group"><button data-provider="codex" class="' + (state.selectedProvider === 'codex' ? 'active' : '') + '">Codex</button><button data-provider="claude" class="' + (state.selectedProvider === 'claude' ? 'active' : '') + '">Claude</button></div><small>Applies to the next Big Ideas generated.</small></div></header>' +
+      '<div class="idea-provider"><span>Generation model</span><div><button class="active" type="button" disabled>Codex</button></div><small>Applies to the next Big Ideas generated.</small></div></header>' +
       '<div class="idea-queue-bar"><span><b>' + state.ideas.length + '</b> / ' + state.target + ' Big Ideas</span><span>Choose one to develop yourself in the Content Pipeline</span></div>' +
       '<div class="idea-list">' + state.ideas.map(card).join('') + jobs(state) + '</div></div>';
     bind(state);

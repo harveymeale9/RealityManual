@@ -69,7 +69,7 @@ window.RMUsage = (function () {
         var updated = new Date(data.lastUpdated);
         dialog.querySelector('.usage-updated').textContent = 'Last updated ' + (isNaN(updated.getTime()) ? 'just now' : updated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
       }).catch(function () {
-        content.innerHTML = '<div class="usage-unavailable">Usage data unavailable. Claude and Codex are unaffected.</div>';
+        content.innerHTML = '<div class="usage-unavailable">Usage data unavailable. Codex itself is unaffected.</div>';
         dialog.querySelector('.usage-updated').textContent = 'Refresh failed';
       }).finally(function () { refresh.disabled = false; });
   }

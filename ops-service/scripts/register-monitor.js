@@ -10,7 +10,7 @@ function value(name) {
   return index >= 0 ? process.argv[index + 1] : null;
 }
 if (process.argv.indexOf('--help') !== -1) {
-  process.stdout.write('Usage: register-monitor.js --kind KIND --title TITLE --agent codex|claude --continuation PROMPT --config JSON [--interval 60] [--min-weekly 15] [--expires ISO]\n');
+  process.stdout.write('Usage: register-monitor.js --kind KIND --title TITLE --agent codex --continuation PROMPT --config JSON [--interval 60] [--min-weekly 15] [--expires ISO]\n');
   process.exit(0);
 }
 const request = {

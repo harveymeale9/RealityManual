@@ -1,6 +1,6 @@
 // Uploader-tool pipeline: pull the audio out of a freshly-uploaded video,
-// transcribe it, then ask Claude (a one-shot call — see claudeRunner.js's
-// runOneShot) to find the best-matching "uploaded"-stage outline and pull
+// transcribe it, then use a restricted structured model call to find the
+// best-matching "uploaded"-stage outline and pull
 // out title candidates from it. Two separate steps kept separate so a
 // transcription failure doesn't also block the (independent) matching step
 // from at least trying with an empty transcript, and so each failure mode
@@ -10,7 +10,7 @@ const { execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const elevenlabs = require('./elevenlabs');
-const claudeRunner = require('./claudeRunner');
+const openaiStructured = require('./openaiStructured');
 
 // Browser-native <video>/canvas support is what the frame picker and
 // Final Check preview both rely on — anything outside this list has been
@@ -375,25 +375,22 @@ function buildMatchPrompt(transcript, candidates) {
     '{"matchedPieceId": "<id or null>", "titleOptions": ["...", "..."], "workingTitle": "..."}';
 }
 
-function parseMatchResult(raw) {
-  var text = (raw || '').trim();
-  // Strip a markdown code fence if the model added one despite being told
-  // not to — cheap defensive parsing, same spirit as this codebase's other
-  // "never trust the model's formatting literally" spots.
-  var fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fenced) text = fenced[1].trim();
-  var parsed = JSON.parse(text);
-  return {
-    matchedPieceId: parsed.matchedPieceId || null,
-    titleOptions: Array.isArray(parsed.titleOptions) ? parsed.titleOptions.filter(Boolean).slice(0, 3) : [],
-    workingTitle: (parsed.workingTitle || '').trim()
-  };
-}
-
 async function matchAndGenerateTitles(transcript, candidates) {
   const prompt = buildMatchPrompt(transcript, candidates);
-  const raw = await claudeRunner.runOneShot(prompt, 90000);
-  return parseMatchResult(raw);
+  const result = await openaiStructured.generate(prompt, {
+    type: 'object', additionalProperties: false,
+    required: ['matchedPieceId', 'titleOptions', 'workingTitle'],
+    properties: {
+      matchedPieceId: { type: ['string', 'null'] },
+      titleOptions: { type: 'array', maxItems: 3, items: { type: 'string' } },
+      workingTitle: { type: 'string' }
+    }
+  }, { timeoutMs: 90000, name: 'uploaded_video_match' });
+  return {
+    matchedPieceId: result.matchedPieceId || null,
+    titleOptions: Array.isArray(result.titleOptions) ? result.titleOptions.filter(Boolean).slice(0, 3) : [],
+    workingTitle: String(result.workingTitle || '').trim()
+  };
 }
 
 // Analysis-generated titles are suggestions, never an authority over a title

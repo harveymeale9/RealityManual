@@ -284,7 +284,7 @@ function setup(db, options) {
         db.prepare(`INSERT INTO voice_messages
           (id,mode,transcript,status,reply_text,created_at,completed_at,agent,notification_kind,notification_unread,source_ref)
           VALUES(?,'notification',?,'done',?,?,?,?, 'mail_alert',1,?)`)
-          .run(alertId, 'Email: ' + (clean(row.subject, 400) || '(no subject)'), rendered, stamp, stamp, 'claude', row.id);
+          .run(alertId, 'Email: ' + (clean(row.subject, 400) || '(no subject)'), rendered, stamp, stamp, 'codex', row.id);
         db.prepare('INSERT INTO mail_alert_topics(topic_key,alert_message_id,latest_mail_message_id,updated_at) VALUES(?,?,?,?)')
           .run(key, alertId, row.id, stamp);
       }

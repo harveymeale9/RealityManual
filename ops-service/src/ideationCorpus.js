@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 function manuscriptPath() {
-  const repo = process.env.CLAUDE_REPO_DIR || path.resolve(__dirname, '..', '..');
+  const repo = process.env.RUNTIME_REPO_DIR || (fs.existsSync('/repo') ? '/repo' : path.resolve(__dirname, '..', '..'));
   return path.join(repo, 'THE_REALITY_MANUAL_COMPLETE_MANUSCRIPT.txt');
 }
 

@@ -579,8 +579,7 @@ body.role-reviewer #pmBackFab {
   color: var(--ink-faint); font: 600 0.78rem var(--font-body); cursor: pointer;
 }
 .pm-agent-option:hover { color: var(--ink); }
-.pm-agent-option[data-agent="claude"].active { background: rgba(139, 124, 246, 0.22); color: #b8adff; }
-.pm-agent-option[data-agent="codex"].active { background: rgba(65, 170, 255, 0.22); color: #82c8ff; }
+.pm-agent-option.active { background: rgba(65, 170, 255, 0.22); color: #82c8ff; cursor: default; }
 .pm-usage-option { border-left: 1px solid var(--border-soft); border-radius: 0 6px 6px 0; }
 .pm-usage-option.open { background: rgba(60, 255, 137, 0.12); color: var(--accent); }
 .pm-auto-speech-btn {
@@ -595,8 +594,7 @@ body.role-reviewer #pmBackFab {
 .pm-auto-speech-btn--mobile span { display: none; }
 .pm-auto-speech-btn--mobile svg { margin-right: 0; }
 
-/* Subscription usage is an informational layer over the one shared Project
-   Manager. It never participates in the persisted Claude/Codex selection. */
+/* Subscription usage is an informational layer over Project Manager. */
 .usage-overlay {
   position: fixed; inset: 0; z-index: 80; display: grid; place-items: center;
   padding: 24px; background: rgba(1, 8, 4, .78); backdrop-filter: blur(8px);
@@ -613,15 +611,13 @@ body.role-reviewer #pmBackFab {
 .usage-kicker { display: block; margin-bottom: 5px; color: var(--accent); font: 600 .62rem var(--font-mono); letter-spacing: .14em; text-transform: uppercase; }
 .usage-dialog h2 { margin: 0; color: var(--ink); font: 500 1.35rem var(--font-display); }
 .usage-close { width: 34px; height: 34px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--ink-soft); cursor: pointer; }
-.usage-content { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; padding: 16px 22px; }
+.usage-content { display: grid; grid-template-columns: minmax(0,1fr); gap: 14px; padding: 16px 22px; }
 .usage-provider { min-width: 0; padding: 16px; border: 1px solid var(--border-soft); border-radius: 10px; background: rgba(255,255,255,.018); }
-.usage-provider--claude { border-top-color: rgba(184,173,255,.65); }
 .usage-provider--codex { border-top-color: rgba(130,200,255,.65); }
 .usage-provider-head { min-height: 45px; margin-bottom: 16px; }
 .usage-provider-head > div { display: flex; align-items: center; gap: 8px; }
 .usage-provider-head h3 { margin: 0; color: var(--ink); font: 700 .82rem var(--font-body); letter-spacing: .1em; text-transform: uppercase; }
 .usage-provider-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 11px currentColor; }
-.usage-provider--claude .usage-provider-dot { background: #a99cf8; }
 .usage-provider--codex .usage-provider-dot { background: #63b7f7; }
 .usage-provider-meta { display: block; margin-top: 6px; color: var(--ink-faint); font: .67rem var(--font-mono); text-transform: capitalize; overflow-wrap: anywhere; }
 .usage-limit + .usage-limit { margin-top: 18px; }
@@ -715,19 +711,17 @@ body.role-reviewer #pmBackFab {
 .pm-msg { max-width: 88%; padding: 12px 15px; border-radius: 10px; line-height: 1.55; font-size: 0.95rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 .pm-msg-user { align-self: flex-end; background: var(--accent-soft); border: 1px solid var(--accent-soft-strong); color: var(--ink); }
 .pm-msg-assistant { align-self: flex-start; background: var(--surface-2); border: 1px solid var(--border); color: var(--ink); }
-.pm-msg-assistant--claude { background: rgba(139, 124, 246, 0.12); border-color: rgba(139, 124, 246, 0.48); }
 .pm-msg-assistant--codex { background: rgba(65, 170, 255, 0.12); border-color: rgba(65, 170, 255, 0.48); }
 .pm-msg-assistant--mail-alert { background: rgba(255, 112, 78, 0.14); border-color: rgba(255, 126, 92, 0.72); box-shadow: inset 3px 0 #ff7e5c; }
 .pm-msg-assistant--mail-alert.pm-msg-notification-unread { box-shadow: inset 4px 0 #ff7e5c, 0 0 0 1px rgba(255,126,92,.16); }
 .pm-msg-agent-label { margin-bottom: 5px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.02em; }
-.pm-msg-assistant--claude .pm-msg-agent-label { color: #b8adff; }
 .pm-msg-assistant--codex .pm-msg-agent-label { color: #82c8ff; }
 .pm-msg-assistant--mail-alert .pm-msg-agent-label { color: #ff9b7d; text-transform: uppercase; letter-spacing: .08em; }
 .pm-alert-btn { position: relative; min-height: 32px; padding: 5px 10px; border: 1px solid rgba(255,126,92,.5); border-radius: 7px; background: rgba(255,112,78,.09); color: #ffad94; font: 700 .72rem var(--font-mono); cursor: pointer; }
 .pm-alert-btn:hover { border-color: #ff7e5c; color: #ffd1c3; }
 .pm-alert-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-left: 5px; padding: 0 4px; border-radius: 99px; background: #ff7e5c; color: #1a0905; font-size: .65rem; }
 .pm-alert-badge[hidden] { display: none; }
-/* Distinct color specifically when Claude's reply needs Harvey to actually
+/* Distinct color specifically when Codex's reply needs Harvey to actually
    do something (run a command, decide, approve) — see the [NEEDS_ACTION]
    marker convention in server.js's VOICE_SYSTEM_PROMPT. A plain status/
    completion report stays the ordinary .pm-msg-assistant color. */
@@ -758,7 +752,6 @@ body.role-reviewer #pmBackFab {
 .pm-stop-btn { color: var(--error); border-color: var(--error); }
 .pm-reply-btn { color: var(--ink-soft); }
 .pm-typing { align-self: flex-start; color: var(--ink-faint); font-size: 0.85rem; font-style: italic; padding: 0 clamp(16px, 3vw, 36px); }
-.pm-typing--claude { color: #a99dff; }
 .pm-typing--codex { color: #71bdff; }
 /* Whichever message's audio is currently playing — auto-spoken or via the
    Play button, doesn't matter, both go through the same voiceClient.js
@@ -1271,7 +1264,7 @@ body.role-reviewer #pmBackFab {
 .kanban-ctx-item.kanban-ctx-confirm { color: var(--error); font-weight: 600; }
 .kanban-ctx-item.kanban-ctx-confirm:hover { background: var(--error-soft); }
 .kanban-ctx-item.kanban-ctx-cancel { color: var(--ink-faint); }
-/* Pieces created by a Claude Code session (voice/chat agent or an
+/* Pieces created by an AI session (voice/chat agent or an
    interactive session acting on Harvey's behalf) rather than by Harvey
    himself directly in the board UI — a subtle indigo tint distinct from
    the board's green accent, so it reads at a glance without shouting. */

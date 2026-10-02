@@ -146,10 +146,6 @@ function setup(db, options) {
   };
 
   function selectedProvider() {
-    try {
-      const row = db.prepare('SELECT selected_provider FROM ideation_settings WHERE id=1').get();
-      if (row && (row.selected_provider === 'claude' || row.selected_provider === 'codex')) return row.selected_provider;
-    } catch (error) { /* Ideation is optional in isolated tests. */ }
     return 'codex';
   }
 

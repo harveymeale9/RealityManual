@@ -158,9 +158,8 @@
     </a>
     <div class="v-home">
       <div class="v-topbar">
-        <div class="pm-agent-switch pm-agent-switch--mobile" role="group" aria-label="Active agent">
-          <button type="button" class="pm-agent-option" data-agent="claude">Claude</button>
-          <button type="button" class="pm-agent-option" data-agent="codex">Codex</button>
+        <div class="pm-agent-switch pm-agent-switch--mobile" aria-label="Project Manager">
+          <span class="pm-agent-option active">Codex</span>
           <button type="button" class="pm-agent-option pm-usage-option" aria-haspopup="dialog">Usage</button>
         </div>
         <button type="button" class="pm-auto-speech-btn pm-auto-speech-btn--mobile" id="vAutoSpeechBtn" aria-pressed="true" title="Turn automatic voice responses off"><span>Auto voice</span></button>
@@ -168,7 +167,7 @@
       </div>
       <button type="button" class="v-btn v-btn-ask" id="askBtn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/></svg>
-        <span class="v-btn-text"><span class="v-btn-label">Ask &amp; Wait for Reply</span><span class="v-btn-sub">Speak — hear the selected agent's answer back</span></span>
+        <span class="v-btn-text"><span class="v-btn-label">Ask &amp; Wait for Reply</span><span class="v-btn-sub">Speak — hear Codex's answer back</span></span>
       </button>
 
       <div class="v-chat">
@@ -260,39 +259,13 @@
       var replyPreviewEl = document.getElementById('vReplyPreview');
       var replyPreviewTextEl = document.getElementById('vReplyPreviewText');
       var replyPreviewCancelBtn = document.getElementById('vReplyPreviewCancel');
-      var agentButtons = Array.prototype.slice.call(document.querySelectorAll('.pm-agent-option[data-agent]'));
       var usageButton = document.querySelector('.pm-usage-option');
       var autoSpeechButton = document.getElementById('vAutoSpeechBtn');
       var alertButton = document.getElementById('vAlertBtn');
       var alertBadge = document.getElementById('vAlertBadge');
-      var selectedAgent = 'claude';
-      var agentPreferenceVersion = 0;
+      var selectedAgent = 'codex';
 
-      function agentName(agent) { return agent === 'codex' ? 'Codex' : 'Claude'; }
-      function applySelectedAgent(agent) {
-        selectedAgent = agent === 'codex' ? 'codex' : 'claude';
-        agentButtons.forEach(function (btn) {
-          var active = btn.dataset.agent === selectedAgent;
-          btn.classList.toggle('active', active);
-          btn.setAttribute('aria-pressed', active ? 'true' : 'false');
-        });
-        textInput.placeholder = "Message " + agentName(selectedAgent) + "…";
-      }
-      function refreshAgentPreference() {
-        var requestedAtVersion = agentPreferenceVersion;
-        Voice.getAgentPreference().then(function (agent) {
-          if (requestedAtVersion === agentPreferenceVersion) applySelectedAgent(agent);
-        }).catch(function () {});
-      }
-      applySelectedAgent('claude');
-      agentButtons.forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          var previous = selectedAgent;
-          agentPreferenceVersion++;
-          applySelectedAgent(btn.dataset.agent);
-          Voice.setAgentPreference(selectedAgent).catch(function () { applySelectedAgent(previous); });
-        });
-      });
+      function agentName() { return 'Codex'; }
       if (window.RMUsage) window.RMUsage.attach(usageButton);
       function autoSpeechIcon(enabled) {
         return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6.5 9H3v6h3.5l4.5 4V5Z"/><path d="M15 9.5a4 4 0 0 1 0 5"/>' +
@@ -304,7 +277,7 @@
         autoSpeechButton.title = enabled ? 'Turn automatic voice responses off' : 'Turn automatic voice responses on';
         autoSpeechButton.innerHTML = autoSpeechIcon(enabled) + (enabled ? '<span>Auto voice</span>' : '<span>Voice muted</span>');
         askBtn.querySelector('.v-btn-sub').textContent = enabled
-          ? "Speak — hear the selected agent's answer back"
+          ? "Speak — hear Codex's answer back"
           : 'Speak — response stays text-only while voice is muted';
       }
       renderAutoSpeech(Voice.isAutoSpeechEnabled());
@@ -365,7 +338,6 @@
 
       function showApp() {
         authChecking.hidden = true; loginGate.hidden = true; vApp.hidden = false;
-        refreshAgentPreference();
         startSync();
       }
       function showLogin() { authChecking.hidden = true; vApp.hidden = true; loginGate.hidden = false; setTimeout(function () { loginPassword.focus(); }, 50); }
@@ -453,7 +425,7 @@
 
       function addAssistantMessage(text, replyToText, msgId, insertBeforeEl, agent, notificationKind, notificationUnread) {
         clearEmptyNote();
-        agent = agent === 'codex' ? 'codex' : 'claude';
+        agent = 'codex';
         var isMailAlert = notificationKind === 'mail_alert';
         var isAction = /^\[NEEDS_ACTION\]/i.test(text || '');
         var wrap = document.createElement('div');
@@ -648,7 +620,7 @@
       function addTyping(msgId, agent) {
         clearEmptyNote();
         var el = document.createElement('div');
-        agent = agent === 'codex' ? 'codex' : 'claude';
+        agent = 'codex';
         el.className = 'pm-typing pm-typing--' + agent;
         if (msgId) el.dataset.msgId = msgId;
         el.textContent = agentName(agent) + ' is working on it…';
@@ -760,7 +732,6 @@
             syncVisibleMailAlerts(rows);
             renderQueue(rows);
             pastFirstTick = true;
-            refreshAgentPreference();
             if (Date.now() - lastAlertRefresh > 10000) { lastAlertRefresh = Date.now(); refreshAlertCount(); }
           }
         });

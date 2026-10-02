@@ -25,7 +25,7 @@ function validateRequest(input) {
   return {
     id: /^[a-f0-9-]{16,64}$/i.test(String(input.id || '')) ? String(input.id) : crypto.randomUUID(),
     kind: kind, title: title, continuationPrompt: continuation,
-    agent: input.agent === 'claude' ? 'claude' : 'codex', config: config,
+    agent: 'codex', config: config,
     intervalSeconds: Math.max(15, Math.min(86400, Number(input.intervalSeconds) || 60)),
     minWeeklyRemaining: Math.max(0, Math.min(100, Number(input.minWeeklyRemaining) || 15)),
     expiresAt: input.expiresAt && Number.isFinite(new Date(input.expiresAt).getTime())
@@ -53,6 +53,7 @@ function setup(db, options) {
     expires_at TEXT NOT NULL, triggered_at TEXT, continuation_message_id TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_background_monitors_due ON background_monitors(status,next_check_at);`);
+  db.prepare("UPDATE background_monitors SET agent='codex' WHERE agent!='codex'").run();
   // `triggering` is the tiny claim/enqueue window. A restart there should
   // retry with the same deterministic voice-message id, never strand the
   // watcher or create a second continuation.

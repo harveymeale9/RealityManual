@@ -1,9 +1,7 @@
 'use strict';
 
-// Subscription usage for the two real coding-agent installations. Both
-// providers run on the VPS host through the existing SSH boundary; neither
-// uses an API billing key and only a strict, non-sensitive normalized result
-// is returned to callers.
+// Codex subscription usage from the host installation. Only a strict,
+// non-sensitive normalized result is returned to callers.
 const { spawn } = require('child_process');
 
 const HOST = process.env.AGENT_USAGE_HOST || process.env.CODEX_HOST || 'ubuntu@host.docker.internal';
@@ -17,35 +15,6 @@ let inFlight = null;
 
 function shellQuote(value) {
   return "'" + String(value).replace(/'/g, "'\\''") + "'";
-}
-
-function run(command, input) {
-  return new Promise(function (resolve, reject) {
-    const child = spawn('ssh', [HOST, command], { stdio: ['pipe', 'pipe', 'pipe'] });
-    let stdout = '';
-    let stderr = '';
-    let settled = false;
-    function finish(err, value) {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      if (err) reject(err); else resolve(value);
-    }
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', function (chunk) { stdout += chunk; });
-    child.stderr.on('data', function (chunk) { stderr += chunk; });
-    child.on('error', function (err) { finish(err); });
-    child.on('close', function (code) {
-      if (code !== 0) return finish(new Error((stderr || 'host command failed').trim().slice(0, 500)));
-      finish(null, stdout);
-    });
-    const timer = setTimeout(function () {
-      try { child.kill('SIGTERM'); } catch (e) { /* best effort */ }
-      finish(new Error('usage request timed out'));
-    }, TIMEOUT_MS);
-    child.stdin.end(input || '');
-  });
 }
 
 function remaining(used) {
@@ -68,47 +37,6 @@ function planName(value) {
   const raw = String(value || '').toLowerCase();
   if (raw === 'prolite') return 'Pro Lite';
   return raw ? raw.replace(/^./, function (c) { return c.toUpperCase(); }) : null;
-}
-
-// This helper executes as root on the host, reads Claude Code's own credential
-// file there, and prints only the provider's usage response plus plan name.
-// No credential crosses SSH or reaches this Node process.
-const CLAUDE_HELPER = [
-  'import json,urllib.request',
-  "c=json.load(open('/root/.claude/.credentials.json'))['claudeAiOauth']",
-  "r=urllib.request.Request('https://api.anthropic.com/api/oauth/usage?at_wall=1&skip_spend=1',headers={'Authorization':'Bearer '+c['accessToken'],'anthropic-beta':'oauth-2025-04-20','user-agent':'rm-content-studio-usage'})",
-  "d=json.load(urllib.request.urlopen(r,timeout=10))",
-  "print(json.dumps({'plan':c.get('subscriptionType'),'usage':d}))"
-].join(';');
-
-async function fetchClaude() {
-  try {
-    const raw = await run('sudo -H python3 -c ' + shellQuote(CLAUDE_HELPER));
-    const data = JSON.parse(raw);
-    const usage = data.usage || {};
-    const definitions = [
-      ['five_hour', '5-hour', 'session'],
-      ['seven_day', 'Weekly', 'weekly'],
-      ['seven_day_opus', 'Weekly · Opus', 'model'],
-      ['seven_day_sonnet', 'Weekly · Sonnet', 'model']
-    ];
-    const limits = definitions.filter(function (entry) { return usage[entry[0]]; }).map(function (entry) {
-      const item = usage[entry[0]];
-      return limit(entry[1], entry[2], item.utilization, item.resets_at, entry[0] === 'five_hour' ? 300 : 10080);
-    });
-    return {
-      provider: 'claude', displayName: 'Claude', available: true,
-      plan: planName(data.plan),
-      currentModel: null, reasoningLevel: null, limits: limits,
-      extraCredits: usage.extra_usage && typeof usage.extra_usage === 'object' ? {
-        enabled: Boolean(usage.extra_usage.is_enabled),
-        remaining: Number.isFinite(Number(usage.extra_usage.balance)) ? Number(usage.extra_usage.balance) : null
-      } : null
-    };
-  } catch (err) {
-    console.error('Claude usage retrieval failed:', err.message);
-    return { provider: 'claude', displayName: 'Claude', available: false, error: 'Usage data unavailable', limits: [] };
-  }
 }
 
 async function fetchCodex() {
@@ -186,7 +114,7 @@ async function getUsage(options) {
   const force = Boolean(options && options.force);
   if (!force && cached && Date.now() - cachedAt < CACHE_MS) return Object.assign({}, cached, { cached: true });
   if (inFlight) return inFlight;
-  inFlight = Promise.all([fetchClaude(), fetchCodex()]).then(function (providers) {
+  inFlight = Promise.all([fetchCodex()]).then(function (providers) {
     const value = { providers: providers, lastUpdated: new Date().toISOString(), cached: false, cacheSeconds: Math.round(CACHE_MS / 1000) };
     cached = value;
     cachedAt = Date.now();
@@ -197,4 +125,4 @@ async function getUsage(options) {
 
 function invalidate() { cachedAt = 0; }
 
-module.exports = { getUsage: getUsage, invalidate: invalidate, _fetchClaude: fetchClaude, _fetchCodex: fetchCodex };
+module.exports = { getUsage: getUsage, invalidate: invalidate, _fetchCodex: fetchCodex };

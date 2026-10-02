@@ -411,9 +411,8 @@
       '<div class="pm-columns">' +
         '<div class="pm-col pm-col-clean">' +
           '<div class="pm-toolbar">' +
-            '<div class="pm-agent-switch" role="group" aria-label="Active agent">' +
-              '<button type="button" class="pm-agent-option" data-agent="claude">Claude</button>' +
-              '<button type="button" class="pm-agent-option" data-agent="codex">Codex</button>' +
+            '<div class="pm-agent-switch" aria-label="Project Manager">' +
+              '<span class="pm-agent-option active">Codex</span>' +
               '<button type="button" class="pm-agent-option pm-usage-option" aria-haspopup="dialog">Usage</button>' +
             '</div>' +
             '<button type="button" class="pm-auto-speech-btn" id="pmAutoSpeechBtn" aria-pressed="true" title="Turn automatic voice responses off"><span>Auto voice</span></button>' +
@@ -439,7 +438,7 @@
               '<button type="button" class="pm-mic-btn" id="pmMicBtn" title="Record voice message" aria-label="Record voice message">' +
                 '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/></svg>' +
               '</button>' +
-              '<textarea id="pmTextInput" class="pm-textarea" rows="1" placeholder="Message Claude… (paste or drop an image too)"></textarea>' +
+              '<textarea id="pmTextInput" class="pm-textarea" rows="1" placeholder="Message Codex… (paste or drop an image too)"></textarea>' +
               '<button type="button" class="pm-send-btn" id="pmSendBtn" title="Send" aria-label="Send">' +
                 '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4Z"/></svg>' +
               '</button>' +
@@ -453,7 +452,7 @@
             '<div class="pm-queue-list" id="pmQueueList"><div class="pm-queue-empty">No tasks right now.</div></div>' +
           '</div>' +
           '<div class="pm-activity-section">' +
-            '<div class="pm-activity-head">Activity <span class="pm-activity-hint">— what the selected agent is doing, live</span></div>' +
+            '<div class="pm-activity-head">Activity <span class="pm-activity-hint">— what Codex is doing, live</span></div>' +
             '<div class="pm-activity" id="pmActivity"><div class="pm-activity-empty" id="pmActivityEmpty">Nothing happening yet.</div></div>' +
           '</div>' +
         '</div>' +
@@ -477,43 +476,14 @@
     var replyPreviewEl = document.getElementById('pmReplyPreview');
     var replyPreviewTextEl = document.getElementById('pmReplyPreviewText');
     var replyPreviewCancelBtn = document.getElementById('pmReplyPreviewCancel');
-    var agentButtons = Array.prototype.slice.call(document.querySelectorAll('.pm-agent-option[data-agent]'));
     var usageButton = document.querySelector('.pm-usage-option');
     var autoSpeechButton = document.getElementById('pmAutoSpeechBtn');
     var voiceHint = document.getElementById('pmVoiceHint');
     var alertButton = document.getElementById('pmAlertBtn');
     var alertBadge = document.getElementById('pmAlertBadge');
-    var selectedAgent = 'claude';
-    var agentPreferenceVersion = 0;
+    var selectedAgent = 'codex';
 
-    function agentName(agent) { return agent === 'codex' ? 'Codex' : 'Claude'; }
-    function applySelectedAgent(agent) {
-      selectedAgent = agent === 'codex' ? 'codex' : 'claude';
-      agentButtons.forEach(function (btn) {
-        var active = btn.dataset.agent === selectedAgent;
-        btn.classList.toggle('active', active);
-        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
-      });
-      textInput.placeholder = 'Message ' + agentName(selectedAgent) + '… (paste or drop an image too)';
-    }
-    function refreshAgentPreference() {
-      var requestedAtVersion = agentPreferenceVersion;
-      Voice.getAgentPreference().then(function (agent) {
-        // A polling GET that began before a local click must not visually
-        // undo that newer click while its PUT is in flight.
-        if (requestedAtVersion === agentPreferenceVersion) applySelectedAgent(agent);
-      }).catch(function () {});
-    }
-    applySelectedAgent('claude');
-    refreshAgentPreference();
-    agentButtons.forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var previous = selectedAgent;
-        agentPreferenceVersion++;
-        applySelectedAgent(btn.dataset.agent);
-        Voice.setAgentPreference(selectedAgent).catch(function () { applySelectedAgent(previous); });
-      });
-    });
+    function agentName() { return 'Codex'; }
     if (window.RMUsage) window.RMUsage.attach(usageButton);
     function autoSpeechIcon(enabled) {
       return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6.5 9H3v6h3.5l4.5 4V5Z"/><path d="M15 9.5a4 4 0 0 1 0 5"/>' +
@@ -678,7 +648,7 @@
 
     function addAssistantMessage(text, replyToText, msgId, insertBeforeEl, agent, notificationKind, notificationUnread) {
       clearEmptyNote();
-      agent = agent === 'codex' ? 'codex' : 'claude';
+      agent = 'codex';
       var isMailAlert = notificationKind === 'mail_alert';
       var isAction = /^\[NEEDS_ACTION\]/i.test(text || '');
       var wrap = document.createElement('div');
@@ -891,7 +861,7 @@
     function addTyping(msgId, agent) {
       clearEmptyNote();
       var el = document.createElement('div');
-      agent = agent === 'codex' ? 'codex' : 'claude';
+      agent = 'codex';
       el.className = 'pm-typing pm-typing--' + agent;
       if (msgId) el.dataset.msgId = msgId;
       el.textContent = agentName(agent) + ' is working on it…';
@@ -1002,7 +972,6 @@
         if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
         if (voiceAutoSpeak[row.id]) {
           delete voiceAutoSpeak[row.id];
-          if (Voice.isAutoSpeechEnabled() && row.agent !== 'codex') Voice.speak(row.error_message || 'Something went wrong.', row.id, row.agent).catch(function () {});
         }
       },
       onUpdate: function (row) {
@@ -1018,7 +987,6 @@
         syncVisibleMailAlerts(rows);
         renderQueue(rows);
         pastFirstTick = true;
-        refreshAgentPreference();
         if (Date.now() - lastAlertRefresh > 10000) { lastAlertRefresh = Date.now(); refreshAlertCount(); }
       }
     });
@@ -2670,7 +2638,7 @@
         }).join('') + '</div>'
       : '';
     return '' +
-      '<div class="card' + (isAuto ? ' card-auto' : '') + (isAi ? ' card-ai' : '') + '" draggable="' + (isAuto || !canEdit ? 'false' : 'true') + '" data-id="' + id + '"' + (isAi ? ' title="Created by Claude Code"' : '') + '>' +
+      '<div class="card' + (isAuto ? ' card-auto' : '') + (isAi ? ' card-ai' : '') + '" draggable="' + (isAuto || !canEdit ? 'false' : 'true') + '" data-id="' + id + '"' + (isAi ? ' title="AI-generated"' : '') + '>' +
         (isAuto ? '' : '<span class="card-grip">⋮⋮</span>') +
         thumbHtml +
         idBadge +

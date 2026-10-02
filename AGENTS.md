@@ -1,10 +1,8 @@
 # AGENTS.md
 
 This file is the fast-onboarding entry point for any coding agent working
-in this repository — written for OpenAI Codex specifically (Harvey is
-installing it alongside Claude Code on the same VPS, both expected to
-operate with full repo + host access), but useful to any agent picking
-this project up cold.
+in this repository — written for OpenAI Codex specifically, but useful to
+any agent picking this project up cold.
 
 **Read [`CLAUDE.md`](./CLAUDE.md) in full before doing anything non-trivial.**
 It is the actual, continuously-updated source of truth for this project —
@@ -13,9 +11,10 @@ causes, not just patches), infrastructure layout, credentials policy, and
 Harvey's own standing preferences. It is long (150+ numbered sections,
 still growing) because this project has a firm convention: **whoever makes
 a real change writes up what changed and why, in CLAUDE.md, before
-considering the task done.** This file does not replace that — it's a map
-to it, plus a few things specific to a new agent joining an already-running
-multi-agent setup.
+considering the task done.** The filename is historical; `CLAUDE.md` is a
+shared project record and no Claude runtime or account is required. This
+file does not replace it — it's a map to it, plus a few things specific to
+a new agent joining an already-running setup.
 
 If anything in this file and CLAUDE.md ever disagree, CLAUDE.md wins —
 update this file to match, not the other way around.
@@ -45,7 +44,7 @@ backend/        Storefront's own backend (Stripe, BookVault fulfillment,
 ops-service/    "Content Studio" — Harvey's internal tool for planning,
                 producing, and publishing marketing videos to YouTube/
                 TikTok/etc, PLUS "Project Manager": a persistent, headless
-                Claude Code agent Harvey talks to by voice/text from his
+                Codex agent Harvey talks to by voice/text from his
                 phone or desktop. Node/Express + better-sqlite3. Deployed
                 as a Docker container (rm-ops-service) at
                 ops.realitymanual.com, with CI auto-deploy on push (see
@@ -67,14 +66,14 @@ incidents). At any given time there may be:
 
 - Harvey's own interactive terminal session(s) on the VPS.
 - A non-root `ubuntu` Remote Control session doing day-to-day work.
-- The headless "Project Manager" agent — a persistent, resumed Claude Code
+- The headless "Project Manager" agent — a persistent, resumed Codex
   session living **inside the `rm-ops-service` Docker container itself**,
   triggered by Harvey's voice/chat app. It has real git push rights to
   this repo and real SSH access to the VPS host. Several of the most
   detailed CLAUDE.md sections (especially the 140s-150s) are literally
   this agent narrating its own work in first person, mid-session.
 - CI's own automated deploy runs.
-- Now, apparently, Codex too.
+- Other Codex sessions working interactively on the same repository.
 
 **Practical consequences:**
 - Always `git fetch`/`pull` and re-read CLAUDE.md before assuming you have
@@ -122,8 +121,7 @@ ssh ubuntu@host.docker.internal 'sudo <command>'
 that way, not as some sandboxed lesser access.
 
 **One standing caveat if you are the kind of agent that runs *inside* the
-`rm-ops-service` container** (as Claude Code's Project Manager does, and
-as Codex might if it's given an equivalent role): rebuilding/restarting
+`rm-ops-service` container** (as the Codex Project Manager does): rebuilding/restarting
 `rm-ops-service` over that same SSH connection kills your own current
 process mid-command. It won't get to report success back to you in the
 same turn. This is routine, not a sign of failure — but if the *next*
@@ -133,15 +131,11 @@ container) immediately before triggering it.
 
 **Generating or writing any raw credential (SSH keys, API keys, OAuth
 tokens, PATs) is a "you-not-me" action, every time, regardless of how
-routine it feels.** This isn't a suggestion this project came to lightly —
-it's a hard boundary Claude Code's own safety classifier has enforced
-repeatedly here (refusing even read-only checks like `sudo -l -U ubuntu`
-with reasons like "Containment Escape"/"Unauthorized Persistence" — see
-CLAUDE.md §74/§88/§74's OAuth-token section). Every credential currently
-in place on this VPS was generated or pasted in by Harvey directly, in a
-human console session, not by an agent running a command. Expect the same
-boundary to exist for Codex; don't try to route around it if it does —
-ask Harvey to do the raw-credential step himself and continue from there.
+routine it feels.** This is a long-standing project boundary. Every
+credential currently in place on this VPS was generated or pasted in by
+Harvey directly, in a human console session, not by an agent running a
+command. Don't try to route around that boundary — ask Harvey to do the
+raw-credential step himself and continue from there.
 
 ---
 
@@ -236,7 +230,7 @@ not an oversight — don't propose hardening it unprompted.
 
 What *is* treated seriously regardless: real external secrets (Stripe
 keys, BookVault API key, YouTube/TikTok OAuth client secrets, ElevenLabs
-key, GitHub PATs, the Claude Code OAuth token) are never committed —
+key, GitHub PATs, and Codex/OpenAI credentials) are never committed —
 they live only in gitignored `.env` files written directly on the VPS.
 `.env.example` files document what's needed without real values. Never
 log secrets. Never expose backend-only secrets to any frontend. When
@@ -254,8 +248,8 @@ disabled form field as the real boundary.
   decision). This file should stay short and mostly stable; CLAUDE.md is
   where the real history and detail belongs, by long-established
   convention in this project.
-- If you (Codex) develop your own tool-specific operating notes that
-  wouldn't apply to Claude Code or a future agent, keep those separate
+- If you develop tool-specific operating notes that would not apply to a
+  future agent, keep those separate
   and clearly labeled rather than folding them into CLAUDE.md's shared
   narrative — but genuine project facts (what's built, what broke, why a
   decision was made) belong in CLAUDE.md regardless of which agent found

@@ -1,6 +1,6 @@
 // Shared client for the voice/chat app (voice-mobile.html + index.html):
-// mic recording, transcription, routing messages to the selected headless
-// agent (Claude or Codex), polling for a reply, and playing it back via TTS.
+// mic recording, transcription, routing messages to the headless Codex
+// Project Manager, polling for a reply, and playing it back via TTS.
 window.RMVoice = (function () {
   var API_BASE = window.RMStore ? window.RMStore.API_BASE : '';
 
@@ -148,7 +148,7 @@ window.RMVoice = (function () {
   // message is a tap-to-reply response to — see server.js's promptText
   // wiring for how it's used.
   function sendMessage(text, mode, imageFiles, replyToId, agent) {
-    agent = agent === 'codex' ? 'codex' : 'claude';
+    agent = 'codex';
     imageFiles = Array.isArray(imageFiles) ? imageFiles.filter(Boolean).slice(0, 8) : (imageFiles ? [imageFiles] : []);
     if (imageFiles.length) {
       var form = new FormData();
@@ -208,11 +208,11 @@ window.RMVoice = (function () {
   function getAgentPreference() {
     return fetch(API_BASE + '/api/voice/agent', { credentials: 'include' })
       .then(function (r) { if (!r.ok) throw new Error('Could not load agent preference'); return r.json(); })
-      .then(function (data) { return data.agent === 'codex' ? 'codex' : 'claude'; });
+      .then(function () { return 'codex'; });
   }
 
   function setAgentPreference(agent) {
-    agent = agent === 'codex' ? 'codex' : 'claude';
+    agent = 'codex';
     return fetch(API_BASE + '/api/voice/agent', {
       method: 'PUT',
       credentials: 'include',
@@ -627,7 +627,7 @@ window.RMVoice = (function () {
   }
 
   function speechCacheKey(msgId, agent, speechKind) {
-    return String(msgId || '') + '|' + (agent === 'codex' ? 'codex' : 'claude') + '|' +
+    return String(msgId || '') + '|codex|' +
       (speechKind === 'early_ack' ? 'early_ack' : 'reply');
   }
 
@@ -684,7 +684,7 @@ window.RMVoice = (function () {
   function prepareSpeech(text, msgId, agent, speechKind) {
     var clean = stripMarkdownForSpeech(text);
     if (!clean || !msgId) return Promise.resolve(null);
-    agent = agent === 'codex' ? 'codex' : 'claude';
+    agent = 'codex';
     speechKind = speechKind === 'early_ack' ? 'early_ack' : 'reply';
     var key = speechCacheKey(msgId, agent, speechKind);
     var existing = preparedSpeechCache[key];
@@ -881,7 +881,7 @@ window.RMVoice = (function () {
     // automatic request rather than allowing it to abort or queue ahead of
     // the explicitly selected audio.
     if (speechMode === 'automatic' && currentSpeechMode === 'manual') return Promise.resolve(null);
-    agent = agent === 'codex' ? 'codex' : 'claude';
+    agent = 'codex';
     stopSpeaking();
     var myToken = playToken;
     currentSpeechMode = speechMode;
@@ -1034,7 +1034,7 @@ window.RMVoice = (function () {
       }
       // Fires once, the moment early_ack first appears — well before the
       // row's bucket transitions to done/error, since it's written mid-turn
-      // (see server.js's onEarlyAck / claudeRunner.js's handleEvent).
+      // (see server.js's onEarlyAck / codexRunner.js's streamed messages).
       if (!seen.hadEarlyAck && row.early_ack) {
         seen.hadEarlyAck = true;
         if (callbacks.onEarlyAck) callbacks.onEarlyAck(row);

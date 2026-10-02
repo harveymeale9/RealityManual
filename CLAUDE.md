@@ -15935,3 +15935,40 @@ Meta requests. **Allow advertising** made exactly one request for Meta's loader,
 queued `init` with the supplied ID and `PageView`, and produced a correctly
 valued `Purchase` with the stable order event ID. The same test confirmed that
 Google stayed disabled.
+
+---
+
+# 458. Content Studio and Project Manager Are Codex-Only (2026-10-02)
+
+Harvey cancelled Claude Pro and explicitly removed Claude from the Reality
+Manual project. Content Studio no longer installs, mounts, calls, displays, or
+requires Claude Code, the Anthropic Agent SDK, an Anthropic API, a Claude OAuth
+token, or a Claude subscription. Project Manager, ideation, background
+monitors, mail alerts, and durable recovery now use Codex exclusively. Existing
+queued work is normalized to Codex at startup, and the agent/model selectors in
+the desktop, mobile, and ideation interfaces have been replaced by a static
+Codex identity. Claude usage reporting and Claude-specific TTS routing were
+removed.
+
+Restricted background interpretation does not hand untrusted email, transcript,
+or competitor content to the full-access coding agent. It now uses the existing
+OpenAI API key through the Responses API with strict Structured Outputs and no
+tools. Research generation uses the same wrapper but explicitly exposes only
+OpenAI's built-in `web_search` tool. Relevant primary documentation:
+https://developers.openai.com/api/docs/guides/structured-outputs and
+https://developers.openai.com/api/docs/guides/tools-web-search.
+
+Deployment no longer installs the Claude CLI or creates/mounts `.claude`
+credential directories. `@anthropic-ai/claude-agent-sdk`, its lockfile
+dependencies, `src/claudeRunner.js`, and its tests were removed. The environment
+template now documents the OpenAI structured/research models and the neutral
+runtime repository path. A legacy `claude_session_id` SQLite column remains
+inert so production history does not require a destructive migration. Likewise,
+the filename `CLAUDE.md` is retained solely as the established shared project
+history filename; it is documentation, not an integration or runtime
+dependency.
+
+Verification included syntax checks, the complete 152-test ops-service suite,
+unit tests proving restricted calls receive zero tools and research receives
+only web search, and a live structured-response probe using the configured
+OpenAI account.

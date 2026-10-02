@@ -18,7 +18,7 @@ ENV_FILE="$REPO_DIR/ops-service/.env"
 
 # Everything below is tee'd into a log file on the host, which is also the
 # bind-mounted /data directory of whatever rm-ops-service container ends up
-# running (old or new) — so a later Claude Code session (this script's own
+# running (old or new) — so a later Project Manager session (this script's own
 # CI step included) can just read /data/last-deploy.log directly off the
 # live filesystem instead of needing GitHub's Actions log-download API,
 # which requires an "Administration" repo permission this token may or may
@@ -28,27 +28,9 @@ LOG_FILE="$DATA_DIR/last-deploy.log"
 exec > >(tee "$LOG_FILE") 2>&1
 set -x
 
-# Claude's host-side voice-turn runner (claudeRunner.js) needs an isolated
-# $HOME, distinct from the `ubuntu` user's own real one, whose .claude/
-# .claude.json alias the exact files already bind-mounted into the
-# container below — see CLAUDE_HOST_HOME's comment in .env.example.
-# Idempotent: safe to re-run every deploy, not just the first one.
-CLAUDE_HOST_HOME_DIR=/root/ops-service-claude-home/host-identity
-mkdir -p "$CLAUDE_HOST_HOME_DIR"
-ln -sfn ../claude-dir "$CLAUDE_HOST_HOME_DIR/.claude"
-ln -sfn ../claude.json "$CLAUDE_HOST_HOME_DIR/.claude.json"
-chown -h ubuntu:ubuntu "$CLAUDE_HOST_HOME_DIR" "$CLAUDE_HOST_HOME_DIR/.claude" "$CLAUDE_HOST_HOME_DIR/.claude.json"
-# Same reasoning as CLAUDE_HOST_REPO=/repo in .env.example: the host-side
-# `claude` process's cwd string must match what the old in-container runs
-# used, or Claude Code's cwd-keyed session store can't resume an existing
-# claude_session_id.
-ln -sfn "$RUNTIME_REPO_DIR" /repo 2>/dev/null || true
-
 RUN_ARGS=(-d --name "$CONTAINER" --restart unless-stopped
   -p 127.0.0.1:4001:4001
   --add-host=host.docker.internal:host-gateway
-  -v /root/ops-service-claude-home/claude-dir:/home/node/.claude
-  -v /root/ops-service-claude-home/claude.json:/home/node/.claude.json
   -v "$DATA_DIR:/data"
   # Aggregate weekly reporting reads this separate service's SQLite files but
   # must never be able to alter order, customer, or analytics data.

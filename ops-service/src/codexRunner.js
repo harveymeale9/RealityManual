@@ -1,14 +1,14 @@
 'use strict';
 
-// Runs Codex on the VPS host through the same audited SSH boundary the
-// container's Claude agent already uses for host work. Codex itself runs on
+// Runs Codex on the VPS host through the service's audited SSH boundary.
+// Codex itself runs on
 // the host (as root via passwordless sudo), so its tools naturally see the
 // repository, Docker, nginx, systemd, logs, and the rest of the VPS without
 // mounting host credentials or a Docker socket into this container.
 //
 // `codex exec --json` emits JSONL as work happens. We translate that stream
-// into the same three callbacks the Project Manager already persists for
-// Claude: an early acknowledgment, activity lines, and one final reply.
+// into the three callbacks Project Manager persists: an early acknowledgment,
+// activity lines, and one final reply.
 const { spawn } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');

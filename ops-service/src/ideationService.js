@@ -110,6 +110,8 @@ function setup(db, options) {
   try { db.exec("ALTER TABLE ideation_ideas ADD COLUMN discussion_angles TEXT NOT NULL DEFAULT '[]'"); } catch (e) { /* already exists */ }
   db.prepare('INSERT OR IGNORE INTO ideation_settings (id, selected_provider, preference_profile, updated_at) VALUES (1, ?, ?, ?)')
     .run('codex', stringify(DEFAULT_PROFILE), now());
+  db.prepare("UPDATE ideation_settings SET selected_provider='codex',updated_at=? WHERE selected_provider!='codex'").run(now());
+  db.prepare("UPDATE ideation_jobs SET provider='codex',updated_at=? WHERE status IN ('pending','running') AND provider!='codex'").run(now());
 
   // Preserve old full-script proposals and their feedback as history, but
   // replace the active queue exactly once with the new Big-Idea-only shape.
@@ -492,9 +494,9 @@ Return strict JSON only, with no markdown fences or commentary. Provider request
   router.get('/state', function (req, res) { ensureQueue(); res.json(state()); });
   router.put('/provider', function (req, res) {
     const provider = req.body && req.body.provider;
-    if (provider !== 'claude' && provider !== 'codex') return res.status(400).json({ error: 'invalid_provider' });
-    db.prepare('UPDATE ideation_settings SET selected_provider=?,updated_at=? WHERE id=1').run(provider, now());
-    res.json({ ok: true, selectedProvider: provider });
+    if (provider !== 'codex') return res.status(400).json({ error: 'invalid_provider' });
+    db.prepare("UPDATE ideation_settings SET selected_provider='codex',updated_at=? WHERE id=1").run(now());
+    res.json({ ok: true, selectedProvider: 'codex' });
   });
   router.put('/ideas/:id', function (req, res) {
     try {

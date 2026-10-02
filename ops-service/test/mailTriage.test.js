@@ -15,7 +15,7 @@ test('mail triage archives every digested email and creates one durable alert on
   db.exec(`CREATE TABLE voice_messages (
     id TEXT PRIMARY KEY,mode TEXT NOT NULL,transcript TEXT NOT NULL,status TEXT NOT NULL,
     reply_text TEXT,error_message TEXT,created_at TEXT NOT NULL,completed_at TEXT,
-    activity_log TEXT,early_ack TEXT,reply_to_id TEXT,agent TEXT NOT NULL DEFAULT 'claude',
+    activity_log TEXT,early_ack TEXT,reply_to_id TEXT,agent TEXT NOT NULL DEFAULT 'codex',
     notification_kind TEXT NOT NULL DEFAULT 'conversation',notification_unread INTEGER NOT NULL DEFAULT 0,source_ref TEXT
   ); CREATE UNIQUE INDEX idx_voice_mail_alert_source ON voice_messages(source_ref)
     WHERE notification_kind='mail_alert' AND source_ref IS NOT NULL;`);
@@ -100,7 +100,7 @@ test('occasional courtesy replies go only to authenticated individual sales pitc
   db.exec(`CREATE TABLE voice_messages (
     id TEXT PRIMARY KEY,mode TEXT NOT NULL,transcript TEXT NOT NULL,status TEXT NOT NULL,
     reply_text TEXT,error_message TEXT,created_at TEXT NOT NULL,completed_at TEXT,
-    agent TEXT NOT NULL DEFAULT 'claude',notification_kind TEXT NOT NULL DEFAULT 'conversation',
+    agent TEXT NOT NULL DEFAULT 'codex',notification_kind TEXT NOT NULL DEFAULT 'conversation',
     notification_unread INTEGER NOT NULL DEFAULT 0,source_ref TEXT
   ); CREATE UNIQUE INDEX idx_voice_mail_alert_source ON voice_messages(source_ref)
     WHERE notification_kind='mail_alert' AND source_ref IS NOT NULL;`);
@@ -174,7 +174,7 @@ test('routine acknowledgements stay silent even when their inherited subject sou
   db.exec(`CREATE TABLE voice_messages (
     id TEXT PRIMARY KEY,mode TEXT NOT NULL,transcript TEXT NOT NULL,status TEXT NOT NULL,
     reply_text TEXT,error_message TEXT,created_at TEXT NOT NULL,completed_at TEXT,
-    agent TEXT NOT NULL DEFAULT 'claude',notification_kind TEXT NOT NULL DEFAULT 'conversation',
+    agent TEXT NOT NULL DEFAULT 'codex',notification_kind TEXT NOT NULL DEFAULT 'conversation',
     notification_unread INTEGER NOT NULL DEFAULT 0,source_ref TEXT
   ); CREATE UNIQUE INDEX idx_voice_mail_alert_source ON voice_messages(source_ref)
     WHERE notification_kind='mail_alert' AND source_ref IS NOT NULL;`);
@@ -219,7 +219,7 @@ test('routine security codes and login alerts never create Project Manager notif
   db.exec(`CREATE TABLE voice_messages (
     id TEXT PRIMARY KEY,mode TEXT NOT NULL,transcript TEXT NOT NULL,status TEXT NOT NULL,
     reply_text TEXT,error_message TEXT,created_at TEXT NOT NULL,completed_at TEXT,
-    agent TEXT NOT NULL DEFAULT 'claude',notification_kind TEXT NOT NULL DEFAULT 'conversation',
+    agent TEXT NOT NULL DEFAULT 'codex',notification_kind TEXT NOT NULL DEFAULT 'conversation',
     notification_unread INTEGER NOT NULL DEFAULT 0,source_ref TEXT
   ); CREATE UNIQUE INDEX idx_voice_mail_alert_source ON voice_messages(source_ref)
     WHERE notification_kind='mail_alert' AND source_ref IS NOT NULL;`);
@@ -260,7 +260,7 @@ test('a classification failure leaves mail visible and retryable instead of sile
   db.exec(`CREATE TABLE voice_messages (
     id TEXT PRIMARY KEY,mode TEXT NOT NULL,transcript TEXT NOT NULL,status TEXT NOT NULL,
     reply_text TEXT,error_message TEXT,created_at TEXT NOT NULL,completed_at TEXT,
-    agent TEXT NOT NULL DEFAULT 'claude',notification_kind TEXT NOT NULL DEFAULT 'conversation',
+    agent TEXT NOT NULL DEFAULT 'codex',notification_kind TEXT NOT NULL DEFAULT 'conversation',
     notification_unread INTEGER NOT NULL DEFAULT 0,source_ref TEXT
   ); CREATE UNIQUE INDEX idx_voice_mail_alert_source ON voice_messages(source_ref)
     WHERE notification_kind='mail_alert' AND source_ref IS NOT NULL;`);
@@ -288,7 +288,7 @@ test('authenticated owner email silently queues its new text as a Project Manage
   db.exec(`CREATE TABLE voice_messages (
     id TEXT PRIMARY KEY,mode TEXT NOT NULL,transcript TEXT NOT NULL,status TEXT NOT NULL,
     reply_text TEXT,error_message TEXT,created_at TEXT NOT NULL,completed_at TEXT,
-    agent TEXT NOT NULL DEFAULT 'claude',notification_kind TEXT NOT NULL DEFAULT 'conversation',
+    agent TEXT NOT NULL DEFAULT 'codex',notification_kind TEXT NOT NULL DEFAULT 'conversation',
     notification_unread INTEGER NOT NULL DEFAULT 0,source_ref TEXT
   ); CREATE UNIQUE INDEX idx_voice_mail_alert_source ON voice_messages(source_ref)
     WHERE notification_kind='mail_alert' AND source_ref IS NOT NULL;`);
@@ -305,7 +305,7 @@ test('authenticated owner email silently queues its new text as a Project Manage
   // must hide it immediately rather than leave an unread self-notification.
   db.prepare(`INSERT INTO voice_messages
     (id,mode,transcript,status,reply_text,created_at,completed_at,agent,notification_kind,notification_unread,source_ref)
-    VALUES('old-alert','notification','Email: Re: Weekly report','done','You sent an email.',?,?, 'claude','mail_alert',1,?)`)
+    VALUES('old-alert','notification','Email: Re: Weekly report','done','You sent an email.',?,?, 'codex','mail_alert',1,?)`)
     .run('2026-09-26T12:00:01Z', '2026-09-26T12:00:01Z', owner.id);
 
   let classifyCalls = 0;
@@ -336,7 +336,7 @@ test('spoofed owner From address stays in untrusted mail triage', async function
   db.exec(`CREATE TABLE voice_messages (
     id TEXT PRIMARY KEY,mode TEXT NOT NULL,transcript TEXT NOT NULL,status TEXT NOT NULL,
     reply_text TEXT,error_message TEXT,created_at TEXT NOT NULL,completed_at TEXT,
-    agent TEXT NOT NULL DEFAULT 'claude',notification_kind TEXT NOT NULL DEFAULT 'conversation',
+    agent TEXT NOT NULL DEFAULT 'codex',notification_kind TEXT NOT NULL DEFAULT 'conversation',
     notification_unread INTEGER NOT NULL DEFAULT 0,source_ref TEXT
   ); CREATE UNIQUE INDEX idx_voice_mail_alert_source ON voice_messages(source_ref)
     WHERE notification_kind='mail_alert' AND source_ref IS NOT NULL;`);

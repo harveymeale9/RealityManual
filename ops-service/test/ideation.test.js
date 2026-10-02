@@ -170,10 +170,10 @@ test('Big Idea queue, verified support, and Ideation-stage transfer work togethe
   assert.equal(state.ideas.some(function (entry) { return entry.id === accepted.id; }), false);
   assert.equal(state.ideas.some(function (entry) { return entry.id === rejected.id; }), false);
 
-  await request('/provider', 'PUT', { provider: 'claude' });
-  assert.equal((await request('/state')).selectedProvider, 'claude');
+  await request('/provider', 'PUT', { provider: 'codex' });
+  assert.equal((await request('/state')).selectedProvider, 'codex');
   const restarted = ideationService.setup(db, { providers: fakeProviders, autoStart: false });
   assert.equal(restarted.state().ideas.length, 10);
-  assert.equal(restarted.state().selectedProvider, 'claude');
+  assert.equal(restarted.state().selectedProvider, 'codex');
   assert.equal(db.prepare("SELECT count(*) AS n FROM ideation_migrations WHERE id='big_idea_cards_v1'").get().n, 1);
 });

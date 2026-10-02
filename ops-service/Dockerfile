@@ -9,11 +9,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 python3
     && update-ca-certificates \
     && python3 -m pip install --break-system-packages --no-cache-dir yt-dlp==2026.8.19 \
     && rm -rf /var/lib/apt/lists/*
-# The voice app shells out to the real `claude` CLI (see src/claudeRunner.js) so
-# voice/chat requests are handled by an actual Claude Code agent with full tool
-# access, not a separate chat API. Pinned to match the version already
-# authenticated on the VPS host — bump both together if the host CLI updates.
-RUN npm install -g @anthropic-ai/claude-code@2.1.276
 WORKDIR /app
 COPY package.json ./
 RUN npm install --omit=dev
@@ -31,13 +26,9 @@ ENV DATA_DIR=/data
 # answer here the way there would be for an unknown remote server.
 RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config \
     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
-# `claude --dangerously-skip-permissions` (bypassPermissions) is refused
-# outright when the process's EUID is 0, which root always is. Running the
-# whole container as the "node" user (built into the base image, uid/gid
-# 1000) instead of root is what makes the headless voice-app runner's full
-# autonomy actually work — see CLAUDE.md section 74. The host repo bind
-# mount (/repo) and DATA_DIR (/data) must be chowned to 1000:1000 on the
-# host for this user to read/write them.
+# Run the service as the base image's non-root node user. The host repo bind
+# mount (/repo) and DATA_DIR (/data) must be chowned to uid/gid 1000 for the
+# service to read/write them.
 USER node
 EXPOSE 4001
 CMD ["node", "server.js"]
