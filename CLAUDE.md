@@ -15745,3 +15745,32 @@ Active Pieces rather than treating that development period as a gap. Existing
 outline-learning databases gain an `active_pieces_snapshot_id` column in place;
 the learner uses the latest Active Pieces snapshot as the developed outline
 when comparing Harvey's original Big Idea with the completed result.
+
+---
+
+# 453. Occasional Polite Declines for Genuine Cold-Sales Mail (2026-10-02)
+
+Harvey authorized the connected `info@realitymanual.com` mailbox to reply
+occasionally—not universally—to genuine individual agency/service pitches. The
+mail triage classifier now makes a separate courtesy-eligibility decision while
+remaining a one-turn, tool-free reader of untrusted email. The only possible
+automatic body is the fixed decline: **“Thanks for reaching out. We're not
+looking for agency support at the moment, but I appreciate the message. Best,
+Harvey.”** Inbound content can never supply or alter the reply text.
+
+The delivery path is intentionally conservative. It permits at most one reply
+globally every seven days and never replies twice to the same sender or to a
+thread that already has outbound mail. The sender must have an aligned DMARC or
+DKIM pass and a normal individual address; messages with attachments,
+unsubscribe/list language, automated-reply language, no-reply/system senders,
+important content, owner instructions, or no positive sales/services signal
+are silently archived as before. A durable pre-send claim gives each candidate
+at-most-once behavior even across restarts or ambiguous SMTP failures. The
+reply is stored in Sent and uses the original thread's `In-Reply-To` and
+`References` headers rather than starting an unrelated conversation.
+
+`MAIL_COURTESY_REPLIES_ENABLED=false` is the emergency off switch; the feature
+defaults on when the mailbox transport is configured. Integration coverage
+proves authenticated individual selection, one-per-week cadence, bulk and
+spoof suppression, proper threading, fixed copy, and restart-safe no-repeat
+behavior. The complete ops-service test suite passes 155/155.

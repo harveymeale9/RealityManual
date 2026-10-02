@@ -300,11 +300,13 @@ function setup(db, options) {
     if (!configured()) throw new Error('mailbox_not_connected');
     input = input || {};
     const draft = saveDraft({
+      threadId: input.threadId,
       to: JSON.stringify(Array.isArray(input.to) ? input.to : []),
       cc: JSON.stringify(Array.isArray(input.cc) ? input.cc : []),
       subject: input.subject,
       textBody: input.textBody,
       htmlBody: input.htmlBody,
+      inReplyTo: input.inReplyTo,
       attachmentMeta: '[]'
     }, []);
     return deliverDraft(draft);

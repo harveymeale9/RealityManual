@@ -940,8 +940,10 @@ app.use('/api/mailbox', requireAuth, mailbox.router);
 // never as a notification. All successfully handled mail is archived.
 const mailTriage = mailTriageService.setup(db, {
   enabled: process.env.MAIL_TRIAGE_ENABLED !== 'false',
+  courtesyRepliesEnabled: process.env.MAIL_COURTESY_REPLIES_ENABLED !== 'false',
   ownerEmails: process.env.MAIL_OWNER_INSTRUCTION_SENDERS || process.env.WEEKLY_REPORT_RECIPIENT || 'harveymeale9@gmail.com',
   enqueueOwnerInstruction: function (input) { return enqueueOwnerEmailInstruction(input); },
+  sendCourtesyReply: mailbox.configured() ? function (message) { return mailbox.sendAutomated(message); } : null,
   classify: function (input) {
     return claudeRunner.runTextOnlyStructured(input.prompt, input.schema, 90000);
   }

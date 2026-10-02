@@ -94,6 +94,80 @@ test('mail triage archives every digested email and creates one durable alert on
   triage.close();
 });
 
+test('occasional courtesy replies go only to authenticated individual sales pitches and remain threaded', async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-mail-courtesy-'));
+  const db = new Database(':memory:');
+  db.exec(`CREATE TABLE voice_messages (
+    id TEXT PRIMARY KEY,mode TEXT NOT NULL,transcript TEXT NOT NULL,status TEXT NOT NULL,
+    reply_text TEXT,error_message TEXT,created_at TEXT NOT NULL,completed_at TEXT,
+    agent TEXT NOT NULL DEFAULT 'claude',notification_kind TEXT NOT NULL DEFAULT 'conversation',
+    notification_unread INTEGER NOT NULL DEFAULT 0,source_ref TEXT
+  ); CREATE UNIQUE INDEX idx_voice_mail_alert_source ON voice_messages(source_ref)
+    WHERE notification_kind='mail_alert' AND source_ref IS NOT NULL;`);
+  const delivered = [];
+  const mailbox = mailboxService.setup(db, {
+    dataDir: dir, autoSync: false,
+    transport: {
+      name: 'Test mail',
+      send: async function (payload) { delivered.push(payload); return { id: '<courtesy-' + delivered.length + '@example.com>' }; }
+    }
+  });
+  t.after(function () { mailbox.close(); db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+
+  const pitch = mailbox.ingest({
+    providerId: 'pitch-1', internetMessageId: '<pitch-1@agency.example>',
+    fromName: 'Alex', fromEmail: 'alex@agency.example', senderAuthenticated: true,
+    senderAuthentication: 'dmarc', subject: 'Video marketing help',
+    textBody: 'Hi Harvey, our agency can help Reality Manual with video marketing. Would you like to book a call?',
+    receivedAt: '2026-10-02T08:00:00Z'
+  });
+  mailbox.ingest({
+    providerId: 'pitch-2', internetMessageId: '<pitch-2@consulting.example>',
+    fromName: 'Blair', fromEmail: 'blair@consulting.example', senderAuthenticated: true,
+    senderAuthentication: 'dkim', subject: 'Consulting services',
+    textBody: 'We provide marketing consulting services and would like to schedule a call.',
+    receivedAt: '2026-10-02T08:01:00Z'
+  });
+  mailbox.ingest({
+    providerId: 'bulk-1', internetMessageId: '<bulk-1@newsletter.example>',
+    fromName: 'Growth News', fromEmail: 'hello@newsletter.example', senderAuthenticated: true,
+    senderAuthentication: 'dmarc', subject: 'Marketing services newsletter',
+    textBody: 'We offer agency services. Unsubscribe or manage your email preferences.',
+    receivedAt: '2026-10-02T08:02:00Z'
+  });
+  mailbox.ingest({
+    providerId: 'spoof-pitch', internetMessageId: '<spoof@agency.example>',
+    fromName: 'Casey', fromEmail: 'casey@agency.example', senderAuthenticated: false,
+    subject: 'Agency services', textBody: 'We can help your business. Book a call.',
+    receivedAt: '2026-10-02T08:03:00Z'
+  });
+
+  const triage = mailTriageService.setup(db, {
+    autoStart: false,
+    sendCourtesyReply: function (message) { return mailbox.sendAutomated(message); },
+    classify: async function () {
+      return {
+        important: false, category: 'Cold sales', summary: 'An unsolicited sales pitch.',
+        actionRequired: false, suggestedNextStep: 'No action needed right now.', reason: 'Cold sales outreach.',
+        courtesyReplyEligible: true, courtesyReplyReason: 'An individually addressed agency-services pitch.'
+      };
+    }
+  });
+  const result = await triage.processPending(10);
+  assert.equal(result.processed, 4);
+  assert.equal(result.courtesyRepliesSent, 1, 'global cadence permits only one occasional reply');
+  assert.equal(delivered.length, 1);
+  assert.deepEqual(delivered[0].message.to, ['alex@agency.example']);
+  assert.equal(delivered[0].message.threadId, pitch.threadId);
+  assert.equal(delivered[0].inReplyTo, '<pitch-1@agency.example>');
+  assert.deepEqual(delivered[0].references, ['<pitch-1@agency.example>']);
+  assert.match(delivered[0].message.textBody, /not looking for agency support/i);
+  assert.equal(db.prepare("SELECT count(*) AS n FROM mail_courtesy_replies WHERE status='sent'").get().n, 1);
+  assert.equal(db.prepare("SELECT count(*) AS n FROM mailbox_messages WHERE direction='outbound' AND status='sent'").get().n, 1);
+  assert.equal((await triage.processPending(10)).processed, 0, 'completed messages are never replied to twice');
+  triage.close();
+});
+
 test('routine acknowledgements stay silent even when their inherited subject sounds urgent', async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-mail-triage-ack-'));
   const db = new Database(':memory:');
