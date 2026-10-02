@@ -15972,3 +15972,26 @@ Verification included syntax checks, the complete 152-test ops-service suite,
 unit tests proving restricted calls receive zero tools and research receives
 only web search, and a live structured-response probe using the configured
 OpenAI account.
+
+---
+
+# 459. Manuscript Text & Copy Workspace (2026-10-02)
+
+The illustrated manuscript reader technically exposed selectable OCR words over
+each page image, but that absolutely-positioned invisible word layer was not a
+usable way to highlight or copy a substantial passage. The reader now has a
+dedicated **Text & copy** mode alongside **Book**. It renders the canonical page
+text as normal, comfortably sized HTML paragraphs while preserving the same
+page navigation and semantic finder.
+
+Search results now include a one-click **Copy passage** action and open directly
+into the full clean-text page with the matching passage highlighted. In text
+mode Harvey can select arbitrary words with normal browser selection, use
+**Copy selection**, copy either complete page, or copy both visible pages with
+page labels. Clipboard writes use the secure Clipboard API with a legacy
+selection fallback and visible success/failure feedback. The illustrated book
+view remains available and unchanged.
+
+A real Chromium test with mocked canonical page/search responses verified the
+Book/Text toggle, normal CSS text selection, actual clipboard contents, and
+search-result-to-highlighted-full-page flow.
