@@ -89,6 +89,13 @@
         social post).
       </p>
       <p>
+        To keep automated crawlers and technical checks out of the audience
+        totals, analytics events are sent only after the page receives a real
+        browser interaction or remains visibly open for a short period. We
+        report an anonymous browser as a visitor; the same person using a
+        different device or browser may therefore appear as another visitor.
+      </p>
+      <p>
         This session identifier is stored in your browser's local storage,
         not as a tracking cookie, is never linked to your name or email
         unless you go on to place an order, and is not shared with or sold
@@ -164,7 +171,7 @@
 
   <script src="js/config.js"></script>
   <script src="js/consent.js"></script>
-  <script src="js/analytics.js"></script>
+  <script src="js/analytics.js?v=20261002-human-v1"></script>
   <script src="js/marketing.js"></script>
   <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
 </body>

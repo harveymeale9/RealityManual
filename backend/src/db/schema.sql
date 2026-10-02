@@ -78,6 +78,9 @@ CREATE TABLE IF NOT EXISTS analytics_events (
   utm_term      TEXT,
   utm_content   TEXT,
   country       TEXT,
+  verified_human INTEGER NOT NULL DEFAULT 0,
+  verification_method TEXT,
+  classification_reason TEXT,
   created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
@@ -85,3 +88,4 @@ CREATE INDEX IF NOT EXISTS idx_analytics_events_created_at ON analytics_events(c
 CREATE INDEX IF NOT EXISTS idx_analytics_events_event_name ON analytics_events(event_name);
 CREATE INDEX IF NOT EXISTS idx_analytics_events_session ON analytics_events(session_id);
 CREATE INDEX IF NOT EXISTS idx_analytics_events_order_id ON analytics_events(order_id);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_verified ON analytics_events(verified_human, created_at);

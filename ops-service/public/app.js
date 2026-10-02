@@ -243,8 +243,18 @@
       .then(function (data) {
         if (currentTabId() !== 'website-analytics') return; // navigated away before this resolved
 
+        var funnelLabels = {
+          page_view: 'Page viewed',
+          landing_page_view: 'Landing page viewed',
+          purchase_cta_clicked: 'Purchase button clicked',
+          checkout_view: 'Checkout page viewed',
+          checkout_started: 'Checkout form engaged',
+          payment_submitted: 'Payment submitted',
+          order_complete: 'Order completed',
+          order_failed: 'Order failed'
+        };
         var funnelRows = data.funnel.map(function (f) {
-          return '<div class="funnel-row"><span class="funnel-step">' + escapeHtml(f.step.replace(/_/g, ' ')) + '</span>' +
+          return '<div class="funnel-row"><span class="funnel-step">' + escapeHtml(funnelLabels[f.step] || f.step.replace(/_/g, ' ')) + '</span>' +
             '<span class="funnel-count">' + f.count + '</span><span class="funnel-sessions">' + f.unique_sessions + ' sessions</span></div>';
         }).join('');
 
@@ -259,10 +269,15 @@
             '<div class="overview-row">' +
               '<div class="overview-tile"><div class="overview-tile-head">Today</div>' +
                 '<div class="overview-tile-stat"><span class="n">' + data.today.page_views + '</span> page views</div>' +
-                '<div class="overview-tile-sub">' + data.today.unique_visitors + ' unique visitors</div></div>' +
+                '<div class="overview-tile-sub">' + data.today.unique_visitors + ' verified browsers</div></div>' +
               '<div class="overview-tile"><div class="overview-tile-head">Last 30 days</div>' +
                 '<div class="overview-tile-stat"><span class="n">' + data.last_30_days.page_views + '</span> page views</div>' +
-                '<div class="overview-tile-sub">' + data.last_30_days.unique_visitors + ' unique visitors</div></div>' +
+                '<div class="overview-tile-sub">' + data.last_30_days.unique_visitors + ' verified browsers</div></div>' +
+            '</div>' +
+            '<div class="funnel-section"><div class="eyebrow">What is counted</div>' +
+              '<p class="analytics-definition">' + escapeHtml(data.visitor_definition || '') + '</p>' +
+              '<p class="analytics-definition">Known bots, automated checks, and ' + Number(data.excluded_unverified_events || 0) + ' older/unverified events are excluded.</p>' +
+              '<a class="analytics-internal-link" href="https://realitymanual.com/?rm_internal=1" target="_blank" rel="noopener">Exclude this browser from storefront analytics</a>' +
             '</div>' +
             '<div class="funnel-section">' +
               '<div class="eyebrow">Funnel — last 30 days</div>' +

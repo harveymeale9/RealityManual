@@ -15826,3 +15826,42 @@ start only after the relevant grant, the consent panel is usable on mobile,
 the purchase payload is emitted after authoritative order confirmation, and a
 reload cannot emit that Purchase twice. All changed JavaScript passes
 `node --check`.
+
+---
+
+# 455. Storefront Analytics Reports Verified Browsers, Not Raw IDs (2026-10-02)
+
+The 42-visitor/7-checkout interpretation at the end of §454 was incorrect.
+The old implementation counted every new local-storage ID as a unique person
+and called a checkout page load a checkout visit. A production-data audit found
+an explicit deploy-test row, bursts of fresh IDs only milliseconds apart with
+synthetic Google/YouTube attribution, and seven checkout-view IDs with **zero**
+checkout form interaction. Those rows are retained as raw history, not deleted,
+but are excluded from the audience and funnel report.
+
+The storefront now holds analytics events in memory until optional Analytics
+consent exists and the browser either produces a trusted pointer/keyboard/touch/
+scroll interaction or remains focused and visible for seven seconds. Every sent
+event carries that verification evidence. The backend independently requires an
+allowed storefront origin, a normal browser user agent, a same-origin/same-site
+fetch when the browser supplies that header, and an allowed evidence method.
+Known crawler/AI/headless/CLI user agents, foreign origins, direct scripts,
+unengaged loads, and unknown event names are discarded rather than stored.
+Pre-migration rows default to unverified and therefore cannot inflate the new
+counts.
+
+Content Studio now says **verified browsers**, because anonymous analytics
+cannot truthfully deduplicate one person across several devices or browser
+profiles without login/identity tracking. Funnel labels explicitly distinguish
+**Checkout page viewed** from **Checkout form engaged**. The dashboard explains
+the definition and links to `?rm_internal=1`, which permanently excludes that
+storefront browser from analytics (and removes the parameter from the visible
+URL); `?rm_internal=0` reverses it. Harvey should use the exclusion link once in
+each browser/device he uses for storefront checks.
+
+The backend schema stores verification status/method/classification while
+preserving legacy rows. Unit coverage verifies genuine-browser acceptance and
+crawler, script, foreign-origin, and no-evidence rejection. Real Chromium tests
+verified no request before consent, interaction-gated flushing, returning
+consenting visitors, and complete internal-browser exclusion. The full backend
+suite passes 12/12.

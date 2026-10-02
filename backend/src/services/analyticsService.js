@@ -4,10 +4,12 @@ const db = require('../db');
 const insertStmt = db.prepare(`
   INSERT INTO analytics_events (
     id, session_id, event_name, page, order_id, referrer,
-    utm_source, utm_medium, utm_campaign, utm_term, utm_content, country
+    utm_source, utm_medium, utm_campaign, utm_term, utm_content, country,
+    verified_human, verification_method, classification_reason
   ) VALUES (
     @id, @session_id, @event_name, @page, @order_id, @referrer,
-    @utm_source, @utm_medium, @utm_campaign, @utm_term, @utm_content, @country
+    @utm_source, @utm_medium, @utm_campaign, @utm_term, @utm_content, @country,
+    @verified_human, @verification_method, @classification_reason
   )
 `);
 
@@ -22,7 +24,7 @@ function clip(value) {
   return s.length > MAX_LEN ? s.slice(0, MAX_LEN) : s;
 }
 
-function recordEvent(input) {
+function recordEvent(input, classification = {}) {
   insertStmt.run({
     id: uuidv4(),
     session_id: clip(input.session_id),
@@ -36,23 +38,33 @@ function recordEvent(input) {
     utm_term: clip(input.utm_term),
     utm_content: clip(input.utm_content),
     country: clip(input.country),
+    verified_human: classification.verifiedHuman ? 1 : 0,
+    verification_method: clip(classification.method),
+    classification_reason: clip(classification.reason || 'unclassified'),
   });
 }
 
 const countsSinceStmt = db.prepare(`
   SELECT event_name, COUNT(*) AS n, COUNT(DISTINCT session_id) AS unique_sessions
   FROM analytics_events
-  WHERE created_at >= ?
+  WHERE created_at >= ? AND verified_human = 1
   GROUP BY event_name
 `);
 
 const utmSourcesSinceStmt = db.prepare(`
   SELECT utm_source, COUNT(DISTINCT session_id) AS sessions
   FROM analytics_events
-  WHERE created_at >= ? AND utm_source IS NOT NULL AND utm_source != ''
+  WHERE created_at >= ? AND verified_human = 1
+    AND utm_source IS NOT NULL AND utm_source != ''
   GROUP BY utm_source
   ORDER BY sessions DESC
   LIMIT 10
+`);
+
+const excludedSinceStmt = db.prepare(`
+  SELECT COUNT(*) AS n
+  FROM analytics_events
+  WHERE created_at >= ? AND verified_human = 0
 `);
 
 function isoDaysAgo(days) {
@@ -80,6 +92,7 @@ function getSummary() {
   const todayEvents = rowsToEventMap(countsSinceStmt.all(isoTodayStart()));
   const last30Events = rowsToEventMap(countsSinceStmt.all(isoDaysAgo(30)));
   const topUtmSources = utmSourcesSinceStmt.all(isoDaysAgo(30));
+  const excluded = excludedSinceStmt.get(isoDaysAgo(30)).n;
 
   const funnelOrder = [
     'page_view',
@@ -107,6 +120,8 @@ function getSummary() {
       unique_sessions: last30Events[step] ? last30Events[step].unique_sessions : 0,
     })),
     top_utm_sources: topUtmSources.map((r) => ({ source: r.utm_source, sessions: r.sessions })),
+    excluded_unverified_events: excluded,
+    visitor_definition: 'A consenting browser that produced a trusted interaction or remained visibly open for seven seconds. Different browsers or devices may represent the same person.',
   };
 }
 

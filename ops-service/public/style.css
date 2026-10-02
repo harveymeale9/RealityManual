@@ -2282,6 +2282,19 @@ body.role-reviewer #pmBackFab {
 .funnel-step { flex: 1; color: var(--ink-soft); text-transform: capitalize; }
 .funnel-count { font-family: var(--font-mono); color: var(--accent); font-variant-numeric: tabular-nums; }
 .funnel-sessions { color: var(--ink-faint); font-size: 0.76rem; min-width: 9ch; text-align: right; }
+.analytics-definition { color: var(--ink-soft); font-size: 0.82rem; line-height: 1.5; max-width: 620px; }
+.analytics-definition + .analytics-definition { color: var(--ink-faint); margin-top: -4px; }
+.analytics-internal-link {
+  display: inline-flex;
+  margin-top: 4px;
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--ink-soft);
+  font: 0.7rem var(--font-mono);
+  text-decoration: none;
+}
+.analytics-internal-link:hover { border-color: var(--accent-3); color: var(--accent); }
 
 /* Fixed way back to Project Manager, mobile only (see index.html for why).
    Desktop always has the side-rail, so this stays hidden there. */

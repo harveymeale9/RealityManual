@@ -51,6 +51,20 @@ for (const column of [
   }
 }
 
+// Analytics recorded before the human-verification gate remains as raw
+// history, but is not promoted into the verified-human reports.
+for (const column of [
+  'verified_human INTEGER NOT NULL DEFAULT 0',
+  'verification_method TEXT',
+  'classification_reason TEXT',
+]) {
+  try {
+    db.exec(`ALTER TABLE analytics_events ADD COLUMN ${column}`);
+  } catch {
+    // Already present, or the table does not exist yet.
+  }
+}
+
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
 db.exec(schema);
 

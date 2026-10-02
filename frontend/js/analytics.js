@@ -5,8 +5,30 @@ window.RMAnalytics = (function () {
   var API_BASE_URL = (window.RM_CONFIG && window.RM_CONFIG.API_BASE_URL) || '';
   var SESSION_KEY = 'rm_session_id';
   var ATTRIBUTION_KEY = 'rm_attribution';
+  var INTERNAL_KEY = 'rm_analytics_internal_v1';
   var pending = [];
   var previousConsent = null;
+  var humanVerified = false;
+  var verificationMethod = '';
+  var verificationSent = false;
+
+  // Opening ?rm_internal=1 once disables analytics for this browser. The
+  // private dashboard links here so Harvey's own checks stay out of reports.
+  // ?rm_internal=0 reverses it.
+  try {
+    var internalParam = new URLSearchParams(window.location.search).get('rm_internal');
+    if (internalParam === '1') localStorage.setItem(INTERNAL_KEY, '1');
+    if (internalParam === '0') localStorage.removeItem(INTERNAL_KEY);
+    if (internalParam !== null && window.history && window.history.replaceState) {
+      var cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete('rm_internal');
+      window.history.replaceState({}, '', cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
+    }
+  } catch (e) {}
+
+  function isInternal() {
+    try { return localStorage.getItem(INTERNAL_KEY) === '1'; } catch (e) { return false; }
+  }
 
   function uuid() {
     if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
@@ -69,6 +91,8 @@ window.RMAnalytics = (function () {
         utm_campaign: attribution.utm_campaign,
         utm_term: attribution.utm_term,
         utm_content: attribution.utm_content,
+        human_verified: humanVerified,
+        human_verification: verificationMethod,
       };
       if (extra) {
         Object.keys(extra).forEach(function (k) { payload[k] = extra[k]; });
@@ -86,14 +110,46 @@ window.RMAnalytics = (function () {
   }
 
   function track(eventName, extra) {
+    if (isInternal()) return;
     var consent = window.RMConsent && window.RMConsent.current();
-    if (!consent) {
+    if (!consent || !consent.analytics || !humanVerified) {
+      if (consent && consent.analytics === false) return;
       pending.push([eventName, extra]);
       return;
     }
-    if (!consent.analytics) return;
     send(eventName, extra);
   }
+
+  function flush() {
+    var consent = window.RMConsent && window.RMConsent.current();
+    if (isInternal() || !consent || !consent.analytics || !humanVerified) return;
+    if (!verificationSent) {
+      verificationSent = true;
+      send('human_verified');
+    }
+    var queued = pending.slice();
+    pending = [];
+    queued.forEach(function (event) { send(event[0], event[1]); });
+  }
+
+  function markHuman(method) {
+    if (humanVerified) return;
+    humanVerified = true;
+    verificationMethod = method;
+    flush();
+  }
+
+  ['pointerdown', 'keydown', 'touchstart'].forEach(function (eventName) {
+    window.addEventListener(eventName, function (event) {
+      if (event.isTrusted !== false) markHuman('interaction');
+    }, { capture: true, once: true, passive: true });
+  });
+  window.addEventListener('scroll', function (event) {
+    if (event.isTrusted !== false) markHuman('interaction');
+  }, { capture: true, once: true, passive: true });
+  window.setTimeout(function () {
+    if (document.visibilityState === 'visible' && document.hasFocus()) markHuman('visible_time');
+  }, 7000);
 
   if (window.RMConsent) {
     window.RMConsent.onChange(function (consent) {
@@ -105,12 +161,10 @@ window.RMAnalytics = (function () {
         pending = [];
         return;
       }
-      var queued = pending.slice();
-      pending = [];
-      queued.forEach(function (event) { send(event[0], event[1]); });
+      flush();
       // Someone who changes an earlier rejection to an analytics grant should
       // begin with the current page rather than waiting for another navigation.
-      if (wasDenied && !wasAllowed && !queued.length) send('page_view');
+      if (wasDenied && !wasAllowed && !pending.length) track('page_view');
     });
   }
 
