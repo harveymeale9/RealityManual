@@ -1,4 +1,6 @@
-// Consent-gated first-party analytics tracker — see CLAUDE.md §31-34.
+// First-party aggregate site statistics — see CLAUDE.md §31-34/§456.
+// Enabled by default under the statistical-purpose exception, with an easy
+// privacy-panel opt-out. Advertising consent is handled separately.
 // Every call is wrapped so a network failure or missing backend can never
 // break the page that fired it.
 window.RMAnalytics = (function () {
@@ -162,8 +164,8 @@ window.RMAnalytics = (function () {
         return;
       }
       flush();
-      // Someone who changes an earlier rejection to an analytics grant should
-      // begin with the current page rather than waiting for another navigation.
+      // Someone who reverses an earlier statistics opt-out should begin with
+      // the current page rather than waiting for another navigation.
       if (wasDenied && !wasAllowed && !pending.length) track('page_view');
     });
   }

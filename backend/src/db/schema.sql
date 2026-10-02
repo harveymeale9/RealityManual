@@ -89,3 +89,20 @@ CREATE INDEX IF NOT EXISTS idx_analytics_events_event_name ON analytics_events(e
 CREATE INDEX IF NOT EXISTS idx_analytics_events_session ON analytics_events(session_id);
 CREATE INDEX IF NOT EXISTS idx_analytics_events_order_id ON analytics_events(order_id);
 CREATE INDEX IF NOT EXISTS idx_analytics_events_verified ON analytics_events(verified_human, created_at);
+
+-- Verified first-party analytics is reduced to aggregate daily statistics.
+-- Individual browser-event rows are deleted after their UTC day closes.
+CREATE TABLE IF NOT EXISTS analytics_daily_events (
+  day             TEXT NOT NULL,
+  event_name      TEXT NOT NULL,
+  event_count     INTEGER NOT NULL,
+  verified_visits INTEGER NOT NULL,
+  PRIMARY KEY (day, event_name)
+);
+
+CREATE TABLE IF NOT EXISTS analytics_daily_utm_sources (
+  day             TEXT NOT NULL,
+  utm_source      TEXT NOT NULL,
+  verified_visits INTEGER NOT NULL,
+  PRIMARY KEY (day, utm_source)
+);

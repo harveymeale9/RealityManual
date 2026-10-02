@@ -15865,3 +15865,48 @@ crawler, script, foreign-origin, and no-evidence rejection. Real Chromium tests
 verified no request before consent, interaction-gated flushing, returning
 consenting visitors, and complete internal-browser exclusion. The full backend
 suite passes 12/12.
+
+---
+
+# 456. No Storefront Prompt Unless Advertising Consent Is Actually Needed (2026-10-02)
+
+Harvey does not want visitors asked for consent unless the request is legally
+necessary. Sections §454-455 were too broad in making the site's own aggregate
+statistics opt-in. Current UK rules changed after the Data (Use and Access) Act
+2025: the ICO's final April 2026 storage/access guidance now includes a specific
+**statistical purposes exception** for first-party service analytics, provided
+the sole purpose is aggregate statistics used to improve the service, users
+receive clear information and a simple free objection mechanism, and
+individual-level data is not retained after aggregation. Primary source:
+https://ico.org.uk/for-organisations/direct-marketing-and-privacy-and-electronic-communications/guidance-on-the-use-of-storage-and-access-technologies/what-are-the-exceptions/
+
+The first-party tracker now uses that exception. It defaults on without a
+banner, remains gated on trusted human interaction/visibility, and retains the
+per-browser rows only during the current UTC day. The backend aggregates each
+completed day into counts by event and UTM source and deletes the underlying
+verified browser-event rows. It deliberately discards `order_id` from this
+first-party store, so the anonymous browser journey is never connected to an
+order/customer record. The permanent **Privacy choices** footer control is the
+simple opt-out; a prior v1 Analytics rejection is migrated and still honored.
+Because unique browser IDs no longer survive between aggregate days, the
+30-day dashboard accurately calls its number **verified daily visits** rather
+than unique people.
+
+Online advertising remains different. The same current ICO guidance says
+storage/access technologies used for online advertising and advertising
+measurement require consent:
+https://ico.org.uk/for-organisations/direct-marketing-and-privacy-and-electronic-communications/guidance-on-the-use-of-storage-and-access-technologies/how-do-the-rules-apply-to-online-advertising/
+Meta/Google tags therefore remain off until affirmative Advertising consent.
+Crucially, the storefront only shows that advertising prompt when at least one
+valid Meta Pixel or Google Ads ID is actually configured. Both IDs are still
+blank, so visitors currently see **no consent banner at all**. If retargeting is
+enabled later, the banner asks only about optional advertising, offers an equal
+**No thanks** path, and does not interrupt the shop when declined.
+
+The privacy notice now explains default aggregate statistics, daily deletion,
+the footer opt-out, and the separate advertising opt-in. Browser verification
+proved: no banner while advertising is unconfigured; statistics begin only
+after human evidence; footer opt-out persists; no irrelevant advertising
+control appears; and a configured advertising provider remains unloaded after
+**No thanks**. Aggregation/order-unlinking has automated coverage. The complete
+backend suite passes 13/13.

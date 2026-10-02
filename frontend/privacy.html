@@ -79,11 +79,11 @@
 
       <h2>Analytics &amp; cookies</h2>
       <p>
-        If you allow analytics, this site uses a first-party analytics system that we built and
+        This site uses a first-party statistical system that we built and
         host ourselves. It records anonymous page-view and
         checkout-funnel events (which pages were viewed, whether checkout
         was started, whether an order completed), along with a randomly
-        generated, anonymous session identifier, your approximate country,
+        generated, anonymous browser identifier,
         the page that referred you, and any UTM campaign parameters present
         in the URL (for example, if you arrived from a specific ad or
         social post).
@@ -96,13 +96,12 @@
         different device or browser may therefore appear as another visitor.
       </p>
       <p>
-        This session identifier is stored in your browser's local storage,
-        not as a tracking cookie, is never linked to your name or email
-        unless you go on to place an order, and is not shared with or sold
-        to any third party. If you complete an order, that order is
-        associated with the session that led to it so we can understand
-        which channels drive sales. This internal reporting is only ever
-        seen by us.
+        This identifier is stored in your browser's local storage, not as a
+        tracking cookie. It is never linked to your name, email, customer
+        record, or order reference, and is not shared with or sold to any
+        third party. Individual event rows are reduced to anonymous daily
+        totals after each UTC day and then deleted. We use those totals only
+        to understand and improve how the shop works.
       </p>
       <p>
         If you allow advertising technologies, the site loads the Meta Pixel
@@ -113,18 +112,20 @@
         visitors while excluding people who have already purchased.
       </p>
       <p>
-        Optional analytics and advertising technologies are off until you make
-        a choice. You can reject them and still use the full website and
-        checkout. You can change or withdraw your choice at any time using
-        <strong>Privacy choices</strong> in the footer.
+        These limited first-party site statistics do not require prior consent
+        under the statistical-purpose exception, but you can switch them off
+        at any time using <strong>Privacy choices</strong> in the footer.
+        Advertising tags are different: they remain off unless you actively
+        allow them, and the full website and checkout work if you decline.
       </p>
 
       <h2>Data retention</h2>
       <p>
         We retain order records (including the shipping and contact details
         above) for as long as reasonably necessary for accounting,
-        fulfillment, warranty, and legal purposes. First-party analytics
-        events are retained to support historical reporting. Meta and Google
+        fulfillment, warranty, and legal purposes. Individual first-party
+        analytics events are deleted after daily aggregation; anonymous daily
+        totals are retained for historical reporting. Meta and Google
         retain advertising-event data according to their own policies and the
         audience-retention settings in our advertising accounts.
       </p>
@@ -170,8 +171,8 @@
   </footer>
 
   <script src="js/config.js"></script>
-  <script src="js/consent.js"></script>
-  <script src="js/analytics.js?v=20261002-human-v1"></script>
+  <script src="js/consent.js?v=20261002-minimal-v2"></script>
+  <script src="js/analytics.js?v=20261002-human-v2"></script>
   <script src="js/marketing.js"></script>
   <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
 </body>

@@ -255,7 +255,7 @@
         };
         var funnelRows = data.funnel.map(function (f) {
           return '<div class="funnel-row"><span class="funnel-step">' + escapeHtml(funnelLabels[f.step] || f.step.replace(/_/g, ' ')) + '</span>' +
-            '<span class="funnel-count">' + f.count + '</span><span class="funnel-sessions">' + f.unique_sessions + ' sessions</span></div>';
+            '<span class="funnel-count">' + f.count + '</span><span class="funnel-sessions">' + f.unique_sessions + ' visits</span></div>';
         }).join('');
 
         var utmRows = data.top_utm_sources.length
@@ -272,7 +272,7 @@
                 '<div class="overview-tile-sub">' + data.today.unique_visitors + ' verified browsers</div></div>' +
               '<div class="overview-tile"><div class="overview-tile-head">Last 30 days</div>' +
                 '<div class="overview-tile-stat"><span class="n">' + data.last_30_days.page_views + '</span> page views</div>' +
-                '<div class="overview-tile-sub">' + data.last_30_days.unique_visitors + ' verified browsers</div></div>' +
+                '<div class="overview-tile-sub">' + data.last_30_days.unique_visitors + ' verified daily visits</div></div>' +
             '</div>' +
             '<div class="funnel-section"><div class="eyebrow">What is counted</div>' +
               '<p class="analytics-definition">' + escapeHtml(data.visitor_definition || '') + '</p>' +
