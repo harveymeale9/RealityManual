@@ -15910,3 +15910,28 @@ after human evidence; footer opt-out persists; no irrelevant advertising
 control appears; and a configured advertising provider remains unloaded after
 **No thanks**. Aggregation/order-unlinking has automated coverage. The complete
 backend suite passes 13/13.
+
+---
+
+# 457. Meta Pixel Enabled Behind Advertising Consent (2026-10-02)
+
+Harvey supplied Meta Dataset/Pixel ID `1842087230476771`; it is now the public
+`META_PIXEL_ID` in `frontend/js/config.js`. Google Ads remains unconfigured.
+The site therefore presents the advertising-only consent choice described in
+§456, makes no request to Meta before an affirmative choice, and initializes
+this dataset with `PageView` only after **Allow advertising**. The existing
+adapter also sends `ViewContent`, `InitiateCheckout`, and authoritative
+confirmation-page `Purchase` events without checkout-form PII.
+
+The standard unconditional `<noscript>` tracking image from Meta's copy/paste
+snippet was deliberately not added: it would transmit a PageView when
+JavaScript is disabled without being able to honor the site's advertising
+consent state. Cache-versioned config and marketing script URLs were applied to
+all public pages so the newly configured ID cannot be hidden by an older CDN or
+browser copy.
+
+Real Chromium verification covered both decisions. **No thanks** caused zero
+Meta requests. **Allow advertising** made exactly one request for Meta's loader,
+queued `init` with the supplied ID and `PageView`, and produced a correctly
+valued `Purchase` with the stable order event ID. The same test confirmed that
+Google stayed disabled.

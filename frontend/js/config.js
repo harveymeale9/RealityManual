@@ -13,7 +13,7 @@ window.RM_CONFIG = {
   API_BASE_URL: 'https://api.realitymanual.com',
   // Public browser identifiers, not API secrets. Leave blank until the
   // corresponding data source exists; marketing.js then loads nothing.
-  META_PIXEL_ID: '',
+  META_PIXEL_ID: '1842087230476771',
   GOOGLE_ADS_ID: '',
   GOOGLE_ADS_PURCHASE_LABEL: '',
 };
