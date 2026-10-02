@@ -16050,3 +16050,14 @@ canonical pages without artwork. A real Chromium test rendered all 180 pages
 in one workspace, selected and copied from page 10 through page 20, jumped to
 page 120 without another network request, highlighted a search passage on page
 150, and copied a document containing both page 1 and page 180.
+
+---
+
+# 462. Planning-Card Back Button Label Restored (2026-10-02)
+
+The desktop planning-card workspace replaces its close glyph with a clearer
+**← Back to Kanban** label. The button correctly hid the original `×` by
+setting its font size to zero, but the generated `::before` label inherited
+that same zero size and left an apparently empty outlined button. The pseudo
+element now has an explicit visible font size, and the stylesheet URL is
+cache-versioned so browsers receive the correction immediately.

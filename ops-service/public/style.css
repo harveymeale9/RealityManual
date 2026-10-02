@@ -1620,7 +1620,7 @@ body.role-reviewer #pmBackFab {
     letter-spacing: .04em;
     text-transform: uppercase;
   }
-  .modal.text-piece .modal-close::before { content: '\2190  Back to Kanban'; }
+  .modal.text-piece .modal-close::before { content: '\2190  Back to Kanban'; font-size: .7rem; }
   .modal.text-piece .modal-close { font-size: 0; }
   .modal.text-piece .modal-close:hover { color: var(--ink); border-color: var(--accent); background: var(--accent-soft); }
   .modal.text-piece .modal-foot { min-height: 44px; padding: 7px 22px; }
