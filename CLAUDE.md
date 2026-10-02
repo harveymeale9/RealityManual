@@ -16053,11 +16053,12 @@ page 120 without another network request, highlighted a search passage on page
 
 ---
 
-# 462. Planning-Card Back Button Label Restored (2026-10-02)
+# 462. Planning-Card Close X Restored (2026-10-02)
 
-The desktop planning-card workspace replaces its close glyph with a clearer
-**← Back to Kanban** label. The button correctly hid the original `×` by
-setting its font size to zero, but the generated `::before` label inherited
-that same zero size and left an apparently empty outlined button. The pseudo
-element now has an explicit visible font size, and the stylesheet URL is
-cache-versioned so browsers receive the correction immediately.
+The desktop planning-card workspace close control is intentionally a simple
+`×`, matching the rest of the modal system. A desktop-only style had hidden
+that real glyph at zero font size while attempting to substitute a text label,
+leaving an apparently empty outlined button. Harvey clarified that no text
+label belongs there. The substitution was removed, the original `×` now has an
+explicit visible size, and the stylesheet URL is cache-versioned so browsers
+receive the correction immediately.

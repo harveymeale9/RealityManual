@@ -1616,12 +1616,8 @@ body.role-reviewer #pmBackFab {
     border: 1px solid var(--border);
     border-radius: 6px;
     color: var(--ink-soft);
-    font: 700 .7rem/1 var(--font-mono);
-    letter-spacing: .04em;
-    text-transform: uppercase;
+    font: 400 22px/1 var(--font-body);
   }
-  .modal.text-piece .modal-close::before { content: '\2190  Back to Kanban'; font-size: .7rem; }
-  .modal.text-piece .modal-close { font-size: 0; }
   .modal.text-piece .modal-close:hover { color: var(--ink); border-color: var(--accent); background: var(--accent-soft); }
   .modal.text-piece .modal-foot { min-height: 44px; padding: 7px 22px; }
   .modal.text-piece .meta-row { flex-direction: row; gap: 14px; }
