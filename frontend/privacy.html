@@ -66,16 +66,16 @@
         <li>To email or otherwise contact you about your order if needed (for example, a fulfillment issue or refund)</li>
         <li>To understand overall site traffic and improve the buying experience</li>
       </ul>
-      <p>With your permission, we use browsing and purchase-event data to measure advertising and build audiences such as people who visited the site but did not buy. We do not sell, rent, or trade your personal information.</p>
+      <p>We use browsing and purchase-event data to measure advertising and build audiences such as people who visited the site but did not buy. We do not sell, rent, or trade your personal information.</p>
 
       <h2>Who we share information with</h2>
       <p>We share the minimum information necessary with service providers that help us operate the store:</p>
       <ul>
         <li><strong>Stripe</strong>, which processes your payment. Stripe's own privacy policy governs how it handles your payment details.</li>
         <li><strong>BookVault</strong>, our print-on-demand fulfillment partner, based in the United Kingdom. We share your name, shipping address, and phone number so they can print and ship your book directly to you.</li>
-        <li><strong>Meta</strong> and <strong>Google</strong>, only when you allow advertising technologies. Their tags receive page and purchase-event information so we can measure advertising and create or exclude retargeting audiences. We do not send them your checkout form details, name, email address, postal address, phone number, or card information.</li>
+        <li><strong>Meta</strong>, and Google if its advertising tag is configured. Their tags receive page and purchase-event information so we can measure advertising and create or exclude retargeting audiences. We do not send them your checkout form details, name, email address, postal address, phone number, or card information.</li>
       </ul>
-      <p>Meta and Google process data under their own privacy terms. Their optional tags are not loaded unless you actively allow advertising technologies.</p>
+      <p>Meta and Google process advertising-event data under their own privacy terms and controls.</p>
 
       <h2>Analytics &amp; cookies</h2>
       <p>
@@ -104,19 +104,17 @@
         to understand and improve how the shop works.
       </p>
       <p>
-        If you allow advertising technologies, the site loads the Meta Pixel
-        and/or Google tag. These technologies can store or read identifiers in
+        The site loads the Meta Pixel and may load a Google advertising tag if
+        one is configured. These technologies can store or read identifiers in
         your browser, record the pages and checkout steps you reach, and record
         a purchase with its value, currency, quantity, and anonymous order
         reference. This lets us measure campaigns and show ads to prior
         visitors while excluding people who have already purchased.
       </p>
       <p>
-        These limited first-party site statistics do not require prior consent
-        under the statistical-purpose exception, but you can switch them off
-        at any time using <strong>Privacy choices</strong> in the footer.
-        Advertising tags are different: they remain off unless you actively
-        allow them, and the full website and checkout work if you decline.
+        The site does not display a cookie or advertising-consent popup. You
+        can use browser privacy controls, tracking protection, or content
+        blocking to restrict advertising technologies.
       </p>
 
       <h2>Data retention</h2>
@@ -171,9 +169,8 @@
   </footer>
 
   <script src="js/config.js?v=20261002-meta"></script>
-  <script src="js/consent.js?v=20261002-minimal-v2"></script>
-  <script src="js/analytics.js?v=20261002-human-v2"></script>
-  <script src="js/marketing.js?v=20261002-meta"></script>
+  <script src="js/analytics.js?v=20261002-no-prompts"></script>
+  <script src="js/marketing.js?v=20261002-auto-meta"></script>
   <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
 </body>
 </html>

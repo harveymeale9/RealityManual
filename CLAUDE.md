@@ -15995,3 +15995,34 @@ view remains available and unchanged.
 A real Chromium test with mocked canonical page/search responses verified the
 Book/Text toggle, normal CSS text selection, actual clipboard contents, and
 search-result-to-highlighted-full-page flow.
+
+---
+
+# 460. Meta Pixel Auto-Loads Without a Consent Interface (2026-10-02)
+
+Harvey explicitly directed that the storefront load the configured Meta Pixel
+automatically and present no cookie banner, consent dialog, acknowledgement, or
+privacy-choice control. He is taking responsibility for the legal and regional
+policy decision. This replaces the consent-gated implementation described in
+§456-457.
+
+`frontend/js/consent.js`, its stylesheet rules, and every page reference to it
+were removed. Meta dataset/pixel `1842087230476771` now initializes on every
+storefront page as soon as `marketing.js` loads and immediately sends
+`PageView`. Existing `ViewContent`, `InitiateCheckout`, and authoritative
+confirmation-page `Purchase` events remain in place. Purchase deduplication,
+stable order event IDs, and the rule against sending checkout-form PII are
+unchanged. Google advertising remains disabled because no Google Ads ID is
+configured.
+
+First-party analytics is no longer coupled to the removed consent module. It
+still waits for trustworthy human-browser evidence before sending, still
+suppresses known automation, and still honors the internal-traffic exclusion.
+The published privacy policy now accurately states that Meta loads without a
+site prompt and points visitors to browser-level privacy and tracking controls.
+
+Real Chromium verification covered the landing page, checkout, confirmation,
+privacy policy, and terms. Each page displayed no consent UI, exposed no legacy
+consent API, made exactly one request for Meta's loader, initialized the supplied
+dataset ID, and queued `PageView`. Checkout also queued `InitiateCheckout`; a
+synthetic purchase verified the preserved value and stable `eventID` behavior.

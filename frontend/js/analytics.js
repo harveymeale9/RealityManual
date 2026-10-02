@@ -1,6 +1,6 @@
 // First-party aggregate site statistics — see CLAUDE.md §31-34/§456.
-// Enabled by default under the statistical-purpose exception, with an easy
-// privacy-panel opt-out. Advertising consent is handled separately.
+// Independent from Meta advertising events and delayed until trustworthy
+// human browser evidence exists.
 // Every call is wrapped so a network failure or missing backend can never
 // break the page that fired it.
 window.RMAnalytics = (function () {
@@ -9,7 +9,6 @@ window.RMAnalytics = (function () {
   var ATTRIBUTION_KEY = 'rm_attribution';
   var INTERNAL_KEY = 'rm_analytics_internal_v1';
   var pending = [];
-  var previousConsent = null;
   var humanVerified = false;
   var verificationMethod = '';
   var verificationSent = false;
@@ -113,9 +112,7 @@ window.RMAnalytics = (function () {
 
   function track(eventName, extra) {
     if (isInternal()) return;
-    var consent = window.RMConsent && window.RMConsent.current();
-    if (!consent || !consent.analytics || !humanVerified) {
-      if (consent && consent.analytics === false) return;
+    if (!humanVerified) {
       pending.push([eventName, extra]);
       return;
     }
@@ -123,8 +120,7 @@ window.RMAnalytics = (function () {
   }
 
   function flush() {
-    var consent = window.RMConsent && window.RMConsent.current();
-    if (isInternal() || !consent || !consent.analytics || !humanVerified) return;
+    if (isInternal() || !humanVerified) return;
     if (!verificationSent) {
       verificationSent = true;
       send('human_verified');
@@ -152,23 +148,6 @@ window.RMAnalytics = (function () {
   window.setTimeout(function () {
     if (document.visibilityState === 'visible' && document.hasFocus()) markHuman('visible_time');
   }, 7000);
-
-  if (window.RMConsent) {
-    window.RMConsent.onChange(function (consent) {
-      if (!consent) return;
-      var wasAllowed = previousConsent && previousConsent.analytics === true;
-      var wasDenied = previousConsent && previousConsent.analytics === false;
-      previousConsent = consent;
-      if (!consent.analytics) {
-        pending = [];
-        return;
-      }
-      flush();
-      // Someone who reverses an earlier statistics opt-out should begin with
-      // the current page rather than waiting for another navigation.
-      if (wasDenied && !wasAllowed && !pending.length) track('page_view');
-    });
-  }
 
   track('page_view');
 
