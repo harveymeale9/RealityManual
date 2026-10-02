@@ -16062,3 +16062,14 @@ leaving an apparently empty outlined button. Harvey clarified that no text
 label belongs there. The substitution was removed, the original `×` now has an
 explicit visible size, and the stylesheet URL is cache-versioned so browsers
 receive the correction immediately.
+
+---
+
+# 463. Manuscript Search Preserves the Active Reader Mode (2026-10-02)
+
+Opening a manuscript search result is navigation, not a request to change view
+preferences. Results now preserve the mode Harvey is currently using. In
+**Book**, a result opens and highlights the illustrated spread. In **Text &
+copy**, it opens and highlights the same passage inside the continuous
+180-page document. Search no longer forces Book users into Text mode, and the
+finder's explanatory copy states this behavior explicitly.
