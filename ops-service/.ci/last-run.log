@@ -14,7 +14,7 @@ From https://github.com/harveymeale9/RealityManual
 + git merge --ff-only origin/main
 Already up to date.
 ++ git rev-parse HEAD
-+ NEW_HEAD=4b8ae9c8d06a502109d332c7364a85eaf6756139
++ NEW_HEAD=3fdc0584ef435cbe5ae7bc257a58023173fc6ff0
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -27,12 +27,12 @@ Already up to date.
 + NEEDS_REBUILD=1
 + '[' -n e005454d1e6ee27dc1b7ea30c14dc73ce7666d35 ']'
 + git cat-file -e 'e005454d1e6ee27dc1b7ea30c14dc73ce7666d35^{commit}'
-++ git diff --name-only e005454d1e6ee27dc1b7ea30c14dc73ce7666d35 4b8ae9c8d06a502109d332c7364a85eaf6756139 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
+++ git diff --name-only e005454d1e6ee27dc1b7ea30c14dc73ce7666d35 3fdc0584ef435cbe5ae7bc257a58023173fc6ff0 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z '' ']'
 + NEEDS_REBUILD=0
 + '[' 0 = 1 ']'
 + '[' 0 = 0 ']'
-+ echo 'no backend changes between e005454d1e6ee27dc1b7ea30c14dc73ce7666d35 and 4b8ae9c8d06a502109d332c7364a85eaf6756139 — already live via git pull, skipping rebuild/restart'
-no backend changes between e005454d1e6ee27dc1b7ea30c14dc73ce7666d35 and 4b8ae9c8d06a502109d332c7364a85eaf6756139 — already live via git pull, skipping rebuild/restart
++ echo 'no backend changes between e005454d1e6ee27dc1b7ea30c14dc73ce7666d35 and 3fdc0584ef435cbe5ae7bc257a58023173fc6ff0 — already live via git pull, skipping rebuild/restart'
+no backend changes between e005454d1e6ee27dc1b7ea30c14dc73ce7666d35 and 3fdc0584ef435cbe5ae7bc257a58023173fc6ff0 — already live via git pull, skipping rebuild/restart
 + exit 0
 ssh exit code: 0
