@@ -315,7 +315,7 @@
       });
 
       // Tap-to-reply — same mechanism and purpose as app.js's identical
-      // block: selecting one of CC's earlier messages (Reply button in
+      // block: selecting one of Codex's earlier messages (Reply button in
       // addAssistantMessage below) threads reply_to_id into the next typed
       // send, so a short follow-up stays unambiguous. Scoped to the type
       // bar per Harvey's request ("reply... via text") — the two big
@@ -671,7 +671,7 @@
           onNewMessage: function (row) { if (row.notification_kind !== 'mail_alert') addMessage('user', row.transcript, row.id, row.attachments, row.reply_to_snippet); },
           onPending: function (row) { if (row.notification_kind !== 'mail_alert') addTyping(row.id, row.agent); },
           onEarlyAck: function (row) {
-            // Swap the generic "CC is working on it…" placeholder for CC's
+            // Swap the generic "Codex is working on it…" placeholder for Codex's
             // own real, contextual first line the moment it's available —
             // visible even for a typed/no-speech send, not just spoken.
             var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');

@@ -397,7 +397,7 @@
   window.__rmRefreshEditorUnreadBadge = refreshEditorUnreadBadge;
 
   /* ============================================================
-     PROJECT MANAGER (chat with CC) — the default tab. Talks to the same
+     PROJECT MANAGER (chat with Codex) — the default tab. Talks to the same
      backend voice/chat endpoints as voice-mobile.html, via the shared
      lib/voiceClient.js client. panelMain is rebuilt fresh every time this
      tab is (re)activated, same as every other tab here, so the visible
@@ -505,12 +505,12 @@
     if (pmAutoSpeechUnsub) pmAutoSpeechUnsub();
     pmAutoSpeechUnsub = Voice.onAutoSpeechChange(renderAutoSpeech);
 
-    // Tap-to-reply: selecting one of CC's earlier messages (via the Reply
+    // Tap-to-reply: selecting one of Codex's earlier messages (via the Reply
     // button added in addAssistantMessage below) sets this, shows the
     // preview strip above the compose box, and gets threaded into the next
     // send — both as an optimistic "Re:" quote on Harvey's own bubble and
     // as reply_to_id sent to the backend, which weaves it into the actual
-    // prompt CC sees (server.js) so a short follow-up like "yes do that"
+    // prompt Codex sees (server.js) so a short follow-up like "yes do that"
     // stays unambiguous even after several things have been discussed.
     var pendingReplyTo = null;
     function setPendingReplyTo(msgId, text) {
@@ -793,7 +793,7 @@
     // (see lib/voiceClient.js syncThread's onTick), so this just re-derives
     // the in-flight + recently-completed lists from scratch each tick
     // rather than diffing. Completed items are shown too (not just
-    // pending/running) so Harvey has a short trail of what CC just
+    // pending/running) so Harvey has a short trail of what Codex just
     // finished, capped at RECENT_DONE_LIMIT and visually distinct from
     // what's actively running — older completions just fall off the
     // bottom rather than piling up.
@@ -917,7 +917,7 @@
       onNewMessage: function (row) { if (row.notification_kind !== 'mail_alert') addMessage('user', row.transcript, row.id, row.attachments, row.reply_to_snippet); },
       onPending: function (row) { if (row.notification_kind !== 'mail_alert') addTyping(row.id, row.agent); },
       onEarlyAck: function (row) {
-        // Swap the generic "CC is working on it…" placeholder for CC's own
+        // Swap the generic "Codex is working on it…" placeholder for Codex's own
         // real, contextual first line the moment it's available — visible
         // even for a typed/no-speech send, not just spoken.
         var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
@@ -1167,7 +1167,7 @@
     });
 
     resetBtn.addEventListener('click', function () {
-      if (!confirm('Start a new conversation? CC will lose context from this one.')) return;
+      if (!confirm('Start a new conversation? Codex will lose context from this one.')) return;
       Voice.resetSession().then(function () {
         addMessage('system', 'New conversation started.');
       });

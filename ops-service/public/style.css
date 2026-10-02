@@ -806,7 +806,7 @@ body.role-reviewer #pmBackFab {
 .pm-hint { color: var(--ink-faint); font-size: 0.72rem; margin-top: 8px; }
 
 /* Reply-to preview: shown above the compose box once Harvey taps "Reply"
-   on one of CC's messages, so it's clear which one the next send will be
+   on one of Codex's messages, so it's clear which one the next send will be
    tagged against before he actually sends it. */
 .pm-reply-preview {
   display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
