@@ -193,6 +193,14 @@ function setup(db, options) {
     // download from Harvey's logged-in phone or desktop.
     res.download(corpus.loadManuscript().file, 'The Reality Manual - Complete Manuscript.txt');
   });
+  router.get('/text', function (req, res) {
+    // Text & copy mode is deliberately one continuous document. Returning
+    // the lightweight canonical text in one response lets a native browser
+    // selection continue across page and chapter boundaries without a page
+    // turn replacing the selected DOM underneath it.
+    res.set('Cache-Control', 'private, max-age=300');
+    res.json({ pageCount: manuscriptPages.length, pages: manuscriptPages });
+  });
   router.get('/pages/:page', function (req, res) {
     const requested = Number(req.params.page);
     if (!Number.isInteger(requested) || requested < 1 || requested > manuscriptPages.length) {

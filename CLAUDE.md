@@ -16026,3 +16026,27 @@ privacy policy, and terms. Each page displayed no consent UI, exposed no legacy
 consent API, made exactly one request for Meta's loader, initialized the supplied
 dataset ID, and queued `PageView`. Checkout also queued `InitiateCheckout`; a
 synthetic purchase verified the preserved value and stable `eventID` behavior.
+
+---
+
+# 461. Continuous Full-Manuscript Text & Copy View (2026-10-02)
+
+The original Text & copy workspace still rendered only the current two-page
+spread. Browser selection therefore ended at the visible spread, making it
+impossible to highlight and copy a whole chapter. Text mode now requests a new
+authenticated `/api/manuscript/text` resource once and renders all 180
+canonical text pages as one continuously scrollable native document. The
+lightweight response deliberately excludes artwork and OCR metadata.
+
+Selections can cross any number of page and chapter boundaries without DOM
+replacement. Per-page copy remains available, **Copy selection** works across
+pages, and **Copy manuscript** copies the full canonical document. Page-number
+jumps and search-result links reuse the already-loaded document, jump directly
+to the requested page, and preserve passage highlighting. Illustrated Book
+mode remains spread-based and unchanged.
+
+The service test verifies that the continuous endpoint returns all 180 ordered
+canonical pages without artwork. A real Chromium test rendered all 180 pages
+in one workspace, selected and copied from page 10 through page 20, jumped to
+page 120 without another network request, highlighted a search passage on page
+150, and copied a document containing both page 1 and page 180.

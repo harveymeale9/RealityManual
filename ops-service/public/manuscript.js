@@ -10,6 +10,8 @@
   var pendingOpen = null;
   var viewMode = 'book';
   var currentSpread = null;
+  var fullTextPages = null;
+  var fullTextLoadPromise = null;
 
   function esc(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, function (char) {
@@ -227,18 +229,76 @@
       '<div class="manual-text-page-body">' + paragraphMarkup + '</div></article>';
   }
 
-  function spreadCopyText(data) {
-    return [data && data.left, data && data.right].filter(Boolean).map(function (page) {
+  function pagesCopyText(pages) {
+    return (pages || []).filter(Boolean).map(function (page) {
       return 'Page ' + page.page + '\n\n' + String(page.text || '').trim();
     }).join('\n\n---\n\n');
   }
 
-  function bindTextCopyControls(book, data) {
+  function bindTextCopyControls(book, pages) {
     book.querySelectorAll('.manual-copy-page').forEach(function (button) {
       button.onclick = function () {
-        var page = [data.left, data.right].find(function (entry) { return entry && entry.page === Number(button.getAttribute('data-copy-page')); });
+        var page = pages.find(function (entry) { return entry && entry.page === Number(button.getAttribute('data-copy-page')); });
         if (page) copyText(page.text, button, 'Page ' + page.page + ' copied.');
       };
+    });
+  }
+
+  function renderTextDocument(pages, targetPage, highlightText) {
+    if (!isMounted() || viewMode !== 'text') return;
+    var book = root.querySelector('#manualBook');
+    book.className = 'manual-text-workspace';
+    book.style.width = '';
+    book.style.height = '';
+    book.innerHTML = pages.map(function (page) {
+      return textPageBody(page, highlightText, targetPage);
+    }).join('');
+    bindTextCopyControls(book, pages);
+    book.removeAttribute('aria-busy');
+    book.classList.remove('manual-book-loading');
+    root.querySelector('#manualCopySpread').hidden = false;
+    root.querySelector('#manualCopySelection').hidden = false;
+
+    requestAnimationFrame(function () {
+      if (!isMounted() || viewMode !== 'text') return;
+      var destination = book.querySelector('.manual-passage-highlight') || book.querySelector('[data-page="' + targetPage + '"]');
+      // A jump can span most of the 180-page document. Use an immediate
+      // native jump so a deep page does not spend several seconds animating
+      // through the intervening manuscript.
+      if (destination) destination.scrollIntoView({ block: highlightText ? 'center' : 'start', behavior: 'auto' });
+    });
+  }
+
+  function loadTextDocument(page, highlightText) {
+    page = Math.max(1, Math.min(pageCount, Number(page) || 1));
+    var generation = ++pageLoadGeneration;
+    currentPage = page;
+    var input = root.querySelector('#manualPageInput');
+    if (input) input.value = page;
+    var book = root.querySelector('#manualBook');
+    book.classList.remove('flipping');
+    showBookLoader(book);
+
+    if (!fullTextLoadPromise) {
+      fullTextLoadPromise = api('/text').then(function (data) {
+        pageCount = data.pageCount;
+        fullTextPages = data.pages || [];
+        return fullTextPages;
+      }).catch(function (error) {
+        fullTextLoadPromise = null;
+        throw error;
+      });
+    }
+
+    return fullTextLoadPromise.then(function (pages) {
+      if (!isMounted() || generation !== pageLoadGeneration || viewMode !== 'text') return;
+      root.querySelector('#manualPageCount').textContent = 'of ' + pageCount;
+      renderTextDocument(pages, page, highlightText);
+    }).catch(function (error) {
+      if (!isMounted() || generation !== pageLoadGeneration || viewMode !== 'text') return;
+      book.removeAttribute('aria-busy');
+      book.classList.remove('manual-book-loading');
+      book.innerHTML = '<section class="manual-page manual-page-blank">' + esc(error.message) + '</section>';
     });
   }
 
@@ -246,30 +306,20 @@
     if (!isMounted() || !data) return;
     var book = root.querySelector('#manualBook');
     currentSpread = data;
-    if (viewMode === 'text') {
-      book.className = 'manual-text-workspace';
-      book.style.width = '';
-      book.style.height = '';
-      book.innerHTML = textPageBody(data.left, highlightText, highlightPage) + textPageBody(data.right, highlightText, highlightPage);
-      bindTextCopyControls(book, data);
-      var textHighlight = book.querySelector('.manual-passage-highlight');
-      if (textHighlight) textHighlight.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    } else {
-      book.className = 'manual-book';
-      book.innerHTML = pageBody(data.left, 'left', highlightText, highlightPage) + pageBody(data.right, 'right', highlightText, highlightPage) + turnControls();
-      bindPageTurns();
-      void book.offsetWidth;
-      book.classList.add('flipping');
-      requestAnimationFrame(function () {
-        fitSpread();
-        var highlighted = book.querySelector('.manual-passage-highlight, .manual-art-word.is-highlighted');
-        if (highlighted) highlighted.focus({ preventScroll: true });
-      });
-    }
+    book.className = 'manual-book';
+    book.innerHTML = pageBody(data.left, 'left', highlightText, highlightPage) + pageBody(data.right, 'right', highlightText, highlightPage) + turnControls();
+    bindPageTurns();
+    void book.offsetWidth;
+    book.classList.add('flipping');
+    requestAnimationFrame(function () {
+      fitSpread();
+      var highlighted = book.querySelector('.manual-passage-highlight, .manual-art-word.is-highlighted');
+      if (highlighted) highlighted.focus({ preventScroll: true });
+    });
     book.removeAttribute('aria-busy');
     book.classList.remove('manual-book-loading');
-    root.querySelector('#manualCopySpread').hidden = viewMode !== 'text';
-    root.querySelector('#manualCopySelection').hidden = viewMode !== 'text';
+    root.querySelector('#manualCopySpread').hidden = true;
+    root.querySelector('#manualCopySelection').hidden = true;
   }
 
   function turnControls() {
@@ -379,6 +429,7 @@
   }
 
   function loadPage(page, highlightText) {
+    if (viewMode === 'text') return loadTextDocument(page, highlightText);
     page = Math.max(1, Math.min(pageCount, Number(page) || 1));
     var generation = ++pageLoadGeneration;
     currentPage = page;
@@ -389,7 +440,7 @@
     showBookLoader(book);
     fitBookGeometry();
     return api('/pages/' + page).then(function (data) {
-      return viewMode === 'book' ? preloadArtwork([data.left, data.right]).then(function () { return data; }) : data;
+      return preloadArtwork([data.left, data.right]).then(function () { return data; });
     }).then(function (data) {
       if (!isMounted() || generation !== pageLoadGeneration) return;
       pageCount = data.pageCount;
@@ -414,10 +465,11 @@
     });
     var hint = root.querySelector('#manualViewHint');
     if (hint) hint.textContent = viewMode === 'text'
-      ? 'Highlight any words normally, or use the copy buttons.'
+      ? 'The entire manuscript is loaded below. Scroll and highlight continuously across pages and chapters.'
       : 'Illustrated book view';
-    if (currentSpread) renderSpread(currentSpread, null, currentPage);
-    else loadPage(currentPage);
+    root.querySelector('#manualCopySpread').hidden = viewMode !== 'text';
+    root.querySelector('#manualCopySelection').hidden = viewMode !== 'text';
+    loadPage(currentPage);
   }
 
   function renderResults(results) {
@@ -501,7 +553,7 @@
       button.onclick = function () { setViewMode(button.getAttribute('data-manual-view')); };
     });
     root.querySelector('#manualCopySpread').onclick = function (event) {
-      if (currentSpread) copyText(spreadCopyText(currentSpread), event.currentTarget, 'Visible pages copied.');
+      if (fullTextPages) copyText(pagesCopyText(fullTextPages), event.currentTarget, 'Complete manuscript copied.');
     };
     root.querySelector('#manualCopySelection').onclick = function (event) {
       var selection = window.getSelection();
@@ -542,7 +594,7 @@
   function mount(container) {
     if (pollTimer) clearTimeout(pollTimer);
     root = container;
-    root.innerHTML = '<div class="manual-reader"><aside class="manual-finder"><div class="eyebrow">Intelligent finder</div><h2>Search the Manual</h2><p class="manual-finder-intro">Describe an idea, question, quotation, or section. Results open as clean text so you can highlight and copy as much surrounding context as you need.</p><form class="manual-search-form" id="manualSearchForm"><textarea id="manualSearchQuery" placeholder="e.g. What does the Manual say about why people cannot make themselves take action?"></textarea><button id="manualSearchButton" type="submit">Find relevant passages</button></form><div class="manual-search-status" id="manualSearchStatus" role="status" aria-live="polite"></div><div class="manual-results" id="manualResults"></div></aside><section class="manual-stage"><div class="manual-toolbar"><div class="manual-view-switch" aria-label="Manuscript view"><button type="button" class="active" data-manual-view="book" aria-pressed="true">Book</button><button type="button" data-manual-view="text" aria-pressed="false">Text &amp; copy</button></div><form class="manual-page-controls" id="manualPageForm"><button type="button" id="manualPrev" aria-label="Previous spread">←</button><label for="manualPageInput">Page</label><input id="manualPageInput" type="number" min="1" max="180" value="1" inputmode="numeric"><span class="manual-page-count" id="manualPageCount">of 180</span><button type="submit">Go</button><button type="button" id="manualNext" aria-label="Next spread">→</button></form><div class="manual-copy-tools"><button type="button" id="manualCopySelection" hidden>Copy selection</button><button type="button" id="manualCopySpread" hidden>Copy pages</button></div></div><div class="manual-toolbar-note"><span id="manualViewHint">Illustrated book view</span><span id="manualCopyStatus" role="status" aria-live="polite"></span></div><div class="manual-book" id="manualBook" aria-live="polite"></div></section></div>';
+    root.innerHTML = '<div class="manual-reader"><aside class="manual-finder"><div class="eyebrow">Intelligent finder</div><h2>Search the Manual</h2><p class="manual-finder-intro">Describe an idea, question, quotation, or section. Results open inside the complete continuous manuscript so you can keep scrolling, highlighting, and copying across page or chapter boundaries.</p><form class="manual-search-form" id="manualSearchForm"><textarea id="manualSearchQuery" placeholder="e.g. What does the Manual say about why people cannot make themselves take action?"></textarea><button id="manualSearchButton" type="submit">Find relevant passages</button></form><div class="manual-search-status" id="manualSearchStatus" role="status" aria-live="polite"></div><div class="manual-results" id="manualResults"></div></aside><section class="manual-stage"><div class="manual-toolbar"><div class="manual-view-switch" aria-label="Manuscript view"><button type="button" class="active" data-manual-view="book" aria-pressed="true">Book</button><button type="button" data-manual-view="text" aria-pressed="false">Text &amp; copy</button></div><form class="manual-page-controls" id="manualPageForm"><button type="button" id="manualPrev" aria-label="Previous spread">←</button><label for="manualPageInput">Page</label><input id="manualPageInput" type="number" min="1" max="180" value="1" inputmode="numeric"><span class="manual-page-count" id="manualPageCount">of 180</span><button type="submit">Go</button><button type="button" id="manualNext" aria-label="Next spread">→</button></form><div class="manual-copy-tools"><button type="button" id="manualCopySelection" hidden>Copy selection</button><button type="button" id="manualCopySpread" hidden>Copy manuscript</button></div></div><div class="manual-toolbar-note"><span id="manualViewHint">Illustrated book view</span><span id="manualCopyStatus" role="status" aria-live="polite"></span></div><div class="manual-book" id="manualBook" aria-live="polite"></div></section></div>';
     bind();
     if (!resizeBound) {
       resizeBound = true;
