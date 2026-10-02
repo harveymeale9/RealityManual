@@ -79,6 +79,16 @@
       statusMessage.textContent = `Thank you for ordering ${order.product_name}. Your order is being prepared for fulfillment — we'll follow up by email once it ships.`;
       orderMeta.textContent = `Order ${order.order_id} · ${order.product_description} · ${formatCents(order.total_price_cents, order.currency)}`;
       trackOnce('order_complete', order.order_id);
+      if (window.RMMarketing) {
+        RMMarketing.track('Purchase', {
+          value: order.total_price_cents / 100,
+          currency: String(order.currency || 'usd').toUpperCase(),
+          content_ids: ['reality-manual-hardcover'],
+          content_type: 'product',
+          num_items: order.quantity || 1,
+          transaction_id: order.order_id
+        }, order.order_id);
+      }
       return;
     }
 

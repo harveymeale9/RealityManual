@@ -15774,3 +15774,55 @@ defaults on when the mailbox transport is configured. Integration coverage
 proves authenticated individual selection, one-per-week cadence, bulk and
 spoof suppression, proper threading, fixed copy, and restart-safe no-repeat
 behavior. The complete ops-service test suite passes 155/155.
+
+---
+
+# 454. Consent-Gated Storefront Retargeting Foundation (2026-10-02)
+
+The customer storefront is now ready for Meta and Google/YouTube retargeting,
+superseding the older §31/§73 policy that prohibited all third-party tags. No
+advertising provider loads until a visitor actively grants the separate
+**Advertising** choice. The new privacy panel offers equally available
+**Only necessary**, **Choose**, and **Accept all** paths; its detailed view
+separates first-party Analytics from Advertising, persists the choice, and
+adds a permanent **Privacy choices** footer control so consent can be changed
+or withdrawn later. Rejecting optional tracking never affects the store or
+checkout. The privacy policy now truthfully explains the providers, purposes,
+events, data fields, and withdrawal mechanism.
+
+`frontend/js/marketing.js` is the one integration boundary. When configured
+and consented, it loads Meta's official Pixel library and Google's Google Ads
+tag, records page views, maps product interest and checkout entry to
+`ViewContent` / `InitiateCheckout` (and Google's corresponding event names),
+and records a confirmed paid order as `Purchase` with product ID, value,
+currency, quantity, and the opaque order UUID. It never passes checkout form
+fields, names, email addresses, phone numbers, postal addresses, or payment
+data. A per-order browser marker prevents confirmation-page reloads from
+duplicating Purchase. Meta also receives a stable event ID ready for future
+browser/Conversions-API deduplication.
+
+The existing first-party analytics is now consent-gated too. Events occurring
+while the initial choice is open wait only in memory, flush if Analytics is
+accepted, and are discarded if it is refused. Changing an earlier refusal to
+an Analytics grant begins with the current page. This aligns the local-storage
+visitor identifier with the same optional-storage rule rather than claiming it
+is automatically exempt.
+
+The public identifiers are deliberately centralized in `frontend/js/config.js`:
+`META_PIXEL_ID`, `GOOGLE_ADS_ID`, and optional
+`GOOGLE_ADS_PURCHASE_LABEL`. They are blank at this commit, so the deployed
+site makes zero Meta/Google requests even after consent until the advertising
+data sources actually exist. The existing Content Studio Meta app/Page OAuth
+is connected, but it is a publishing grant and is not a substitute for a Meta
+Dataset/Pixel ID or a Google Ads tag. Harvey was emailed for the public IDs;
+no API secret or advertising token was requested by email.
+
+The existing first-party report showed a real audience before this change: 42
+unique visitors and 65 page views in the preceding 30 days, seven unique
+checkout visitors, and zero submitted/completed purchases. Synthetic Chromium
+verification at 390×844 proved that neither advertising provider nor the
+first-party analytics endpoint is contacted before consent, all three trackers
+start only after the relevant grant, the consent panel is usable on mobile,
+the purchase payload is emitted after authoritative order confirmation, and a
+reload cannot emit that Purchase twice. All changed JavaScript passes
+`node --check`.

@@ -1,10 +1,12 @@
-// First-party analytics tracker — see CLAUDE.md §31-34. No third-party
-// scripts, no blocking. Every call is wrapped so a network failure or a
-// missing backend can never break the page it's called from.
+// Consent-gated first-party analytics tracker — see CLAUDE.md §31-34.
+// Every call is wrapped so a network failure or missing backend can never
+// break the page that fired it.
 window.RMAnalytics = (function () {
   var API_BASE_URL = (window.RM_CONFIG && window.RM_CONFIG.API_BASE_URL) || '';
   var SESSION_KEY = 'rm_session_id';
   var ATTRIBUTION_KEY = 'rm_attribution';
+  var pending = [];
+  var previousConsent = null;
 
   function uuid() {
     if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
@@ -53,7 +55,7 @@ window.RMAnalytics = (function () {
     return attribution;
   }
 
-  function track(eventName, extra) {
+  function send(eventName, extra) {
     if (!API_BASE_URL) return;
     try {
       var attribution = getAttribution();
@@ -81,6 +83,35 @@ window.RMAnalytics = (function () {
     } catch (e) {
       // Analytics must never break the page it's called from.
     }
+  }
+
+  function track(eventName, extra) {
+    var consent = window.RMConsent && window.RMConsent.current();
+    if (!consent) {
+      pending.push([eventName, extra]);
+      return;
+    }
+    if (!consent.analytics) return;
+    send(eventName, extra);
+  }
+
+  if (window.RMConsent) {
+    window.RMConsent.onChange(function (consent) {
+      if (!consent) return;
+      var wasAllowed = previousConsent && previousConsent.analytics === true;
+      var wasDenied = previousConsent && previousConsent.analytics === false;
+      previousConsent = consent;
+      if (!consent.analytics) {
+        pending = [];
+        return;
+      }
+      var queued = pending.slice();
+      pending = [];
+      queued.forEach(function (event) { send(event[0], event[1]); });
+      // Someone who changes an earlier rejection to an analytics grant should
+      // begin with the current page rather than waiting for another navigation.
+      if (wasDenied && !wasAllowed && !queued.length) send('page_view');
+    });
   }
 
   track('page_view');

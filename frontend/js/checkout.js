@@ -41,6 +41,14 @@
   let elements = null;
 
   RMAnalytics.track('checkout_view');
+  if (window.RMMarketing) {
+    RMMarketing.track('InitiateCheckout', {
+      value: BOOK_PRICE_CENTS / 100,
+      currency: 'USD',
+      content_ids: ['reality-manual-hardcover'],
+      content_type: 'product'
+    });
+  }
   // Fired once, on the first time the shopper actually touches the form —
   // distinct from checkout_view (just landing on the page) per CLAUDE.md §31.
   form.addEventListener('input', function trackCheckoutStarted() {

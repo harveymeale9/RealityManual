@@ -27,7 +27,7 @@
     <article class="legal-page">
       <p class="eyebrow">Legal</p>
       <h1>Privacy Policy</h1>
-      <p class="legal-updated">Last updated: September 19, 2026</p>
+      <p class="legal-updated">Last updated: October 2, 2026</p>
 
       <h2>Who we are</h2>
       <p>
@@ -66,21 +66,21 @@
         <li>To email or otherwise contact you about your order if needed (for example, a fulfillment issue or refund)</li>
         <li>To understand overall site traffic and improve the buying experience</li>
       </ul>
-      <p>We do not use your information for targeted advertising, and we do not sell, rent, or trade your personal information to anyone.</p>
+      <p>With your permission, we use browsing and purchase-event data to measure advertising and build audiences such as people who visited the site but did not buy. We do not sell, rent, or trade your personal information.</p>
 
       <h2>Who we share information with</h2>
-      <p>We share the minimum information necessary with two service providers, both of whom are contractually required to protect your data:</p>
+      <p>We share the minimum information necessary with service providers that help us operate the store:</p>
       <ul>
         <li><strong>Stripe</strong>, which processes your payment. Stripe's own privacy policy governs how it handles your payment details.</li>
         <li><strong>BookVault</strong>, our print-on-demand fulfillment partner, based in the United Kingdom. We share your name, shipping address, and phone number so they can print and ship your book directly to you.</li>
+        <li><strong>Meta</strong> and <strong>Google</strong>, only when you allow advertising technologies. Their tags receive page and purchase-event information so we can measure advertising and create or exclude retargeting audiences. We do not send them your checkout form details, name, email address, postal address, phone number, or card information.</li>
       </ul>
-      <p>We do not share your information with any advertising network, data broker, or social media platform. We do not use Google Analytics, Meta/Facebook Pixel, or any third-party analytics or tracking script on this site.</p>
+      <p>Meta and Google process data under their own privacy terms. Their optional tags are not loaded unless you actively allow advertising technologies.</p>
 
       <h2>Analytics &amp; cookies</h2>
       <p>
-        This site uses a first-party analytics system that we built and
-        host ourselves. No third-party analytics or advertising scripts are
-        loaded on this site. It records anonymous page-view and
+        If you allow analytics, this site uses a first-party analytics system that we built and
+        host ourselves. It records anonymous page-view and
         checkout-funnel events (which pages were viewed, whether checkout
         was started, whether an order completed), along with a randomly
         generated, anonymous session identifier, your approximate country,
@@ -97,14 +97,29 @@
         which channels drive sales. This internal reporting is only ever
         seen by us.
       </p>
+      <p>
+        If you allow advertising technologies, the site loads the Meta Pixel
+        and/or Google tag. These technologies can store or read identifiers in
+        your browser, record the pages and checkout steps you reach, and record
+        a purchase with its value, currency, quantity, and anonymous order
+        reference. This lets us measure campaigns and show ads to prior
+        visitors while excluding people who have already purchased.
+      </p>
+      <p>
+        Optional analytics and advertising technologies are off until you make
+        a choice. You can reject them and still use the full website and
+        checkout. You can change or withdraw your choice at any time using
+        <strong>Privacy choices</strong> in the footer.
+      </p>
 
       <h2>Data retention</h2>
       <p>
         We retain order records (including the shipping and contact details
         above) for as long as reasonably necessary for accounting,
-        fulfillment, warranty, and legal purposes. Anonymous analytics
-        events are retained to support historical reporting and are not
-        linked back to you unless tied to a completed order.
+        fulfillment, warranty, and legal purposes. First-party analytics
+        events are retained to support historical reporting. Meta and Google
+        retain advertising-event data according to their own policies and the
+        audience-retention settings in our advertising accounts.
       </p>
 
       <h2>Your rights</h2>
@@ -148,7 +163,9 @@
   </footer>
 
   <script src="js/config.js"></script>
+  <script src="js/consent.js"></script>
   <script src="js/analytics.js"></script>
+  <script src="js/marketing.js"></script>
   <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
 </body>
 </html>
