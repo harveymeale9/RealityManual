@@ -16106,16 +16106,16 @@ ops-service suite passes (152 tests).
 
 ---
 
-# 465. Page 23 Manuscript Punctuation Correction (2026-10-03)
+# 465. Page 23 Printed-Page Punctuation Typo (2026-10-03)
 
-Harvey found a punctuation typo on canonical book page 23. The printed artwork
+Harvey found a punctuation typo on book page 23. The flattened printed artwork
 reads `same underlying phenomenon, Purpose may be understood`; the intended
-continuous sentence is now recorded in `THE_REALITY_MANUAL_COMPLETE_MANUSCRIPT.txt`
-as `same underlying phenomenon; purpose may be understood`. This corrects the
-comma to a semicolon and lowercases the continuation after it.
+text uses a full stop: `same underlying phenomenon. Purpose may be understood`.
+The root `THE_REALITY_MANUAL_COMPLETE_MANUSCRIPT.txt` already contained that
+correct wording. A brief semicolon change made while clarifying the report was
+reverted immediately, restoring the canonical source exactly.
 
-The existing flattened page-23 WebP, its OCR coordinate layer, and
-`interior_printready2.pdf` remain unchanged because Harvey will reprint and
-upscale the corrected page before regenerating the print-ready interior. The
-canonical text is the authority for that replacement and now contains the
-requested wording.
+The typo therefore exists only in the generated page-23 artwork, its OCR
+coordinate layer, and `interior_printready2.pdf`. Those derived assets remain
+unchanged because Harvey will reprint and upscale the corrected page before
+regenerating the print-ready interior.
