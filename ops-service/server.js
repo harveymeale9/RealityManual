@@ -252,6 +252,7 @@ const stmts = {
   purgeReviewerSessions: db.prepare('DELETE FROM reviewer_sessions WHERE expires_at < ?'),
   insertVoiceMessage: db.prepare('INSERT INTO voice_messages (id, mode, transcript, status, created_at, reply_to_id, agent, attachments_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'),
   insertEmailInstruction: db.prepare("INSERT INTO voice_messages (id,mode,transcript,status,created_at,reply_to_id,agent,notification_kind,notification_unread,source_ref) VALUES(?,'execute',?,'pending',?,NULL,?,'conversation',0,?)"),
+  insertEditorRevisionInstruction: db.prepare("INSERT INTO voice_messages (id,mode,transcript,status,created_at,reply_to_id,agent,notification_kind,notification_unread,source_ref) VALUES(?,'execute',?,'pending',?,NULL,'codex','conversation',0,?)"),
   setVoiceMessageStatus: db.prepare('UPDATE voice_messages SET status = ? WHERE id = ?'),
   setVoiceActivityLog: db.prepare('UPDATE voice_messages SET activity_log = ? WHERE id = ?'),
   setVoiceEarlyAck: db.prepare('UPDATE voice_messages SET early_ack = ? WHERE id = ?'),
@@ -888,6 +889,7 @@ const videoEditor = videoEditorService.setup({
     return row ? JSON.parse(row.data) : {};
   },
   buildAudioPreview: videoAnalysis.buildAudioPreview,
+  queueManualRevision: enqueueEditorManualRevision,
   handoffToProduction: sendEditorProjectToProduction
 });
 app.use('/api/editor', requireEditorAuth, videoEditor.router);
@@ -3162,6 +3164,46 @@ function enqueueOwnerEmailInstruction(input) {
   return id;
 }
 
+function enqueueEditorManualRevision(input) {
+  const project = input && input.project;
+  const revision = input && input.revision;
+  if (!project || !project.id || !revision || !revision.id || !revision.request) throw new Error('editor_revision_required');
+  const id = crypto.randomUUID().replace(/-/g, '');
+  const sourceRef = 'editor-revision:' + project.id + ':' + revision.id;
+  const title = String(project.planningPieceTitle || project.name || project.fileName || 'Untitled recording').slice(0, 300);
+  const transcriptExcerpt = String(project.transcriptText || '').replace(/\s+/g, ' ').trim().slice(0, 6000);
+  const prompt = '[Manual Editor revision — Harvey submitted this instruction from the revision panel for one exact recording. This is authorized implementation work, not a request for advice. Inspect the current project and media, make only the requested change safely, and verify the actual resulting preview/output. The Editor is locked while you work. Your final response is written verbatim into this recording\'s permanent change log, so make it a concise factual summary of what changed and how you verified it. If the requested change cannot safely be completed or needs Harvey\'s input, begin the final response with exactly "REVISION BLOCKED:" and explain the specific blocker.]\n\n' +
+    'Editor project ID: ' + project.id + '\n' +
+    'Recording: ' + title + '\n' +
+    'Source file: ' + String(project.fileName || '') + '\n' +
+    'Duration/layout: ' + Number(project.duration || 0).toFixed(2) + ' seconds; ' + (Number(project.height) > Number(project.width) ? 'vertical' : 'horizontal') + '\n' +
+    (transcriptExcerpt ? 'Transcript excerpt: ' + transcriptExcerpt + '\n' : '') +
+    '\nHarvey\'s requested revision:\n' + String(revision.request).trim();
+  stmts.insertEditorRevisionInstruction.run(id, prompt, new Date().toISOString(), sourceRef);
+  voiceQueue.push({ id: id, mode: 'execute', text: prompt, agent: 'codex', imagePath: null, uploadPath: null });
+  // Let the Editor persist this voice-message id before processing can mark
+  // it running. That keeps the cross-store lifecycle link race-free.
+  setImmediate(drainVoiceQueue);
+  return id;
+}
+
+function syncEditorManualRevision(voiceMessageId) {
+  const row = stmts.getVoiceMessage.get(voiceMessageId);
+  if (!row || !String(row.source_ref || '').startsWith('editor-revision:')) return;
+  if (row.status === 'running') {
+    videoEditor.markManualRevisionRunningByVoiceMessage(voiceMessageId);
+  } else if (row.status === 'done') {
+    const reply = String(row.reply_text || '');
+    if (/^REVISION BLOCKED:/i.test(reply.trim())) {
+      videoEditor.finishManualRevisionByVoiceMessage(voiceMessageId, { status: 'error', error: reply });
+    } else {
+      videoEditor.finishManualRevisionByVoiceMessage(voiceMessageId, { status: 'done', summary: reply });
+    }
+  } else if (row.status === 'error') {
+    videoEditor.finishManualRevisionByVoiceMessage(voiceMessageId, { status: 'error', error: row.error_message || '' });
+  }
+}
+
 function drainVoiceQueue() {
   if (voiceProcessing) return;
   const next = voiceQueue.shift();
@@ -3175,6 +3217,7 @@ function drainVoiceQueue() {
       stmts.finishVoiceMessage.run('error', null, String((err && err.message) || err).slice(0, 2000), new Date().toISOString(), next.id);
     })
     .finally(function () {
+      syncEditorManualRevision(next.id);
       if (next.uploadPath) fs.rm(next.uploadPath, { force: true }, function () {});
       voiceProcessing = false;
       drainVoiceQueue();
@@ -3187,6 +3230,7 @@ function drainVoiceQueue() {
 async function recoverAgentVoiceMessage(id) {
   const row = stmts.getVoiceMessage.get(id);
   if (!row) return;
+  videoEditor.markManualRevisionRunningByVoiceMessage(id);
   let activity;
   try { activity = row.activity_log ? JSON.parse(row.activity_log) : []; } catch (e) { activity = []; }
   function onActivity(line) {
@@ -3244,6 +3288,7 @@ function buildSystemPromptForSession(sessionId) {
 
 async function processVoiceMessage(id, mode, text, agent, imagePaths) {
   stmts.setVoiceMessageStatus.run('running', id);
+  syncEditorManualRevision(id);
   agent = normalizeVoiceAgent(agent);
   const sessionRow = stmts.getVoiceSession.get();
   const sessionId = sessionRow && sessionRow.codex_session_id;
@@ -3705,6 +3750,7 @@ function recoverInflightVoiceMessages() {
       stmts.finishVoiceMessage.run('error', null,
         'Service restarted while this was in progress (redeploy or crash) — completion status unknown, please resend if it still needs doing.',
         now, row.id);
+      syncEditorManualRevision(row.id);
       errored++;
     }
   });

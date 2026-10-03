@@ -16119,3 +16119,45 @@ The typo therefore exists only in the generated page-23 artwork, its OCR
 coordinate layer, and `interior_printready2.pdf`. Those derived assets remain
 unchanged because Harvey will reprint and upscale the corrected page before
 regenerating the print-ready interior.
+
+---
+
+# 466. Per-Recording Manual Revision Queue in Editor (2026-10-03)
+
+Each active Editor recording now has a **Manual revision** panel beneath its
+preview and soundtrack controls. Harvey can type a free-form instruction or
+record it with **Dictate**; dictation reuses the existing authenticated voice
+transcription endpoint and appends the transcript into the same editable
+request box. A request may name a timestamp, visual treatment, caption/audio
+change, or another recording-specific exception that does not fit the normal
+controls.
+
+Submitting creates a durable revision entry on the exact `editorProjects`
+record and a linked `voice_messages` Project Manager job whose `source_ref`
+contains both project and revision ids. The instruction includes the recording
+identity, duration/orientation, and a bounded transcript excerpt. It explicitly
+authorizes implementation, tells Codex to inspect and verify the actual media,
+and makes the final reply the recording's change-log text. Only one manual
+revision can be active per recording. While it is queued or running, the whole
+workspace becomes a persistent working screen showing the submitted request;
+the recording's queue card also says **Manual revision queued** or **Updating
+manually**. Harvey can leave, refresh, or restart the browser without losing
+either the lock or the request.
+
+The Project Manager queue now mirrors its durable lifecycle back to the linked
+Editor revision. Starting the Codex job changes it to `running`; a successful
+final response changes it to `done`, unlocks the recording, and appears beneath
+the panel as a permanent dated record of both the request and the verified
+change. A failed run unlocks it as an error so it can be retried. If Codex can
+not safely apply a request or needs input, its prompt requires the explicit
+`REVISION BLOCKED:` final prefix; that is also stored as an error rather than
+being mislabeled completed. Existing voice-queue restart recovery applies to
+these linked jobs, and interrupted jobs are reconciled back to the Editor
+instead of leaving an endless spinner.
+
+Automated coverage exercises request validation, the single-active-request
+lock, queued/running/done persistence, and the permanent summary. The complete
+ops-service suite passes (153 tests). A real Chromium mock-service test used
+the microphone control, transcribed a dictated request, submitted it, observed
+the full-workspace queued state, changed the durable task to complete, then
+observed polling restore the Editor with its completion log.

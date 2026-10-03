@@ -902,6 +902,56 @@ test('an aborted multipart upload removes its partial file immediately', { timeo
   assert.deepEqual(fs.readdirSync(tempDir), []);
 });
 
+test('manual Editor revisions remain locked until their linked Project Manager task completes', async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-manual-revision-'));
+  const db = new Database(path.join(dir, 'test.sqlite'));
+  db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
+  const now = new Date().toISOString();
+  db.prepare('INSERT INTO records (store_name,id,data,updated_at) VALUES (?,?,?,?)').run('editorProjects', 'manual-1', JSON.stringify({
+    id: 'manual-1', name: 'Manual test', fileName: 'test.mp4', duration: 20, width: 1920, height: 1080,
+    transcriptionStatus: 'ready', transcriptText: 'This is the exact test recording.', words: [],
+    classificationStatus: 'ready', visualClassification: { layout: 'horizontal' }, layoutOverride: 'horizontal',
+    retakeAnalysisStatus: 'unavailable', planningMatchStatus: 'unavailable', renderStatus: '', insertedClips: [],
+    manualRevisions: [], createdAt: now, updatedAt: now
+  }), now);
+  let queuedInput = null;
+  const service = editor.setup({
+    db: db, dataDir: dir,
+    transcribeDetailed: async function () { return { text: '', words: [] }; },
+    queueManualRevision: function (input) { queuedInput = input; return 'voice-manual-1'; }
+  });
+  const app = express(); app.use(express.json()); app.use('/api/editor', service.router);
+  const server = http.createServer(app);
+  await new Promise(function (resolve) { server.listen(0, '127.0.0.1', resolve); });
+  t.after(function () { server.close(); db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+  const base = 'http://127.0.0.1:' + server.address().port;
+  let response = await fetch(base + '/api/editor/manual-1/manual-revisions', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ request: 'Keep the close zoom at 14 seconds.' })
+  });
+  assert.equal(response.status, 202);
+  let project = await response.json();
+  assert.equal(project.manualRevisions[0].status, 'queued');
+  assert.equal(project.manualRevisions[0].voiceMessageId, 'voice-manual-1');
+  assert.equal(queuedInput.project.id, 'manual-1');
+  assert.equal(queuedInput.revision.request, 'Keep the close zoom at 14 seconds.');
+  response = await fetch(base + '/api/editor/manual-1/manual-revisions', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request: 'A second request.' })
+  });
+  assert.equal(response.status, 409);
+  service.markManualRevisionRunningByVoiceMessage('voice-manual-1');
+  project = await (await fetch(base + '/api/editor/manual-1')).json();
+  assert.equal(project.manualRevisions[0].status, 'running');
+  service.finishManualRevisionByVoiceMessage('voice-manual-1', { status: 'done', summary: 'Kept the close framing and verified the preview.' });
+  project = await (await fetch(base + '/api/editor/manual-1')).json();
+  assert.equal(project.manualRevisions[0].status, 'done');
+  assert.equal(project.manualRevisions[0].summary, 'Kept the close framing and verified the preview.');
+  response = await fetch(base + '/api/editor/manual-1/manual-revisions', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request: 'A follow-up request.' })
+  });
+  assert.equal(response.status, 202);
+});
+
 test('chunked Editor upload crosses proxy-sized files with accurate idempotent assembly', { timeout: 20000 }, async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-chunks-'));
   const source = path.join(dir, 'large-camera.mp4');

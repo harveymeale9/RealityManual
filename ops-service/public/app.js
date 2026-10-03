@@ -297,6 +297,7 @@
 
   function renderActiveTab() {
     var active = currentTabId();
+    if (active !== 'editor' && window.RMEditor && typeof window.RMEditor.unmount === 'function') window.RMEditor.unmount();
     // A reviewer session hand-editing the URL hash (or a stale bookmark
     // to #project-manager/#website-analytics/etc.) gets bounced back to
     // Content Pipeline rather than ever rendering a tab it shouldn't see —

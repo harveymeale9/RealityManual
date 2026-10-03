@@ -1005,6 +1005,7 @@ function setup(options) {
   const getAudioTrackPath = options.getAudioTrackPath;
   const getAudioMixSettings = options.getAudioMixSettings;
   const buildAudioPreview = options.buildAudioPreview;
+  const queueManualRevision = options.queueManualRevision;
   if (!db || !dataDir || typeof transcribeDetailed !== 'function') throw new Error('video editor setup is incomplete');
   const router = express.Router();
   const rootDir = path.join(dataDir, 'editor');
@@ -1153,6 +1154,46 @@ function setup(options) {
     project.updatedAt = new Date().toISOString();
     putStmt.run(STORE_NAME, project.id, JSON.stringify(project), project.updatedAt);
     return project;
+  }
+  function manualRevisionEntries(project) {
+    return Array.isArray(project && project.manualRevisions) ? project.manualRevisions : [];
+  }
+  function activeManualRevision(project) {
+    return manualRevisionEntries(project).find(function (entry) {
+      return entry && (entry.status === 'queued' || entry.status === 'running');
+    }) || null;
+  }
+  function updateManualRevisionByVoiceMessage(voiceMessageId, update) {
+    if (!voiceMessageId) return null;
+    const rows = listStmt.all(STORE_NAME);
+    for (const row of rows) {
+      let project;
+      try { project = JSON.parse(row.data); } catch (error) { continue; }
+      const entries = manualRevisionEntries(project);
+      const index = entries.findIndex(function (entry) { return entry.voiceMessageId === voiceMessageId; });
+      if (index === -1) continue;
+      const entry = Object.assign({}, entries[index], update || {});
+      project.manualRevisions = entries.slice();
+      project.manualRevisions[index] = entry;
+      saveProject(project);
+      return { project: project, revision: entry };
+    }
+    return null;
+  }
+  function markManualRevisionRunningByVoiceMessage(voiceMessageId) {
+    return updateManualRevisionByVoiceMessage(voiceMessageId, {
+      status: 'running', startedAt: new Date().toISOString(), error: ''
+    });
+  }
+  function finishManualRevisionByVoiceMessage(voiceMessageId, outcome) {
+    outcome = outcome || {};
+    const failed = outcome.status === 'error';
+    return updateManualRevisionByVoiceMessage(voiceMessageId, {
+      status: failed ? 'error' : 'done',
+      completedAt: new Date().toISOString(),
+      summary: failed ? '' : String(outcome.summary || 'Manual revision completed.').slice(0, 8000),
+      error: failed ? String(outcome.error || 'The manual revision could not be completed.').slice(0, 2000) : ''
+    });
   }
   function projectDetail(project) {
     project.cuts = cutsForProject(project);
@@ -1805,6 +1846,7 @@ async function renderProject(id) {
       if (!Number.isFinite(Number(project.editRevision))) { project.editRevision = 0; migrated = true; }
       if (!Number.isFinite(Number(project.renderProgress))) { project.renderProgress = 0; migrated = true; }
       if (!Array.isArray(project.insertedClips)) { project.insertedClips = []; migrated = true; }
+      if (!Array.isArray(project.manualRevisions)) { project.manualRevisions = []; migrated = true; }
       if (['queued', 'preparing'].includes(project.clipInsertStatus)) {
         project.insertedClips = project.insertedClips.filter(function (clip) { return clip.status === 'ready'; });
         project.clipInsertStatus = 'error'; project.clipInsertError = 'Clip preparation was interrupted by a service restart. Press Insert clip to retry.'; migrated = true;
@@ -2148,6 +2190,7 @@ async function renderProject(id) {
         renderPreviewVersion: 0,
         audioTrackId: '__none__',
         insertedClips: [],
+        manualRevisions: [],
         clipInsertStatus: '',
         clipInsertError: '',
         editRevision: 0,
@@ -2439,6 +2482,43 @@ async function renderProject(id) {
     saveProject(project);
     res.json(projectDetail(project));
     if (patchNeedsAutoRender(project, renderWillChange)) scheduleAutoRender(project.id, EDIT_RENDER_DEBOUNCE_MS);
+  });
+
+  router.post('/:id/manual-revisions', async function (req, res) {
+    if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
+    let project = getProject(req.params.id);
+    if (!project) return res.status(404).json({ error: 'not_found' });
+    if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked in Content Production.' });
+    if (activeManualRevision(project)) return res.status(409).json({ error: 'manual_revision_active', message: 'A manual revision is already being applied to this recording.' });
+    if (typeof queueManualRevision !== 'function') return res.status(503).json({ error: 'manual_revision_unavailable', message: 'Project Manager is not available to accept this revision right now.' });
+    const request = String(req.body && req.body.request || '').trim();
+    if (!request) return res.status(400).json({ error: 'request_required', message: 'Describe the change you want made.' });
+    if (request.length > 4000) return res.status(400).json({ error: 'request_too_long', message: 'Keep the revision request under 4,000 characters.' });
+    const now = new Date().toISOString();
+    const revision = {
+      id: crypto.randomUUID(), request: request, status: 'queued',
+      requestedAt: now, startedAt: '', completedAt: '', voiceMessageId: '', summary: '', error: ''
+    };
+    project.manualRevisions = manualRevisionEntries(project).concat([revision]).slice(-50);
+    saveProject(project);
+    try {
+      const voiceMessageId = await Promise.resolve(queueManualRevision({ project: project, revision: revision }));
+      if (!voiceMessageId) throw new Error('Project Manager did not accept the revision.');
+      project = getProject(project.id);
+      const queued = manualRevisionEntries(project).find(function (entry) { return entry.id === revision.id; });
+      if (queued) queued.voiceMessageId = String(voiceMessageId);
+      saveProject(project);
+      res.status(202).json(withQueuePositions(projectDetail(project)));
+    } catch (error) {
+      project = getProject(project.id);
+      const failed = manualRevisionEntries(project).find(function (entry) { return entry.id === revision.id; });
+      if (failed) {
+        failed.status = 'error'; failed.completedAt = new Date().toISOString();
+        failed.error = String(error.message || error).slice(0, 2000);
+      }
+      saveProject(project);
+      res.status(502).json({ error: 'manual_revision_queue_failed', message: 'The revision could not be queued. Please try again.' });
+    }
   });
 
   router.post('/:id/undo-cut', function (req, res) {
@@ -2754,7 +2834,17 @@ async function renderProject(id) {
     res.json({ ok: true });
   });
 
-  return { router: router, transcribeProject: transcribeProject, generateBrowserPreview: generateBrowserPreview, classifyProject: classifyProject, analyzeProjectRetakes: analyzeProjectRetakes, matchProjectPlanningPiece: matchProjectPlanningPiece, renderProject: renderProject };
+  return {
+    router: router,
+    transcribeProject: transcribeProject,
+    generateBrowserPreview: generateBrowserPreview,
+    classifyProject: classifyProject,
+    analyzeProjectRetakes: analyzeProjectRetakes,
+    matchProjectPlanningPiece: matchProjectPlanningPiece,
+    renderProject: renderProject,
+    markManualRevisionRunningByVoiceMessage: markManualRevisionRunningByVoiceMessage,
+    finishManualRevisionByVoiceMessage: finishManualRevisionByVoiceMessage
+  };
 }
 
 module.exports = {

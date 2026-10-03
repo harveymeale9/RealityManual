@@ -30,6 +30,8 @@
   var uploadBatchCancelled = false;
   var currentUploadXhr = null;
   var currentUploadSessionId = '';
+  var manualRevisionRecorder = null;
+  var manualRevisionStream = null;
   var uploadStatusText = '';
   var uploadStatusPercent = 0;
   var MAX_RECORDING_BYTES = Math.floor(4.5 * 1024 * 1024 * 1024);
@@ -52,6 +54,17 @@
     return String(value == null ? '' : value).replace(/[&<>"']/g, function (char) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char];
     });
+  }
+
+  function stopManualRevisionDictation() {
+    if (manualRevisionRecorder) {
+      manualRevisionRecorder.ondataavailable = null;
+      manualRevisionRecorder.onstop = null;
+      try { if (manualRevisionRecorder.state === 'recording') manualRevisionRecorder.stop(); } catch (error) {}
+    }
+    if (manualRevisionStream) manualRevisionStream.getTracks().forEach(function (track) { track.stop(); });
+    manualRevisionRecorder = null;
+    manualRevisionStream = null;
   }
 
   function api(url, options) {
@@ -154,6 +167,26 @@
   function displayName(item) {
     if (!item || !item.planningPieceTitle) return item && item.name || 'Untitled recording';
     return (item.planningPieceSeq ? '#' + String(item.planningPieceSeq).padStart(3, '0') + ' · ' : '') + item.planningPieceTitle;
+  }
+
+  function activeManualRevision(item) {
+    return ((item && item.manualRevisions) || []).find(function (entry) {
+      return entry && (entry.status === 'queued' || entry.status === 'running');
+    }) || null;
+  }
+
+  function manualRevisionLogHtml(item) {
+    var entries = ((item && item.manualRevisions) || []).filter(function (entry) {
+      return entry && entry.status !== 'queued' && entry.status !== 'running';
+    }).slice().reverse();
+    if (!entries.length) return '';
+    return '<div class="editor-manual-log"><div class="eyebrow">Manual change log</div>' + entries.map(function (entry) {
+      var failed = entry.status === 'error';
+      var detail = failed ? entry.error : entry.summary;
+      return '<article class="editor-manual-log-entry ' + (failed ? 'error' : 'done') + '"><div><strong>' + (failed ? 'Revision needs attention' : 'Revision completed') + '</strong><time>' + esc(new Date(entry.completedAt || entry.requestedAt).toLocaleString()) + '</time></div>' +
+        '<p class="request"><b>Requested:</b> ' + esc(entry.request || '').replace(/\n/g, '<br>') + '</p>' +
+        '<p><b>' + (failed ? 'What happened:' : 'Changed:') + '</b> ' + esc(detail || (failed ? 'The task did not complete.' : 'Manual revision completed.')).replace(/\n/g, '<br>') + '</p></article>';
+    }).join('') + '</div>';
   }
 
   function isVideoFile(file) {
@@ -308,6 +341,8 @@
       return position > 1 ? label + ' · ' + (position - 1) + ' ahead' : position === 1 ? 'Next: ' + label.toLowerCase() : label;
     }
     if (item.productionPieceId) return item.workflowWarning ? 'Sent · workflow warning' : 'Sent to Production';
+    var manualRevision = activeManualRevision(item);
+    if (manualRevision) return manualRevision.status === 'running' ? 'Updating manually' : 'Manual revision queued';
     if (item.transcriptionStatus === 'pending') return queued('Waiting for transcript', item.transcriptionQueuePosition);
     if (item.transcriptionStatus === 'running') return 'Transcribing';
     if (item.transcriptionStatus === 'error') return 'Needs attention';
@@ -339,6 +374,7 @@
 
   function sessionBucket(item) {
     if (item.productionPieceId) return item.workflowWarning ? 'warning' : 'sent';
+    if (activeManualRevision(item)) return 'working';
     if (item.transcriptionStatus === 'error' || (item.browserPreviewStatus === 'error' && item.renderStatus !== 'ready') || framingFailureIsBlocking(item) || item.retakeAnalysisStatus === 'error' || item.clipInsertStatus === 'error' || item.renderStatus === 'error' || Number(item.unresolvedRetakeCount) > 0 || item.layoutReviewRequired) return 'attention';
     if (item.workflowWarning) return 'warning';
     if (item.renderStatus === 'ready') return 'ready';
@@ -852,7 +888,7 @@
   }
 
   function projectIsActive(item) {
-    return !!item && (['pending', 'running'].indexOf(item.transcriptionStatus) !== -1 ||
+    return !!item && (!!activeManualRevision(item) || ['pending', 'running'].indexOf(item.transcriptionStatus) !== -1 ||
       ['pending', 'running'].indexOf(item.browserPreviewStatus) !== -1 ||
       ['pending', 'running'].indexOf(item.classificationStatus) !== -1 ||
       ['pending', 'running', 'pending_transcript'].indexOf(item.retakeAnalysisStatus) !== -1 ||
@@ -863,8 +899,11 @@
 
   function projectPollSignature(item) {
     if (!item) return '';
+    var manualRevision = activeManualRevision(item);
+    var latestManualRevision = ((item.manualRevisions || []).slice(-1)[0]) || {};
     return [item.transcriptionStatus, item.browserPreviewStatus, item.classificationStatus, item.retakeAnalysisStatus, item.planningMatchStatus,
-      item.clipInsertStatus || '', item.renderStatus, Math.round(Number(item.renderProgress) || 0), item.renderRebuildPending ? 'rebuild' : '', item.productionPieceId || '', item.workflowWarning || ''].join('|');
+      item.clipInsertStatus || '', item.renderStatus, Math.round(Number(item.renderProgress) || 0), item.renderRebuildPending ? 'rebuild' : '', item.productionPieceId || '', item.workflowWarning || '',
+      manualRevision ? manualRevision.id + ':' + manualRevision.status : '', latestManualRevision.id || '', latestManualRevision.status || '', latestManualRevision.completedAt || ''].join('|');
   }
 
   function schedulePoll() {
@@ -890,6 +929,15 @@
     activeAudioPanelRefresh = null;
     var workspace = root.querySelector('#editorWorkspace');
     if (!workspace || !project) return;
+    var manualRevision = activeManualRevision(project);
+    if (manualRevision) {
+      workspace.innerHTML = '<div class="editor-manual-working" role="status" aria-live="polite"><div class="editor-processing-icon"></div>' +
+        '<div class="eyebrow">Manual revision</div><h2>' + (manualRevision.status === 'running' ? 'Updating this video manually…' : 'Your revision is queued…') + '</h2>' +
+        '<p>' + (manualRevision.status === 'running' ? 'I am applying and checking your requested change now.' : 'Project Manager has the instruction and will begin as soon as the current task finishes.') + ' You can leave the Editor and check back shortly.</p>' +
+        '<blockquote>' + esc(manualRevision.request).replace(/\n/g, '<br>') + '</blockquote>' +
+        manualRevisionLogHtml(project) + '</div>';
+      return;
+    }
     if (project.transcriptionStatus !== 'ready') {
       var isError = project.transcriptionStatus === 'error';
       workspace.innerHTML = '<div class="editor-processing"><div class="editor-processing-icon' + (isError ? ' error' : '') + '">' + (isError ? '!' : '') + '</div>' +
@@ -965,6 +1013,9 @@
     var audioPanelHtml = '<section class="editor-audio-panel"><div><div class="eyebrow">Backing audio</div><h3>Choose the soundtrack against this edit</h3><span>Every preview uses the saved production loudness settings. Switching tracks restarts the same video from the beginning.</span></div>' +
       '<div class="editor-audio-picker"><button type="button" class="btn-secondary btn-tiny" id="editorAudioPrevious" disabled>← Previous</button><select id="editorAudioTrack" class="stage-select" ' + (project.renderStatus !== 'ready' || sentToProduction || previewLocked ? 'disabled' : '') + '><option value="">Preparing soundtrack previews…</option></select><button type="button" class="btn-secondary btn-tiny" id="editorAudioNext" disabled>Next →</button></div>' +
       '<div class="editor-audio-progress loading" id="editorAudioProgress"><i></i><span>' + (project.renderStatus === 'ready' ? 'Loading audio previews 0/' + audioTracks.length : 'Available when the final edit is ready') + '</span></div><audio id="editorMixedAudio" preload="auto" hidden></audio></section>';
+    var manualRevisionPanelHtml = '<section class="editor-manual-panel"><div class="editor-manual-heading"><div><div class="eyebrow">Manual revision</div><h3>Tell me what to change</h3><span>Type or dictate a specific change. Include a timestamp when it helps.</span></div></div>' +
+      (!sentToProduction ? '<textarea id="editorManualRevisionText" maxlength="4000" rows="3" placeholder="For example: Around 14 seconds, keep the tight zoom instead of pulling back."></textarea><div class="editor-manual-actions"><button type="button" class="btn-secondary btn-tiny" id="editorManualDictate">Dictate</button><button type="button" class="btn-primary btn-tiny" id="editorManualSubmit" disabled>Apply revision</button><span id="editorManualStatus" aria-live="polite"></span></div>' : '<p class="editor-manual-locked">This approved version is locked; its completed manual changes remain recorded below.</p>') +
+      manualRevisionLogHtml(project) + '</section>';
     var rebuildPercent = Math.max(0, Math.min(99, Math.round(Number(project.renderProgress) || 0)));
     var rebuildLabel = project.renderStatus === 'running'
       ? (rebuildPercent >= 99 ? 'Finalising updated preview…' : 'Rebuilding preview… ' + rebuildPercent + '%')
@@ -996,6 +1047,7 @@
       (layout === 'horizontal' ? '<div class="editor-preview-toolbar">' + previewActionsHtml + '</div>' : '') +
       previewStageHtml +
       audioPanelHtml +
+      manualRevisionPanelHtml +
       '<section class="editor-automation"><div class="editor-automation-head"><div><div class="eyebrow">Automatic edit</div><h3>Speech and pause map</h3></div><div class="editor-legend"><span class="speech">Speech</span><span class="cut">Removed pause</span><span class="pause">Kept pause</span></div></div>' + timelineHtml(project) +
         (layout === 'horizontal' ? automaticControlsHtml : '') + '</section>' +
       '<section class="editor-review"><div class="editor-review-column"><div class="editor-section-title"><div><div class="eyebrow">Pause decisions</div><h3>Every automatic silence cut</h3></div><span>Red means removed</span></div><div id="editorGapReview">' + gapReviewHtml(project) + '</div></div>' +
@@ -1054,6 +1106,10 @@
     var audioPrevious = root.querySelector('#editorAudioPrevious');
     var audioNext = root.querySelector('#editorAudioNext');
     var audioProgress = root.querySelector('#editorAudioProgress');
+    var manualText = root.querySelector('#editorManualRevisionText');
+    var manualSubmit = root.querySelector('#editorManualSubmit');
+    var manualDictate = root.querySelector('#editorManualDictate');
+    var manualStatus = root.querySelector('#editorManualStatus');
     var audioBatch = project.renderStatus === 'ready' && !previewLocked ? ensureAudioPreviewBatch(project) : null;
     var playerScrubbing = false;
     var resumeAfterScrub = false;
@@ -1061,6 +1117,75 @@
     var bufferingTimer = null;
     var synchronizedStartToken = 0;
     var synchronizedStartInProgress = false;
+    function setManualStatus(text, failed) {
+      if (!manualStatus) return;
+      manualStatus.textContent = text || '';
+      manualStatus.className = failed ? 'error' : '';
+    }
+    if (manualText && manualSubmit) {
+      manualText.addEventListener('input', function () { manualSubmit.disabled = !manualText.value.trim() || !!manualRevisionRecorder; });
+      manualSubmit.onclick = function () {
+        if (manualRevisionRecorder) return;
+        var request = manualText.value.trim();
+        if (!request) return;
+        manualSubmit.disabled = true;
+        if (manualDictate) manualDictate.disabled = true;
+        setManualStatus('Queuing revision…');
+        api('/api/editor/' + encodeURIComponent(project.id) + '/manual-revisions', {
+          method: 'POST', body: JSON.stringify({ request: request })
+        }).then(function (updated) {
+          project = updated;
+          projectDetails[updated.id] = updated;
+          projects = projects.map(function (item) { return item.id === updated.id ? updated : item; });
+          renderList(); renderWorkspace(); schedulePoll();
+        }).catch(function (error) {
+          manualSubmit.disabled = false;
+          if (manualDictate) manualDictate.disabled = false;
+          setManualStatus(error.message, true);
+        });
+      };
+    }
+    if (manualDictate) manualDictate.onclick = function () {
+      if (manualRevisionRecorder && manualRevisionRecorder.state === 'recording') {
+        manualRevisionRecorder.stop();
+        manualDictate.disabled = true;
+        manualDictate.textContent = 'Transcribing…';
+        return;
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+        setManualStatus('Voice dictation is not supported in this browser.', true);
+        return;
+      }
+      setManualStatus('Opening microphone…');
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+        var chunks = [];
+        manualRevisionStream = stream;
+        manualRevisionRecorder = new MediaRecorder(stream);
+        manualRevisionRecorder.ondataavailable = function (event) { if (event.data && event.data.size) chunks.push(event.data); };
+        manualRevisionRecorder.onstop = function () {
+          var type = manualRevisionRecorder.mimeType || 'audio/webm';
+          var blob = new Blob(chunks, { type: type });
+          if (manualRevisionStream) manualRevisionStream.getTracks().forEach(function (track) { track.stop(); });
+          manualRevisionStream = null; manualRevisionRecorder = null;
+          var form = new FormData(); form.append('audio', blob, 'revision.webm');
+          fetch('/api/voice/transcribe', { method: 'POST', credentials: 'same-origin', body: form }).then(function (response) {
+            if (!response.ok) throw new Error('Could not transcribe that recording.');
+            return response.json();
+          }).then(function (body) {
+            var dictated = String(body.text || '').trim();
+            if (dictated) manualText.value = (manualText.value.trim() ? manualText.value.trim() + ' ' : '') + dictated;
+            manualText.dispatchEvent(new Event('input', { bubbles: true }));
+            manualDictate.disabled = false; manualDictate.textContent = 'Dictate'; setManualStatus(dictated ? 'Dictation added.' : 'No speech was detected.', !dictated);
+          }).catch(function (error) {
+            manualDictate.disabled = false; manualDictate.textContent = 'Dictate'; setManualStatus(error.message, true);
+          });
+        };
+        manualRevisionRecorder.start();
+        manualSubmit.disabled = true;
+        manualDictate.textContent = 'Stop & transcribe';
+        setManualStatus('Listening…');
+      }).catch(function () { setManualStatus('Microphone access was not available.', true); });
+    };
     function setInitialPlayerLoading(loading) {
       if (playerLoading) playerLoading.hidden = !loading;
       if (playerRoot) playerRoot.setAttribute('aria-busy', loading || previewLocked ? 'true' : 'false');
@@ -2124,7 +2249,13 @@
   }
 
   window.RMEditor = {
+    unmount: function () {
+      stopManualRevisionDictation();
+      clearTimeout(pollTimer);
+      root = null;
+    },
     mount: function (element) {
+      stopManualRevisionDictation();
       mountToken++;
       openRequestToken++;
       pendingExplicitOpenToken = 0;
