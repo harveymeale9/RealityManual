@@ -16103,3 +16103,19 @@ handoffs remain immutable. Runtime FFmpeg coverage verifies the full visual
 stream duration, a visible final content frame, near-black ending pixels,
 silent dialogue padding, and the two-second soundtrack fade filters. The full
 ops-service suite passes (152 tests).
+
+---
+
+# 465. Page 23 Manuscript Punctuation Correction (2026-10-03)
+
+Harvey found a punctuation typo on canonical book page 23. The printed artwork
+reads `same underlying phenomenon, Purpose may be understood`; the intended
+continuous sentence is now recorded in `THE_REALITY_MANUAL_COMPLETE_MANUSCRIPT.txt`
+as `same underlying phenomenon; purpose may be understood`. This corrects the
+comma to a semicolon and lowercases the continuation after it.
+
+The existing flattened page-23 WebP, its OCR coordinate layer, and
+`interior_printready2.pdf` remain unchanged because Harvey will reprint and
+upscale the corrected page before regenerating the print-ready interior. The
+canonical text is the authority for that replacement and now contains the
+requested wording.
