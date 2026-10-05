@@ -43,6 +43,7 @@ for (const column of [
   'confirmation_email_sent_at TEXT',
   'shipping_email_sent_at TEXT',
   'refund_email_sent_at TEXT',
+  'resend_contact_synced_at TEXT',
 ]) {
   try {
     db.exec(`ALTER TABLE orders ADD COLUMN ${column}`);

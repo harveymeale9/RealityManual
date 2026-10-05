@@ -59,6 +59,7 @@ test('BookVault payload uses the checkout service and complete customer address'
 test('paid order is submitted once, emailed, then dispatch is emailed with tracking', async () => {
   const order = paidOrder();
   const sent = [];
+  const synced = [];
   let submissions = 0;
   bookvaultService.submitOrder = async () => {
     submissions += 1;
@@ -68,6 +69,9 @@ test('paid order is submitted once, emailed, then dispatch is emailed with track
     sent.push(message);
     return { id: `email_${sent.length}` };
   };
+  resendClient.syncPurchaserContact = async (contactOrder, summary) => {
+    synced.push({ contactOrder, summary });
+  };
 
   await fulfillmentService.processOrder(order);
   let stored = orderService.getById(order.id);
@@ -75,7 +79,17 @@ test('paid order is submitted once, emailed, then dispatch is emailed with track
   assert.equal(stored.bookvault_order_id, '7001');
   assert.ok(stored.confirmation_email_sent_at);
   assert.equal(submissions, 1);
+  assert.equal(synced.length, 1);
+  assert.equal(synced[0].summary.purchase_order_count, 1);
+  assert.equal(synced[0].summary.lifetime_book_quantity, 1);
+  assert.ok(stored.resend_contact_synced_at);
   assert.equal(sent[0].subject, 'We’re Making Your Copy of The Reality Manual');
+  assert.deepEqual(sent[0].tags, [
+    { name: 'email_type', value: 'confirmation_email' },
+    { name: 'customer_status', value: 'purchaser' },
+    { name: 'product', value: 'reality_manual_hardcover' },
+    { name: 'quantity_band', value: '1_book' },
+  ]);
 
   bookvaultService.getOrder = async () => ({
     Progress: { Status: 'Dispatched' },
@@ -98,6 +112,7 @@ test('an accepted order is never refunded merely because confirmation email is t
   const order = paidOrder();
   let refundCalls = 0;
   bookvaultService.submitOrder = async () => ({ PodRef: 7002 });
+  resendClient.syncPurchaserContact = async () => {};
   resendClient.sendEmail = async () => { throw new Error('temporary mail outage'); };
   stripeService.refundPayment = async () => { refundCalls += 1; };
 
@@ -107,4 +122,22 @@ test('an accepted order is never refunded merely because confirmation email is t
   assert.equal(stored.bookvault_order_id, '7002');
   assert.equal(stored.confirmation_email_sent_at, null);
   assert.equal(refundCalls, 0);
+});
+
+test('a Resend contact-sync outage does not block confirmation or fulfillment', async () => {
+  const order = paidOrder();
+  const sent = [];
+  bookvaultService.submitOrder = async () => ({ PodRef: 7003 });
+  resendClient.syncPurchaserContact = async () => { throw new Error('contacts temporarily unavailable'); };
+  resendClient.sendEmail = async (message) => {
+    sent.push(message);
+    return { id: 'email_contact_outage' };
+  };
+
+  await fulfillmentService.processOrder(order);
+  const stored = orderService.getById(order.id);
+  assert.equal(stored.order_status, 'BOOKVAULT_ACCEPTED');
+  assert.equal(stored.resend_contact_synced_at, null);
+  assert.ok(stored.confirmation_email_sent_at);
+  assert.equal(sent.length, 1);
 });

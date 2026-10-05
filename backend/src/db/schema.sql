@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS orders (
   confirmation_email_sent_at TEXT,
   shipping_email_sent_at     TEXT,
   refund_email_sent_at       TEXT,
+  resend_contact_synced_at   TEXT,
   order_status               TEXT NOT NULL DEFAULT 'PAYMENT_PENDING',
   created_at                 TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   updated_at                 TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))

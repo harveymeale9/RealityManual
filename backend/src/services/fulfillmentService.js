@@ -3,7 +3,7 @@ const config = require('../config');
 const stripeService = require('./stripeService');
 const orderService = require('./orderService');
 const errorLogService = require('./errorLogService');
-const { resendClient } = require('./resendService');
+const { resendClient, quantityBand } = require('./resendService');
 const {
   orderConfirmedEmail,
   orderShippedEmail,
@@ -27,8 +27,35 @@ async function sendTemplate(order, kind, template, suffix) {
     html: template.html,
     text: template.text,
     idempotencyKey: `${order.id}-${suffix}`,
+    tags: [
+      { name: 'email_type', value: `${kind}_email` },
+      { name: 'customer_status', value: kind === 'refund' ? 'refunded' : 'purchaser' },
+      { name: 'product', value: 'reality_manual_hardcover' },
+      { name: 'quantity_band', value: quantityBand(order.quantity) },
+    ],
   });
   orderService.markEmailSent(order.id, kind);
+}
+
+async function syncPurchaserContact(order) {
+  if (order.resend_contact_synced_at) return true;
+  try {
+    const summary = orderService.getPurchaseSummaryForEmail(order.email);
+    await resendClient.syncPurchaserContact(order, summary);
+    orderService.markResendContactSynced(order.id);
+    return true;
+  } catch (err) {
+    // Contact segmentation is useful marketing metadata, but it must never
+    // block confirmation mail, BookVault submission, or shipment polling.
+    errorLogService.logError({
+      orderId: order.id,
+      service: 'resend',
+      errorType: 'purchaser_contact_sync_failed',
+      errorMessage: err.message,
+    });
+    orderService.setNextAttempt(order.id, minutesFromNow(STATUS_POLL_MINUTES));
+    return false;
+  }
 }
 
 async function refundUnfulfillableOrder(order, failureMessage) {
@@ -73,6 +100,7 @@ async function submitToBookVault(order) {
     return;
   }
 
+  await syncPurchaserContact(accepted);
   try {
     await sendTemplate(accepted, 'confirmation', orderConfirmedEmail(accepted), 'confirmed');
   } catch (err) {
@@ -120,6 +148,10 @@ async function checkBookVaultProgress(order) {
 }
 
 async function processOrder(order) {
+  if (order.order_status === 'SHIPPED') {
+    await syncPurchaserContact(order);
+    return;
+  }
   if (order.order_status === 'REFUNDED') {
     if (!order.refund_email_sent_at) {
       try {
@@ -137,6 +169,7 @@ async function processOrder(order) {
     return;
   }
   if (order.order_status === 'BOOKVAULT_ACCEPTED') {
+    await syncPurchaserContact(order);
     if (!order.confirmation_email_sent_at) {
       try {
         await sendTemplate(order, 'confirmation', orderConfirmedEmail(order), 'confirmed');

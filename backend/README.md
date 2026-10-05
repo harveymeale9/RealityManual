@@ -147,6 +147,14 @@ schedule; after the final attempt the Stripe payment is refunded and the
 customer receives the retry-order email. A Resend outage never cancels or
 duplicates a BookVault order.
 
+Once BookVault accepts a paid order, the same durable worker also upserts the
+customer into Resend's `Customers | The Reality Manual` segment. The contact
+stores product, latest/largest order quantity, lifetime book quantity, order
+count, first/latest purchase dates, and a `1_book` through `5_plus_books`
+quantity band. Repeat purchases update the existing contact without reversing
+an unsubscribe. Contact-sync failures retry independently and never delay
+transactional mail or fulfillment.
+
 ## Deferred to later phases
 
 First-party analytics reporting, SEO admin, and `/admin-dashboard` (auth,

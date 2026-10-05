@@ -16161,3 +16161,40 @@ ops-service suite passes (153 tests). A real Chromium mock-service test used
 the microphone control, transcribed a dictated request, submitted it, observed
 the full-workspace queued state, changed the durable task to complete, then
 observed polling restore the Editor with its completion log.
+
+---
+
+# 467. Paid Customers Are Segmented in Resend (2026-10-05)
+
+Paid live orders now become durable Resend marketing contacts once BookVault
+accepts the print order. The worker upserts by normalized email into one
+`Customers | The Reality Manual` segment rather than creating duplicate
+contacts or consuming a separate Resend segment for every cohort. This matters
+on the current Resend plan, which permits three segments total and already had
+`General`; the purchaser segment leaves one slot free while contact properties
+provide the detailed filtering Harvey requested.
+
+Each purchaser contact records `customer_status`, `products_purchased`,
+`last_order_quantity`, `largest_order_quantity`, `lifetime_book_quantity`,
+`purchase_order_count`, `quantity_band`, `first_purchase_at`, and
+`latest_purchase_at`. Quantity bands are `1_book`, `2_books`, `3_books`,
+`4_books`, and `5_plus_books`. Basing the band on the largest single order means
+a five-copy buyer is never downgraded merely because a later order contains one
+copy; the last-order and lifetime fields remain available for different future
+campaign logic. Repeat purchases update the same global Resend contact. An
+existing unsubscribe is deliberately preserved rather than silently reversed.
+
+Transactional Resend messages also carry operational email tags for email
+type, purchaser/refunded status, product, and that order's quantity band. The
+order row records `resend_contact_synced_at`; failed contact updates are logged
+and retried independently, including after shipment if necessary. They cannot
+block confirmation mail, BookVault submission, shipment polling, or trigger a
+refund.
+
+The live Resend account was provisioned with the nine property definitions and
+the purchaser segment, but no synthetic contact was added. Resend's current
+official OpenAPI/global-contact model was used rather than the deprecated
+Audience endpoints. Backend coverage verifies first-purchase creation,
+repeat-purchase updates, unsubscribe preservation, quantity cohorts, email
+tags, cumulative local purchase summaries, and failure isolation. All 17
+backend tests pass.

@@ -29,8 +29,11 @@ const updateStatusByPaymentIntentStmt = db.prepare(`
 
 const fulfillmentCandidatesStmt = db.prepare(`
   SELECT * FROM orders
-  WHERE order_status IN ('PAYMENT_RECEIVED', 'FULFILLMENT_RETRY', 'BOOKVAULT_ACCEPTED', 'REFUNDED')
-    AND stripe_livemode = 1
+  WHERE stripe_livemode = 1
+    AND (
+      order_status IN ('PAYMENT_RECEIVED', 'FULFILLMENT_RETRY', 'BOOKVAULT_ACCEPTED', 'REFUNDED')
+      OR (order_status = 'SHIPPED' AND resend_contact_synced_at IS NULL)
+    )
     AND (fulfillment_next_attempt_at IS NULL OR fulfillment_next_attempt_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   ORDER BY created_at ASC
   LIMIT ?
@@ -64,6 +67,22 @@ const markEmailSentStmt = {
   shipping: db.prepare("UPDATE orders SET shipping_email_sent_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"),
   refund: db.prepare("UPDATE orders SET refund_email_sent_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"),
 };
+const markResendContactSyncedStmt = db.prepare(`
+  UPDATE orders
+  SET resend_contact_synced_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+      updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  WHERE id = ?
+`);
+const purchaseSummaryStmt = db.prepare(`
+  SELECT COUNT(*) AS purchase_order_count,
+         COALESCE(SUM(quantity), 0) AS lifetime_book_quantity,
+         COALESCE(MAX(quantity), 0) AS largest_order_quantity,
+         MIN(created_at) AS first_purchase_at,
+         MAX(created_at) AS latest_purchase_at
+  FROM orders
+  WHERE LOWER(email) = LOWER(?)
+    AND order_status IN ('BOOKVAULT_ACCEPTED', 'SHIPPED')
+`);
 
 function createOrder(input) {
   const id = uuidv4();
@@ -142,6 +161,14 @@ function markEmailSent(orderId, kind) {
   statement.run(orderId);
 }
 
+function markResendContactSynced(orderId) {
+  markResendContactSyncedStmt.run(orderId);
+}
+
+function getPurchaseSummaryForEmail(email) {
+  return purchaseSummaryStmt.get(String(email || '').trim());
+}
+
 // Only the subset of fields safe to expose to an unauthenticated customer
 // polling the confirmation page.
 function toPublicStatus(order) {
@@ -169,5 +196,7 @@ module.exports = {
   setOrderStatus,
   setNextAttempt,
   markEmailSent,
+  markResendContactSynced,
+  getPurchaseSummaryForEmail,
   toPublicStatus,
 };
