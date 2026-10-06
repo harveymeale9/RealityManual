@@ -16219,3 +16219,18 @@ so both the full query and `reprogramming a subc` put page 127 first. The index
 fingerprint version was advanced so older cached search jobs cannot preserve
 the bad ordering. Regression coverage checks both forms, and the full
 ops-service suite passes (153 tests).
+
+---
+
+# 469. Illustrated-Book Search Highlight Remains Readable (2026-10-06)
+
+Search-result highlights in the illustrated manuscript previously placed a
+56% opaque yellow fill over each matched OCR word, rising to 72% during the
+opening animation. That washed out the book's existing gold and fine printed
+lettering precisely where Harvey needed to read it.
+
+The artwork highlight now uses a 16% translucent marker fill (26% at the brief
+opening pulse) plus a thin gold edge glow. The passage remains easy to locate
+without recolouring or obscuring the text baked into the illustrated page.
+The stylesheet URL was versioned so existing Content Studio tabs fetch the
+readable treatment rather than retaining the old cached CSS.
