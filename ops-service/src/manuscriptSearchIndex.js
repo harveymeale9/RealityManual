@@ -3,7 +3,7 @@
 const crypto = require('crypto');
 const doctrine = require('./ideationDoctrine');
 
-const INDEX_VERSION = 'semantic-fts-v5-highlight-safe-phrases';
+const INDEX_VERSION = 'semantic-fts-v6-chapter-title-priority';
 const STOP_WORDS = new Set(['a','an','and','are','as','at','be','but','by','do','does','for','from','had','has','have','how','i','if','in','is','it','me','my','of','on','or','our','should','so','that','the','their','there','they','this','to','was','we','what','when','where','which','who','why','will','with','you','your']);
 
 const TOPICS = [
@@ -47,6 +47,26 @@ function phraseTokens(value) {
 
 function terms(value) {
   return phraseTokens(value).filter(function (term) { return term.length > 1 && !STOP_WORDS.has(term); });
+}
+
+function titleMatchQuality(query, title) {
+  const wanted = terms(query);
+  const available = terms(title);
+  if (wanted.length < 2 || available.length < 2) return 0;
+  const matched = wanted.filter(function (wantedTerm) {
+    return available.some(function (titleTerm) {
+      // Prefix matching covers both harmless singular/plural differences
+      // (belief/beliefs) and an in-progress search such as "subc" while the
+      // user is typing "subconscious". Require three characters so a tiny
+      // fragment cannot promote an unrelated chapter.
+      return wantedTerm === titleTerm
+        || (Math.min(wantedTerm.length, titleTerm.length) >= 3
+          && (wantedTerm.indexOf(titleTerm) === 0 || titleTerm.indexOf(wantedTerm) === 0));
+    });
+  }).length;
+  if (matched !== wanted.length) return 0;
+  const precision = matched / available.length;
+  return 3000 + Math.round(precision * 1000);
 }
 
 // Find a genuinely verbatim sequence while ignoring typography and punctuation
@@ -215,14 +235,23 @@ function setup(db, pages) {
       const excerpt = exactPhraseExcerpt(page.text, query);
       return excerpt ? { page: page.page, title: titleFor(page), body: excerpt, rank: 0, exactPhrase: true } : null;
     }).filter(Boolean);
-    if (!unique.length && !exactRows.length) return [];
+    const titleRows = pages.map(function (page) {
+      const title = titleFor(page);
+      const titleScore = titleMatchQuality(query, title);
+      if (!titleScore) return null;
+      const body = chunksFor(page).find(function (chunk) {
+        return normalized(chunk) !== normalized(title) && chunk.length > 80;
+      }) || chunksFor(page)[0];
+      return { page: page.page, title: title, body: body, rank: 0, titleMatch: true, titleScore: titleScore };
+    }).filter(Boolean);
+    if (!unique.length && !exactRows.length && !titleRows.length) return [];
     const match = unique.map(function (term) { return '"' + term + '"*'; }).join(' OR ');
     // FTS deliberately caps its broad candidate set. Always inject semantic
     // intent anchors as candidates too, otherwise a long query full of common
     // words can identify the right concept yet have its canonical page dropped
     // before the reranker ever sees it.
     const anchorRows = anchors.flatMap(function (page) { return pageLookup.all(page); });
-    const rows = (match ? lookup.all(match) : []).concat(exactRows, anchorRows, rule ? pageLookup.all(rule.page) : []);
+    const rows = (match ? lookup.all(match) : []).concat(exactRows, titleRows, anchorRows, rule ? pageLookup.all(rule.page) : []);
     const byPage = new Map();
     rows.forEach(function (row) {
       const page = Number(row.page);
@@ -233,12 +262,13 @@ function setup(db, pages) {
         return score + 28 + Math.max(0, 8 - Math.abs(page - topic.anchor));
       }, 0);
       const phraseBoost = row.exactPhrase ? 4000 : 0;
+      const titleBoost = row.titleMatch ? Number(row.titleScore || 0) : 0;
       const anchorBoost = anchors.reduce(function (score, anchor) {
         const distance = Math.abs(page - anchor);
         return score + (distance === 0 ? 100 : distance <= 2 ? 45 - distance * 10 : 0);
       }, 0);
       const ruleBoost = rule && page === rule.page ? 2000 : 0;
-      const score = -Number(row.rank || 0) + lexical + topicBoost + phraseBoost + anchorBoost + ruleBoost;
+      const score = -Number(row.rank || 0) + lexical + topicBoost + phraseBoost + titleBoost + anchorBoost + ruleBoost;
       const prior = byPage.get(page);
       if (!prior || score > prior.score) byPage.set(page, Object.assign({}, row, { page: page, score: score }));
     });
@@ -246,12 +276,15 @@ function setup(db, pages) {
       const topic = topics.find(function (candidate) { return row.page >= candidate.from && row.page <= candidate.to; });
       const exactRule = rule && row.page === rule.page;
       const exactPhrase = !!row.exactPhrase;
+      const exactTitle = !!row.titleMatch;
       const body = row.body.length > 500 ? row.body.slice(0, 500).replace(/\s+\S*$/, '') : row.body;
       return {
         page: row.page,
         title: exactRule ? rule.title : (row.title === 'Page ' + row.page && topic ? topic.label : row.title),
         relevance: exactRule
           ? 'This is ' + rule.title + ', the exact Rule requested.'
+          : exactTitle
+          ? 'This chapter title directly matches your search.'
           : exactPhrase
           ? 'This passage contains the exact phrase from your search.'
           : topic
@@ -266,4 +299,4 @@ function setup(db, pages) {
   return { search: search, fingerprint: expected, topicCount: TOPICS.length };
 }
 
-module.exports = { setup: setup, matchingTopics: matchingTopics, matchingRule: matchingRule, intentAnchors: intentAnchors, exactPhraseExcerpt: exactPhraseExcerpt, normalized: normalized, terms: terms, TOPICS: TOPICS, RULE_REFERENCES: RULE_REFERENCES };
+module.exports = { setup: setup, matchingTopics: matchingTopics, matchingRule: matchingRule, intentAnchors: intentAnchors, exactPhraseExcerpt: exactPhraseExcerpt, titleMatchQuality: titleMatchQuality, normalized: normalized, terms: terms, TOPICS: TOPICS, RULE_REFERENCES: RULE_REFERENCES };

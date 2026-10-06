@@ -16198,3 +16198,24 @@ Audience endpoints. Backend coverage verifies first-purchase creation,
 repeat-purchase updates, unsubscribe preservation, quantity cohorts, email
 tags, cumulative local purchase summaries, and failure isolation. All 17
 backend tests pass.
+
+---
+
+# 468. Manuscript Search Prioritizes Matching Chapter Titles (2026-10-06)
+
+The manuscript finder previously omitted page 127 for searches such as
+`Reprogramming A Subconscious Belief`, even though that page begins the chapter
+`Reprogramming Subconscious Beliefs`. The heading was correctly indexed, but
+the broad semantic expansions for `reprogramming` and `subconscious belief`
+could fill the capped FTS candidate pool with FIRR and belief passages before
+the exact chapter-heading page reached the reranker.
+
+Chapter-title matches are now generated directly from every canonical page and
+injected into the reranker independently of that FTS cap. A complete title
+token match receives explicit priority and a clear `chapter title directly
+matches` explanation. Matching tolerates stop words, harmless singular/plural
+differences, and useful partially typed tokens of at least three characters,
+so both the full query and `reprogramming a subc` put page 127 first. The index
+fingerprint version was advanced so older cached search jobs cannot preserve
+the bad ordering. Regression coverage checks both forms, and the full
+ops-service suite passes (153 tests).

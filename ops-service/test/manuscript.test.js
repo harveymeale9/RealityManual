@@ -148,6 +148,20 @@ test('manuscript reader serves illustrated selectable spreads and instant persis
   assert.equal(namedRule.results[0].page, 9);
   assert.equal(namedRule.results[0].title, 'Rule I: The Rule of Internal Value');
 
+  const chapterTitle = await request('/search', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ query: 'Reprogramming A Subconscious Belief' })
+  });
+  assert.equal(chapterTitle.results[0].page, 127);
+  assert.equal(chapterTitle.results[0].title, 'Reprogramming Subconscious Beliefs');
+  assert.match(chapterTitle.results[0].relevance, /chapter title directly matches/i);
+
+  const partialChapterTitle = await request('/search', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ query: 'reprogramming a subc' })
+  });
+  assert.equal(partialChapterTitle.results[0].page, 127);
+
   const exactPhrase = await request('/search', {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ query: '“The more of one\'s life that can be directed toward what one wants, the greater one\'s freedom.”' })
