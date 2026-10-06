@@ -44,25 +44,38 @@ function jaccard(a, b) {
   return overlap / (left.size + right.size - overlap);
 }
 
-function relatedPlanningSource(a, b) {
-  const aRefs = [a && a.sourcePlanningPieceId, a && a.analysisMatchedPieceId].filter(Boolean);
-  const bRefs = [b && b.sourcePlanningPieceId, b && b.analysisMatchedPieceId].filter(Boolean);
-  return aRefs.some(function (id) { return bRefs.indexOf(id) !== -1 || id === (b && b.id); })
-    || bRefs.some(function (id) { return id === (a && a.id); });
+function bigrams(words) {
+  const result = [];
+  for (let index = 1; index < words.length; index++) result.push(words[index - 1] + ':' + words[index]);
+  return result;
 }
 
 function similarity(a, b) {
   if (!a || !b) return 0;
-  if (relatedPlanningSource(a, b)) return 1;
-  if (clean(a.title) && clean(a.title) === clean(b.title)) return 0.95;
   const aTitle = tokens([a.title].concat(a.ytTitles || []).join(' '), 100);
   const bTitle = tokens([b.title].concat(b.ytTitles || []).join(' '), 100);
   const titleScore = jaccard(aTitle, bTitle);
-  const tagScore = jaccard(tokens((a.tags || []).join(' '), 100), tokens((b.tags || []).join(' '), 100));
-  const aBody = frequency(aTitle.concat(tokens(a.transcript, 1600)));
-  const bBody = frequency(bTitle.concat(tokens(b.transcript, 1600)));
-  const bodyScore = cosine(aBody, bBody);
-  return Math.max(0, Math.min(1, titleScore * 0.48 + bodyScore * 0.44 + tagScore * 0.08));
+  const aTranscript = tokens(a.transcript, 1600);
+  const bTranscript = tokens(b.transcript, 1600);
+
+  // Uploaded long- and short-form treatments are independent cards. Their
+  // edited transcripts are therefore the source of truth for topic overlap;
+  // planning-card references and manually maintained tags are deliberately
+  // ignored. Titles are useful supporting evidence, but cannot make two
+  // substantively different transcripts identical by themselves.
+  if (aTranscript.length && bTranscript.length) {
+    const transcriptCosine = cosine(frequency(aTranscript), frequency(bTranscript));
+    const transcriptVocabulary = jaccard(aTranscript, bTranscript);
+    const phraseScore = jaccard(bigrams(aTranscript), bigrams(bTranscript));
+    return Math.max(0, Math.min(1,
+      transcriptCosine * 0.65 + transcriptVocabulary * 0.12 + phraseScore * 0.08 + titleScore * 0.15
+    ));
+  }
+
+  // A title-only fallback keeps newly uploaded/legacy cards schedulable, but
+  // remains lower-confidence until both transcripts exist.
+  if (clean(a.title) && clean(a.title) === clean(b.title)) return 0.75;
+  return Math.max(0, Math.min(0.65, titleScore * 0.65));
 }
 
 function publicationTime(piece) {
@@ -83,14 +96,14 @@ function chooseSlot(piece, candidates, comparisonPieces, nowMs) {
     // Philosophical videos inevitably share broad vocabulary such as action,
     // belief and emotion. Only a substantive match should delay a release;
     // weaker background overlap must not manufacture empty queue slots.
-    return score >= 0.25 ? { piece: other, time: time, similarity: score } : null;
+    return score >= 0.18 ? { piece: other, time: time, similarity: score } : null;
   }).filter(Boolean);
 
   const ranked = slots.map(function (slot, index) {
     let proximityPenalty = 0;
     comparisons.forEach(function (other) {
       const distanceDays = Math.abs(slot - other.time) / DAY_MS;
-      const desiredDays = 2 + other.similarity * 8;
+      const desiredDays = 2 + other.similarity * 14;
       const shortfall = Math.max(0, (desiredDays - distanceDays) / desiredDays);
       proximityPenalty += other.similarity * shortfall * shortfall * 4;
       if (other.similarity >= 0.35 && distanceDays < 1) proximityPenalty += other.similarity * 3;

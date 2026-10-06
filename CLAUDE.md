@@ -16240,15 +16240,16 @@ readable treatment rather than retaining the old cached CSS.
 # 470. Topic-Aware Publishing Queue (2026-10-06)
 
 Scheduling no longer blindly appends every approved video to the next available
-slot. Content Studio now builds a lightweight local topic profile from data it
-already owns: the working/publish titles, tags, edited transcript, and planning
-card linkage. It makes no AI request and performs no additional transcription.
-Videos linked to the same planning card are treated as the same topic; exact
-titles are near-duplicates; other pieces receive a bounded lexical similarity
-score from title, tag, and transcript overlap. A live-corpus check correctly
-grouped the duplicate `No Boat Rises Alone` recordings, recognized the two
-consciousness videos as strongly related, and scored unrelated subjects near
-zero.
+slot. Content Studio now builds a lightweight local topic profile primarily
+from the edited transcript it already owns, with the working/publish title as
+secondary evidence. It makes no AI request and performs no additional
+transcription. Longform and short-form treatments have separate planning cards,
+so planning linkage and ad-hoc tags are deliberately ignored rather than being
+allowed to manufacture similarity. Transcript vocabulary, term frequency, and
+phrase overlap produce the bounded score; title-only legacy cards receive a
+lower-confidence fallback until a transcript exists. A live-corpus check
+correctly scored the duplicate `No Boat Rises Alone` recordings at 0.925 and
+unrelated subjects near zero.
 
 For each approved video, the scheduler considers the next 32 unoccupied
 short-form slots (roughly sixteen days at the normal twice-daily cadence) or ten
@@ -16258,9 +16259,11 @@ days for a substantive relation to ten days for the exact same topic. Broad
 shared vocabulary below a 0.25 score is ignored, so fresh subjects fill the
 earliest open holes, while a long/short pair from one plan or
 a near-duplicate is deliberately pushed toward the far end of the useful
-window. Scheduled and recently live pieces across **all** formats participate,
-so longform and shortform versions cannot evade comparison merely because they
-use different publishing rhythms. The chosen similarity, comparison piece,
+window. The corrected transcript-first formula also extends the desired gap as
+similarity rises, reaching farther into the available queue for genuinely close
+treatments. Scheduled and recently live pieces across **all** formats
+participate, so longform and shortform versions cannot evade comparison merely
+because they use different publishing rhythms. The chosen similarity, comparison piece,
 separation, and optimization score are stored on the video card as a durable
 audit record.
 
@@ -16273,7 +16276,38 @@ new approval being appended beyond a deliberately delayed similar video.
 Longform similarly retains its three-day Bangkok calendar while filling open
 grid positions.
 
-Automated coverage verifies exact planning-card matches, related-vs-unrelated
-lexical scoring, duplicate spacing, earliest-slot behavior for fresh material,
-gap filling in both publishing rhythms, and Buffer's exact custom timestamp.
-The complete ops-service suite passes (159 tests).
+Automated coverage verifies independent-card transcript matches, confirms that
+planning links and tags cannot manufacture similarity, tests related-vs-
+unrelated scoring, duplicate spacing, earliest-slot behavior for fresh
+material, gap filling in both publishing rhythms, and Buffer's exact custom
+timestamp.
+
+---
+
+# 471. Daily Kanban JSON Backup to R2 (2026-10-06)
+
+The VPS snapshot is no longer the only recovery path for Content Studio's
+ideas and outlines. Once per UTC day, ops-service serializes every `pieces`
+card into a dated R2 object at `backups/kanban/daily/YYYY-MM-DD.json`. This is
+the complete card record needed to recover its stage, idea, outline,
+transcript, titles, platform choices, and workflow metadata; only the derived
+base64 thumbnail is omitted because it can dwarf the actual card content and
+is not needed to restore the Kanban. No video or audio media is duplicated by
+this job.
+
+Each object includes a format/version marker, timestamp, card count, and SHA-256
+digest. An upload is not considered successful until Content Studio reads the
+JSON back from R2, parses it, recomputes the digest, and confirms the card
+count. A stable per-day key makes the job safe across service restarts; an
+hourly watcher creates the missing daily copy and otherwise validates/skips
+the already-good object. It retries after failure, prevents concurrent runs,
+and retains 365 daily snapshots by default (configurable with
+`R2_KANBAN_BACKUP_RETENTION_DAYS`). Storage status exposes the last attempt,
+success, object key, count, size, and error, and an authenticated manual-run
+endpoint is available at `POST /api/storage/kanban-backup`.
+
+R2's storage adapter now supports namespace-restricted JSON upload/read/list
+operations in addition to publish-ready video media. Automated coverage checks
+upload-size verification, JSON readback, safe key restrictions, card fidelity,
+thumbnail omission, retention, idempotent same-day operation, and corrupt
+readback failure. The complete ops-service suite passes (163 tests).

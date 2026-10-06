@@ -18,7 +18,8 @@ const commandTypes = {
   HeadBucketCommand: command('headBucket'),
   HeadObjectCommand: command('headObject'),
   GetObjectCommand: command('getObject'),
-  DeleteObjectCommand: command('deleteObject')
+  DeleteObjectCommand: command('deleteObject'),
+  ListObjectsV2Command: command('listObjects')
 };
 
 test('R2 storage reports missing configuration without constructing a client', async function () {
@@ -27,6 +28,35 @@ test('R2 storage reports missing configuration without constructing a client', a
   assert.deepEqual(storage.missing, ['R2_ENDPOINT', 'R2_BUCKET_NAME', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY']);
   assert.deepEqual(await storage.health(), { configured: false, connected: false, missing: storage.missing });
   await assert.rejects(storage.signedGetUrl('x', 60), /not configured/);
+});
+
+test('R2 JSON backups can be uploaded, read, listed and verified', async function () {
+  const calls = [];
+  const payload = { format: 'test', cards: [{ id: 'one' }] };
+  const bytes = Buffer.from(JSON.stringify(payload, null, 2) + '\n');
+  let uploadInput;
+  const storage = storageModule.setup({
+    endpoint: 'https://account.r2.cloudflarestorage.com', bucket: 'bucket', accessKeyId: 'key', secretAccessKey: 'secret',
+    commandTypes: commandTypes,
+    client: { send: async function (cmd) {
+      calls.push(cmd);
+      if (cmd.name === 'headObject') return { ContentLength: bytes.length, ETag: 'json-etag', ContentType: 'application/json' };
+      if (cmd.name === 'getObject') return { Body: Readable.from(bytes), ContentType: 'application/json' };
+      if (cmd.name === 'listObjects') return { Contents: [{ Key: 'backups/kanban/daily/2026-10-06.json', Size: bytes.length, LastModified: new Date('2026-10-06T01:00:00Z') }] };
+      return {};
+    } },
+    uploadFactory: function (input) { uploadInput = input; return { done: async function () {} }; }
+  });
+  const result = await storage.uploadJson('backups/kanban/daily/2026-10-06.json', payload);
+  assert.equal(uploadInput.params.ContentType, 'application/json');
+  assert.deepEqual(uploadInput.params.Body, bytes);
+  assert.equal(result.sizeBytes, bytes.length);
+  assert.deepEqual(await storage.readJson('backups/kanban/daily/2026-10-06.json'), payload);
+  assert.deepEqual(await storage.listKeys('backups/kanban/daily/'), [{
+    key: 'backups/kanban/daily/2026-10-06.json', sizeBytes: bytes.length, lastModified: '2026-10-06T01:00:00.000Z'
+  }]);
+  await assert.rejects(storage.uploadJson('../secret.json', {}), /Invalid R2 JSON object key/);
+  assert.ok(calls.some(function (call) { return call.name === 'listObjects'; }));
 });
 
 test('R2 uploads are multipart, verified by size, downloadable and privately signed', async function (t) {

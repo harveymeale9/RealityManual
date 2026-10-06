@@ -43,6 +43,7 @@ const videoEditorService = require('./src/videoEditorService');
 const editorRetakeAnalysis = require('./src/editorRetakeAnalysis');
 const editorTranscriptSampling = require('./src/editorTranscriptSampling');
 const r2StorageService = require('./src/r2Storage');
+const kanbanBackupService = require('./src/kanbanBackupService');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
@@ -84,6 +85,7 @@ const ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const FINAL_VIDEO_SUFFIX = '-final';
 const R2_PUBLISHED_RETENTION_DAYS = Math.max(1, Math.min(365, Number(process.env.R2_PUBLISHED_RETENTION_DAYS) || 14));
+const R2_KANBAN_BACKUP_RETENTION_DAYS = Math.max(30, Math.min(3650, Number(process.env.R2_KANBAN_BACKUP_RETENTION_DAYS) || 365));
 const r2Storage = r2StorageService.setup({
   endpoint: process.env.R2_ENDPOINT,
   bucket: process.env.R2_BUCKET_NAME,
@@ -1829,6 +1831,16 @@ function savePieceRecord(piece) {
   weeklyReports.recordStageChange(piece, previous && previous.stage, 'automation', stamp);
 }
 
+const kanbanBackups = kanbanBackupService.setup({
+  storage: r2Storage,
+  retentionDays: R2_KANBAN_BACKUP_RETENTION_DAYS,
+  getCards: function () {
+    return stmts.getAll.all('pieces').map(function (row) {
+      try { return recordConcurrency.decodeRow(row); } catch (error) { return null; }
+    }).filter(Boolean);
+  }
+});
+
 // Planning cards and physical video files used to share one lifecycle. Split
 // them once: plans stop permanently at Uploaded, while video cards occupy the
 // automatic Editor/Production/Final Check/publishing half of the board.
@@ -2554,7 +2566,13 @@ app.get('/api/storage/status', requireAuth, async function (req, res) {
     try { return count + (recordConcurrency.decodeRow(row).storageStatus === 'ready' ? 1 : 0); }
     catch (error) { return count; }
   }, 0);
+  status.kanbanBackups = kanbanBackups.status();
   res.json(status);
+});
+
+app.post('/api/storage/kanban-backup', requireAuth, async function (req, res) {
+  try { res.json(await kanbanBackups.run({ force: true })); }
+  catch (error) { res.status(502).json({ error: String(error && error.message || error).slice(0, 500) }); }
 });
 
 async function runBufferTiktokPublish(id, opts) {
@@ -3875,6 +3893,18 @@ const httpServer = app.listen(PORT, function () {
   }, 24 * 60 * 60 * 1000);
   if (firstR2Cleanup.unref) firstR2Cleanup.unref();
   if (r2CleanupTimer.unref) r2CleanupTimer.unref();
+  // Keep the ideas/outlines independently recoverable even if the VPS copy
+  // and its ordinary daily snapshot are both unavailable. The stable daily
+  // key makes this idempotent across restarts; each successful upload is read
+  // back and hash-checked before it counts as a backup.
+  const firstKanbanBackup = setTimeout(function () {
+    kanbanBackups.run().catch(function (error) { console.error('Kanban R2 backup failed:', error.message); });
+  }, 20 * 1000);
+  const kanbanBackupTimer = setInterval(function () {
+    kanbanBackups.run().catch(function (error) { console.error('Kanban R2 backup failed:', error.message); });
+  }, 60 * 60 * 1000);
+  if (firstKanbanBackup.unref) firstKanbanBackup.unref();
+  if (kanbanBackupTimer.unref) kanbanBackupTimer.unref();
 });
 // Node's default requestTimeout is five minutes for receiving the complete
 // request body. That is far shorter than a legitimate multi-gigabyte camera

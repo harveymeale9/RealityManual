@@ -8,7 +8,8 @@ const {
   HeadBucketCommand,
   HeadObjectCommand,
   GetObjectCommand,
-  DeleteObjectCommand
+  DeleteObjectCommand,
+  ListObjectsV2Command
 } = require('@aws-sdk/client-s3');
 const { Upload } = require('@aws-sdk/lib-storage');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
@@ -33,7 +34,8 @@ function setup(options) {
     HeadBucketCommand: HeadBucketCommand,
     HeadObjectCommand: HeadObjectCommand,
     GetObjectCommand: GetObjectCommand,
-    DeleteObjectCommand: DeleteObjectCommand
+    DeleteObjectCommand: DeleteObjectCommand,
+    ListObjectsV2Command: ListObjectsV2Command
   };
   const client = options.client || (configured ? new S3Client({
     region: 'auto',
@@ -90,6 +92,68 @@ function setup(options) {
     return remote;
   }
 
+  function safeDataKey(value) {
+    const key = clean(value, 1000);
+    if (!/^backups\/[A-Za-z0-9_./-]+\.json$/.test(key) || key.includes('..')) {
+      throw new Error('Invalid R2 JSON object key.');
+    }
+    return key;
+  }
+
+  async function uploadJson(key, value) {
+    requireConfigured();
+    key = safeDataKey(key);
+    const body = Buffer.from(JSON.stringify(value, null, 2) + '\n', 'utf8');
+    const upload = uploadFactory({
+      client: client,
+      params: { Bucket: bucket, Key: key, Body: body, ContentType: 'application/json' },
+      queueSize: 1,
+      partSize: 5 * 1024 * 1024,
+      leavePartsOnError: false
+    });
+    await upload.done();
+    const remote = await headKey(key);
+    if (remote.sizeBytes !== body.length) throw new Error('R2 JSON upload verification failed: remote size did not match.');
+    return remote;
+  }
+
+  async function readJson(key) {
+    requireConfigured();
+    key = safeDataKey(key);
+    const response = await client.send(new commandTypes.GetObjectCommand({ Bucket: bucket, Key: key }));
+    if (!response.Body) throw new Error('R2 returned an empty JSON object body.');
+    let body;
+    if (typeof response.Body.transformToString === 'function') body = await response.Body.transformToString('utf8');
+    else {
+      const chunks = [];
+      for await (const chunk of response.Body) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      body = Buffer.concat(chunks).toString('utf8');
+    }
+    return JSON.parse(body);
+  }
+
+  async function listKeys(prefix) {
+    requireConfigured();
+    prefix = clean(prefix, 900);
+    if (!/^backups\/[A-Za-z0-9_./-]*$/.test(prefix) || prefix.includes('..')) throw new Error('Invalid R2 list prefix.');
+    const objects = [];
+    let continuationToken;
+    do {
+      const response = await client.send(new commandTypes.ListObjectsV2Command({
+        Bucket: bucket, Prefix: prefix, ContinuationToken: continuationToken
+      }));
+      (response.Contents || []).forEach(function (item) {
+        if (item.Key) objects.push({
+          key: item.Key,
+          sizeBytes: Number(item.Size) || 0,
+          lastModified: item.LastModified ? new Date(item.LastModified).toISOString() : ''
+        });
+      });
+      continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+    } while (continuationToken);
+    return objects;
+  }
+
   async function downloadKey(key, destination) {
     requireConfigured();
     await fs.promises.mkdir(path.dirname(destination), { recursive: true });
@@ -134,6 +198,9 @@ function setup(options) {
     objectKey: objectKey,
     headKey: headKey,
     uploadFile: uploadFile,
+    uploadJson: uploadJson,
+    readJson: readJson,
+    listKeys: listKeys,
     downloadKey: downloadKey,
     signedGetUrl: signedGetUrl,
     deleteKey: deleteKey,
