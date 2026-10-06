@@ -19,7 +19,7 @@ test('daily Kanban backup preserves card data, omits derived thumbnails and veri
     },
     listKeys: async function () {
       const current = Array.from(objects.keys()).map(function (key) { return { key: key, lastModified: key }; });
-      for (let index = 0; index < 366; index++) current.push({
+      for (let index = 0; index < 8; index++) current.push({
         key: 'backups/kanban/daily/2025-' + String(Math.floor(index / 31) + 1).padStart(2, '0') + '-' + String(index % 31 + 1).padStart(2, '0') + '.json',
         lastModified: new Date(2025, 0, 1 + index).toISOString()
       });
@@ -42,6 +42,7 @@ test('daily Kanban backup preserves card data, omits derived thumbnails and veri
   assert.equal(saved.cards[0].thumbnailDataUrl, undefined);
   assert.equal(backupModule.validBackup(saved), true);
   assert.equal(deleted.length, 2);
+  assert.equal(service.status().retentionDays, 7);
   assert.equal(service.status().lastError, '');
 
   const second = await service.run();

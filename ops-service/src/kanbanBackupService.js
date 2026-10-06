@@ -35,7 +35,7 @@ function setup(options) {
   const storage = options.storage;
   const getCards = options.getCards;
   const now = options.now || Date.now;
-  const retentionDays = Math.max(30, Math.min(3650, Number(options.retentionDays) || 365));
+  const retentionDays = Math.max(1, Math.min(3650, Number(options.retentionDays) || 7));
   let running = null;
   const state = {
     configured: !!(storage && storage.configured),

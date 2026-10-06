@@ -85,7 +85,7 @@ const ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const FINAL_VIDEO_SUFFIX = '-final';
 const R2_PUBLISHED_RETENTION_DAYS = Math.max(1, Math.min(365, Number(process.env.R2_PUBLISHED_RETENTION_DAYS) || 14));
-const R2_KANBAN_BACKUP_RETENTION_DAYS = Math.max(30, Math.min(3650, Number(process.env.R2_KANBAN_BACKUP_RETENTION_DAYS) || 365));
+const R2_KANBAN_BACKUP_RETENTION_DAYS = 7;
 const r2Storage = r2StorageService.setup({
   endpoint: process.env.R2_ENDPOINT,
   bucket: process.env.R2_BUCKET_NAME,

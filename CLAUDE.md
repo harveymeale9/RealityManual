@@ -16301,8 +16301,7 @@ JSON back from R2, parses it, recomputes the digest, and confirms the card
 count. A stable per-day key makes the job safe across service restarts; an
 hourly watcher creates the missing daily copy and otherwise validates/skips
 the already-good object. It retries after failure, prevents concurrent runs,
-and retains 365 daily snapshots by default (configurable with
-`R2_KANBAN_BACKUP_RETENTION_DAYS`). Storage status exposes the last attempt,
+and retains only the seven most recent daily snapshots. Storage status exposes the last attempt,
 success, object key, count, size, and error, and an authenticated manual-run
 endpoint is available at `POST /api/storage/kanban-backup`.
 
