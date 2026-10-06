@@ -46,6 +46,20 @@ test('Buffer refuses ambiguous TikTok channels and reports missing configuration
   await assert.rejects(ambiguous.resolveTiktokChannel(), /Multiple TikTok channels/);
 });
 
+test('Buffer locks topic-aware TikTok posts to the exact chosen publishing time', async function () {
+  const dueAt = '2026-10-14T05:00:00.000Z';
+  const service = bufferService.setup({ apiKey: 'test-key', fetchImpl: async function (url, options) {
+    const body = JSON.parse(options.body);
+    if (body.query.indexOf('account') !== -1) return response({ data: { account: { organizations: [{ id: 'org-1' }] } } });
+    if (body.query.indexOf('query Channels') !== -1) return response({ data: { channels: [{ id: 'tt-1', service: 'tiktok' }] } });
+    assert.equal(body.variables.input.mode, 'customScheduled');
+    assert.equal(body.variables.input.dueAt, dueAt);
+    return response({ data: { createPost: { __typename: 'PostActionSuccess', post: { id: 'post-2', status: 'scheduled', dueAt: dueAt } } } });
+  } });
+  const result = await service.createTiktokVideoPost({ text: 'Scheduled intelligently', videoUrl: 'https://example/video.mp4', dueAt: dueAt });
+  assert.equal(result.post.dueAt, dueAt);
+});
+
 test('Buffer returns authoritative lifecycle, destination link, and normalized post metrics', async function () {
   const service = bufferService.setup({ apiKey: 'test-key', fetchImpl: async function (url, options) {
     const body = JSON.parse(options.body);

@@ -28,6 +28,15 @@ test('missing Buffer schedule safely falls back to two daily GMT+7 slots', funct
   assert.equal(schedule.isShortform({ contentType: 'longform' }), false);
 });
 
+test('topic scheduler can fill open short-form slots instead of appending after a distant reservation', function () {
+  const start = Date.parse('2026-09-28T04:00:00Z');
+  assert.deepEqual(schedule.nextAvailableBangkokSlots(start, daily(['00:00', '12:00']), [
+    '2026-09-28T05:00:00.000Z', '2026-09-29T17:00:00.000Z'
+  ], 3), [
+    '2026-09-28T17:00:00.000Z', '2026-09-29T05:00:00.000Z', '2026-09-30T05:00:00.000Z'
+  ]);
+});
+
 test('longform uses the chosen Bangkok time on a three-day calendar rhythm', function () {
   assert.equal(
     schedule.nextBangkokLongformSlot(Date.parse('2026-09-28T00:00:00Z'), '07:55', null),
@@ -46,4 +55,13 @@ test('longform uses the chosen Bangkok time on a three-day calendar rhythm', fun
 test('longform time input is normalized and safely defaults to the shorts midpoint', function () {
   assert.equal(schedule.normalizeLongformTime('19:05'), '19:05');
   assert.equal(schedule.normalizeLongformTime('bad'), '07:55');
+});
+
+test('topic scheduler retains the three-day longform rhythm while filling intentional gaps', function () {
+  assert.deepEqual(schedule.nextAvailableBangkokLongformSlots(
+    Date.parse('2026-09-29T02:00:00Z'), '07:55',
+    ['2026-09-28T00:55:00.000Z', '2026-10-04T00:55:00.000Z'], 3
+  ), [
+    '2026-10-01T00:55:00.000Z', '2026-10-07T00:55:00.000Z', '2026-10-10T00:55:00.000Z'
+  ]);
 });

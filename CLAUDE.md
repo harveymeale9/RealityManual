@@ -16234,3 +16234,46 @@ opening pulse) plus a thin gold edge glow. The passage remains easy to locate
 without recolouring or obscuring the text baked into the illustrated page.
 The stylesheet URL was versioned so existing Content Studio tabs fetch the
 readable treatment rather than retaining the old cached CSS.
+
+---
+
+# 470. Topic-Aware Publishing Queue (2026-10-06)
+
+Scheduling no longer blindly appends every approved video to the next available
+slot. Content Studio now builds a lightweight local topic profile from data it
+already owns: the working/publish titles, tags, edited transcript, and planning
+card linkage. It makes no AI request and performs no additional transcription.
+Videos linked to the same planning card are treated as the same topic; exact
+titles are near-duplicates; other pieces receive a bounded lexical similarity
+score from title, tag, and transcript overlap. A live-corpus check correctly
+grouped the duplicate `No Boat Rises Alone` recordings, recognized the two
+consciousness videos as strongly related, and scored unrelated subjects near
+zero.
+
+For each approved video, the scheduler considers the next 32 unoccupied
+short-form slots (roughly sixteen days at the normal twice-daily cadence) or ten
+unoccupied longform slots (the existing three-day rhythm). It balances using an
+early slot against a proximity penalty whose desired separation rises from four
+days for a substantive relation to ten days for the exact same topic. Broad
+shared vocabulary below a 0.25 score is ignored, so fresh subjects fill the
+earliest open holes, while a long/short pair from one plan or
+a near-duplicate is deliberately pushed toward the far end of the useful
+window. Scheduled and recently live pieces across **all** formats participate,
+so longform and shortform versions cannot evade comparison merely because they
+use different publishing rhythms. The chosen similarity, comparison piece,
+separation, and optimization score are stored on the video card as a durable
+audit record.
+
+TikTok posts now use Buffer's official `customScheduled` mode with Content
+Studio's exact selected `dueAt`, rather than asking Buffer to choose the next
+queue slot. YouTube, Instagram, Facebook, and TikTok continue sharing one exact
+release instant for a short. Existing occupied short slots are skipped, and
+intentional gaps remain available for later unrelated uploads instead of every
+new approval being appended beyond a deliberately delayed similar video.
+Longform similarly retains its three-day Bangkok calendar while filling open
+grid positions.
+
+Automated coverage verifies exact planning-card matches, related-vs-unrelated
+lexical scoring, duplicate spacing, earliest-slot behavior for fresh material,
+gap filling in both publishing rhythms, and Buffer's exact custom timestamp.
+The complete ops-service suite passes (159 tests).

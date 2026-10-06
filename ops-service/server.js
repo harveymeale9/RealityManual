@@ -38,6 +38,7 @@ const bufferPublicationSyncService = require('./src/bufferPublicationSync');
 const metaAuth = require('./src/metaAuth');
 const metaPublisherService = require('./src/metaPublisher');
 const shortformSchedule = require('./src/shortformSchedule');
+const topicSchedule = require('./src/topicSchedule');
 const videoEditorService = require('./src/videoEditorService');
 const editorRetakeAnalysis = require('./src/editorRetakeAnalysis');
 const editorTranscriptSampling = require('./src/editorTranscriptSampling');
@@ -2647,6 +2648,27 @@ function uniquePublishDestinations(destinations) {
   });
 }
 
+function allPieceRecords() {
+  return stmts.getAll.all('pieces').map(function (row) { return recordConcurrency.decodeRow(row); }).filter(Boolean);
+}
+
+function topicAwarePublishingSlot(piece, candidates, pieces) {
+  const selection = topicSchedule.chooseSlot(piece, candidates, pieces, Date.now());
+  return {
+    dueAt: selection.dueAt,
+    diagnostic: {
+      version: 1,
+      selectedAt: new Date().toISOString(),
+      closestPieceId: selection.closestPieceId,
+      closestTitle: selection.closestTitle,
+      similarity: selection.similarity,
+      separationDays: selection.separationDays,
+      slotIndex: selection.slotIndex,
+      optimizationScore: selection.optimizationScore
+    }
+  };
+}
+
 async function runPlatformPublishBatch(id, destinations) {
   const finalPath = path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX);
   const openingPiece = getPieceRecord(id);
@@ -2677,13 +2699,13 @@ async function runPlatformPublishBatch(id, destinations) {
   const archivedPiece = getPieceRecord(id);
   const mimeType = archivedPiece && archivedPiece.storageMimeType || videoMeta.mimeType || 'video/mp4';
 
-  // Shorts use one shared release instant across every destination. Buffer is
-  // authoritative whenever TikTok is selected: enqueue TikTok first, retain
-  // its exact dueAt, then persist the direct-platform payload until that same
-  // instant. If TikTok is not selected, mirror Buffer's current Bangkok queue
-  // schedule so YouTube Shorts / Instagram / Facebook still occupy the same
-  // midnight-or-noon timeline. Longform is queued separately below on its
-  // three-day Bangkok rhythm and never competes with either short slot.
+  // Shorts use one shared release instant across every destination. Content
+  // Studio chooses an exact topic-aware slot from Buffer's Bangkok posting
+  // calendar, then creates TikTok as a custom-scheduled post at that instant
+  // and retains the direct-platform payload until the same time. Longform
+  // keeps its separate three-day Bangkok rhythm, but both rhythms compare
+  // against every format so a long and short treatment of the same subject
+  // are deliberately kept apart.
   const initialPiece = getPieceRecord(id);
   const isScheduledLongformRelease = initialPiece && initialPiece.contentType === 'longform' &&
     !initialPiece.directLongformReleaseRunning;
@@ -2691,27 +2713,22 @@ async function runPlatformPublishBatch(id, destinations) {
     const settingsRow = stmts.getOne.get('settings', 'settings');
     let settings = {};
     try { settings = settingsRow ? JSON.parse(settingsRow.data) : {}; } catch (error) { settings = {}; }
-    let latestScheduledAt = null;
-    let latestTimestamp = 0;
-    stmts.getAll.all('pieces').forEach(function (row) {
-      const other = recordConcurrency.decodeRow(row);
-      if (!other || other.id === id || other.contentType !== 'longform' ||
-          ['scheduled', 'live'].indexOf(other.stage) === -1 || !other.scheduledAt) return;
-      const timestamp = Date.parse(other.scheduledAt);
-      if (Number.isFinite(timestamp) && timestamp > latestTimestamp) {
-        latestTimestamp = timestamp;
-        latestScheduledAt = other.scheduledAt;
-      }
-    });
-    const dueAt = shortformSchedule.nextBangkokLongformSlot(
-      Date.now(), settings.longformScheduleTime || '07:55', latestScheduledAt
+    const pieces = allPieceRecords();
+    const occupied = pieces.filter(function (other) {
+      return other.id !== id && other.contentType === 'longform' && other.stage === 'scheduled' && other.scheduledAt;
+    }).map(function (other) { return other.scheduledAt; });
+    const candidates = shortformSchedule.nextAvailableBangkokLongformSlots(
+      Date.now(), settings.longformScheduleTime || '07:55', occupied, 10
     );
+    const scheduled = topicAwarePublishingSlot(initialPiece, candidates, pieces);
+    const dueAt = scheduled.dueAt;
     const latest = getPieceRecord(id);
     if (!latest) return;
     latest.scheduledAt = dueAt;
     latest.stage = 'scheduled';
     latest.directLongformPublishStatus = 'scheduled';
     latest.scheduledPublishDestinations = destinations;
+    latest.topicSchedule = scheduled.diagnostic;
     latest.directLongformReleaseRunning = false;
     destinations.forEach(function (destination) {
       latest[publishStatusField(destination.platform)] = 'scheduled';
@@ -2728,15 +2745,32 @@ async function runPlatformPublishBatch(id, destinations) {
     const tiktokDestination = destinations.find(function (destination) { return destination.platform === 'tiktok'; });
     const directDestinations = destinations.filter(function (destination) { return destination.platform !== 'tiktok'; });
     let dueAt = null;
+    let postingSchedule = [];
+    try {
+      const bufferStatus = await buffer.status();
+      if (bufferStatus.connected && bufferStatus.channel && bufferStatus.channel.timezone === 'Asia/Bangkok') {
+        postingSchedule = bufferStatus.channel.postingSchedule || [];
+      }
+    } catch (error) {
+      console.error('Could not read Buffer schedule; using midnight/noon Bangkok fallback:', error.message);
+    }
+    const pieces = allPieceRecords();
+    const occupied = pieces.filter(function (other) {
+      return other.id !== id && shortformSchedule.isShortform(other) && other.stage === 'scheduled' && other.scheduledAt;
+    }).map(function (other) { return other.scheduledAt; });
+    const candidates = shortformSchedule.nextAvailableBangkokSlots(Date.now(), postingSchedule, occupied, 32);
+    const scheduled = topicAwarePublishingSlot(initialPiece, candidates, pieces);
+    dueAt = scheduled.dueAt;
 
     if (tiktokDestination) {
       try {
         const result = await buffer.createTiktokVideoPost({
           text: tiktokDestination.caption || tiktokDestination.title || 'Untitled',
           videoUrl: buffer.mediaUrl(id),
-          thumbnailOffset: Math.round((Number(initialPiece && initialPiece.thumbnailTimeSeconds) || 0) * 1000)
+          thumbnailOffset: Math.round((Number(initialPiece && initialPiece.thumbnailTimeSeconds) || 0) * 1000),
+          dueAt: dueAt
         });
-        dueAt = result.post.dueAt || null;
+        dueAt = result.post.dueAt || dueAt;
         updatePieceFields(id, {
           tiktokPublishStatus: 'done', tiktokPublishError: '', tiktokPublishProvider: 'buffer',
           tiktokPublishId: result.post.id, tiktokBufferStatus: result.post.status,
@@ -2753,32 +2787,13 @@ async function runPlatformPublishBatch(id, destinations) {
       }
     }
 
-    if (!dueAt) {
-      let postingSchedule = [];
-      try {
-        const bufferStatus = await buffer.status();
-        if (bufferStatus.connected && bufferStatus.channel && bufferStatus.channel.timezone === 'Asia/Bangkok') {
-          postingSchedule = bufferStatus.channel.postingSchedule || [];
-        }
-      } catch (error) {
-        console.error('Could not read Buffer schedule; using midnight/noon Bangkok fallback:', error.message);
-      }
-      let after = Date.now();
-      stmts.getAll.all('pieces').forEach(function (row) {
-        const other = recordConcurrency.decodeRow(row);
-        if (!other || other.id === id || !shortformSchedule.isShortform(other) || other.stage !== 'scheduled' || !other.scheduledAt) return;
-        const timestamp = Date.parse(other.scheduledAt);
-        if (Number.isFinite(timestamp) && timestamp > after) after = timestamp;
-      });
-      dueAt = shortformSchedule.nextBangkokSlot(after, postingSchedule);
-    }
-
     const latest = getPieceRecord(id);
     if (!latest) return;
     latest.scheduledAt = dueAt;
     latest.stage = 'scheduled';
     latest.directShortPublishStatus = directDestinations.length ? 'scheduled' : 'not_required';
     latest.scheduledPublishDestinations = directDestinations;
+    latest.topicSchedule = scheduled.diagnostic;
     latest.directShortReleaseRunning = false;
     directDestinations.forEach(function (destination) {
       latest[publishStatusField(destination.platform)] = 'scheduled';

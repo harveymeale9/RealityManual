@@ -56,6 +56,22 @@ function nextBangkokSlot(after, postingSchedule) {
   throw new Error('No active short-form posting slot is available in the next two weeks.');
 }
 
+function nextAvailableBangkokSlots(after, postingSchedule, occupiedTimes, count) {
+  const wanted = Math.max(1, Math.min(100, Number(count) || 1));
+  const occupied = new Set((occupiedTimes || []).map(function (value) {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }).filter(function (value) { return value !== null; }));
+  const slots = [];
+  let cursor = after instanceof Date ? after.getTime() : Number(after);
+  while (slots.length < wanted) {
+    const next = Date.parse(nextBangkokSlot(cursor, postingSchedule));
+    cursor = next;
+    if (!occupied.has(next)) slots.push(new Date(next).toISOString());
+  }
+  return slots;
+}
+
 function isShortform(piece) {
   return ['ultra_short', 'short', 'long_short'].indexOf(piece && piece.contentType) !== -1;
 }
@@ -83,10 +99,39 @@ function nextBangkokLongformSlot(after, selectedTime, latestScheduledAt) {
   return new Date(candidate).toISOString();
 }
 
+function nextAvailableBangkokLongformSlots(after, selectedTime, occupiedTimes, count) {
+  const afterMs = after instanceof Date ? after.getTime() : Number(after);
+  if (!Number.isFinite(afterMs)) throw new Error('A valid starting time is required.');
+  const wanted = Math.max(1, Math.min(40, Number(count) || 1));
+  const occupied = (occupiedTimes || []).map(function (value) { return Date.parse(value); }).filter(Number.isFinite).sort(function (a, b) { return a - b; });
+  const occupiedSet = new Set(occupied);
+  const selected = normalizeLongformTime(selectedTime).split(':').map(Number);
+  let first;
+  if (occupied.length) {
+    const anchorLocal = new Date(occupied[0] + BANGKOK_OFFSET_MS);
+    const anchorDay = Date.UTC(anchorLocal.getUTCFullYear(), anchorLocal.getUTCMonth(), anchorLocal.getUTCDate());
+    const anchor = anchorDay + selected[0] * 3600000 + selected[1] * 60000 - BANGKOK_OFFSET_MS;
+    const intervals = Math.floor((afterMs - anchor) / (3 * 86400000)) + 1;
+    first = anchor + Math.max(0, intervals) * 3 * 86400000;
+    while (first <= afterMs) first += 3 * 86400000;
+  } else {
+    first = Date.parse(nextBangkokLongformSlot(afterMs, selectedTime, null));
+  }
+  const slots = [];
+  let candidate = first;
+  while (slots.length < wanted) {
+    if (!occupiedSet.has(candidate)) slots.push(new Date(candidate).toISOString());
+    candidate += 3 * 86400000;
+  }
+  return slots;
+}
+
 module.exports = {
   DEFAULT_SLOTS: DEFAULT_SLOTS,
   nextBangkokSlot: nextBangkokSlot,
+  nextAvailableBangkokSlots: nextAvailableBangkokSlots,
   nextBangkokLongformSlot: nextBangkokLongformSlot,
+  nextAvailableBangkokLongformSlots: nextAvailableBangkokLongformSlots,
   normalizeLongformTime: normalizeLongformTime,
   scheduleMap: scheduleMap,
   isShortform: isShortform

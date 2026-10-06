@@ -87,7 +87,8 @@ function setup(options) {
       }
     }`, { input: {
       text: clean(input.text, 2200), channelId: channel.id,
-      schedulingType: 'automatic', mode: 'addToQueue', aiAssisted: false,
+      schedulingType: 'automatic', mode: input.dueAt ? 'customScheduled' : 'addToQueue',
+      dueAt: input.dueAt || undefined, aiAssisted: false,
       assets: [{ video: { url: input.videoUrl, metadata: { thumbnailOffset: Math.max(0, Math.round(Number(input.thumbnailOffset) || 0)) } } }],
       metadata: { tiktok: { isAiGenerated: false } }
     } });
