@@ -16466,3 +16466,12 @@ closes the section. The retained questions and answers are otherwise unchanged.
 The eyebrow above the homepage's final **Get Your Copy Now** call to action
 now reads **Play the game better**, replacing “There is a better way to play.”
 The headline, checkout button, and surrounding layout are unchanged.
+
+---
+
+# 482. Storefront Header Navigation Simplified (2026-10-10)
+
+The homepage header no longer includes the **About** or **FAQ** anchor links.
+The **Get Your Copy** checkout action remains as the sole navigation item, and
+the existing compact mobile menu continues to expose that action on phones.
+The underlying About and FAQ page sections remain available while scrolling.
