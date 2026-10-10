@@ -326,6 +326,7 @@
     panelMain.classList.toggle('panel-main--ideation', active === 'content-ideation');
     panelMain.classList.toggle('panel-main--manuscript', active === 'manuscript');
     panelMain.classList.toggle('panel-main--mailbox', active === 'mailbox');
+    panelMain.classList.toggle('panel-main--website-analytics', active === 'website-analytics');
     if (active !== 'project-manager' && pmSync) { pmSync.stop(); pmSync = null; }
     if (active === 'project-manager') {
       panelMain.innerHTML = PM_MARKUP;

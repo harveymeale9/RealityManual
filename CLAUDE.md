@@ -16310,3 +16310,22 @@ operations in addition to publish-ready video media. Automated coverage checks
 upload-size verification, JSON readback, safe key restrictions, card fidelity,
 thumbnail omission, retention, idempotent same-day operation, and corrupt
 readback failure. The complete ops-service suite passes (163 tests).
+
+---
+
+# 472. Website Analytics Scrolls Above the Footer (2026-10-10)
+
+The Website Analytics tab could exceed its available flex height on shorter
+laptop windows while `.panel-main` still used visible overflow. Its final
+funnel rows therefore painted through the in-flow footer instead of remaining
+inside a scrollable content area. The failure was especially obvious around a
+770px-wide viewport, where the wrapped header leaves little vertical space for
+analytics.
+
+`renderActiveTab()` now marks Website Analytics with its own main-panel class,
+and that class supplies contained vertical scrolling. The footer stays below
+the panel, while every analytics row remains reachable by scrolling. Browser
+regression checks at 1366×768, 1024×600, and 770×500 confirmed that the footer
+owns its own area, short layouts scroll, and the last funnel row becomes fully
+visible without overlap. The stylesheet and application cache keys were
+advanced so already-open browsers fetch the correction.

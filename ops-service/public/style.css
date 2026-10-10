@@ -402,6 +402,7 @@ body.role-reviewer #pmBackFab {
 
 .panel-main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .panel-main--ideation { overflow-y: auto; overscroll-behavior: contain; }
+.panel-main--website-analytics { overflow-y: auto; overscroll-behavior: contain; }
 .panel-main--manuscript { overflow: hidden; }
 .panel-main--mailbox { overflow: hidden; }
 .panel-main--ideation + .panel-footer,
