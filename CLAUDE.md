@@ -16458,3 +16458,11 @@ The homepage FAQ no longer includes **Will there be a second edition?** The
 remaining three questions are ordered as return policy, worldwide shipping,
 and finally **How long does shipping take?**, so the shipping-time answer now
 closes the section. The retained questions and answers are otherwise unchanged.
+
+---
+
+# 481. Final Storefront CTA Eyebrow Tightened (2026-10-10)
+
+The eyebrow above the homepage's final **Get Your Copy Now** call to action
+now reads **Play the game better**, replacing “There is a better way to play.”
+The headline, checkout button, and surrounding layout are unchanged.
