@@ -16437,3 +16437,15 @@ geometry intentionally preserves the cover's identity without attempting to
 compress its fine texture and many orbital details into a browser-tab icon.
 The favicon is linked from the homepage, checkout, order confirmation,
 privacy policy, and terms pages using the root-relative `/favicon.svg` URL.
+
+---
+
+# 479. Storefront Benefit Copy Refined (2026-10-10)
+
+Three panels in the homepage's four-column **Why This Book** section now
+describe the book's progression more precisely. **The 14 Rules** says that
+the Rules of Reality govern the entire game; the former **A Clearer Mind**
+panel is now **The Strategy**, describing the translation of complex theory
+into practical actions; and **A Better Life** now connects a better strategy
+directly to a superior experience of life. The Objective panel, icons, and
+layout are unchanged.
