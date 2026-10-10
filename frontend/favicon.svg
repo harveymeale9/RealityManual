@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="The Reality Manual celestial emblem">
+  <rect width="64" height="64" rx="10" fill="#0b0906"/>
+  <rect x="1.5" y="1.5" width="61" height="61" rx="8.5" fill="none" stroke="#6f5125"/>
+
+  <g fill="#d8ac51" stroke="#d8ac51" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M32 7.5l1.8 5.2 5.2 1.8-5.2 1.8-1.8 5.2-1.8-5.2-5.2-1.8 5.2-1.8z"/>
+    <path d="M32 20.5v7" fill="none" stroke-width="1.5"/>
+    <circle cx="32" cy="31.5" r="5.5"/>
+    <ellipse cx="32" cy="31.5" rx="18" ry="7.5" fill="none" stroke-width="1.8"/>
+    <circle cx="14" cy="31.5" r="1.5"/>
+    <circle cx="50" cy="31.5" r="1.5"/>
+    <path d="M32 37v5" fill="none" stroke-width="1.5"/>
+    <path d="M25.2 43.2a9 9 0 0 0 13.6 10.9 10.6 10.6 0 1 1-13.6-10.9z"/>
+    <path d="M32 53v4" fill="none" stroke-width="1.5"/>
+    <path d="M32 55.5l1 2.6 2.5 1-2.5 1-1 2.4-1-2.4-2.5-1 2.5-1z"/>
+  </g>
+
+  <circle cx="32" cy="31.5" r="2" fill="#0b0906"/>
+</svg>

@@ -16424,3 +16424,16 @@ The hardcover selector no longer describes the binding as “gold foil,” and
 the note beneath it no longer repeats “One edition.” The visible copy now says
 **Premium cloth.** and **Shipping calculated at checkout.** respectively; the
 edition, price, checkout link, and layout are unchanged.
+
+---
+
+# 478. Storefront Celestial Favicon (2026-10-10)
+
+The customer-facing storefront now has a dedicated SVG favicon. It distills
+the book cover's central celestial artwork into a legible small-format mark:
+a gold star, vertical axis, orbiting planet, crescent, and lower star on a
+rounded near-black field with a restrained bronze border. The simplified
+geometry intentionally preserves the cover's identity without attempting to
+compress its fine texture and many orbital details into a browser-tab icon.
+The favicon is linked from the homepage, checkout, order confirmation,
+privacy policy, and terms pages using the root-relative `/favicon.svg` URL.
