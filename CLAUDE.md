@@ -16329,3 +16329,29 @@ regression checks at 1366×768, 1024×600, and 770×500 confirmed that the foote
 owns its own area, short layouts scroll, and the last funnel row becomes fully
 visible without overlap. The stylesheet and application cache keys were
 advanced so already-open browsers fetch the correction.
+
+---
+
+# 473. Read-Only Teleprompter View for Planning Scripts (2026-10-10)
+
+Planning-card scripts can now be opened directly from the card editor in a
+dedicated **Teleprompter** view. It uses the current editor contents (including
+unsaved text already visible in the browser), but presents them read-only in a
+full-viewport black reading surface with approximately 47px type on a typical
+desktop and responsive 29px type on a phone. The normal metadata rail, editing
+controls, board, and footer are removed while reading; only a compact title bar
+and close button remain.
+
+The script owns the complete remaining viewport and has a permanently
+scrollable surface with a 26px styled desktop scrollbar (22px on phones), a
+large minimum thumb, generous line spacing, and extra trailing room so the
+last lines do not have to be read against the bottom edge. The view always
+starts at the top, closes with either its X or Escape, and returns to the still-
+open planning card without changing its content. Video-card media modals do
+not show this planning-script control.
+
+Real Chromium verification opened existing card #131 on 1440x900 and 390x844
+viewports. In both cases the title and current script were reproduced, the
+surface was read-only and independently scrollable, there was no horizontal
+overflow or page error, and Escape restored the editor. The stylesheet and
+application cache keys were advanced so existing browsers receive the new UI.

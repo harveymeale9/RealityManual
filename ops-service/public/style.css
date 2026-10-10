@@ -1426,6 +1426,10 @@ body.role-reviewer #pmBackFab {
 .kanban-mic svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 .kanban-mic.recording { color: #ff8d86; border-color: #9a504b; background: rgba(255,98,89,.1); animation: ideaMicPulse 1s infinite; }
 .kanban-mic:disabled { opacity: .45; cursor: not-allowed; }
+.teleprompter-open { min-height: 34px; padding: 0 11px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid #476456; border-radius: 7px; background: #101914; color: var(--ink); cursor: pointer; font: 700 .67rem var(--font-mono); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+.teleprompter-open:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.teleprompter-open > span:first-child { color: var(--accent); font-size: .9rem; line-height: 1; }
+.teleprompter-open[hidden] { display: none; }
 .save-flag { color: var(--good); opacity: 0; transition: opacity 0.25s ease; }
 .modal-id { color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 1px 7px; letter-spacing: 0.03em; }
 .save-flag.show { opacity: 1; }
@@ -1437,6 +1441,72 @@ body.role-reviewer #pmBackFab {
   font-size: 22px; line-height: 1; cursor: pointer; padding: 4px 6px;
 }
 .modal-close:hover { color: var(--ink); }
+
+/* Read-only recording surface for planning-card scripts. This deliberately
+   has almost no chrome: one compact title bar, the largest practical copy,
+   and a conspicuously wide scrollbar that is easy to drag while filming. */
+.teleprompter-view {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  background: #030705;
+  color: #f1f7f3;
+}
+.teleprompter-view[hidden] { display: none; }
+.teleprompter-head {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 8px 18px 8px 24px;
+  border-bottom: 1px solid #193126;
+  background: #07100b;
+  flex: 0 0 auto;
+}
+.teleprompter-head > div { min-width: 0; display: flex; align-items: baseline; gap: 14px; }
+.teleprompter-head span { color: var(--accent); font: 700 .66rem/1 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; }
+.teleprompter-head strong { min-width: 0; overflow: hidden; color: #9eaea4; font: 500 .92rem/1.25 var(--font-body); text-overflow: ellipsis; white-space: nowrap; }
+.teleprompter-close {
+  width: 46px;
+  height: 42px;
+  flex: 0 0 auto;
+  border: 1px solid #294337;
+  border-radius: 7px;
+  background: #0a1510;
+  color: #c2d0c7;
+  cursor: pointer;
+  font: 400 30px/1 var(--font-body);
+}
+.teleprompter-close:hover { border-color: var(--accent); color: var(--accent); }
+.teleprompter-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: scroll;
+  overscroll-behavior: contain;
+  scrollbar-color: #4be891 #14241b;
+  scrollbar-width: auto;
+  outline: none;
+}
+.teleprompter-scroll::-webkit-scrollbar { width: 26px; }
+.teleprompter-scroll::-webkit-scrollbar-track { background: #14241b; border-left: 1px solid #284336; }
+.teleprompter-scroll::-webkit-scrollbar-thumb { min-height: 80px; border: 5px solid #14241b; border-radius: 14px; background: #4be891; }
+.teleprompter-scroll::-webkit-scrollbar-thumb:hover { background: #79f4ac; }
+.teleprompter-script {
+  width: min(1220px, calc(100% - 11vw));
+  min-height: 100%;
+  margin: 0 auto;
+  padding: clamp(44px, 8vh, 110px) 0 38vh;
+  color: #f4f8f5;
+  font: 500 clamp(2rem, 3.25vw, 3.75rem)/1.55 var(--font-body);
+  letter-spacing: -.015em;
+  overflow-wrap: anywhere;
+}
+.teleprompter-script:empty::before { content: 'No script has been added to this piece yet.'; color: #6f8176; font-style: italic; }
+.teleprompter-script p, .teleprompter-script div { margin: 0 0 1em; }
+.teleprompter-script img { display: block; max-width: 100%; max-height: 70vh; margin: 1em auto; object-fit: contain; }
 
 .modal-body { flex: 1; overflow-y: auto; padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
 
@@ -2464,8 +2534,16 @@ body.role-reviewer #pmBackFab {
   .modal-head { padding: 12px 14px; }
   .modal-head-actions { gap: 6px; }
   .kanban-dictation-status { display: none; }
+  .teleprompter-open { min-height: 38px; padding: 0 10px; }
+  .teleprompter-open > span:last-child { display: none; }
   .kanban-mic { min-height: 38px; padding: 0 9px; }
   .kanban-mic span { display: none; }
+  .teleprompter-head { min-height: 54px; padding: max(7px, env(safe-area-inset-top)) 10px 7px 16px; }
+  .teleprompter-head > div { display: block; }
+  .teleprompter-head strong { display: block; max-width: 72vw; margin-top: 4px; font-size: .78rem; }
+  .teleprompter-close { width: 44px; height: 40px; }
+  .teleprompter-scroll::-webkit-scrollbar { width: 22px; }
+  .teleprompter-script { width: calc(100% - 54px); padding-top: 36px; font-size: clamp(1.75rem, 7.5vw, 2.4rem); line-height: 1.5; }
   .title-input { font-size: 1.4rem; }
   /* Same space problem as the tabs above — the per-content-type overview
      is a nice-to-have summary, not needed to actually see/edit pieces, so

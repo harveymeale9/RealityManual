@@ -1600,7 +1600,9 @@
       utmField, fieldUtmLink, copyUtmBtn, scheduleStatus, approveBtn,
       stageField, stageReadoutField, stageReadout,
       ytTitlesField, fieldYtTitle1, fieldYtTitle2, fieldYtTitle3,
-      kanbanDictateBtn, kanbanDictationStatus;
+      kanbanDictateBtn, kanbanDictationStatus,
+      teleprompterOpen, teleprompterView, teleprompterTitle,
+      teleprompterScroll, teleprompterScript, teleprompterClose;
 
   var activeId = null;
   var isNewUnsaved = false;
@@ -1794,6 +1796,12 @@
     btnDelete = document.getElementById('btnDelete');
     kanbanDictateBtn = document.getElementById('kanbanDictateBtn');
     kanbanDictationStatus = document.getElementById('kanbanDictationStatus');
+    teleprompterOpen = document.getElementById('teleprompterOpen');
+    teleprompterView = document.getElementById('teleprompterView');
+    teleprompterTitle = document.getElementById('teleprompterTitle');
+    teleprompterScroll = document.getElementById('teleprompterScroll');
+    teleprompterScript = document.getElementById('teleprompterScript');
+    teleprompterClose = document.getElementById('teleprompterClose');
 
     videoSection = document.getElementById('videoSection');
     videoPreview = document.getElementById('videoPreview');
@@ -1852,6 +1860,8 @@
     fieldNotes.addEventListener('focus', function () { setKanbanDictationTarget(fieldNotes); });
     kanbanDictateBtn.addEventListener('pointerdown', function (event) { event.preventDefault(); });
     kanbanDictateBtn.addEventListener('click', startKanbanDictation);
+    teleprompterOpen.addEventListener('click', openTeleprompter);
+    teleprompterClose.addEventListener('click', closeTeleprompter);
     setKanbanDictationTarget(fieldNotes);
     fieldTranscript.addEventListener('input', captureDraftAndDebounceSync);
     fieldTranscript.addEventListener('blur', function () { clearTimeout(saveTimer); syncFromForm(); });
@@ -1989,8 +1999,28 @@
 
     document.getElementById('modalClose').addEventListener('click', closeModal);
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && modalWrap.classList.contains('open')) closeModal();
+      if (e.key !== 'Escape') return;
+      if (!teleprompterView.hidden) closeTeleprompter();
+      else if (modalWrap.classList.contains('open')) closeModal();
     });
+  }
+
+  function openTeleprompter() {
+    if (!activeId || !pieces[activeId] || pieces[activeId].hasVideo) return;
+    teleprompterTitle.textContent = fieldTitle.value.trim() || 'Untitled piece';
+    teleprompterScript.innerHTML = fieldNotes.innerHTML;
+    teleprompterView.hidden = false;
+    teleprompterView.setAttribute('aria-hidden', 'false');
+    teleprompterScroll.scrollTop = 0;
+    requestAnimationFrame(function () { teleprompterScroll.focus(); });
+  }
+
+  function closeTeleprompter() {
+    if (!teleprompterView || teleprompterView.hidden) return;
+    teleprompterView.hidden = true;
+    teleprompterView.setAttribute('aria-hidden', 'true');
+    teleprompterScript.innerHTML = '';
+    if (teleprompterOpen && !teleprompterOpen.hidden) teleprompterOpen.focus();
   }
 
   function notifyPiecesChanged() {
@@ -2139,6 +2169,7 @@
     pieceModal.classList.toggle('text-piece', !p.hasVideo);
     pieceModal.classList.toggle('video-piece', !!p.hasVideo);
     modalWrap.classList.toggle('text-workspace', !p.hasVideo);
+    teleprompterOpen.hidden = !!p.hasVideo;
     fieldTitle.value = p.title || '';
     fieldContentType.value = p.contentType || '';
     stageField.hidden = !!p.hasVideo;
@@ -2304,6 +2335,7 @@
 
   function hideModal() {
     if (activeKanbanDictationStop) activeKanbanDictationStop();
+    closeTeleprompter();
     modalWrap.classList.remove('open');
     modalWrap.classList.remove('text-workspace');
     pieceModal.setAttribute('aria-hidden', 'true');

@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,400&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=20261010-analytics-scroll-v112" />
+  <link rel="stylesheet" href="style.css?v=20261010-teleprompter-v113" />
 </head>
 <body>
 
@@ -157,6 +157,10 @@
         <div class="modal-eyebrow"><span id="modalEyebrowText">Piece</span><span class="card-id modal-id" id="modalIdBadge" hidden></span><span class="save-flag" id="saveFlag">Saved</span></div>
         <div class="modal-head-actions">
           <span class="kanban-dictation-status" id="kanbanDictationStatus" role="status" aria-live="polite"></span>
+          <button type="button" class="teleprompter-open" id="teleprompterOpen" title="Open this script in teleprompter view">
+            <span aria-hidden="true">▣</span>
+            <span>Teleprompter</span>
+          </button>
           <button type="button" class="kanban-mic" id="kanbanDictateBtn" title="Dictate into notes" aria-label="Dictate into notes">
             <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="3" width="8" height="12" rx="4"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg>
             <span>Dictate notes</span>
@@ -261,6 +265,19 @@
     </div>
   </div>
 
+  <div class="teleprompter-view" id="teleprompterView" role="dialog" aria-modal="true" aria-labelledby="teleprompterTitle" aria-hidden="true" hidden>
+    <header class="teleprompter-head">
+      <div>
+        <span>Teleprompter</span>
+        <strong id="teleprompterTitle">Untitled piece</strong>
+      </div>
+      <button type="button" class="teleprompter-close" id="teleprompterClose" aria-label="Close teleprompter view">&times;</button>
+    </header>
+    <main class="teleprompter-scroll" id="teleprompterScroll" tabindex="0">
+      <article class="teleprompter-script" id="teleprompterScript"></article>
+    </main>
+  </div>
+
   <script src="lib/store.js?v=20261001-split-video-workflow-v4"></script>
   <script src="lib/auth.js"></script>
   <script src="lib/voiceClient.js?v=20260930-multi-image-chat"></script>
@@ -271,6 +288,6 @@
   <script src="competitors.js?v=20260926-outlier-research"></script>
   <script src="mailbox.js?v=20260923-namecheap-mail"></script>
   <script src="editor.js?v=20261003-editor-manual-revisions-v110"></script>
-  <script src="app.js?v=20261010-analytics-scroll-v108"></script>
+  <script src="app.js?v=20261010-teleprompter-v109"></script>
 </body>
 </html>
