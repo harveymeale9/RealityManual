@@ -16475,3 +16475,16 @@ The homepage header no longer includes the **About** or **FAQ** anchor links.
 The **Get Your Copy** checkout action remains as the sole navigation item, and
 the existing compact mobile menu continues to expose that action on phones.
 The underlying About and FAQ page sections remain available while scrolling.
+
+---
+
+# 483. Storefront Favicon Reworked for Small-Size Legibility (2026-10-10)
+
+The original gold-on-black celestial favicon became illegible at browser-tab
+size. It has been replaced with a higher-contrast, simplified rendering of the
+provided round emblem: an ivory circular field, two bold mirrored hands, and a
+reduced black-and-gold celestial mechanism. The hands and circular field carry
+the silhouette at 16px, while the star, planet, orbit, and stacked discs retain
+the Reality Manual identity at larger bookmark and shortcut sizes. All five
+storefront pages use a new cache-versioned favicon URL so browsers request the
+replacement instead of indefinitely retaining the earlier icon.
