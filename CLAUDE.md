@@ -16449,3 +16449,12 @@ panel is now **The Strategy**, describing the translation of complex theory
 into practical actions; and **A Better Life** now connects a better strategy
 directly to a superior experience of life. The Objective panel, icons, and
 layout are unchanged.
+
+---
+
+# 480. Storefront FAQ Shortened and Reordered (2026-10-10)
+
+The homepage FAQ no longer includes **Will there be a second edition?** The
+remaining three questions are ordered as return policy, worldwide shipping,
+and finally **How long does shipping take?**, so the shipping-time answer now
+closes the section. The retained questions and answers are otherwise unchanged.
