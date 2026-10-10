@@ -36,3 +36,35 @@ test('storefront report aggregates traffic, funnel, paid sales and refunds witho
   assert.equal(JSON.stringify(report).includes('customer@example.com'), false);
   db.close();
 });
+
+test('sales dashboard returns live periods, a filled daily series and privacy-safe order state', function () {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE orders(
+      id TEXT, order_status TEXT, stripe_payment_status TEXT, quantity INTEGER,
+      total_price_cents INTEGER, currency TEXT, country TEXT, shipping_service_name TEXT,
+      bookvault_order_id TEXT, confirmation_email_sent_at TEXT, shipping_email_sent_at TEXT,
+      resend_contact_synced_at TEXT, created_at TEXT, updated_at TEXT,
+      customer_name TEXT, email TEXT, street1 TEXT
+    );
+  `);
+  const order = db.prepare('INSERT INTO orders VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+  order.run('paid-1','BOOKVAULT_ACCEPTED','succeeded',2,14200,'usd','GB','Tracked','BV-1','2026-10-09T10:03:00.000Z',null,'2026-10-09T10:04:00.000Z','2026-10-09T10:00:00.000Z','2026-10-09T10:04:00.000Z','Private Person','private@example.com','Secret street');
+  order.run('paid-2','SHIPPED','succeeded',1,7100,'usd','US','Standard','BV-2','2026-10-10T08:03:00.000Z','2026-10-10T09:00:00.000Z','2026-10-10T08:04:00.000Z','2026-10-10T08:00:00.000Z','2026-10-10T09:00:00.000Z','Private Person','private@example.com','Secret street');
+  order.run('refund','REFUNDED','succeeded',1,7100,'usd','US','Standard',null,null,null,null,'2026-10-08T08:00:00.000Z','2026-10-10T09:30:00.000Z','Private Person','private@example.com','Secret street');
+  order.run('pending','PAYMENT_PENDING','requires_payment_method',1,7100,'usd','US','Standard',null,null,null,null,'2026-10-10T09:00:00.000Z','2026-10-10T09:00:00.000Z','Private Person','private@example.com','Secret street');
+
+  const dashboard = reporting.getSalesDashboard(db, '2026-10-10T12:00:00.000Z');
+  assert.equal(dashboard.periods.today.paid_orders, 1);
+  assert.equal(dashboard.periods.last_7_days.paid_orders, 2);
+  assert.equal(dashboard.periods.last_7_days.revenue_cents, 21300);
+  assert.equal(dashboard.periods.today.refunded_orders, 1);
+  assert.equal(dashboard.daily.length, 30);
+  assert.deepEqual(dashboard.countries[0], { country: 'GB', orders: 1, units: 2, revenue_cents: 14200 });
+  assert.equal(dashboard.recent_orders.length, 4);
+  assert.equal(dashboard.recent_orders[0].id, 'pending');
+  assert.equal(dashboard.recent_orders[1].shipping_email_sent, true);
+  assert.equal(JSON.stringify(dashboard).includes('private@example.com'), false);
+  assert.equal(JSON.stringify(dashboard).includes('Secret street'), false);
+  db.close();
+});

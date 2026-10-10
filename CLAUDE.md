@@ -16355,3 +16355,35 @@ viewports. In both cases the title and current script were reproduced, the
 surface was read-only and independently scrollable, there was no horizontal
 overflow or page error, and Escape restored the editor. The stylesheet and
 application cache keys were advanced so existing browsers receive the new UI.
+
+---
+
+# 474. Sales Analytics Is Connected to the Live Storefront (2026-10-10)
+
+The former Sales Analytics placeholder is now a live private dashboard backed
+by the storefront's production SQLite database. It reuses the read-only
+`/store-data` mount already established for weekly reporting; no storefront
+credentials, database copy, public revenue endpoint, or second integration was
+introduced. `GET /api/reports/sales-dashboard` requires a real admin session
+(the restricted reviewer session is insufficient) and deliberately omits
+customer names, email addresses, phone numbers, and postal addresses.
+
+The dashboard shows revenue, paid orders, and books for today, seven days,
+thirty days, and all time; thirty-day average order value and refunds; verified
+landing/checkout conversion; a thirty-day daily-revenue chart; all-time country
+totals; and the newest 25 operational order records. Each recent order exposes
+only its short internal reference, time, country, quantity, total, lifecycle
+status, and whether Stripe payment, BookVault acceptance, confirmation email,
+shipping email, and Resend customer segmentation have completed. This means
+Harvey's first real order is visible during the entire workflow rather than
+only after fulfillment finishes. The view refreshes automatically every 30
+seconds and also has a manual Refresh control.
+
+Paid-order classification now recognizes the current durable fulfillment
+statuses (`BOOKVAULT_ACCEPTED`, `FULFILLMENT_RETRY`, and `SHIPPED`) in addition
+to successful Stripe payment, correcting the older weekly-report status list.
+The reporting unit tests cover period totals, refunds, thirty filled chart
+points, country aggregation, operational flags, pending orders, and exclusion
+of customer PII. Real Chromium checks with representative paid-order data at
+1440x900 and 390x844 confirmed all four period cards, the chart, recent order,
+contained scrolling, no horizontal document overflow, and no page errors.

@@ -1217,14 +1217,17 @@ async function getValidYoutubeAccessToken() {
 // report builder. Open lazily so a temporary mount problem cannot prevent the
 // rest of Content Studio from starting.
 let storefrontReportDb = null;
-function readStorefrontReport(start, end) {
+function getStorefrontReportDb() {
   if (!storefrontReportDb) {
     storefrontReportDb = new Database(process.env.STOREFRONT_DB_PATH || '/store-data/reality-manual.db', {
       readonly: true,
       fileMustExist: true
     });
   }
-  return storefrontReporting.getPeriodReport(storefrontReportDb, start, end);
+  return storefrontReportDb;
+}
+function readStorefrontReport(start, end) {
+  return storefrontReporting.getPeriodReport(getStorefrontReportDb(), start, end);
 }
 
 const weeklyReports = weeklyReportService.setup(db, {
@@ -1340,6 +1343,16 @@ app.use('/api/research', requireAuth, researchIdeas.router);
 
 app.get('/api/reports/weekly/status', requireAuth, function (req, res) {
   res.json(weeklyReports.status());
+});
+app.get('/api/reports/sales-dashboard', requireAuth, function (req, res) {
+  try {
+    res.set('Cache-Control', 'no-store');
+    res.json(storefrontReporting.getSalesDashboard(getStorefrontReportDb()));
+  }
+  catch (error) {
+    console.error('Sales dashboard read failed:', error.message);
+    res.status(503).json({ error: 'sales_dashboard_unavailable' });
+  }
 });
 app.post('/api/reports/weekly/run', requireAuth, async function (req, res) {
   try { res.json(await weeklyReports.runDue()); }

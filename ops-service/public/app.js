@@ -197,7 +197,7 @@
   var ANALYTICS_INFO = {
     'sales-analytics': {
       title: 'Sales Analytics',
-      blurb: 'Order and revenue reporting once the storefront backend (backend/) is deployed with live Stripe and BookVault credentials.',
+      blurb: 'The private sales feed is temporarily unavailable. Content Studio will retry when this tab is reopened.',
       metrics: [
         'Revenue — daily, weekly, monthly',
         'Orders completed, refunded',
@@ -235,6 +235,113 @@
   // The storefront's own backend — separate service, separate domain (see
   // CLAUDE.md §62/§65). Read-only, unauthenticated aggregate counts, no PII.
   var STOREFRONT_API_BASE = 'https://api.realitymanual.com';
+
+  var salesAnalyticsTimer = null;
+
+  function salesMoney(cents, currency) {
+    try {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: String(currency || 'USD').toUpperCase(), maximumFractionDigits: 2 }).format((Number(cents) || 0) / 100);
+    } catch (e) {
+      return '$' + ((Number(cents) || 0) / 100).toFixed(2);
+    }
+  }
+
+  function salesStatusLabel(status) {
+    return String(status || 'Pending').toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, function (letter) { return letter.toUpperCase(); });
+  }
+
+  function salesStatusTone(status) {
+    if (['BOOKVAULT_ACCEPTED', 'SHIPPED', 'COMPLETE'].indexOf(status) !== -1) return 'good';
+    if (status === 'REFUNDED' || status === 'PAYMENT_FAILED') return 'bad';
+    if (status === 'FULFILLMENT_RETRY') return 'warn';
+    return 'pending';
+  }
+
+  function salesConversion(orders, analytics, step) {
+    if (!analytics || !analytics.funnel) return '—';
+    var row = analytics.funnel.filter(function (entry) { return entry.step === step; })[0];
+    var visits = row ? Number(row.unique_sessions) || 0 : 0;
+    return visits ? ((Number(orders) || 0) / visits * 100).toFixed(1) + '%' : '—';
+  }
+
+  function renderSalesAnalytics() {
+    clearTimeout(salesAnalyticsTimer);
+    panelMain.innerHTML = '<div class="sales-dashboard sales-loading"><div class="eyebrow">Live storefront database</div><h2>Sales Analytics</h2><p>Loading orders and revenue…</p></div>';
+    Promise.all([
+      fetch('/api/reports/sales-dashboard', { credentials: 'include' }).then(function (res) {
+        if (!res.ok) throw new Error('sales_status_' + res.status);
+        return res.json();
+      }),
+      fetch(STOREFRONT_API_BASE + '/api/analytics/summary').then(function (res) { return res.ok ? res.json() : null; }).catch(function () { return null; })
+    ]).then(function (results) {
+      if (currentTabId() !== 'sales-analytics') return;
+      var data = results[0];
+      var analytics = results[1];
+      var periodConfig = [
+        ['Today', data.periods.today],
+        ['Last 7 days', data.periods.last_7_days],
+        ['Last 30 days', data.periods.last_30_days],
+        ['All time', data.periods.all_time]
+      ];
+      var periodCards = periodConfig.map(function (entry) {
+        var totals = entry[1];
+        return '<article class="sales-metric-card"><span>' + entry[0] + '</span>' +
+          '<strong>' + salesMoney(totals.revenue_cents) + '</strong>' +
+          '<small>' + totals.paid_orders + ' paid order' + (totals.paid_orders === 1 ? '' : 's') + ' · ' + totals.units + ' book' + (totals.units === 1 ? '' : 's') + '</small></article>';
+      }).join('');
+
+      var maximumRevenue = Math.max.apply(Math, data.daily.map(function (day) { return Number(day.revenue_cents) || 0; }).concat([0]));
+      var chart = maximumRevenue ? data.daily.map(function (day, index) {
+        var amount = Number(day.revenue_cents) || 0;
+        var height = amount ? Math.max(5, Math.round(amount / maximumRevenue * 100)) : 2;
+        var label = (index % 5 === 0 || index === data.daily.length - 1) ? day.day.slice(5) : '';
+        return '<div class="sales-chart-column" title="' + escapeHtml(day.day + ': ' + salesMoney(amount) + ' · ' + day.orders + ' orders') + '">' +
+          '<div class="sales-chart-track"><i style="height:' + height + '%"></i></div><span>' + label + '</span></div>';
+      }).join('') : '<div class="sales-empty-chart">Your first paid order will appear here automatically.</div>';
+
+      var countries = data.countries.length ? data.countries.map(function (country) {
+        return '<div class="sales-country-row"><strong>' + escapeHtml(country.country) + '</strong><span>' + country.orders + ' order' + (country.orders === 1 ? '' : 's') + ' · ' + country.units + ' books</span><b>' + salesMoney(country.revenue_cents) + '</b></div>';
+      }).join('') : '<div class="sales-empty">No paid orders yet.</div>';
+
+      var recentOrders = data.recent_orders.length ? data.recent_orders.map(function (order) {
+        var date = new Date(order.created_at);
+        var paymentSettled = ['succeeded', 'paid'].indexOf(order.stripe_payment_status) !== -1;
+        var operations = paymentSettled
+          ? '<span class="' + (order.bookvault_order_id ? 'done' : '') + '">BookVault ' + (order.bookvault_order_id ? 'accepted' : 'pending') + '</span>' +
+            '<span class="' + (order.confirmation_email_sent ? 'done' : '') + '">Email ' + (order.confirmation_email_sent ? 'sent' : 'pending') + '</span>' +
+            '<span class="' + (order.resend_contact_synced ? 'done' : '') + '">Resend ' + (order.resend_contact_synced ? 'tagged' : 'pending') + '</span>'
+          : '<span>Awaiting payment</span>';
+        return '<div class="sales-order-row">' +
+          '<time datetime="' + escapeHtml(order.created_at || '') + '">' + (isNaN(date.getTime()) ? '—' : date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })) + '</time>' +
+          '<strong>#' + escapeHtml(String(order.id || '').slice(0, 8).toUpperCase()) + '<small>' + escapeHtml(order.country) + ' · ' + order.quantity + ' book' + (order.quantity === 1 ? '' : 's') + '</small></strong>' +
+          '<span class="sales-order-status ' + salesStatusTone(order.order_status) + '">' + escapeHtml(salesStatusLabel(order.order_status)) + '</span>' +
+          '<b>' + salesMoney(order.total_price_cents, order.currency) + '</b>' +
+          '<div class="sales-order-ops">' + operations + '</div></div>';
+      }).join('') : '<div class="sales-empty sales-empty-orders"><strong>No orders yet</strong><span>Tomorrow’s purchase will appear here as soon as checkout creates it, with payment, BookVault, email, and Resend status.</span></div>';
+
+      var thirty = data.periods.last_30_days;
+      panelMain.innerHTML = '<div class="sales-dashboard">' +
+        '<header class="sales-dashboard-head"><div><div class="eyebrow">Live storefront database</div><h2>Sales Analytics</h2><p>Revenue, orders, fulfillment and customer-email delivery.</p></div>' +
+          '<div><span>Updated ' + new Date(data.generated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</span><button type="button" class="btn-secondary btn-tiny" id="salesRefresh">Refresh</button></div></header>' +
+        '<section class="sales-metric-grid">' + periodCards + '</section>' +
+        '<section class="sales-secondary-grid">' +
+          '<article><span>30-day average order</span><strong>' + salesMoney(thirty.average_order_cents) + '</strong></article>' +
+          '<article><span>30-day refunds</span><strong>' + thirty.refunded_orders + '</strong><small>' + salesMoney(thirty.refunded_value_cents) + '</small></article>' +
+          '<article><span>Landing → order</span><strong>' + salesConversion(thirty.paid_orders, analytics, 'landing_page_view') + '</strong><small>verified visits</small></article>' +
+          '<article><span>Checkout → order</span><strong>' + salesConversion(thirty.paid_orders, analytics, 'checkout_view') + '</strong><small>verified visits</small></article>' +
+        '</section>' +
+        '<div class="sales-dashboard-columns"><section class="sales-block sales-chart-block"><div class="sales-block-head"><div><span>Revenue</span><h3>Last 30 days</h3></div><b>' + salesMoney(thirty.revenue_cents) + '</b></div><div class="sales-chart">' + chart + '</div></section>' +
+          '<section class="sales-block"><div class="sales-block-head"><div><span>Markets</span><h3>Revenue by country</h3></div></div><div class="sales-country-list">' + countries + '</div></section></div>' +
+        '<section class="sales-block sales-orders"><div class="sales-block-head"><div><span>Operations</span><h3>Recent orders</h3></div><small>Newest 25 · refreshes every 30 seconds</small></div><div class="sales-order-list">' + recentOrders + '</div></section>' +
+      '</div>';
+      var refresh = document.getElementById('salesRefresh');
+      if (refresh) refresh.addEventListener('click', renderSalesAnalytics);
+      salesAnalyticsTimer = setTimeout(function () { if (currentTabId() === 'sales-analytics') renderSalesAnalytics(); }, 30000);
+    }).catch(function () {
+      if (currentTabId() !== 'sales-analytics') return;
+      renderAnalyticsPlaceholder('sales-analytics');
+    });
+  }
 
   function renderWebsiteAnalytics() {
     panelMain.innerHTML = '<div class="tab-placeholder wide"><div class="eyebrow">Loading…</div><h2>Website Analytics</h2></div>';
@@ -327,6 +434,8 @@
     panelMain.classList.toggle('panel-main--manuscript', active === 'manuscript');
     panelMain.classList.toggle('panel-main--mailbox', active === 'mailbox');
     panelMain.classList.toggle('panel-main--website-analytics', active === 'website-analytics');
+    panelMain.classList.toggle('panel-main--sales-analytics', active === 'sales-analytics');
+    if (active !== 'sales-analytics') { clearTimeout(salesAnalyticsTimer); salesAnalyticsTimer = null; }
     if (active !== 'project-manager' && pmSync) { pmSync.stop(); pmSync = null; }
     if (active === 'project-manager') {
       panelMain.innerHTML = PM_MARKUP;
@@ -350,6 +459,8 @@
       bootSettings();
     } else if (active === 'website-analytics') {
       renderWebsiteAnalytics();
+    } else if (active === 'sales-analytics') {
+      renderSalesAnalytics();
     } else if (active === 'content-analytics') {
       window.RMCompetitors.mount(panelMain);
     } else if (active === 'idea-research') {
