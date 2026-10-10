@@ -16387,3 +16387,17 @@ points, country aggregation, operational flags, pending orders, and exclusion
 of customer PII. Real Chromium checks with representative paid-order data at
 1440x900 and 390x844 confirmed all four period cards, the chart, recent order,
 contained scrolling, no horizontal document overflow, and no page errors.
+
+---
+
+# 475. Storefront Header Purchase CTA Uses a Contrasting Gold Fill (2026-10-10)
+
+The sticky-header **Get Your Copy** link previously used a transparent
+background, faint brown border, and muted gold text. Against the already-dark
+header it read like another secondary navigation item instead of the page's
+primary purchase action. It now uses the site's established bright gold
+gradient with dark lettering, a brighter border, and a restrained gold glow.
+Its hover state lifts and brightens slightly while retaining strong contrast.
+The compact header dimensions and mobile navigation layout are unchanged, and
+the landing page stylesheet URL is cache-versioned so returning visitors see
+the new treatment immediately.

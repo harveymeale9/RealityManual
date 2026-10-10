@@ -249,26 +249,30 @@ img { max-width: 100%; }
   text-align: center;
 }
 
-.btn--nav {
+.site-nav a.btn--nav {
   padding: 0.5rem 1.05rem;
   font-size: 0.62rem;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  background: transparent;
-  color: var(--accent);
-  border: 1px solid var(--border-warm);
-  box-shadow: none;
+  background: linear-gradient(135deg, var(--accent-2) 0%, var(--accent) 52%, var(--accent-3) 100%);
+  color: var(--accent-ink);
+  border: 1px solid var(--accent-2);
+  box-shadow: 0 7px 20px -10px rgba(230, 201, 131, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.32);
 }
 
-.btn--nav:hover {
-  background: var(--accent-soft);
-  color: var(--accent-2);
-  box-shadow: none;
-  transform: none;
+.site-nav a.btn--nav:hover {
+  background: linear-gradient(135deg, #f0d996 0%, var(--accent-2) 55%, var(--accent) 100%);
+  color: var(--accent-ink);
+  box-shadow: 0 9px 24px -9px rgba(230, 201, 131, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.38);
+  transform: translateY(-1px);
 }
 
-.btn--nav::before { display: none; }
+.site-nav a.btn--nav::before { display: none; }
+
+@media (max-width: 820px) {
+  .site-nav a.btn--nav { padding: 0.85rem 1.05rem; }
+}
 
 .btn--lg {
   padding: 1.05rem 2.6rem;
