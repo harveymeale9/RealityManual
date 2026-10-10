@@ -1496,17 +1496,18 @@ body.role-reviewer #pmBackFab {
 .teleprompter-scroll::-webkit-scrollbar-thumb { min-height: 80px; border: 5px solid #14241b; border-radius: 14px; background: #4be891; }
 .teleprompter-scroll::-webkit-scrollbar-thumb:hover { background: #79f4ac; }
 .teleprompter-script {
-  width: min(1220px, calc(100% - 11vw));
+  width: min(1180px, calc(100% - 9vw));
   min-height: 100%;
   margin: 0 auto;
-  padding: clamp(44px, 8vh, 110px) 0 38vh;
+  padding: 28px 0 20vh;
   color: #f4f8f5;
-  font: 500 clamp(2rem, 3.25vw, 3.75rem)/1.55 var(--font-body);
-  letter-spacing: -.015em;
+  font: 500 19px/1.58 var(--font-body);
+  letter-spacing: 0;
   overflow-wrap: anywhere;
 }
 .teleprompter-script:empty::before { content: 'No script has been added to this piece yet.'; color: #6f8176; font-style: italic; }
-.teleprompter-script p, .teleprompter-script div { margin: 0 0 1em; }
+.teleprompter-script div { margin: 0; }
+.teleprompter-script p { margin: 0 0 .75em; }
 .teleprompter-script img { display: block; max-width: 100%; max-height: 70vh; margin: 1em auto; object-fit: contain; }
 
 .modal-body { flex: 1; overflow-y: auto; padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
@@ -2626,7 +2627,7 @@ body.role-reviewer #pmBackFab {
   .teleprompter-head strong { display: block; max-width: 72vw; margin-top: 4px; font-size: .78rem; }
   .teleprompter-close { width: 44px; height: 40px; }
   .teleprompter-scroll::-webkit-scrollbar { width: 22px; }
-  .teleprompter-script { width: calc(100% - 54px); padding-top: 36px; font-size: clamp(1.75rem, 7.5vw, 2.4rem); line-height: 1.5; }
+  .teleprompter-script { width: calc(100% - 50px); padding-top: 24px; font-size: clamp(18px,5vw,20px); line-height: 1.55; }
   .title-input { font-size: 1.4rem; }
   /* Same space problem as the tabs above — the per-content-type overview
      is a nice-to-have summary, not needed to actually see/edit pieces, so

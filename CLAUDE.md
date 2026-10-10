@@ -16401,3 +16401,17 @@ Its hover state lifts and brightens slightly while retaining strong contrast.
 The compact header dimensions and mobile navigation layout are unchanged, and
 the landing page stylesheet URL is cache-versioned so returning visitors see
 the new treatment immediately.
+
+---
+
+# 476. Teleprompter Prioritizes Script Density at Laptop Distance (2026-10-10)
+
+The first teleprompter treatment assumed a distant camera-reading position and
+used approximately 47px desktop copy. Harvey clarified that he sits directly
+in front of the laptop and wants to minimize scrolling, not maximize letter
+size. Desktop teleprompter copy is now 19px with a compact 1.58 line height,
+28px top inset, and a wider usable reading measure. The trailing scroll area
+was reduced from 38vh to 20vh so more of the actual script occupies the screen.
+Phones use responsive 18–20px copy for the same density-first behavior. The
+read-only surface and large draggable scrollbar remain unchanged, and the
+stylesheet cache key was advanced.
