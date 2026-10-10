@@ -16415,3 +16415,12 @@ was reduced from 38vh to 20vh so more of the actual script occupies the screen.
 Phones use responsive 18–20px copy for the same density-first behavior. The
 read-only surface and large draggable scrollbar remain unchanged, and the
 stylesheet cache key was advanced.
+
+---
+
+# 477. Storefront Edition Copy Simplified (2026-10-10)
+
+The hardcover selector no longer describes the binding as “gold foil,” and
+the note beneath it no longer repeats “One edition.” The visible copy now says
+**Premium cloth.** and **Shipping calculated at checkout.** respectively; the
+edition, price, checkout link, and layout are unchanged.
