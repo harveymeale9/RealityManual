@@ -21,6 +21,7 @@ const openaiStructured = require('./openaiStructured');
 // worked around client-side.
 var BROWSER_SAFE_VIDEO_CODECS = ['h264', 'vp8', 'vp9', 'av1'];
 var VIDEO_OUTRO_SECONDS = 2;
+var PUBLISH_AUDIO_SAMPLE_RATE = '48000';
 
 function probeVideoCodec(videoPath) {
   return new Promise(function (resolve) {
@@ -106,7 +107,7 @@ function legacyFinalVideoArgs(videoPath, audioPath, outPath, ambientVolumePercen
   const volume = (normalizeAmbientVolumePercent(ambientVolumePercent) / 100).toFixed(2);
   return ['-y', '-i', videoPath, '-stream_loop', '-1', '-i', audioPath,
     '-filter_complex', '[1:a]volume=' + volume + musicOutroFade(programmeDuration, outroSeconds) + '[bg];[0:a][bg]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]',
-    '-map', '0:v', '-map', '[aout]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k',
+    '-map', '0:v', '-map', '[aout]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-ar', PUBLISH_AUDIO_SAMPLE_RATE,
     '-movflags', '+faststart', '-f', 'mp4', outPath];
 }
 
@@ -234,7 +235,7 @@ function finalLoudnormFilter(settings, measurement) {
 function measuredFinalVideoArgs(videoPath, tempAudioPath, outPath, settings, mixMeasurement) {
   return ['-y', '-i', videoPath, '-i', tempAudioPath,
     '-filter_complex', '[1:a]' + finalLoudnormFilter(settings, mixMeasurement) + '[aout]',
-    '-map', '0:v', '-map', '[aout]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k',
+    '-map', '0:v', '-map', '[aout]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-ar', PUBLISH_AUDIO_SAMPLE_RATE,
     '-shortest', '-movflags', '+faststart', '-f', 'mp4', outPath];
 }
 
@@ -245,14 +246,14 @@ function previewBitrate(options) {
 
 function measuredFinalAudioArgs(tempAudioPath, outPath, settings, mixMeasurement, options) {
   return ['-y', '-i', tempAudioPath, '-af', finalLoudnormFilter(settings, mixMeasurement),
-    '-c:a', 'libmp3lame', '-b:a', previewBitrate(options), '-f', 'mp3', outPath];
+    '-c:a', 'libmp3lame', '-b:a', previewBitrate(options), '-ar', PUBLISH_AUDIO_SAMPLE_RATE, '-f', 'mp3', outPath];
 }
 
 function legacyAudioPreviewArgs(dialoguePath, audioPath, outPath, ambientVolumePercent, options, programmeDuration, outroSeconds) {
   const volume = (normalizeAmbientVolumePercent(ambientVolumePercent) / 100).toFixed(2);
   return ['-y', '-i', dialoguePath, '-stream_loop', '-1', '-i', audioPath,
     '-filter_complex', '[1:a]volume=' + volume + musicOutroFade(programmeDuration, outroSeconds) + '[bg];[0:a][bg]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]',
-    '-map', '[aout]', '-c:a', 'libmp3lame', '-b:a', previewBitrate(options), '-f', 'mp3', outPath];
+    '-map', '[aout]', '-c:a', 'libmp3lame', '-b:a', previewBitrate(options), '-ar', PUBLISH_AUDIO_SAMPLE_RATE, '-f', 'mp3', outPath];
 }
 
 function runFfmpeg(args, label) {

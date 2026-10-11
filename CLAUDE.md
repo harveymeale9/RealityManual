@@ -16536,3 +16536,24 @@ expected endpoint. Render version 17 invalidates and rebuilds affected active
 edits automatically after deployment. The end-to-end test uses a 24 fps
 camera source and now asserts that its visual stream lasts through the complete
 edit and two-second fade-out.
+
+---
+
+# 486. Published Reel Audio Calibrated and Audited (2026-10-11)
+
+The production audio path was audited using the current **The Propagation of
+Success** edit, both voice-only and with its selected backing track. The actual
+AAC publish simulations measured -16.14 LUFS / -1.56 dBTP without music and
+-16.12 LUFS / -1.46 dBTP with music. This confirms that selecting a soundtrack
+does not change the programme loudness, the saved 20 dB voice-to-music offset
+keeps speech dominant, and neither version approaches clipping. The measured
+preview/export path remains the source of truth; the Editor's raw no-music
+playback is not the mastered publish file.
+
+Final AAC videos and their MP3 soundtrack auditions now explicitly encode at
+48 kHz rather than inheriting a phone recording's 96 kHz sample rate. This
+matches the standard social-video delivery profile and avoids an unnecessary
+platform-side sample-rate conversion. Outputs remain AAC-LC stereo at roughly
+192 kbps, with two-pass -16 LUFS normalization and a -1.5 dBTP limiter. Tests
+now require the shared 48 kHz output profile for both the legacy and measured
+mix paths.

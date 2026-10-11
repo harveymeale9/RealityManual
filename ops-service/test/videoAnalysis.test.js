@@ -44,6 +44,7 @@ test('final video mix uses the selected ambient percentage and clamps unsafe val
 
   const withOutro = videoAnalysis.legacyFinalVideoArgs('/video', '/music', '/out', 13, 12, 2);
   assert.match(withOutro.join(' '), /volume=0\.13,afade=t=out:st=10\.000:d=2\.000\[bg\]/);
+  assert.equal(withOutro[withOutro.indexOf('-ar') + 1], '48000');
 });
 
 test('measured audio profile normalizes safe settings and builds independent dialogue/music gains', function () {
@@ -101,6 +102,7 @@ test('measured final pass uses two-pass loudnorm values and a true-peak safeguar
   assert.match(duckedOutro.join(' '), /afade=t=out:st=6\.000:d=2\.000\[bg\].*sidechaincompress/);
   const compressed = videoAnalysis.measuredFinalAudioArgs('/mix.flac', '/preview.mp3', {}, measurement, { bitrate: '48k' });
   assert.equal(compressed[compressed.indexOf('-b:a') + 1], '48k');
+  assert.equal(compressed[compressed.indexOf('-ar') + 1], '48000');
   const safeFallback = videoAnalysis.legacyAudioPreviewArgs('/voice', '/music', '/preview.mp3', 10, { bitrate: '12k' });
   assert.equal(safeFallback[safeFallback.indexOf('-b:a') + 1], '192k');
   const previewOutro = videoAnalysis.legacyAudioPreviewArgs('/voice', '/music', '/preview.mp3', 10, {}, 8, 2);
