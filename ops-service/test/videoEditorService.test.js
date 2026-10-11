@@ -1356,11 +1356,14 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   const audioLibrary = await response.json();
   assert.deepEqual(audioLibrary.tracks, [{ id: 'track-1', name: 'Test ambience', note: 'Quiet test bed' }]);
   assert.equal(audioLibrary.mixVersion.length, 16);
+  const audioPreviewUrl = base + '/api/editor/' + project.id + '/audio-preview/track-1?v=' +
+    encodeURIComponent(project.renderSha256 + ':' + audioLibrary.mixVersion + ':track-1');
   const audioPreviews = await Promise.all([
-    fetch(base + '/api/editor/' + project.id + '/audio-preview/track-1', { method: 'POST' }),
-    fetch(base + '/api/editor/' + project.id + '/audio-preview/track-1', { method: 'POST' })
+    fetch(audioPreviewUrl),
+    fetch(audioPreviewUrl)
   ]);
   assert.deepEqual(audioPreviews.map(function (item) { return item.status; }), [200, 200]);
+  assert.equal(audioPreviews[0].headers.get('cache-control'), 'private, max-age=31536000, immutable');
   assert.ok(Buffer.from(await audioPreviews[0].arrayBuffer()).length > 1000);
   assert.ok(Buffer.from(await audioPreviews[1].arrayBuffer()).length > 1000);
   assert.equal(audioPreviewCalls, 1, 'simultaneous requests must share one cached mix');

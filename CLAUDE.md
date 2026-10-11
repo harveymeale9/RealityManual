@@ -16606,3 +16606,27 @@ The self-contained win-x64 executable was rebuilt as version 2.0.0 and placed
 at the existing persistent download target. The Content Settings explanation
 now describes the two-folder arrangement. The executable remains unsigned and
 is still intentionally kept out of Git.
+
+---
+
+# 489. Completed Editor Soundtrack Previews Survive Page Refreshes (2026-10-11)
+
+The Editor previously held all completed soundtrack auditions only as
+page-scoped blob URLs. The server could reuse its two-hour FFmpeg result, but a
+browser refresh discarded every blob and issued thirty POST requests, forcing
+all thirty MP3 responses to be transferred and loaded again before the picker
+unlocked.
+
+Soundtrack auditions now use cacheable GET requests whose URL is versioned by
+the verified render SHA-256, current production mix profile, and audio-library
+identity. Successful responses are private, immutable browser-cache entries.
+A normal refresh therefore rebuilds the page's blob URLs from the local browser
+cache rather than regenerating or downloading the mixes. Any edit rebuild,
+mix-setting change, or track-library change creates a different URL and cannot
+reuse stale audio. The former POST route remains temporarily available for
+tabs which loaded the previous JavaScript before deployment.
+
+The Editor route regression now verifies the immutable private cache policy
+and concurrent server-side mix reuse. A real Chromium reload test additionally
+confirmed that two page loads of the same versioned preview produce only one
+network transfer.

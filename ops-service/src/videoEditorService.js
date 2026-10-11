@@ -2800,7 +2800,7 @@ async function renderProject(id) {
     res.sendFile(useProxy ? previewPath(req.params.id) : sourcePath(req.params.id));
   });
 
-  router.post('/:id/audio-preview/:trackId', async function (req, res) {
+  async function sendEditorAudioPreview(req, res) {
     if (!isId(req.params.id) || !isId(req.params.trackId)) return res.status(400).json({ error: 'invalid_params' });
     const project = getProject(req.params.id);
     if (!project) return res.status(404).json({ error: 'not_found' });
@@ -2815,12 +2815,23 @@ async function renderProject(id) {
         return res.status(409).json({ error: 'render_changed', message: 'The edit changed while this soundtrack preview was building.' });
       }
       res.type('audio/mpeg');
-      res.set('Cache-Control', 'private, max-age=7200');
+      // The browser URL includes the verified render hash, saved mix profile,
+      // and track-library identity. That makes it safe to retain completed
+      // previews across a page reload: any meaningful input change produces a
+      // different URL rather than serving stale audio.
+      res.set('Cache-Control', req.method === 'GET' && req.query.v
+        ? 'private, max-age=31536000, immutable'
+        : 'private, max-age=7200');
       res.sendFile(previewPath);
     } catch (error) {
       res.status(422).json({ error: 'audio_preview_failed', message: String(error.message || error).slice(0, 500) });
     }
-  });
+  }
+
+  router.get('/:id/audio-preview/:trackId', sendEditorAudioPreview);
+  // Keep the original POST route temporarily for already-open tabs while the
+  // frontend cache-key release propagates.
+  router.post('/:id/audio-preview/:trackId', sendEditorAudioPreview);
 
   router.get('/:id/render', function (req, res) {
     if (!isId(req.params.id) || !fs.existsSync(renderPath(req.params.id))) return res.status(404).end();

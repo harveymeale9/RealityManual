@@ -113,6 +113,11 @@
     return [item && item.renderSha256 || '', audioMixVersion, audioTracks.map(function (track) { return track.id; }).join(',')].join(':');
   }
 
+  function audioPreviewUrl(item, trackId) {
+    return '/api/editor/' + encodeURIComponent(item.id) + '/audio-preview/' + encodeURIComponent(trackId) +
+      '?v=' + encodeURIComponent(audioPreviewFingerprint(item));
+  }
+
   function notifyAudioPreviewProgress(id) {
     if (project && project.id === id && typeof activeAudioPanelRefresh === 'function') activeAudioPanelRefresh();
   }
@@ -133,8 +138,8 @@
     function worker() {
       var track = queue.shift();
       if (!track || batch.cancelled) return Promise.resolve();
-      return fetch('/api/editor/' + encodeURIComponent(item.id) + '/audio-preview/' + encodeURIComponent(track.id), {
-        method: 'POST', credentials: 'same-origin'
+      return fetch(audioPreviewUrl(item, track.id), {
+        method: 'GET', credentials: 'same-origin', cache: 'force-cache'
       }).then(function (response) {
         if (!response.ok) return response.json().catch(function () { return {}; }).then(function (body) { throw new Error(body.message || body.error || 'Preview failed'); });
         return response.blob();
