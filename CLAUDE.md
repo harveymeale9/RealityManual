@@ -16745,3 +16745,16 @@ The three-card **Inside the Book** gallery retains two equal columns below
 one normal column's width in the horizontal center. This replaces the visually
 unbalanced empty bottom-right cell with a symmetric `2 + 1` arrangement. The
 desktop three-card row and testimonial column are unchanged.
+
+---
+
+# 496. Interior Gallery Desktop Images Are Crisp and Byline-Free (2026-10-11)
+
+The small explanatory line beneath **Inside the Book** was removed at Harvey's
+request. The three gallery photographs were rebuilt from the full-resolution
+phone originals at 1800x2400 rather than 900x1200, using high-quality Lanczos
+resampling and a restrained sharpening pass. Explicit intrinsic dimensions
+prevent layout movement while the lazy-loaded files decode, and a source URL
+version suffix ensures browsers do not retain the softer cached derivatives.
+The existing crops, labels, desktop grid, and centered mobile `2 + 1` layout
+remain unchanged.

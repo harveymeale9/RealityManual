@@ -796,13 +796,6 @@ img { max-width: 100%; }
 
 .inside-head .section-label { color: var(--accent); opacity: 0.85; letter-spacing: 0.22em; }
 
-.inside-sub {
-  font-family: var(--serif);
-  font-size: 1.1rem;
-  color: var(--ink-soft);
-  margin: 0;
-}
-
 .inside-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -813,6 +806,7 @@ img { max-width: 100%; }
 
 .page-card img {
   width: 100%;
+  height: auto;
   aspect-ratio: 3 / 4;
   object-fit: cover;
   display: block;
