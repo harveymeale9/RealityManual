@@ -16679,3 +16679,23 @@ Cloudflare can cache repeat delivery. The static storefront creates its native
 autoplaying, inline-controls player only after the visitor presses Play; the
 card duration now reads `1:34`, and `object-fit: contain` prevents the finished
 16:9 picture from being stretched by the responsive offer grid.
+
+---
+
+# 492. Inside the Book Uses Real Proof-Copy Photography (2026-10-11)
+
+The storefront's four placeholder interior cards have been replaced by three
+real photographs Harvey supplied from the physical proof copy. The labels are
+now **Core Principles**, **Practical Applications**, and **Advanced
+Techniques**; the former **Original Diagrams** and **Beautifully Designed**
+claims were removed as requested. Core Principles specifically uses page 81,
+**Existence by Function**. Practical Applications uses page 58's examples of
+oneness and separation, and Advanced Techniques uses page 176's enlightenment
+framework.
+
+Each phone original was auto-oriented, stripped of EXIF/GPS metadata, resized
+and cropped to the existing 3:4 card ratio, then given the same restrained
+contrast/desaturation treatment. The resulting 900x1200 JPEGs are only
+147-172 KB each and lazy-load below the fold. Desktop layout now reserves three
+equal image columns plus the testimonial; the existing two-column mobile grid
+remains intact.
