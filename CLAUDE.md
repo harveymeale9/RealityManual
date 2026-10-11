@@ -16799,3 +16799,16 @@ cloth, a subtle spine and black page block, and the small centered gold-foil
 **The Reality Manual** title. The vector treatment is deliberately simplified
 for clarity at the rendered 52x68 desktop and 44x58 mobile sizes. The image URL
 uses a new cache key so returning browsers receive the replacement immediately.
+
+---
+
+# 500. Interior Cards Cannot Be Stretched by Stale CSS (2026-10-11)
+
+The 1800x2400 intrinsic `width`/`height` attributes added in §496 could produce
+2400-CSS-pixel-tall image boxes if a returning browser combined the newer HTML
+with a cached stylesheet from before `.page-card img { height: auto; }`. With
+`object-fit: cover`, that failure appeared as three extremely tall, severely
+zoomed page slivers. The intrinsic attributes have been removed from these
+three lazy-loaded images. Their established CSS `width: 100%` and `aspect-ratio:
+3 / 4` now control the boxes directly, while the 1800x2400 source files remain
+unchanged and retain their desktop sharpness.
