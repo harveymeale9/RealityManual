@@ -16488,3 +16488,29 @@ the silhouette at 16px, while the star, planet, orbit, and stacked discs retain
 the Reality Manual identity at larger bookmark and shortcut sizes. All five
 storefront pages use a new cache-versioned favicon URL so browsers request the
 replacement instead of indefinitely retaining the earlier icon.
+
+---
+
+# 484. Comparative Rhetoric No Longer Blocks Editor Audio (2026-10-11)
+
+A new portrait recording of **The Propagation of Success** could play its
+browser-safe source preview but could not choose backing audio. The soundtrack
+panel's generic “Available when the final edit is ready” message obscured the
+real dependency: semantic retake analysis had mistaken the deliberate parallel
+sentence “the greater… the greater… the greater…” for two possible failed
+takes. Unresolved retake suggestions intentionally prevent final rendering,
+and soundtrack auditions require that verified final timeline.
+
+Semantic retake normalization now ignores evidence-free article-only ranges
+and tiny comparative scaffolds such as “greater the” when the proposed later
+wording does not actually support a replacement. Genuine repeated takes still
+qualify through meaningful shared wording, while longer rephrased candidates
+retain the existing conservative review path. A regression uses the exact
+comparative structure that caused the production false positive and requires
+both bogus decisions to be discarded.
+
+When any legitimate dependency still delays the final render, the soundtrack
+panel now names it directly—for example, **Resolve 2 possible retakes below to
+build the final edit and unlock audio**—instead of presenting every blocked
+state as unexplained final-edit preparation. The Editor asset cache key was
+advanced so the clearer status reaches already-open browsers after reload.

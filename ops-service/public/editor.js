@@ -979,6 +979,12 @@
     var failedSafetyCheck = project.retakeAnalysisStatus === 'error' || framingFailureBlocks;
     var renderBlocked = automaticEditRunning || failedSafetyCheck || unresolvedRetakes > 0 || project.layoutReviewRequired;
     var renderButtonText = automaticEditRunning ? 'Preparing automatic edit…' : project.retakeAnalysisStatus === 'error' ? 'Retry failed retake check' : framingFailureBlocks ? 'Retry framing or choose a frame' : project.layoutReviewRequired ? 'Confirm Vertical or Horizontal frame' : unresolvedRetakes ? 'Review ' + unresolvedRetakes + ' possible retake' + (unresolvedRetakes === 1 ? '' : 's') : 'Build final edit';
+    var audioUnavailableText = unresolvedRetakes
+      ? 'Resolve ' + unresolvedRetakes + ' possible retake' + (unresolvedRetakes === 1 ? '' : 's') + ' below to build the final edit and unlock audio'
+      : automaticEditRunning ? 'Available when the automatic edit is ready'
+        : project.retakeAnalysisStatus === 'error' ? 'Retry the failed retake check to unlock audio'
+          : project.renderStatus === 'error' ? 'Retry the failed final edit to unlock audio'
+            : 'Available when the final edit is ready';
     var rendering = ['queued', 'running'].indexOf(project.renderStatus) !== -1;
     var previewRebuildPending = !!localPreviewRebuilds[project.id] || !!project.renderRebuildPending;
     var previewLocked = rendering || previewRebuildPending;
@@ -1012,7 +1018,7 @@
     var audioSelectionReady = !!project.audioTrackId && selectedAudioExists;
     var audioPanelHtml = '<section class="editor-audio-panel"><div><div class="eyebrow">Backing audio</div><h3>Choose the soundtrack against this edit</h3><span>Every preview uses the saved production loudness settings. Switching tracks restarts the same video from the beginning.</span></div>' +
       '<div class="editor-audio-picker"><button type="button" class="btn-secondary btn-tiny" id="editorAudioPrevious" disabled>← Previous</button><select id="editorAudioTrack" class="stage-select" ' + (project.renderStatus !== 'ready' || sentToProduction || previewLocked ? 'disabled' : '') + '><option value="">Preparing soundtrack previews…</option></select><button type="button" class="btn-secondary btn-tiny" id="editorAudioNext" disabled>Next →</button></div>' +
-      '<div class="editor-audio-progress loading" id="editorAudioProgress"><i></i><span>' + (project.renderStatus === 'ready' ? 'Loading audio previews 0/' + audioTracks.length : 'Available when the final edit is ready') + '</span></div><audio id="editorMixedAudio" preload="auto" hidden></audio></section>';
+      '<div class="editor-audio-progress loading" id="editorAudioProgress"><i></i><span>' + (project.renderStatus === 'ready' ? 'Loading audio previews 0/' + audioTracks.length : audioUnavailableText) + '</span></div><audio id="editorMixedAudio" preload="auto" hidden></audio></section>';
     var manualRevisionPanelHtml = '<section class="editor-manual-panel"><div class="editor-manual-heading"><div><div class="eyebrow">Manual revision</div><h3>Tell me what to change</h3><span>Type or dictate a specific change. Include a timestamp when it helps.</span></div></div>' +
       (!sentToProduction ? '<textarea id="editorManualRevisionText" maxlength="4000" rows="3" placeholder="For example: Around 14 seconds, keep the tight zoom instead of pulling back."></textarea><div class="editor-manual-actions"><button type="button" class="btn-secondary btn-tiny" id="editorManualDictate">Dictate</button><button type="button" class="btn-primary btn-tiny" id="editorManualSubmit" disabled>Apply revision</button><span id="editorManualStatus" aria-live="polite"></span></div>' : '<p class="editor-manual-locked">This approved version is locked; its completed manual changes remain recorded below.</p>') +
       manualRevisionLogHtml(project) + '</section>';
@@ -1322,7 +1328,7 @@
       } else if (project.renderStatus !== 'ready') {
         audioTrackSelect.disabled = true;
         audioProgress.className = 'editor-audio-progress';
-        audioProgress.querySelector('span').textContent = 'Available when the final edit is ready';
+        audioProgress.querySelector('span').textContent = audioUnavailableText;
       } else if (!audioTracks.length) {
         audioTrackSelect.disabled = sent;
         audioProgress.className = 'editor-audio-progress';

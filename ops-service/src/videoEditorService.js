@@ -695,10 +695,22 @@ function normalizeRetakeDecisions(raw, words) {
     }
     const removedTokens = tokens(start, end);
     const replacementTokens = tokens(replacementStart, replacementEnd);
+    // Articles and connective/comparative scaffolding are too weak to prove
+    // that one phrase replaces another. In particular, deliberate parallel
+    // constructions such as "the greater X, the greater Y" used to produce
+    // review cards for a lone "the" or "greater the", which then blocked the
+    // final render even though the sentence was fluent. Keep meaningful
+    // wording as the evidence and discard tiny scaffold-only guesses.
+    const weakTokens = new Set(['a', 'an', 'and', 'or', 'the', 'to', 'of', 'in', 'on', 'at', 'for', 'with', 'is', 'are', 'was', 'were', 'be', 'been', 'being']);
+    const comparativeScaffoldTokens = new Set(['a', 'an', 'and', 'or', 'the', 'greater', 'more', 'less', 'fewer']);
+    const removedSignalTokens = removedTokens.filter(function (token) { return !weakTokens.has(token); });
+    const replacementSignalTokens = replacementTokens.filter(function (token) { return !weakTokens.has(token); });
+    if (!removedSignalTokens.length) return null;
     let matchingPrefix = 0;
-    while (matchingPrefix < Math.min(removedTokens.length, replacementTokens.length) && removedTokens[matchingPrefix] === replacementTokens[matchingPrefix]) matchingPrefix++;
-    const sharedRatio = removedTokens.filter(function (token) { return replacementTokens.includes(token); }).length / Math.max(1, removedTokens.length);
-    const lexicalSupport = matchingPrefix >= Math.min(2, removedTokens.length) || sharedRatio >= 0.5;
+    while (matchingPrefix < Math.min(removedSignalTokens.length, replacementSignalTokens.length) && removedSignalTokens[matchingPrefix] === replacementSignalTokens[matchingPrefix]) matchingPrefix++;
+    const sharedRatio = removedSignalTokens.filter(function (token) { return replacementSignalTokens.includes(token); }).length / Math.max(1, removedSignalTokens.length);
+    const lexicalSupport = matchingPrefix >= Math.min(2, removedSignalTokens.length) || sharedRatio >= 0.5;
+    if (!lexicalSupport && removedTokens.length <= 2 && removedTokens.every(function (token) { return comparativeScaffoldTokens.has(token); })) return null;
     const requestedHigh = decision.confidence === 'high';
     const confidence = requestedHigh && lexicalSupport ? 'high' : 'review';
     const reason = String(decision.reason || 'A nearby take may replace this wording.').slice(0, 260) +

@@ -377,6 +377,18 @@ test('unrelated semantic ranges can never become automatic retake cuts', functio
   assert.deepEqual(project.autoRetakeRemovedWordIndices, []);
 });
 
+test('comparative parallelism cannot become blocking retake review', function () {
+  const texts = ['In', 'life,', 'the', 'greater', 'the', 'number', 'of', 'participants', 'who', 'succeed,', 'and', 'the', 'greater', 'the', 'degree', 'to', 'which', 'they', 'succeed,', 'the', 'greater', 'the', 'potential', 'magnitude', 'of', 'success', 'available', 'to', 'everyone', 'else.'];
+  const timed = texts.map(function (text, index) {
+    return { index: index, text: text, start: index * 0.2, end: index * 0.2 + 0.15 };
+  });
+  const decisions = editor.normalizeRetakeDecisions([
+    { removeStartIndex: 4, removeEndIndex: 4, replacementStartIndex: 11, replacementEndIndex: 14, confidence: 'review', reason: 'Mistook parallel wording for a restart.' },
+    { removeStartIndex: 20, removeEndIndex: 21, replacementStartIndex: 22, replacementEndIndex: 25, confidence: 'review', reason: 'Mistook a comparative clause for a restart.' }
+  ], timed);
+  assert.deepEqual(decisions, []);
+});
+
 test('overlapping semantic retake removals cannot create conflicting review cards', function () {
   const timed = Array.from({ length: 12 }, function (_, index) {
     return { index: index, text: 'w' + index, start: index, end: index + 0.4 };
