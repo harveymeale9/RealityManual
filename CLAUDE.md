@@ -16514,3 +16514,25 @@ panel now names it directly—for example, **Resolve 2 possible retakes below to
 build the final edit and unlock audio**—instead of presenting every blocked
 state as unexplained final-edit preparation. The Editor asset cache key was
 advanced so the clearer status reaches already-open browsers after reload.
+
+---
+
+# 485. Editor Visual Stream Now Reaches the True End (2026-10-11)
+
+The first finished portrait edit exposed a frame-rate bug hidden by the
+container duration: its 25 fps camera frames were retimestamped as 29.97 fps
+after concatenation. Audio and the MP4 container correctly lasted 36.29
+seconds, but the visual stream ended at 30.60 seconds, leaving the player with
+no frames for the final 5.69 seconds. The existing technical check only probed
+the container duration, so it incorrectly marked that output as passed.
+
+Every retained source or inserted-clip segment is now explicitly resampled to
+the 29.97 fps render rate before camera motion and concatenation. This
+preserves real elapsed duration for 24/25 fps phone recordings while retaining
+the established output profile. Probing and browser-proxy validation now track
+the video stream duration separately from the container duration, and a final
+render cannot pass unless both audio/container and visual durations reach the
+expected endpoint. Render version 17 invalidates and rebuilds affected active
+edits automatically after deployment. The end-to-end test uses a 24 fps
+camera source and now asserts that its visual stream lasts through the complete
+edit and two-second fade-out.

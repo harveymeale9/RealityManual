@@ -642,7 +642,7 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.equal(stored.renderQuality.status, 'passed');
-  assert.equal(stored.renderVersion, 16);
+  assert.equal(stored.renderVersion, 17);
   assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), true);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
@@ -674,7 +674,7 @@ test('final render splices an inserted clip and its caption timeline between sou
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.ok(stored.editedDuration > 3.9 && stored.editedDuration < 4.1);
-  assert.equal(stored.renderVersion, 16);
+  assert.equal(stored.renderVersion, 17);
   assert.equal(stored.renderQuality.contentDuration, 2);
   assert.equal(stored.renderQuality.outroSeconds, 2);
   assert.ok(stored.renderQuality.insertedClipLoudness.clips[0].gainDb > 18);
@@ -1185,7 +1185,9 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(renderReadyCalls, 1);
   assert.equal(project.workflowWarning, 'Synthetic first workflow failure.');
   assert.equal(project.renderQuality.status, 'passed');
-  assert.deepEqual(project.renderQuality.checks, { playableFile: true, correctFrame: true, standardPixelFormat: true, audioPresent: true, audibleAudio: true, durationMatches: true });
+  assert.deepEqual(project.renderQuality.checks, { playableFile: true, correctFrame: true, standardPixelFormat: true, audioPresent: true, audibleAudio: true, durationMatches: true, visualDurationMatches: true });
+  assert.ok(Math.abs(project.renderQuality.videoDuration - project.editedDuration) < 0.15,
+    '24 fps source keeps visual frames through the full edited duration');
   assert.ok(project.renderQuality.audioPeakDb > -55);
   assert.deepEqual([project.renderQuality.width, project.renderQuality.height], [1080, 1920]);
   assert.equal(project.renderQuality.pixelFormat, 'yuv420p');

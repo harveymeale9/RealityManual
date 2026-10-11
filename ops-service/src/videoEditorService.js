@@ -23,7 +23,7 @@ const VIDEO_OUTRO_SECONDS = 2;
 // automatic long-pause cuts are treated as page changes and start the move
 // again from the wide camera frame.
 const OPENING_PUSH_IN_SCALE = 1.25;
-const EDITOR_RENDER_VERSION = 16;
+const EDITOR_RENDER_VERSION = 17;
 const PAGE_CHANGE_SSIM_THRESHOLD = 0.5;
 const BROWSER_PREVIEW_VERSION = 2;
 const AUDIO_PREVIEW_MIX_VERSION = 3;
@@ -1267,7 +1267,7 @@ function setup(options) {
 
   async function probe(filePath) {
     const result = await run('ffprobe', ['-v', 'error', '-show_entries',
-      'format=duration:stream=codec_type,codec_name,width,height,pix_fmt:stream_tags=rotate:stream_side_data=rotation',
+      'format=duration:stream=codec_type,codec_name,width,height,pix_fmt,duration:stream_tags=rotate:stream_side_data=rotation',
       '-of', 'json', filePath], 'video probe');
     const parsed = JSON.parse(result.stdout || '{}');
     const video = (parsed.streams || []).find(function (stream) { return stream.codec_type === 'video'; }) || {};
@@ -1278,6 +1278,7 @@ function setup(options) {
     const dimensions = displayDimensions(video.width, video.height, rotation);
     return {
       duration: Number(parsed.format && parsed.format.duration) || 0,
+      videoDuration: Number(video.duration) || 0,
       width: dimensions.width,
       height: dimensions.height,
       codedWidth: Number(video.width) || 0,
@@ -1295,7 +1296,10 @@ function setup(options) {
       const stat = fs.statSync(filePath);
       if (!stat.isFile() || stat.size <= 1024) return false;
       const media = await probe(filePath);
-      const durationValid = !Number(expectedDuration) || Math.abs(media.duration - Number(expectedDuration)) <= renderDurationTolerance(expectedDuration);
+      const durationValid = !Number(expectedDuration) || (
+        Math.abs(media.duration - Number(expectedDuration)) <= renderDurationTolerance(expectedDuration) &&
+        Math.abs(media.videoDuration - Number(expectedDuration)) <= renderDurationTolerance(expectedDuration)
+      );
       const rotationBakedIn = Math.abs(Number(media.rotation) || 0) % 180 !== 90;
       return media.videoCodec === 'h264' && media.hasAudio && media.width > 0 && media.height > 0 &&
         Math.max(media.width, media.height) <= 854 && rotationBakedIn && durationValid;
@@ -1712,7 +1716,11 @@ async function renderProject(id) {
       segments.forEach(function (segment, index) {
         const segmentDuration = segment.end - segment.start;
         const inputIndex = segment.type === 'insert' ? clipInputIndex.get(segment.clipId) : 0;
-        let videoFilter = '[' + inputIndex + ':v]trim=start=' + segment.start.toFixed(3) + ':end=' + segment.end.toFixed(3) + ',setpts=PTS-STARTPTS';
+        // Resample every retained shot to the render rate before zoompan. The
+        // camera-motion filter emits one output frame per input frame; without
+        // this stage a 24/25 fps phone recording is later timestamped as
+        // 29.97 fps and its visual stream ends well before its audio.
+        let videoFilter = '[' + inputIndex + ':v]trim=start=' + segment.start.toFixed(3) + ':end=' + segment.end.toFixed(3) + ',setpts=PTS-STARTPTS,fps=30000/1001';
         if (layout === 'vertical') {
           videoFilter += ",crop=w='min(iw\\,ih*9/16)':h='min(ih\\,iw*16/9)':x='(iw-ow)/2':y='(ih-oh)/2',scale=1080:1920,setsar=1";
         } else {
@@ -1778,7 +1786,8 @@ async function renderProject(id) {
         standardPixelFormat: renderedMedia.pixelFormat === 'yuv420p',
         audioPresent: renderedMedia.hasAudio,
         audibleAudio: Number.isFinite(audioPeakDb) && audioPeakDb > -55,
-        durationMatches: Math.abs(renderedMedia.duration - expectedDuration) <= durationTolerance
+        durationMatches: Math.abs(renderedMedia.duration - expectedDuration) <= durationTolerance,
+        visualDurationMatches: Math.abs(renderedMedia.videoDuration - expectedDuration) <= durationTolerance
       };
       if (Object.keys(qualityChecks).some(function (key) { return !qualityChecks[key]; })) {
         const failedChecks = Object.keys(qualityChecks).filter(function (key) { return !qualityChecks[key]; });
@@ -1801,7 +1810,8 @@ async function renderProject(id) {
       project.renderQuality = {
         status: 'passed', checkedAt: new Date().toISOString(), checks: qualityChecks,
         width: renderedMedia.width, height: renderedMedia.height, pixelFormat: renderedMedia.pixelFormat,
-        duration: renderedMedia.duration, contentDuration: contentDuration, outroSeconds: VIDEO_OUTRO_SECONDS, audioPeakDb: audioPeakDb,
+        duration: renderedMedia.duration, videoDuration: renderedMedia.videoDuration,
+        contentDuration: contentDuration, outroSeconds: VIDEO_OUTRO_SECONDS, audioPeakDb: audioPeakDb,
         insertedClipLoudness: mainVoiceLufs === null ? null : {
           mainVoiceLufs: mainVoiceLufs,
           clips: readyClips.map(function (clip) {
