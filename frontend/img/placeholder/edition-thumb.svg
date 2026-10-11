@@ -1,18 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 160" role="img" aria-label="Placeholder — edition thumbnail">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 160" role="img" aria-label="The Reality Manual plain black cloth hardcover">
   <defs>
-    <linearGradient id="et" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#2b2418"/>
-      <stop offset="1" stop-color="#0c0a06"/>
+    <linearGradient id="cover" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#25231f"/>
+      <stop offset="0.5" stop-color="#151411"/>
+      <stop offset="1" stop-color="#090908"/>
     </linearGradient>
+    <pattern id="weave" width="4" height="4" patternUnits="userSpaceOnUse">
+      <path d="M0 1 H4 M1 0 V4" stroke="#8a8171" stroke-opacity="0.1" stroke-width="0.45"/>
+    </pattern>
   </defs>
   <rect width="120" height="160" fill="#0c0a06"/>
-  <rect x="18" y="12" width="84" height="136" fill="url(#et)" stroke="#c9a24d" stroke-opacity="0.55"/>
-  <rect x="18" y="12" width="7" height="136" fill="#c9a24d" fill-opacity="0.4"/>
-  <g stroke="#c9a24d" stroke-opacity="0.55" fill="none" stroke-width="1">
-    <circle cx="63" cy="86" r="24"/>
-    <circle cx="63" cy="86" r="13"/>
-    <path d="M39 86 H87 M63 62 V110"/>
-  </g>
-  <path d="M40 40 H86" stroke="#c9a24d" stroke-opacity="0.45" stroke-width="1.5"/>
-  <path d="M46 48 H80" stroke="#c9a24d" stroke-opacity="0.3" stroke-width="1.5"/>
+  <path d="M25 13 L96 10 L102 15 L102 146 L96 150 L25 147 Z" fill="#030303" stroke="#332b1d"/>
+  <path d="M94 14 L101 16 L101 144 L94 141 Z" fill="#050505" stroke="#24221e" stroke-width="0.7"/>
+  <rect x="18" y="12" width="78" height="136" rx="1.5" fill="url(#cover)" stroke="#51452e" stroke-width="1"/>
+  <rect x="18" y="12" width="78" height="136" rx="1.5" fill="url(#weave)"/>
+  <rect x="18" y="12" width="7" height="136" fill="#080807" opacity="0.72"/>
+  <path d="M25 15 V145" stroke="#50483b" stroke-opacity="0.45" stroke-width="1"/>
+  <text x="57" y="82" text-anchor="middle" fill="#d4aa55" font-family="Georgia, 'Times New Roman', serif" font-size="5.2" letter-spacing="0.15">The Reality Manual</text>
 </svg>

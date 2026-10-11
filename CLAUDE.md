@@ -16788,3 +16788,14 @@ preserved. The final optimized assets are `book-desk-v3.jpg` (1536x1024,
 255 KB) and `book-desk-square-v2.jpg` (1254x1254, 437 KB).
 The homepage stylesheet cache key was advanced with this change so the mobile
 image's intrinsic dimensions cannot temporarily override its square CSS size.
+
+---
+
+# 499. Edition Selector Thumbnail Matches the Physical Hardcover (2026-10-11)
+
+The small edition-selector thumbnail no longer shows the former circular
+diagram cover. Its SVG now depicts the current physical edition: plain black
+cloth, a subtle spine and black page block, and the small centered gold-foil
+**The Reality Manual** title. The vector treatment is deliberately simplified
+for clarity at the rendered 52x68 desktop and 44x58 mobile sizes. The image URL
+uses a new cache key so returning browsers receive the replacement immediately.
