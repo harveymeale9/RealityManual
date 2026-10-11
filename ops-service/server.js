@@ -2410,11 +2410,9 @@ app.post('/api/videos/:id/audio-preview', requireAuthOrReviewer, async function 
 // "respond immediately, run the real work in the background, let the
 // client poll the piece record" pattern as analyze/build-final — a real
 // upload can take a while and there's no reason to hold the HTTP request
-// open for it. Always uploads the built final video (`<id>-final`, audio
-// already spliced in per Harvey's Final Check rule) if it exists, falling
-// back to the raw upload only if it somehow doesn't — a piece can't
-// actually reach Final Check without the final build having succeeded, so
-// this fallback should never really trigger in practice.
+// open for it. It may only upload the built final video (`<id>-final`) that
+// Final Check plays. A missing final is a hard failure: silently publishing
+// the raw upload would bypass the reviewed audio mix and loudness master.
 async function runYoutubePublish(id, opts) {
   const piece = getPieceRecord(id);
   if (!piece) return; // deleted before this started
@@ -2424,17 +2422,14 @@ async function runYoutubePublish(id, opts) {
 
   try {
     const finalPath = path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX);
-    const rawPath = path.join(UPLOADS_DIR, 'videos', id);
-    const useFinal = fs.existsSync(finalPath);
-    const videoPath = useFinal ? finalPath : rawPath;
-    if (!fs.existsSync(videoPath)) throw new Error('video file not found on disk');
+    if (!fs.existsSync(finalPath)) throw new Error('Final Check video is missing; refusing to publish the unreviewed raw upload.');
 
-    const videoRow = stmts.getOne.get('videos', useFinal ? (id + FINAL_VIDEO_SUFFIX) : id);
+    const videoRow = stmts.getOne.get('videos', id + FINAL_VIDEO_SUFFIX);
     const videoMeta = videoRow ? JSON.parse(videoRow.data) : {};
     const mimeType = videoMeta.mimeType || 'video/mp4';
 
     const accessToken = await getValidYoutubeAccessToken();
-    const result = await youtubeAuth.uploadVideo(accessToken, videoPath, mimeType, {
+    const result = await youtubeAuth.uploadVideo(accessToken, finalPath, mimeType, {
       title: opts.title || piece.title || 'Untitled',
       description: opts.description || '',
       privacyStatus: opts.privacyStatus
@@ -2491,7 +2486,9 @@ app.post('/api/youtube/publish/:id', requireAuthOrReviewer, function (req, res) 
 // --- Real TikTok publish — same shape as the YouTube job above, using
 // the token stored by the TikTok OAuth connect flow. Always uploads the
 // built final video (`<id>-final`) if it exists, same reasoning as
-// YouTube's version. Known limitation, not built: if a single piece is
+// YouTube's version. A missing final is never allowed to fall back to the raw
+// camera upload, because that would not contain Final Check's mastered audio.
+// Known limitation, not built: if a single piece is
 // ever tagged for *both* ytlong and tiktok at once, this job and
 // runYoutubePublish both read-modify-write the same piece record
 // concurrently with no locking between them, so one could clobber the
@@ -2508,17 +2505,14 @@ async function runTiktokPublish(id, opts) {
 
   try {
     const finalPath = path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX);
-    const rawPath = path.join(UPLOADS_DIR, 'videos', id);
-    const useFinal = fs.existsSync(finalPath);
-    const videoPath = useFinal ? finalPath : rawPath;
-    if (!fs.existsSync(videoPath)) throw new Error('video file not found on disk');
+    if (!fs.existsSync(finalPath)) throw new Error('Final Check video is missing; refusing to publish the unreviewed raw upload.');
 
-    const videoRow = stmts.getOne.get('videos', useFinal ? (id + FINAL_VIDEO_SUFFIX) : id);
+    const videoRow = stmts.getOne.get('videos', id + FINAL_VIDEO_SUFFIX);
     const videoMeta = videoRow ? JSON.parse(videoRow.data) : {};
     const mimeType = videoMeta.mimeType || 'video/mp4';
 
     const accessToken = await getValidTiktokAccessToken();
-    const result = await tiktokAuth.publishVideo(accessToken, videoPath, mimeType, {
+    const result = await tiktokAuth.publishVideo(accessToken, finalPath, mimeType, {
       title: opts.title || piece.title || 'Untitled',
       brandedContent: !!opts.brandedContent
     });

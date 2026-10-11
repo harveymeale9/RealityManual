@@ -16557,3 +16557,25 @@ platform-side sample-rate conversion. Outputs remain AAC-LC stereo at roughly
 192 kbps, with two-pass -16 LUFS normalization and a -1.5 dBTP limiter. Tests
 now require the shared 48 kHz output profile for both the legacy and measured
 mix paths.
+
+---
+
+# 487. Final Check Master Is the Only Publishable File (2026-10-11)
+
+The Final Check player already streams the persisted `<piece-id>-final` MP4,
+and the coordinated multi-platform pipeline archives that same file to R2
+before YouTube, TikTok/Buffer, Instagram, or Facebook can receive it. Local
+direct uploads and R2-backed releases therefore begin with the exact mastered
+audio Harvey reviewed, rather than independently rebuilding a mix at publish
+time.
+
+Two older standalone YouTube and TikTok compatibility endpoints still had a
+defensive fallback to the raw camera upload if the final MP4 disappeared. The
+normal Final Check UI no longer calls those endpoints, but retaining the
+fallback violated the stronger invariant. Both routes now fail explicitly
+when the Final Check master is missing and can only upload `<id>-final`.
+Consequently no available publishing path may silently substitute an
+unreviewed file with different audio mixing or overall loudness. Platforms may
+still perform their own unavoidable delivery transcode or playback
+normalization after upload, but Content Studio always supplies the exact file
+played in Final Check.
