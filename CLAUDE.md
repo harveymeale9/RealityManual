@@ -16758,3 +16758,15 @@ prevent layout movement while the lazy-loaded files decode, and a source URL
 version suffix ensures browsers do not retain the softer cached derivatives.
 The existing crops, labels, desktop grid, and centered mobile `2 + 1` layout
 remain unchanged.
+
+---
+
+# 497. Homepage Stylesheet Cache Bust Restores the Exact VSL Frame (2026-10-11)
+
+The VSL itself is a true 1920x1080 file with no encoded side bars, and the
+current player CSS also measures at 16:9 with `object-fit: cover`. Harvey could
+still see the former stretched player because `index.html` continued to request
+the stylesheet under the older `20261010-nav-cta` cache key, allowing the
+browser/CDN to reuse CSS from before the exact-frame fix. The homepage now uses
+a new `20261011-video-frame` stylesheet version, forcing the corrected 16:9
+player dimensions to load immediately instead of waiting for cache expiry.
