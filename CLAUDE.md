@@ -16824,3 +16824,16 @@ Strategy**. Each phrase occupies one deliberate line directly beneath the
 title. The italic literary treatment remains, while `white-space: nowrap`
 prevents individual phrases from splitting at phone widths. The stylesheet
 cache key was advanced so the new line treatment takes effect immediately.
+
+---
+
+# 502. Interior Gallery Uses Equal Detail Crops (2026-10-11)
+
+Each **Inside the Book** photograph now sits inside an explicit, overflow-hidden
+3:4 frame, preserving three identical card dimensions while enlarging the page
+photography by 34%. Individual transform origins keep the relevant headings and
+diagrams in view: Functional Existence for Core Principles, the oneness and
+separation discussion for Practical Applications, and the enlightenment
+framework for Advanced Techniques. The full-resolution 1800x2400 sources make
+the closer crops remain sharp on desktop and mobile. The stylesheet cache key
+was advanced with the layout change.
