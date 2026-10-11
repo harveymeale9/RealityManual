@@ -895,7 +895,7 @@ img { max-width: 100%; }
 }
 
 @media (min-width: 900px) {
-  .faq-grid { grid-template-columns: 1fr 1fr; }
+  .faq-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 .faq-item { border-bottom: 1px solid var(--border); }

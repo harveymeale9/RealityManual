@@ -16837,3 +16837,13 @@ separation discussion for Practical Applications, and the enlightenment
 framework for Advanced Techniques. The full-resolution 1800x2400 sources make
 the closer crops remain sharp on desktop and mobile. The stylesheet cache key
 was advanced with the layout change.
+
+---
+
+# 503. Desktop FAQ Uses One Three-Column Row (2026-10-11)
+
+The homepage FAQ now presents its three questions in one equal-width row at
+desktop widths (900px and above), instead of wrapping the third question onto a
+second row. The existing single-column mobile layout is unchanged. The
+stylesheet cache key was advanced so the revised grid reaches browsers
+immediately.
