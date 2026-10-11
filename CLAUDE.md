@@ -16812,3 +16812,15 @@ zoomed page slivers. The intrinsic attributes have been removed from these
 three lazy-loaded images. Their established CSS `width: 100%` and `aspect-ratio:
 3 / 4` now control the boxes directly, while the 1800x2400 source files remain
 unchanged and retain their desktop sharpness.
+
+---
+
+# 501. Hero Byline Is Now the Three-Part Framework (2026-10-11)
+
+The former italic tagline **“The objective. The rules. A better life.”** and
+the descriptive paragraph beneath it were replaced by Harvey's exact byline:
+**The Objective of Life**, **The Rules of Reality**, and **& The Optimal Life
+Strategy**. Each phrase occupies one deliberate line directly beneath the
+title. The italic literary treatment remains, while `white-space: nowrap`
+prevents individual phrases from splitting at phone widths. The stylesheet
+cache key was advanced so the new line treatment takes effect immediately.

@@ -404,7 +404,12 @@ img { max-width: 100%; }
   font-size: clamp(1.25rem, 2.4vw, 1.55rem);
   line-height: 1.45;
   color: var(--ink);
-  margin-bottom: 1.4rem;
+  margin-bottom: 0;
+}
+
+.tagline span {
+  display: block;
+  white-space: nowrap;
 }
 
 .hero-body {
@@ -538,12 +543,6 @@ img { max-width: 100%; }
   }
 
   .hero-copy { max-width: 100%; }
-  /* Only the tagline needs its own cap here — it's the one line in this
-     column long enough to reach the candle/book once .hero-copy's own
-     max-width (above) was loosened for the eyebrow/H1 (Harvey: match the
-     mockup's one-line eyebrow, two-line H1). Eyebrow and H1 both wrap
-     naturally within their own line lengths without needing a cap. */
-  .tagline { max-width: 24ch; }
   .hero-quote { align-self: center; margin-top: 0; max-width: min(30ch, 100%); }
 }
 
