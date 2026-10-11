@@ -115,7 +115,7 @@
               <button class="play-btn" id="play-btn" type="button" aria-label="Play the video">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l12 7-12 7z" /></svg>
               </button>
-              <p class="video-duration">1–2 Minutes</p>
+              <p class="video-duration">1:34</p>
             </div>
           </div>
 
@@ -383,9 +383,9 @@
       }
     });
 
-    // Video: set VIDEO_EMBED_URL to a YouTube/Vimeo embed URL (or a local .mp4)
-    // and the play button swaps the poster for the real player.
-    var VIDEO_EMBED_URL = '';
+    // The finished VSL lives on the storefront backend's persistent media
+    // volume so the static site does not need to carry a large binary in Git.
+    var VIDEO_EMBED_URL = 'https://api.realitymanual.com/media/reality-manual-vsl-1080p.mp4';
     document.getElementById('play-btn').addEventListener('click', function () {
       if (!VIDEO_EMBED_URL) return;
       var card = document.getElementById('video-card');

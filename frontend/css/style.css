@@ -648,6 +648,11 @@ img { max-width: 100%; }
   z-index: 3;
 }
 
+.video-card video {
+  object-fit: contain;
+  background: #000;
+}
+
 /* edition selector */
 
 .edition-panel {

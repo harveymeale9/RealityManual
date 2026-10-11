@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
 const config = require('./config');
 require('./db'); // bootstraps schema + seeds shipping_rates as a side effect
 
@@ -39,6 +41,20 @@ app.use('/api/shipping', shippingRoutes);
 app.use('/api/checkout', checkoutRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/analytics', analyticsRoutes);
+
+// The storefront VSL is a finished, immutable marketing asset kept on the
+// backend's persistent data volume rather than baked into the Docker image or
+// committed to Git. Express handles byte-range requests here, which lets the
+// native video player seek normally while Cloudflare can cache the file.
+app.get('/media/reality-manual-vsl-1080p.mp4', (req, res, next) => {
+  const videoPath = '/data/media/reality-manual-vsl-1080p.mp4';
+  if (!fs.existsSync(videoPath)) return res.status(404).json({ error: 'video_not_found' });
+  res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+  res.type('video/mp4');
+  res.sendFile(path.resolve(videoPath), (err) => {
+    if (err) next(err);
+  });
+});
 
 // Publishable Stripe keys are intentionally public browser configuration,
 // not secrets. Serving the active key from the backend prevents the static

@@ -16657,3 +16657,25 @@ prompt so the host-native Codex can inspect the real file with ffprobe, FFmpeg,
 or extracted frames. Pending-message restart recovery reconstructs the same
 split. Traversal-shaped stored names remain rejected. Unit coverage verifies
 MP4 MIME/extension handling, safe metadata parsing, and the image/file split.
+
+---
+
+# 491. Captioned Storefront VSL Is Live From Persistent Media (2026-10-11)
+
+The landing page's **What is The Reality Manual?** placeholder now plays the
+approved 1:33.9 VSL. This is the caption-only 1920x1080 derivative of Harvey's
+finished CapCut export: the picture was downscaled from 4K, the existing
+caption treatment was burned in, and the original AAC stream was copied
+byte-for-byte. None of the Content Studio Editor's cuts, zooms, soundtrack,
+normalization, or outro processing were applied.
+
+The 80 MB binary is deliberately not committed to Git or baked into a Docker
+image. It lives at
+`/root/realitymanual-backend-data/media/reality-manual-vsl-1080p.mp4`, inside
+the storefront backend's existing persistent `/data` mount. The backend serves
+it from `/media/reality-manual-vsl-1080p.mp4` with native byte-range support and
+a one-week immutable public cache policy so browser seeking works and
+Cloudflare can cache repeat delivery. The static storefront creates its native
+autoplaying, inline-controls player only after the visitor presses Play; the
+card duration now reads `1:34`, and `object-fit: contain` prevents the finished
+16:9 picture from being stretched by the responsive offer grid.
