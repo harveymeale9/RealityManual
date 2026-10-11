@@ -581,7 +581,9 @@ img { max-width: 100%; }
   position: relative;
   overflow: hidden;
   border: 1px solid var(--border);
-  min-height: 300px;
+  aspect-ratio: 16 / 9;
+  min-height: 0;
+  align-self: start;
   display: grid;
   place-items: center;
   text-align: center;
@@ -649,7 +651,7 @@ img { max-width: 100%; }
 }
 
 .video-card video {
-  object-fit: contain;
+  object-fit: cover;
   background: #000;
 }
 

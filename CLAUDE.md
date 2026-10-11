@@ -16699,3 +16699,19 @@ contrast/desaturation treatment. The resulting 900x1200 JPEGs are only
 147-172 KB each and lazy-load below the fold. Desktop layout now reserves three
 equal image columns plus the testimonial; the existing two-column mobile grid
 remains intact.
+
+---
+
+# 493. Storefront VSL Has a Real Poster and Exact 16:9 Frame (2026-10-11)
+
+The offer-grid video card previously stretched to the neighboring edition
+panel's height. Because the real VSL remained correctly contained at 16:9,
+that oversized box exposed a black strip beside the native player. The card is
+now explicitly 16:9 and opts out of grid stretching, so its frame and the
+1920x1080 video share the same geometry at every responsive width.
+
+The abstract placeholder behind the Play control was also replaced with an
+actual 1280x720 frame from six seconds into the captioned VSL. The same image
+is assigned as the native player's poster while metadata loads, preventing a
+blank flash after Play. The existing dark radial treatment, title, duration,
+and gold play control remain above the real frame until playback begins.

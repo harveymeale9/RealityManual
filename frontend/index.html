@@ -107,8 +107,7 @@
 
           <!-- video -->
           <div class="video-card" id="video-card">
-            <!-- IMAGE SLOT: video poster frame -->
-            <img class="bg-img" src="img/placeholder/video-poster.svg" alt="" aria-hidden="true" />
+            <img class="bg-img" src="img/photo/vsl-poster.jpg" alt="" aria-hidden="true" />
             <div class="video-inner">
               <p class="eyebrow">Watch the Video</p>
               <h2>What is The Reality Manual?</h2>
@@ -381,6 +380,7 @@
     // The finished VSL lives on the storefront backend's persistent media
     // volume so the static site does not need to carry a large binary in Git.
     var VIDEO_EMBED_URL = 'https://api.realitymanual.com/media/reality-manual-vsl-1080p.mp4';
+    var VIDEO_POSTER_URL = 'img/photo/vsl-poster.jpg';
     document.getElementById('play-btn').addEventListener('click', function () {
       if (!VIDEO_EMBED_URL) return;
       var card = document.getElementById('video-card');
@@ -391,6 +391,8 @@
         frame.controls = true;
         frame.autoplay = true;
         frame.playsInline = true;
+        frame.preload = 'metadata';
+        frame.poster = VIDEO_POSTER_URL;
       } else {
         frame = document.createElement('iframe');
         frame.src = VIDEO_EMBED_URL + (VIDEO_EMBED_URL.indexOf('?') > -1 ? '&' : '?') + 'autoplay=1';
