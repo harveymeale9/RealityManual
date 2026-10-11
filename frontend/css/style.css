@@ -354,8 +354,8 @@ img { max-width: 100%; }
    positioned child of it, not of .hero) — see CLAUDE.md §71. */
 .hero .wrap { position: relative; }
 
-/* Mobile (<900px): unchanged since before §68 — the combined candle+book
-   photo, free-bleeding in normal flow, matching the mobile mockup. */
+/* Mobile (<900px): the same faithful product photograph, cropped square in
+   normal flow so the physical book remains consistent at every breakpoint. */
 .hero-mobile-photo {
   grid-area: book;
   display: block;
@@ -504,12 +504,6 @@ img { max-width: 100%; }
   .hero-bg-desktop {
     display: block;
     object-position: 50% 42%;
-    /* book-desk.png reads dull/muted at hero size compared to the source
-       file — a small brightness/contrast lift on the photo itself (not a
-       darkening overlay) so the candlelight actually reads as bright.
-       Text legibility still comes from the text-shadow above, not from
-       darkening the image (Harvey, §72). */
-    filter: brightness(1.18) contrast(1.06) saturate(1.08);
   }
 
   /* Text legibility over the photo — a soft shadow directly behind the

@@ -16715,3 +16715,23 @@ actual 1280x720 frame from six seconds into the captioned VSL. The same image
 is assigned as the native player's poster while metadata loads, preventing a
 blank flash after Play. The existing dark radial treatment, title, duration,
 and gold play control remain above the real frame until playback begins.
+
+---
+
+# 494. Hero Product Image Matches the Physical Proof (2026-10-11)
+
+The homepage hero no longer depicts the fictional AI cover with a large title
+and ornate celestial diagram. Harvey supplied photographs of the bound proof,
+which establish the real product: plain black woven cloth, a very small
+centered gold-foil `The Reality Manual` title, and black sprayed page edges.
+
+A new photorealistic candlelit product image was generated from those proof
+references while retaining the established hero's dark archival setting and
+left-side negative space for copy. Product fidelity was explicit: no dust
+jacket, cover diagram, decorative border, subtitle, author name, cream page
+block, or leather texture. Both desktop and mobile now consume the same
+1536x1024 source (`frontend/img/photo/book-desk-v2.jpg`), with the existing
+responsive CSS providing the desktop bleed and mobile square crop. The former
+desktop-only brightness lift was removed so the black cloth remains genuinely
+black rather than reading as grey. The optimized web JPEG is 318 KB; the old
+assets remain in the repository but are no longer referenced by the homepage.
