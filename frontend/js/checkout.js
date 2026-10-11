@@ -150,7 +150,7 @@
     for (let i = 0; i < iconCount; i += 1) {
       const icon = document.createElement('img');
       icon.className = 'qty-book-icon';
-      icon.src = 'img/placeholder/edition-thumb.svg';
+      icon.src = 'img/placeholder/reality-manual-edition-thumbnail.svg';
       icon.alt = '';
       icon.setAttribute('aria-hidden', 'true');
       qtyBooks.appendChild(icon);

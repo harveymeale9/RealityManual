@@ -16847,3 +16847,23 @@ desktop widths (900px and above), instead of wrapping the third question onto a
 second row. The existing single-column mobile layout is unchanged. The
 stylesheet cache key was advanced so the revised grid reaches browsers
 immediately.
+
+---
+
+# 504. Open-Book Hero Backdrop and SEO Image Filenames (2026-10-11)
+
+The supplied open-book spread is now the full-width desktop backdrop behind
+the established centered hardcover hero. The hardcover composition retains its
+exact 1200px-capped placement and mobile keeps its purpose-built square image;
+only the otherwise empty desktop side fields reveal the darker spread layer.
+The backdrop is widened slightly so the gloved hands remain visible at both
+outer edges, with a restrained tonal treatment and soft shadow blending it into
+the existing hero rather than competing with the title, book, or quotation.
+
+All storefront imagery depicting The Reality Manual was renamed with
+descriptive `reality-manual-*` filenames, including hero, mobile, interior,
+video-poster, placeholder, and product-view assets. Every live HTML/JavaScript
+reference and the Open Graph image were updated to the new paths. This removes
+generic production filenames such as `book-desk-v3.jpg` and makes the public
+asset URLs descriptive for search engines and link previews. The stylesheet
+cache key was advanced with the hero composition change.

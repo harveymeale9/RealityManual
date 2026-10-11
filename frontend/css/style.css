@@ -3,12 +3,12 @@
 
    IMAGE SLOTS (all placeholders live in img/placeholder/ — replace the file or
    swap the src, no CSS changes needed):
-     hero-bg.svg       hero background photograph
-     book-hero.svg     the book itself, hero centrepiece
-     video-poster.svg  poster frame behind the play button
-     page-1..4.svg     "Inside the book" interior page shots
-     edition-thumb.svg small book thumbnail in the edition selector
-     cta-bg.svg        closing CTA background photograph
+     reality-manual-hero-background.svg   hero background photograph
+     reality-manual-book-hero.svg         the book itself, hero centrepiece
+     reality-manual-video-poster.svg      poster frame behind the play button
+     reality-manual-interior-page-*.svg   "Inside the book" interior page shots
+     reality-manual-edition-thumbnail.svg small book thumbnail in the edition selector
+     cta-bg.svg                          closing CTA background photograph
 */
 
 :root {
@@ -350,9 +350,13 @@ img { max-width: 100%; }
   padding: 5rem 0 4.5rem;
 }
 
+/* Wide ambient layer behind the established hardcover composition. Desktop
+   only: on mobile the dedicated square hero already fills the viewport. */
+.hero-spread-bg { display: none; }
+
 /* .wrap is now the containing block for .hero-bg-desktop (an absolutely
    positioned child of it, not of .hero) — see CLAUDE.md §71. */
-.hero .wrap { position: relative; }
+.hero .wrap { position: relative; z-index: 1; }
 
 /* Mobile (<900px): a dedicated square composition in normal flow. */
 .hero-mobile-photo {
@@ -471,7 +475,7 @@ img { max-width: 100%; }
        .offer starts). The photo itself should run completely flush,
        top and bottom, with nothing but its own content in between. */
     padding: 0;
-    /* Keeps the box roughly matched to book-desk.png's native aspect
+    /* Keeps the box roughly matched to the hardcover hero photo's native aspect
        ratio (1536:1024 = 1.5:1) as .wrap approaches its var(--wrap)
        (1200px) cap. Using min(100vw, 1200px) rather than a bare vw unit
        means this is automatically bounded the same way .wrap itself is —
@@ -506,9 +510,24 @@ img { max-width: 100%; }
 
   .hero-mobile-photo { display: none; }
 
+  .hero-spread-bg {
+    display: block;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 50% 50%;
+    filter: brightness(0.68) saturate(0.82) contrast(1.05);
+    opacity: 0.95;
+    transform: scaleX(1.25) scaleY(1.015);
+    pointer-events: none;
+  }
+
   .hero-bg-desktop {
     display: block;
     object-position: 50% 42%;
+    box-shadow: 0 0 3rem 1.5rem rgba(0, 0, 0, 0.82);
   }
 
   /* Text legibility over the photo — a soft shadow directly behind the
