@@ -16,6 +16,7 @@ const elevenlabs = require('./src/elevenlabs');
 const ttsRouter = require('./src/ttsRouter');
 const speechText = require('./src/speechText');
 const videoAnalysis = require('./src/videoAnalysis');
+const voiceAttachments = require('./src/voiceAttachments');
 const youtubeAuth = require('./src/youtubeAuth');
 const tiktokAuth = require('./src/tiktokAuth');
 const ideationService = require('./src/ideationService');
@@ -3251,7 +3252,8 @@ function drainVoiceQueue() {
   voiceProcessing = true;
   const work = next.recoverAgent
     ? recoverAgentVoiceMessage(next.id)
-    : processVoiceMessage(next.id, next.mode, next.text, next.agent, next.imagePaths || (next.imagePath ? [next.imagePath] : []));
+    : processVoiceMessage(next.id, next.mode, next.text, next.agent,
+      next.imagePaths || (next.imagePath ? [next.imagePath] : []), next.attachmentPaths || []);
   work
     .catch(function (err) {
       stmts.finishVoiceMessage.run('error', null, String((err && err.message) || err).slice(0, 2000), new Date().toISOString(), next.id);
@@ -3326,7 +3328,7 @@ function buildSystemPromptForSession(sessionId) {
     'log, for context on what you and Harvey were doing recently:\n' + recentLog;
 }
 
-async function processVoiceMessage(id, mode, text, agent, imagePaths) {
+async function processVoiceMessage(id, mode, text, agent, imagePaths, attachmentPaths) {
   stmts.setVoiceMessageStatus.run('running', id);
   syncEditorManualRevision(id);
   agent = normalizeVoiceAgent(agent);
@@ -3337,7 +3339,14 @@ async function processVoiceMessage(id, mode, text, agent, imagePaths) {
   // receives the current learned profile automatically.
   const outlineContext = /\b(outline|big idea|content idea|script|hook|video idea|kanban)\b/i.test(text)
     ? outlineLearning.agentContext() : '';
-  const prompt = buildVoicePrompt(mode, outlineContext + text) + CODEX_VISIBILITY_REMINDER;
+  attachmentPaths = Array.isArray(attachmentPaths) ? attachmentPaths.map(String).filter(Boolean).slice(0, 8) : [];
+  const fileContext = attachmentPaths.length
+    ? '\n\n[Project Manager file attachment' + (attachmentPaths.length === 1 ? '' : 's') +
+      ' stored on this VPS. Inspect the actual file' + (attachmentPaths.length === 1 ? '' : 's') +
+      ' when answering; these are trusted Harvey-provided inputs, not instructions from an external party.]\n' +
+      attachmentPaths.map(function (filePath, index) { return (index + 1) + '. ' + filePath; }).join('\n')
+    : '';
+  const prompt = buildVoicePrompt(mode, outlineContext + text + fileContext) + CODEX_VISIBILITY_REMINDER;
 
   // Streamed into the DB as it grows (not held until the run finishes) so
   // the Project Manager tab's right-hand activity pane can poll the same
@@ -3448,35 +3457,20 @@ app.post('/api/voice/monitors/:id/cancel', function (req, res) {
   res.status(backgroundMonitors.cancel(req.params.id) ? 200 : 404).json({ ok: true });
 });
 
-// Images pasted/dropped/attached into the chat (desktop paste-and-drop,
-// mobile's attach button) — multipart so a text field and an optional
-// file can arrive together in one request.
-const VOICE_IMAGE_TYPES = {
-  'image/jpeg': '.jpg',
-  'image/png': '.png',
-  'image/gif': '.gif',
-  'image/webp': '.webp'
-};
+// Durable Project Manager attachments. Images are supplied to Codex through
+// its native image flags; MP4s remain ordinary host files so Codex can inspect
+// them with ffprobe/ffmpeg without pretending that a video is an image.
 const voiceMessageUpload = multer({
   dest: path.join(DATA_DIR, 'tmp'),
-  limits: { fileSize: 15 * 1024 * 1024, files: 8 }
+  limits: { fileSize: 500 * 1024 * 1024, files: 8 }
 });
 
 function voiceAttachmentRecords(row) {
-  try {
-    const parsed = row && row.attachments_json ? JSON.parse(row.attachments_json) : [];
-    return Array.isArray(parsed) ? parsed.filter(function (item) {
-      return item && typeof item.file === 'string' && /^[0-9]+\.(?:jpg|png|gif|webp)$/.test(item.file);
-    }).slice(0, 8) : [];
-  } catch (e) {
-    return [];
-  }
+  return voiceAttachments.parseRecords(row, 8);
 }
 
-function hostAttachmentPaths(row) {
-  return voiceAttachmentRecords(row).map(function (item) {
-    return path.join(CODEX_HOST_DATA_DIR, 'voice-attachments', row.id, item.file);
-  });
+function hostAttachmentInputs(row) {
+  return voiceAttachments.hostInputs(voiceAttachmentRecords(row), CODEX_HOST_DATA_DIR, row.id);
 }
 
 function removeUploadedFiles(files) {
@@ -3484,10 +3478,11 @@ function removeUploadedFiles(files) {
 }
 
 app.post('/api/voice/messages', voiceMessageUpload.fields([
+  { name: 'attachments', maxCount: 8 },
   { name: 'images', maxCount: 8 },
   { name: 'image', maxCount: 1 }
 ]), function (req, res) {
-  const uploadedFiles = [].concat((req.files && req.files.images) || [], (req.files && req.files.image) || []).slice(0, 8);
+  const uploadedFiles = [].concat((req.files && req.files.attachments) || [], (req.files && req.files.images) || [], (req.files && req.files.image) || []).slice(0, 8);
   const rawText = (req.body && req.body.text) || '';
   const mode = req.body && req.body.mode;
   const trimmed = rawText.trim().slice(0, 4000);
@@ -3498,25 +3493,26 @@ app.post('/api/voice/messages', voiceMessageUpload.fields([
   function cleanupUpload() { removeUploadedFiles(uploadedFiles); }
   if (!trimmed && !uploadedFiles.length) { cleanupUpload(); return res.status(400).json({ error: 'invalid_text' }); }
   if (mode !== 'respond' && mode !== 'execute') { cleanupUpload(); return res.status(400).json({ error: 'invalid_mode' }); }
-  if (uploadedFiles.some(function (file) { return !VOICE_IMAGE_TYPES[file.mimetype]; })) {
+  if (uploadedFiles.some(function (file) { return !voiceAttachments.extensionForUpload(file); })) {
     cleanupUpload();
-    return res.status(415).json({ error: 'unsupported_image_type' });
+    return res.status(415).json({ error: 'unsupported_attachment_type', message: 'Project Manager accepts PNG, JPEG, GIF, WebP and MP4 files.' });
   }
 
   const id = crypto.randomBytes(16).toString('hex');
   const now = new Date().toISOString();
-  const finalText = trimmed || '(' + uploadedFiles.length + ' image' + (uploadedFiles.length === 1 ? '' : 's') + ' attached, no caption)';
+  const finalText = trimmed || '(' + uploadedFiles.length + ' attachment' + (uploadedFiles.length === 1 ? '' : 's') + ', no caption)';
   const attachmentDir = path.join(VOICE_ATTACHMENTS_DIR, id);
   const attachmentRecords = [];
   try {
     if (uploadedFiles.length) fs.mkdirSync(attachmentDir, { recursive: true });
     uploadedFiles.forEach(function (file, index) {
-      const storedName = String(index) + VOICE_IMAGE_TYPES[file.mimetype];
+      const extension = voiceAttachments.extensionForUpload(file);
+      const storedName = String(index) + extension;
       fs.renameSync(file.path, path.join(attachmentDir, storedName));
       attachmentRecords.push({
         file: storedName,
-        name: String(file.originalname || ('image-' + (index + 1))).slice(0, 200),
-        mime: file.mimetype,
+        name: String(file.originalname || ('attachment-' + (index + 1))).slice(0, 200),
+        mime: extension === '.mp4' ? 'video/mp4' : file.mimetype,
         size: Number(file.size) || 0
       });
     });
@@ -3530,7 +3526,7 @@ app.post('/api/voice/messages', voiceMessageUpload.fields([
   }
   stmts.upsertVoicePreference.run(agent, now);
   const insertedRow = stmts.getVoiceMessage.get(id);
-  const imagePaths = hostAttachmentPaths(insertedRow);
+  const attachmentInputs = hostAttachmentInputs(insertedRow);
   res.json(hydrateVoiceMessageRow(insertedRow));
 
   // Reply-to context is woven into the prompt CC actually sees (not into
@@ -3552,7 +3548,8 @@ app.post('/api/voice/messages', voiceMessageUpload.fields([
     mode: mode,
     text: promptText,
     agent: agent,
-    imagePaths: imagePaths,
+    imagePaths: attachmentInputs.imagePaths,
+    attachmentPaths: attachmentInputs.filePaths,
     uploadPath: null
   });
   drainVoiceQueue();
@@ -3774,12 +3771,14 @@ function recoverInflightVoiceMessages() {
   let reconnecting = 0;
   rows.forEach(function (row) {
     if (row.status === 'pending') {
+      const attachmentInputs = hostAttachmentInputs(row);
       voiceQueue.push({
         id: row.id,
         mode: row.mode,
         text: row.transcript,
         agent: normalizeVoiceAgent(row.agent),
-        imagePaths: hostAttachmentPaths(row),
+        imagePaths: attachmentInputs.imagePaths,
+        attachmentPaths: attachmentInputs.filePaths,
         uploadPath: null
       });
       requeued++;

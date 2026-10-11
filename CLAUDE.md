@@ -16630,3 +16630,30 @@ The Editor route regression now verifies the immutable private cache policy
 and concurrent server-side mix reuse. A real Chromium reload test additionally
 confirmed that two page loads of the same versioned preview produce only one
 network transfer.
+
+---
+
+# 490. Project Manager Accepts Durable MP4 Attachments (2026-10-11)
+
+The desktop and mobile Project Manager composers now accept MP4 files alongside
+the existing PNG/JPEG/GIF/WebP images, through the picker and desktop
+drag-and-drop path. Pending MP4s appear as compact video thumbnails, and sent
+or historical messages expose normal playable video controls. Once the upload
+completes, optimistic local blob URLs are replaced with the authenticated
+durable attachment URL so large browser-held files are released promptly.
+
+Project Manager attachments remain limited to eight files per message. The
+per-file ceiling is now 500 MB so practical screen recordings and short source
+clips fit without turning this chat path into another multi-gigabyte Editor
+intake. Unsupported formats receive a specific error instead of a generic send
+failure. Attachment metadata and bytes continue to live durably under the
+existing `DATA_DIR/voice-attachments/<message-id>/` structure and survive
+reloads and service restarts.
+
+The Codex handoff now separates image inputs from ordinary file inputs. Images
+continue to use Codex's native `-i` arguments. MP4s are never passed through an
+invalid image flag; their host-visible paths are added explicitly to Harvey's
+prompt so the host-native Codex can inspect the real file with ffprobe, FFmpeg,
+or extracted frames. Pending-message restart recovery reconstructs the same
+split. Traversal-shaped stored names remain rejected. Unit coverage verifies
+MP4 MIME/extension handling, safe metadata parsing, and the image/file split.

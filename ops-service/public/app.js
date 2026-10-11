@@ -544,14 +544,14 @@
             '</div>' +
             '<div class="pm-image-preview" id="pmImagePreview" hidden></div>' +
             '<div class="pm-input-row">' +
-              '<button type="button" class="pm-attach-btn" id="pmAttachBtn" title="Attach images" aria-label="Attach images">' +
+              '<button type="button" class="pm-attach-btn" id="pmAttachBtn" title="Attach images or MP4 videos" aria-label="Attach images or MP4 videos">' +
                 '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21.44 11.05 12.25 20.24a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95L9.83 18.5a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>' +
               '</button>' +
-              '<input type="file" accept="image/png,image/jpeg,image/gif,image/webp" id="pmImageInput" multiple hidden />' +
+              '<input type="file" accept="image/png,image/jpeg,image/gif,image/webp,video/mp4,.mp4" id="pmImageInput" multiple hidden />' +
               '<button type="button" class="pm-mic-btn" id="pmMicBtn" title="Record voice message" aria-label="Record voice message">' +
                 '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/></svg>' +
               '</button>' +
-              '<textarea id="pmTextInput" class="pm-textarea" rows="1" placeholder="Message Codex… (paste or drop an image too)"></textarea>' +
+              '<textarea id="pmTextInput" class="pm-textarea" rows="1" placeholder="Message Codex… (attach images or MP4s too)"></textarea>' +
               '<button type="button" class="pm-send-btn" id="pmSendBtn" title="Send" aria-label="Send">' +
                 '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4Z"/></svg>' +
               '</button>' +
@@ -708,16 +708,19 @@
         var imageGrid = document.createElement('div');
         imageGrid.className = 'pm-msg-images';
         images.forEach(function (image, index) {
-          var img = document.createElement('img');
-          img.className = 'pm-msg-image';
-          img.alt = image.name || ('Attached image ' + (index + 1));
-          if (image.url) img.src = image.url;
+          var isVideo = String(image.mime || image.type || '').toLowerCase() === 'video/mp4' || /\.mp4$/i.test(image.name || '');
+          var media = document.createElement(isVideo ? 'video' : 'img');
+          media.className = 'pm-msg-image';
+          if (isVideo) { media.controls = true; media.preload = 'metadata'; media.playsInline = true; }
+          else media.alt = image.name || ('Attached image ' + (index + 1));
+          if (image.url) media.src = image.url;
+          else if (isVideo) media.src = URL.createObjectURL(image);
           else {
             var reader = new FileReader();
-            reader.onload = function () { img.src = reader.result; };
+            reader.onload = function () { media.src = reader.result; };
             reader.readAsDataURL(image);
           }
-          imageGrid.appendChild(img);
+          imageGrid.appendChild(media);
         });
         el.appendChild(imageGrid);
       }
@@ -838,31 +841,46 @@
       return wrap;
     }
 
-    // --- Image attach: picker, paste, and drop all append to the same
-    // eight-image tray. Each thumbnail can be removed independently.
+    // --- Image/MP4 attach: picker, paste, and drop all append to the same
+    // eight-file tray. Each preview can be removed independently.
     var pendingImages = [];
+    var pendingPreviewUrls = [];
+    function clearPendingPreviewUrls() {
+      pendingPreviewUrls.forEach(function (url) { URL.revokeObjectURL(url); });
+      pendingPreviewUrls = [];
+    }
     function clearPendingImages() {
+      clearPendingPreviewUrls();
       pendingImages = [];
       imagePreviewEl.hidden = true;
       imagePreviewEl.innerHTML = '';
       imageInput.value = '';
     }
     function renderPendingImages() {
+      clearPendingPreviewUrls();
       imagePreviewEl.innerHTML = '';
       pendingImages.forEach(function (file, index) {
         var item = document.createElement('div');
         item.className = 'pm-image-preview-item';
-        var img = document.createElement('img');
-        img.alt = file.name || ('Image ' + (index + 1));
-        var reader = new FileReader();
-        reader.onload = function () { img.src = reader.result; };
-        reader.readAsDataURL(file);
-        item.appendChild(img);
+        var isVideo = file.type === 'video/mp4' || /\.mp4$/i.test(file.name || '');
+        var media = document.createElement(isVideo ? 'video' : 'img');
+        media.title = file.name || (isVideo ? 'MP4 video' : 'Image ' + (index + 1));
+        if (isVideo) {
+          media.muted = true; media.playsInline = true; media.preload = 'metadata';
+          media.src = URL.createObjectURL(file); pendingPreviewUrls.push(media.src);
+        }
+        else {
+          media.alt = media.title;
+          var reader = new FileReader();
+          reader.onload = function () { media.src = reader.result; };
+          reader.readAsDataURL(file);
+        }
+        item.appendChild(media);
         var removeBtn = document.createElement('button');
         removeBtn.type = 'button';
         removeBtn.className = 'pm-image-preview-remove';
         removeBtn.textContent = '×';
-        removeBtn.setAttribute('aria-label', 'Remove ' + img.alt);
+        removeBtn.setAttribute('aria-label', 'Remove ' + media.title);
         removeBtn.addEventListener('click', function () {
           pendingImages.splice(index, 1);
           renderPendingImages();
@@ -874,7 +892,8 @@
     }
     function addPendingImages(files) {
       Array.prototype.slice.call(files || []).forEach(function (file) {
-        if (pendingImages.length < 8 && file.type && file.type.indexOf('image/') === 0) pendingImages.push(file);
+        var allowed = (file.type && file.type.indexOf('image/') === 0) || file.type === 'video/mp4' || /\.mp4$/i.test(file.name || '');
+        if (pendingImages.length < 8 && allowed) pendingImages.push(file);
       });
       renderPendingImages();
     }
@@ -1111,12 +1130,20 @@
       if (!text.trim() && !images.length) return;
       var replyTo = pendingReplyTo;
       clearPendingReplyTo();
-      addMessage('user', text.trim(), null, images, replyTo ? replyTo.snippet : null);
+      var userMessageEl = addMessage('user', text.trim(), null, images, replyTo ? replyTo.snippet : null);
       var agent = selectedAgent;
       var typingEl = addTyping(null, agent);
       renderActivity(null);
       Voice.sendMessage(text.trim(), mode, images, replyTo ? replyTo.id : null, agent).then(function (created) {
         typingEl.dataset.msgId = created.id;
+        userMessageEl.dataset.msgId = created.id;
+        var persistedAttachments = Array.isArray(created.attachments) ? created.attachments : [];
+        userMessageEl.querySelectorAll('.pm-msg-image').forEach(function (media, index) {
+          if (!persistedAttachments[index] || !persistedAttachments[index].url) return;
+          var previous = media.src;
+          media.src = persistedAttachments[index].url;
+          if (previous && previous.indexOf('blob:') === 0) URL.revokeObjectURL(previous);
+        });
         if (autoSpeak) voiceAutoSpeak[created.id] = true;
         pmSync.markKnown(created);
       }).catch(function (err) {

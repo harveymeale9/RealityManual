@@ -844,7 +844,7 @@ body.role-reviewer #pmBackFab {
 .pm-reply-preview-cancel:hover { color: var(--error); }
 
 .pm-image-preview { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
-.pm-image-preview img { height: 56px; width: 56px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); }
+.pm-image-preview img, .pm-image-preview video { height: 56px; width: 56px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: #000; }
 .pm-image-preview-item { position: relative; width: 56px; height: 56px; }
 .pm-image-preview-remove {
   position: absolute; top: -6px; right: -6px; width: 20px; height: 20px;

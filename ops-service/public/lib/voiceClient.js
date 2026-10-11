@@ -141,26 +141,25 @@ window.RMVoice = (function () {
       .then(function (data) { return data.text || ''; });
   }
 
-  // imageFiles (optional): one File/Blob or an array of up to eight — sent
-  // as multipart alongside text/mode. Accepting one value keeps older callers
-  // compatible while the Project Manager composer now preserves every image.
+  // attachmentFiles (optional): one File/Blob or an array of up to eight
+  // supported images/MP4s, sent as multipart alongside text/mode.
   // replyToId (optional): the id of an earlier voice_messages row this
   // message is a tap-to-reply response to — see server.js's promptText
   // wiring for how it's used.
-  function sendMessage(text, mode, imageFiles, replyToId, agent) {
+  function sendMessage(text, mode, attachmentFiles, replyToId, agent) {
     agent = 'codex';
-    imageFiles = Array.isArray(imageFiles) ? imageFiles.filter(Boolean).slice(0, 8) : (imageFiles ? [imageFiles] : []);
-    if (imageFiles.length) {
+    attachmentFiles = Array.isArray(attachmentFiles) ? attachmentFiles.filter(Boolean).slice(0, 8) : (attachmentFiles ? [attachmentFiles] : []);
+    if (attachmentFiles.length) {
       var form = new FormData();
       form.append('text', text || '');
       form.append('mode', mode);
       form.append('agent', agent);
       if (replyToId) form.append('replyToId', replyToId);
-      imageFiles.forEach(function (imageFile, index) {
-        form.append('images', imageFile, imageFile.name || ('pasted-image-' + (index + 1) + '.png'));
+      attachmentFiles.forEach(function (file, index) {
+        form.append('attachments', file, file.name || ('attachment-' + (index + 1)));
       });
       return fetch(API_BASE + '/api/voice/messages', { method: 'POST', credentials: 'include', body: form })
-        .then(function (r) { if (!r.ok) throw new Error('Could not send message'); return r.json(); });
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (body) { if (!r.ok) throw new Error(body.message || 'Could not send message'); return body; }); });
     }
     var body = { text: text, mode: mode, agent: agent };
     if (replyToId) body.replyToId = replyToId;
