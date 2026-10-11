@@ -354,12 +354,12 @@ img { max-width: 100%; }
    positioned child of it, not of .hero) — see CLAUDE.md §71. */
 .hero .wrap { position: relative; }
 
-/* Mobile (<900px): the same faithful product photograph, cropped square in
-   normal flow so the physical book remains consistent at every breakpoint. */
+/* Mobile (<900px): a dedicated square composition in normal flow. */
 .hero-mobile-photo {
   grid-area: book;
   display: block;
   width: calc(100% + 3rem);
+  height: auto;
   margin-inline: -1.5rem;
   aspect-ratio: 1 / 1;
   object-fit: cover;

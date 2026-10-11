@@ -16770,3 +16770,21 @@ the stylesheet under the older `20261010-nav-cta` cache key, allowing the
 browser/CDN to reuse CSS from before the exact-frame fix. The homepage now uses
 a new `20261011-video-frame` stylesheet version, forcing the corrected 16:9
 player dimensions to load immediately instead of waiting for cache expiry.
+
+---
+
+# 498. Hero Restores Its Established Desktop and Mobile Compositions (2026-10-11)
+
+The plain proof-copy hero introduced in §494 used one landscape photograph for
+both breakpoints, shifting the book materially rightward on desktop and losing
+the dedicated close mobile framing. The replacement now edits the two earlier
+composition sources independently: desktop again uses the original 3:2 scene
+with the book in its established central position, while mobile again uses the
+original square close-up. In both assets only the product was revised to match
+the physical edition: plain black cloth, a small centered gold-foil **The
+Reality Manual** title, and black sprayed page edges. The surrounding scene,
+book scale, placement, perspective, lighting, and responsive layout are
+preserved. The final optimized assets are `book-desk-v3.jpg` (1536x1024,
+255 KB) and `book-desk-square-v2.jpg` (1254x1254, 437 KB).
+The homepage stylesheet cache key was advanced with this change so the mobile
+image's intrinsic dimensions cannot temporarily override its square CSS size.
