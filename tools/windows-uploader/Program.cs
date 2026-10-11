@@ -47,7 +47,11 @@ internal static class Program
 internal sealed class AppConfig
 {
     public string Token { get; set; } = "";
-    public string WatchFolder { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "Reality Manual");
+    // Retained for backwards-compatible deserialization of v1 config files.
+    public string WatchFolder { get; set; } = "";
+    public string VerticalFolder { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "Reality Manual", "Vertical");
+    public string HorizontalFolder { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "Reality Manual", "Horizontal");
+    public int FolderConfigurationVersion { get; set; }
     public List<UploadItem> Items { get; set; } = new();
 
     public static AppConfig Load()
@@ -63,6 +67,11 @@ internal sealed class AppConfig
         File.WriteAllText(temp, JsonSerializer.Serialize(this, Program.JsonOptions));
         File.Move(temp, Program.ConfigPath, true);
     }
+
+    public IEnumerable<string> WatchFolders() => new[] { VerticalFolder, HorizontalFolder }
+        .Where(x => !string.IsNullOrWhiteSpace(x))
+        .Select(Path.GetFullPath)
+        .Distinct(StringComparer.OrdinalIgnoreCase);
 }
 
 internal sealed class UploadItem
@@ -97,7 +106,7 @@ internal sealed class UploaderContext : ApplicationContext
     private readonly System.Windows.Forms.Timer scanTimer;
     private readonly Dictionary<string, (long Size, DateTime Seen)> stability = new(StringComparer.OrdinalIgnoreCase);
     private readonly SynchronizationContext uiContext;
-    private FileSystemWatcher? watcher;
+    private readonly List<FileSystemWatcher> watchers = new();
     private bool processing;
     private bool uploadActive;
     private string status = "Starting…";
@@ -121,7 +130,7 @@ internal sealed class UploaderContext : ApplicationContext
         tray.DoubleClick += (_, _) => OpenEditor();
         scanTimer = new System.Windows.Forms.Timer { Interval = 10_000 };
         scanTimer.Tick += async (_, _) => await ScanAndProcess();
-        if (string.IsNullOrWhiteSpace(config.Token)) ShowSetup();
+        if (string.IsNullOrWhiteSpace(config.Token) || config.FolderConfigurationVersion < 2) ShowSetup();
         else StartWatching();
     }
 
@@ -134,17 +143,22 @@ internal sealed class UploaderContext : ApplicationContext
 
     private void StartWatching()
     {
-        Directory.CreateDirectory(config.WatchFolder);
-        ConfigureObsProfile(config.WatchFolder);
+        var folders = config.WatchFolders().ToList();
+        foreach (var folder in folders) Directory.CreateDirectory(folder);
         using (var key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run"))
             key.SetValue("Reality Manual Uploader", '"' + Program.InstalledExe + '"');
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", config.Token);
-        watcher?.Dispose();
-        watcher = new FileSystemWatcher(config.WatchFolder) { IncludeSubdirectories = false, EnableRaisingEvents = true };
-        watcher.Created += (_, _) => BeginScanSoon();
-        watcher.Changed += (_, _) => BeginScanSoon();
+        watchers.ForEach(x => x.Dispose());
+        watchers.Clear();
+        foreach (var folder in folders)
+        {
+            var watcher = new FileSystemWatcher(folder) { IncludeSubdirectories = false, EnableRaisingEvents = true };
+            watcher.Created += (_, _) => BeginScanSoon();
+            watcher.Changed += (_, _) => BeginScanSoon();
+            watchers.Add(watcher);
+        }
         scanTimer.Start();
-        status = "Watching " + config.WatchFolder;
+        status = "Watching vertical + horizontal";
         UpdateTray();
         _ = ScanAndProcess();
     }
@@ -161,7 +175,11 @@ internal sealed class UploaderContext : ApplicationContext
         try
         {
             var extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".mp4", ".mkv", ".mov", ".m4v", ".webm", ".avi" };
-            foreach (var path in Directory.EnumerateFiles(config.WatchFolder).Where(p => extensions.Contains(Path.GetExtension(p))))
+            var recordingPaths = config.WatchFolders()
+                .SelectMany(folder => Directory.EnumerateFiles(folder))
+                .Where(p => extensions.Contains(Path.GetExtension(p)))
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+            foreach (var path in recordingPaths)
             {
                 FileInfo info;
                 try { info = new FileInfo(path); } catch { continue; }
@@ -314,43 +332,16 @@ internal sealed class UploaderContext : ApplicationContext
 
     protected override void ExitThreadCore()
     {
-        scanTimer.Stop(); watcher?.Dispose(); tray.Dispose(); shutdownWindow.Dispose(); http.Dispose();
+        scanTimer.Stop(); watchers.ForEach(x => x.Dispose()); watchers.Clear(); tray.Dispose(); shutdownWindow.Dispose(); http.Dispose();
         base.ExitThreadCore();
-    }
-
-    private static void ConfigureObsProfile(string outputFolder)
-    {
-        try
-        {
-            var profilesRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "obs-studio", "basic", "profiles");
-            if (!Directory.Exists(profilesRoot)) return;
-            var target = Path.Combine(profilesRoot, "Reality Manual");
-            if (!Directory.Exists(target))
-            {
-                var obsRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "obs-studio");
-                var globalText = File.Exists(Path.Combine(obsRoot, "global.ini")) ? File.ReadAllText(Path.Combine(obsRoot, "global.ini")) : "";
-                var activeProfileDir = Ini.Get(globalText, "Basic", "ProfileDir");
-                var source = !string.IsNullOrWhiteSpace(activeProfileDir) && Directory.Exists(Path.Combine(profilesRoot, activeProfileDir))
-                    ? Path.Combine(profilesRoot, activeProfileDir)
-                    : Directory.EnumerateDirectories(profilesRoot).FirstOrDefault();
-                Directory.CreateDirectory(target);
-                if (source != null) foreach (var file in Directory.EnumerateFiles(source)) File.Copy(file, Path.Combine(target, Path.GetFileName(file)), true);
-            }
-            var ini = Path.Combine(target, "basic.ini");
-            var text = File.Exists(ini) ? File.ReadAllText(ini) : "";
-            text = Ini.Set(text, "General", "Name", "Reality Manual");
-            text = Ini.Set(text, "SimpleOutput", "FilePath", outputFolder.Replace("\\", "/"));
-            text = Ini.Set(text, "AdvOut", "RecFilePath", outputFolder.Replace("\\", "/"));
-            File.WriteAllText(ini, text);
-        }
-        catch { }
     }
 }
 
 internal sealed class SetupForm : Form
 {
     private readonly AppConfig config;
-    private readonly TextBox folder = new() { Dock = DockStyle.Fill };
+    private readonly TextBox verticalFolder = new() { Dock = DockStyle.Fill };
+    private readonly TextBox horizontalFolder = new() { Dock = DockStyle.Fill };
     private readonly TextBox code = new() { Dock = DockStyle.Fill, CharacterCasing = CharacterCasing.Upper, MaxLength = 12 };
     private readonly Label message = new() { AutoSize = true, ForeColor = Color.DimGray };
     private readonly Button pair = new() { Text = "Pair and start", AutoSize = true };
@@ -358,36 +349,62 @@ internal sealed class SetupForm : Form
     public SetupForm(AppConfig config)
     {
         this.config = config;
-        Text = "Reality Manual Uploader"; Width = 610; Height = 310; StartPosition = FormStartPosition.CenterScreen; MaximizeBox = false;
-        folder.Text = config.WatchFolder;
-        var browse = new Button { Text = "Browse…", AutoSize = true };
-        browse.Click += (_, _) => { using var dialog = new FolderBrowserDialog { InitialDirectory = folder.Text }; if (dialog.ShowDialog() == DialogResult.OK) folder.Text = dialog.SelectedPath; };
+        Text = "Reality Manual Uploader"; Width = 660; Height = 405; StartPosition = FormStartPosition.CenterScreen; MaximizeBox = false;
+        verticalFolder.Text = config.VerticalFolder;
+        horizontalFolder.Text = config.HorizontalFolder;
+        var browseVertical = new Button { Text = "Browse…", AutoSize = true };
+        browseVertical.Click += (_, _) => ChooseFolder(verticalFolder);
+        var browseHorizontal = new Button { Text = "Browse…", AutoSize = true };
+        browseHorizontal.Click += (_, _) => ChooseFolder(horizontalFolder);
+        if (!string.IsNullOrWhiteSpace(config.Token)) pair.Text = "Save and start";
         pair.Click += async (_, _) => await Pair();
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(20), ColumnCount = 2, RowCount = 7 };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(20), ColumnCount = 2, RowCount = 11 };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         var heading = new Label { Text = "Automatic OBS upload", Font = new Font(Font, FontStyle.Bold), AutoSize = true };
-        var info = new Label { Text = "This creates an OBS profile named Reality Manual, points it at the folder below, and uploads completed recordings into Editor. Close and reopen OBS once after setup.", AutoSize = true, MaximumSize = new Size(540, 0) };
+        var info = new Label { Text = "Choose the two folders used by your Vertical and Horizontal OBS profiles. The uploader watches both and sends every completed recording into Editor; it does not alter your OBS profiles.", AutoSize = true, MaximumSize = new Size(590, 0) };
+        var verticalLabel = new Label { Text = "Vertical recordings folder", AutoSize = true };
+        var horizontalLabel = new Label { Text = "Horizontal recordings folder", AutoSize = true };
+        var codeLabel = new Label { Text = string.IsNullOrWhiteSpace(config.Token) ? "One-time code from Content Settings" : "New pairing code (leave blank to keep this laptop paired)", AutoSize = true };
         layout.Controls.Add(heading, 0, 0); layout.SetColumnSpan(heading, 2);
         layout.Controls.Add(info, 0, 1); layout.SetColumnSpan(info, 2);
-        layout.Controls.Add(new Label { Text = "Recording folder", AutoSize = true }, 0, 2); layout.SetColumnSpan(layout.GetControlFromPosition(0, 2), 2);
-        layout.Controls.Add(folder, 0, 3); layout.Controls.Add(browse, 1, 3);
-        layout.Controls.Add(new Label { Text = "One-time code from Content Settings", AutoSize = true }, 0, 4); layout.SetColumnSpan(layout.GetControlFromPosition(0, 4), 2);
-        layout.Controls.Add(code, 0, 5); layout.Controls.Add(pair, 1, 5);
-        layout.Controls.Add(message, 0, 6); layout.SetColumnSpan(message, 2);
+        layout.Controls.Add(verticalLabel, 0, 2); layout.SetColumnSpan(verticalLabel, 2);
+        layout.Controls.Add(verticalFolder, 0, 3); layout.Controls.Add(browseVertical, 1, 3);
+        layout.Controls.Add(horizontalLabel, 0, 4); layout.SetColumnSpan(horizontalLabel, 2);
+        layout.Controls.Add(horizontalFolder, 0, 5); layout.Controls.Add(browseHorizontal, 1, 5);
+        layout.Controls.Add(codeLabel, 0, 6); layout.SetColumnSpan(codeLabel, 2);
+        layout.Controls.Add(code, 0, 7); layout.Controls.Add(pair, 1, 7);
+        layout.Controls.Add(message, 0, 8); layout.SetColumnSpan(message, 2);
         Controls.Add(layout);
+    }
+
+    private static void ChooseFolder(TextBox target)
+    {
+        using var dialog = new FolderBrowserDialog { InitialDirectory = target.Text };
+        if (dialog.ShowDialog() == DialogResult.OK) target.Text = dialog.SelectedPath;
     }
 
     private async Task Pair()
     {
-        if (string.IsNullOrWhiteSpace(folder.Text) || string.IsNullOrWhiteSpace(code.Text)) { message.Text = "Choose a folder and enter the pairing code."; return; }
-        pair.Enabled = false; message.Text = "Pairing…";
+        if (string.IsNullOrWhiteSpace(verticalFolder.Text) || string.IsNullOrWhiteSpace(horizontalFolder.Text)) { message.Text = "Choose both recording folders."; return; }
+        if (string.IsNullOrWhiteSpace(config.Token) && string.IsNullOrWhiteSpace(code.Text)) { message.Text = "Enter the pairing code from Content Settings."; return; }
+        pair.Enabled = false; message.Text = string.IsNullOrWhiteSpace(code.Text) ? "Saving…" : "Pairing…";
         try
         {
-            using var client = new HttpClient { BaseAddress = new Uri(Program.BaseUrl), Timeout = TimeSpan.FromSeconds(30) };
-            using var response = await client.PostAsJsonAsync("/api/desktop-uploader/pair", new { code = code.Text, deviceName = Environment.MachineName });
-            if (!response.IsSuccessStatusCode) throw new InvalidOperationException("The code is invalid or expired. Generate a new one in Content Settings.");
-            var result = await response.Content.ReadFromJsonAsync<PairResponse>(Program.JsonOptions) ?? throw new InvalidOperationException("Pairing returned no device token.");
-            config.Token = result.Token; config.WatchFolder = folder.Text.Trim(); config.Save();
+            var vertical = Path.GetFullPath(verticalFolder.Text.Trim());
+            var horizontal = Path.GetFullPath(horizontalFolder.Text.Trim());
+            if (string.Equals(vertical, horizontal, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Choose a different folder for each OBS profile.");
+            if (!string.IsNullOrWhiteSpace(code.Text))
+            {
+                using var client = new HttpClient { BaseAddress = new Uri(Program.BaseUrl), Timeout = TimeSpan.FromSeconds(30) };
+                using var response = await client.PostAsJsonAsync("/api/desktop-uploader/pair", new { code = code.Text, deviceName = Environment.MachineName });
+                if (!response.IsSuccessStatusCode) throw new InvalidOperationException("The code is invalid or expired. Generate a new one in Content Settings.");
+                var result = await response.Content.ReadFromJsonAsync<PairResponse>(Program.JsonOptions) ?? throw new InvalidOperationException("Pairing returned no device token.");
+                config.Token = result.Token;
+            }
+            config.VerticalFolder = vertical;
+            config.HorizontalFolder = horizontal;
+            config.FolderConfigurationVersion = 2;
+            config.Save();
             DialogResult = DialogResult.OK; Close();
         }
         catch (Exception error) { message.Text = error.Message; pair.Enabled = true; }
@@ -419,34 +436,4 @@ internal static class NativeMethods
     [DllImport("kernel32.dll")] internal static extern uint SetThreadExecutionState(uint flags);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool ShutdownBlockReasonCreate(IntPtr hwnd, string reason);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool ShutdownBlockReasonDestroy(IntPtr hwnd);
-}
-
-internal static class Ini
-{
-    public static string Get(string text, string section, string key)
-    {
-        var lines = text.Replace("\r\n", "\n").Split('\n');
-        var inside = false;
-        foreach (var raw in lines)
-        {
-            var line = raw.Trim();
-            if (line.StartsWith("[") && line.EndsWith("]")) { inside = string.Equals(line, "[" + section + "]", StringComparison.OrdinalIgnoreCase); continue; }
-            if (inside && line.StartsWith(key + "=", StringComparison.OrdinalIgnoreCase)) return line[(key.Length + 1)..].Trim();
-        }
-        return "";
-    }
-
-    public static string Set(string text, string section, string key, string value)
-    {
-        var lines = text.Replace("\r\n", "\n").Split('\n').ToList();
-        var header = "[" + section + "]";
-        var start = lines.FindIndex(x => string.Equals(x.Trim(), header, StringComparison.OrdinalIgnoreCase));
-        if (start < 0) { if (lines.Count > 0 && lines[^1] != "") lines.Add(""); lines.Add(header); lines.Add(key + "=" + value); return string.Join("\r\n", lines); }
-        var end = lines.FindIndex(start + 1, x => x.TrimStart().StartsWith("["));
-        if (end < 0) end = lines.Count;
-        for (var i = start + 1; i < end; i++)
-            if (lines[i].StartsWith(key + "=", StringComparison.OrdinalIgnoreCase)) { lines[i] = key + "=" + value; return string.Join("\r\n", lines); }
-        lines.Insert(end, key + "=" + value);
-        return string.Join("\r\n", lines);
-    }
 }

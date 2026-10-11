@@ -4612,7 +4612,7 @@
     '<div class="settings-panel">' +
       '<section class="settings-section" id="desktopUploaderSettings">' +
         '<h3>Automatic OBS upload</h3>' +
-        '<p class="settings-hint">Use the <strong>Reality Manual</strong> OBS profile, recording to <code>Videos\\Reality Manual</code>. The Windows tray app waits until OBS finishes the file, then uploads it safely into Editor. Your laptop copy is never deleted.</p>' +
+        '<p class="settings-hint">Choose separate recording folders for your <strong>Vertical</strong> and <strong>Horizontal</strong> OBS profiles. The Windows tray app watches both, waits until OBS finishes each file, then uploads it safely into Editor. Your laptop copy is never deleted.</p>' +
         '<div class="desktop-uploader-actions">' +
           '<a class="btn-secondary" href="/downloads/reality-manual-uploader.exe">Download Windows uploader</a>' +
           '<button type="button" class="btn-secondary" id="desktopPairBtn">Generate pairing code</button>' +

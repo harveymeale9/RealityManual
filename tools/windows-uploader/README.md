@@ -3,7 +3,8 @@
 Self-contained Windows tray app for the OBS-to-Editor intake path.
 
 - First launch copies the executable to `%LOCALAPPDATA%\RealityManualUploader` and starts it with Windows.
-- Setup clones the currently selected OBS profile as `Reality Manual` and changes only its recording directory to `%USERPROFILE%\Videos\Reality Manual` (or the folder chosen in setup).
+- Setup asks for separate Vertical and Horizontal recording folders and watches both simultaneously.
+- The uploader does not alter OBS. Point each of Harvey's two OBS profiles at its corresponding chosen folder; Editor detects the actual orientation from the recording itself.
 - Completed recordings are detected only after their byte size is stable and the file can be opened exclusively, preventing uploads while OBS is still writing.
 - Uploads use the Editor's resumable 16 MB chunk API. Queue/session state is persisted after every acknowledged chunk, so app, network, or laptop restarts resume safely.
 - The laptop source is never deleted automatically.

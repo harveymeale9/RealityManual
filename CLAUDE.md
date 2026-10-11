@@ -16579,3 +16579,30 @@ unreviewed file with different audio mixing or overall loudness. Platforms may
 still perform their own unavoidable delivery transcode or playback
 normalization after upload, but Content Studio always supplies the exact file
 played in Final Check.
+
+---
+
+# 488. Windows Uploader Watches Separate Vertical and Horizontal Folders (2026-10-11)
+
+The Windows OBS uploader now accepts two independent recording directories,
+one for Harvey's Vertical OBS profile and one for his Horizontal profile, and
+watches both simultaneously. It no longer creates, clones, or edits any OBS
+profile. Harvey remains in control of the two OBS profiles and only needs to
+point each profile's recording output at the corresponding folder selected in
+the uploader. Editor continues to determine the real orientation from the
+uploaded video's dimensions, so folder names are routing conveniences rather
+than trusted media metadata.
+
+Uploader configuration schema version 2 deliberately sends existing v1
+installs through the new two-folder setup once. Their already-issued device
+token and durable upload queue are preserved, so the pairing-code field can be
+left empty unless Harvey actually wants to replace the pairing. The two paths
+must be distinct. Afterwards both the filesystem watchers and the periodic
+safety scan cover both folders while retaining the existing stable-file,
+exclusive-open, resumable-upload, source-retention, and duplicate-detection
+guarantees.
+
+The self-contained win-x64 executable was rebuilt as version 2.0.0 and placed
+at the existing persistent download target. The Content Settings explanation
+now describes the two-folder arrangement. The executable remains unsigned and
+is still intentionally kept out of Git.
