@@ -16867,3 +16867,25 @@ reference and the Open Graph image were updated to the new paths. This removes
 generic production filenames such as `book-desk-v3.jpg` and makes the public
 asset URLs descriptive for search engines and link previews. The stylesheet
 cache key was advanced with the hero composition change.
+
+---
+
+# 505. Content Production Renders Without Downloading the Audio Library (2026-10-11)
+
+Editor project **The Propagation of Success** was correctly Sent: its Editor
+project, `in_production` video piece, and copied media were all present in the
+live database. Content Production nevertheless appeared empty because its
+initial renderer called `Store.getAll('audioTracks')`. Audio tracks are a
+file-backed store, so that helper downloads every full Blob before resolving;
+with the current 30-track library, no Production rows were painted during that
+long transfer. The delay also affected Editor-origin videos even though their
+reviewed soundtrack is locked and Content Production does not display an audio
+picker for them.
+
+The shared store now exposes `getAllMetadata()`, which reads the same record
+list without hydrating file Blobs. Content Production uses that path for the
+soundtrack dropdown because row construction only needs track ids and names;
+actual mixed previews remain on-demand through their existing server endpoint.
+The live piece therefore appears immediately, direct-upload dropdowns still
+contain all tracks, and a refresh no longer re-downloads the ambient library
+before rendering the page. Both script cache keys were advanced.

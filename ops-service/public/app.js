@@ -4350,7 +4350,11 @@
     if (!inProgress.length) {
       swapIn([]);
     } else {
-      Store.getAll('audioTracks').then(swapIn);
+      // Building these rows only needs soundtrack ids/names. getAll() on a
+      // file store downloads every full audio Blob first (30 tracks today),
+      // which made Content Production look empty for a long time and was
+      // especially wasteful for Editor-origin rows whose audio is locked.
+      Store.getAllMetadata('audioTracks').then(swapIn);
     }
 
     maybeStartAnalysisPolling();

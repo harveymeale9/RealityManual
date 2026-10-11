@@ -32,6 +32,15 @@ window.RMStore = (function () {
       .catch(function () { return []; });
   }
 
+  // File-backed stores normally hydrate every record with its full Blob.
+  // Callers that only need names/ids must not pay that cost before they can
+  // render; the metadata already lives in the ordinary store response.
+  function getAllMetadata(storeName) {
+    return apiFetch('/api/store/' + storeName)
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .catch(function () { return []; });
+  }
+
   function get(storeName, id) {
     return apiFetch('/api/store/' + storeName + '/' + encodeURIComponent(id))
       .then(function (r) { return r.ok ? r.json() : undefined; })
@@ -349,7 +358,7 @@ window.RMStore = (function () {
     captionAllowsTrackedLink: captionAllowsTrackedLink,
     stripCaptionLink: stripCaptionLink,
     renderPlatformCaption: renderPlatformCaption,
-    getAll: getAll, get: get, put: put, del: del,
+    getAll: getAll, getAllMetadata: getAllMetadata, get: get, put: put, del: del,
     genId: genId, nowIso: nowIso,
     STAGES: STAGES, TAGS: TAGS, CONTENT_TYPES: CONTENT_TYPES, PLATFORMS: PLATFORMS,
     DEFAULT_CADENCE: DEFAULT_CADENCE,
