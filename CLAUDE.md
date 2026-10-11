@@ -16735,3 +16735,13 @@ responsive CSS providing the desktop bleed and mobile square crop. The former
 desktop-only brightness lift was removed so the black cloth remains genuinely
 black rather than reading as grey. The optimized web JPEG is 318 KB; the old
 assets remain in the repository but are no longer referenced by the homepage.
+
+---
+
+# 495. Third Interior Card Is Centered on Mobile (2026-10-11)
+
+The three-card **Inside the Book** gallery retains two equal columns below
+900px, but its final **Advanced Techniques** card now spans the grid and takes
+one normal column's width in the horizontal center. This replaces the visually
+unbalanced empty bottom-right cell with a symmetric `2 + 1` arrangement. The
+desktop three-card row and testimonial column are unchanged.
