@@ -17787,3 +17787,21 @@ slot.
 Focused tests prove the two-worker ceiling, CPU-aware sizing, urgent ordering,
 and same-recording exclusion. The real HEVC proxy regression and all 182
 ops-service tests pass, including the generated FFmpeg final-render paths.
+
+---
+
+# 551. Home2 Purchase Panel Features the Standing Hardcover (2026-10-12)
+
+The first purchase panel beneath the `/home2` video hero now places Harvey's
+supplied standing deluxe-hardcover photograph beside the sales copy. On desktop
+the panel is a wide two-column composition: the book is deliberately taller
+than the complete heading, description, checkout button, and assurance group,
+giving it the requested towering product presence. The headline scale was
+rebalanced so it retains a clean two-line shape in the narrower copy column.
+
+Below 900px the panel becomes a single column with the book centred above the
+copy at a bounded width. The source image carries explicit intrinsic dimensions,
+lazy loading, and descriptive alt text. Headless Chromium verified the exact
+418×557 asset loaded, the desktop book is taller than the adjacent content,
+and both 1440×900 and 390×844 layouts have no horizontal overflow. Both renders
+were visually inspected, and the `/home2` stylesheet cache key was advanced.
