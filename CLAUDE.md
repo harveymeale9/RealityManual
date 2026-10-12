@@ -17060,3 +17060,26 @@ composition is left undisturbed. The dedicated mobile Project Manager view
 retains the safer button-only behavior requested earlier, so its on-screen
 keyboard Enter key inserts a newline and only tapping Send submits the message.
 The desktop app script cache key was advanced.
+
+---
+
+# 517. Filmed and Uploaded Are One Kanban Stage (2026-10-12)
+
+The separate **Filmed** planning column has been removed. Because recordings
+now enter Editor immediately after filming, the planning pipeline proceeds
+directly from **Outline Completed** to the single **Uploaded** column. The
+automatic video lifecycle remains separate and unchanged: a raw recording
+still creates its own card in **In Editor**, then moves through In Production,
+Final Check, Scheduled, and Posted / Live.
+
+A durable one-time migration moves every existing Filmed card into Uploaded,
+preserving their relative order and appending them after cards already there;
+there were three such live planning cards before deployment. Editor matching
+and linkage now use only Outline Completed or Uploaded planning cards.
+Unlinking or deleting an unfinished Editor project removes its relationship
+from the plan but leaves that plan in Uploaded rather than resurrecting the
+retired Filmed state. The piece write boundary also normalizes `filmed` to
+`uploaded`, preventing a browser tab opened before this change from recreating
+an invisible legacy card. Ideation progression and weekly-report milestones
+now use the same merged stage vocabulary. The Store script cache key was
+advanced.

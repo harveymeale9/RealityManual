@@ -9,7 +9,7 @@ const STAGE_LABELS = {
   filmed: 'Filmed', uploaded: 'Uploaded', in_editor: 'In Editor', in_production: 'In Production',
   final_check: 'Final Check', scheduled: 'Scheduled', live: 'Published'
 };
-const MILESTONE_STAGES = ['big_ideas', 'outline_started', 'active_pieces', 'outline_completed', 'filmed', 'uploaded', 'in_editor', 'in_production', 'final_check', 'scheduled', 'live'];
+const MILESTONE_STAGES = ['big_ideas', 'outline_started', 'active_pieces', 'outline_completed', 'uploaded', 'in_editor', 'in_production', 'final_check', 'scheduled', 'live'];
 
 function clean(value, max) { return String(value == null ? '' : value).trim().slice(0, max || 100000); }
 function json(value, fallback) { try { return JSON.parse(value); } catch (error) { return fallback; } }

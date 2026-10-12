@@ -92,9 +92,9 @@ test('weekly report sends one complete Monday-to-Monday email and never duplicat
   assert.equal(second.skipped, 'already_sent');
   assert.equal(sent.length, 1);
 
-  service.recordStageChange({ id: 'outline-1', title: 'Completed outline', stage: 'filmed', contentType: 'short' }, 'outline_completed', 'kanban', '2026-09-24T10:00:00.000Z');
+  service.recordStageChange({ id: 'outline-1', title: 'Completed outline', stage: 'uploaded', contentType: 'short' }, 'outline_completed', 'kanban', '2026-09-24T10:00:00.000Z');
   const event = db.prepare("SELECT from_stage,to_stage,source FROM piece_stage_events WHERE source='kanban'").get();
-  assert.deepEqual(event, { from_stage: 'outline_completed', to_stage: 'filmed', source: 'kanban' });
+  assert.deepEqual(event, { from_stage: 'outline_completed', to_stage: 'uploaded', source: 'kanban' });
   service.close();
   db.close();
 });

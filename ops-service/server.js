@@ -701,7 +701,7 @@ function editorPlanningCandidates(project) {
     if (!piece || piece.hasVideo) return false;
     if (piece.id === (project && project.planningPieceId)) return true;
     if (claimedByOtherEditorProjects.has(piece.id)) return false;
-    return piece.stage === 'outline_completed' || piece.stage === 'filmed' || piece.stage === 'uploaded';
+    return piece.stage === 'outline_completed' || piece.stage === 'uploaded';
   }).sort(function (a, b) {
     if (a.id === (project && project.planningPieceId)) return -1;
     if (b.id === (project && project.planningPieceId)) return 1;
@@ -714,7 +714,7 @@ function editorPlanningCandidates(project) {
 
 function editorPlanningPiece(id) {
   const piece = getPieceRecord(id);
-  if (!piece || piece.hasVideo || !['outline_completed', 'filmed', 'uploaded'].includes(piece.stage)) return null;
+  if (!piece || piece.hasVideo || !['outline_completed', 'uploaded'].includes(piece.stage)) return null;
   return { id: piece.id, seq: piece.seq, title: piece.title, stage: piece.stage, notesHtml: String(piece.notesHtml || '') };
 }
 
@@ -824,7 +824,7 @@ function advanceEditorPlanningPiece(input) {
   const project = input && input.project;
   if (!project || !project.planningPieceId) return;
   const piece = getPieceRecord(project.planningPieceId);
-  if (!piece || piece.hasVideo || !['outline_completed', 'filmed', 'uploaded'].includes(piece.stage)) return;
+  if (!piece || piece.hasVideo || !['outline_completed', 'uploaded'].includes(piece.stage)) return;
   piece.stage = 'uploaded';
   piece.updatedAt = new Date().toISOString();
   piece.editorProjectId = project.id;
@@ -838,7 +838,6 @@ function reconcileEditorPlanningPiece(input) {
   if (previousId && previousId !== project.planningPieceId) {
     const previous = getPieceRecord(previousId);
     if (previous && previous.stage === 'uploaded' && previous.editorProjectId === project.id) {
-      previous.stage = 'filmed';
       previous.updatedAt = new Date().toISOString();
       delete previous.editorProjectId;
       savePieceRecord(previous);
@@ -1554,6 +1553,10 @@ app.put('/api/store/:storeName/:id', function (req, res) {
       req.body.contentType = '';
       req.body.contentTypeSelectionExplicit = false;
     }
+    // Filmed and Uploaded are now one planning state. Tabs left open before
+    // that merge may still submit the retired stage id; normalize it at the
+    // write boundary so they cannot recreate an invisible Filmed card.
+    if (!req.body.hasVideo && req.body.stage === 'filmed') req.body.stage = 'uploaded';
   }
 
   if (req.sessionRole === 'youtube-reviewer') {
@@ -1912,6 +1915,35 @@ function migrateSplitPlanningAndVideoStages() {
   })();
 }
 migrateSplitPlanningAndVideoStages();
+
+// Filming now flows directly into Editor intake, so the former Filmed and
+// Uploaded planning columns represent the same real-world state. Collapse all
+// durable Filmed cards into Uploaded exactly once, appending them in their
+// existing relative order after cards already there.
+function mergeFilmedIntoUploadedStage() {
+  const migrationId = 'merge-filmed-into-uploaded-v1';
+  if (stmts.getOne.get('systemMigrations', migrationId)) return;
+  const migratedAt = new Date().toISOString();
+  db.transaction(function () {
+    const pieces = stmts.getAll.all('pieces').map(function (row) {
+      return recordConcurrency.decodeRow(row);
+    }).filter(Boolean);
+    let nextOrder = pieces.filter(function (piece) { return piece.stage === 'uploaded'; })
+      .reduce(function (max, piece) { return Math.max(max, Number(piece.order) || 0); }, 0);
+    pieces.filter(function (piece) { return piece.stage === 'filmed'; })
+      .sort(function (a, b) { return (Number(a.order) || 0) - (Number(b.order) || 0); })
+      .forEach(function (piece) {
+        nextOrder += 10;
+        piece.stage = 'uploaded';
+        piece.order = nextOrder;
+        piece.updatedAt = migratedAt;
+        recordConcurrency.stampServerWrite(piece);
+        stmts.upsert.run('pieces', piece.id, JSON.stringify(piece), migratedAt);
+      });
+    stmts.upsert.run('systemMigrations', migrationId, JSON.stringify({ id: migrationId, appliedAt: migratedAt }), migratedAt);
+  })();
+}
+mergeFilmedIntoUploadedStage();
 
 // Active Editor projects created before the split need the same lightweight
 // video card as a newly uploaded recording. Sent projects already own their

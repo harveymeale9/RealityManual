@@ -1122,7 +1122,7 @@ function setup(options) {
     const rebuildPending = hadVerifiedRender || !!(project && project.renderRebuildPending);
     if (hadVerifiedRender && typeof onRenderInvalidated === 'function') {
       try { onRenderInvalidated({ project: project }); }
-      catch (error) { project.workflowWarning = 'The edit changed safely, but its linked planning card could not be returned to Filmed.'; }
+      catch (error) { project.workflowWarning = 'The edit changed safely, but its linked planning card could not be restored to Uploaded.'; }
     }
     const invalidated = invalidateRender(project);
     // Preserve an explicit distinction between a first render and an edit

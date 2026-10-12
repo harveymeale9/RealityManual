@@ -144,7 +144,6 @@ window.RMStore = (function () {
     { id: 'outline_started', label: 'Outline Started' },
     { id: 'active_pieces', label: 'Active Pieces' },
     { id: 'outline_completed', label: 'Outline Completed' },
-    { id: 'filmed', label: 'Filmed' },
     { id: 'uploaded', label: 'Uploaded' },
     { id: 'in_editor', label: 'In Editor' },
     { id: 'in_production', label: 'In Production' },

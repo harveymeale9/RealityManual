@@ -1050,8 +1050,8 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
       if (retakeCalls === 1) throw new Error('synthetic transient classifier failure');
       return { decisions: [{ removeStartIndex: 0, removeEndIndex: 1, replacementStartIndex: 2, replacementEndIndex: 3, confidence: 'high', reason: 'Synthetic replaced take.' }] };
     },
-    getPlanningCandidates: function () { return [{ id: 'plan-1', seq: 79, title: 'Synthetic outline', stage: 'filmed', notesSnippet: 'One two.' }, { id: 'plan-2', seq: 80, title: 'Corrected outline', stage: 'filmed', notesSnippet: 'One two.' }]; },
-    matchPlanningPiece: async function () { planningMatchCalls++; return { pieceId: 'plan-1', confidence: 'high', reason: 'The transcript matches the filmed outline.', workingTitle: 'Synthetic Outline' }; },
+    getPlanningCandidates: function () { return [{ id: 'plan-1', seq: 79, title: 'Synthetic outline', stage: 'uploaded', notesSnippet: 'One two.' }, { id: 'plan-2', seq: 80, title: 'Corrected outline', stage: 'uploaded', notesSnippet: 'One two.' }]; },
+    matchPlanningPiece: async function () { planningMatchCalls++; return { pieceId: 'plan-1', confidence: 'high', reason: 'The transcript matches the uploaded outline.', workingTitle: 'Synthetic Outline' }; },
     onProjectCreated: function (input) { createdProjects.push(input.project); },
     onProjectMetadataChanged: function (input) { metadataProjects.push(input.project); },
     onRenderReady: function (input) {
