@@ -383,6 +383,19 @@ test('precise manual trims bridge residual fragments between automatic and trans
   }]);
 });
 
+test('manual timeline trims remove the selected source interval and ripple later footage left', function () {
+  const project = {
+    duration: 10,
+    autoSilenceEnabled: false,
+    words: [],
+    removedWordIndices: [],
+    manualTrimCuts: [{ id: 'timeline-test', start: 2, end: 4, note: 'Deleted from manual timeline' }]
+  };
+  const cuts = editor.cutsForProject(project);
+  assert.deepEqual(cuts, [{ id: 'timeline-test', start: 2, end: 4, reason: 'manual_trim' }]);
+  assert.deepEqual(editor.keepSegments(project.duration, cuts), [{ start: 0, end: 2 }, { start: 4, end: 10 }]);
+});
+
 test('likely restarted lines are surfaced without being automatically removed', function () {
   const attempts = [
     { index: 0, text: 'The', start: 0, end: 0.2 }, { index: 1, text: 'problem', start: 0.25, end: 0.6 },

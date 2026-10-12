@@ -25,6 +25,9 @@
   var audioMixVersion = '';
   var audioPreviewBatches = {};
   var activeAudioPanelRefresh = null;
+  var manualTimelineOpen = {};
+  var manualTimelineZoom = {};
+  var manualTimelineSelections = {};
   var restoreTranscriptFocus = false;
   var uploadBatchInProgress = false;
   var uploadBatchCancelled = false;
@@ -466,6 +469,75 @@
       var width = Math.max(0.18, (span.end - span.start) / total * 100);
       return '<button type="button" class="editor-timeline-segment ' + span.kind + '" style="left:' + left.toFixed(4) + '%;width:' + width.toFixed(4) + '%" data-time="' + span.start + '" title="' + esc(span.label) + '"></button>';
     }).join('') + '<i class="editor-playhead" id="editorPlayhead"></i></div>';
+  }
+
+  function manualTimelineSplitKey(id) {
+    return 'rmEditorTimelineSplits:' + id;
+  }
+
+  function manualTimelineSplitsFor(item) {
+    var duration = Math.max(0, Number(item && item.duration) || 0);
+    var values = [];
+    try { values = JSON.parse(localStorage.getItem(manualTimelineSplitKey(item.id)) || '[]'); } catch (error) {}
+    return Array.from(new Set((Array.isArray(values) ? values : []).map(Number).filter(function (time) {
+      return Number.isFinite(time) && time > 0.02 && time < duration - 0.02;
+    }).map(function (time) { return Number(time.toFixed(3)); }))).sort(function (a, b) { return a - b; });
+  }
+
+  function storeManualTimelineSplits(item, values) {
+    localStorage.setItem(manualTimelineSplitKey(item.id), JSON.stringify(values));
+  }
+
+  function manualTimelineVoiceRanges(words) {
+    var ranges = [];
+    (words || []).forEach(function (word) {
+      var start = Math.max(0, Number(word.start) || 0);
+      var end = Math.max(start, Number(word.end) || start);
+      var previous = ranges[ranges.length - 1];
+      if (!previous || start - previous.end > 0.32) ranges.push({ start: start, end: end });
+      else previous.end = Math.max(previous.end, end);
+    });
+    return ranges;
+  }
+
+  function manualTimelineHtml(item, locked) {
+    if (!manualTimelineOpen[item.id]) return '';
+    var duration = Math.max(0.01, Number(item.duration) || 0.01);
+    var zoom = Math.max(8, Math.min(180, Number(manualTimelineZoom[item.id]) || 14));
+    manualTimelineZoom[item.id] = zoom;
+    var splits = manualTimelineSplitsFor(item);
+    var boundaries = [0].concat(splits, [duration]);
+    var selection = manualTimelineSelections[item.id];
+    function pct(time) { return Math.max(0, Math.min(100, time / duration * 100)).toFixed(5); }
+    function widthPct(start, end) { return Math.max(0.02, (end - start) / duration * 100).toFixed(5); }
+    function selected(start, end) {
+      return selection && Math.abs(selection.start - start) < 0.002 && Math.abs(selection.end - end) < 0.002;
+    }
+    var segments = boundaries.slice(0, -1).map(function (start, index) {
+      var end = boundaries[index + 1];
+      return '<button type="button" class="editor-manual-segment' + (selected(start, end) ? ' selected' : '') + '" data-start="' + start.toFixed(3) + '" data-end="' + end.toFixed(3) + '" style="left:' + pct(start) + '%;width:' + widthPct(start, end) + '%" title="Select ' + formatTime(start) + '–' + formatTime(end) + '"></button>';
+    }).join('');
+    var voice = manualTimelineVoiceRanges(item.words).map(function (range) {
+      return '<i class="editor-manual-voice-block" style="left:' + pct(range.start) + '%;width:' + widthPct(range.start, range.end) + '%"></i>';
+    }).join('');
+    var cuts = (item.cuts || []).map(function (cut) {
+      return '<i class="editor-manual-cut" style="left:' + pct(cut.start) + '%;width:' + widthPct(cut.start, cut.end) + '%" title="Removed ' + formatTime(cut.start) + '–' + formatTime(cut.end) + '"></i>';
+    }).join('');
+    var markers = splits.map(function (time) {
+      return '<i class="editor-manual-split" style="left:' + pct(time) + '%" title="Split at ' + formatTime(time) + '"></i>';
+    }).join('');
+    var effectiveWidth = Math.max(760, Math.round(duration * zoom));
+    var tickStep = zoom >= 70 ? 1 : zoom >= 28 ? 5 : 10;
+    var ticks = '';
+    for (var time = 0; time <= duration; time += tickStep) {
+      ticks += '<i style="left:' + pct(time) + '%"><span>' + formatTime(time) + '</span></i>';
+    }
+    return '<section class="editor-manual-timeline" id="editorManualTimeline"><div class="editor-manual-timeline-head"><div><div class="eyebrow">Source timeline</div><h3>Video + voice</h3><span>Click to seek. Add two splits, select the section between them, then delete it. The following clip ripples left automatically.</span></div><div class="editor-manual-timeline-actions">' +
+      '<button type="button" class="btn-secondary btn-tiny" id="editorTimelineAddSplit" ' + (locked ? 'disabled' : '') + '>Split at playhead</button><button type="button" class="btn-secondary btn-tiny" id="editorTimelineClearSplits" ' + (!splits.length || locked ? 'disabled' : '') + '>Clear splits</button><button type="button" class="btn-primary btn-tiny" id="editorTimelineDelete" ' + (!selection || locked ? 'disabled' : '') + '>Delete selected section</button></div></div>' +
+      '<div class="editor-manual-timeline-hint"><span id="editorTimelineZoomLabel">' + zoom.toFixed(0) + ' px/sec</span><span>Ctrl/⌘ + scroll to zoom · normal scroll moves along the timeline</span></div>' +
+      '<div class="editor-manual-timeline-viewport" id="editorManualTimelineViewport"><div class="editor-manual-timeline-inner" id="editorManualTimelineInner" style="width:' + effectiveWidth + 'px">' +
+        '<div class="editor-manual-ruler">' + ticks + '</div><div class="editor-manual-lane editor-manual-video-lane"><b>VIDEO</b>' + segments + cuts + '</div>' +
+        '<div class="editor-manual-lane editor-manual-voice-lane"><b>VOICE</b>' + voice + cuts + '</div>' + markers + '<i class="editor-manual-playhead" id="editorManualPlayhead"></i></div></div></section>';
   }
 
   function gapReviewHtml(item) {
@@ -1087,6 +1159,7 @@
     workspace.innerHTML =
       '<div class="editor-topbar"><div><h2>' + esc(displayName(project)) + '</h2><span>' + (project.planningPieceTitle ? esc(project.name) + ' · ' : '') + formatTime(project.duration) + ' original · ' + formatTime(editedDuration(project)) + ' edited · ' + cutSeconds.toFixed(1) + 's removed' + (formatBytes(project.sizeBytes) ? ' · ' + formatBytes(project.sizeBytes) + ' source' : '') + '</span></div>' +
         '<div class="editor-topbar-actions"><div class="editor-project-nav"><button type="button" class="btn-secondary btn-tiny" id="editorPreviousProject" ' + (reviewProjectIndex <= 0 ? 'disabled' : '') + '>← Previous</button><span id="editorProjectPosition">' + (reviewProjectIndex >= 0 ? (reviewProjectIndex + 1) + ' of ' + reviewProjects.length : '') + '</span><button type="button" class="btn-secondary btn-tiny" id="editorNextProject" ' + (reviewProjectIndex < 0 || reviewProjectIndex >= reviewProjects.length - 1 ? 'disabled' : '') + '>Next →</button></div>' +
+          (!sentToProduction ? '<button type="button" class="btn-secondary btn-tiny" id="editorToggleTimeline" ' + (previewLocked ? 'disabled' : '') + '>' + (manualTimelineOpen[project.id] ? 'Hide timeline' : 'Show timeline') + '</button>' : '') +
           (!sentToProduction && project.renderStatus === 'ready' && !previewLocked ? '<button type="button" class="btn-primary btn-tiny editor-quick-approve" data-editor-approve ' + (!audioSelectionReady ? 'disabled title="Choose backing audio first"' : '') + '>Approve &amp; next</button>' : '') +
           '<span class="editor-save-state ' + esc(saveStates[project.id] || '') + '" id="editorSaveState">' + ({ saving: 'Saving…', saved: 'Saved', error: 'Save failed' }[saveStates[project.id]] || '') + '</span><button class="editor-delete" id="editorDelete">' + (sentToProduction ? 'Remove Editor files' : 'Delete recording') + '</button></div></div>' +
       (previewLocked ? '<div class="editor-lock-notice"><strong>Preview is rebuilding</strong><span>Playback is locked until the updated file has encoded and passed verification.</span></div>' : '') +
@@ -1096,6 +1169,7 @@
       (project.workflowWarning ? '<div class="editor-workflow-warning"><strong>Video workflow needs attention</strong><span>' + esc(project.workflowWarning) + '</span></div>' : '') +
       (layout === 'horizontal' ? '<div class="editor-preview-toolbar">' + previewActionsHtml + '</div>' : '') +
       previewStageHtml +
+      (!sentToProduction ? manualTimelineHtml(project, previewLocked) : '') +
       audioPanelHtml +
       manualRevisionPanelHtml +
       '<section class="editor-automation"><div class="editor-automation-head"><div><div class="eyebrow">Automatic edit</div><h3>Speech and pause map</h3></div><div class="editor-legend"><span class="speech">Speech</span><span class="cut">Removed pause</span><span class="pause">Kept pause</span></div></div>' + timelineHtml(project) +
@@ -1521,6 +1595,7 @@
     video.addEventListener('playing', hideBuffering);
     video.addEventListener('canplay', hideBuffering);
     video.addEventListener('durationchange', syncPlayerControls);
+    video.addEventListener('timeupdate', function () { updateManualTimelinePlayhead(currentSourcePlayhead()); });
     video.addEventListener('volumechange', syncPlayerControls);
     if (mixedAudio) {
       mixedAudio.addEventListener('volumechange', syncPlayerControls);
@@ -1542,6 +1617,101 @@
       var index = items.findIndex(function (item) { return item.id === project.id; });
       if (index >= 0 && index + 1 < items.length) openProject(items[index + 1].id);
     };
+    var toggleTimelineButton = root.querySelector('#editorToggleTimeline');
+    if (toggleTimelineButton) toggleTimelineButton.onclick = function () {
+      manualTimelineOpen[project.id] = !manualTimelineOpen[project.id];
+      previewSeekTimes[project.id] = Number(video.currentTime) || 0;
+      renderWorkspace();
+    };
+    var manualTimelineViewport = root.querySelector('#editorManualTimelineViewport');
+    var manualTimelineInner = root.querySelector('#editorManualTimelineInner');
+    var manualTimelinePlayhead = root.querySelector('#editorManualPlayhead');
+    function currentSourcePlayhead() {
+      return previewingFinal ? editedToSourceTime(video.currentTime, project) : Number(video.currentTime) || 0;
+    }
+    function updateManualTimelinePlayhead(sourceTime) {
+      if (!manualTimelinePlayhead) return;
+      var duration = Math.max(0.01, Number(project.duration) || 0.01);
+      manualTimelinePlayhead.style.left = Math.max(0, Math.min(100, Number(sourceTime) / duration * 100)).toFixed(5) + '%';
+    }
+    function seekManualTimeline(sourceTime) {
+      var clamped = Math.max(0, Math.min(Number(project.duration) || 0, Number(sourceTime) || 0));
+      var target = previewingFinal ? sourceToEditedTime(clamped, project.cuts || [], project) : clamped;
+      try { video.currentTime = Math.max(0, Math.min(Number(video.duration) || target, target)); } catch (error) {}
+      updateManualTimelinePlayhead(clamped);
+      syncPlayerControls();
+    }
+    function preserveTimelinePlaybackPosition() {
+      previewSeekTimes[project.id] = Number(video.currentTime) || 0;
+      previewAutoplay[project.id] = !video.paused && !video.ended;
+    }
+    if (manualTimelineViewport && manualTimelineInner) {
+      manualTimelineInner.onclick = function (event) {
+        var segment = event.target.closest('.editor-manual-segment');
+        var rect = manualTimelineInner.getBoundingClientRect();
+        var sourceTime = Math.max(0, Math.min(Number(project.duration) || 0,
+          (event.clientX - rect.left) / Math.max(1, rect.width) * (Number(project.duration) || 0)));
+        if (segment) {
+          var start = Number(segment.dataset.start);
+          var end = Number(segment.dataset.end);
+          manualTimelineSelections[project.id] = { start: start, end: end };
+          manualTimelineInner.querySelectorAll('.editor-manual-segment').forEach(function (node) { node.classList.toggle('selected', node === segment); });
+          var deleteButton = root.querySelector('#editorTimelineDelete');
+          if (deleteButton) {
+            deleteButton.disabled = manualTimelineSplitsFor(project).length === 0;
+            deleteButton.textContent = 'Delete ' + (end - start).toFixed(2) + 's section';
+          }
+          sourceTime = start;
+        }
+        seekManualTimeline(sourceTime);
+      };
+      manualTimelineViewport.addEventListener('wheel', function (event) {
+        if (!event.ctrlKey && !event.metaKey) return;
+        event.preventDefault();
+        var oldWidth = manualTimelineInner.offsetWidth;
+        var cursorX = event.clientX - manualTimelineViewport.getBoundingClientRect().left;
+        var anchor = (manualTimelineViewport.scrollLeft + cursorX) / Math.max(1, oldWidth);
+        var currentZoom = Math.max(8, Math.min(180, Number(manualTimelineZoom[project.id]) || 14));
+        var nextZoom = Math.max(8, Math.min(180, currentZoom * (event.deltaY < 0 ? 1.25 : 0.8)));
+        manualTimelineZoom[project.id] = nextZoom;
+        var nextWidth = Math.max(760, Math.round((Number(project.duration) || 0) * nextZoom));
+        manualTimelineInner.style.width = nextWidth + 'px';
+        manualTimelineViewport.scrollLeft = Math.max(0, anchor * nextWidth - cursorX);
+        var label = root.querySelector('#editorTimelineZoomLabel');
+        if (label) label.textContent = nextZoom.toFixed(0) + ' px/sec';
+      }, { passive: false });
+    }
+    var addTimelineSplit = root.querySelector('#editorTimelineAddSplit');
+    if (addTimelineSplit) addTimelineSplit.onclick = function () {
+      var time = Number(currentSourcePlayhead().toFixed(3));
+      if (time <= 0.02 || time >= Number(project.duration) - 0.02) return;
+      var splits = manualTimelineSplitsFor(project);
+      if (!splits.some(function (value) { return Math.abs(value - time) < 0.02; })) splits.push(time);
+      splits.sort(function (a, b) { return a - b; });
+      storeManualTimelineSplits(project, splits);
+      delete manualTimelineSelections[project.id];
+      preserveTimelinePlaybackPosition();
+      renderWorkspace();
+    };
+    var clearTimelineSplits = root.querySelector('#editorTimelineClearSplits');
+    if (clearTimelineSplits) clearTimelineSplits.onclick = function () {
+      storeManualTimelineSplits(project, []);
+      delete manualTimelineSelections[project.id];
+      preserveTimelinePlaybackPosition();
+      renderWorkspace();
+    };
+    var deleteTimelineSection = root.querySelector('#editorTimelineDelete');
+    if (deleteTimelineSection) deleteTimelineSection.onclick = function () {
+      var selection = manualTimelineSelections[project.id];
+      if (!selection || selection.end - selection.start < 0.02) return;
+      delete manualTimelineSelections[project.id];
+      save(function (latest) {
+        var trims = (latest.manualTrimCuts || []).slice();
+        trims.unshift({ id: 'timeline-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8), start: selection.start, end: selection.end, note: 'Deleted from manual timeline' });
+        return { manualTrimCuts: trims };
+      });
+    };
+    updateManualTimelinePlayhead(currentSourcePlayhead());
     video.playbackRate = reviewRate;
     var videoError = root.querySelector('#editorVideoError');
     video.addEventListener('loadeddata', function () {
@@ -2301,7 +2471,7 @@
     var mutationId = window.crypto && typeof window.crypto.randomUUID === 'function'
       ? window.crypto.randomUUID()
       : 'edit-' + Date.now() + '-' + Math.random().toString(36).slice(2);
-    var renderKeys = ['removedWordIndices', 'wordCorrection', 'autoSilenceEnabled', 'restoredAutoCutIds', 'captionsEnabled',
+    var renderKeys = ['removedWordIndices', 'manualTrimCuts', 'wordCorrection', 'autoSilenceEnabled', 'restoredAutoCutIds', 'captionsEnabled',
       'layoutOverride', 'openingPushInEnabled', 'silenceThresholdSeconds', 'retainedPauseSeconds'];
     var renderWillChange = typeof patch === 'function' || renderKeys.some(function (key) {
       return patch && Object.prototype.hasOwnProperty.call(patch, key);

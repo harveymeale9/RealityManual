@@ -17312,3 +17312,29 @@ The browser preview and final FFmpeg renderer use the same target selection.
 Render format version 22 invalidates active older output, the Editor cache key
 was advanced, and regression coverage distinguishes initial horizontal motion
 from later horizontal resets.
+
+---
+
+# 530. Basic Manual Video-and-Voice Timeline (2026-10-12)
+
+Active recordings now have a **Show timeline** control beneath the Editor
+preview. It opens a deliberately simple source-time editor with separate VIDEO
+and VOICE lanes, existing removed ranges overlaid in red, a shared playhead,
+and split markers. The voice lane represents timed speech activity from the
+recording transcript; backing audio is intentionally absent. Clicking seeks
+the existing preview. Ctrl/Command + wheel zooms from 8 to 180 pixels per
+second around the pointer, while ordinary horizontal scrolling pans the
+timeline.
+
+**Split at playhead** adds non-destructive editing guides. Selecting one of the
+sections those guides create and choosing **Delete selected section** stores an
+exact source-time `manualTrimCut` through the normal revision-checked Editor
+API. The existing renderer concatenates the retained segments, so everything
+after the deleted interval ripples left automatically in both the replacement
+preview and final output. The edit remains part of cut-decision history and can
+be reversed with the existing Undo control. Split guides persist locally in
+that browser per recording; the resulting cut itself is durable server data.
+
+The Editor JavaScript and stylesheet cache keys were advanced. A new regression
+test proves a 2–4 second timeline deletion produces retained 0–2 and 4–10
+second segments with no gap. The complete 178-test ops-service suite passes.
