@@ -5,23 +5,22 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   0ef8acc..aa234e9  main       -> origin/main
+   aa234e9..378f39c  main       -> origin/main
 + git merge --ff-only origin/main
-Updating 0ef8acc..aa234e9
+Updating aa234e9..378f39c
 Fast-forward
- CLAUDE.md                             |  31 +++++++++
- frontend/css/style.css                |  11 ++-
- frontend/index.html                   |   2 +-
- ops-service/.ci/last-run.log          | 123 +++++++++++++++++++++++++++++-----
- ops-service/public/app.js             |  13 ++--
- ops-service/public/index.html         |   4 +-
- ops-service/public/lib/voiceClient.js |  13 +++-
- ops-service/public/voice-mobile.html  |  15 +++--
- ops-service/test/voiceClient.test.js  |  65 ++++++++++++++++++
- 9 files changed, 241 insertions(+), 36 deletions(-)
- create mode 100644 ops-service/test/voiceClient.test.js
+ CLAUDE.md                     |  54 ++++++-
+ frontend/css/style.css        | 135 ++++++++++++++++--
+ frontend/home2/index.html     | 320 ++++++++++++++++++++++++++++++++++++++++++
+ frontend/index.html           |   2 +-
+ ops-service/.ci/last-run.log  | 132 ++++-------------
+ ops-service/public/editor.js  |  27 +++-
+ ops-service/public/index.html |   4 +-
+ ops-service/public/style.css  |   5 +-
+ 8 files changed, 545 insertions(+), 134 deletions(-)
+ create mode 100644 frontend/home2/index.html
 ++ git rev-parse HEAD
-+ NEW_HEAD=aa234e9d1992069f842a7fdafb5561d67a6956fa
++ NEW_HEAD=378f39c55323bc46121c003e2d490088243774be
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -34,12 +33,12 @@ Already up to date.
 + NEEDS_REBUILD=1
 + '[' -n 0ef8acca3a842f737928442f177e0fc127c432d0 ']'
 + git cat-file -e '0ef8acca3a842f737928442f177e0fc127c432d0^{commit}'
-++ git diff --name-only 0ef8acca3a842f737928442f177e0fc127c432d0 aa234e9d1992069f842a7fdafb5561d67a6956fa -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
+++ git diff --name-only 0ef8acca3a842f737928442f177e0fc127c432d0 378f39c55323bc46121c003e2d490088243774be -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z '' ']'
 + NEEDS_REBUILD=0
 + '[' 0 = 1 ']'
 + '[' 0 = 0 ']'
-+ echo 'no backend changes between 0ef8acca3a842f737928442f177e0fc127c432d0 and aa234e9d1992069f842a7fdafb5561d67a6956fa — already live via git pull, skipping rebuild/restart'
-no backend changes between 0ef8acca3a842f737928442f177e0fc127c432d0 and aa234e9d1992069f842a7fdafb5561d67a6956fa — already live via git pull, skipping rebuild/restart
++ echo 'no backend changes between 0ef8acca3a842f737928442f177e0fc127c432d0 and 378f39c55323bc46121c003e2d490088243774be — already live via git pull, skipping rebuild/restart'
+no backend changes between 0ef8acca3a842f737928442f177e0fc127c432d0 and 378f39c55323bc46121c003e2d490088243774be — already live via git pull, skipping rebuild/restart
 + exit 0
 ssh exit code: 0
