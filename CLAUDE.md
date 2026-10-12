@@ -17171,3 +17171,17 @@ review file cannot disagree with the new rule, and the Editor script cache key
 was advanced. Regression coverage checks the 112.5% easing/filter expression,
 the unchanged horizontal and reveal targets, and all real render integration
 paths. The complete 173-test service suite passes.
+
+---
+
+# 523. Editor Recording Cards Show Their Video Orientation (2026-10-12)
+
+Every recording in the Editor sidebar now shows a small outlined frame beside
+its title: a tall frame for vertical video and a wide frame for horizontal
+video. The icon uses the project's resolved `effectiveLayout`, falling back to
+the explicit override or source dimensions while early processing is still in
+progress. It has an accessible “Vertical video” or “Horizontal video” label
+and matching hover tooltip, and the active card changes the frame to the same
+green accent used by its border. The title remains ellipsized inside the
+narrow desktop and mobile cards. Editor script and stylesheet cache keys were
+advanced; no server or data-format change was required.
