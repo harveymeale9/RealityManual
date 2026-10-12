@@ -758,6 +758,15 @@ body.role-reviewer #pmBackFab {
   display: block; width: 92px; height: 92px; border-radius: 7px;
   object-fit: cover; border: 1px solid var(--border-soft); background: var(--surface-2);
 }
+.pm-msg-images--assistant {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  gap: 10px; margin: 8px 0 12px;
+}
+.pm-msg-image-link { display: block; min-width: 0; }
+.pm-msg-images--assistant .pm-msg-image {
+  width: 100%; height: auto; max-height: 430px; object-fit: contain;
+  border-color: rgba(130,200,255,.38); background: #050807;
+}
 .pm-msg-caption { margin-top: 8px; }
 /* Quoted reference to the user message a reply answers — a reply can land
    well after Harvey has sent other messages in the meantime, so it's not

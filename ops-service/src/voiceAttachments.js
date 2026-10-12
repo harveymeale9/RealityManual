@@ -19,11 +19,12 @@ function extensionForUpload(file) {
   return '';
 }
 
-function parseRecords(row, maximum) {
+function parseRecords(row, maximum, fieldName) {
   try {
-    const parsed = row && row.attachments_json ? JSON.parse(row.attachments_json) : [];
+    fieldName = fieldName || 'attachments_json';
+    const parsed = row && row[fieldName] ? JSON.parse(row[fieldName]) : [];
     return Array.isArray(parsed) ? parsed.filter(function (item) {
-      return item && typeof item.file === 'string' && /^[0-9]+\.(?:jpg|png|gif|webp|mp4)$/.test(item.file);
+      return item && typeof item.file === 'string' && /^(?:[0-9]+|reply-[0-9]+)\.(?:jpg|png|gif|webp|mp4)$/.test(item.file);
     }).slice(0, maximum || 8) : [];
   } catch (error) {
     return [];

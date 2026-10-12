@@ -762,9 +762,10 @@
       }).catch(function () {});
     });
 
-    function addAssistantMessage(text, replyToText, msgId, insertBeforeEl, agent, notificationKind, notificationUnread) {
+    function addAssistantMessage(text, replyToText, msgId, insertBeforeEl, agent, notificationKind, notificationUnread, replyAttachments) {
       clearEmptyNote();
       agent = 'codex';
+      replyAttachments = Array.isArray(replyAttachments) ? replyAttachments.filter(Boolean) : [];
       var isMailAlert = notificationKind === 'mail_alert';
       var isAction = /^\[NEEDS_ACTION\]/i.test(text || '');
       var wrap = document.createElement('div');
@@ -780,6 +781,26 @@
         replyTo.className = 'pm-msg-replyto';
         replyTo.textContent = replyToSnippet(replyToText);
         wrap.appendChild(replyTo);
+      }
+      if (replyAttachments.length) {
+        var imageGrid = document.createElement('div');
+        imageGrid.className = 'pm-msg-images pm-msg-images--assistant';
+        replyAttachments.forEach(function (image, index) {
+          var link = document.createElement('a');
+          link.className = 'pm-msg-image-link';
+          link.href = image.url;
+          link.target = '_blank';
+          link.rel = 'noopener';
+          link.title = 'Open full-size image';
+          var media = document.createElement('img');
+          media.className = 'pm-msg-image';
+          media.alt = image.name || ('Generated image ' + (index + 1));
+          media.loading = 'lazy';
+          media.src = image.url;
+          link.appendChild(media);
+          imageGrid.appendChild(link);
+        });
+        wrap.appendChild(imageGrid);
       }
       var body = document.createElement('div');
       body.appendChild(Voice.renderMarkdownLite(text || ''));
@@ -1074,7 +1095,7 @@
           // Execute-mode replies are real completion summaries now (see
           // server.js buildVoicePrompt), not throwaway placeholders.
           addAssistantMessage(replyText, row.transcript, row.id, typingEl, row.agent,
-            row.notification_kind, !!row.notification_unread);
+            row.notification_kind, !!row.notification_unread, row.replyAttachments);
           if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
           if (shouldAutoplay) {
             // prepareSpeech has already placed the first MP3 part in memory,
@@ -1109,7 +1130,7 @@
       onUpdate: function (row) {
         if (row.notification_kind !== 'mail_alert') return;
         var existing = thread.querySelector('.pm-msg-assistant--mail-alert[data-msg-id="' + row.id + '"]');
-        addAssistantMessage(row.reply_text || '', null, row.id, existing, row.agent, row.notification_kind, !!row.notification_unread);
+        addAssistantMessage(row.reply_text || '', null, row.id, existing, row.agent, row.notification_kind, !!row.notification_unread, row.replyAttachments);
         if (existing) existing.remove();
         if (pastFirstTick && row.notification_unread && Voice.isActiveHere()) Voice.playPing();
         refreshAlertCount();

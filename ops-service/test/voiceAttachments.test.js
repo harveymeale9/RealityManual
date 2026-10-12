@@ -21,3 +21,15 @@ test('Project Manager accepts MP4 files without passing them as Codex images', f
     filePaths: ['/root/ops-service-data/voice-attachments/message-id/1.mp4']
   });
 });
+
+test('Project Manager keeps generated reply images separate and rejects unsafe filenames', function () {
+  const row = { reply_attachments_json: JSON.stringify([
+    { file: 'reply-0.png', mime: 'image/png', name: 'First mockup' },
+    { file: 'reply-1.webp', mime: 'image/webp', name: 'Second mockup' },
+    { file: '../reply-2.png', mime: 'image/png', name: 'Escape attempt' }
+  ]) };
+  assert.deepEqual(attachments.parseRecords(row, 8, 'reply_attachments_json'), [
+    { file: 'reply-0.png', mime: 'image/png', name: 'First mockup' },
+    { file: 'reply-1.webp', mime: 'image/webp', name: 'Second mockup' }
+  ]);
+});

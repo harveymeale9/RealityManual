@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const childProcess = require('node:child_process');
 const test = require('node:test');
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-codex-recovery-'));
@@ -42,6 +43,41 @@ test('recovers the final Codex reply and thread from a completed durable journal
   assert.equal(result.sessionId, 'thread_recovered_123');
   assert.match(activity.join('\n'), /reconnected/i);
   assert.match(activity.join('\n'), /completed/i);
+});
+
+test('recovers generated image metadata with the assistant reply', async function () {
+  const key = 'completed-images-234';
+  writeRun(key, [
+    { type: 'thread.started', thread_id: 'thread_images_234' },
+    { type: 'item.completed', item: { type: 'agent_message', text: 'Here are the mockups.' } }
+  ], 0);
+  fs.writeFileSync(path.join(scratch, key + '.images.tsv'), [
+    'reply-0.png\timage/png\tCinematic mockup.png',
+    'reply-1.webp\timage/webp\tEditorial mockup.webp',
+    '../escape.png\timage/png\tUnsafe.png'
+  ].join('\n') + '\n');
+
+  const result = await codexRunner.recoverCodexRun({ runKey: key, pollIntervalMs: 5 });
+  assert.deepEqual(result.replyAttachments, [
+    { file: 'reply-0.png', mime: 'image/png', name: 'Cinematic mockup.png' },
+    { file: 'reply-1.webp', mime: 'image/webp', name: 'Editorial mockup.webp' }
+  ]);
+});
+
+test('generated-image capture keeps the remote runner shell valid', function () {
+  const key = 'shell-images-345';
+  const paths = {
+    hostJournal: path.join(scratch, key + '.jsonl'),
+    hostStderr: path.join(scratch, key + '.stderr'),
+    hostExit: path.join(scratch, key + '.exit'),
+    hostImageMarker: path.join(scratch, key + '.image-marker'),
+    hostImageManifest: path.join(scratch, key + '.images.tsv')
+  };
+  const command = codexRunner.buildRemoteCommand('thread_shell_345', [], '/tmp/rm-codex-shell.pid', paths, key);
+  const syntax = childProcess.spawnSync('bash', ['-n', '-c', command], { encoding: 'utf8' });
+  assert.equal(syntax.status, 0, syntax.stderr);
+  assert.match(command, /reply-\$\{image_index\}/);
+  assert.match(command, /generated_images/);
 });
 
 test('waits for an inherited host run to finish after the service restart', async function () {

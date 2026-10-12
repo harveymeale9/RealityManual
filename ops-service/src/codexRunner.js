@@ -19,6 +19,8 @@ const HOST_BIN = process.env.CODEX_HOST_BIN || '/root/.local/bin/codex';
 const HOST_REPO = process.env.CODEX_HOST_REPO || '/srv/realitymanual-repo';
 const RUN_DIR = process.env.CODEX_RUN_DIR || '/data/codex-runs';
 const HOST_RUN_DIR = process.env.CODEX_HOST_RUN_DIR || '/root/ops-service-data/codex-runs';
+const HOST_GENERATED_IMAGES_DIR = process.env.CODEX_HOST_GENERATED_IMAGES_DIR || '/root/.codex/generated_images';
+const HOST_VOICE_ATTACHMENTS_DIR = process.env.CODEX_HOST_VOICE_ATTACHMENTS_DIR || '/root/ops-service-data/voice-attachments';
 // This is an inactivity watchdog, not a wall-clock turn limit. Long-running
 // implementation turns can legitimately exceed twenty minutes while still
 // emitting Codex events, so every stdout/stderr event rearms it.
@@ -86,9 +88,13 @@ function runPaths(runKey) {
     journal: path.join(RUN_DIR, runKey + '.jsonl'),
     stderr: path.join(RUN_DIR, runKey + '.stderr'),
     exit: path.join(RUN_DIR, runKey + '.exit'),
+    imageMarker: path.join(RUN_DIR, runKey + '.image-marker'),
+    imageManifest: path.join(RUN_DIR, runKey + '.images.tsv'),
     hostJournal: path.posix.join(HOST_RUN_DIR, runKey + '.jsonl'),
     hostStderr: path.posix.join(HOST_RUN_DIR, runKey + '.stderr'),
-    hostExit: path.posix.join(HOST_RUN_DIR, runKey + '.exit')
+    hostExit: path.posix.join(HOST_RUN_DIR, runKey + '.exit'),
+    hostImageMarker: path.posix.join(HOST_RUN_DIR, runKey + '.image-marker'),
+    hostImageManifest: path.posix.join(HOST_RUN_DIR, runKey + '.images.tsv')
   };
 }
 
@@ -114,17 +120,36 @@ function initializeRunFiles(paths) {
     fs.chmodSync(paths.stderr, 0o666);
   } catch (e) { /* best effort — see comment above */ }
   try { fs.rmSync(paths.exit, { force: true }); } catch (e) { /* best effort */ }
+  try { fs.rmSync(paths.imageMarker, { force: true }); } catch (e) { /* best effort */ }
+  try { fs.rmSync(paths.imageManifest, { force: true }); } catch (e) { /* best effort */ }
 }
 
 function cleanupRun(runKey) {
   const paths = runPaths(runKey);
   if (!paths) return;
-  [paths.journal, paths.stderr, paths.exit].forEach(function (file) {
+  [paths.journal, paths.stderr, paths.exit, paths.imageMarker, paths.imageManifest].forEach(function (file) {
     try { fs.rmSync(file, { force: true }); } catch (e) { /* best effort */ }
   });
 }
 
-function buildRemoteCommand(sessionId, imagePaths, pidFile, paths) {
+function parseReplyAttachmentManifest(filePath) {
+  try {
+    return fs.readFileSync(filePath, 'utf8').split('\n').map(function (line) {
+      const parts = line.split('\t');
+      if (parts.length < 3) return null;
+      const file = parts[0];
+      const mime = parts[1];
+      const name = parts.slice(2).join('\t').slice(0, 200);
+      if (!/^reply-[0-9]+\.(?:png|jpg|gif|webp)$/.test(file)) return null;
+      if (!/^image\/(?:png|jpeg|gif|webp)$/.test(mime)) return null;
+      return { file: file, mime: mime, name: name || file };
+    }).filter(Boolean).slice(0, 8);
+  } catch (e) {
+    return [];
+  }
+}
+
+function buildRemoteCommand(sessionId, imagePaths, pidFile, paths, runKey) {
   const args = [HOST_BIN, 'exec'];
   imagePaths = Array.isArray(imagePaths) ? imagePaths : [];
   if (sessionId) {
@@ -150,10 +175,27 @@ function buildRemoteCommand(sessionId, imagePaths, pidFile, paths) {
     // narrowed it, so the container's own non-root pre-touch in
     // initializeRunFiles() can never get locked out of it again.
     const hostRunDir = path.posix.dirname(paths.hostJournal);
-    command = 'mkdir -p ' + shellQuote(hostRunDir) + '; chmod 0777 ' + shellQuote(hostRunDir) + ' 2>/dev/null; ' + command;
+    command = 'mkdir -p ' + shellQuote(hostRunDir) + '; chmod 0777 ' + shellQuote(hostRunDir) + ' 2>/dev/null; ' +
+      'rm -f ' + shellQuote(paths.hostImageManifest) + '; touch ' + shellQuote(paths.hostImageMarker) + '; ' + command;
     command += ' 2> >(tee --output-error=warn-nopipe -a ' + shellQuote(paths.hostStderr) + ' >&2) | ' +
       'tee --output-error=warn-nopipe -a ' + shellQuote(paths.hostJournal) + '; ' +
-      'run_code=${PIPESTATUS[0]}; exit_tmp=' + shellQuote(paths.hostExit + '.tmp.$$') + '; ' +
+      'run_code=${PIPESTATUS[0]}; ' +
+      'image_dest=' + shellQuote(path.posix.join(HOST_VOICE_ATTACHMENTS_DIR, runKey)) + '; ' +
+      'image_manifest=' + shellQuote(paths.hostImageManifest) + '; image_index=0; ' +
+      'while IFS= read -r image_source && [ "$image_index" -lt 8 ]; do ' +
+      'case "${image_source##*.}" in ' +
+      'png|PNG) image_ext=png; image_mime=image/png;; ' +
+      'jpg|JPG|jpeg|JPEG) image_ext=jpg; image_mime=image/jpeg;; ' +
+      'gif|GIF) image_ext=gif; image_mime=image/gif;; ' +
+      'webp|WEBP) image_ext=webp; image_mime=image/webp;; ' +
+      '*) continue;; esac; ' +
+      'mkdir -p "$image_dest"; image_file="reply-${image_index}.${image_ext}"; ' +
+      'cp -- "$image_source" "$image_dest/$image_file"; ' +
+      'image_name=$(basename -- "$image_source"); ' +
+      'printf "%s\\t%s\\t%s\\n" "$image_file" "$image_mime" "$image_name" >> "$image_manifest"; ' +
+      'image_index=$((image_index+1)); ' +
+      'done < <(find ' + shellQuote(HOST_GENERATED_IMAGES_DIR) + ' -type f -newer ' + shellQuote(paths.hostImageMarker) + ' 2>/dev/null | sort); ' +
+      'exit_tmp=' + shellQuote(paths.hostExit + '.tmp.$$') + '; ' +
       'printf "%s\\n" "$run_code" > "$exit_tmp"; mv "$exit_tmp" ' + shellQuote(paths.hostExit) + '; exit "$run_code"';
   }
   const runScript = 'echo $$ > ' + shellQuote(pidFile) + '; ' +
@@ -191,7 +233,7 @@ function runCodex(opts) {
   return new Promise(function (resolve) {
     initializeRunFiles(paths);
     onActivity('\u25cf Starting Codex on the VPS');
-    const child = spawn('ssh', ['-o', 'LogLevel=ERROR', HOST, buildRemoteCommand(sessionId, imagePaths, pidFile, paths)], {
+    const child = spawn('ssh', ['-o', 'LogLevel=ERROR', HOST, buildRemoteCommand(sessionId, imagePaths, pidFile, paths, runKey)], {
       stdio: ['pipe', 'pipe', 'pipe']
     });
     let stdoutBuffer = '';
@@ -290,7 +332,7 @@ function runCodex(opts) {
       if (timeoutTriggered) return;
       consumeLines(true);
       if (code === 0 && finalText) {
-        finish({ ok: true, replyText: finalText, sessionId: threadId });
+        finish({ ok: true, replyText: finalText, sessionId: threadId, replyAttachments: paths ? parseReplyAttachmentManifest(paths.imageManifest) : [] });
         return;
       }
       const detail = streamError || shortText(stderr, 2000) || ('Codex exited with code ' + code);
@@ -361,7 +403,7 @@ function recoverCodexRun(opts) {
         try { code = parseInt(fs.readFileSync(paths.exit, 'utf8').trim(), 10); } catch (e) { /* failure result below */ }
         if (code === 0 && parsed.finalText) {
           onActivity('\u2713 Recovered Codex turn completed');
-          resolve({ ok: true, replyText: parsed.finalText, sessionId: parsed.threadId });
+          resolve({ ok: true, replyText: parsed.finalText, sessionId: parsed.threadId, replyAttachments: parseReplyAttachmentManifest(paths.imageManifest) });
           return;
         }
         let stderr = '';
@@ -387,5 +429,7 @@ module.exports = {
   runCodex: runCodex,
   recoverCodexRun: recoverCodexRun,
   hasRecoverableRun: hasRecoverableRun,
-  cleanupRun: cleanupRun
+  cleanupRun: cleanupRun,
+  parseReplyAttachmentManifest: parseReplyAttachmentManifest,
+  buildRemoteCommand: buildRemoteCommand
 };

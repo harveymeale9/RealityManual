@@ -229,6 +229,10 @@ try { db.exec('ALTER TABLE voice_messages ADD COLUMN source_ref TEXT'); } catch 
 // still show them after a reload (the old single upload was temporary and was
 // deleted as soon as the agent turn finished).
 try { db.exec('ALTER TABLE voice_messages ADD COLUMN attachments_json TEXT'); } catch (e) { /* already exists */ }
+// Generated images returned by Codex belong to the assistant half of the
+// same chat turn, not to Harvey's inbound attachments. Keeping them separate
+// lets both bubbles render their own durable media after reload.
+try { db.exec('ALTER TABLE voice_messages ADD COLUMN reply_attachments_json TEXT'); } catch (e) { /* already exists */ }
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_mail_alert_source ON voice_messages(source_ref) WHERE notification_kind='mail_alert' AND source_ref IS NOT NULL");
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_email_instruction_source ON voice_messages(source_ref) WHERE notification_kind='conversation' AND source_ref IS NOT NULL");
 // Older production databases have a legacy claude_session_id column. It is
@@ -260,6 +264,7 @@ const stmts = {
   setVoiceMessageStatus: db.prepare('UPDATE voice_messages SET status = ? WHERE id = ?'),
   setVoiceActivityLog: db.prepare('UPDATE voice_messages SET activity_log = ? WHERE id = ?'),
   setVoiceEarlyAck: db.prepare('UPDATE voice_messages SET early_ack = ? WHERE id = ?'),
+  setVoiceReplyAttachments: db.prepare('UPDATE voice_messages SET reply_attachments_json = ? WHERE id = ?'),
   finishVoiceMessage: db.prepare('UPDATE voice_messages SET status = ?, reply_text = ?, error_message = ?, completed_at = ? WHERE id = ?'),
   getVoiceMessage: db.prepare('SELECT * FROM voice_messages WHERE id = ?'),
   getVoiceMessageBySource: db.prepare("SELECT * FROM voice_messages WHERE notification_kind='conversation' AND source_ref=?"),
@@ -3294,6 +3299,9 @@ async function recoverAgentVoiceMessage(id) {
     stmts.upsertCodexSession.run(result.sessionId, now);
   }
   if (result.ok) {
+    if (result.replyAttachments && result.replyAttachments.length) {
+      stmts.setVoiceReplyAttachments.run(JSON.stringify(result.replyAttachments), id);
+    }
     stmts.finishVoiceMessage.run('done', (result.replyText || '').slice(0, 8000), null, now, id);
     agentUsage.invalidate();
   } else {
@@ -3409,6 +3417,9 @@ async function processVoiceMessage(id, mode, text, agent, imagePaths, attachment
     codexRunner.cleanupRun(id);
     console.error('voice ' + agent + ' run failed:', result.error);
     return;
+  }
+  if (result.replyAttachments && result.replyAttachments.length) {
+    stmts.setVoiceReplyAttachments.run(JSON.stringify(result.replyAttachments), id);
   }
   stmts.finishVoiceMessage.run('done', (result.replyText || '').slice(0, 8000), null, now, id);
   codexRunner.cleanupRun(id);
@@ -3566,7 +3577,15 @@ function hydrateVoiceMessageRow(row) {
       url: '/api/voice/messages/' + encodeURIComponent(row.id) + '/attachments/' + index
     };
   });
+  row.replyAttachments = voiceAttachments.parseRecords(row, 8, 'reply_attachments_json').map(function (item, index) {
+    return {
+      name: item.name,
+      mime: item.mime,
+      url: '/api/voice/messages/' + encodeURIComponent(row.id) + '/reply-attachments/' + index
+    };
+  });
   delete row.attachments_json;
+  delete row.reply_attachments_json;
   // reply_to_snippet: resolved server-side (rather than left for the client
   // to cross-reference against whatever it happens to already have loaded)
   // so the quoted preview renders correctly even after a page reload, on a
@@ -3596,6 +3615,22 @@ app.get('/api/voice/messages/:id/attachments/:index', function (req, res) {
   const row = stmts.getVoiceMessage.get(req.params.id);
   const index = Number(req.params.index);
   const attachments = voiceAttachmentRecords(row);
+  if (!row || !Number.isInteger(index) || index < 0 || index >= attachments.length) {
+    return res.status(404).json({ error: 'not_found' });
+  }
+  const attachment = attachments[index];
+  const filePath = path.join(VOICE_ATTACHMENTS_DIR, row.id, attachment.file);
+  res.type(attachment.mime || 'application/octet-stream');
+  res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+  res.sendFile(filePath, function (error) {
+    if (error && !res.headersSent) res.status(error.statusCode || 404).json({ error: 'not_found' });
+  });
+});
+
+app.get('/api/voice/messages/:id/reply-attachments/:index', function (req, res) {
+  const row = stmts.getVoiceMessage.get(req.params.id);
+  const index = Number(req.params.index);
+  const attachments = voiceAttachments.parseRecords(row, 8, 'reply_attachments_json');
   if (!row || !Number.isInteger(index) || index < 0 || index >= attachments.length) {
     return res.status(404).json({ error: 'not_found' });
   }

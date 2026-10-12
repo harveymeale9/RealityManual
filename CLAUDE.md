@@ -16951,3 +16951,28 @@ the visible Send button is the only way to submit typed text. This prevents an
 unfinished multiline instruction from being sent accidentally. The same rule
 applies to both the desktop control panel and the dedicated mobile Project
 Manager view. Voice recording flows are unchanged.
+
+---
+
+# 511. Generated Images Are Durable Assistant Chat Attachments (2026-10-12)
+
+Project Manager previously persisted and rendered only Harvey's inbound image
+attachments. Codex image-generation results existed on the VPS, but the runner
+discarded that media layer and saved only the final reply text, so claims such
+as “the four mockups above” produced an empty assistant bubble on both desktop
+and mobile.
+
+The durable Codex runner now marks the beginning of each turn, collects up to
+eight newly generated PNG/JPEG/GIF/WebP files when the turn finishes, copies
+them into that message's existing `voice-attachments/<message-id>` directory,
+and writes a small manifest alongside the restart-safe run journal. Both normal
+completion and post-restart recovery return this manifest. The server stores it
+in a separate `reply_attachments_json` column, exposes authenticated immutable
+media routes, and hydrates each chat row with `replyAttachments`; inbound and
+assistant media therefore cannot be confused.
+
+Desktop and mobile assistant bubbles render those images at a useful responsive
+size, with each image opening full-resolution in a new tab when tapped. The
+four already-generated Reality Manual landing-page mockups from the original
+request were backfilled onto their historical reply so they become visible
+after reloading the existing conversation rather than requiring regeneration.
