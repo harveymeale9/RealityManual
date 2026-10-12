@@ -45,6 +45,7 @@ const productionAudioPreviewService = require('./src/productionAudioPreviews');
 const editorRetakeAnalysis = require('./src/editorRetakeAnalysis');
 const editorTranscriptSampling = require('./src/editorTranscriptSampling');
 const r2StorageService = require('./src/r2Storage');
+const rangeResponse = require('./src/rangeResponse');
 const kanbanBackupService = require('./src/kanbanBackupService');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
@@ -1797,8 +1798,7 @@ app.get('/api/files/:storeName/:id', async function (req, res) {
   }
   const row = stmts.getOne.get(storeName, id);
   const meta = row ? JSON.parse(row.data) : {};
-  res.setHeader('Content-Type', meta.mimeType || 'application/octet-stream');
-  fs.createReadStream(filePath).pipe(res);
+  rangeResponse.sendFile(req, res, filePath, meta.mimeType || 'application/octet-stream');
 });
 
 // --- Uploader tool: transcribe a freshly-uploaded video, match it to the

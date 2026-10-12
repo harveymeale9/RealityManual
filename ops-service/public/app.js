@@ -3704,7 +3704,6 @@
     '</div>';
 
   var dropzone, fileInput, uploadRows;
-  var uploadRowObjectUrls = {}; // pieceId -> object URL, revoked/rebuilt on each render pass
   // pieceId -> { trackId: mixed-audio object URL }. Production fills these
   // asynchronously from the server's persistent preview cache so every row
   // is ready for rapid soundtrack comparisons without blocking Editor.
@@ -3979,10 +3978,13 @@
     frameSection.className = 'upload-row-section upload-row-frame';
     var videoShell = document.createElement('div');
     videoShell.className = 'upload-row-video-shell' + (p.videoIsVertical ? ' is-vertical' : '');
+    if (p.thumbnailDataUrl) videoShell.classList.add('has-poster');
     var videoEl = document.createElement('video');
     videoEl.className = 'upload-row-video' + (p.videoIsVertical ? ' is-vertical' : '');
     videoEl.playsInline = true;
     videoEl.muted = true;
+    videoEl.preload = 'metadata';
+    if (p.thumbnailDataUrl) videoEl.poster = p.thumbnailDataUrl;
     var videoReady = videoEl.readyState >= 2;
     var frameLoader = document.createElement('div');
     frameLoader.className = 'upload-row-frame-loader';
@@ -4109,16 +4111,11 @@
       frameLoader.innerHTML = '<span>Video preview could not load.</span>';
       setFrameControlsReady(false);
     });
-    Store.get('videos', p.id).then(function (v) {
-      if (!v || !v.blob) {
-        frameLoader.innerHTML = '<span>Video preview is unavailable.</span>';
-        return;
-      }
-      if (uploadRowObjectUrls[p.id]) URL.revokeObjectURL(uploadRowObjectUrls[p.id]);
-      var url = URL.createObjectURL(v.blob);
-      uploadRowObjectUrls[p.id] = url;
-      videoEl.src = url;
-    });
+    // Stream the source directly with HTTP byte ranges. The old Store.get()
+    // path first downloaded the entire file into a Blob — disastrous for a
+    // multi-GB recording when Production only needs enough bytes to decode a
+    // frame. The saved poster is visible while the first media range arrives.
+    videoEl.src = '/api/files/videos/' + encodeURIComponent(p.id);
 
     // --- Audio dropdown
     var audioSection = document.createElement('div');
@@ -4427,7 +4424,6 @@
     if (typeof row._cancelAudioPreviews === 'function') row._cancelAudioPreviews();
     row.classList.add('upload-row-removing');
     setTimeout(function () {
-      if (uploadRowObjectUrls[id]) { URL.revokeObjectURL(uploadRowObjectUrls[id]); delete uploadRowObjectUrls[id]; }
       if (uploadRowPreviewUrls[id]) {
         Object.keys(uploadRowPreviewUrls[id]).forEach(function (trackId) { URL.revokeObjectURL(uploadRowPreviewUrls[id][trackId]); });
         delete uploadRowPreviewUrls[id];
@@ -4462,9 +4458,7 @@
       Array.from(uploadRows.querySelectorAll('.upload-row')).forEach(function (row) {
         if (typeof row._cancelAudioPreviews === 'function') row._cancelAudioPreviews();
       });
-      var oldObjectUrls = uploadRowObjectUrls;
       var oldPreviewUrls = uploadRowPreviewUrls;
-      uploadRowObjectUrls = {};
       uploadRowPreviewUrls = {};
       var frag = document.createDocumentFragment();
       if (!inProgress.length) {
@@ -4477,7 +4471,6 @@
       }
       uploadRows.innerHTML = '';
       uploadRows.appendChild(frag);
-      Object.keys(oldObjectUrls).forEach(function (id) { URL.revokeObjectURL(oldObjectUrls[id]); });
       Object.keys(oldPreviewUrls).forEach(function (id) {
         Object.keys(oldPreviewUrls[id]).forEach(function (trackId) { URL.revokeObjectURL(oldPreviewUrls[id][trackId]); });
       });

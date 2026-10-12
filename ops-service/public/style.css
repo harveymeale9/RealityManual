@@ -1956,6 +1956,8 @@ body.role-reviewer #pmBackFab {
 .upload-row-frame-loader { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; background: var(--surface-2); color: var(--ink-faint); font-size: .72rem; }
 .upload-row-frame-loader .spinner { width: 22px; height: 22px; }
 .upload-row-video-shell.is-loading .upload-row-video { visibility: hidden; }
+.upload-row-video-shell.is-loading.has-poster .upload-row-video { visibility: visible; }
+.upload-row-video-shell.has-poster .upload-row-frame-loader { background: rgba(3, 15, 10, 0.58); }
 .upload-row-video-preview-controls { display: flex; align-items: center; gap: 9px; margin-top: 8px; }
 .upload-row-video-preview { min-width: 118px; white-space: nowrap; }
 .upload-row-video-preview-controls span { font-size: .68rem; line-height: 1.25; color: var(--ink-faint); }

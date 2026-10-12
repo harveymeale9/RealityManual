@@ -17944,3 +17944,24 @@ their repeated star rows. It now keeps only the large featured quote and its
 single five-star line above the checkout button. The removed grid's desktop
 dividers and mobile typography rules were deleted, and the button receives its
 own responsive top spacing so the simplified section remains balanced.
+
+---
+
+# 560. Production Frames Stream Video Ranges Instead of Full Files (2026-10-12)
+
+Production's frame picker no longer calls `Store.get('videos', id)`. That data
+helper hydrates file-backed records by downloading the complete file into a
+browser Blob before assigning a video source, so showing one frame of a large
+recording could transfer hundreds of megabytes or several gigabytes first.
+
+Authenticated `/api/files` responses now implement standard single-byte-range
+delivery (`Accept-Ranges`, `206`, `Content-Range`, bounded/open/suffix ranges,
+and `416` for invalid requests). Production points each video element directly
+at that endpoint with metadata preloading, allowing the browser to request only
+the chunks required for metadata and the current frame. When a saved thumbnail
+exists it is used as the poster immediately and remains visible through a light
+loading overlay until the decoded frame is ready. Thumbnail scrubbing, capture,
+synchronized soundtrack preview, and reviewer access rules are unchanged.
+
+Focused tests cover valid and invalid range parsing. The complete 188-test
+ops-service suite passes.
