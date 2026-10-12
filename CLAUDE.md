@@ -17236,3 +17236,10 @@ automation-only recordings untouched. The list summary exposes only the
 derived boolean, not its internal evidence. Editor script and stylesheet cache
 keys were advanced. Regression coverage verifies untouched automatic state and
 every accepted manual-review signal; the full 175-test suite passes.
+
+Live verification used a 390px-wide Chromium session against the deployed
+Editor. Before interaction it showed exactly two started and seven untouched
+recordings, with orientation and work-state labels present on all nine cards.
+Opening the synthetic `Horizontal layout test` recording changed its icon to
+started, and that state survived a full page reload (leaving three started and
+six untouched in the live list).
