@@ -17665,3 +17665,21 @@ the original homepage closing CTA is unchanged. Headless Chromium verified the
 replacement content, review count, checkout link, assurance count, and absence
 of horizontal overflow at desktop and mobile widths; both renders were also
 visually inspected. The `/home2` stylesheet cache key was advanced.
+
+---
+
+# 545. Horizontal Editor Preview Uses the Full Workspace Width (2026-10-12)
+
+The Editor's horizontal preview no longer caps itself at 1,049px or derives its
+width from the viewport height. Those constraints left symmetrical black
+gutters on wide workspaces even though the 16:9 video itself was valid. A
+horizontal frame now occupies the complete available workspace width and lets
+its native 16:9 aspect ratio determine the required height.
+
+The video remains `object-fit: contain`, so this removes only the surrounding
+Editor gutters; it does not crop, stretch, or otherwise alter the actual edit.
+The same full-width rule applies on mobile, while the existing constrained
+portrait layout is unchanged. Headless Chromium verified that horizontal frame
+and workspace widths match at desktop and mobile sizes, the video remains
+16:9, portrait sizing is unaffected, and neither layout introduces horizontal
+page overflow. The shared stylesheet cache key was advanced.
