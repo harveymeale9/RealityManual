@@ -3080,19 +3080,11 @@
     return !!(cache && cache.connected);
   }
 
-  // "Schedule Video" — a single action covering every platform a piece is
-  // tagged for. Always shown on a Final Check card (every card here has a
-  // real video), rather than gated to one specific platform, since the
-  // whole point is it's not platform-specific. Whichever tagged platforms
-  // are actually wired get a real, immediate publish on click — no
-  // scheduled-time delay, per Harvey's own "for this test we can publish
-  // immediately" — and any tagged platform that isn't wired yet is called
-  // out honestly rather than silently ignored. Known limitation, not
-  // built: a piece tagged for *both* wired platforms at once fires both
-  // publishes concurrently with no coordination between the two
-  // background jobs writing to the same piece record (see the matching
-  // comment on runTiktokPublish in server.js) — fine for Harvey's actual
-  // test plan (one platform per piece), not fine if that ever changes.
+  // "Schedule Video" is the single action covering every wired platform a
+  // piece is tagged for. The backend owns release timing, topic separation,
+  // and visibility. Final Check therefore offers no misleading per-card
+  // privacy choice: Harvey's YouTube releases are always Public, while the
+  // separately restricted reviewer account remains Private server-side.
   function fcScheduleVideoHtml(id, piece) {
     // A reviewer session can only ever schedule a piece it made itself —
     // server.js enforces this too (real 403 on the publish routes), this
@@ -3131,20 +3123,8 @@
     var disabledAttr = disconnected.length
       ? ' disabled title="Connect ' + disconnected.map(function (p) { return PUBLISH_PLATFORM_LABELS[p] || p; }).join(' / ') + ' in Content Settings first"'
       : '';
-    // The privacy select only ever affects YouTube — TikTok is forced to
-    // SELF_ONLY (private) regardless while unaudited/sandboxed, so there's
-    // no real choice to offer for it yet.
-    var privacySelectHtml = (wired.indexOf('ytlong') !== -1 || wired.indexOf('ytshort') !== -1)
-      ? '' +
-        '<select class="fc-yt-privacy" data-id="' + id + '" title="YouTube visibility">' +
-          '<option value="private"' + (IS_REVIEWER ? ' selected' : '') + '>Private</option>' +
-          '<option value="unlisted">Unlisted</option>' +
-          '<option value="public"' + (IS_REVIEWER ? '' : ' selected') + '>Public</option>' +
-        '</select>'
-      : '';
     return '' +
       '<div class="fc-yt-publish">' +
-        privacySelectHtml +
         '<button type="button" class="btn-secondary fc-yt-publish-btn" data-id="' + id + '"' + disabledAttr + '>' +
           (erroredPlatforms.length ? 'Retry' : 'Schedule Video') +
         '</button>' +
@@ -3392,16 +3372,11 @@
         if (!p || btn.disabled || !canEditPiece(p)) return;
         var platforms = (p.platforms || []).filter(function (pl) { return effectiveWiredPlatforms().indexOf(pl) !== -1; });
         if (!platforms.length) return;
-        var wrap = btn.closest('.fc-yt-publish');
-        var select = wrap ? wrap.querySelector('.fc-yt-privacy') : null;
-        var privacyStatus = select ? select.value : 'private';
-
         var captions = boardSettingsCache ? captionsForPiece(boardSettingsCache, p) : [];
         var title = (p.ytTitles && p.ytTitles[0]) || p.title || 'Untitled';
 
         btn.disabled = true;
         btn.textContent = 'Publishing…';
-        if (select) select.disabled = true;
         var unpublishedPlatforms = platforms.filter(function (platform) { return p[publishStatusFieldFor(platform)] !== 'done'; });
         unpublishedPlatforms.forEach(function (platform) { p[publishStatusFieldFor(platform)] = 'pending'; });
         pieces[id] = p;
@@ -3409,7 +3384,7 @@
         var destinations = unpublishedPlatforms.map(function (platform) {
           var captionEntry = captions.filter(function (c) { return c.key === platform; })[0];
           var caption = (captionEntry && !captionEntry.empty) ? captionEntry.text : '';
-          return { platform: platform, title: title, caption: caption, privacyStatus: privacyStatus };
+          return { platform: platform, title: title, caption: caption };
         });
         fetch('/api/publish/' + encodeURIComponent(id), {
           method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },

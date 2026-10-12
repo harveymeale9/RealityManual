@@ -40,6 +40,7 @@ const metaAuth = require('./src/metaAuth');
 const metaPublisherService = require('./src/metaPublisher');
 const shortformSchedule = require('./src/shortformSchedule');
 const topicSchedule = require('./src/topicSchedule');
+const publishPolicy = require('./src/publishPolicy');
 const videoEditorService = require('./src/videoEditorService');
 const productionAudioPreviewService = require('./src/productionAudioPreviews');
 const editorRetakeAnalysis = require('./src/editorRetakeAnalysis');
@@ -2571,7 +2572,7 @@ app.post('/api/youtube/publish/:id', requireAuthOrReviewer, function (req, res) 
   const opts = {
     title: typeof body.title === 'string' ? body.title : '',
     description: typeof body.description === 'string' ? body.description : '',
-    privacyStatus: typeof body.privacyStatus === 'string' ? body.privacyStatus : 'private'
+    privacyStatus: publishPolicy.youtubePrivacyStatus(req.sessionRole)
   };
   res.json({ ok: true, status: 'running' });
   runYoutubePublish(id, opts).catch(function (e) { console.error('unhandled youtube publish error for ' + id + ':', e.message); });
@@ -3076,7 +3077,9 @@ app.post('/api/publish/:id', requireAuthOrReviewer, async function (req, res) {
       platform: String(destination && destination.platform || ''),
       title: String(destination && destination.title || '').slice(0, 255),
       caption: String(destination && destination.caption || '').slice(0, 60000),
-      privacyStatus: ['private', 'unlisted', 'public'].includes(destination && destination.privacyStatus) ? destination.privacyStatus : 'private'
+      // Visibility is policy-owned, not client-owned. A stale or hand-written
+      // request cannot silently turn one of Harvey's releases private.
+      privacyStatus: publishPolicy.youtubePrivacyStatus(req.sessionRole)
     };
   }).filter(function (destination) {
     return PUBLISH_PLATFORMS.includes(destination.platform) && selected.includes(destination.platform) &&

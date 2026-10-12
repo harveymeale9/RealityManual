@@ -18244,3 +18244,31 @@ automatic.
 The promoted root page and `/home2/` alias both received the new stylesheet
 cache key. The card dimensions, captions, order, background, and source images
 are unchanged.
+
+---
+
+# 576. Final Check Scheduling Has One Public Release Action (2026-10-12)
+
+Final Check no longer shows a Private / Unlisted / Public dropdown beside
+**Schedule Video**. Harvey's real release workflow has one policy: scheduled
+YouTube uploads are Public. The browser also stopped sending a visibility value,
+and the coordinated publish endpoint now assigns Public server-side, so a stale
+tab or hand-written request cannot silently make a real release private. The
+older direct YouTube endpoint follows the same rule.
+
+The deliberately restricted `youtube-reviewer` compliance account remains
+Private server-side. That account is external sandbox access and must not be
+able to create a public release; it never receives a visibility control either.
+
+This change does not schedule any existing Final Check video. The current
+scheduler still begins from the next available release after the moment Harvey
+presses **Schedule Video**: short-form uses Buffer's Bangkok calendar, longform
+uses the three-day Bangkok rhythm, and the topic-aware optimizer evaluates open
+future slots against scheduled/recently live transcripts across all formats.
+There is not yet a campaign-level start-date gate or a batch staging action, so
+those should be added before treating a set of approvals as one campaign launch.
+
+Regression coverage checks that the Final Check source contains no visibility
+selector or client-owned privacy payload, that Harvey's server policy is Public,
+and that the reviewer policy remains Private. The complete ops-service suite
+passes (191 tests), and both changed JavaScript entry points pass syntax checks.
