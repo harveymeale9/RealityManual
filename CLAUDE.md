@@ -17996,3 +17996,24 @@ supervision visible and makes a stale service distinguishable from a merely
 long command.
 
 The complete 188-test ops-service suite passes.
+
+---
+
+# 562. Final Check Titles Are Directly Editable (2026-10-12)
+
+Final Check now renders its publish-authoritative title slots as inline text
+inputs instead of fixed labels. Short-form cards expose their single title;
+long-form cards retain all three title-option slots. Edits update the in-memory
+value used by the card's Schedule Video action immediately, set the existing
+manual-title ownership marker so late analysis cannot overwrite them, and
+autosave after 450ms or immediately on blur/Enter.
+
+The fields use the normal serialized, version-checked piece write path and
+retain a synchronous local recovery draft until the server confirms the save.
+Each card reports Saving, Saved, or Not saved without re-rendering the card or
+resetting video playback. Reviewer-owned edit restrictions remain unchanged.
+
+A live Chromium check edited the real `Subconscious mind short` Final Check
+field, observed the Saving-to-Saved transition, and fetched the authoritative
+piece record to confirm the same title and manual-ownership marker persisted.
+The complete 188-test ops-service suite passes.

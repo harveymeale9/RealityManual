@@ -2956,22 +2956,22 @@
 
   function finalCheckCardHtml(id, piece) {
     var titles = piece.ytTitles || [];
-    // "Title 1: x" / "Title 2: y" plain lines, not a numbered list, sized
-    // to match the main-title heading this replaced (Harvey: "remove
-    // bottom one [the #094 — <title> heading, redundant with Title 1],
-    // make these a bit larger, same size as [that removed heading]").
-    // A shortform piece only ever has one title slot now (§131 — no
-    // rotation/testing for a short, so Content Production only collects
-    // one), so numbering it "Title 1:" implied a second option that
-    // doesn't exist — just "Title:" when there's exactly one (Harvey,
-    // 2026-09-20). Longform still numbers, since it genuinely can have
-    // up to 3.
-    var titlesHtml = titles.length
-      ? '<div class="fc-titles">' + titles.map(function (t, i) {
-          var label = titles.length === 1 ? 'Title' : ('Title ' + (i + 1));
-          return '<div class="fc-title-line"><strong>' + label + ':</strong> ' + escapeHtml(t) + '</div>';
-        }).join('') + '</div>'
-      : '<div class="fc-titles-empty">No title options set.</div>';
+    // Final Check is the last safe place to catch a weak/incorrect title,
+    // so these are real autosaving inputs rather than read-only lines. A
+    // short still gets one slot; longform retains its three genuine title
+    // options. The first saved value remains the publish-authoritative title
+    // used by fc-yt-publish-btn below.
+    var titleSlotCount = piece.contentType === 'longform' ? 3 : 1;
+    var titleIndexes = [];
+    for (var titleIndex = 0; titleIndex < titleSlotCount; titleIndex++) titleIndexes.push(titleIndex);
+    var titlesHtml = '<div class="fc-titles" data-id="' + id + '">' + titleIndexes.map(function (i) {
+      var label = titleSlotCount === 1 ? 'Title' : ('Title ' + (i + 1));
+      var placeholder = titleSlotCount === 1 ? 'Add title' : ('Title option ' + (i + 1) + (i ? ' (optional)' : ''));
+      return '<label class="fc-title-line"><strong>' + label + ':</strong>' +
+        '<input type="text" class="fc-title-input" data-id="' + id + '" data-index="' + i + '" maxlength="100"' +
+          ' value="' + escapeHtml(titles[i] || '') + '" placeholder="' + placeholder + '"' +
+          (canEditPiece(piece) ? '' : ' disabled') + ' /></label>';
+    }).join('') + '<span class="fc-title-save" aria-live="polite"></span></div>';
     // A piece never reaches this stage without its final (audio-spliced)
     // video already having been built — server.js's runBuildFinalVideo
     // only flips the stage to final_check once that's genuinely done —
@@ -3322,6 +3322,59 @@
       v.addEventListener('play', syncPlayState);
       v.addEventListener('pause', syncPlayState);
       syncPlayState();
+    });
+    // Final Check title edits persist without re-rendering the card (which
+    // would reset video playback). Input updates the in-memory publish value
+    // immediately; a short debounce writes through the normal version-checked
+    // piece API and keeps a synchronous local recovery draft until confirmed.
+    board.querySelectorAll('.fc-titles').forEach(function (titlesWrap) {
+      var id = titlesWrap.dataset.id;
+      var p = pieces[id];
+      if (!p || !canEditPiece(p)) return;
+      var inputs = Array.prototype.slice.call(titlesWrap.querySelectorAll('.fc-title-input'));
+      var saveState = titlesWrap.querySelector('.fc-title-save');
+      var saveTimer = null;
+
+      function copyInputsToPiece() {
+        var values = inputs.map(function (input) { return input.value.trim(); }).filter(Boolean);
+        p.ytTitles = values;
+        p.ytTitlesManuallyEdited = true;
+        p.title = values[0] || '';
+        p.updatedAt = nowIso();
+        syncTags(p);
+        return storePieceDraftSnapshot(p);
+      }
+
+      function saveTitles() {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+        var draftRevision = copyInputsToPiece();
+        saveState.textContent = 'Saving…';
+        Store.put('pieces', p).then(function () {
+          clearPieceDraftSnapshot(id, draftRevision);
+          saveState.textContent = 'Saved';
+          clearTimeout(saveState._clearTimer);
+          saveState._clearTimer = setTimeout(function () { saveState.textContent = ''; }, 1800);
+        }).catch(function (error) {
+          saveState.textContent = 'Not saved';
+          if (!error || error.code !== 'stale_write') showPieceConflict('That title could not be saved yet. Your local recovery copy has been kept.');
+        });
+      }
+
+      inputs.forEach(function (input) {
+        input.addEventListener('input', function () {
+          copyInputsToPiece();
+          saveState.textContent = 'Saving…';
+          clearTimeout(saveTimer);
+          saveTimer = setTimeout(saveTitles, 450);
+        });
+        input.addEventListener('blur', function () {
+          if (saveTimer) saveTitles();
+        });
+        input.addEventListener('keydown', function (event) {
+          if (event.key === 'Enter') { event.preventDefault(); input.blur(); }
+        });
+      });
     });
     // One coordinated backend job publishes every wired/tagged platform and
     // switches this one card into a
