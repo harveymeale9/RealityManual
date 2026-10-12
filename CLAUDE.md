@@ -17111,3 +17111,24 @@ its displayed end while a black overlay progressively reproduces the final
 outro fade. Internal silence cuts still jump forward as before, the original
 master is unchanged, and completed final renders continue to show their own
 baked two-second fade. The Editor script cache key was advanced.
+
+---
+
+# 520. Confirmed Page Changes Blink Through Black (2026-10-12)
+
+Every visually confirmed page change now uses a quick dip-to-black transition:
+the outgoing page fades to black over 140ms immediately before the removed
+page-turn interval, and the incoming page fades back from black over 140ms.
+This gives each page reveal the requested blink without extending the edit or
+altering its audio timing.
+
+The rule is deliberately attached to the existing persisted visual page-change
+allowlist. Ordinary shortened pauses, spoken hesitations, manual transcript
+cuts, inserted-clip boundaries, and unconfirmed long silences remain hard cuts;
+only a source jump whose before/after frames passed the SSIM page-change check
+receives the blink. The lightweight browser preview reproduces the same timing
+with its black overlay, while final FFmpeg renders bake the fades into the two
+adjacent source segments. Render format version 18 invalidates active older
+renders. Regression coverage proves boundary selection and performs a real
+white-page to black to blue-page FFmpeg render. The complete 172-test suite
+passes, and the Editor script cache key was advanced.

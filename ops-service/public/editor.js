@@ -36,6 +36,7 @@
   var uploadStatusPercent = 0;
   var MAX_RECORDING_BYTES = Math.floor(4.5 * 1024 * 1024 * 1024);
   var RESTING_CAMERA_SCALE = 1.25;
+  var PAGE_CHANGE_FADE_SECONDS = 0.14;
   var listFilter = localStorage.getItem('rmEditorListFilter') === 'sent' ? 'sent' : 'active';
   var reviewRate = Number(localStorage.getItem('rmEditorReviewRate')) || 1;
   if ([1, 1.25, 1.5, 2].indexOf(reviewRate) === -1) reviewRate = 1;
@@ -1593,6 +1594,30 @@
       var offsetY = height * (1 - openingScale) * (horizontalBookFrame ? 0.34 : 0.5);
       video.style.transform = openingScale > 1.0001 ? 'matrix(' + openingScale.toFixed(5) + ',0,0,' + openingScale.toFixed(5) + ',' + offsetX.toFixed(3) + ',' + offsetY.toFixed(3) + ')' : '';
       video.style.transformOrigin = '0 0';
+      var overlayOpacity = 0;
+      if (previewingWorkingEdit) {
+        var confirmedPageChanges = new Set((project.pageChangeCutIds || []).map(String));
+        (project.cuts || []).forEach(function (cut) {
+          if (!confirmedPageChanges.has(String(cut.id))) return;
+          if (sourcePlayheadTime >= cut.start - PAGE_CHANGE_FADE_SECONDS && sourcePlayheadTime < cut.start) {
+            overlayOpacity = Math.max(overlayOpacity,
+              (sourcePlayheadTime - (cut.start - PAGE_CHANGE_FADE_SECONDS)) / PAGE_CHANGE_FADE_SECONDS);
+          } else if (sourcePlayheadTime >= cut.start && sourcePlayheadTime <= cut.end) {
+            overlayOpacity = 1;
+          } else if (sourcePlayheadTime > cut.end && sourcePlayheadTime <= cut.end + PAGE_CHANGE_FADE_SECONDS) {
+            overlayOpacity = Math.max(overlayOpacity,
+              1 - (sourcePlayheadTime - cut.end) / PAGE_CHANGE_FADE_SECONDS);
+          }
+        });
+        var trailingCut = (project.cuts || []).filter(function (cut) {
+          return cut.end >= video.duration - 0.02;
+        })[0];
+        if (trailingCut && sourcePlayheadTime >= trailingCut.start) {
+          overlayOpacity = Math.max(overlayOpacity, Math.max(0, Math.min(1,
+            (sourcePlayheadTime - trailingCut.start) / Math.max(0.01, trailingCut.end - trailingCut.start))));
+        }
+      }
+      if (previewOutro) previewOutro.style.opacity = Math.max(0, Math.min(1, overlayOpacity)).toFixed(3);
     }
     function animatePreviewMotion() {
       if (!video.isConnected || !project || project.id !== videoProjectId) {
@@ -1678,7 +1703,6 @@
         playhead.style.left = Math.min(100, sourcePlayheadTime / project.duration * 100) + '%';
       }
       if (previewingFinal || previewingOriginalMaster) {
-        if (previewOutro) previewOutro.style.opacity = '0';
         caption.classList.remove('visible');
         return;
       }
@@ -1691,13 +1715,9 @@
           // black. Keep the lightweight source preview moving through its
           // remaining tail while reproducing that fade, instead of freezing
           // the player just before its displayed end time.
-          var outroProgress = Math.max(0, Math.min(1,
-            (video.currentTime - trailingCut.start) / Math.max(0.01, trailingCut.end - trailingCut.start)));
-          if (previewOutro) previewOutro.style.opacity = outroProgress.toFixed(3);
           caption.classList.remove('visible');
           return;
         }
-        if (previewOutro) previewOutro.style.opacity = '0';
         var cut = (project.cuts || []).filter(function (item) { return video.currentTime >= item.start && video.currentTime < item.end; })[0];
         if (cut && cut.end < video.duration - 0.02) { video.currentTime = cut.end + 0.01; return; }
       }

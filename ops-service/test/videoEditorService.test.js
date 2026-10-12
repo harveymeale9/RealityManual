@@ -489,6 +489,17 @@ test('only genuine source jumps receive tiny audio boundary fades', function () 
   assert.deepEqual(editor.segmentAudioFades(segments, 3, 10), { fadeIn: false, fadeOut: false });
 });
 
+test('only visually confirmed page changes fade out and back from black', function () {
+  const cuts = [
+    { id: 'page', start: 2, end: 6, reason: 'long_pause' },
+    { id: 'hesitation', start: 8, end: 10, reason: 'long_pause' }
+  ];
+  assert.deepEqual(editor.pageChangeFadesForSegment({ type: 'source', start: 0, end: 2 }, cuts, ['page']), { fadeIn: false, fadeOut: true });
+  assert.deepEqual(editor.pageChangeFadesForSegment({ type: 'source', start: 6, end: 8 }, cuts, ['page']), { fadeIn: true, fadeOut: false });
+  assert.deepEqual(editor.pageChangeFadesForSegment({ type: 'source', start: 10, end: 12 }, cuts, ['page']), { fadeIn: false, fadeOut: false });
+  assert.deepEqual(editor.pageChangeFadesForSegment({ type: 'insert', start: 0, end: 2 }, cuts, ['page']), { fadeIn: false, fadeOut: false });
+});
+
 test('caption groups omit deleted words and carry raw and edited timing', function () {
   const project = { words: words, removedWordIndices: [2, 3] };
   const cuts = [{ start: 1.8, end: 4.95 }];
@@ -642,7 +653,7 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.equal(stored.renderQuality.status, 'passed');
-  assert.equal(stored.renderVersion, 17);
+  assert.equal(stored.renderVersion, 18);
   assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), true);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
@@ -674,7 +685,7 @@ test('final render splices an inserted clip and its caption timeline between sou
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.ok(stored.editedDuration > 3.9 && stored.editedDuration < 4.1);
-  assert.equal(stored.renderVersion, 17);
+  assert.equal(stored.renderVersion, 18);
   assert.equal(stored.renderQuality.contentDuration, 2);
   assert.equal(stored.renderQuality.outroSeconds, 2);
   assert.ok(stored.renderQuality.insertedClipLoudness.clips[0].gainDb > 18);
@@ -704,6 +715,52 @@ test('final render splices an inserted clip and its caption timeline between sou
   assert.ok(nearEnd.every(function (channel) { return channel < 30; }),
     'the held final frame fades fully to black: ' + JSON.stringify(nearEnd));
   assert.match(fs.readFileSync(path.join(projectDir, 'captions.ass'), 'utf8'), /External/);
+  t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+});
+
+test('final render blinks through black across a visually confirmed page change', { timeout: 45000 }, async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-page-blink-'));
+  const projectDir = path.join(dir, 'editor', 'page-blink-1'); fs.mkdirSync(projectDir, { recursive: true });
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y',
+    '-f', 'lavfi', '-i', 'color=c=white:s=320x180:d=1.1:r=30000/1001',
+    '-f', 'lavfi', '-i', 'color=c=black:s=320x180:d=3.8:r=30000/1001',
+    '-f', 'lavfi', '-i', 'color=c=blue:s=320x180:d=1.1:r=30000/1001',
+    '-f', 'lavfi', '-i', 'sine=frequency=440:duration=6',
+    '-filter_complex', '[0:v][1:v][2:v]concat=n=3:v=1:a=0[v]', '-map', '[v]', '-map', '3:a',
+    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-f', 'mp4', path.join(projectDir, 'source')]);
+  const db = new Database(path.join(dir, 'test.sqlite'));
+  db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
+  const now = new Date().toISOString();
+  db.prepare('INSERT INTO records VALUES (?, ?, ?, ?)').run('editorProjects', 'page-blink-1', JSON.stringify({
+    id: 'page-blink-1', name: 'Page blink', fileName: 'take.mp4', duration: 6, width: 320, height: 180,
+    words: [{ index: 0, text: 'First.', start: 0.2, end: 0.8 }, { index: 1, text: 'Second.', start: 5.2, end: 5.8 }],
+    removedWordIndices: [], dismissedRetakeIds: [], restoredAutoCutIds: [], autoSilenceEnabled: true,
+    silenceThresholdSeconds: 1, retainedPauseSeconds: 0.38, captionsEnabled: false, openingPushInEnabled: false,
+    layoutOverride: 'horizontal', transcriptionStatus: 'ready', classificationStatus: 'unavailable',
+    retakeAnalysisStatus: 'unavailable', planningMatchStatus: 'unavailable', renderStatus: '',
+    automaticRenderStartedAt: 'start', createdAt: now, updatedAt: now
+  }), now);
+  editor.setup({ db: db, dataDir: dir, transcribeDetailed: async function () { return { text: '', words: [] }; } });
+  let stored;
+  for (let attempt = 0; attempt < 1200; attempt++) {
+    stored = JSON.parse(db.prepare('SELECT data FROM records WHERE store_name=? AND id=?').get('editorProjects', 'page-blink-1').data);
+    if (stored.renderStatus === 'ready' || stored.renderStatus === 'error') break;
+    await new Promise(function (resolve) { setTimeout(resolve, 30); });
+  }
+  assert.equal(stored.renderStatus, 'ready', stored.renderError);
+  assert.deepEqual(stored.pageChangeCutIds, ['gap-0']);
+  const rendered = path.join(projectDir, 'render.mp4');
+  function frameBrightness(at) {
+    const frame = execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', rendered,
+      '-frames:v', '1', '-vf', "select='gte(t," + at + ")',scale=1:1", '-pix_fmt', 'rgb24', '-f', 'rawvideo', 'pipe:1']);
+    return Array.from(frame.subarray(0, 3)).reduce(function (sum, channel) { return sum + channel; }, 0);
+  }
+  const whitePage = frameBrightness(0.7);
+  const fadeOut = frameBrightness(0.96);
+  const fadeIn = frameBrightness(1.03);
+  const bluePage = frameBrightness(1.25);
+  assert.ok(fadeOut < whitePage * 0.35, JSON.stringify({ whitePage: whitePage, fadeOut: fadeOut }));
+  assert.ok(fadeIn < bluePage * 0.45, JSON.stringify({ bluePage: bluePage, fadeIn: fadeIn }));
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
 

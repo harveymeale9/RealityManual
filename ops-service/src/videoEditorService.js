@@ -16,6 +16,7 @@ const EDITOR_DISK_RESERVE_BYTES = 2 * 1024 * 1024 * 1024;
 const PAGE_ZOOM_SECONDS = 3;
 const HORIZONTAL_OPENING_ZOOM_SECONDS = 5;
 const PAGE_CHANGE_CUT_SECONDS = 3;
+const PAGE_CHANGE_FADE_SECONDS = 0.14;
 const VIDEO_OUTRO_SECONDS = 2;
 // Footage is deliberately recorded wide enough to show a little table. The
 // opening move settles into a tight book-first framing and that 125%
@@ -23,7 +24,7 @@ const VIDEO_OUTRO_SECONDS = 2;
 // automatic long-pause cuts are treated as page changes and start the move
 // again from the wide camera frame.
 const OPENING_PUSH_IN_SCALE = 1.25;
-const EDITOR_RENDER_VERSION = 17;
+const EDITOR_RENDER_VERSION = 18;
 const PAGE_CHANGE_SSIM_THRESHOLD = 0.5;
 const BROWSER_PREVIEW_VERSION = 2;
 const AUDIO_PREVIEW_MIX_VERSION = 3;
@@ -793,6 +794,16 @@ function segmentAudioFades(segments, index, duration) {
   return {
     fadeIn: segment.start > 0.015 && (!previous || segment.start - previous.end > 0.015),
     fadeOut: segment.end < Math.max(0, Number(duration) || 0) - 0.015 && (!next || next.start - segment.end > 0.015)
+  };
+}
+
+function pageChangeFadesForSegment(segment, cuts, confirmedCutIds) {
+  if (!segment || segment.type !== 'source') return { fadeIn: false, fadeOut: false };
+  const confirmed = new Set((confirmedCutIds || []).map(String));
+  const pageCuts = (cuts || []).filter(function (cut) { return confirmed.has(String(cut.id)); });
+  return {
+    fadeIn: pageCuts.some(function (cut) { return Math.abs(Number(cut.end) - Number(segment.start)) <= 0.02; }),
+    fadeOut: pageCuts.some(function (cut) { return Math.abs(Number(cut.start) - Number(segment.end)) <= 0.02; })
   };
 }
 
@@ -1729,6 +1740,10 @@ async function renderProject(id) {
         if (segment.type === 'source') {
           const motion = cameraMotionForSegment(segment, cuts, layout, project.pageChangeCutIds);
           videoFilter += cameraMotionFilter({ renderShape: renderShape, layout: layout, elapsedStart: motion.elapsed, durationSeconds: motion.duration, openingEnabled: project.openingPushInEnabled !== false });
+          const pageFades = pageChangeFadesForSegment(segment, cuts, project.pageChangeCutIds);
+          const pageFadeDuration = Math.min(PAGE_CHANGE_FADE_SECONDS, Math.max(0.02, segmentDuration / 2));
+          if (pageFades.fadeIn) videoFilter += ',fade=t=in:st=0:d=' + pageFadeDuration.toFixed(3) + ':color=black';
+          if (pageFades.fadeOut) videoFilter += ',fade=t=out:st=' + Math.max(0, segmentDuration - pageFadeDuration).toFixed(3) + ':d=' + pageFadeDuration.toFixed(3) + ':color=black';
         }
         videoFilter += ',format=yuv420p';
         filters.push(videoFilter + '[v' + index + ']');
@@ -2902,6 +2917,7 @@ module.exports = {
   parseInsertClipDirectives,
   clipTimestampSeconds,
   segmentAudioFades,
+  pageChangeFadesForSegment,
   mapSourceTimeToEdited,
   cameraResetStarts,
   cameraMotionState,
