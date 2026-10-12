@@ -17269,3 +17269,16 @@ The interface is renamed from **Smart review / Possible retakes** to **Retake
 detection / Repeated takes**, states that only repeated lines are flagged, and
 uses a single neutral **Possible retake** badge. The Editor script cache key was
 advanced. The complete 177-test ops-service suite passes.
+
+---
+
+# 527. Page-Change Fades Last 280ms in Each Direction (2026-10-12)
+
+The confirmed page-change transition now fades the outgoing page to black over
+280ms and fades the incoming page back from black over 280ms, exactly twice the
+original 140ms duration in each direction. The lightweight browser preview and
+the final FFmpeg renderer use the same timing. Render format version 20
+invalidates active older renders so the review output cannot retain the faster
+transition, and the Editor script cache key was advanced. Regression coverage
+asserts the shared 280ms timing and still performs the real white-to-black-to-
+blue page-change render.

@@ -16,7 +16,7 @@ const EDITOR_DISK_RESERVE_BYTES = 2 * 1024 * 1024 * 1024;
 const PAGE_ZOOM_SECONDS = 3;
 const HORIZONTAL_OPENING_ZOOM_SECONDS = 5;
 const PAGE_CHANGE_CUT_SECONDS = 3;
-const PAGE_CHANGE_FADE_SECONDS = 0.14;
+const PAGE_CHANGE_FADE_SECONDS = 0.28;
 const VIDEO_OUTRO_SECONDS = 2;
 // Footage is deliberately recorded wide enough to show a little table. The
 // opening move settles into a book-first framing and that composition remains
@@ -27,7 +27,7 @@ const VIDEO_OUTRO_SECONDS = 2;
 // again from the wide camera frame.
 const OPENING_PUSH_IN_SCALE = 1.25;
 const VERTICAL_OPENING_PUSH_IN_SCALE = 1.125;
-const EDITOR_RENDER_VERSION = 19;
+const EDITOR_RENDER_VERSION = 20;
 const PAGE_CHANGE_SSIM_THRESHOLD = 0.5;
 const BROWSER_PREVIEW_VERSION = 2;
 const AUDIO_PREVIEW_MIX_VERSION = 3;
@@ -3015,6 +3015,7 @@ module.exports = {
   parseInsertClipDirectives,
   clipTimestampSeconds,
   segmentAudioFades,
+  pageChangeFadeSeconds: PAGE_CHANGE_FADE_SECONDS,
   pageChangeFadesForSegment,
   mapSourceTimeToEdited,
   cameraResetStarts,

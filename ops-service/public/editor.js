@@ -37,7 +37,7 @@
   var MAX_RECORDING_BYTES = Math.floor(4.5 * 1024 * 1024 * 1024);
   var RESTING_CAMERA_SCALE = 1.25;
   var VERTICAL_OPENING_CAMERA_SCALE = 1.125;
-  var PAGE_CHANGE_FADE_SECONDS = 0.14;
+  var PAGE_CHANGE_FADE_SECONDS = 0.28;
   var listFilter = localStorage.getItem('rmEditorListFilter') === 'sent' ? 'sent' : 'active';
   var reviewRate = Number(localStorage.getItem('rmEditorReviewRate')) || 1;
   if ([1, 1.25, 1.5, 2].indexOf(reviewRate) === -1) reviewRate = 1;

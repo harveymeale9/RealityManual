@@ -574,6 +574,8 @@ test('only genuine source jumps receive tiny audio boundary fades', function () 
 });
 
 test('only visually confirmed page changes fade out and back from black', function () {
+  assert.equal(editor.pageChangeFadeSeconds, 0.28);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'public', 'editor.js'), 'utf8'), /PAGE_CHANGE_FADE_SECONDS = 0\.28;/);
   const cuts = [
     { id: 'page', start: 2, end: 6, reason: 'long_pause' },
     { id: 'hesitation', start: 8, end: 10, reason: 'long_pause' }
@@ -737,7 +739,7 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.equal(stored.renderQuality.status, 'passed');
-  assert.equal(stored.renderVersion, 19);
+  assert.equal(stored.renderVersion, 20);
   assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), true);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
@@ -769,7 +771,7 @@ test('final render splices an inserted clip and its caption timeline between sou
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.ok(stored.editedDuration > 3.9 && stored.editedDuration < 4.1);
-  assert.equal(stored.renderVersion, 19);
+  assert.equal(stored.renderVersion, 20);
   assert.equal(stored.renderQuality.contentDuration, 2);
   assert.equal(stored.renderQuality.outroSeconds, 2);
   assert.ok(stored.renderQuality.insertedClipLoudness.clips[0].gainDb > 18);
