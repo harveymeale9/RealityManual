@@ -18063,3 +18063,21 @@ behind the two-column page grid rather than showing only the quiet centre.
 
 Headless Chromium screenshots at 1858px and 390px verified the final lazy-loaded
 page imagery, full-width background coverage, label contrast, and crop behavior.
+
+---
+
+# 565. Home2 Interior Photo Set Staged Upright (2026-10-12)
+
+Eight new photographs of the printed Reality Manual interior are staged under
+`frontend/img/photo/home2-interiors/` for the next Home2 layout revision. The
+first five source photos were already portrait/upright and were copied without
+pixel edits. The final three phone captures (Five Axes, Indirect Pursuit of the
+Objective, and Internal Value) were rotated 90 degrees counter-clockwise into
+their natural reading orientation using lossless PNG output. Nothing was
+cropped, resized, retouched, or generatively reconstructed, which preserves the
+printed text and artwork exactly.
+
+The files have descriptive `reality-manual-*` names rather than attachment
+indices. A contact-sheet review confirmed all eight are upright. They are not
+yet referenced by Home2 markup or styles; placement is intentionally deferred
+until Harvey supplies the follow-up layout instructions.
