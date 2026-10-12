@@ -908,7 +908,16 @@ img { max-width: 100%; }
   padding: 3.5rem 0 4rem;
 }
 
-.faq .section-label { margin-bottom: 1.8rem; letter-spacing: 0.22em; }
+.faq .section-label {
+  max-width: 52rem;
+  margin: 0 auto 1.35rem;
+  letter-spacing: 0.22em;
+  text-align: left;
+}
+
+@media (max-width: 600px) {
+  .faq .section-label { text-align: center; }
+}
 
 .faq-grid {
   display: grid;

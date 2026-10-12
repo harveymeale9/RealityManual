@@ -16976,3 +16976,14 @@ size, with each image opening full-resolution in a new tab when tapped. The
 four already-generated Reality Manual landing-page mockups from the original
 request were backfilled onto their historical reply so they become visible
 after reloading the existing conversation rather than requiring regeneration.
+
+---
+
+# 512. FAQ Heading Aligns With Its Question Column (2026-10-12)
+
+The homepage FAQ remains a centered, single vertical column, but its section
+label no longer floats independently at the center above left-aligned question
+rows. On desktop and tablet, the label shares the same 52rem measure and left
+edge as the questions, producing one coherent visual block. At narrow mobile
+widths the short label remains centered. The gap below the label was tightened
+slightly and the stylesheet cache key was advanced.
