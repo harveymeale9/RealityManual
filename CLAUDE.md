@@ -17834,3 +17834,13 @@ cards across two mobile rows, the deliberate duplicate source, preservation of
 the original homepage testimonial, and no horizontal overflow at 1440px or
 390px. Both renders were visually inspected. The `/home2` stylesheet cache key
 was advanced.
+
+---
+
+# 554. Home2 Purchase Headline Drops “Copy” (2026-10-12)
+
+The first `/home2` purchase panel now reads **Get Your Deluxe First Edition
+Hardcover Now**. Only the requested word was removed; the supporting copy,
+checkout button, product image, and layout remain unchanged. Headless Chromium
+verified the exact heading at 1440px and 390px with clean wrapping and no
+horizontal overflow; the desktop result was visually inspected.
