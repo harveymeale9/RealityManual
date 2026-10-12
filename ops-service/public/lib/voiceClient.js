@@ -1039,7 +1039,8 @@ window.RMVoice = (function () {
         if (callbacks.onEarlyAck) callbacks.onEarlyAck(row);
       }
       var bucket = bucketOf(row.status);
-      if (bucket !== seen.bucket) {
+      var bucketChanged = bucket !== seen.bucket;
+      if (bucketChanged) {
         seen.bucket = bucket;
         if (bucket === 'inflight' && callbacks.onPending) callbacks.onPending(row);
         else if (bucket === 'done' && callbacks.onDone) callbacks.onDone(row);
@@ -1050,9 +1051,15 @@ window.RMVoice = (function () {
         seen.activityLen = activityLen;
         if (callbacks.onActivity) callbacks.onActivity(row);
       }
+      var replyAttachmentSignature = Array.isArray(row.replyAttachments)
+        ? row.replyAttachments.map(function (item) { return [item && item.url || '', item && item.name || ''].join('\u001e'); }).join('\u001d')
+        : '';
       var contentSignature = [row.transcript || '', row.reply_text || '', row.error_message || '',
-        row.notification_kind || '', Number(row.notification_unread) || 0, row.completed_at || ''].join('\u001f');
-      if (!isNew && seen.contentSignature !== null && contentSignature !== seen.contentSignature && callbacks.onUpdate) {
+        row.notification_kind || '', Number(row.notification_unread) || 0, row.completed_at || '', replyAttachmentSignature].join('\u001f');
+      // A bucket transition already invokes onDone/onError with the complete
+      // row. onUpdate is only for later in-place changes such as generated
+      // images being attached after the text bubble has rendered.
+      if (!isNew && !bucketChanged && seen.contentSignature !== null && contentSignature !== seen.contentSignature && callbacks.onUpdate) {
         callbacks.onUpdate(row);
       }
       seen.contentSignature = contentSignature;

@@ -16987,3 +16987,23 @@ rows. On desktop and tablet, the label shares the same 52rem measure and left
 edge as the questions, producing one coherent visual block. At narrow mobile
 widths the short label remains centered. The gap below the label was tightened
 slightly and the stylesheet cache key was advanced.
+
+---
+
+# 513. Completed Chat Bubbles Refresh When Generated Images Arrive (2026-10-12)
+
+The generated-image backend was confirmed healthy: assistant attachment
+manifests were persisted, hydrated by the live messages API, and every private
+image endpoint returned the correct PNG. The remaining failure was in the
+shared browser sync client. Its completed-message signature did not include
+`replyAttachments`, and the desktop/mobile `onUpdate` handlers ignored every
+ordinary conversation row, so a bubble already rendered without media could
+never acquire a later attachment or a historical backfill until a full reload.
+
+The shared content signature now includes assistant attachment URLs and names.
+Ordinary completed bubbles are rebuilt in place when that signature changes,
+on both desktop and mobile; bucket transitions remain handled only by
+`onDone`/`onError`, avoiding a double render on normal completion. The shared
+client and desktop app cache keys were advanced. A VM-backed regression test
+simulates a completed text bubble receiving a later image and verifies exactly
+one completion callback followed by the attachment update.

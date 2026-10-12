@@ -1128,12 +1128,15 @@
         }
       },
       onUpdate: function (row) {
-        if (row.notification_kind !== 'mail_alert') return;
-        var existing = thread.querySelector('.pm-msg-assistant--mail-alert[data-msg-id="' + row.id + '"]');
-        addAssistantMessage(row.reply_text || '', null, row.id, existing, row.agent, row.notification_kind, !!row.notification_unread, row.replyAttachments);
+        var existing = thread.querySelector('.pm-msg-assistant[data-msg-id="' + row.id + '"]');
+        if (!existing) return;
+        addAssistantMessage(row.reply_text || '', row.notification_kind === 'mail_alert' ? null : row.transcript,
+          row.id, existing, row.agent, row.notification_kind, !!row.notification_unread, row.replyAttachments);
         if (existing) existing.remove();
-        if (pastFirstTick && row.notification_unread && Voice.isActiveHere()) Voice.playPing();
-        refreshAlertCount();
+        if (row.notification_kind === 'mail_alert') {
+          if (pastFirstTick && row.notification_unread && Voice.isActiveHere()) Voice.playPing();
+          refreshAlertCount();
+        }
       },
       onActivity: function (row) { renderActivity(row.activity_log); },
       onTick: function (rows) {
