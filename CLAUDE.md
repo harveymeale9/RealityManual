@@ -17132,3 +17132,24 @@ adjacent source segments. Render format version 18 invalidates active older
 renders. Regression coverage proves boundary selection and performs a real
 white-page to black to blue-page FFmpeg render. The complete 172-test suite
 passes, and the Editor script cache key was advanced.
+
+---
+
+# 521. `/home2/` Leads with the VSL Over the Open Spread (2026-10-12)
+
+The `/home2/` prototype hero now contains only the edge-to-edge open-book
+spread and one large centred 16:9 VSL card. On desktop the player is capped at
+1040px; on mobile it remains inset from the viewport edges and is vertically
+centred over the spread. The surrounding photograph uses a symmetric edge
+shade so the spread remains visible while the video reads as the sole hero
+action. The existing VSL click-to-load behavior and persistent backend media
+URL are unchanged.
+
+The title block was removed from the photograph and moved into the offer panel
+immediately below it. That panel now pairs **The Reality Manual**, its byline,
+the three-line framework, and a direct **Get Your Copy** action with the full
+hardcover edition/price/checkout card. Mobile stacks the title first and the
+edition card second. The production `/` homepage remains unchanged. Desktop
+1543×945 and mobile 390×844 browser checks confirm one video element, a
+centred hero player, and the title inside the second panel. The stylesheet
+cache key was advanced.
