@@ -18017,3 +18017,27 @@ A live Chromium check edited the real `Subconscious mind short` Final Check
 field, observed the Saving-to-Saved transition, and fetched the authoritative
 piece record to confirm the same title and manual-ownership marker persisted.
 The complete 188-test ops-service suite passes.
+
+---
+
+# 563. Future Vertical Captions Use Three-Word Emphasis Windows (2026-10-12)
+
+New vertical renders now show captions in windows of at most three spoken
+words instead of one word at a time. Each window remains visible while the
+same 12% size increase and heavier outline used by landscape captions advances
+through the word currently being spoken; the next three-word window begins at
+the fourth word's exact timestamp. Existing sentence, pause, edit, and inserted
+clip boundaries still clear captions rather than allowing a completed thought
+to linger.
+
+Vertical windows receive their own conservative whole-window font fitting.
+Ordinary phrases retain the existing 86px-at-1080-wide base size, while long
+three-word combinations scale all words together and may wrap inside the ASS
+safe margins rather than clipping at either edge. Actual 1080×1920 FFmpeg/
+libass renders verified both normal emphasis progression and a pathological
+64-character three-word window fully inside the frame.
+
+No render-version bump or migration was made: finished and already-rendered
+videos remain byte-for-byte untouched, while any new vertical render uses the
+experiment automatically. Focused caption tests and the complete 188-test
+ops-service suite pass.

@@ -732,20 +732,25 @@ test('landscape captions are larger and advance spoken-word emphasis', function 
   assert.match(fitted, /\\fs38\\bord4/);
 });
 
-test('vertical captions show one large yellow word at a time', function () {
-  const groups = [{ start: 1, end: 2, text: 'One word now', words: [
-    { text: 'One', start: 1, end: 1.2 }, { text: 'word', start: 1.25, end: 1.55 }, { text: 'now', start: 1.6, end: 2 }
+test('vertical captions show three-word windows with spoken-word emphasis', function () {
+  const groups = [{ start: 1, end: 3, text: 'One word now then next phrase', words: [
+    { text: 'One', start: 1, end: 1.2 }, { text: 'word', start: 1.25, end: 1.55 }, { text: 'now', start: 1.6, end: 1.9 },
+    { text: 'then', start: 2, end: 2.2 }, { text: 'next', start: 2.25, end: 2.5 }, { text: 'phrase', start: 2.55, end: 3 }
   ] }];
   const ass = editor.buildAss({ width: 1080, height: 1920 }, groups);
   assert.match(ass, /Style: Default,Arial,86,.*&H0063DFF4/);
-  assert.equal((ass.match(/^Dialogue:/gm) || []).length, 3);
-  assert.match(ass, /Dialogue: 0,0:00:01\.00,0:00:01\.25.*One$/m);
-  assert.match(ass, /Dialogue: 0,0:00:01\.25,0:00:01\.60.*word$/m);
-  assert.match(ass, /Dialogue: 0,0:00:01\.60,0:00:02\.00.*now$/m);
-  const fitted = editor.buildAss({ width: 1080, height: 1920 }, [{ start: 0, end: 1, text: 'xxxxxxxxxxxxxxxxxxxxxxxx', words: [{ text: 'xxxxxxxxxxxxxxxxxxxxxxxx', start: 0, end: 1 }] }]);
-  assert.match(fitted, /\{\\fs54\}xxxxxxxxxxxxxxxxxxxxxxxx\{\\r\}/);
-  const fittedMaximum = editor.buildAss({ width: 1080, height: 1920 }, [{ start: 0, end: 1, text: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', words: [{ text: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', start: 0, end: 1 }] }]);
-  assert.match(fittedMaximum, /\{\\fs32\}xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\{\\r\}/);
+  assert.equal((ass.match(/^Dialogue:/gm) || []).length, 6);
+  assert.match(ass, /Dialogue: 0,0:00:01\.00,0:00:01\.25.*\{\\fs96\\bord4\}One\{\\r\} word now$/m);
+  assert.match(ass, /Dialogue: 0,0:00:01\.25,0:00:01\.60.*One \{\\fs96\\bord4\}word\{\\r\} now$/m);
+  assert.match(ass, /Dialogue: 0,0:00:01\.60,0:00:02\.00.*One word \{\\fs96\\bord4\}now\{\\r\}$/m);
+  assert.match(ass, /Dialogue: 0,0:00:02\.00,0:00:02\.25.*\{\\fs96\\bord4\}then\{\\r\} next phrase$/m);
+  assert.doesNotMatch(ass, /One word now then/);
+
+  const fitted = editor.buildAss({ width: 1080, height: 1920 }, [{ start: 0, end: 1, text: 'extraordinary captions remain', words: [
+    { text: 'extraordinary', start: 0, end: .3 }, { text: 'captions', start: .3, end: .6 }, { text: 'remain', start: .6, end: 1 }
+  ] }]);
+  assert.match(fitted, /\{\\fs59\\bord4\}extraordinary/);
+  assert.match(fitted, /\{\\fs53\\bord3\}captions/);
 });
 
 test('batch preprocessing serializes expensive transcription', { timeout: 15000 }, async function (t) {

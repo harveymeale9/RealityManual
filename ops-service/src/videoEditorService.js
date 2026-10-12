@@ -1093,20 +1093,39 @@ function buildAss(project, groups) {
       return;
     }
     if (!isLongform) {
-      // Vertical content deliberately shows exactly one large word at a
-      // time. Hold it until the following word begins, then switch cleanly;
-      // the phrase grouper still supplies a blank beat at sentence/long-pause
-      // boundaries so a finished thought does not linger on screen.
-      group.words.forEach(function (word, wordIndex) {
-        const eventStart = word.start;
-        const eventEnd = wordIndex + 1 < group.words.length ? group.words[wordIndex + 1].start : group.end;
-        if (eventEnd <= eventStart) return;
-        const escaped = escapeAss(word.text);
-        const characterCount = Array.from(String(word.text || '')).length;
-        const fittedSize = Math.max(Math.round(fontSize * 0.36), Math.min(fontSize, Math.round(fontSize * 15 / Math.max(15, characterCount))));
-        const fittedText = fittedSize < fontSize ? '{\\fs' + fittedSize + '}' + escaped + '{\\r}' : escaped;
-        events.push('Dialogue: 0,' + assTime(eventStart) + ',' + assTime(eventEnd) + ',Default,,0,0,0,,' + fittedText);
-      });
+      // Vertical content uses compact three-word windows. Keep the complete
+      // window visible and move the same 12% spoken-word emphasis used by
+      // landscape captions through it. Splitting here (rather than changing
+      // transcript phrase groups) preserves sentence/long-pause blank beats.
+      for (let windowStart = 0; windowStart < group.words.length; windowStart += 3) {
+        const windowWords = group.words.slice(windowStart, windowStart + 3);
+        const nextWindowWord = group.words[windowStart + 3];
+        const windowEnd = nextWindowWord ? nextWindowWord.start : group.end;
+        const windowText = windowWords.map(function (word) { return word.text; }).join(' ');
+        const characterCount = Array.from(windowText).length;
+        // At Arial's typical glyph width, 18 characters at the base size fit
+        // comfortably inside the 40px ASS side margins. Longer trios scale
+        // together, with a conservative floor that still permits libass to
+        // wrap pathological words without clipping either frame edge.
+        const fittedSize = Math.max(Math.round(fontSize * 0.36), Math.min(fontSize, Math.round(fontSize * 18 / Math.max(18, characterCount))));
+        const fittedEmphasizedSize = Math.round(fittedSize * 1.12);
+        windowWords.forEach(function (activeWord, activeIndex) {
+          const eventStart = activeIndex === 0 ? windowWords[0].start : activeWord.start;
+          const followingWord = windowWords[activeIndex + 1];
+          const eventEnd = followingWord ? followingWord.start : windowEnd;
+          if (eventEnd <= eventStart) return;
+          const text = windowWords.map(function (word, wordIndex) {
+            const escaped = escapeAss(word.text);
+            if (fittedSize < fontSize) {
+              return wordIndex === activeIndex
+                ? '{\\fs' + fittedEmphasizedSize + '\\bord4}' + escaped
+                : '{\\fs' + fittedSize + '\\bord3}' + escaped;
+            }
+            return wordIndex === activeIndex ? '{\\fs' + emphasizedSize + '\\bord4}' + escaped + '{\\r}' : escaped;
+          }).join(' ');
+          events.push('Dialogue: 0,' + assTime(eventStart) + ',' + assTime(eventEnd) + ',Default,,0,0,0,,' + text);
+        });
+      }
       return;
     }
     // Keep the complete phrase on screen while moving one stable emphasis
