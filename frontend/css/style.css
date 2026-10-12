@@ -1183,16 +1183,13 @@ img { max-width: 100%; }
 .home2-page .inside .page-card img {
   position: absolute;
   left: 50%;
-  top: 24%;
-  width: auto;
+  top: 50%;
+  width: 110%;
   max-width: none;
   height: auto;
-  object-fit: none;
+  object-fit: fill;
   transform: translate(-50%, -50%);
 }
-.home2-page .inside .page-card:nth-child(2) img { top: 33%; }
-.home2-page .inside .page-card:nth-child(3) img { top: 25%; }
-.home2-page .inside .page-card:nth-child(4) img { top: 38%; }
 .home2-page .inside .page-card figcaption {
   color: rgba(231, 200, 130, 0.78);
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.95);

@@ -18222,3 +18222,25 @@ Headless Chromium verification covered desktop and mobile layouts, identical
 root/alias screenshots, all checkout CTA destinations, FAQ ordering, mobile
 navigation, VSL element creation, and absence of console/runtime errors. The
 static-site push deploys through the existing GitHub Pages workflow.
+
+---
+
+# 575. Homepage Interior Crops Restore Page Context (2026-10-12)
+
+The four Inside the Book cards are no longer locked to intrinsic 1:1 dimensions,
+which made the first three photographs show isolated lines or partial shapes
+without enough context. All four now render at a consistent 110% of the card
+width and are centred within their clipped 9:16 windows. This remains a close,
+high-detail crop, but reveals enough of each diagram, rule, or illustration for
+the image to make visual sense across desktop and mobile.
+
+The old `object-fit: none` native-pixel lock was removed as part of this change.
+Changing only the element width while that rule remained in place did not scale
+the bitmap content itself, so intermediate 230%, 170%, and 125% trials appeared
+visually unchanged. The final `object-fit: fill` plus 110% width scales each
+photograph predictably without distorting its aspect ratio because height stays
+automatic.
+
+The promoted root page and `/home2/` alias both received the new stylesheet
+cache key. The card dimensions, captions, order, background, and source images
+are unchanged.
