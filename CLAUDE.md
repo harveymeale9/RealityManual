@@ -16889,3 +16889,23 @@ actual mixed previews remain on-demand through their existing server endpoint.
 The live piece therefore appears immediately, direct-upload dropdowns still
 contain all tracks, and a refresh no longer re-downloads the ambient library
 before rendering the page. Both script cache keys were advanced.
+
+---
+
+# 506. Open-Book Spread Moved Behind the Offer Panel; Mobile Hero Is Truly Full-Bleed (2026-10-12)
+
+The supplied open-book spread no longer sits behind the homepage hero. It now
+fills the desktop **Watch the Video / Choose Your Edition** section, where its
+gloved edges occupy the otherwise empty outer fields behind that panel. The
+original centered hardcover hero is restored without the spread-specific edge
+shadow. The spread remains desktop-only so it does not compete with the compact
+mobile offer layout.
+
+The mobile hardcover photograph was intended to extend across the viewport via
+`width: calc(100% + 3rem)` and negative margins that cancel `.wrap` padding.
+The global `img { max-width: 100% }` rule silently capped it back to the content
+width, then the negative margin shifted that narrower image left and exposed a
+blank strip on the right. `.hero-mobile-photo` now opts out with
+`max-width: none`, allowing the established full-bleed calculation to work
+symmetrically. Desktop and mobile were checked for horizontal overflow, and the
+stylesheet cache key was advanced.
