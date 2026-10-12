@@ -5,22 +5,17 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   aa234e9..378f39c  main       -> origin/main
+   378f39c..cf8de23  main       -> origin/main
 + git merge --ff-only origin/main
-Updating aa234e9..378f39c
+Updating 378f39c..cf8de23
 Fast-forward
- CLAUDE.md                     |  54 ++++++-
- frontend/css/style.css        | 135 ++++++++++++++++--
- frontend/home2/index.html     | 320 ++++++++++++++++++++++++++++++++++++++++++
- frontend/index.html           |   2 +-
- ops-service/.ci/last-run.log  | 132 ++++-------------
- ops-service/public/editor.js  |  27 +++-
- ops-service/public/index.html |   4 +-
- ops-service/public/style.css  |   5 +-
- 8 files changed, 545 insertions(+), 134 deletions(-)
- create mode 100644 frontend/home2/index.html
+ CLAUDE.md                     | 11 +++++++++++
+ ops-service/.ci/last-run.log  | 33 ++++++++++++++++-----------------
+ ops-service/public/app.js     | 12 ++++++++----
+ ops-service/public/index.html |  2 +-
+ 4 files changed, 36 insertions(+), 22 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=378f39c55323bc46121c003e2d490088243774be
++ NEW_HEAD=cf8de2301f05f3ce91c185fe53b88b5a4d2a48ac
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -33,12 +28,12 @@ Already up to date.
 + NEEDS_REBUILD=1
 + '[' -n 0ef8acca3a842f737928442f177e0fc127c432d0 ']'
 + git cat-file -e '0ef8acca3a842f737928442f177e0fc127c432d0^{commit}'
-++ git diff --name-only 0ef8acca3a842f737928442f177e0fc127c432d0 378f39c55323bc46121c003e2d490088243774be -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
+++ git diff --name-only 0ef8acca3a842f737928442f177e0fc127c432d0 cf8de2301f05f3ce91c185fe53b88b5a4d2a48ac -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z '' ']'
 + NEEDS_REBUILD=0
 + '[' 0 = 1 ']'
 + '[' 0 = 0 ']'
-+ echo 'no backend changes between 0ef8acca3a842f737928442f177e0fc127c432d0 and 378f39c55323bc46121c003e2d490088243774be — already live via git pull, skipping rebuild/restart'
-no backend changes between 0ef8acca3a842f737928442f177e0fc127c432d0 and 378f39c55323bc46121c003e2d490088243774be — already live via git pull, skipping rebuild/restart
++ echo 'no backend changes between 0ef8acca3a842f737928442f177e0fc127c432d0 and cf8de2301f05f3ce91c185fe53b88b5a4d2a48ac — already live via git pull, skipping rebuild/restart'
+no backend changes between 0ef8acca3a842f737928442f177e0fc127c432d0 and cf8de2301f05f3ce91c185fe53b88b5a4d2a48ac — already live via git pull, skipping rebuild/restart
 + exit 0
 ssh exit code: 0
