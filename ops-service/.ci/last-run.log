@@ -5,15 +5,15 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   daee3b3..517720e  main       -> origin/main
+   517720e..05d8dd3  main       -> origin/main
 + git merge --ff-only origin/main
-Updating daee3b3..517720e
+Updating 517720e..05d8dd3
 Fast-forward
- ops-service/.ci/last-run.log | 98 ++++++++++++++++++++++----------------------
- ops-service/public/app.js    |  6 +--
- 2 files changed, 51 insertions(+), 53 deletions(-)
+ ops-service/.ci/last-run.log  | 120 ++++++------------------------------------
+ ops-service/public/index.html |   2 +-
+ 2 files changed, 17 insertions(+), 105 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=517720e363624d045473ffaf663355db59b2e702
++ NEW_HEAD=05d8dd39acfe591c6400bccce50721337b97fbb6
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -26,12 +26,12 @@ Already up to date.
 + NEEDS_REBUILD=1
 + '[' -n daee3b3ffefc333dad29f53182526d79e0aa064c ']'
 + git cat-file -e 'daee3b3ffefc333dad29f53182526d79e0aa064c^{commit}'
-++ git diff --name-only daee3b3ffefc333dad29f53182526d79e0aa064c 517720e363624d045473ffaf663355db59b2e702 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
+++ git diff --name-only daee3b3ffefc333dad29f53182526d79e0aa064c 05d8dd39acfe591c6400bccce50721337b97fbb6 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z '' ']'
 + NEEDS_REBUILD=0
 + '[' 0 = 1 ']'
 + '[' 0 = 0 ']'
-+ echo 'no backend changes between daee3b3ffefc333dad29f53182526d79e0aa064c and 517720e363624d045473ffaf663355db59b2e702 — already live via git pull, skipping rebuild/restart'
-no backend changes between daee3b3ffefc333dad29f53182526d79e0aa064c and 517720e363624d045473ffaf663355db59b2e702 — already live via git pull, skipping rebuild/restart
++ echo 'no backend changes between daee3b3ffefc333dad29f53182526d79e0aa064c and 05d8dd39acfe591c6400bccce50721337b97fbb6 — already live via git pull, skipping rebuild/restart'
+no backend changes between daee3b3ffefc333dad29f53182526d79e0aa064c and 05d8dd39acfe591c6400bccce50721337b97fbb6 — already live via git pull, skipping rebuild/restart
 + exit 0
 ssh exit code: 0
