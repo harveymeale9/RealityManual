@@ -5,17 +5,69 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   e582f72..205a117  main       -> origin/main
+   205a117..82311a6  main       -> origin/main
 + git merge --ff-only origin/main
-Updating e582f72..205a117
+Updating 205a117..82311a6
 Fast-forward
- CLAUDE.md                                   |  24 ++++++
- ops-service/.ci/last-run.log                | 114 +++++-----------------------
- ops-service/src/videoEditorService.js       |  47 ++++++++----
- ops-service/test/videoEditorService.test.js |  27 ++++---
- 4 files changed, 91 insertions(+), 121 deletions(-)
+ CLAUDE.md                                          | 231 +++++++++++++++++
+ frontend/checkout.html                             |  12 +-
+ frontend/confirmation.html                         |   6 +-
+ frontend/css/style.css                             | 122 +++++++--
+ frontend/home2/index.html                          |  52 ++--
+ ...ity-manual-advanced-techniques-omnipresence.png | Bin 0 -> 1161167 bytes
+ .../reality-manual-crystallized-emotion.png        | Bin 0 -> 819002 bytes
+ .../reality-manual-divine-attributes.png           | Bin 0 -> 1110963 bytes
+ .../home2-interiors/reality-manual-five-axes.png   | Bin 0 -> 2176482 bytes
+ ...eality-manual-fulfilment-action-dissolution.png | Bin 0 -> 595174 bytes
+ .../reality-manual-indirect-pursuit-objective.png  | Bin 0 -> 2476813 bytes
+ .../reality-manual-internal-value.png              | Bin 0 -> 1771491 bytes
+ .../reality-manual-omnipresence-detail.png         | Bin 0 -> 1147678 bytes
+ .../reality-manual-purpose-reality-objective.png   | Bin 0 -> 1003147 bytes
+ .../photo/reality-manual-candlelit-study-wide.webp | Bin 0 -> 225888 bytes
+ .../reality-manual-deluxe-hardcover-cutout.webp    | Bin 0 -> 521396 bytes
+ frontend/img/placeholder/cta-bg.svg                |   2 +-
+ .../img/placeholder/reality-manual-book-hero.svg   |   2 +-
+ .../placeholder/reality-manual-hero-background.svg |   2 +-
+ .../placeholder/reality-manual-interior-page-1.svg |   2 +-
+ .../placeholder/reality-manual-interior-page-2.svg |   2 +-
+ .../placeholder/reality-manual-interior-page-3.svg |   2 +-
+ .../placeholder/reality-manual-interior-page-4.svg |   2 +-
+ .../placeholder/reality-manual-video-poster.svg    |   2 +-
+ frontend/img/product/reality-manual-back-cover.svg |   2 +-
+ .../img/product/reality-manual-front-cover.svg     |   2 +-
+ frontend/img/product/reality-manual-full-set.svg   |   2 +-
+ .../img/product/reality-manual-jacket-detail.svg   |   2 +-
+ frontend/img/product/reality-manual-spine.svg      |   2 +-
+ frontend/index.html                                | 274 +++++++--------------
+ frontend/js/analytics.js                           |   4 +-
+ frontend/js/checkout.js                            |  18 +-
+ frontend/js/config.js                              |   4 +-
+ frontend/js/confirmation.js                        |   6 +-
+ ops-service/.ci/last-run.log                       | 107 ++++++--
+ ops-service/public/app.js                          |  37 +--
+ ops-service/public/index.html                      |   4 +-
+ ops-service/public/style.css                       |   4 -
+ ops-service/server.js                              |   7 +-
+ ops-service/src/publishPolicy.js                   |  11 +
+ ops-service/test/finalCheckPublishUi.test.js       |  13 +
+ ops-service/test/publishPolicy.test.js             |  14 ++
+ 42 files changed, 629 insertions(+), 323 deletions(-)
+ create mode 100644 frontend/img/photo/home2-interiors/reality-manual-advanced-techniques-omnipresence.png
+ create mode 100644 frontend/img/photo/home2-interiors/reality-manual-crystallized-emotion.png
+ create mode 100644 frontend/img/photo/home2-interiors/reality-manual-divine-attributes.png
+ create mode 100644 frontend/img/photo/home2-interiors/reality-manual-five-axes.png
+ create mode 100644 frontend/img/photo/home2-interiors/reality-manual-fulfilment-action-dissolution.png
+ create mode 100644 frontend/img/photo/home2-interiors/reality-manual-indirect-pursuit-objective.png
+ create mode 100644 frontend/img/photo/home2-interiors/reality-manual-internal-value.png
+ create mode 100644 frontend/img/photo/home2-interiors/reality-manual-omnipresence-detail.png
+ create mode 100644 frontend/img/photo/home2-interiors/reality-manual-purpose-reality-objective.png
+ create mode 100644 frontend/img/photo/reality-manual-candlelit-study-wide.webp
+ create mode 100644 frontend/img/photo/reality-manual-deluxe-hardcover-cutout.webp
+ create mode 100644 ops-service/src/publishPolicy.js
+ create mode 100644 ops-service/test/finalCheckPublishUi.test.js
+ create mode 100644 ops-service/test/publishPolicy.test.js
 ++ git rev-parse HEAD
-+ NEW_HEAD=205a117fd2bc713ba19579ee3f3aac32ad382aea
++ NEW_HEAD=82311a6acce11db0a65cbb36d8b9223b2562269c
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -24,12 +76,13 @@ Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
 + LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
 ++ cat /root/ops-service-data/last-image-commit.txt
-+ LAST_BUILD_COMMIT=6b83040fd51db5fb90c10fe175d3fe1a95fa7c91
++ LAST_BUILD_COMMIT=205a117fd2bc713ba19579ee3f3aac32ad382aea
 + NEEDS_REBUILD=1
-+ '[' -n 6b83040fd51db5fb90c10fe175d3fe1a95fa7c91 ']'
-+ git cat-file -e '6b83040fd51db5fb90c10fe175d3fe1a95fa7c91^{commit}'
-++ git diff --name-only 6b83040fd51db5fb90c10fe175d3fe1a95fa7c91 205a117fd2bc713ba19579ee3f3aac32ad382aea -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
-+ '[' -z ops-service/src/videoEditorService.js ']'
++ '[' -n 205a117fd2bc713ba19579ee3f3aac32ad382aea ']'
++ git cat-file -e '205a117fd2bc713ba19579ee3f3aac32ad382aea^{commit}'
+++ git diff --name-only 205a117fd2bc713ba19579ee3f3aac32ad382aea 82311a6acce11db0a65cbb36d8b9223b2562269c -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -z 'ops-service/server.js
+ops-service/src/publishPolicy.js' ']'
 + '[' 0 = 1 ']'
 + '[' 1 = 0 ']'
 + docker tag rm-ops-service rm-ops-service:previous
@@ -37,11 +90,11 @@ Already up to date.
 #0 building with "default" instance using docker driver
 
 #1 [internal] load build definition from Dockerfile
-#1 transferring dockerfile: 2.04kB done
-#1 DONE 0.0s
+#1 transferring dockerfile: 2.04kB 0.0s done
+#1 DONE 0.1s
 
 #2 [internal] load metadata for docker.io/library/node:22-slim
-#2 DONE 0.2s
+#2 DONE 0.3s
 
 #3 [internal] load .dockerignore
 #3 transferring context: 136B done
@@ -52,63 +105,64 @@ Already up to date.
 #4 DONE 0.0s
 
 #5 [internal] load build context
-#5 transferring context: 670.04kB 0.0s done
-#5 DONE 0.0s
+#5 transferring context: 726.85kB 0.0s done
+#5 DONE 0.1s
 
-#6 [ 5/10] RUN npm install --omit=dev
+#6 [ 2/10] RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && python3 -m pip install --break-system-packages --no-cache-dir yt-dlp==2026.8.19     && rm -rf /var/lib/apt/lists/*
 #6 CACHED
 
-#7 [ 2/10] RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && python3 -m pip install --break-system-packages --no-cache-dir yt-dlp==2026.8.19     && rm -rf /var/lib/apt/lists/*
+#7 [ 3/10] WORKDIR /app
 #7 CACHED
 
 #8 [ 4/10] COPY package.json ./
 #8 CACHED
 
-#9 [ 3/10] WORKDIR /app
+#9 [ 5/10] RUN npm install --omit=dev
 #9 CACHED
 
 #10 [ 6/10] COPY server.js ./
-#10 CACHED
+#10 DONE 0.1s
 
 #11 [ 7/10] COPY src ./src
 #11 DONE 0.1s
 
 #12 [ 8/10] COPY public ./public
-#12 DONE 0.1s
+#12 DONE 1.1s
 
 #13 [ 9/10] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
-#13 DONE 19.3s
+#13 DONE 21.8s
 
 #14 [10/10] RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
 #14 DONE 0.3s
 
 #15 exporting to image
 #15 exporting layers
-#15 exporting layers 3.8s done
-#15 exporting manifest sha256:597b56e11af097fb5934e4bfe69cae704867854e705287f317ae1651df17800f 0.0s done
-#15 exporting config sha256:a0044b157be3b28756db8e16d5af913ee1fc37bf3e461fc2d24beb8fc7f6cf10 0.0s done
-#15 exporting attestation manifest sha256:5ef66935ecebcaa9d917c6b33a72d1dbd3a30f1ef772b2a01d60dae58fd731d2 0.0s done
-#15 exporting manifest list sha256:363660e63b628e760c9ad10d388e89908cff0cb192200ad87c148d7e08028d15 0.0s done
+#15 exporting layers 5.6s done
+#15 exporting manifest sha256:225942fa48bed2b52f56cfce60099d4e7a1d9326fdf9b82efe183e65c2e13e8b 0.0s done
+#15 exporting config sha256:0d8e5ad38494e1d751dbe9cc70dba2ade181e8e9304c37f7c9329783b8891faa 0.0s done
+#15 exporting attestation manifest sha256:f0a44466c3a19787cbbb2547fd2ed2326c2e6179b72a5f2fe7eb837938ce2fff 0.0s done
+#15 exporting manifest list sha256:516ab500533f1ee03fa9d1b18afb5f5ef11050eff265fe9d8517324032af16f4 0.0s done
+#15 naming to docker.io/library/rm-ops-service:latest
 #15 naming to docker.io/library/rm-ops-service:latest done
 #15 unpacking to docker.io/library/rm-ops-service:latest
-#15 unpacking to docker.io/library/rm-ops-service:latest 1.5s done
-#15 DONE 5.4s
+#15 unpacking to docker.io/library/rm-ops-service:latest 2.8s done
+#15 DONE 8.5s
 + docker stop rm-ops-service
 rm-ops-service
 + docker rm rm-ops-service
 rm-ops-service
 + docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-data:/data -v /root/realitymanual-backend-data:/store-data:ro -v /srv/realitymanual-repo:/repo -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
-42e78a27cd0867aa7a3a8c6311cc634c4610171762fee908b084355f7c9027ba
-+ echo 205a117fd2bc713ba19579ee3f3aac32ad382aea
+2b3c69096cc003459a5751a643c574b0c8a58502f79326863d0c4accfb41f9a1
++ echo 82311a6acce11db0a65cbb36d8b9223b2562269c
 ++ git -C /root/realitymanual-repo rev-parse --short HEAD
-+ echo 'rm-ops-service redeployed at 205a117'
-rm-ops-service redeployed at 205a117
++ echo 'rm-ops-service redeployed at 82311a6'
+rm-ops-service redeployed at 82311a6
 + docker image prune -f
 Deleted Images:
-untagged: sha256:ab7004a0d7aa4a1c6d7375f31a310b5d22de470f49ad3a0ce820649404508698
-deleted: sha256:ab7004a0d7aa4a1c6d7375f31a310b5d22de470f49ad3a0ce820649404508698
-deleted: sha256:8fee025b48c0a47859577b548ca6804938c64eb63bd445d2b62cb35da31a3bae
-deleted: sha256:3492da29dbed9b47205b96eb6c1aba41c3bd031852d0ba3b743529da57778cf9
+untagged: sha256:5652e5e6a34eba95c3d20cb1d2cbc19ae0a25ef7b3c76d57a1ebc78c5ced40ce
+deleted: sha256:5652e5e6a34eba95c3d20cb1d2cbc19ae0a25ef7b3c76d57a1ebc78c5ced40ce
+deleted: sha256:e49589960a107a30955f6b959e14b473e5e0838c2151480775abc9c8037da9ce
+deleted: sha256:7f1e3be4f3a1488c03f9972fc7c9cc5a0eaba7c70c3c341239f4a736d0835fc1
 
 Total reclaimed space: 15.67kB
 + docker builder prune -f --max-used-space 8GB
