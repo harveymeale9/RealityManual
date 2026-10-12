@@ -737,6 +737,22 @@ img { max-width: 100%; }
   pointer-events: none;
 }
 
+.video-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease-out;
+}
+
+.video-card.is-starting::before {
+  opacity: 1;
+  transition: none;
+}
+
 .video-inner { position: relative; z-index: 2; }
 
 .video-card .eyebrow { margin-bottom: 0.8rem; }

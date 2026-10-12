@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Archivo:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/style.css?v=20261012-faq-centered" />
+  <link rel="stylesheet" href="css/style.css?v=20261012-vsl-black-handoff" />
 </head>
 <body>
 
@@ -378,27 +378,33 @@
     // The finished VSL lives on the storefront backend's persistent media
     // volume so the static site does not need to carry a large binary in Git.
     var VIDEO_EMBED_URL = 'https://api.realitymanual.com/media/reality-manual-vsl-1080p.mp4';
-    var VIDEO_POSTER_URL = 'img/photo/reality-manual-vsl-poster-no-captions.jpg';
     document.getElementById('play-btn').addEventListener('click', function () {
       if (!VIDEO_EMBED_URL) return;
       var card = document.getElementById('video-card');
-      var frame;
-      if (/\.(mp4|webm)$/i.test(VIDEO_EMBED_URL)) {
-        frame = document.createElement('video');
-        frame.src = VIDEO_EMBED_URL;
-        frame.controls = true;
-        frame.autoplay = true;
-        frame.playsInline = true;
-        frame.preload = 'metadata';
-        frame.poster = VIDEO_POSTER_URL;
-      } else {
-        frame = document.createElement('iframe');
-        frame.src = VIDEO_EMBED_URL + (VIDEO_EMBED_URL.indexOf('?') > -1 ? '&' : '?') + 'autoplay=1';
-        frame.allow = 'autoplay; encrypted-media; picture-in-picture';
-        frame.allowFullscreen = true;
-        frame.title = 'What is The Reality Manual?';
-      }
-      card.appendChild(frame);
+      if (card.classList.contains('has-video')) return;
+      card.classList.add('has-video', 'is-starting');
+      requestAnimationFrame(function () {
+        var frame;
+        var reveal = function () { requestAnimationFrame(function () { card.classList.remove('is-starting'); }); };
+        if (/\.(mp4|webm)$/i.test(VIDEO_EMBED_URL)) {
+          frame = document.createElement('video');
+          frame.src = VIDEO_EMBED_URL;
+          frame.controls = true;
+          frame.autoplay = true;
+          frame.playsInline = true;
+          frame.preload = 'auto';
+          frame.addEventListener('playing', reveal, { once: true });
+          frame.addEventListener('error', reveal, { once: true });
+        } else {
+          frame = document.createElement('iframe');
+          frame.src = VIDEO_EMBED_URL + (VIDEO_EMBED_URL.indexOf('?') > -1 ? '&' : '?') + 'autoplay=1';
+          frame.allow = 'autoplay; encrypted-media; picture-in-picture';
+          frame.allowFullscreen = true;
+          frame.title = 'What is The Reality Manual?';
+          frame.addEventListener('load', reveal, { once: true });
+        }
+        card.appendChild(frame);
+      });
     });
   </script>
 </body>

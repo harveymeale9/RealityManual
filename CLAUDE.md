@@ -17417,3 +17417,28 @@ video card remains, the overlay is geometrically centred, the hero and offer
 share an exact zero-gap boundary, and the appended playback element covers the
 hero with zero positional or dimensional difference. No browser runtime errors
 occurred.
+
+---
+
+# 535. VSL Playback Hands Off Directly Through Black (2026-10-12)
+
+The storefront VSL no longer inserts a video element carrying the separate
+clean poster image. That poster briefly differed from the full-spread `/home2`
+thumbnail and could flash before the video's black opening frame decoded. On
+click, both storefront variants now synchronously place an opaque black cover
+over the video surface, wait one animation frame before inserting the player,
+and remove the cover only after the media fires `playing`. The cover then eases
+away over 180ms into the VSL's own black-to-picture opening fade.
+
+The video uses eager preload once requested, duplicate activations are blocked,
+and media errors release the cover rather than leaving the page black. No
+`poster` attribute is applied to the playing element, so there is no alternate
+image state between the thumbnail and black. The `/home2` stylesheet cache key
+was advanced; the shared CSS behavior also fixes the original homepage card.
+
+Headless Chromium exercised both routes against the real media: in the same
+synchronous click task the cover was fully opaque while no player element yet
+existed; the next frame inserted an autoplaying, eager-preload video with no
+poster; and the cover reached zero opacity only after `playing`. Both videos
+advanced from their actual opening frames and produced no browser runtime
+errors.
