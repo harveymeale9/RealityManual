@@ -4362,9 +4362,9 @@
 
     row.appendChild(head);
     row.appendChild(frameSection);
-    // Editor-origin videos already carry the reviewed soundtrack choice.
-    // Keep this picker only for legacy/direct uploads that bypass Editor.
-    if (!p.editorProjectId) row.appendChild(audioSection);
+    // Soundtrack selection belongs here for every Production video, including
+    // Editor handoffs (which now arrive deliberately unselected).
+    row.appendChild(audioSection);
     row.appendChild(titlesSection);
     row.appendChild(actionSection);
     return row;
