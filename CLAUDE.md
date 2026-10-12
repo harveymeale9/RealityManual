@@ -17805,3 +17805,17 @@ lazy loading, and descriptive alt text. Headless Chromium verified the exact
 418×557 asset loaded, the desktop book is taller than the adjacent content,
 and both 1440×900 and 390×844 layouts have no horizontal overflow. Both renders
 were visually inspected, and the `/home2` stylesheet cache key was advanced.
+
+---
+
+# 552. Home2 Panels Use Thin Gold Dividers (2026-10-12)
+
+The `/home2` sticky header now has a 1px translucent gold bottom rule instead
+of the shared dark-brown border. Every following major panel also begins with
+the same gold rule, including the boundary above the footer, so the full page
+has one consistent separator treatment without adding extra spacing or double
+borders. The rules are scoped to `.home2-page`; the original storefront is
+unchanged. Headless Chromium confirmed every boundary computes to the same 1px
+solid translucent-gold rule at 1440px and 390px with no horizontal overflow;
+the result was also visually inspected. The `/home2` stylesheet cache key was
+advanced.

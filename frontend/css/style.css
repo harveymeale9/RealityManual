@@ -549,6 +549,20 @@ img { max-width: 100%; }
 
 /* ---------------------------------------------------------- /home2 hero */
 
+.home2-page {
+  --home2-panel-border: rgba(201, 162, 77, 0.55);
+}
+
+.home2-page .site-header {
+  border-bottom-color: var(--home2-panel-border);
+}
+
+.home2-page main > section + section,
+.home2-page main > section.home2-offer,
+.home2-page footer {
+  border-top: 1px solid var(--home2-panel-border);
+}
+
 .home2-hero {
   position: relative;
   min-height: clamp(620px, 48.1vw, 900px);
