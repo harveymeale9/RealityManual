@@ -18174,3 +18174,11 @@ The animation is CSS-only, keeps the existing layout dimensions unchanged, and
 is disabled by `prefers-reduced-motion: reduce` while retaining the static book
 and shadows. The Home2 stylesheet cache key was advanced so the effect appears
 without stale browser CSS.
+
+---
+
+# 572. Home2 Bookbinder Copy Uses Worldwide Positioning (2026-10-12)
+
+The Home2 purchase description now says the book is printed and bound by “one
+of the world's finest bespoke bookbinders” rather than “one of Europe's
+finest.” No other purchase copy or layout changed.
