@@ -17625,3 +17625,25 @@ smaller embedded VSL card unchanged. Headless Chromium verified the computed
 sizes at 1440×900 and 390×844, no horizontal overflow, and no runtime errors;
 both screenshots were visually inspected. The `/home2` stylesheet cache key
 was advanced.
+
+---
+
+# 543. `/home2` Second Panel Replaced by Focused Purchase Block (2026-10-12)
+
+The two-column title-and-checkout section immediately beneath the `/home2` VSL
+hero has been removed. In its place is a single centered conversion block based
+on the existing closing CTA: **Get Your Copy Now**, the supporting line “A
+practical guide to the optimal strategy for life,” the hardcover edition
+selector, one full-width checkout button, and three purchase assurances.
+
+The edition selector (including price and shipping note) now sits immediately
+above the button as requested. Secure Stripe checkout, worldwide shipping, and
+encrypted payment appear below as three evenly weighted icon/text items. The
+section uses a restrained central gold glow and no outer purchase-card border,
+keeping the hierarchy focused on the edition and primary action.
+
+The replacement is scoped to `/home2`; the main homepage and the later closing
+CTA are unchanged. Headless Chromium verified the exact content/order, all
+three assurance items, and no horizontal overflow at 1440×900 and 390×844.
+Both section screenshots were visually inspected, and the `/home2` stylesheet
+cache key was advanced.
