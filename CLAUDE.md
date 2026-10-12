@@ -18120,3 +18120,21 @@ copy remains centred in its own column. The Home2 stylesheet cache key was
 advanced, and headless Chromium screenshots at 1858px and 390px confirmed the
 background is gone, the cutout is prominent, and the responsive stack remains
 balanced.
+
+---
+
+# 568. Home2 Interior Cards Show Native-Pixel Detail Crops (2026-10-12)
+
+Home2's four Inside the Book photographs are no longer scaled down to fit their
+cards. Each image now renders at its intrinsic dimensions (`width: auto`,
+`height: auto`, no maximum width) inside the existing clipped 9:16 frame. This
+provides a literal one-source-pixel-per-CSS-pixel crop: 1016×1816, 870×1551,
+1031×1829, and 573×1007 source images render at those same CSS dimensions on
+both desktop and mobile. Only the portion beneath each fixed card window is
+visible, as requested, preserving maximum page texture and type detail.
+
+Per-card vertical focal points keep the visible fragment deliberate while the
+image remains horizontally centred. The stylesheet cache key was advanced.
+Headless Chromium checks at 1858px and 390px confirmed all four rendered widths
+and heights exactly match their natural dimensions, with the card overflow
+clipping correctly and the captions/layout unchanged.

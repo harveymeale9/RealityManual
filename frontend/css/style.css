@@ -1128,14 +1128,24 @@ img { max-width: 100%; }
 
 .home2-page .inside > .wrap { position: relative; z-index: 1; }
 .home2-page .inside .page-card-media {
+  position: relative;
   aspect-ratio: 9 / 16;
   border-color: rgba(201, 162, 77, 0.5);
   box-shadow: 0 18px 38px rgba(0, 0, 0, 0.55);
 }
 .home2-page .inside .page-card img {
-  object-fit: cover;
-  transform: none;
+  position: absolute;
+  left: 50%;
+  top: 24%;
+  width: auto;
+  max-width: none;
+  height: auto;
+  object-fit: none;
+  transform: translate(-50%, -50%);
 }
+.home2-page .inside .page-card:nth-child(2) img { top: 33%; }
+.home2-page .inside .page-card:nth-child(3) img { top: 25%; }
+.home2-page .inside .page-card:nth-child(4) img { top: 38%; }
 .home2-page .inside .page-card figcaption {
   color: rgba(231, 200, 130, 0.78);
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.95);
