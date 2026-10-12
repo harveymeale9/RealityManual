@@ -17050,8 +17050,6 @@ paths. A ready-state guard also dismisses the cover when a cached video decodes
 before its event listener is bound. CSS and Editor script cache keys were
 advanced.
 
----
-
 # 516. Project Manager Enter-to-Send Differs by Device (2026-10-12)
 
 The desktop Project Manager composer again sends a typed message when Enter is
@@ -17819,3 +17817,20 @@ unchanged. Headless Chromium confirmed every boundary computes to the same 1px
 solid translucent-gold rule at 1440px and 390px with no horizontal overflow;
 the result was also visually inspected. The `/home2` stylesheet cache key was
 advanced.
+
+---
+
+# 553. Home2 Inside-the-Book Row Uses Four Image Slots (2026-10-12)
+
+The testimonial at the end of `/home2`'s **Inside the Book** row has been
+removed and replaced with a fourth page-card slot. Until Harvey supplies the
+final image and caption, that slot deliberately duplicates the adjacent
+Advanced Techniques image and label. Desktop now uses four equal image columns;
+mobile uses a balanced two-by-two grid instead of the shared three-card layout's
+centred final item. These layout overrides are scoped to `.home2-page`, leaving
+the original storefront's testimonial and three-plus-quote composition intact.
+Headless Chromium verified four equal cards in one desktop row, four equal
+cards across two mobile rows, the deliberate duplicate source, preservation of
+the original homepage testimonial, and no horizontal overflow at 1440px or
+390px. Both renders were visually inspected. The `/home2` stylesheet cache key
+was advanced.
