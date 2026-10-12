@@ -1671,10 +1671,12 @@
         var oldWidth = manualTimelineInner.offsetWidth;
         var cursorX = event.clientX - manualTimelineViewport.getBoundingClientRect().left;
         var anchor = (manualTimelineViewport.scrollLeft + cursorX) / Math.max(1, oldWidth);
-        var currentZoom = Math.max(8, Math.min(180, Number(manualTimelineZoom[project.id]) || 14));
+        var duration = Math.max(0.01, Number(project.duration) || 0.01);
+        var displayedZoom = oldWidth / duration;
+        var currentZoom = Math.max(8, Math.min(180, Math.max(Number(manualTimelineZoom[project.id]) || 14, displayedZoom)));
         var nextZoom = Math.max(8, Math.min(180, currentZoom * (event.deltaY < 0 ? 1.25 : 0.8)));
         manualTimelineZoom[project.id] = nextZoom;
-        var nextWidth = Math.max(760, Math.round((Number(project.duration) || 0) * nextZoom));
+        var nextWidth = Math.max(manualTimelineViewport.clientWidth, Math.round(duration * nextZoom));
         manualTimelineInner.style.width = nextWidth + 'px';
         manualTimelineViewport.scrollLeft = Math.max(0, anchor * nextWidth - cursorX);
         var label = root.querySelector('#editorTimelineZoomLabel');
