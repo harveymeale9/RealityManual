@@ -1194,10 +1194,14 @@
       clearPendingImages();
       sendText(text, 'respond', { autoSpeak: carryVoice, images: images });
     });
-    // Enter is deliberately left to the textarea's native behavior so it
-    // always inserts a newline. Typed messages are sent only by explicitly
-    // clicking the Send button, which prevents an unfinished line from being
-    // submitted accidentally.
+    // Desktop keeps the familiar chat behavior: Enter sends, while
+    // Shift+Enter inserts a deliberate newline. The dedicated mobile view is
+    // button-only because its on-screen keyboard made accidental sends easy.
+    textInput.addEventListener('keydown', function (event) {
+      if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
+      event.preventDefault();
+      sendBtn.click();
+    });
     function autoresize() {
       textInput.style.height = 'auto';
       textInput.style.height = Math.min(textInput.scrollHeight, 160) + 'px';

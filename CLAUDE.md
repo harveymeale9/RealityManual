@@ -17049,3 +17049,14 @@ valid. The message calculation now lives in a shared helper used by both render
 paths. A ready-state guard also dismisses the cover when a cached video decodes
 before its event listener is bound. CSS and Editor script cache keys were
 advanced.
+
+---
+
+# 516. Project Manager Enter-to-Send Differs by Device (2026-10-12)
+
+The desktop Project Manager composer again sends a typed message when Enter is
+pressed; Shift+Enter remains available for an intentional newline, and IME
+composition is left undisturbed. The dedicated mobile Project Manager view
+retains the safer button-only behavior requested earlier, so its on-screen
+keyboard Enter key inserts a newline and only tapping Send submits the message.
+The desktop app script cache key was advanced.
