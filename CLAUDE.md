@@ -17083,3 +17083,17 @@ retired Filmed state. The piece write boundary also normalizes `filmed` to
 an invisible legacy card. Ideation progression and weekly-report milestones
 now use the same merged stage vocabulary. The Store script cache key was
 advanced.
+
+---
+
+# 518. Horizontal Editor Preview Captions Preserve Word Spacing (2026-10-12)
+
+Horizontal source-preview captions rendered each word as a separate
+`inline-block` so the currently spoken word could scale independently. The
+separator had been stored as trailing whitespace inside the preceding span;
+browsers collapse whitespace at an inline-block boundary, turning a valid
+phrase such as “stuff is fine, page turns” into the visibly joined
+“stuffisfine,pageturns.” The preview now inserts an explicit text node between
+word spans, preserving natural spaces without changing timed emphasis. The
+baked ASS caption renderer already joined words correctly and remains
+unchanged. The Editor script cache key was advanced.

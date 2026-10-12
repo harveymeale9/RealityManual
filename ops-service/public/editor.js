@@ -1703,8 +1703,13 @@
         var phraseScale = Math.max(0.65, Math.min(1, 50 / Math.max(50, phraseCharacters)));
         if (phraseScale < 1) caption.style.fontSize = (2.7 * phraseScale).toFixed(2) + 'cqw';
         group.words.forEach(function (word, index) {
+          // Whitespace at the end of an inline-block is collapsed away, so
+          // putting the separator inside the preceding word joined every
+          // horizontal caption into one unreadable string. Keep each word as
+          // its own emphasis target and insert a real text node between them.
+          if (index) caption.appendChild(document.createTextNode(' '));
           var span = document.createElement('span');
-          span.textContent = word.text + (index + 1 < group.words.length ? ' ' : '');
+          span.textContent = word.text;
           var emphasisEnd = index + 1 < group.words.length ? group.words[index + 1].sourceStart : group.sourceEnd;
           span.className = video.currentTime >= word.sourceStart && video.currentTime < emphasisEnd ? 'active' : '';
           caption.appendChild(span);
