@@ -18100,3 +18100,23 @@ instead of being cropped down to their centres. Other pages retain their
 existing gallery styling. Headless Chromium checks at 1858px and 390px confirmed
 all four exact files decode, render in the requested order, and keep legible,
 balanced captions across desktop and the two-column phone layout.
+
+---
+
+# 567. Home2 Hardcover Uses a True Transparent Product Cutout (2026-10-12)
+
+The Home2 purchase panel no longer embeds the book inside its old rectangular
+tabletop photograph. A high-fidelity transparent-background edit isolates the
+same minimal black cloth hardcover, retaining its perspective, spine, visible
+page block, texture, and small centred gold title. The project asset is saved as
+`reality-manual-deluxe-hardcover-cutout.webp`; WebP quality 92 with lossless
+alpha reduces the generated 3.4MB PNG to 512KB while preserving genuine 0–255
+transparency.
+
+The book renders slightly larger and now receives two CSS shadows: a deep,
+grounded black shadow for physical lift and a restrained warm halo that
+separates its dark cloth edges from the dark offer section. The surrounding
+copy remains centred in its own column. The Home2 stylesheet cache key was
+advanced, and headless Chromium screenshots at 1858px and 390px confirmed the
+background is gone, the cutout is prominent, and the responsive stack remains
+balanced.

@@ -668,10 +668,12 @@ img { max-width: 100%; }
 
 .home2-purchase__book img {
   display: block;
-  width: min(100%, 440px);
+  width: min(100%, 470px);
   height: auto;
   margin-inline: auto;
-  filter: drop-shadow(0 28px 35px rgba(0, 0, 0, 0.42));
+  filter:
+    drop-shadow(0 34px 32px rgba(0, 0, 0, 0.72))
+    drop-shadow(0 0 28px rgba(201, 162, 77, 0.16));
 }
 
 .home2-purchase__content { min-width: 0; }
