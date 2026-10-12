@@ -566,7 +566,7 @@
           '</div>' +
           '<div class="pm-activity-section">' +
             '<div class="pm-activity-head">Activity <span class="pm-activity-hint">— what Codex is doing, live</span></div>' +
-            '<div class="pm-activity" id="pmActivity"><div class="pm-activity-empty" id="pmActivityEmpty">Nothing happening yet.</div></div>' +
+            '<div class="pm-activity" id="pmActivity"><div class="pm-runner-status pm-runner-idle">○ Runner idle · waiting for a task</div></div>' +
           '</div>' +
         '</div>' +
       '</div>' +
@@ -1026,21 +1026,72 @@
     // Right-hand "code-like" pane — the raw tool-call/thinking trail, kept
     // deliberately separate from the clean thread on the left per Harvey:
     // this is the stuff he'll mostly ignore, not the stuff he reads.
-    function renderActivity(lines) {
+    function activityAge(timestamp) {
+      var milliseconds = timestamp ? Date.now() - new Date(timestamp).getTime() : NaN;
+      if (!Number.isFinite(milliseconds) || milliseconds < 0) return 'just now';
+      var seconds = Math.floor(milliseconds / 1000);
+      if (seconds < 10) return 'just now';
+      if (seconds < 60) return seconds + 's ago';
+      var minutes = Math.floor(seconds / 60);
+      if (minutes < 60) return minutes + 'm ago';
+      return Math.floor(minutes / 60) + 'h ago';
+    }
+
+    function elapsedSince(timestamp) {
+      var milliseconds = timestamp ? Date.now() - new Date(timestamp).getTime() : NaN;
+      if (!Number.isFinite(milliseconds) || milliseconds < 0) return 'starting';
+      var seconds = Math.floor(milliseconds / 1000);
+      if (seconds < 60) return seconds + 's elapsed';
+      var minutes = Math.floor(seconds / 60);
+      return minutes + 'm ' + (seconds % 60) + 's elapsed';
+    }
+
+    function renderActivity(rows, submitting) {
+      rows = Array.isArray(rows) ? rows : [];
+      var running = rows.find(function (row) { return row.status === 'running'; });
+      var pending = rows.filter(function (row) { return row.status === 'pending'; });
       activityEl.innerHTML = '';
-      if (!lines || !lines.length) {
-        var empty = document.createElement('div');
-        empty.className = 'pm-activity-empty';
-        empty.textContent = 'Nothing happening yet.';
-        activityEl.appendChild(empty);
-        return;
+
+      var status = document.createElement('div');
+      status.className = 'pm-runner-status';
+      if (running) {
+        var heartbeatTime = new Date(running.runner_heartbeat_at || 0).getTime();
+        var heartbeatLate = !heartbeatTime || Date.now() - heartbeatTime > 35000;
+        status.classList.add(heartbeatLate ? 'pm-runner-stale' : 'pm-runner-active');
+        status.textContent = heartbeatLate
+          ? '⚠ Runner heartbeat late · last signal ' + activityAge(running.runner_heartbeat_at || running.activity_updated_at || running.runner_started_at)
+          : '● Runner active · ' + elapsedSince(running.runner_started_at || running.created_at) +
+            ' · heartbeat ' + activityAge(running.runner_heartbeat_at) +
+            ' · Codex event ' + activityAge(running.activity_updated_at || running.runner_started_at);
+      } else if (pending.length || submitting) {
+        status.classList.add('pm-runner-starting');
+        status.textContent = '◌ Runner starting' + (pending.length ? ' · ' + pending.length + ' task' + (pending.length === 1 ? '' : 's') + ' queued' : ' · submitting task');
+      } else {
+        status.classList.add('pm-runner-idle');
+        status.textContent = '○ Runner idle · waiting for a task';
       }
+      activityEl.appendChild(status);
+
+      if (running && pending.length) {
+        var queueStatus = document.createElement('div');
+        queueStatus.className = 'pm-runner-queue';
+        queueStatus.textContent = 'Queue · ' + pending.length + ' more task' + (pending.length === 1 ? '' : 's') + ' waiting';
+        activityEl.appendChild(queueStatus);
+      }
+
+      var lines = running && Array.isArray(running.activity_log) ? running.activity_log : [];
       lines.forEach(function (line) {
         var el = document.createElement('div');
         el.className = 'pm-activity-line';
         el.textContent = line;
         activityEl.appendChild(el);
       });
+      if (running && !lines.length) {
+        var waiting = document.createElement('div');
+        waiting.className = 'pm-activity-empty';
+        waiting.textContent = 'Waiting for the first runner event…';
+        activityEl.appendChild(waiting);
+      }
       activityEl.scrollTop = activityEl.scrollHeight;
     }
 
@@ -1138,10 +1189,11 @@
           refreshAlertCount();
         }
       },
-      onActivity: function (row) { renderActivity(row.activity_log); },
+      onActivity: function () {},
       onTick: function (rows) {
         syncVisibleMailAlerts(rows);
         renderQueue(rows);
+        renderActivity(rows);
         pastFirstTick = true;
         if (Date.now() - lastAlertRefresh > 10000) { lastAlertRefresh = Date.now(); refreshAlertCount(); }
       }
@@ -1157,7 +1209,7 @@
       var userMessageEl = addMessage('user', text.trim(), null, images, replyTo ? replyTo.snippet : null);
       var agent = selectedAgent;
       var typingEl = addTyping(null, agent);
-      renderActivity(null);
+      renderActivity([], true);
       Voice.sendMessage(text.trim(), mode, images, replyTo ? replyTo.id : null, agent).then(function (created) {
         typingEl.dataset.msgId = created.id;
         userMessageEl.dataset.msgId = created.id;

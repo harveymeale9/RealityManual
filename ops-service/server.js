@@ -206,6 +206,14 @@ db.exec(
 // won't retrofit it onto an existing DB file — ALTER TABLE, no-op if the
 // column is already there (fresh DB or already migrated).
 try { db.exec('ALTER TABLE voice_messages ADD COLUMN activity_log TEXT'); } catch (e) { /* already exists */ }
+// Separate runner liveness from the human-readable activity trail. Tool calls
+// can legitimately be quiet for minutes, but the dashboard still needs to
+// prove that the queue supervisor is alive (and identify a genuinely stale
+// run). These timestamps are intentionally durable across browser refreshes
+// and service restarts.
+try { db.exec('ALTER TABLE voice_messages ADD COLUMN activity_updated_at TEXT'); } catch (e) { /* already exists */ }
+try { db.exec('ALTER TABLE voice_messages ADD COLUMN runner_started_at TEXT'); } catch (e) { /* already exists */ }
+try { db.exec('ALTER TABLE voice_messages ADD COLUMN runner_heartbeat_at TEXT'); } catch (e) { /* already exists */ }
 // early_ack: the first genuinely contextual sentence Codex produces for a
 // turn — spoken to Harvey immediately
 // instead of a hardcoded filler phrase while the real work is still in
@@ -264,8 +272,9 @@ const stmts = {
   insertVoiceMessage: db.prepare('INSERT INTO voice_messages (id, mode, transcript, status, created_at, reply_to_id, agent, attachments_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'),
   insertEmailInstruction: db.prepare("INSERT INTO voice_messages (id,mode,transcript,status,created_at,reply_to_id,agent,notification_kind,notification_unread,source_ref) VALUES(?,'execute',?,'pending',?,NULL,?,'conversation',0,?)"),
   insertEditorRevisionInstruction: db.prepare("INSERT INTO voice_messages (id,mode,transcript,status,created_at,reply_to_id,agent,notification_kind,notification_unread,source_ref) VALUES(?,'execute',?,'pending',?,NULL,'codex','conversation',0,?)"),
-  setVoiceMessageStatus: db.prepare('UPDATE voice_messages SET status = ? WHERE id = ?'),
-  setVoiceActivityLog: db.prepare('UPDATE voice_messages SET activity_log = ? WHERE id = ?'),
+  startVoiceMessage: db.prepare("UPDATE voice_messages SET status = 'running', runner_started_at = ?, runner_heartbeat_at = ? WHERE id = ?"),
+  touchVoiceRunner: db.prepare("UPDATE voice_messages SET runner_heartbeat_at = ? WHERE id = ? AND status = 'running'"),
+  setVoiceActivityLog: db.prepare('UPDATE voice_messages SET activity_log = ?, activity_updated_at = ?, runner_heartbeat_at = ? WHERE id = ?'),
   setVoiceEarlyAck: db.prepare('UPDATE voice_messages SET early_ack = ? WHERE id = ?'),
   setVoiceReplyAttachments: db.prepare('UPDATE voice_messages SET reply_attachments_json = ? WHERE id = ?'),
   finishVoiceMessage: db.prepare('UPDATE voice_messages SET status = ?, reply_text = ?, error_message = ?, completed_at = ? WHERE id = ?'),
@@ -3361,13 +3370,23 @@ async function recoverAgentVoiceMessage(id) {
   try { activity = row.activity_log ? JSON.parse(row.activity_log) : []; } catch (e) { activity = []; }
   function onActivity(line) {
     activity.push(line);
-    stmts.setVoiceActivityLog.run(JSON.stringify(activity.slice(-200)), id);
+    const stamp = new Date().toISOString();
+    stmts.setVoiceActivityLog.run(JSON.stringify(activity.slice(-200)), stamp, stamp, id);
   }
   function onEarlyAck(text) {
     if (!row.early_ack && text) stmts.setVoiceEarlyAck.run(text.slice(0, 2000), id);
   }
 
-  const result = await codexRunner.recoverCodexRun({ runKey: id, onActivity: onActivity, onEarlyAck: onEarlyAck });
+  const heartbeat = setInterval(function () {
+    stmts.touchVoiceRunner.run(new Date().toISOString(), id);
+  }, 10000);
+  heartbeat.unref();
+  let result;
+  try {
+    result = await codexRunner.recoverCodexRun({ runKey: id, onActivity: onActivity, onEarlyAck: onEarlyAck });
+  } finally {
+    clearInterval(heartbeat);
+  }
   const now = new Date().toISOString();
   if (!result) {
     stmts.finishVoiceMessage.run('error', null,
@@ -3416,7 +3435,8 @@ function buildSystemPromptForSession(sessionId) {
 }
 
 async function processVoiceMessage(id, mode, text, agent, imagePaths, attachmentPaths) {
-  stmts.setVoiceMessageStatus.run('running', id);
+  const runnerStartedAt = new Date().toISOString();
+  stmts.startVoiceMessage.run(runnerStartedAt, runnerStartedAt, id);
   syncEditorManualRevision(id);
   agent = normalizeVoiceAgent(agent);
   const sessionRow = stmts.getVoiceSession.get();
@@ -3441,7 +3461,8 @@ async function processVoiceMessage(id, mode, text, agent, imagePaths, attachment
   let activity = [];
   function onActivity(line) {
     activity.push(line);
-    stmts.setVoiceActivityLog.run(JSON.stringify(activity.slice(-200)), id);
+    const stamp = new Date().toISOString();
+    stmts.setVoiceActivityLog.run(JSON.stringify(activity.slice(-200)), stamp, stamp, id);
   }
   // Written the instant it's available (well before the turn finishes) so
   // the client can speak it immediately instead of a hardcoded filler —
@@ -3462,30 +3483,39 @@ async function processVoiceMessage(id, mode, text, agent, imagePaths, attachment
     });
   };
 
-  let result = await runSelectedAgent(sessionId);
-  // The resumed session id can go stale (e.g. the CLI's local session store
-  // living outside the persisted volume, wiped by a container rebuild) —
-  // rather than leave every future message stuck repeating the same
-  // failure forever, drop the dead session and retry once as a fresh one.
-  const missingSession = /thread|session|rollout/i.test(result.error || '') && /not found|no .*found|unknown|missing/i.test(result.error || '');
-  const writerConflict = /active writer|thread-store conflict/i.test(result.error || '');
-  // A long-running resumed session accumulates conversation history on top
-  // of the full project instructions — after enough turns (a long Editor-build session is the
-  // real case that triggered this) the combined prompt can exceed the
-  // model's context window outright. There is no way to trim a resumed
-  // session's own history from here, so the same self-healing move as a
-  // lost/invalid session applies: drop it and retry once completely fresh,
-  // rather than leaving Harvey looking at a bare "Prompt is too long" error.
-  const promptTooLong = /prompt is too long|prompt too long|context.{0,20}(window|length).{0,20}(exceed|too long)/i.test(result.error || '');
-  if (!result.ok && sessionId && (missingSession || writerConflict || promptTooLong)) {
-    console.error('voice ' + agent + ' session ' + sessionId + ' cannot be resumed, starting fresh:', result.error);
-    stmts.upsertCodexSession.run(null, new Date().toISOString());
-    activity.push(writerConflict
-      ? '— previous Codex writer was still attached; isolated it and started a clean session —'
-      : promptTooLong
-        ? '— previous session had grown too large for the model context; starting a fresh session —'
-        : '— previous session was lost, starting a new one —');
-    result = await runSelectedAgent(null);
+  const heartbeat = setInterval(function () {
+    stmts.touchVoiceRunner.run(new Date().toISOString(), id);
+  }, 10000);
+  heartbeat.unref();
+  let result;
+  try {
+    result = await runSelectedAgent(sessionId);
+    // The resumed session id can go stale (e.g. the CLI's local session store
+    // living outside the persisted volume, wiped by a container rebuild) —
+    // rather than leave every future message stuck repeating the same
+    // failure forever, drop the dead session and retry once as a fresh one.
+    const missingSession = /thread|session|rollout/i.test(result.error || '') && /not found|no .*found|unknown|missing/i.test(result.error || '');
+    const writerConflict = /active writer|thread-store conflict/i.test(result.error || '');
+    // A long-running resumed session accumulates conversation history on top
+    // of the full project instructions — after enough turns (a long Editor-build session is the
+    // real case that triggered this) the combined prompt can exceed the
+    // model's context window outright. There is no way to trim a resumed
+    // session's own history from here, so the same self-healing move as a
+    // lost/invalid session applies: drop it and retry once completely fresh,
+    // rather than leaving Harvey looking at a bare "Prompt is too long" error.
+    const promptTooLong = /prompt is too long|prompt too long|context.{0,20}(window|length).{0,20}(exceed|too long)/i.test(result.error || '');
+    if (!result.ok && sessionId && (missingSession || writerConflict || promptTooLong)) {
+      console.error('voice ' + agent + ' session ' + sessionId + ' cannot be resumed, starting fresh:', result.error);
+      stmts.upsertCodexSession.run(null, new Date().toISOString());
+      onActivity(writerConflict
+        ? '— previous Codex writer was still attached; isolated it and started a clean session —'
+        : promptTooLong
+          ? '— previous session had grown too large for the model context; starting a fresh session —'
+          : '— previous session was lost, starting a new one —');
+      result = await runSelectedAgent(null);
+    }
+  } finally {
+    clearInterval(heartbeat);
   }
   const now = new Date().toISOString();
   if (result.sessionId) {

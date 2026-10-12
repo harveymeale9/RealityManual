@@ -875,6 +875,12 @@ body.role-reviewer #pmBackFab {
   font-family: var(--font-mono); font-size: 0.78rem; line-height: 1.6; color: var(--ink-soft);
 }
 .pm-activity-empty { color: var(--ink-faint); font-style: italic; }
+.pm-runner-status { margin-bottom: 9px; padding: 8px 10px; border: 1px solid var(--border-soft); background: rgba(0, 0, 0, 0.18); color: var(--ink-dim); font-style: normal; letter-spacing: 0.015em; }
+.pm-runner-active { border-color: rgba(55, 255, 139, 0.32); color: var(--accent); }
+.pm-runner-starting { border-color: rgba(216, 174, 80, 0.34); color: #d8ae50; }
+.pm-runner-stale { border-color: rgba(255, 105, 90, 0.5); color: #ff695a; }
+.pm-runner-idle { color: var(--ink-faint); }
+.pm-runner-queue { padding: 1px 2px 7px; color: var(--ink-faint); font-style: italic; }
 .pm-activity-line { white-space: pre-wrap; word-break: break-word; padding: 3px 0; border-bottom: 1px dashed var(--border-soft); }
 .pm-activity-line:last-child { border-bottom: none; }
 

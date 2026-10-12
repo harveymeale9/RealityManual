@@ -17972,3 +17972,27 @@ ops-service suite passes.
 A live Chromium check against a 283,751,769-byte production source decoded a
 real 1920×1080 frame in 61ms while transferring two 4MB `206` responses (8MB
 total), rather than hydrating the complete 284MB file before assigning `src`.
+
+---
+
+# 561. Project Manager Activity Shows Durable Runner Liveness (2026-10-12)
+
+The Project Manager Activity panel no longer equates a temporarily quiet Codex
+stream with “Nothing happening yet.” Every running voice task now persists a
+runner start time plus a supervisor heartbeat updated every ten seconds,
+including while the service is watching a host-side Codex process recovered
+after a deploy. Human-readable tool/activity events keep their own timestamp,
+so process liveness and actual Codex output are observable independently.
+
+The desktop Activity panel is redrawn on every normal 2.5-second message poll,
+not only when the activity array grows. It therefore always reports one of four
+explicit states: runner active, runner starting with the queue count, runner
+idle, or heartbeat late. The active state includes elapsed runtime, heartbeat
+age, last Codex-event age, queued work, and the existing tool-event trail. A
+newly submitted task shows its starting state immediately instead of briefly
+clearing the panel. The existing host-process inactivity watchdog and durable
+restart recovery remain the enforcement paths; the new heartbeat makes their
+supervision visible and makes a stale service distinguishable from a merely
+long command.
+
+The complete 188-test ops-service suite passes.
