@@ -17282,3 +17282,18 @@ invalidates active older renders so the review output cannot retain the faster
 transition, and the Editor script cache key was advanced. Regression coverage
 asserts the shared 280ms timing and still performs the real white-to-black-to-
 blue page-change render.
+
+---
+
+# 528. Horizontal Camera Zooms Use the Exact Frame Centre (2026-10-12)
+
+Horizontal Editor camera moves no longer bias their zoom toward a presumed
+book position at 25% across and 34% down. Every opening and page-reset move now
+zooms directly toward 50% across and 50% down—the exact centre of the recorded
+frame—so Harvey can establish composition in-camera without the Editor moving
+the book sideways. Portrait motion remains centred as before.
+
+The lightweight browser preview and final FFmpeg `zoompan` filter use the same
+centre calculation. Render format version 21 invalidates active older renders,
+the Editor cache key was advanced, and regression coverage asserts both output
+paths use 50%/50% with no remaining horizontal offset.

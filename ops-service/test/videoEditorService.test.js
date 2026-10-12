@@ -223,7 +223,7 @@ test('page-change zoom uses one centred fractional resampling stage', function (
   assert.match(filter, /\*0\.5/);
 });
 
-test('horizontal resting crop follows the open book instead of the desk centre', function () {
+test('horizontal camera motion zooms into the exact frame centre', function () {
   const filter = editor.cameraMotionFilter({
     renderShape: { width: 1920, height: 1080 },
     layout: 'horizontal',
@@ -231,9 +231,12 @@ test('horizontal resting crop follows the open book instead of the desk centre',
     durationSeconds: 5,
     openingEnabled: true
   });
-  assert.match(filter, /\*0\.25/);
-  assert.match(filter, /\*0\.34/);
+  assert.equal((filter.match(/\*0\.5/g) || []).length, 2);
+  assert.doesNotMatch(filter, /\*0\.25|\*0\.34/);
   assert.match(filter, /0\.250/);
+  const previewSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'editor.js'), 'utf8');
+  assert.match(previewSource, /offsetX = width \* \(1 - openingScale\) \* 0\.5;/);
+  assert.match(previewSource, /offsetY = height \* \(1 - openingScale\) \* 0\.5;/);
 });
 
 test('camera motion restarts after automatic long-pause cuts but not manual cuts', function () {
@@ -739,7 +742,7 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.equal(stored.renderQuality.status, 'passed');
-  assert.equal(stored.renderVersion, 20);
+  assert.equal(stored.renderVersion, 21);
   assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), true);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
@@ -771,7 +774,7 @@ test('final render splices an inserted clip and its caption timeline between sou
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.ok(stored.editedDuration > 3.9 && stored.editedDuration < 4.1);
-  assert.equal(stored.renderVersion, 20);
+  assert.equal(stored.renderVersion, 21);
   assert.equal(stored.renderQuality.contentDuration, 2);
   assert.equal(stored.renderQuality.outroSeconds, 2);
   assert.ok(stored.renderQuality.insertedClipLoudness.clips[0].gainDb > 18);

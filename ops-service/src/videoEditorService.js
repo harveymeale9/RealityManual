@@ -19,15 +19,15 @@ const PAGE_CHANGE_CUT_SECONDS = 3;
 const PAGE_CHANGE_FADE_SECONDS = 0.28;
 const VIDEO_OUTRO_SECONDS = 2;
 // Footage is deliberately recorded wide enough to show a little table. The
-// opening move settles into a book-first framing and that composition remains
-// the baseline for the rest of the shot. Portrait openings use a gentler
+// opening move settles toward the exact centre of the recorded frame and that
+// composition remains the baseline for the rest of the shot. Portrait openings use a gentler
 // 112.5% target; horizontal openings and later reveal resets retain 125%.
 // Substantial
 // automatic long-pause cuts are treated as page changes and start the move
 // again from the wide camera frame.
 const OPENING_PUSH_IN_SCALE = 1.25;
 const VERTICAL_OPENING_PUSH_IN_SCALE = 1.125;
-const EDITOR_RENDER_VERSION = 20;
+const EDITOR_RENDER_VERSION = 21;
 const PAGE_CHANGE_SSIM_THRESHOLD = 0.5;
 const BROWSER_PREVIEW_VERSION = 2;
 const AUDIO_PREVIEW_MIX_VERSION = 3;
@@ -612,13 +612,10 @@ function cameraMotionFilter(options) {
   const renderShape = options.renderShape;
   const framesPerSecond = 30000 / 1001;
   const zoom = openingZoomExpression(options.elapsedStart, framesPerSecond, options.durationSeconds, options.targetScale);
-  // The open book sits left and slightly high in the fixed horizontal camera
-  // setup. Bias the crop toward its measured centre so 125% keeps both page
-  // edges visible instead of enlarging the surrounding desk. Portrait footage
-  // is deliberately framed around its single page and remains centred.
-  const horizontal = options.layout === 'horizontal';
-  const x = '(iw-iw/' + zoom + ')*' + (horizontal ? '0.25' : '0.5');
-  const y = '(ih-ih/' + zoom + ')*' + (horizontal ? '0.34' : '0.5');
+  // Camera placement is authoritative: every move zooms toward the exact frame
+  // centre, without trying to infer the book position from the layout.
+  const x = '(iw-iw/' + zoom + ')*0.5';
+  const y = '(ih-ih/' + zoom + ')*0.5';
   return ",zoompan=z='" + zoom + "':x='" + x + "':y='" + y + "':d=1:s=" +
     renderShape.width + 'x' + renderShape.height + ':fps=30000/1001,setsar=1';
 }

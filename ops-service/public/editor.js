@@ -1619,9 +1619,8 @@
       }
       var width = video.clientWidth || 0;
       var height = video.clientHeight || 0;
-      var horizontalBookFrame = (project.effectiveLayout || 'horizontal') === 'horizontal';
-      var offsetX = width * (1 - openingScale) * (horizontalBookFrame ? 0.25 : 0.5);
-      var offsetY = height * (1 - openingScale) * (horizontalBookFrame ? 0.34 : 0.5);
+      var offsetX = width * (1 - openingScale) * 0.5;
+      var offsetY = height * (1 - openingScale) * 0.5;
       video.style.transform = openingScale > 1.0001 ? 'matrix(' + openingScale.toFixed(5) + ',0,0,' + openingScale.toFixed(5) + ',' + offsetX.toFixed(3) + ',' + offsetY.toFixed(3) + ')' : '';
       video.style.transformOrigin = '0 0';
       var overlayOpacity = 0;
