@@ -670,20 +670,60 @@ function retakeCandidates(words) {
     const b = second.map(function (word) { return clean(word.text); }).filter(Boolean);
     let prefix = 0;
     while (prefix < Math.min(a.length, b.length) && a[prefix] === b[prefix]) prefix++;
-    const overlap = a.filter(function (token) { return b.includes(token); }).length / Math.max(a.length, b.length);
     const likelyRestart = prefix >= Math.min(3, a.length) && b.length > a.length;
-    const closeRepeat = overlap >= 0.68;
+    const closeRepeat = repeatedLineEvidence(a.join(' '), b.join(' '));
     if (!likelyRestart && !closeRepeat) continue;
     output.push({
       id: 'retake-' + index,
       removeWordIndices: first.map(function (word) { return word.index; }),
       firstText: first.map(function (word) { return word.text; }).join(' '),
       replacementText: second.map(function (word) { return word.text; }).join(' '),
-      confidence: likelyRestart && overlap >= 0.5 ? 'high' : 'review',
+      confidence: likelyRestart && closeRepeat ? 'high' : 'review',
       reason: likelyRestart ? 'The next take begins the same way and continues further.' : 'These adjacent lines substantially repeat one another.'
     });
   }
   return output;
+}
+
+const RETAKE_WEAK_TOKENS = new Set(['a', 'an', 'and', 'or', 'the', 'to', 'of', 'in', 'on', 'at', 'for', 'with', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'but']);
+
+function retakeSignalTokens(value) {
+  return String(value || '').toLowerCase().split(/\s+/).map(function (token) {
+    return token.replace(/[^a-z0-9']/g, '');
+  }).filter(function (token) { return token && !RETAKE_WEAK_TOKENS.has(token); });
+}
+
+function retakeTokenMatches(left, right) {
+  if (left === right) return true;
+  // Whisper commonly transcribes an abandoned word as a truncated version of
+  // the clean take (for example "manifesta-" then "manifestation").
+  return Math.min(left.length, right.length) >= 5 && (left.startsWith(right) || right.startsWith(left));
+}
+
+function repeatedLineEvidence(firstText, replacementText) {
+  const first = retakeSignalTokens(firstText);
+  const replacement = retakeSignalTokens(replacementText);
+  if (!first.length || !replacement.length) return false;
+  let replacementCursor = 0;
+  let matches = 0;
+  first.forEach(function (token) {
+    for (let index = replacementCursor; index < replacement.length; index++) {
+      if (!retakeTokenMatches(token, replacement[index])) continue;
+      matches++;
+      replacementCursor = index + 1;
+      break;
+    }
+  });
+  const firstCoverage = matches / first.length;
+  // A one-word card is useful only for an unmistakable truncated/repeated
+  // word. Longer attempts must repeat at least two meaningful words and most
+  // of the abandoned wording, in order, in the later take.
+  if (first.length === 1) return matches === 1 && retakeTokenMatches(first[0], replacement[0]);
+  return matches >= 2 && firstCoverage >= 0.6;
+}
+
+function isRepeatedLineRetakeCandidate(candidate) {
+  return !!candidate && repeatedLineEvidence(candidate.firstText, candidate.replacementText);
 }
 
 function normalizeRetakeDecisions(raw, words) {
@@ -731,16 +771,12 @@ function normalizeRetakeDecisions(raw, words) {
     // review cards for a lone "the" or "greater the", which then blocked the
     // final render even though the sentence was fluent. Keep meaningful
     // wording as the evidence and discard tiny scaffold-only guesses.
-    const weakTokens = new Set(['a', 'an', 'and', 'or', 'the', 'to', 'of', 'in', 'on', 'at', 'for', 'with', 'is', 'are', 'was', 'were', 'be', 'been', 'being']);
     const comparativeScaffoldTokens = new Set(['a', 'an', 'and', 'or', 'the', 'greater', 'more', 'less', 'fewer']);
-    const removedSignalTokens = removedTokens.filter(function (token) { return !weakTokens.has(token); });
-    const replacementSignalTokens = replacementTokens.filter(function (token) { return !weakTokens.has(token); });
+    const removedSignalTokens = removedTokens.filter(function (token) { return !RETAKE_WEAK_TOKENS.has(token); });
     if (!removedSignalTokens.length) return null;
-    let matchingPrefix = 0;
-    while (matchingPrefix < Math.min(removedSignalTokens.length, replacementSignalTokens.length) && removedSignalTokens[matchingPrefix] === replacementSignalTokens[matchingPrefix]) matchingPrefix++;
-    const sharedRatio = removedSignalTokens.filter(function (token) { return replacementSignalTokens.includes(token); }).length / Math.max(1, removedSignalTokens.length);
-    const lexicalSupport = matchingPrefix >= Math.min(2, removedSignalTokens.length) || sharedRatio >= 0.5;
+    const lexicalSupport = repeatedLineEvidence(removedTokens.join(' '), replacementTokens.join(' '));
     if (!lexicalSupport && removedTokens.length <= 2 && removedTokens.every(function (token) { return comparativeScaffoldTokens.has(token); })) return null;
+    if (!lexicalSupport) return null;
     const requestedHigh = decision.confidence === 'high';
     const confidence = requestedHigh && lexicalSupport ? 'high' : 'review';
     const reason = String(decision.reason || 'A nearby take may replace this wording.').slice(0, 260) +
@@ -758,9 +794,12 @@ function normalizeRetakeDecisions(raw, words) {
 }
 
 function retakeCandidatesForProject(project) {
-  return Array.isArray(project.retakeDecisions) && project.retakeDecisions.length
+  const candidates = Array.isArray(project.retakeDecisions) && project.retakeDecisions.length
     ? project.retakeDecisions
     : retakeCandidates(project.words || []);
+  // Apply the same deterministic gate when reading old stored decisions, so
+  // legacy model commentary about related ideas disappears immediately.
+  return candidates.filter(isRepeatedLineRetakeCandidate);
 }
 
 function unresolvedRetakeCount(project) {
@@ -2999,6 +3038,8 @@ module.exports = {
   cleanOrphanedEditorTempFiles,
   gapDecisions,
   retakeCandidates,
+  repeatedLineEvidence,
+  retakeCandidatesForProject,
   normalizeRetakeDecisions,
   unresolvedRetakeCount,
   appliedRetakeCount,

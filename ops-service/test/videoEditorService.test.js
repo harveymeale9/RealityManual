@@ -414,13 +414,39 @@ test('unrelated semantic ranges can never become automatic retake cuts', functio
     removeStartIndex: 0, removeEndIndex: 1, replacementStartIndex: 2, replacementEndIndex: 5,
     confidence: 'high', reason: 'Synthetic mistaken replacement.'
   }], timed);
-  assert.equal(decisions.length, 1);
-  assert.equal(decisions[0].confidence, 'review');
-  assert.match(decisions[0].reason, /wording differs enough/i);
+  assert.deepEqual(decisions, []);
   const project = { removedWordIndices: [], autoRetakeRemovedWordIndices: [], dismissedRetakeIds: [] };
   editor.reconcileAutomaticRetakeCuts(project, decisions);
   assert.deepEqual(project.removedWordIndices, []);
   assert.deepEqual(project.autoRetakeRemovedWordIndices, []);
+});
+
+test('conceptual repetition and continuations never become retake review cards', function () {
+  assert.equal(editor.repeatedLineEvidence(
+    'One may conclude that unconditional love requires unlimited tolerance of behaviour that causes genuine harm, or that remaining in a destructive relationship is somehow evidence of greater devotion.',
+    "This too misunderstands oneness. Love does not require the annihilation of one's own well-being for the sake of another, because the self is also the part of the whole being loved."
+  ), false);
+  assert.equal(editor.repeatedLineEvidence(
+    "Love does not require the annihilation of one's own well-being for the sake of another,",
+    'because the self is also the part of the whole being loved.'
+  ), false);
+  const legacyProject = { retakeDecisions: [{
+    id: 'smart-retake-legacy', firstText: 'Love does not require the annihilation of itself.',
+    replacementText: 'because the self is part of the whole being loved.', removeWordIndices: [0, 1], confidence: 'review'
+  }] };
+  assert.deepEqual(editor.retakeCandidatesForProject(legacyProject), []);
+  assert.equal(editor.unresolvedRetakeCount(legacyProject), 0);
+});
+
+test('actual repeated lines and truncated restarted words retain retake evidence', function () {
+  assert.equal(editor.repeatedLineEvidence(
+    'Take those things away from some...',
+    'Take those two things away from someone and watch what happens.'
+  ), true);
+  assert.equal(editor.repeatedLineEvidence(
+    'Most manifesta-',
+    'Most manifestation gurus and life coaches have no idea how the subconscious mind works.'
+  ), true);
 });
 
 test('comparative parallelism cannot become blocking retake review', function () {
@@ -436,19 +462,21 @@ test('comparative parallelism cannot become blocking retake review', function ()
 });
 
 test('overlapping semantic retake removals cannot create conflicting review cards', function () {
-  const timed = Array.from({ length: 12 }, function (_, index) {
-    return { index: index, text: 'w' + index, start: index, end: index + 0.4 };
-  });
+  const texts = ['start', 'this', 'same', 'line', 'again', 'start', 'this', 'same', 'line', 'cleanly', 'start', 'this'];
+  const timed = texts.map(function (text, index) { return { index: index, text: text, start: index, end: index + 0.4 }; });
   const decisions = editor.normalizeRetakeDecisions([
-    { removeStartIndex: 0, removeEndIndex: 3, replacementStartIndex: 5, replacementEndIndex: 7, confidence: 'review', reason: 'Uncertain overlap listed first' },
-    { removeStartIndex: 2, removeEndIndex: 4, replacementStartIndex: 8, replacementEndIndex: 10, confidence: 'high', reason: 'Clear failed take' },
-    { removeStartIndex: 0, removeEndIndex: 1, replacementStartIndex: 8, replacementEndIndex: 10, confidence: 'review', reason: 'Disjoint' }
+    { removeStartIndex: 0, removeEndIndex: 3, replacementStartIndex: 5, replacementEndIndex: 9, confidence: 'review', reason: 'Uncertain overlap listed first' },
+    { removeStartIndex: 2, removeEndIndex: 4, replacementStartIndex: 7, replacementEndIndex: 9, confidence: 'high', reason: 'Clear failed take' },
+    { removeStartIndex: 0, removeEndIndex: 1, replacementStartIndex: 10, replacementEndIndex: 11, confidence: 'review', reason: 'Disjoint' }
   ], timed);
   assert.deepEqual(decisions.map(function (decision) { return decision.removeWordIndices; }), [[2, 3, 4], [0, 1]]);
 });
 
 test('unresolved retakes block approval until cut or explicitly dismissed', function () {
-  const project = { words: words, removedWordIndices: [], dismissedRetakeIds: [], retakeDecisions: [{ id: 'smart-retake-0', removeWordIndices: [2, 3], confidence: 'review' }] };
+  const project = { words: words, removedWordIndices: [], dismissedRetakeIds: [], retakeDecisions: [{
+    id: 'smart-retake-0', removeWordIndices: [2, 3], confidence: 'review',
+    firstText: 'This same line starts here', replacementText: 'This same line starts here and finishes cleanly'
+  }] };
   assert.equal(editor.unresolvedRetakeCount(project), 1);
   assert.equal(editor.appliedRetakeCount(project), 0);
   project.removedWordIndices = [2, 3];
@@ -494,7 +522,8 @@ test('editor queue summaries omit transcript-scale payload while retaining actio
     words: [{ index: 0, text: 'Hello', start: 0, end: 0.4 }],
     transcriptText: 'Hello', removedWordIndices: [], autoRetakeRemovedWordIndices: [],
     dismissedRetakeIds: [], restoredAutoCutIds: [], retakeDecisions: [{
-      id: 'smart-retake-0-0-0', confidence: 'review', removeWordIndices: [0]
+      id: 'smart-retake-0-0-0', confidence: 'review', removeWordIndices: [0],
+      firstText: 'Hello again now', replacementText: 'Hello again now with the full line'
     }],
     cutDecisionHistory: [{ removedWordIndices: [] }], renderQuality: { status: 'passed' },
     visualClassification: { layout: 'horizontal', confidence: 'high' },

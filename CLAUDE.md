@@ -17243,3 +17243,29 @@ recordings, with orientation and work-state labels present on all nine cards.
 Opening the synthetic `Horizontal layout test` recording changed its icon to
 started, and that state survived a full page reload (leaving three started and
 six untouched in the live list).
+
+---
+
+# 526. Editor Retake Detection Is Limited to Repeated Lines (2026-10-12)
+
+The Editor no longer treats related ideas, restatements, explanations,
+continuations, or rhetorical repetition as possible retakes. The model prompt
+now asks only for an earlier failed attempt followed by substantially the same
+line, and explicitly says to omit uncertainty rather than manufacture a review
+card. More importantly, model output now passes a deterministic lexical gate:
+most of the earlier take's meaningful words must recur in the same order in the
+later take. A model's semantic commentary cannot bypass that rule.
+
+The same gate is applied when old stored decisions are read, so the two false
+cards on `Love & Self Sacrifice` disappear immediately without rewriting its
+record. Tests use those exact reported passages as negative fixtures, while
+real repeated lines and truncated/restarted words remain positive fixtures.
+Across the current live recordings this also removes old conceptual-review
+cards from `The Propagation of Success`, `Determine the conditions of victory`,
+`What if i don't love myself`, and the horizontal test recording, while keeping
+the genuine repeated takes.
+
+The interface is renamed from **Smart review / Possible retakes** to **Retake
+detection / Repeated takes**, states that only repeated lines are flagged, and
+uses a single neutral **Possible retake** badge. The Editor script cache key was
+advanced. The complete 177-test ops-service suite passes.
