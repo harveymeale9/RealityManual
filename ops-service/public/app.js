@@ -3983,7 +3983,9 @@
     videoEl.className = 'upload-row-video' + (p.videoIsVertical ? ' is-vertical' : '');
     videoEl.playsInline = true;
     videoEl.muted = true;
-    videoEl.preload = 'metadata';
+    // Range responses are capped server-side, so eager loading gets an actual
+    // decodable frame quickly without risking a whole-file download.
+    videoEl.preload = 'auto';
     if (p.thumbnailDataUrl) videoEl.poster = p.thumbnailDataUrl;
     var videoReady = videoEl.readyState >= 2;
     var frameLoader = document.createElement('div');

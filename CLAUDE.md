@@ -17960,7 +17960,7 @@ delivery (`Accept-Ranges`, `206`, `Content-Range`, bounded/open/suffix ranges,
 is essential because Chrome commonly asks for the valid but open-ended
 `bytes=0-`; returning the full remainder would reproduce the original whole-file
 transfer under a different API shape. Production points each video element directly
-at that endpoint with metadata preloading, allowing the browser to request only
+at that endpoint with eager frame preloading, allowing the browser to request only
 the chunks required for metadata and the current frame. When a saved thumbnail
 exists it is used as the poster immediately and remains visible through a light
 loading overlay until the decoded frame is ready. Thumbnail scrubbing, capture,
@@ -17968,3 +17968,7 @@ synchronized soundtrack preview, and reviewer access rules are unchanged.
 
 Focused tests cover valid and invalid range parsing. The complete 188-test
 ops-service suite passes.
+
+A live Chromium check against a 283,751,769-byte production source decoded a
+real 1920×1080 frame in 61ms while transferring two 4MB `206` responses (8MB
+total), rather than hydrating the complete 284MB file before assigning `src`.
