@@ -17905,3 +17905,16 @@ track-specific music and completed-mix measurements remain independent.
 Focused tests cover durable cache reuse, concurrent-request deduplication,
 settings invalidation, stale-file cleanup, and the two-job concurrency bound.
 The complete 185-test ops-service suite passes.
+
+---
+
+# 557. Production Soundtrack Auditions Have an Explicit Video Preview (2026-10-12)
+
+Each Production card now puts a prominent **Preview video** control directly
+beneath its picture. It uses the same synchronized playback path as the cached
+soundtrack audition controls, so the visible video, its voice track, and the
+currently selected backing track all start together from zero. The control
+becomes available only after both the browser-decodable video and the selected
+cached mix are ready, changes to **Stop video** while playing, and also supports
+the no-music option using the video's original audio. The existing scrubber and
+**Use this frame** thumbnail workflow remain independent and unchanged.

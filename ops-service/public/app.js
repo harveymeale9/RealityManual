@@ -3983,6 +3983,7 @@
     videoEl.className = 'upload-row-video' + (p.videoIsVertical ? ' is-vertical' : '');
     videoEl.playsInline = true;
     videoEl.muted = true;
+    var videoReady = videoEl.readyState >= 2;
     var frameLoader = document.createElement('div');
     frameLoader.className = 'upload-row-frame-loader';
     frameLoader.innerHTML = '<span class="spinner" aria-hidden="true"></span><span>Loading frame…</span>';
@@ -4059,9 +4060,21 @@
         setCaptureButtonState(true, 'Could not save — try again');
       });
     });
+    var videoPreviewControls = document.createElement('div');
+    videoPreviewControls.className = 'upload-row-video-preview-controls';
+    var videoPreviewBtn = document.createElement('button');
+    videoPreviewBtn.type = 'button';
+    videoPreviewBtn.className = 'btn-primary btn-tiny upload-row-video-preview';
+    videoPreviewBtn.textContent = '▶ Preview video';
+    videoPreviewBtn.disabled = true;
+    var videoPreviewHint = document.createElement('span');
+    videoPreviewHint.textContent = 'Voice + selected backing track';
+    videoPreviewControls.appendChild(videoPreviewBtn);
+    videoPreviewControls.appendChild(videoPreviewHint);
     videoShell.appendChild(videoEl);
     videoShell.appendChild(frameLoader);
     frameSection.appendChild(videoShell);
+    frameSection.appendChild(videoPreviewControls);
     frameSection.appendChild(scrub);
     frameSection.appendChild(captureBtn);
     // Disabled while a spinner covers the frame area until the video
@@ -4080,10 +4093,12 @@
       captureBtn.textContent = overrideText || (ready && frameMatchesThumbnail ? '✓ Thumbnail selected' : 'Use this frame');
     }
     function setFrameControlsReady(ready) {
+      videoReady = ready;
       frameLoader.hidden = ready;
       videoShell.classList.toggle('is-loading', !ready);
       setCaptureButtonState(ready);
       scrub.disabled = !ready || !canEditRow;
+      if (audioPreviewBtn) setPreviewButtonState();
     }
     setFrameControlsReady(videoEl.readyState >= 2);
     videoEl.addEventListener('loadeddata', function () { setFrameControlsReady(true); });
@@ -4092,7 +4107,7 @@
     });
     videoEl.addEventListener('error', function () {
       frameLoader.innerHTML = '<span>Video preview could not load.</span>';
-      setCaptureButtonState(false);
+      setFrameControlsReady(false);
     });
     Store.get('videos', p.id).then(function (v) {
       if (!v || !v.blob) {
@@ -4156,8 +4171,11 @@
     function setPreviewButtonState() {
       var selectable = !!audioSelect.value;
       var ready = audioSelect.value === '__none__' || !!previewUrls[audioSelect.value];
-      audioPreviewBtn.disabled = !selectable || !ready;
+      var canPreview = selectable && ready && videoReady;
+      audioPreviewBtn.disabled = !canPreview;
       audioPreviewBtn.textContent = previewPlaying ? 'Stop' : 'Preview';
+      videoPreviewBtn.disabled = !canPreview;
+      videoPreviewBtn.textContent = previewPlaying ? '■ Stop video' : '▶ Preview video';
       audioPrevious.disabled = audioTracks.length < 2;
       audioNext.disabled = audioTracks.length < 2;
     }
@@ -4209,6 +4227,9 @@
       }
       if (previewUrls[trackId]) { startSynchronizedPreview(trackId); return; }
       audioPreviewStatus.textContent = 'This soundtrack preview is still preparing…';
+    });
+    videoPreviewBtn.addEventListener('click', function () {
+      audioPreviewBtn.click();
     });
     function selectAdjacentTrack(offset) {
       var choices = ['__none__'].concat(audioTracks.map(function (track) { return track.id; }));
