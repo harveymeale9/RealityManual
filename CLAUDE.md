@@ -17383,3 +17383,15 @@ spread beneath the enlarged video fades continuously into the second panel.
 The `/home2` stylesheet cache key was advanced. Headless Chromium verified the
 desktop and mobile dimensions, the zero-width section borders, the resolved
 gradient endpoint, and no browser runtime errors.
+
+---
+
+# 533. `/home2` Hero Ends at the Video's Bottom Edge (2026-10-12)
+
+The enlarged VSL card now defines the exact lower boundary of the `/home2`
+hero. The hero no longer enforces a viewport-derived minimum height, its inner
+wrapper bottom padding is zero, and the card is bottom-aligned. Consequently
+there is no exposed hero-background strip beneath the video's gold bottom
+border: the `--bg-2` title-and-purchase panel begins on the very next pixel.
+The same rule applies on mobile, with the existing 2rem breathing room retained
+above the card rather than below it. The stylesheet cache key was advanced.
