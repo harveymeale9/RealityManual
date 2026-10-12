@@ -1025,6 +1025,7 @@ function projectListSummary(project) {
   summary.appliedRetakeCount = appliedRetakeCount(project);
   summary.layoutReviewRequired = layoutReviewRequired(project);
   summary.canUndoCut = Array.isArray(project.cutDecisionHistory) && project.cutDecisionHistory.length > 0;
+  summary.editStarted = editorWorkStarted(project);
   // Queue cards and status polling need lifecycle metadata, not the complete
   // transcript/edit graph. A filming batch can otherwise resend megabytes of
   // repeated word timing and analysis every 1.8 seconds.
@@ -1034,6 +1035,14 @@ function projectListSummary(project) {
     delete summary[key];
   });
   return summary;
+}
+
+function editorWorkStarted(project) {
+  if (!project) return false;
+  if (project.reviewStartedAt) return true;
+  if (Array.isArray(project.cutDecisionHistory) && project.cutDecisionHistory.length > 0) return true;
+  if (Array.isArray(project.manualRevisions) && project.manualRevisions.length > 0) return true;
+  return Number(project.editRevision) > 2;
 }
 
 function setup(options) {
@@ -1259,6 +1268,7 @@ function setup(options) {
     project.detectedContentType = contentTypeForProject(project, project.cuts);
     project.planningCandidates = typeof getPlanningCandidates === 'function' ? getPlanningCandidates(project) : [];
     project.canUndoCut = Array.isArray(project.cutDecisionHistory) && project.cutDecisionHistory.length > 0;
+    project.editStarted = editorWorkStarted(project);
     delete project.cutDecisionHistory;
     delete project.recentMutationIds;
     return project;
@@ -2410,6 +2420,17 @@ async function renderProject(id) {
     res.json({ ok: true, videoPiece: piece || null });
   });
 
+  router.post('/:id/review-started', function (req, res) {
+    if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
+    const project = getProject(req.params.id);
+    if (!project) return res.status(404).json({ error: 'not_found' });
+    if (!project.productionPieceId && !project.reviewStartedAt) {
+      project.reviewStartedAt = new Date().toISOString();
+      saveProject(project);
+    }
+    res.json({ ok: true, reviewStartedAt: project.reviewStartedAt || '', editStarted: editorWorkStarted(project) });
+  });
+
   router.get('/audio-tracks', function (req, res) {
     if (typeof getAudioTracks !== 'function') return res.status(501).json({ error: 'audio_library_unavailable' });
     const tracks = (getAudioTracks() || []).filter(function (track) {
@@ -2991,5 +3012,6 @@ module.exports = {
   openingPushInFilter,
   cameraMotionFilter,
   reconcileAutomaticRetakeCuts,
-  projectListSummary
+  projectListSummary,
+  editorWorkStarted
 };

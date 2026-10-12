@@ -505,11 +505,20 @@ test('editor queue summaries omit transcript-scale payload while retaining actio
   assert.equal(summary.renderStatus, 'ready');
   assert.equal(summary.unresolvedRetakeCount, 1);
   assert.equal(summary.canUndoCut, true);
+  assert.equal(summary.editStarted, true);
   ['words', 'transcriptText', 'removedWordIndices', 'retakeDecisions', 'cutDecisionHistory',
     'renderQuality', 'visualClassification', 'planningMatch'].forEach(function (key) {
     assert.equal(Object.prototype.hasOwnProperty.call(summary, key), false, key + ' should not be in a queue summary');
   });
   assert.equal(project.words.length, 1, 'summarizing must not mutate the durable project');
+});
+
+test('Editor work state ignores automation and recognizes review or manual decisions', function () {
+  assert.equal(editor.editorWorkStarted({ editRevision: 2, removedWordIndices: [1], renderStatus: 'ready' }), false);
+  assert.equal(editor.editorWorkStarted({ editRevision: 2, reviewStartedAt: '2026-10-12T12:00:00.000Z' }), true);
+  assert.equal(editor.editorWorkStarted({ editRevision: 2, cutDecisionHistory: [{ removedWordIndices: [] }] }), true);
+  assert.equal(editor.editorWorkStarted({ editRevision: 2, manualRevisions: [{ status: 'done' }] }), true);
+  assert.equal(editor.editorWorkStarted({ editRevision: 3 }), true);
 });
 
 test('adjacent removed transcript words become one manual cut', function () {

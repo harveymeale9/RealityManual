@@ -17215,3 +17215,24 @@ The selected second “Money” now begins at edited 26.28 seconds after one cle
 374.7ms measured silence. In the exact former artifact window, mean/max audio
 dropped from -41.0/-30.1 dB to -73.0/-58.3 dB; waveform inspection confirms
 the isolated burst is gone while the surrounding sentence audio is intact.
+
+---
+
+# 525. Editor Cards Distinguish Started Reviews from Untouched Automation (2026-10-12)
+
+Each Editor recording card now has a second compact state icon beside its
+portrait/landscape frame: a hollow grey circle means **Untouched**, while a
+filled green circle means **Edit started**. Both have matching accessible
+labels/tooltips. The state deliberately describes Harvey's review work rather
+than background processing—automatic transcription, retake detection, and a
+ready render do not mark a recording started by themselves.
+
+Opening an active recording for review now records a durable
+`reviewStartedAt` timestamp through a small idempotent endpoint. Existing work
+is recognized without a migration when the project already has decision
+history, a Manual revision, or a post-automation edit revision; this correctly
+classifies the two recordings already worked on while leaving seven
+automation-only recordings untouched. The list summary exposes only the
+derived boolean, not its internal evidence. Editor script and stylesheet cache
+keys were advanced. Regression coverage verifies untouched automatic state and
+every accepted manual-review signal; the full 175-test suite passes.

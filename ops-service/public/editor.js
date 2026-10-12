@@ -188,6 +188,12 @@
     return '<i class="editor-format-icon ' + layout + '" role="img" aria-label="' + label + '" title="' + label + '"></i>';
   }
 
+  function projectWorkStateIcon(item) {
+    var started = item && item.editStarted === true;
+    var label = started ? 'Edit started' : 'Untouched';
+    return '<i class="editor-work-icon ' + (started ? 'started' : 'untouched') + '" role="img" aria-label="' + label + '" title="' + label + '"></i>';
+  }
+
   function activeManualRevision(item) {
     return ((item && item.manualRevisions) || []).find(function (entry) {
       return entry && (entry.status === 'queued' || entry.status === 'running');
@@ -618,7 +624,7 @@
     }
     list.innerHTML = visibleProjects.map(function (item) {
       return '<button class="editor-project' + (project && item.id === project.id ? ' active' : '') + '" data-id="' + esc(item.id) + '">' +
-        '<div class="editor-project-title"><strong>' + esc(displayName(item)) + '</strong>' + projectFormatIcon(item) + '</div><span>' + esc(statusLabel(item)) + ' · ' + formatTime(item.duration) + (formatBytes(item.sizeBytes) ? ' · ' + formatBytes(item.sizeBytes) : '') + '</span></button>';
+        '<div class="editor-project-title"><strong>' + esc(displayName(item)) + '</strong><span class="editor-project-icons">' + projectWorkStateIcon(item) + projectFormatIcon(item) + '</span></div><span>' + esc(statusLabel(item)) + ' · ' + formatTime(item.duration) + (formatBytes(item.sizeBytes) ? ' · ' + formatBytes(item.sizeBytes) : '') + '</span></button>';
     }).join('');
     list.querySelectorAll('.editor-project').forEach(function (button) {
       button.addEventListener('click', function () { openProject(button.dataset.id); });
@@ -878,6 +884,13 @@
         Number(previousProject.editRevision || 0) === Number(item.editRevision || 0));
       if (item.renderStatus === 'ready') delete localPreviewRebuilds[item.id];
       project = item;
+      if (!quiet && !item.productionPieceId && !item.editStarted) {
+        item.editStarted = true;
+        projects = projects.map(function (entry) {
+          return entry.id === item.id ? Object.assign({}, entry, { editStarted: true }) : entry;
+        });
+        fetch('/api/editor/' + encodeURIComponent(item.id) + '/review-started', { method: 'POST', credentials: 'include' }).catch(function () {});
+      }
       if (item.ingestSource === 'desktop_listener') {
         fetch('/api/editor/' + encodeURIComponent(item.id) + '/seen', { method: 'POST', credentials: 'include' })
           .then(function () { if (typeof window.__rmRefreshEditorUnreadBadge === 'function') window.__rmRefreshEditorUnreadBadge(); })
