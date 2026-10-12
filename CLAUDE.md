@@ -17395,3 +17395,25 @@ there is no exposed hero-background strip beneath the video's gold bottom
 border: the `--bg-2` title-and-purchase panel begins on the very next pixel.
 The same rule applies on mobile, with the existing 2rem breathing room retained
 above the card rather than below it. The stylesheet cache key was advanced.
+
+---
+
+# 534. The Entire `/home2` Spread Hero Is the Video Surface (2026-10-12)
+
+The separate bordered VSL poster box has been removed from `/home2`. The hero
+section itself is now the `video-card`: its full-bleed open-book spread is the
+thumbnail, while **Watch the Video**, **What is The Reality Manual?**, the play
+button, and duration remain centred directly over that spread. Activating the
+play button appends the native video to the hero, so playback replaces the
+entire first panel rather than a smaller inset rectangle.
+
+The hero retains its responsive desktop and mobile panel heights, but now spans
+100% width with no border, inset margin, box shadow, or inner poster asset. Its
+bottom edge is still immediately followed by the title-and-purchase panel. The
+stylesheet cache key was advanced.
+
+Headless Chromium verified the structure at 1840×1000 and 390×844: no nested
+video card remains, the overlay is geometrically centred, the hero and offer
+share an exact zero-gap boundary, and the appended playback element covers the
+hero with zero positional or dimensional difference. No browser runtime errors
+occurred.
