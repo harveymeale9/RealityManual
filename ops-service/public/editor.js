@@ -36,6 +36,7 @@
   var uploadStatusPercent = 0;
   var MAX_RECORDING_BYTES = Math.floor(4.5 * 1024 * 1024 * 1024);
   var RESTING_CAMERA_SCALE = 1.25;
+  var VERTICAL_OPENING_CAMERA_SCALE = 1.125;
   var PAGE_CHANGE_FADE_SECONDS = 0.14;
   var listFilter = localStorage.getItem('rmEditorListFilter') === 'sent' ? 'sent' : 'active';
   var reviewRate = Number(localStorage.getItem('rmEditorReviewRate')) || 1;
@@ -296,6 +297,7 @@
       if (boundary <= editedTime + 0.001) resetAt = Math.max(resetAt, boundary);
     });
     return {
+      resetAt: resetAt,
       elapsed: Math.max(0, editedTime - resetAt),
       duration: (item.effectiveLayout || 'horizontal') === 'horizontal' && resetAt === 0 ? 5 : 3
     };
@@ -1026,7 +1028,7 @@
       (project.renderStatus === 'ready' ? '<button type="button" id="editorPreviewFinal" class="' + (previewMode === 'final' ? 'active' : '') + '"' + (previewLocked ? ' disabled' : '') + '>Final edit</button><button type="button" id="editorPreviewSource" class="' + (previewMode === 'source' ? 'active' : '') + '"' + (previewLocked ? ' disabled' : '') + '>' + sourcePreviewLabel + '</button>' : '') + '</div>';
     var automaticControlsHtml = '<div class="editor-controls"><label class="editor-toggle"><input type="checkbox" id="editorAutoSilence" ' + (project.autoSilenceEnabled !== false ? 'checked' : '') + '><span></span>Remove long pauses</label>' +
       '<label class="editor-toggle"><input type="checkbox" id="editorCaptions" ' + (project.captionsEnabled !== false ? 'checked' : '') + '><span></span>Add yellow captions</label>' +
-      '<label class="editor-toggle" title="Starts wide, settles to a tight 125% book framing, and repeats after each removed page-turn pause or inserted clip. Horizontal openings use five seconds; every other move uses three."><input type="checkbox" id="editorOpeningPushIn" ' + (project.openingPushInEnabled !== false ? 'checked' : '') + '><span></span>Page-change camera zooms</label>' +
+      '<label class="editor-toggle" title="Starts wide and gently settles to 112.5% on vertical openings. Horizontal openings and later page-turn or inserted-clip reveals still settle to 125%. Horizontal openings use five seconds; every other move uses three."><input type="checkbox" id="editorOpeningPushIn" ' + (project.openingPushInEnabled !== false ? 'checked' : '') + '><span></span>Page-change camera zooms</label>' +
       '<label class="editor-mode">Pacing<select id="editorPacing"><option value="tight"' + (Number(project.silenceThresholdSeconds) < 0.85 ? ' selected' : '') + '>Tight</option><option value="natural"' + (Number(project.silenceThresholdSeconds || 1) >= 0.85 && Number(project.silenceThresholdSeconds || 1) < 1.3 ? ' selected' : '') + '>Natural</option><option value="gentle"' + (Number(project.silenceThresholdSeconds || 1) >= 1.3 ? ' selected' : '') + '>Gentle</option></select></label>' +
       '<button type="button" class="btn-secondary btn-tiny editor-clear-automation" id="editorClearAutomation" ' + (!automaticCutsPresent ? 'disabled' : '') + ' title="Restore every pause and retake removed automatically. Manual transcript cuts stay intact.">Restore automatic cuts</button></div>';
     var selectedAudioExists = project.audioTrackId === '__none__' || audioTracks.some(function (track) { return track.id === project.audioTrackId; });
@@ -1585,7 +1587,10 @@
       if (previewingWorkingEdit && project.openingPushInEnabled !== false) {
         var motion = cameraMotionState(sourcePlayheadTime, project);
         var openingProgress = Math.max(0, Math.min(1, motion.elapsed / motion.duration));
-        openingScale = 1 + (RESTING_CAMERA_SCALE - 1) * openingProgress * openingProgress * (3 - 2 * openingProgress);
+        var targetScale = (project.effectiveLayout || 'horizontal') === 'vertical' && Math.abs(motion.resetAt) <= 0.001
+          ? VERTICAL_OPENING_CAMERA_SCALE
+          : RESTING_CAMERA_SCALE;
+        openingScale = 1 + (targetScale - 1) * openingProgress * openingProgress * (3 - 2 * openingProgress);
       }
       var width = video.clientWidth || 0;
       var height = video.clientHeight || 0;

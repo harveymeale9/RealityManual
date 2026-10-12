@@ -19,12 +19,15 @@ const PAGE_CHANGE_CUT_SECONDS = 3;
 const PAGE_CHANGE_FADE_SECONDS = 0.14;
 const VIDEO_OUTRO_SECONDS = 2;
 // Footage is deliberately recorded wide enough to show a little table. The
-// opening move settles into a tight book-first framing and that 125%
-// composition remains the baseline for the rest of the shot. Substantial
+// opening move settles into a book-first framing and that composition remains
+// the baseline for the rest of the shot. Portrait openings use a gentler
+// 112.5% target; horizontal openings and later reveal resets retain 125%.
+// Substantial
 // automatic long-pause cuts are treated as page changes and start the move
 // again from the wide camera frame.
 const OPENING_PUSH_IN_SCALE = 1.25;
-const EDITOR_RENDER_VERSION = 18;
+const VERTICAL_OPENING_PUSH_IN_SCALE = 1.125;
+const EDITOR_RENDER_VERSION = 19;
 const PAGE_CHANGE_SSIM_THRESHOLD = 0.5;
 const BROWSER_PREVIEW_VERSION = 2;
 const AUDIO_PREVIEW_MIX_VERSION = 3;
@@ -488,19 +491,21 @@ function patchAffectsRender(body) {
   });
 }
 
-function openingPushInScale(editedSeconds, durationSeconds) {
+function openingPushInScale(editedSeconds, durationSeconds, targetScale) {
   const duration = Math.max(0.001, Number(durationSeconds) || PAGE_ZOOM_SECONDS);
   const progress = clamp((Number(editedSeconds) || 0) / duration, 0, 1);
   const eased = progress * progress * (3 - 2 * progress);
-  return 1 + (OPENING_PUSH_IN_SCALE - 1) * eased;
+  const restingScale = Math.max(1, Number(targetScale) || OPENING_PUSH_IN_SCALE);
+  return 1 + (restingScale - 1) * eased;
 }
 
-function openingZoomExpression(elapsedStart, framesPerSecond, durationSeconds) {
+function openingZoomExpression(elapsedStart, framesPerSecond, durationSeconds, targetScale) {
   const frameOffset = (Math.max(0, Number(elapsedStart) || 0) * framesPerSecond).toFixed(6);
   const duration = Math.max(0.001, Number(durationSeconds) || PAGE_ZOOM_SECONDS);
   const progress = 'min(max((on+' + frameOffset + ')/(' + framesPerSecond.toFixed(8) + '*' + duration.toFixed(6) + '),0),1)';
   const eased = '(' + progress + '*' + progress + '*(3-2*' + progress + '))';
-  return '(1+' + (OPENING_PUSH_IN_SCALE - 1).toFixed(3) + '*' + eased + ')';
+  const restingScale = Math.max(1, Number(targetScale) || OPENING_PUSH_IN_SCALE);
+  return '(1+' + (restingScale - 1).toFixed(3) + '*' + eased + ')';
 }
 
 function cameraResetStarts(cuts, confirmedCutIds) {
@@ -546,6 +551,12 @@ function cameraMotionForSegment(segment, cuts, layout, confirmedCutIds) {
   return cameraMotionState(segment && segment.start, cuts, layout, confirmedCutIds);
 }
 
+function cameraMotionTargetScale(layout, motion, revealReset) {
+  return layout === 'vertical' && !revealReset && motion && Math.abs(Number(motion.resetAt) || 0) <= 0.001
+    ? VERTICAL_OPENING_PUSH_IN_SCALE
+    : OPENING_PUSH_IN_SCALE;
+}
+
 function visualPageChangeFromSsim(score) {
   return Number.isFinite(Number(score)) && Number(score) < PAGE_CHANGE_SSIM_THRESHOLD;
 }
@@ -582,7 +593,7 @@ function cameraMotionFilter(options) {
   if (!openingEnabled) return '';
   const renderShape = options.renderShape;
   const framesPerSecond = 30000 / 1001;
-  const zoom = openingZoomExpression(options.elapsedStart, framesPerSecond, options.durationSeconds);
+  const zoom = openingZoomExpression(options.elapsedStart, framesPerSecond, options.durationSeconds, options.targetScale);
   // The open book sits left and slightly high in the fixed horizontal camera
   // setup. Bias the crop toward its measured centre so 125% keeps both page
   // edges visible instead of enlarging the surrounding desk. Portrait footage
@@ -1739,7 +1750,7 @@ async function renderProject(id) {
         }
         if (segment.type === 'source') {
           const motion = cameraMotionForSegment(segment, cuts, layout, project.pageChangeCutIds);
-          videoFilter += cameraMotionFilter({ renderShape: renderShape, layout: layout, elapsedStart: motion.elapsed, durationSeconds: motion.duration, openingEnabled: project.openingPushInEnabled !== false });
+          videoFilter += cameraMotionFilter({ renderShape: renderShape, layout: layout, elapsedStart: motion.elapsed, durationSeconds: motion.duration, targetScale: cameraMotionTargetScale(layout, motion, segment.cameraResetAfterInsert === true), openingEnabled: project.openingPushInEnabled !== false });
           const pageFades = pageChangeFadesForSegment(segment, cuts, project.pageChangeCutIds);
           const pageFadeDuration = Math.min(PAGE_CHANGE_FADE_SECONDS, Math.max(0.02, segmentDuration / 2));
           if (pageFades.fadeIn) videoFilter += ',fade=t=in:st=0:d=' + pageFadeDuration.toFixed(3) + ':color=black';
@@ -2922,6 +2933,7 @@ module.exports = {
   cameraResetStarts,
   cameraMotionState,
   cameraMotionForSegment,
+  cameraMotionTargetScale,
   visualPageChangeFromSsim,
   detectVisualPageChangeCutIds,
   captionGroups,

@@ -17153,3 +17153,21 @@ edition card second. The production `/` homepage remains unchanged. Desktop
 1543×945 and mobile 390×844 browser checks confirm one video element, a
 centred hero player, and the title inside the second panel. The stylesheet
 cache key was advanced.
+
+---
+
+# 522. Vertical Editor Openings Use Half the Previous Zoom Strength (2026-10-12)
+
+The initial camera move on vertical Editor videos now eases from 100% to
+112.5% over the existing three seconds instead of ending at 125%. This halves
+the magnification change while preserving the same smooth timing and centred
+portrait crop. Horizontal openings remain a five-second move to 125%, and
+every later reveal after a confirmed page change or inserted clip still moves
+to 125%; only the first vertical opening is gentler.
+
+The lightweight working preview and final FFmpeg renderer use the same target
+selection. Render format version 19 invalidates active older renders so their
+review file cannot disagree with the new rule, and the Editor script cache key
+was advanced. Regression coverage checks the 112.5% easing/filter expression,
+the unchanged horizontal and reveal targets, and all real render integration
+paths. The complete 173-test service suite passes.

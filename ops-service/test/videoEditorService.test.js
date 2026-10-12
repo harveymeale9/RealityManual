@@ -178,18 +178,37 @@ test('every camera recording receives a scrub-optimized review proxy', function 
   assert.equal(editor.browserPreviewNeeded('camera.mp4', { videoCodec: 'h264', audioCodec: 'pcm_s16le' }), true);
 });
 
-test('camera zoom eases to a permanent 125 percent book-filling base over three or five seconds', function () {
+test('camera zoom supports a gentler vertical opening while preserving the 125 percent default', function () {
   assert.equal(editor.openingPushInScale(0), 1);
   assert.equal(editor.openingPushInScale(1.5), 1.125);
   assert.equal(editor.openingPushInScale(3), 1.25);
   assert.equal(editor.openingPushInScale(20), 1.25);
   assert.equal(editor.openingPushInScale(2.5, 5), 1.125);
   assert.equal(editor.openingPushInScale(5, 5), 1.25);
+  assert.equal(editor.openingPushInScale(1.5, 3, 1.125), 1.0625);
+  assert.equal(editor.openingPushInScale(3, 3, 1.125), 1.125);
   const filter = editor.openingPushInFilter({ width: 1080, height: 1920 }, 1.25);
   assert.match(filter, /zoompan=/);
   assert.match(filter, /on\+37\.462537/);
   assert.match(filter, /s=1080x1920/);
   assert.doesNotMatch(filter, /scale=w='trunc/);
+});
+
+test('only the initial vertical camera move uses the gentler zoom target', function () {
+  assert.equal(editor.cameraMotionTargetScale('vertical', { resetAt: 0 }), 1.125);
+  assert.equal(editor.cameraMotionTargetScale('vertical', { resetAt: 4 }), 1.25);
+  assert.equal(editor.cameraMotionTargetScale('vertical', { resetAt: 0 }, true), 1.25);
+  assert.equal(editor.cameraMotionTargetScale('horizontal', { resetAt: 0 }), 1.25);
+  const filter = editor.cameraMotionFilter({
+    renderShape: { width: 1080, height: 1920 },
+    layout: 'vertical',
+    elapsedStart: 0,
+    durationSeconds: 3,
+    targetScale: 1.125,
+    openingEnabled: true
+  });
+  assert.match(filter, /0\.125/);
+  assert.doesNotMatch(filter, /0\.250/);
 });
 
 test('page-change zoom uses one centred fractional resampling stage', function () {
@@ -653,7 +672,7 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.equal(stored.renderQuality.status, 'passed');
-  assert.equal(stored.renderVersion, 18);
+  assert.equal(stored.renderVersion, 19);
   assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), true);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
@@ -685,7 +704,7 @@ test('final render splices an inserted clip and its caption timeline between sou
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.ok(stored.editedDuration > 3.9 && stored.editedDuration < 4.1);
-  assert.equal(stored.renderVersion, 18);
+  assert.equal(stored.renderVersion, 19);
   assert.equal(stored.renderQuality.contentDuration, 2);
   assert.equal(stored.renderQuality.outroSeconds, 2);
   assert.ok(stored.renderQuality.insertedClipLoudness.clips[0].gainDb > 18);
