@@ -1867,7 +1867,8 @@ productionAudioPreviews = productionAudioPreviewService.setup({
     const row = stmts.getOne.get('settings', 'settings');
     return row ? JSON.parse(row.data) : {};
   },
-  buildAudioPreview: videoAnalysis.buildAudioPreview
+  buildAudioPreview: videoAnalysis.buildAudioPreview,
+  prepareAudioPreview: videoAnalysis.prepareAudioPreview
 });
 
 setImmediate(function () {

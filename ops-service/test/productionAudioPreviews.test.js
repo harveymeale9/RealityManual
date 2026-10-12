@@ -12,19 +12,20 @@ test('Production preview cache deduplicates work, persists results, and invalida
   t.after(function () { fs.rmSync(dir, { recursive: true, force: true }); });
   const video = path.join(dir, 'video'); const track = path.join(dir, 'track');
   fs.writeFileSync(video, 'video'); fs.writeFileSync(track, 'track');
-  let settings = { musicBelowDialogueDb: 20 }; let builds = 0;
+  let settings = { musicBelowDialogueDb: 20 }; let builds = 0; let preparations = 0;
   const service = previews.setup({
     rootDir: path.join(dir, 'cache'), concurrency: 2,
     getVideoPath: function () { return video; }, getAudioTrackPath: function () { return track; },
     getAudioTracks: function () { return [{ id: 'track-1' }]; }, getMixSettings: function () { return settings; },
-    buildAudioPreview: async function (_video, _track, output) { builds++; await new Promise(function (resolve) { setTimeout(resolve, 20); }); fs.writeFileSync(output, Buffer.alloc(2048)); }
+    prepareAudioPreview: async function () { preparations++; return { shared: true }; },
+    buildAudioPreview: async function (_video, _track, output, _settings, _options, prepared) { assert.deepEqual(prepared, { shared: true }); builds++; await new Promise(function (resolve) { setTimeout(resolve, 20); }); fs.writeFileSync(output, Buffer.alloc(2048)); }
   });
   const first = await Promise.all([service.ensure('piece-1', 'track-1'), service.ensure('piece-1', 'track-1')]);
-  assert.equal(first[0], first[1]); assert.equal(builds, 1); assert.ok(fs.statSync(first[0]).size > 1024);
+  assert.equal(first[0], first[1]); assert.equal(builds, 1); assert.equal(preparations, 1); assert.ok(fs.statSync(first[0]).size > 1024);
   assert.equal(await service.ensure('piece-1', 'track-1'), first[0]); assert.equal(builds, 1);
   settings = { musicBelowDialogueDb: 18 };
   const changed = await service.ensure('piece-1', 'track-1');
-  assert.notEqual(changed, first[0]); assert.equal(builds, 2); assert.equal(fs.existsSync(first[0]), false);
+  assert.notEqual(changed, first[0]); assert.equal(builds, 2); assert.equal(preparations, 2); assert.equal(fs.existsSync(first[0]), false);
   service.prune([]); assert.equal(fs.existsSync(path.dirname(changed)), false);
 });
 

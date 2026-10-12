@@ -33,8 +33,10 @@ function setup(options) {
   const getAudioTracks = options.getAudioTracks;
   const getMixSettings = options.getMixSettings;
   const buildAudioPreview = options.buildAudioPreview;
+  const prepareAudioPreview = options.prepareAudioPreview;
   const enqueue = createQueue(Math.max(1, Math.min(4, Number(options.concurrency) || 2)));
   const jobs = new Map();
+  const preparationJobs = new Map();
   fs.mkdirSync(rootDir, { recursive: true });
 
   function previewIdentity(pieceId, trackId) {
@@ -45,12 +47,15 @@ function setup(options) {
     const video = fs.statSync(videoPath);
     const audio = fs.statSync(audioPath);
     const settings = getMixSettings() || {};
+    const preparationKey = crypto.createHash('sha256').update(JSON.stringify({
+      video: [videoPath, video.size, video.mtimeMs], settings: settings
+    })).digest('hex');
     const hash = crypto.createHash('sha256').update(JSON.stringify({
       video: [video.size, video.mtimeMs], audio: [audio.size, audio.mtimeMs], settings: settings
     })).digest('hex').slice(0, 24);
     const dir = path.join(rootDir, pieceId);
     return { videoPath: videoPath, audioPath: audioPath, settings: settings, dir: dir,
-      path: path.join(dir, trackId + '-' + hash + '.mp3'), hash: hash };
+      path: path.join(dir, trackId + '-' + hash + '.mp3'), hash: hash, preparationKey: preparationKey };
   }
 
   function ensure(pieceId, trackId) {
@@ -61,7 +66,20 @@ function setup(options) {
       fs.mkdirSync(identity.dir, { recursive: true });
       const tempPath = identity.path + '.tmp-' + crypto.randomUUID();
       try {
-        await buildAudioPreview(identity.videoPath, identity.audioPath, tempPath, identity.settings, { bitrate: '192k' });
+        const preparationKey = identity.preparationKey;
+        let preparation = preparationJobs.get(preparationKey);
+        if (!preparation) {
+          preparation = typeof prepareAudioPreview === 'function'
+            ? Promise.resolve().then(function () { return prepareAudioPreview(identity.videoPath, identity.settings); })
+            : Promise.resolve(null);
+          preparation = preparation.catch(function (error) {
+            preparationJobs.delete(preparationKey);
+            throw error;
+          });
+          preparationJobs.set(preparationKey, preparation);
+        }
+        const prepared = await preparation;
+        await buildAudioPreview(identity.videoPath, identity.audioPath, tempPath, identity.settings, { bitrate: '192k' }, prepared);
         if (fs.statSync(tempPath).size <= 1024) throw new Error('The backing-audio preview was empty.');
         await fs.promises.rename(tempPath, identity.path);
         const prefix = trackId + '-';

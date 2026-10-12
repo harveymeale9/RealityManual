@@ -322,9 +322,17 @@ async function buildFinalVideo(videoPath, audioPath, outPath, mixInput) {
 // Audio-only audition used by Editor soundtrack previews. It deliberately
 // calls the same measurement and mix helpers as Final Check, so a preview is
 // representative of the production render rather than a lighter browser mix.
-async function buildAudioPreview(dialoguePath, audioPath, outPath, mixInput, outputOptions) {
+async function prepareAudioPreview(dialoguePath, mixInput) {
   const settings = normalizeAudioMixSettings(mixInput);
   const programmeDuration = await mediaDuration(dialoguePath);
+  const dialogueMeasurement = settings.mode === 'legacy_percent' ? null : await measureLoudness(dialoguePath, settings);
+  return { settings: settings, programmeDuration: programmeDuration, dialogueMeasurement: dialogueMeasurement };
+}
+
+async function buildAudioPreview(dialoguePath, audioPath, outPath, mixInput, outputOptions, preparedInput) {
+  const prepared = preparedInput || await prepareAudioPreview(dialoguePath, mixInput);
+  const settings = prepared.settings || normalizeAudioMixSettings(mixInput);
+  const programmeDuration = prepared.programmeDuration;
   if (settings.mode === 'legacy_percent') {
     await runFfmpeg(legacyAudioPreviewArgs(dialoguePath, audioPath, outPath, settings.legacyPercent, outputOptions,
       programmeDuration, VIDEO_OUTRO_SECONDS), 'legacy audio preview');
@@ -332,7 +340,7 @@ async function buildAudioPreview(dialoguePath, audioPath, outPath, mixInput, out
   }
   const tempAudioPath = outPath + '.loudness-mix.flac';
   try {
-    const dialogueMeasurement = await measureLoudness(dialoguePath, settings);
+    const dialogueMeasurement = prepared.dialogueMeasurement;
     const musicMeasurement = await measureMusicPeak(audioPath, programmeDuration);
     await runFfmpeg(measuredMixAudioArgs(dialoguePath, audioPath, tempAudioPath, settings, dialogueMeasurement,
       musicMeasurement, programmeDuration, VIDEO_OUTRO_SECONDS), 'preview audio mix');
@@ -424,6 +432,7 @@ module.exports = {
   matchAndGenerateTitles,
   buildFinalVideo,
   buildAudioPreview,
+  prepareAudioPreview,
   ensureBrowserCompatibleVideo,
   applyGeneratedTitleSuggestions,
   normalizeAmbientVolumePercent,

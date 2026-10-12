@@ -17894,6 +17894,11 @@ read the same current Content Settings profile used by these Production
 auditions, eliminating the old possibility of an inherited Editor mix profile
 disagreeing with the preview.
 
+The batch prepares each video's duration and integrated dialogue-loudness
+measurement once and shares that result across all 30 track mixes. It does not
+repeat the identical full-video measurement in both workers for every track;
+track-specific music and completed-mix measurements remain independent.
+
 Focused tests cover durable cache reuse, concurrent-request deduplication,
 settings invalidation, stale-file cleanup, and the two-job concurrency bound.
 The complete 185-test ops-service suite passes.
