@@ -17518,7 +17518,7 @@ the timeline scroll position to 123px, split at 1:12, and verified the new video
 retained `data-seek-time="72.000"`, the split marker appeared at 72%, and the
 replacement viewport restored to 123px with no browser runtime errors. The
 complete ops-service suite also passes: 178 tests, zero failures.
-# 489. Desktop Listener Capacity Rejection Was False for Render-Ready Work (2026-10-12)
+# 539. Desktop Listener Capacity Rejection Was False for Render-Ready Work (2026-10-12)
 
 A completed 2.46 GB horizontal OBS recording was discovered immediately by the
 Windows listener and durably queued, but never appeared in Editor. The live
