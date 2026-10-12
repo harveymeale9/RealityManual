@@ -17647,3 +17647,21 @@ CTA are unchanged. Headless Chromium verified the exact content/order, all
 three assurance items, and no horizontal overflow at 1440×900 and 390×844.
 Both section screenshots were visually inspected, and the `/home2` stylesheet
 cache key was advanced.
+
+---
+
+# 544. `/home2` Closing CTA Replaced by Review Proof (2026-10-12)
+
+The closing `/home2` purchase panel no longer repeats the page's product title
+or the earlier pair of brand quotations. It now leads with the testimonial “A
+rare combination of depth, clarity, and practical value,” a five-star rating,
+and three compact five-star review quotes before the checkout action.
+
+The replacement retains one centered **Continue to Checkout** button and the
+same three purchase assurances used in the preceding purchase panel: secure
+Stripe checkout, worldwide shipping, and encrypted payment. Its review grid,
+gold star treatment, dividers, and responsive type are scoped to `/home2`, so
+the original homepage closing CTA is unchanged. Headless Chromium verified the
+replacement content, review count, checkout link, assurance count, and absence
+of horizontal overflow at desktop and mobile widths; both renders were also
+visually inspected. The `/home2` stylesheet cache key was advanced.
