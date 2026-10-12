@@ -18158,3 +18158,19 @@ figure instead of the Purpose–Reality–Objective page. It retains the gallery
 native-pixel 1:1 rendering and existing fourth-card focal point, with updated
 alt text describing the new page. The previous photograph remains available in
 the staged interior asset set but is no longer referenced by the card.
+
+---
+
+# 571. Home2 Hardcover Has a Restrained Floating Presentation (2026-10-12)
+
+The transparent hardcover in Home2's purchase panel now moves through a slow
+5.2-second ease-in-out float, rising only 11px before returning. Its black drop
+shadow softens and the warm gold edge glow breathes slightly at the top of the
+motion. A separate blurred floor shadow remains anchored beneath the book and
+contracts/fades as the book rises, which makes the motion feel physical rather
+than like the entire image box is sliding.
+
+The animation is CSS-only, keeps the existing layout dimensions unchanged, and
+is disabled by `prefers-reduced-motion: reduce` while retaining the static book
+and shadows. The Home2 stylesheet cache key was advanced so the effect appears
+without stale browser CSS.
