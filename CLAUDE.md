@@ -17934,3 +17934,13 @@ remove the selected speech and intervening dead space independently of the
 automatic-silence pacing preference. Render and automatic-boundary versions
 were advanced so non-Production Editor projects and all future recordings use
 the corrected rules; Production copies remain immutable.
+
+---
+
+# 559. Home2 Closing CTA Keeps Only Its Featured Review (2026-10-12)
+
+The `/home2` closing CTA no longer shows the three smaller review snippets or
+their repeated star rows. It now keeps only the large featured quote and its
+single five-star line above the checkout button. The removed grid's desktop
+dividers and mobile typography rules were deleted, and the button receives its
+own responsive top spacing so the simplified section remains balanced.

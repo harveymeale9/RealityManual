@@ -749,52 +749,18 @@ img { max-width: 100%; }
   line-height: 1.02;
 }
 
-.home2-review__stars,
-.home2-review__small-stars {
+.home2-review__stars {
   color: var(--accent-2);
   line-height: 1;
   letter-spacing: 0.2em;
-}
-
-.home2-review__stars {
   margin-top: 1rem;
   font-size: clamp(1.2rem, 1.9vw, 1.65rem);
-}
-
-.home2-review__quotes {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: clamp(2rem, 4vw, 3rem) 0 clamp(2.2rem, 4vw, 3rem);
-}
-
-.home2-review__quotes figure {
-  margin: 0;
-  padding: 0 clamp(0.75rem, 3vw, 2.4rem);
-}
-
-.home2-review__quotes figure + figure {
-  border-left: 1px solid var(--border);
-}
-
-.home2-review__quotes blockquote {
-  margin: 0;
-  color: var(--ink);
-  font-family: var(--serif);
-  font-size: clamp(1rem, 1.55vw, 1.3rem);
-  font-style: italic;
-  font-weight: 500;
-  line-height: 1.18;
-}
-
-.home2-review__small-stars {
-  margin-top: 0.85rem;
-  font-size: clamp(0.72rem, 1.05vw, 0.9rem);
 }
 
 .home2-review__button {
   display: block;
   width: min(100%, 570px);
-  margin-inline: auto;
+  margin: clamp(2.2rem, 4vw, 3rem) auto 0;
   text-align: center;
 }
 
@@ -857,13 +823,6 @@ img { max-width: 100%; }
     font-size: clamp(1.75rem, 7.5vw, 2.4rem);
   }
 
-  .home2-review__quotes figure {
-    padding-inline: clamp(0.35rem, 2vw, 0.85rem);
-  }
-
-  .home2-review__quotes blockquote {
-    font-size: clamp(0.78rem, 3.3vw, 1rem);
-  }
 }
 
 /* ----------------------------------------------------------------- offer */
