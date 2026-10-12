@@ -5,72 +5,20 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   3c9e36c..b56220a  main       -> origin/main
+   b56220a..4b9680f  main       -> origin/main
 + git merge --ff-only origin/main
-Updating 3c9e36c..b56220a
+Updating b56220a..4b9680f
 Fast-forward
- CLAUDE.md                                          | 210 +++++++++++++++++++++
- frontend/css/style.css                             |  98 ++++++----
- ...g => reality-manual-black-hardcover-cutout.png} | Bin
- ...reality-manual-black-hardcover-hero-source.png} | Bin
- .../reality-manual-black-hardcover-hero-v2.jpg     | Bin 0 -> 324754 bytes
- .../photo/reality-manual-black-hardcover-hero.jpg  | Bin 0 -> 260986 bytes
- ...ality-manual-black-hardcover-mobile-source.png} | Bin
- .../reality-manual-black-hardcover-mobile.jpg      | Bin 0 -> 447281 bytes
- ...ound.png => reality-manual-hero-background.png} | Bin
- ...reality-manual-interior-advanced-techniques.jpg | Bin 0 -> 1040333 bytes
- .../reality-manual-interior-core-principles.jpg    | Bin 0 -> 888737 bytes
- ...lity-manual-interior-practical-applications.jpg | Bin 0 -> 1017729 bytes
- .../img/photo/reality-manual-open-book-spread.jpg  | Bin 0 -> 330564 bytes
- frontend/img/photo/reality-manual-vsl-poster.jpg   | Bin 0 -> 82322 bytes
- frontend/img/placeholder/edition-thumb.svg         |  18 --
- ...{book-hero.svg => reality-manual-book-hero.svg} |   0
- .../reality-manual-edition-thumbnail.svg           |  20 ++
- ...o-bg.svg => reality-manual-hero-background.svg} |   0
- ...ge-1.svg => reality-manual-interior-page-1.svg} |   0
- ...ge-2.svg => reality-manual-interior-page-2.svg} |   0
- ...ge-3.svg => reality-manual-interior-page-3.svg} |   0
- ...ge-4.svg => reality-manual-interior-page-4.svg} |   0
- ...-poster.svg => reality-manual-video-poster.svg} |   0
- ...ack-cover.svg => reality-manual-back-cover.svg} |   0
- ...nt-cover.svg => reality-manual-front-cover.svg} |   0
- .../{full-set.svg => reality-manual-full-set.svg}  |   0
- ...detail.svg => reality-manual-jacket-detail.svg} |   0
- .../{spine.svg => reality-manual-spine.svg}        |   0
- frontend/index.html                                |  59 +++---
- frontend/js/checkout.js                            |   2 +-
- ops-service/public/app.js                          |   6 +-
- ops-service/public/index.html                      |   4 +-
- ops-service/public/lib/store.js                    |  11 +-
- 33 files changed, 337 insertions(+), 91 deletions(-)
- rename frontend/img/photo/{hero-book.png => reality-manual-black-hardcover-cutout.png} (100%)
- rename frontend/img/photo/{book-desk.png => reality-manual-black-hardcover-hero-source.png} (100%)
- create mode 100644 frontend/img/photo/reality-manual-black-hardcover-hero-v2.jpg
- create mode 100644 frontend/img/photo/reality-manual-black-hardcover-hero.jpg
- rename frontend/img/photo/{book-desk-square.png => reality-manual-black-hardcover-mobile-source.png} (100%)
- create mode 100644 frontend/img/photo/reality-manual-black-hardcover-mobile.jpg
- rename frontend/img/photo/{hero-background.png => reality-manual-hero-background.png} (100%)
- create mode 100644 frontend/img/photo/reality-manual-interior-advanced-techniques.jpg
- create mode 100644 frontend/img/photo/reality-manual-interior-core-principles.jpg
- create mode 100644 frontend/img/photo/reality-manual-interior-practical-applications.jpg
- create mode 100644 frontend/img/photo/reality-manual-open-book-spread.jpg
- create mode 100644 frontend/img/photo/reality-manual-vsl-poster.jpg
- delete mode 100644 frontend/img/placeholder/edition-thumb.svg
- rename frontend/img/placeholder/{book-hero.svg => reality-manual-book-hero.svg} (100%)
- create mode 100644 frontend/img/placeholder/reality-manual-edition-thumbnail.svg
- rename frontend/img/placeholder/{hero-bg.svg => reality-manual-hero-background.svg} (100%)
- rename frontend/img/placeholder/{page-1.svg => reality-manual-interior-page-1.svg} (100%)
- rename frontend/img/placeholder/{page-2.svg => reality-manual-interior-page-2.svg} (100%)
- rename frontend/img/placeholder/{page-3.svg => reality-manual-interior-page-3.svg} (100%)
- rename frontend/img/placeholder/{page-4.svg => reality-manual-interior-page-4.svg} (100%)
- rename frontend/img/placeholder/{video-poster.svg => reality-manual-video-poster.svg} (100%)
- rename frontend/img/product/{back-cover.svg => reality-manual-back-cover.svg} (100%)
- rename frontend/img/product/{front-cover.svg => reality-manual-front-cover.svg} (100%)
- rename frontend/img/product/{full-set.svg => reality-manual-full-set.svg} (100%)
- rename frontend/img/product/{jacket-detail.svg => reality-manual-jacket-detail.svg} (100%)
- rename frontend/img/product/{spine.svg => reality-manual-spine.svg} (100%)
+ CLAUDE.md                            |   62 ++
+ frontend/css/style.css               |   56 +-
+ frontend/index.html                  |   10 +-
+ ops-service/.ci/last-run.log         | 1761 ++--------------------------------
+ ops-service/public/app.js            |   10 +-
+ ops-service/public/index.html        |    2 +-
+ ops-service/public/voice-mobile.html |    5 +-
+ 7 files changed, 175 insertions(+), 1731 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=b56220ac8d07fd55d9f791400759a1a7820e324d
++ NEW_HEAD=4b9680f0b936dbe6630eb1e69c77f7c39c56b6ec
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -83,12 +31,12 @@ Already up to date.
 + NEEDS_REBUILD=1
 + '[' -n 9613b39cea6e7a4ff29feff59d94db89c660a775 ']'
 + git cat-file -e '9613b39cea6e7a4ff29feff59d94db89c660a775^{commit}'
-++ git diff --name-only 9613b39cea6e7a4ff29feff59d94db89c660a775 b56220ac8d07fd55d9f791400759a1a7820e324d -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
+++ git diff --name-only 9613b39cea6e7a4ff29feff59d94db89c660a775 4b9680f0b936dbe6630eb1e69c77f7c39c56b6ec -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z '' ']'
 + NEEDS_REBUILD=0
 + '[' 0 = 1 ']'
 + '[' 0 = 0 ']'
-+ echo 'no backend changes between 9613b39cea6e7a4ff29feff59d94db89c660a775 and b56220ac8d07fd55d9f791400759a1a7820e324d — already live via git pull, skipping rebuild/restart'
-no backend changes between 9613b39cea6e7a4ff29feff59d94db89c660a775 and b56220ac8d07fd55d9f791400759a1a7820e324d — already live via git pull, skipping rebuild/restart
++ echo 'no backend changes between 9613b39cea6e7a4ff29feff59d94db89c660a775 and 4b9680f0b936dbe6630eb1e69c77f7c39c56b6ec — already live via git pull, skipping rebuild/restart'
+no backend changes between 9613b39cea6e7a4ff29feff59d94db89c660a775 and 4b9680f0b936dbe6630eb1e69c77f7c39c56b6ec — already live via git pull, skipping rebuild/restart
 + exit 0
 ssh exit code: 0
