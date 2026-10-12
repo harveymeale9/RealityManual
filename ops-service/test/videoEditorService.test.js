@@ -28,6 +28,16 @@ test('inserted clips are gain-matched to the main voice loudness', function () {
   assert.throws(function () { editor.parseIntegratedLoudness('{ "input_i" : "-inf" }'); }, /too quiet/);
 });
 
+test('manual voice-level adjustments are bounded and become timed FFmpeg gain filters', function () {
+  assert.deepEqual(editor.normalizeVoiceGainAdjustments([
+    { start: 15.4904, gainDb: -2.934 }, { start: 999, gainDb: -80 }, { start: 'bad', gainDb: 2 }
+  ], 45.94), [
+    { start: 15.49, gainDb: -2.93 }, { start: 45.94, gainDb: -24 }
+  ]);
+  assert.equal(editor.voiceGainFilter([{ start: 15.49, gainDb: -2.93 }], 45.94),
+    "volume=-2.93dB:enable='gte(t\\,15.490)'");
+});
+
 test('inserted clips split the source timeline and supply their own timed captions', function () {
   const project = {
     duration: 4, removedWordIndices: [],
@@ -420,6 +430,7 @@ test('metadata-only editor changes preserve a verified render', function () {
   assert.equal(editor.patchAffectsRender({ manualTrimCuts: [{ start: 1, end: 2 }] }), true);
   assert.equal(editor.patchAffectsRender({ layoutOverride: 'vertical' }), true);
   assert.equal(editor.patchAffectsRender({ openingPushInEnabled: false }), true);
+  assert.equal(editor.patchAffectsRender({ voiceGainAdjustments: [{ start: 15.49, gainDb: -2.93 }] }), true);
   assert.equal(editor.patchAffectsRender({ punchIns: [{ start: 1, end: 2 }] }), false);
   assert.equal(editor.patchNeedsAutoRender({ renderStatus: 'ready' }, false), false);
   assert.equal(editor.patchNeedsAutoRender({ renderStatus: '' }, false), true);

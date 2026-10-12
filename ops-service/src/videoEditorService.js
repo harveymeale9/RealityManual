@@ -559,9 +559,27 @@ function advanceEditRevision(project) {
 function patchAffectsRender(body) {
   body = body && typeof body === 'object' ? body : {};
   return ['removedWordIndices', 'manualTrimCuts', 'wordCorrection', 'autoSilenceEnabled', 'restoredAutoCutIds', 'captionsEnabled',
-    'layoutOverride', 'openingPushInEnabled', 'silenceThresholdSeconds', 'retainedPauseSeconds'].some(function (key) {
+    'layoutOverride', 'openingPushInEnabled', 'silenceThresholdSeconds', 'retainedPauseSeconds', 'voiceGainAdjustments'].some(function (key) {
     return Object.prototype.hasOwnProperty.call(body, key);
   });
+}
+
+function normalizeVoiceGainAdjustments(adjustments, duration) {
+  const limit = Math.max(0, Number(duration) || 0);
+  if (!Array.isArray(adjustments)) return [];
+  return adjustments.slice(0, 20).map(function (adjustment) {
+    if (!adjustment || !Number.isFinite(Number(adjustment.start)) || !Number.isFinite(Number(adjustment.gainDb))) return null;
+    return {
+      start: Number(clamp(Number(adjustment.start), 0, limit).toFixed(3)),
+      gainDb: Number(clamp(Number(adjustment.gainDb), -24, 24).toFixed(2))
+    };
+  }).filter(Boolean).sort(function (a, b) { return a.start - b.start; });
+}
+
+function voiceGainFilter(adjustments, duration) {
+  return normalizeVoiceGainAdjustments(adjustments, duration).map(function (adjustment) {
+    return "volume=" + adjustment.gainDb.toFixed(2) + "dB:enable='gte(t\\," + adjustment.start.toFixed(3) + ")'";
+  }).join(',');
 }
 
 function openingPushInScale(editedSeconds, durationSeconds, targetScale) {
@@ -1907,7 +1925,9 @@ async function renderProject(id) {
       filters.push('[captionedv]tpad=stop_mode=clone:stop_duration=' + VIDEO_OUTRO_SECONDS.toFixed(3) +
         ',fade=t=out:st=' + contentDuration.toFixed(3) + ':d=' + VIDEO_OUTRO_SECONDS.toFixed(3) +
         ',fps=30000/1001[outv]');
-      filters.push('[outa]apad=pad_dur=' + VIDEO_OUTRO_SECONDS.toFixed(3) + '[outaextended]');
+      const requestedVoiceGain = voiceGainFilter(project.voiceGainAdjustments, contentDuration);
+      if (requestedVoiceGain) filters.push('[outa]' + requestedVoiceGain + '[leveledouta]');
+      filters.push('[' + (requestedVoiceGain ? 'leveledouta' : 'outa') + ']apad=pad_dur=' + VIDEO_OUTRO_SECONDS.toFixed(3) + '[outaextended]');
       let lastReportedProgress = -1;
       const ffmpegInputs = ['-hide_banner', '-loglevel', 'error', '-y', '-filter_complex_threads', String(EDITOR_FFMPEG_THREADS), '-autorotate', '1', '-i', sourcePath(id)];
       readyClips.forEach(function (clip) { ffmpegInputs.push('-i', insertedClipPath(id, clip.id)); });
@@ -2577,6 +2597,7 @@ async function renderProject(id) {
     const currentAutoSilenceEnabled = project.autoSilenceEnabled !== false;
     const currentSilenceThresholdSeconds = Number(project.silenceThresholdSeconds) || 1;
     const currentRetainedPauseSeconds = effectiveRetainedPauseSeconds(project);
+    const currentVoiceGainAdjustments = normalizeVoiceGainAdjustments(project.voiceGainAdjustments, project.duration);
     const nextRemovedWordIndices = Array.isArray(req.body && req.body.removedWordIndices)
       ? Array.from(new Set(req.body.removedWordIndices.map(Number).filter(function (index) { return Number.isInteger(index) && index >= 0 && index < (project.words || []).length; }))).sort(function (a, b) { return a - b; })
       : currentRemovedWordIndices;
@@ -2592,6 +2613,12 @@ async function renderProject(id) {
     const nextAutoSilenceEnabled = typeof (req.body && req.body.autoSilenceEnabled) === 'boolean' ? req.body.autoSilenceEnabled : currentAutoSilenceEnabled;
     const nextSilenceThresholdSeconds = Number.isFinite(Number(req.body && req.body.silenceThresholdSeconds)) ? clamp(req.body.silenceThresholdSeconds, 0.65, 5) : currentSilenceThresholdSeconds;
     const nextRetainedPauseSeconds = Number.isFinite(Number(req.body && req.body.retainedPauseSeconds)) ? clamp(req.body.retainedPauseSeconds, MIN_RETAINED_PAUSE_SECONDS, 1.2) : currentRetainedPauseSeconds;
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'voiceGainAdjustments') && !Array.isArray(req.body.voiceGainAdjustments)) {
+      return res.status(400).json({ error: 'invalid_voice_gain_adjustments', message: 'Voice gain adjustments must be a list.' });
+    }
+    const nextVoiceGainAdjustments = Object.prototype.hasOwnProperty.call(req.body || {}, 'voiceGainAdjustments')
+      ? normalizeVoiceGainAdjustments(req.body.voiceGainAdjustments, project.duration)
+      : currentVoiceGainAdjustments;
     let decisionSnapshotSaved = false;
     function saveDecisionSnapshot() {
       if (decisionSnapshotSaved) return;
@@ -2655,6 +2682,7 @@ async function renderProject(id) {
     }
     project.silenceThresholdSeconds = nextSilenceThresholdSeconds;
     project.retainedPauseSeconds = nextRetainedPauseSeconds;
+    project.voiceGainAdjustments = nextVoiceGainAdjustments;
     project.autoCutBoundaryVersion = AUTO_CUT_BOUNDARY_VERSION;
     if (typeof (req.body && req.body.planningPieceId) === 'string' && typeof getPlanningCandidates === 'function') {
       const requested = req.body.planningPieceId;
@@ -3120,6 +3148,8 @@ module.exports = {
   openingPushInScale,
   openingPushInFilter,
   cameraMotionFilter,
+  normalizeVoiceGainAdjustments,
+  voiceGainFilter,
   reconcileAutomaticRetakeCuts,
   projectListSummary,
   editorWorkStarted

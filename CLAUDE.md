@@ -17844,3 +17844,23 @@ Hardcover Now**. Only the requested word was removed; the supporting copy,
 checkout button, product image, and layout remain unchanged. Headless Chromium
 verified the exact heading at 1440px and 390px with clean wrapping and no
 horizontal overflow; the desktop result was visually inspected.
+
+---
+
+# 555. Editor Supports Durable Voice-Level Corrections (2026-10-12)
+
+Manual Editor revisions can now store bounded, timeline-based voice gain
+adjustments on an individual project. The final renderer applies each decibel
+change to the concatenated voice programme at the exact edited-time boundary,
+before the existing outro pad, so a correction survives every later preview
+rebuild without altering the camera master or the source audio. These
+adjustments are accepted by the existing concurrency-safe Editor PATCH route,
+invalidate stale outputs, and trigger the normal verified rebuild path.
+
+This was added for **Indiscriminate Love**, whose first retained edit boundary
+is 15.490 seconds. Measurement of the current final showed the retained audio
+after that boundary at -28.03 LUFS versus -30.96 LUFS before it, so this
+project receives a -2.93 dB correction from 15.490 seconds onward. Focused
+coverage verifies input bounding, timeline precision, FFmpeg filter generation,
+and render invalidation; the actual project output is also re-measured after
+rebuild before the revision is considered complete.
