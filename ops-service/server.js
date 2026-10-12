@@ -2478,6 +2478,17 @@ async function sendProductionAudioPreview(req, res, next) {
 
 app.get('/api/videos/:id/audio-preview/:trackId', requireAuthOrReviewer, sendProductionAudioPreview);
 app.post('/api/videos/:id/audio-preview', requireAuthOrReviewer, sendProductionAudioPreview);
+app.get('/api/videos/:id/audio-previews', requireAuthOrReviewer, function (req, res) {
+  const id = req.params.id;
+  if (!isValidId(id)) return res.status(400).json({ error: 'invalid_params' });
+  const piece = getPieceRecord(id);
+  if (!piece) return res.status(404).json({ error: 'piece_not_found' });
+  if (req.sessionRole === 'youtube-reviewer' && piece.createdBy !== 'youtube-reviewer') return res.status(403).json({ error: 'forbidden' });
+  productionAudioPreviews.warm(id).catch(function (error) {
+    console.error('[production-audio] status warm failed for ' + id + ':', error.message);
+  });
+  res.json(productionAudioPreviews.status(id));
+});
 
 // --- Real YouTube publish: the actual videos.insert-equivalent, using the
 // token stored by the OAuth connect flow above (src/youtubeAuth.js). Same

@@ -22,6 +22,7 @@ test('Production preview cache deduplicates work, persists results, and invalida
   });
   const first = await Promise.all([service.ensure('piece-1', 'track-1'), service.ensure('piece-1', 'track-1')]);
   assert.equal(first[0], first[1]); assert.equal(builds, 1); assert.equal(preparations, 1); assert.ok(fs.statSync(first[0]).size > 1024);
+  assert.deepEqual(service.status('piece-1'), { total: 1, ready: [{ id: 'track-1', version: service.previewIdentity('piece-1', 'track-1').hash }] });
   assert.equal(await service.ensure('piece-1', 'track-1'), first[0]); assert.equal(builds, 1);
   settings = { musicBelowDialogueDb: 18 };
   const changed = await service.ensure('piece-1', 'track-1');

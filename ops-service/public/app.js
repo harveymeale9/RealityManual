@@ -4237,25 +4237,31 @@
       try { previewAudio.currentTime = videoEl.currentTime || 0; } catch (e) {}
     });
     setPreviewButtonState();
-    var pendingPreviews = audioTracks.slice();
-    function preloadWorker() {
-      var track = pendingPreviews.shift();
-      if (!track || previewCancelled) return Promise.resolve();
-      return fetch('/api/videos/' + encodeURIComponent(p.id) + '/audio-preview/' + encodeURIComponent(track.id), {
-        method: 'GET', credentials: 'include', cache: 'default'
+    var previewStatusTimer = null;
+    function refreshPreviewStatus() {
+      return fetch('/api/videos/' + encodeURIComponent(p.id) + '/audio-previews', {
+        method: 'GET', credentials: 'include', cache: 'no-store'
       }).then(function (response) {
-        if (!response.ok) throw new Error('Could not prepare ' + track.name + '.');
-        return response.blob();
-      }).then(function (blob) {
+        if (!response.ok) throw new Error('Could not check soundtrack previews.');
+        return response.json();
+      }).then(function (body) {
         if (previewCancelled) return;
-        previewUrls[track.id] = URL.createObjectURL(blob);
-      }).catch(function () { if (!previewCancelled) previewFailed++; }).finally(function () {
-        if (!previewCancelled) { previewCompleted++; updatePreviewReadiness(); }
-      }).then(preloadWorker);
+        (body.ready || []).forEach(function (ready) {
+          previewUrls[ready.id] = '/api/videos/' + encodeURIComponent(p.id) + '/audio-preview/' + encodeURIComponent(ready.id) + '?v=' + encodeURIComponent(ready.version || 'ready');
+        });
+        previewCompleted = Object.keys(previewUrls).length;
+        previewFailed = 0;
+        updatePreviewReadiness();
+        if (previewCompleted < audioTracks.length) previewStatusTimer = setTimeout(refreshPreviewStatus, 1200);
+      }).catch(function () {
+        if (previewCancelled) return;
+        audioPreviewStatus.textContent = 'Soundtrack previews are still preparing in Production.';
+        previewStatusTimer = setTimeout(refreshPreviewStatus, 2000);
+      });
     }
-    row._cancelAudioPreviews = function () { previewCancelled = true; };
+    row._cancelAudioPreviews = function () { previewCancelled = true; clearTimeout(previewStatusTimer); };
     updatePreviewReadiness();
-    Promise.all([preloadWorker(), preloadWorker()]);
+    refreshPreviewStatus();
     audioSection.appendChild(audioLabel);
     audioPicker.appendChild(audioPrevious);
     audioPicker.appendChild(audioSelect);

@@ -104,6 +104,18 @@ function setup(options) {
     }));
   }
 
+  function status(pieceId) {
+    const tracks = (getAudioTracks() || []).filter(function (track) { return track && track.id; });
+    const ready = [];
+    tracks.forEach(function (track) {
+      try {
+        const identity = previewIdentity(pieceId, track.id);
+        if (fs.statSync(identity.path).size > 1024) ready.push({ id: track.id, version: identity.hash });
+      } catch (error) {}
+    });
+    return { total: tracks.length, ready: ready };
+  }
+
   function prune(activePieceIds) {
     const active = new Set(activePieceIds || []);
     if (!fs.existsSync(rootDir)) return;
@@ -113,7 +125,7 @@ function setup(options) {
     }
   }
 
-  return { ensure: ensure, warm: warm, prune: prune, previewIdentity: previewIdentity };
+  return { ensure: ensure, warm: warm, status: status, prune: prune, previewIdentity: previewIdentity };
 }
 
 module.exports = { setup: setup, createQueue: createQueue };

@@ -17886,13 +17886,16 @@ changed inputs invalidate the relevant MP3, and cache folders for videos no
 longer in Production are pruned at startup. Previews remain full 192 kbps mixes
 using the same measured loudness pipeline as the final build.
 
-The Production UI also preloads the cached MP3s asynchronously for every
-visible row, reports batch progress, and provides compact previous/next buttons
-for rapid comparisons. A selected track's Preview button becomes available as
-soon as that mix arrives; no click starts a new ad-hoc render. Final builds now
-read the same current Content Settings profile used by these Production
-auditions, eliminating the old possibility of an inherited Editor mix profile
-disagreeing with the preview.
+The Production UI checks cache readiness asynchronously for every visible row,
+reports batch progress, and provides compact previous/next buttons for rapid
+comparisons. It does not download all 30 full MP3s per video merely to mark
+them ready: the readiness response supplies versioned direct-stream URLs, so a
+revisit can expose all server-cached tracks immediately and only the track
+Harvey plays crosses the network. A selected track's Preview button becomes
+available as soon as that mix arrives; no click starts a new ad-hoc render.
+Final builds now read the same current Content Settings profile used by these
+Production auditions, eliminating the old possibility of an inherited Editor
+mix profile disagreeing with the preview.
 
 The batch prepares each video's duration and integrated dialogue-loudness
 measurement once and shares that result across all 30 track mixes. It does not
