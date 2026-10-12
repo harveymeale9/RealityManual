@@ -16979,13 +16979,13 @@ after reloading the existing conversation rather than requiring regeneration.
 
 ---
 
-# 512. FAQ Heading Aligns With Its Question Column (2026-10-12)
+# 512. FAQ Content Uses One Centered Axis (2026-10-12)
 
-The homepage FAQ remains a centered, single vertical column, but its section
-label no longer floats independently at the center above left-aligned question
-rows. On desktop and tablet, the label shares the same 52rem measure and left
-edge as the questions, producing one coherent visual block. At narrow mobile
-widths the short label remains centered. The gap below the label was tightened
+The homepage FAQ remains a centered, single vertical column. Its section label,
+question text, and expanded answers are all centered at every breakpoint. The
+plus/minus controls remain pinned consistently to the right edge without
+offsetting the question text from the true center; symmetric horizontal padding
+prevents collisions on narrow screens. The gap below the label was tightened
 slightly and the stylesheet cache key was advanced.
 
 ---

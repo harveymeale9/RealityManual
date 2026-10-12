@@ -912,11 +912,7 @@ img { max-width: 100%; }
   max-width: 52rem;
   margin: 0 auto 1.35rem;
   letter-spacing: 0.22em;
-  text-align: left;
-}
-
-@media (max-width: 600px) {
-  .faq .section-label { text-align: center; }
+  text-align: center;
 }
 
 .faq-grid {
@@ -931,11 +927,13 @@ img { max-width: 100%; }
 .faq-item summary {
   list-style: none;
   cursor: pointer;
-  padding: 1.05rem 0;
+  position: relative;
+  padding: 1.05rem 2rem;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 1rem;
+  text-align: center;
   font-size: 0.87rem;
   color: var(--ink);
 }
@@ -945,6 +943,10 @@ img { max-width: 100%; }
 
 .faq-item summary::after {
   content: '+';
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
   color: var(--accent);
   font-size: 1.1rem;
   line-height: 1;
@@ -958,7 +960,8 @@ img { max-width: 100%; }
   line-height: 1.7;
   color: var(--ink-soft);
   margin: 0;
-  padding: 0 2rem 1.2rem 0;
+  padding: 0 2rem 1.2rem;
+  text-align: center;
 }
 
 /* ------------------------------------------------------------- final cta */
