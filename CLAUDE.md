@@ -17346,3 +17346,21 @@ seconds, produced three selectable sections, widened a short timeline from 849
 to 1061 pixels with one Ctrl-wheel gesture, and sent the selected 2–4 second
 interval as the exact durable manual trim payload. No browser runtime errors
 occurred.
+
+---
+
+# 531. Storefront VSL Poster Has No Burned-In Caption (2026-10-12)
+
+The storefront video card now uses
+`frontend/img/photo/reality-manual-vsl-poster-no-captions.jpg`, a 1280×720
+edit of the existing open-book-and-gloves poster with only the yellow burned-in
+subtitle removed. The page-owned **WATCH THE VIDEO**, title, and play button
+remain unchanged, so the mobile composition is materially less busy and the
+play control is no longer competing with subtitle text.
+
+Both the visible poster image and the native video element's `poster` value use
+the clean asset on the main homepage and `/home2`. The previous poster remains
+in the repository for history, while the distinct filename prevents browsers
+or the CDN from serving a stale cached image. A 390×844 headless-Chromium check
+confirmed the mobile card loads the new 1280×720 image at its intended 342×192
+display size with no browser runtime errors.
