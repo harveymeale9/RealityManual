@@ -16909,3 +16909,15 @@ blank strip on the right. `.hero-mobile-photo` now opts out with
 `max-width: none`, allowing the established full-bleed calculation to work
 symmetrically. Desktop and mobile were checked for horizontal overflow, and the
 stylesheet cache key was advanced.
+
+---
+
+# 507. Interior Preview Cards Use Detail Crops (2026-10-12)
+
+The three **Inside the Book** photographs retain the same equal 3:4 card sizes
+and responsive grid positions, but their internal image scale was increased
+from `1.34` to `2.12`. Individual focal points keep the functional-existence
+diagram, the practical-applications text and hand, and the enlightenment
+framework centered in their respective frames. This presents the pages as
+close-up detail previews rather than nearly complete page photographs. The
+stylesheet cache key was advanced.
