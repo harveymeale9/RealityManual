@@ -592,6 +592,42 @@ img { max-width: 100%; }
   box-shadow: none;
 }
 
+/* This is the hero itself, not a compact video card inside another panel.
+   Scale its invitation to match the full-bleed spread and keep every part
+   comfortably legible over the photograph. */
+.home2-hero__video .video-inner { width: min(92vw, 900px); }
+
+.video-card.home2-hero__video .eyebrow {
+  margin-bottom: clamp(0.9rem, 1.2vw, 1.25rem);
+  font-size: clamp(0.78rem, 0.9vw, 1rem);
+}
+
+.video-card.home2-hero__video h2 {
+  margin-bottom: clamp(1.5rem, 2.2vw, 2.4rem);
+  font-size: clamp(2.5rem, 4vw, 4.25rem);
+  line-height: 1;
+}
+
+.home2-hero__video .play-btn {
+  width: clamp(100px, 7.5vw, 132px);
+  height: clamp(100px, 7.5vw, 132px);
+  border-width: 2px;
+}
+
+.home2-hero__video .play-btn svg {
+  width: clamp(30px, 2.4vw, 42px);
+  height: clamp(30px, 2.4vw, 42px);
+  margin-left: 6px;
+}
+
+.home2-hero__video .video-duration {
+  margin-top: clamp(1.25rem, 1.8vw, 1.8rem);
+  font-size: clamp(1rem, 1.25vw, 1.3rem);
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  color: var(--ink-soft);
+}
+
 .home2-page .home2-offer { border-top: 0; }
 
 .home2-offer__copy {
@@ -643,6 +679,17 @@ img { max-width: 100%; }
     width: 100%;
     min-height: clamp(360px, 68svh, 620px);
   }
+
+  .video-card.home2-hero__video h2 {
+    font-size: clamp(2.05rem, 9vw, 3.1rem);
+  }
+
+  .home2-hero__video .play-btn {
+    width: clamp(92px, 25vw, 112px);
+    height: clamp(92px, 25vw, 112px);
+  }
+
+  .home2-hero__video .video-duration { font-size: clamp(1rem, 4.5vw, 1.2rem); }
 
   .home2-offer__copy {
     text-align: center;

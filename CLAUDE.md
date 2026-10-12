@@ -17607,3 +17607,21 @@ A mocked-API headless Chromium test rendered a TikTok Final Check card, verified
 both controls were absent, clicked **Schedule Video** without any confirmation,
 and observed the coordinated publish request carry the TikTok title/caption to
 the Buffer-backed batch with no `brandedContent` field.
+
+---
+
+# 542. Larger `/home2` Hero Video Invitation (2026-10-12)
+
+The full-spread `/home2` VSL hero now gives its overlaid invitation the scale
+expected of a full hero rather than inheriting the compact card treatment. At a
+1440px viewport the question is 57.6px, the play target is 108px, and the
+duration is 18px; at 390px they remain 35.1px, 97.5px, and 17.55px respectively.
+The eyebrow and play glyph were increased proportionally, and the duration now
+uses brighter text, medium weight, and slightly tighter tracking so it reads as
+useful video information instead of faint microcopy.
+
+The rules are scoped to `.home2-hero__video`, leaving the original homepage's
+smaller embedded VSL card unchanged. Headless Chromium verified the computed
+sizes at 1440×900 and 390×844, no horizontal overflow, and no runtime errors;
+both screenshots were visually inspected. The `/home2` stylesheet cache key
+was advanced.
