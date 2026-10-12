@@ -18081,3 +18081,22 @@ The files have descriptive `reality-manual-*` names rather than attachment
 indices. A contact-sheet review confirmed all eight are upright. They are not
 yet referenced by Home2 markup or styles; placement is intentionally deferred
 until Harvey supplies the follow-up layout instructions.
+
+---
+
+# 566. Home2 Interior Gallery Follows the Book's Four-Part Story (2026-10-12)
+
+Home2's four Inside the Book cards now present the requested progression and
+new photographs: The Objective of Life uses the upright Five Axes page; The 14
+Rules of Reality uses the upright Rule I / Internal Value page; Life Strategy
+uses the remaining upright Section I game material showing the indirect pursuit
+of the objective; and Advanced Techniques uses Harvey's newly supplied
+Purpose–Reality–Objective photograph. Descriptive alt text follows the content
+of each page.
+
+The Home2-only card ratio changed from 3:4 to 9:16 and its inherited 2.12× image
+zoom was removed. These phone photographs now appear upright and nearly in full
+instead of being cropped down to their centres. Other pages retain their
+existing gallery styling. Headless Chromium checks at 1858px and 390px confirmed
+all four exact files decode, render in the requested order, and keep legible,
+balanced captions across desktop and the two-column phone layout.
