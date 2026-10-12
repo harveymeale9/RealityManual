@@ -18147,3 +18147,14 @@ Home2's three FAQ rows now follow the requested purchase-decision order: “Do
 you ship to my country?”, “How long does shipping take?”, then “What is your
 return policy?”. Each answer remains attached to its original question; only
 the row order changed.
+
+---
+
+# 570. Home2 Advanced Techniques Uses the Omnipresence Artwork (2026-10-12)
+
+The fourth Home2 Inside the Book card, Advanced Techniques, now uses Harvey's
+newly supplied 576×1034 photograph of the Omnipresence framework and celestial
+figure instead of the Purpose–Reality–Objective page. It retains the gallery's
+native-pixel 1:1 rendering and existing fourth-card focal point, with updated
+alt text describing the new page. The previous photograph remains available in
+the staged interior asset set but is no longer referenced by the card.
