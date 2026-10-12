@@ -28,6 +28,7 @@
   var manualTimelineOpen = {};
   var manualTimelineZoom = {};
   var manualTimelineSelections = {};
+  var manualTimelineViewStates = {};
   var restoreTranscriptFocus = false;
   var uploadBatchInProgress = false;
   var uploadBatchCancelled = false;
@@ -1638,8 +1639,10 @@
     };
     var toggleTimelineButton = root.querySelector('#editorToggleTimeline');
     if (toggleTimelineButton) toggleTimelineButton.onclick = function () {
-      manualTimelineOpen[project.id] = !manualTimelineOpen[project.id];
+      var openingTimeline = !manualTimelineOpen[project.id];
+      manualTimelineOpen[project.id] = openingTimeline;
       previewSeekTimes[project.id] = Number(video.currentTime) || 0;
+      if (openingTimeline) manualTimelineViewStates[project.id] = { sourceTime: currentSourcePlayhead(), center: true };
       renderWorkspace();
     };
     var manualTimelineViewport = root.querySelector('#editorManualTimelineViewport');
@@ -1663,6 +1666,30 @@
     function preserveTimelinePlaybackPosition() {
       previewSeekTimes[project.id] = Number(video.currentTime) || 0;
       previewAutoplay[project.id] = !video.paused && !video.ended;
+      if (manualTimelineViewport) {
+        manualTimelineViewStates[project.id] = {
+          sourceTime: currentSourcePlayhead(),
+          scrollLeft: manualTimelineViewport.scrollLeft
+        };
+      }
+    }
+    function restoreManualTimelineView() {
+      if (!manualTimelineViewport || !manualTimelineInner) return;
+      var state = manualTimelineViewStates[project.id];
+      if (!state) return;
+      delete manualTimelineViewStates[project.id];
+      var restoreProjectId = project.id;
+      requestAnimationFrame(function () {
+        if (!project || project.id !== restoreProjectId || !manualTimelineViewport.isConnected) return;
+        var maximum = Math.max(0, manualTimelineInner.scrollWidth - manualTimelineViewport.clientWidth);
+        if (Number.isFinite(Number(state.scrollLeft))) {
+          manualTimelineViewport.scrollLeft = Math.max(0, Math.min(maximum, Number(state.scrollLeft)));
+          return;
+        }
+        var duration = Math.max(0.01, Number(project.duration) || 0.01);
+        var playheadX = Math.max(0, Math.min(1, Number(state.sourceTime) / duration)) * manualTimelineInner.scrollWidth;
+        manualTimelineViewport.scrollLeft = Math.max(0, Math.min(maximum, playheadX - manualTimelineViewport.clientWidth / 2));
+      });
     }
     if (manualTimelineViewport && manualTimelineInner) {
       manualTimelineInner.onclick = function (event) {
@@ -1733,6 +1760,7 @@
       });
     };
     updateManualTimelinePlayhead(currentSourcePlayhead());
+    restoreManualTimelineView();
     video.playbackRate = reviewRate;
     var videoError = root.querySelector('#editorVideoError');
     video.addEventListener('loadeddata', function () {

@@ -17493,3 +17493,28 @@ failures. A headless Chromium working-preview check also crossed a confirmed
 four-second page-turn cut in a vertical project and observed the browser's
 actual video transform settle at exactly `matrix(1.125, …)`, with no runtime
 errors.
+
+---
+
+# 538. Manual Timeline Opens and Rebuilds at the Current Position (2026-10-12)
+
+Opening the Editor's manual timeline now centres its horizontal viewport on the
+video's current source playhead instead of exposing the beginning of a zoomed
+track. This is source-time aware when reviewing the final edit, so a playhead
+after ripple cuts still opens over the corresponding source footage.
+
+Actions which rebuild the timeline DOM, including **Split at playhead** and
+**Clear splits**, now preserve both the media playback time and the timeline's
+exact horizontal `scrollLeft`. The previous implementation preserved only the
+video time; recreating the viewport implicitly reset its scroll position to
+zero, which made a successful split look as though the editor had jumped back
+to the start. Restoration is deferred by one animation frame so the replacement
+timeline has its final measured width before the saved viewport is applied. The
+Editor script cache key was advanced.
+
+A mocked-API headless Chromium test opened a 100-second timeline while the
+video was at 1:10 and observed the viewport centre at that playhead. It then set
+the timeline scroll position to 123px, split at 1:12, and verified the new video
+retained `data-seek-time="72.000"`, the split marker appeared at 72%, and the
+replacement viewport restored to 123px with no browser runtime errors. The
+complete ops-service suite also passes: 178 tests, zero failures.
