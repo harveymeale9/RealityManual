@@ -17587,3 +17587,23 @@ then exercised right-click → Delete → Confirm delete. It verified the
 piece DELETE waited for the write and used its new version, both video IDs were
 deleted in order, the selected row left the DOM, and no runtime exception was
 raised. The complete ops-service test suite also passes.
+
+---
+
+# 541. Removed Direct-TikTok Consent Controls from Final Check (2026-10-12)
+
+Final Check no longer shows the **Music Usage Confirmation** or **This is
+branded content** checkboxes on TikTok-tagged cards. Those controls belonged to
+the retired direct TikTok Content Posting API flow; Reality Manual now schedules
+TikTok through Buffer, where neither client-side direct-post confirmation is
+part of the workflow.
+
+The old checkbox gate, warning, direct-post `brandedContent` request property,
+and unused consent styling were removed together. The historical TikTok app
+review page and dormant direct-publish backend remain untouched because this
+change concerns the active Buffer-based Final Check surface only.
+
+A mocked-API headless Chromium test rendered a TikTok Final Check card, verified
+both controls were absent, clicked **Schedule Video** without any confirmation,
+and observed the coordinated publish request carry the TikTok title/caption to
+the Buffer-backed batch with no `brandedContent` field.
