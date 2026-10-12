@@ -16931,3 +16931,12 @@ All three questions now remain stacked in one centered column at every
 breakpoint, capped at 52rem so the summaries and expanded answers retain a
 comfortable reading measure on wide screens. Mobile behavior is unchanged and
 the stylesheet cache key was advanced.
+
+---
+
+# 509. Homepage Tagline Is “A Guide To Existing Well” (2026-10-12)
+
+The homepage browser title, Open Graph title, and visible hero eyebrow now use
+**A Guide To Existing Well** in place of **A Strategy Manual for the Game of
+Life**. The main title, three-line subject summary, metadata description, and
+the separate lower-page strategy copy remain unchanged.
