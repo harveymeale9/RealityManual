@@ -17208,3 +17208,10 @@ pause cuts left 130ms and 90ms source islands before the selected second
 the intended 190ms handle on each side (380ms total sentence pause). Regression
 coverage proves precise trims join those residual islands and count as
 render-affecting edits. The complete 174-test service suite passes.
+
+The live project was updated through its revision-checked Editor API and its
+replacement render completed with quality status `passed` at 50.41 seconds.
+The selected second “Money” now begins at edited 26.28 seconds after one clean
+374.7ms measured silence. In the exact former artifact window, mean/max audio
+dropped from -41.0/-30.1 dB to -73.0/-58.3 dB; waveform inspection confirms
+the isolated burst is gone while the surrounding sentence audio is intact.
