@@ -937,15 +937,10 @@
   }
 
   function loadProjects(expectedMountToken) {
-    return Promise.all([
-      retryTransientOnce(function () { return api('/api/editor'); }, 300),
-      retryTransientOnce(function () { return api('/api/editor/audio-tracks'); }, 300)
-    ]).then(function (results) {
+    return retryTransientOnce(function () { return api('/api/editor'); }, 300).then(function (items) {
       if (expectedMountToken !== mountToken || !editorMounted()) return;
-      projects = results[0];
+      projects = items;
       projects.forEach(function (item) { if (item.renderStatus === 'ready' || item.renderStatus === 'error') delete localPreviewRebuilds[item.id]; });
-      audioTracks = Array.isArray(results[1].tracks) ? results[1].tracks : [];
-      audioMixVersion = results[1].mixVersion || '';
       if (project && !projects.some(function (item) { return item.id === project.id; })) project = null;
       renderList();
       if (project) return openProject(project.id, true);
@@ -1149,11 +1144,7 @@
       '<label class="editor-toggle" title="Starts wide and gently settles to 112.5% on vertical and horizontal openings. Later vertical page-turn or inserted-clip reveals also settle to 112.5%; horizontal reveals settle to 125%. Horizontal openings use five seconds; every other move uses three."><input type="checkbox" id="editorOpeningPushIn" ' + (project.openingPushInEnabled !== false ? 'checked' : '') + '><span></span>Page-change camera zooms</label>' +
       '<label class="editor-mode">Pacing<select id="editorPacing"><option value="tight"' + (Number(project.silenceThresholdSeconds) < 0.85 ? ' selected' : '') + '>Tight</option><option value="natural"' + (Number(project.silenceThresholdSeconds || 1) >= 0.85 && Number(project.silenceThresholdSeconds || 1) < 1.3 ? ' selected' : '') + '>Natural</option><option value="gentle"' + (Number(project.silenceThresholdSeconds || 1) >= 1.3 ? ' selected' : '') + '>Gentle</option></select></label>' +
       '<button type="button" class="btn-secondary btn-tiny editor-clear-automation" id="editorClearAutomation" ' + (!automaticCutsPresent ? 'disabled' : '') + ' title="Restore every pause and retake removed automatically. Manual transcript cuts stay intact.">Restore automatic cuts</button></div>';
-    var selectedAudioExists = project.audioTrackId === '__none__' || audioTracks.some(function (track) { return track.id === project.audioTrackId; });
-    var audioSelectionReady = !!project.audioTrackId && selectedAudioExists;
-    var audioPanelHtml = '<section class="editor-audio-panel"><div><div class="eyebrow">Backing audio</div><h3>Choose the soundtrack against this edit</h3><span>Every preview uses the saved production loudness settings. Switching tracks restarts the same video from the beginning.</span></div>' +
-      '<div class="editor-audio-picker"><button type="button" class="btn-secondary btn-tiny" id="editorAudioPrevious" disabled>← Previous</button><select id="editorAudioTrack" class="stage-select" ' + (project.renderStatus !== 'ready' || sentToProduction || previewLocked ? 'disabled' : '') + '><option value="">Preparing soundtrack previews…</option></select><button type="button" class="btn-secondary btn-tiny" id="editorAudioNext" disabled>Next →</button></div>' +
-      '<div class="editor-audio-progress loading" id="editorAudioProgress"><i></i><span>' + (project.renderStatus === 'ready' ? 'Loading audio previews 0/' + audioTracks.length : audioUnavailableText) + '</span></div><audio id="editorMixedAudio" preload="auto" hidden></audio></section>';
+    var audioSelectionReady = true;
     var manualRevisionPanelHtml = '<section class="editor-manual-panel"><div class="editor-manual-heading"><div><div class="eyebrow">Manual revision</div><h3>Tell me what to change</h3><span>Type or dictate a specific change. Include a timestamp when it helps.</span></div></div>' +
       (!sentToProduction ? '<textarea id="editorManualRevisionText" maxlength="4000" rows="3" placeholder="For example: Around 14 seconds, keep the tight zoom instead of pulling back."></textarea><div class="editor-manual-actions"><button type="button" class="btn-secondary btn-tiny" id="editorManualDictate">Dictate</button><button type="button" class="btn-primary btn-tiny" id="editorManualSubmit" disabled>Apply revision</button><span id="editorManualStatus" aria-live="polite"></span></div>' : '<p class="editor-manual-locked">This approved version is locked; its completed manual changes remain recorded below.</p>') +
       manualRevisionLogHtml(project) + '</section>';
@@ -1190,7 +1181,6 @@
       (layout === 'horizontal' ? '<div class="editor-preview-toolbar">' + previewActionsHtml + '</div>' : '') +
       previewStageHtml +
       (!sentToProduction ? manualTimelineHtml(project, previewLocked) : '') +
-      audioPanelHtml +
       manualRevisionPanelHtml +
       '<section class="editor-automation"><div class="editor-automation-head"><div><div class="eyebrow">Automatic edit</div><h3>Speech and pause map</h3></div><div class="editor-legend"><span class="speech">Speech</span><span class="cut">Removed pause</span><span class="pause">Kept pause</span></div></div>' + timelineHtml(project) +
         (layout === 'horizontal' ? automaticControlsHtml : '') + '</section>' +
@@ -1211,9 +1201,9 @@
         '<p class="editor-selection-hint">Select the word a clip should follow, or drag across words to cut footage. Press Delete to cut, Ctrl/⌘ Z to undo, or Escape to clear.</p></section>' +
       '<div class="editor-export"><div><strong>Next: Content Production</strong><span>' +
         (project.productionPieceId ? 'This edit is ready in Content Production for titles and thumbnail selection.' :
-          project.renderStatus === 'ready' ? (audioSelectionReady ? 'Soundtrack selected. Send the finished edit across without uploading it again.' : 'Choose a backing track or No backing audio before approval.') :
+          project.renderStatus === 'ready' ? 'Send the finished edit across without uploading it again. Backing audio is chosen in Content Production.' :
           'Build the final edit first. Yellow captions will be baked in below center.') + '</span>' +
-        '<div class="editor-readiness"><i class="ready">Transcript ready</i>' + framingReadiness + retakeReadiness + (project.renderStatus === 'ready' ? '<i class="ready">Output verified</i>' : '') + (audioSelectionReady ? '<i class="ready">Soundtrack chosen</i>' : '<i class="review">Soundtrack needed</i>') + '</div>' +
+        '<div class="editor-readiness"><i class="ready">Transcript ready</i>' + framingReadiness + retakeReadiness + (project.renderStatus === 'ready' ? '<i class="ready">Output verified</i>' : '') + '</div>' +
         (['queued', 'running'].indexOf(project.renderStatus) !== -1 ? '<div class="editor-render-progress"><span id="editorRenderProgressLabel">' + (project.renderStatus === 'queued' ? (Number(project.renderQueuePosition) > 1 ? (Number(project.renderQueuePosition) - 1) + ' recording(s) ahead in the render queue' : 'Next in the render queue') : 'Encoding final edit · ' + Math.round(Number(project.renderProgress) || 0) + '%') + '</span><div><i id="editorRenderProgressBar" style="width:' + (project.renderStatus === 'queued' ? 4 : Math.max(2, Number(project.renderProgress) || 0)) + '%"></i></div></div>' : '') +
         (project.renderStatus === 'error' ? '<em>' + esc(project.renderError) + '</em>' : '') + '</div><div class="editor-export-actions">' +
         (project.productionPieceId ? '<button class="btn-primary" id="editorOpenProduction">Open Content Production</button>' :
@@ -1254,7 +1244,10 @@
     var manualSubmit = root.querySelector('#editorManualSubmit');
     var manualDictate = root.querySelector('#editorManualDictate');
     var manualStatus = root.querySelector('#editorManualStatus');
-    var audioBatch = project.renderStatus === 'ready' && !previewLocked ? ensureAudioPreviewBatch(project) : null;
+    // Backing-audio auditioning belongs to Content Production. Keeping this
+    // null makes Editor playback use the verified voice-only render and, most
+    // importantly, prevents opening a recording from generating 30 mixes.
+    var audioBatch = null;
     var playerScrubbing = false;
     var resumeAfterScrub = false;
     var scrubResumeToken = 0;

@@ -17864,3 +17864,36 @@ project receives a -2.93 dB correction from 15.490 seconds onward. Focused
 coverage verifies input bounding, timeline precision, FFmpeg filter generation,
 and render invalidation; the actual project output is also re-measured after
 rebuild before the revision is considered complete.
+
+---
+
+# 556. Backing-Audio Auditioning Moves from Editor to Production (2026-10-12)
+
+The Editor is voice-only again. Opening a recording no longer fetches the
+soundtrack library, builds 30 mixed MP3s, shows a backing-audio panel, or gates
+approval on a music choice. Its verified preview therefore becomes interactive
+as soon as the video itself is ready. Editor-to-Production handoff deliberately
+starts the downstream card with no selected track; cuts, captions, framing and
+voice remain the Editor's responsibilities, while soundtrack selection begins
+in Content Production.
+
+Production now owns a persistent asynchronous soundtrack-preview cache. Every
+In Production video is warmed against every current library track in a bounded
+two-worker queue on handoff, after direct-upload analysis, and after service
+startup for work already in that stage. Cache identity includes both source
+files and the saved audio-mix settings, simultaneous requests share one job,
+changed inputs invalidate the relevant MP3, and cache folders for videos no
+longer in Production are pruned at startup. Previews remain full 192 kbps mixes
+using the same measured loudness pipeline as the final build.
+
+The Production UI also preloads the cached MP3s asynchronously for every
+visible row, reports batch progress, and provides compact previous/next buttons
+for rapid comparisons. A selected track's Preview button becomes available as
+soon as that mix arrives; no click starts a new ad-hoc render. Final builds now
+read the same current Content Settings profile used by these Production
+auditions, eliminating the old possibility of an inherited Editor mix profile
+disagreeing with the preview.
+
+Focused tests cover durable cache reuse, concurrent-request deduplication,
+settings invalidation, stale-file cleanup, and the two-job concurrency bound.
+The complete 185-test ops-service suite passes.

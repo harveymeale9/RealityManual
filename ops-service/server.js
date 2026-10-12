@@ -41,6 +41,7 @@ const metaPublisherService = require('./src/metaPublisher');
 const shortformSchedule = require('./src/shortformSchedule');
 const topicSchedule = require('./src/topicSchedule');
 const videoEditorService = require('./src/videoEditorService');
+const productionAudioPreviewService = require('./src/productionAudioPreviews');
 const editorRetakeAnalysis = require('./src/editorRetakeAnalysis');
 const editorTranscriptSampling = require('./src/editorTranscriptSampling');
 const r2StorageService = require('./src/r2Storage');
@@ -85,6 +86,7 @@ const FILE_STORES = ['videos', 'audioTracks'];
 const ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const FINAL_VIDEO_SUFFIX = '-final';
+let productionAudioPreviews = null;
 const R2_PUBLISHED_RETENTION_DAYS = Math.max(1, Math.min(365, Number(process.env.R2_PUBLISHED_RETENTION_DAYS) || 14));
 const R2_KANBAN_BACKUP_RETENTION_DAYS = 7;
 const r2Storage = r2StorageService.setup({
@@ -1853,6 +1855,34 @@ function savePieceRecord(piece) {
   weeklyReports.recordStageChange(piece, previous && previous.stage, 'automation', stamp);
 }
 
+productionAudioPreviews = productionAudioPreviewService.setup({
+  rootDir: path.join(DATA_DIR, 'production-audio-previews'),
+  concurrency: Math.max(1, Math.min(2, Number(process.env.PRODUCTION_AUDIO_PREVIEW_CONCURRENCY) || 2)),
+  getVideoPath: function (id) { return isValidId(id) ? path.join(UPLOADS_DIR, 'videos', id) : ''; },
+  getAudioTrackPath: function (id) { return isValidId(id) ? path.join(UPLOADS_DIR, 'audioTracks', id) : ''; },
+  getAudioTracks: function () {
+    return stmts.getAll.all('audioTracks').map(function (row) { try { return JSON.parse(row.data); } catch (error) { return null; } }).filter(Boolean);
+  },
+  getMixSettings: function () {
+    const row = stmts.getOne.get('settings', 'settings');
+    return row ? JSON.parse(row.data) : {};
+  },
+  buildAudioPreview: videoAnalysis.buildAudioPreview
+});
+
+setImmediate(function () {
+  const productionIds = stmts.getAll.all('pieces').map(function (row) {
+    try { const piece = recordConcurrency.decodeRow(row); return piece.stage === 'in_production' ? piece.id : ''; }
+    catch (error) { return ''; }
+  }).filter(Boolean);
+  productionAudioPreviews.prune(productionIds);
+  productionIds.forEach(function (id) {
+    productionAudioPreviews.warm(id).catch(function (error) {
+      console.error('[production-audio] startup warm failed for ' + id + ':', error.message);
+    });
+  });
+});
+
 const kanbanBackups = kanbanBackupService.setup({
   storage: r2Storage,
   retentionDays: R2_KANBAN_BACKUP_RETENTION_DAYS,
@@ -2127,8 +2157,10 @@ async function sendEditorProjectToProduction(input) {
     transcript: (project.words || []).filter(function (word) {
       return (project.removedWordIndices || []).indexOf(word.index) === -1;
     }).map(function (word) { return word.text; }).join(' '),
-    audioTrackId: project.audioTrackId,
-    audioMixSettings: project.audioMixSettings || {},
+    // Backing-audio selection now starts here in Production. Editor approves
+    // only picture, voice, cuts and captions, so no old Editor choice leaks
+    // into this card or blocks the handoff.
+    audioTrackId: '',
     thumbnailDataUrl: '',
     ytTitles: [],
     tags: [],
@@ -2170,6 +2202,9 @@ async function sendEditorProjectToProduction(input) {
   // reflects Harvey's manual cuts. Reuse it for matching/title generation
   // instead of retranscribing the rendered video through ElevenLabs.
   setImmediate(function () { runVideoAnalysis(piece.id, piece.transcript); });
+  setImmediate(function () { productionAudioPreviews.warm(piece.id).catch(function (error) {
+    console.error('[production-audio] handoff warm failed for ' + piece.id + ':', error.message);
+  }); });
   return { pieceId: piece.id, piece: piece, planningPiece: planningPiece, alreadySent: false, workflowWarning: '' };
 }
 
@@ -2298,6 +2333,12 @@ async function runVideoAnalysis(id, existingTranscript) {
     savePieceRecord(latest);
     maybeAdvanceToFinalCheck(id);
   }
+  const completed = getPieceRecord(id);
+  if (completed && completed.stage === 'in_production') {
+    productionAudioPreviews.warm(id).catch(function (error) {
+      console.error('[production-audio] analysis warm failed for ' + id + ':', error.message);
+    });
+  }
 }
 
 // requireAuthOrReviewer added here (this route previously had no auth
@@ -2343,13 +2384,10 @@ async function runBuildFinalVideo(id) {
     }
     const finalId = id + FINAL_VIDEO_SUFFIX;
     const outPath = path.join(UPLOADS_DIR, 'videos', finalId);
-    // Editor-origin videos retain the exact mix profile used for their audio
-    // auditions. Legacy/direct uploads fall back to the current global profile.
-    // Loudness mode still measures dialogue, music, and the completed mix.
+    // Backing audio is now a Production-only decision, so both auditions and
+    // the final build use the current saved Content Settings mix profile.
     const settingsRow = stmts.getOne.get('settings', 'settings');
-    const settings = piece.audioMixSettings && typeof piece.audioMixSettings === 'object'
-      ? piece.audioMixSettings
-      : settingsRow ? JSON.parse(settingsRow.data) : {};
+    const settings = settingsRow ? JSON.parse(settingsRow.data) : {};
     const mixProfile = videoAnalysis.normalizeAudioMixSettings(settings);
     const mixResult = await videoAnalysis.buildFinalVideo(videoPath, audioPath, outPath, settings);
 
@@ -2411,9 +2449,9 @@ app.post('/api/videos/:id/build-final', requireAuthOrReviewer, function (req, re
 // by runBuildFinalVideo are used here, so choosing a track is an honest
 // preview of what Final Check will receive. Nothing is persisted; the scratch
 // MP3 is removed as soon as the response has been sent.
-app.post('/api/videos/:id/audio-preview', requireAuthOrReviewer, async function (req, res, next) {
+async function sendProductionAudioPreview(req, res, next) {
   const { id } = req.params;
-  const audioTrackId = req.body && req.body.audioTrackId;
+  const audioTrackId = req.params.trackId || req.body && req.body.audioTrackId;
   if (!isValidId(id) || !isValidId(audioTrackId)) return res.status(400).json({ error: 'invalid_params' });
   const piece = getPieceRecord(id);
   if (!piece) return res.status(404).json({ error: 'piece_not_found' });
@@ -2427,21 +2465,18 @@ app.post('/api/videos/:id/audio-preview', requireAuthOrReviewer, async function 
     return res.status(400).json({ error: 'invalid_audio_track' });
   }
 
-  const outPath = path.join(DATA_DIR, 'tmp', 'video-audio-preview-' + crypto.randomUUID() + '.mp3');
-  const settingsRow = stmts.getOne.get('settings', 'settings');
-  const settings = settingsRow ? JSON.parse(settingsRow.data) : {};
   try {
-    await videoAnalysis.buildAudioPreview(videoPath, audioPath, outPath, settings);
+    const previewPath = await productionAudioPreviews.ensure(id, audioTrackId);
     res.type('audio/mpeg');
-    res.sendFile(outPath, function (err) {
-      fs.rm(outPath, { force: true }, function () {});
-      if (err && !res.headersSent) next(err);
-    });
+    res.set('Cache-Control', 'private, max-age=7200');
+    res.sendFile(previewPath, function (err) { if (err && !res.headersSent) next(err); });
   } catch (err) {
-    fs.rm(outPath, { force: true }, function () {});
     res.status(422).json({ error: 'audio_preview_failed', message: err.message });
   }
-});
+}
+
+app.get('/api/videos/:id/audio-preview/:trackId', requireAuthOrReviewer, sendProductionAudioPreview);
+app.post('/api/videos/:id/audio-preview', requireAuthOrReviewer, sendProductionAudioPreview);
 
 // --- Real YouTube publish: the actual videos.insert-equivalent, using the
 // token stored by the OAuth connect flow above (src/youtubeAuth.js). Same

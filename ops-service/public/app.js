@@ -3705,8 +3705,9 @@
 
   var dropzone, fileInput, uploadRows;
   var uploadRowObjectUrls = {}; // pieceId -> object URL, revoked/rebuilt on each render pass
-  // pieceId -> { trackId: mixed-audio object URL }. These are on-demand,
-  // temporary uploader auditions, never persistent media-library records.
+  // pieceId -> { trackId: mixed-audio object URL }. Production fills these
+  // asynchronously from the server's persistent preview cache so every row
+  // is ready for rapid soundtrack comparisons without blocking Editor.
   var uploadRowPreviewUrls = {};
   // pieceId -> pending debounce timer for the platform-checkbox save
   // below — see that handler's own comment for why this exists.
@@ -4117,6 +4118,16 @@
     audioSelect.disabled = !canEditRow;
     var audioPicker = document.createElement('div');
     audioPicker.className = 'upload-row-audio-picker';
+    var audioPrevious = document.createElement('button');
+    audioPrevious.type = 'button';
+    audioPrevious.className = 'btn-secondary btn-tiny';
+    audioPrevious.textContent = '←';
+    audioPrevious.title = 'Previous soundtrack';
+    var audioNext = document.createElement('button');
+    audioNext.type = 'button';
+    audioNext.className = 'btn-secondary btn-tiny';
+    audioNext.textContent = '→';
+    audioNext.title = 'Next soundtrack';
     var audioPreviewBtn = document.createElement('button');
     audioPreviewBtn.type = 'button';
     audioPreviewBtn.className = 'btn-secondary btn-tiny upload-row-audio-preview';
@@ -4130,11 +4141,25 @@
     uploadRowPreviewUrls[p.id] = previewUrls;
     var previewRequest = 0;
     var previewPlaying = false;
+    var previewCompleted = 0;
+    var previewFailed = 0;
+    var previewCancelled = false;
+
+    function updatePreviewReadiness() {
+      if (previewCancelled) return;
+      if (!audioTracks.length) audioPreviewStatus.textContent = 'No backing tracks are currently in the library.';
+      else if (previewCompleted < audioTracks.length) audioPreviewStatus.textContent = 'Preparing soundtrack previews ' + previewCompleted + '/' + audioTracks.length + '…';
+      else audioPreviewStatus.textContent = (audioTracks.length - previewFailed) + ' soundtrack previews ready' + (previewFailed ? ' · ' + previewFailed + ' failed' : '') + '. Switching is instant.';
+      setPreviewButtonState();
+    }
 
     function setPreviewButtonState() {
       var selectable = !!audioSelect.value;
-      audioPreviewBtn.disabled = !selectable;
+      var ready = audioSelect.value === '__none__' || !!previewUrls[audioSelect.value];
+      audioPreviewBtn.disabled = !selectable || !ready;
       audioPreviewBtn.textContent = previewPlaying ? 'Stop' : 'Preview';
+      audioPrevious.disabled = audioTracks.length < 2;
+      audioNext.disabled = audioTracks.length < 2;
     }
 
     function stopAudioPreview(message) {
@@ -4166,6 +4191,7 @@
       p.updatedAt = nowIso();
       syncTags(p);
       Store.put('pieces', p).then(refreshHead);
+      updatePreviewReadiness();
     });
     audioPreviewBtn.addEventListener('click', function () {
       if (previewPlaying) { stopAudioPreview(''); return; }
@@ -4182,35 +4208,18 @@
         return;
       }
       if (previewUrls[trackId]) { startSynchronizedPreview(trackId); return; }
-
-      var thisRequest = ++previewRequest;
-      audioPreviewBtn.disabled = true;
-      audioPreviewBtn.textContent = 'Building…';
-      audioPreviewStatus.textContent = 'Mixing this soundtrack with the video…';
-      fetch('/api/videos/' + encodeURIComponent(p.id) + '/audio-preview', {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audioTrackId: trackId })
-      }).then(function (response) {
-        if (!response.ok) throw new Error('Could not build the preview.');
-        return response.blob();
-      }).then(function (blob) {
-        if (!row.isConnected) return;
-        var url = URL.createObjectURL(blob);
-        // Cache every completed mix for instant repeat comparisons while
-        // this upload row remains open, even if a newer click superseded
-        // the autoplay request before this render finished.
-        if (previewUrls[trackId]) URL.revokeObjectURL(previewUrls[trackId]);
-        previewUrls[trackId] = url;
-        if (thisRequest !== previewRequest || audioSelect.value !== trackId) return;
-        startSynchronizedPreview(trackId);
-      }).catch(function (err) {
-        if (thisRequest !== previewRequest) return;
-        previewPlaying = false;
-        setPreviewButtonState();
-        audioPreviewStatus.textContent = (err && err.message) || 'Could not build the preview.';
-      });
+      audioPreviewStatus.textContent = 'This soundtrack preview is still preparing…';
     });
+    function selectAdjacentTrack(offset) {
+      var choices = ['__none__'].concat(audioTracks.map(function (track) { return track.id; }));
+      var index = choices.indexOf(audioSelect.value);
+      index = index < 0 ? 0 : (index + offset + choices.length) % choices.length;
+      audioSelect.value = choices[index];
+      audioSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      if (audioSelect.value === '__none__' || previewUrls[audioSelect.value]) audioPreviewBtn.click();
+    }
+    audioPrevious.addEventListener('click', function () { selectAdjacentTrack(-1); });
+    audioNext.addEventListener('click', function () { selectAdjacentTrack(1); });
     previewAudio.addEventListener('ended', function () { stopAudioPreview('Preview finished.'); });
     videoEl.addEventListener('ended', function () { if (previewPlaying) stopAudioPreview('Preview finished.'); });
     videoEl.addEventListener('pause', function () {
@@ -4228,9 +4237,30 @@
       try { previewAudio.currentTime = videoEl.currentTime || 0; } catch (e) {}
     });
     setPreviewButtonState();
+    var pendingPreviews = audioTracks.slice();
+    function preloadWorker() {
+      var track = pendingPreviews.shift();
+      if (!track || previewCancelled) return Promise.resolve();
+      return fetch('/api/videos/' + encodeURIComponent(p.id) + '/audio-preview/' + encodeURIComponent(track.id), {
+        method: 'GET', credentials: 'include', cache: 'default'
+      }).then(function (response) {
+        if (!response.ok) throw new Error('Could not prepare ' + track.name + '.');
+        return response.blob();
+      }).then(function (blob) {
+        if (previewCancelled) return;
+        previewUrls[track.id] = URL.createObjectURL(blob);
+      }).catch(function () { if (!previewCancelled) previewFailed++; }).finally(function () {
+        if (!previewCancelled) { previewCompleted++; updatePreviewReadiness(); }
+      }).then(preloadWorker);
+    }
+    row._cancelAudioPreviews = function () { previewCancelled = true; };
+    updatePreviewReadiness();
+    Promise.all([preloadWorker(), preloadWorker()]);
     audioSection.appendChild(audioLabel);
+    audioPicker.appendChild(audioPrevious);
     audioPicker.appendChild(audioSelect);
     audioPicker.appendChild(audioPreviewBtn);
+    audioPicker.appendChild(audioNext);
     audioSection.appendChild(audioPicker);
     audioSection.appendChild(audioPreviewStatus);
     audioSection.appendChild(previewAudio);
@@ -4367,6 +4397,7 @@
   function removeUploadRowAnimated(id) {
     var row = uploadRows.querySelector('.upload-row[data-id="' + id + '"]');
     if (!row) return;
+    if (typeof row._cancelAudioPreviews === 'function') row._cancelAudioPreviews();
     row.classList.add('upload-row-removing');
     setTimeout(function () {
       if (uploadRowObjectUrls[id]) { URL.revokeObjectURL(uploadRowObjectUrls[id]); delete uploadRowObjectUrls[id]; }
@@ -4401,6 +4432,9 @@
     var inProgress = items.filter(function (p) { return p.stage === 'in_production'; }).sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
 
     function swapIn(audioTracks) {
+      Array.from(uploadRows.querySelectorAll('.upload-row')).forEach(function (row) {
+        if (typeof row._cancelAudioPreviews === 'function') row._cancelAudioPreviews();
+      });
       var oldObjectUrls = uploadRowObjectUrls;
       var oldPreviewUrls = uploadRowPreviewUrls;
       uploadRowObjectUrls = {};

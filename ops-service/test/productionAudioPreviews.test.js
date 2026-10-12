@@ -1,0 +1,38 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const previews = require('../src/productionAudioPreviews');
+
+test('Production preview cache deduplicates work, persists results, and invalidates changed settings', async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-production-audio-'));
+  t.after(function () { fs.rmSync(dir, { recursive: true, force: true }); });
+  const video = path.join(dir, 'video'); const track = path.join(dir, 'track');
+  fs.writeFileSync(video, 'video'); fs.writeFileSync(track, 'track');
+  let settings = { musicBelowDialogueDb: 20 }; let builds = 0;
+  const service = previews.setup({
+    rootDir: path.join(dir, 'cache'), concurrency: 2,
+    getVideoPath: function () { return video; }, getAudioTrackPath: function () { return track; },
+    getAudioTracks: function () { return [{ id: 'track-1' }]; }, getMixSettings: function () { return settings; },
+    buildAudioPreview: async function (_video, _track, output) { builds++; await new Promise(function (resolve) { setTimeout(resolve, 20); }); fs.writeFileSync(output, Buffer.alloc(2048)); }
+  });
+  const first = await Promise.all([service.ensure('piece-1', 'track-1'), service.ensure('piece-1', 'track-1')]);
+  assert.equal(first[0], first[1]); assert.equal(builds, 1); assert.ok(fs.statSync(first[0]).size > 1024);
+  assert.equal(await service.ensure('piece-1', 'track-1'), first[0]); assert.equal(builds, 1);
+  settings = { musicBelowDialogueDb: 18 };
+  const changed = await service.ensure('piece-1', 'track-1');
+  assert.notEqual(changed, first[0]); assert.equal(builds, 2); assert.equal(fs.existsSync(first[0]), false);
+  service.prune([]); assert.equal(fs.existsSync(path.dirname(changed)), false);
+});
+
+test('Production preview queue bounds simultaneous mixes', async function () {
+  const enqueue = previews.createQueue(2);
+  let active = 0; let peak = 0;
+  await Promise.all([1, 2, 3, 4].map(function () {
+    return enqueue(async function () { active++; peak = Math.max(peak, active); await new Promise(function (resolve) { setTimeout(resolve, 10); }); active--; });
+  }));
+  assert.equal(peak, 2);
+});
