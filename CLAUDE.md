@@ -17007,3 +17007,24 @@ on both desktop and mobile; bucket transitions remain handled only by
 client and desktop app cache keys were advanced. A VM-backed regression test
 simulates a completed text bubble receiving a later image and verifies exactly
 one completion callback followed by the attachment update.
+
+---
+
+# 514. `/home2/` Open-Book Hero Prototype (2026-10-12)
+
+`frontend/home2/index.html` is a deliberate duplicate of the current homepage
+for a self-contained design test; the production `/` homepage remains
+unchanged. The prototype replaces the hardcover/candle hero with the real
+3759×1808 open-book spread as a genuine viewport-wide image. A restrained dark
+edge gradient supports the existing title, three-line framework and purchase
+CTA without globally dimming or boxing the photograph. Desktop preserves the
+spread's native wide proportion; mobile uses a full-screen crop with the copy
+anchored over a bottom fade.
+
+The spread was removed from behind the prototype's video/edition offer so the
+same photograph is not repeated immediately below the hero. The entire
+four-item “Why This Book” section (Objective, 14 Rules, Strategy, Better Life)
+was also removed from `/home2/` only. Root-relative resolution is provided by a
+`<base href="/">`, so the duplicate safely reuses all production assets,
+checkout links, scripts and settings while remaining available at the clean
+`/home2/` path.
