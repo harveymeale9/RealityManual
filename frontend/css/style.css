@@ -1,7 +1,7 @@
-/* The Reality Manual — shared design system
+/* The Reality Manual - shared design system
    Dark warm near-black, gold accent, literary/archival. No frameworks, no build step.
 
-   IMAGE SLOTS (all placeholders live in img/placeholder/ — replace the file or
+   IMAGE SLOTS (all placeholders live in img/placeholder/ - replace the file or
    swap the src, no CSS changes needed):
      reality-manual-hero-background.svg   hero background photograph
      reality-manual-book-hero.svg         the book itself, hero centrepiece
@@ -351,7 +351,7 @@ img { max-width: 100%; }
 }
 
 /* .wrap is now the containing block for .hero-bg-desktop (an absolutely
-   positioned child of it, not of .hero) — see CLAUDE.md §71. */
+   positioned child of it, not of .hero) - see CLAUDE.md §71. */
 .hero .wrap { position: relative; z-index: 1; }
 
 /* Mobile (<900px): a dedicated square composition in normal flow. */
@@ -390,7 +390,7 @@ img { max-width: 100%; }
 
 .hero-copy h1 { margin-bottom: 0.35em; }
 
-/* Wrapped to 2 lines deliberately — at the full single-line width, this
+/* Wrapped to 2 lines deliberately - at the full single-line width, this
    phrase's rightmost letters reached far enough right to land on the
    book in the full-bleed photo behind it at some viewport widths
    (~960-1024px), regardless of how the image crop was tuned. Capping
@@ -467,7 +467,7 @@ img { max-width: 100%; }
 
 @media (min-width: 900px) {
   .hero {
-    /* No padding at all: Harvey flagged solid---bg gaps on BOTH sides —
+    /* No padding at all: Harvey flagged solid---bg gaps on BOTH sides -
        above the hero (below the sticky header) and below it (before
        .offer starts). The photo itself should run completely flush,
        top and bottom, with nothing but its own content in between. */
@@ -475,7 +475,7 @@ img { max-width: 100%; }
     /* Keeps the box roughly matched to the hardcover hero photo's native aspect
        ratio (1536:1024 = 1.5:1) as .wrap approaches its var(--wrap)
        (1200px) cap. Using min(100vw, 1200px) rather than a bare vw unit
-       means this is automatically bounded the same way .wrap itself is —
+       means this is automatically bounded the same way .wrap itself is -
        past ~1200px viewport, the reference width simply stops growing,
        so this stays capped too instead of needing its own separate max.
        min-height only ever adds space, so narrower desktop widths
@@ -486,7 +486,7 @@ img { max-width: 100%; }
        .wrap's old `height: 100%` never actually resolved. A percentage
        height only resolves against an ancestor with a *definite* height,
        and .hero's height was 'auto' (min-height is a floor, not a
-       definite height) — so `height:100%` silently computed to 'auto'
+       definite height) - so `height:100%` silently computed to 'auto'
        instead, and .wrap (and therefore the absolutely-positioned photo
        pinned to its edges) only grew as tall as hero-grid's own content,
        leaving .hero's min-height-driven extra space as a bare gap below
@@ -497,7 +497,7 @@ img { max-width: 100%; }
     flex-direction: column;
   }
 
-  /* flex:1 (not height:100%, see above) — stretches to .hero's full
+  /* flex:1 (not height:100%, see above) - stretches to .hero's full
      flex-resolved height, which is now a definite height that
      .hero-grid's own `height:100%` below can correctly resolve against
      in turn. min-height:0 overrides flex's default min-height:auto,
@@ -512,7 +512,7 @@ img { max-width: 100%; }
     object-position: 50% 42%;
   }
 
-  /* Text legibility over the photo — a soft shadow directly behind the
+  /* Text legibility over the photo - a soft shadow directly behind the
      glyphs, not a darkening overlay across the whole image (Harvey,
      §72: "dont darken the hero bg just because its the background, the
      text should still stand out"). Leaves the photo at its natural
@@ -527,7 +527,7 @@ img { max-width: 100%; }
     /* minmax(0, …fr), not bare …fr: a bare fr track's implicit min-width is
        "auto" (the content's intrinsic min-content size), so a long word in
        the copy or quote column could otherwise force that column wider
-       than its fr share. Middle column is an empty gap ('.') — the book
+       than its fr share. Middle column is an empty gap ('.') - the book
        is part of the background photo, not a grid item. */
     grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.95fr) minmax(0, 0.8fr);
     grid-template-areas:
@@ -1542,7 +1542,7 @@ footer a:hover { color: var(--ink-soft); }
   display: block;
   border-radius: 2px;
   /* Overlapping "fanned stack" look instead of the old evenly-spaced
-     row with an accent border around each icon — the border read as
+     row with an accent border around each icon - the border read as
      distracting; a shadow gives each overlapping icon enough separation
      from the one behind it without needing a colored outline. */
   box-shadow: -3px 0 10px -2px rgba(0, 0, 0, 0.6);
@@ -1565,7 +1565,7 @@ footer a:hover { color: var(--ink-soft); }
 }
 
 .qty-gift-note {
-  /* Was serif italic at 0.92rem — Harvey found it hard to read; sans,
+  /* Was serif italic at 0.92rem - Harvey found it hard to read; sans,
      upright, and a touch larger reads much more clearly at this size. */
   font-family: var(--sans);
   font-style: normal;

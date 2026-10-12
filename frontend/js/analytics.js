@@ -1,4 +1,4 @@
-// First-party aggregate site statistics — see CLAUDE.md §31-34/§456.
+// First-party aggregate site statistics - see CLAUDE.md §31-34/§456.
 // Independent from Meta advertising events and delayed until trustworthy
 // human browser evidence exists.
 // Every call is wrapped so a network failure or missing backend can never
@@ -40,7 +40,7 @@ window.RMAnalytics = (function () {
     });
   }
 
-  // One id per browser, kept in localStorage rather than sessionStorage —
+  // One id per browser, kept in localStorage rather than sessionStorage -
   // "session" here means "this visitor", not "this tab"; the funnel needs
   // to survive a landing-page visit today and a checkout tomorrow.
   function getSessionId() {

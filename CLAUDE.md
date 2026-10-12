@@ -18182,3 +18182,20 @@ without stale browser CSS.
 The Home2 purchase description now says the book is printed and bound by “one
 of the world's finest bespoke bookbinders” rather than “one of Europe's
 finest.” No other purchase copy or layout changed.
+
+---
+
+# 573. Public Storefront Has a Zero-Em-Dash Copy Rule (2026-10-12)
+
+Harvey does not want em dashes anywhere on the public website. The entire
+`frontend/` tree was audited for the Unicode character plus HTML and escaped
+forms. All occurrences were removed, including visible landing-page FAQ copy,
+page titles and metadata, checkout product/placeholder text, quantity warnings,
+confirmation/status messages, SVG accessibility labels, and non-rendered source
+comments.
+
+User-facing sentences now use full stops, commas, or vertical-bar title
+separators according to context; empty checkout totals use a plain ASCII
+hyphen. A repository search covering `—`, `&mdash;`, numeric entities, and
+escaped `\\u2014`/`\\x{2014}` forms returns zero matches under `frontend/`.
+Future storefront copy must preserve this zero-em-dash rule.

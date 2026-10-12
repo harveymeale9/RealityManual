@@ -20,7 +20,7 @@
 
   const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const PHONE_REGEX = /^\+?[\d\s\-.()/]{6,35}$/;
-  // Field limits mirror BookVault's OrderAddress schema — see
+  // Field limits mirror BookVault's OrderAddress schema - see
   // backend/src/lib/validation.js and CLAUDE.md §64 for the source.
   const NAME_MAX = 200;
   const STREET1_MAX = 200;
@@ -29,7 +29,7 @@
   const STATE_MAX = 200;
   const POSTAL_MAX = 99;
   const PHONE_MAX = 35;
-  // Not a BookVault limit — a sane cap, matching backend/src/lib/validation.js.
+  // Not a BookVault limit - a sane cap, matching backend/src/lib/validation.js.
   const QUANTITY_MIN = 1;
   const QUANTITY_MAX = 20;
 
@@ -49,7 +49,7 @@
       content_type: 'product'
     });
   }
-  // Fired once, on the first time the shopper actually touches the form —
+  // Fired once, on the first time the shopper actually touches the form -
   // distinct from checkout_view (just landing on the page) per CLAUDE.md §31.
   form.addEventListener('input', function trackCheckoutStarted() {
     if (checkoutStartedTracked) return;
@@ -125,7 +125,7 @@
     countrySelect.addEventListener('change', updateShipping);
 
     // Shipping is quoted live against BookVault for the exact country +
-    // postcode + quantity (see backend/src/services/bookvaultService.js —
+    // postcode + quantity (see backend/src/services/bookvaultService.js -
     // quantity matters here because BookVault's quote is weight-based), so
     // a postcode edit needs to re-trigger it too, not just a country
     // change. Debounced so we're not firing a request per keystroke.
@@ -141,7 +141,7 @@
     renderQtyBooks(getQuantity());
   }
 
-  // One small book icon per copy, up to QTY_ICON_MAX — beyond that a "+N"
+  // One small book icon per copy, up to QTY_ICON_MAX - beyond that a "+N"
   // badge instead of letting the row grow without bound.
   function renderQtyBooks(quantity) {
     qtyBooks.innerHTML = '';
@@ -173,7 +173,7 @@
   function setQuantity(n) {
     const clamped = Math.min(QUANTITY_MAX, Math.max(QUANTITY_MIN, Math.round(n) || QUANTITY_MIN));
     quantityInput.value = clamped;
-    // Immediate client-side estimate — updateShipping() below then confirms
+    // Immediate client-side estimate - updateShipping() below then confirms
     // the real (server-authoritative) number once BookVault responds,
     // including whether this quantity triggers the upgraded-shipping
     // warning below.
@@ -191,7 +191,7 @@
 
     const requestId = ++shippingRequestSeq;
     summaryShipping.textContent = 'Calculating…';
-    summaryTotal.textContent = '—';
+    summaryTotal.textContent = '-';
 
     try {
       const res = await fetch(`${API_BASE_URL}/api/shipping/calculate`, {
@@ -213,7 +213,7 @@
       summaryHint.style.display = 'none';
 
       if (data.shipping_upgraded) {
-        quantityWarningBanner.textContent = `Ordering ${quantity} copies no longer qualifies for the cheapest shipping service — a pricier, faster courier is used instead, which is why shipping costs more per copy than a smaller order.`;
+        quantityWarningBanner.textContent = `Ordering ${quantity} copies no longer qualifies for the cheapest shipping service. A pricier, faster courier is used instead, which is why shipping costs more per copy than a smaller order.`;
         quantityWarningBanner.hidden = false;
       } else {
         quantityWarningBanner.hidden = true;
@@ -224,7 +224,7 @@
     } catch (err) {
       if (requestId !== shippingRequestSeq) return;
       summaryShipping.textContent = 'Unavailable';
-      summaryTotal.textContent = '—';
+      summaryTotal.textContent = '-';
       quantityWarningBanner.hidden = true;
       showFormError('We could not calculate shipping for that address. Please check the country and postal code.');
     }

@@ -56,7 +56,7 @@
       const data = await res.json();
       render(data);
     } catch (err) {
-      // Transient network errors shouldn't stop polling — just try again.
+      // Transient network errors shouldn't stop polling - just try again.
     }
 
     if (pollCount >= MAX_POLLS) {
@@ -76,7 +76,7 @@
       clearTimeout(timerId);
       spinner.style.display = 'none';
       statusTitle.textContent = 'Payment confirmed';
-      statusMessage.textContent = `Thank you for ordering ${order.product_name}. Your order is being prepared for fulfillment — we'll follow up by email once it ships.`;
+      statusMessage.textContent = `Thank you for ordering ${order.product_name}. Your order is being prepared for fulfillment. We'll follow up by email once it ships.`;
       orderMeta.textContent = `Order ${order.order_id} · ${order.product_description} · ${formatCents(order.total_price_cents, order.currency)}`;
       trackOnce('order_complete', order.order_id);
       if (window.RMMarketing) {
@@ -110,7 +110,7 @@
       return;
     }
 
-    // PAYMENT_PENDING — keep polling, waiting state stays as-is.
+    // PAYMENT_PENDING - keep polling, waiting state stays as-is.
     orderMeta.textContent = `Order ${order.order_id}`;
   }
 
