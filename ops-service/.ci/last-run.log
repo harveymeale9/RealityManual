@@ -5,19 +5,25 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   fa48c69..e69db31  main       -> origin/main
+   e69db31..99637a3  main       -> origin/main
 + git merge --ff-only origin/main
-Updating fa48c69..e69db31
+Updating e69db31..99637a3
 Fast-forward
- CLAUDE.md                                   |   16 +
- ops-service/.ci/last-run.log                | 1696 +--------------------------
- ops-service/public/editor.js                |    2 +-
- ops-service/public/index.html               |    2 +-
- ops-service/src/videoEditorService.js       |   26 +-
- ops-service/test/videoEditorService.test.js |   27 +-
- 6 files changed, 73 insertions(+), 1696 deletions(-)
+ CLAUDE.md                              |  31 +++++++++
+ frontend/css/style.css                 |  45 +------------
+ frontend/home2/index.html              |  17 +----
+ ops-service/.ci/last-run.log           | 111 ++++++++++++++++++++++++++++-----
+ ops-service/public/app.js              |  23 +++----
+ ops-service/public/index.html          |   4 +-
+ ops-service/public/style.css           |   2 +
+ ops-service/server.js                  |   4 +-
+ ops-service/src/rangeResponse.js       |  47 ++++++++++++++
+ ops-service/test/rangeResponse.test.js |  20 ++++++
+ 10 files changed, 210 insertions(+), 94 deletions(-)
+ create mode 100644 ops-service/src/rangeResponse.js
+ create mode 100644 ops-service/test/rangeResponse.test.js
 ++ git rev-parse HEAD
-+ NEW_HEAD=e69db31f2031949c1071d2bcc902e6453b311872
++ NEW_HEAD=99637a3251b213a98a22f3dc77fd386133f805cf
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -26,12 +32,13 @@ Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
 + LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
 ++ cat /root/ops-service-data/last-image-commit.txt
-+ LAST_BUILD_COMMIT=1a2f355ba43d326ac132ae02209a2c25b632b4bb
++ LAST_BUILD_COMMIT=e69db31f2031949c1071d2bcc902e6453b311872
 + NEEDS_REBUILD=1
-+ '[' -n 1a2f355ba43d326ac132ae02209a2c25b632b4bb ']'
-+ git cat-file -e '1a2f355ba43d326ac132ae02209a2c25b632b4bb^{commit}'
-++ git diff --name-only 1a2f355ba43d326ac132ae02209a2c25b632b4bb e69db31f2031949c1071d2bcc902e6453b311872 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
-+ '[' -z ops-service/src/videoEditorService.js ']'
++ '[' -n e69db31f2031949c1071d2bcc902e6453b311872 ']'
++ git cat-file -e 'e69db31f2031949c1071d2bcc902e6453b311872^{commit}'
+++ git diff --name-only e69db31f2031949c1071d2bcc902e6453b311872 99637a3251b213a98a22f3dc77fd386133f805cf -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -z 'ops-service/server.js
+ops-service/src/rangeResponse.js' ']'
 + '[' 0 = 1 ']'
 + '[' 1 = 0 ']'
 + docker tag rm-ops-service rm-ops-service:previous
@@ -39,11 +46,11 @@ Already up to date.
 #0 building with "default" instance using docker driver
 
 #1 [internal] load build definition from Dockerfile
-#1 transferring dockerfile: 2.04kB 0.0s done
-#1 DONE 0.1s
+#1 transferring dockerfile: 2.04kB done
+#1 DONE 0.0s
 
 #2 [internal] load metadata for docker.io/library/node:22-slim
-#2 DONE 0.4s
+#2 DONE 0.2s
 
 #3 [internal] load .dockerignore
 #3 transferring context: 136B done
@@ -54,64 +61,63 @@ Already up to date.
 #4 DONE 0.0s
 
 #5 [internal] load build context
-#5 transferring context: 845.95kB 0.0s done
+#5 transferring context: 721.21kB 0.0s done
 #5 DONE 0.0s
 
 #6 [ 3/10] WORKDIR /app
 #6 CACHED
 
-#7 [ 4/10] COPY package.json ./
+#7 [ 2/10] RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && python3 -m pip install --break-system-packages --no-cache-dir yt-dlp==2026.8.19     && rm -rf /var/lib/apt/lists/*
 #7 CACHED
 
-#8 [ 5/10] RUN npm install --omit=dev
+#8 [ 4/10] COPY package.json ./
 #8 CACHED
 
-#9 [ 2/10] RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && python3 -m pip install --break-system-packages --no-cache-dir yt-dlp==2026.8.19     && rm -rf /var/lib/apt/lists/*
+#9 [ 5/10] RUN npm install --omit=dev
 #9 CACHED
 
 #10 [ 6/10] COPY server.js ./
-#10 CACHED
+#10 DONE 0.1s
 
 #11 [ 7/10] COPY src ./src
 #11 DONE 0.1s
 
 #12 [ 8/10] COPY public ./public
-#12 DONE 0.2s
+#12 DONE 0.1s
 
 #13 [ 9/10] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
-#13 DONE 15.0s
+#13 DONE 14.8s
 
 #14 [10/10] RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
-#14 DONE 0.3s
+#14 DONE 0.2s
 
 #15 exporting to image
 #15 exporting layers
-#15 exporting layers 3.3s done
-#15 exporting manifest sha256:2bbfb8a60918da2cdc1eeec876b9cdb8397d0fa37d837361fc41af47f1fb41a8 0.0s done
-#15 exporting config sha256:8d3bd54405319260b6c5bced40c5c212e71a1baae68101289c2d4852b48443ca 0.0s done
-#15 exporting attestation manifest sha256:20239947529c5ecf6d0cb89ce5631ff92e96b03ae919bb557786569f71d1c9aa 0.0s done
-#15 exporting manifest list sha256:be6d36e175ad723ca477caba7c67256d90879214d5326b26cfbef9a5e13f97e2
-#15 exporting manifest list sha256:be6d36e175ad723ca477caba7c67256d90879214d5326b26cfbef9a5e13f97e2 0.0s done
+#15 exporting layers 3.5s done
+#15 exporting manifest sha256:b619cbf709163d7fa466315692a378e9d0248b4101f3f93075acd06e5314f418 0.0s done
+#15 exporting config sha256:5ea98613e2b77cfa5f6aa6c11645636a4c79b05c6307a325d2eaf7763be626db 0.0s done
+#15 exporting attestation manifest sha256:ac4317d15e90ca85583b07117a860bb0c8992005e3859fc7ae3acf3f765c5e36 0.0s done
+#15 exporting manifest list sha256:752fefac8c2134182749866f15dcba80578d9b6f14d505392c6367f2351a8b9b done
 #15 naming to docker.io/library/rm-ops-service:latest done
 #15 unpacking to docker.io/library/rm-ops-service:latest
-#15 unpacking to docker.io/library/rm-ops-service:latest 1.6s done
-#15 DONE 5.0s
+#15 unpacking to docker.io/library/rm-ops-service:latest 1.5s done
+#15 DONE 5.2s
 + docker stop rm-ops-service
 rm-ops-service
 + docker rm rm-ops-service
 rm-ops-service
 + docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-data:/data -v /root/realitymanual-backend-data:/store-data:ro -v /srv/realitymanual-repo:/repo -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
-dd3010150b0ea9c9e6de8093884e0a8fdde188ef50e8764cbec3b2fbe9bca2e6
-+ echo e69db31f2031949c1071d2bcc902e6453b311872
+4240d6b10a60c7668ca19467f66a479519237442efad4926570af67a314ba456
++ echo 99637a3251b213a98a22f3dc77fd386133f805cf
 ++ git -C /root/realitymanual-repo rev-parse --short HEAD
-+ echo 'rm-ops-service redeployed at e69db31'
-rm-ops-service redeployed at e69db31
++ echo 'rm-ops-service redeployed at 99637a3'
+rm-ops-service redeployed at 99637a3
 + docker image prune -f
 Deleted Images:
-untagged: sha256:892fdd1095cb18a75c73d50eb372f2156a1d69dfdafe0fccc1ed4aa6b1f90904
-deleted: sha256:892fdd1095cb18a75c73d50eb372f2156a1d69dfdafe0fccc1ed4aa6b1f90904
-deleted: sha256:79be9dff76786b067c0fac658e48c135d6eb83d677de93640d1594b707f3d641
-deleted: sha256:d58b1ae0441c5af8f9f682bbf0125d1d70e4c93e377296a5076161701adc9844
+untagged: sha256:b30c18d143d7d2aa8cda143f513000dc621016c8bfe42508dc128b901f73ad24
+deleted: sha256:b30c18d143d7d2aa8cda143f513000dc621016c8bfe42508dc128b901f73ad24
+deleted: sha256:91ee2b06e69de643f10bc85f56e4d93c671aa2ee4a482248c7fb670b254a4574
+deleted: sha256:3b4bdc1dfe7c1f010ad5a00848549bf674b646dcd9da2f2fdbcfa78600e3bea7
 
 Total reclaimed space: 15.67kB
 + docker builder prune -f --max-used-space 8GB
