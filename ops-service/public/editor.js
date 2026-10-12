@@ -377,6 +377,20 @@
       (item.layoutOverride === 'auto' || !item.layoutOverride) && Number(item.width) >= Number(item.height);
   }
 
+  function audioUnavailableMessage(item) {
+    var unresolvedRetakes = Number(item && item.unresolvedRetakeCount) || 0;
+    var automaticEditRunning = ['pending', 'running', 'pending_transcript'].indexOf(item && item.retakeAnalysisStatus) !== -1 ||
+      ['pending', 'running', 'pending_transcript'].indexOf(item && item.planningMatchStatus) !== -1 ||
+      ['queued', 'preparing'].indexOf(item && item.clipInsertStatus) !== -1;
+    if (unresolvedRetakes) {
+      return 'Resolve ' + unresolvedRetakes + ' possible retake' + (unresolvedRetakes === 1 ? '' : 's') + ' below to build the final edit and unlock audio';
+    }
+    if (automaticEditRunning) return 'Available when the automatic edit is ready';
+    if (item && item.retakeAnalysisStatus === 'error') return 'Retry the failed retake check to unlock audio';
+    if (item && item.renderStatus === 'error') return 'Retry the failed final edit to unlock audio';
+    return 'Available when the final edit is ready';
+  }
+
   function sessionBucket(item) {
     if (item.productionPieceId) return item.workflowWarning ? 'warning' : 'sent';
     if (activeManualRevision(item)) return 'working';
@@ -984,12 +998,7 @@
     var failedSafetyCheck = project.retakeAnalysisStatus === 'error' || framingFailureBlocks;
     var renderBlocked = automaticEditRunning || failedSafetyCheck || unresolvedRetakes > 0 || project.layoutReviewRequired;
     var renderButtonText = automaticEditRunning ? 'Preparing automatic edit…' : project.retakeAnalysisStatus === 'error' ? 'Retry failed retake check' : framingFailureBlocks ? 'Retry framing or choose a frame' : project.layoutReviewRequired ? 'Confirm Vertical or Horizontal frame' : unresolvedRetakes ? 'Review ' + unresolvedRetakes + ' possible retake' + (unresolvedRetakes === 1 ? '' : 's') : 'Build final edit';
-    var audioUnavailableText = unresolvedRetakes
-      ? 'Resolve ' + unresolvedRetakes + ' possible retake' + (unresolvedRetakes === 1 ? '' : 's') + ' below to build the final edit and unlock audio'
-      : automaticEditRunning ? 'Available when the automatic edit is ready'
-        : project.retakeAnalysisStatus === 'error' ? 'Retry the failed retake check to unlock audio'
-          : project.renderStatus === 'error' ? 'Retry the failed final edit to unlock audio'
-            : 'Available when the final edit is ready';
+    var audioUnavailableText = audioUnavailableMessage(project);
     var rendering = ['queued', 'running'].indexOf(project.renderStatus) !== -1;
     var previewRebuildPending = !!localPreviewRebuilds[project.id] || !!project.renderRebuildPending;
     var previewLocked = rendering || previewRebuildPending;
@@ -1333,7 +1342,7 @@
       } else if (project.renderStatus !== 'ready') {
         audioTrackSelect.disabled = true;
         audioProgress.className = 'editor-audio-progress';
-        audioProgress.querySelector('span').textContent = audioUnavailableText;
+        audioProgress.querySelector('span').textContent = audioUnavailableMessage(project);
       } else if (!audioTracks.length) {
         audioTrackSelect.disabled = sent;
         audioProgress.className = 'editor-audio-progress';
@@ -1513,6 +1522,10 @@
       updatePreviewMotion(previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime);
       syncPlayerControls();
     });
+    // A cached review proxy can already have a decoded frame before the
+    // workspace finishes binding its listeners. Do not leave the loading
+    // cover up forever merely because `loadeddata` won that race.
+    if (video.readyState >= 2) setInitialPlayerLoading(false);
     video.addEventListener('error', function () {
       setInitialPlayerLoading(false);
       if (videoError) videoError.hidden = false;

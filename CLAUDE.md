@@ -17028,3 +17028,24 @@ was also removed from `/home2/` only. Root-relative resolution is provided by a
 `<base href="/">`, so the duplicate safely reuses all production assets,
 checkout links, scripts and settings while remaining available at the clean
 `/home2/` path.
+
+---
+
+# 515. Editor Preview Loader No Longer Freezes on Refresh (2026-10-12)
+
+The Editor's initial video loader appeared frozen for two independent reasons.
+Its CSS referenced a nonexistent `spin` keyframe while the loading cover also
+set `cursor: wait`, producing a second operating-system busy cursor whenever
+the pointer crossed the preview. The shared Editor spinner keyframe now exists,
+and preview loading/rebuild covers use the normal cursor so the single visible
+green indicator is the only loading affordance.
+
+The longer apparent hang on unrendered recordings was a JavaScript scope bug:
+`paintAudioPanel()` referenced `audioUnavailableText`, but that variable existed
+only inside the separate `renderWorkspace()` function. On refresh this threw
+before the video `loadeddata`/`error` handlers were attached, leaving the cover
+permanently visible even though the browser-safe H.264 preview was complete and
+valid. The message calculation now lives in a shared helper used by both render
+paths. A ready-state guard also dismisses the cover when a cached video decodes
+before its event listener is bound. CSS and Editor script cache keys were
+advanced.
