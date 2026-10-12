@@ -17683,3 +17683,22 @@ portrait layout is unchanged. Headless Chromium verified that horizontal frame
 and workspace widths match at desktop and mobile sizes, the video remains
 16:9, portrait sizing is unaffected, and neither layout introduces horizontal
 page overflow. The shared stylesheet cache key was advanced.
+
+---
+
+# 546. Delete Key Removes the Selected Manual-Timeline Section (2026-10-12)
+
+The Editor's manual timeline now accepts either **Delete** or **Backspace**
+after a section between split points is selected. The shortcut invokes the
+same guarded action as **Delete selected section**, so the existing durable
+manual trim, ripple-left behavior, preview rebuild, and undo history remain
+unchanged rather than creating a second deletion path.
+
+The listener is scoped to the timeline viewport. It does not intercept keys
+while Harvey is typing elsewhere in the Editor, and it remains inactive when
+the timeline's delete action is disabled or no section is selected. The
+timeline instructions now advertise both keyboard keys, and the Editor script
+cache key was advanced. A mocked-API headless-Chromium test selected two
+different timeline sections and proved that Delete and Backspace each sent the
+exact selected source interval through the existing manual-trim save path. The
+complete 178-test ops-service suite also passes.

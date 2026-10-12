@@ -550,7 +550,7 @@
     for (var time = 0; time <= duration; time += tickStep) {
       ticks += '<i style="left:' + pct(time) + '%"><span>' + formatTime(time) + '</span></i>';
     }
-    return '<section class="editor-manual-timeline" id="editorManualTimeline"><div class="editor-manual-timeline-head"><div><div class="eyebrow">Source timeline</div><h3>Video + voice</h3><span>Click to seek. Add two splits, select the section between them, then delete it. The following clip ripples left automatically.</span></div><div class="editor-manual-timeline-actions">' +
+    return '<section class="editor-manual-timeline" id="editorManualTimeline"><div class="editor-manual-timeline-head"><div><div class="eyebrow">Source timeline</div><h3>Video + voice</h3><span>Click to seek. Add two splits, select the section between them, then press Delete/Backspace or use the button. The following clip ripples left automatically.</span></div><div class="editor-manual-timeline-actions">' +
       '<button type="button" class="btn-secondary btn-tiny" id="editorTimelineAddSplit" ' + (locked ? 'disabled' : '') + '>Split at playhead</button><button type="button" class="btn-secondary btn-tiny" id="editorTimelineClearSplits" ' + (!splits.length || locked ? 'disabled' : '') + '>Clear splits</button><button type="button" class="btn-primary btn-tiny" id="editorTimelineDelete" ' + (!selection || locked ? 'disabled' : '') + '>Delete selected section</button></div></div>' +
       '<div class="editor-manual-timeline-hint"><span id="editorTimelineZoomLabel">' + zoom.toFixed(0) + ' px/sec</span><span>Ctrl/⌘ + scroll to zoom · normal scroll moves along the timeline</span></div>' +
       '<div class="editor-manual-timeline-viewport" id="editorManualTimelineViewport"><div class="editor-manual-timeline-inner" id="editorManualTimelineInner" style="width:' + effectiveWidth + 'px">' +
@@ -1759,6 +1759,12 @@
         return { manualTrimCuts: trims };
       });
     };
+    if (manualTimelineViewport && deleteTimelineSection) manualTimelineViewport.addEventListener('keydown', function (event) {
+      if (event.key !== 'Delete' && event.key !== 'Backspace') return;
+      if (deleteTimelineSection.disabled || !manualTimelineSelections[project.id]) return;
+      event.preventDefault();
+      deleteTimelineSection.click();
+    });
     updateManualTimelinePlayhead(currentSourcePlayhead());
     restoreManualTimelineView();
     video.playbackRate = reviewRate;
