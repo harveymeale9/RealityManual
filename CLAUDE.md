@@ -17956,7 +17956,10 @@ recording could transfer hundreds of megabytes or several gigabytes first.
 
 Authenticated `/api/files` responses now implement standard single-byte-range
 delivery (`Accept-Ranges`, `206`, `Content-Range`, bounded/open/suffix ranges,
-and `416` for invalid requests). Production points each video element directly
+4MB maximum response chunks, and `416` for invalid requests). The response cap
+is essential because Chrome commonly asks for the valid but open-ended
+`bytes=0-`; returning the full remainder would reproduce the original whole-file
+transfer under a different API shape. Production points each video element directly
 at that endpoint with metadata preloading, allowing the browser to request only
 the chunks required for metadata and the current frame. When a saved thumbnail
 exists it is used as the poster immediately and remains visible through a light

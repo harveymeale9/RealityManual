@@ -1,8 +1,9 @@
 'use strict';
 
 const fs = require('fs');
+const MAX_RANGE_BYTES = 4 * 1024 * 1024;
 
-function parseByteRange(header, size) {
+function parseByteRange(header, size, maxBytes) {
   const total = Math.max(0, Number(size) || 0);
   if (!header) return null;
   const match = /^bytes=(\d*)-(\d*)$/.exec(String(header).trim());
@@ -21,6 +22,8 @@ function parseByteRange(header, size) {
     end = Math.min(end, total - 1);
   }
   if (start < 0 || start >= total || end < start) return { invalid: true };
+  const limit = Math.max(1, Number(maxBytes) || MAX_RANGE_BYTES);
+  end = Math.min(end, start + limit - 1);
   return { start: start, end: end };
 }
 
@@ -44,4 +47,4 @@ function sendFile(req, res, filePath, contentType) {
   return fs.createReadStream(filePath).pipe(res);
 }
 
-module.exports = { parseByteRange, sendFile };
+module.exports = { maxRangeBytes: MAX_RANGE_BYTES, parseByteRange, sendFile };
