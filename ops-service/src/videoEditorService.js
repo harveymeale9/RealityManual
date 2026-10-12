@@ -29,7 +29,11 @@ const OPENING_PUSH_IN_SCALE = 1.25;
 const VERTICAL_OPENING_PUSH_IN_SCALE = 1.125;
 const HORIZONTAL_OPENING_PUSH_IN_SCALE = 1.125;
 const VERTICAL_REVEAL_PUSH_IN_SCALE = 1.125;
-const EDITOR_RENDER_VERSION = 23;
+const EDITOR_RENDER_VERSION = 24;
+const AUTO_CUT_BOUNDARY_VERSION = 2;
+const DEFAULT_RETAINED_PAUSE_SECONDS = 0.14;
+const MIN_RETAINED_PAUSE_SECONDS = 0.08;
+const CUT_ISLAND_BRIDGE_SECONDS = 0.12;
 const PAGE_CHANGE_SSIM_THRESHOLD = 0.5;
 const BROWSER_PREVIEW_VERSION = 2;
 const AUDIO_PREVIEW_MIX_VERSION = 3;
@@ -357,12 +361,24 @@ function normalizeWords(rawWords) {
   });
 }
 
-// Natural mode keeps 380ms between phrases. It removes only the middle of a
-// gap, so consonants, breaths and deliberate sentence cadence retain handles.
+function retainedPauseForThreshold(thresholdSeconds) {
+  const threshold = Number(thresholdSeconds) || 1;
+  return threshold < 0.85 ? 0.10 : threshold < 1.3 ? DEFAULT_RETAINED_PAUSE_SECONDS : 0.22;
+}
+
+function effectiveRetainedPauseSeconds(project) {
+  return Number(project && project.autoCutBoundaryVersion) === AUTO_CUT_BOUNDARY_VERSION
+    ? Number(project.retainedPauseSeconds) || retainedPauseForThreshold(project.silenceThresholdSeconds)
+    : retainedPauseForThreshold(project && project.silenceThresholdSeconds);
+}
+
+// Natural mode keeps a tight 140ms between phrases. The 70ms handle on each
+// spoken edge protects consonants without leaving an audible dead fragment
+// before the cut begins.
 function calculateAutoCuts(words, duration, options) {
   options = options || {};
   const threshold = clamp(options.thresholdSeconds === undefined ? 1.0 : options.thresholdSeconds, 0.65, 5);
-  const retainedPause = clamp(options.retainedPauseSeconds === undefined ? 0.38 : options.retainedPauseSeconds, 0.18, threshold - 0.05);
+  const retainedPause = clamp(options.retainedPauseSeconds === undefined ? DEFAULT_RETAINED_PAUSE_SECONDS : options.retainedPauseSeconds, MIN_RETAINED_PAUSE_SECONDS, threshold - 0.05);
   const cuts = [];
   if (!words.length || !Number.isFinite(Number(duration)) || Number(duration) <= 0) return cuts;
   const total = Number(duration);
@@ -432,7 +448,9 @@ function mergeCuts(cuts, duration) {
   const merged = [];
   sorted.forEach(function (cut) {
     const previous = merged[merged.length - 1];
-    if (!previous || cut.start > previous.end + 0.015) return merged.push(Object.assign({}, cut));
+    // A sliver between two removals cannot carry intelligible speech and plays
+    // as a visual/audio glitch. Bridge those islands into one continuous cut.
+    if (!previous || cut.start > previous.end + CUT_ISLAND_BRIDGE_SECONDS) return merged.push(Object.assign({}, cut));
     previous.end = Math.max(previous.end, cut.end);
     if (previous.reason !== cut.reason) previous.reason = 'combined';
     if (previous.id !== cut.id) previous.id = '';
@@ -444,7 +462,7 @@ function cutsForProject(project) {
   const restored = new Set(Array.isArray(project.restoredAutoCutIds) ? project.restoredAutoCutIds : []);
   const auto = project.autoSilenceEnabled === false ? [] : calculateAutoCuts(project.words || [], project.duration, {
     thresholdSeconds: project.silenceThresholdSeconds,
-    retainedPauseSeconds: project.retainedPauseSeconds
+    retainedPauseSeconds: effectiveRetainedPauseSeconds(project)
   }).filter(function (cut) { return !restored.has(cut.id); });
   const manual = calculateManualCuts(project.words || [], project.removedWordIndices || [], project.duration);
   const precise = normalizeManualTrimCuts(project.manualTrimCuts, project.duration);
@@ -645,7 +663,7 @@ function gapDecisions(project) {
   const restored = new Set(Array.isArray(project.restoredAutoCutIds) ? project.restoredAutoCutIds : []);
   return calculateAutoCuts(words, project.duration, {
     thresholdSeconds: project.silenceThresholdSeconds,
-    retainedPauseSeconds: project.retainedPauseSeconds
+    retainedPauseSeconds: effectiveRetainedPauseSeconds(project)
   }).map(function (cut) {
     return Object.assign({}, cut, {
       duration: Math.max(0, cut.end - cut.start),
@@ -2280,7 +2298,8 @@ async function renderProject(id) {
         restoredAutoCutIds: [],
         autoSilenceEnabled: true,
         silenceThresholdSeconds: 1,
-        retainedPauseSeconds: 0.38,
+        retainedPauseSeconds: DEFAULT_RETAINED_PAUSE_SECONDS,
+        autoCutBoundaryVersion: AUTO_CUT_BOUNDARY_VERSION,
         captionsEnabled: true,
         openingPushInEnabled: true,
         layoutOverride: 'auto',
@@ -2528,7 +2547,7 @@ async function renderProject(id) {
     const currentManualTrimCuts = normalizeManualTrimCuts(project.manualTrimCuts, project.duration);
     const currentAutoSilenceEnabled = project.autoSilenceEnabled !== false;
     const currentSilenceThresholdSeconds = Number(project.silenceThresholdSeconds) || 1;
-    const currentRetainedPauseSeconds = Number(project.retainedPauseSeconds) || 0.38;
+    const currentRetainedPauseSeconds = effectiveRetainedPauseSeconds(project);
     const nextRemovedWordIndices = Array.isArray(req.body && req.body.removedWordIndices)
       ? Array.from(new Set(req.body.removedWordIndices.map(Number).filter(function (index) { return Number.isInteger(index) && index >= 0 && index < (project.words || []).length; }))).sort(function (a, b) { return a - b; })
       : currentRemovedWordIndices;
@@ -2543,7 +2562,7 @@ async function renderProject(id) {
       : currentManualTrimCuts;
     const nextAutoSilenceEnabled = typeof (req.body && req.body.autoSilenceEnabled) === 'boolean' ? req.body.autoSilenceEnabled : currentAutoSilenceEnabled;
     const nextSilenceThresholdSeconds = Number.isFinite(Number(req.body && req.body.silenceThresholdSeconds)) ? clamp(req.body.silenceThresholdSeconds, 0.65, 5) : currentSilenceThresholdSeconds;
-    const nextRetainedPauseSeconds = Number.isFinite(Number(req.body && req.body.retainedPauseSeconds)) ? clamp(req.body.retainedPauseSeconds, 0.18, 1.2) : currentRetainedPauseSeconds;
+    const nextRetainedPauseSeconds = Number.isFinite(Number(req.body && req.body.retainedPauseSeconds)) ? clamp(req.body.retainedPauseSeconds, MIN_RETAINED_PAUSE_SECONDS, 1.2) : currentRetainedPauseSeconds;
     let decisionSnapshotSaved = false;
     function saveDecisionSnapshot() {
       if (decisionSnapshotSaved) return;
@@ -2607,6 +2626,7 @@ async function renderProject(id) {
     }
     project.silenceThresholdSeconds = nextSilenceThresholdSeconds;
     project.retainedPauseSeconds = nextRetainedPauseSeconds;
+    project.autoCutBoundaryVersion = AUTO_CUT_BOUNDARY_VERSION;
     if (typeof (req.body && req.body.planningPieceId) === 'string' && typeof getPlanningCandidates === 'function') {
       const requested = req.body.planningPieceId;
       const candidate = getPlanningCandidates(project).find(function (item) { return item.id === requested; });

@@ -17722,3 +17722,32 @@ Headless Chromium verified the exact new content and element order, removal of
 the edition selector, retention of all three purchase assurances, and no
 horizontal overflow at 1440×900 or 390×844. Both renders were visually
 inspected, and the original homepage still retains its edition panel.
+
+---
+
+# 548. Automatic Cuts Sit Tight to Speech and Absorb Tiny Islands (2026-10-12)
+
+The Editor's automatic silence cuts no longer retain 380ms across a removed
+pause (190ms on each spoken edge). Natural pacing now retains 140ms total,
+placing each cut 70ms from the last/next timed word. Tight pacing retains
+100ms and Gentle retains 220ms. This preserves a small consonant-safe handle
+without the conspicuous blank beat that previously appeared between the end of
+the green voice region and the beginning of a red cut.
+
+The shared cut normalizer also bridges retained islands of 120ms or less
+between adjacent removals. Such fragments cannot carry intelligible speech and
+previously appeared as narrow gaps between red timeline regions and as audible
+or visual glitches in the edit. Islands longer than 120ms remain intact.
+
+`AUTO_CUT_BOUNDARY_VERSION` is now 2 and `EDITOR_RENDER_VERSION` is 24. Legacy
+non-Production Editor projects calculate their corrected handle from the
+selected pacing, and the render-version migration invalidates and rebuilds
+their verified previews. Approved Production copies remain immutable. Future
+recordings persist the corrected Natural boundary version directly, and later
+pacing changes use the new values. The Editor script cache key was advanced.
+
+Focused regression coverage proves the new 70ms Natural edge handle, the
+120ms island merge boundary, retained longer material, and continued ripple
+behavior for manual timeline cuts. Render-level coverage also verifies the
+page-change blink and inserted-clip path against the new boundaries, and the
+complete 179-test ops-service suite passes.

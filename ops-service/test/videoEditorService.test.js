@@ -293,15 +293,26 @@ test('render duration tolerance stays strict for long-form output', function () 
 test('automatic cuts preserve natural handles around long pauses', function () {
   const cuts = editor.calculateAutoCuts(words, 9);
   assert.deepEqual(cuts.map(function (cut) { return cut.reason; }), ['leading_silence', 'long_pause', 'long_pause', 'trailing_silence']);
-  assert.equal(cuts[1].start, 1.99);
-  assert.equal(cuts[1].end, 3.81);
+  assert.equal(cuts[1].start, 1.87);
+  assert.equal(cuts[1].end, 3.93);
+});
+
+test('sub-perceptual islands between adjacent cuts are removed continuously', function () {
+  assert.deepEqual(editor.mergeCuts([
+    { id: 'first', start: 1, end: 2, reason: 'long_pause' },
+    { id: 'second', start: 2.08, end: 3, reason: 'transcript_cut' }
+  ], 10), [{ id: '', start: 1, end: 3, reason: 'combined' }]);
+  assert.deepEqual(editor.mergeCuts([
+    { id: 'first', start: 1, end: 2, reason: 'long_pause' },
+    { id: 'second', start: 2.13, end: 3, reason: 'transcript_cut' }
+  ], 10).map(function (cut) { return [cut.start, cut.end]; }), [[1, 2], [2.13, 3]]);
 });
 
 test('individual automatic pauses can be restored without disabling the rest', function () {
   const project = { words: words, duration: 9, autoSilenceEnabled: true, restoredAutoCutIds: ['gap-1'] };
   const cuts = editor.cutsForProject(project);
   assert.equal(cuts.some(function (cut) { return cut.start < 4 && cut.end > 2; }), false);
-  assert.equal(cuts.some(function (cut) { return cut.start > 5 && cut.start < 7; }), true);
+  assert.equal(cuts.some(function (cut) { return cut.id === 'gap-3'; }), true);
   const decisions = editor.gapDecisions(project);
   assert.equal(decisions.find(function (cut) { return cut.id === 'gap-1'; }).restored, true);
 });
@@ -380,7 +391,7 @@ test('precise manual trims bridge residual fragments between automatic and trans
   assert.deepEqual(editor.cutsForProject(project), [{
     id: 'lead', start: 0, end: 32.02, reason: 'leading_silence'
   }, {
-    id: '', start: 32.71, end: 64.71000000000001, reason: 'combined'
+    id: '', start: 32.59, end: 64.83000000000001, reason: 'combined'
   }, {
     id: 'tail', start: 65.35, end: 70, reason: 'trailing_silence'
   }]);
@@ -760,7 +771,7 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.equal(stored.renderQuality.status, 'passed');
-  assert.equal(stored.renderVersion, 23);
+  assert.equal(stored.renderVersion, 24);
   assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), true);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
@@ -792,7 +803,7 @@ test('final render splices an inserted clip and its caption timeline between sou
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.ok(stored.editedDuration > 3.9 && stored.editedDuration < 4.1);
-  assert.equal(stored.renderVersion, 23);
+  assert.equal(stored.renderVersion, 24);
   assert.equal(stored.renderQuality.contentDuration, 2);
   assert.equal(stored.renderQuality.outroSeconds, 2);
   assert.ok(stored.renderQuality.insertedClipLoudness.clips[0].gainDb > 18);
@@ -862,10 +873,10 @@ test('final render blinks through black across a visually confirmed page change'
       '-frames:v', '1', '-vf', "select='gte(t," + at + ")',scale=1:1", '-pix_fmt', 'rgb24', '-f', 'rawvideo', 'pipe:1']);
     return Array.from(frame.subarray(0, 3)).reduce(function (sum, channel) { return sum + channel; }, 0);
   }
-  const whitePage = frameBrightness(0.7);
-  const fadeOut = frameBrightness(0.96);
-  const fadeIn = frameBrightness(1.03);
-  const bluePage = frameBrightness(1.25);
+  const whitePage = frameBrightness(0.65);
+  const fadeOut = frameBrightness(0.84);
+  const fadeIn = frameBrightness(0.90);
+  const bluePage = frameBrightness(1.15);
   assert.ok(fadeOut < whitePage * 0.35, JSON.stringify({ whitePage: whitePage, fadeOut: fadeOut }));
   assert.ok(fadeIn < bluePage * 0.45, JSON.stringify({ bluePage: bluePage, fadeIn: fadeIn }));
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
@@ -1335,7 +1346,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.nameSource, 'planning_transcript');
   assert.equal(planningMatchCalls, 1);
   assert.ok(metadataProjects.some(function (item) { return item.id === project.id && item.workingTitle === 'Synthetic Outline'; }));
-  assert.ok(project.cuts.some(function (cut) { return cut.reason === 'long_pause'; }));
+  assert.ok(project.cuts.some(function (cut) { return cut.reason === 'long_pause' || cut.reason === 'combined'; }));
   assert.deepEqual(project.captionGroups.map(function (group) { return group.text; }), ['One two.']);
   for (let attempt = 0; attempt < 600 && (project.renderStatus !== 'error' && (project.renderStatus !== 'ready' || renderReadyCalls < 1 || !project.workflowWarning)); attempt++) {
     await new Promise(function (resolve) { setTimeout(resolve, 50); });
@@ -1436,7 +1447,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.deepEqual(project.restoredAutoCutIds, []);
   assert.equal(project.autoSilenceEnabled, true);
   assert.equal(project.silenceThresholdSeconds, 1);
-  assert.equal(project.retainedPauseSeconds, 0.38);
+  assert.equal(project.retainedPauseSeconds, 0.14);
   assert.equal(project.canUndoCut, false);
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ captionsEnabled: false, wordCorrection: { index: 0, text: 'Once' } }) });
   assert.equal(response.status, 200);
