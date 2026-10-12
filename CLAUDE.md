@@ -17338,3 +17338,11 @@ that browser per recording; the resulting cut itself is durable server data.
 The Editor JavaScript and stylesheet cache keys were advanced. A new regression
 test proves a 2–4 second timeline deletion produces retained 0–2 and 4–10
 second segments with no gap. The complete 178-test ops-service suite passes.
+
+Live headless-Chromium verification loaded the deployed cache-keyed assets and
+exercised the real DOM against a mocked recording, leaving production data
+untouched. It opened one VIDEO and one VOICE lane, added splits at 2 and 4
+seconds, produced three selectable sections, widened a short timeline from 849
+to 1061 pixels with one Ctrl-wheel gesture, and sent the selected 2–4 second
+interval as the exact durable manual trim payload. No browser runtime errors
+occurred.
