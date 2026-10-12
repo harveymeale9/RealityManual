@@ -207,7 +207,8 @@ internal sealed class UploaderContext : ApplicationContext
         catch (Exception error)
         {
             status = "Waiting to retry · " + error.Message;
-            await Heartbeat("error", "", 0);
+            var queued = config.Items.FirstOrDefault(x => !x.Complete && File.Exists(x.Path));
+            await Heartbeat("error", queued == null ? "" : Path.GetFileName(queued.Path), queued == null || queued.Size <= 0 ? 0 : queued.ReceivedBytes * 100d / queued.Size);
         }
         finally
         {

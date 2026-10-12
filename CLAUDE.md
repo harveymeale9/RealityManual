@@ -17518,3 +17518,31 @@ the timeline scroll position to 123px, split at 1:12, and verified the new video
 retained `data-seek-time="72.000"`, the split marker appeared at 72%, and the
 replacement viewport restored to 123px with no browser runtime errors. The
 complete ops-service suite also passes: 178 tests, zero failures.
+# 489. Desktop Listener Capacity Rejection Was False for Render-Ready Work (2026-10-12)
+
+A completed 2.46 GB horizontal OBS recording was discovered immediately by the
+Windows listener and durably queued, but never appeared in Editor. The live
+request trail proved the configured horizontal path and watcher were correct:
+the laptop retried `2026-10-12 17-54-32.mp4` every ten seconds and the server
+returned HTTP 507 each time. The disk gate had 22 GB free after safe Docker
+builder-cache cleanup, but `outstandingEditorCapacity` still reserved two
+raw-camera-sized future copies for every render-ready active project. Production
+actually receives the much smaller verified Editor render, so the gate was
+overstating already-known future output by several gigabytes.
+
+Render-ready projects now reserve two copies of their measured `renderSizeBytes`
+for the Production handoff and later mixed final. Projects without a finished
+render retain the conservative raw-source estimate, as does every unknown output
+for a newly arriving file. If legacy metadata lacks `renderSizeBytes`, the gate
+also falls back to the source size. Capacity rejections now log the filename,
+source bytes, free bytes, requested capacity, outstanding work, live upload
+reservations, and desktop device id, so the next failure can be diagnosed from
+normal service logs rather than packet capture. The Windows listener heartbeat
+also keeps the queued filename and partial percentage when reporting an error,
+instead of replacing both with blank values. Focused capacity coverage locks the
+measured-render behavior and conservative legacy fallback.
+
+The listener change was published as self-contained Windows build 2.0.1 and
+placed at the persistent Content Settings download target. Existing installed
+2.0.0 listeners remain upload-compatible; installing 2.0.1 adds the richer
+error heartbeat without changing the durable queue or pairing token.

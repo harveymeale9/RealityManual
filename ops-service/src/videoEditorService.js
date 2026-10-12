@@ -48,10 +48,18 @@ function outstandingEditorCapacity(projects) {
   return (Array.isArray(projects) ? projects : []).reduce(function (total, project) {
     if (!project || project.productionPieceId) return total;
     const bytes = Math.max(0, Number(project.sizeBytes) || 0);
-    let copies = 2; // Production handoff plus its later soundtrack/final copy.
-    if (project.renderStatus !== 'ready') copies += 2;
-    if (project.browserPreviewRequired && project.browserPreviewStatus !== 'ready') copies++;
-    return total + bytes * copies;
+    const readyRenderBytes = project.renderStatus === 'ready'
+      ? Math.max(0, Number(project.renderSizeBytes) || 0)
+      : 0;
+    // Production receives the verified Editor render, not the much larger raw
+    // camera source. Once that render exists, reserve its measured byte size
+    // for the Production copy and later mixed final instead of pretending both
+    // will be raw-source-sized. Before a render exists, retain the conservative
+    // source-sized estimate for those outputs.
+    let totalBytes = (readyRenderBytes || bytes) * 2;
+    if (project.renderStatus !== 'ready') totalBytes += bytes * 2;
+    if (project.browserPreviewRequired && project.browserPreviewStatus !== 'ready') totalBytes += bytes;
+    return total + totalBytes;
   }, 0);
 }
 
@@ -2362,7 +2370,15 @@ async function renderProject(id) {
     }
     const projects = listStmt.all(STORE_NAME).map(function (row) { try { return JSON.parse(row.data); } catch (error) { return null; } }).filter(Boolean);
     const requestedCapacity = requiredEditorCapacity(sizeBytes, false);
-    if (availableDiskBytes() < requestedCapacity + outstandingEditorCapacity(projects) + uploadCapacityReservations.total()) {
+    const availableBytes = availableDiskBytes();
+    const outstandingBytes = outstandingEditorCapacity(projects);
+    const reservedBytes = uploadCapacityReservations.total();
+    if (availableBytes < requestedCapacity + outstandingBytes + reservedBytes) {
+      console.warn('editor upload rejected for capacity', JSON.stringify({
+        fileName: fileName, sizeBytes: sizeBytes, availableBytes: availableBytes,
+        requestedCapacity: requestedCapacity, outstandingBytes: outstandingBytes,
+        reservedBytes: reservedBytes, desktopUploaderDeviceId: req.desktopUploaderDeviceId || ''
+      }));
       return res.status(507).json({ error: 'insufficient_storage', message: 'There is not enough free workspace to safely edit this recording. Clear old Editor files or VPS storage, then try again.' });
     }
     const uploadId = crypto.randomUUID();

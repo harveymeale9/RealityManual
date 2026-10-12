@@ -120,6 +120,9 @@ test('batch capacity includes unfinished copies owed to earlier recordings', fun
     { sizeBytes: 1000, productionPieceId: 'already-sent', renderStatus: 'ready' }
   ]), 100 * 5 + 200 * 2);
   assert.equal(editor.outstandingEditorCapacity([
+    { sizeBytes: 100, renderSizeBytes: 25, browserPreviewRequired: true, browserPreviewStatus: 'ready', renderStatus: 'ready' }
+  ]), 50);
+  assert.equal(editor.outstandingEditorCapacity([
     { sizeBytes: 100, browserPreviewRequired: true, browserPreviewStatus: 'ready', renderStatus: 'ready' }
   ]), 200);
 });
