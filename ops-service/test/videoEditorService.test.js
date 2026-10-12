@@ -159,8 +159,8 @@ test('concurrent byte-identical uploads share one creation claim', async functio
   retry.settle('project-3');
 });
 
-test('final renders take the next serial encoder slot ahead of waiting proxies', async function () {
-  const queue = editor.createPriorityTaskQueue();
+test('final renders take the next encoder slot ahead of waiting proxies', async function () {
+  const queue = editor.createPriorityTaskQueue(1);
   const order = [];
   let releaseFirst;
   const firstGate = new Promise(function (resolve) { releaseFirst = resolve; });
@@ -171,6 +171,61 @@ test('final renders take the next serial encoder slot ahead of waiting proxies',
   releaseFirst();
   await Promise.all([first, second, final]);
   assert.deepEqual(order, ['proxy-running', 'final', 'proxy-waiting']);
+});
+
+test('encoder queue runs a bounded pair concurrently and still prioritizes final renders', async function () {
+  const queue = editor.createPriorityTaskQueue(2);
+  const order = [];
+  let active = 0;
+  let maximumActive = 0;
+  let releaseFirst;
+  let releaseSecond;
+  const firstGate = new Promise(function (resolve) { releaseFirst = resolve; });
+  const secondGate = new Promise(function (resolve) { releaseSecond = resolve; });
+  function tracked(label, gate) {
+    return async function () {
+      order.push(label);
+      active++;
+      maximumActive = Math.max(maximumActive, active);
+      if (gate) await gate;
+      active--;
+    };
+  }
+  const first = queue.enqueue(tracked('proxy-one', firstGate), 'normal');
+  const second = queue.enqueue(tracked('proxy-two', secondGate), 'normal');
+  await new Promise(function (resolve) { setImmediate(resolve); });
+  const waitingProxy = queue.enqueue(tracked('proxy-waiting'), 'normal');
+  const final = queue.enqueue(tracked('final'), 'urgent');
+  releaseFirst();
+  await final;
+  releaseSecond();
+  await Promise.all([first, second, waitingProxy]);
+  assert.equal(maximumActive, 2);
+  assert.ok(order.indexOf('final') < order.indexOf('proxy-waiting'));
+});
+
+test('encoder concurrency follows available CPUs and remains capped at two by default', function () {
+  assert.equal(editor.encoderConcurrencyForCpuCount(1), 1);
+  assert.equal(editor.encoderConcurrencyForCpuCount(2), 2);
+  assert.equal(editor.encoderConcurrencyForCpuCount(8), 2);
+  assert.equal(editor.encoderConcurrencyForCpuCount(8, 1), 1);
+  assert.equal(editor.encoderConcurrencyForCpuCount(2, 8), 2);
+});
+
+test('encoder queue never overlaps two jobs for the same recording', async function () {
+  const queue = editor.createPriorityTaskQueue(2);
+  const order = [];
+  let releaseFirst;
+  const firstGate = new Promise(function (resolve) { releaseFirst = resolve; });
+  const first = queue.enqueue(async function () { order.push('same-first'); await firstGate; }, 'normal', 'recording-a');
+  await new Promise(function (resolve) { setImmediate(resolve); });
+  const same = queue.enqueue(async function () { order.push('same-second'); }, 'urgent', 'recording-a');
+  const other = queue.enqueue(async function () { order.push('other'); }, 'normal', 'recording-b');
+  await new Promise(function (resolve) { setImmediate(resolve); });
+  assert.deepEqual(order, ['same-first', 'other']);
+  releaseFirst();
+  await Promise.all([first, same, other]);
+  assert.deepEqual(order, ['same-first', 'other', 'same-second']);
 });
 
 test('every camera recording receives a scrub-optimized review proxy', function () {

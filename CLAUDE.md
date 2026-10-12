@@ -17762,3 +17762,28 @@ its question and removes the long decorative rule extending across either
 side, while retaining the existing full-width-responsive behavior on narrow
 screens. The override is scoped to `.home2-page`, so the original storefront
 FAQ remains unchanged. The `/home2` stylesheet cache key was advanced.
+
+---
+
+# 550. Editor Rebuilds Use a CPU-Bounded Parallel Encoder Pool (2026-10-12)
+
+The Editor no longer forces every recording's preview and final rebuild through
+one global serial FFmpeg slot. The host exposes two CPUs and has no container
+CPU or memory cap, so the shared priority queue now derives its worker count
+from the CPUs visible to Node, defaults to at most two workers, and can be
+reduced with `EDITOR_ENCODE_CONCURRENCY`. Each FFmpeg video encode receives its
+proportional thread budget (one thread per job on the current two-core VPS), so
+two separate recordings can make progress together without two unrestricted
+x264 processes each trying to consume the whole host.
+
+Queue entries are keyed by Editor project: a source proxy and final rebuild for
+the same recording remain serialized, while work for different recordings can
+run concurrently. Final renders retain priority over waiting browser proxies.
+This work also corrected a pre-existing call-site bug where the final render's
+`urgent` argument had accidentally been supplied to `.catch()` rather than the
+priority queue, so approval-ready renders now genuinely take the next free
+slot.
+
+Focused tests prove the two-worker ceiling, CPU-aware sizing, urgent ordering,
+and same-recording exclusion. The real HEVC proxy regression and all 182
+ops-service tests pass, including the generated FFmpeg final-render paths.

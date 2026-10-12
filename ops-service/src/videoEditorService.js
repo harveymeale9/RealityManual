@@ -4,6 +4,7 @@ const express = require('express');
 const multer = require('multer');
 const crypto = require('crypto');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { execFile, spawn } = require('child_process');
 
@@ -38,6 +39,23 @@ const PAGE_CHANGE_SSIM_THRESHOLD = 0.5;
 const BROWSER_PREVIEW_VERSION = 2;
 const AUDIO_PREVIEW_MIX_VERSION = 3;
 const AUDIO_PREVIEW_TTL_MS = 2 * 60 * 60 * 1000;
+
+function encoderConcurrencyForCpuCount(cpuCount, configuredLimit) {
+  const available = Math.max(1, Math.floor(Number(cpuCount) || 1));
+  const configured = Math.floor(Number(configuredLimit) || 0);
+  // Two simultaneous FFmpeg jobs are enough to let separate recordings make
+  // progress together without turning a filming-session batch into an
+  // unbounded process storm. An explicit lower limit remains useful on a
+  // smaller host, and no configuration can exceed the CPUs actually visible
+  // to this process.
+  return Math.min(available, Math.max(1, configured > 0 ? configured : 2));
+}
+
+const AVAILABLE_CPU_COUNT = typeof os.availableParallelism === 'function'
+  ? os.availableParallelism()
+  : (os.cpus() || []).length;
+const EDITOR_ENCODE_CONCURRENCY = encoderConcurrencyForCpuCount(AVAILABLE_CPU_COUNT, process.env.EDITOR_ENCODE_CONCURRENCY);
+const EDITOR_FFMPEG_THREADS = Math.max(1, Math.floor(Math.max(1, AVAILABLE_CPU_COUNT) / EDITOR_ENCODE_CONCURRENCY));
 
 function requiredEditorCapacity(fileBytes, fileAlreadyStored) {
   const bytes = Math.max(0, Number(fileBytes) || 0);
@@ -111,24 +129,33 @@ function createKeyedClaimRegistry() {
   };
 }
 
-function createPriorityTaskQueue() {
+function createPriorityTaskQueue(limit) {
   const urgent = [];
   const normal = [];
-  let running = false;
+  const activeKeys = new Set();
+  let running = 0;
+  limit = Math.max(1, Math.floor(Number(limit) || 1));
+  function nextAvailable(queue) {
+    const index = queue.findIndex(function (entry) { return !entry.key || !activeKeys.has(entry.key); });
+    return index < 0 ? null : queue.splice(index, 1)[0];
+  }
   function pump() {
-    if (running) return;
-    const entry = urgent.shift() || normal.shift();
-    if (!entry) return;
-    running = true;
-    Promise.resolve().then(entry.task).then(entry.resolve, entry.reject).finally(function () {
-      running = false;
-      pump();
-    });
+    while (running < limit) {
+      const entry = nextAvailable(urgent) || nextAvailable(normal);
+      if (!entry) return;
+      running++;
+      if (entry.key) activeKeys.add(entry.key);
+      Promise.resolve().then(entry.task).then(entry.resolve, entry.reject).finally(function () {
+        if (entry.key) activeKeys.delete(entry.key);
+        running--;
+        pump();
+      });
+    }
   }
   return {
-    enqueue: function (task, priority) {
+    enqueue: function (task, priority, key) {
       return new Promise(function (resolve, reject) {
-        (priority === 'urgent' ? urgent : normal).push({ task: task, resolve: resolve, reject: reject });
+        (priority === 'urgent' ? urgent : normal).push({ task: task, resolve: resolve, reject: reject, key: key || '' });
         setImmediate(pump);
       });
     }
@@ -1167,10 +1194,10 @@ function setup(options) {
   const audioPreviewJobs = new Map();
   const audioPreviewCache = new Map();
   const audioPreviewQueue = createConcurrentTaskQueue(2);
-  // Browser proxies and final masters are both sustained FFmpeg encodes. One
-  // priority queue prevents CPU contention while letting an approval-ready
-  // final take the next slot ahead of proxies that have not started yet.
-  const encodeQueue = createPriorityTaskQueue();
+  // Browser proxies and final masters are both sustained FFmpeg encodes. Use a
+  // CPU-bounded worker pool so separate recordings can rebuild together while
+  // final edits still take the next free slot ahead of waiting proxies.
+  const encodeQueue = createPriorityTaskQueue(EDITOR_ENCODE_CONCURRENCY);
   const classificationJobs = new Map();
   const retakeJobs = new Map();
   const planningMatchJobs = new Map();
@@ -1423,10 +1450,11 @@ function setup(options) {
   }
 
   async function buildScrubProxy(inputPath, outputPath, expectedDuration, label) {
-    await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-autorotate', '1', '-i', inputPath,
+    await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-filter_threads', String(EDITOR_FFMPEG_THREADS), '-autorotate', '1', '-i', inputPath,
       '-map', '0:v:0', '-map', '0:a:0', '-vf',
       "scale=w='if(gte(iw,ih),trunc(min(854,iw)/2)*2,-2)':h='if(gte(iw,ih),-2,trunc(min(854,ih)/2)*2)',fps=30",
       '-c:v', 'libx264', '-preset', 'superfast', '-tune', 'fastdecode', '-crf', '30', '-pix_fmt', 'yuv420p',
+      '-threads', String(EDITOR_FFMPEG_THREADS),
       '-g', '15', '-keyint_min', '15', '-sc_threshold', '0',
       '-c:a', 'aac', '-b:a', '64k', '-movflags', '+faststart', outputPath], label);
     if (!await browserPreviewIsValid(outputPath, expectedDuration)) throw new Error('The scrub-optimized browser preview failed verification.');
@@ -1462,7 +1490,7 @@ function setup(options) {
           try { saveProject(project); } catch (saveError) { return; }
         }
       }
-    }, 'normal').finally(function () { previewJobs.delete(id); });
+    }, 'normal', id).finally(function () { previewJobs.delete(id); });
     previewJobs.set(id, job);
     return job;
   }
@@ -1497,7 +1525,7 @@ function setup(options) {
           try { saveProject(project); } catch (saveError) { return; }
         }
       }
-    }, 'normal').finally(function () { renderPreviewJobs.delete(id); });
+    }, 'normal', id).finally(function () { renderPreviewJobs.delete(id); });
     renderPreviewJobs.set(id, job);
     return job;
   }
@@ -1881,10 +1909,11 @@ async function renderProject(id) {
         ',fps=30000/1001[outv]');
       filters.push('[outa]apad=pad_dur=' + VIDEO_OUTRO_SECONDS.toFixed(3) + '[outaextended]');
       let lastReportedProgress = -1;
-      const ffmpegInputs = ['-hide_banner', '-loglevel', 'error', '-y', '-autorotate', '1', '-i', sourcePath(id)];
+      const ffmpegInputs = ['-hide_banner', '-loglevel', 'error', '-y', '-filter_complex_threads', String(EDITOR_FFMPEG_THREADS), '-autorotate', '1', '-i', sourcePath(id)];
       readyClips.forEach(function (clip) { ffmpegInputs.push('-i', insertedClipPath(id, clip.id)); });
       await runWithProgress('ffmpeg', ffmpegInputs.concat(['-filter_complex', filters.join(';'),
         '-map', '[outv]', '-map', '[outaextended]', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k',
+        '-threads', String(EDITOR_FFMPEG_THREADS),
         '-movflags', '+faststart', '-progress', 'pipe:1', '-nostats', renderPath(id)]), 'editor render', function (encodedSeconds) {
         const percent = Math.min(99, Math.max(0, Math.floor(encodedSeconds / Math.max(0.01, expectedDuration) * 100)));
         if (percent < lastReportedProgress + 2) return;
@@ -1959,7 +1988,7 @@ async function renderProject(id) {
           }
         }
       }
-    }).catch(function (err) {
+    }, 'urgent', id).catch(function (err) {
       const project = getProject(id);
       fs.rm(renderPath(id), { force: true }, function () {});
       fs.rm(renderPreviewPath(id), { force: true }, function () {});
@@ -1970,7 +1999,7 @@ async function renderProject(id) {
         project.renderQuality = { status: 'failed', checkedAt: new Date().toISOString(), message: project.renderError };
         saveProject(project);
       }
-    }, 'urgent').finally(function () { renderJobs.delete(id); });
+    }).finally(function () { renderJobs.delete(id); });
     renderJobs.set(id, job);
     return job;
   }
@@ -3037,6 +3066,7 @@ module.exports = {
   createByteReservationLedger,
   createKeyedClaimRegistry,
   createPriorityTaskQueue,
+  encoderConcurrencyForCpuCount,
   verifiedRenderMatches,
   parseIntegratedLoudness,
   insertedClipGainDb,
