@@ -5,18 +5,17 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   feb46f5..6b83040  main       -> origin/main
+   6b83040..e582f72  main       -> origin/main
 + git merge --ff-only origin/main
-Updating feb46f5..6b83040
+Updating 6b83040..e582f72
 Fast-forward
- CLAUDE.md                    |  24 +++++++++
- ops-service/.ci/last-run.log | 113 +++++++------------------------------------
- ops-service/public/app.js    |  72 +++++++++++++++++++++++----
- ops-service/public/style.css |   6 +++
- ops-service/server.js        |  90 ++++++++++++++++++++++------------
- 5 files changed, 170 insertions(+), 135 deletions(-)
+ CLAUDE.md                    |  21 +++++++++
+ ops-service/.ci/last-run.log | 108 +++++++++++++++++++++++++++++++++++++------
+ ops-service/public/app.js    |  85 +++++++++++++++++++++++++++-------
+ ops-service/public/style.css |  13 +++++-
+ 4 files changed, 194 insertions(+), 33 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=6b83040fd51db5fb90c10fe175d3fe1a95fa7c91
++ NEW_HEAD=e582f72fc6f1fbf6294f92249ed0561f6fe343fb
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -25,93 +24,16 @@ Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
 + LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
 ++ cat /root/ops-service-data/last-image-commit.txt
-+ LAST_BUILD_COMMIT=0fbfa5a11632766224482210554dc6b70e7a9b50
++ LAST_BUILD_COMMIT=6b83040fd51db5fb90c10fe175d3fe1a95fa7c91
 + NEEDS_REBUILD=1
-+ '[' -n 0fbfa5a11632766224482210554dc6b70e7a9b50 ']'
-+ git cat-file -e '0fbfa5a11632766224482210554dc6b70e7a9b50^{commit}'
-++ git diff --name-only 0fbfa5a11632766224482210554dc6b70e7a9b50 6b83040fd51db5fb90c10fe175d3fe1a95fa7c91 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
-+ '[' -z ops-service/server.js ']'
++ '[' -n 6b83040fd51db5fb90c10fe175d3fe1a95fa7c91 ']'
++ git cat-file -e '6b83040fd51db5fb90c10fe175d3fe1a95fa7c91^{commit}'
+++ git diff --name-only 6b83040fd51db5fb90c10fe175d3fe1a95fa7c91 e582f72fc6f1fbf6294f92249ed0561f6fe343fb -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -z '' ']'
++ NEEDS_REBUILD=0
 + '[' 0 = 1 ']'
-+ '[' 1 = 0 ']'
-+ docker tag rm-ops-service rm-ops-service:previous
-+ docker build -t rm-ops-service ./ops-service
-#0 building with "default" instance using docker driver
-
-#1 [internal] load build definition from Dockerfile
-#1 transferring dockerfile: 2.04kB done
-#1 DONE 0.0s
-
-#2 [internal] load metadata for docker.io/library/node:22-slim
-#2 DONE 0.2s
-
-#3 [internal] load .dockerignore
-#3 transferring context: 136B done
-#3 DONE 0.0s
-
-#4 [ 1/10] FROM docker.io/library/node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
-#4 resolve docker.io/library/node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 0.0s done
-#4 DONE 0.0s
-
-#5 [internal] load build context
-#5 transferring context: 724.68kB 0.0s done
-#5 DONE 0.0s
-
-#6 [ 2/10] RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && python3 -m pip install --break-system-packages --no-cache-dir yt-dlp==2026.8.19     && rm -rf /var/lib/apt/lists/*
-#6 CACHED
-
-#7 [ 3/10] WORKDIR /app
-#7 CACHED
-
-#8 [ 4/10] COPY package.json ./
-#8 CACHED
-
-#9 [ 5/10] RUN npm install --omit=dev
-#9 CACHED
-
-#10 [ 6/10] COPY server.js ./
-#10 DONE 0.1s
-
-#11 [ 7/10] COPY src ./src
-#11 DONE 0.1s
-
-#12 [ 8/10] COPY public ./public
-#12 DONE 0.1s
-
-#13 [ 9/10] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
-#13 DONE 18.2s
-
-#14 [10/10] RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
-#14 DONE 0.3s
-
-#15 exporting to image
-#15 exporting layers
-#15 exporting layers 3.3s done
-#15 exporting manifest sha256:e49589960a107a30955f6b959e14b473e5e0838c2151480775abc9c8037da9ce 0.0s done
-#15 exporting config sha256:774ca003b29a5b7b6d178963ee2241b35bcb9762488d462ccc188309fac598f9 0.0s done
-#15 exporting attestation manifest sha256:7f1e3be4f3a1488c03f9972fc7c9cc5a0eaba7c70c3c341239f4a736d0835fc1 0.0s done
-#15 exporting manifest list sha256:5652e5e6a34eba95c3d20cb1d2cbc19ae0a25ef7b3c76d57a1ebc78c5ced40ce 0.0s done
-#15 naming to docker.io/library/rm-ops-service:latest done
-#15 unpacking to docker.io/library/rm-ops-service:latest
-#15 unpacking to docker.io/library/rm-ops-service:latest 1.7s done
-#15 DONE 5.2s
-+ docker stop rm-ops-service
-rm-ops-service
-+ docker rm rm-ops-service
-rm-ops-service
-+ docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-data:/data -v /root/realitymanual-backend-data:/store-data:ro -v /srv/realitymanual-repo:/repo -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
-802c3789a28a07d2a83cbe72c617a6194cc0320dcaaf2f85f0d6952d7a69a92b
-+ echo 6b83040fd51db5fb90c10fe175d3fe1a95fa7c91
-++ git -C /root/realitymanual-repo rev-parse --short HEAD
-+ echo 'rm-ops-service redeployed at 6b83040'
-rm-ops-service redeployed at 6b83040
-+ docker image prune -f
-Deleted Images:
-untagged: sha256:752fefac8c2134182749866f15dcba80578d9b6f14d505392c6367f2351a8b9b
-deleted: sha256:752fefac8c2134182749866f15dcba80578d9b6f14d505392c6367f2351a8b9b
-deleted: sha256:b619cbf709163d7fa466315692a378e9d0248b4101f3f93075acd06e5314f418
-deleted: sha256:ac4317d15e90ca85583b07117a860bb0c8992005e3859fc7ae3acf3f765c5e36
-
-Total reclaimed space: 15.67kB
-+ docker builder prune -f --max-used-space 8GB
-Total:	0B
++ '[' 0 = 0 ']'
++ echo 'no backend changes between 6b83040fd51db5fb90c10fe175d3fe1a95fa7c91 and e582f72fc6f1fbf6294f92249ed0561f6fe343fb — already live via git pull, skipping rebuild/restart'
+no backend changes between 6b83040fd51db5fb90c10fe175d3fe1a95fa7c91 and e582f72fc6f1fbf6294f92249ed0561f6fe343fb — already live via git pull, skipping rebuild/restart
++ exit 0
 ssh exit code: 0
