@@ -17364,3 +17364,22 @@ in the repository for history, while the distinct filename prevents browsers
 or the CDN from serving a stale cached image. A 390×844 headless-Chromium check
 confirmed the mobile card loads the new 1280×720 image at its intended 342×192
 display size with no browser runtime errors.
+
+---
+
+# 532. `/home2` Video Dominates the Hero and Its Backdrop Blends into the Offer (2026-10-12)
+
+The `/home2` desktop VSL card now uses up to 1320px / 84vw instead of 1040px /
+74vw, and the hero's inner wrapper is no longer constrained by the site's
+1200px copy width. At a 1840px viewport the rendered card is 1320×742.5px,
+occupying 71.7% of the complete hero width; its former width was capped at
+1040px. Mobile retains its existing near-full-width card (358px within a 390px
+viewport) rather than forcing the desktop scale onto a small screen.
+
+The hero shade now resolves through a progressive lower gradient to the exact
+`--bg-2` surface used by the title-and-purchase offer below. The two sections'
+touching borders were removed, eliminating the hard divider so the exposed
+spread beneath the enlarged video fades continuously into the second panel.
+The `/home2` stylesheet cache key was advanced. Headless Chromium verified the
+desktop and mobile dimensions, the zero-width section borders, the resolved
+gradient endpoint, and no browser runtime errors.
