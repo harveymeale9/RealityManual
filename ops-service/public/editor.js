@@ -198,6 +198,22 @@
     return '<i class="editor-work-icon ' + (started ? 'started' : 'untouched') + '" role="img" aria-label="' + label + '" title="' + label + '"></i>';
   }
 
+  function projectRenderIndicator(item) {
+    if (!item) return '';
+    var status = item.renderStatus || '';
+    if (status === 'ready' || status === 'error') return '';
+    var rebuilding = !!localPreviewRebuilds[item.id] || !!item.renderRebuildPending;
+    if (!rebuilding && status !== 'queued' && status !== 'running') return '';
+    var progress = status === 'running' ? Math.max(0, Math.min(100, Math.round(Number(item.renderProgress) || 0))) : 0;
+    var label = rebuilding ? 'Rebuilding preview' : 'Building preview';
+    if (status === 'queued') label += ' · queued';
+    else if (status === 'running') label += ' · ' + progress + '%';
+    else label += ' · preparing';
+    return '<span class="editor-project-render-state ' + (status === 'running' ? 'running' : 'queued') + '" role="status" aria-label="' + esc(label) + '" title="' + esc(label) + '">' +
+      '<i aria-hidden="true"></i><b aria-hidden="true"><em style="width:' + progress + '%"></em></b>' +
+      (status === 'running' ? '<small>' + progress + '%</small>' : '<small>•••</small>') + '</span>';
+  }
+
   function activeManualRevision(item) {
     return ((item && item.manualRevisions) || []).find(function (entry) {
       return entry && (entry.status === 'queued' || entry.status === 'running');
@@ -697,7 +713,7 @@
     }
     list.innerHTML = visibleProjects.map(function (item) {
       return '<button class="editor-project' + (project && item.id === project.id ? ' active' : '') + '" data-id="' + esc(item.id) + '">' +
-        '<div class="editor-project-title"><strong>' + esc(displayName(item)) + '</strong><span class="editor-project-icons">' + projectWorkStateIcon(item) + projectFormatIcon(item) + '</span></div><span>' + esc(statusLabel(item)) + ' · ' + formatTime(item.duration) + (formatBytes(item.sizeBytes) ? ' · ' + formatBytes(item.sizeBytes) : '') + '</span></button>';
+        projectRenderIndicator(item) + '<span class="editor-project-copy"><span class="editor-project-title"><strong>' + esc(displayName(item)) + '</strong><span class="editor-project-icons">' + projectWorkStateIcon(item) + projectFormatIcon(item) + '</span></span><span class="editor-project-meta">' + esc(statusLabel(item)) + ' · ' + formatTime(item.duration) + (formatBytes(item.sizeBytes) ? ' · ' + formatBytes(item.sizeBytes) : '') + '</span></span></button>';
     }).join('');
     list.querySelectorAll('.editor-project').forEach(function (button) {
       button.addEventListener('click', function () { openProject(button.dataset.id); });
@@ -925,6 +941,7 @@
     ]).then(function (results) {
       if (expectedMountToken !== mountToken || !editorMounted()) return;
       projects = results[0];
+      projects.forEach(function (item) { if (item.renderStatus === 'ready' || item.renderStatus === 'error') delete localPreviewRebuilds[item.id]; });
       audioTracks = Array.isArray(results[1].tracks) ? results[1].tracks : [];
       audioMixVersion = results[1].mixVersion || '';
       if (project && !projects.some(function (item) { return item.id === project.id; })) project = null;
@@ -1036,6 +1053,7 @@
       var before = projectPollSignature(project);
       api('/api/editor').then(function (items) {
         if (token !== mountToken || !project || project.id !== activeId) return;
+        items.forEach(function (item) { if (item.renderStatus === 'ready' || item.renderStatus === 'error') delete localPreviewRebuilds[item.id]; });
         projects = items;
         renderList();
         var summary = items.find(function (item) { return item.id === activeId; });
@@ -2437,6 +2455,7 @@
       projectDetails[id] = item;
       projects = projects.map(function (entry) { return entry.id === item.id ? item : entry; });
       renderList();
+      schedulePoll();
       if (project && project.id === id) {
         project = item;
         if (!options.skipWorkspaceRender) renderWorkspace();

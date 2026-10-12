@@ -17442,3 +17442,29 @@ existed; the next frame inserted an autoplaying, eager-preload video with no
 poster; and the cover reached zero opacity only after `playing`. Both videos
 advanced from their actual opening frames and produced no browser runtime
 errors.
+
+---
+
+# 536. Background Preview-Rebuild Progress on Editor Cards (2026-10-12)
+
+Editor recording cards now retain visible render progress when Harvey leaves a
+rebuilding piece to work on another one. A compact animated render glyph,
+miniature progress bar, and live percentage occupy the card's left edge while
+the preview is preparing, queued, or rendering. The indicator is derived from
+the queue summary's existing `renderStatus`, `renderProgress`, and
+`renderRebuildPending` fields, so no second render state or backend endpoint was
+introduced. It also carries an accessible status label.
+
+The existing 1.8-second Editor summary poll already fetched the lifecycle of
+every recording, but an edit made from an otherwise-idle project did not
+reliably restart that poll. Successful render-affecting saves now explicitly
+schedule it. Each summary refresh updates every card without reopening or
+repainting the selected piece; only the selected piece's own lifecycle changes
+trigger its detail refresh. Completed renders also clear their local optimistic
+rebuild marker. The Editor JS/CSS cache key was advanced.
+
+A mocked-API headless Chromium test selected a second recording and observed
+the first recording's card advance from 12% to 58% while the second card
+remained selected. The indicator stayed visible without horizontal overflow at
+390px mobile width, and the browser produced no runtime errors. The complete
+ops-service suite also passes: 178 tests, zero failures.
