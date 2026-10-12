@@ -17562,3 +17562,28 @@ the authoritative first copy until Editor returns acceptance, while the VPS
 becomes the second verified copy. R2 remains the pressure-relief/archive layer
 defined in section 450 for media that has already completed enough local work
 to be safely spilled and rehydrated.
+
+---
+
+# 540. Right-Click Delete in Content Production (2026-10-12)
+
+Content Production rows now support the same guarded right-click deletion used
+by Kanban cards. Right-clicking an editable Production video opens the compact
+Delete menu, followed by an explicit **Confirm delete** step. Confirmation
+removes the piece plus its raw and optional `-final` video records/files, then
+collapses only that row; a missing final render is treated as the normal case,
+not a failed deletion. Reviewer sessions retain the existing ownership rule and
+cannot expose the menu on somebody else's video.
+
+Production rows can still have a debounced title or platform save underway at
+the moment Delete is chosen. Piece deletion is now serialized behind any
+already-started write in the shared store layer, while unsent debounce timers
+are cancelled before deletion. This prevents a late PUT from recreating a
+video immediately after its row disappears and ensures the DELETE carries the
+newest record version.
+
+A mocked-API headless Chromium test edited a title, held that PUT in flight,
+then exercised right-click → Delete → Confirm delete. It verified the
+piece DELETE waited for the write and used its new version, both video IDs were
+deleted in order, the selected row left the DOM, and no runtime exception was
+raised. The complete ops-service test suite also passes.

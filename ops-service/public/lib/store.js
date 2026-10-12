@@ -103,7 +103,7 @@ window.RMStore = (function () {
     return task;
   }
 
-  function del(storeName, id, record) {
+  function delNow(storeName, id, record) {
     var headers = {};
     if (storeName === 'pieces' && record && record._recordVersion) headers['X-Record-Version'] = record._recordVersion;
     return apiFetch('/api/store/' + storeName + '/' + encodeURIComponent(id), { method: 'DELETE', headers: headers })
@@ -119,6 +119,19 @@ window.RMStore = (function () {
           return data;
         });
       });
+  }
+
+  function del(storeName, id, record) {
+    if (storeName !== 'pieces') return delNow(storeName, id, record);
+    // A Production row can still have a debounced title/platform save in
+    // flight when Harvey right-clicks Delete. Serialize the delete behind
+    // any already-started write for this piece so a late PUT cannot recreate
+    // the card immediately after it disappears.
+    var previous = pieceWriteQueues[id] || Promise.resolve();
+    var task = previous.catch(function () {}).then(function () { return delNow(storeName, id, record); });
+    pieceWriteQueues[id] = task;
+    task.finally(function () { if (pieceWriteQueues[id] === task) delete pieceWriteQueues[id]; }).catch(function () {});
+    return task;
   }
 
   function genId() {

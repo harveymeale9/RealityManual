@@ -3750,6 +3750,94 @@
   // pieceId -> pending debounce timer for the platform-checkbox save
   // below — see that handler's own comment for why this exists.
   var platformSaveTimers = {};
+  var uploadCtxMenu = null;
+
+  function closeUploadCtxMenu() {
+    if (!uploadCtxMenu) return;
+    uploadCtxMenu.remove();
+    uploadCtxMenu = null;
+    document.removeEventListener('click', closeUploadCtxMenuOnOutside, true);
+    document.removeEventListener('contextmenu', closeUploadCtxMenuOnOutside, true);
+    document.removeEventListener('keydown', closeUploadCtxMenuOnEscape, true);
+  }
+  function closeUploadCtxMenuOnOutside(e) {
+    if (uploadCtxMenu && !uploadCtxMenu.contains(e.target)) closeUploadCtxMenu();
+  }
+  function closeUploadCtxMenuOnEscape(e) {
+    if (e.key === 'Escape') closeUploadCtxMenu();
+  }
+  function openUploadCtxMenu(id, x, y) {
+    closeUploadCtxMenu();
+    var menu = document.createElement('div');
+    menu.className = 'kanban-ctx-menu';
+
+    function renderInitial() {
+      menu.innerHTML = '';
+      var delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'kanban-ctx-item kanban-ctx-delete';
+      delBtn.textContent = 'Delete';
+      delBtn.addEventListener('click', function (e) { e.stopPropagation(); renderConfirm(); });
+      menu.appendChild(delBtn);
+    }
+    function renderConfirm() {
+      menu.innerHTML = '';
+      var label = document.createElement('div');
+      label.className = 'kanban-ctx-label';
+      label.textContent = 'Delete this video?';
+      var confirmBtn = document.createElement('button');
+      confirmBtn.type = 'button';
+      confirmBtn.className = 'kanban-ctx-item kanban-ctx-confirm';
+      confirmBtn.textContent = 'Confirm delete';
+      confirmBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var p = pieces[id];
+        if (!p || p.stage !== 'in_production' || !canEditPiece(p)) { closeUploadCtxMenu(); return; }
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Deleting…';
+        clearTimeout(uploadRowSaveTimers[id]);
+        delete uploadRowSaveTimers[id];
+        clearTimeout(platformSaveTimers[id]);
+        delete platformSaveTimers[id];
+        Store.del('pieces', id, p).then(function () {
+          delete pieces[id];
+          // Media deletion is deliberately best-effort after the durable
+          // piece deletion: a raw Production item may not have a `-final`
+          // render yet, and that ordinary 404 must not make the card return.
+          return Promise.all([
+            Store.del('videos', id).catch(function () {}),
+            Store.del('videos', id + '-final').catch(function () {})
+          ]);
+        }).then(function () {
+          closeUploadCtxMenu();
+          removeUploadRowAnimated(id);
+        }).catch(function () {
+          closeUploadCtxMenu();
+          renderUploadLists();
+        });
+      });
+      var cancelBtn = document.createElement('button');
+      cancelBtn.type = 'button';
+      cancelBtn.className = 'kanban-ctx-item kanban-ctx-cancel';
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.addEventListener('click', function (e) { e.stopPropagation(); closeUploadCtxMenu(); });
+      menu.appendChild(label);
+      menu.appendChild(confirmBtn);
+      menu.appendChild(cancelBtn);
+    }
+    renderInitial();
+
+    document.body.appendChild(menu);
+    var rect = menu.getBoundingClientRect();
+    menu.style.left = Math.max(4, Math.min(x, window.innerWidth - rect.width - 8)) + 'px';
+    menu.style.top = Math.max(4, Math.min(y, window.innerHeight - rect.height - 8)) + 'px';
+    uploadCtxMenu = menu;
+    setTimeout(function () {
+      document.addEventListener('click', closeUploadCtxMenuOnOutside, true);
+      document.addEventListener('contextmenu', closeUploadCtxMenuOnOutside, true);
+      document.addEventListener('keydown', closeUploadCtxMenuOnEscape, true);
+    }, 0);
+  }
 
   // One row per in-production video, everything Harvey needs inline —
   // thumbnail/title/id, a real scrubbable frame picker, the backing-audio
@@ -4654,6 +4742,12 @@
     });
     dropzone.addEventListener('drop', function (e) {
       if (e.dataTransfer && e.dataTransfer.files) handleFiles(e.dataTransfer.files);
+    });
+    uploadRows.addEventListener('contextmenu', function (e) {
+      var row = e.target.closest('.upload-row');
+      if (!row || !row.dataset.id || !canEditPiece(pieces[row.dataset.id])) return;
+      e.preventDefault();
+      openUploadCtxMenu(row.dataset.id, e.clientX, e.clientY);
     });
 
     window.__rmOnPiecesChanged = renderUploadLists;
