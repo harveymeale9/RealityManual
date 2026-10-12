@@ -18138,3 +18138,12 @@ image remains horizontally centred. The stylesheet cache key was advanced.
 Headless Chromium checks at 1858px and 390px confirmed all four rendered widths
 and heights exactly match their natural dimensions, with the card overflow
 clipping correctly and the captions/layout unchanged.
+
+---
+
+# 569. Home2 FAQ Leads With Shipping (2026-10-12)
+
+Home2's three FAQ rows now follow the requested purchase-decision order: “Do
+you ship to my country?”, “How long does shipping take?”, then “What is your
+return policy?”. Each answer remains attached to its original question; only
+the row order changed.
