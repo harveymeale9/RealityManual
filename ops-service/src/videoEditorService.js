@@ -21,14 +21,15 @@ const VIDEO_OUTRO_SECONDS = 2;
 // Footage is deliberately recorded wide enough to show a little table. The
 // opening move settles toward the exact centre of the recorded frame and that
 // composition remains the baseline for the rest of the shot. Initial portrait
-// and horizontal openings use a gentler 112.5% target; later reveal resets retain 125%.
-// Substantial
-// automatic long-pause cuts are treated as page changes and start the move
-// again from the wide camera frame.
+// and horizontal openings use a gentler 112.5% target. Later vertical reveals
+// also settle at 112.5%; horizontal reveal resets retain 125%. Substantial
+// automatic long-pause cuts are treated as page changes and start the move again
+// from the wide camera frame.
 const OPENING_PUSH_IN_SCALE = 1.25;
 const VERTICAL_OPENING_PUSH_IN_SCALE = 1.125;
 const HORIZONTAL_OPENING_PUSH_IN_SCALE = 1.125;
-const EDITOR_RENDER_VERSION = 22;
+const VERTICAL_REVEAL_PUSH_IN_SCALE = 1.125;
+const EDITOR_RENDER_VERSION = 23;
 const PAGE_CHANGE_SSIM_THRESHOLD = 0.5;
 const BROWSER_PREVIEW_VERSION = 2;
 const AUDIO_PREVIEW_MIX_VERSION = 3;
@@ -559,7 +560,9 @@ function cameraMotionState(sourceSeconds, cuts, layout, confirmedCutIds) {
 function cameraMotionForSegment(segment, cuts, layout, confirmedCutIds) {
   // Returning from an external full-screen excerpt is a new camera reveal,
   // just like returning after a page turn: begin on the completely wide book
-  // frame, ease to the 125% base over three seconds, then hold. This must be
+  // frame, ease to the layout's reveal scale over three seconds, then hold.
+  // Portrait footage uses the gentler 112.5% target; landscape retains 125%.
+  // This must be
   // attached to the edit-decision segment rather than inferred from source
   // time, because the inserted clip advances the final timeline without
   // changing the camera recording's own timestamps.
@@ -572,7 +575,7 @@ function cameraMotionForSegment(segment, cuts, layout, confirmedCutIds) {
 
 function cameraMotionTargetScale(layout, motion, revealReset) {
   const initialOpening = !revealReset && motion && Math.abs(Number(motion.resetAt) || 0) <= 0.001;
-  if (!initialOpening) return OPENING_PUSH_IN_SCALE;
+  if (!initialOpening) return layout === 'vertical' ? VERTICAL_REVEAL_PUSH_IN_SCALE : OPENING_PUSH_IN_SCALE;
   return layout === 'horizontal' ? HORIZONTAL_OPENING_PUSH_IN_SCALE : VERTICAL_OPENING_PUSH_IN_SCALE;
 }
 

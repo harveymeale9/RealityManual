@@ -41,6 +41,7 @@
   var RESTING_CAMERA_SCALE = 1.25;
   var VERTICAL_OPENING_CAMERA_SCALE = 1.125;
   var HORIZONTAL_OPENING_CAMERA_SCALE = 1.125;
+  var VERTICAL_REVEAL_CAMERA_SCALE = 1.125;
   var PAGE_CHANGE_FADE_SECONDS = 0.28;
   var listFilter = localStorage.getItem('rmEditorListFilter') === 'sent' ? 'sent' : 'active';
   var reviewRate = Number(localStorage.getItem('rmEditorReviewRate')) || 1;
@@ -1144,7 +1145,7 @@
       (project.renderStatus === 'ready' ? '<button type="button" id="editorPreviewFinal" class="' + (previewMode === 'final' ? 'active' : '') + '"' + (previewLocked ? ' disabled' : '') + '>Final edit</button><button type="button" id="editorPreviewSource" class="' + (previewMode === 'source' ? 'active' : '') + '"' + (previewLocked ? ' disabled' : '') + '>' + sourcePreviewLabel + '</button>' : '') + '</div>';
     var automaticControlsHtml = '<div class="editor-controls"><label class="editor-toggle"><input type="checkbox" id="editorAutoSilence" ' + (project.autoSilenceEnabled !== false ? 'checked' : '') + '><span></span>Remove long pauses</label>' +
       '<label class="editor-toggle"><input type="checkbox" id="editorCaptions" ' + (project.captionsEnabled !== false ? 'checked' : '') + '><span></span>Add yellow captions</label>' +
-      '<label class="editor-toggle" title="Starts wide and gently settles to 112.5% on vertical and horizontal openings. Later page-turn or inserted-clip reveals settle to 125%. Horizontal openings use five seconds; every other move uses three."><input type="checkbox" id="editorOpeningPushIn" ' + (project.openingPushInEnabled !== false ? 'checked' : '') + '><span></span>Page-change camera zooms</label>' +
+      '<label class="editor-toggle" title="Starts wide and gently settles to 112.5% on vertical and horizontal openings. Later vertical page-turn or inserted-clip reveals also settle to 112.5%; horizontal reveals settle to 125%. Horizontal openings use five seconds; every other move uses three."><input type="checkbox" id="editorOpeningPushIn" ' + (project.openingPushInEnabled !== false ? 'checked' : '') + '><span></span>Page-change camera zooms</label>' +
       '<label class="editor-mode">Pacing<select id="editorPacing"><option value="tight"' + (Number(project.silenceThresholdSeconds) < 0.85 ? ' selected' : '') + '>Tight</option><option value="natural"' + (Number(project.silenceThresholdSeconds || 1) >= 0.85 && Number(project.silenceThresholdSeconds || 1) < 1.3 ? ' selected' : '') + '>Natural</option><option value="gentle"' + (Number(project.silenceThresholdSeconds || 1) >= 1.3 ? ' selected' : '') + '>Gentle</option></select></label>' +
       '<button type="button" class="btn-secondary btn-tiny editor-clear-automation" id="editorClearAutomation" ' + (!automaticCutsPresent ? 'disabled' : '') + ' title="Restore every pause and retake removed automatically. Manual transcript cuts stay intact.">Restore automatic cuts</button></div>';
     var selectedAudioExists = project.audioTrackId === '__none__' || audioTracks.some(function (track) { return track.id === project.audioTrackId; });
@@ -1806,7 +1807,7 @@
         var initialOpening = Math.abs(motion.resetAt) <= 0.001;
         var targetScale = initialOpening
           ? ((project.effectiveLayout || 'horizontal') === 'horizontal' ? HORIZONTAL_OPENING_CAMERA_SCALE : VERTICAL_OPENING_CAMERA_SCALE)
-          : RESTING_CAMERA_SCALE;
+          : ((project.effectiveLayout || 'horizontal') === 'vertical' ? VERTICAL_REVEAL_CAMERA_SCALE : RESTING_CAMERA_SCALE);
         openingScale = 1 + (targetScale - 1) * openingProgress * openingProgress * (3 - 2 * openingProgress);
       }
       var width = video.clientWidth || 0;

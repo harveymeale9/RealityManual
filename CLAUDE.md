@@ -17468,3 +17468,28 @@ the first recording's card advance from 12% to 58% while the second card
 remained selected. The indicator stayed visible without horizontal overflow at
 390px mobile width, and the browser produced no runtime errors. The complete
 ops-service suite also passes: 178 tests, zero failures.
+
+---
+
+# 537. Gentler Vertical Camera Reveals After Page Changes (2026-10-12)
+
+Vertical Editor videos now use the same gentle 100%→112.5% camera move after
+confirmed page turns and inserted-clip returns as they use at the opening. The
+previous post-transition target was 125%, so this halves the crop/zoom delta
+while retaining the existing three-second easing and exact frame-centre
+placement. Horizontal post-transition reveals deliberately remain at 125%.
+The browser working preview uses the same layout-aware target as the FFmpeg
+render, and the Editor control tooltip now describes that distinction.
+
+`EDITOR_RENDER_VERSION` advanced from 22 to 23. On deployment startup this
+invalidates and requeues verified renders belonging to active Editor projects,
+while the existing `productionPieceId` exclusion leaves every approved
+Production copy immutable. Unfinished recordings automatically use the new
+target when their first/next render runs. Regression coverage now proves all
+three vertical cases (opening, page change, and inserted-clip reveal) settle at
+112.5%, while the horizontal opening remains 112.5% and later horizontal
+reveals remain 125%. The complete ops-service suite passes: 178 tests, zero
+failures. A headless Chromium working-preview check also crossed a confirmed
+four-second page-turn cut in a vertical project and observed the browser's
+actual video transform settle at exactly `matrix(1.125, …)`, with no runtime
+errors.

@@ -194,10 +194,10 @@ test('camera zoom supports a gentler vertical opening while preserving the 125 p
   assert.doesNotMatch(filter, /scale=w='trunc/);
 });
 
-test('initial vertical and horizontal camera moves use the gentler zoom target', function () {
+test('vertical camera moves stay gentle after page turns while horizontal reveals retain the stronger target', function () {
   assert.equal(editor.cameraMotionTargetScale('vertical', { resetAt: 0 }), 1.125);
-  assert.equal(editor.cameraMotionTargetScale('vertical', { resetAt: 4 }), 1.25);
-  assert.equal(editor.cameraMotionTargetScale('vertical', { resetAt: 0 }, true), 1.25);
+  assert.equal(editor.cameraMotionTargetScale('vertical', { resetAt: 4 }), 1.125);
+  assert.equal(editor.cameraMotionTargetScale('vertical', { resetAt: 0 }, true), 1.125);
   assert.equal(editor.cameraMotionTargetScale('horizontal', { resetAt: 0 }), 1.125);
   assert.equal(editor.cameraMotionTargetScale('horizontal', { resetAt: 4 }), 1.25);
   const filter = editor.cameraMotionFilter({
@@ -757,7 +757,7 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.equal(stored.renderQuality.status, 'passed');
-  assert.equal(stored.renderVersion, 22);
+  assert.equal(stored.renderVersion, 23);
   assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), true);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
@@ -789,7 +789,7 @@ test('final render splices an inserted clip and its caption timeline between sou
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.ok(stored.editedDuration > 3.9 && stored.editedDuration < 4.1);
-  assert.equal(stored.renderVersion, 22);
+  assert.equal(stored.renderVersion, 23);
   assert.equal(stored.renderQuality.contentDuration, 2);
   assert.equal(stored.renderQuality.outroSeconds, 2);
   assert.ok(stored.renderQuality.insertedClipLoudness.clips[0].gainDb > 18);
