@@ -791,9 +791,8 @@
         textInput.style.height = 'auto';
         sendTyped(text);
       });
-      textInput.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendBtn.click(); }
-      });
+      // Enter remains the textarea's normal newline action. Only an explicit
+      // tap on Send submits typed text, matching the desktop chat composer.
       textInput.addEventListener('input', function () {
         textInput.style.height = 'auto';
         textInput.style.height = Math.min(textInput.scrollHeight, 120) + 'px';

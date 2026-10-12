@@ -1170,12 +1170,10 @@
       clearPendingImages();
       sendText(text, 'respond', { autoSpeak: carryVoice, images: images });
     });
-    textInput.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendBtn.click();
-      }
-    });
+    // Enter is deliberately left to the textarea's native behavior so it
+    // always inserts a newline. Typed messages are sent only by explicitly
+    // clicking the Send button, which prevents an unfinished line from being
+    // submitted accidentally.
     function autoresize() {
       textInput.style.height = 'auto';
       textInput.style.height = Math.min(textInput.scrollHeight, 160) + 'px';

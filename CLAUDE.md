@@ -16940,3 +16940,14 @@ The homepage browser title, Open Graph title, and visible hero eyebrow now use
 **A Guide To Existing Well** in place of **A Strategy Manual for the Game of
 Life**. The main title, three-line subject summary, metadata description, and
 the separate lower-page strategy copy remain unchanged.
+
+---
+
+# 510. Project Manager Typed Messages Require the Send Button (2026-10-12)
+
+The Project Manager chat composer no longer submits a typed message when Enter
+is pressed. Enter now keeps its normal textarea behavior and inserts a newline;
+the visible Send button is the only way to submit typed text. This prevents an
+unfinished multiline instruction from being sent accidentally. The same rule
+applies to both the desktop control panel and the dedicated mobile Project
+Manager view. Voice recording flows are unchanged.
