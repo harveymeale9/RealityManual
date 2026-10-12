@@ -17297,3 +17297,18 @@ The lightweight browser preview and final FFmpeg `zoompan` filter use the same
 centre calculation. Render format version 21 invalidates active older renders,
 the Editor cache key was advanced, and regression coverage asserts both output
 paths use 50%/50% with no remaining horizontal offset.
+
+---
+
+# 529. Initial Horizontal Zoom Strength Is Halved (2026-10-12)
+
+The initial horizontal camera move now settles at 112.5% instead of 125%,
+halving its magnification change while preserving the existing five-second
+ease and exact 50%/50% frame centre. This mirrors the gentler initial vertical
+opening. Later confirmed page changes and returns from inserted clips still use
+the stronger 125% reveal; only the first horizontal opening is reduced.
+
+The browser preview and final FFmpeg renderer use the same target selection.
+Render format version 22 invalidates active older output, the Editor cache key
+was advanced, and regression coverage distinguishes initial horizontal motion
+from later horizontal resets.

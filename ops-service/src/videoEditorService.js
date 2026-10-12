@@ -20,14 +20,15 @@ const PAGE_CHANGE_FADE_SECONDS = 0.28;
 const VIDEO_OUTRO_SECONDS = 2;
 // Footage is deliberately recorded wide enough to show a little table. The
 // opening move settles toward the exact centre of the recorded frame and that
-// composition remains the baseline for the rest of the shot. Portrait openings use a gentler
-// 112.5% target; horizontal openings and later reveal resets retain 125%.
+// composition remains the baseline for the rest of the shot. Initial portrait
+// and horizontal openings use a gentler 112.5% target; later reveal resets retain 125%.
 // Substantial
 // automatic long-pause cuts are treated as page changes and start the move
 // again from the wide camera frame.
 const OPENING_PUSH_IN_SCALE = 1.25;
 const VERTICAL_OPENING_PUSH_IN_SCALE = 1.125;
-const EDITOR_RENDER_VERSION = 21;
+const HORIZONTAL_OPENING_PUSH_IN_SCALE = 1.125;
+const EDITOR_RENDER_VERSION = 22;
 const PAGE_CHANGE_SSIM_THRESHOLD = 0.5;
 const BROWSER_PREVIEW_VERSION = 2;
 const AUDIO_PREVIEW_MIX_VERSION = 3;
@@ -570,9 +571,9 @@ function cameraMotionForSegment(segment, cuts, layout, confirmedCutIds) {
 }
 
 function cameraMotionTargetScale(layout, motion, revealReset) {
-  return layout === 'vertical' && !revealReset && motion && Math.abs(Number(motion.resetAt) || 0) <= 0.001
-    ? VERTICAL_OPENING_PUSH_IN_SCALE
-    : OPENING_PUSH_IN_SCALE;
+  const initialOpening = !revealReset && motion && Math.abs(Number(motion.resetAt) || 0) <= 0.001;
+  if (!initialOpening) return OPENING_PUSH_IN_SCALE;
+  return layout === 'horizontal' ? HORIZONTAL_OPENING_PUSH_IN_SCALE : VERTICAL_OPENING_PUSH_IN_SCALE;
 }
 
 function visualPageChangeFromSsim(score) {

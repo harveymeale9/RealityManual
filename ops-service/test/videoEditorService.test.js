@@ -194,11 +194,12 @@ test('camera zoom supports a gentler vertical opening while preserving the 125 p
   assert.doesNotMatch(filter, /scale=w='trunc/);
 });
 
-test('only the initial vertical camera move uses the gentler zoom target', function () {
+test('initial vertical and horizontal camera moves use the gentler zoom target', function () {
   assert.equal(editor.cameraMotionTargetScale('vertical', { resetAt: 0 }), 1.125);
   assert.equal(editor.cameraMotionTargetScale('vertical', { resetAt: 4 }), 1.25);
   assert.equal(editor.cameraMotionTargetScale('vertical', { resetAt: 0 }, true), 1.25);
-  assert.equal(editor.cameraMotionTargetScale('horizontal', { resetAt: 0 }), 1.25);
+  assert.equal(editor.cameraMotionTargetScale('horizontal', { resetAt: 0 }), 1.125);
+  assert.equal(editor.cameraMotionTargetScale('horizontal', { resetAt: 4 }), 1.25);
   const filter = editor.cameraMotionFilter({
     renderShape: { width: 1080, height: 1920 },
     layout: 'vertical',
@@ -237,6 +238,7 @@ test('horizontal camera motion zooms into the exact frame centre', function () {
   const previewSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'editor.js'), 'utf8');
   assert.match(previewSource, /offsetX = width \* \(1 - openingScale\) \* 0\.5;/);
   assert.match(previewSource, /offsetY = height \* \(1 - openingScale\) \* 0\.5;/);
+  assert.match(previewSource, /HORIZONTAL_OPENING_CAMERA_SCALE = 1\.125;/);
 });
 
 test('camera motion restarts after automatic long-pause cuts but not manual cuts', function () {
@@ -742,7 +744,7 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.equal(stored.renderQuality.status, 'passed');
-  assert.equal(stored.renderVersion, 21);
+  assert.equal(stored.renderVersion, 22);
   assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), true);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
@@ -774,7 +776,7 @@ test('final render splices an inserted clip and its caption timeline between sou
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.ok(stored.editedDuration > 3.9 && stored.editedDuration < 4.1);
-  assert.equal(stored.renderVersion, 21);
+  assert.equal(stored.renderVersion, 22);
   assert.equal(stored.renderQuality.contentDuration, 2);
   assert.equal(stored.renderQuality.outroSeconds, 2);
   assert.ok(stored.renderQuality.insertedClipLoudness.clips[0].gainDb > 18);
