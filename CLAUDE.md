@@ -18041,3 +18041,25 @@ No render-version bump or migration was made: finished and already-rendered
 videos remain byte-for-byte untouched, while any new vertical render uses the
 experiment automatically. Focused caption tests and the complete 188-test
 ops-service suite pass.
+
+---
+
+# 564. Home2 Inside-the-Book Panel Uses a Generated Candlelit Study (2026-10-12)
+
+The `/home2` Inside the Book section now has a purpose-generated, full-bleed
+photorealistic study background: a fireplace and reading chair at the left,
+dark library panelling through the quiet centre, and a candlelit writing desk
+at the right. The source was generated specifically as an ultra-wide website
+backdrop with its detail pushed toward the outer edges, then saved in the
+project as a 2135×736 WebP (`reality-manual-candlelit-study-wide.webp`). At
+quality 88 it is 224KB, versus the 2MB generated PNG source.
+
+Layered horizontal and vertical darkening keep the four photographed interior
+pages visually primary while preserving the room at both edges. Page frames
+receive a restrained gold border/shadow and their labels use a warmer,
+higher-contrast gold. Desktop uses the full panoramic composition; mobile uses
+an intentional left-biased crop so the fireplace/library remains recognizable
+behind the two-column page grid rather than showing only the quiet centre.
+
+Headless Chromium screenshots at 1858px and 390px verified the final lazy-loaded
+page imagery, full-width background coverage, label contrast, and crop behavior.
