@@ -128,7 +128,7 @@ internal sealed class UploaderContext : ApplicationContext
             ContextMenuStrip = menu
         };
         tray.DoubleClick += (_, _) => OpenEditor();
-        scanTimer = new System.Windows.Forms.Timer { Interval = 10_000 };
+        scanTimer = new System.Windows.Forms.Timer { Interval = 3_000 };
         scanTimer.Tick += async (_, _) => await ScanAndProcess();
         if (string.IsNullOrWhiteSpace(config.Token) || config.FolderConfigurationVersion < 2) ShowSetup();
         else StartWatching();
@@ -155,6 +155,7 @@ internal sealed class UploaderContext : ApplicationContext
             var watcher = new FileSystemWatcher(folder) { IncludeSubdirectories = false, EnableRaisingEvents = true };
             watcher.Created += (_, _) => BeginScanSoon();
             watcher.Changed += (_, _) => BeginScanSoon();
+            watcher.Renamed += (_, _) => BeginScanSoon();
             watchers.Add(watcher);
         }
         scanTimer.Start();
@@ -165,13 +166,14 @@ internal sealed class UploaderContext : ApplicationContext
 
     private void BeginScanSoon()
     {
-        uiContext.Post(_ => { if (scanTimer.Enabled) { scanTimer.Stop(); scanTimer.Interval = 3000; scanTimer.Start(); } }, null);
+        uiContext.Post(_ => { if (scanTimer.Enabled) { scanTimer.Stop(); scanTimer.Interval = 500; scanTimer.Start(); } }, null);
     }
 
     private async Task ScanAndProcess()
     {
         if (processing || string.IsNullOrWhiteSpace(config.Token)) return;
         processing = true;
+        var needsFastRescan = false;
         try
         {
             var extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".mp4", ".mkv", ".mov", ".m4v", ".webm", ".avi" };
@@ -188,11 +190,18 @@ internal sealed class UploaderContext : ApplicationContext
                 if (!stability.TryGetValue(path, out var observed) || observed.Size != info.Length)
                 {
                     stability[path] = (info.Length, DateTime.UtcNow);
+                    needsFastRescan = true;
                     continue;
                 }
-                if (DateTime.UtcNow - observed.Seen < TimeSpan.FromSeconds(12) || !CanOpenExclusively(path)) continue;
+                // The exclusive handle is the authoritative OBS-completion
+                // signal. A second unchanged observation one second later
+                // protects files produced by software that does not retain a
+                // write lock, without imposing the former 12-22 second delay.
+                if (DateTime.UtcNow - observed.Seen < TimeSpan.FromSeconds(1)) { needsFastRescan = true; continue; }
+                if (!CanOpenExclusively(path)) continue;
                 config.Items.RemoveAll(x => string.Equals(x.Path, path, StringComparison.OrdinalIgnoreCase) && !x.Complete);
                 config.Items.Add(new UploadItem { Path = path, Size = info.Length, LastWriteUtcTicks = info.LastWriteTimeUtc.Ticks });
+                stability.Remove(path);
                 config.Save();
             }
 
@@ -213,7 +222,7 @@ internal sealed class UploaderContext : ApplicationContext
         finally
         {
             processing = false;
-            scanTimer.Interval = 10_000;
+            scanTimer.Interval = needsFastRescan ? 1_000 : 3_000;
             UpdateTray();
         }
     }

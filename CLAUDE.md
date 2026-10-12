@@ -17546,3 +17546,19 @@ The listener change was published as self-contained Windows build 2.0.1 and
 placed at the persistent Content Settings download target. Existing installed
 2.0.0 listeners remain upload-compatible; installing 2.0.1 adds the richer
 error heartbeat without changing the durable queue or pairing token.
+
+Follow-up latency tuning is published as build 2.0.2. Watcher events now trigger
+a 500 ms scan, renamed/remuxed files are explicit events, and the safety scan
+runs every three seconds. A candidate must still have the same byte length on
+two observations at least one second apart and Windows must grant an exclusive
+read handle, so an OBS file is never uploaded while it is open; the usual start
+delay after OBS closes it falls from roughly 15-25 seconds to about 1.5 seconds
+(four seconds worst case if only the safety scan notices it).
+
+The intake remains direct laptop-to-Editor rather than laptop-to-R2-to-Editor.
+R2-first would add a second multi-gigabyte transfer before editing could begin
+and would not create local working space for FFmpeg. The durable laptop queue is
+the authoritative first copy until Editor returns acceptance, while the VPS
+becomes the second verified copy. R2 remains the pressure-relief/archive layer
+defined in section 450 for media that has already completed enough local work
+to be safely spilled and rehydrated.
