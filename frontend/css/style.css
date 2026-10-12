@@ -913,11 +913,8 @@ img { max-width: 100%; }
 .faq-grid {
   display: grid;
   grid-template-columns: 1fr;
-  column-gap: 3rem;
-}
-
-@media (min-width: 900px) {
-  .faq-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  max-width: 52rem;
+  margin-inline: auto;
 }
 
 .faq-item { border-bottom: 1px solid var(--border); }

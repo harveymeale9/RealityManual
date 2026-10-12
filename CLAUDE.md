@@ -16921,3 +16921,13 @@ diagram, the practical-applications text and hand, and the enlightenment
 framework centered in their respective frames. This presents the pages as
 close-up detail previews rather than nearly complete page photographs. The
 stylesheet cache key was advanced.
+
+---
+
+# 508. Desktop FAQ Uses One Vertical Column (2026-10-12)
+
+The homepage FAQ no longer switches to a three-column row at desktop widths.
+All three questions now remain stacked in one centered column at every
+breakpoint, capped at 52rem so the summaries and expanded answers retain a
+comfortable reading measure on wide screens. Mobile behavior is unchanged and
+the stylesheet cache key was advanced.
