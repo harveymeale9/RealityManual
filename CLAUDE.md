@@ -17751,3 +17751,14 @@ Focused regression coverage proves the new 70ms Natural edge handle, the
 behavior for manual timeline cuts. Render-level coverage also verifies the
 page-change blink and inserted-clip path against the new boundaries, and the
 complete 179-test ops-service suite passes.
+
+---
+
+# 549. Home2 FAQ Uses a Compact Question Column (2026-10-12)
+
+The `/home2` FAQ question list is now capped at 28rem instead of the shared
+52rem FAQ width. This brings each plus/minus control substantially closer to
+its question and removes the long decorative rule extending across either
+side, while retaining the existing full-width-responsive behavior on narrow
+screens. The override is scoped to `.home2-page`, so the original storefront
+FAQ remains unchanged. The `/home2` stylesheet cache key was advanced.

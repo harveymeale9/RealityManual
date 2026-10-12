@@ -1212,6 +1212,11 @@ img { max-width: 100%; }
   margin-inline: auto;
 }
 
+.home2-page .faq .section-label,
+.home2-page .faq-grid {
+  max-width: 28rem;
+}
+
 .faq-item { border-bottom: 1px solid var(--border); }
 
 .faq-item summary {
