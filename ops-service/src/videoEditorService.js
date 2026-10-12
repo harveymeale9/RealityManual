@@ -396,6 +396,23 @@ function calculateManualCuts(words, removedWordIndices, duration) {
   return cuts;
 }
 
+function normalizeManualTrimCuts(cuts, duration) {
+  const total = Math.max(0, Number(duration) || 0);
+  return (Array.isArray(cuts) ? cuts : []).slice(0, 50).map(function (cut, index) {
+    const start = clamp(Number(cut && cut.start), 0, total);
+    const end = clamp(Number(cut && cut.end), 0, total);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end - start < 0.02) return null;
+    const suppliedId = String(cut && cut.id || '');
+    return {
+      id: /^[A-Za-z0-9_-]{1,100}$/.test(suppliedId) ? suppliedId : 'manual-trim-' + index,
+      start: start,
+      end: end,
+      note: String(cut && cut.note || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 300),
+      reason: 'manual_trim'
+    };
+  }).filter(Boolean).sort(function (a, b) { return a.start - b.start || a.end - b.end; });
+}
+
 function mergeCuts(cuts, duration) {
   const total = Math.max(0, Number(duration) || 0);
   const sorted = (cuts || []).map(function (cut) {
@@ -420,7 +437,8 @@ function cutsForProject(project) {
     retainedPauseSeconds: project.retainedPauseSeconds
   }).filter(function (cut) { return !restored.has(cut.id); });
   const manual = calculateManualCuts(project.words || [], project.removedWordIndices || [], project.duration);
-  return mergeCuts(auto.concat(manual), project.duration);
+  const precise = normalizeManualTrimCuts(project.manualTrimCuts, project.duration);
+  return mergeCuts(auto.concat(manual, precise), project.duration);
 }
 
 function sourceLayout(project) {
@@ -485,7 +503,7 @@ function advanceEditRevision(project) {
 
 function patchAffectsRender(body) {
   body = body && typeof body === 'object' ? body : {};
-  return ['removedWordIndices', 'wordCorrection', 'autoSilenceEnabled', 'restoredAutoCutIds', 'captionsEnabled',
+  return ['removedWordIndices', 'manualTrimCuts', 'wordCorrection', 'autoSilenceEnabled', 'restoredAutoCutIds', 'captionsEnabled',
     'layoutOverride', 'openingPushInEnabled', 'silenceThresholdSeconds', 'retainedPauseSeconds'].some(function (key) {
     return Object.prototype.hasOwnProperty.call(body, key);
   });
@@ -2430,6 +2448,7 @@ async function renderProject(id) {
     const currentRemovedWordIndices = (project.removedWordIndices || []).map(Number).sort(function (a, b) { return a - b; });
     const currentDismissedRetakeIds = (project.dismissedRetakeIds || []).map(String).sort();
     const currentRestoredAutoCutIds = (project.restoredAutoCutIds || []).map(String).sort();
+    const currentManualTrimCuts = normalizeManualTrimCuts(project.manualTrimCuts, project.duration);
     const currentAutoSilenceEnabled = project.autoSilenceEnabled !== false;
     const currentSilenceThresholdSeconds = Number(project.silenceThresholdSeconds) || 1;
     const currentRetainedPauseSeconds = Number(project.retainedPauseSeconds) || 0.38;
@@ -2442,6 +2461,9 @@ async function renderProject(id) {
     const nextRestoredAutoCutIds = Array.isArray(req.body && req.body.restoredAutoCutIds)
       ? Array.from(new Set(req.body.restoredAutoCutIds.map(String).filter(function (id) { return /^(lead|tail|gap-\d+)$/.test(id); }))).sort()
       : currentRestoredAutoCutIds;
+    const nextManualTrimCuts = Array.isArray(req.body && req.body.manualTrimCuts)
+      ? normalizeManualTrimCuts(req.body.manualTrimCuts, project.duration)
+      : currentManualTrimCuts;
     const nextAutoSilenceEnabled = typeof (req.body && req.body.autoSilenceEnabled) === 'boolean' ? req.body.autoSilenceEnabled : currentAutoSilenceEnabled;
     const nextSilenceThresholdSeconds = Number.isFinite(Number(req.body && req.body.silenceThresholdSeconds)) ? clamp(req.body.silenceThresholdSeconds, 0.65, 5) : currentSilenceThresholdSeconds;
     const nextRetainedPauseSeconds = Number.isFinite(Number(req.body && req.body.retainedPauseSeconds)) ? clamp(req.body.retainedPauseSeconds, 0.18, 1.2) : currentRetainedPauseSeconds;
@@ -2453,6 +2475,7 @@ async function renderProject(id) {
         dismissedRetakeIds: currentDismissedRetakeIds,
         autoRetakeRemovedWordIndices: (project.autoRetakeRemovedWordIndices || []).map(Number),
         restoredAutoCutIds: currentRestoredAutoCutIds,
+        manualTrimCuts: currentManualTrimCuts,
         autoSilenceEnabled: currentAutoSilenceEnabled,
         silenceThresholdSeconds: currentSilenceThresholdSeconds,
         retainedPauseSeconds: currentRetainedPauseSeconds
@@ -2472,6 +2495,7 @@ async function renderProject(id) {
       });
     }
     if (JSON.stringify(nextRestoredAutoCutIds) !== JSON.stringify(currentRestoredAutoCutIds) ||
+        JSON.stringify(nextManualTrimCuts) !== JSON.stringify(currentManualTrimCuts) ||
         nextAutoSilenceEnabled !== currentAutoSilenceEnabled ||
         Number(nextSilenceThresholdSeconds) !== currentSilenceThresholdSeconds ||
         Number(nextRetainedPauseSeconds) !== currentRetainedPauseSeconds) saveDecisionSnapshot();
@@ -2489,6 +2513,7 @@ async function renderProject(id) {
     }
     project.autoSilenceEnabled = nextAutoSilenceEnabled;
     project.restoredAutoCutIds = nextRestoredAutoCutIds;
+    project.manualTrimCuts = nextManualTrimCuts;
     if (typeof (req.body && req.body.captionsEnabled) === 'boolean') project.captionsEnabled = req.body.captionsEnabled;
     if (typeof (req.body && req.body.openingPushInEnabled) === 'boolean') project.openingPushInEnabled = req.body.openingPushInEnabled;
     if (['auto', 'vertical', 'horizontal'].includes(req.body && req.body.layoutOverride)) project.layoutOverride = req.body.layoutOverride;
@@ -2597,6 +2622,7 @@ async function renderProject(id) {
       project.dismissedRetakeIds = Array.isArray(snapshot && snapshot.dismissedRetakeIds) ? snapshot.dismissedRetakeIds : [];
       project.autoRetakeRemovedWordIndices = Array.isArray(snapshot && snapshot.autoRetakeRemovedWordIndices) ? snapshot.autoRetakeRemovedWordIndices : [];
       if (Array.isArray(snapshot && snapshot.restoredAutoCutIds)) project.restoredAutoCutIds = snapshot.restoredAutoCutIds;
+      if (Array.isArray(snapshot && snapshot.manualTrimCuts)) project.manualTrimCuts = snapshot.manualTrimCuts;
       if (typeof (snapshot && snapshot.autoSilenceEnabled) === 'boolean') project.autoSilenceEnabled = snapshot.autoSilenceEnabled;
       if (Number.isFinite(Number(snapshot && snapshot.silenceThresholdSeconds))) project.silenceThresholdSeconds = Number(snapshot.silenceThresholdSeconds);
       if (Number.isFinite(Number(snapshot && snapshot.retainedPauseSeconds))) project.retainedPauseSeconds = Number(snapshot.retainedPauseSeconds);
@@ -2920,6 +2946,7 @@ module.exports = {
   normalizeWords,
   calculateAutoCuts,
   calculateManualCuts,
+  normalizeManualTrimCuts,
   mergeCuts,
   cutsForProject,
   keepSegments,

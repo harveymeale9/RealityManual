@@ -343,12 +343,39 @@ test('metadata-only editor changes preserve a verified render', function () {
   assert.equal(editor.patchAffectsRender({ dismissedRetakeIds: ['retake-1'] }), false);
   assert.equal(editor.patchAffectsRender({ captionsEnabled: false }), true);
   assert.equal(editor.patchAffectsRender({ removedWordIndices: [1, 2] }), true);
+  assert.equal(editor.patchAffectsRender({ manualTrimCuts: [{ start: 1, end: 2 }] }), true);
   assert.equal(editor.patchAffectsRender({ layoutOverride: 'vertical' }), true);
   assert.equal(editor.patchAffectsRender({ openingPushInEnabled: false }), true);
   assert.equal(editor.patchAffectsRender({ punchIns: [{ start: 1, end: 2 }] }), false);
   assert.equal(editor.patchNeedsAutoRender({ renderStatus: 'ready' }, false), false);
   assert.equal(editor.patchNeedsAutoRender({ renderStatus: '' }, false), true);
   assert.equal(editor.patchNeedsAutoRender({ renderStatus: 'ready' }, true), true);
+});
+
+test('precise manual trims bridge residual fragments between automatic and transcript cuts', function () {
+  const project = {
+    duration: 70,
+    autoSilenceEnabled: true,
+    silenceThresholdSeconds: 1,
+    retainedPauseSeconds: 0.38,
+    words: [
+      { index: 0, text: 'before', start: 32.2, end: 32.52 },
+      { index: 1, text: 'rejected', start: 51.36, end: 60.6 },
+      { index: 2, text: 'Money', start: 64.9, end: 65.1 }
+    ],
+    removedWordIndices: [1],
+    manualTrimCuts: [{ id: 'manual-mumble-26s', start: 32.71, end: 64.71, note: 'Remove residual mumble' }]
+  };
+  assert.deepEqual(editor.normalizeManualTrimCuts(project.manualTrimCuts, project.duration), [{
+    id: 'manual-mumble-26s', start: 32.71, end: 64.71, note: 'Remove residual mumble', reason: 'manual_trim'
+  }]);
+  assert.deepEqual(editor.cutsForProject(project), [{
+    id: 'lead', start: 0, end: 32.02, reason: 'leading_silence'
+  }, {
+    id: '', start: 32.71, end: 64.71000000000001, reason: 'combined'
+  }, {
+    id: 'tail', start: 65.35, end: 70, reason: 'trailing_silence'
+  }]);
 });
 
 test('likely restarted lines are surfaced without being automatically removed', function () {

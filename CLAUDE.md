@@ -17185,3 +17185,26 @@ and matching hover tooltip, and the active card changes the frame to the same
 green accent used by its border. The title remains ellipsized inside the
 narrow desktop and mobile cards. Editor script and stylesheet cache keys were
 advanced; no server or data-format change was required.
+
+---
+
+# 524. Manual Editor Revisions Can Store Precise Source-Time Trims (2026-10-12)
+
+The Editor project model now supports bounded `manualTrimCuts` for corrections
+that cannot be expressed by deleting whole transcript words—for example, a
+sub-word mumble or a tiny rejected-take fragment left between an automatic
+pause cut and a transcript cut. Each trim has a stable id, source start/end,
+and short audit note; the server validates and bounds it to the recording,
+merges it through the normal cut graph, invalidates the old render, and stores
+it in cut-decision history so Undo remains coherent. There is intentionally no
+general sidebar control for arbitrary time cuts: this is a precise mechanism
+for the already-authorized per-recording Manual revision workflow.
+
+The first use is project `477e996b-e5c7-4775-9e35-bf266b8e24dd` (“Understand
+This & You Can Sell Anything”). Its removed first take and neighboring natural
+pause cuts left 130ms and 90ms source islands before the selected second
+“Money” take, producing the reported mumble around edited 26 seconds. A single
+32.71–64.71 source-time manual trim bridges the existing cuts while preserving
+the intended 190ms handle on each side (380ms total sentence pause). Regression
+coverage proves precise trims join those residual islands and count as
+render-affecting edits. The complete 174-test service suite passes.
