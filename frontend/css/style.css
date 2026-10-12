@@ -637,29 +637,24 @@ img { max-width: 100%; }
 }
 
 .home2-purchase {
-  width: min(100%, 760px);
+  width: min(100%, 980px);
   margin-inline: auto;
   text-align: center;
 }
 
 .home2-purchase h2 {
   margin-bottom: 0.28em;
-  font-size: clamp(2.8rem, 5vw, 4.4rem);
-  line-height: 1;
+  font-size: clamp(2.35rem, 4.5vw, 4rem);
+  line-height: 1.05;
 }
 
 .home2-purchase__lede {
-  margin: 0 0 clamp(2rem, 4vw, 3rem);
-  font-size: clamp(1.05rem, 1.6vw, 1.3rem);
+  width: min(100%, 820px);
+  margin: 0 auto clamp(2rem, 4vw, 3rem);
+  font-size: clamp(1rem, 1.45vw, 1.22rem);
+  line-height: 1.65;
   color: var(--ink-soft);
 }
-
-.home2-purchase__edition {
-  width: min(100%, 570px);
-  margin-inline: auto;
-}
-
-.home2-purchase__edition .panel-label { text-align: left; }
 
 .home2-purchase__button {
   display: block;

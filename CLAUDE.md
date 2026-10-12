@@ -17702,3 +17702,23 @@ cache key was advanced. A mocked-API headless-Chromium test selected two
 different timeline sections and proved that Delete and Backspace each sent the
 exact selected source interval through the existing manual-trim save path. The
 complete 178-test ops-service suite also passes.
+
+---
+
+# 547. `/home2` First Purchase Panel Is Copy-Led (2026-10-12)
+
+The first purchase panel beneath the `/home2` video hero no longer repeats the
+hardcover edition selector, thumbnail, price, or shipping note. It now moves
+directly from the product proposition to the existing checkout button and
+purchase assurances, matching the simpler conversion hierarchy requested.
+
+Its headline is now **Get Your Deluxe First Edition Hardcover Copy Now**. The
+supporting copy explains that each copy is printed and bound by a bespoke
+European bookbinder, crafted to order from premium materials, and designed to
+last a lifetime. The text container and responsive type scale were rebalanced
+for the longer copy while leaving the rest of `/home2` and the main homepage's
+edition selector unchanged. The `/home2` stylesheet cache key was advanced.
+Headless Chromium verified the exact new content and element order, removal of
+the edition selector, retention of all three purchase assurances, and no
+horizontal overflow at 1440×900 or 390×844. Both renders were visually
+inspected, and the original homepage still retains its edition panel.
