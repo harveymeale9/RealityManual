@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <base href="/" />
   <meta name="color-scheme" content="dark" />
   <title>The Reality Manual | A Guide To Existing Well</title>
   <meta name="description" content="The Reality Manual. A single edition, printed once and bound to last. A complete framework for constructing the most effective life strategy possible. Premium hardcover, $65, ships worldwide." />
@@ -12,13 +13,13 @@
   <meta property="og:description" content="The objective. The rules. A better life. First edition premium hardcover." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://realitymanual.com/" />
-  <meta property="og:image" content="https://realitymanual.com/img/photo/reality-manual-black-hardcover-hero.jpg" />
+  <meta property="og:image" content="https://realitymanual.com/img/photo/reality-manual-open-book-spread.jpg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Archivo:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/style.css?v=20261012-vsl-black-handoff" />
+  <link rel="stylesheet" href="css/style.css?v=20261012-home2-floating-book" />
 </head>
-<body>
+<body class="home2-page">
 
   <header class="site-header">
     <div class="site-header__inner">
@@ -39,167 +40,54 @@
   <main>
 
     <!-- ============================================================ HERO -->
-    <section class="hero">
-      <div class="wrap">
-        <!-- Desktop-only (900px+): the established centered composition with
-             the proof copy's plain black cloth, small gold title and black edges. -->
-        <img class="bg-img hero-bg-desktop" src="img/photo/reality-manual-black-hardcover-hero.jpg" alt="" aria-hidden="true" fetchpriority="high" />
-
-        <div class="hero-grid">
-
-          <div class="hero-copy">
-            <p class="eyebrow">A Guide To Existing Well</p>
-            <h1>The Reality Manual</h1>
-            <p class="tagline">
-              <span>The Objective of Life</span>
-              <span>The Rules of Reality</span>
-              <span>&amp; The Optimal Life Strategy</span>
-            </p>
-          </div>
-
-          <img class="hero-mobile-photo" src="img/photo/reality-manual-black-hardcover-mobile.jpg" alt="The Reality Manual in black cloth with gold foil and black sprayed page edges" width="1254" height="1254" fetchpriority="high" />
-
-          <div class="hero-trust">
-            <div class="trust-item">
-              <svg viewBox="0 0 24 24" aria-hidden="true" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5z" />
-                <path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5z" />
-              </svg>
-              <span>Premium<br />Hardcover</span>
-            </div>
-            <div class="trust-item">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="12" cy="12" r="8.5" />
-                <path d="M3.5 12h17M12 3.5c2.5 2.6 2.5 14.4 0 17M12 3.5c-2.5 2.6-2.5 14.4 0 17" />
-              </svg>
-              <span>Ships<br />Worldwide</span>
-            </div>
-            <div class="trust-item">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <rect x="5" y="10.5" width="14" height="9.5" rx="1.5" />
-                <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" />
-              </svg>
-              <span>Secure<br />Checkout</span>
-            </div>
-          </div>
-
-          <blockquote class="hero-quote">
-            "Reality exhibits the defining characteristics of a game which is
-            solvable. An optimal strategy exists and has been identified."
-          </blockquote>
-
-        </div>
+    <section class="home2-hero video-card home2-hero__video" id="video-card" aria-labelledby="home2-video-title">
+      <img class="home2-hero__image" src="img/photo/reality-manual-open-book-spread.jpg" alt="The Reality Manual open to a spread and handled with white archival gloves" width="3759" height="1808" fetchpriority="high" />
+      <div class="home2-hero__shade" aria-hidden="true"></div>
+      <div class="video-inner">
+        <p class="eyebrow">Watch the Video</p>
+        <h2 id="home2-video-title">What is The Reality Manual?</h2>
+        <button class="play-btn" id="play-btn" type="button" aria-label="Play the video">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l12 7-12 7z" /></svg>
+        </button>
+        <p class="video-duration">1:34</p>
       </div>
     </section>
 
     <!-- =========================================================== OFFER -->
-    <section class="offer" id="order">
-      <img class="offer-spread-bg" src="img/photo/reality-manual-open-book-spread.jpg" alt="" aria-hidden="true" decoding="async" />
+    <section class="offer home2-offer" id="order" aria-labelledby="home2-title">
       <div class="wrap">
-        <div class="offer-grid">
-
-          <!-- video -->
-          <div class="video-card" id="video-card">
-            <img class="bg-img" src="img/photo/reality-manual-vsl-poster-no-captions.jpg" alt="" aria-hidden="true" />
-            <div class="video-inner">
-              <p class="eyebrow">Watch the Video</p>
-              <h2>What is The Reality Manual?</h2>
-              <button class="play-btn" id="play-btn" type="button" aria-label="Play the video">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l12 7-12 7z" /></svg>
-              </button>
-              <p class="video-duration">1:34</p>
-            </div>
+        <div class="home2-purchase">
+          <div class="home2-purchase__book">
+            <img src="img/photo/reality-manual-deluxe-hardcover-cutout.webp" alt="The Reality Manual deluxe black hardcover first edition" width="1086" height="1448" loading="lazy" decoding="async" />
           </div>
 
-          <!-- edition selector -->
-          <div class="edition-panel">
-            <p class="panel-label">Choose Your Edition</p>
+          <div class="home2-purchase__content">
+            <h2 id="home2-title">Get Your Deluxe First Edition Hardcover Now</h2>
+            <p class="home2-purchase__lede">Printed and bound by one of the world's finest bespoke bookbinders, each copy of The Reality Manual is expertly crafted to order using premium materials and designed to last a lifetime.</p>
 
-            <div class="edition">
-              <!-- IMAGE SLOT: edition thumbnail -->
-              <img class="edition-thumb" src="img/placeholder/reality-manual-edition-thumbnail.svg?v=3" alt="" aria-hidden="true" />
-              <div>
-                <p class="edition-name">Hardcover</p>
-                <p class="edition-desc">
-                  Deluxe first edition.<br />
-                  Premium cloth.
-                </p>
-              </div>
-              <div class="edition-price">$65</div>
-            </div>
+            <a class="btn btn--lg home2-purchase__button" href="checkout.html" data-cta="home2-offer">Continue to Checkout →</a>
 
-            <p class="edition-note">Shipping calculated at checkout.</p>
-
-            <a class="btn btn--block" href="checkout.html" data-cta="edition-panel">Continue to Checkout →</a>
-
-            <div class="assurance">
-              <div>
+            <div class="home2-purchase__trust" aria-label="Purchase assurances">
+              <div class="home2-purchase__trust-item">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
                   <rect x="5" y="11" width="14" height="9" rx="1.5" /><path d="M8 11V7a4 4 0 0 1 8 0v4" />
                 </svg>
-                Secure checkout powered by Stripe
+                <span>Secure checkout<br />powered by Stripe</span>
               </div>
-              <div>
+              <div class="home2-purchase__trust-item">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-                  <path d="M12 3l7 3v5.5c0 4.2-2.9 7.7-7 9-4.1-1.3-7-4.8-7-9V6z" />
+                  <circle cx="12" cy="12" r="8.5" /><path d="M3.5 12h17M12 3.5c2.5 2.6 2.5 14.4 0 17M12 3.5c-2.5 2.6-2.5 14.4 0 17" />
                 </svg>
-                Encrypted payment &nbsp;·&nbsp; Ships worldwide
+                <span>Ships worldwide</span>
+              </div>
+              <div class="home2-purchase__trust-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                  <rect x="3" y="5" width="18" height="14" rx="1.5" /><path d="M3 9h18M7 15h4" />
+                </svg>
+                <span>Encrypted payment</span>
               </div>
             </div>
           </div>
-
-        </div>
-      </div>
-    </section>
-
-    <!-- ============================================================= WHY -->
-    <section class="why" id="about">
-      <div class="wrap">
-        <p class="section-label">Why This Book</p>
-        <div class="why-grid">
-
-          <div class="why-item">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
-            </svg>
-            <div>
-              <h3>The Objective</h3>
-              <p>Discover the true objective of the game of life.</p>
-            </div>
-          </div>
-
-          <div class="why-item">
-            <svg viewBox="0 0 24 24" aria-hidden="true" stroke-linecap="round">
-              <path d="M6 3h12v18H6z" /><path d="M9 8h6M9 12h6M9 16h4" />
-            </svg>
-            <div>
-              <h3>The 14 Rules</h3>
-              <p>The 14 Rules of Reality that govern the entire game.</p>
-            </div>
-          </div>
-
-          <div class="why-item">
-            <svg viewBox="0 0 24 24" aria-hidden="true" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 5.5c-1.8-1.8-5.2-1-5.6 1.7-1.9.7-2.2 3.3-.6 4.4-.8 2 .8 4.2 3 4.1.6 1.8 3 2.3 4.2.9" />
-              <path d="M12 5.5c1.8-1.8 5.2-1 5.6 1.7 1.9.7 2.2 3.3.6 4.4.8 2-.8 4.2-3 4.1-.6 1.8-3 2.3-4.2.9" />
-              <path d="M12 5.5V20" />
-            </svg>
-            <div>
-              <h3>The Strategy</h3>
-              <p>Complex theory translated into practical actions.</p>
-            </div>
-          </div>
-
-          <div class="why-item">
-            <svg viewBox="0 0 24 24" aria-hidden="true" stroke-linejoin="round">
-              <path d="M2.5 19l6-11 4 6.5 2.5-4 6.5 8.5z" /><path d="M2.5 19h19" />
-            </svg>
-            <div>
-              <h3>A Better Life</h3>
-              <p>A better strategy means a superior experience of life.</p>
-            </div>
-          </div>
-
         </div>
       </div>
     </section>
@@ -214,27 +102,29 @@
         <div class="inside-grid">
           <figure class="page-card">
             <div class="page-card-media">
-              <img src="img/photo/reality-manual-interior-core-principles.jpg" alt="The Rule of Functional Existence inside The Reality Manual" loading="lazy" decoding="async" />
+              <img src="img/photo/home2-interiors/reality-manual-five-axes.png" alt="The five axes of belief, oneness, expansion, freedom, and desire inside The Reality Manual" loading="lazy" decoding="async" />
             </div>
-            <figcaption>Core Principles</figcaption>
+            <figcaption>The Objective of Life</figcaption>
           </figure>
           <figure class="page-card">
             <div class="page-card-media">
-              <img src="img/photo/reality-manual-interior-practical-applications.jpg" alt="Examples of oneness and separation inside The Reality Manual" loading="lazy" decoding="async" />
+              <img src="img/photo/home2-interiors/reality-manual-internal-value.png" alt="Rule I, the Rule of Internal Value, inside The Reality Manual" loading="lazy" decoding="async" />
             </div>
-            <figcaption>Practical Applications</figcaption>
+            <figcaption>The 14 Rules of Reality</figcaption>
           </figure>
           <figure class="page-card">
             <div class="page-card-media">
-              <img src="img/photo/reality-manual-interior-advanced-techniques.jpg" alt="The attainment of enlightenment framework inside The Reality Manual" loading="lazy" decoding="async" />
+              <img src="img/photo/home2-interiors/reality-manual-indirect-pursuit-objective.png" alt="The indirect pursuit of the objective inside The Reality Manual" loading="lazy" decoding="async" />
+            </div>
+            <figcaption>Life Strategy</figcaption>
+          </figure>
+
+          <figure class="page-card">
+            <div class="page-card-media">
+              <img src="img/photo/home2-interiors/reality-manual-advanced-techniques-omnipresence.png" alt="The omnipresence framework and celestial illustration inside The Reality Manual" loading="lazy" decoding="async" />
             </div>
             <figcaption>Advanced Techniques</figcaption>
           </figure>
-
-          <div class="testimonial">
-            <p>"A rare combination of depth, clarity, and practical value."</p>
-            <div class="stars" aria-label="Five out of five stars">★★★★★</div>
-          </div>
         </div>
       </div>
     </section>
@@ -245,15 +135,6 @@
         <p class="section-label">Frequently Asked Questions</p>
 
         <div class="faq-grid">
-          <details class="faq-item">
-            <summary>What is your return policy?</summary>
-            <p class="faq-answer">
-              If your copy arrives damaged or misprinted, email us and we'll send
-              a replacement at no cost. Because every book is printed to order,
-              we don't accept change-of-mind returns.
-            </p>
-          </details>
-
           <details class="faq-item">
             <summary>Do you ship to my country?</summary>
             <p class="faq-answer">
@@ -272,40 +153,51 @@
               on destination. You'll see your exact shipping cost at checkout.
             </p>
           </details>
+
+          <details class="faq-item">
+            <summary>What is your return policy?</summary>
+            <p class="faq-answer">
+              If your copy arrives damaged or misprinted, email us and we'll send
+              a replacement at no cost. Because every book is printed to order,
+              we don't accept change-of-mind returns.
+            </p>
+          </details>
         </div>
       </div>
     </section>
 
     <!-- ======================================================= FINAL CTA -->
-    <section class="final-cta">
+    <section class="final-cta home2-review-cta" aria-labelledby="home2-review-heading">
       <!-- IMAGE SLOT: closing photograph -->
       <img class="bg-img" src="img/placeholder/cta-bg.svg" alt="" aria-hidden="true" />
 
       <div class="wrap">
-        <div class="final-grid">
+        <div class="home2-review">
+          <h2 class="home2-review__lead" id="home2-review-heading">“A rare combination of depth, clarity,<br />and practical value.”</h2>
+          <div class="home2-review__stars" aria-label="Five out of five stars">★★★★★</div>
 
-          <blockquote class="final-quote">
-            "Not a self-help book.<br />A strategy manual."
-          </blockquote>
+          <a class="btn btn--lg home2-review__button" href="checkout.html" data-cta="final">Continue to Checkout →</a>
 
-          <div class="final-main">
-            <p class="eyebrow">Play the game better</p>
-            <h2>Get Your Copy Now</h2>
-            <a class="btn btn--lg" href="checkout.html" data-cta="final">Continue to Checkout →</a>
-            <div class="assurance">
-              <div>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-                  <rect x="5" y="11" width="14" height="9" rx="1.5" /><path d="M8 11V7a4 4 0 0 1 8 0v4" />
-                </svg>
-                Secure checkout powered by Stripe &nbsp;·&nbsp; Encrypted payment &nbsp;·&nbsp; Ships worldwide
-              </div>
+          <div class="home2-purchase__trust" aria-label="Purchase assurances">
+            <div class="home2-purchase__trust-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                <rect x="5" y="11" width="14" height="9" rx="1.5" /><path d="M8 11V7a4 4 0 0 1 8 0v4" />
+              </svg>
+              <span>Secure checkout<br />powered by Stripe</span>
+            </div>
+            <div class="home2-purchase__trust-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                <circle cx="12" cy="12" r="8.5" /><path d="M3.5 12h17M12 3.5c2.5 2.6 2.5 14.4 0 17M12 3.5c-2.5 2.6-2.5 14.4 0 17" />
+              </svg>
+              <span>Ships worldwide</span>
+            </div>
+            <div class="home2-purchase__trust-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                <rect x="3" y="5" width="18" height="14" rx="1.5" /><path d="M3 9h18M7 15h4" />
+              </svg>
+              <span>Encrypted payment</span>
             </div>
           </div>
-
-          <blockquote class="final-quote">
-            "Understand the game.<br />Play it better."
-          </blockquote>
-
         </div>
       </div>
     </section>

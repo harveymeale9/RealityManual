@@ -18199,3 +18199,26 @@ separators according to context; empty checkout totals use a plain ASCII
 hyphen. A repository search covering `—`, `&mdash;`, numeric entities, and
 escaped `\\u2014`/`\\x{2014}` forms returns zero matches under `frontend/`.
 Future storefront copy must preserve this zero-em-dash rule.
+
+---
+
+# 574. Home2 Promoted to the Public Root Homepage (2026-10-12)
+
+Harvey selected the completed `/home2/` variant as the real storefront. Its
+document now replaces `frontend/index.html`, so `https://realitymanual.com/`
+opens directly on the preferred video-first hero, floating transparent
+hardcover offer, native-pixel interior gallery, reordered FAQ, and simplified
+review close. The previous root landing-page markup is retired.
+
+The root-only SEO contract was preserved: canonical URL, Open Graph URL, and
+Book JSON-LD all point to `https://realitymanual.com/`; the Open Graph image now
+matches the promoted open-book hero. `/home2/` remains as a byte-identical alias
+for old preview links but declares the root URL as canonical, avoiding a second
+SEO target. Both routes retain the shared analytics, marketing events, mobile
+menu, backend-hosted VSL playback, checkout destinations, zero-em-dash rule,
+and current stylesheet cache revision.
+
+Headless Chromium verification covered desktop and mobile layouts, identical
+root/alias screenshots, all checkout CTA destinations, FAQ ordering, mobile
+navigation, VSL element creation, and absence of console/runtime errors. The
+static-site push deploys through the existing GitHub Pages workflow.
