@@ -17097,3 +17097,17 @@ phrase such as “stuff is fine, page turns” into the visibly joined
 word spans, preserving natural spaces without changing timed emphasis. The
 baked ASS caption renderer already joined words correctly and remains
 unchanged. The Editor script cache key was advanced.
+
+---
+
+# 519. Working Preview Plays Through Its Trailing Fade (2026-10-12)
+
+The Editor's lightweight working preview used to pause and seek backward as
+soon as playback entered an automatically removed trailing-silence interval.
+That made an 11-second recording visibly stop around 10 seconds and, unlike
+the final FFmpeg render, showed no fade-out. A trailing automatic cut is now
+handled separately from internal jump cuts: the source preview continues to
+its displayed end while a black overlay progressively reproduces the final
+outro fade. Internal silence cuts still jump forward as before, the original
+master is unchanged, and completed final renders continue to show their own
+baked two-second fade. The Editor script cache key was advanced.

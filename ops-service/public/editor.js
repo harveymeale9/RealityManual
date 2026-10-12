@@ -1048,6 +1048,7 @@
       : '';
     var initialLoadingOverlayHtml = previewLocked ? '' : '<div class="editor-preview-loading" id="editorPreviewLoading" role="status" aria-live="polite"><div></div><strong>Loading preview…</strong></div>';
     var previewPlayerHtml = '<div class="editor-preview' + (previewLocked ? ' rebuilding' : '') + '" id="editorPreview" tabindex="' + (previewLocked ? '-1' : '0') + '" aria-busy="true" aria-label="Video review. Space plays or pauses. Left and right arrows move two seconds."><div class="editor-video-frame ' + layout + '"><video id="editorVideo" data-preview-mode="' + previewMode + '" data-seek-time="' + previewSeek.toFixed(3) + '" playsinline preload="auto" src="' + previewUrl + '"></video>' +
+      '<div class="editor-preview-outro" id="editorPreviewOutro" aria-hidden="true"></div>' +
       '<div class="editor-caption" id="editorCaption"></div>' +
       '<div class="editor-player-controls" id="editorPlayerControls"><button type="button" class="editor-player-icon" id="editorPlayerPlay" aria-label="Play" disabled>▶</button><span id="editorPlayerCurrent">0:00</span><input type="range" id="editorPlayerSeek" min="0" max="1" step="0.01" value="0" aria-label="Video position" disabled><span id="editorPlayerDuration">' + formatTime(previewMode === 'final' ? editedDuration(project) : project.duration) + '</span><i id="editorPlayerBuffering" hidden>Loading</i><button type="button" class="editor-player-icon" id="editorPlayerMute" aria-label="Mute" disabled>VOL</button><button type="button" class="editor-player-icon" id="editorPlayerFullscreen" aria-label="Full screen" disabled>⛶</button></div>' +
       '<div class="editor-video-error" id="editorVideoError" hidden><strong>Preview could not be played</strong><span>Your recording and edit are safe. Reload this review copy without rebuilding anything.</span><button type="button" class="btn-secondary btn-tiny" id="editorReloadVideo">Reload preview</button></div>' + initialLoadingOverlayHtml + rebuildOverlayHtml + '</div></div>';
@@ -1573,6 +1574,7 @@
     var ignoreNextClick = false;
     var playingWordIndex = null;
     var lastReviewProgressSaveAt = 0;
+    var previewOutro = root.querySelector('#editorPreviewOutro');
     function isLongformVideo() {
       return (project.effectiveLayout || 'horizontal') === 'horizontal';
     }
@@ -1676,19 +1678,28 @@
         playhead.style.left = Math.min(100, sourcePlayheadTime / project.duration * 100) + '%';
       }
       if (previewingFinal || previewingOriginalMaster) {
+        if (previewOutro) previewOutro.style.opacity = '0';
         caption.classList.remove('visible');
         return;
       }
       if (!previewingOriginalMaster) {
-        var cut = (project.cuts || []).filter(function (item) { return video.currentTime >= item.start && video.currentTime < item.end; })[0];
-        if (cut && cut.end < video.duration - 0.02) { video.currentTime = cut.end + 0.01; return; }
-        if (cut) {
-          // A trailing cut has no retained timestamp to jump into. Stop on the
-          // final kept frame rather than playing silence absent from the render.
-          video.pause();
-          video.currentTime = Math.max(0, cut.start - 0.01);
+        var trailingCut = (project.cuts || []).filter(function (item) {
+          return item.end >= video.duration - 0.02;
+        })[0];
+        if (trailingCut && video.currentTime >= trailingCut.start) {
+          // The exported edit holds the final retained frame and fades it to
+          // black. Keep the lightweight source preview moving through its
+          // remaining tail while reproducing that fade, instead of freezing
+          // the player just before its displayed end time.
+          var outroProgress = Math.max(0, Math.min(1,
+            (video.currentTime - trailingCut.start) / Math.max(0.01, trailingCut.end - trailingCut.start)));
+          if (previewOutro) previewOutro.style.opacity = outroProgress.toFixed(3);
+          caption.classList.remove('visible');
           return;
         }
+        if (previewOutro) previewOutro.style.opacity = '0';
+        var cut = (project.cuts || []).filter(function (item) { return video.currentTime >= item.start && video.currentTime < item.end; })[0];
+        if (cut && cut.end < video.duration - 0.02) { video.currentTime = cut.end + 0.01; return; }
       }
       var group = (project.captionGroups || []).filter(function (item) {
         return video.currentTime >= item.sourceStart && video.currentTime <= item.sourceEnd;
