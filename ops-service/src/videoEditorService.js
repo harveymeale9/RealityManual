@@ -30,10 +30,11 @@ const OPENING_PUSH_IN_SCALE = 1.25;
 const VERTICAL_OPENING_PUSH_IN_SCALE = 1.125;
 const HORIZONTAL_OPENING_PUSH_IN_SCALE = 1.125;
 const VERTICAL_REVEAL_PUSH_IN_SCALE = 1.125;
-const EDITOR_RENDER_VERSION = 24;
-const AUTO_CUT_BOUNDARY_VERSION = 2;
-const DEFAULT_RETAINED_PAUSE_SECONDS = 0.14;
+const EDITOR_RENDER_VERSION = 25;
+const AUTO_CUT_BOUNDARY_VERSION = 3;
+const DEFAULT_RETAINED_PAUSE_SECONDS = 0.24;
 const MIN_RETAINED_PAUSE_SECONDS = 0.08;
+const TRANSCRIPT_CUT_HANDLE_SECONDS = 0.07;
 const CUT_ISLAND_BRIDGE_SECONDS = 0.12;
 const PAGE_CHANGE_SSIM_THRESHOLD = 0.5;
 const BROWSER_PREVIEW_VERSION = 2;
@@ -390,7 +391,7 @@ function normalizeWords(rawWords) {
 
 function retainedPauseForThreshold(thresholdSeconds) {
   const threshold = Number(thresholdSeconds) || 1;
-  return threshold < 0.85 ? 0.10 : threshold < 1.3 ? DEFAULT_RETAINED_PAUSE_SECONDS : 0.22;
+  return threshold < 0.85 ? 0.10 : threshold < 1.3 ? DEFAULT_RETAINED_PAUSE_SECONDS : 0.32;
 }
 
 function effectiveRetainedPauseSeconds(project) {
@@ -399,9 +400,9 @@ function effectiveRetainedPauseSeconds(project) {
     : retainedPauseForThreshold(project && project.silenceThresholdSeconds);
 }
 
-// Natural mode keeps a tight 140ms between phrases. The 70ms handle on each
-// spoken edge protects consonants without leaving an audible dead fragment
-// before the cut begins.
+// Natural mode keeps 240ms between phrases. The 120ms handle on each spoken
+// edge protects consonants without restoring the conspicuous 190ms dead beat
+// that preceded the tighter cutting pass.
 function calculateAutoCuts(words, duration, options) {
   options = options || {};
   const threshold = clamp(options.thresholdSeconds === undefined ? 1.0 : options.thresholdSeconds, 0.65, 5);
@@ -441,8 +442,15 @@ function calculateManualCuts(words, removedWordIndices, duration) {
     const last = index;
     const previousEnd = first > 0 && !removed.has(first - 1) ? words[first - 1].end : 0;
     const nextStart = last + 1 < words.length && !removed.has(last + 1) ? words[last + 1].start : Number(duration);
-    const start = Math.max(previousEnd + (first > 0 ? 0.02 : 0), words[first].start - 0.06, 0);
-    const end = Math.min(nextStart - (last + 1 < words.length ? 0.02 : 0), words[last].end + 0.10, Number(duration));
+    // A transcript deletion removes the selected speech and the surrounding
+    // dead space, while retaining exactly 70ms against each neighbouring word.
+    // This is intentionally tighter than the 120ms automatic-silence handle.
+    const start = first > 0
+      ? Math.min(words[first].start, previousEnd + TRANSCRIPT_CUT_HANDLE_SECONDS)
+      : 0;
+    const end = last + 1 < words.length
+      ? Math.max(words[last].end, nextStart - TRANSCRIPT_CUT_HANDLE_SECONDS)
+      : Number(duration);
     if (end > start) cuts.push({ start: start, end: end, reason: 'transcript_cut' });
     index++;
   }

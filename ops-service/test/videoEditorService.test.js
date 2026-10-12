@@ -358,8 +358,8 @@ test('render duration tolerance stays strict for long-form output', function () 
 test('automatic cuts preserve natural handles around long pauses', function () {
   const cuts = editor.calculateAutoCuts(words, 9);
   assert.deepEqual(cuts.map(function (cut) { return cut.reason; }), ['leading_silence', 'long_pause', 'long_pause', 'trailing_silence']);
-  assert.equal(cuts[1].start, 1.87);
-  assert.equal(cuts[1].end, 3.93);
+  assert.equal(cuts[1].start, 1.92);
+  assert.equal(cuts[1].end, 3.88);
 });
 
 test('sub-perceptual islands between adjacent cuts are removed continuously', function () {
@@ -648,12 +648,23 @@ test('Editor work state ignores automation and recognizes review or manual decis
   assert.equal(editor.editorWorkStarted({ editRevision: 3 }), true);
 });
 
-test('adjacent removed transcript words become one manual cut', function () {
+test('adjacent removed transcript words become one cut with 70ms speech handles', function () {
   const cuts = editor.calculateManualCuts(words, [2, 3], 9);
   assert.equal(cuts.length, 1);
   assert.equal(cuts[0].reason, 'transcript_cut');
-  assert.ok(cuts[0].start > words[1].end);
-  assert.ok(cuts[0].end < words[4].start);
+  assert.ok(Math.abs(cuts[0].start - 1.87) < 0.000001);
+  assert.ok(Math.abs(cuts[0].end - 6.53) < 0.000001);
+});
+
+test('transcript handles never leave fragments of a selected word', function () {
+  const closeWords = [
+    { index: 0, text: 'keep', start: 0.5, end: 1.0 },
+    { index: 1, text: 'remove', start: 1.02, end: 1.2 },
+    { index: 2, text: 'keep', start: 1.22, end: 1.7 }
+  ];
+  assert.deepEqual(editor.calculateManualCuts(closeWords, [1], 2), [
+    { start: 1.02, end: 1.2, reason: 'transcript_cut' }
+  ]);
 });
 
 test('overlapping cuts merge and retained segments fill the rest', function () {
@@ -837,7 +848,7 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.equal(stored.renderQuality.status, 'passed');
-  assert.equal(stored.renderVersion, 24);
+  assert.equal(stored.renderVersion, 25);
   assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), true);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
@@ -869,7 +880,7 @@ test('final render splices an inserted clip and its caption timeline between sou
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.ok(stored.editedDuration > 3.9 && stored.editedDuration < 4.1);
-  assert.equal(stored.renderVersion, 24);
+  assert.equal(stored.renderVersion, 25);
   assert.equal(stored.renderQuality.contentDuration, 2);
   assert.equal(stored.renderQuality.outroSeconds, 2);
   assert.ok(stored.renderQuality.insertedClipLoudness.clips[0].gainDb > 18);
@@ -1513,7 +1524,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.deepEqual(project.restoredAutoCutIds, []);
   assert.equal(project.autoSilenceEnabled, true);
   assert.equal(project.silenceThresholdSeconds, 1);
-  assert.equal(project.retainedPauseSeconds, 0.14);
+  assert.equal(project.retainedPauseSeconds, 0.24);
   assert.equal(project.canUndoCut, false);
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ captionsEnabled: false, wordCorrection: { index: 0, text: 'Once' } }) });
   assert.equal(response.status, 200);

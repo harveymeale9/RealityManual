@@ -17918,3 +17918,19 @@ becomes available only after both the browser-decodable video and the selected
 cached mix are ready, changes to **Stop video** while playing, and also supports
 the no-music option using the video's original audio. The existing scrubber and
 **Use this frame** thumbnail workflow remain independent and unchanged.
+
+---
+
+# 558. Automatic and Transcript Cuts Use Separate Speech Handles (2026-10-12)
+
+Natural automatic silence cuts now retain 120ms against each spoken edge
+(240ms total between phrases), replacing the too-aggressive 70ms edge without
+returning to the old 190ms dead beat. Tight pacing remains 50ms per edge;
+Gentle is 160ms per edge so the three pacing choices remain ordered.
+
+Transcript-tool deletions now use their own fixed 70ms handle against the last
+retained word before the selection and the first retained word after it. They
+remove the selected speech and intervening dead space independently of the
+automatic-silence pacing preference. Render and automatic-boundary versions
+were advanced so non-Production Editor projects and all future recordings use
+the corrected rules; Production copies remain immutable.

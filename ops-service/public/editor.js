@@ -2201,7 +2201,7 @@
       }).catch(function (error) { alert(error.message); renderWorkspace(); });
     };
     root.querySelector('#editorPacing').onchange = function () {
-      var settings = { tight: [0.7, 0.10], natural: [1, 0.14], gentle: [1.5, 0.22] }[this.value] || [1, 0.14];
+      var settings = { tight: [0.7, 0.10], natural: [1, 0.24], gentle: [1.5, 0.32] }[this.value] || [1, 0.24];
       save({ silenceThresholdSeconds: settings[0], retainedPauseSeconds: settings[1] }, true);
     };
     var clearAutomation = root.querySelector('#editorClearAutomation');
