@@ -18468,3 +18468,23 @@ Regression tests cover the spoken example, preservation of material before the
 false-start pause, exact 70 ms boundaries, tolerant marker spelling, and the
 requirement that both marker words be present. The complete ops-service suite
 passes with 203 tests.
+
+---
+
+# 584. Storefront VSL Preloads Before the Play Tap (2026-10-13)
+
+The homepage and retained `/home2/` copy no longer create the 83.5 MB VSL
+player only after a visitor presses Play. Both pages now declare the real
+`<video preload="auto">` inside the hero so the browser's HTML preload scanner
+can discover it early, preconnect to `api.realitymanual.com`, and begin ranged
+media loading while the visitor reads the page. The player remains transparent
+and cannot intercept pointer events until playback begins, leaving the existing
+bright photographic invitation unchanged.
+
+The Play handler now reveals and calls `play()` on that same buffered element
+inside the original user gesture. It does not create a second player or wait a
+render frame before starting the request. `playsinline` and the existing mobile
+16:9 containment remain in force. Browser verification at a 390 px mobile
+viewport observed VSL network requests before the tap, `readyState === 4`,
+successful playback after the synthetic tap, and a player/card width equal to
+the 390 px viewport.

@@ -14,10 +14,12 @@
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://realitymanual.com/" />
   <meta property="og:image" content="https://realitymanual.com/img/photo/reality-manual-open-book-spread.jpg" />
+  <link rel="dns-prefetch" href="//api.realitymanual.com" />
+  <link rel="preconnect" href="https://api.realitymanual.com" crossorigin />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Archivo:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/style.css?v=20261013-mobile-vsl-fit" />
+  <link rel="stylesheet" href="css/style.css?v=20261013-vsl-preload" />
 </head>
 <body class="home2-page">
 
@@ -43,6 +45,7 @@
     <section class="home2-hero video-card home2-hero__video" id="video-card" aria-labelledby="home2-video-title">
       <img class="home2-hero__image" src="img/photo/reality-manual-open-book-spread.jpg" alt="The Reality Manual open to a spread and handled with white archival gloves" width="3759" height="1808" fetchpriority="high" />
       <div class="home2-hero__shade" aria-hidden="true"></div>
+      <video class="vsl-player" id="vsl-player" src="https://api.realitymanual.com/media/reality-manual-vsl-1080p.mp4" preload="auto" playsinline webkit-playsinline aria-label="What is The Reality Manual?"></video>
       <div class="video-inner">
         <p class="eyebrow">Watch the Video</p>
         <h2 id="home2-video-title">What is The Reality Manual?</h2>
@@ -274,34 +277,23 @@
 
     // The finished VSL lives on the storefront backend's persistent media
     // volume so the static site does not need to carry a large binary in Git.
-    var VIDEO_EMBED_URL = 'https://api.realitymanual.com/media/reality-manual-vsl-1080p.mp4';
+    var videoCard = document.getElementById('video-card');
+    var videoPlayer = document.getElementById('vsl-player');
+    videoPlayer.addEventListener('playing', function () {
+      requestAnimationFrame(function () { videoCard.classList.remove('is-starting'); });
+    });
+    videoPlayer.addEventListener('error', function () { videoCard.classList.remove('is-starting'); });
+    // Explicit load starts the ranged media request while the visitor reads
+    // the page, instead of waiting for their tap to establish the connection.
+    videoPlayer.load();
     document.getElementById('play-btn').addEventListener('click', function () {
-      if (!VIDEO_EMBED_URL) return;
-      var card = document.getElementById('video-card');
-      if (card.classList.contains('has-video')) return;
-      card.classList.add('has-video', 'is-starting');
-      requestAnimationFrame(function () {
-        var frame;
-        var reveal = function () { requestAnimationFrame(function () { card.classList.remove('is-starting'); }); };
-        if (/\.(mp4|webm)$/i.test(VIDEO_EMBED_URL)) {
-          frame = document.createElement('video');
-          frame.src = VIDEO_EMBED_URL;
-          frame.controls = true;
-          frame.autoplay = true;
-          frame.playsInline = true;
-          frame.preload = 'auto';
-          frame.addEventListener('playing', reveal, { once: true });
-          frame.addEventListener('error', reveal, { once: true });
-        } else {
-          frame = document.createElement('iframe');
-          frame.src = VIDEO_EMBED_URL + (VIDEO_EMBED_URL.indexOf('?') > -1 ? '&' : '?') + 'autoplay=1';
-          frame.allow = 'autoplay; encrypted-media; picture-in-picture';
-          frame.allowFullscreen = true;
-          frame.title = 'What is The Reality Manual?';
-          frame.addEventListener('load', reveal, { once: true });
-        }
-        card.appendChild(frame);
-      });
+      if (videoCard.classList.contains('has-video')) return;
+      videoCard.classList.add('has-video', 'is-starting');
+      videoPlayer.controls = true;
+      var playback = videoPlayer.play();
+      if (playback && typeof playback.catch === 'function') {
+        playback.catch(function () { videoCard.classList.remove('is-starting'); });
+      }
     });
   </script>
 </body>

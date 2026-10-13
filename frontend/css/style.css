@@ -1043,6 +1043,19 @@ img { max-width: 100%; }
   background: #000;
 }
 
+/* The real VSL player exists and buffers behind the photographic invitation.
+   Opacity keeps it paintable (and therefore preloadable on mobile) without
+   letting invisible native controls intercept the invitation's play button. */
+.video-card video.vsl-player {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.video-card.has-video video.vsl-player {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 /* edition selector */
 
 .edition-panel {
