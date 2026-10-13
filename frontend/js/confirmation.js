@@ -77,7 +77,7 @@
       clearTimeout(timerId);
       spinner.style.display = 'none';
       statusEyebrow.textContent = 'Order confirmed';
-      statusTitle.textContent = 'Our Expert Bookbinders Are Rolling Up Their Sleeves';
+      statusTitle.textContent = 'Our Expert Bookbinders Are Rolling Up Their Sleeves.';
       statusMessage.textContent = "Thank you! Your payment has been received and your order has been confirmed. Please bear in mind that it can take up to 15 business days for us to print your Reality Manual. We'll send you another email as soon as we ship your order!";
       trackOnce('order_complete', order.order_id);
       if (window.RMMarketing) {
@@ -94,9 +94,6 @@
     }
 
     if (['PAYMENT_RECEIVED', 'FULFILLMENT_RETRY'].includes(order.order_status)) {
-      statusEyebrow.textContent = 'Payment received';
-      statusTitle.textContent = 'Our Expert Bookbinders Are Getting Ready';
-      statusMessage.textContent = "Thank you! Your payment has been received. We're finishing confirmation with our bookbinders now, and we'll email you as soon as your order is confirmed.";
       return false;
     }
 
@@ -112,9 +109,6 @@
     }
 
     if (order.order_status === 'PAYMENT_PROCESSING') {
-      statusEyebrow.textContent = 'Payment processing';
-      statusTitle.textContent = 'Payment processing';
-      statusMessage.textContent = 'Your payment has been authorized and is still being confirmed. We will begin preparing your order only after Stripe confirms the funds.';
       return false;
     }
 

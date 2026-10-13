@@ -18632,3 +18632,20 @@ refunds appear even when the customer does not revisit the confirmation page.
 If the private sales aggregate is temporarily unavailable, Website Analytics
 still renders normally with a conservative zero refund count. A static UI
 regression locks the refund source, label, and single-count rendering.
+
+---
+
+# 590. Two-State Order Confirmation Messaging (2026-10-13)
+
+The confirmation page no longer changes its headline as a successful order
+moves through payment processing, payment received, and BookVault retry states.
+Those internal states now retain one stable customer-facing presentation:
+**Order in progress**, **We're Confirming Your Order**, and a short explanation
+that payment and the bookbinder order are being confirmed. Only authoritative
+BookVault acceptance advances the page to the second success presentation.
+
+The completed headline is now **Our Expert Bookbinders Are Rolling Up Their
+Sleeves.**, including Harvey's requested full stop. Genuine terminal failures
+still replace the progress message with the necessary failure and retry copy;
+the two-state simplification applies to the normal successful order path rather
+than hiding actionable errors.

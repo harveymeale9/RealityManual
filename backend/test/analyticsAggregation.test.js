@@ -64,9 +64,11 @@ test('checkout uses only the branded confirmation flow and confirmation omits or
 
   assert.doesNotMatch(checkout, /receipt_email/);
   assert.match(confirmationPage, /reality-manual-deluxe-hardcover-cutout\.webp/);
+  assert.match(confirmationPage, /We're Confirming Your Order/);
   assert.doesNotMatch(confirmationPage, /order-meta/);
-  assert.match(confirmationScript, /Our Expert Bookbinders Are Rolling Up Their Sleeves/);
+  assert.match(confirmationScript, /Our Expert Bookbinders Are Rolling Up Their Sleeves\./);
   assert.match(confirmationScript, /15 business days/);
   assert.match(confirmationScript, /if \(terminal\) return/);
+  assert.doesNotMatch(confirmationScript, /Our Expert Bookbinders Are Getting Ready|Payment processing';/);
   assert.doesNotMatch(confirmationScript, /product_description|formatCents/);
 });
