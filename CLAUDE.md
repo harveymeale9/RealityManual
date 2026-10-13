@@ -18272,3 +18272,51 @@ Regression coverage checks that the Final Check source contains no visibility
 selector or client-owned privacy payload, that Harvey's server policy is Public,
 and that the reviewer policy remains Private. The complete ops-service suite
 passes (191 tests), and both changed JavaScript entry points pass syntax checks.
+
+---
+
+# 577. Rolling Publishing Queue Between Final Check and Scheduled (2026-10-13)
+
+Harvey wanted an approved reserve large enough for meaningful ordering before
+anything is committed to a platform schedule. The pipeline now has an automatic
+**Publishing Queue** stage between Final Check and Scheduled. Harvey's card
+action is now **Send to Publishing Queue**. It snapshots the already reviewed
+title, captions, destinations, and server-owned Public YouTube policy, then
+moves the card into that reserve without contacting Buffer or any publishing
+API. The restricted YouTube reviewer flow deliberately bypasses this reserve so
+Google's compliance account still performs its isolated Private test action.
+
+Content Settings now contains one **Pre-schedule queue length** dropdown. It
+defaults to 10 and offers 5, 6, 7, 8, 9, 10, 12, 15, and 20. The number means
+"keep this many approved videos unscheduled." With a target of eight, the first
+eight approvals wait; approving a ninth selects one item for Scheduled and
+leaves eight behind. Lowering the setting drains excess immediately, while
+raising it pauses new scheduling until the larger reserve refills. Only approved
+Publishing Queue cards count; raw uploads, Editor work, Production work, and
+unchecked Final Check videos do not.
+
+Selection is server-side and restart-safe. At a target of ten the reserve aims
+to retain three longforms plus seven short-form videos; at eight it aims for two
+plus six. It does not block when Harvey's available mix differs. The excess
+format is considered first, then candidates are scored using: transcript/title
+topic similarity against recent Scheduled/Live work, a strong penalty for
+repeating the most recently scheduled short length, lighter recent-length
+penalties, and a small oldest-first bias. This lets a genuinely better topic or
+format order beat blind FIFO while keeping the newest approvals in reserve when
+choices are otherwise equal. The selected card then enters the existing proven
+slot planner, which still chooses the exact Buffer/Bangkok short-form slot or
+three-day longform slot and applies cross-format topic spacing.
+
+Queued destination payloads and queue audit data are server-owned, so an old
+browser write cannot erase or rewrite them. Failed media archival or Buffer
+queueing returns the affected card to Final Check with its visible error rather
+than shrinking the reserve silently. A serialized drain prevents simultaneous
+approvals from scheduling too many cards, runs after each approval or setting
+change, and resumes on service startup without needing a browser tab open. No
+real video was queued or scheduled during implementation.
+
+Focused regressions cover default/range normalization, ten-video longform
+reserve composition, short-form reserve composition, recent-length alternation,
+topic avoidance, oldest-first ties, the new stage/control, and removal of the
+old direct scheduling action. The complete ops-service suite passes (197 tests),
+and the touched browser/server JavaScript passes syntax validation.

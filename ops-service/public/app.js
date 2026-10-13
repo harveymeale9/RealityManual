@@ -1647,8 +1647,8 @@
 
   // Replaces the old "Thumbnail Selected" stage-derivation (deriveAndApplyStage) —
   // a video piece's *stage* is now fully explicit (In Production -> Final Check
-  // -> Scheduled -> Live, moved only by Harvey hitting "Send to final
-  // check" / "Approve," never automatically), but these three tags still
+  // -> Publishing Queue -> Scheduled -> Live, moved by explicit review and
+  // the rolling reserve scheduler), but these three tags still
   // want to reflect field state automatically, recomputed from scratch
   // every time rather than tracked incrementally — so unpicking a
   // thumbnail/audio/title also correctly drops its tag again.
@@ -2364,6 +2364,8 @@
     stageReadout.textContent = stageLabelOf(p.stage);
     if (p.stage === 'scheduled' && p.scheduledAt) {
       scheduleStatus.textContent = 'Scheduled for ' + fmtFull(p.scheduledAt);
+    } else if (p.stage === 'publishing_queue') {
+      scheduleStatus.textContent = 'Approved and waiting in Publishing Queue.';
     } else if (p.stage === 'live') {
       scheduleStatus.textContent = p.scheduledAt ? ('Posted ' + fmtFull(p.scheduledAt)) : 'Posted — connect an API in Settings to confirm.';
     } else if (p.stage === 'final_check') {
@@ -2762,7 +2764,7 @@
   // just enough to survive re-renders within the same page session.
   var fcCaptionTab = {};
   // Fetched once in bootContentOps (mirrors boardSettingsCache just above)
-  // so a Final Check card's "Schedule Video" button can tell whether
+  // so a Final Check card's publishing-queue button can tell whether
   // there's actually a connected account to publish to, without every
   // card making its own request.
   var youtubeStatusCache = null;
@@ -2784,6 +2786,7 @@
     var now = Date.now();
     var tiles = Store.CONTENT_TYPES.map(function (ct) {
       var items = Object.keys(pieces).map(function (k) { return pieces[k]; }).filter(function (p) { return p.contentType === ct.id && p.hasVideo; });
+      var queued = items.filter(function (p) { return p.stage === 'publishing_queue'; });
       var scheduled = items.filter(function (p) { return p.stage === 'scheduled'; });
       var live = items.filter(function (p) { return p.stage === 'live'; });
       var furthest = 0;
@@ -2795,6 +2798,7 @@
       });
       return '<div class="overview-tile">' +
         '<div class="overview-tile-head"><span class="dot" style="background:' + ct.color + '"></span>' + ct.label + '</div>' +
+        '<div class="overview-tile-sub2">' + queued.length + ' in publishing queue</div>' +
         '<div class="overview-tile-stat"><span class="n">' + scheduled.length + '</span> scheduled</div>' +
         '<div class="overview-tile-sub">' + (scheduled.length ? furthest.toFixed(1) + ' days out' : 'nothing queued') + '</div>' +
         '<div class="overview-tile-sub2">' + live.length + ' posted</div>' +
@@ -3028,7 +3032,7 @@
         titlesHtml +
         fcCaptionSectionHtml(id, piece, boardSettingsCache) +
         '<div class="chip-row">' + chipHtml(piece, { hideVideoChip: true }) + '</div>' +
-        // "Schedule Video" (below) is the one and only action on this
+        // "Send to Publishing Queue" (below) is the one and only action on this
         // card now — the old separate "Approve → Scheduled" button
         // (§111's original cadence-only approval, pre-dating any real
         // publish integration) used to sit right next to it, which
@@ -3080,17 +3084,18 @@
     return !!(cache && cache.connected);
   }
 
-  // "Schedule Video" is the single action covering every wired platform a
+  // This is the single action covering every wired platform a
   // piece is tagged for. The backend owns release timing, topic separation,
   // and visibility. Final Check therefore offers no misleading per-card
   // privacy choice: Harvey's YouTube releases are always Public, while the
   // separately restricted reviewer account remains Private server-side.
   function fcScheduleVideoHtml(id, piece) {
+    var actionLabel = IS_REVIEWER ? 'Schedule Video' : 'Send to Publishing Queue';
     // A reviewer session can only ever schedule a piece it made itself —
     // server.js enforces this too (real 403 on the publish routes), this
     // just avoids offering a button that would fail.
     if (!canEditPiece(piece)) {
-      return '<div class="fc-yt-publish"><button type="button" class="btn-secondary" disabled title="You can only publish a video you uploaded yourself">Schedule Video</button></div>';
+      return '<div class="fc-yt-publish"><button type="button" class="btn-secondary" disabled title="You can only publish a video you uploaded yourself">' + actionLabel + '</button></div>';
     }
     var wiredPlatforms = effectiveWiredPlatforms();
     var platforms = piece.platforms || [];
@@ -3115,7 +3120,7 @@
     if (!wired.length) {
       return '' +
         '<div class="fc-yt-publish">' +
-          '<button type="button" class="btn-secondary" disabled title="None of this piece\'s selected platforms can be published yet">Schedule Video</button>' +
+          '<button type="button" class="btn-secondary" disabled title="None of this piece\'s selected platforms can be published yet">' + actionLabel + '</button>' +
           notWiredNote +
         '</div>';
     }
@@ -3126,7 +3131,7 @@
     return '' +
       '<div class="fc-yt-publish">' +
         '<button type="button" class="btn-secondary fc-yt-publish-btn" data-id="' + id + '"' + disabledAttr + '>' +
-          (erroredPlatforms.length ? 'Retry' : 'Schedule Video') +
+          (erroredPlatforms.length ? 'Retry' : actionLabel) +
         '</button>' +
         notWiredNote +
         errorHtml +
@@ -3376,7 +3381,7 @@
         var title = (p.ytTitles && p.ytTitles[0]) || p.title || 'Untitled';
 
         btn.disabled = true;
-        btn.textContent = 'Publishing…';
+        btn.textContent = IS_REVIEWER ? 'Publishing…' : 'Sending…';
         var unpublishedPlatforms = platforms.filter(function (platform) { return p[publishStatusFieldFor(platform)] !== 'done'; });
         unpublishedPlatforms.forEach(function (platform) { p[publishStatusFieldFor(platform)] = 'pending'; });
         pieces[id] = p;
@@ -3625,7 +3630,7 @@
   var youtubePublishPollTimer = null;
   var contentOpsRefreshTimer = null;
 
-  // Buffer publishes later, independently of the browser tab that queued
+  // The rolling reserve and Buffer publish later, independently of the browser tab that queued
   // the post. Refresh the board while it is open so Scheduled -> Posted/Live
   // and newly available metrics appear without a manual reload.
   function startContentOpsRefresh() {
@@ -4874,6 +4879,11 @@
         '<p class="settings-hint">Every short-form piece uses one shared slot across TikTok, YouTube Shorts, Instagram and Facebook. ' +
           'TikTok remains the source of truth in Buffer; the direct platforms wait for the exact same release time. ' +
           'Longform keeps its separate rolling YouTube/Facebook timeline.</p>' +
+        '<div class="cadence-row publishing-reserve-row">' +
+          '<span class="cadence-label">Pre-schedule queue length</span>' +
+          '<span class="cadence-inputs">Keep <select class="cadence-unit" id="publishingQueueTarget"></select> approved videos in Publishing Queue</span>' +
+        '</div>' +
+        '<p class="settings-hint">When the reserve exceeds this number, Content Studio selects one video for Scheduled while preserving a useful longform/short-form mix and separating related topics. Lowering the number immediately schedules any excess; raising it lets the reserve refill.</p>' +
         '<div class="tiktok-schedule-block shortform-mirror-block">' +
           '<div class="cadence-label">Shared short-form schedule</div>' +
           '<div class="shortform-schedule-summary" id="directShortScheduleSummary">12:00 AM · 12:00 PM daily (Asia/Bangkok)</div>' +
@@ -5210,6 +5220,17 @@
     var grid = document.getElementById('cadenceGrid');
     if (!grid) return;
     var dis = IS_REVIEWER ? ' disabled' : '';
+    var queueTarget = document.getElementById('publishingQueueTarget');
+    var queueSizes = [5, 6, 7, 8, 9, 10, 12, 15, 20];
+    queueTarget.innerHTML = queueSizes.map(function (size) {
+      return '<option value="' + size + '">' + size + '</option>';
+    }).join('');
+    queueTarget.value = String(settingsCache.publishingQueueTarget || 10);
+    queueTarget.disabled = IS_REVIEWER;
+    queueTarget.addEventListener('change', function () {
+      settingsCache.publishingQueueTarget = Math.max(1, Math.min(30, parseInt(queueTarget.value, 10) || 10));
+      saveSettingsDebounced();
+    });
     grid.innerHTML = '<div class="cadence-row" data-key="longform">' +
       '<span class="cadence-label">Direct longform <span class="ink-faint">(YouTube / Facebook)</span></span>' +
       '<span class="cadence-inputs">Every 3 days at <input type="time" class="cadence-time" id="longformScheduleTime" value="' +

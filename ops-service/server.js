@@ -41,6 +41,7 @@ const metaPublisherService = require('./src/metaPublisher');
 const shortformSchedule = require('./src/shortformSchedule');
 const topicSchedule = require('./src/topicSchedule');
 const publishPolicy = require('./src/publishPolicy');
+const publishingQueue = require('./src/publishingQueue');
 const videoEditorService = require('./src/videoEditorService');
 const productionAudioPreviewService = require('./src/productionAudioPreviews');
 const editorRetakeAnalysis = require('./src/editorRetakeAnalysis');
@@ -1525,12 +1526,17 @@ app.get('/api/store/:storeName/:id', function (req, res) {
 // click, including a retry after a failure, and protecting it would
 // silently break that reset.
 const SERVER_OWNED_PIECE_FIELDS = [
-  'analysisStatus', 'analysisError', 'analysisMatchedPieceId', 'stage'
+  'analysisStatus', 'analysisError', 'analysisMatchedPieceId', 'stage',
+  'queuedPublishDestinations', 'publishingQueuedAt', 'publishingDequeuedAt',
+  'publishingQueueSelection', 'publishBatchPlatforms'
 ];
 app.put('/api/store/:storeName/:id', function (req, res) {
   const { storeName, id } = req.params;
   if (!isValidStore(storeName) || !isValidId(id)) return res.status(400).json({ error: 'invalid_params' });
   if (!req.body || typeof req.body !== 'object') return res.status(400).json({ error: 'invalid_body' });
+  if (storeName === 'settings') {
+    req.body.publishingQueueTarget = publishingQueue.normalizeTarget(req.body.publishingQueueTarget);
+  }
 
   let existingPiece = null;
   let existingPieceRow = null;
@@ -1616,6 +1622,7 @@ app.put('/api/store/:storeName/:id', function (req, res) {
     }
   }
   res.json(record);
+  if (storeName === 'settings' && req.sessionRole !== 'youtube-reviewer') schedulePublishingQueueDrain();
 });
 
 app.delete('/api/store/:storeName/:id', function (req, res) {
@@ -2789,6 +2796,66 @@ function topicAwarePublishingSlot(piece, candidates, pieces) {
   };
 }
 
+function publishingQueueTarget() {
+  const row = stmts.getOne.get('settings', 'settings');
+  let settings = {};
+  try { settings = row ? JSON.parse(row.data) : {}; } catch (error) { settings = {}; }
+  return publishingQueue.normalizeTarget(settings.publishingQueueTarget);
+}
+
+let publishingQueueDrainRunning = false;
+let publishingQueueDrainRequested = false;
+
+async function drainPublishingQueue() {
+  for (;;) {
+    const pieces = allPieceRecords();
+    const queued = pieces.filter(function (piece) {
+      return piece.stage === 'publishing_queue' && Array.isArray(piece.queuedPublishDestinations) && piece.queuedPublishDestinations.length;
+    });
+    const target = publishingQueueTarget();
+    if (queued.length <= target) return;
+    const selection = publishingQueue.chooseCandidate(queued, pieces, target);
+    if (!selection || !selection.piece) return;
+    const candidate = getPieceRecord(selection.piece.id);
+    if (!candidate || candidate.stage !== 'publishing_queue' || !Array.isArray(candidate.queuedPublishDestinations) || !candidate.queuedPublishDestinations.length) continue;
+
+    candidate.publishingQueueSelection = {
+      selectedAt: new Date().toISOString(),
+      target: target,
+      score: Math.round(selection.score * 1000) / 1000,
+      topicSimilarity: Math.round(selection.strongestTopicMatch * 1000) / 1000,
+      typePenalty: Math.round(selection.typePenalty * 1000) / 1000,
+      ageRank: selection.ageRank
+    };
+    candidate.queuedPublishDestinations.forEach(function (destination) {
+      candidate[publishStatusField(destination.platform)] = 'pending';
+      candidate[publishErrorField(destination.platform)] = '';
+    });
+    candidate.updatedAt = new Date().toISOString();
+    savePieceRecord(candidate);
+    await runPlatformPublishBatch(candidate.id, candidate.queuedPublishDestinations);
+  }
+}
+
+function schedulePublishingQueueDrain() {
+  publishingQueueDrainRequested = true;
+  if (publishingQueueDrainRunning) return;
+  publishingQueueDrainRunning = true;
+  setImmediate(async function runRequestedDrains() {
+    try {
+      while (publishingQueueDrainRequested) {
+        publishingQueueDrainRequested = false;
+        await drainPublishingQueue();
+      }
+    } catch (error) {
+      console.error('publishing queue drain failed:', error.message);
+    } finally {
+      publishingQueueDrainRunning = false;
+      if (publishingQueueDrainRequested) schedulePublishingQueueDrain();
+    }
+  });
+}
+
 async function runPlatformPublishBatch(id, destinations) {
   const finalPath = path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX);
   const openingPiece = getPieceRecord(id);
@@ -2798,6 +2865,7 @@ async function runPlatformPublishBatch(id, destinations) {
       const fields = {}; fields[publishStatusField(destination.platform)] = 'error'; fields[publishErrorField(destination.platform)] = 'finished video not found on disk';
       updatePieceFields(id, fields);
     });
+    updatePieceFields(id, { stage: 'final_check', queuedPublishDestinations: [] });
     return;
   }
   // Archive before assigning a future release time. A schedule is only
@@ -2811,7 +2879,7 @@ async function runPlatformPublishBatch(id, destinations) {
       fields[publishErrorField(destination.platform)] = 'R2 storage failed: ' + String(error.message || error).slice(0, 450);
       updatePieceFields(id, fields);
     });
-    updatePieceFields(id, { stage: 'final_check' });
+    updatePieceFields(id, { stage: 'final_check', queuedPublishDestinations: [] });
     return;
   }
   const videoRow = stmts.getOne.get('videos', id + FINAL_VIDEO_SUFFIX);
@@ -2848,6 +2916,8 @@ async function runPlatformPublishBatch(id, destinations) {
     latest.stage = 'scheduled';
     latest.directLongformPublishStatus = 'scheduled';
     latest.scheduledPublishDestinations = destinations;
+    latest.queuedPublishDestinations = [];
+    latest.publishingDequeuedAt = new Date().toISOString();
     latest.topicSchedule = scheduled.diagnostic;
     latest.directLongformReleaseRunning = false;
     destinations.forEach(function (destination) {
@@ -2901,7 +2971,8 @@ async function runPlatformPublishBatch(id, destinations) {
         updatePieceFields(id, {
           tiktokPublishStatus: 'error',
           tiktokPublishError: String(error.message || error).slice(0, 500),
-          stage: 'final_check'
+          stage: 'final_check',
+          queuedPublishDestinations: []
         });
         return;
       }
@@ -2913,6 +2984,8 @@ async function runPlatformPublishBatch(id, destinations) {
     latest.stage = 'scheduled';
     latest.directShortPublishStatus = directDestinations.length ? 'scheduled' : 'not_required';
     latest.scheduledPublishDestinations = directDestinations;
+    latest.queuedPublishDestinations = [];
+    latest.publishingDequeuedAt = new Date().toISOString();
     latest.topicSchedule = scheduled.diagnostic;
     latest.directShortReleaseRunning = false;
     directDestinations.forEach(function (destination) {
@@ -2993,6 +3066,8 @@ async function runPlatformPublishBatch(id, destinations) {
 
   const latest = getPieceRecord(id);
   if (!latest) return;
+  latest.queuedPublishDestinations = [];
+  latest.publishingDequeuedAt = new Date().toISOString();
   const allPlatforms = Array.isArray(latest.publishBatchPlatforms) ? latest.publishBatchPlatforms : destinations.map(function (d) { return d.platform; });
   const hasError = allPlatforms.some(function (platform) { return latest[publishStatusField(platform)] === 'error'; });
   const allDone = allPlatforms.every(function (platform) { return latest[publishStatusField(platform)] === 'done'; });
@@ -3102,14 +3177,30 @@ app.post('/api/publish/:id', requireAuthOrReviewer, async function (req, res) {
   }
 
   piece.publishBatchPlatforms = uniquePublishDestinations(selected.filter(function (platform) { return PUBLISH_PLATFORMS.includes(platform); }).map(function (platform) { return { platform: platform }; })).map(function (d) { return d.platform; });
+  const reviewerPublish = req.sessionRole === 'youtube-reviewer';
   destinations.forEach(function (destination) {
-    piece[publishStatusField(destination.platform)] = 'pending';
+    piece[publishStatusField(destination.platform)] = reviewerPublish ? 'pending' : 'queued';
     piece[publishErrorField(destination.platform)] = '';
   });
+  if (!reviewerPublish) {
+    const queueOrders = allPieceRecords().filter(function (other) { return other.stage === 'publishing_queue'; })
+      .map(function (other) { return Number(other.order) || 0; });
+    piece.stage = 'publishing_queue';
+    piece.order = (queueOrders.length ? Math.max.apply(Math, queueOrders) : 0) + 10;
+    piece.publishingQueuedAt = piece.publishingQueuedAt || new Date().toISOString();
+    piece.queuedPublishDestinations = destinations;
+  }
   piece.updatedAt = new Date().toISOString();
   savePieceRecord(piece);
-  res.json({ ok: true, status: 'running', platforms: destinations.map(function (d) { return d.platform; }) });
-  runPlatformPublishBatch(id, destinations).catch(function (error) { console.error('unhandled multi-platform publish error for ' + id + ':', error.message); });
+  res.json({
+    ok: true,
+    status: reviewerPublish ? 'running' : 'queued',
+    stage: reviewerPublish ? piece.stage : 'publishing_queue',
+    queueTarget: reviewerPublish ? null : publishingQueueTarget(),
+    platforms: destinations.map(function (d) { return d.platform; })
+  });
+  if (reviewerPublish) runPlatformPublishBatch(id, destinations).catch(function (error) { console.error('unhandled reviewer publish error for ' + id + ':', error.message); });
+  else schedulePublishingQueueDrain();
 });
 
 // --- Voice app: talk to the headless Codex Project Manager by voice or text ---
@@ -4030,6 +4121,7 @@ const httpServer = app.listen(PORT, function () {
   console.log('rm-ops-service listening on ' + PORT);
   recoverInflightVoiceMessages();
   recoverInflightVideoJobs();
+  schedulePublishingQueueDrain();
   releaseDueDirectPosts().catch(function (error) { console.error('initial direct release check failed:', error.message); });
   setInterval(function () {
     releaseDueDirectPosts().catch(function (error) { console.error('direct release check failed:', error.message); });

@@ -149,7 +149,8 @@ window.RMStore = (function () {
   // Harvey explicitly sends it for review (thumbnail/audio/titles all
   // picked) and before he approves it into "Scheduled"; approving is what
   // actually assigns its scheduledAt now, not picking a thumbnail/audio
-  // combination automatically the way it used to.
+  // combination automatically the way it used to. Publishing Queue is the
+  // rolling approved reserve between Final Check and Scheduled.
   var STAGES = [
     { id: 'archived', label: 'Archived Ideas' },
     { id: 'ideation', label: 'Rough Ideas' },
@@ -161,6 +162,7 @@ window.RMStore = (function () {
     { id: 'in_editor', label: 'In Editor' },
     { id: 'in_production', label: 'In Production' },
     { id: 'final_check', label: 'Final Check' },
+    { id: 'publishing_queue', label: 'Publishing Queue' },
     { id: 'scheduled', label: 'Scheduled' },
     { id: 'live', label: 'Posted / Live' },
     { id: 'removed', label: 'Deleted / Removed / Private' }
@@ -206,6 +208,7 @@ window.RMStore = (function () {
       id: SETTINGS_ID,
       cadence: JSON.parse(JSON.stringify(DEFAULT_CADENCE)),
       longformScheduleTime: '07:55',
+      publishingQueueTarget: 10,
       lastShortType: '',
       // Captions are organized by content shape, per Harvey (2026-09-20) —
       // one field per platform that shape can actually be tagged with,
@@ -297,6 +300,8 @@ window.RMStore = (function () {
       s.musicDuckingEnabled = s.musicDuckingEnabled === true;
       if (typeof s.baseLinkUrl !== 'string') s.baseLinkUrl = d.baseLinkUrl;
       if (typeof s.lastShortType !== 'string') s.lastShortType = '';
+      var queueTarget = Math.round(Number(s.publishingQueueTarget));
+      s.publishingQueueTarget = Number.isFinite(queueTarget) ? Math.max(1, Math.min(30, queueTarget)) : d.publishingQueueTarget;
       if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(s.longformScheduleTime || ''))) s.longformScheduleTime = d.longformScheduleTime;
       return s;
     });
