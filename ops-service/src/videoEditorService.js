@@ -785,7 +785,10 @@ function retakeMarkerDecisions(words) {
     if (!RETAKE_MARKER_FIRST_WORDS.has(retakeMarkerToken(timedWords[markerStart] && timedWords[markerStart].text)) ||
         !RETAKE_MARKER_SECOND_WORDS.has(retakeMarkerToken(timedWords[markerStart + 1] && timedWords[markerStart + 1].text))) continue;
     const markerEnd = markerStart + 1;
-    let attemptStart = markerStart;
+    // Always include the immediately preceding spoken attempt, even if Harvey
+    // paused while deciding to call the retake. Pauses *within* that preceding
+    // speech still delimit it from the earlier, valid material.
+    let attemptStart = markerStart > previousMarkerEnd + 1 ? markerStart - 1 : markerStart;
     // The marked mistake is the current spoken attempt: walk back to the
     // latest natural pause, without ever crossing an earlier marker.
     while (attemptStart > previousMarkerEnd + 1) {

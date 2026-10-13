@@ -18452,6 +18452,9 @@ start back to the latest natural speech break, removes the marker itself, and
 keeps the clean take beginning immediately after it. This runs locally as soon
 as transcription finishes, independently of the semantic AI retake reviewer,
 so a provider miss or failure cannot leave the marked mistake in the edit.
+The marker deliberately crosses a pause immediately before the phrase because
+Harvey may stop to decide that a retake is needed; the earlier pause before the
+failed attempt remains its safe boundary.
 
 Marker cuts use the existing transcript-deletion behavior: all speech and dead
 space between the surrounding kept words is removed while retaining 70 ms at
