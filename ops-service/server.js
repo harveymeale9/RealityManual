@@ -2814,8 +2814,23 @@ async function drainPublishingQueue() {
     });
     const target = publishingQueueTarget();
     if (queued.length <= target) return;
-    const selection = publishingQueue.chooseCandidate(queued, pieces, target);
+    const plan = publishingQueue.planQueue(queued, pieces, target);
+    const selection = plan && plan[0];
     if (!selection || !selection.piece) return;
+
+    // Reorder only at the same overflow moment that releases a video. Below
+    // or at capacity, approvals retain their original order and no planning
+    // work is performed. The remaining cards show Harvey the current planned
+    // sequence, but the next overflow is free to recalculate it from the now
+    // newer publishing history.
+    plan.forEach(function (planned, index) {
+      const current = getPieceRecord(planned.piece.id);
+      if (!current || current.stage !== 'publishing_queue') return;
+      current.order = (index + 1) * 10;
+      current.updatedAt = new Date().toISOString();
+      savePieceRecord(current);
+    });
+
     const candidate = getPieceRecord(selection.piece.id);
     if (!candidate || candidate.stage !== 'publishing_queue' || !Array.isArray(candidate.queuedPublishDestinations) || !candidate.queuedPublishDestinations.length) continue;
 

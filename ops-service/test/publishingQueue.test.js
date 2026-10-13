@@ -57,3 +57,26 @@ test('equally suitable candidates release the oldest approval first', function (
   const selected = queue.chooseCandidate(items, [], 1);
   assert.equal(selected.piece.id, 'old');
 });
+
+test('queue planning does nothing until the reserve is exceeded', function () {
+  const items = [];
+  for (let index = 0; index < 10; index++) items.push(piece('s' + index, 'short', index));
+  assert.equal(queue.planQueue(items.slice(0, 9), [], 10), null);
+  assert.equal(queue.planQueue(items, [], 10), null);
+});
+
+test('an overflow plans every card and releases the first planned item', function () {
+  const items = [
+    piece('l1', 'longform', 1), piece('l2', 'longform', 2), piece('l3', 'longform', 3)
+  ];
+  for (let index = 0; index < 8; index++) {
+    items.push(piece('s' + index, index % 2 ? 'short' : 'long_short', index + 4, 'topic ' + index));
+  }
+
+  const plan = queue.planQueue(items, [], 10);
+  const selected = queue.chooseCandidate(items, [], 10);
+  assert.equal(plan.length, 11);
+  assert.equal(new Set(plan.map(function (entry) { return entry.piece.id; })).size, 11);
+  assert.equal(selected.piece.id, plan[0].piece.id);
+  assert.notEqual(plan[0].piece.contentType, 'longform');
+});

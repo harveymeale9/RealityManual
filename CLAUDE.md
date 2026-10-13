@@ -18358,3 +18358,28 @@ showed the complete source and caption within the phone width.
 The root homepage and `/home2/` alias now begin their FAQ with **How long is
 the book?** and the concise answer **It's 185 pages.** The existing shipping
 and returns questions keep their established order beneath it.
+
+---
+
+# 580. Publishing Queue Plans Only When Its Reserve Overflows (2026-10-13)
+
+Harvey clarified that a ten-video Publishing Queue is an uncommitted reserve,
+not a schedule that needs continuous reshuffling. The existing drain already
+left ten or fewer approvals untouched; this change makes the ordering behavior
+match the same boundary. Cards retain their arrival order while the queue is at
+or below its configured target. No topic or format plan is generated then.
+
+When the eleventh card enters a ten-card queue, the server now calculates one
+complete best-current sequence across all eleven cards. It still protects the
+intended longform/short-form reserve mix, and evaluates topic similarity,
+recent short length, and approval age. The first planned card is sent through
+the existing topic-aware slot scheduler immediately, while the other ten have
+their Kanban order updated to show the current planned sequence. The next card
+that causes another overflow triggers a fresh calculation using the newer
+Scheduled/Live history. The visible order is therefore useful guidance, not a
+prematurely frozen campaign calendar.
+
+This does not publish or queue any real video during deployment. Focused tests
+verify that nine and ten cards produce no plan, an eleven-card overflow plans
+every card exactly once, and the selected release matches the plan's first
+item. The complete ops-service suite passes with 199 tests.

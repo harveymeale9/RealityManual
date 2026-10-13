@@ -34,13 +34,13 @@ function candidatePool(queue, target) {
   return queue.slice();
 }
 
-function chooseCandidate(queue, allPieces, targetValue) {
-  const target = normalizeTarget(targetValue);
-  if (!Array.isArray(queue) || queue.length <= target) return null;
-  const candidates = candidatePool(queue, target);
-  const history = (allPieces || []).filter(function (piece) {
+function publicationHistory(allPieces) {
+  return (allPieces || []).filter(function (piece) {
     return piece && (piece.stage === 'scheduled' || piece.stage === 'live') && publishedAt(piece) !== null;
   }).sort(function (a, b) { return publishedAt(b) - publishedAt(a); }).slice(0, 24);
+}
+
+function bestCandidate(candidates, queue, history) {
   const recentShorts = history.filter(function (piece) {
     return SHORT_TYPES.indexOf(piece.contentType) !== -1;
   }).slice(0, 4);
@@ -69,8 +69,38 @@ function chooseCandidate(queue, allPieces, targetValue) {
   })[0];
 }
 
+// A queue plan is deliberately generated only when the reserve overflows.
+// The first item is released now; the rest become the visible best-current
+// sequence. The next overflow recalculates from fresh Scheduled/Live history,
+// so this is guidance rather than a prematurely fixed publishing calendar.
+function planQueue(queue, allPieces, targetValue) {
+  const target = normalizeTarget(targetValue);
+  if (!Array.isArray(queue) || queue.length <= target) return null;
+
+  const remaining = queue.slice();
+  const history = publicationHistory(allPieces);
+  const plan = [];
+
+  while (remaining.length) {
+    const candidates = plan.length ? remaining : candidatePool(remaining, target);
+    const selected = bestCandidate(candidates, remaining, history);
+    if (!selected || !selected.piece) break;
+    plan.push(selected);
+    remaining.splice(remaining.indexOf(selected.piece), 1);
+    history.unshift(selected.piece);
+  }
+
+  return plan;
+}
+
+function chooseCandidate(queue, allPieces, targetValue) {
+  const plan = planQueue(queue, allPieces, targetValue);
+  return plan && plan.length ? plan[0] : null;
+}
+
 module.exports = {
   SHORT_TYPES: SHORT_TYPES,
   normalizeTarget: normalizeTarget,
+  planQueue: planQueue,
   chooseCandidate: chooseCandidate
 };
