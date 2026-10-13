@@ -22,7 +22,8 @@ const order = {
 test('confirmation email is branded, responsive, plain-text backed, and escapes customer data', () => {
   const email = orderConfirmedEmail(order, { preview: true });
   assert.equal(email.subject, 'We’re Making Your Copy of The Reality Manual.');
-  assert.match(email.html, /We’re Making Your Copy of The Reality Manual/);
+  assert.match(email.html, /We’re Making Your Copy of The Reality Manual\.<\/h1>/);
+  assert.match(email.text, /WE’RE MAKING YOUR COPY OF THE REALITY MANUAL\./);
   assert.match(email.html, /15 working days/);
   assert.match(email.html, /leading printers of bespoke books/);
   assert.match(email.html, /time and individual attention/);

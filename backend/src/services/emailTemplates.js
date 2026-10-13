@@ -129,7 +129,7 @@ function orderConfirmedEmail(order, { preview = false } = {}) {
     preview ? 'SAMPLE PREVIEW: NOT A REAL ORDER' : '',
     'THE REALITY MANUAL',
     '',
-    'WE’RE MAKING YOUR COPY OF THE REALITY MANUAL',
+    'WE’RE MAKING YOUR COPY OF THE REALITY MANUAL.',
     '',
     `Thank you, ${firstName(order.customer_name)}. Your order is confirmed, and we’re delighted to begin creating your copy of The Reality Manual.`,
     '',
@@ -150,7 +150,7 @@ function orderConfirmedEmail(order, { preview = false } = {}) {
 
   return {
     subject,
-    html: layout({ preview, preheader: 'We’re carefully creating your copy of The Reality Manual.', eyebrow: 'Order confirmed', title: 'We’re Making Your Copy of The Reality Manual', body, details, callout }),
+    html: layout({ preview, preheader: 'We’re carefully creating your copy of The Reality Manual.', eyebrow: 'Order confirmed', title: 'We’re Making Your Copy of The Reality Manual.', body, details, callout }),
     text,
   };
 }

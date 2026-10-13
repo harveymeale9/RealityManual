@@ -18683,3 +18683,11 @@ Real Chromium verification covered the initial, completed and replay states at
 1440x900 and 390x844. Both sizes had no horizontal overflow, the spinner and
 countdown appeared only in the first state, the replay restored that state, and
 the browser observed no API or analytics requests.
+
+---
+
+# 593. Confirmation Email Headline Punctuation (2026-10-13)
+
+The branded order-confirmation email headline now ends with a full stop in both
+the HTML and plain-text versions: **We’re Making Your Copy of The Reality
+Manual.** This matches the already-punctuated subject line.
