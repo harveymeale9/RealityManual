@@ -18584,3 +18584,14 @@ asset and confirmation copy remain present, no order metadata is rendered, and
 terminal polling stops. The full backend suite passes with 20 tests. The page
 was rendered in a real Chromium browser at 1440x900 and 390x844; both layouts
 show the intended state without horizontal overflow.
+
+After Harvey chose to cancel the live test purchase before retrying checkout,
+the order was audited read-only in all three systems first. Stripe showed one
+successful $82.29 charge and no prior refund, BookVault returned 404 for the
+order's `DocRef` and the local order had no `bookvault_order_id`. The backend's
+idempotent refund path then issued a full Stripe refund, changed the durable
+local status from `FULFILLMENT_RETRY` to `REFUNDED`, and sent the branded Resend
+refund email. A post-action audit confirmed Stripe reports the full refund as
+`succeeded`, BookVault still has no order, the public status endpoint reports
+`REFUNDED`, and the order is no longer eligible for a BookVault submission
+retry.
