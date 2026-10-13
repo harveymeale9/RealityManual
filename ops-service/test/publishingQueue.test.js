@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const queue = require('../src/publishingQueue');
+const NOW = Date.UTC(2026, 9, 2, 12);
 
 function piece(id, type, queuedIndex, transcript) {
   return {
@@ -40,29 +41,29 @@ test('short selection alternates length and avoids the strongest recent topic ma
     piece('fresh-long-short', 'long_short', 2, 'why mutual cooperation improves a community'),
     piece('reserve-a', 'ultra_short', 3), piece('reserve-b', 'short', 4)
   ];
-  const selected = queue.chooseCandidate(items, history, 3);
+  const selected = queue.chooseCandidate(items, history, 3, NOW);
   assert.equal(selected.piece.id, 'fresh-long-short');
 });
 
 test('equally suitable candidates release the oldest approval first', function () {
   const items = [piece('old', 'ultra_short', 1, 'unique alpha'), piece('new', 'ultra_short', 2, 'unique beta')];
-  const selected = queue.chooseCandidate(items, [], 1);
+  const selected = queue.chooseCandidate(items, [], 1, NOW);
   assert.equal(selected.piece.id, 'old');
 });
 
 test('queue planning does nothing until the reserve is exceeded', function () {
   const items = [];
   for (let index = 0; index < 10; index++) items.push(piece('s' + index, 'short', index));
-  assert.equal(queue.planQueue(items.slice(0, 9), [], 10), null);
-  assert.equal(queue.planQueue(items, [], 10), null);
+  assert.equal(queue.planQueue(items.slice(0, 9), [], 10, NOW), null);
+  assert.equal(queue.planQueue(items, [], 10, NOW), null);
 });
 
 test('a short-form overflow plans every card and releases the first planned item', function () {
   const items = [];
   for (let index = 0; index < 11; index++) items.push(piece('s' + index, index % 2 ? 'short' : 'long_short', index + 1, 'topic ' + index));
 
-  const plan = queue.planQueue(items, [], 10);
-  const selected = queue.chooseCandidate(items, [], 10);
+  const plan = queue.planQueue(items, [], 10, NOW);
+  const selected = queue.chooseCandidate(items, [], 10, NOW);
   assert.equal(plan.length, 11);
   assert.equal(new Set(plan.map(function (entry) { return entry.piece.id; })).size, 11);
   assert.equal(selected.piece.id, plan[0].piece.id);
@@ -70,6 +71,22 @@ test('a short-form overflow plans every card and releases the first planned item
 
 test('a long-form reserve can use its own four-video threshold', function () {
   const items = Array.from({ length: 5 }, function (_, index) { return piece('l' + index, 'longform', index + 1, 'long topic ' + index); });
-  assert.equal(queue.planQueue(items.slice(0, 4), [], 4), null);
-  assert.equal(queue.planQueue(items, [], 4).length, 5);
+  assert.equal(queue.planQueue(items.slice(0, 4), [], 4, NOW), null);
+  assert.equal(queue.planQueue(items, [], 4, NOW).length, 5);
+});
+
+test('an approval waiting ten days becomes the mandatory next release', function () {
+  const old = piece('old-topic', 'short', 1, 'beliefs are emotional records formed from repeated experiences');
+  old.publishingQueuedAt = '2026-09-20T00:00:00.000Z';
+  const fresh = piece('fresh-topic', 'long_short', 2, 'why mutual cooperation improves a community');
+  fresh.publishingQueuedAt = '2026-10-11T00:00:00.000Z';
+  const history = [{
+    id: 'recent-match', stage: 'live', contentType: 'short', postedAt: '2026-10-11T12:00:00.000Z',
+    transcript: old.transcript
+  }];
+  const now = Date.parse('2026-10-12T12:00:00.000Z');
+  const selected = queue.chooseCandidate([old, fresh], history, 1, now);
+  assert.equal(selected.piece.id, old.id);
+  assert.equal(selected.ageForced, true);
+  assert.ok(selected.queueWaitDays >= queue.MAX_QUEUE_WAIT_DAYS);
 });

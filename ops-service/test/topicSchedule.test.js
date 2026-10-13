@@ -79,4 +79,5 @@ test('matching long-form and short-form treatments are separated across queues',
   assert.equal(selection.closestPieceId, 'long');
   assert.ok(selection.similarity >= 0.35, JSON.stringify(selection));
   assert.ok(selection.separationDays >= 8, JSON.stringify(selection));
+  assert.ok(selection.separationDays <= topicSchedule.MAX_RELATED_SEPARATION_DAYS, JSON.stringify(selection));
 });

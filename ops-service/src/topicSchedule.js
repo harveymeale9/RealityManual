@@ -1,6 +1,7 @@
 'use strict';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_RELATED_SEPARATION_DAYS = 10;
 const STOP_WORDS = new Set('a an and are as at be because been being but by can could did do does doing for from had has have he her here hers herself him himself his how i if in into is it its itself just me more most my myself no nor not of off on once only or other our ours ourselves out over own same she should so some such than that the their theirs them themselves then there these they this those through to too under until up very was we were what when where which while who whom why will with would you your yours yourself yourselves video videos reality manual people person thing things really basically kind gonna going get gets got make makes made say says said'.split(/\s+/));
 
 function clean(value) {
@@ -103,7 +104,10 @@ function chooseSlot(piece, candidates, comparisonPieces, nowMs) {
     let proximityPenalty = 0;
     comparisons.forEach(function (other) {
       const distanceDays = Math.abs(slot - other.time) / DAY_MS;
-      const desiredDays = 2 + other.similarity * 14;
+      // Related long/short treatments need breathing room, but delaying one
+      // farther and farther defeats the feedback value of early videos. Aim
+      // for at most ten days, then prefer the earliest eligible slot.
+      const desiredDays = Math.min(MAX_RELATED_SEPARATION_DAYS, 2 + other.similarity * 14);
       const shortfall = Math.max(0, (desiredDays - distanceDays) / desiredDays);
       proximityPenalty += other.similarity * shortfall * shortfall * 4;
       if (other.similarity >= 0.35 && distanceDays < 1) proximityPenalty += other.similarity * 3;
@@ -128,4 +132,11 @@ function chooseSlot(piece, candidates, comparisonPieces, nowMs) {
   };
 }
 
-module.exports = { clean: clean, tokens: tokens, similarity: similarity, chooseSlot: chooseSlot, publicationTime: publicationTime };
+module.exports = {
+  MAX_RELATED_SEPARATION_DAYS: MAX_RELATED_SEPARATION_DAYS,
+  clean: clean,
+  tokens: tokens,
+  similarity: similarity,
+  chooseSlot: chooseSlot,
+  publicationTime: publicationTime
+};

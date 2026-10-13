@@ -2829,7 +2829,7 @@ async function drainPublishingQueue() {
     if (!queues.length) return;
     const activeQueue = queues[0];
     const target = activeQueue.target;
-    const plan = publishingQueue.planQueue(activeQueue.pieces, pieces, target);
+    const plan = publishingQueue.planQueue(activeQueue.pieces, pieces, target, Date.now());
     const selection = plan && plan[0];
     if (!selection || !selection.piece) return;
 
@@ -2855,7 +2855,9 @@ async function drainPublishingQueue() {
       score: Math.round(selection.score * 1000) / 1000,
       topicSimilarity: Math.round(selection.strongestTopicMatch * 1000) / 1000,
       typePenalty: Math.round(selection.typePenalty * 1000) / 1000,
-      ageRank: selection.ageRank
+      ageRank: selection.ageRank,
+      ageForced: selection.ageForced === true,
+      queueWaitDays: Math.round(selection.queueWaitDays * 10) / 10
     };
     candidate.queuedPublishDestinations.forEach(function (destination) {
       candidate[publishStatusField(destination.platform)] = 'pending';

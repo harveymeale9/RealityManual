@@ -18408,10 +18408,35 @@ Live videos. If a long-form treatment is already scheduled, a matching short
 is pushed to a distant eligible short-form slot, and the reverse is also true.
 When both reserves overflow together, releases are processed serially so the
 second decision sees the first one's newly assigned slot. A focused regression
-using matching long-form and short-form transcripts produces an eleven-day
-separation rather than adjacent releases.
+using matching long-form and short-form transcripts keeps them well separated
+rather than allowing adjacent releases.
 
 The live database contained zero Publishing Queue cards before this migration,
 so deploying the new defaults cannot unexpectedly schedule existing work. The
 complete ops-service suite passes with 200 tests; no real card or publishing
 API was touched during verification.
+
+---
+
+# 582. Ten-Day Anti-Starvation Guard for Publishing Queues (2026-10-13)
+
+Queue selection now treats `publishingQueuedAt` as a hard fairness signal, not
+only a small scoring preference. Topic variety, short length alternation, and
+approval age still determine the best next item during the first ten days. Once
+the oldest card in an overflowing long-form or short-form reserve has waited
+ten days, that card becomes the mandatory next release from its queue. Newer
+uploads therefore cannot repeatedly leapfrog an early approval forever. The
+selection audit stored on the card records whether this age guard fired and
+the measured queue wait in days.
+
+Cross-format topic spacing now aims for no more than ten days. A matching short
+and long-form video still receive meaningful separation, but the optimizer
+prefers the earliest eligible slot once that gap has been achieved rather than
+continually pushing the second treatment farther into the future. Cadence and
+occupied slots can make the nearest real slot slightly later, but there is no
+intentional benefit to delaying beyond the ten-day target. The paired-topic
+regression that previously landed eleven days apart now lands nine days apart.
+
+Focused tests prove both the hard ten-day oldest-card selection and the capped
+cross-format separation. The live Publishing Queue was empty before this
+change, so deployment cannot reschedule existing cards.
