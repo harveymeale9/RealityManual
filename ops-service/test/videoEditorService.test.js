@@ -123,12 +123,12 @@ test('upload capacity reserves the source, one full-size render and operating sp
   assert.equal(editor.requiredEditorCapacity(2 * gib, true), 4 * gib);
 });
 
-test('batch capacity includes unfinished copies owed to earlier recordings', function () {
+test('batch capacity reserves one render for unfinished earlier recordings', function () {
   assert.equal(editor.outstandingEditorCapacity([
     { sizeBytes: 100, browserPreviewRequired: true, browserPreviewStatus: 'pending', renderStatus: '' },
     { sizeBytes: 200, browserPreviewRequired: false, renderStatus: 'ready' },
     { sizeBytes: 1000, productionPieceId: 'already-sent', renderStatus: 'ready' }
-  ]), 100 * 5 + 200 * 2);
+  ]), 100 + 200 * 2);
   assert.equal(editor.outstandingEditorCapacity([
     { sizeBytes: 100, renderSizeBytes: 25, browserPreviewRequired: true, browserPreviewStatus: 'ready', renderStatus: 'ready' }
   ]), 50);

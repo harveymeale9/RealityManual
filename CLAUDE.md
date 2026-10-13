@@ -18755,3 +18755,8 @@ low-resolution, and Production is created later from the normally much smaller
 verified render. Existing unfinished-project capacity remains additive, as do
 concurrent upload reservations. This lets the waiting 4.76GB source fit while
 still retaining more than one complete render's worth of protected workspace.
+## 598. Laptop upload batch capacity must count files that are actually still owed (2026-10-13)
+
+After the long-recording admission fix in §597, the 37-minute 4.43 GiB laptop recording uploaded successfully, but the next queued recording was still rejected. `outstandingEditorCapacity()` charged every unfinished Editor project for five additional raw-camera-sized files: a render, two later Production outputs, and a full-size browser preview. The source already occupied disk, browser previews are deliberately low-resolution, and Production files are not created until a later explicit approval. For the new 37-minute project this invented 23.8 GB of outstanding work on a host that actually had about 11.7 GB free, permanently blocking the remaining laptop queue.
+
+Outstanding capacity now reserves one source-sized future render for an unfinished Editor project. If its render is already ready, the function continues to reserve two copies using the measured render size for the later Production handoff and mixed final. The global 2 GB operating reserve covers low-resolution preview work. This preserves a conservative allowance for the next real large file while allowing sequential recordings that genuinely fit to enter Editor.

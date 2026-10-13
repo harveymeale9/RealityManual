@@ -78,15 +78,17 @@ function outstandingEditorCapacity(projects) {
     const readyRenderBytes = project.renderStatus === 'ready'
       ? Math.max(0, Number(project.renderSizeBytes) || 0)
       : 0;
-    // Production receives the verified Editor render, not the much larger raw
-    // camera source. Once that render exists, reserve its measured byte size
-    // for the Production copy and later mixed final instead of pretending both
-    // will be raw-source-sized. Before a render exists, retain the conservative
-    // source-sized estimate for those outputs.
-    let totalBytes = (readyRenderBytes || bytes) * 2;
-    if (project.renderStatus !== 'ready') totalBytes += bytes * 2;
-    if (project.browserPreviewRequired && project.browserPreviewStatus !== 'ready') totalBytes += bytes;
-    return total + totalBytes;
+    // The source is already reflected in filesystem free space. Before a
+    // render exists, the only full-size file still owed by Editor is that
+    // render itself. Scrub previews are low-resolution and fit inside the
+    // global operating reserve; Production copies are admitted later when the
+    // user actually approves the edit. Counting all of those hypothetical
+    // future files as raw-camera-sized made one long recording permanently
+    // block every later laptop upload even though the next recording fit.
+    if (project.renderStatus !== 'ready') return total + bytes;
+    // Once the real render exists, use its measured size for the Production
+    // handoff and mixed-final allowance rather than the raw camera size.
+    return total + (readyRenderBytes || bytes) * 2;
   }, 0);
 }
 
