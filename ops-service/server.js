@@ -1535,7 +1535,10 @@ app.put('/api/store/:storeName/:id', function (req, res) {
   if (!isValidStore(storeName) || !isValidId(id)) return res.status(400).json({ error: 'invalid_params' });
   if (!req.body || typeof req.body !== 'object') return res.status(400).json({ error: 'invalid_body' });
   if (storeName === 'settings') {
-    req.body.publishingQueueTarget = publishingQueue.normalizeTarget(req.body.publishingQueueTarget);
+    const legacyTarget = publishingQueue.normalizeTarget(req.body.publishingQueueTarget, 10);
+    req.body.publishingQueueShortTarget = publishingQueue.normalizeTarget(req.body.publishingQueueShortTarget, legacyTarget);
+    req.body.publishingQueueLongformTarget = publishingQueue.normalizeTarget(req.body.publishingQueueLongformTarget, 4);
+    delete req.body.publishingQueueTarget;
   }
 
   let existingPiece = null;
@@ -2796,11 +2799,15 @@ function topicAwarePublishingSlot(piece, candidates, pieces) {
   };
 }
 
-function publishingQueueTarget() {
+function publishingQueueTargets() {
   const row = stmts.getOne.get('settings', 'settings');
   let settings = {};
   try { settings = row ? JSON.parse(row.data) : {}; } catch (error) { settings = {}; }
-  return publishingQueue.normalizeTarget(settings.publishingQueueTarget);
+  const legacyTarget = publishingQueue.normalizeTarget(settings.publishingQueueTarget, 10);
+  return {
+    shortform: publishingQueue.normalizeTarget(settings.publishingQueueShortTarget, legacyTarget),
+    longform: publishingQueue.normalizeTarget(settings.publishingQueueLongformTarget, 4)
+  };
 }
 
 let publishingQueueDrainRunning = false;
@@ -2812,9 +2819,17 @@ async function drainPublishingQueue() {
     const queued = pieces.filter(function (piece) {
       return piece.stage === 'publishing_queue' && Array.isArray(piece.queuedPublishDestinations) && piece.queuedPublishDestinations.length;
     });
-    const target = publishingQueueTarget();
-    if (queued.length <= target) return;
-    const plan = publishingQueue.planQueue(queued, pieces, target);
+    const targets = publishingQueueTargets();
+    const queues = [
+      { type: 'longform', target: targets.longform, pieces: queued.filter(function (piece) { return publishingQueue.queueType(piece) === 'longform'; }) },
+      { type: 'shortform', target: targets.shortform, pieces: queued.filter(function (piece) { return publishingQueue.queueType(piece) === 'shortform'; }) }
+    ].filter(function (queue) { return queue.pieces.length > queue.target; }).sort(function (a, b) {
+      return (b.pieces.length - b.target) - (a.pieces.length - a.target) || (a.type === 'longform' ? -1 : 1);
+    });
+    if (!queues.length) return;
+    const activeQueue = queues[0];
+    const target = activeQueue.target;
+    const plan = publishingQueue.planQueue(activeQueue.pieces, pieces, target);
     const selection = plan && plan[0];
     if (!selection || !selection.piece) return;
 
@@ -3198,7 +3213,10 @@ app.post('/api/publish/:id', requireAuthOrReviewer, async function (req, res) {
     piece[publishErrorField(destination.platform)] = '';
   });
   if (!reviewerPublish) {
-    const queueOrders = allPieceRecords().filter(function (other) { return other.stage === 'publishing_queue'; })
+    const queueType = publishingQueue.queueType(piece);
+    const queueOrders = allPieceRecords().filter(function (other) {
+      return other.stage === 'publishing_queue' && publishingQueue.queueType(other) === queueType;
+    })
       .map(function (other) { return Number(other.order) || 0; });
     piece.stage = 'publishing_queue';
     piece.order = (queueOrders.length ? Math.max.apply(Math, queueOrders) : 0) + 10;
@@ -3211,7 +3229,7 @@ app.post('/api/publish/:id', requireAuthOrReviewer, async function (req, res) {
     ok: true,
     status: reviewerPublish ? 'running' : 'queued',
     stage: reviewerPublish ? piece.stage : 'publishing_queue',
-    queueTarget: reviewerPublish ? null : publishingQueueTarget(),
+    queueTargets: reviewerPublish ? null : publishingQueueTargets(),
     platforms: destinations.map(function (d) { return d.platform; })
   });
   if (reviewerPublish) runPlatformPublishBatch(id, destinations).catch(function (error) { console.error('unhandled reviewer publish error for ' + id + ':', error.message); });

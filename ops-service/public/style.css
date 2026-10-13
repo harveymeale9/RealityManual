@@ -1198,6 +1198,10 @@ body.role-reviewer #pmBackFab {
   gap: 10px;
   scrollbar-color: var(--scrollbar-thumb) transparent;
 }
+.publishing-queue-group { display: flex; flex-direction: column; gap: 10px; }
+.publishing-queue-group + .publishing-queue-group { margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--border-soft); }
+.publishing-queue-group-head { display: flex; justify-content: space-between; align-items: center; margin: 0 2px 8px; color: var(--accent); font-size: 0.62rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+.publishing-queue-empty { padding: 12px 8px; color: var(--ink-faint); font-size: 0.7rem; text-align: center; }
 .column.drag-target .column-body { background: var(--accent-soft); }
 
 .column-body::-webkit-scrollbar, .board-wrap::-webkit-scrollbar { height: 14px; width: 12px; }

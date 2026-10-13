@@ -4,9 +4,10 @@ const topicSchedule = require('./topicSchedule');
 
 const SHORT_TYPES = ['ultra_short', 'short', 'long_short'];
 
-function normalizeTarget(value) {
-  const parsed = Math.round(Number(value));
-  return Number.isFinite(parsed) ? Math.max(1, Math.min(30, parsed)) : 10;
+function normalizeTarget(value, fallbackValue) {
+  const parsed = value === null || value === undefined || value === '' ? NaN : Math.round(Number(value));
+  const fallback = Number.isFinite(Number(fallbackValue)) ? Math.round(Number(fallbackValue)) : 10;
+  return Number.isFinite(parsed) ? Math.max(1, Math.min(30, parsed)) : Math.max(1, Math.min(30, fallback));
 }
 
 function queuedAt(piece) {
@@ -18,20 +19,8 @@ function publishedAt(piece) {
   return topicSchedule.publicationTime(piece);
 }
 
-function candidatePool(queue, target) {
-  const longs = queue.filter(function (piece) { return piece.contentType === 'longform'; });
-  const shorts = queue.filter(function (piece) { return SHORT_TYPES.indexOf(piece.contentType) !== -1; });
-  const longReserve = Math.min(target, Math.max(2, Math.round(target * 0.3)));
-  const shortReserve = Math.max(0, target - longReserve);
-  const longSurplus = longs.length - longReserve;
-  const shortSurplus = shorts.length - shortReserve;
-
-  if (longSurplus > 0 || shortSurplus > 0) {
-    if (longSurplus > shortSurplus) return longs;
-    if (shortSurplus > longSurplus) return shorts;
-    return longs.concat(shorts);
-  }
-  return queue.slice();
+function queueType(piece) {
+  return piece && piece.contentType === 'longform' ? 'longform' : 'shortform';
 }
 
 function publicationHistory(allPieces) {
@@ -82,8 +71,7 @@ function planQueue(queue, allPieces, targetValue) {
   const plan = [];
 
   while (remaining.length) {
-    const candidates = plan.length ? remaining : candidatePool(remaining, target);
-    const selected = bestCandidate(candidates, remaining, history);
+    const selected = bestCandidate(remaining, remaining, history);
     if (!selected || !selected.piece) break;
     plan.push(selected);
     remaining.splice(remaining.indexOf(selected.piece), 1);
@@ -101,6 +89,7 @@ function chooseCandidate(queue, allPieces, targetValue) {
 module.exports = {
   SHORT_TYPES: SHORT_TYPES,
   normalizeTarget: normalizeTarget,
+  queueType: queueType,
   planQueue: planQueue,
   chooseCandidate: chooseCandidate
 };

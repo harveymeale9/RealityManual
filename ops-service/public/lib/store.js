@@ -208,7 +208,8 @@ window.RMStore = (function () {
       id: SETTINGS_ID,
       cadence: JSON.parse(JSON.stringify(DEFAULT_CADENCE)),
       longformScheduleTime: '07:55',
-      publishingQueueTarget: 10,
+      publishingQueueShortTarget: 10,
+      publishingQueueLongformTarget: 4,
       lastShortType: '',
       // Captions are organized by content shape, per Harvey (2026-09-20) —
       // one field per platform that shape can actually be tagged with,
@@ -300,8 +301,13 @@ window.RMStore = (function () {
       s.musicDuckingEnabled = s.musicDuckingEnabled === true;
       if (typeof s.baseLinkUrl !== 'string') s.baseLinkUrl = d.baseLinkUrl;
       if (typeof s.lastShortType !== 'string') s.lastShortType = '';
-      var queueTarget = Math.round(Number(s.publishingQueueTarget));
-      s.publishingQueueTarget = Number.isFinite(queueTarget) ? Math.max(1, Math.min(30, queueTarget)) : d.publishingQueueTarget;
+      var legacyQueueTarget = Math.round(Number(s.publishingQueueTarget));
+      var shortQueueTarget = Math.round(Number(s.publishingQueueShortTarget));
+      var longformQueueTarget = Math.round(Number(s.publishingQueueLongformTarget));
+      s.publishingQueueShortTarget = Number.isFinite(shortQueueTarget) ? Math.max(1, Math.min(30, shortQueueTarget))
+        : (Number.isFinite(legacyQueueTarget) ? Math.max(1, Math.min(30, legacyQueueTarget)) : d.publishingQueueShortTarget);
+      s.publishingQueueLongformTarget = Number.isFinite(longformQueueTarget) ? Math.max(1, Math.min(30, longformQueueTarget)) : d.publishingQueueLongformTarget;
+      delete s.publishingQueueTarget;
       if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(s.longformScheduleTime || ''))) s.longformScheduleTime = d.longformScheduleTime;
       return s;
     });

@@ -62,3 +62,21 @@ test('topic-aware scheduling sends a duplicate far away while fresh subject matt
   assert.ok(duplicate.similarity >= 0.35, JSON.stringify(duplicate));
   assert.equal(fresh.dueAt, candidates[0]);
 });
+
+test('matching long-form and short-form treatments are separated across queues', function () {
+  const now = Date.parse('2026-10-01T00:00:00Z');
+  const candidates = Array.from({ length: 18 }, function (_, index) { return new Date(now + (index + 1) * DAY).toISOString(); });
+  const scheduledLongform = [{
+    id: 'long', stage: 'scheduled', contentType: 'longform', scheduledAt: new Date(now + DAY).toISOString(),
+    title: 'Why Indiscriminate Love Creates Oneness',
+    transcript: 'Indiscriminate unconditional love creates oneness by taking every other person as oneself.'
+  }];
+  const matchingShort = {
+    id: 'short', contentType: 'short', title: 'Love Is the Practice of Oneness',
+    transcript: 'Practice unconditional indiscriminate love by taking the other person as oneself and creating oneness.'
+  };
+  const selection = topicSchedule.chooseSlot(matchingShort, candidates, scheduledLongform, now);
+  assert.equal(selection.closestPieceId, 'long');
+  assert.ok(selection.similarity >= 0.35, JSON.stringify(selection));
+  assert.ok(selection.separationDays >= 8, JSON.stringify(selection));
+});

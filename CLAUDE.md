@@ -18383,3 +18383,35 @@ This does not publish or queue any real video during deployment. Focused tests
 verify that nine and ten cards produce no plan, an eleven-card overflow plans
 every card exactly once, and the selected release matches the plan's first
 item. The complete ops-service suite passes with 199 tests.
+
+---
+
+# 581. Independent Long-form and Short-form Publishing Reserves (2026-10-13)
+
+The single mixed Publishing Queue reserve is now two logical queues because
+long-form and short-form inventory accumulate and publish on different rhythms.
+The default short-form reserve is 10 videos and the default long-form reserve
+is 4 videos. Content Settings exposes both numbers independently. Existing
+installations with the former single reserve setting migrate that value to the
+short-form reserve and receive the four-video long-form default.
+
+Each reserve retains arrival order until it exceeds its own target. The
+overflowing reserve then calculates its own complete topic/format-aware plan,
+sends the first item into scheduling, and retains the newly ordered remainder.
+An overflow in one queue never drains the other. The Publishing Queue Kanban
+column now visibly groups cards under **Long-form queue** and **Short-form
+queue**, each with its own count and planned order.
+
+The queues are separate only at the reserve and selection layer. Exact release
+times still use one cross-format topic-aware optimizer over all Scheduled and
+Live videos. If a long-form treatment is already scheduled, a matching short
+is pushed to a distant eligible short-form slot, and the reverse is also true.
+When both reserves overflow together, releases are processed serially so the
+second decision sees the first one's newly assigned slot. A focused regression
+using matching long-form and short-form transcripts produces an eleven-day
+separation rather than adjacent releases.
+
+The live database contained zero Publishing Queue cards before this migration,
+so deploying the new defaults cannot unexpectedly schedule existing work. The
+complete ops-service suite passes with 200 tests; no real card or publishing
+API was touched during verification.

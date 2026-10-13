@@ -1590,7 +1590,14 @@
   function orderedIds(stageId) {
     return Object.keys(pieces)
       .filter(function (id) { return pieces[id].stage === stageId; })
-      .sort(function (a, b) { return (pieces[a].order || 0) - (pieces[b].order || 0); });
+      .sort(function (a, b) {
+        if (stageId === 'publishing_queue') {
+          var aLong = pieces[a].contentType === 'longform' ? 0 : 1;
+          var bLong = pieces[b].contentType === 'longform' ? 0 : 1;
+          if (aLong !== bLong) return aLong - bLong;
+        }
+        return (pieces[a].order || 0) - (pieces[b].order || 0);
+      });
   }
 
   function maxOrder(stageId) {
@@ -3175,7 +3182,20 @@
       if (query) ids = ids.filter(function (id) { return pieceMatchesSearch(pieces[id], query); });
       var isAutoCol = AUTO_STAGE_IDS.indexOf(s.id) !== -1;
       var isFinalCheck = s.id === 'final_check';
-      var cards = ids.map(function (id) { return isFinalCheck ? finalCheckCardHtml(id, pieces[id]) : cardHtml(id, pieces[id]); }).join('');
+      var cards;
+      if (s.id === 'publishing_queue') {
+        var longformQueueIds = ids.filter(function (id) { return pieces[id].contentType === 'longform'; });
+        var shortformQueueIds = ids.filter(function (id) { return pieces[id].contentType !== 'longform'; });
+        var queueGroupHtml = function (label, groupIds) {
+          return '<section class="publishing-queue-group">' +
+            '<div class="publishing-queue-group-head"><span>' + label + '</span><span>' + groupIds.length + '</span></div>' +
+            (groupIds.length ? groupIds.map(function (id) { return cardHtml(id, pieces[id]); }).join('') : '<div class="publishing-queue-empty">Reserve is empty</div>') +
+          '</section>';
+        };
+        cards = queueGroupHtml('Long-form queue', longformQueueIds) + queueGroupHtml('Short-form queue', shortformQueueIds);
+      } else {
+        cards = ids.map(function (id) { return isFinalCheck ? finalCheckCardHtml(id, pieces[id]) : cardHtml(id, pieces[id]); }).join('');
+      }
       if (!cards) cards = '<div class="empty-slot">' + (isAutoCol ? 'Nothing here yet' : 'Nothing here yet') + '</div>';
       var num = String(idx + 1).padStart(2, '0');
       return '' +
@@ -4880,10 +4900,14 @@
           'TikTok remains the source of truth in Buffer; the direct platforms wait for the exact same release time. ' +
           'Longform keeps its separate rolling YouTube/Facebook timeline.</p>' +
         '<div class="cadence-row publishing-reserve-row">' +
-          '<span class="cadence-label">Pre-schedule queue length</span>' +
-          '<span class="cadence-inputs">Keep <select class="cadence-unit" id="publishingQueueTarget"></select> approved videos in Publishing Queue</span>' +
+          '<span class="cadence-label">Short-form reserve</span>' +
+          '<span class="cadence-inputs">Keep <select class="cadence-unit" id="publishingQueueShortTarget"></select> approved shorts</span>' +
         '</div>' +
-        '<p class="settings-hint">When the reserve exceeds this number, Content Studio selects one video for Scheduled while preserving a useful longform/short-form mix and separating related topics. Lowering the number immediately schedules any excess; raising it lets the reserve refill.</p>' +
+        '<div class="cadence-row publishing-reserve-row">' +
+          '<span class="cadence-label">Long-form reserve</span>' +
+          '<span class="cadence-inputs">Keep <select class="cadence-unit" id="publishingQueueLongformTarget"></select> approved long-form videos</span>' +
+        '</div>' +
+        '<p class="settings-hint">Each reserve plans and releases independently only when it exceeds its own target. The shared topic-aware scheduler still compares both formats, keeping a long video and its corresponding short as far apart as the available publishing slots allow.</p>' +
         '<div class="tiktok-schedule-block shortform-mirror-block">' +
           '<div class="cadence-label">Shared short-form schedule</div>' +
           '<div class="shortform-schedule-summary" id="directShortScheduleSummary">12:00 AM · 12:00 PM daily (Asia/Bangkok)</div>' +
@@ -5220,15 +5244,26 @@
     var grid = document.getElementById('cadenceGrid');
     if (!grid) return;
     var dis = IS_REVIEWER ? ' disabled' : '';
-    var queueTarget = document.getElementById('publishingQueueTarget');
-    var queueSizes = [5, 6, 7, 8, 9, 10, 12, 15, 20];
-    queueTarget.innerHTML = queueSizes.map(function (size) {
+    var shortQueueTarget = document.getElementById('publishingQueueShortTarget');
+    var longformQueueTarget = document.getElementById('publishingQueueLongformTarget');
+    var shortQueueSizes = [5, 6, 7, 8, 9, 10, 12, 15, 20];
+    var longformQueueSizes = [2, 3, 4, 5, 6, 8, 10, 12, 15];
+    shortQueueTarget.innerHTML = shortQueueSizes.map(function (size) {
       return '<option value="' + size + '">' + size + '</option>';
     }).join('');
-    queueTarget.value = String(settingsCache.publishingQueueTarget || 10);
-    queueTarget.disabled = IS_REVIEWER;
-    queueTarget.addEventListener('change', function () {
-      settingsCache.publishingQueueTarget = Math.max(1, Math.min(30, parseInt(queueTarget.value, 10) || 10));
+    longformQueueTarget.innerHTML = longformQueueSizes.map(function (size) {
+      return '<option value="' + size + '">' + size + '</option>';
+    }).join('');
+    shortQueueTarget.value = String(settingsCache.publishingQueueShortTarget || 10);
+    longformQueueTarget.value = String(settingsCache.publishingQueueLongformTarget || 4);
+    shortQueueTarget.disabled = IS_REVIEWER;
+    longformQueueTarget.disabled = IS_REVIEWER;
+    shortQueueTarget.addEventListener('change', function () {
+      settingsCache.publishingQueueShortTarget = Math.max(1, Math.min(30, parseInt(shortQueueTarget.value, 10) || 10));
+      saveSettingsDebounced();
+    });
+    longformQueueTarget.addEventListener('change', function () {
+      settingsCache.publishingQueueLongformTarget = Math.max(1, Math.min(30, parseInt(longformQueueTarget.value, 10) || 4));
       saveSettingsDebounced();
     });
     grid.innerHTML = '<div class="cadence-row" data-key="longform">' +
