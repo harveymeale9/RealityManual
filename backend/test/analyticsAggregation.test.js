@@ -72,3 +72,16 @@ test('checkout uses only the branded confirmation flow and confirmation omits or
   assert.doesNotMatch(confirmationScript, /Our Expert Bookbinders Are Getting Ready|Payment processing';/);
   assert.doesNotMatch(confirmationScript, /product_description|formatCents/);
 });
+
+test('test order route simulates both confirmation states without real order or analytics calls', () => {
+  const demoPage = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'testorder', 'index.html'), 'utf8');
+  const confirmationScript = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'js', 'confirmation.js'), 'utf8');
+
+  assert.match(demoPage, /data-order-demo="true"/);
+  assert.match(demoPage, /noindex, nofollow/);
+  assert.doesNotMatch(demoPage, /analytics\.js|marketing\.js/);
+  assert.match(confirmationScript, /const demoDurationSeconds = 8/);
+  assert.match(confirmationScript, /Replay demo/);
+  assert.match(confirmationScript, /if \(!isDemo\) trackOnce/);
+  assert.match(confirmationScript, /if \(!isDemo && window\.RMMarketing\)/);
+});

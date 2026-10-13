@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Order Confirmation Demo | The Reality Manual</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="icon" href="/favicon.svg?v=20261010-hands" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Archivo:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css?v=20261013-test-order-demo" />
+</head>
+<body data-order-demo="true">
+  <header class="site-header">
+    <div class="site-header__inner">
+      <a class="wordmark" href="/">The Reality Manual</a>
+    </div>
+  </header>
+
+  <main class="confirmation-page">
+    <section class="confirmation-box" id="confirmation-box" aria-live="polite">
+      <div class="confirmation-book" aria-hidden="true">
+        <img src="/img/photo/reality-manual-deluxe-hardcover-cutout.webp" alt="" width="1086" height="1448" />
+      </div>
+
+      <div class="confirmation-content">
+        <p class="eyebrow" id="status-eyebrow">Order in progress</p>
+        <div class="spinner" id="spinner"></div>
+        <h1 id="status-title">We're Confirming Your Order</h1>
+        <p id="status-message">We're confirming your payment and placing your order with our expert bookbinders now. This usually only takes a moment.</p>
+        <div id="action-area"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="footer-links">
+      <a href="/privacy.html">Privacy Policy</a>
+      <a href="/terms.html">Terms of Service</a>
+    </div>
+    &copy; <span id="year"></span> The Reality Manual. All rights reserved.
+  </footer>
+
+  <script src="/js/config.js?v=20261002-meta"></script>
+  <script src="/js/confirmation.js?v=20261013-test-order-demo"></script>
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>

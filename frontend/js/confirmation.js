@@ -11,6 +11,7 @@
 
   const params = new URLSearchParams(window.location.search);
   const orderId = params.get('order');
+  const isDemo = document.body.dataset.orderDemo === 'true';
 
   let pollCount = 0;
   let timerId = null;
@@ -23,6 +24,11 @@
     if (trackedEvent === eventName) return;
     trackedEvent = eventName;
     RMAnalytics.track(eventName, { order_id: orderIdValue });
+  }
+
+  if (isDemo) {
+    runDemo();
+    return;
   }
 
   if (!orderId) {
@@ -79,8 +85,8 @@
       statusEyebrow.textContent = 'Order confirmed';
       statusTitle.textContent = 'Our Expert Bookbinders Are Rolling Up Their Sleeves.';
       statusMessage.textContent = "Thank you! Your payment has been received and your order has been confirmed. Please bear in mind that it can take up to 15 business days for us to print your Reality Manual. We'll send you another email as soon as we ship your order!";
-      trackOnce('order_complete', order.order_id);
-      if (window.RMMarketing) {
+      if (!isDemo) trackOnce('order_complete', order.order_id);
+      if (!isDemo && window.RMMarketing) {
         RMMarketing.track('Purchase', {
           value: order.total_price_cents / 100,
           currency: String(order.currency || 'usd').toUpperCase(),
@@ -129,6 +135,69 @@
       link.textContent = 'Try again';
       actionArea.appendChild(link);
     }
+  }
+
+  function runDemo() {
+    const demoDurationSeconds = 8;
+    let secondsRemaining = demoDurationSeconds;
+
+    const countdown = document.createElement('p');
+    countdown.className = 'confirmation-demo-timer';
+    countdown.setAttribute('role', 'timer');
+    countdown.setAttribute('aria-live', 'off');
+    statusMessage.insertAdjacentElement('afterend', countdown);
+
+    function updateCountdown() {
+      countdown.textContent = `Demo: order confirmation in ${secondsRemaining} second${secondsRemaining === 1 ? '' : 's'}`;
+    }
+
+    function showConfirmingState() {
+      clearTimeout(timerId);
+      actionArea.replaceChildren();
+      spinner.style.display = '';
+      statusEyebrow.textContent = 'Order in progress';
+      statusTitle.textContent = "We're Confirming Your Order";
+      statusTitle.style.color = '';
+      statusMessage.textContent = "We're confirming your payment and placing your order with our expert bookbinders now. This usually only takes a moment.";
+      countdown.hidden = false;
+      secondsRemaining = demoDurationSeconds;
+      updateCountdown();
+      replayStateAnimation();
+
+      timerId = setInterval(() => {
+        secondsRemaining -= 1;
+        updateCountdown();
+
+        if (secondsRemaining <= 0) {
+          clearInterval(timerId);
+          countdown.hidden = true;
+          render({
+            order_status: 'BOOKVAULT_ACCEPTED',
+            order_id: 'test-order-demo',
+            total_price_cents: 0,
+            currency: 'usd',
+            quantity: 1,
+          });
+          replayStateAnimation();
+
+          const replay = document.createElement('button');
+          replay.type = 'button';
+          replay.className = 'confirmation-demo-replay';
+          replay.textContent = 'Replay demo';
+          replay.addEventListener('click', showConfirmingState);
+          actionArea.appendChild(replay);
+        }
+      }, 1000);
+    }
+
+    function replayStateAnimation() {
+      const content = document.querySelector('.confirmation-content');
+      content.classList.remove('confirmation-state-enter');
+      void content.offsetWidth;
+      content.classList.add('confirmation-state-enter');
+    }
+
+    showConfirmingState();
   }
 
 })();

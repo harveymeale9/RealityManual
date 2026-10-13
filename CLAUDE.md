@@ -18660,3 +18660,26 @@ no longer adds a `[PREVIEW]` prefix when invoked by the internal preview sender,
 so a preview cannot be mistaken for a separate customer-facing subject format.
 The normal fulfillment path was already invoking the template without preview
 mode; this change makes the subject invariant across both paths.
+
+---
+
+# 592. Safe Full Order-Confirmation Demo at `/testorder` (2026-10-13)
+
+The storefront now exposes a no-index simulation at `/testorder/` so Harvey can
+review the complete post-checkout experience without charging a card, creating
+an order, contacting BookVault, or polluting customer analytics. It uses the
+same book presentation, confirming copy, spinner and final success copy as the
+real confirmation page.
+
+The simulation remains in the confirming state for eight seconds and displays
+a visible countdown, then transitions into **Our Expert Bookbinders Are Rolling
+Up Their Sleeves.** with the genuine completion message. A **Replay demo**
+button resets the animation and countdown for repeated review. The route omits
+the analytics and marketing bundles, and the shared confirmation controller
+also explicitly suppresses completion and purchase events in demo mode as a
+second layer of protection.
+
+Real Chromium verification covered the initial, completed and replay states at
+1440x900 and 390x844. Both sizes had no horizontal overflow, the spinner and
+countdown appeared only in the first state, the replay restored that state, and
+the browser observed no API or analytics requests.
