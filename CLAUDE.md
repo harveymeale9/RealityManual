@@ -18691,3 +18691,7 @@ the browser observed no API or analytics requests.
 The branded order-confirmation email headline now ends with a full stop in both
 the HTML and plain-text versions: **We’re Making Your Copy of The Reality
 Manual.** This matches the already-punctuated subject line.
+
+Harvey immediately clarified that the intended punctuation was an exclamation
+mark rather than a full stop. The subject, HTML headline and plain-text headline
+therefore now all end **The Reality Manual!**

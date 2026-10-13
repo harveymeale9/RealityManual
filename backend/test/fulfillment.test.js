@@ -96,7 +96,7 @@ test('paid order is submitted once, emailed, then dispatch is emailed with track
   assert.equal(synced[0].summary.purchase_order_count, 1);
   assert.equal(synced[0].summary.lifetime_book_quantity, 1);
   assert.ok(stored.resend_contact_synced_at);
-  assert.equal(sent[0].subject, 'We’re Making Your Copy of The Reality Manual.');
+  assert.equal(sent[0].subject, 'We’re Making Your Copy of The Reality Manual!');
   assert.deepEqual(sent[0].tags, [
     { name: 'email_type', value: 'confirmation_email' },
     { name: 'customer_status', value: 'purchaser' },
