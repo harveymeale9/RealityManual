@@ -18488,3 +18488,21 @@ render frame before starting the request. `playsinline` and the existing mobile
 viewport observed VSL network requests before the tap, `readyState === 4`,
 successful playback after the synthetic tap, and a player/card width equal to
 the 390 px viewport.
+
+---
+
+# 585. Unified Sepia Treatment for Inside-the-Book Photography (2026-10-13)
+
+The four photographed pages in the storefront's **Inside the Book** section
+now share one warm amber-sepia grade. A restrained multiply wash unifies the
+paper colour and adds a slight edge falloff, while a common sepia, saturation,
+hue, and contrast filter preserves the photographed texture and black linework.
+Each source has its own brightness correction because the Omnipresence artwork
+was considerably brighter and pinker than the first three images, while the
+middle pages were cooler and greyer. The adjustment is CSS-only and therefore
+does not discard resolution or alter the source files.
+
+The stylesheet URL was revisioned on both `/` and `/home2/` to bypass cached
+CSS. A real-browser mobile capture confirmed that all four pages now sit at a
+similar warm level, retain readable detail, and remain visually distinct from
+the dark candlelit study background.
