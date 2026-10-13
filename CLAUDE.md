@@ -18603,3 +18603,13 @@ then sent one explicitly labelled `[PREVIEW]` branded order-confirmation email
 to the configured private preview recipient; Resend's email-status API reported
 `last_event: delivered`. This confirms that disabling Stripe's receipt path did
 not affect the store-owned Resend confirmation and refund path.
+
+Immediately before Harvey's replacement live order, a final read-only readiness
+audit found the BookVault title now reports `Active`, the USD prepayment profile
+has a saved card, and the deployed backend is healthy. BookVault's non-creating
+`POST /ValidateOrder?type=Full` accepted the prior address and shipping data
+with the new customs declaration, returning HTTP 200, no critical error, and no
+validation messages. The live checkout still contains no `receipt_email`, the
+new confirmation asset and copy are live, and the production Resend preview
+remains confirmed delivered. The replacement order is therefore cleared for an
+end-to-end live test.
