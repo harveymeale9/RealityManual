@@ -12,19 +12,19 @@ test('Final Check exposes one publishing-queue action and no visibility selector
   assert.doesNotMatch(source, /privacyStatus:\s*privacyStatus/);
 });
 
-test('Content Settings exposes independent short-form and long-form reserve controls', function () {
+test('Publishing Queue is natural inventory with no configurable reserve targets', function () {
   const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const store = fs.readFileSync(path.join(__dirname, '..', 'public', 'lib', 'store.js'), 'utf8');
   const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
-  assert.match(source, /id="publishingQueueShortTarget"/);
-  assert.match(source, /id="publishingQueueLongformTarget"/);
-  assert.match(store, /publishingQueueShortTarget:\s*10/);
-  assert.match(store, /publishingQueueLongformTarget:\s*4/);
+  assert.doesNotMatch(source, /id="publishingQueueShortTarget"/);
+  assert.doesNotMatch(source, /id="publishingQueueLongformTarget"/);
+  assert.doesNotMatch(store, /publishingQueueShortTarget:/);
+  assert.doesNotMatch(store, /publishingQueueLongformTarget:/);
   assert.match(store, /id:\s*'publishing_queue',\s*label:\s*'Publishing Queue'/);
   assert.match(server, /piece\.stage\s*=\s*'publishing_queue'/);
   assert.match(server, /piece\.queuedPublishDestinations\s*=\s*destinations/);
-  assert.match(server, /function publishingQueueTargets\(\)/);
-  assert.match(server, /publishingQueue\.queueType\(piece\)/);
+  assert.doesNotMatch(server, /function publishingQueueTargets\(\)/);
+  assert.match(server, /publishingQueue\.readyQueues\(queued, pieces\)/);
   assert.match(server, /schedulePublishingQueueDrain\(\)/);
 });
 
@@ -34,5 +34,5 @@ test('Kanban presents the durable uploaded stage to users as Filmed', function (
 
   assert.match(store, /id:\s*'uploaded',\s*label:\s*'Filmed'/);
   assert.doesNotMatch(store, /id:\s*'uploaded',\s*label:\s*'Uploaded'/);
-  assert.match(page, /store\.js\?v=20261013-filmed-label-v9/);
+  assert.match(page, /store\.js\?v=20261013-natural-publishing-queue-v10/);
 });

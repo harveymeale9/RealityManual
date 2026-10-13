@@ -6,12 +6,6 @@ const SHORT_TYPES = ['ultra_short', 'short', 'long_short'];
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_QUEUE_WAIT_DAYS = 10;
 
-function normalizeTarget(value, fallbackValue) {
-  const parsed = value === null || value === undefined || value === '' ? NaN : Math.round(Number(value));
-  const fallback = Number.isFinite(Number(fallbackValue)) ? Math.round(Number(fallbackValue)) : 10;
-  return Number.isFinite(parsed) ? Math.max(1, Math.min(30, parsed)) : Math.max(1, Math.min(30, fallback));
-}
-
 function queuedAt(piece) {
   const parsed = Date.parse(piece && (piece.publishingQueuedAt || piece.updatedAt || piece.createdAt) || '');
   return Number.isFinite(parsed) ? parsed : 0;
@@ -67,14 +61,11 @@ function bestCandidate(candidates, queue, history, nowValue) {
   })[0];
 }
 
-// A queue plan is deliberately generated only when the reserve overflows.
-// The first item is released now; the rest become the visible best-current
-// sequence. The next overflow recalculates from fresh Scheduled/Live history,
-// so this is guidance rather than a prematurely fixed publishing calendar.
-function planQueue(queue, allPieces, targetValue, nowValue) {
-  const target = normalizeTarget(targetValue);
-  if (!Array.isArray(queue) || queue.length <= target) return null;
-
+// Plan from the videos that are actually waiting at the moment a cadence slot
+// becomes available. Nothing is pre-planned merely because another approval
+// entered the queue; fresh Scheduled/Live history informs every choice.
+function planQueue(queue, allPieces, nowValue) {
+  if (!Array.isArray(queue) || !queue.length) return [];
   const remaining = queue.slice();
   const history = publicationHistory(allPieces);
   const plan = [];
@@ -90,16 +81,31 @@ function planQueue(queue, allPieces, targetValue, nowValue) {
   return plan;
 }
 
-function chooseCandidate(queue, allPieces, targetValue, nowValue) {
-  const plan = planQueue(queue, allPieces, targetValue, nowValue);
-  return plan && plan.length ? plan[0] : null;
+function chooseCandidate(queue, allPieces, nowValue) {
+  const plan = planQueue(queue, allPieces, nowValue);
+  return plan.length ? plan[0] : null;
+}
+
+// Long-form and short-form have independent cadences. A format needs its next
+// item selected only when it has waiting videos and no item already committed
+// to Scheduled. The queue's size is therefore natural inventory, not a target.
+function readyQueues(queue, allPieces) {
+  const queued = Array.isArray(queue) ? queue : [];
+  const occupied = new Set((Array.isArray(allPieces) ? allPieces : []).filter(function (piece) {
+    return piece && piece.stage === 'scheduled';
+  }).map(queueType));
+  return ['longform', 'shortform'].map(function (type) {
+    return { type: type, pieces: queued.filter(function (piece) { return queueType(piece) === type; }) };
+  }).filter(function (group) {
+    return group.pieces.length && !occupied.has(group.type);
+  });
 }
 
 module.exports = {
   SHORT_TYPES: SHORT_TYPES,
   MAX_QUEUE_WAIT_DAYS: MAX_QUEUE_WAIT_DAYS,
-  normalizeTarget: normalizeTarget,
   queueType: queueType,
   planQueue: planQueue,
-  chooseCandidate: chooseCandidate
+  chooseCandidate: chooseCandidate,
+  readyQueues: readyQueues
 };

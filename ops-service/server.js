@@ -1323,6 +1323,7 @@ const bufferPublicationSync = bufferPublicationSyncService.setup(db, {
     // background sync cannot overwrite that newer user work.
     const latest = getPieceRecord(piece.id);
     if (!latest) return;
+    const previousStage = latest.stage;
     ['stage', 'scheduledAt', 'postedAt', 'tiktokPublishStatus', 'tiktokPublishError',
       'tiktokBufferStatus', 'tiktokBufferCheckedAt', 'tiktokExternalLink',
       'tiktokBufferSupportUrl', 'tiktokMetrics', 'tiktokMetricsUpdatedAt'].forEach(function (field) {
@@ -1330,6 +1331,7 @@ const bufferPublicationSync = bufferPublicationSyncService.setup(db, {
     });
     latest.updatedAt = piece.updatedAt;
     savePieceRecord(latest);
+    if (previousStage === 'scheduled' && latest.stage !== 'scheduled') schedulePublishingQueueDrain();
   }
 });
 
@@ -1535,10 +1537,9 @@ app.put('/api/store/:storeName/:id', function (req, res) {
   if (!isValidStore(storeName) || !isValidId(id)) return res.status(400).json({ error: 'invalid_params' });
   if (!req.body || typeof req.body !== 'object') return res.status(400).json({ error: 'invalid_body' });
   if (storeName === 'settings') {
-    const legacyTarget = publishingQueue.normalizeTarget(req.body.publishingQueueTarget, 10);
-    req.body.publishingQueueShortTarget = publishingQueue.normalizeTarget(req.body.publishingQueueShortTarget, legacyTarget);
-    req.body.publishingQueueLongformTarget = publishingQueue.normalizeTarget(req.body.publishingQueueLongformTarget, 4);
     delete req.body.publishingQueueTarget;
+    delete req.body.publishingQueueShortTarget;
+    delete req.body.publishingQueueLongformTarget;
   }
 
   let existingPiece = null;
@@ -1625,7 +1626,6 @@ app.put('/api/store/:storeName/:id', function (req, res) {
     }
   }
   res.json(record);
-  if (storeName === 'settings' && req.sessionRole !== 'youtube-reviewer') schedulePublishingQueueDrain();
 });
 
 app.delete('/api/store/:storeName/:id', function (req, res) {
@@ -2799,74 +2799,45 @@ function topicAwarePublishingSlot(piece, candidates, pieces) {
   };
 }
 
-function publishingQueueTargets() {
-  const row = stmts.getOne.get('settings', 'settings');
-  let settings = {};
-  try { settings = row ? JSON.parse(row.data) : {}; } catch (error) { settings = {}; }
-  const legacyTarget = publishingQueue.normalizeTarget(settings.publishingQueueTarget, 10);
-  return {
-    shortform: publishingQueue.normalizeTarget(settings.publishingQueueShortTarget, legacyTarget),
-    longform: publishingQueue.normalizeTarget(settings.publishingQueueLongformTarget, 4)
-  };
-}
-
 let publishingQueueDrainRunning = false;
 let publishingQueueDrainRequested = false;
 
 async function drainPublishingQueue() {
-  for (;;) {
-    const pieces = allPieceRecords();
-    const queued = pieces.filter(function (piece) {
-      return piece.stage === 'publishing_queue' && Array.isArray(piece.queuedPublishDestinations) && piece.queuedPublishDestinations.length;
-    });
-    const targets = publishingQueueTargets();
-    const queues = [
-      { type: 'longform', target: targets.longform, pieces: queued.filter(function (piece) { return publishingQueue.queueType(piece) === 'longform'; }) },
-      { type: 'shortform', target: targets.shortform, pieces: queued.filter(function (piece) { return publishingQueue.queueType(piece) === 'shortform'; }) }
-    ].filter(function (queue) { return queue.pieces.length > queue.target; }).sort(function (a, b) {
-      return (b.pieces.length - b.target) - (a.pieces.length - a.target) || (a.type === 'longform' ? -1 : 1);
-    });
-    if (!queues.length) return;
-    const activeQueue = queues[0];
-    const target = activeQueue.target;
-    const plan = publishingQueue.planQueue(activeQueue.pieces, pieces, target, Date.now());
-    const selection = plan && plan[0];
-    if (!selection || !selection.piece) return;
+  const pieces = allPieceRecords();
+  const queued = pieces.filter(function (piece) {
+    return piece.stage === 'publishing_queue' && Array.isArray(piece.queuedPublishDestinations) && piece.queuedPublishDestinations.length;
+  });
+  const queues = publishingQueue.readyQueues(queued, pieces);
+  const activeQueue = queues[0];
+  if (!activeQueue) return;
+  const selection = publishingQueue.chooseCandidate(activeQueue.pieces, pieces, Date.now());
+  if (!selection || !selection.piece) return;
+  const candidate = getPieceRecord(selection.piece.id);
+  if (!candidate || candidate.stage !== 'publishing_queue' || !Array.isArray(candidate.queuedPublishDestinations) || !candidate.queuedPublishDestinations.length) return;
 
-    // Reorder only at the same overflow moment that releases a video. Below
-    // or at capacity, approvals retain their original order and no planning
-    // work is performed. The remaining cards show Harvey the current planned
-    // sequence, but the next overflow is free to recalculate it from the now
-    // newer publishing history.
-    plan.forEach(function (planned, index) {
-      const current = getPieceRecord(planned.piece.id);
-      if (!current || current.stage !== 'publishing_queue') return;
-      current.order = (index + 1) * 10;
-      current.updatedAt = new Date().toISOString();
-      savePieceRecord(current);
-    });
-
-    const candidate = getPieceRecord(selection.piece.id);
-    if (!candidate || candidate.stage !== 'publishing_queue' || !Array.isArray(candidate.queuedPublishDestinations) || !candidate.queuedPublishDestinations.length) continue;
-
-    candidate.publishingQueueSelection = {
-      selectedAt: new Date().toISOString(),
-      target: target,
-      score: Math.round(selection.score * 1000) / 1000,
-      topicSimilarity: Math.round(selection.strongestTopicMatch * 1000) / 1000,
-      typePenalty: Math.round(selection.typePenalty * 1000) / 1000,
-      ageRank: selection.ageRank,
-      ageForced: selection.ageForced === true,
-      queueWaitDays: Math.round(selection.queueWaitDays * 10) / 10
-    };
-    candidate.queuedPublishDestinations.forEach(function (destination) {
-      candidate[publishStatusField(destination.platform)] = 'pending';
-      candidate[publishErrorField(destination.platform)] = '';
-    });
-    candidate.updatedAt = new Date().toISOString();
-    savePieceRecord(candidate);
-    await runPlatformPublishBatch(candidate.id, candidate.queuedPublishDestinations);
-  }
+  candidate.publishingQueueSelection = {
+    selectedAt: new Date().toISOString(),
+    score: Math.round(selection.score * 1000) / 1000,
+    topicSimilarity: Math.round(selection.strongestTopicMatch * 1000) / 1000,
+    typePenalty: Math.round(selection.typePenalty * 1000) / 1000,
+    ageRank: selection.ageRank,
+    ageForced: selection.ageForced === true,
+    queueWaitDays: Math.round(selection.queueWaitDays * 10) / 10
+  };
+  candidate.queuedPublishDestinations.forEach(function (destination) {
+    candidate[publishStatusField(destination.platform)] = 'pending';
+    candidate[publishErrorField(destination.platform)] = '';
+  });
+  candidate.updatedAt = new Date().toISOString();
+  savePieceRecord(candidate);
+  await runPlatformPublishBatch(candidate.id, candidate.queuedPublishDestinations);
+  const result = getPieceRecord(candidate.id);
+  // A platform/storage failure returns the card to Final Check. Do not burn
+  // through the rest of the queue while the same external fault persists.
+  if (!result || result.stage !== 'scheduled') return;
+  // Re-read all pieces before considering the other format so its topic choice
+  // sees the slot this pass just committed.
+  publishingQueueDrainRequested = true;
 }
 
 function schedulePublishingQueueDrain() {
@@ -2935,12 +2906,16 @@ async function runPlatformPublishBatch(id, destinations) {
     try { settings = settingsRow ? JSON.parse(settingsRow.data) : {}; } catch (error) { settings = {}; }
     const pieces = allPieceRecords();
     const occupied = pieces.filter(function (other) {
-      return other.id !== id && other.contentType === 'longform' && other.stage === 'scheduled' && other.scheduledAt;
-    }).map(function (other) { return other.scheduledAt; });
+      return other.id !== id && other.contentType === 'longform' &&
+        (other.stage === 'scheduled' || other.stage === 'live') && (other.scheduledAt || other.postedAt);
+    }).map(function (other) { return other.scheduledAt || other.postedAt; });
     const candidates = shortformSchedule.nextAvailableBangkokLongformSlots(
       Date.now(), settings.longformScheduleTime || '07:55', occupied, 10
     );
-    const scheduled = topicAwarePublishingSlot(initialPiece, candidates, pieces);
+    // Queue selection already chose the best topic for this turn. Commit it
+    // to the next cadence slot rather than moving it days later and leaving
+    // an artificial hole in the three-day release rhythm.
+    const scheduled = topicAwarePublishingSlot(initialPiece, candidates.slice(0, 1), pieces);
     const dueAt = scheduled.dueAt;
     const latest = getPieceRecord(id);
     if (!latest) return;
@@ -2981,7 +2956,10 @@ async function runPlatformPublishBatch(id, destinations) {
       return other.id !== id && shortformSchedule.isShortform(other) && other.stage === 'scheduled' && other.scheduledAt;
     }).map(function (other) { return other.scheduledAt; });
     const candidates = shortformSchedule.nextAvailableBangkokSlots(Date.now(), postingSchedule, occupied, 32);
-    const scheduled = topicAwarePublishingSlot(initialPiece, candidates, pieces);
+    // The natural queue decides which video goes next; the chosen video uses
+    // the next daily Buffer slot. Topic separation must not manufacture empty
+    // publishing days by pushing the only Scheduled short far into the future.
+    const scheduled = topicAwarePublishingSlot(initialPiece, candidates.slice(0, 1), pieces);
     dueAt = scheduled.dueAt;
 
     if (tiktokDestination) {
@@ -3231,7 +3209,6 @@ app.post('/api/publish/:id', requireAuthOrReviewer, async function (req, res) {
     ok: true,
     status: reviewerPublish ? 'running' : 'queued',
     stage: reviewerPublish ? piece.stage : 'publishing_queue',
-    queueTargets: reviewerPublish ? null : publishingQueueTargets(),
     platforms: destinations.map(function (d) { return d.platform; })
   });
   if (reviewerPublish) runPlatformPublishBatch(id, destinations).catch(function (error) { console.error('unhandled reviewer publish error for ' + id + ':', error.message); });
@@ -4157,6 +4134,8 @@ const httpServer = app.listen(PORT, function () {
   recoverInflightVoiceMessages();
   recoverInflightVideoJobs();
   schedulePublishingQueueDrain();
+  const publishingQueueTimer = setInterval(schedulePublishingQueueDrain, 60 * 1000);
+  if (publishingQueueTimer.unref) publishingQueueTimer.unref();
   releaseDueDirectPosts().catch(function (error) { console.error('initial direct release check failed:', error.message); });
   setInterval(function () {
     releaseDueDirectPosts().catch(function (error) { console.error('direct release check failed:', error.message); });

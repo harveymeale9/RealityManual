@@ -150,7 +150,7 @@ window.RMStore = (function () {
   // picked) and before he approves it into "Scheduled"; approving is what
   // actually assigns its scheduledAt now, not picking a thumbnail/audio
   // combination automatically the way it used to. Publishing Queue is the
-  // rolling approved reserve between Final Check and Scheduled.
+  // natural set of approved videos waiting for their next cadence slot.
   var STAGES = [
     { id: 'archived', label: 'Archived Ideas' },
     { id: 'ideation', label: 'Rough Ideas' },
@@ -208,8 +208,6 @@ window.RMStore = (function () {
       id: SETTINGS_ID,
       cadence: JSON.parse(JSON.stringify(DEFAULT_CADENCE)),
       longformScheduleTime: '07:55',
-      publishingQueueShortTarget: 10,
-      publishingQueueLongformTarget: 4,
       lastShortType: '',
       // Captions are organized by content shape, per Harvey (2026-09-20) —
       // one field per platform that shape can actually be tagged with,
@@ -301,13 +299,9 @@ window.RMStore = (function () {
       s.musicDuckingEnabled = s.musicDuckingEnabled === true;
       if (typeof s.baseLinkUrl !== 'string') s.baseLinkUrl = d.baseLinkUrl;
       if (typeof s.lastShortType !== 'string') s.lastShortType = '';
-      var legacyQueueTarget = Math.round(Number(s.publishingQueueTarget));
-      var shortQueueTarget = Math.round(Number(s.publishingQueueShortTarget));
-      var longformQueueTarget = Math.round(Number(s.publishingQueueLongformTarget));
-      s.publishingQueueShortTarget = Number.isFinite(shortQueueTarget) ? Math.max(1, Math.min(30, shortQueueTarget))
-        : (Number.isFinite(legacyQueueTarget) ? Math.max(1, Math.min(30, legacyQueueTarget)) : d.publishingQueueShortTarget);
-      s.publishingQueueLongformTarget = Number.isFinite(longformQueueTarget) ? Math.max(1, Math.min(30, longformQueueTarget)) : d.publishingQueueLongformTarget;
       delete s.publishingQueueTarget;
+      delete s.publishingQueueShortTarget;
+      delete s.publishingQueueLongformTarget;
       if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(s.longformScheduleTime || ''))) s.longformScheduleTime = d.longformScheduleTime;
       return s;
     });

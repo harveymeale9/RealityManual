@@ -1678,7 +1678,7 @@
   // Replaces the old "Thumbnail Selected" stage-derivation (deriveAndApplyStage) —
   // a video piece's *stage* is now fully explicit (In Production -> Final Check
   // -> Publishing Queue -> Scheduled -> Live, moved by explicit review and
-  // the rolling reserve scheduler), but these three tags still
+  // the cadence-aware queue scheduler), but these three tags still
   // want to reflect field state automatically, recomputed from scratch
   // every time rather than tracked incrementally — so unpicking a
   // thumbnail/audio/title also correctly drops its tag again.
@@ -3212,7 +3212,7 @@
         var queueGroupHtml = function (label, groupIds) {
           return '<section class="publishing-queue-group">' +
             '<div class="publishing-queue-group-head"><span>' + label + '</span><span>' + groupIds.length + '</span></div>' +
-            (groupIds.length ? groupIds.map(function (id) { return cardHtml(id, pieces[id]); }).join('') : '<div class="publishing-queue-empty">Reserve is empty</div>') +
+            (groupIds.length ? groupIds.map(function (id) { return cardHtml(id, pieces[id]); }).join('') : '<div class="publishing-queue-empty">No videos waiting</div>') +
           '</section>';
         };
         cards = queueGroupHtml('Long-form queue', longformQueueIds) + queueGroupHtml('Short-form queue', shortformQueueIds);
@@ -3673,7 +3673,7 @@
   var youtubePublishPollTimer = null;
   var contentOpsRefreshTimer = null;
 
-  // The rolling reserve and Buffer publish later, independently of the browser tab that queued
+  // The natural publishing queue and Buffer publish later, independently of the browser tab that queued
   // the post. Refresh the board while it is open so Scheduled -> Posted/Live
   // and newly available metrics appear without a manual reload.
   function startContentOpsRefresh() {
@@ -4922,15 +4922,7 @@
         '<p class="settings-hint">Every short-form piece uses one shared slot across TikTok, YouTube Shorts, Instagram and Facebook. ' +
           'TikTok remains the source of truth in Buffer; the direct platforms wait for the exact same release time. ' +
           'Longform keeps its separate rolling YouTube/Facebook timeline.</p>' +
-        '<div class="cadence-row publishing-reserve-row">' +
-          '<span class="cadence-label">Short-form reserve</span>' +
-          '<span class="cadence-inputs">Keep <select class="cadence-unit" id="publishingQueueShortTarget"></select> approved shorts</span>' +
-        '</div>' +
-        '<div class="cadence-row publishing-reserve-row">' +
-          '<span class="cadence-label">Long-form reserve</span>' +
-          '<span class="cadence-inputs">Keep <select class="cadence-unit" id="publishingQueueLongformTarget"></select> approved long-form videos</span>' +
-        '</div>' +
-        '<p class="settings-hint">Each reserve plans and releases independently only when it exceeds its own target. The shared topic-aware scheduler still compares both formats, keeping a long video and its corresponding short as far apart as the available publishing slots allow.</p>' +
+        '<p class="settings-hint">Approved videos wait naturally in Publishing Queue. When the next slot is available, the scheduler chooses the best short-form or long-form video using topic separation, format variety and age.</p>' +
         '<div class="tiktok-schedule-block shortform-mirror-block">' +
           '<div class="cadence-label">Shared short-form schedule</div>' +
           '<div class="shortform-schedule-summary" id="directShortScheduleSummary">12:00 AM · 12:00 PM daily (Asia/Bangkok)</div>' +
@@ -5267,28 +5259,6 @@
     var grid = document.getElementById('cadenceGrid');
     if (!grid) return;
     var dis = IS_REVIEWER ? ' disabled' : '';
-    var shortQueueTarget = document.getElementById('publishingQueueShortTarget');
-    var longformQueueTarget = document.getElementById('publishingQueueLongformTarget');
-    var shortQueueSizes = [5, 6, 7, 8, 9, 10, 12, 15, 20];
-    var longformQueueSizes = [2, 3, 4, 5, 6, 8, 10, 12, 15];
-    shortQueueTarget.innerHTML = shortQueueSizes.map(function (size) {
-      return '<option value="' + size + '">' + size + '</option>';
-    }).join('');
-    longformQueueTarget.innerHTML = longformQueueSizes.map(function (size) {
-      return '<option value="' + size + '">' + size + '</option>';
-    }).join('');
-    shortQueueTarget.value = String(settingsCache.publishingQueueShortTarget || 10);
-    longformQueueTarget.value = String(settingsCache.publishingQueueLongformTarget || 4);
-    shortQueueTarget.disabled = IS_REVIEWER;
-    longformQueueTarget.disabled = IS_REVIEWER;
-    shortQueueTarget.addEventListener('change', function () {
-      settingsCache.publishingQueueShortTarget = Math.max(1, Math.min(30, parseInt(shortQueueTarget.value, 10) || 10));
-      saveSettingsDebounced();
-    });
-    longformQueueTarget.addEventListener('change', function () {
-      settingsCache.publishingQueueLongformTarget = Math.max(1, Math.min(30, parseInt(longformQueueTarget.value, 10) || 4));
-      saveSettingsDebounced();
-    });
     grid.innerHTML = '<div class="cadence-row" data-key="longform">' +
       '<span class="cadence-label">Direct longform <span class="ink-faint">(YouTube / Facebook)</span></span>' +
       '<span class="cadence-inputs">Every 3 days at <input type="time" class="cadence-time" id="longformScheduleTime" value="' +
