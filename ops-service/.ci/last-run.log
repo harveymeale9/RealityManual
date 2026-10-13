@@ -5,21 +5,23 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   3a0649d..8745c8d  main       -> origin/main
+   8745c8d..4b9dae5  main       -> origin/main
 + git merge --ff-only origin/main
-Updating 3a0649d..8745c8d
+Updating 8745c8d..4b9dae5
 Fast-forward
- CLAUDE.md                                |   63 ++
- frontend/css/style.css                   |   33 +-
- frontend/home2/index.html                |    7 +-
- frontend/index.html                      |    7 +-
- ops-service/.ci/last-run.log             | 1712 ++++++++++++++++++++++++++++--
- ops-service/server.js                    |   17 +-
- ops-service/src/publishingQueue.js       |   40 +-
- ops-service/test/publishingQueue.test.js |   23 +
- 8 files changed, 1802 insertions(+), 100 deletions(-)
+ CLAUDE.md                                    |   32 +
+ ops-service/.ci/last-run.log                 | 1678 +-------------------------
+ ops-service/public/app.js                    |   59 +-
+ ops-service/public/lib/store.js              |   12 +-
+ ops-service/public/style.css                 |    4 +
+ ops-service/server.js                        |   34 +-
+ ops-service/src/publishingQueue.js           |   27 +-
+ ops-service/test/finalCheckPublishUi.test.js |   10 +-
+ ops-service/test/publishingQueue.test.js     |   39 +-
+ ops-service/test/topicSchedule.test.js       |   18 +
+ 10 files changed, 216 insertions(+), 1697 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=8745c8d02782e8e1cad3e8d5922d06ccda450e53
++ NEW_HEAD=4b9dae54c898e77747f029513736d427874b324a
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -28,11 +30,11 @@ Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
 + LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
 ++ cat /root/ops-service-data/last-image-commit.txt
-+ LAST_BUILD_COMMIT=3a0649d1a45654b401b354437ad3e21d2956e1e9
++ LAST_BUILD_COMMIT=8745c8d02782e8e1cad3e8d5922d06ccda450e53
 + NEEDS_REBUILD=1
-+ '[' -n 3a0649d1a45654b401b354437ad3e21d2956e1e9 ']'
-+ git cat-file -e '3a0649d1a45654b401b354437ad3e21d2956e1e9^{commit}'
-++ git diff --name-only 3a0649d1a45654b401b354437ad3e21d2956e1e9 8745c8d02782e8e1cad3e8d5922d06ccda450e53 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -n 8745c8d02782e8e1cad3e8d5922d06ccda450e53 ']'
++ git cat-file -e '8745c8d02782e8e1cad3e8d5922d06ccda450e53^{commit}'
+++ git diff --name-only 8745c8d02782e8e1cad3e8d5922d06ccda450e53 4b9dae54c898e77747f029513736d427874b324a -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z 'ops-service/server.js
 ops-service/src/publishingQueue.js' ']'
 + '[' 0 = 1 ']'
@@ -57,7 +59,7 @@ ops-service/src/publishingQueue.js' ']'
 #4 DONE 0.0s
 
 #5 [internal] load build context
-#5 transferring context: 233.04kB 0.0s done
+#5 transferring context: 739.68kB 0.0s done
 #5 DONE 0.0s
 
 #6 [ 3/10] WORKDIR /app
@@ -73,7 +75,7 @@ ops-service/src/publishingQueue.js' ']'
 #9 CACHED
 
 #10 [ 6/10] COPY server.js ./
-#10 DONE 0.1s
+#10 DONE 0.0s
 
 #11 [ 7/10] COPY src ./src
 #11 DONE 0.1s
@@ -82,39 +84,38 @@ ops-service/src/publishingQueue.js' ']'
 #12 DONE 0.1s
 
 #13 [ 9/10] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
-#13 DONE 15.2s
+#13 DONE 23.2s
 
 #14 [10/10] RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
-#14 DONE 0.6s
+#14 DONE 0.3s
 
 #15 exporting to image
 #15 exporting layers
-#15 exporting layers 3.8s done
-#15 exporting manifest sha256:35eefc158e1b1bdd9579cd929f0dca8fc8358439e58c3b21584bd0604d31ee0f 0.0s done
-#15 exporting config sha256:040c451ba2af83d5f95ef3e834976e1874b1ddd8a29d6b96e88bd34658363998 0.0s done
-#15 exporting attestation manifest sha256:c6096a925d9192463152a109e8bf1beae59a175af282a9408180f1219703b7b2
-#15 exporting attestation manifest sha256:c6096a925d9192463152a109e8bf1beae59a175af282a9408180f1219703b7b2 0.1s done
-#15 exporting manifest list sha256:3352e690f4a4bd24a4f95b563522c269e8372b7c4d5ed91d26e868cb313c16bb 0.0s done
+#15 exporting layers 3.1s done
+#15 exporting manifest sha256:8b46c927da148f7a9ac371629966cf551ef3492e3d7e147cd5cd03fbaa168c69 0.0s done
+#15 exporting config sha256:dc7e8a09b6a6c346e875d09ba86d02c9b4cae8905939fdb14b6a45e1abb275f8 0.0s done
+#15 exporting attestation manifest sha256:28f1081982dc5440954f945b2c858011e2e0a55d88654670b3a782454498bfa8 0.0s done
+#15 exporting manifest list sha256:de88b67b50b979cdec4212cff859739bf5201f82c2792d6f304038d4d90a0405 done
 #15 naming to docker.io/library/rm-ops-service:latest done
 #15 unpacking to docker.io/library/rm-ops-service:latest
-#15 unpacking to docker.io/library/rm-ops-service:latest 1.5s done
-#15 DONE 5.5s
+#15 unpacking to docker.io/library/rm-ops-service:latest 1.6s done
+#15 DONE 4.9s
 + docker stop rm-ops-service
 rm-ops-service
 + docker rm rm-ops-service
 rm-ops-service
 + docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-data:/data -v /root/realitymanual-backend-data:/store-data:ro -v /srv/realitymanual-repo:/repo -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
-8370430ce7db9318f6772eb4edbe71f34b8d1264c3c751f82b099ad81c262800
-+ echo 8745c8d02782e8e1cad3e8d5922d06ccda450e53
+e60ffa9de532a129330def6f68bcacebb453e1a80b55c6f52450d801f3feba76
++ echo 4b9dae54c898e77747f029513736d427874b324a
 ++ git -C /root/realitymanual-repo rev-parse --short HEAD
-+ echo 'rm-ops-service redeployed at 8745c8d'
-rm-ops-service redeployed at 8745c8d
++ echo 'rm-ops-service redeployed at 4b9dae5'
+rm-ops-service redeployed at 4b9dae5
 + docker image prune -f
 Deleted Images:
-untagged: sha256:516ab500533f1ee03fa9d1b18afb5f5ef11050eff265fe9d8517324032af16f4
-deleted: sha256:516ab500533f1ee03fa9d1b18afb5f5ef11050eff265fe9d8517324032af16f4
-deleted: sha256:225942fa48bed2b52f56cfce60099d4e7a1d9326fdf9b82efe183e65c2e13e8b
-deleted: sha256:f0a44466c3a19787cbbb2547fd2ed2326c2e6179b72a5f2fe7eb837938ce2fff
+untagged: sha256:7b6c1184b4b4474f2d74f976bd09ecbb64c09a7042ca330a3bb68d30ebba2ece
+deleted: sha256:7b6c1184b4b4474f2d74f976bd09ecbb64c09a7042ca330a3bb68d30ebba2ece
+deleted: sha256:9878ece0316775b3b9b59f87216832a4b978824d157663a494728e2cb827f4ca
+deleted: sha256:be8a3dea3cdb6bd9f0326facdd2bcbcb4e35a4ee7bec363a5f1feb65a32dd61e
 
 Total reclaimed space: 15.67kB
 + docker builder prune -f --max-used-space 8GB
