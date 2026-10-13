@@ -18868,3 +18868,31 @@ highlights, the absence of the old review-card copy, and the upload-through-
 render lifecycle. A real Chromium render of a synthetic project confirmed that
 only the intended words received the amber highlight and that zero old review
 cards remained. The complete ops-service suite passes with 208 tests.
+
+---
+
+# 604. Shared VPS Disk Incident Was CrusherDB Artifact Retention (2026-10-13)
+
+The VPS reached 94% disk usage shortly after two large Reality Manual Editor
+projects were deleted. Those asynchronous project removals brought usage to
+85%, but the dominant avoidable growth was in the separate CrusherDB project:
+72 completed-task Git worktrees occupied 14 GB, 66 full pre-release database
+snapshots occupied 16 GB, completed isolated Codex homes occupied 12 GB, and
+disposable Docker build cache occupied nearly 4 GB. The live application
+databases, Docker volumes, active containers, and the remaining Reality Manual
+Editor projects were not deleted.
+
+The emergency cleanup removed 70 clean terminal-task worktrees through `git
+worktree remove`, retained the two dirty conflict worktrees, retained the
+current and previous database snapshots while removing 64 superseded copies,
+pruned disposable Docker build cache, and retired 345 terminal-task Codex homes
+after checking that no live process used them. Disk usage fell from 94% to 39%,
+leaving 59 GB free.
+
+CrusherDB's existing six-hour storage timer previously pruned only its old
+Docker images and build cache. Its maintained script now also enforces bounded
+snapshot retention, removes only clean worktrees for terminal tasks, and
+expires terminal-task Codex homes after 24 hours while preserving homes named
+by live processes. The same audit runs after every successful CrusherDB
+release, so the exact classes of artifact responsible for this incident are
+now capped before the periodic timer is needed.
