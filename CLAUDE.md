@@ -18721,3 +18721,15 @@ On screens up to 760px wide, confirmation content now appears before the
 floating book. Desktop retains the established book-left, copy-right layout.
 The live confirmation page and `/testorder/` use the same markup, controller
 and responsive rule, including when the demo is replayed.
+
+---
+
+# 596. Kanban Uploaded Stage Is Labelled Filmed (2026-10-13)
+
+The planning Kanban now displays **Filmed** where it previously displayed
+**Uploaded**. This makes the stage describe the content-production milestone
+without implying that a video has already been published to an external
+platform. The durable stage ID remains `uploaded`, so existing cards, editor
+matching, migrations, automation boundaries and stored records are unchanged.
+Only the user-facing Kanban label changed, and the Store script cache key was
+advanced so already-open browsers receive it on refresh.

@@ -27,3 +27,12 @@ test('Content Settings exposes independent short-form and long-form reserve cont
   assert.match(server, /publishingQueue\.queueType\(piece\)/);
   assert.match(server, /schedulePublishingQueueDrain\(\)/);
 });
+
+test('Kanban presents the durable uploaded stage to users as Filmed', function () {
+  const store = fs.readFileSync(path.join(__dirname, '..', 'public', 'lib', 'store.js'), 'utf8');
+  const page = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+
+  assert.match(store, /id:\s*'uploaded',\s*label:\s*'Filmed'/);
+  assert.doesNotMatch(store, /id:\s*'uploaded',\s*label:\s*'Uploaded'/);
+  assert.match(page, /store\.js\?v=20261013-filmed-label-v9/);
+});
