@@ -18733,3 +18733,25 @@ platform. The durable stage ID remains `uploaded`, so existing cards, editor
 matching, migrations, automation boundaries and stored records are unchanged.
 Only the user-facing Kanban label changed, and the Store script cache key was
 advanced so already-open browsers receive it on refresh.
+
+---
+
+# 597. Long Laptop Recordings Use Realistic Editor Capacity Admission (2026-10-13)
+
+A 37-minute, 4.76GB laptop recording repeatedly reached the live Editor intake
+but was rejected before upload. The laptop was healthy and checking in every
+few seconds with four local recordings queued. The server had roughly 15.9GB
+free, but `requiredEditorCapacity()` demanded 30.7GB because it charged six
+raw-camera-sized copies at initial admission. That model treated both small
+scrub proxies, the verified Editor render, a later Production copy and a later
+mixed final as if all were additional raw camera masters created immediately.
+
+Editor admission now reflects the actual lifecycle: before upload it reserves
+the incoming source, one worst-case full-size Editor render, and the existing
+2GB operating reserve. Once upload bytes are already stored, the current free
+space already reflects the source and only the render plus operating reserve is
+required. The upload file is renamed rather than copied, both scrub proxies are
+low-resolution, and Production is created later from the normally much smaller
+verified render. Existing unfinished-project capacity remains additive, as do
+concurrent upload reservations. This lets the waiting 4.76GB source fit while
+still retaining more than one complete render's worth of protected workspace.

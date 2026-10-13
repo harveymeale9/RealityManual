@@ -60,11 +60,15 @@ const EDITOR_FFMPEG_THREADS = Math.max(1, Math.floor(Math.max(1, AVAILABLE_CPU_C
 
 function requiredEditorCapacity(fileBytes, fileAlreadyStored) {
   const bytes = Math.max(0, Number(fileBytes) || 0);
-  // Source, source scrub proxy, Editor render, final-render scrub proxy,
-  // Production copy, and the later mixed final can coexist. The proxies are
-  // much smaller, but capacity admission deliberately assumes the safe worst
-  // case rather than gambling on compression ratios.
-  return EDITOR_DISK_RESERVE_BYTES + bytes * (fileAlreadyStored ? 5 : 6);
+  // Admission needs room for the incoming camera master plus one worst-case
+  // full-size Editor render. Multer/chunk completion renames the received file
+  // into place rather than copying it, the two scrub proxies are deliberately
+  // low-resolution, and Production is created later from the normally much
+  // smaller verified render. Charging six raw-camera copies here blocked valid
+  // long recordings even when the real Editor workspace fit comfortably.
+  // Once the upload is already stored, current free space already reflects the
+  // source allocation, so only the render allowance remains to be reserved.
+  return EDITOR_DISK_RESERVE_BYTES + bytes * (fileAlreadyStored ? 1 : 2);
 }
 
 function outstandingEditorCapacity(projects) {
