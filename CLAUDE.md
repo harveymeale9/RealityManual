@@ -18440,3 +18440,28 @@ regression that previously landed eleven days apart now lands nine days apart.
 Focused tests prove both the hard ten-day oldest-card selection and the capped
 cross-format separation. The live Publishing Queue was empty before this
 change, so deployment cannot reschedule existing cards.
+
+---
+
+# 583. Deterministic “Antoine Matthias” Retake Marker (2026-10-13)
+
+The Editor's initial pass now treats the deliberately unusual phrase
+“Antoine Matthias” as a deterministic retake marker. When the timed transcript
+contains that adjacent two-word phrase, the Editor removes the current false
+start back to the latest natural speech break, removes the marker itself, and
+keeps the clean take beginning immediately after it. This runs locally as soon
+as transcription finishes, independently of the semantic AI retake reviewer,
+so a provider miss or failure cannot leave the marked mistake in the edit.
+
+Marker cuts use the existing transcript-deletion behavior: all speech and dead
+space between the surrounding kept words is removed while retaining 70 ms at
+each boundary. The matcher requires both words to avoid false positives, but
+accepts conservative speech-to-text spellings including `Antwan Mathias` and
+`Matias`. Marker decisions remain visible as automatically removed retakes and
+can still be restored by Harvey from the normal retake review UI. A later AI
+analysis is merged with marker decisions and cannot create an overlapping cut.
+
+Regression tests cover the spoken example, preservation of material before the
+false-start pause, exact 70 ms boundaries, tolerant marker spelling, and the
+requirement that both marker words be present. The complete ops-service suite
+passes with 203 tests.

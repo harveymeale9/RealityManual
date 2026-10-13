@@ -765,6 +765,58 @@ function retakeCandidates(words) {
   return output;
 }
 
+// Harvey says this deliberately unusual two-word phrase whenever the words
+// immediately before it were a false start. Keep the matcher tolerant of the
+// small spelling variations speech-to-text commonly produces, but require
+// both adjacent words so ordinary speech can never trip it accidentally.
+const RETAKE_MARKER_FIRST_WORDS = new Set(['antoine', 'antoin', 'antwan', 'antwon', 'antwine']);
+const RETAKE_MARKER_SECOND_WORDS = new Set(['matthias', 'mathias', 'matias', 'mattias', 'matthies', 'matthews']);
+const RETAKE_MARKER_ATTEMPT_GAP_SECONDS = 0.85;
+
+function retakeMarkerToken(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z]/g, '');
+}
+
+function retakeMarkerDecisions(words) {
+  const timedWords = Array.isArray(words) ? words : [];
+  const decisions = [];
+  let previousMarkerEnd = -1;
+  for (let markerStart = 0; markerStart < timedWords.length - 1; markerStart++) {
+    if (!RETAKE_MARKER_FIRST_WORDS.has(retakeMarkerToken(timedWords[markerStart] && timedWords[markerStart].text)) ||
+        !RETAKE_MARKER_SECOND_WORDS.has(retakeMarkerToken(timedWords[markerStart + 1] && timedWords[markerStart + 1].text))) continue;
+    const markerEnd = markerStart + 1;
+    let attemptStart = markerStart;
+    // The marked mistake is the current spoken attempt: walk back to the
+    // latest natural pause, without ever crossing an earlier marker.
+    while (attemptStart > previousMarkerEnd + 1) {
+      const previous = timedWords[attemptStart - 1];
+      const current = timedWords[attemptStart];
+      if (Number(current && current.start) - Number(previous && previous.end) > RETAKE_MARKER_ATTEMPT_GAP_SECONDS) break;
+      attemptStart--;
+    }
+    const removeWordIndices = [];
+    for (let index = attemptStart; index <= markerEnd; index++) removeWordIndices.push(index);
+    const replacementWords = [];
+    for (let index = markerEnd + 1; index < timedWords.length && replacementWords.length < 24; index++) {
+      if (index > markerEnd + 1 && Number(timedWords[index].start) - Number(timedWords[index - 1].end) > RETAKE_MARKER_ATTEMPT_GAP_SECONDS) break;
+      replacementWords.push(timedWords[index]);
+      if (/[.!?]["'’”)]*$/.test(String(timedWords[index].text || ''))) break;
+    }
+    decisions.push({
+      id: 'marker-retake-' + decisions.length + '-' + attemptStart + '-' + markerEnd,
+      removeWordIndices: removeWordIndices,
+      firstText: timedWords.slice(attemptStart, markerEnd + 1).map(function (word) { return word.text; }).join(' '),
+      replacementText: replacementWords.map(function (word) { return word.text; }).join(' '),
+      confidence: 'high',
+      reason: '“Antoine Matthias” marked the preceding words as a false start.',
+      source: 'marker'
+    });
+    previousMarkerEnd = markerEnd;
+    markerStart = markerEnd;
+  }
+  return decisions;
+}
+
 const RETAKE_WEAK_TOKENS = new Set(['a', 'an', 'and', 'or', 'the', 'to', 'of', 'in', 'on', 'at', 'for', 'with', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'but']);
 
 function retakeSignalTokens(value) {
@@ -879,7 +931,9 @@ function retakeCandidatesForProject(project) {
     : retakeCandidates(project.words || []);
   // Apply the same deterministic gate when reading old stored decisions, so
   // legacy model commentary about related ideas disappears immediately.
-  return candidates.filter(isRepeatedLineRetakeCandidate);
+  return candidates.filter(function (candidate) {
+    return candidate && candidate.source === 'marker' || isRepeatedLineRetakeCandidate(candidate);
+  });
 }
 
 function unresolvedRetakeCount(project) {
@@ -1599,6 +1653,7 @@ function setup(options) {
         project.transcriptText = String(result.text || '').trim();
         project.words = normalizeWords(result.words);
         project.removedWordIndices = [];
+        project.autoRetakeRemovedWordIndices = [];
         project.dismissedRetakeIds = [];
         project.restoredAutoCutIds = [];
         project.autoSilenceEnabled = true;
@@ -1606,7 +1661,8 @@ function setup(options) {
         project.transcriptionError = project.words.length ? '' : 'No timed speech was detected in this recording.';
         project.retakeAnalysisStatus = project.words.length && typeof analyzeRetakes === 'function' ? 'pending' : 'unavailable';
         project.retakeAnalysisError = '';
-        project.retakeDecisions = [];
+        project.retakeDecisions = retakeMarkerDecisions(project.words);
+        reconcileAutomaticRetakeCuts(project, project.retakeDecisions);
         project.planningMatchStatus = project.words.length && typeof matchPlanningPiece === 'function' ? 'pending' : 'unavailable';
         project.planningMatchError = '';
         invalidateProjectRender(project);
@@ -1653,7 +1709,12 @@ function setup(options) {
         }
         project = getProject(id);
         if (!project) return;
-        const decisions = normalizeRetakeDecisions(raw && raw.decisions, project.words || []);
+        const markerDecisions = retakeMarkerDecisions(project.words || []);
+        const markerIndices = new Set(markerDecisions.flatMap(function (decision) { return decision.removeWordIndices; }));
+        const semanticDecisions = normalizeRetakeDecisions(raw && raw.decisions, project.words || []).filter(function (decision) {
+          return !decision.removeWordIndices.some(function (index) { return markerIndices.has(index); });
+        });
+        const decisions = markerDecisions.concat(semanticDecisions);
         reconcileAutomaticRetakeCuts(project, decisions);
         project.retakeDecisions = decisions;
         project.retakeAnalysisStatus = 'ready';
@@ -2629,7 +2690,7 @@ async function renderProject(id) {
       ? Array.from(new Set(req.body.removedWordIndices.map(Number).filter(function (index) { return Number.isInteger(index) && index >= 0 && index < (project.words || []).length; }))).sort(function (a, b) { return a - b; })
       : currentRemovedWordIndices;
     const nextDismissedRetakeIds = Array.isArray(req.body && req.body.dismissedRetakeIds)
-      ? Array.from(new Set(req.body.dismissedRetakeIds.map(String).filter(function (id) { return /^(?:retake-\d+|smart-retake-\d+-\d+-\d+)$/.test(id); }))).sort()
+      ? Array.from(new Set(req.body.dismissedRetakeIds.map(String).filter(function (id) { return /^(?:retake-\d+|smart-retake-\d+-\d+-\d+|marker-retake-\d+-\d+-\d+)$/.test(id); }))).sort()
       : currentDismissedRetakeIds;
     const nextRestoredAutoCutIds = Array.isArray(req.body && req.body.restoredAutoCutIds)
       ? Array.from(new Set(req.body.restoredAutoCutIds.map(String).filter(function (id) { return /^(lead|tail|gap-\d+)$/.test(id); }))).sort()
@@ -3161,6 +3222,7 @@ module.exports = {
   cleanOrphanedEditorTempFiles,
   gapDecisions,
   retakeCandidates,
+  retakeMarkerDecisions,
   repeatedLineEvidence,
   retakeCandidatesForProject,
   normalizeRetakeDecisions,

@@ -488,6 +488,37 @@ test('likely restarted lines are surfaced without being automatically removed', 
   assert.deepEqual(candidates[0].removeWordIndices, [0, 1]);
 });
 
+test('Antoine Matthias removes the current false start and marker but preserves the clean take', function () {
+  const timed = [
+    { index: 0, text: 'Earlier', start: 0, end: .3 }, { index: 1, text: 'point.', start: .35, end: .7 },
+    { index: 2, text: 'The', start: 1.8, end: 2 }, { index: 3, text: 'reason', start: 2.05, end: 2.35 },
+    { index: 4, text: 'for', start: 2.4, end: 2.55 }, { index: 5, text: 'this', start: 2.6, end: 2.85 },
+    { index: 6, text: 'Antoine', start: 3, end: 3.35 }, { index: 7, text: 'Matthias.', start: 3.4, end: 3.85 },
+    { index: 8, text: 'The', start: 4.8, end: 5 }, { index: 9, text: 'reason', start: 5.05, end: 5.35 },
+    { index: 10, text: 'for', start: 5.4, end: 5.55 }, { index: 11, text: 'existence.', start: 5.6, end: 6 }
+  ];
+  const decisions = editor.retakeMarkerDecisions(timed);
+  assert.equal(decisions.length, 1);
+  assert.deepEqual(decisions[0].removeWordIndices, [2, 3, 4, 5, 6, 7]);
+  assert.equal(decisions[0].replacementText, 'The reason for existence.');
+  assert.equal(decisions[0].source, 'marker');
+  const project = { words: timed, removedWordIndices: [], autoRetakeRemovedWordIndices: [], dismissedRetakeIds: [], retakeDecisions: decisions };
+  editor.reconcileAutomaticRetakeCuts(project, decisions);
+  assert.deepEqual(project.removedWordIndices, [2, 3, 4, 5, 6, 7]);
+  assert.equal(editor.appliedRetakeCount(project), 1);
+  assert.deepEqual(editor.calculateManualCuts(timed, project.removedWordIndices, 7), [
+    { start: .77, end: 4.7299999999999995, reason: 'transcript_cut' }
+  ]);
+});
+
+test('retake marker tolerates likely transcript spellings but requires both words', function () {
+  const timed = ['Mistake', 'Antwan', 'Mathias', 'Clean', 'take.'].map(function (text, index) {
+    return { index: index, text: text, start: index * .4, end: index * .4 + .3 };
+  });
+  assert.deepEqual(editor.retakeMarkerDecisions(timed)[0].removeWordIndices, [0, 1, 2]);
+  assert.deepEqual(editor.retakeMarkerDecisions(timed.slice(0, 2)), []);
+});
+
 test('semantic retake ranges become bounded exact word decisions', function () {
   const decisions = editor.normalizeRetakeDecisions([{ removeStartIndex: 0, removeEndIndex: 1, replacementStartIndex: 2, replacementEndIndex: 5, confidence: 'high', reason: 'The first attempt stops early.' }], [
     { index: 0, text: 'The', start: 0, end: .2 }, { index: 1, text: 'problem', start: .25, end: .6 },
