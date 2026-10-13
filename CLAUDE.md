@@ -18706,3 +18706,18 @@ page eyebrow now changes from the gold **Order in progress** label to a green
 exclamation mark: **Our Expert Bookbinders Are Rolling Up Their Sleeves!** The
 same transition is visible in the safe `/testorder/` simulation, and replaying
 the demo restores the original gold in-progress state before running again.
+
+---
+
+# 595. Animated Waiting Copy and Mobile Confirmation Order (2026-10-13)
+
+The in-progress confirmation headline now reads **We're Confirming Your Order.
+Please wait...** The three dots animate in sequence while the status is pending;
+the accessible label exposes the complete sentence without repeatedly
+announcing the visual animation, and reduced-motion visitors see three static
+dots.
+
+On screens up to 760px wide, confirmation content now appears before the
+floating book. Desktop retains the established book-left, copy-right layout.
+The live confirmation page and `/testorder/` use the same markup, controller
+and responsive rule, including when the demo is replayed.

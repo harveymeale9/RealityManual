@@ -84,6 +84,7 @@
       spinner.style.display = 'none';
       statusEyebrow.textContent = '✓ Order confirmed';
       statusEyebrow.classList.add('is-success');
+      statusTitle.removeAttribute('aria-label');
       statusTitle.textContent = 'Our Expert Bookbinders Are Rolling Up Their Sleeves!';
       statusMessage.textContent = "Thank you! Your payment has been received and your order has been confirmed. Please bear in mind that it can take up to 15 business days for us to print your Reality Manual. We'll send you another email as soon as we ship your order!";
       if (!isDemo) trackOnce('order_complete', order.order_id);
@@ -125,6 +126,7 @@
   function showTerminalState({ title, message, isError, showRetry }) {
     clearTimeout(timerId);
     spinner.style.display = 'none';
+    statusTitle.removeAttribute('aria-label');
     statusTitle.textContent = title;
     statusTitle.style.color = isError ? 'var(--error)' : 'var(--ink)';
     statusMessage.textContent = message;
@@ -158,7 +160,7 @@
       spinner.style.display = '';
       statusEyebrow.textContent = 'Order in progress';
       statusEyebrow.classList.remove('is-success');
-      statusTitle.textContent = "We're Confirming Your Order";
+      setWaitingTitle();
       statusTitle.style.color = '';
       statusMessage.textContent = "We're confirming your payment and placing your order with our expert bookbinders now. This usually only takes a moment.";
       countdown.hidden = false;
@@ -200,6 +202,22 @@
     }
 
     showConfirmingState();
+  }
+
+  function setWaitingTitle() {
+    statusTitle.setAttribute('aria-label', "We're Confirming Your Order. Please wait...");
+    statusTitle.replaceChildren(
+      document.createTextNode("We're Confirming Your Order. Please wait"),
+    );
+    const dots = document.createElement('span');
+    dots.className = 'confirmation-waiting-dots';
+    dots.setAttribute('aria-hidden', 'true');
+    for (let index = 0; index < 3; index += 1) {
+      const dot = document.createElement('span');
+      dot.textContent = '.';
+      dots.appendChild(dot);
+    }
+    statusTitle.appendChild(dots);
   }
 
 })();

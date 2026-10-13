@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Archivo:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/style.css?v=20261013-confirmation-success" />
+  <link rel="stylesheet" href="/css/style.css?v=20261013-confirmation-wait" />
 </head>
 <body data-order-demo="true">
   <header class="site-header">
@@ -27,7 +27,7 @@
       <div class="confirmation-content">
         <p class="eyebrow" id="status-eyebrow">Order in progress</p>
         <div class="spinner" id="spinner"></div>
-        <h1 id="status-title">We're Confirming Your Order</h1>
+        <h1 id="status-title" aria-label="We're Confirming Your Order. Please wait...">We're Confirming Your Order. Please wait<span class="confirmation-waiting-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></h1>
         <p id="status-message">We're confirming your payment and placing your order with our expert bookbinders now. This usually only takes a moment.</p>
         <div id="action-area"></div>
       </div>
@@ -43,7 +43,7 @@
   </footer>
 
   <script src="/js/config.js?v=20261002-meta"></script>
-  <script src="/js/confirmation.js?v=20261013-confirmation-success"></script>
+  <script src="/js/confirmation.js?v=20261013-confirmation-wait"></script>
   <script>
     document.getElementById('year').textContent = new Date().getFullYear();
   </script>
