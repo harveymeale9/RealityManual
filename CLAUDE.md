@@ -18573,11 +18573,14 @@ therefore remains in `FULFILLMENT_RETRY`, and the Reality Manual confirmation
 email is correctly withheld because that email is sent only after BookVault
 accepts the print job. Activating the title and funding the BookVault account
 are Harvey/account-owner actions. The customs-declaration field is a separate
-integration follow-up which must use BookVault's current official order schema
-and the store's stated customer-responsible import-duty policy.
+integration issue fixed in the same pass against BookVault's current official
+order schema: non-GB orders now send `CustomsDeclaration` with the standard
+printed-book HS code, BookVault's calculated order value, no IOSS, and DDU
+incoterms. DDU matches the store's stated customer-responsible import-duty
+policy; domestic UK orders omit the declaration.
 
 Regression coverage proves the Stripe receipt override is absent, the new book
 asset and confirmation copy remain present, no order metadata is rendered, and
-terminal polling stops. The full backend suite passes with 19 tests. The page
+terminal polling stops. The full backend suite passes with 20 tests. The page
 was rendered in a real Chromium browser at 1440x900 and 390x844; both layouts
 show the intended state without horizontal overflow.

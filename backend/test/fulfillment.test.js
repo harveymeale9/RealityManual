@@ -54,6 +54,19 @@ test('BookVault payload uses the checkout service and complete customer address'
   assert.equal(payload.OrderLines[0].ISBN, '9781234567890');
   assert.equal(payload.Address.Country.ISO_Code, 'US');
   assert.equal(payload.Notifications.NotifyCustomer, false);
+  assert.deepEqual(payload.CustomsDeclaration, {
+    UseOrderValue: true,
+    HSCode: '49019900',
+    UseIOSS: false,
+    IncoTerms: 'DDU',
+  });
+});
+
+test('BookVault payload omits customs declaration for domestic UK orders', () => {
+  const order = paidOrder();
+  order.country = 'GB';
+  const payload = bookvaultService.orderPayload(order);
+  assert.equal(payload.CustomsDeclaration, undefined);
 });
 
 test('paid order is submitted once, emailed, then dispatch is emailed with tracking', async () => {

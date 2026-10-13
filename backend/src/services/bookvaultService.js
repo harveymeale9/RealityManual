@@ -69,7 +69,7 @@ function orderPayload(order) {
     ? { RequestedService: 'Specified', RequestedServID: [Number(order.shipping_service_id)] }
     : { RequestedService: 'CheapestTracked' };
 
-  return {
+  const payload = {
     Status: 'Active',
     DocRef: order.id,
     CustRef: order.id,
@@ -94,6 +94,22 @@ function orderPayload(order) {
       Quantity: Number(order.quantity),
     }],
   };
+
+  // BookVault requires an explicit declaration when a UK account sends an
+  // order overseas. The storefront does not collect destination duties or
+  // taxes (terms.html), so DDU keeps those charges with the recipient. Using
+  // the order value lets BookVault calculate the declaration rather than
+  // trusting a duplicated price assembled here.
+  if (String(order.country || '').toUpperCase() !== 'GB') {
+    payload.CustomsDeclaration = {
+      UseOrderValue: true,
+      HSCode: '49019900',
+      UseIOSS: false,
+      IncoTerms: 'DDU',
+    };
+  }
+
+  return payload;
 }
 
 function assertAcceptedOrder(data) {
