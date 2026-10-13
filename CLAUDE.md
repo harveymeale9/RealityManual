@@ -18320,3 +18320,33 @@ reserve composition, short-form reserve composition, recent-length alternation,
 topic avoidance, oldest-first ties, the new stage/control, and removal of the
 old direct scheduling action. The complete ops-service suite passes (197 tests),
 and the touched browser/server JavaScript passes syntax validation.
+
+---
+
+# 578. Mobile Homepage VSL Preserves Its Full Frame (2026-10-13)
+
+The homepage VSL used the same tall hero height before and after playback on
+mobile. Because the injected horizontal video also inherited `object-fit:
+cover`, the browser filled that portrait-height box by cropping both sides of
+the 16:9 source. This made the video appear wider than the phone and cut off
+captions baked near the source edges even though the DOM itself did not report
+horizontal overflow.
+
+Once playback starts on a sub-900px viewport, the VSL now changes to a genuine
+16:9 box constrained to the device width. Its video or iframe uses
+`object-fit: contain`, so the whole horizontal frame, native controls, and
+captions remain visible. The tall photographic treatment is retained before
+play and desktop behavior is unchanged.
+
+The mobile poster is also brighter. Its dedicated shade layer was reduced and
+the generic video-card vignette now has a lighter homepage-specific mobile
+override, avoiding the previous pair of stacked dark masks over the open-book
+photograph. The root homepage and `/home2/` alias share the fix and received the
+same stylesheet cache key.
+
+Verification used Chromium at a 390 by 844 viewport against the actual local
+page. Before play the hero measured 390 by 573.9 pixels with no page overflow.
+After play it measured 390 by 219.375 pixels, exactly 16:9; the 1920 by 1080
+video occupied the same in-bounds rectangle with computed `object-fit:
+contain`, document width remained 390 pixels, and an actual frame at 15 seconds
+showed the complete source and caption within the phone width.
