@@ -18613,3 +18613,22 @@ validation messages. The live checkout still contains no `receipt_email`, the
 new confirmation asset and copy are live, and the production Resend preview
 remains confirmed delivered. The replacement order is therefore cleared for an
 end-to-end live test.
+
+---
+
+# 589. Single-Count Website Funnel and Refund Visibility (2026-10-13)
+
+Website Analytics previously rendered both raw event count and unique-session
+count on every funnel row, producing combinations such as “97” and “14 visits”
+without column headings. Harvey found the paired numbers confusing. Funnel rows
+now show one right-aligned raw count only; the separate top-level visitor cards
+continue to communicate verified browser/visit totals where that distinction is
+useful.
+
+The funnel also now includes **Order refunded** immediately before **Order
+failed**. This is sourced from the private storefront sales dashboard's
+30-day `REFUNDED` order aggregate, not from a browser event, so server-side
+refunds appear even when the customer does not revisit the confirmation page.
+If the private sales aggregate is temporarily unavailable, Website Analytics
+still renders normally with a conservative zero refund count. A static UI
+regression locks the refund source, label, and single-count rendering.

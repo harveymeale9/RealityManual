@@ -2,8 +2,17 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const Database = require('better-sqlite3');
 const reporting = require('../src/storefrontReporting');
+
+test('website analytics shows refunds and one count per funnel row', function () {
+  const appSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.match(appSource, /order_refunded: 'Order refunded'/);
+  assert.match(appSource, /last_30_days\.refunded_orders/);
+  assert.doesNotMatch(appSource, /f\.unique_sessions \+ ' visits'/);
+});
 
 test('storefront report aggregates traffic, funnel, paid sales and refunds without returning PII', function () {
   const db = new Database(':memory:');

@@ -2381,7 +2381,7 @@ body.role-reviewer #pmBackFab {
 }
 .funnel-row:last-child { border-bottom: none; }
 .funnel-step { flex: 1; color: var(--ink-soft); text-transform: capitalize; }
-.funnel-count { font-family: var(--font-mono); color: var(--accent); font-variant-numeric: tabular-nums; }
+.funnel-count { min-width: 5ch; text-align: right; font-family: var(--font-mono); color: var(--accent); font-variant-numeric: tabular-nums; }
 .funnel-sessions { color: var(--ink-faint); font-size: 0.76rem; min-width: 9ch; text-align: right; }
 .analytics-definition { color: var(--ink-soft); font-size: 0.82rem; line-height: 1.5; max-width: 620px; }
 .analytics-definition + .analytics-definition { color: var(--ink-faint); margin-top: -4px; }

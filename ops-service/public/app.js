@@ -345,10 +345,17 @@
 
   function renderWebsiteAnalytics() {
     panelMain.innerHTML = '<div class="tab-placeholder wide"><div class="eyebrow">Loading…</div><h2>Website Analytics</h2></div>';
-    fetch(STOREFRONT_API_BASE + '/api/analytics/summary')
-      .then(function (res) { if (!res.ok) throw new Error('bad_status'); return res.json(); })
-      .then(function (data) {
+    Promise.all([
+      fetch(STOREFRONT_API_BASE + '/api/analytics/summary')
+        .then(function (res) { if (!res.ok) throw new Error('bad_status'); return res.json(); }),
+      fetch('/api/reports/sales-dashboard', { credentials: 'include' })
+        .then(function (res) { return res.ok ? res.json() : null; })
+        .catch(function () { return null; })
+    ])
+      .then(function (results) {
         if (currentTabId() !== 'website-analytics') return; // navigated away before this resolved
+        var data = results[0];
+        var sales = results[1];
 
         var funnelLabels = {
           page_view: 'Page viewed',
@@ -364,11 +371,21 @@
           checkout_started: 'Checkout form engaged',
           payment_submitted: 'Payment submitted',
           order_complete: 'Order completed',
+          order_refunded: 'Order refunded',
           order_failed: 'Order failed'
         };
-        var funnelRows = data.funnel.map(function (f) {
+        var funnel = data.funnel.slice();
+        var refundedOrders = sales && sales.periods && sales.periods.last_30_days
+          ? Number(sales.periods.last_30_days.refunded_orders) || 0
+          : 0;
+        var failedIndex = funnel.findIndex(function (row) { return row.step === 'order_failed'; });
+        var refundedRow = { step: 'order_refunded', count: refundedOrders };
+        if (failedIndex === -1) funnel.push(refundedRow);
+        else funnel.splice(failedIndex, 0, refundedRow);
+
+        var funnelRows = funnel.map(function (f) {
           return '<div class="funnel-row"><span class="funnel-step">' + escapeHtml(funnelLabels[f.step] || f.step.replace(/_/g, ' ')) + '</span>' +
-            '<span class="funnel-count">' + f.count + '</span><span class="funnel-sessions">' + f.unique_sessions + ' visits</span></div>';
+            '<span class="funnel-count">' + f.count + '</span></div>';
         }).join('');
 
         var utmRows = data.top_utm_sources.length
