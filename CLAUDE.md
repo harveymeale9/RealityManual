@@ -18595,3 +18595,11 @@ refund email. A post-action audit confirmed Stripe reports the full refund as
 `succeeded`, BookVault still has no order, the public status endpoint reports
 `REFUNDED`, and the order is no longer eligible for a BookVault submission
 retry.
+
+A final post-refund email-path audit verified the two providers independently.
+The deployed checkout bundle contains no `receipt_email`, so new API-created
+PaymentIntents no longer force Stripe receipts. The production Resend account
+then sent one explicitly labelled `[PREVIEW]` branded order-confirmation email
+to the configured private preview recipient; Resend's email-status API reported
+`last_event: delivered`. This confirms that disabling Stripe's receipt path did
+not affect the store-owned Resend confirmation and refund path.
