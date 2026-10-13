@@ -1,7 +1,9 @@
 'use strict';
 
 const FUNNEL_STEPS = [
-  'page_view', 'landing_page_view', 'purchase_cta_clicked', 'checkout_view',
+  'page_view', 'landing_page_view', 'purchase_cta_clicked',
+  'checkout_cta_header_clicked', 'checkout_cta_primary_clicked', 'checkout_cta_final_clicked',
+  'checkout_arrival_header', 'checkout_arrival_primary', 'checkout_arrival_final', 'checkout_view',
   'checkout_started', 'payment_submitted', 'order_complete', 'order_failed'
 ];
 

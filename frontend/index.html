@@ -34,7 +34,7 @@
       </button>
 
       <nav class="site-nav" id="site-nav">
-        <a class="btn btn--nav" href="checkout.html" data-cta="nav">Get Your Copy</a>
+        <a class="btn btn--nav" href="checkout.html?cta_source=header" data-cta="header">Get Your Copy</a>
       </nav>
     </div>
   </header>
@@ -68,7 +68,7 @@
             <h2 id="home2-title">Get Your Deluxe First Edition Hardcover Now</h2>
             <p class="home2-purchase__lede">Printed and bound by one of the world's finest bespoke bookbinders, each copy of The Reality Manual is expertly crafted to order using premium materials and designed to last a lifetime.</p>
 
-            <a class="btn btn--lg home2-purchase__button" href="checkout.html" data-cta="home2-offer">Continue to Checkout →</a>
+            <a class="btn btn--lg home2-purchase__button" href="checkout.html?cta_source=primary_offer" data-cta="primary_offer">Continue to Checkout →</a>
 
             <div class="home2-purchase__trust" aria-label="Purchase assurances">
               <div class="home2-purchase__trust-item">
@@ -184,7 +184,7 @@
           <h2 class="home2-review__lead" id="home2-review-heading">“A rare combination of depth, clarity,<br />and practical value.”</h2>
           <div class="home2-review__stars" aria-label="Five out of five stars">★★★★★</div>
 
-          <a class="btn btn--lg home2-review__button" href="checkout.html" data-cta="final">Continue to Checkout →</a>
+          <a class="btn btn--lg home2-review__button" href="checkout.html?cta_source=final_cta" data-cta="final_cta">Continue to Checkout →</a>
 
           <div class="home2-purchase__trust" aria-label="Purchase assurances">
             <div class="home2-purchase__trust-item">
@@ -255,6 +255,12 @@
       var cta = e.target.closest('[data-cta]');
       if (cta) {
         RMAnalytics.track('purchase_cta_clicked', { cta: cta.dataset.cta });
+        var placementEvent = {
+          header: 'checkout_cta_header_clicked',
+          primary_offer: 'checkout_cta_primary_clicked',
+          final_cta: 'checkout_cta_final_clicked'
+        }[cta.dataset.cta];
+        if (placementEvent) RMAnalytics.track(placementEvent);
         if (window.RMMarketing) RMMarketing.track('ViewContent', {
           content_ids: ['reality-manual-hardcover'], content_type: 'product', value: 65, currency: 'USD'
         });

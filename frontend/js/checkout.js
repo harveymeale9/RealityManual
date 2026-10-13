@@ -40,14 +40,23 @@
   let stripe = null;
   let elements = null;
 
+  const ctaSource = new URLSearchParams(window.location.search).get('cta_source') || '';
+  const checkoutArrivalEvent = {
+    header: 'checkout_arrival_header',
+    primary_offer: 'checkout_arrival_primary',
+    final_cta: 'checkout_arrival_final'
+  }[ctaSource];
   RMAnalytics.track('checkout_view');
+  if (checkoutArrivalEvent) RMAnalytics.track(checkoutArrivalEvent);
   if (window.RMMarketing) {
-    RMMarketing.track('InitiateCheckout', {
+    const marketingCheckout = {
       value: BOOK_PRICE_CENTS / 100,
       currency: 'USD',
       content_ids: ['reality-manual-hardcover'],
       content_type: 'product'
-    });
+    };
+    if (checkoutArrivalEvent) marketingCheckout.cta_source = ctaSource;
+    RMMarketing.track('InitiateCheckout', marketingCheckout);
   }
   // Fired once, on the first time the shopper actually touches the form -
   // distinct from checkout_view (just landing on the page) per CLAUDE.md §31.

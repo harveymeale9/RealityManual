@@ -18516,3 +18516,26 @@ under **Life Strategy**, while the indirect-pursuit diagram now appears under
 **Advanced Techniques**. The swap is present on both `/` and `/home2/`, and the
 descriptive alt text moved with each image. Their per-source brightness values
 also moved with them so the unified sepia grade remains visually balanced.
+
+---
+
+# 587. Durable Homepage Checkout-Button Attribution (2026-10-13)
+
+The three homepage checkout placements now have distinct attribution paths:
+`header`, `primary_offer`, and `final_cta`. Each link carries its source into
+`checkout.html` through an allowlisted `cta_source` query parameter. The landing
+page records both the existing aggregate `purchase_cta_clicked` event and a
+placement-specific click event. Checkout records both `checkout_view` and the
+matching placement-specific arrival event, so a fast navigation or lost click
+beacon cannot erase which button actually produced the checkout visit.
+
+The storefront backend accepts and aggregates six new event names: three click
+events and three checkout-arrival events. The Website Analytics funnel labels
+them explicitly as header, primary offer, or final CTA, and private weekly
+report data retains the same rows. Meta/Google `InitiateCheckout` also receives
+the allowlisted `cta_source` as a custom parameter. No arbitrary query value can
+become an analytics event name.
+
+Regression coverage verifies all three homepage destinations, all six event
+mappings, preservation across both `/` and `/home2/`, aggregation after the
+privacy compaction pass, and inclusion in private storefront reporting.

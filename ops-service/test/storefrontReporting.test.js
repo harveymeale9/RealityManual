@@ -14,6 +14,7 @@ test('storefront report aggregates traffic, funnel, paid sales and refunds witho
   const event = db.prepare('INSERT INTO analytics_events VALUES (?,?,?,?,?)');
   event.run('a','page_view','tiktok','launch','2026-09-15T10:00:00.000Z');
   event.run('a','landing_page_view','tiktok','launch','2026-09-15T10:00:01.000Z');
+  event.run('a','checkout_arrival_primary','tiktok','launch','2026-09-15T10:00:30.000Z');
   event.run('a','checkout_view','tiktok','launch','2026-09-15T10:01:00.000Z');
   event.run('a','order_complete','tiktok','launch','2026-09-15T10:02:00.000Z');
   event.run('b','page_view','','','2026-09-16T10:00:00.000Z');
@@ -27,6 +28,7 @@ test('storefront report aggregates traffic, funnel, paid sales and refunds witho
   assert.equal(report.website.unique_visitors, 2);
   assert.equal(report.website.landing_to_checkout_percent, 100);
   assert.equal(report.website.checkout_to_order_percent, 100);
+  assert.equal(report.website.funnel.find(function (row) { return row.step === 'checkout_arrival_primary'; }).count, 1);
   assert.deepEqual(report.website.top_sources, [{ source: 'tiktok', sessions: 1 }]);
   assert.equal(report.sales.paid_orders, 1);
   assert.equal(report.sales.units, 2);
