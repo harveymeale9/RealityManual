@@ -5261,8 +5261,8 @@
     var dis = IS_REVIEWER ? ' disabled' : '';
     grid.innerHTML = '<div class="cadence-row" data-key="longform">' +
       '<span class="cadence-label">Direct longform <span class="ink-faint">(YouTube / Facebook)</span></span>' +
-      '<span class="cadence-inputs">Every 3 days at <input type="time" class="cadence-time" id="longformScheduleTime" value="' +
-        escapeHtml(settingsCache.longformScheduleTime || '07:55') + '"' + dis + ' /> <span>Asia/Bangkok</span></span>' +
+      '<span class="cadence-inputs">First video at the next <input type="time" class="cadence-time" id="longformScheduleTime" value="' +
+        escapeHtml(settingsCache.longformScheduleTime || '07:55') + '"' + dis + ' /> <span>Asia/Bangkok, then every 3 days</span></span>' +
     '</div>';
     var timeInput = document.getElementById('longformScheduleTime');
     timeInput.addEventListener('change', function () {

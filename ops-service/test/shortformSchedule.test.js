@@ -52,6 +52,21 @@ test('longform uses the chosen Bangkok time on a three-day calendar rhythm', fun
   );
 });
 
+test('the first longform uses the very next 1:55 PM Bangkok occurrence', function () {
+  assert.equal(
+    schedule.nextBangkokLongformSlot(Date.parse('2026-10-13T05:00:00Z'), '13:55', null),
+    '2026-10-13T06:55:00.000Z'
+  );
+  assert.equal(
+    schedule.nextBangkokLongformSlot(Date.parse('2026-10-13T07:00:00Z'), '13:55', null),
+    '2026-10-14T06:55:00.000Z'
+  );
+  assert.equal(
+    schedule.nextBangkokLongformSlot(Date.parse('2026-10-14T00:00:00Z'), '13:55', '2026-10-13T06:55:00.000Z'),
+    '2026-10-16T06:55:00.000Z'
+  );
+});
+
 test('longform time input is normalized and safely defaults to the shorts midpoint', function () {
   assert.equal(schedule.normalizeLongformTime('19:05'), '19:05');
   assert.equal(schedule.normalizeLongformTime('bad'), '07:55');
