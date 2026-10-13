@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Archivo:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/style.css?v=20261013-branded-confirmation" />
 </head>
 <body>
   <header class="site-header">
@@ -18,14 +18,20 @@
     </div>
   </header>
 
-  <main class="page-wrap">
-    <div class="confirmation-box" id="confirmation-box" aria-live="polite">
-      <div class="spinner" id="spinner"></div>
-      <h2 id="status-title">We're confirming your payment</h2>
-      <p id="status-message">Please wait a moment. This usually only takes a few seconds.</p>
-      <div class="order-meta" id="order-meta"></div>
-      <div id="action-area"></div>
-    </div>
+  <main class="confirmation-page">
+    <section class="confirmation-box" id="confirmation-box" aria-live="polite">
+      <div class="confirmation-book" aria-hidden="true">
+        <img src="img/photo/reality-manual-deluxe-hardcover-cutout.webp" alt="" width="1086" height="1448" />
+      </div>
+
+      <div class="confirmation-content">
+        <p class="eyebrow" id="status-eyebrow">Order received</p>
+        <div class="spinner" id="spinner"></div>
+        <h1 id="status-title">We're confirming your payment</h1>
+        <p id="status-message">Please wait a moment. This usually only takes a few seconds.</p>
+        <div id="action-area"></div>
+      </div>
+    </section>
   </main>
 
   <footer>
@@ -39,7 +45,7 @@
   <script src="js/config.js?v=20261002-meta"></script>
   <script src="js/analytics.js?v=20261002-no-prompts"></script>
   <script src="js/marketing.js?v=20261002-auto-meta"></script>
-  <script src="js/confirmation.js?v=20261012-no-em-dashes"></script>
+  <script src="js/confirmation.js?v=20261013-branded-confirmation"></script>
   <script>
     document.getElementById('year').textContent = new Date().getFullYear();
   </script>

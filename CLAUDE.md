@@ -18539,3 +18539,45 @@ become an analytics event name.
 Regression coverage verifies all three homepage destinations, all six event
 mappings, preservation across both `/` and `/home2/`, aggregation after the
 privacy compaction pass, and inclusion in private storefront reporting.
+
+---
+
+# 588. Branded Confirmation Page and Store-Owned Receipt Flow (2026-10-13)
+
+The first real live purchase exposed two customer-experience issues. Checkout
+was explicitly passing `receipt_email` into `stripe.confirmPayment`, which
+causes Stripe to send its own receipt in live mode regardless of Dashboard
+email settings. That receipt used the legal Stripe account branding rather than
+The Reality Manual. The client no longer supplies `receipt_email`; customer
+order and dispatch messages remain the branded Resend templates owned by the
+storefront.
+
+The confirmation page is now a responsive two-column presentation based on the
+homepage offer: the transparent hardcover cutout floats above a soft shadow,
+with the confirmation message alongside it on desktop and beneath it on mobile.
+The UUID, product-description and price metadata line was removed. Once
+BookVault has authoritatively accepted an order, the page says “Our Expert
+Bookbinders Are Rolling Up Their Sleeves,” explains the up-to-15-business-day
+production window, and promises a dispatch email. Paid orders which BookVault
+has not yet accepted retain the same premium layout but accurately say that
+confirmation is still being finished. This preserves §27's requirement not to
+claim successful fulfillment before printer acceptance. Terminal success and
+failure states now also stop the polling loop instead of being polled again and
+potentially overwritten five minutes later.
+
+The live purchase `1ccac84e-975a-424b-be98-3b9b754a9298` confirmed that Stripe
+payment capture and signed-webhook persistence work, but BookVault rejected the
+order for three independent reasons: the title is inactive, the account balance
+is insufficient, and the overseas order lacks a customs declaration. The order
+therefore remains in `FULFILLMENT_RETRY`, and the Reality Manual confirmation
+email is correctly withheld because that email is sent only after BookVault
+accepts the print job. Activating the title and funding the BookVault account
+are Harvey/account-owner actions. The customs-declaration field is a separate
+integration follow-up which must use BookVault's current official order schema
+and the store's stated customer-responsible import-duty policy.
+
+Regression coverage proves the Stripe receipt override is absent, the new book
+asset and confirmation copy remain present, no order metadata is rendered, and
+terminal polling stops. The full backend suite passes with 19 tests. The page
+was rendered in a real Chromium browser at 1440x900 and 390x844; both layouts
+show the intended state without horizontal overflow.

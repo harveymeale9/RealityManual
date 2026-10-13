@@ -56,3 +56,17 @@ test('each homepage checkout placement survives navigation as its own arrival ev
   });
   assert.equal(homepage, home2);
 });
+
+test('checkout uses only the branded confirmation flow and confirmation omits order metadata', () => {
+  const checkout = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'js', 'checkout.js'), 'utf8');
+  const confirmationPage = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'confirmation.html'), 'utf8');
+  const confirmationScript = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'js', 'confirmation.js'), 'utf8');
+
+  assert.doesNotMatch(checkout, /receipt_email/);
+  assert.match(confirmationPage, /reality-manual-deluxe-hardcover-cutout\.webp/);
+  assert.doesNotMatch(confirmationPage, /order-meta/);
+  assert.match(confirmationScript, /Our Expert Bookbinders Are Rolling Up Their Sleeves/);
+  assert.match(confirmationScript, /15 business days/);
+  assert.match(confirmationScript, /if \(terminal\) return/);
+  assert.doesNotMatch(confirmationScript, /product_description|formatCents/);
+});

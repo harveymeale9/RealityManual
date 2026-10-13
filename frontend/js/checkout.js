@@ -370,7 +370,6 @@
       clientSecret: orderResponse.client_secret,
       confirmParams: {
         return_url: confirmationUrl,
-        receipt_email: values.email,
       },
     });
 

@@ -4,9 +4,9 @@
   const MAX_POLLS = 150; // ~5 minutes
 
   const spinner = document.getElementById('spinner');
+  const statusEyebrow = document.getElementById('status-eyebrow');
   const statusTitle = document.getElementById('status-title');
   const statusMessage = document.getElementById('status-message');
-  const orderMeta = document.getElementById('order-meta');
   const actionArea = document.getElementById('action-area');
 
   const params = new URLSearchParams(window.location.search);
@@ -54,7 +54,8 @@
       if (!res.ok) throw new Error('status_check_failed');
 
       const data = await res.json();
-      render(data);
+      const terminal = render(data);
+      if (terminal) return;
     } catch (err) {
       // Transient network errors shouldn't stop polling - just try again.
     }
@@ -72,12 +73,12 @@
   }
 
   function render(order) {
-    if (['PAYMENT_RECEIVED', 'FULFILLMENT_RETRY', 'BOOKVAULT_ACCEPTED', 'SHIPPED'].includes(order.order_status)) {
+    if (['BOOKVAULT_ACCEPTED', 'SHIPPED'].includes(order.order_status)) {
       clearTimeout(timerId);
       spinner.style.display = 'none';
-      statusTitle.textContent = 'Payment confirmed';
-      statusMessage.textContent = `Thank you for ordering ${order.product_name}. Your order is being prepared for fulfillment. We'll follow up by email once it ships.`;
-      orderMeta.textContent = `Order ${order.order_id} · ${order.product_description} · ${formatCents(order.total_price_cents, order.currency)}`;
+      statusEyebrow.textContent = 'Order confirmed';
+      statusTitle.textContent = 'Our Expert Bookbinders Are Rolling Up Their Sleeves';
+      statusMessage.textContent = "Thank you! Your payment has been received and your order has been confirmed. Please bear in mind that it can take up to 15 business days for us to print your Reality Manual. We'll send you another email as soon as we ship your order!";
       trackOnce('order_complete', order.order_id);
       if (window.RMMarketing) {
         RMMarketing.track('Purchase', {
@@ -89,7 +90,14 @@
           transaction_id: order.order_id
         }, order.order_id);
       }
-      return;
+      return true;
+    }
+
+    if (['PAYMENT_RECEIVED', 'FULFILLMENT_RETRY'].includes(order.order_status)) {
+      statusEyebrow.textContent = 'Payment received';
+      statusTitle.textContent = 'Our Expert Bookbinders Are Getting Ready';
+      statusMessage.textContent = "Thank you! Your payment has been received. We're finishing confirmation with our bookbinders now, and we'll email you as soon as your order is confirmed.";
+      return false;
     }
 
     if (order.order_status === 'FAILED') {
@@ -100,18 +108,17 @@
         isError: true,
         showRetry: true,
       });
-      return;
+      return true;
     }
 
     if (order.order_status === 'PAYMENT_PROCESSING') {
+      statusEyebrow.textContent = 'Payment processing';
       statusTitle.textContent = 'Payment processing';
       statusMessage.textContent = 'Your payment has been authorized and is still being confirmed. We will begin preparing your order only after Stripe confirms the funds.';
-      orderMeta.textContent = `Order ${order.order_id}`;
-      return;
+      return false;
     }
 
-    // PAYMENT_PENDING - keep polling, waiting state stays as-is.
-    orderMeta.textContent = `Order ${order.order_id}`;
+    return false;
   }
 
   function showTerminalState({ title, message, isError, showRetry }) {
@@ -130,7 +137,4 @@
     }
   }
 
-  function formatCents(cents, currency) {
-    return `$${(cents / 100).toFixed(2)} ${String(currency || 'usd').toUpperCase()}`;
-  }
 })();
