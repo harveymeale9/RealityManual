@@ -18506,3 +18506,13 @@ The stylesheet URL was revisioned on both `/` and `/home2/` to bypass cached
 CSS. A real-browser mobile capture confirmed that all four pages now sit at a
 similar warm level, retain readable detail, and remain visually distinct from
 the dark candlelit study background.
+
+---
+
+# 586. Life Strategy and Advanced Techniques Interior Images Swapped (2026-10-13)
+
+At Harvey's request, the Omnipresence/celestial God illustration now appears
+under **Life Strategy**, while the indirect-pursuit diagram now appears under
+**Advanced Techniques**. The swap is present on both `/` and `/home2/`, and the
+descriptive alt text moved with each image. Their per-source brightness values
+also moved with them so the unified sepia grade remains visually balanced.

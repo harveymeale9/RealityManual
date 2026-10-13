@@ -1235,8 +1235,8 @@ img { max-width: 100%; }
 }
 .home2-page .inside .page-card:nth-child(1) { --inside-page-brightness: 0.92; }
 .home2-page .inside .page-card:nth-child(2) { --inside-page-brightness: 0.84; }
-.home2-page .inside .page-card:nth-child(3) { --inside-page-brightness: 0.82; }
-.home2-page .inside .page-card:nth-child(4) { --inside-page-brightness: 0.70; }
+.home2-page .inside .page-card:nth-child(3) { --inside-page-brightness: 0.70; }
+.home2-page .inside .page-card:nth-child(4) { --inside-page-brightness: 0.82; }
 .home2-page .inside .page-card img {
   position: absolute;
   left: 50%;
