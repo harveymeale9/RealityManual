@@ -113,7 +113,7 @@ function layout({ preview = false, preheader, eyebrow, title, body, details, cal
 function orderConfirmedEmail(order, { preview = false } = {}) {
   const orderNumber = order.display_order_id || order.id;
   const address = addressLines(order);
-  const subject = `${preview ? '[PREVIEW] ' : ''}We’re Making Your Copy of The Reality Manual`;
+  const subject = 'We’re Making Your Copy of The Reality Manual.';
   const details = detailsTable([
     ['Order', escapeHtml(orderNumber)],
     ['Edition', 'Hardcover, Deluxe First Edition'],

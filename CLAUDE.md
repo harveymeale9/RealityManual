@@ -18649,3 +18649,14 @@ Sleeves.**, including Harvey's requested full stop. Genuine terminal failures
 still replace the progress message with the necessary failure and retry copy;
 the two-state simplification applies to the normal successful order path rather
 than hiding actionable errors.
+
+---
+
+# 591. Customer Confirmation Subject Is Always Production Copy (2026-10-13)
+
+The order-confirmation email subject is now always **We’re Making Your Copy of
+The Reality Manual.**, including the requested closing full stop. The template
+no longer adds a `[PREVIEW]` prefix when invoked by the internal preview sender,
+so a preview cannot be mistaken for a separate customer-facing subject format.
+The normal fulfillment path was already invoking the template without preview
+mode; this change makes the subject invariant across both paths.
