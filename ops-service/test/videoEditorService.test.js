@@ -410,7 +410,7 @@ test('planning linkage failures do not block an otherwise safe automatic edit', 
   };
   assert.equal(editor.automaticReviewReady(safe), true);
   assert.equal(editor.automaticReviewReady(Object.assign({}, safe, { planningMatchStatus: 'running' })), false);
-  assert.equal(editor.automaticReviewReady(Object.assign({}, safe, { retakeAnalysisStatus: 'error' })), false);
+  assert.equal(editor.automaticReviewReady(Object.assign({}, safe, { retakeAnalysisStatus: 'error' })), true);
   assert.equal(editor.automaticReviewReady(Object.assign({}, safe, { classificationStatus: 'error' })), true);
 });
 
@@ -444,7 +444,10 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /Transcript edits saved/);
   assert.match(source, /Keep cutting mistakes, then press Rebuild preview once/);
   assert.doesNotMatch(source, /scheduleAutoRender\(project\.id, EDIT_RENDER_DEBOUNCE_MS\)/);
-  assert.match(page, /editor\.js\?v=20261013-batched-transcript-cuts-v133/);
+  assert.match(source, /suspected-mistake/);
+  assert.doesNotMatch(source, /Removed automatically/);
+  assert.doesNotMatch(source, /Every automatic silence cut/);
+  assert.match(page, /editor\.js\?v=20261013-highlighted-transcript-review-v134/);
 });
 
 test('precise manual trims bridge residual fragments between automatic and transcript cuts', function () {
@@ -467,7 +470,7 @@ test('precise manual trims bridge residual fragments between automatic and trans
   assert.deepEqual(editor.cutsForProject(project), [{
     id: 'lead', start: 0, end: 32.02, reason: 'leading_silence'
   }, {
-    id: '', start: 32.59, end: 64.83000000000001, reason: 'combined'
+    id: '', start: 32.620000000000005, end: 64.80000000000001, reason: 'combined'
   }, {
     id: 'tail', start: 65.35, end: 70, reason: 'trailing_silence'
   }]);
@@ -498,7 +501,7 @@ test('likely restarted lines are surfaced without being automatically removed', 
   assert.deepEqual(candidates[0].removeWordIndices, [0, 1]);
 });
 
-test('Antoine Matthias removes the current false start and marker but preserves the clean take', function () {
+test('Antoine Matthias is highlighted without automatically removing the marked take', function () {
   const timed = [
     { index: 0, text: 'Earlier', start: 0, end: .3 }, { index: 1, text: 'point.', start: .35, end: .7 },
     { index: 2, text: 'The', start: 1.8, end: 2 }, { index: 3, text: 'reason', start: 2.05, end: 2.35 },
@@ -512,12 +515,12 @@ test('Antoine Matthias removes the current false start and marker but preserves 
   assert.deepEqual(decisions[0].removeWordIndices, [2, 3, 4, 5, 6, 7]);
   assert.equal(decisions[0].replacementText, 'The reason for existence.');
   assert.equal(decisions[0].source, 'marker');
-  const project = { words: timed, removedWordIndices: [], autoRetakeRemovedWordIndices: [], dismissedRetakeIds: [], retakeDecisions: decisions };
-  editor.reconcileAutomaticRetakeCuts(project, decisions);
-  assert.deepEqual(project.removedWordIndices, [2, 3, 4, 5, 6, 7]);
-  assert.equal(editor.appliedRetakeCount(project), 1);
-  assert.deepEqual(editor.calculateManualCuts(timed, project.removedWordIndices, 8), [
-    { start: .77, end: 5.7299999999999995, reason: 'transcript_cut' }
+  const project = { words: timed, removedWordIndices: [], autoRetakeRemovedWordIndices: [], dismissedRetakeIds: [], retakeDecisions: decisions, retakeWorkflowVersion: 3 };
+  assert.deepEqual(editor.retakeHighlightsForProject(project).map(function (candidate) { return candidate.removeWordIndices; }), [[2, 3, 4, 5, 6, 7]]);
+  assert.deepEqual(project.removedWordIndices, []);
+  assert.equal(editor.appliedRetakeCount(project), 0);
+  assert.deepEqual(editor.calculateManualCuts(timed, decisions[0].removeWordIndices, 8), [
+    { start: .7999999999999999, end: 5.7, reason: 'transcript_cut' }
   ]);
 });
 
@@ -558,6 +561,21 @@ test('unrelated semantic ranges can never become automatic retake cuts', functio
   editor.reconcileAutomaticRetakeCuts(project, decisions);
   assert.deepEqual(project.removedWordIndices, []);
   assert.deepEqual(project.autoRetakeRemovedWordIndices, []);
+});
+
+test('highlight-only analysis may surface a suspicious restart without cutting it', function () {
+  const timed = [
+    { index: 0, text: 'I', start: 0, end: .1 }, { index: 1, text: 'mean', start: .15, end: .4 },
+    { index: 2, text: 'no.', start: .45, end: .7 }, { index: 3, text: 'Here', start: 1.2, end: 1.45 },
+    { index: 4, text: 'is', start: 1.5, end: 1.65 }, { index: 5, text: 'the', start: 1.7, end: 1.85 },
+    { index: 6, text: 'point.', start: 1.9, end: 2.2 }
+  ];
+  const raw = [{ removeStartIndex: 0, removeEndIndex: 2, replacementStartIndex: 3, replacementEndIndex: 6, confidence: 'review', reason: 'The opening looks abandoned.' }];
+  assert.deepEqual(editor.normalizeRetakeDecisions(raw, timed), []);
+  const highlights = editor.normalizeRetakeDecisions(raw, timed, { highlightOnly: true });
+  assert.deepEqual(highlights.map(function (candidate) { return candidate.removeWordIndices; }), [[0, 1, 2]]);
+  assert.equal(highlights[0].confidence, 'review');
+  assert.deepEqual(editor.retakeHighlightsForProject({ retakeWorkflowVersion: 3, retakeDecisions: highlights }), highlights);
 });
 
 test('conceptual repetition and continuations never become retake review cards', function () {
@@ -689,12 +707,12 @@ test('Editor work state ignores automation and recognizes review or manual decis
   assert.equal(editor.editorWorkStarted({ editRevision: 3 }), true);
 });
 
-test('adjacent removed transcript words become one cut with 70ms speech handles', function () {
+test('adjacent removed transcript words become one cut with 100ms speech handles', function () {
   const cuts = editor.calculateManualCuts(words, [2, 3], 9);
   assert.equal(cuts.length, 1);
   assert.equal(cuts[0].reason, 'transcript_cut');
-  assert.ok(Math.abs(cuts[0].start - 1.87) < 0.000001);
-  assert.ok(Math.abs(cuts[0].end - 6.53) < 0.000001);
+  assert.ok(Math.abs(cuts[0].start - 1.9) < 0.000001);
+  assert.ok(Math.abs(cuts[0].end - 6.5) < 0.000001);
 });
 
 test('transcript handles never leave fragments of a selected word', function () {
@@ -1048,7 +1066,7 @@ test('startup invalidates a corrupt active final before it can be reviewed', { t
     id: 'corrupt-final-1', name: 'Corrupt final', duration: 10, width: 1920, height: 1080,
     words: [{ index: 0, text: 'Hello.', start: 1, end: 2 }], removedWordIndices: [], dismissedRetakeIds: [], restoredAutoCutIds: [],
     transcriptionStatus: 'ready', classificationStatus: 'ready', retakeAnalysisStatus: 'error', planningMatchStatus: 'ready',
-    renderStatus: 'ready', renderSizeBytes: 9999, renderSha256: 'a'.repeat(64), renderQuality: { status: 'passed' },
+    renderStatus: 'ready', renderDirty: true, renderSizeBytes: 9999, renderSha256: 'a'.repeat(64), renderQuality: { status: 'passed' },
     renderVersion: 9, openingPushInEnabled: true, automaticRenderStartedAt: 'old-render', createdAt: now, updatedAt: now
   }), now);
   editor.setup({ db: db, dataDir: dir, transcribeDetailed: async function () { return { text: '', words: [] }; } });
@@ -1062,6 +1080,7 @@ test('startup invalidates a corrupt active final before it can be reviewed', { t
   assert.equal(stored.renderSha256, '');
   assert.equal(stored.renderSizeBytes, 0);
   assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), false);
+  await new Promise(function (resolve) { setTimeout(resolve, 50); });
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
 
@@ -1156,7 +1175,7 @@ test('startup stops old retake renders and preserves only manual transcript cuts
   assert.deepEqual(project.removedWordIndices, [4]);
   assert.deepEqual(project.autoRetakeRemovedWordIndices, []);
   assert.equal(project.retakeAnalysisStatus, 'unavailable');
-  assert.equal(project.retakeWorkflowVersion, 2);
+  assert.equal(project.retakeWorkflowVersion, 3);
   assert.equal(project.renderStatus, '');
   assert.equal(project.renderDirty, true);
   assert.equal(project.renderProgress, 47);
@@ -1475,9 +1494,14 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.classificationStatus, 'ready', project.classificationError);
   assert.equal(project.effectiveLayout, 'vertical');
   assert.equal(project.cropCenterX, 0.5);
-  assert.equal(project.retakeAnalysisStatus, 'unavailable');
-  assert.equal(retakeCalls, 0, 'initial cleanup must not guess at spoken retakes');
+  for (let attempt = 0; attempt < 100 && project.retakeAnalysisStatus !== 'ready'; attempt++) {
+    await new Promise(function (resolve) { setTimeout(resolve, 30); });
+    project = await (await fetch(base + '/api/editor/' + project.id)).json();
+  }
+  assert.equal(project.retakeAnalysisStatus, 'ready', project.retakeAnalysisError);
+  assert.equal(retakeCalls, 2, 'the non-destructive highlight scan retries once after a transient failure');
   assert.deepEqual(project.removedWordIndices, []);
+  assert.deepEqual(project.retakeHighlights.map(function (candidate) { return candidate.removeWordIndices; }), [[0, 1]]);
   for (let attempt = 0; attempt < 100 && project.planningMatchStatus !== 'ready'; attempt++) {
     await new Promise(function (resolve) { setTimeout(resolve, 30); });
     project = await (await fetch(base + '/api/editor/' + project.id)).json();

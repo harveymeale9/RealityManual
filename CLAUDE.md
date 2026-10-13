@@ -18829,3 +18829,42 @@ interaction test selected and cut two separate transcript words, observed two
 fast saves and zero render calls, saw the saved-edits notice and **Rebuild
 preview** control, then confirmed that pressing it made exactly one render
 request.
+
+---
+
+# 603. Editor Review Is Pause Cleanup Plus Non-Destructive Transcript Highlights (2026-10-13)
+
+Harvey replaced the experimental automatic-retake workflow with a simpler
+human review loop. A new recording still receives automatic long-pause cleanup
+and its initial working preview. The transcript analyzer may identify clear
+false starts, repeated-line retakes, and the old Antoine Matthias marker, but
+these findings are now suggestions only. They never add word indices to the
+cut list and never remove footage. Suspected words are rendered directly in
+the transcript in amber, with one short count and instruction above the text.
+Harvey reviews those highlights, selects any unwanted wording himself, makes
+as many saved cuts as needed, and presses **Rebuild preview** once at the end.
+
+The large two-column review area listing every automatic pause and every
+retake card has been removed. The speech/pause map and global long-pause
+controls remain, but there is no individual card for every silence cut and
+there are no **Removed automatically**, **Restore first take**, or **Use latest
+take** controls. A highlight-analysis failure is advisory rather than
+render-blocking, so it cannot prevent the pause-cleaned preview from being
+built.
+
+Transcript deletion boundaries now retain 100 ms beside the surrounding kept
+speech rather than 70 ms. This makes manually approved cuts slightly less
+tight while still removing the selected speech and intervening dead space.
+The Editor cache key was advanced so already-open browsers fetch this UI.
+
+At Harvey's explicit request, the two active Editor recordings, **What
+enlightenment really means** and **Let them love you**, were deleted through
+the live authenticated Editor API after confirming they were the only two
+active projects. Both project records and their Editor-owned media directories
+were removed; sent Production projects were untouched.
+
+Verification covers the 100 ms boundaries, non-destructive marker and semantic
+highlights, the absence of the old review-card copy, and the upload-through-
+render lifecycle. A real Chromium render of a synthetic project confirmed that
+only the intended words received the amber highlight and that zero old review
+cards remained. The complete ops-service suite passes with 208 tests.

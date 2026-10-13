@@ -34,7 +34,7 @@ const EDITOR_RENDER_VERSION = 25;
 const AUTO_CUT_BOUNDARY_VERSION = 3;
 const DEFAULT_RETAINED_PAUSE_SECONDS = 0.24;
 const MIN_RETAINED_PAUSE_SECONDS = 0.08;
-const TRANSCRIPT_CUT_HANDLE_SECONDS = 0.07;
+const TRANSCRIPT_CUT_HANDLE_SECONDS = 0.10;
 const CUT_ISLAND_BRIDGE_SECONDS = 0.12;
 const PAGE_CHANGE_SSIM_THRESHOLD = 0.5;
 const BROWSER_PREVIEW_VERSION = 2;
@@ -449,7 +449,7 @@ function calculateManualCuts(words, removedWordIndices, duration) {
     const previousEnd = first > 0 && !removed.has(first - 1) ? words[first - 1].end : 0;
     const nextStart = last + 1 < words.length && !removed.has(last + 1) ? words[last + 1].start : Number(duration);
     // A transcript deletion removes the selected speech and the surrounding
-    // dead space, while retaining exactly 70ms against each neighbouring word.
+    // dead space, while retaining exactly 100ms against each neighbouring word.
     // This is intentionally tighter than the 120ms automatic-silence handle.
     const start = first > 0
       ? Math.min(words[first].start, previousEnd + TRANSCRIPT_CUT_HANDLE_SECONDS)
@@ -530,7 +530,7 @@ function blockingReviewFailure(project) {
 function automaticReviewReady(project) {
   if (!project || project.transcriptionStatus !== 'ready') return false;
   if (['queued', 'preparing'].includes(project.clipInsertStatus)) return false;
-  if (!['ready', 'unavailable'].includes(project.retakeAnalysisStatus)) return false;
+  if (!['ready', 'unavailable', 'error'].includes(project.retakeAnalysisStatus)) return false;
   // Planning linkage controls workflow bookkeeping, never the safety or bytes
   // of the video. A failed matcher must remain visible and retryable without
   // turning an otherwise finished automatic edit into manual babysitting.
@@ -864,7 +864,8 @@ function isRepeatedLineRetakeCandidate(candidate) {
   return !!candidate && repeatedLineEvidence(candidate.firstText, candidate.replacementText);
 }
 
-function normalizeRetakeDecisions(raw, words) {
+function normalizeRetakeDecisions(raw, words, options) {
+  options = options || {};
   const claimedRemovalIndices = new Set();
   const ordered = (Array.isArray(raw) ? raw : []).map(function (decision, index) {
     return { decision: decision, index: index };
@@ -914,7 +915,7 @@ function normalizeRetakeDecisions(raw, words) {
     if (!removedSignalTokens.length) return null;
     const lexicalSupport = repeatedLineEvidence(removedTokens.join(' '), replacementTokens.join(' '));
     if (!lexicalSupport && removedTokens.length <= 2 && removedTokens.every(function (token) { return comparativeScaffoldTokens.has(token); })) return null;
-    if (!lexicalSupport) return null;
+    if (!lexicalSupport && !options.highlightOnly) return null;
     const requestedHigh = decision.confidence === 'high';
     const confidence = requestedHigh && lexicalSupport ? 'high' : 'review';
     const reason = String(decision.reason || 'A nearby take may replace this wording.').slice(0, 260) +
@@ -924,7 +925,7 @@ function normalizeRetakeDecisions(raw, words) {
       removeWordIndices: removeWordIndices,
       firstText: words.slice(start, end + 1).map(function (word) { return word.text; }).join(' '),
       replacementText: words.slice(replacementStart, replacementEnd + 1).map(function (word) { return word.text; }).join(' '),
-      confidence: confidence,
+      confidence: lexicalSupport ? confidence : 'review',
       reason: reason.slice(0, 300),
       source: 'semantic'
     };
@@ -940,6 +941,13 @@ function retakeCandidatesForProject(project) {
   // legacy model commentary about related ideas disappears immediately.
   return candidates.filter(function (candidate) {
     return candidate && candidate.source === 'marker' || isRepeatedLineRetakeCandidate(candidate);
+  });
+}
+
+function retakeHighlightsForProject(project) {
+  if (Number(project && project.retakeWorkflowVersion) < 3) return [];
+  return (Array.isArray(project.retakeDecisions) ? project.retakeDecisions : []).filter(function (candidate) {
+    return candidate && Array.isArray(candidate.removeWordIndices) && candidate.removeWordIndices.length;
   });
 }
 
@@ -1471,6 +1479,7 @@ function setup(options) {
     project.captionGroups = captionGroups(project, project.cuts);
     project.gapDecisions = gapDecisions(project);
     project.retakeCandidates = retakeCandidatesForProject(project);
+    project.retakeHighlights = retakeHighlightsForProject(project);
     project.unresolvedRetakeCount = unresolvedRetakeCount(project);
     project.appliedRetakeCount = appliedRetakeCount(project);
     project.layoutReviewRequired = layoutReviewRequired(project);
@@ -1677,15 +1686,16 @@ function setup(options) {
         project.autoSilenceEnabled = true;
         project.transcriptionStatus = project.words.length ? 'ready' : 'error';
         project.transcriptionError = project.words.length ? '' : 'No timed speech was detected in this recording.';
-        project.retakeAnalysisStatus = 'unavailable';
+        project.retakeAnalysisStatus = project.words.length && typeof analyzeRetakes === 'function' ? 'pending' : 'unavailable';
         project.retakeAnalysisError = '';
         project.retakeDecisions = [];
-        project.retakeWorkflowVersion = 2;
+        project.retakeWorkflowVersion = 3;
         project.planningMatchStatus = project.words.length && typeof matchPlanningPiece === 'function' ? 'pending' : 'unavailable';
         project.planningMatchError = '';
         invalidateProjectRender(project);
         advanceEditRevision(project);
         saveProject(project);
+        if (project.words.length && typeof analyzeRetakes === 'function') setImmediate(function () { analyzeProjectRetakes(id); });
         if (project.words.length && typeof matchPlanningPiece === 'function') setImmediate(function () { matchProjectPlanningPiece(id); });
         if (project.words.length) setImmediate(function () { maybeAutoRender(id); });
       } catch (err) {
@@ -1728,16 +1738,13 @@ function setup(options) {
         if (!project) return;
         const markerDecisions = retakeMarkerDecisions(project.words || []);
         const markerIndices = new Set(markerDecisions.flatMap(function (decision) { return decision.removeWordIndices; }));
-        const semanticDecisions = normalizeRetakeDecisions(raw && raw.decisions, project.words || []).filter(function (decision) {
+        const semanticDecisions = normalizeRetakeDecisions(raw && raw.decisions, project.words || [], { highlightOnly: true }).filter(function (decision) {
           return !decision.removeWordIndices.some(function (index) { return markerIndices.has(index); });
         });
-        const decisions = markerDecisions.concat(semanticDecisions);
-        reconcileAutomaticRetakeCuts(project, decisions);
-        project.retakeDecisions = decisions;
+        project.retakeDecisions = markerDecisions.concat(semanticDecisions);
+        project.autoRetakeRemovedWordIndices = [];
         project.retakeAnalysisStatus = 'ready';
         project.retakeAnalysisError = '';
-        invalidateProjectRender(project);
-        advanceEditRevision(project);
         saveProject(project);
         setImmediate(function () { maybeAutoRender(id); });
       } catch (err) {
@@ -1746,6 +1753,7 @@ function setup(options) {
           project.retakeAnalysisStatus = 'error';
           project.retakeAnalysisError = String(err.message || err).slice(0, 500);
           saveProject(project);
+          setImmediate(function () { maybeAutoRender(id); });
         }
       }
     }).finally(function () { retakeJobs.delete(id); });
@@ -2156,7 +2164,7 @@ async function renderProject(id) {
         if (migrated) saveProject(project);
         return;
       }
-      if (Number(project.retakeWorkflowVersion) !== 2) {
+      if (Number(project.retakeWorkflowVersion) !== 3) {
         const automaticRetakeIndices = new Set((project.autoRetakeRemovedWordIndices || []).map(Number));
         if (automaticRetakeIndices.size) {
           project.removedWordIndices = (project.removedWordIndices || []).map(Number).filter(function (index) {
@@ -2168,9 +2176,9 @@ async function renderProject(id) {
         project.autoRetakeRemovedWordIndices = [];
         project.retakeDecisions = [];
         project.dismissedRetakeIds = [];
-        project.retakeAnalysisStatus = 'unavailable';
+        project.retakeAnalysisStatus = project.transcriptionStatus === 'ready' && typeof analyzeRetakes === 'function' ? 'pending' : 'unavailable';
         project.retakeAnalysisError = '';
-        project.retakeWorkflowVersion = 2;
+        project.retakeWorkflowVersion = 3;
         migrated = true;
       }
       const recordedLayout = sourceLayout(project);
@@ -2209,7 +2217,7 @@ async function renderProject(id) {
       const resumeTranscription = project.transcriptionStatus === 'running' || project.transcriptionStatus === 'pending';
       const resumePreview = project.browserPreviewRequired && ['running', 'pending'].includes(project.browserPreviewStatus);
       const resumeRender = project.renderStatus === 'running' || project.renderStatus === 'queued';
-      const resumeRetakes = false;
+      const resumeRetakes = ['running', 'pending', 'pending_transcript'].includes(project.retakeAnalysisStatus);
       const resumePlanning = ['running', 'pending', 'pending_transcript'].includes(project.planningMatchStatus);
       const orphanedRenderKickoff = !project.renderStatus && !!project.automaticRenderStartedAt;
       if (project.transcriptionStatus === 'running' || project.transcriptionStatus === 'pending') {
@@ -2239,6 +2247,7 @@ async function renderProject(id) {
       setImmediate(function () {
         if (resumeTranscription) transcribeProject(project.id);
         if (resumePreview) generateBrowserPreview(project.id);
+        if (!resumeTranscription && project.transcriptionStatus === 'ready' && resumeRetakes) analyzeProjectRetakes(project.id);
         if (!resumeTranscription && project.transcriptionStatus === 'ready' && resumePlanning) matchProjectPlanningPiece(project.id);
         if (resumeAutomaticRender) maybeAutoRender(project.id);
       });
@@ -2483,10 +2492,10 @@ async function renderProject(id) {
         },
         classificationStatus: 'ready',
         classificationError: '',
-        retakeAnalysisStatus: 'unavailable',
+        retakeAnalysisStatus: typeof analyzeRetakes === 'function' ? 'pending_transcript' : 'unavailable',
         retakeAnalysisError: '',
         retakeDecisions: [],
-        retakeWorkflowVersion: 2,
+        retakeWorkflowVersion: 3,
         planningPieceId: '',
         planningPieceTitle: '',
         planningPieceSeq: 0,
@@ -3259,6 +3268,7 @@ module.exports = {
   retakeMarkerDecisions,
   repeatedLineEvidence,
   retakeCandidatesForProject,
+  retakeHighlightsForProject,
   normalizeRetakeDecisions,
   unresolvedRetakeCount,
   appliedRetakeCount,

@@ -549,33 +549,6 @@
         '<div class="editor-manual-lane editor-manual-voice-lane"><b>VOICE</b>' + voice + cuts + '</div>' + markers + '<i class="editor-manual-playhead" id="editorManualPlayhead"></i></div></div></section>';
   }
 
-  function gapReviewHtml(item) {
-    if (!item.autoSilenceEnabled) return '<div class="editor-review-empty">Pause removal is off. The original timing is preserved.</div>';
-    var decisions = item.gapDecisions || [];
-    if (!decisions.length) return '<div class="editor-review-empty">No long pauses need attention.</div>';
-    return decisions.map(function (gap) {
-      return '<div class="editor-decision ' + (gap.restored ? 'kept' : 'removed') + '"><div><strong>' + esc(gap.label) + '</strong><span>' + gap.duration.toFixed(1) + 's ' + (gap.restored ? 'kept in the edit' : 'removed') + '</span></div>' +
-        '<div class="editor-decision-actions"><button type="button" class="btn-secondary btn-tiny editor-preview-cut" data-time="' + Math.max(0, gap.start - 1.2) + '">Preview</button><button type="button" class="btn-secondary btn-tiny editor-gap-toggle" data-gap-id="' + esc(gap.id) + '" data-restored="' + (gap.restored ? '1' : '0') + '">' + (gap.restored ? 'Remove pause' : 'Keep pause') + '</button></div></div>';
-    }).join('');
-  }
-
-  function retakeReviewHtml(item) {
-    var dismissed = new Set((item.dismissedRetakeIds || []).map(String));
-    var removed = new Set((item.removedWordIndices || []).map(Number));
-    var candidates = (item.retakeCandidates || []).filter(function (candidate) {
-      return !dismissed.has(candidate.id);
-    });
-    if (!candidates.length && (item.retakeAnalysisStatus === 'pending' || item.retakeAnalysisStatus === 'running')) return '<div class="editor-review-empty editor-review-loading">Checking for repeated-line retakes…</div>';
-    if (!candidates.length) return '<div class="editor-review-empty">No repeated-line retakes found.</div>';
-    return candidates.map(function (candidate) {
-      var applied = candidate.removeWordIndices.every(function (index) { return removed.has(index); });
-      var firstWord = (item.words || [])[candidate.removeWordIndices[0]];
-      return '<div class="editor-retake-card' + (applied ? ' applied' : '') + '"><div class="editor-retake-badge ' + esc(candidate.confidence) + '">' + (applied ? 'Removed automatically' : 'Possible retake') + '</div>' +
-        '<p><del>“' + esc(candidate.firstText) + '”</del></p><p class="replacement">Latest take: “' + esc(candidate.replacementText) + '”</p><span>' + esc(candidate.reason) + '</span>' +
-        '<div><button type="button" class="btn-secondary btn-tiny editor-preview-cut" data-time="' + Math.max(0, Number(firstWord && firstWord.start) - 1.2) + '">Preview edit</button>' + (applied ? '' : '<button type="button" class="btn-primary btn-tiny editor-retake-apply" data-id="' + esc(candidate.id) + '">Use latest take</button>') + '<button type="button" class="btn-secondary btn-tiny editor-retake-dismiss" data-id="' + esc(candidate.id) + '" data-applied="' + (applied ? '1' : '0') + '">' + (applied ? 'Restore first take' : 'Keep both') + '</button></div></div>';
-    }).join('');
-  }
-
   function processingStepsHtml(item) {
     function step(state, label, detail) {
       return '<div class="editor-process-step ' + state + '"><i></i><div><strong>' + esc(label) + '</strong><span>' + esc(detail) + '</span></div></div>';
@@ -1087,6 +1060,10 @@
       return;
     }
     var removed = new Set((project.removedWordIndices || []).map(Number));
+    var suspectedMistakeIndices = new Set((project.retakeHighlights || []).flatMap(function (candidate) {
+      return (candidate.removeWordIndices || []).map(Number);
+    }));
+    var suspectedMistakeCount = (project.retakeHighlights || []).length;
     var clipsByWord = {};
     (project.insertedClips || []).forEach(function (clip) { (clipsByWord[clip.afterWordIndex] || (clipsByWord[clip.afterWordIndex] = [])).push(clip); });
     var reviewProjects = visibleProjectsForCurrentFilter();
@@ -1094,8 +1071,7 @@
     var cutSeconds = Math.max(0, Number(project.duration) - editedDuration(project));
     var layout = project.effectiveLayout || (Number(project.height) > Number(project.width) ? 'vertical' : 'horizontal');
     var automaticEditRunning = ['pending', 'running', 'pending_transcript'].indexOf(project.planningMatchStatus) !== -1 || ['queued', 'preparing'].indexOf(project.clipInsertStatus) !== -1;
-    var automaticRetakeIndices = new Set((project.autoRetakeRemovedWordIndices || []).map(Number));
-    var automaticCutsPresent = (project.autoSilenceEnabled !== false && (project.gapDecisions || []).some(function (gap) { return !gap.restored; })) || automaticRetakeIndices.size > 0;
+    var automaticCutsPresent = project.autoSilenceEnabled !== false && (project.gapDecisions || []).some(function (gap) { return !gap.restored; });
     var framingFailureBlocks = framingFailureIsBlocking(project);
     var failedSafetyCheck = framingFailureBlocks;
     var renderBlocked = automaticEditRunning || failedSafetyCheck || project.layoutReviewRequired;
@@ -1168,16 +1144,19 @@
       manualRevisionPanelHtml +
       '<section class="editor-automation"><div class="editor-automation-head"><div><div class="eyebrow">Automatic edit</div><h3>Speech and pause map</h3></div><div class="editor-legend"><span class="speech">Speech</span><span class="cut">Removed pause</span><span class="pause">Kept pause</span></div></div>' + timelineHtml(project) +
         (layout === 'horizontal' ? automaticControlsHtml : '') + '</section>' +
-      '<section class="editor-review"><div class="editor-review-column"><div class="editor-section-title"><div><div class="eyebrow">Pause decisions</div><h3>Every automatic silence cut</h3></div><span>Red means removed</span></div><div id="editorGapReview">' + gapReviewHtml(project) + '</div></div>' +
-        '<div class="editor-review-column"><div class="editor-section-title"><div><div class="eyebrow">Mistake cleanup</div><h3>Manual transcript cuts</h3></div><span>No automatic retake guessing</span></div><div class="editor-review-empty">Select any unwanted words or sentences in the transcript below and cut them. Rebuild the preview once after all mistakes are removed.</div></div></section>' +
       '<section class="editor-transcript-panel"><div class="editor-transcript-head"><div><div class="eyebrow">Transcript editor</div><h3>Select words to cut footage</h3></div>' +
         '<div class="editor-transcript-actions"><button class="btn-secondary btn-tiny" id="editorUndo" ' + (!project.canUndoCut ? 'disabled' : '') + '>Undo last decision</button><button class="btn-secondary btn-tiny" id="editorPlaySelection" disabled>Play selected</button>' +
         '<button class="btn-secondary btn-tiny editor-insert-clip" id="editorInsertClip" disabled>Insert clip here</button>' +
         '<button class="btn-secondary btn-tiny" id="editorCorrect" disabled>Correct word</button><button class="btn-secondary btn-tiny" id="editorRestore" disabled>Restore selected</button><button class="btn-primary btn-tiny" id="editorCut" disabled>Cut selected</button></div></div>' +
+        '<div class="editor-transcript-review-note ' + esc(project.retakeAnalysisStatus || 'unavailable') + '">' +
+          (['pending', 'running', 'pending_transcript'].indexOf(project.retakeAnalysisStatus) !== -1 ? 'Scanning for likely mistakes and retakes…' :
+            project.retakeAnalysisStatus === 'error' ? 'The highlight scan was unavailable. You can still edit the full transcript normally.' :
+            suspectedMistakeCount ? '<strong>' + suspectedMistakeCount + ' possible ' + (suspectedMistakeCount === 1 ? 'mistake' : 'mistakes') + ' highlighted.</strong> Review the amber text and cut only what you do not want.' :
+            'No obvious mistakes or retakes were found. Review the transcript normally.') + '</div>' +
         '<div class="editor-correction-tray" id="editorCorrectionTray" hidden><div><strong>Correct caption word</strong><span id="editorCorrectionNote">Timing stays exactly where it is.</span><em id="editorCorrectionError" hidden></em></div><input id="editorCorrectionInput" maxlength="40" autocomplete="off" aria-label="Corrected caption word"><div><button type="button" class="btn-secondary btn-tiny" id="editorCorrectionCancel">Cancel</button><button type="button" class="btn-secondary btn-tiny" id="editorCorrectionOriginal" hidden>Use original</button><button type="button" class="btn-primary btn-tiny" id="editorCorrectionSave">Save correction</button></div></div>' +
         '<div class="editor-transcript' + (rendering || sentToProduction ? ' locked' : '') + '" id="editorTranscript" tabindex="0">' + (project.words || []).map(function (word) {
           var markers = (clipsByWord[word.index] || []).map(function (clip) { return '<span class="editor-clip-marker" title="Inserted from ' + esc(clip.sourceUrl || 'planning clip') + '">CLIP</span> '; }).join('');
-          return '<span class="editor-word' + (removed.has(word.index) ? ' removed' : '') + (word.originalText ? ' corrected' : '') + '" data-index="' + word.index + '" data-start="' + word.start + '" data-end="' + word.end + '"' + (word.originalText ? ' title="Originally transcribed as: ' + esc(word.originalText) + '"' : '') + '>' + esc(word.text) + '</span> ' + markers;
+          return '<span class="editor-word' + (removed.has(word.index) ? ' removed' : '') + (suspectedMistakeIndices.has(Number(word.index)) && !removed.has(word.index) ? ' suspected-mistake' : '') + (word.originalText ? ' corrected' : '') + '" data-index="' + word.index + '" data-start="' + word.start + '" data-end="' + word.end + '"' + (word.originalText ? ' title="Originally transcribed as: ' + esc(word.originalText) + '"' : suspectedMistakeIndices.has(Number(word.index)) ? ' title="Possible mistake or retake. Review before cutting."' : '') + '>' + esc(word.text) + '</span> ' + markers;
         }).join('') + '</div>' +
         ((project.insertedClips || []).length ? '<div class="editor-inserted-clips">' + (project.insertedClips || []).map(function (clip) { return '<div><span><strong>' + (clip.status === 'ready' ? 'Inserted clip' : 'Preparing clip…') + '</strong>' + esc(clip.transcriptText || clip.quote || clip.sourceUrl) + '</span><button type="button" class="btn-secondary btn-tiny editor-remove-clip" data-clip-id="' + esc(clip.id) + '" ' + (clip.status !== 'ready' ? 'disabled' : '') + '>Remove</button></div>'; }).join('') + '</div>' : '') +
         (project.clipInsertStatus === 'error' ? '<div class="editor-clip-error">' + esc(project.clipInsertError || 'The clip could not be prepared.') + '</div>' : '') +
@@ -2171,18 +2150,6 @@
         project.classificationStatus = 'running'; renderWorkspace(); schedulePoll();
       }).catch(function (error) { alert(error.message); renderWorkspace(); });
     };
-    var retakeAnalyzeButton = root.querySelector('#editorAnalyzeRetakes');
-    if (retakeAnalyzeButton) retakeAnalyzeButton.onclick = function () {
-      var analyzeProjectId = project.id;
-      retakeAnalyzeButton.disabled = true;
-      retakeAnalyzeButton.textContent = 'Analyzing…';
-      retryTransientOnce(function () {
-        return api('/api/editor/' + analyzeProjectId + '/analyze-retakes', { method: 'POST' });
-      }, 500).then(function () {
-        if (!project || project.id !== analyzeProjectId) return;
-        project.retakeAnalysisStatus = 'running'; renderWorkspace(); schedulePoll();
-      }).catch(function (error) { alert(error.message); renderWorkspace(); });
-    };
     root.querySelector('#editorPacing').onchange = function () {
       var settings = { tight: [0.7, 0.10], natural: [1, 0.24], gentle: [1.5, 0.32] }[this.value] || [1, 0.24];
       save({ silenceThresholdSeconds: settings[0], retainedPauseSeconds: settings[1] }, true);
@@ -2190,15 +2157,9 @@
     var clearAutomation = root.querySelector('#editorClearAutomation');
     if (clearAutomation) clearAutomation.onclick = function () {
       save(function (latest) {
-        var owned = new Set((latest.autoRetakeRemovedWordIndices || []).map(Number));
-        var dismissed = new Set((latest.dismissedRetakeIds || []).map(String));
-        (latest.retakeCandidates || []).forEach(function (candidate) {
-          if (candidate.removeWordIndices && candidate.removeWordIndices.length && candidate.removeWordIndices.every(function (index) { return owned.has(Number(index)); })) dismissed.add(candidate.id);
-        });
         return {
           autoSilenceEnabled: false,
-          removedWordIndices: (latest.removedWordIndices || []).map(Number).filter(function (index) { return !owned.has(index); }),
-          dismissedRetakeIds: Array.from(dismissed)
+          removedWordIndices: (latest.removedWordIndices || []).map(Number)
         };
       }, true).then(function (item) {
         if (!item) return;
@@ -2206,45 +2167,6 @@
         renderNotice();
       });
     };
-    root.querySelectorAll('.editor-gap-toggle').forEach(function (button) {
-      button.onclick = function () {
-        var gapId = button.dataset.gapId;
-        save(function (latest) {
-          var next = new Set((latest.restoredAutoCutIds || []).map(String));
-          if (next.has(gapId)) next.delete(gapId); else next.add(gapId);
-          return { restoredAutoCutIds: Array.from(next) };
-        }, true);
-      };
-    });
-    root.querySelectorAll('.editor-retake-apply').forEach(function (button) {
-      button.onclick = function () {
-        var candidateId = button.dataset.id;
-        save(function (latest) {
-          var candidate = (latest.retakeCandidates || []).find(function (item) { return item.id === candidateId; });
-          var next = new Set((latest.removedWordIndices || []).map(Number));
-          if (candidate) candidate.removeWordIndices.forEach(function (index) { next.add(index); });
-          return { removedWordIndices: Array.from(next).sort(function (a, b) { return a - b; }) };
-        });
-      };
-    });
-    root.querySelectorAll('.editor-retake-dismiss').forEach(function (button) {
-      button.onclick = function () {
-        var candidateId = button.dataset.id;
-        var restoreAppliedTake = button.dataset.applied === '1';
-        save(function (latest) {
-          var next = new Set((latest.dismissedRetakeIds || []).map(String));
-          next.add(candidateId);
-          var patch = { dismissedRetakeIds: Array.from(next) };
-          if (restoreAppliedTake) {
-            var candidate = (latest.retakeCandidates || []).find(function (item) { return item.id === candidateId; });
-            var removed = new Set((latest.removedWordIndices || []).map(Number));
-            if (candidate) candidate.removeWordIndices.forEach(function (index) { removed.delete(index); });
-            patch.removedWordIndices = Array.from(removed).sort(function (a, b) { return a - b; });
-          }
-          return patch;
-        }, true);
-      };
-    });
     var renderButton = root.querySelector('#editorRender');
     if (renderButton) renderButton.onclick = function () {
         var renderProjectId = project.id;
