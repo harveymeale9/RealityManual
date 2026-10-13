@@ -82,8 +82,9 @@
     if (['BOOKVAULT_ACCEPTED', 'SHIPPED'].includes(order.order_status)) {
       clearTimeout(timerId);
       spinner.style.display = 'none';
-      statusEyebrow.textContent = 'Order confirmed';
-      statusTitle.textContent = 'Our Expert Bookbinders Are Rolling Up Their Sleeves.';
+      statusEyebrow.textContent = '✓ Order confirmed';
+      statusEyebrow.classList.add('is-success');
+      statusTitle.textContent = 'Our Expert Bookbinders Are Rolling Up Their Sleeves!';
       statusMessage.textContent = "Thank you! Your payment has been received and your order has been confirmed. Please bear in mind that it can take up to 15 business days for us to print your Reality Manual. We'll send you another email as soon as we ship your order!";
       if (!isDemo) trackOnce('order_complete', order.order_id);
       if (!isDemo && window.RMMarketing) {
@@ -156,6 +157,7 @@
       actionArea.replaceChildren();
       spinner.style.display = '';
       statusEyebrow.textContent = 'Order in progress';
+      statusEyebrow.classList.remove('is-success');
       statusTitle.textContent = "We're Confirming Your Order";
       statusTitle.style.color = '';
       statusMessage.textContent = "We're confirming your payment and placing your order with our expert bookbinders now. This usually only takes a moment.";

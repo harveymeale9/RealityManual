@@ -18695,3 +18695,14 @@ Manual.** This matches the already-punctuated subject line.
 Harvey immediately clarified that the intended punctuation was an exclamation
 mark rather than a full stop. The subject, HTML headline and plain-text headline
 therefore now all end **The Reality Manual!**
+
+---
+
+# 594. Stronger Visual Success State on Confirmation Page (2026-10-13)
+
+Once BookVault acceptance authoritatively completes an order, the confirmation
+page eyebrow now changes from the gold **Order in progress** label to a green
+**✓ Order confirmed** label. The completed headline now ends with an
+exclamation mark: **Our Expert Bookbinders Are Rolling Up Their Sleeves!** The
+same transition is visible in the safe `/testorder/` simulation, and replaying
+the demo restores the original gold in-progress state before running again.

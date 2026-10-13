@@ -37,6 +37,7 @@
   --gold: #c9a24d;
 
   --error: #e2685f;
+  --success: #75c98d;
   --max-width: 720px;
   --wrap: 1200px;
 
@@ -1816,6 +1817,11 @@ footer a:hover { color: var(--ink-soft); }
 }
 
 .confirmation-content .eyebrow { margin-bottom: 1.25rem; }
+
+.confirmation-content .eyebrow.is-success {
+  color: var(--success);
+  opacity: 1;
+}
 
 .confirmation-content h1 {
   margin-bottom: 0.42em;
