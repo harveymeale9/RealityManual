@@ -18350,3 +18350,11 @@ After play it measured 390 by 219.375 pixels, exactly 16:9; the 1920 by 1080
 video occupied the same in-bounds rectangle with computed `object-fit:
 contain`, document width remained 390 pixels, and an actual frame at 15 seconds
 showed the complete source and caption within the phone width.
+
+---
+
+# 579. Book Length Added to the Homepage FAQ (2026-10-13)
+
+The root homepage and `/home2/` alias now begin their FAQ with **How long is
+the book?** and the concise answer **It's 185 pages.** The existing shipping
+and returns questions keep their established order beneath it.
