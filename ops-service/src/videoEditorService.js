@@ -524,9 +524,6 @@ function layoutReviewRequired(project) {
 }
 
 function blockingReviewFailure(project) {
-  if (project && project.retakeAnalysisStatus === 'error') {
-    return 'The automatic retake check failed. Retry it before building the final edit.';
-  }
   return '';
 }
 
@@ -714,7 +711,7 @@ function openingPushInFilter(renderShape, elapsedStart, durationSeconds) {
 }
 
 function patchNeedsAutoRender(project, renderWillChange) {
-  return !!renderWillChange || !project || !project.renderStatus;
+  return !renderWillChange && (!project || !project.renderStatus);
 }
 
 function gapDecisions(project) {
@@ -935,6 +932,7 @@ function normalizeRetakeDecisions(raw, words) {
 }
 
 function retakeCandidatesForProject(project) {
+  if (Number(project && project.retakeWorkflowVersion) >= 2) return [];
   const candidates = Array.isArray(project.retakeDecisions) && project.retakeDecisions.length
     ? project.retakeDecisions
     : retakeCandidates(project.words || []);
@@ -1367,10 +1365,11 @@ function setup(options) {
     return job;
   }
 
-  function invalidateProjectRender(project) {
+  function invalidateProjectRender(project, settings) {
+    settings = settings || {};
     const hadVerifiedRender = project && project.renderStatus === 'ready';
     const rebuildPending = hadVerifiedRender || !!(project && project.renderRebuildPending);
-    if (hadVerifiedRender && typeof onRenderInvalidated === 'function') {
+    if (hadVerifiedRender && !settings.workflowAlreadyInvalidated && typeof onRenderInvalidated === 'function') {
       try { onRenderInvalidated({ project: project }); }
       catch (error) { project.workflowWarning = 'The edit changed safely, but its linked planning card could not be restored to Uploaded.'; }
     }
@@ -1389,6 +1388,16 @@ function setup(options) {
       project.renderPreviewVersion = 0;
     }
     return invalidated;
+  }
+
+  function markProjectRenderDirty(project) {
+    if (!project) return;
+    if (project.renderStatus === 'ready' && !project.renderDirty && typeof onRenderInvalidated === 'function') {
+      try { onRenderInvalidated({ project: project }); }
+      catch (error) { project.workflowWarning = 'The edit changed safely, but its linked planning card could not be restored to Filmed.'; }
+    }
+    project.renderDirty = true;
+    project.renderError = '';
   }
 
   function withQueuePositions(project) {
@@ -1668,16 +1677,15 @@ function setup(options) {
         project.autoSilenceEnabled = true;
         project.transcriptionStatus = project.words.length ? 'ready' : 'error';
         project.transcriptionError = project.words.length ? '' : 'No timed speech was detected in this recording.';
-        project.retakeAnalysisStatus = project.words.length && typeof analyzeRetakes === 'function' ? 'pending' : 'unavailable';
+        project.retakeAnalysisStatus = 'unavailable';
         project.retakeAnalysisError = '';
-        project.retakeDecisions = retakeMarkerDecisions(project.words);
-        reconcileAutomaticRetakeCuts(project, project.retakeDecisions);
+        project.retakeDecisions = [];
+        project.retakeWorkflowVersion = 2;
         project.planningMatchStatus = project.words.length && typeof matchPlanningPiece === 'function' ? 'pending' : 'unavailable';
         project.planningMatchError = '';
         invalidateProjectRender(project);
         advanceEditRevision(project);
         saveProject(project);
-        if (project.words.length && typeof analyzeRetakes === 'function') setImmediate(function () { analyzeProjectRetakes(id); });
         if (project.words.length && typeof matchPlanningPiece === 'function') setImmediate(function () { matchProjectPlanningPiece(id); });
         if (project.words.length) setImmediate(function () { maybeAutoRender(id); });
       } catch (err) {
@@ -1912,7 +1920,7 @@ function setup(options) {
 
   function maybeAutoRender(id) {
     const project = getProject(id);
-    if (!project || project.productionPieceId || project.automaticRenderStartedAt || project.renderStatus || !automaticReviewReady(project)) return false;
+    if (!project || project.productionPieceId || project.renderDirty || project.automaticRenderStartedAt || project.renderStatus || !automaticReviewReady(project)) return false;
     project.automaticRenderStartedAt = new Date().toISOString();
     saveProject(project);
     setImmediate(function () { renderProject(id); });
@@ -2065,6 +2073,7 @@ async function renderProject(id) {
       const renderSha256 = await hashFile(renderPath(id));
       project.renderStatus = 'ready';
       project.renderRebuildPending = false;
+      project.renderDirty = false;
       project.renderVersion = EDITOR_RENDER_VERSION;
       project.renderProgress = 100;
       project.renderSizeBytes = stat.size;
@@ -2131,6 +2140,7 @@ async function renderProject(id) {
       const canResumeWork = !project.productionPieceId;
       if (project.renderStatus === undefined || project.renderStatus === null) { project.renderStatus = ''; migrated = true; }
       if (typeof project.renderRebuildPending !== 'boolean') { project.renderRebuildPending = false; migrated = true; }
+      if (typeof project.renderDirty !== 'boolean') { project.renderDirty = false; migrated = true; }
       if (!Number.isFinite(Number(project.editRevision))) { project.editRevision = 0; migrated = true; }
       if (!Number.isFinite(Number(project.renderProgress))) { project.renderProgress = 0; migrated = true; }
       if (!Array.isArray(project.insertedClips)) { project.insertedClips = []; migrated = true; }
@@ -2140,11 +2150,28 @@ async function renderProject(id) {
         project.clipInsertStatus = 'error'; project.clipInsertError = 'Clip preparation was interrupted by a service restart. Press Insert clip to retry.'; migrated = true;
       }
       if (!project.audioTrackId) { project.audioTrackId = '__none__'; migrated = true; }
-      if (!project.retakeAnalysisStatus) { project.retakeAnalysisStatus = canResumeWork && typeof analyzeRetakes === 'function' ? (project.transcriptionStatus === 'ready' ? 'pending' : 'pending_transcript') : 'unavailable'; migrated = true; }
+      if (!project.retakeAnalysisStatus) { project.retakeAnalysisStatus = 'unavailable'; migrated = true; }
       if (!project.planningMatchStatus) { project.planningMatchStatus = canResumeWork && typeof matchPlanningPiece === 'function' ? (project.transcriptionStatus === 'ready' ? 'pending' : 'pending_transcript') : 'unavailable'; migrated = true; }
       if (!canResumeWork) {
         if (migrated) saveProject(project);
         return;
+      }
+      if (Number(project.retakeWorkflowVersion) !== 2) {
+        const automaticRetakeIndices = new Set((project.autoRetakeRemovedWordIndices || []).map(Number));
+        if (automaticRetakeIndices.size) {
+          project.removedWordIndices = (project.removedWordIndices || []).map(Number).filter(function (index) {
+            return !automaticRetakeIndices.has(index);
+          });
+          if (project.renderStatus === 'ready') markProjectRenderDirty(project);
+          else project.renderDirty = true;
+        }
+        project.autoRetakeRemovedWordIndices = [];
+        project.retakeDecisions = [];
+        project.dismissedRetakeIds = [];
+        project.retakeAnalysisStatus = 'unavailable';
+        project.retakeAnalysisError = '';
+        project.retakeWorkflowVersion = 2;
+        migrated = true;
       }
       const recordedLayout = sourceLayout(project);
       const previousAutomaticLayout = project.layoutOverride === 'vertical' || project.layoutOverride === 'horizontal'
@@ -2182,7 +2209,7 @@ async function renderProject(id) {
       const resumeTranscription = project.transcriptionStatus === 'running' || project.transcriptionStatus === 'pending';
       const resumePreview = project.browserPreviewRequired && ['running', 'pending'].includes(project.browserPreviewStatus);
       const resumeRender = project.renderStatus === 'running' || project.renderStatus === 'queued';
-      const resumeRetakes = ['running', 'pending', 'pending_transcript'].includes(project.retakeAnalysisStatus);
+      const resumeRetakes = false;
       const resumePlanning = ['running', 'pending', 'pending_transcript'].includes(project.planningMatchStatus);
       const orphanedRenderKickoff = !project.renderStatus && !!project.automaticRenderStartedAt;
       if (project.transcriptionStatus === 'running' || project.transcriptionStatus === 'pending') {
@@ -2207,12 +2234,11 @@ async function renderProject(id) {
         project.planningMatchStatus = project.transcriptionStatus === 'ready' ? 'pending' : 'pending_transcript';
         project.planningMatchError = '';
       }
-      const resumeAutomaticRender = (resumeRender || !project.renderStatus) && automaticReviewReady(project);
+      const resumeAutomaticRender = !project.renderDirty && (resumeRender || !project.renderStatus) && automaticReviewReady(project);
       if (migrated || resumeTranscription || resumePreview || resumeRender || resumeRetakes || resumePlanning || orphanedRenderKickoff || resumeAutomaticRender) saveProject(project);
       setImmediate(function () {
         if (resumeTranscription) transcribeProject(project.id);
         if (resumePreview) generateBrowserPreview(project.id);
-        if (!resumeTranscription && project.transcriptionStatus === 'ready' && resumeRetakes) analyzeProjectRetakes(project.id);
         if (!resumeTranscription && project.transcriptionStatus === 'ready' && resumePlanning) matchProjectPlanningPiece(project.id);
         if (resumeAutomaticRender) maybeAutoRender(project.id);
       });
@@ -2457,9 +2483,10 @@ async function renderProject(id) {
         },
         classificationStatus: 'ready',
         classificationError: '',
-        retakeAnalysisStatus: typeof analyzeRetakes === 'function' ? 'pending_transcript' : 'unavailable',
+        retakeAnalysisStatus: 'unavailable',
         retakeAnalysisError: '',
         retakeDecisions: [],
+        retakeWorkflowVersion: 2,
         planningPieceId: '',
         planningPieceTitle: '',
         planningPieceSeq: 0,
@@ -2473,6 +2500,7 @@ async function renderProject(id) {
         transcriptionError: '',
         renderStatus: '',
         renderRebuildPending: false,
+        renderDirty: false,
         renderError: '',
         renderPreviewStatus: '',
         renderPreviewError: '',
@@ -2799,13 +2827,12 @@ async function renderProject(id) {
         }
       }
     }
-    if (renderWillChange) invalidateProjectRender(project);
+    if (renderWillChange) markProjectRenderDirty(project);
     advanceEditRevision(project);
     if (mutationId) project.recentMutationIds = (Array.isArray(project.recentMutationIds) ? project.recentMutationIds : []).concat([mutationId]).slice(-100);
     if (typeof onProjectMetadataChanged === 'function') onProjectMetadataChanged({ project: project });
     saveProject(project);
     res.json(projectDetail(project));
-    if (patchNeedsAutoRender(project, renderWillChange)) scheduleAutoRender(project.id, EDIT_RENDER_DEBOUNCE_MS);
   });
 
   router.post('/:id/manual-revisions', async function (req, res) {
@@ -2879,12 +2906,11 @@ async function renderProject(id) {
       if (Number.isFinite(Number(snapshot && snapshot.retainedPauseSeconds))) project.retainedPauseSeconds = Number(snapshot.retainedPauseSeconds);
     }
     project.cutDecisionHistory = history;
-    invalidateProjectRender(project);
+    markProjectRenderDirty(project);
     advanceEditRevision(project);
     if (mutationId) project.recentMutationIds = (Array.isArray(project.recentMutationIds) ? project.recentMutationIds : []).concat([mutationId]).slice(-100);
     saveProject(project);
     res.json(projectDetail(project));
-    scheduleAutoRender(project.id, EDIT_RENDER_DEBOUNCE_MS);
   });
 
   router.post('/:id/transcribe', function (req, res) {
@@ -2911,9 +2937,7 @@ async function renderProject(id) {
     if (!project) return res.status(404).json({ error: 'not_found' });
     if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked.' });
     if (project.transcriptionStatus !== 'ready') return res.status(409).json({ error: 'transcript_not_ready' });
-    if (typeof analyzeRetakes !== 'function') return res.status(501).json({ error: 'retake_analysis_unavailable' });
-    res.status(202).json({ ok: true, status: 'running' });
-    analyzeProjectRetakes(project.id);
+    return res.status(410).json({ error: 'retake_analysis_disabled', message: 'Retake removal is now handled manually in the transcript editor.' });
   });
 
   router.post('/:id/match-planning-piece', function (req, res) {
@@ -2963,11 +2987,8 @@ async function renderProject(id) {
     if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked. The approved video is already in Content Production.' });
     if (project.transcriptionStatus !== 'ready') return res.status(409).json({ error: 'transcript_not_ready' });
     if (['queued', 'preparing'].includes(project.clipInsertStatus)) return res.status(409).json({ error: 'clip_insert_running', message: 'Wait for the inserted clip to finish preparing.' });
-    if (['pending', 'running', 'pending_transcript'].includes(project.retakeAnalysisStatus) || ['pending', 'running', 'pending_transcript'].includes(project.planningMatchStatus)) {
-      return res.status(409).json({ error: 'automatic_edit_running', message: 'Wait for the automatic retake and planning checks to finish.' });
-    }
-    if (unresolvedRetakeCount(project) > 0) {
-      return res.status(409).json({ error: 'retake_review_required', message: 'Review each possible retake before building the final edit.' });
+    if (['pending', 'running', 'pending_transcript'].includes(project.planningMatchStatus)) {
+      return res.status(409).json({ error: 'automatic_edit_running', message: 'Wait for the planning check to finish.' });
     }
     const reviewFailure = blockingReviewFailure(project);
     if (reviewFailure) {
@@ -2975,6 +2996,10 @@ async function renderProject(id) {
     }
     if (layoutReviewRequired(project)) {
       return res.status(409).json({ error: 'layout_review_required', message: 'Choose Vertical or Horizontal once to confirm this uncertain frame.' });
+    }
+    if (project.renderStatus === 'ready' || project.renderDirty) {
+      invalidateProjectRender(project, { workflowAlreadyInvalidated: !!project.renderDirty });
+      saveProject(project);
     }
     res.status(202).json({ ok: true, status: 'running' });
     renderProject(project.id);
@@ -3018,7 +3043,7 @@ async function renderProject(id) {
     // Do not trust productionPieceId as proof that the downstream record and
     // media still exist. The handoff callback is idempotent and also repairs
     // an orphaned "Sent" Editor project if its Production item was removed.
-    if (project.renderStatus !== 'ready' || !fs.existsSync(renderPath(project.id))) {
+    if (project.renderDirty || project.renderStatus !== 'ready' || !fs.existsSync(renderPath(project.id))) {
       return res.status(409).json({ error: 'render_not_ready', message: 'Finish the edit before sending it to production.' });
     }
     if (!project.audioTrackId) {

@@ -25,6 +25,8 @@ test('Publishing Queue is natural inventory with no configurable reserve targets
   assert.match(server, /piece\.queuedPublishDestinations\s*=\s*destinations/);
   assert.doesNotMatch(server, /function publishingQueueTargets\(\)/);
   assert.match(server, /publishingQueue\.readyQueues\(queued, pieces\)/);
+  assert.match(server, /publishingQueue\.preparationDue\(candidateDueAt, now\)/);
+  assert.match(server, /runPlatformPublishBatch\(candidate\.id, candidate\.queuedPublishDestinations, \{ dueAt: dueAt \}\)/);
   assert.match(server, /schedulePublishingQueueDrain\(\)/);
 });
 

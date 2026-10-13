@@ -2801,16 +2801,57 @@ function topicAwarePublishingSlot(piece, candidates, pieces) {
 
 let publishingQueueDrainRunning = false;
 let publishingQueueDrainRequested = false;
+let publishingBufferScheduleCache = { expiresAt: 0, postingSchedule: [] };
+
+async function nextPublishingQueueSlot(type, pieces, nowValue) {
+  if (type === 'longform') {
+    const settingsRow = stmts.getOne.get('settings', 'settings');
+    let settings = {};
+    try { settings = settingsRow ? JSON.parse(settingsRow.data) : {}; } catch (error) { settings = {}; }
+    const occupied = pieces.filter(function (piece) {
+      return piece.contentType === 'longform' && (piece.stage === 'scheduled' || piece.stage === 'live') && (piece.scheduledAt || piece.postedAt);
+    }).map(function (piece) { return piece.scheduledAt || piece.postedAt; });
+    return shortformSchedule.nextAvailableBangkokLongformSlots(
+      nowValue, settings.longformScheduleTime || '07:55', occupied, 1
+    )[0] || '';
+  }
+  let postingSchedule = publishingBufferScheduleCache.postingSchedule;
+  if (publishingBufferScheduleCache.expiresAt <= nowValue) {
+    try {
+      const bufferStatus = await buffer.status();
+      if (bufferStatus.connected && bufferStatus.channel && bufferStatus.channel.timezone === 'Asia/Bangkok') {
+        postingSchedule = bufferStatus.channel.postingSchedule || [];
+      }
+    } catch (error) {
+      console.error('Could not read Buffer schedule while checking the publishing queue:', error.message);
+    }
+    publishingBufferScheduleCache = { expiresAt: nowValue + 10 * 60 * 1000, postingSchedule: postingSchedule };
+  }
+  const occupied = pieces.filter(function (piece) {
+    return shortformSchedule.isShortform(piece) && piece.stage === 'scheduled' && piece.scheduledAt;
+  }).map(function (piece) { return piece.scheduledAt; });
+  return shortformSchedule.nextAvailableBangkokSlots(nowValue, postingSchedule, occupied, 1)[0] || '';
+}
 
 async function drainPublishingQueue() {
+  const now = Date.now();
   const pieces = allPieceRecords();
   const queued = pieces.filter(function (piece) {
     return piece.stage === 'publishing_queue' && Array.isArray(piece.queuedPublishDestinations) && piece.queuedPublishDestinations.length;
   });
   const queues = publishingQueue.readyQueues(queued, pieces);
-  const activeQueue = queues[0];
+  let activeQueue = null;
+  let dueAt = '';
+  for (const queue of queues) {
+    const candidateDueAt = await nextPublishingQueueSlot(queue.type, pieces, now);
+    if (publishingQueue.preparationDue(candidateDueAt, now)) {
+      activeQueue = queue;
+      dueAt = candidateDueAt;
+      break;
+    }
+  }
   if (!activeQueue) return;
-  const selection = publishingQueue.chooseCandidate(activeQueue.pieces, pieces, Date.now());
+  const selection = publishingQueue.chooseCandidate(activeQueue.pieces, pieces, now);
   if (!selection || !selection.piece) return;
   const candidate = getPieceRecord(selection.piece.id);
   if (!candidate || candidate.stage !== 'publishing_queue' || !Array.isArray(candidate.queuedPublishDestinations) || !candidate.queuedPublishDestinations.length) return;
@@ -2822,7 +2863,8 @@ async function drainPublishingQueue() {
     typePenalty: Math.round(selection.typePenalty * 1000) / 1000,
     ageRank: selection.ageRank,
     ageForced: selection.ageForced === true,
-    queueWaitDays: Math.round(selection.queueWaitDays * 10) / 10
+    queueWaitDays: Math.round(selection.queueWaitDays * 10) / 10,
+    dueAt: dueAt
   };
   candidate.queuedPublishDestinations.forEach(function (destination) {
     candidate[publishStatusField(destination.platform)] = 'pending';
@@ -2830,7 +2872,7 @@ async function drainPublishingQueue() {
   });
   candidate.updatedAt = new Date().toISOString();
   savePieceRecord(candidate);
-  await runPlatformPublishBatch(candidate.id, candidate.queuedPublishDestinations);
+  await runPlatformPublishBatch(candidate.id, candidate.queuedPublishDestinations, { dueAt: dueAt });
   const result = getPieceRecord(candidate.id);
   // A platform/storage failure returns the card to Final Check. Do not burn
   // through the rest of the queue while the same external fault persists.
@@ -2859,7 +2901,8 @@ function schedulePublishingQueueDrain() {
   });
 }
 
-async function runPlatformPublishBatch(id, destinations) {
+async function runPlatformPublishBatch(id, destinations, options) {
+  options = options || {};
   const finalPath = path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX);
   const openingPiece = getPieceRecord(id);
   const hasStoredFinal = openingPiece && openingPiece.storageStatus === 'ready' && openingPiece.storageObjectKey;
@@ -2909,7 +2952,9 @@ async function runPlatformPublishBatch(id, destinations) {
       return other.id !== id && other.contentType === 'longform' &&
         (other.stage === 'scheduled' || other.stage === 'live') && (other.scheduledAt || other.postedAt);
     }).map(function (other) { return other.scheduledAt || other.postedAt; });
-    const candidates = shortformSchedule.nextAvailableBangkokLongformSlots(
+    const forcedDueAt = publishingQueue.preparationDue(options.dueAt, Date.now(), publishingQueue.PREPARATION_LEAD_MS + 60 * 1000)
+      ? options.dueAt : '';
+    const candidates = forcedDueAt ? [forcedDueAt] : shortformSchedule.nextAvailableBangkokLongformSlots(
       Date.now(), settings.longformScheduleTime || '07:55', occupied, 10
     );
     // Queue selection already chose the best topic for this turn. Commit it
@@ -2955,7 +3000,9 @@ async function runPlatformPublishBatch(id, destinations) {
     const occupied = pieces.filter(function (other) {
       return other.id !== id && shortformSchedule.isShortform(other) && other.stage === 'scheduled' && other.scheduledAt;
     }).map(function (other) { return other.scheduledAt; });
-    const candidates = shortformSchedule.nextAvailableBangkokSlots(Date.now(), postingSchedule, occupied, 32);
+    const forcedDueAt = publishingQueue.preparationDue(options.dueAt, Date.now(), publishingQueue.PREPARATION_LEAD_MS + 60 * 1000)
+      ? options.dueAt : '';
+    const candidates = forcedDueAt ? [forcedDueAt] : shortformSchedule.nextAvailableBangkokSlots(Date.now(), postingSchedule, occupied, 32);
     // The natural queue decides which video goes next; the chosen video uses
     // the next daily Buffer slot. Topic separation must not manufacture empty
     // publishing days by pushing the only Scheduled short far into the future.

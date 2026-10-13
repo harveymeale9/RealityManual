@@ -64,6 +64,13 @@ test('each cadence selects one next video only when that format has no scheduled
   assert.deepEqual(queue.readyQueues(waiting, waiting.concat(longScheduled, shortScheduled)), []);
 });
 
+test('a queue slot becomes actionable only during its twenty-minute preparation window', function () {
+  const now = Date.parse('2026-10-13T06:35:00.000Z');
+  assert.equal(queue.preparationDue('2026-10-13T06:55:00.000Z', now), true);
+  assert.equal(queue.preparationDue('2026-10-13T06:55:01.000Z', now), false);
+  assert.equal(queue.preparationDue('2026-10-13T06:34:59.000Z', now), false);
+});
+
 test('an approval waiting ten days becomes the mandatory next release', function () {
   const old = piece('old-topic', 'short', 1, 'beliefs are emotional records formed from repeated experiences');
   old.publishingQueuedAt = '2026-09-20T00:00:00.000Z';

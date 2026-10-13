@@ -399,7 +399,7 @@ test('format classification trusts recording orientation and explicit overrides'
   assert.equal(editor.effectiveLayout({ width: 1080, height: 1920, visualClassification: { layout: 'horizontal' } }), 'vertical');
   assert.equal(editor.layoutReviewRequired({ width: 1080, height: 1920, visualClassification: { layout: 'horizontal', confidence: 'low' } }), false);
   assert.equal(editor.blockingReviewFailure({ width: 1920, height: 1080, layoutOverride: 'auto', classificationStatus: 'error' }), '');
-  assert.match(editor.blockingReviewFailure({ width: 1920, height: 1080, retakeAnalysisStatus: 'error' }), /retake check failed/i);
+  assert.equal(editor.blockingReviewFailure({ width: 1920, height: 1080, retakeAnalysisStatus: 'error' }), '');
 });
 
 test('planning linkage failures do not block an otherwise safe automatic edit', function () {
@@ -434,7 +434,17 @@ test('metadata-only editor changes preserve a verified render', function () {
   assert.equal(editor.patchAffectsRender({ punchIns: [{ start: 1, end: 2 }] }), false);
   assert.equal(editor.patchNeedsAutoRender({ renderStatus: 'ready' }, false), false);
   assert.equal(editor.patchNeedsAutoRender({ renderStatus: '' }, false), true);
-  assert.equal(editor.patchNeedsAutoRender({ renderStatus: 'ready' }, true), true);
+  assert.equal(editor.patchNeedsAutoRender({ renderStatus: 'ready' }, true), false);
+});
+
+test('Editor UI batches transcript cuts behind one explicit preview rebuild', function () {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'editor.js'), 'utf8');
+  const page = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  assert.match(source, /project\.renderDirty \? 'Rebuild preview' : 'Build final edit'/);
+  assert.match(source, /Transcript edits saved/);
+  assert.match(source, /Keep cutting mistakes, then press Rebuild preview once/);
+  assert.doesNotMatch(source, /scheduleAutoRender\(project\.id, EDIT_RENDER_DEBOUNCE_MS\)/);
+  assert.match(page, /editor\.js\?v=20261013-batched-transcript-cuts-v133/);
 });
 
 test('precise manual trims bridge residual fragments between automatic and transcript cuts', function () {
@@ -1123,6 +1133,36 @@ test('legacy ready recordings acquire missing analysis phases on startup', { tim
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
 
+test('startup stops old retake renders and preserves only manual transcript cuts', async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-manual-cut-migration-'));
+  const db = new Database(path.join(dir, 'test.sqlite'));
+  db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
+  const now = new Date().toISOString();
+  db.prepare('INSERT INTO records VALUES (?, ?, ?, ?)').run('editorProjects', 'old-retake-render', JSON.stringify({
+    id: 'old-retake-render', name: 'Old automatic retake render', fileName: 'source.mp4', duration: 20,
+    width: 1920, height: 1080, words: [
+      { index: 0, text: 'old', start: 0, end: 0.3 }, { index: 1, text: 'take', start: 0.3, end: 0.6 },
+      { index: 2, text: 'clean', start: 1, end: 1.3 }, { index: 3, text: 'take', start: 1.3, end: 1.6 },
+      { index: 4, text: 'manual', start: 2, end: 2.4 }
+    ],
+    removedWordIndices: [0, 1, 4], autoRetakeRemovedWordIndices: [0, 1], dismissedRetakeIds: [],
+    restoredAutoCutIds: [], autoSilenceEnabled: true, transcriptionStatus: 'ready', classificationStatus: 'ready',
+    visualClassification: { layout: 'horizontal' }, retakeAnalysisStatus: 'ready', planningMatchStatus: 'unavailable',
+    automaticRenderStartedAt: now, renderStatus: 'running', renderProgress: 47, createdAt: now, updatedAt: now
+  }), now);
+  editor.setup({ db: db, dataDir: dir, transcribeDetailed: async function () { return { text: '', words: [] }; } });
+  await new Promise(function (resolve) { setTimeout(resolve, 40); });
+  const project = JSON.parse(db.prepare('SELECT data FROM records WHERE store_name=? AND id=?').get('editorProjects', 'old-retake-render').data);
+  assert.deepEqual(project.removedWordIndices, [4]);
+  assert.deepEqual(project.autoRetakeRemovedWordIndices, []);
+  assert.equal(project.retakeAnalysisStatus, 'unavailable');
+  assert.equal(project.retakeWorkflowVersion, 2);
+  assert.equal(project.renderStatus, '');
+  assert.equal(project.renderDirty, true);
+  assert.equal(project.renderProgress, 47);
+  t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+});
+
 test('an HEVC camera master receives a real browser-safe review proxy', { timeout: 30000 }, async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-hevc-'));
   const id = 'hevc-1';
@@ -1435,17 +1475,9 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.classificationStatus, 'ready', project.classificationError);
   assert.equal(project.effectiveLayout, 'vertical');
   assert.equal(project.cropCenterX, 0.5);
-  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cropCenterX: 0.1 }) });
-  assert.equal(response.status, 200);
-  project = await response.json();
-  assert.equal(project.cropCenterX, 0.5, 'retired crop-pan input must not alter centred portrait framing');
-  for (let attempt = 0; attempt < 100 && project.retakeAnalysisStatus !== 'ready'; attempt++) {
-    await new Promise(function (resolve) { setTimeout(resolve, 30); });
-    project = await (await fetch(base + '/api/editor/' + project.id)).json();
-  }
-  assert.equal(project.retakeAnalysisStatus, 'ready', project.retakeAnalysisError);
-  assert.equal(retakeCalls, 2);
-  assert.deepEqual(project.removedWordIndices, [0, 1]);
+  assert.equal(project.retakeAnalysisStatus, 'unavailable');
+  assert.equal(retakeCalls, 0, 'initial cleanup must not guess at spoken retakes');
+  assert.deepEqual(project.removedWordIndices, []);
   for (let attempt = 0; attempt < 100 && project.planningMatchStatus !== 'ready'; attempt++) {
     await new Promise(function (resolve) { setTimeout(resolve, 30); });
     project = await (await fetch(base + '/api/editor/' + project.id)).json();
@@ -1460,7 +1492,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(planningMatchCalls, 1);
   assert.ok(metadataProjects.some(function (item) { return item.id === project.id && item.workingTitle === 'Synthetic Outline'; }));
   assert.ok(project.cuts.some(function (cut) { return cut.reason === 'long_pause' || cut.reason === 'combined'; }));
-  assert.deepEqual(project.captionGroups.map(function (group) { return group.text; }), ['One two.']);
+  assert.deepEqual(project.captionGroups.map(function (group) { return group.text; }), ['One two.', 'One two.']);
   for (let attempt = 0; attempt < 600 && (project.renderStatus !== 'error' && (project.renderStatus !== 'ready' || renderReadyCalls < 1 || !project.workflowWarning)); attempt++) {
     await new Promise(function (resolve) { setTimeout(resolve, 50); });
     project = await (await fetch(base + '/api/editor/' + project.id)).json();
@@ -1512,28 +1544,31 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
     { previous: '', next: 'plan-1', renderWillChange: false },
     { previous: 'plan-1', next: 'plan-2', renderWillChange: false }
   ]);
-  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ removedWordIndices: [], dismissedRetakeIds: ['smart-retake-0-0-1'] }) });
+  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ removedWordIndices: [0, 1] }) });
   assert.equal(response.status, 200);
   project = await response.json();
-  assert.deepEqual(project.removedWordIndices, []);
-  assert.deepEqual(project.dismissedRetakeIds, ['smart-retake-0-0-1']);
-  assert.equal(project.renderRebuildPending, true, 'an invalidated reviewed preview stays explicitly locked throughout the debounce');
+  assert.deepEqual(project.removedWordIndices, [0, 1]);
+  assert.equal(project.renderDirty, true, 'transcript cuts wait for the explicit rebuild action');
+  assert.equal(project.renderStatus, 'ready', 'the reviewed preview remains available while cuts are batched');
+  assert.equal(project.renderRebuildPending, false);
   assert.equal(project.canUndoCut, true);
   assert.equal(renderInvalidatedCalls, 1);
-  assert.equal(fs.existsSync(path.join(dir, 'editor', project.id, 'render.mp4')), false);
+  assert.equal(fs.existsSync(path.join(dir, 'editor', project.id, 'render.mp4')), true);
+  await new Promise(function (resolve) { setTimeout(resolve, 2800); });
+  project = await (await fetch(base + '/api/editor/' + project.id)).json();
+  assert.equal(renderReadyCalls, 1, 'saving a transcript cut must not start FFmpeg');
   const undoMutation = { expectedEditRevision: project.editRevision, mutationId: 'undo-idempotency-0001' };
   response = await fetch(base + '/api/editor/' + project.id + '/undo-cut', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(undoMutation) });
   assert.equal(response.status, 200);
   project = await response.json();
-  assert.deepEqual(project.removedWordIndices, [0, 1]);
-  assert.deepEqual(project.dismissedRetakeIds, []);
+  assert.deepEqual(project.removedWordIndices, []);
   assert.equal(project.canUndoCut, false);
   const undoneRevision = project.editRevision;
   response = await fetch(base + '/api/editor/' + project.id + '/undo-cut', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(undoMutation) });
   assert.equal(response.status, 200);
   project = await response.json();
   assert.equal(project.editRevision, undoneRevision);
-  assert.deepEqual(project.removedWordIndices, [0, 1]);
+  assert.deepEqual(project.removedWordIndices, []);
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ removedWordIndices: [0, 1, 2, 3] }) });
   assert.equal(response.status, 200);
   project = await response.json();
@@ -1542,7 +1577,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   response = await fetch(base + '/api/editor/' + project.id + '/undo-cut', { method: 'POST' });
   assert.equal(response.status, 200);
   project = await response.json();
-  assert.deepEqual(project.removedWordIndices, [0, 1]);
+  assert.deepEqual(project.removedWordIndices, []);
   assert.equal(project.canUndoCut, false);
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
     restoredAutoCutIds: ['gap-1'], autoSilenceEnabled: false, silenceThresholdSeconds: 1.5, retainedPauseSeconds: 0.55
@@ -1565,11 +1600,12 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ captionsEnabled: false, wordCorrection: { index: 0, text: 'Once' } }) });
   assert.equal(response.status, 200);
   project = await response.json();
-  assert.equal(project.renderStatus, '');
+  assert.equal(project.renderStatus, 'ready');
+  assert.equal(project.renderDirty, true);
   assert.equal(project.words[0].text, 'Once');
   assert.equal(project.words[0].originalText, 'One');
   assert.equal(project.transcriptText, 'Once two. One two.');
-  assert.deepEqual(project.captionGroups.map(function (group) { return group.text; }), ['One two.']);
+  assert.deepEqual(project.captionGroups.map(function (group) { return group.text; }), ['Once two.', 'One two.']);
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wordCorrection: { index: 0, text: 'two words' } }) });
   assert.equal(response.status, 400);
   assert.equal((await response.json()).error, 'invalid_word_correction');
@@ -1580,11 +1616,18 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
     retainedPauseSeconds: 0.55
   }) });
   assert.equal(response.status, 200);
-  for (let attempt = 0; attempt < 600 && (project.renderStatus !== 'ready' || renderReadyCalls < 2 || project.workflowWarning); attempt++) {
+  project = await response.json();
+  assert.equal(project.renderStatus, 'ready');
+  assert.equal(project.renderDirty, true);
+  assert.equal(renderReadyCalls, 1, 'all manual changes remain batched before rebuild');
+  response = await fetch(base + '/api/editor/' + project.id + '/render', { method: 'POST' });
+  assert.equal(response.status, 202);
+  for (let attempt = 0; attempt < 600 && (project.renderStatus !== 'ready' || project.renderDirty || renderReadyCalls < 2 || project.workflowWarning); attempt++) {
     await new Promise(function (resolve) { setTimeout(resolve, 50); });
     project = await (await fetch(base + '/api/editor/' + project.id)).json();
   }
   assert.equal(project.renderStatus, 'ready', project.renderError);
+  assert.equal(project.renderDirty, false);
   assert.equal(project.renderRebuildPending, false, 'the preview unlocks only after the replacement render and scrub proxy are both ready');
   assert.equal(project.renderPreviewStatus, 'ready', project.renderPreviewError);
   assert.equal(project.renderPreviewVersion, 2);

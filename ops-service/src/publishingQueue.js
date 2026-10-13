@@ -5,6 +5,7 @@ const topicSchedule = require('./topicSchedule');
 const SHORT_TYPES = ['ultra_short', 'short', 'long_short'];
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_QUEUE_WAIT_DAYS = 10;
+const PREPARATION_LEAD_MS = 20 * 60 * 1000;
 
 function queuedAt(piece) {
   const parsed = Date.parse(piece && (piece.publishingQueuedAt || piece.updatedAt || piece.createdAt) || '');
@@ -86,9 +87,9 @@ function chooseCandidate(queue, allPieces, nowValue) {
   return plan.length ? plan[0] : null;
 }
 
-// Long-form and short-form have independent cadences. A format needs its next
-// item selected only when it has waiting videos and no item already committed
-// to Scheduled. The queue's size is therefore natural inventory, not a target.
+// Long-form and short-form have independent cadences. This identifies formats
+// which may need a next item; the worker separately waits until the cadence
+// slot is within its preparation window before choosing a specific video.
 function readyQueues(queue, allPieces) {
   const queued = Array.isArray(queue) ? queue : [];
   const occupied = new Set((Array.isArray(allPieces) ? allPieces : []).filter(function (piece) {
@@ -101,11 +102,20 @@ function readyQueues(queue, allPieces) {
   });
 }
 
+function preparationDue(dueAt, nowValue, leadMs) {
+  const due = Date.parse(String(dueAt || ''));
+  const now = Number.isFinite(Number(nowValue)) ? Number(nowValue) : Date.now();
+  const lead = Number.isFinite(Number(leadMs)) ? Math.max(0, Number(leadMs)) : PREPARATION_LEAD_MS;
+  return Number.isFinite(due) && due > now && due <= now + lead;
+}
+
 module.exports = {
   SHORT_TYPES: SHORT_TYPES,
   MAX_QUEUE_WAIT_DAYS: MAX_QUEUE_WAIT_DAYS,
+  PREPARATION_LEAD_MS: PREPARATION_LEAD_MS,
   queueType: queueType,
   planQueue: planQueue,
   chooseCandidate: chooseCandidate,
-  readyQueues: readyQueues
+  readyQueues: readyQueues,
+  preparationDue: preparationDue
 };

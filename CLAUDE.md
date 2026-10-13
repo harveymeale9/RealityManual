@@ -18778,3 +18778,54 @@ The connected live Buffer channel was read before this change and already has ex
 The first approved long-form video is not required to wait three days before its initial release. With no earlier Scheduled or Live long-form anchor, it uses the next occurrence of the configured 1:55 PM Asia/Bangkok wall-clock time. If it enters Publishing Queue before 1:55 PM, that means the same day; if it enters afterward, that means the following day. Once this first release establishes the cadence anchor, later long-form releases use the subsequent 72-hour slots. Harvey is responsible for replenishing Publishing Queue before the next slot if he wants the rhythm to continue without a gap.
 
 This was already the server scheduler's actual behavior. The Content Settings label now states it explicitly as **First video at the next 1:55 PM Asia/Bangkok, then every 3 days**, and a dedicated regression test locks both the before/after-first-slot cases and the following 72-hour slot.
+
+---
+
+# 601. Publishing Selection Happens Twenty Minutes Before Release (2026-10-13)
+
+Publishing Queue no longer chooses and moves a video to Scheduled as soon as
+the preceding card publishes. The one-minute queue worker now calculates the
+next real slot for each independent cadence and leaves every candidate in
+Publishing Queue until that slot is no more than twenty minutes away. Only
+then does it apply the existing topic separation, short-format variety, age,
+and ten-day anti-starvation rules, archive the chosen media, and prepare the
+platform upload for the exact upcoming release time.
+
+The calculated due time is carried through the publishing batch rather than
+being recalculated after media preparation. The Buffer posting calendar is
+cached for ten minutes so an idle short-form queue does not turn the one-minute
+worker into excessive external API traffic. If both a long-form and a
+short-form slot enter their preparation windows together, the worker commits
+one and immediately rechecks the other. A completed publication therefore does
+not itself trigger a premature choice; it merely makes that format eligible
+for the later T-minus-20 check.
+
+---
+
+# 602. Editor Transcript Cuts Are Batched Before One Preview Rebuild (2026-10-13)
+
+Manual transcript cuts, restores, caption corrections, pause-setting changes,
+and Undo no longer invalidate the current preview and launch FFmpeg after every
+click. They save immediately as durable edit decisions, mark the verified
+preview as out of date, retain that previous file for reference, and show the
+source recording by default while Harvey continues editing. The Editor now
+shows **Transcript edits saved** and one explicit **Rebuild preview** button.
+Approval is blocked until that one rebuild completes and verifies the new
+output.
+
+The initial automatic pass now removes long pauses only. It no longer calls the
+semantic retake analyzer or applies the Antoine Matthias marker heuristic.
+Existing active projects are migrated once: only indices explicitly owned by
+the old retake automation are restored, all manual transcript cuts are
+preserved, and any existing preview is marked out of date rather than silently
+rebuilt. An in-progress old-style render is stopped by the deployment and left
+waiting for the same explicit rebuild action. Spoken mistakes are now Harvey's
+manual transcript-editing step.
+
+The end-to-end Editor test proves that repeated transcript changes preserve the
+existing preview and do not start a second render, then verifies that the
+explicit render endpoint produces exactly one replacement. A real Chromium
+interaction test selected and cut two separate transcript words, observed two
+fast saves and zero render calls, saw the saved-edits notice and **Rebuild
+preview** control, then confirmed that pressing it made exactly one render
+request.
