@@ -27,6 +27,14 @@ mkdir -p "$DATA_DIR"
 LOG_FILE="$DATA_DIR/last-deploy.log"
 exec > >(tee "$LOG_FILE") 2>&1
 set -x
+fail() { echo "DEPLOY FAILED: $*"; exit 1; }
+
+# A CI push, workflow retry, and an interactive repair can overlap. Only one
+# process may stop/recreate the named container at a time; later deployments
+# wait and then re-evaluate the live commit instead of racing `docker rm/run`.
+DEPLOY_LOCK="$DATA_DIR/deploy.lock"
+exec 9>"$DEPLOY_LOCK"
+flock -w 900 9 || fail "timed out waiting for another ops-service deployment"
 
 RUN_ARGS=(-d --name "$CONTAINER" --restart unless-stopped
   -p 127.0.0.1:4001:4001
@@ -41,8 +49,6 @@ RUN_ARGS=(-d --name "$CONTAINER" --restart unless-stopped
   -v "$RUNTIME_REPO_DIR:/repo"
   -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro
   --env-file "$ENV_FILE")
-
-fail() { echo "DEPLOY FAILED: $*"; exit 1; }
 
 cd "$REPO_DIR" || fail "cannot cd into $REPO_DIR"
 # REPO_DIR doubles as an interactive root session's own working copy (see

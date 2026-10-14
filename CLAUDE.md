@@ -18939,3 +18939,22 @@ v2.0.3 source and stored at the existing persistent download route. Because
 the old v2.0.2 executable did not include an updater, installing v2.0.3 once is
 required for these laptop-side recovery changes; pairing and queue state remain
 in the same Local AppData config.
+
+---
+
+# 607. Ops-service Deployments Are Serialized on the Host (2026-10-14)
+
+GitHub Actions run 519 for commit `3358083` failed because two deployment
+processes overlapped. Both passed the image build, then raced through
+`docker stop`, `docker rm`, and `docker run` for the same fixed
+`rm-ops-service` container name. One process created the new container while
+the other believed removal had completed, producing container-name conflicts
+for both its new image and rollback attempt. A later deployment restored the
+service, and current run 526 for uploader recovery completed successfully.
+
+`ops-service/deploy.sh` now takes an exclusive `flock` on the persistent data
+volume before inspecting Git state or Docker state. A concurrent CI retry or
+interactive deployment waits for the active run to finish, then reevaluates
+whether any rebuild is still owed. It can no longer race the named container
+recreation path. The lock has a fifteen-minute upper bound so a genuinely
+wedged deploy reports a specific timeout rather than waiting forever.
