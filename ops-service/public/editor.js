@@ -2027,7 +2027,7 @@
       if (group && Array.isArray(group.words) && isLongform) {
         var phraseCharacters = Array.from(String(group.text || '')).length;
         var phraseScale = Math.max(0.65, Math.min(1, 50 / Math.max(50, phraseCharacters)));
-        if (phraseScale < 1) caption.style.fontSize = (2.7 * phraseScale).toFixed(2) + 'cqw';
+        if (phraseScale < 1) caption.style.fontSize = (2.05 * phraseScale).toFixed(2) + 'cqw';
         group.words.forEach(function (word, index) {
           // Whitespace at the end of an inline-block is collapsed away, so
           // putting the separator inside the preceding word joined every

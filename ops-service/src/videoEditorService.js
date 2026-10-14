@@ -1166,7 +1166,9 @@ function buildAss(project, groups) {
   const width = Math.max(360, Math.round(Number(project.width) || 1080));
   const height = Math.max(360, Math.round(Number(project.height) || 1920));
   const isLongform = width >= height;
-  const fontSize = Math.max(30, Math.round(Math.min(width, height) * (isLongform ? 0.048 : 0.08)));
+  const fontSize = isLongform
+    ? Math.max(18, Math.round(Math.min(width, height) * 0.036))
+    : Math.max(30, Math.round(Math.min(width, height) * 0.08));
   // Long-form phrases remain on one line, so a large inline size jump can
   // visually crowd neighbouring words. Keep their emphasis gentler and add
   // explicit word room below; vertical three-word windows retain 12%.

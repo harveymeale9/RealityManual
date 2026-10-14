@@ -463,7 +463,8 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /Preparing browser-safe preview…/);
   assert.match(source, /Playback will unlock automatically/);
   assert.match(source, /\(mediaUnavailable \? '' : ' src="' \+ previewUrl/);
-  assert.match(page, /editor\.js\?v=20261014-decision-preview-v141/);
+  assert.match(page, /editor\.js\?v=20261014-longform-caption-size-v142/);
+  assert.match(page, /style\.css\?v=20261014-longform-caption-size-v139/);
 });
 
 test('startup probing preserves an active browser preview encode', function () {
@@ -812,24 +813,25 @@ test('ASS export uses bold yellow captions below centre', function () {
   assert.match(ass, /Dialogue: 0,0:00:01\.00,0:00:02\.00.*A \\{real\\} caption/);
 });
 
-test('landscape captions are larger and advance spoken-word emphasis', function () {
+test('landscape captions stay compact, spaced and advance spoken-word emphasis', function () {
   const groups = [{ start: 1, end: 2, text: 'A wise move', words: [
     { text: 'A', start: 1, end: 1.2 }, { text: 'wise', start: 1.2, end: 1.6 }, { text: 'move', start: 1.6, end: 2 }
   ] }];
   const ass = editor.buildAss({ width: 1920, height: 1080 }, groups);
-  assert.match(ass, /Style: Default,Arial,52,/);
+  assert.match(ass, /Style: Default,Arial,39,/);
   assert.match(ass, /,2,40,40,130,1/);
   assert.equal((ass.match(/^Dialogue:/gm) || []).length, 3);
-  assert.match(ass, /\\fs56\\bord4}A\{\\r}\\h\\hwise\\h\\hmove/);
-  assert.match(ass, /A\\h\\h\{\\fs56\\bord4}wise\{\\r}\\h\\hmove/);
+  assert.match(ass, /\\fs42\\bord4}A\{\\r}\\h\\hwise\\h\\hmove/);
+  assert.match(ass, /A\\h\\h\{\\fs42\\bord4}wise\{\\r}\\h\\hmove/);
   const longWords = Array.from({ length: 5 }, function (_, index) {
     return { text: 'extraordinarylong' + index, start: index * .2, end: index * .2 + .18 };
   });
   const fitted = editor.buildAss({ width: 1920, height: 1080 }, [{
     start: 0, end: 1, text: longWords.map(function (word) { return word.text; }).join(' '), words: longWords
   }]);
-  assert.match(fitted, /\\fs34\\bord3/);
-  assert.match(fitted, /\\fs37\\bord4/);
+  assert.match(fitted, /\\fs25\\bord3/);
+  assert.match(fitted, /\\fs27\\bord4/);
+  assert.match(editor.buildAss({ width: 720, height: 404 }, groups), /Style: Default,Arial,18,/);
 });
 
 test('vertical captions show three-word windows with spoken-word emphasis', function () {
