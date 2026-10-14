@@ -447,7 +447,17 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /suspected-mistake/);
   assert.doesNotMatch(source, /Removed automatically/);
   assert.doesNotMatch(source, /Every automatic silence cut/);
-  assert.match(page, /editor\.js\?v=20261013-highlighted-transcript-review-v134/);
+  assert.match(page, /editor\.js\?v=20261014-laptop-upload-status-v137/);
+});
+
+test('Editor summary shows live laptop upload progress independently of project processing', function () {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'editor.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'public', 'style.css'), 'utf8');
+  assert.match(source, /api\/desktop-uploader\/devices/);
+  assert.match(source, /device\.status === 'uploading'/);
+  assert.match(source, /Uploading · ' \+ percent \+ '%/);
+  assert.match(source, /pollDesktopUploaderStatus\(expectedMountToken\)/);
+  assert.match(styles, /editor-session-summary \.uploading/);
 });
 
 test('precise manual trims bridge residual fragments between automatic and transcript cuts', function () {

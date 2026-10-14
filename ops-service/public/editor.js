@@ -6,6 +6,8 @@
   var project = null;
   var selected = new Set();
   var pollTimer = null;
+  var desktopUploaderPollTimer = null;
+  var desktopUploaderDevices = [];
   var mountToken = 0;
   var openRequestToken = 0;
   var pendingExplicitOpenToken = 0;
@@ -448,14 +450,45 @@
   function renderSessionSummary() {
     var summary = root && root.querySelector('#editorSessionSummary');
     if (!summary) return;
-    if (!projects.length) { summary.hidden = true; summary.innerHTML = ''; return; }
+    var now = Date.now();
+    var laptopUploads = desktopUploaderDevices.filter(function (device) {
+      var heartbeatAt = new Date(device.lastSeenAt || 0).getTime();
+      return !device.revokedAt && device.status === 'uploading' && heartbeatAt && now - heartbeatAt < 120000;
+    });
+    if (!projects.length && !laptopUploads.length) { summary.hidden = true; summary.innerHTML = ''; return; }
     var counts = { working: 0, ready: 0, warning: 0, attention: 0, prepared: 0, sent: 0 };
     projects.forEach(function (item) { counts[sessionBucket(item)]++; });
     var labels = { working: 'processing', ready: 'ready to approve', warning: 'workflow warning', attention: 'need attention', prepared: 'prepared', sent: 'sent' };
-    summary.innerHTML = '<strong>' + projects.length + ' recording' + (projects.length === 1 ? '' : 's') + '</strong>' + Object.keys(counts).filter(function (key) { return counts[key]; }).map(function (key) {
+    var uploadBadges = laptopUploads.map(function (device) {
+      var percent = Math.max(0, Math.min(100, Math.round(Number(device.uploadProgress) || 0)));
+      var fileName = device.currentFileName || 'recording';
+      return '<span class="uploading" title="' + esc('Uploading ' + fileName + ' from ' + (device.name || 'laptop')) + '"><i></i>Uploading · ' + percent + '%</span>';
+    }).join('');
+    summary.innerHTML = '<strong>' + projects.length + ' recording' + (projects.length === 1 ? '' : 's') + '</strong>' + uploadBadges + Object.keys(counts).filter(function (key) { return counts[key]; }).map(function (key) {
       return '<span class="' + key + '"><i></i>' + counts[key] + ' ' + labels[key] + '</span>';
     }).join('');
     summary.hidden = false;
+  }
+
+  function pollDesktopUploaderStatus(expectedMountToken) {
+    clearTimeout(desktopUploaderPollTimer);
+    var wasUploading = desktopUploaderDevices.some(function (device) { return device.status === 'uploading'; });
+    fetch('/api/desktop-uploader/devices', { credentials: 'include' }).then(function (response) {
+      if (!response.ok) throw new Error('uploader_status_unavailable');
+      return response.json();
+    }).then(function (result) {
+      if (expectedMountToken !== mountToken || !editorMounted()) return;
+      desktopUploaderDevices = (result.devices || []).filter(function (device) { return !device.revokedAt; });
+      renderSessionSummary();
+      var isUploading = desktopUploaderDevices.some(function (device) { return device.status === 'uploading'; });
+      if (wasUploading && !isUploading) loadProjects(expectedMountToken).catch(function () {});
+    }).catch(function () {
+      if (expectedMountToken === mountToken && editorMounted()) renderSessionSummary();
+    }).finally(function () {
+      if (expectedMountToken === mountToken && editorMounted()) {
+        desktopUploaderPollTimer = setTimeout(function () { pollDesktopUploaderStatus(expectedMountToken); }, 2000);
+      }
+    });
   }
 
   function timelineHtml(item) {
@@ -582,7 +615,7 @@
           '<div class="editor-heading-actions"><a href="voice-mobile.html" class="editor-pm-mobile btn-secondary">Project Manager</a><label class="editor-upload btn-primary"><input id="editorFile" type="file" accept="video/*,.mp4,.mov,.m4v,.webm,.mkv,.avi" multiple hidden>Upload raw videos</label></div></header>' +
         '<div class="editor-upload-progress" id="editorUploadProgress" hidden><div class="editor-upload-progress-head"><span id="editorUploadLabel">Uploading…</span><button type="button" class="btn-secondary btn-tiny" id="editorCancelUpload" hidden>Cancel batch</button></div><div class="editor-upload-progress-track"><i id="editorUploadBar"></i></div></div>' +
         '<div class="editor-notice" id="editorNotice" hidden></div>' +
-        '<div class="editor-session-summary" id="editorSessionSummary" hidden></div>' +
+        '<div class="editor-session-summary" id="editorSessionSummary" role="status" aria-live="polite" hidden></div>' +
         '<div class="editor-layout"><aside class="editor-projects"><div class="editor-aside-head"><div class="editor-aside-title">Recordings</div><div class="editor-list-filters"><button type="button" data-filter="active">Active</button><button type="button" data-filter="sent">Sent</button></div></div><div id="editorProjectList"></div></aside>' +
           '<main class="editor-workspace" id="editorWorkspace"><div class="editor-empty"><strong>No recording selected</strong><span>Upload a raw video to begin.</span></div></main></div>' +
         '<div class="editor-drop-overlay" id="editorDropOverlay"><strong>Drop filming session</strong><span>Every video will enter the automatic edit queue</span></div>' +
@@ -2451,6 +2484,7 @@
     unmount: function () {
       stopManualRevisionDictation();
       clearTimeout(pollTimer);
+      clearTimeout(desktopUploaderPollTimer);
       root = null;
     },
     mount: function (element) {
@@ -2459,6 +2493,7 @@
       openRequestToken++;
       pendingExplicitOpenToken = 0;
       clearTimeout(pollTimer);
+      clearTimeout(desktopUploaderPollTimer);
       Object.keys(renderRefreshTimers).forEach(function (id) { clearTimeout(renderRefreshTimers[id]); });
       // Save queues deliberately survive a tab round trip. A PATCH already in
       // flight must remain the predecessor of any new edit made immediately
@@ -2472,6 +2507,7 @@
       if (projects.length) renderList();
       if (project) renderWorkspace();
       var expectedMountToken = mountToken;
+      pollDesktopUploaderStatus(expectedMountToken);
       loadProjects(expectedMountToken).catch(function (error) {
         if (expectedMountToken !== mountToken || !editorMounted()) return;
         var workspace = root && root.querySelector('#editorWorkspace');

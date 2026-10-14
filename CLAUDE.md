@@ -19004,3 +19004,26 @@ so tapping **Never mind** immediately after Send is still effective rather
 than becoming a silent no-op. Later messages remain ordinary queued follow-ups
 unless Harvey explicitly cancels the earlier one, which avoids guessing that
 every correction or extra detail is intended to abort active work.
+
+---
+
+# 610. Editor Shows Live Laptop Upload Progress (2026-10-14)
+
+The Windows uploader already sent its current filename, byte-derived
+percentage, queue count and heartbeat to the service, but that status was only
+visible in Content Settings. While an OBS master was still crossing the
+network, Editor therefore showed only completed recordings and could look as
+though the laptop had not started sending anything.
+
+Editor now polls the existing paired-device status feed every two seconds while
+the tab is mounted. A fresh `uploading` heartbeat adds a green animated
+**Uploading · N%** badge to the filming-session summary above the recording
+list. The full laptop and filename are retained in the badge title without
+allowing a long filename to crowd the narrow mobile layout. Heartbeats older
+than two minutes are not presented as active uploads, so a stopped laptop does
+not leave a permanent false indicator.
+
+This status loop is independent of Editor's project-processing poll. It works
+when there are zero active projects, stops when the Editor tab unmounts, and
+refreshes the project list as an upload changes from active to complete so the
+new recording appears without a manual reload.
