@@ -19126,6 +19126,45 @@ an unavailable media URL while the player is locked.
 
 Browser review proxies are now capped at 720 pixels on the long edge and 24
 fps, encoded with x264's ultrafast preset at CRF 31 and half-second keyframes.
-They remain disposable review media—the verified final export retains its
-existing full-resolution CRF 18 pipeline—so this reduces time-to-edit and CPU
-cost without lowering the video that is ultimately approved and published.
+They remain disposable review media, so this reduces time-to-edit and CPU cost
+without lowering the video that is ultimately approved and published.
+
+---
+
+# 614. Editor Builds Decisions; Production Builds the Native Master (2026-10-14)
+
+The first decision-first rollout still used the old render boundary: **Build
+preview** created a 1080p CRF 18 file, and approval copied that expensive file
+into Production. That contradicted the actual workflow. Editor only needs a
+fast representation of cuts, captions, inserted clips and camera moves;
+Production is the last place where title, thumbnail and soundtrack choices are
+made, and Final Check is the first place that needs the real master.
+
+An explicit Editor rebuild now composes the saved edit at a 720-pixel long edge
+using x264 ultrafast/CRF 30. That small verified decision preview is what gets
+copied into Production for analysis and selection work. Editor approval no
+longer requires a backing-audio choice. When **Send to final check** is pressed,
+Production asks the Editor service to render the same durable decisions from
+the camera source at its native 16:9 resolution, capped at 3840 pixels on the
+long edge, using the existing CRF 18 master settings. Production then applies
+the selected mastered soundtrack to that picture and only advances the card
+after the finished file and analysis are both ready. Oversized recordings
+temporarily restore their untouched R2 original for this master render instead
+of upscaling the local 1080p editing copy. Their original dimensions are
+retained alongside the archive metadata.
+
+All sustained Editor encodes now share a CPU-bounded priority queue. The
+default is one active encode using every available core; on the current
+two-core host this replaces two competing one-thread jobs with one two-thread
+job. Lightweight and explicitly requested previews take priority, while full
+Production masters wait their turn. Hosts with more CPUs may opt into more
+workers through `EDITOR_ENCODE_CONCURRENCY`, with FFmpeg threads divided across
+those workers.
+
+Project Manager remains intentionally single-writer because concurrent coding
+turns can corrupt the shared worktree. Its thread UI now distinguishes a
+message actively running from one queued behind it and shows the exact number
+of tasks ahead. The earlier generic “Codex is working on it” text made every
+queued follow-up look active even though the backend processes only one turn at
+a time; per-message **Never mind** cancellation remains available when the
+active task should be stopped.

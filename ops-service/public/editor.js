@@ -427,8 +427,8 @@
     var automaticEditRunning = ['pending', 'running', 'pending_transcript'].indexOf(item && item.planningMatchStatus) !== -1 ||
       ['queued', 'preparing'].indexOf(item && item.clipInsertStatus) !== -1;
     if (automaticEditRunning) return 'Available when the automatic edit is ready';
-    if (item && item.renderStatus === 'error') return 'Retry the failed final edit to unlock audio';
-    return 'Available when the final edit is ready';
+    if (item && item.renderStatus === 'error') return 'Retry the failed editing preview to unlock audio';
+    return 'Available when the editing preview is ready';
   }
 
   function sessionBucket(item) {
@@ -1006,9 +1006,9 @@
         var label = root.querySelector('#editorRenderProgressLabel');
         var bar = root.querySelector('#editorRenderProgressBar');
         var button = root.querySelector('#editorRender');
-        if (label) label.textContent = 'Encoding final edit · ' + percent + '%';
+        if (label) label.textContent = 'Encoding editing preview · ' + percent + '%';
         if (bar) bar.style.width = Math.max(2, percent) + '%';
-        if (button) button.textContent = 'Building final edit… ' + percent + '%';
+        if (button) button.textContent = 'Building editing preview… ' + percent + '%';
         var overlayLabel = root.querySelector('#editorPreviewRebuildLabel');
         var overlayBar = root.querySelector('#editorPreviewRebuildBar');
         if (overlayLabel) overlayLabel.textContent = percent >= 99 ? 'Finalising updated preview…' : 'Rebuilding preview… ' + percent + '%';
@@ -1148,7 +1148,7 @@
     var framingFailureBlocks = framingFailureIsBlocking(project);
     var failedSafetyCheck = framingFailureBlocks;
     var renderBlocked = automaticEditRunning || failedSafetyCheck || project.layoutReviewRequired;
-    var renderButtonText = automaticEditRunning ? 'Preparing automatic edit…' : framingFailureBlocks ? 'Retry framing or choose a frame' : project.layoutReviewRequired ? 'Confirm Vertical or Horizontal frame' : project.renderDirty ? 'Rebuild preview' : 'Build final edit';
+    var renderButtonText = automaticEditRunning ? 'Preparing automatic edit…' : framingFailureBlocks ? 'Retry framing or choose a frame' : project.layoutReviewRequired ? 'Confirm Vertical or Horizontal frame' : project.renderDirty ? 'Rebuild preview' : 'Build editing preview';
     var audioUnavailableText = audioUnavailableMessage(project);
     var rendering = ['queued', 'running'].indexOf(project.renderStatus) !== -1;
     var previewRebuildPending = !!localPreviewRebuilds[project.id] || !!project.renderRebuildPending;
@@ -1172,7 +1172,7 @@
     var framingReadiness = '<i class="ready">Orientation detected</i>';
     var retakeReadiness = '<i class="ready">Mistakes edited manually</i>';
     var previewActionsHtml = '<div class="editor-preview-actions"><span class="editor-review-keys">Space play/pause · ←/→ 2s</span><label>Review speed<select id="editorReviewRate"' + (previewLocked ? ' disabled' : '') + '><option value="1"' + (reviewRate === 1 ? ' selected' : '') + '>1×</option><option value="1.25"' + (reviewRate === 1.25 ? ' selected' : '') + '>1.25×</option><option value="1.5"' + (reviewRate === 1.5 ? ' selected' : '') + '>1.5×</option><option value="2"' + (reviewRate === 2 ? ' selected' : '') + '>2×</option></select></label>' +
-      (project.renderStatus === 'ready' ? '<button type="button" id="editorPreviewFinal" class="' + (previewMode === 'final' ? 'active' : '') + '"' + (previewLocked ? ' disabled' : '') + '>' + (project.renderDirty ? 'Previous preview' : 'Final edit') + '</button><button type="button" id="editorPreviewSource" class="' + (previewMode === 'source' ? 'active' : '') + '"' + (previewLocked ? ' disabled' : '') + '>' + sourcePreviewLabel + '</button>' : '') + '</div>';
+      (project.renderStatus === 'ready' ? '<button type="button" id="editorPreviewFinal" class="' + (previewMode === 'final' ? 'active' : '') + '"' + (previewLocked ? ' disabled' : '') + '>' + (project.renderDirty ? 'Previous preview' : 'Editing preview') + '</button><button type="button" id="editorPreviewSource" class="' + (previewMode === 'source' ? 'active' : '') + '"' + (previewLocked ? ' disabled' : '') + '>' + sourcePreviewLabel + '</button>' : '') + '</div>';
     var automaticControlsHtml = '<div class="editor-controls"><label class="editor-toggle"><input type="checkbox" id="editorAutoSilence" ' + (project.autoSilenceEnabled !== false ? 'checked' : '') + '><span></span>Remove long pauses</label>' +
       '<label class="editor-toggle"><input type="checkbox" id="editorCaptions" ' + (project.captionsEnabled !== false ? 'checked' : '') + '><span></span>Add yellow captions</label>' +
       '<label class="editor-toggle" title="Starts wide and gently settles to 112.5% on vertical and horizontal openings. Later vertical page-turn or inserted-clip reveals also settle to 112.5%; horizontal reveals settle to 125%. Horizontal openings use five seconds; every other move uses three."><input type="checkbox" id="editorOpeningPushIn" ' + (project.openingPushInEnabled !== false ? 'checked' : '') + '><span></span>Page-change camera zooms</label>' +
@@ -1242,13 +1242,13 @@
       '<div class="editor-export"><div><strong>Next: Content Production</strong><span>' +
         (project.productionPieceId ? 'This edit is ready in Content Production for titles and thumbnail selection.' :
           project.renderStatus === 'ready' && !project.renderDirty ? 'Send the finished edit across without uploading it again. Backing audio is chosen in Content Production.' : project.renderDirty ? 'Your transcript cuts are saved. Rebuild the preview once when you have finished removing mistakes.' :
-          'Build the final edit first. Yellow captions will be baked in below center.') + '</span>' +
+          'Build the editing preview first. Yellow captions will be baked in below center.') + '</span>' +
         '<div class="editor-readiness"><i class="ready">Transcript ready</i>' + framingReadiness + retakeReadiness + (project.renderStatus === 'ready' && !project.renderDirty ? '<i class="ready">Output verified</i>' : project.renderDirty ? '<i class="review">Preview needs rebuild</i>' : '') + '</div>' +
-        (['queued', 'running'].indexOf(project.renderStatus) !== -1 ? '<div class="editor-render-progress"><span id="editorRenderProgressLabel">' + (project.renderStatus === 'queued' ? (Number(project.renderQueuePosition) > 1 ? (Number(project.renderQueuePosition) - 1) + ' recording(s) ahead in the render queue' : 'Next in the render queue') : 'Encoding final edit · ' + Math.round(Number(project.renderProgress) || 0) + '%') + '</span><div><i id="editorRenderProgressBar" style="width:' + (project.renderStatus === 'queued' ? 4 : Math.max(2, Number(project.renderProgress) || 0)) + '%"></i></div></div>' : '') +
+        (['queued', 'running'].indexOf(project.renderStatus) !== -1 ? '<div class="editor-render-progress"><span id="editorRenderProgressLabel">' + (project.renderStatus === 'queued' ? (Number(project.renderQueuePosition) > 1 ? (Number(project.renderQueuePosition) - 1) + ' recording(s) ahead in the preview queue' : 'Next in the preview queue') : 'Encoding editing preview · ' + Math.round(Number(project.renderProgress) || 0) + '%') + '</span><div><i id="editorRenderProgressBar" style="width:' + (project.renderStatus === 'queued' ? 4 : Math.max(2, Number(project.renderProgress) || 0)) + '%"></i></div></div>' : '') +
         (project.renderStatus === 'error' ? '<em>' + esc(project.renderError) + '</em>' : '') + '</div><div class="editor-export-actions">' +
         (project.productionPieceId ? '<button class="btn-primary" id="editorOpenProduction">Open Content Production</button>' :
           project.renderStatus === 'ready' && !project.renderDirty ? '<button class="btn-primary" id="editorSendProduction" data-editor-approve ' + (!audioSelectionReady || previewLocked ? 'disabled title="Wait for the updated preview before approval"' : '') + '>Approve &amp; Send to Production</button>' :
-          '<button class="btn-primary" id="editorRender" ' + (['queued', 'running'].indexOf(project.renderStatus) !== -1 || renderBlocked ? 'disabled' : '') + '>' + (project.renderStatus === 'queued' ? 'Waiting in render queue…' : project.renderStatus === 'running' ? 'Building final edit… ' + Math.round(Number(project.renderProgress) || 0) + '%' : renderButtonText) + '</button>') +
+          '<button class="btn-primary" id="editorRender" ' + (['queued', 'running'].indexOf(project.renderStatus) !== -1 || renderBlocked ? 'disabled' : '') + '>' + (project.renderStatus === 'queued' ? 'Waiting in preview queue…' : project.renderStatus === 'running' ? 'Building editing preview… ' + Math.round(Number(project.renderProgress) || 0) + '%' : renderButtonText) + '</button>') +
         '</div></div>';
     bindWorkspace(previewLocked);
     paintSelection();
@@ -2250,14 +2250,14 @@
         var renderProjectId = project.id;
         var wasRebuild = !!project.renderDirty;
         renderButton.disabled = true;
-        renderButton.textContent = wasRebuild ? 'Starting preview rebuild…' : 'Starting final edit…';
+        renderButton.textContent = wasRebuild ? 'Starting preview rebuild…' : 'Starting editing preview…';
         retryTransientOnce(function () {
           return api('/api/editor/' + renderProjectId + '/render', { method: 'POST' });
         }, 500).then(function () {
           if (!project || project.id !== renderProjectId) return;
           project.renderStatus = 'running'; renderWorkspace(); schedulePoll();
         }).catch(function (error) {
-          if (renderButton.isConnected) { renderButton.disabled = false; renderButton.textContent = wasRebuild ? 'Rebuild preview' : 'Build final edit'; }
+          if (renderButton.isConnected) { renderButton.disabled = false; renderButton.textContent = wasRebuild ? 'Rebuild preview' : 'Build editing preview'; }
           alert(error.message);
         });
       };

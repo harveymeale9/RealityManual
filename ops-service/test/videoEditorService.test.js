@@ -215,12 +215,21 @@ test('encoder queue runs a bounded pair concurrently and still prioritizes final
   assert.ok(order.indexOf('final') < order.indexOf('proxy-waiting'));
 });
 
-test('encoder concurrency follows available CPUs and remains capped at two by default', function () {
+test('encoder concurrency defaults to one full-CPU encode and honors explicit larger hosts', function () {
   assert.equal(editor.encoderConcurrencyForCpuCount(1), 1);
-  assert.equal(editor.encoderConcurrencyForCpuCount(2), 2);
-  assert.equal(editor.encoderConcurrencyForCpuCount(8), 2);
+  assert.equal(editor.encoderConcurrencyForCpuCount(2), 1);
+  assert.equal(editor.encoderConcurrencyForCpuCount(8), 1);
   assert.equal(editor.encoderConcurrencyForCpuCount(8, 1), 1);
   assert.equal(editor.encoderConcurrencyForCpuCount(2, 8), 2);
+  assert.equal(editor.encoderConcurrencyForCpuCount(8, 3), 3);
+});
+
+test('decision previews stay tiny while production masters preserve native resolution up to 4K', function () {
+  assert.deepEqual(editor.renderShapeForProject({ width: 3840, height: 2160 }, 'horizontal', false), { width: 720, height: 404 });
+  assert.deepEqual(editor.renderShapeForProject({ width: 3840, height: 2160 }, 'horizontal', true), { width: 3840, height: 2160 });
+  assert.deepEqual(editor.renderShapeForProject({ width: 2160, height: 3840 }, 'vertical', true), { width: 2160, height: 3840 });
+  assert.deepEqual(editor.renderShapeForProject({ width: 1920, height: 1080 }, 'horizontal', true), { width: 1920, height: 1080 });
+  assert.deepEqual(editor.renderShapeForProject({ width: 1920, height: 1080 }, 'vertical', true), { width: 606, height: 1080 });
 });
 
 test('encoder queue never overlaps two jobs for the same recording', async function () {
@@ -441,7 +450,7 @@ test('metadata-only editor changes preserve a verified render', function () {
 test('Editor UI batches transcript cuts behind one explicit preview rebuild', function () {
   const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'editor.js'), 'utf8');
   const page = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
-  assert.match(source, /project\.renderDirty \? 'Rebuild preview' : 'Build final edit'/);
+  assert.match(source, /project\.renderDirty \? 'Rebuild preview' : 'Build editing preview'/);
   assert.match(source, /Transcript edits saved/);
   assert.match(source, /Keep cutting mistakes, then press Rebuild preview once/);
   assert.doesNotMatch(source, /scheduleAutoRender\(project\.id, EDIT_RENDER_DEBOUNCE_MS\)/);
@@ -450,7 +459,7 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.doesNotMatch(source, /Every automatic silence cut/);
   assert.match(source, /No changes have been made\. The first editable preview is being prepared/);
   assert.match(source, /initial processing—not a change you made/);
-  assert.match(page, /editor\.js\?v=20261014-editor-first-preview-v139/);
+  assert.match(page, /editor\.js\?v=20261014-decision-preview-v140/);
 });
 
 test('Editor summary shows live laptop upload progress independently of project processing', function () {
@@ -1560,7 +1569,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.ok(metadataProjects.some(function (item) { return item.id === project.id && item.workingTitle === 'Synthetic Outline'; }));
   assert.ok(project.cuts.some(function (cut) { return cut.reason === 'long_pause' || cut.reason === 'combined'; }));
   assert.deepEqual(project.captionGroups.map(function (group) { return group.text; }), ['One two.', 'One two.']);
-  assert.equal(project.renderStatus, '', 'fresh uploads remain editable before the one explicit full-quality rebuild');
+  assert.equal(project.renderStatus, '', 'fresh uploads remain editable before the explicit decision-preview build');
   response = await fetch(base + '/api/editor/' + project.id + '/render', { method: 'POST' });
   assert.equal(response.status, 202);
   for (let attempt = 0; attempt < 600 && (project.renderStatus !== 'error' && (project.renderStatus !== 'ready' || renderReadyCalls < 1 || !project.workflowWarning)); attempt++) {
@@ -1569,9 +1578,9 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   }
   assert.equal(project.renderStatus, 'ready', project.renderError);
   assert.equal(project.renderProgress, 100);
-  assert.equal(project.renderPreviewStatus, 'ready', project.renderPreviewError);
-  assert.equal(project.renderPreviewVersion, 3);
-  assert.ok(fs.statSync(path.join(dir, 'editor', project.id, 'render-preview.mp4')).size > 1024);
+  assert.equal(project.renderPreviewStatus, 'not_required', project.renderPreviewError);
+  assert.equal(project.renderPreviewVersion, 0);
+  assert.equal(fs.existsSync(path.join(dir, 'editor', project.id, 'render-preview.mp4')), false);
   assert.equal(renderReadyCalls, 1);
   assert.equal(project.workflowWarning, 'Synthetic first workflow failure.');
   assert.equal(project.renderQuality.status, 'passed');
@@ -1579,7 +1588,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.ok(Math.abs(project.renderQuality.videoDuration - project.editedDuration) < 0.15,
     '24 fps source keeps visual frames through the full edited duration');
   assert.ok(project.renderQuality.audioPeakDb > -55);
-  assert.deepEqual([project.renderQuality.width, project.renderQuality.height], [1080, 1920]);
+  assert.deepEqual([project.renderQuality.width, project.renderQuality.height], [404, 720]);
   assert.equal(project.renderQuality.pixelFormat, 'yuv420p');
   const idempotentMutation = {
     contentTypeOverride: 'short', expectedEditRevision: project.editRevision, mutationId: 'mutation-idempotency-0001'
@@ -1698,9 +1707,9 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   }
   assert.equal(project.renderStatus, 'ready', project.renderError);
   assert.equal(project.renderDirty, false);
-  assert.equal(project.renderRebuildPending, false, 'the preview unlocks only after the replacement render and scrub proxy are both ready');
-  assert.equal(project.renderPreviewStatus, 'ready', project.renderPreviewError);
-  assert.equal(project.renderPreviewVersion, 3);
+  assert.equal(project.renderRebuildPending, false, 'the preview unlocks only after the replacement decision preview is ready');
+  assert.equal(project.renderPreviewStatus, 'not_required', project.renderPreviewError);
+  assert.equal(project.renderPreviewVersion, 0);
   assert.equal(renderReadyCalls, 2);
   assert.equal(project.workflowWarning, undefined);
   assert.equal(project.captionsEnabled, false);
@@ -1721,9 +1730,6 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   const verifiedRenderPath = path.join(dir, 'editor', project.id, 'render.mp4');
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ audioTrackId: '' }) });
   assert.equal(response.status, 200);
-  response = await fetch(base + '/api/editor/' + project.id + '/production', { method: 'POST' });
-  assert.equal(response.status, 409);
-  assert.equal((await response.json()).error, 'audio_track_required');
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ audioTrackId: 'missing-track' }) });
   assert.equal(response.status, 400);
   assert.equal((await response.json()).error, 'invalid_audio_track');
@@ -1792,6 +1798,12 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(response.status, 201);
   assert.equal((await response.json()).alreadySent, false);
   assert.equal(handoffCalls, 3, 'an orphaned Sent marker must recreate the downstream handoff');
+  const productionMasterPath = path.join(dir, 'production-master.mp4');
+  const masterProgress = [];
+  const masterResult = await service.renderProductionMaster(project.id, productionMasterPath, function (percent) { masterProgress.push(percent); });
+  assert.ok(fs.statSync(productionMasterPath).size > 1024);
+  assert.deepEqual([masterResult.width, masterResult.height], [360, 640]);
+  assert.equal(masterProgress.at(-1), 100);
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ captionsEnabled: true }) });
   assert.equal(response.status, 409);
   assert.equal((await response.json()).error, 'approved_read_only');
@@ -1799,9 +1811,9 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(response.status, 409);
   assert.equal((await response.json()).error, 'approved_read_only');
   response = await fetch(base + '/api/editor/' + project.id, { method: 'DELETE' });
-  assert.equal(response.status, 200);
-  assert.equal(deletedProjects.length, 1);
-  assert.equal(deletedProjects[0].productionPieceId, project.id);
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).error, 'production_source_required');
+  assert.equal(deletedProjects.length, 0);
   response = await fetch(base + '/api/editor/' + project.id);
-  assert.equal(response.status, 404);
+  assert.equal(response.status, 200);
 });

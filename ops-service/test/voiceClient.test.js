@@ -92,3 +92,10 @@ test('Project Manager UIs expose a per-message Never mind control', function () 
   assert.match(server, /api\/voice\/messages\/:id\/cancel/);
   assert.match(server, /status = 'cancelled'/);
 });
+
+test('desktop Project Manager distinguishes queued follow-ups from the active runner', function () {
+  const desktop = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
+  assert.match(desktop, /copy\.textContent = 'Queued'/);
+  assert.match(desktop, /task' \+ \(ahead === 1 \? '' : 's'\) \+ ' ahead'/);
+  assert.match(desktop, /is actively working on this/);
+});

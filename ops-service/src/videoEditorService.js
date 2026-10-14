@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFile, spawn } = require('child_process');
+const { pipeline } = require('stream/promises');
 
 const STORE_NAME = 'editorProjects';
 // OBS long-form masters can exceed the original 4.5 GiB ceiling even when
@@ -52,12 +53,11 @@ const AUDIO_PREVIEW_TTL_MS = 2 * 60 * 60 * 1000;
 function encoderConcurrencyForCpuCount(cpuCount, configuredLimit) {
   const available = Math.max(1, Math.floor(Number(cpuCount) || 1));
   const configured = Math.floor(Number(configuredLimit) || 0);
-  // Two simultaneous FFmpeg jobs are enough to let separate recordings make
-  // progress together without turning a filming-session batch into an
-  // unbounded process storm. An explicit lower limit remains useful on a
-  // smaller host, and no configuration can exceed the CPUs actually visible
-  // to this process.
-  return Math.min(available, Math.max(1, configured > 0 ? configured : 2));
+  // One encode at a time is intentional. Giving the active encode every CPU
+  // finishes the first usable preview sooner and avoids two long recordings
+  // making the whole two-core ops host unresponsive. Larger hosts can opt in
+  // to more workers explicitly, but never beyond the CPUs actually visible.
+  return Math.min(available, Math.max(1, configured > 0 ? configured : 1));
 }
 
 const AVAILABLE_CPU_COUNT = typeof os.availableParallelism === 'function'
@@ -65,6 +65,25 @@ const AVAILABLE_CPU_COUNT = typeof os.availableParallelism === 'function'
   : (os.cpus() || []).length;
 const EDITOR_ENCODE_CONCURRENCY = encoderConcurrencyForCpuCount(AVAILABLE_CPU_COUNT, process.env.EDITOR_ENCODE_CONCURRENCY);
 const EDITOR_FFMPEG_THREADS = Math.max(1, Math.floor(Math.max(1, AVAILABLE_CPU_COUNT) / EDITOR_ENCODE_CONCURRENCY));
+
+function renderShapeForProject(project, layout, master) {
+  if (!master) return layout === 'vertical'
+    ? { width: 404, height: 720 }
+    : { width: 720, height: 404 };
+  const sourceWidth = Math.max(2, Number(project && (project.originalWidth || project.width)) || 1920);
+  const sourceHeight = Math.max(2, Number(project && (project.originalHeight || project.height)) || 1080);
+  const cropWidth = layout === 'vertical'
+    ? Math.min(sourceWidth, sourceHeight * 9 / 16)
+    : Math.min(sourceWidth, sourceHeight * 16 / 9);
+  const cropHeight = layout === 'vertical'
+    ? Math.min(sourceHeight, sourceWidth * 16 / 9)
+    : Math.min(sourceHeight, sourceWidth * 9 / 16);
+  const scale = Math.min(1, 3840 / Math.max(cropWidth, cropHeight));
+  return {
+    width: Math.max(2, Math.floor((cropWidth * scale) / 2) * 2),
+    height: Math.max(2, Math.floor((cropHeight * scale) / 2) * 2)
+  };
+}
 
 function requiredEditorCapacity(fileBytes, fileAlreadyStored) {
   const bytes = Math.max(0, Number(fileBytes) || 0);
@@ -1313,13 +1332,14 @@ function setup(options) {
   const previewJobs = new Map();
   const renderPreviewJobs = new Map();
   const renderJobs = new Map();
+  const masterRenderJobs = new Map();
   const productionJobs = new Map();
   const audioPreviewJobs = new Map();
   const audioPreviewCache = new Map();
   const audioPreviewQueue = createConcurrentTaskQueue(2);
-  // Browser proxies and final masters are both sustained FFmpeg encodes. Use a
-  // CPU-bounded worker pool so separate recordings can rebuild together while
-  // final edits still take the next free slot ahead of waiting proxies.
+  // All sustained FFmpeg work shares one CPU-bounded queue. On the current
+  // two-core host this deliberately runs one encode with both cores; explicit
+  // review previews are urgent, while production masters wait their turn.
   const encodeQueue = createPriorityTaskQueue(EDITOR_ENCODE_CONCURRENCY);
   const classificationJobs = new Map();
   const retakeJobs = new Map();
@@ -1648,6 +1668,8 @@ function setup(options) {
         project = getProject(id);
         if (!project) return;
         project.originalSizeBytes = Number(project.originalSizeBytes) || Number(project.sizeBytes) || 0;
+        project.originalWidth = Number(project.originalWidth) || Number(project.width) || 0;
+        project.originalHeight = Number(project.originalHeight) || Number(project.height) || 0;
         project.sizeBytes = compactStat.size;
         project.videoCodec = compactMedia.videoCodec;
         project.audioCodec = compactMedia.audioCodec;
@@ -2022,8 +2044,8 @@ function setup(options) {
   function maybeAutoRender(id) {
     // The Editor is deliberately decision-first: prepare the transcript and
     // lightweight source preview, let Harvey make every cut, then perform one
-    // expensive full-quality rebuild when he explicitly asks for it. Starting
-    // a final render here used to lock the transcript immediately after every
+    // lightweight decision-preview rebuild when he explicitly asks for it.
+    // Starting a full render here used to lock the transcript after every
     // upload and made a fresh recording look as though an edit was rebuilding.
     return false;
   }
@@ -2037,23 +2059,33 @@ function setup(options) {
     automaticRenderTimers.set(id, timer);
   }
 
-async function renderProject(id) {
-    if (renderJobs.has(id)) return renderJobs.get(id);
+  async function renderProject(id, options) {
+    options = options || {};
+    const masterOutputPath = options.masterOutputPath ? path.resolve(String(options.masterOutputPath)) : '';
+    const master = !!masterOutputPath;
+    const renderSourcePath = options.sourceOverridePath ? path.resolve(String(options.sourceOverridePath)) : sourcePath(id);
+    const jobMap = master ? masterRenderJobs : renderJobs;
+    if (jobMap.has(id)) return jobMap.get(id);
     let queuedProject = getProject(id);
     if (!queuedProject) return;
-    queuedProject.renderStatus = 'queued';
-    queuedProject.renderError = '';
-    queuedProject.renderProgress = 0;
-    saveProject(queuedProject);
+    if (master && !queuedProject.productionPieceId) throw new Error('This edit has not been sent to Production yet.');
+    if (!master) {
+      queuedProject.renderStatus = 'queued';
+      queuedProject.renderError = '';
+      queuedProject.renderProgress = 0;
+      saveProject(queuedProject);
+    }
     const job = encodeQueue.enqueue(async function () {
       let project = getProject(id);
       if (!project) return;
-      project.renderStatus = 'running';
-      project.renderError = '';
-      project.renderProgress = 0;
-      saveProject(project);
+      if (!master) {
+        project.renderStatus = 'running';
+        project.renderError = '';
+        project.renderProgress = 0;
+        saveProject(project);
+      }
       const cuts = cutsForProject(project);
-      project.pageChangeCutIds = await detectVisualPageChangeCutIds(sourcePath(id), cuts);
+      project.pageChangeCutIds = await detectVisualPageChangeCutIds(renderSourcePath, cuts);
       saveProject(project);
       const segments = editorTimelineSegments(project, cuts);
       if (!segments.length) throw new Error('Every part of the recording is currently cut. Restore some transcript first.');
@@ -2061,7 +2093,8 @@ async function renderProject(id) {
       const expectedDuration = contentDuration + VIDEO_OUTRO_SECONDS;
       const assPath = path.join(projectDir(id), 'captions.ass');
       const layout = effectiveLayout(project);
-      const renderShape = layout === 'vertical' ? { width: 1080, height: 1920 } : { width: 1920, height: 1080 };
+      const renderShape = renderShapeForProject(project, layout, master);
+      const outputPath = master ? masterOutputPath : renderPath(id);
       if (project.captionsEnabled !== false) fs.writeFileSync(assPath, buildAss(renderShape, renderCaptionGroups(project, cuts, segments)));
       const filters = [];
       const readyClips = (project.insertedClips || []).filter(function (clip) { return clip.status === 'ready'; });
@@ -2072,7 +2105,7 @@ async function renderProject(id) {
         // Match each external speaker to Harvey's actual recording before the
         // timeline is concatenated. Normalizing only the completed programme
         // cannot remove a local volume jump at a clip boundary.
-        mainVoiceLufs = await measureIntegratedLoudness(sourcePath(id), 'main voice loudness measurement');
+        mainVoiceLufs = await measureIntegratedLoudness(renderSourcePath, 'main voice loudness measurement');
         for (const clip of readyClips) {
           const measuredLufs = await measureIntegratedLoudness(insertedClipPath(id, clip.id), 'inserted clip loudness measurement');
           clipAudioBalance.set(clip.id, {
@@ -2090,9 +2123,9 @@ async function renderProject(id) {
         // 29.97 fps and its visual stream ends well before its audio.
         let videoFilter = '[' + inputIndex + ':v]trim=start=' + segment.start.toFixed(3) + ':end=' + segment.end.toFixed(3) + ',setpts=PTS-STARTPTS,fps=30000/1001';
         if (layout === 'vertical') {
-          videoFilter += ",crop=w='min(iw\\,ih*9/16)':h='min(ih\\,iw*16/9)':x='(iw-ow)/2':y='(ih-oh)/2',scale=1080:1920,setsar=1";
+          videoFilter += ",crop=w='min(iw\\,ih*9/16)':h='min(ih\\,iw*16/9)':x='(iw-ow)/2':y='(ih-oh)/2',scale=" + renderShape.width + ':' + renderShape.height + ',setsar=1';
         } else {
-          videoFilter += ",crop=w='min(iw\\,ih*16/9)':h='min(ih\\,iw*9/16)':x='(iw-ow)/2':y='(ih-oh)/2',scale=1920:1080,setsar=1";
+          videoFilter += ",crop=w='min(iw\\,ih*16/9)':h='min(ih\\,iw*9/16)':x='(iw-ow)/2':y='(ih-oh)/2',scale=" + renderShape.width + ':' + renderShape.height + ',setsar=1';
         }
         if (segment.type === 'source') {
           const motion = cameraMotionForSegment(segment, cuts, layout, project.pageChangeCutIds);
@@ -2135,23 +2168,28 @@ async function renderProject(id) {
       if (requestedVoiceGain) filters.push('[outa]' + requestedVoiceGain + '[leveledouta]');
       filters.push('[' + (requestedVoiceGain ? 'leveledouta' : 'outa') + ']apad=pad_dur=' + VIDEO_OUTRO_SECONDS.toFixed(3) + '[outaextended]');
       let lastReportedProgress = -1;
-      const ffmpegInputs = ['-hide_banner', '-loglevel', 'error', '-y', '-filter_complex_threads', String(EDITOR_FFMPEG_THREADS), '-autorotate', '1', '-i', sourcePath(id)];
+      const ffmpegInputs = ['-hide_banner', '-loglevel', 'error', '-y', '-filter_complex_threads', String(EDITOR_FFMPEG_THREADS), '-autorotate', '1', '-i', renderSourcePath];
       readyClips.forEach(function (clip) { ffmpegInputs.push('-i', insertedClipPath(id, clip.id)); });
       await runWithProgress('ffmpeg', ffmpegInputs.concat(['-filter_complex', filters.join(';'),
-        '-map', '[outv]', '-map', '[outaextended]', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k',
+        '-map', '[outv]', '-map', '[outaextended]', '-c:v', 'libx264',
+        '-preset', master ? 'veryfast' : 'ultrafast', '-crf', master ? '18' : '30',
+        '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', master ? '192k' : '96k',
         '-threads', String(EDITOR_FFMPEG_THREADS),
-        '-movflags', '+faststart', '-progress', 'pipe:1', '-nostats', renderPath(id)]), 'editor render', function (encodedSeconds) {
+        '-movflags', '+faststart', '-progress', 'pipe:1', '-nostats', outputPath]), master ? 'production master render' : 'editor decision preview', function (encodedSeconds) {
         const percent = Math.min(99, Math.max(0, Math.floor(encodedSeconds / Math.max(0.01, expectedDuration) * 100)));
         if (percent < lastReportedProgress + 2) return;
         lastReportedProgress = percent;
-        const current = getProject(id);
-        if (current && current.renderStatus === 'running') { current.renderProgress = percent; saveProject(current); }
+        if (typeof options.onProgress === 'function') options.onProgress(percent);
+        if (!master) {
+          const current = getProject(id);
+          if (current && current.renderStatus === 'running') { current.renderProgress = percent; saveProject(current); }
+        }
       });
       project = getProject(id);
       if (!project) return;
-      const stat = fs.statSync(renderPath(id));
-      const renderedMedia = await probe(renderPath(id));
-      const volumeResult = await run('ffmpeg', ['-hide_banner', '-nostats', '-i', renderPath(id), '-map', '0:a:0',
+      const stat = fs.statSync(outputPath);
+      const renderedMedia = await probe(outputPath);
+      const volumeResult = await run('ffmpeg', ['-hide_banner', '-nostats', '-i', outputPath, '-map', '0:a:0',
         '-af', 'volumedetect', '-f', 'null', '-'], 'render audio verification');
       const audioPeakDb = parseMaxVolume(volumeResult.stderr);
       const durationTolerance = renderDurationTolerance(expectedDuration);
@@ -2170,8 +2208,17 @@ async function renderProject(id) {
           ? ' (expected ' + expectedDuration.toFixed(3) + 's, received ' + Number(renderedMedia.duration).toFixed(3) + 's)' : '';
         throw new Error('Rendered output failed technical verification: ' + failedChecks.join(', ') + durationDetail);
       }
-      await buildScrubProxy(renderPath(id), renderPreviewPath(id), expectedDuration, 'final edit scrub proxy');
-      const renderSha256 = await hashFile(renderPath(id));
+      if (master) {
+        if (typeof options.onProgress === 'function') options.onProgress(100);
+        return {
+          path: outputPath,
+          width: renderedMedia.width,
+          height: renderedMedia.height,
+          duration: renderedMedia.duration,
+          sizeBytes: stat.size
+        };
+      }
+      const renderSha256 = await hashFile(outputPath);
       project.renderStatus = 'ready';
       project.renderRebuildPending = false;
       project.renderDirty = false;
@@ -2179,9 +2226,9 @@ async function renderProject(id) {
       project.renderProgress = 100;
       project.renderSizeBytes = stat.size;
       project.renderSha256 = renderSha256;
-      project.renderPreviewStatus = 'ready';
+      project.renderPreviewStatus = 'not_required';
       project.renderPreviewError = '';
-      project.renderPreviewVersion = BROWSER_PREVIEW_VERSION;
+      project.renderPreviewVersion = 0;
       project.editedDuration = expectedDuration;
       project.renderQuality = {
         status: 'passed', checkedAt: new Date().toISOString(), checks: qualityChecks,
@@ -2200,7 +2247,7 @@ async function renderProject(id) {
       saveProject(project);
       if (typeof onRenderReady === 'function') {
         try {
-          await Promise.resolve(onRenderReady({ project: project, renderPath: renderPath(id) }));
+          await Promise.resolve(onRenderReady({ project: project, renderPath: outputPath }));
           project = getProject(id);
           if (project && project.workflowWarning) {
             delete project.workflowWarning;
@@ -2215,7 +2262,11 @@ async function renderProject(id) {
           }
         }
       }
-    }, 'urgent', id).catch(function (err) {
+    }, master ? 'normal' : 'urgent', id).catch(function (err) {
+      if (master) {
+        fs.rm(masterOutputPath, { force: true }, function () {});
+        throw err;
+      }
       const project = getProject(id);
       fs.rm(renderPath(id), { force: true }, function () {});
       fs.rm(renderPreviewPath(id), { force: true }, function () {});
@@ -2226,8 +2277,8 @@ async function renderProject(id) {
         project.renderQuality = { status: 'failed', checkedAt: new Date().toISOString(), message: project.renderError };
         saveProject(project);
       }
-    }).finally(function () { renderJobs.delete(id); });
-    renderJobs.set(id, job);
+    }).finally(function () { jobMap.delete(id); });
+    jobMap.set(id, job);
     return job;
   }
 
@@ -2427,14 +2478,15 @@ async function renderProject(id) {
     });
   });
 
-  // Existing verified edits predate the dedicated low-resolution final-review
-  // file. Build it in the background without touching or re-encoding the
-  // authoritative final master.
+  // Existing verified edits may predate a dedicated low-resolution review
+  // file. Build it in the background without touching their authoritative
+  // stored output.
   setImmediate(function () {
     listStmt.all(STORE_NAME).forEach(function (row) {
       let project;
       try { project = JSON.parse(row.data); } catch (error) { return; }
       if (!project || project.productionPieceId || project.renderStatus !== 'ready' || !isId(project.id) || !fs.existsSync(renderPath(project.id))) return;
+      if (project.renderPreviewStatus === 'not_required') return;
       let previewExists = false;
       try { previewExists = fs.statSync(renderPreviewPath(project.id)).size > 1024; } catch (error) {}
       if (previewExists && Number(project.renderPreviewVersion) === BROWSER_PREVIEW_VERSION) return;
@@ -2862,7 +2914,7 @@ async function renderProject(id) {
     }
     if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked. Make downstream changes in Content Production.' });
     if (productionJobs.has(project.id)) return res.status(409).json({ error: 'approval_in_progress', message: 'This edit is currently being sent to Content Production.' });
-    if (renderJobs.has(project.id)) return res.status(409).json({ error: 'render_in_progress', message: 'Wait for this final edit to finish before changing its cut settings.' });
+    if (renderJobs.has(project.id)) return res.status(409).json({ error: 'render_in_progress', message: 'Wait for this editing preview to finish before changing its cut settings.' });
     if (Number.isFinite(Number(req.body && req.body.expectedEditRevision)) && Number(req.body.expectedEditRevision) !== (Number(project.editRevision) || 0)) {
       return res.status(409).json({ error: 'edit_conflict', message: 'This recording changed on another screen. Its latest edit has been reloaded.', editRevision: Number(project.editRevision) || 0 });
     }
@@ -3033,7 +3085,7 @@ async function renderProject(id) {
       return res.json(withQueuePositions(projectDetail(project)));
     }
     if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked.' });
-    if (renderJobs.has(project.id)) return res.status(409).json({ error: 'render_in_progress', message: 'Wait for this final edit to finish before undoing the decision.' });
+    if (renderJobs.has(project.id)) return res.status(409).json({ error: 'render_in_progress', message: 'Wait for this editing preview to finish before undoing the decision.' });
     if (Number.isFinite(Number(req.body && req.body.expectedEditRevision)) && Number(req.body.expectedEditRevision) !== (Number(project.editRevision) || 0)) {
       return res.status(409).json({ error: 'edit_conflict', message: 'This recording changed on another screen. Reloaded the latest edit instead of undoing the wrong decision.', editRevision: Number(project.editRevision) || 0 });
     }
@@ -3198,16 +3250,10 @@ async function renderProject(id) {
     if (project.renderDirty || project.renderStatus !== 'ready' || !fs.existsSync(renderPath(project.id))) {
       return res.status(409).json({ error: 'render_not_ready', message: 'Finish the edit before sending it to production.' });
     }
-    if (!project.audioTrackId) {
-      return res.status(409).json({ error: 'audio_track_required', message: 'Choose a backing track or No backing audio before sending this edit to Production.' });
-    }
-    if (project.audioTrackId !== '__none__' && (typeof getAudioTrackPath !== 'function' || !fs.existsSync(getAudioTrackPath(project.audioTrackId) || ''))) {
-      return res.status(409).json({ error: 'audio_track_missing', message: 'The selected backing track is no longer available. Choose another track.' });
-    }
     if (!(await verifiedRenderMatches(project, renderPath(project.id)))) {
       invalidateProjectRender(project);
       saveProject(project);
-      res.status(409).json({ error: 'render_verification_stale', message: 'The final file no longer matches its verified render. Editor is rebuilding it automatically before approval.' });
+      res.status(409).json({ error: 'render_verification_stale', message: 'The editing preview no longer matches its verified file. Rebuild the preview before approval.' });
       setImmediate(function () { renderProject(project.id); });
       return;
     }
@@ -3294,7 +3340,7 @@ async function renderProject(id) {
     const project = getProject(req.params.id);
     if (!project) return res.status(404).json({ error: 'not_found' });
     if (project.renderStatus !== 'ready' || !project.renderSha256 || !fs.existsSync(renderPath(project.id))) {
-      return res.status(409).json({ error: 'render_not_ready', message: 'The verified final edit must be ready before its soundtrack previews can be mixed.' });
+      return res.status(409).json({ error: 'render_not_ready', message: 'The verified editing preview must be ready before its soundtrack previews can be mixed.' });
     }
     const renderSha256 = project.renderSha256;
     try {
@@ -3341,11 +3387,17 @@ async function renderProject(id) {
   router.delete('/:id', function (req, res) {
     if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
     if (sourcePreparationJobs.has(req.params.id)) return res.status(409).json({ error: 'source_preparation_in_progress', message: 'Wait for this large recording to finish archiving and compacting before deleting it.' });
-    if (renderJobs.has(req.params.id)) return res.status(409).json({ error: 'render_in_progress', message: 'Wait for the final edit to finish before deleting this recording.' });
+    if (renderJobs.has(req.params.id)) return res.status(409).json({ error: 'render_in_progress', message: 'Wait for the editing preview to finish before deleting this recording.' });
     if (clipInsertJobs.has(req.params.id)) return res.status(409).json({ error: 'clip_insert_running', message: 'Wait for the inserted clip to finish preparing before deleting this recording.' });
     if (productionJobs.has(req.params.id)) return res.status(409).json({ error: 'approval_in_progress', message: 'Wait for this edit to finish entering Content Production before deleting it.' });
     const project = getProject(req.params.id);
     if (!project) return res.status(404).json({ error: 'not_found' });
+    if (project.productionPieceId) {
+      return res.status(409).json({
+        error: 'production_source_required',
+        message: 'This source is retained until Production builds the full-resolution Final Check master.'
+      });
+    }
     if (typeof onProjectDeleted === 'function') {
       try { onProjectDeleted({ project: project }); }
       catch (error) { return res.status(422).json({ error: 'workflow_cleanup_failed', message: 'The linked planning card could not be reconciled, so the recording was kept safely.' }); }
@@ -3370,6 +3422,29 @@ async function renderProject(id) {
     analyzeProjectRetakes: analyzeProjectRetakes,
     matchProjectPlanningPiece: matchProjectPlanningPiece,
     renderProject: renderProject,
+    renderProductionMaster: async function (id, outputPath, onProgress) {
+      const project = getProject(id);
+      if (!project) throw new Error('The Editor project no longer exists.');
+      if (!project.sourceStorageObjectKey) {
+        return renderProject(id, { masterOutputPath: outputPath, onProgress: onProgress });
+      }
+      if (!storage || !storage.configured || typeof storage.readStream !== 'function') {
+        throw new Error('The archived camera master is temporarily unavailable.');
+      }
+      const restoredSourcePath = path.join(projectDir(id), 'production-source-restored');
+      await fs.promises.rm(restoredSourcePath, { force: true });
+      try {
+        const remote = await storage.readStream(project.sourceStorageObjectKey);
+        await pipeline(remote.body, fs.createWriteStream(restoredSourcePath, { flags: 'wx' }));
+        return await renderProject(id, {
+          masterOutputPath: outputPath,
+          sourceOverridePath: restoredSourcePath,
+          onProgress: onProgress
+        });
+      } finally {
+        fs.rm(restoredSourcePath, { force: true }, function () {});
+      }
+    },
     markManualRevisionRunningByVoiceMessage: markManualRevisionRunningByVoiceMessage,
     finishManualRevisionByVoiceMessage: finishManualRevisionByVoiceMessage
   };
@@ -3385,6 +3460,7 @@ module.exports = {
   createKeyedClaimRegistry,
   createPriorityTaskQueue,
   encoderConcurrencyForCpuCount,
+  renderShapeForProject,
   verifiedRenderMatches,
   parseIntegratedLoudness,
   insertedClipGainDb,

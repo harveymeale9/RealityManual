@@ -2420,10 +2420,28 @@ async function runBuildFinalVideo(id) {
   const piece = getPieceRecord(id);
   if (!piece) return; // deleted before this started — nothing to do
   piece.finalBuildStatus = 'running';
+  piece.finalBuildProgress = 0;
   savePieceRecord(piece);
 
+  let productionPicturePath = '';
   try {
-    const videoPath = path.join(UPLOADS_DIR, 'videos', id);
+    let videoPath = path.join(UPLOADS_DIR, 'videos', id);
+    // Editor hands Production a tiny decision preview so title, thumbnail and
+    // soundtrack work never waits on a 4K encode. Only when Production sends
+    // the piece to Final Check do we render the original source and saved edit
+    // decisions at native resolution (capped at 4K).
+    if (piece.editorProjectId === id && videoEditor && typeof videoEditor.renderProductionMaster === 'function') {
+      productionPicturePath = path.join(UPLOADS_DIR, 'videos', id + '-picture-building.mp4');
+      await fs.promises.rm(productionPicturePath, { force: true });
+      await videoEditor.renderProductionMaster(id, productionPicturePath, function (percent) {
+        const current = getPieceRecord(id);
+        if (!current || current.finalBuildStatus !== 'running') return;
+        current.finalBuildProgress = Math.min(95, Math.max(0, Math.round(Number(percent) * 0.95)));
+        current.updatedAt = new Date().toISOString();
+        savePieceRecord(current);
+      });
+      videoPath = productionPicturePath;
+    }
     let audioPath = null;
     if (piece.audioTrackId && piece.audioTrackId !== '__none__') {
       const candidate = path.join(UPLOADS_DIR, 'audioTracks', piece.audioTrackId);
@@ -2447,6 +2465,7 @@ async function runBuildFinalVideo(id) {
     const latest = getPieceRecord(id);
     if (!latest) return; // deleted while this was running
     latest.finalBuildStatus = 'done';
+    latest.finalBuildProgress = 100;
     latest.finalAudioMix = mixResult.mode === 'legacy_percent'
       ? { mode: mixResult.mode, ambientMusicVolumePercent: mixProfile.legacyPercent, builtAt: new Date().toISOString() }
       : { mode: mixResult.mode, dialogueLufsTarget: mixProfile.dialogueLufs,
@@ -2466,12 +2485,15 @@ async function runBuildFinalVideo(id) {
     const latest = getPieceRecord(id);
     if (!latest) return;
     latest.finalBuildStatus = 'error';
+    latest.finalBuildProgress = 0;
     latest.finalBuildError = String(e.message || e).slice(0, 500);
     // Deliberately NOT touching stage here — it stays In Production so
     // Harvey can just try again (e.g. pick a different track) rather
     // than getting stuck on a stage that doesn't have a real video yet.
     latest.updatedAt = new Date().toISOString();
     savePieceRecord(latest);
+  } finally {
+    if (productionPicturePath) fs.rm(productionPicturePath, { force: true }, function () {});
   }
 }
 

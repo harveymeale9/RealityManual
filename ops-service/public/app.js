@@ -1250,6 +1250,20 @@
       },
       onActivity: function () {},
       onTick: function (rows) {
+        var inflight = rows.filter(function (row) { return row.status === 'pending' || row.status === 'running'; })
+          .slice().sort(function (a, b) { return new Date(a.created_at) - new Date(b.created_at); });
+        inflight.forEach(function (row, index) {
+          var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
+          if (!typingEl) return;
+          var copy = typingEl.querySelector('.pm-typing-copy');
+          if (!copy) return;
+          if (row.status === 'pending') {
+            var ahead = inflight.slice(0, index).filter(function (item) { return item.status === 'running' || item.status === 'pending'; }).length;
+            copy.textContent = 'Queued' + (ahead ? ' · ' + ahead + ' task' + (ahead === 1 ? '' : 's') + ' ahead' : ' · starting next');
+          } else {
+            copy.textContent = row.early_ack || (agentName(row.agent) + ' is actively working on this…');
+          }
+        });
         syncVisibleMailAlerts(rows);
         renderQueue(rows);
         renderActivity(rows);
@@ -4027,7 +4041,8 @@
     if (p.finalBuildStatus === 'running' || p.finalBuildStatus === 'pending') {
       var building = document.createElement('div');
       building.className = 'upload-row-status';
-      building.textContent = 'Building final video (splicing in audio)…';
+      building.textContent = 'Rendering full-resolution final video' +
+        (Number(p.finalBuildProgress) > 0 ? ' · ' + Math.round(Number(p.finalBuildProgress)) + '%' : '') + '…';
       titleId.appendChild(building);
     } else if (p.finalBuildStatus === 'error') {
       var buildErr = document.createElement('div');
