@@ -8,19 +8,23 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   08a2e0b..b0665e3  main       -> origin/main
+   b0665e3..f4304bf  main       -> origin/main
 + git merge --ff-only origin/main
-Updating 08a2e0b..b0665e3
+Updating b0665e3..f4304bf
 Fast-forward
- CLAUDE.md                                   | 23 ++++++++
- ops-service/.ci/last-run.log                | 88 ++++++++++++++++-------------
- ops-service/public/editor.js                | 42 +++++++++++++-
- ops-service/public/index.html               |  4 +-
- ops-service/public/style.css                |  2 +-
- ops-service/test/videoEditorService.test.js | 12 +++-
- 6 files changed, 126 insertions(+), 45 deletions(-)
+ CLAUDE.md                                      |  39 ++++++++
+ ops-service/.ci/last-run.log                   | 127 ++++---------------------
+ ops-service/deploy.sh                          |  25 +++++
+ ops-service/server.js                          |  51 +++++++---
+ ops-service/src/bufferPublicationSync.js       |   2 +-
+ ops-service/src/metaPublisher.js               |  27 ++++--
+ ops-service/src/r2Storage.js                   |  15 +++
+ ops-service/test/bufferPublicationSync.test.js |   2 +-
+ ops-service/test/metaPublisher.test.js         |  16 ++++
+ ops-service/test/r2Storage.test.js             |   7 +-
+ 10 files changed, 180 insertions(+), 131 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=b0665e32f971e3ac5d6b7e9131cf616a021b3e77
++ NEW_HEAD=f4304bfcddf103568de814985c5e7bebce8e62be
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -33,12 +37,60 @@ Already up to date.
 + NEEDS_REBUILD=1
 + '[' -n 08a2e0b40d2d6bc98071280a6bc361127f744ae0 ']'
 + git cat-file -e '08a2e0b40d2d6bc98071280a6bc361127f744ae0^{commit}'
-++ git diff --name-only 08a2e0b40d2d6bc98071280a6bc361127f744ae0 b0665e32f971e3ac5d6b7e9131cf616a021b3e77 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
-+ '[' -z '' ']'
-+ NEEDS_REBUILD=0
+++ git diff --name-only 08a2e0b40d2d6bc98071280a6bc361127f744ae0 f4304bfcddf103568de814985c5e7bebce8e62be -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -z 'ops-service/deploy.sh
+ops-service/server.js
+ops-service/src/bufferPublicationSync.js
+ops-service/src/metaPublisher.js
+ops-service/src/r2Storage.js' ']'
 + '[' 0 = 1 ']'
-+ '[' 0 = 0 ']'
-+ echo 'no backend changes between 08a2e0b40d2d6bc98071280a6bc361127f744ae0 and b0665e32f971e3ac5d6b7e9131cf616a021b3e77 — already live via git pull, skipping rebuild/restart'
-no backend changes between 08a2e0b40d2d6bc98071280a6bc361127f744ae0 and b0665e32f971e3ac5d6b7e9131cf616a021b3e77 — already live via git pull, skipping rebuild/restart
-+ exit 0
-ssh exit code: 0
++ '[' 1 = 0 ']'
++ docker tag rm-ops-service rm-ops-service:previous
++ docker build -t rm-ops-service ./ops-service
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile:
+#1 transferring dockerfile: 2.04kB 0.1s done
+#1 DONE 0.2s
+
+#2 [internal] load metadata for docker.io/library/node:22-slim
+#2 DONE 1.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 136B done
+#3 DONE 0.0s
+
+#4 [ 1/10] FROM docker.io/library/node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
+#4 resolve docker.io/library/node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 0.1s done
+#4 DONE 0.1s
+
+#5 [internal] load build context
+#5 transferring context: 633.93kB 0.1s done
+#5 DONE 0.2s
+
+#6 [ 4/10] COPY package.json ./
+#6 CACHED
+
+#7 [ 2/10] RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && python3 -m pip install --break-system-packages --no-cache-dir yt-dlp==2026.8.19     && rm -rf /var/lib/apt/lists/*
+#7 CACHED
+
+#8 [ 3/10] WORKDIR /app
+#8 CACHED
+
+#9 [ 5/10] RUN npm install --omit=dev
+#9 CACHED
+
+#10 [ 6/10] COPY server.js ./
+#10 DONE 0.3s
+
+#11 [ 7/10] COPY src ./src
+#11 DONE 0.2s
+
+#12 [ 8/10] COPY public ./public
+#12 DONE 1.2s
+
+#13 [ 9/10] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
+#13 CANCELED
+ERROR: failed to build: failed to solve: Canceled: context canceled
+ssh exit code: 255
