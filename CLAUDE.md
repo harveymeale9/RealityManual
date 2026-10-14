@@ -18896,3 +18896,14 @@ expires terminal-task Codex homes after 24 hours while preserving homes named
 by live processes. The same audit runs after every successful CrusherDB
 release, so the exact classes of artifact responsible for this incident are
 now capped before the periodic timer is needed.
+
+---
+
+# 605. Editor Transcript Cut Handles Increased to 120 ms (2026-10-14)
+
+Transcript-selected cuts now retain 120 ms beside each neighbouring kept word,
+up from 100 ms. This matches the Natural automatic-silence handle and gives
+spoken consonants slightly more protection at each manually approved edit
+boundary. The selected words and surrounding dead space are still removed,
+and the existing fragment guard continues to prevent any portion of a selected
+word from being left behind.

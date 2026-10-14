@@ -34,7 +34,7 @@ const EDITOR_RENDER_VERSION = 25;
 const AUTO_CUT_BOUNDARY_VERSION = 3;
 const DEFAULT_RETAINED_PAUSE_SECONDS = 0.24;
 const MIN_RETAINED_PAUSE_SECONDS = 0.08;
-const TRANSCRIPT_CUT_HANDLE_SECONDS = 0.10;
+const TRANSCRIPT_CUT_HANDLE_SECONDS = 0.12;
 const CUT_ISLAND_BRIDGE_SECONDS = 0.12;
 const PAGE_CHANGE_SSIM_THRESHOLD = 0.5;
 const BROWSER_PREVIEW_VERSION = 2;
@@ -449,8 +449,8 @@ function calculateManualCuts(words, removedWordIndices, duration) {
     const previousEnd = first > 0 && !removed.has(first - 1) ? words[first - 1].end : 0;
     const nextStart = last + 1 < words.length && !removed.has(last + 1) ? words[last + 1].start : Number(duration);
     // A transcript deletion removes the selected speech and the surrounding
-    // dead space, while retaining exactly 100ms against each neighbouring word.
-    // This is intentionally tighter than the 120ms automatic-silence handle.
+    // dead space, while retaining exactly 120ms against each neighbouring word.
+    // This now matches the Natural automatic-silence handle.
     const start = first > 0
       ? Math.min(words[first].start, previousEnd + TRANSCRIPT_CUT_HANDLE_SECONDS)
       : 0;

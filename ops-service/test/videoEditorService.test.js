@@ -470,7 +470,7 @@ test('precise manual trims bridge residual fragments between automatic and trans
   assert.deepEqual(editor.cutsForProject(project), [{
     id: 'lead', start: 0, end: 32.02, reason: 'leading_silence'
   }, {
-    id: '', start: 32.620000000000005, end: 64.80000000000001, reason: 'combined'
+    id: '', start: 32.64, end: 64.78, reason: 'combined'
   }, {
     id: 'tail', start: 65.35, end: 70, reason: 'trailing_silence'
   }]);
@@ -520,7 +520,7 @@ test('Antoine Matthias is highlighted without automatically removing the marked 
   assert.deepEqual(project.removedWordIndices, []);
   assert.equal(editor.appliedRetakeCount(project), 0);
   assert.deepEqual(editor.calculateManualCuts(timed, decisions[0].removeWordIndices, 8), [
-    { start: .7999999999999999, end: 5.7, reason: 'transcript_cut' }
+    { start: .82, end: 5.68, reason: 'transcript_cut' }
   ]);
 });
 
@@ -707,12 +707,12 @@ test('Editor work state ignores automation and recognizes review or manual decis
   assert.equal(editor.editorWorkStarted({ editRevision: 3 }), true);
 });
 
-test('adjacent removed transcript words become one cut with 100ms speech handles', function () {
+test('adjacent removed transcript words become one cut with 120ms speech handles', function () {
   const cuts = editor.calculateManualCuts(words, [2, 3], 9);
   assert.equal(cuts.length, 1);
   assert.equal(cuts[0].reason, 'transcript_cut');
-  assert.ok(Math.abs(cuts[0].start - 1.9) < 0.000001);
-  assert.ok(Math.abs(cuts[0].end - 6.5) < 0.000001);
+  assert.ok(Math.abs(cuts[0].start - 1.92) < 0.000001);
+  assert.ok(Math.abs(cuts[0].end - 6.48) < 0.000001);
 });
 
 test('transcript handles never leave fragments of a selected word', function () {
