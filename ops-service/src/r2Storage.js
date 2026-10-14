@@ -170,6 +170,20 @@ function setup(options) {
     }
   }
 
+  async function readStream(key, range) {
+    requireConfigured();
+    const input = { Bucket: bucket, Key: clean(key, 1000) };
+    if (range) input.Range = clean(range, 100);
+    const response = await client.send(new commandTypes.GetObjectCommand(input));
+    if (!response.Body) throw new Error('R2 returned an empty object body.');
+    return {
+      body: response.Body,
+      contentLength: Number(response.ContentLength) || 0,
+      contentRange: clean(response.ContentRange, 200),
+      contentType: clean(response.ContentType, 100) || 'application/octet-stream'
+    };
+  }
+
   async function signedGetUrl(key, expiresInSeconds) {
     requireConfigured();
     const expiresIn = Math.max(60, Math.min(7 * 24 * 60 * 60, Math.round(Number(expiresInSeconds) || 3600)));
@@ -202,6 +216,7 @@ function setup(options) {
     readJson: readJson,
     listKeys: listKeys,
     downloadKey: downloadKey,
+    readStream: readStream,
     signedGetUrl: signedGetUrl,
     deleteKey: deleteKey,
     health: health

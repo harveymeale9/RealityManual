@@ -53,7 +53,7 @@ function setup(db, options) {
     db.prepare("UPDATE buffer_publication_sync_state SET status='running',last_started_at=?,last_error=NULL WHERE id=1").run(startedAt);
     const pieces = (await options.listPieces()).filter(function (piece) {
       return piece && piece.tiktokPublishProvider === 'buffer' && piece.tiktokPublishId &&
-        ['scheduled', 'live'].indexOf(piece.stage) !== -1;
+        ['scheduled', 'live', 'final_check'].indexOf(piece.stage) !== -1;
     });
     let scheduled = 0;
     let live = 0;

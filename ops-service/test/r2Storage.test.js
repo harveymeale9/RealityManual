@@ -71,7 +71,8 @@ test('R2 uploads are multipart, verified by size, downloadable and privately sig
       calls.push(cmd);
       if (cmd.name === 'headBucket') return {};
       if (cmd.name === 'headObject') return { ContentLength: 4096, ETag: '"etag-1"', ContentType: 'video/mp4' };
-      if (cmd.name === 'getObject') return { Body: Readable.from(Buffer.alloc(4096, 3)), ContentType: 'video/mp4' };
+      if (cmd.name === 'getObject') return { Body: Readable.from(Buffer.alloc(4096, 3)), ContentType: 'video/mp4', ContentLength: 4096,
+        ContentRange: cmd.input.Range ? 'bytes 0-1023/4096' : undefined };
       return {};
     }
   };
@@ -100,6 +101,10 @@ test('R2 uploads are multipart, verified by size, downloadable and privately sig
   const downloaded = await storage.downloadKey(uploaded.key, destination);
   assert.equal(downloaded.sizeBytes, 4096);
   assert.deepEqual(fs.readFileSync(destination), fs.readFileSync(source));
+  const streamed = await storage.readStream(uploaded.key, 'bytes=0-1023');
+  assert.equal(streamed.contentLength, 4096);
+  assert.equal(streamed.contentRange, 'bytes 0-1023/4096');
+  assert.equal(calls[calls.length - 1].input.Range, 'bytes=0-1023');
   await storage.deleteKey(uploaded.key);
   assert.equal(calls[calls.length - 1].name, 'deleteObject');
 });

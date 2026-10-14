@@ -46,14 +46,27 @@ function setup(options) {
   }
 
   async function publishFacebookVideo(input) {
-    const video = await openAsBlob(input.videoPath, { type: clean(input.mimeType, 100) || 'video/mp4' });
-    const form = new FormData();
-    form.set('access_token', clean(input.pageToken, 2000));
-    form.set('title', clean(input.title, 255));
-    form.set('description', clean(input.description, 60000));
-    form.set('source', video, path.basename(input.videoPath) + '.mp4');
+    const videoUrl = clean(input.videoUrl, 2000);
+    let body;
+    let headers;
+    if (videoUrl) {
+      body = new URLSearchParams({
+        access_token: clean(input.pageToken, 2000),
+        title: clean(input.title, 255),
+        description: clean(input.description, 60000),
+        file_url: videoUrl
+      });
+      headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+    } else {
+      const video = await openAsBlob(input.videoPath, { type: clean(input.mimeType, 100) || 'video/mp4' });
+      body = new FormData();
+      body.set('access_token', clean(input.pageToken, 2000));
+      body.set('title', clean(input.title, 255));
+      body.set('description', clean(input.description, 60000));
+      body.set('source', video, path.basename(input.videoPath) + '.mp4');
+    }
     const response = await fetchImpl(GRAPH_VIDEO_URL + '/' + encodeURIComponent(clean(input.pageId, 100)) + '/videos', {
-      method: 'POST', body: form
+      method: 'POST', headers: headers, body: body
     });
     const payload = await jsonResponse(response, 'Facebook video publish failed');
     if (!payload.id) throw new Error('Facebook video publish failed: no video id returned.');

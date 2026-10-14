@@ -19027,3 +19027,42 @@ This status loop is independent of Editor's project-processing poll. It works
 when there are zero active projects, stops when the Editor tab unmounts, and
 refreshes the project list as an upload changes from active to complete so the
 new recording appears without a manual reload.
+
+---
+
+# 611. TikTok and Facebook Publish from Archived Media Without Redirects or Large Multipart Requests (2026-10-14)
+
+The first four-platform short reached YouTube and Instagram, but TikTok failed
+at its release time and Facebook returned HTTP 413. These were separate media
+transport failures. The local publish-ready file was deliberately released
+after its verified R2 archive was created. Buffer later requested the signed
+Content Studio URL, received a redirect to an R2 signed GET URL, and rejected
+the asset as inaccessible. Facebook's path meanwhile tried to send the entire
+124 MB video as one multipart request to Graph Video and was rejected before
+Meta accepted the video.
+
+Signed Buffer and Meta media routes now remain stable, direct HTTP media
+endpoints even after local cleanup. When the local final no longer exists,
+Content Studio streams the verified R2 object itself, including HEAD responses
+and bounded byte-range requests, instead of redirecting the platform to a
+method-specific R2 signature. Facebook now supplies that media URL through
+Meta's `file_url` input, avoiding a second large multipart transfer through
+the Graph request. The original local-file upload remains as a fallback for
+non-archived development/test use.
+
+Buffer reconciliation now also checks TikTok posts whose shared card returned
+to Final Check because a different platform failed. This prevents a Facebook
+error from hiding a later authoritative TikTok failure. The affected post was
+repaired from the verified R2 object: replacement TikTok post
+`6acfd146edcab17b81289ca7` reached Buffer `sent`, Facebook video
+`1671635621051492` reached Meta `published`, and the Content Studio record was
+reconciled to Live with both public links.
+
+Because backend deployments recreate the Node container and its in-memory
+chunk sessions, `deploy.sh` now checks fresh paired-laptop heartbeats before a
+real rebuild. If any non-revoked device still reports queued recordings, the
+deployment holds the existing serialized deploy lock and waits in fifteen-
+second intervals for the batch to reach zero. Stale heartbeats older than five
+minutes do not block deployment, and the wait has a two-hour ceiling. Static-
+only deployments still skip the rebuild immediately. This prevents an
+unrelated backend fix from resetting a multi-gigabyte laptop transfer.

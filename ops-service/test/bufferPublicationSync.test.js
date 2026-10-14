@@ -10,7 +10,7 @@ test('Buffer sync advances sent posts, returns failures to Final Check, and stor
   const pieces = [
     { id: 'queued', stage: 'scheduled', tiktokPublishProvider: 'buffer', tiktokPublishId: 'b1' },
     { id: 'sent', title: 'Live post', stage: 'scheduled', tiktokPublishProvider: 'buffer', tiktokPublishId: 'b2' },
-    { id: 'failed', stage: 'scheduled', tiktokPublishProvider: 'buffer', tiktokPublishId: 'b3' },
+    { id: 'failed', stage: 'final_check', facebookPublishStatus: 'error', tiktokPublishProvider: 'buffer', tiktokPublishId: 'b3' },
     { id: 'other', stage: 'live', youtubeVideoId: 'yt1' }
   ];
   const saved = [];

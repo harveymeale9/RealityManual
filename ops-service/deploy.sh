@@ -121,6 +121,31 @@ if [ "$NEEDS_REBUILD" = "0" ]; then
   exit 0
 fi
 
+# Chunk upload sessions currently live in the Node process. Recreating the
+# container while the paired laptop still has a fresh queued batch forces its
+# active file to restart from byte zero. Wait for the uploader to report an
+# empty queue before touching the container. A stale/offline laptop cannot
+# wedge deployments forever: only a heartbeat updated within the last five
+# minutes counts, and the overall drain wait is capped at two hours.
+UPLOAD_DRAIN_WAITED=0
+UPLOAD_DRAIN_LIMIT=7200
+while [ -f "$DATA_DIR/db.sqlite" ]; do
+  ACTIVE_UPLOAD_QUEUE="$(sqlite3 "$DATA_DIR/db.sqlite" "
+    SELECT COUNT(*) FROM records
+    WHERE store_name='desktopUploaders'
+      AND COALESCE(json_extract(data,'$.revokedAt'),'')=''
+      AND COALESCE(json_extract(data,'$.queuedCount'),0)>0
+      AND julianday(COALESCE(json_extract(data,'$.lastSeenAt'),'1970-01-01')) > julianday('now','-5 minutes');
+  " 2>/dev/null || echo 0)"
+  if [ "$ACTIVE_UPLOAD_QUEUE" = "0" ]; then break; fi
+  if [ "$UPLOAD_DRAIN_WAITED" -ge "$UPLOAD_DRAIN_LIMIT" ]; then
+    fail "timed out waiting for the active laptop upload queue to drain"
+  fi
+  echo "laptop upload queue is active — deferring container restart (${UPLOAD_DRAIN_WAITED}s elapsed)"
+  sleep 15
+  UPLOAD_DRAIN_WAITED=$((UPLOAD_DRAIN_WAITED + 15))
+done
+
 # Snapshot whatever is currently tagged $IMAGE (the build about to be
 # replaced) *before* rebuilding overwrites that tag, so a bad new container
 # can be rolled back automatically instead of leaving the site (and this

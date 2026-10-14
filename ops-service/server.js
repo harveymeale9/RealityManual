@@ -1847,9 +1847,7 @@ app.get('/api/buffer/media/:id', async function (req, res) {
   const filePath = path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX);
   if (fs.existsSync(filePath)) return res.type('video/mp4').sendFile(filePath);
   try {
-    const remoteUrl = await storedMediaUrl(piece, 60 * 60);
-    if (!remoteUrl) return res.status(404).end();
-    return res.redirect(302, remoteUrl);
+    return await sendArchivedPublishMedia(req, res, piece);
   } catch (error) { return res.status(502).end(); }
 });
 
@@ -1861,13 +1859,13 @@ app.get('/api/meta/media/:id', async function (req, res) {
   const auth = stmts.getMetaAuth.get();
   if (!isValidId(id) || !auth || !metaPublisher.verifyMediaSignature(id, req.query.expires, req.query.sig, auth.app_secret)) return res.status(403).end();
   const piece = getPieceRecord(id);
-  if (!piece || (piece.platforms || []).indexOf('instagram') === -1) return res.status(404).end();
+  if (!piece || !(piece.platforms || []).some(function (platform) { return platform === 'instagram' || platform === 'facebook'; })) {
+    return res.status(404).end();
+  }
   const filePath = path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX);
   if (fs.existsSync(filePath)) return res.type('video/mp4').sendFile(filePath);
   try {
-    const remoteUrl = await storedMediaUrl(piece, 60 * 60);
-    if (!remoteUrl) return res.status(404).end();
-    return res.redirect(302, remoteUrl);
+    return await sendArchivedPublishMedia(req, res, piece);
   } catch (error) { return res.status(502).end(); }
 });
 function savePieceRecord(piece) {
@@ -2100,6 +2098,32 @@ async function localPublishMedia(id) {
 async function storedMediaUrl(piece, lifetimeSeconds) {
   if (!piece || piece.storageStatus !== 'ready' || !piece.storageObjectKey || !r2Storage.configured) return '';
   return r2Storage.signedGetUrl(piece.storageObjectKey, lifetimeSeconds || 3600);
+}
+
+async function sendArchivedPublishMedia(req, res, piece) {
+  if (!piece || piece.storageStatus !== 'ready' || !piece.storageObjectKey || !r2Storage.configured) {
+    return res.status(404).end();
+  }
+  const size = Number(piece.storageSizeBytes) || 0;
+  const parsedRange = rangeResponse.parseByteRange(req.headers.range, size);
+  res.setHeader('Content-Type', piece.storageMimeType || 'video/mp4');
+  res.setHeader('Accept-Ranges', 'bytes');
+  if (parsedRange && parsedRange.invalid) {
+    res.status(416).setHeader('Content-Range', 'bytes */' + size);
+    return res.end();
+  }
+  if (parsedRange) {
+    res.status(206);
+    res.setHeader('Content-Range', 'bytes ' + parsedRange.start + '-' + parsedRange.end + '/' + size);
+    res.setHeader('Content-Length', parsedRange.end - parsedRange.start + 1);
+  } else if (size) {
+    res.setHeader('Content-Length', size);
+  }
+  if (req.method === 'HEAD') return res.end();
+  const requestedRange = parsedRange ? 'bytes=' + parsedRange.start + '-' + parsedRange.end : '';
+  const remote = await r2Storage.readStream(piece.storageObjectKey, requestedRange);
+  remote.body.on('error', function () { if (!res.destroyed) res.destroy(); });
+  return remote.body.pipe(res);
 }
 
 async function purgeExpiredPublishedMedia() {
@@ -3094,14 +3118,13 @@ async function runPlatformPublishBatch(id, destinations, options) {
         const auth = stmts.getMetaAuth.get();
         if (!auth || !auth.page_access_token || !auth.page_id) throw new Error('Facebook + Instagram is not connected to a publishing Page.');
         if (platform === 'facebook') {
-          const media = await localPublishMedia(id);
+          const directUrl = metaPublisher.mediaUrl(id, auth.app_secret, 60 * 60 * 1000);
           let result;
-          try {
-            result = await metaPublisher.publishFacebookVideo({
-              pageId: auth.page_id, pageToken: auth.page_access_token, videoPath: media.path, mimeType: mimeType,
-              title: destination.title || 'Untitled', description: destination.caption || ''
-            });
-          } finally { media.cleanup(); }
+          result = await metaPublisher.publishFacebookVideo({
+            pageId: auth.page_id, pageToken: auth.page_access_token,
+            videoUrl: directUrl, mimeType: mimeType,
+            title: destination.title || 'Untitled', description: destination.caption || ''
+          });
           updatePieceFields(id, {
             facebookPublishStatus: 'done', facebookPublishError: '', facebookVideoId: result.id, facebookUrl: result.url
           });

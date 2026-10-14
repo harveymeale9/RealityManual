@@ -22,6 +22,22 @@ test('Meta publisher uploads a Facebook video with its platform caption', async 
   assert.equal(result.id, 'fb-video-1');
 });
 
+test('Meta publisher lets Facebook fetch an archived video without a large multipart upload', async function () {
+  let call;
+  const service = metaPublisher.setup({
+    openAsBlob: async function () { throw new Error('local file should not be opened'); },
+    fetchImpl: async function (url, options) { call = { url: url, options: options }; return response({ id: 'fb-video-2' }); }
+  });
+  const result = await service.publishFacebookVideo({
+    pageId: 'page-1', pageToken: 'page-token', videoUrl: 'https://r2.example/final.mp4?signature=valid',
+    title: 'Chosen title', description: 'Facebook caption'
+  });
+  assert.equal(call.options.headers['Content-Type'], 'application/x-www-form-urlencoded');
+  assert.equal(call.options.body.get('file_url'), 'https://r2.example/final.mp4?signature=valid');
+  assert.equal(call.options.body.get('description'), 'Facebook caption');
+  assert.equal(result.id, 'fb-video-2');
+});
+
 test('Meta publisher creates, waits for, and publishes an Instagram Reel', async function () {
   const calls = [];
   const service = metaPublisher.setup({
