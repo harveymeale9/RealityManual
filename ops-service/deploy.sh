@@ -145,7 +145,7 @@ while [ -f "$DATA_DIR/db.sqlite" ]; do
         OR COALESCE(json_extract(data,'$.browserPreviewStatus'),'') IN ('pending','running')
         OR COALESCE(json_extract(data,'$.transcriptionStatus'),'')='running'
         OR (
-          COALESCE(json_extract(data,'$.renderStatus'),'')='running'
+          COALESCE(json_extract(data,'$.renderStatus'),'') IN ('queued','running')
           AND COALESCE(json_extract(data,'$.automaticRenderStartedAt'),'')=''
         )
         OR COALESCE(json_extract(data,'$.clipInsertStatus'),'')='preparing'
