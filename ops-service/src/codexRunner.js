@@ -28,6 +28,11 @@ const DEFAULT_TIMEOUT_MS = 4 * 60 * 60 * 1000;
 const SESSION_ID_RE = /^[A-Za-z0-9_-]{8,128}$/;
 const OWNER_KEY_RE = /^[A-Za-z0-9_-]{3,80}$/;
 const RUN_KEY_RE = /^[A-Za-z0-9_-]{8,128}$/;
+// A Project Manager message can now be stopped explicitly from the UI. Keep
+// the live resolver in-process for the ordinary case and a small cancelled
+// marker for a recovered host run whose original service process is gone.
+const activeRunCancels = new Map();
+const cancelledRunKeys = new Set();
 
 function shellQuote(value) {
   return "'" + String(value).replace(/'/g, "'\\''") + "'";
@@ -130,6 +135,8 @@ function cleanupRun(runKey) {
   [paths.journal, paths.stderr, paths.exit, paths.imageMarker, paths.imageManifest].forEach(function (file) {
     try { fs.rmSync(file, { force: true }); } catch (e) { /* best effort */ }
   });
+  activeRunCancels.delete(runKey);
+  cancelledRunKeys.delete(runKey);
 }
 
 function parseReplyAttachmentManifest(filePath) {
@@ -226,6 +233,7 @@ function runCodex(opts) {
   const ownerKey = opts.ownerKey && OWNER_KEY_RE.test(opts.ownerKey) ? opts.ownerKey : runId;
   const pidFile = '/tmp/rm-codex-' + ownerKey + '.pid';
   const runKey = opts.runKey && RUN_KEY_RE.test(opts.runKey) ? opts.runKey : null;
+  if (runKey) cancelledRunKeys.delete(runKey);
   const paths = runPaths(runKey);
   const onActivity = typeof opts.onActivity === 'function' ? opts.onActivity : function () {};
   const onEarlyAck = typeof opts.onEarlyAck === 'function' ? opts.onEarlyAck : function () {};
@@ -251,7 +259,21 @@ function runCodex(opts) {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      if (runKey) activeRunCancels.delete(runKey);
       resolve(result);
+    }
+
+    if (runKey) {
+      activeRunCancels.set(runKey, function cancelActiveRun() {
+        if (settled) return Promise.resolve(false);
+        cancelledRunKeys.add(runKey);
+        onActivity('\u2715 Stopped by Harvey');
+        return stopRemoteRun(pidFile).then(function () {
+          try { child.kill('SIGTERM'); } catch (e) { /* best effort */ }
+          finish({ ok: false, cancelled: true, error: 'Stopped by Harvey.', sessionId: threadId });
+          return true;
+        });
+      });
     }
 
     function armWatchdog() {
@@ -393,6 +415,10 @@ function recoverCodexRun(opts) {
     onActivity('\u21bb Service restarted; reconnected to the Codex task running on the VPS');
 
     function inspect() {
+      if (cancelledRunKeys.has(runKey)) {
+        resolve({ ok: false, cancelled: true, error: 'Stopped by Harvey.' });
+        return;
+      }
       const parsed = parseRunJournal(paths);
       if (!announcedAck && parsed.earlyAck) {
         announcedAck = true;
@@ -425,10 +451,22 @@ function recoverCodexRun(opts) {
   });
 }
 
+function cancelCodexRun(opts) {
+  opts = opts || {};
+  const runKey = opts.runKey && RUN_KEY_RE.test(opts.runKey) ? opts.runKey : null;
+  const ownerKey = opts.ownerKey && OWNER_KEY_RE.test(opts.ownerKey) ? opts.ownerKey : null;
+  if (!runKey || !ownerKey) return Promise.resolve(false);
+  cancelledRunKeys.add(runKey);
+  const activeCancel = activeRunCancels.get(runKey);
+  if (activeCancel) return activeCancel();
+  return stopRemoteRun('/tmp/rm-codex-' + ownerKey + '.pid').then(function () { return true; });
+}
+
 module.exports = {
   runCodex: runCodex,
   recoverCodexRun: recoverCodexRun,
   hasRecoverableRun: hasRecoverableRun,
+  cancelCodexRun: cancelCodexRun,
   cleanupRun: cleanupRun,
   parseReplyAttachmentManifest: parseReplyAttachmentManifest,
   buildRemoteCommand: buildRemoteCommand

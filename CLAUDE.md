@@ -18977,3 +18977,30 @@ GiB operating reserve before accepting the first byte. A file that does not
 fit still receives HTTP 507 and remains resumably queued on the laptop. The
 higher ceiling only removes the contradictory 413 rejection for recordings
 that the real capacity model says fit safely.
+
+---
+
+# 609. Project Manager Tasks Can Be Stopped Per Message (2026-10-14)
+
+Follow-up messages previously joined the durable FIFO queue but could not stop
+the instruction already running. A correction such as "never mind, that was
+the wrong screenshot" therefore left the first Codex process continuing to
+inspect or modify the project until its turn ended, even though the correction
+was already visible underneath it in the chat.
+
+Every pending or running Project Manager message now has a **Never mind**
+button beside its working indicator and in the queue drawer on desktop and
+mobile. Pending work is removed from the in-memory queue and persisted as
+`cancelled`. Running work is also terminated at the existing audited host
+process-group boundary, including a run reconnected after a service restart.
+The runner promise settles with a distinct cancellation result once the host
+process has stopped, and guarded database transitions prevent a late process exit, exception, or
+successful reply from overwriting the cancelled state. A cancellation is not
+rendered as a red system error or spoken aloud; the working indicator simply
+disappears and the queue retains a muted cancelled entry for context.
+
+The client waits briefly for a newly sent message to receive its durable id,
+so tapping **Never mind** immediately after Send is still effective rather
+than becoming a silent no-op. Later messages remain ordinary queued follow-ups
+unless Harvey explicitly cancels the earlier one, which avoids guessing that
+every correction or extra detail is intended to abort active work.

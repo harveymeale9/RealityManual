@@ -176,6 +176,17 @@ window.RMVoice = (function () {
       .then(function (r) { if (!r.ok) throw new Error('Could not fetch message'); return r.json(); });
   }
 
+  function cancelMessage(id) {
+    return fetch(API_BASE + '/api/voice/messages/' + encodeURIComponent(id) + '/cancel', {
+      method: 'POST', credentials: 'include'
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (body) {
+        if (!r.ok) throw new Error(body.message || 'Could not stop that task');
+        return body;
+      });
+    });
+  }
+
   function listMessages(limit) {
     return fetch(API_BASE + '/api/voice/messages?limit=' + (limit || 30), { credentials: 'include' })
       .then(function (r) { if (!r.ok) throw new Error('Could not load history'); return r.json(); });
@@ -233,7 +244,7 @@ window.RMVoice = (function () {
       (function tick() {
         getMessage(id).then(function (row) {
           if (onTick) onTick(row);
-          if (row.status === 'done' || row.status === 'error') return resolve(row);
+          if (row.status === 'done' || row.status === 'error' || row.status === 'cancelled') return resolve(row);
           if (Date.now() - started > timeoutMs) return reject(new Error('Timed out waiting for a reply'));
           setTimeout(tick, intervalMs);
         }).catch(reject);
@@ -1004,6 +1015,7 @@ window.RMVoice = (function () {
   //            onEarlyAck(row)   — row.early_ack just appeared, fires once
   //            onDone(row)       — row finished successfully
   //            onError(row)      — row finished with an error
+  //            onCancelled(row)  — Harvey explicitly stopped this row
   //            onUpdate(row)     — a completed row's visible content/read
   //                                state changed in place (mail alerts use
   //                                one living row per topic)
@@ -1045,6 +1057,7 @@ window.RMVoice = (function () {
         if (bucket === 'inflight' && callbacks.onPending) callbacks.onPending(row);
         else if (bucket === 'done' && callbacks.onDone) callbacks.onDone(row);
         else if (bucket === 'error' && callbacks.onError) callbacks.onError(row);
+        else if (bucket === 'cancelled' && callbacks.onCancelled) callbacks.onCancelled(row);
       }
       var activityLen = (row.activity_log && row.activity_log.length) || 0;
       if (activityLen !== seen.activityLen) {
@@ -1100,6 +1113,7 @@ window.RMVoice = (function () {
     transcribe: transcribe,
     sendMessage: sendMessage,
     getMessage: getMessage,
+    cancelMessage: cancelMessage,
     listMessages: listMessages,
     getNotificationStatus: getNotificationStatus,
     markNotificationsRead: markNotificationsRead,

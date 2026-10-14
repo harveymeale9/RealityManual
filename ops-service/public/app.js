@@ -974,10 +974,35 @@
     // what's actively running — older completions just fall off the
     // bottom rather than piling up.
     var RECENT_DONE_LIMIT = 5;
+    function requestMessageCancel(messageId, button) {
+      if (button && button.dataset.cancelling === '1') return;
+      if (button) { button.dataset.cancelling = '1'; button.disabled = true; button.textContent = 'Stopping…'; }
+      function stopWhenPersisted(attemptsLeft) {
+        var owner = button && button.closest('[data-msg-id]');
+        var id = messageId || (owner && owner.dataset.msgId);
+        if (!id && attemptsLeft > 0) return setTimeout(function () { stopWhenPersisted(attemptsLeft - 1); }, 100);
+        var request = id ? Voice.cancelMessage(id) : Promise.reject(new Error('That message has not finished sending yet.'));
+        request.catch(function (error) {
+          if (button) { delete button.dataset.cancelling; button.disabled = false; button.textContent = 'Never mind'; }
+          addMessage('error', (error && error.message) || 'Could not stop that task.');
+        });
+      }
+      stopWhenPersisted(50);
+    }
+
+    function makeCancelButton(messageId) {
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'pm-cancel-btn';
+      button.textContent = 'Never mind';
+      button.addEventListener('click', function () { requestMessageCancel(messageId, button); });
+      return button;
+    }
+
     function renderQueue(rows) {
       rows = rows.filter(function (r) { return r.notification_kind !== 'mail_alert'; });
       var inflight = rows.filter(function (r) { return r.status === 'pending' || r.status === 'running'; }).slice().reverse();
-      var recentDone = rows.filter(function (r) { return r.status === 'done' || r.status === 'error'; })
+      var recentDone = rows.filter(function (r) { return r.status === 'done' || r.status === 'error' || r.status === 'cancelled'; })
         .slice()
         .sort(function (a, b) { return new Date(b.completed_at || b.created_at) - new Date(a.completed_at || a.created_at); })
         .slice(0, RECENT_DONE_LIMIT);
@@ -1011,6 +1036,8 @@
         }
         item.appendChild(num);
         item.appendChild(copy);
+        item.dataset.msgId = row.id;
+        item.appendChild(makeCancelButton(row.id));
         queueListEl.appendChild(item);
       });
       if (recentDone.length) {
@@ -1020,10 +1047,10 @@
         queueListEl.appendChild(divider);
         recentDone.forEach(function (row) {
           var item = document.createElement('div');
-          item.className = 'pm-queue-item ' + (row.status === 'error' ? 'pm-queue-failed' : 'pm-queue-done');
+          item.className = 'pm-queue-item ' + (row.status === 'error' ? 'pm-queue-failed' : row.status === 'cancelled' ? 'pm-queue-cancelled' : 'pm-queue-done');
           var mark = document.createElement('span');
           mark.className = 'pm-queue-num';
-          mark.textContent = row.status === 'error' ? '✕' : '✓';
+          mark.textContent = row.status === 'done' ? '✓' : '✕';
           var textEl = document.createElement('span');
           textEl.className = 'pm-queue-text';
           textEl.textContent = agentName(row.agent) + ': ' + (row.early_ack || row.transcript);
@@ -1040,7 +1067,11 @@
       agent = 'codex';
       el.className = 'pm-typing pm-typing--' + agent;
       if (msgId) el.dataset.msgId = msgId;
-      el.textContent = agentName(agent) + ' is working on it…';
+      var copy = document.createElement('span');
+      copy.className = 'pm-typing-copy';
+      copy.textContent = agentName(agent) + ' is working on it…';
+      el.appendChild(copy);
+      el.appendChild(makeCancelButton(msgId));
       thread.appendChild(el);
       thread.scrollTop = thread.scrollHeight;
       return el;
@@ -1148,7 +1179,7 @@
         // real, contextual first line the moment it's available — visible
         // even for a typed/no-speech send, not just spoken.
         var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
-        if (typingEl) typingEl.textContent = row.early_ack;
+        if (typingEl) typingEl.querySelector('.pm-typing-copy').textContent = row.early_ack;
         if (!voiceAutoSpeak[row.id] || !Voice.isAutoSpeechEnabled()) return;
         Voice.speak(row.early_ack, row.id, row.agent, 'early_ack').catch(function () {});
       },
@@ -1181,7 +1212,7 @@
         }
 
         if (newlyArrived && row.notification_kind !== 'mail_alert' && replyText) {
-          if (typingEl) typingEl.textContent = agentName(row.agent) + ' is preparing voice playback…';
+          if (typingEl) typingEl.querySelector('.pm-typing-copy').textContent = agentName(row.agent) + ' is preparing voice playback…';
           // Do not expose a Play button that still has to synthesize audio.
           // If the provider is unavailable, fail open after the bounded TTS
           // request and reveal the readable answer rather than hiding it.
@@ -1200,6 +1231,11 @@
         if (voiceAutoSpeak[row.id]) {
           delete voiceAutoSpeak[row.id];
         }
+      },
+      onCancelled: function (row) {
+        var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
+        if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
+        delete voiceAutoSpeak[row.id];
       },
       onUpdate: function (row) {
         var existing = thread.querySelector('.pm-msg-assistant[data-msg-id="' + row.id + '"]');

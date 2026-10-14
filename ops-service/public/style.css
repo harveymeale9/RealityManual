@@ -722,6 +722,14 @@ body.role-reviewer #pmBackFab {
 .pm-queue-item.pm-queue-done .pm-queue-num { color: var(--ink-faint); }
 .pm-queue-item.pm-queue-failed { background: var(--error-soft); border-color: var(--error); opacity: 0.85; }
 .pm-queue-item.pm-queue-failed .pm-queue-num { color: var(--error); }
+.pm-queue-item.pm-queue-cancelled { background: var(--surface-2); opacity: 0.62; }
+.pm-cancel-btn {
+  flex-shrink: 0; background: transparent; border: 1px solid rgba(255,126,92,.5);
+  color: #ffad94; border-radius: 6px; padding: 4px 8px; font: 700 .68rem var(--font-mono);
+  cursor: pointer; font-style: normal;
+}
+.pm-cancel-btn:hover { border-color: #ff7e5c; color: #ffd1c3; }
+.pm-cancel-btn:disabled { cursor: wait; opacity: .55; }
 
 .pm-thread {
   flex: 1; min-height: 0; overflow-y: auto;
@@ -782,7 +790,7 @@ body.role-reviewer #pmBackFab {
 .pm-play-btn.pm-play-btn-error { color: var(--error); border-color: var(--error); }
 .pm-stop-btn { color: var(--error); border-color: var(--error); }
 .pm-reply-btn { color: var(--ink-soft); }
-.pm-typing { align-self: flex-start; color: var(--ink-faint); font-size: 0.85rem; font-style: italic; padding: 0 clamp(16px, 3vw, 36px); }
+.pm-typing { align-self: flex-start; display: flex; align-items: center; gap: 9px; color: var(--ink-faint); font-size: 0.85rem; font-style: italic; padding: 0 clamp(16px, 3vw, 36px); }
 .pm-typing--codex { color: #71bdff; }
 /* Whichever message's audio is currently playing — auto-spoken or via the
    Play button, doesn't matter, both go through the same voiceClient.js

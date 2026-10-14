@@ -63,3 +63,32 @@ test('syncThread reports assistant attachments added after a completed bubble', 
   });
 });
 
+test('syncThread reports cancellation as its own terminal state', async function () {
+  const Voice = loadVoiceClient([[
+    { id: 'message-cancelled', status: 'cancelled', transcript: 'Do the wrong thing', completed_at: '2026-10-14T10:00:00Z' }
+  ]]);
+
+  await new Promise(function (resolve, reject) {
+    const timeout = setTimeout(function () { reject(new Error('cancellation not observed')); }, 500);
+    const sync = Voice.syncThread({
+      onCancelled: function (row) {
+        clearTimeout(timeout);
+        sync.stop();
+        try {
+          assert.equal(row.id, 'message-cancelled');
+          resolve();
+        } catch (error) { reject(error); }
+      }
+    }, { intervalMs: 5 });
+  });
+});
+
+test('Project Manager UIs expose a per-message Never mind control', function () {
+  const desktop = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
+  const mobile = fs.readFileSync(path.join(__dirname, '../public/voice-mobile.html'), 'utf8');
+  const server = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
+  assert.match(desktop, /button\.textContent = 'Never mind'/);
+  assert.match(mobile, /button\.textContent = 'Never mind'/);
+  assert.match(server, /api\/voice\/messages\/:id\/cancel/);
+  assert.match(server, /status = 'cancelled'/);
+});

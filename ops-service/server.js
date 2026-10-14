@@ -274,12 +274,13 @@ const stmts = {
   insertVoiceMessage: db.prepare('INSERT INTO voice_messages (id, mode, transcript, status, created_at, reply_to_id, agent, attachments_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'),
   insertEmailInstruction: db.prepare("INSERT INTO voice_messages (id,mode,transcript,status,created_at,reply_to_id,agent,notification_kind,notification_unread,source_ref) VALUES(?,'execute',?,'pending',?,NULL,?,'conversation',0,?)"),
   insertEditorRevisionInstruction: db.prepare("INSERT INTO voice_messages (id,mode,transcript,status,created_at,reply_to_id,agent,notification_kind,notification_unread,source_ref) VALUES(?,'execute',?,'pending',?,NULL,'codex','conversation',0,?)"),
-  startVoiceMessage: db.prepare("UPDATE voice_messages SET status = 'running', runner_started_at = ?, runner_heartbeat_at = ? WHERE id = ?"),
+  startVoiceMessage: db.prepare("UPDATE voice_messages SET status = 'running', runner_started_at = ?, runner_heartbeat_at = ? WHERE id = ? AND status = 'pending'"),
   touchVoiceRunner: db.prepare("UPDATE voice_messages SET runner_heartbeat_at = ? WHERE id = ? AND status = 'running'"),
   setVoiceActivityLog: db.prepare('UPDATE voice_messages SET activity_log = ?, activity_updated_at = ?, runner_heartbeat_at = ? WHERE id = ?'),
   setVoiceEarlyAck: db.prepare('UPDATE voice_messages SET early_ack = ? WHERE id = ?'),
   setVoiceReplyAttachments: db.prepare('UPDATE voice_messages SET reply_attachments_json = ? WHERE id = ?'),
   finishVoiceMessage: db.prepare('UPDATE voice_messages SET status = ?, reply_text = ?, error_message = ?, completed_at = ? WHERE id = ?'),
+  cancelVoiceMessage: db.prepare("UPDATE voice_messages SET status = 'cancelled', reply_text = NULL, error_message = NULL, completed_at = ? WHERE id = ? AND status IN ('pending','running')"),
   getVoiceMessage: db.prepare('SELECT * FROM voice_messages WHERE id = ?'),
   getVoiceMessageBySource: db.prepare("SELECT * FROM voice_messages WHERE notification_kind='conversation' AND source_ref=?"),
   listVoiceMessages: db.prepare("SELECT * FROM voice_messages WHERE notification_kind!='superseded_mail_alert' ORDER BY created_at DESC LIMIT ?"),
@@ -3490,6 +3491,8 @@ function syncEditorManualRevision(voiceMessageId) {
     }
   } else if (row.status === 'error') {
     videoEditor.finishManualRevisionByVoiceMessage(voiceMessageId, { status: 'error', error: row.error_message || '' });
+  } else if (row.status === 'cancelled') {
+    videoEditor.finishManualRevisionByVoiceMessage(voiceMessageId, { status: 'error', error: 'Stopped by Harvey.' });
   }
 }
 
@@ -3504,7 +3507,10 @@ function drainVoiceQueue() {
       next.imagePaths || (next.imagePath ? [next.imagePath] : []), next.attachmentPaths || []);
   work
     .catch(function (err) {
-      stmts.finishVoiceMessage.run('error', null, String((err && err.message) || err).slice(0, 2000), new Date().toISOString(), next.id);
+      const row = stmts.getVoiceMessage.get(next.id);
+      if (!row || row.status !== 'cancelled') {
+        stmts.finishVoiceMessage.run('error', null, String((err && err.message) || err).slice(0, 2000), new Date().toISOString(), next.id);
+      }
     })
     .finally(function () {
       syncEditorManualRevision(next.id);
@@ -3543,6 +3549,10 @@ async function recoverAgentVoiceMessage(id) {
     clearInterval(heartbeat);
   }
   const now = new Date().toISOString();
+  if ((stmts.getVoiceMessage.get(id) || {}).status === 'cancelled') {
+    codexRunner.cleanupRun(id);
+    return;
+  }
   if (!result) {
     stmts.finishVoiceMessage.run('error', null,
       'The service restarted and could not reconnect to this Codex task. Please resend it if it still needs doing.', now, id);
@@ -3591,7 +3601,7 @@ function buildSystemPromptForSession(sessionId) {
 
 async function processVoiceMessage(id, mode, text, agent, imagePaths, attachmentPaths) {
   const runnerStartedAt = new Date().toISOString();
-  stmts.startVoiceMessage.run(runnerStartedAt, runnerStartedAt, id);
+  if (!stmts.startVoiceMessage.run(runnerStartedAt, runnerStartedAt, id).changes) return;
   syncEditorManualRevision(id);
   agent = normalizeVoiceAgent(agent);
   const sessionRow = stmts.getVoiceSession.get();
@@ -3673,6 +3683,10 @@ async function processVoiceMessage(id, mode, text, agent, imagePaths, attachment
     clearInterval(heartbeat);
   }
   const now = new Date().toISOString();
+  if ((stmts.getVoiceMessage.get(id) || {}).status === 'cancelled') {
+    codexRunner.cleanupRun(id);
+    return;
+  }
   if (result.sessionId) {
     stmts.upsertCodexSession.run(result.sessionId, now);
   }
@@ -3873,6 +3887,30 @@ app.get('/api/voice/messages/:id', function (req, res) {
   const row = stmts.getVoiceMessage.get(req.params.id);
   if (!row) return res.status(404).json({ error: 'not_found' });
   res.json(hydrateVoiceMessageRow(row));
+});
+
+app.post('/api/voice/messages/:id/cancel', async function (req, res) {
+  const row = stmts.getVoiceMessage.get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'not_found' });
+  if (row.status === 'cancelled') return res.json(hydrateVoiceMessageRow(row));
+  if (row.status !== 'pending' && row.status !== 'running') {
+    return res.status(409).json({ error: 'already_finished', message: 'That task has already finished.' });
+  }
+
+  const now = new Date().toISOString();
+  if (!stmts.cancelVoiceMessage.run(now, row.id).changes) {
+    return res.status(409).json({ error: 'already_finished', message: 'That task has already finished.' });
+  }
+  voiceQueue = voiceQueue.filter(function (item) { return item.id !== row.id; });
+  syncEditorManualRevision(row.id);
+  try {
+    if (row.status === 'running') {
+      await codexRunner.cancelCodexRun({ runKey: row.id, ownerKey: 'project-manager' });
+    }
+  } catch (error) {
+    console.error('voice cancellation cleanup failed:', error.message);
+  }
+  res.json(hydrateVoiceMessageRow(stmts.getVoiceMessage.get(row.id)));
 });
 
 app.get('/api/voice/messages/:id/attachments/:index', function (req, res) {

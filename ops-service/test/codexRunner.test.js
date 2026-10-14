@@ -141,3 +141,37 @@ test('passes every attached image to the Codex CLI', async function () {
     fs.rmSync(fakeBin, { recursive: true, force: true });
   }
 });
+
+test('cancels an active Codex run and settles it as cancelled', async function () {
+  const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-codex-cancel-'));
+  const fakeSsh = path.join(fakeBin, 'ssh');
+  fs.writeFileSync(fakeSsh, [
+    '#!/bin/sh',
+    'case "$*" in',
+    '  *"codex"*"exec"*) cat >/dev/null; exec sleep 30 ;;',
+    '  *) exit 0 ;;',
+    'esac'
+  ].join('\n') + '\n', { mode: 0o755 });
+
+  const originalPath = process.env.PATH;
+  process.env.PATH = fakeBin + path.delimiter + originalPath;
+  const key = 'cancel-active-run-123';
+  try {
+    const running = codexRunner.runCodex({
+      prompt: 'keep working',
+      ownerKey: 'project-manager',
+      runKey: key,
+      timeoutMs: 1000
+    });
+    await new Promise(function (resolve) { setTimeout(resolve, 25); });
+    assert.equal(await codexRunner.cancelCodexRun({ runKey: key, ownerKey: 'project-manager' }), true);
+    const result = await running;
+    assert.equal(result.ok, false);
+    assert.equal(result.cancelled, true);
+    assert.match(result.error, /Stopped by Harvey/);
+  } finally {
+    codexRunner.cleanupRun(key);
+    process.env.PATH = originalPath;
+    fs.rmSync(fakeBin, { recursive: true, force: true });
+  }
+});
