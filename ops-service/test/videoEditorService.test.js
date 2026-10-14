@@ -459,7 +459,11 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.doesNotMatch(source, /Every automatic silence cut/);
   assert.match(source, /No changes have been made\. The first editable preview is being prepared/);
   assert.match(source, /initial processing—not a change you made/);
-  assert.match(page, /editor\.js\?v=20261014-decision-preview-v140/);
+  assert.match(source, /var mediaUnavailable = previewLocked \|\| sourcePreviewPreparing/);
+  assert.match(source, /Preparing browser-safe preview…/);
+  assert.match(source, /Playback will unlock automatically/);
+  assert.match(source, /\(mediaUnavailable \? '' : ' src="' \+ previewUrl/);
+  assert.match(page, /editor\.js\?v=20261014-decision-preview-v141/);
 });
 
 test('Editor summary shows live laptop upload progress independently of project processing', function () {
