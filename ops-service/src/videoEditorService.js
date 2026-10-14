@@ -9,7 +9,11 @@ const path = require('path');
 const { execFile, spawn } = require('child_process');
 
 const STORE_NAME = 'editorProjects';
-const MAX_UPLOAD_BYTES = Math.floor(4.5 * 1024 * 1024 * 1024);
+// OBS long-form masters can exceed the original 4.5 GiB ceiling even when
+// the Editor has ample workspace. This is only a sanity ceiling; the
+// per-upload source+render reservation below remains the authoritative and
+// substantially stricter admission check against current disk capacity.
+const MAX_UPLOAD_BYTES = 16 * 1024 * 1024 * 1024;
 const EDITOR_UPLOAD_CHUNK_BYTES = 16 * 1024 * 1024;
 const EDITOR_UPLOAD_SESSION_TTL_MS = 6 * 60 * 60 * 1000;
 const EDIT_RENDER_DEBOUNCE_MS = 2500;
@@ -2568,7 +2572,7 @@ async function renderProject(id) {
     const mimeType = normalizedVideoMimeType(fileName, req.body && req.body.mimeType);
     const sizeBytes = Number(req.body && req.body.sizeBytes);
     if (!Number.isInteger(sizeBytes) || sizeBytes <= 0 || sizeBytes > MAX_UPLOAD_BYTES) {
-      return res.status(413).json({ error: 'invalid_upload_size', message: 'This recording is empty or larger than the 4.5 GB upload limit.' });
+      return res.status(413).json({ error: 'invalid_upload_size', message: 'This recording is empty or larger than the 16 GiB upload limit.' });
     }
     const projects = listStmt.all(STORE_NAME).map(function (row) { try { return JSON.parse(row.data); } catch (error) { return null; } }).filter(Boolean);
     const requestedCapacity = requiredEditorCapacity(sizeBytes, false);

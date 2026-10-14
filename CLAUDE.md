@@ -18958,3 +18958,22 @@ interactive deployment waits for the active run to finish, then reevaluates
 whether any rebuild is still owed. It can no longer race the named container
 recreation path. The lock has a fifteen-minute upper bound so a genuinely
 wedged deploy reports a specific timeout rather than waiting forever.
+
+---
+
+# 608. Large OBS Masters Use Dynamic Capacity Instead of the Old 4.5 GiB Ceiling (2026-10-14)
+
+The laptop uploader reached the chunk-session endpoint for the four waiting
+recordings but received HTTP 413 before it could transfer a filename or any
+bytes. The fixed 4.5 GiB sanity ceiling was still rejecting newer long-form
+OBS masters despite the VPS having 57 GiB free and the Editor already having a
+more conservative dynamic admission calculation.
+
+The sanity ceiling is now 16 GiB. This does not allow a recording to consume
+unsafe space: every browser and laptop upload must still pass the existing
+live capacity guard, which reserves the incoming source, a worst-case
+full-size render, all outstanding Editor work, concurrent uploads, and the 2
+GiB operating reserve before accepting the first byte. A file that does not
+fit still receives HTTP 507 and remains resumably queued on the laptop. The
+higher ceiling only removes the contradictory 413 rejection for recordings
+that the real capacity model says fit safely.
