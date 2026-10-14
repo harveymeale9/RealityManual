@@ -2435,21 +2435,28 @@ function setup(options) {
         // save the pre-await snapshot over that newer state.
         current = getProject(project.id);
         if (!current || current.productionPieceId) return;
+        // Startup recovery may already have queued or started this proxy while
+        // the asynchronous probe above was running. Preserve that live job's
+        // state and output file instead of resetting it to pending (or
+        // unlinking the file FFmpeg is currently writing).
+        const previewJobActive = previewJobs.has(current.id);
         const dimensionsChanged = current.width !== media.width || current.height !== media.height;
         const previewMetadataChanged = !current.videoCodec || current.browserPreviewRequired === undefined || current.sourceRotation === undefined;
-        const expectedPreviewStatus = needsPreview ? (previewValid ? 'ready' : 'pending') : 'not_required';
+        const expectedPreviewStatus = needsPreview
+          ? (previewValid ? 'ready' : (previewJobActive ? current.browserPreviewStatus : 'pending'))
+          : 'not_required';
         const previewStateChanged = current.browserPreviewRequired !== needsPreview || current.browserPreviewStatus !== expectedPreviewStatus;
         if (!dimensionsChanged && !previewMetadataChanged && !previewStateChanged) return;
         current.videoCodec = media.videoCodec;
         current.audioCodec = media.audioCodec;
         current.sourceRotation = media.rotation;
         current.browserPreviewRequired = needsPreview;
-        if (needsPreview && !previewValid) {
+        if (needsPreview && !previewValid && !previewJobActive) {
           await fs.promises.rm(previewFile, { force: true });
           current.browserPreviewStatus = 'pending';
           current.browserPreviewError = '';
           current.browserPreviewVersion = 0;
-        } else if (needsPreview) {
+        } else if (needsPreview && previewValid) {
           current.browserPreviewStatus = 'ready';
           current.browserPreviewError = '';
           current.browserPreviewVersion = BROWSER_PREVIEW_VERSION;

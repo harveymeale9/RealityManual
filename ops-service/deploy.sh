@@ -142,7 +142,7 @@ while [ -f "$DATA_DIR/db.sqlite" ]; do
     WHERE store_name='editorProjects'
       AND (
         COALESCE(json_extract(data,'$.sourcePreparationStatus'),'') IN ('queued','archiving','compacting')
-        OR COALESCE(json_extract(data,'$.browserPreviewStatus'),'')='running'
+        OR COALESCE(json_extract(data,'$.browserPreviewStatus'),'') IN ('pending','running')
         OR COALESCE(json_extract(data,'$.transcriptionStatus'),'')='running'
         OR (
           COALESCE(json_extract(data,'$.renderStatus'),'')='running'

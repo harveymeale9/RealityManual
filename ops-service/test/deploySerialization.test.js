@@ -17,5 +17,6 @@ test('ops-service deployments serialize before touching Git or Docker', function
   assert.match(source, /sourcePreparationStatus/);
   assert.match(source, /'queued','archiving','compacting'/);
   assert.match(source, /browserPreviewStatus/);
+  assert.ok(source.includes("COALESCE(json_extract(data,'$.browserPreviewStatus'),'') IN ('pending','running')"));
   assert.match(source, /renderStatus/);
 });

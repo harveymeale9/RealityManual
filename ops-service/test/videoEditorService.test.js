@@ -466,6 +466,13 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(page, /editor\.js\?v=20261014-decision-preview-v141/);
 });
 
+test('startup probing preserves an active browser preview encode', function () {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'videoEditorService.js'), 'utf8');
+  assert.match(source, /const previewJobActive = previewJobs\.has\(current\.id\)/);
+  assert.match(source, /needsPreview && !previewValid && !previewJobActive/);
+  assert.match(source, /previewJobActive \? current\.browserPreviewStatus : 'pending'/);
+});
+
 test('Editor summary shows live laptop upload progress independently of project processing', function () {
   const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'editor.js'), 'utf8');
   const styles = fs.readFileSync(path.join(__dirname, '..', 'public', 'style.css'), 'utf8');
