@@ -820,8 +820,8 @@ test('landscape captions are larger and advance spoken-word emphasis', function 
   assert.match(ass, /Style: Default,Arial,52,/);
   assert.match(ass, /,2,40,40,130,1/);
   assert.equal((ass.match(/^Dialogue:/gm) || []).length, 3);
-  assert.match(ass, /\\fs58\\bord4}A\{\\r} wise move/);
-  assert.match(ass, /A \{\\fs58\\bord4}wise\{\\r} move/);
+  assert.match(ass, /\\fs56\\bord4}A\{\\r}\\h\\hwise\\h\\hmove/);
+  assert.match(ass, /A\\h\\h\{\\fs56\\bord4}wise\{\\r}\\h\\hmove/);
   const longWords = Array.from({ length: 5 }, function (_, index) {
     return { text: 'extraordinarylong' + index, start: index * .2, end: index * .2 + .18 };
   });
@@ -829,7 +829,7 @@ test('landscape captions are larger and advance spoken-word emphasis', function 
     start: 0, end: 1, text: longWords.map(function (word) { return word.text; }).join(' '), words: longWords
   }]);
   assert.match(fitted, /\\fs34\\bord3/);
-  assert.match(fitted, /\\fs38\\bord4/);
+  assert.match(fitted, /\\fs37\\bord4/);
 });
 
 test('vertical captions show three-word windows with spoken-word emphasis', function () {

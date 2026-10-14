@@ -1167,7 +1167,10 @@ function buildAss(project, groups) {
   const height = Math.max(360, Math.round(Number(project.height) || 1920));
   const isLongform = width >= height;
   const fontSize = Math.max(30, Math.round(Math.min(width, height) * (isLongform ? 0.048 : 0.08)));
-  const emphasizedSize = Math.round(fontSize * 1.12);
+  // Long-form phrases remain on one line, so a large inline size jump can
+  // visually crowd neighbouring words. Keep their emphasis gentler and add
+  // explicit word room below; vertical three-word windows retain 12%.
+  const emphasizedSize = Math.round(fontSize * (isLongform ? 1.08 : 1.12));
   // Vertical captions sit low over the otherwise-unused lower page area.
   // 22% from the bottom matches the Editor preview and Harvey's marked
   // reference line; the former 30% placement sat visibly over the page text.
@@ -1228,9 +1231,9 @@ function buildAss(project, groups) {
     // through it. Segment boundaries use the next word's exact start, so the
     // active word changes in lockstep with speech without relying on karaoke
     // fill behavior that differs between ASS renderers.
-    const characterCount = Array.from(String(group.text || '')).length;
+    const characterCount = Array.from(String(group.text || '')).length + Math.max(0, group.words.length - 1);
     const fittedLongformSize = Math.max(Math.round(fontSize * 0.65), Math.min(fontSize, Math.round(fontSize * 50 / Math.max(50, characterCount))));
-    const fittedEmphasizedSize = Math.round(fittedLongformSize * 1.12);
+    const fittedEmphasizedSize = Math.round(fittedLongformSize * 1.08);
     group.words.forEach(function (activeWord, activeIndex) {
       const eventStart = activeIndex === 0 ? group.start : activeWord.start;
       const eventEnd = activeIndex + 1 < group.words.length ? group.words[activeIndex + 1].start : group.end;
@@ -1243,7 +1246,9 @@ function buildAss(project, groups) {
             : '{\\fs' + fittedLongformSize + '\\bord3}' + escaped;
         }
         return wordIndex === activeIndex ? '{\\fs' + emphasizedSize + '\\bord4}' + escaped + '{\\r}' : escaped;
-      }).join(' ');
+      // Two non-collapsing spaces reserve enough room for the highlighted
+      // word to grow without its outline touching either neighbour.
+      }).join('\\h\\h');
       events.push('Dialogue: 0,' + assTime(eventStart) + ',' + assTime(eventEnd) + ',Default,,0,0,0,,' + text);
     });
   });
