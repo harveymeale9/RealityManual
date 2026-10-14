@@ -18907,3 +18907,35 @@ spoken consonants slightly more protection at each manually approved edit
 boundary. The selected words and surrounding dead space are still removed,
 and the existing fragment guard continues to prevent any portion of a selected
 word from being left behind.
+
+---
+
+# 606. Windows Uploader Cannot Be Wedged by a Stale File or One Bad Folder (2026-10-14)
+
+The paired Windows uploader was still heartbeating but reported four queued
+recordings, no current filename, zero progress, and only the generic `error`
+state. Its durable queue retained incomplete entries after their source files
+had been moved or deleted, so those impossible entries inflated the queue
+forever. In addition, folder enumeration was one combined LINQ operation: an
+exception from either Vertical or Horizontal aborted the entire scan and
+prevented the healthy folder from being processed. The exact exception was
+shown only in the 63-character tray tooltip and was discarded from the server
+heartbeat, which made remote diagnosis impossible.
+
+Uploader v2.0.3 now removes only incomplete queue entries whose laptop source
+no longer exists; if the file later returns, the normal scan safely discovers
+it again. Vertical and Horizontal are created, watched, and scanned
+independently. One unavailable folder is reported as a warning while the other
+continues uploading, and the uploader keeps retrying both through its periodic
+scan. If neither can be scanned, it remains in the existing resumable retry
+loop. Detailed errors are written to the laptop's bounded
+`%LOCALAPPDATA%\RealityManualUploader\uploader.log` file.
+
+Heartbeats now carry a single-line, length-bounded diagnostic. Content
+Settings displays it beside the laptop status and clears it on the next clean
+heartbeat, without exposing the device credential or server internals. The
+replacement self-contained Windows executable is compiled from the committed
+v2.0.3 source and stored at the existing persistent download route. Because
+the old v2.0.2 executable did not include an updater, installing v2.0.3 once is
+required for these laptop-side recovery changes; pairing and queue state remain
+in the same Local AppData config.

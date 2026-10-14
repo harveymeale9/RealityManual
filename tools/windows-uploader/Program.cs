@@ -14,6 +14,7 @@ internal static class Program
     internal static readonly string AppDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RealityManualUploader");
     internal static readonly string InstalledExe = Path.Combine(AppDir, "RealityManualUploader.exe");
     internal static readonly string ConfigPath = Path.Combine(AppDir, "config.json");
+    internal static readonly string LogPath = Path.Combine(AppDir, "uploader.log");
     internal static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true, WriteIndented = true };
 
     [STAThread]
@@ -42,6 +43,18 @@ internal static class Program
     }
 
     private static bool PathsEqual(string? a, string? b) => string.Equals(Path.GetFullPath(a ?? ""), Path.GetFullPath(b ?? ""), StringComparison.OrdinalIgnoreCase);
+
+    internal static void Log(string message)
+    {
+        try
+        {
+            Directory.CreateDirectory(AppDir);
+            if (File.Exists(LogPath) && new FileInfo(LogPath).Length > 2 * 1024 * 1024)
+                File.Move(LogPath, LogPath + ".old", true);
+            File.AppendAllText(LogPath, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + message + Environment.NewLine);
+        }
+        catch { }
+    }
 }
 
 internal sealed class AppConfig
@@ -144,7 +157,6 @@ internal sealed class UploaderContext : ApplicationContext
     private void StartWatching()
     {
         var folders = config.WatchFolders().ToList();
-        foreach (var folder in folders) Directory.CreateDirectory(folder);
         using (var key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run"))
             key.SetValue("Reality Manual Uploader", '"' + Program.InstalledExe + '"');
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", config.Token);
@@ -152,11 +164,21 @@ internal sealed class UploaderContext : ApplicationContext
         watchers.Clear();
         foreach (var folder in folders)
         {
-            var watcher = new FileSystemWatcher(folder) { IncludeSubdirectories = false, EnableRaisingEvents = true };
-            watcher.Created += (_, _) => BeginScanSoon();
-            watcher.Changed += (_, _) => BeginScanSoon();
-            watcher.Renamed += (_, _) => BeginScanSoon();
-            watchers.Add(watcher);
+            try
+            {
+                Directory.CreateDirectory(folder);
+                var watcher = new FileSystemWatcher(folder) { IncludeSubdirectories = false, EnableRaisingEvents = true };
+                watcher.Created += (_, _) => BeginScanSoon();
+                watcher.Changed += (_, _) => BeginScanSoon();
+                watcher.Renamed += (_, _) => BeginScanSoon();
+                watchers.Add(watcher);
+            }
+            catch (Exception error)
+            {
+                // The periodic scan will keep trying this folder, while a bad
+                // path no longer prevents the other recording folder starting.
+                Program.Log("Could not start watcher for " + folder + ": " + error);
+            }
         }
         scanTimer.Start();
         status = "Watching vertical + horizontal";
@@ -177,10 +199,35 @@ internal sealed class UploaderContext : ApplicationContext
         try
         {
             var extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".mp4", ".mkv", ".mov", ".m4v", ".webm", ".avi" };
-            var recordingPaths = config.WatchFolders()
-                .SelectMany(folder => Directory.EnumerateFiles(folder))
-                .Where(p => extensions.Contains(Path.GetExtension(p)))
-                .Distinct(StringComparer.OrdinalIgnoreCase);
+            var recordingPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var scanWarnings = new List<string>();
+            foreach (var folder in config.WatchFolders())
+            {
+                try
+                {
+                    Directory.CreateDirectory(folder);
+                    foreach (var path in Directory.EnumerateFiles(folder))
+                        if (extensions.Contains(Path.GetExtension(path))) recordingPaths.Add(path);
+                }
+                catch (Exception error)
+                {
+                    var warning = Path.GetFileName(folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)) + ": " + error.Message;
+                    scanWarnings.Add(warning);
+                    Program.Log("Could not scan " + folder + ": " + error);
+                }
+            }
+            if (scanWarnings.Count == config.WatchFolders().Count())
+                throw new IOException("Neither recording folder could be scanned. " + string.Join(" | ", scanWarnings));
+
+            // A recording may be renamed, moved, or deleted before an upload
+            // starts. Do not let that stale entry leave the laptop reporting a
+            // permanent queue which can never make progress.
+            var removedMissing = config.Items.RemoveAll(x => !x.Complete && !File.Exists(x.Path));
+            if (removedMissing > 0)
+            {
+                config.Save();
+                Program.Log("Removed " + removedMissing + " missing recording(s) from the pending queue.");
+            }
             foreach (var path in recordingPaths)
             {
                 FileInfo info;
@@ -210,14 +257,16 @@ internal sealed class UploaderContext : ApplicationContext
                 if (!File.Exists(item.Path)) continue;
                 await Upload(item);
             }
-            status = "Watching · " + config.Items.Count(x => !x.Complete) + " queued";
-            await Heartbeat("watching", "", 0);
+            var pending = config.Items.Count(x => !x.Complete);
+            status = "Watching · " + pending + " queued" + (scanWarnings.Count > 0 ? " · one folder unavailable" : "");
+            await Heartbeat("watching", "", 0, scanWarnings.Count > 0 ? string.Join(" | ", scanWarnings) : "");
         }
         catch (Exception error)
         {
+            Program.Log("Upload scan failed: " + error);
             status = "Waiting to retry · " + error.Message;
             var queued = config.Items.FirstOrDefault(x => !x.Complete && File.Exists(x.Path));
-            await Heartbeat("error", queued == null ? "" : Path.GetFileName(queued.Path), queued == null || queued.Size <= 0 ? 0 : queued.ReceivedBytes * 100d / queued.Size);
+            await Heartbeat("error", queued == null ? "" : Path.GetFileName(queued.Path), queued == null || queued.Size <= 0 ? 0 : queued.ReceivedBytes * 100d / queued.Size, error.Message);
         }
         finally
         {
@@ -297,11 +346,11 @@ internal sealed class UploaderContext : ApplicationContext
         }
     }
 
-    private async Task Heartbeat(string state, string file, double progress)
+    private async Task Heartbeat(string state, string file, double progress, string errorMessage = "")
     {
         try
         {
-            using var response = await http.PostAsJsonAsync("/api/desktop-uploader/heartbeat", new { status = state, currentFileName = file, uploadProgress = progress, queuedCount = config.Items.Count(x => !x.Complete) });
+            using var response = await http.PostAsJsonAsync("/api/desktop-uploader/heartbeat", new { status = state, currentFileName = file, uploadProgress = progress, queuedCount = config.Items.Count(x => !x.Complete), errorMessage });
             if (response.StatusCode == HttpStatusCode.Unauthorized) throw new InvalidOperationException("Laptop pairing was revoked.");
         }
         catch { }

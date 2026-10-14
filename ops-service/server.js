@@ -500,6 +500,7 @@ function publicDesktopUploader(device) {
     currentFileName: device.currentFileName || '',
     uploadProgress: Number(device.uploadProgress) || 0,
     queuedCount: Number(device.queuedCount) || 0,
+    errorMessage: device.errorMessage || '',
     revokedAt: device.revokedAt || ''
   };
 }
@@ -610,7 +611,7 @@ app.post('/api/desktop-uploader/pair', function (req, res) {
     tokenHash: desktopTokenHash(secret),
     createdAt: new Date(now).toISOString(),
     lastSeenAt: new Date(now).toISOString(),
-    status: 'ready', currentFileName: '', uploadProgress: 0, queuedCount: 0, revokedAt: ''
+    status: 'ready', currentFileName: '', uploadProgress: 0, queuedCount: 0, errorMessage: '', revokedAt: ''
   };
   putRecordData('desktopUploaders', deviceId, device);
   res.status(201).json({ token: DESKTOP_TOKEN_PREFIX + deviceId + '.' + secret, device: publicDesktopUploader(device) });
@@ -638,6 +639,7 @@ app.post('/api/desktop-uploader/heartbeat', requireDesktopUploader, function (re
   device.currentFileName = String(req.body && req.body.currentFileName || '').slice(0, 255);
   device.uploadProgress = Math.max(0, Math.min(100, Number(req.body && req.body.uploadProgress) || 0));
   device.queuedCount = Math.max(0, Math.min(9999, Number(req.body && req.body.queuedCount) || 0));
+  device.errorMessage = String(req.body && req.body.errorMessage || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 500);
   device.lastSeenAt = new Date().toISOString();
   putRecordData('desktopUploaders', device.id, device);
   res.json({ ok: true });

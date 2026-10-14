@@ -5400,6 +5400,7 @@
           var detail = state === 'uploading'
             ? 'Uploading ' + (device.currentFileName || 'recording') + ' · ' + Math.round(device.uploadProgress || 0) + '%'
             : state.charAt(0).toUpperCase() + state.slice(1) + (device.queuedCount ? ' · ' + device.queuedCount + ' queued' : '');
+          if (device.errorMessage) detail += ' · ' + device.errorMessage;
           return '<div class="desktop-device-row"><div class="desktop-device-main"><strong>' + escapeHtml(device.name || 'Windows laptop') + '</strong><span>' + escapeHtml(detail) + '</span></div>' +
             '<button type="button" class="btn-secondary btn-tiny" data-revoke-device="' + escapeHtml(device.id) + '">Revoke</button></div>';
         }).join('');
