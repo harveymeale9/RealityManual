@@ -121,3 +121,25 @@ test('R2 upload refuses a remote object whose verified size differs', async func
   });
   await assert.rejects(storage.uploadFile('piece-2', source, 'video/mp4'), /remote size did not match/);
 });
+
+test('oversized Editor originals use an isolated verified R2 namespace', async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-r2-editor-'));
+  t.after(function () { fs.rmSync(dir, { recursive: true, force: true }); });
+  const source = path.join(dir, 'original.mp4');
+  fs.writeFileSync(source, Buffer.alloc(3072, 7));
+  let uploadInput;
+  const storage = storageModule.setup({
+    endpoint: 'https://account.r2.cloudflarestorage.com', bucket: 'bucket', accessKeyId: 'key', secretAccessKey: 'secret',
+    commandTypes: commandTypes,
+    client: { send: async function (cmd) {
+      if (cmd.name === 'headObject') return { ContentLength: 3072, ETag: 'editor-etag', ContentType: 'video/mp4' };
+      return {};
+    } },
+    uploadFactory: function (input) { uploadInput = input; return { done: async function () { for await (const _chunk of input.params.Body) {} } }; }
+  });
+  const uploaded = await storage.uploadEditorSource('editor-1', source, 'video/mp4');
+  assert.equal(uploaded.key, 'editor-sources/editor-1/original.mp4');
+  assert.equal(uploadInput.params.Key, uploaded.key);
+  assert.deepEqual(uploadInput.params.Metadata, { editorprojectid: 'editor-1' });
+  assert.throws(function () { storage.editorSourceKey('../escape'); }, /Invalid Editor project id/);
+});

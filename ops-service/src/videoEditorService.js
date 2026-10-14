@@ -14,6 +14,10 @@ const STORE_NAME = 'editorProjects';
 // per-upload source+render reservation below remains the authoritative and
 // substantially stricter admission check against current disk capacity.
 const MAX_UPLOAD_BYTES = 16 * 1024 * 1024 * 1024;
+// Raw OBS captures above this point are durable originals, not practical
+// working files. Archive them to R2 and replace the local copy with a compact,
+// high-quality editing master before any transcript, preview or render work.
+const OVERSIZED_SOURCE_BYTES = 6 * 1024 * 1024 * 1024;
 const EDITOR_UPLOAD_CHUNK_BYTES = 16 * 1024 * 1024;
 const EDITOR_UPLOAD_SESSION_TTL_MS = 6 * 60 * 60 * 1000;
 const EDIT_RENDER_DEBOUNCE_MS = 2500;
@@ -41,7 +45,7 @@ const MIN_RETAINED_PAUSE_SECONDS = 0.08;
 const TRANSCRIPT_CUT_HANDLE_SECONDS = 0.12;
 const CUT_ISLAND_BRIDGE_SECONDS = 0.12;
 const PAGE_CHANGE_SSIM_THRESHOLD = 0.5;
-const BROWSER_PREVIEW_VERSION = 2;
+const BROWSER_PREVIEW_VERSION = 3;
 const AUDIO_PREVIEW_MIX_VERSION = 3;
 const AUDIO_PREVIEW_TTL_MS = 2 * 60 * 60 * 1000;
 
@@ -715,7 +719,7 @@ function openingPushInFilter(renderShape, elapsedStart, durationSeconds) {
 }
 
 function patchNeedsAutoRender(project, renderWillChange) {
-  return !renderWillChange && (!project || !project.renderStatus);
+  return false;
 }
 
 function gapDecisions(project) {
@@ -1278,6 +1282,7 @@ function setup(options) {
   const getAudioMixSettings = options.getAudioMixSettings;
   const buildAudioPreview = options.buildAudioPreview;
   const queueManualRevision = options.queueManualRevision;
+  const storage = options.storage;
   if (!db || !dataDir || typeof transcribeDetailed !== 'function') throw new Error('video editor setup is incomplete');
   const router = express.Router();
   const rootDir = path.join(dataDir, 'editor');
@@ -1323,6 +1328,7 @@ function setup(options) {
   const automaticRenderTimers = new Map();
   const uploadCapacityReservations = createByteReservationLedger();
   const sourceHashClaims = createKeyedClaimRegistry();
+  const sourcePreparationJobs = new Map();
   const chunkUploadSessions = new Map();
   let transcriptionChain = Promise.resolve();
   let retakeChain = Promise.resolve();
@@ -1575,19 +1581,102 @@ function setup(options) {
       );
       const rotationBakedIn = Math.abs(Number(media.rotation) || 0) % 180 !== 90;
       return media.videoCodec === 'h264' && media.hasAudio && media.width > 0 && media.height > 0 &&
-        Math.max(media.width, media.height) <= 854 && rotationBakedIn && durationValid;
+        Math.max(media.width, media.height) <= 720 && rotationBakedIn && durationValid;
     } catch (error) { return false; }
   }
 
   async function buildScrubProxy(inputPath, outputPath, expectedDuration, label) {
     await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-filter_threads', String(EDITOR_FFMPEG_THREADS), '-autorotate', '1', '-i', inputPath,
       '-map', '0:v:0', '-map', '0:a:0', '-vf',
-      "scale=w='if(gte(iw,ih),trunc(min(854,iw)/2)*2,-2)':h='if(gte(iw,ih),-2,trunc(min(854,ih)/2)*2)',fps=30",
-      '-c:v', 'libx264', '-preset', 'superfast', '-tune', 'fastdecode', '-crf', '30', '-pix_fmt', 'yuv420p',
+      "scale=w='if(gte(iw,ih),trunc(min(720,iw)/2)*2,-2)':h='if(gte(iw,ih),-2,trunc(min(720,ih)/2)*2)',fps=24",
+      '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'fastdecode', '-crf', '31', '-pix_fmt', 'yuv420p',
       '-threads', String(EDITOR_FFMPEG_THREADS),
-      '-g', '15', '-keyint_min', '15', '-sc_threshold', '0',
+      '-g', '12', '-keyint_min', '12', '-sc_threshold', '0',
       '-c:a', 'aac', '-b:a', '64k', '-movflags', '+faststart', outputPath], label);
     if (!await browserPreviewIsValid(outputPath, expectedDuration)) throw new Error('The scrub-optimized browser preview failed verification.');
+  }
+
+  async function buildEditingMaster(inputPath, outputPath, expectedDuration) {
+    await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-filter_threads', String(EDITOR_FFMPEG_THREADS),
+      '-autorotate', '1', '-i', inputPath, '-map', '0:v:0', '-map', '0:a:0', '-vf',
+      "scale=w='if(gte(iw,ih),trunc(min(1920,iw)/2)*2,-2)':h='if(gte(iw,ih),-2,trunc(min(1920,ih)/2)*2)',fps=30",
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p',
+      '-threads', String(EDITOR_FFMPEG_THREADS), '-g', '60', '-keyint_min', '30', '-sc_threshold', '0',
+      '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', outputPath], 'oversized source editing master');
+    const media = await probe(outputPath);
+    const durationValid = Math.abs(media.duration - Number(expectedDuration)) <= renderDurationTolerance(expectedDuration) &&
+      Math.abs(media.videoDuration - Number(expectedDuration)) <= renderDurationTolerance(expectedDuration);
+    if (!media.hasAudio || media.videoCodec !== 'h264' || !durationValid || !media.width || !media.height) {
+      throw new Error('The compact editing master failed verification.');
+    }
+    return media;
+  }
+
+  function prepareOversizedSource(id) {
+    if (sourcePreparationJobs.has(id)) return sourcePreparationJobs.get(id);
+    const job = encodeQueue.enqueue(async function () {
+      let project = getProject(id);
+      if (!project || !project.oversizedSource || project.sourcePreparationStatus === 'ready' || !fs.existsSync(sourcePath(id))) return;
+      if (!storage || !storage.configured || typeof storage.uploadEditorSource !== 'function') {
+        project.sourcePreparationStatus = 'error';
+        project.sourcePreparationError = 'R2 storage is unavailable, so this oversized recording was kept safely but cannot enter the Editor yet.';
+        saveProject(project);
+        return;
+      }
+      const compactPath = path.join(projectDir(id), 'source-compacting.mp4');
+      try {
+        if (!project.sourceStorageObjectKey) {
+          project.sourcePreparationStatus = 'archiving';
+          project.sourcePreparationError = '';
+          saveProject(project);
+          const remote = await storage.uploadEditorSource(id, sourcePath(id), project.mimeType || 'video/mp4');
+          project = getProject(id);
+          if (!project) return;
+          project.sourceStorageProvider = 'cloudflare_r2';
+          project.sourceStorageObjectKey = remote.key;
+          project.sourceStorageSizeBytes = remote.sizeBytes;
+          project.sourceStorageEtag = remote.etag;
+          project.sourceStoredAt = new Date().toISOString();
+        }
+        project.sourcePreparationStatus = 'compacting';
+        project.sourcePreparationError = '';
+        saveProject(project);
+        fs.rmSync(compactPath, { force: true });
+        const compactMedia = await buildEditingMaster(sourcePath(id), compactPath, project.duration);
+        const compactStat = fs.statSync(compactPath);
+        fs.renameSync(compactPath, sourcePath(id));
+        project = getProject(id);
+        if (!project) return;
+        project.originalSizeBytes = Number(project.originalSizeBytes) || Number(project.sizeBytes) || 0;
+        project.sizeBytes = compactStat.size;
+        project.videoCodec = compactMedia.videoCodec;
+        project.audioCodec = compactMedia.audioCodec;
+        project.width = compactMedia.width;
+        project.height = compactMedia.height;
+        project.sourceRotation = compactMedia.rotation;
+        project.sourcePreparationStatus = 'ready';
+        project.sourcePreparationError = '';
+        project.sourcePreparedAt = new Date().toISOString();
+        // The compact master is already H.264/AAC with fast-start metadata and
+        // bounded dimensions, so it is also the browser-safe editing source.
+        // Do not spend another full-duration encode producing a second proxy.
+        project.browserPreviewRequired = false;
+        project.browserPreviewStatus = 'not_required';
+        project.browserPreviewVersion = 0;
+        saveProject(project);
+        setImmediate(function () { transcribeProject(id); });
+      } catch (error) {
+        fs.rm(compactPath, { force: true }, function () {});
+        try { project = getProject(id); } catch (readError) { return; }
+        if (project) {
+          project.sourcePreparationStatus = 'error';
+          project.sourcePreparationError = String(error.message || error).slice(0, 500);
+          saveProject(project);
+        }
+      }
+    }, 'urgent', id).finally(function () { sourcePreparationJobs.delete(id); });
+    sourcePreparationJobs.set(id, job);
+    return job;
   }
 
   async function generateBrowserPreview(id) {
@@ -1931,12 +2020,12 @@ function setup(options) {
   }
 
   function maybeAutoRender(id) {
-    const project = getProject(id);
-    if (!project || project.productionPieceId || project.renderDirty || project.automaticRenderStartedAt || project.renderStatus || !automaticReviewReady(project)) return false;
-    project.automaticRenderStartedAt = new Date().toISOString();
-    saveProject(project);
-    setImmediate(function () { renderProject(id); });
-    return true;
+    // The Editor is deliberately decision-first: prepare the transcript and
+    // lightweight source preview, let Harvey make every cut, then perform one
+    // expensive full-quality rebuild when he explicitly asks for it. Starting
+    // a final render here used to lock the transcript immediately after every
+    // upload and made a fresh recording look as though an edit was rebuilding.
+    return false;
   }
 
   function scheduleAutoRender(id, delayMs) {
@@ -2218,12 +2307,25 @@ async function renderProject(id) {
         migrated = true;
       }
       if (migrationRequiresRender && project.renderStatus === 'ready') invalidateProjectRender(project);
-      const resumeTranscription = project.transcriptionStatus === 'running' || project.transcriptionStatus === 'pending';
-      const resumePreview = project.browserPreviewRequired && ['running', 'pending'].includes(project.browserPreviewStatus);
-      const resumeRender = project.renderStatus === 'running' || project.renderStatus === 'queued';
+      const sourceNeedsPreparation = project.oversizedSource && project.sourcePreparationStatus !== 'ready';
+      if (sourceNeedsPreparation && ['archiving', 'compacting'].includes(project.sourcePreparationStatus)) {
+        project.sourcePreparationStatus = 'queued';
+        project.sourcePreparationError = '';
+        migrated = true;
+      }
+      const resumeTranscription = !sourceNeedsPreparation && (project.transcriptionStatus === 'running' || project.transcriptionStatus === 'pending');
+      const resumePreview = !sourceNeedsPreparation && project.browserPreviewRequired && ['running', 'pending'].includes(project.browserPreviewStatus);
+      // Before the decision-first workflow, fresh uploads marked their first
+      // automatic full render with automaticRenderStartedAt. Those jobs are
+      // redundant now and must not be resumed after this migration. Explicit
+      // user rebuilds never carry that marker and remain restart-safe.
+      const legacyAutomaticRender = !!project.automaticRenderStartedAt && !project.renderDirty &&
+        !project.renderSha256 && !project.lastRenderAt;
+      const resumeRender = (project.renderStatus === 'running' || project.renderStatus === 'queued') && !legacyAutomaticRender;
       const resumeRetakes = ['running', 'pending', 'pending_transcript'].includes(project.retakeAnalysisStatus);
       const resumePlanning = ['running', 'pending', 'pending_transcript'].includes(project.planningMatchStatus);
-      const orphanedRenderKickoff = !project.renderStatus && !!project.automaticRenderStartedAt;
+      const orphanedRenderKickoff = !project.renderStatus && !!project.automaticRenderStartedAt && !legacyAutomaticRender;
+      const resumeInterruptedRender = resumeRender || orphanedRenderKickoff;
       if (project.transcriptionStatus === 'running' || project.transcriptionStatus === 'pending') {
         project.transcriptionStatus = 'pending';
         project.transcriptionError = '';
@@ -2236,6 +2338,7 @@ async function renderProject(id) {
         project.renderStatus = '';
         project.renderError = '';
         project.automaticRenderStartedAt = '';
+        if (legacyAutomaticRender) project.renderProgress = 0;
       }
       if (orphanedRenderKickoff) project.automaticRenderStartedAt = '';
       if (['running', 'pending', 'pending_transcript'].includes(project.retakeAnalysisStatus)) {
@@ -2246,14 +2349,16 @@ async function renderProject(id) {
         project.planningMatchStatus = project.transcriptionStatus === 'ready' ? 'pending' : 'pending_transcript';
         project.planningMatchError = '';
       }
-      const resumeAutomaticRender = !project.renderDirty && (resumeRender || !project.renderStatus) && automaticReviewReady(project);
-      if (migrated || resumeTranscription || resumePreview || resumeRender || resumeRetakes || resumePlanning || orphanedRenderKickoff || resumeAutomaticRender) saveProject(project);
+      if (migrated || resumeTranscription || resumePreview || resumeRender || resumeRetakes || resumePlanning || orphanedRenderKickoff) saveProject(project);
       setImmediate(function () {
+        if (sourceNeedsPreparation && project.sourcePreparationStatus !== 'error') prepareOversizedSource(project.id);
         if (resumeTranscription) transcribeProject(project.id);
         if (resumePreview) generateBrowserPreview(project.id);
         if (!resumeTranscription && project.transcriptionStatus === 'ready' && resumeRetakes) analyzeProjectRetakes(project.id);
         if (!resumeTranscription && project.transcriptionStatus === 'ready' && resumePlanning) matchProjectPlanningPiece(project.id);
-        if (resumeAutomaticRender) maybeAutoRender(project.id);
+        // Only a render that was explicitly in flight is resumed. A newly
+        // uploaded recording stays editable until Rebuild preview is pressed.
+        if (resumeInterruptedRender && !project.renderDirty) renderProject(project.id);
       });
     } catch (e) {}
   });
@@ -2266,7 +2371,8 @@ async function renderProject(id) {
     listStmt.all(STORE_NAME).forEach(function (row) {
       let project;
       try { project = JSON.parse(row.data); } catch (e) { return; }
-      if (!project || project.productionPieceId || !isId(project.id) || !fs.existsSync(sourcePath(project.id))) return;
+      if (!project || project.productionPieceId || (project.oversizedSource && project.sourcePreparationStatus !== 'ready') ||
+          !isId(project.id) || !fs.existsSync(sourcePath(project.id))) return;
       probe(sourcePath(project.id)).then(async function (media) {
         let current = getProject(project.id);
         if (!current) return;
@@ -2421,6 +2527,10 @@ async function renderProject(id) {
     // included in the definitive post-upload capacity check below.
     if (typeof req.releaseEditorUploadReservation === 'function') req.releaseEditorUploadReservation();
     if (!req.file || !req.file.path) return res.status(400).json({ error: 'missing_video' });
+    if (req.file.size > OVERSIZED_SOURCE_BYTES && (!storage || !storage.configured || typeof storage.uploadEditorSource !== 'function')) {
+      fs.rm(req.file.path, { force: true }, function () {});
+      return res.status(503).json({ error: 'large_recording_storage_unavailable', message: 'R2 storage must be available before a recording over 6 GiB can enter the Editor.' });
+    }
     const existingProjects = listStmt.all(STORE_NAME).map(function (row) { try { return JSON.parse(row.data); } catch (error) { return null; } }).filter(Boolean);
     if (availableDiskBytes() < requiredEditorCapacity(req.file.size, true) + outstandingEditorCapacity(existingProjects) + uploadCapacityReservations.total()) {
       fs.rm(req.file.path, { force: true }, function () {});
@@ -2458,13 +2568,24 @@ async function renderProject(id) {
       const media = await probe(sourcePath(id));
       if (!media.duration || !media.width || !media.height || !media.hasAudio) throw new Error('The recording must contain playable video and audio.');
       const now = new Date().toISOString();
+      const oversizedSource = req.file.size > OVERSIZED_SOURCE_BYTES;
       const project = saveProject({
         id: id,
         name: String((req.body && req.body.name) || req.file.originalname || 'Untitled recording').slice(0, 200),
         fileName: String(req.file.originalname || 'recording.mp4').slice(0, 255),
         mimeType: normalizedVideoMimeType(req.file.originalname, req.file.mimetype),
         sizeBytes: req.file.size,
+        originalSizeBytes: req.file.size,
         sourceSha256: sourceSha256,
+        oversizedSource: oversizedSource,
+        sourcePreparationStatus: oversizedSource ? 'queued' : 'not_required',
+        sourcePreparationError: '',
+        sourceStorageProvider: '',
+        sourceStorageObjectKey: '',
+        sourceStorageSizeBytes: 0,
+        sourceStorageEtag: '',
+        sourceStoredAt: '',
+        sourcePreparedAt: '',
         duration: media.duration,
         width: media.width,
         height: media.height,
@@ -2534,7 +2655,10 @@ async function renderProject(id) {
         : null;
       sourceClaim.settle(id);
       res.status(202).json(Object.assign({}, project, { videoPiece: videoPiece }));
-      setImmediate(function () { transcribeProject(id); generateBrowserPreview(id); });
+      setImmediate(function () {
+        if (oversizedSource) prepareOversizedSource(id);
+        else { transcribeProject(id); generateBrowserPreview(id); }
+      });
     } catch (err) {
       sourceClaim.settle('');
       const failedProject = getProject(id);
@@ -2573,6 +2697,9 @@ async function renderProject(id) {
     const sizeBytes = Number(req.body && req.body.sizeBytes);
     if (!Number.isInteger(sizeBytes) || sizeBytes <= 0 || sizeBytes > MAX_UPLOAD_BYTES) {
       return res.status(413).json({ error: 'invalid_upload_size', message: 'This recording is empty or larger than the 16 GiB upload limit.' });
+    }
+    if (sizeBytes > OVERSIZED_SOURCE_BYTES && (!storage || !storage.configured || typeof storage.uploadEditorSource !== 'function')) {
+      return res.status(503).json({ error: 'large_recording_storage_unavailable', message: 'R2 storage must be available before a recording over 6 GiB can enter the Editor.' });
     }
     const projects = listStmt.all(STORE_NAME).map(function (row) { try { return JSON.parse(row.data); } catch (error) { return null; } }).filter(Boolean);
     const requestedCapacity = requiredEditorCapacity(sizeBytes, false);
@@ -2673,6 +2800,18 @@ async function renderProject(id) {
     if (session && req.desktopUploaderDeviceId && session.desktopUploaderDeviceId !== req.desktopUploaderDeviceId) return res.status(404).json({ error: 'upload_session_missing' });
     releaseChunkUploadSession(req.params.uploadId, true);
     res.status(204).end();
+  });
+
+  router.post('/:id/source-preparation/retry', function (req, res) {
+    const project = isId(req.params.id) && getProject(req.params.id);
+    if (!project) return res.status(404).json({ error: 'not_found' });
+    if (!project.oversizedSource) return res.status(409).json({ error: 'source_preparation_not_required' });
+    if (project.sourcePreparationStatus !== 'error') return res.status(409).json({ error: 'source_preparation_not_retryable' });
+    project.sourcePreparationStatus = 'queued';
+    project.sourcePreparationError = '';
+    saveProject(project);
+    prepareOversizedSource(project.id);
+    res.status(202).json({ ok: true });
   });
 
   router.post('/:id/seen', function (req, res) {
@@ -3046,7 +3185,7 @@ async function renderProject(id) {
     if (retried.includes('preview')) generateBrowserPreview(project.id);
     if (retried.includes('retakes')) analyzeProjectRetakes(project.id);
     if (retried.includes('planning')) matchProjectPlanningPiece(project.id);
-    if (retried.includes('render')) setImmediate(function () { maybeAutoRender(project.id); });
+    if (retried.includes('render')) setImmediate(function () { renderProject(project.id); });
   });
 
   router.post('/:id/production', async function (req, res) {
@@ -3069,7 +3208,7 @@ async function renderProject(id) {
       invalidateProjectRender(project);
       saveProject(project);
       res.status(409).json({ error: 'render_verification_stale', message: 'The final file no longer matches its verified render. Editor is rebuilding it automatically before approval.' });
-      scheduleAutoRender(project.id, 0);
+      setImmediate(function () { renderProject(project.id); });
       return;
     }
     // Fingerprinting a large master is intentionally streamed and can take a
@@ -3118,9 +3257,18 @@ async function renderProject(id) {
   });
 
   router.get('/:id/source', function (req, res) {
-    if (!isId(req.params.id) || !fs.existsSync(sourcePath(req.params.id))) return res.status(404).end();
+    if (!isId(req.params.id)) return res.status(404).end();
     const project = getProject(req.params.id);
     if (!project) return res.status(404).end();
+    if (project.oversizedSource && project.sourcePreparationStatus !== 'ready') {
+      return res.status(project.sourcePreparationStatus === 'error' ? 422 : 425).json({
+        error: project.sourcePreparationStatus === 'error' ? 'source_preparation_failed' : 'source_preparing',
+        message: project.sourcePreparationStatus === 'error'
+          ? (project.sourcePreparationError || 'The oversized recording could not be prepared.')
+          : 'The original recording is being archived and compacted for fast editing.'
+      });
+    }
+    if (!fs.existsSync(sourcePath(req.params.id))) return res.status(404).end();
     let proxyExists = false;
     try { proxyExists = fs.statSync(previewPath(req.params.id)).size > 1024; } catch (error) {}
     const useProxy = project.browserPreviewRequired && project.browserPreviewStatus === 'ready' &&
@@ -3192,6 +3340,7 @@ async function renderProject(id) {
 
   router.delete('/:id', function (req, res) {
     if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
+    if (sourcePreparationJobs.has(req.params.id)) return res.status(409).json({ error: 'source_preparation_in_progress', message: 'Wait for this large recording to finish archiving and compacting before deleting it.' });
     if (renderJobs.has(req.params.id)) return res.status(409).json({ error: 'render_in_progress', message: 'Wait for the final edit to finish before deleting this recording.' });
     if (clipInsertJobs.has(req.params.id)) return res.status(409).json({ error: 'clip_insert_running', message: 'Wait for the inserted clip to finish preparing before deleting this recording.' });
     if (productionJobs.has(req.params.id)) return res.status(409).json({ error: 'approval_in_progress', message: 'Wait for this edit to finish entering Content Production before deleting it.' });
@@ -3205,6 +3354,11 @@ async function renderProject(id) {
     pruneAudioPreviewCache(req.params.id);
     delStmt.run(STORE_NAME, req.params.id);
     fs.rm(projectDir(req.params.id), { recursive: true, force: true }, function () {});
+    if (project.sourceStorageObjectKey && storage && storage.configured && typeof storage.deleteKey === 'function') {
+      storage.deleteKey(project.sourceStorageObjectKey).catch(function (error) {
+        console.error('[editor-source] could not remove R2 archive for ' + project.id + ':', error.message);
+      });
+    }
     res.json({ ok: true });
   });
 
@@ -3224,6 +3378,7 @@ async function renderProject(id) {
 module.exports = {
   setup,
   maxUploadBytes: MAX_UPLOAD_BYTES,
+  oversizedSourceBytes: OVERSIZED_SOURCE_BYTES,
   requiredEditorCapacity,
   outstandingEditorCapacity,
   createByteReservationLedger,

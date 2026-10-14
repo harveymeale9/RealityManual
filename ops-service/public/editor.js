@@ -393,6 +393,10 @@
     if (item.productionPieceId) return item.workflowWarning ? 'Sent · workflow warning' : 'Sent to Production';
     var manualRevision = activeManualRevision(item);
     if (manualRevision) return manualRevision.status === 'running' ? 'Updating manually' : 'Manual revision queued';
+    if (item.oversizedSource && item.sourcePreparationStatus === 'queued') return 'Waiting to secure large recording';
+    if (item.oversizedSource && item.sourcePreparationStatus === 'archiving') return 'Archiving original to R2';
+    if (item.oversizedSource && item.sourcePreparationStatus === 'compacting') return 'Building editing master';
+    if (item.oversizedSource && item.sourcePreparationStatus === 'error') return 'Large recording needs attention';
     if (item.transcriptionStatus === 'pending') return queued('Waiting for transcript', item.transcriptionQueuePosition);
     if (item.transcriptionStatus === 'running') return 'Transcribing';
     if (item.transcriptionStatus === 'error') return 'Needs attention';
@@ -430,10 +434,11 @@
   function sessionBucket(item) {
     if (item.productionPieceId) return item.workflowWarning ? 'warning' : 'sent';
     if (activeManualRevision(item)) return 'working';
+    if (item.oversizedSource && item.sourcePreparationStatus === 'error') return 'attention';
     if (item.transcriptionStatus === 'error' || (item.browserPreviewStatus === 'error' && item.renderStatus !== 'ready') || framingFailureIsBlocking(item) || item.clipInsertStatus === 'error' || item.renderStatus === 'error' || item.layoutReviewRequired) return 'attention';
     if (item.workflowWarning) return 'warning';
     if (item.renderStatus === 'ready' && !item.renderDirty) return 'ready';
-    if (['pending', 'running'].indexOf(item.transcriptionStatus) !== -1 || ['pending', 'running'].indexOf(item.browserPreviewStatus) !== -1 || ['pending', 'running'].indexOf(item.classificationStatus) !== -1 || ['pending', 'running', 'pending_transcript'].indexOf(item.planningMatchStatus) !== -1 || ['queued', 'preparing'].indexOf(item.clipInsertStatus) !== -1 || ['queued', 'running'].indexOf(item.renderStatus) !== -1 || item.renderRebuildPending) return 'working';
+    if (['queued', 'archiving', 'compacting'].indexOf(item.sourcePreparationStatus) !== -1 || ['pending', 'running'].indexOf(item.transcriptionStatus) !== -1 || ['pending', 'running'].indexOf(item.browserPreviewStatus) !== -1 || ['pending', 'running'].indexOf(item.classificationStatus) !== -1 || ['pending', 'running', 'pending_transcript'].indexOf(item.planningMatchStatus) !== -1 || ['queued', 'preparing'].indexOf(item.clipInsertStatus) !== -1 || ['queued', 'running'].indexOf(item.renderStatus) !== -1 || item.renderRebuildPending) return 'working';
     return 'prepared';
   }
 
@@ -590,7 +595,11 @@
     var frameState = item.classificationStatus === 'error' ? 'error' : item.classificationStatus === 'ready' ? 'done' : item.classificationStatus === 'running' || item.classificationStatus === 'pending' ? 'active' : 'waiting';
     var planState = item.planningMatchStatus === 'error' ? 'error' : item.planningMatchStatus === 'ready' ? 'done' : item.planningMatchStatus === 'running' || item.planningMatchStatus === 'pending' ? 'active' : 'waiting';
     var previewState = item.browserPreviewStatus === 'error' ? 'error' : item.browserPreviewStatus === 'ready' ? 'done' : item.browserPreviewRequired ? 'active' : '';
-    return '<div class="editor-processing-steps">' + step('done', 'Recording secured', 'Original master preserved') +
+    var sourceState = item.oversizedSource ? (item.sourcePreparationStatus === 'error' ? 'error' : item.sourcePreparationStatus === 'ready' ? 'done' : 'active') : 'done';
+    var sourceDetail = item.oversizedSource
+      ? (sourceState === 'done' ? 'Original archived in R2; compact editing master ready' : sourceState === 'error' ? 'Needs retry' : item.sourcePreparationStatus === 'compacting' ? 'Creating the local editing master' : 'Uploading the untouched original to R2')
+      : 'Original master preserved';
+    return '<div class="editor-processing-steps">' + step(sourceState, 'Recording secured', sourceDetail) +
       (item.browserPreviewRequired ? step(previewState, 'Browser review copy', previewState === 'done' ? 'H.264 preview ready' : previewState === 'error' ? 'Can be retried' : Number(item.previewQueuePosition) > 1 ? (Number(item.previewQueuePosition) - 1) + ' recording(s) ahead' : 'Converting camera codec') : '') +
       step(transcriptState, 'Word-timed transcript', transcriptState === 'done' ? 'Speech mapped' : transcriptState === 'error' ? 'Needs retry' : item.transcriptionStatus === 'pending' && Number(item.transcriptionQueuePosition) > 1 ? (Number(item.transcriptionQueuePosition) - 1) + ' recording(s) ahead' : 'Listening for every word') +
       step(frameState, 'Camera orientation', frameState === 'done' ? (Number(item.height) > Number(item.width) ? 'Portrait detected' : 'Landscape detected') : 'Reading recording dimensions') +
@@ -600,6 +609,7 @@
 
   function failedSteps(item) {
     var labels = [];
+    if (item.oversizedSource && item.sourcePreparationStatus === 'error') labels.push('large recording preparation');
     if (item.transcriptionStatus === 'error') labels.push('transcript');
     if (item.browserPreviewStatus === 'error') labels.push('browser preview');
     if (framingFailureIsBlocking(item)) labels.push('framing');
@@ -1017,7 +1027,8 @@
   }
 
   function projectIsActive(item) {
-    return !!item && (!!activeManualRevision(item) || ['pending', 'running'].indexOf(item.transcriptionStatus) !== -1 ||
+    return !!item && (!!activeManualRevision(item) || ['queued', 'archiving', 'compacting'].indexOf(item.sourcePreparationStatus) !== -1 ||
+      ['pending', 'running'].indexOf(item.transcriptionStatus) !== -1 ||
       ['pending', 'running'].indexOf(item.browserPreviewStatus) !== -1 ||
       ['pending', 'running'].indexOf(item.classificationStatus) !== -1 ||
       ['pending', 'running', 'pending_transcript'].indexOf(item.retakeAnalysisStatus) !== -1 ||
@@ -1030,7 +1041,7 @@
     if (!item) return '';
     var manualRevision = activeManualRevision(item);
     var latestManualRevision = ((item.manualRevisions || []).slice(-1)[0]) || {};
-    return [item.transcriptionStatus, item.browserPreviewStatus, item.classificationStatus, item.retakeAnalysisStatus, item.planningMatchStatus,
+    return [item.sourcePreparationStatus || '', item.transcriptionStatus, item.browserPreviewStatus, item.classificationStatus, item.retakeAnalysisStatus, item.planningMatchStatus,
       item.clipInsertStatus || '', item.renderStatus, Math.round(Number(item.renderProgress) || 0), item.renderRebuildPending ? 'rebuild' : '', item.productionPieceId || '', item.workflowWarning || '',
       manualRevision ? manualRevision.id + ':' + manualRevision.status : '', latestManualRevision.id || '', latestManualRevision.status || '', latestManualRevision.completedAt || ''].join('|');
   }
@@ -1066,6 +1077,35 @@
         '<p>' + (manualRevision.status === 'running' ? 'I am applying and checking your requested change now.' : 'Project Manager has the instruction and will begin as soon as the current task finishes.') + ' You can leave the Editor and check back shortly.</p>' +
         '<blockquote>' + esc(manualRevision.request).replace(/\n/g, '<br>') + '</blockquote>' +
         manualRevisionLogHtml(project) + '</div>';
+      return;
+    }
+    if (project.oversizedSource && project.sourcePreparationStatus !== 'ready') {
+      var sourceFailed = project.sourcePreparationStatus === 'error';
+      var sourceHeading = sourceFailed ? 'Large recording needs attention' :
+        project.sourcePreparationStatus === 'compacting' ? 'Building a faster editing master…' : 'Securing this large recording…';
+      var sourceMessage = sourceFailed ? project.sourcePreparationError :
+        project.sourcePreparationStatus === 'compacting'
+          ? 'The untouched original is safe in R2. We are creating a much smaller high-quality working copy so transcript edits and preview rebuilds do not have to process the massive OBS file.'
+          : 'This recording is over 6 GiB, so its untouched original is being archived to R2 before local editing begins.';
+      workspace.innerHTML = '<div class="editor-processing"><div class="editor-processing-icon' + (sourceFailed ? ' error' : '') + '">' + (sourceFailed ? '!' : '') + '</div>' +
+        '<h2>' + sourceHeading + '</h2><p>' + esc(sourceMessage) + '</p>' + processingStepsHtml(project) +
+        (sourceFailed ? '<button class="btn-primary" id="editorSourceRetry">Retry large recording preparation</button>' : '') + '</div>';
+      if (sourceFailed) workspace.querySelector('#editorSourceRetry').onclick = function () {
+        var button = workspace.querySelector('#editorSourceRetry');
+        var retryProjectId = project.id;
+        button.disabled = true;
+        button.textContent = 'Retrying…';
+        api('/api/editor/' + retryProjectId + '/source-preparation/retry', { method: 'POST' }).then(function () {
+          if (!project || project.id !== retryProjectId) return;
+          project.sourcePreparationStatus = 'queued';
+          project.sourcePreparationError = '';
+          renderWorkspace();
+          schedulePoll();
+        }).catch(function (error) {
+          if (button.isConnected) { button.disabled = false; button.textContent = 'Retry large recording preparation'; }
+          alert(error.message);
+        });
+      };
       return;
     }
     if (project.transcriptionStatus !== 'ready') {
@@ -1113,6 +1153,8 @@
     var rendering = ['queued', 'running'].indexOf(project.renderStatus) !== -1;
     var previewRebuildPending = !!localPreviewRebuilds[project.id] || !!project.renderRebuildPending;
     var previewLocked = rendering || previewRebuildPending;
+    var initialPreviewBuild = rendering && !project.renderDirty && !project.renderRebuildPending &&
+      !project.renderSha256 && !project.lastRenderAt;
     var sentToProduction = !!project.productionPieceId;
     var failures = failedSteps(project);
     var previewMode = project.renderStatus === 'ready' && (!project.renderDirty || (previewModes[project.id] === 'final' && !explicitSourcePreviews[project.id])) &&
@@ -1142,16 +1184,19 @@
       manualRevisionLogHtml(project) + '</section>';
     var rebuildPercent = Math.max(0, Math.min(99, Math.round(Number(project.renderProgress) || 0)));
     var rebuildLabel = project.renderStatus === 'running'
-      ? (rebuildPercent >= 99 ? 'Finalising updated preview…' : 'Rebuilding preview… ' + rebuildPercent + '%')
+      ? (rebuildPercent >= 99 ? (initialPreviewBuild ? 'Finalising first preview…' : 'Finalising updated preview…') :
+        (initialPreviewBuild ? 'Preparing first preview… ' : 'Rebuilding preview… ') + rebuildPercent + '%')
       : project.renderStatus === 'queued'
-        ? (Number(project.renderQueuePosition) > 1 ? 'Preview queued · ' + (Number(project.renderQueuePosition) - 1) + ' recording(s) ahead' : 'Preview queued for rebuild…')
+        ? (Number(project.renderQueuePosition) > 1
+          ? (initialPreviewBuild ? 'First preview queued' : 'Preview rebuild queued') + ' · ' + (Number(project.renderQueuePosition) - 1) + ' recording(s) ahead'
+          : (initialPreviewBuild ? 'First preview is next to prepare…' : 'Preview queued for rebuild…'))
         : project.renderStatus === 'error' ? 'Preview rebuild needs attention' : 'Preparing updated preview…';
     var rebuildFailed = project.renderStatus === 'error';
     var rebuildOverlayHtml = previewLocked
-      ? '<div class="editor-preview-rebuild' + (rebuildFailed ? ' error' : '') + '" id="editorPreviewRebuild" role="status" aria-live="polite"><div class="editor-preview-rebuild-spinner">' + (rebuildFailed ? '!' : '') + '</div><strong id="editorPreviewRebuildLabel">' + rebuildLabel + '</strong><span>' + (rebuildFailed ? 'Playback remains locked because this file was not regenerated. Use Retry failed steps above.' : 'Your latest edit is being applied. Playback will unlock when the regenerated preview is ready.') + '</span>' + (rebuildFailed ? '' : '<div><i id="editorPreviewRebuildBar" style="width:' + (project.renderStatus === 'running' ? Math.max(2, rebuildPercent) : 4) + '%"></i></div>') + '</div>'
+      ? '<div class="editor-preview-rebuild' + (rebuildFailed ? ' error' : '') + '" id="editorPreviewRebuild" role="status" aria-live="polite"><div class="editor-preview-rebuild-spinner">' + (rebuildFailed ? '!' : '') + '</div><strong id="editorPreviewRebuildLabel">' + rebuildLabel + '</strong><span>' + (rebuildFailed ? 'Playback remains locked because this file was not regenerated. Use Retry failed steps above.' : initialPreviewBuild ? 'No changes have been made. The first editable preview is being prepared from your new recording.' : 'Your latest edit is being applied. Playback will unlock when the regenerated preview is ready.') + '</span>' + (rebuildFailed ? '' : '<div><i id="editorPreviewRebuildBar" style="width:' + (project.renderStatus === 'running' ? Math.max(2, rebuildPercent) : 4) + '%"></i></div>') + '</div>'
       : '';
     var initialLoadingOverlayHtml = previewLocked ? '' : '<div class="editor-preview-loading" id="editorPreviewLoading" role="status" aria-live="polite"><div></div><strong>Loading preview…</strong></div>';
-    var previewPlayerHtml = '<div class="editor-preview' + (previewLocked ? ' rebuilding' : '') + '" id="editorPreview" tabindex="' + (previewLocked ? '-1' : '0') + '" aria-busy="true" aria-label="Video review. Space plays or pauses. Left and right arrows move two seconds."><div class="editor-video-frame ' + layout + '"><video id="editorVideo" data-preview-mode="' + previewMode + '" data-seek-time="' + previewSeek.toFixed(3) + '" playsinline preload="auto" src="' + previewUrl + '"></video>' +
+    var previewPlayerHtml = '<div class="editor-preview' + (previewLocked ? ' rebuilding' : '') + '" id="editorPreview" tabindex="' + (previewLocked ? '-1' : '0') + '" aria-busy="true" aria-label="Video review. Space plays or pauses. Left and right arrows move two seconds."><div class="editor-video-frame ' + layout + '"><video id="editorVideo" data-preview-mode="' + previewMode + '" data-seek-time="' + previewSeek.toFixed(3) + '" playsinline preload="auto"' + (previewLocked ? '' : ' src="' + previewUrl + '"') + '></video>' +
       '<div class="editor-preview-outro" id="editorPreviewOutro" aria-hidden="true"></div>' +
       '<div class="editor-caption" id="editorCaption"></div>' +
       '<div class="editor-player-controls" id="editorPlayerControls"><button type="button" class="editor-player-icon" id="editorPlayerPlay" aria-label="Play" disabled>▶</button><span id="editorPlayerCurrent">0:00</span><input type="range" id="editorPlayerSeek" min="0" max="1" step="0.01" value="0" aria-label="Video position" disabled><span id="editorPlayerDuration">' + formatTime(previewMode === 'final' ? editedDuration(project) : project.duration) + '</span><i id="editorPlayerBuffering" hidden>Loading</i><button type="button" class="editor-player-icon" id="editorPlayerMute" aria-label="Mute" disabled>VOL</button><button type="button" class="editor-player-icon" id="editorPlayerFullscreen" aria-label="Full screen" disabled>⛶</button></div>' +
@@ -1165,7 +1210,7 @@
           (!sentToProduction ? '<button type="button" class="btn-secondary btn-tiny" id="editorToggleTimeline" ' + (previewLocked ? 'disabled' : '') + '>' + (manualTimelineOpen[project.id] ? 'Hide timeline' : 'Show timeline') + '</button>' : '') +
           (!sentToProduction && project.renderStatus === 'ready' && !project.renderDirty && !previewLocked ? '<button type="button" class="btn-primary btn-tiny editor-quick-approve" data-editor-approve ' + (!audioSelectionReady ? 'disabled title="Choose backing audio first"' : '') + '>Approve &amp; next</button>' : '') +
           '<span class="editor-save-state ' + esc(saveStates[project.id] || '') + '" id="editorSaveState">' + ({ saving: 'Saving…', saved: 'Saved', error: 'Save failed' }[saveStates[project.id]] || '') + '</span><button class="editor-delete" id="editorDelete">' + (sentToProduction ? 'Remove Editor files' : 'Delete recording') + '</button></div></div>' +
-      (previewLocked ? '<div class="editor-lock-notice"><strong>Preview is rebuilding</strong><span>Playback is locked until the updated file has encoded and passed verification.</span></div>' : '') +
+      (previewLocked ? '<div class="editor-lock-notice"><strong>' + (initialPreviewBuild ? 'Preparing the first preview' : 'Preview is rebuilding') + '</strong><span>' + (initialPreviewBuild ? 'This is initial processing—not a change you made. Playback will unlock when the first verified preview is ready.' : 'Playback is locked until the updated file has encoded and passed verification.') + '</span></div>' : '') +
       (project.renderDirty && !previewLocked ? '<div class="editor-lock-notice"><strong>Transcript edits saved</strong><span>Keep cutting mistakes, then press Rebuild preview once when you are finished.</span></div>' : '') +
       (project.browserPreviewRequired && ['pending', 'running'].indexOf(project.browserPreviewStatus) !== -1 && previewMode === 'source' ? '<div class="editor-lock-notice"><strong>Preparing a browser-safe source preview</strong><span>The camera master is preserved and final editing continues. This view will switch to H.264 automatically when ready.</span></div>' : '') +
       (sentToProduction ? '<div class="editor-lock-notice approved"><strong>Approved version locked</strong><span>The exact reviewed file is now in Content Production. Source and final previews remain available here.</span></div>' : '') +

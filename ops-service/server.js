@@ -914,6 +914,7 @@ const videoEditor = videoEditorService.setup({
     return row ? JSON.parse(row.data) : {};
   },
   buildAudioPreview: videoAnalysis.buildAudioPreview,
+  storage: r2Storage,
   queueManualRevision: enqueueEditorManualRevision,
   handoffToProduction: sendEditorProjectToProduction
 });

@@ -14,4 +14,8 @@ test('ops-service deployments serialize before touching Git or Docker', function
   assert.ok(lock > 0, 'deployment lock is present');
   assert.ok(lock < repo, 'lock is taken before Git state changes');
   assert.ok(lock < docker, 'lock is taken before Docker changes');
+  assert.match(source, /sourcePreparationStatus/);
+  assert.match(source, /'queued','archiving','compacting'/);
+  assert.match(source, /browserPreviewStatus/);
+  assert.match(source, /renderStatus/);
 });

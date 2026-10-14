@@ -55,6 +55,12 @@ function setup(options) {
     return 'publish-ready/' + id + '/final.mp4';
   }
 
+  function editorSourceKey(projectId) {
+    const id = clean(projectId, 128);
+    if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw new Error('Invalid Editor project id.');
+    return 'editor-sources/' + id + '/original.mp4';
+  }
+
   async function headKey(key) {
     requireConfigured();
     const result = await client.send(new commandTypes.HeadObjectCommand({ Bucket: bucket, Key: key }));
@@ -66,11 +72,10 @@ function setup(options) {
     };
   }
 
-  async function uploadFile(pieceId, filePath, contentType) {
+  async function uploadPath(key, filePath, contentType, metadata) {
     requireConfigured();
     const stat = await fs.promises.stat(filePath);
-    if (!stat.isFile() || stat.size <= 0) throw new Error('The final video is missing or empty.');
-    const key = objectKey(pieceId);
+    if (!stat.isFile() || stat.size <= 0) throw new Error('The media file is missing or empty.');
     const upload = uploadFactory({
       client: client,
       params: {
@@ -78,7 +83,7 @@ function setup(options) {
         Key: key,
         Body: fs.createReadStream(filePath),
         ContentType: clean(contentType, 100) || 'video/mp4',
-        Metadata: { pieceid: clean(pieceId, 128) }
+        Metadata: metadata || {}
       },
       queueSize: 3,
       partSize: 16 * 1024 * 1024,
@@ -87,9 +92,17 @@ function setup(options) {
     await upload.done();
     const remote = await headKey(key);
     if (remote.sizeBytes !== stat.size) {
-      throw new Error('R2 upload verification failed: remote size did not match the final video.');
+      throw new Error('R2 upload verification failed: remote size did not match the media file.');
     }
     return remote;
+  }
+
+  async function uploadFile(pieceId, filePath, contentType) {
+    return uploadPath(objectKey(pieceId), filePath, contentType, { pieceid: clean(pieceId, 128) });
+  }
+
+  async function uploadEditorSource(projectId, filePath, contentType) {
+    return uploadPath(editorSourceKey(projectId), filePath, contentType, { editorprojectid: clean(projectId, 128) });
   }
 
   function safeDataKey(value) {
@@ -210,8 +223,10 @@ function setup(options) {
     bucket: bucket,
     missing: missing.slice(),
     objectKey: objectKey,
+    editorSourceKey: editorSourceKey,
     headKey: headKey,
     uploadFile: uploadFile,
+    uploadEditorSource: uploadEditorSource,
     uploadJson: uploadJson,
     readJson: readJson,
     listKeys: listKeys,

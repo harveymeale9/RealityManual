@@ -19066,3 +19066,66 @@ second intervals for the batch to reach zero. Stale heartbeats older than five
 minutes do not block deployment, and the wait has a two-hour ceiling. Static-
 only deployments still skip the rebuild immediately. This prevents an
 unrelated backend fix from resetting a multi-gigabyte laptop transfer.
+
+---
+
+# 612. Oversized Editor Sources Are Archived and Compacted Before Editing (2026-10-14)
+
+A roughly 9.5 GB OBS master was technically admissible under the dynamic disk
+guard but was not a practical Editor working file. Every later transcript,
+scrub-preview and final-render pass had to read the enormous camera source,
+making the Editor appear stuck and retaining needless pressure on the VPS.
+
+Recordings over 6 GiB now follow a separate ingest lifecycle. After the normal
+byte hash, duplicate check and media probe, Content Studio creates the Editor
+record, archives the untouched original under an isolated
+`editor-sources/<project-id>/original.mp4` R2 key, verifies the remote byte
+count, and then makes one high-quality H.264/AAC editing master capped at 1080p
+and 30 fps. Only after that verified compact master atomically replaces the
+local raw source do transcription and automatic edit work begin. The compact
+master is already browser-safe H.264/AAC with fast-start
+metadata, so oversized recordings use it directly for review instead of paying
+for another full-duration scrub-proxy encode. The original byte count and R2 metadata remain on the project; the
+local capacity model switches to the real compact-master size. Exact duplicate
+detection continues to use the original upload's SHA-256.
+
+The Editor visibly distinguishes **Waiting to secure large recording**,
+**Archiving original to R2**, and **Building editing master** from ordinary
+transcription. A failed preparation retains the raw source, shows the exact
+error, and exposes an explicit retry action. Service startup resumes queued or
+interrupted archive/compaction work without prematurely starting transcript or
+preview jobs. Deleting the Editor recording also removes its private R2 source
+archive. Deployments now wait for an active laptop queue, queued/active
+oversized-source preparation, and expensive running Editor preview,
+transcription, render or clip-preparation work before container recreation, so
+neither the new lifecycle nor an ordinary long encode loses its progress to an
+unrelated push.
+
+---
+
+# 613. Editor Uploads Stay Editable Until One Explicit Preview Rebuild (2026-10-14)
+
+Fresh recordings used to start a full-quality final render as soon as the
+automatic transcript and planning work finished. That render locked the
+transcript for many minutes before Harvey had made a single decision, and the
+shared rebuild overlay incorrectly claimed that his "latest edit" was being
+applied. The hidden video element simultaneously requested a render file that
+did not exist yet, allowing a misleading playback error to show through the
+processing cover.
+
+The Editor is now decision-first. New uploads prepare their transcript,
+automatic long-pause decisions, mistake highlights and lightweight source
+review copy, but do not automatically encode the final video. Harvey can make
+all transcript cuts first and press **Rebuild preview** once; interrupted
+renders that were genuinely requested by the user still resume after a service
+restart. A one-time migration cancels only legacy first renders identified by
+their old automatic-start marker, including those active during this rollout.
+The overlay distinguishes an old in-flight first build from a manual
+rebuild, explicitly says that no customer edit caused it, and does not attach
+an unavailable media URL while the player is locked.
+
+Browser review proxies are now capped at 720 pixels on the long edge and 24
+fps, encoded with x264's ultrafast preset at CRF 31 and half-second keyframes.
+They remain disposable review media—the verified final export retains its
+existing full-resolution CRF 18 pipeline—so this reduces time-to-edit and CPU
+cost without lowering the video that is ultimately approved and published.

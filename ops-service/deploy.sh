@@ -137,11 +137,25 @@ while [ -f "$DATA_DIR/db.sqlite" ]; do
       AND COALESCE(json_extract(data,'$.queuedCount'),0)>0
       AND julianday(COALESCE(json_extract(data,'$.lastSeenAt'),'1970-01-01')) > julianday('now','-5 minutes');
   " 2>/dev/null || echo 0)"
-  if [ "$ACTIVE_UPLOAD_QUEUE" = "0" ]; then break; fi
+  ACTIVE_EDITOR_PROCESSING="$(sqlite3 "$DATA_DIR/db.sqlite" "
+    SELECT COUNT(*) FROM records
+    WHERE store_name='editorProjects'
+      AND (
+        COALESCE(json_extract(data,'$.sourcePreparationStatus'),'') IN ('queued','archiving','compacting')
+        OR COALESCE(json_extract(data,'$.browserPreviewStatus'),'')='running'
+        OR COALESCE(json_extract(data,'$.transcriptionStatus'),'')='running'
+        OR (
+          COALESCE(json_extract(data,'$.renderStatus'),'')='running'
+          AND COALESCE(json_extract(data,'$.automaticRenderStartedAt'),'')=''
+        )
+        OR COALESCE(json_extract(data,'$.clipInsertStatus'),'')='preparing'
+      );
+  " 2>/dev/null || echo 0)"
+  if [ "$ACTIVE_UPLOAD_QUEUE" = "0" ] && [ "$ACTIVE_EDITOR_PROCESSING" = "0" ]; then break; fi
   if [ "$UPLOAD_DRAIN_WAITED" -ge "$UPLOAD_DRAIN_LIMIT" ]; then
     fail "timed out waiting for the active laptop upload queue to drain"
   fi
-  echo "laptop upload queue is active — deferring container restart (${UPLOAD_DRAIN_WAITED}s elapsed)"
+  echo "laptop upload or oversized-source preparation is active — deferring container restart (${UPLOAD_DRAIN_WAITED}s elapsed)"
   sleep 15
   UPLOAD_DRAIN_WAITED=$((UPLOAD_DRAIN_WAITED + 15))
 done

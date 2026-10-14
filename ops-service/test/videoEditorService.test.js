@@ -119,6 +119,7 @@ test('restart cleanup removes only Editor-owned temporary files regardless of ag
 test('upload capacity reserves the source, one full-size render and operating space', function () {
   const gib = 1024 * 1024 * 1024;
   assert.equal(editor.maxUploadBytes, 16 * gib);
+  assert.equal(editor.oversizedSourceBytes, 6 * gib);
   assert.equal(editor.requiredEditorCapacity(2 * gib, false), 6 * gib);
   assert.equal(editor.requiredEditorCapacity(2 * gib, true), 4 * gib);
 });
@@ -433,7 +434,7 @@ test('metadata-only editor changes preserve a verified render', function () {
   assert.equal(editor.patchAffectsRender({ voiceGainAdjustments: [{ start: 15.49, gainDb: -2.93 }] }), true);
   assert.equal(editor.patchAffectsRender({ punchIns: [{ start: 1, end: 2 }] }), false);
   assert.equal(editor.patchNeedsAutoRender({ renderStatus: 'ready' }, false), false);
-  assert.equal(editor.patchNeedsAutoRender({ renderStatus: '' }, false), true);
+  assert.equal(editor.patchNeedsAutoRender({ renderStatus: '' }, false), false);
   assert.equal(editor.patchNeedsAutoRender({ renderStatus: 'ready' }, true), false);
 });
 
@@ -447,7 +448,9 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /suspected-mistake/);
   assert.doesNotMatch(source, /Removed automatically/);
   assert.doesNotMatch(source, /Every automatic silence cut/);
-  assert.match(page, /editor\.js\?v=20261014-laptop-upload-status-v137/);
+  assert.match(source, /No changes have been made\. The first editable preview is being prepared/);
+  assert.match(source, /initial processing—not a change you made/);
+  assert.match(page, /editor\.js\?v=20261014-editor-first-preview-v139/);
 });
 
 test('Editor summary shows live laptop upload progress independently of project processing', function () {
@@ -458,6 +461,14 @@ test('Editor summary shows live laptop upload progress independently of project 
   assert.match(source, /Uploading · ' \+ percent \+ '%/);
   assert.match(source, /pollDesktopUploaderStatus\(expectedMountToken\)/);
   assert.match(styles, /editor-session-summary \.uploading/);
+});
+
+test('Editor explains and polls oversized source preparation', function () {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'editor.js'), 'utf8');
+  assert.match(source, /Archiving original to R2/);
+  assert.match(source, /Building a faster editing master/);
+  assert.match(source, /source-preparation\/retry/);
+  assert.match(source, /sourcePreparationStatus/);
 });
 
 test('precise manual trims bridge residual fragments between automatic and transcript cuts', function () {
@@ -910,8 +921,8 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
     words: [{ index: 0, text: 'Hello.', start: 0.2, end: 0.8 }], removedWordIndices: [], dismissedRetakeIds: [], restoredAutoCutIds: [],
     autoSilenceEnabled: true, silenceThresholdSeconds: 1, retainedPauseSeconds: 0.38, captionsEnabled: false,
     layoutOverride: 'horizontal', cropCenterX: 0.5, transcriptionStatus: 'ready', classificationStatus: 'unavailable',
-    retakeAnalysisStatus: 'unavailable', planningMatchStatus: 'unavailable', renderStatus: '',
-    automaticRenderStartedAt: 'interrupted-before-queue', createdAt: now, updatedAt: now
+    retakeAnalysisStatus: 'unavailable', planningMatchStatus: 'unavailable', renderStatus: 'queued',
+    automaticRenderStartedAt: '', createdAt: now, updatedAt: now
   }), now);
   editor.setup({ db: db, dataDir: dir, transcribeDetailed: async function () { return { text: '', words: [] }; } });
   let stored;
@@ -924,6 +935,28 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
   assert.equal(stored.renderQuality.status, 'passed');
   assert.equal(stored.renderVersion, 25);
   assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), true);
+  t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+});
+
+test('restart cancels only a legacy automatic first render', async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-cancel-auto-render-'));
+  const db = new Database(path.join(dir, 'test.sqlite'));
+  db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
+  const now = new Date().toISOString();
+  db.prepare('INSERT INTO records VALUES (?, ?, ?, ?)').run('editorProjects', 'legacy-auto-1', JSON.stringify({
+    id: 'legacy-auto-1', name: 'Fresh automatic render', fileName: 'take.mp4', duration: 10, width: 1920, height: 1080,
+    words: [{ index: 0, text: 'Hello.', start: 0.2, end: 0.8 }], removedWordIndices: [], dismissedRetakeIds: [],
+    restoredAutoCutIds: [], autoSilenceEnabled: true, transcriptionStatus: 'ready', classificationStatus: 'ready',
+    retakeAnalysisStatus: 'unavailable', planningMatchStatus: 'unavailable', renderStatus: 'running', renderProgress: 42,
+    automaticRenderStartedAt: now, renderSha256: '', lastRenderAt: '', renderDirty: false, createdAt: now, updatedAt: now
+  }), now);
+  editor.setup({ db: db, dataDir: dir, transcribeDetailed: async function () { return { text: '', words: [] }; } });
+  await new Promise(function (resolve) { setTimeout(resolve, 40); });
+  const project = JSON.parse(db.prepare('SELECT data FROM records WHERE store_name=? AND id=?').get('editorProjects', 'legacy-auto-1').data);
+  assert.equal(project.renderStatus, '');
+  assert.equal(project.renderProgress, 0);
+  assert.equal(project.automaticRenderStartedAt, '');
+  assert.equal(project.renderDirty, false);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
 
@@ -943,7 +976,7 @@ test('final render splices an inserted clip and its caption timeline between sou
     clipInsertStatus: 'ready', removedWordIndices: [], dismissedRetakeIds: [], restoredAutoCutIds: [], autoSilenceEnabled: false,
     silenceThresholdSeconds: 1, retainedPauseSeconds: 0.38, captionsEnabled: true, openingPushInEnabled: true,
     layoutOverride: 'horizontal', cropCenterX: 0.5, transcriptionStatus: 'ready', classificationStatus: 'unavailable',
-    retakeAnalysisStatus: 'unavailable', planningMatchStatus: 'unavailable', renderStatus: '', automaticRenderStartedAt: 'start', createdAt: now, updatedAt: now
+    retakeAnalysisStatus: 'unavailable', planningMatchStatus: 'unavailable', renderStatus: 'queued', automaticRenderStartedAt: '', createdAt: now, updatedAt: now
   }), now);
   editor.setup({ db: db, dataDir: dir, transcribeDetailed: async function () { return { text: '', words: [] }; } });
   let stored;
@@ -1006,8 +1039,8 @@ test('final render blinks through black across a visually confirmed page change'
     removedWordIndices: [], dismissedRetakeIds: [], restoredAutoCutIds: [], autoSilenceEnabled: true,
     silenceThresholdSeconds: 1, retainedPauseSeconds: 0.38, captionsEnabled: false, openingPushInEnabled: false,
     layoutOverride: 'horizontal', transcriptionStatus: 'ready', classificationStatus: 'unavailable',
-    retakeAnalysisStatus: 'unavailable', planningMatchStatus: 'unavailable', renderStatus: '',
-    automaticRenderStartedAt: 'start', createdAt: now, updatedAt: now
+    retakeAnalysisStatus: 'unavailable', planningMatchStatus: 'unavailable', renderStatus: 'queued',
+    automaticRenderStartedAt: '', createdAt: now, updatedAt: now
   }), now);
   editor.setup({ db: db, dataDir: dir, transcribeDetailed: async function () { return { text: '', words: [] }; } });
   let stored;
@@ -1094,7 +1127,7 @@ test('startup invalidates a corrupt active final before it can be reviewed', { t
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
 
-test('one recovery endpoint retries failed automatic work without replacing the source', { timeout: 30000 }, async function (t) {
+test('one recovery endpoint retries failed preprocessing without starting a final render', { timeout: 30000 }, async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-retry-'));
   const projectDir = path.join(dir, 'editor', 'retry-1'); fs.mkdirSync(projectDir, { recursive: true });
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=320x180:d=1:r=12',
@@ -1119,11 +1152,11 @@ test('one recovery endpoint retries failed automatic work without replacing the 
   let project;
   for (let attempt = 0; attempt < 650; attempt++) {
     project = await (await fetch(base + '/api/editor/retry-1')).json();
-    if (project.transcriptionStatus === 'ready' && (project.renderStatus === 'ready' || project.renderStatus === 'error')) break;
+    if (project.transcriptionStatus === 'ready') break;
     await new Promise(function (resolve) { setTimeout(resolve, 30); });
   }
   assert.equal(project.transcriptionStatus, 'ready'); assert.equal(project.transcriptText, 'Recovered.');
-  assert.equal(project.renderStatus, 'ready', project.renderError);
+  assert.equal(project.renderStatus, '', 'a recovered upload waits for one explicit preview rebuild');
   response = await fetch(base + '/api/editor/retry-1/retry-failed', { method: 'POST' });
   assert.equal(response.status, 409);
 });
@@ -1228,13 +1261,13 @@ test('an HEVC camera master receives a real browser-safe review proxy', { timeou
     await new Promise(function (resolve) { setTimeout(resolve, 30); });
   }
   assert.equal(stored.browserPreviewStatus, 'ready', stored.browserPreviewError);
-  assert.equal(stored.browserPreviewVersion, 2);
+  assert.equal(stored.browserPreviewVersion, 3);
   const proxy = path.join(projectDir, 'preview.mp4');
   assert.ok(fs.statSync(proxy).size > 1024);
   const probe = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_name,width,height,r_frame_rate', '-of', 'json', proxy], { encoding: 'utf8' }));
   assert.equal(probe.streams[0].codec_name, 'h264');
-  assert.ok(Math.max(probe.streams[0].width, probe.streams[0].height) <= 854);
-  assert.equal(probe.streams[0].r_frame_rate, '30/1');
+  assert.ok(Math.max(probe.streams[0].width, probe.streams[0].height) <= 720);
+  assert.equal(probe.streams[0].r_frame_rate, '24/1');
   const keyframes = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-skip_frame', 'nokey', '-select_streams', 'v:0', '-show_entries', 'frame=pts_time', '-of', 'json', proxy], { encoding: 'utf8' })).frames;
   assert.ok(keyframes.length >= 2);
   assert.ok(Number(keyframes[1].pts_time) - Number(keyframes[0].pts_time) <= 0.51);
@@ -1527,6 +1560,9 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.ok(metadataProjects.some(function (item) { return item.id === project.id && item.workingTitle === 'Synthetic Outline'; }));
   assert.ok(project.cuts.some(function (cut) { return cut.reason === 'long_pause' || cut.reason === 'combined'; }));
   assert.deepEqual(project.captionGroups.map(function (group) { return group.text; }), ['One two.', 'One two.']);
+  assert.equal(project.renderStatus, '', 'fresh uploads remain editable before the one explicit full-quality rebuild');
+  response = await fetch(base + '/api/editor/' + project.id + '/render', { method: 'POST' });
+  assert.equal(response.status, 202);
   for (let attempt = 0; attempt < 600 && (project.renderStatus !== 'error' && (project.renderStatus !== 'ready' || renderReadyCalls < 1 || !project.workflowWarning)); attempt++) {
     await new Promise(function (resolve) { setTimeout(resolve, 50); });
     project = await (await fetch(base + '/api/editor/' + project.id)).json();
@@ -1534,7 +1570,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.renderStatus, 'ready', project.renderError);
   assert.equal(project.renderProgress, 100);
   assert.equal(project.renderPreviewStatus, 'ready', project.renderPreviewError);
-  assert.equal(project.renderPreviewVersion, 2);
+  assert.equal(project.renderPreviewVersion, 3);
   assert.ok(fs.statSync(path.join(dir, 'editor', project.id, 'render-preview.mp4')).size > 1024);
   assert.equal(renderReadyCalls, 1);
   assert.equal(project.workflowWarning, 'Synthetic first workflow failure.');
@@ -1664,7 +1700,7 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.renderDirty, false);
   assert.equal(project.renderRebuildPending, false, 'the preview unlocks only after the replacement render and scrub proxy are both ready');
   assert.equal(project.renderPreviewStatus, 'ready', project.renderPreviewError);
-  assert.equal(project.renderPreviewVersion, 2);
+  assert.equal(project.renderPreviewVersion, 3);
   assert.equal(renderReadyCalls, 2);
   assert.equal(project.workflowWarning, undefined);
   assert.equal(project.captionsEnabled, false);
