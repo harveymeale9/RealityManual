@@ -8,16 +8,18 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   c6a8281..d6bddc1  main       -> origin/main
+   d6bddc1..1b09441  main       -> origin/main
 + git merge --ff-only origin/main
-Updating c6a8281..d6bddc1
+Updating d6bddc1..1b09441
 Fast-forward
- ops-service/public/editor.js                | 12 +++++++++---
- ops-service/public/index.html               |  2 +-
- ops-service/test/videoEditorService.test.js |  6 +++++-
- 3 files changed, 15 insertions(+), 5 deletions(-)
+ ops-service/.ci/last-run.log                 | 156 ++++++++++++++++++++++++---
+ ops-service/deploy.sh                        |   2 +-
+ ops-service/src/videoEditorService.js        |  13 ++-
+ ops-service/test/deploySerialization.test.js |   1 +
+ ops-service/test/videoEditorService.test.js  |   7 ++
+ 5 files changed, 159 insertions(+), 20 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=d6bddc14fc097219a70ab16ce8a889c832aeb235
++ NEW_HEAD=1b0944149c84e9d9e74527500b060a689e529165
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -26,18 +28,2373 @@ Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
 + LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
 ++ cat /root/ops-service-data/last-image-commit.txt
-+ LAST_BUILD_COMMIT=18da3a2cf484c1fb6164376160ab887860e18759
++ LAST_BUILD_COMMIT=d6bddc14fc097219a70ab16ce8a889c832aeb235
 + NEEDS_REBUILD=1
-+ '[' -n 18da3a2cf484c1fb6164376160ab887860e18759 ']'
-+ git cat-file -e '18da3a2cf484c1fb6164376160ab887860e18759^{commit}'
-++ git diff --name-only 18da3a2cf484c1fb6164376160ab887860e18759 d6bddc14fc097219a70ab16ce8a889c832aeb235 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -n d6bddc14fc097219a70ab16ce8a889c832aeb235 ']'
++ git cat-file -e 'd6bddc14fc097219a70ab16ce8a889c832aeb235^{commit}'
+++ git diff --name-only d6bddc14fc097219a70ab16ce8a889c832aeb235 1b0944149c84e9d9e74527500b060a689e529165 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z 'ops-service/deploy.sh
-ops-service/server.js
 ops-service/src/videoEditorService.js' ']'
 + '[' 0 = 1 ']'
 + '[' 1 = 0 ']'
 + UPLOAD_DRAIN_WAITED=0
 + UPLOAD_DRAIN_LIMIT=7200
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 0 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (0s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (0s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=15
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 15 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (15s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (15s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=30
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 30 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (30s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (30s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=45
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 45 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (45s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (45s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=60
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 60 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (60s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (60s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=75
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 75 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (75s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (75s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=90
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 90 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (90s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (90s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=105
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 105 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (105s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (105s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=120
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 120 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (120s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (120s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=135
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 135 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (135s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (135s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=150
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 150 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (150s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (150s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=165
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 165 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (165s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (165s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=180
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 180 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (180s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (180s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=195
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 195 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (195s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (195s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=210
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 210 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (210s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (210s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=225
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 225 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (225s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (225s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=240
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 240 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (240s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (240s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=255
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 255 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (255s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (255s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=270
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 270 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (270s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (270s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=285
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 285 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (285s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (285s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=300
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 300 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (300s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (300s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=315
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 315 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (315s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (315s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=330
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 330 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (330s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (330s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=345
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 345 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (345s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (345s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=360
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 360 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (360s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (360s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=375
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 375 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (375s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (375s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=390
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 390 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (390s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (390s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=405
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 405 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (405s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (405s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=420
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 420 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (420s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (420s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=435
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 435 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (435s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (435s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=450
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 450 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (450s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (450s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=465
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 465 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (465s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (465s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=480
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 480 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (480s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (480s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=495
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 495 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (495s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (495s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=510
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 510 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (510s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (510s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=525
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 525 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (525s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (525s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=540
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 540 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (540s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (540s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=555
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 555 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (555s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (555s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=570
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 570 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (570s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (570s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=585
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 585 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (585s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (585s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=600
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 600 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (600s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (600s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=615
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 615 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (615s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (615s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=630
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 630 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (630s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (630s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=645
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 645 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (645s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (645s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=660
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 660 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (660s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (660s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=675
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 675 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (675s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (675s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=690
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 690 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (690s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (690s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=705
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 705 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (705s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (705s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=720
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 720 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (720s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (720s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=735
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 735 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (735s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (735s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=750
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 750 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (750s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (750s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=765
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 765 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (765s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (765s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=780
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 780 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (780s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (780s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=795
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 795 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (795s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (795s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=810
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 810 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (810s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (810s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=825
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 825 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (825s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (825s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=840
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 840 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (840s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (840s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=855
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 855 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (855s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (855s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=870
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 870 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (870s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (870s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=885
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 885 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (885s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (885s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=900
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 900 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (900s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (900s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=915
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 915 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (915s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (915s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=930
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 930 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (930s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (930s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=945
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 945 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (945s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (945s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=960
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 960 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (960s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (960s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=975
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 975 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (975s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (975s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=990
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 990 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (990s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (990s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=1005
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 1005 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (1005s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (1005s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=1020
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 1020 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (1020s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (1020s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=1035
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 1035 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (1035s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (1035s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=1050
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 1050 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (1050s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (1050s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=1065
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 1065 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (1065s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (1065s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=1080
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 1080 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (1080s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (1080s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=1095
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 1095 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (1095s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (1095s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=1110
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 1110 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (1110s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (1110s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=1125
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'')='\''running'\''
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'')='\''running'\''
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=1
++ '[' 0 = 0 ']'
++ '[' 1 = 0 ']'
++ '[' 1125 -ge 7200 ']'
++ echo 'laptop upload or oversized-source preparation is active — deferring container restart (1125s elapsed)'
+laptop upload or oversized-source preparation is active — deferring container restart (1125s elapsed)
++ sleep 15
++ UPLOAD_DRAIN_WAITED=1140
 + '[' -f /root/ops-service-data/db.sqlite ']'
 ++ sqlite3 /root/ops-service-data/db.sqlite '
     SELECT COUNT(*) FROM records
@@ -70,11 +2427,11 @@ ops-service/src/videoEditorService.js' ']'
 #0 building with "default" instance using docker driver
 
 #1 [internal] load build definition from Dockerfile
-#1 transferring dockerfile: 2.04kB done
+#1 transferring dockerfile: 2.04kB 0.0s done
 #1 DONE 0.0s
 
 #2 [internal] load metadata for docker.io/library/node:22-slim
-#2 DONE 0.1s
+#2 DONE 0.3s
 
 #3 [internal] load .dockerignore
 #3 transferring context: 136B done
@@ -85,65 +2442,64 @@ ops-service/src/videoEditorService.js' ']'
 #4 DONE 0.0s
 
 #5 [internal] load build context
-#5 transferring context: 192.51kB 0.0s done
+#5 transferring context: 204.87kB 0.0s done
 #5 DONE 0.0s
 
-#6 [ 2/10] RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && python3 -m pip install --break-system-packages --no-cache-dir yt-dlp==2026.8.19     && rm -rf /var/lib/apt/lists/*
+#6 [ 3/10] WORKDIR /app
 #6 CACHED
 
-#7 [ 3/10] WORKDIR /app
+#7 [ 4/10] COPY package.json ./
 #7 CACHED
 
-#8 [ 4/10] COPY package.json ./
+#8 [ 5/10] RUN npm install --omit=dev
 #8 CACHED
 
-#9 [ 5/10] RUN npm install --omit=dev
+#9 [ 2/10] RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && python3 -m pip install --break-system-packages --no-cache-dir yt-dlp==2026.8.19     && rm -rf /var/lib/apt/lists/*
 #9 CACHED
 
 #10 [ 6/10] COPY server.js ./
 #10 CACHED
 
 #11 [ 7/10] COPY src ./src
-#11 CACHED
+#11 DONE 0.1s
 
 #12 [ 8/10] COPY public ./public
-#12 DONE 0.1s
+#12 DONE 0.7s
 
 #13 [ 9/10] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
-#13 DONE 60.7s
+#13 DONE 22.1s
 
 #14 [10/10] RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
-#14 DONE 0.4s
+#14 DONE 0.3s
 
 #15 exporting to image
 #15 exporting layers
-#15 exporting layers 12.1s done
-#15 exporting manifest sha256:9855d11b140e24cd78208eeb7d50eadaa3038fd57330b7b148adeae5687008e9 0.1s done
-#15 exporting config sha256:0b8cd2d7c2eda09ae1c17f78a0276fbc0556b6864ba9311e467e0c8980a53ea7 0.0s done
-#15 exporting attestation manifest sha256:628bac9a48c88c53c22b24abb58054ac80b7695e690db6d23c91de1481d0579e
-#15 exporting attestation manifest sha256:628bac9a48c88c53c22b24abb58054ac80b7695e690db6d23c91de1481d0579e 0.1s done
-#15 exporting manifest list sha256:4d6b292c8f69a32247f58aac30deebef082248cae5b2913304762b4b92b34776
-#15 exporting manifest list sha256:4d6b292c8f69a32247f58aac30deebef082248cae5b2913304762b4b92b34776 0.0s done
+#15 exporting layers 4.5s done
+#15 exporting manifest sha256:2363236289eb03b320e0f9ae3dad841bc50a7aca78a7bd76ef237dd28fea03e0 0.0s done
+#15 exporting config sha256:5c5157d1ac6e3c5f3d0bef0ebd9d27e13640652b6724272c04c08bfa37cae5f5 0.0s done
+#15 exporting attestation manifest sha256:47fa3c3818854380b5729846b066507bae7c38901c6c4eee38bd84c632b2952a 0.0s done
+#15 exporting manifest list sha256:18c0760b35192b6349d84b4a427006f83bf264bced5024497fc4649027cd2e49 0.0s done
+#15 naming to docker.io/library/rm-ops-service:latest
 #15 naming to docker.io/library/rm-ops-service:latest done
 #15 unpacking to docker.io/library/rm-ops-service:latest
-#15 unpacking to docker.io/library/rm-ops-service:latest 4.5s done
-#15 DONE 17.0s
+#15 unpacking to docker.io/library/rm-ops-service:latest 2.3s done
+#15 DONE 7.0s
 + docker stop rm-ops-service
 rm-ops-service
 + docker rm rm-ops-service
 rm-ops-service
 + docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-data:/data -v /root/realitymanual-backend-data:/store-data:ro -v /srv/realitymanual-repo:/repo -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
-f73dd58aa2fd785040849b497440de9f3724644fa094ac60e3156beddc8d0d3f
-+ echo d6bddc14fc097219a70ab16ce8a889c832aeb235
+ec0c9a071eaf1f97e3e207ee6212f6217f1145898b4aa1596155808130f5cfd3
++ echo 1b0944149c84e9d9e74527500b060a689e529165
 ++ git -C /root/realitymanual-repo rev-parse --short HEAD
-+ echo 'rm-ops-service redeployed at d6bddc1'
-rm-ops-service redeployed at d6bddc1
++ echo 'rm-ops-service redeployed at 1b09441'
+rm-ops-service redeployed at 1b09441
 + docker image prune -f
 Deleted Images:
-untagged: sha256:ad2501d4db3c2cf2fc58d36d0bc5446bfb9797be37341c2170b017bcb235dd31
-deleted: sha256:ad2501d4db3c2cf2fc58d36d0bc5446bfb9797be37341c2170b017bcb235dd31
-deleted: sha256:c843c7691ea894e3f14fe349ca40f8228122c7fe4c9c07b4cdac77da7c436789
-deleted: sha256:41d50151dd19d59e5dfe8e8f70135dc8cdbb240abb0a986d2171fc4f1b7a364e
+untagged: sha256:1897267de7f0824339b7c27cdb8dee699681027b60155f94a6a4e9e5e5cccd48
+deleted: sha256:1897267de7f0824339b7c27cdb8dee699681027b60155f94a6a4e9e5e5cccd48
+deleted: sha256:8c630bcd3770e7703e364b4be30b90c485ba0137228baa08c8bf396426b06bc7
+deleted: sha256:454f9b53c40ac057d9628b2b475ccf23e48791c8d6f3b6af64d05f1aff6dc961
 
 Total reclaimed space: 15.67kB
 + docker builder prune -f --max-used-space 8GB
