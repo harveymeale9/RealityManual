@@ -31,6 +31,7 @@
   var manualTimelineZoom = {};
   var manualTimelineSelections = {};
   var manualTimelineViewStates = {};
+  var editorActionFeedbackTimer = null;
   var restoreTranscriptFocus = false;
   var uploadBatchInProgress = false;
   var uploadBatchCancelled = false;
@@ -629,6 +630,7 @@
           '<div class="editor-heading-actions"><a href="voice-mobile.html" class="editor-pm-mobile btn-secondary">Project Manager</a><label class="editor-upload btn-primary"><input id="editorFile" type="file" accept="video/*,.mp4,.mov,.m4v,.webm,.mkv,.avi" multiple hidden>Upload raw videos</label></div></header>' +
         '<div class="editor-upload-progress" id="editorUploadProgress" hidden><div class="editor-upload-progress-head"><span id="editorUploadLabel">Uploading…</span><button type="button" class="btn-secondary btn-tiny" id="editorCancelUpload" hidden>Cancel batch</button></div><div class="editor-upload-progress-track"><i id="editorUploadBar"></i></div></div>' +
         '<div class="editor-notice" id="editorNotice" hidden></div>' +
+        '<div class="editor-action-feedback" id="editorActionFeedback" role="status" aria-live="polite"></div>' +
         '<div class="editor-session-summary" id="editorSessionSummary" role="status" aria-live="polite" hidden></div>' +
         '<div class="editor-layout"><aside class="editor-projects"><div class="editor-aside-head"><div class="editor-aside-title">Recordings</div><div class="editor-list-filters"><button type="button" data-filter="active">Active</button><button type="button" data-filter="sent">Sent</button></div></div><div id="editorProjectList"></div></aside>' +
           '<main class="editor-workspace" id="editorWorkspace"><div class="editor-empty"><strong>No recording selected</strong><span>Upload a raw video to begin.</span></div></main></div>' +
@@ -680,6 +682,18 @@
     if (!notice) return;
     notice.textContent = editorNotice;
     notice.hidden = !editorNotice;
+  }
+
+  function showEditorActionFeedback(message) {
+    var feedback = root && root.querySelector('#editorActionFeedback');
+    if (!feedback) return;
+    clearTimeout(editorActionFeedbackTimer);
+    feedback.textContent = message || '';
+    feedback.classList.toggle('show', !!message);
+    if (!message) return;
+    editorActionFeedbackTimer = setTimeout(function () {
+      if (feedback.isConnected) feedback.classList.remove('show');
+    }, 2600);
   }
 
   function visibleProjectsForCurrentFilter() {
@@ -1185,7 +1199,9 @@
     var failures = failedSteps(project);
     var previewMode = project.renderStatus === 'ready' && (!project.renderDirty || (previewModes[project.id] === 'final' && !explicitSourcePreviews[project.id])) &&
       !(previewModes[project.id] === 'source' && explicitSourcePreviews[project.id]) ? 'final' : 'source';
-    var previewingWorkingEdit = previewMode === 'source' && project.renderStatus !== 'ready';
+    // Dirty edits use the source media as a live cut-aware, captioned preview.
+    // It is the untouched camera master only after an explicit Raw click.
+    var previewingWorkingEdit = previewMode === 'source' && !explicitSourcePreviews[project.id];
     var browserSafeSource = project.browserPreviewRequired && project.browserPreviewStatus === 'ready';
     var sourcePreviewPreparing = previewMode === 'source' && project.browserPreviewRequired &&
       ['pending', 'running'].indexOf(project.browserPreviewStatus) !== -1;
@@ -1201,7 +1217,9 @@
     var framingReadiness = '<i class="ready">Orientation detected</i>';
     var retakeReadiness = '<i class="ready">Mistakes edited manually</i>';
     var previewActionsHtml = '<div class="editor-preview-actions"><span class="editor-review-keys">Space play/pause · ←/→ 2s</span><label>Review speed<select id="editorReviewRate"' + (previewLocked ? ' disabled' : '') + '><option value="1"' + (reviewRate === 1 ? ' selected' : '') + '>1×</option><option value="1.25"' + (reviewRate === 1.25 ? ' selected' : '') + '>1.25×</option><option value="1.5"' + (reviewRate === 1.5 ? ' selected' : '') + '>1.5×</option><option value="2"' + (reviewRate === 2 ? ' selected' : '') + '>2×</option></select></label>' +
-      (project.renderStatus === 'ready' ? '<button type="button" id="editorPreviewFinal" class="' + (previewMode === 'final' ? 'active' : '') + '"' + (previewLocked ? ' disabled' : '') + '>' + (project.renderDirty ? 'Previous preview' : 'Editing preview') + '</button><button type="button" id="editorPreviewSource" class="' + (previewMode === 'source' ? 'active' : '') + '"' + (previewLocked ? ' disabled' : '') + '>' + sourcePreviewLabel + '</button>' : '') + '</div>';
+      (project.renderStatus === 'ready' ? '<button type="button" id="editorPreviewFinal" class="' + (previewMode === 'final' ? 'active' : '') + '"' + (previewLocked ? ' disabled' : '') + '>' + (project.renderDirty ? 'Previous preview' : 'Editing preview') + '</button>' +
+        (project.renderDirty ? '<button type="button" id="editorPreviewWorking" class="' + (previewingWorkingEdit ? 'active' : '') + '"' + (previewLocked ? ' disabled' : '') + '>Working preview</button>' : '') +
+        '<button type="button" id="editorPreviewSource" class="' + (previewMode === 'source' && !previewingWorkingEdit ? 'active' : '') + '"' + (previewLocked ? ' disabled' : '') + '>' + sourcePreviewLabel + '</button>' : '') + '</div>';
     var automaticControlsHtml = '<div class="editor-controls"><label class="editor-toggle"><input type="checkbox" id="editorAutoSilence" ' + (project.autoSilenceEnabled !== false ? 'checked' : '') + '><span></span>Remove long pauses</label>' +
       '<label class="editor-toggle"><input type="checkbox" id="editorCaptions" ' + (project.captionsEnabled !== false ? 'checked' : '') + '><span></span>Add yellow captions</label>' +
       '<label class="editor-toggle" title="Starts wide and gently settles to 112.5% on vertical and horizontal openings. Later vertical page-turn or inserted-clip reveals also settle to 112.5%; horizontal reveals settle to 125%. Horizontal openings use five seconds; every other move uses three."><input type="checkbox" id="editorOpeningPushIn" ' + (project.openingPushInEnabled !== false ? 'checked' : '') + '><span></span>Page-change camera zooms</label>' +
@@ -1228,7 +1246,7 @@
       ? '<div class="editor-preview-rebuild" id="editorSourcePreviewPreparing" role="status" aria-live="polite"><div class="editor-preview-rebuild-spinner"></div><strong>Preparing browser-safe preview…</strong><span>This is actively encoding. Playback will unlock automatically; your camera master and editing controls remain available.</span><div><i style="width:4%"></i></div></div>'
       : '';
     var initialLoadingOverlayHtml = mediaUnavailable ? '' : '<div class="editor-preview-loading" id="editorPreviewLoading" role="status" aria-live="polite"><div></div><strong>Loading preview…</strong></div>';
-    var rawSourceNoticeHtml = previewMode === 'source' && project.renderStatus === 'ready'
+    var rawSourceNoticeHtml = previewMode === 'source' && !!explicitSourcePreviews[project.id]
       ? '<div class="editor-raw-source-notice">Raw original · cuts, captions and animations are not shown</div>'
       : '';
     var previewPlayerHtml = '<div class="editor-preview' + (mediaUnavailable ? ' rebuilding' : '') + '" id="editorPreview" tabindex="' + (mediaUnavailable ? '-1' : '0') + '" aria-busy="' + (mediaUnavailable ? 'true' : 'false') + '" aria-label="Video review. Space plays or pauses. Left and right arrows move two seconds."><div class="editor-video-frame ' + layout + '"><video id="editorVideo" data-preview-mode="' + previewMode + '" data-seek-time="' + previewSeek.toFixed(3) + '" playsinline preload="auto"' + (mediaUnavailable ? '' : ' src="' + previewUrl + '"') + '></video>' + rawSourceNoticeHtml +
@@ -1293,8 +1311,8 @@
     var caption = root.querySelector('#editorCaption');
     var transcript = root.querySelector('#editorTranscript');
     var previewingFinal = video.dataset.previewMode === 'final';
-    var previewingOriginalMaster = !previewingFinal && project.renderStatus === 'ready';
-    var previewingWorkingEdit = !previewingFinal && project.renderStatus !== 'ready';
+    var previewingOriginalMaster = !previewingFinal && !!explicitSourcePreviews[project.id];
+    var previewingWorkingEdit = !previewingFinal && !previewingOriginalMaster;
     var rendering = ['queued', 'running'].indexOf(project.renderStatus) !== -1;
     var sentToProduction = !!project.productionPieceId;
     var editingLocked = rendering || sentToProduction;
@@ -1680,7 +1698,7 @@
     video.addEventListener('playing', hideBuffering);
     video.addEventListener('canplay', hideBuffering);
     video.addEventListener('durationchange', syncPlayerControls);
-    video.addEventListener('timeupdate', function () { updateManualTimelinePlayhead(currentSourcePlayhead()); });
+    video.addEventListener('timeupdate', function () { updateReviewPlayheads(currentSourcePlayhead()); });
     video.addEventListener('volumechange', syncPlayerControls);
     if (mixedAudio) {
       mixedAudio.addEventListener('volumechange', syncPlayerControls);
@@ -1720,6 +1738,12 @@
       if (!manualTimelinePlayhead) return;
       var duration = Math.max(0.01, Number(project.duration) || 0.01);
       manualTimelinePlayhead.style.left = Math.max(0, Math.min(100, Number(sourceTime) / duration * 100)).toFixed(5) + '%';
+    }
+    function updateReviewPlayheads(sourceTime) {
+      updateManualTimelinePlayhead(sourceTime);
+      var automaticPlayhead = root.querySelector('#editorPlayhead');
+      if (!automaticPlayhead || !project.duration) return;
+      automaticPlayhead.style.left = Math.max(0, Math.min(100, Number(sourceTime) / Number(project.duration) * 100)).toFixed(5) + '%';
     }
     function seekManualTimeline(sourceTime) {
       var clamped = Math.max(0, Math.min(Number(project.duration) || 0, Number(sourceTime) || 0));
@@ -1817,11 +1841,23 @@
     if (deleteTimelineSection) deleteTimelineSection.onclick = function () {
       var selection = manualTimelineSelections[project.id];
       if (!selection || selection.end - selection.start < 0.02) return;
-      delete manualTimelineSelections[project.id];
-      save(function (latest) {
+      var cutProjectId = project.id;
+      var removedSeconds = selection.end - selection.start;
+      preserveTimelinePlaybackPosition();
+      delete manualTimelineSelections[cutProjectId];
+      deleteTimelineSection.disabled = true;
+      deleteTimelineSection.textContent = 'Applying cut…';
+      var cutRequest = save(function (latest) {
         var trims = (latest.manualTrimCuts || []).slice();
         trims.unshift({ id: 'timeline-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8), start: selection.start, end: selection.end, note: 'Deleted from manual timeline' });
         return { manualTrimCuts: trims };
+      });
+      previewModes[cutProjectId] = 'source';
+      delete explicitSourcePreviews[cutProjectId];
+      previewSeekTimes[cutProjectId] = selection.start;
+      cutRequest.then(function (item) {
+        if (!item) return;
+        showEditorActionFeedback('Cut applied · ' + removedSeconds.toFixed(2) + 's removed');
       });
     };
     if (manualTimelineViewport && deleteTimelineSection) manualTimelineViewport.addEventListener('keydown', function (event) {
@@ -1839,7 +1875,9 @@
       if (videoError) videoError.hidden = true;
       if (mediaRecoveryChecks[videoProjectId]) clearTimeout(mediaRecoveryChecks[videoProjectId]);
       delete mediaRecoveryChecks[videoProjectId];
-      updatePreviewMotion(previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime);
+      var sourceTime = previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime;
+      updatePreviewMotion(sourceTime);
+      updateReviewPlayheads(sourceTime);
       syncPlayerControls();
     });
     // A cached review proxy can already have a decoded frame before the
@@ -1945,7 +1983,9 @@
         motionAnimationFrame = null;
         return;
       }
-      updatePreviewMotion(previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime);
+      var sourceTime = previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime;
+      updatePreviewMotion(sourceTime);
+      updateReviewPlayheads(sourceTime);
       syncPlayerControls();
       if (!video.paused && !video.ended) motionAnimationFrame = requestAnimationFrame(animatePreviewMotion);
       else motionAnimationFrame = null;
@@ -2019,10 +2059,7 @@
         }
         playingWordIndex = nextPlayingWordIndex;
       }
-      var playhead = root.querySelector('#editorPlayhead');
-      if (playhead && project.duration) {
-        playhead.style.left = Math.min(100, sourcePlayheadTime / project.duration * 100) + '%';
-      }
+      updateReviewPlayheads(sourcePlayheadTime);
       if (previewingFinal || previewingOriginalMaster) {
         caption.classList.remove('visible');
         return;
@@ -2111,6 +2148,12 @@
       previewSeekTimes[project.id] = previewingFinal ? video.currentTime : sourceToEditedTime(video.currentTime, project.cuts, project);
       delete explicitSourcePreviews[project.id];
       previewModes[project.id] = 'final'; renderWorkspace();
+    };
+    var workingPreviewButton = root.querySelector('#editorPreviewWorking');
+    if (workingPreviewButton) workingPreviewButton.onclick = function () {
+      previewSeekTimes[project.id] = previewingFinal ? editedToSourceTime(video.currentTime, project) : video.currentTime;
+      delete explicitSourcePreviews[project.id];
+      previewModes[project.id] = 'source'; renderWorkspace();
     };
     var sourcePreviewButton = root.querySelector('#editorPreviewSource');
     if (sourcePreviewButton) sourcePreviewButton.onclick = function () {
@@ -2548,7 +2591,7 @@
     rememberPlaybackBeforeEdit(id, renderWillChange);
     if (renderWillChange) {
       previewModes[id] = 'source';
-      explicitSourcePreviews[id] = true;
+      delete explicitSourcePreviews[id];
     }
     return queueProjectUpdate(id, function () {
       var latest = project && project.id === id ? project : projectDetails[id] || projects.find(function (item) { return item.id === id; });
@@ -2581,6 +2624,7 @@
       stopManualRevisionDictation();
       clearTimeout(pollTimer);
       clearTimeout(desktopUploaderPollTimer);
+      clearTimeout(editorActionFeedbackTimer);
       root = null;
     },
     mount: function (element) {

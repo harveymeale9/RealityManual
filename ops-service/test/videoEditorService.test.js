@@ -310,6 +310,20 @@ test('ready Editor projects reopen on the edited preview rather than a remembere
   assert.doesNotMatch(source, /saved\.mode === 'source' \|\| item\.renderStatus !== 'ready'/);
 });
 
+test('a new Editor cut stays in the captioned working preview with synchronized playheads', function () {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'editor.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'public', 'style.css'), 'utf8');
+  assert.match(source, /previewingWorkingEdit = previewMode === 'source' && !explicitSourcePreviews\[project\.id\]/);
+  assert.match(source, /previewingOriginalMaster = !previewingFinal && !!explicitSourcePreviews\[project\.id\]/);
+  assert.match(source, /previewModes\[id\] = 'source';\s+delete explicitSourcePreviews\[id\];/);
+  assert.match(source, /id="editorPreviewWorking"/);
+  assert.match(source, /previewSeekTimes\[cutProjectId\] = selection\.start;/);
+  assert.match(source, /Cut applied · ' \+ removedSeconds\.toFixed\(2\) \+ 's removed/);
+  assert.match(source, /updateReviewPlayheads\(sourceTime\);\s+syncPlayerControls\(\);/);
+  assert.doesNotMatch(source, /previewModes\[id\] = 'source';\s+explicitSourcePreviews\[id\] = true;/);
+  assert.match(styles, /\.editor-playhead\{transition:none\}/);
+});
+
 test('horizontal camera motion zooms into the exact frame centre', function () {
   const filter = editor.cameraMotionFilter({
     renderShape: { width: 1920, height: 1080 },
@@ -475,8 +489,8 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /Preparing browser-safe preview…/);
   assert.match(source, /Playback will unlock automatically/);
   assert.match(source, /\(mediaUnavailable \? '' : ' src="' \+ previewUrl/);
-  assert.match(page, /editor\.js\?v=20261015-raw-preview-warning-v145/);
-  assert.match(page, /style\.css\?v=20261015-raw-preview-warning-v145/);
+  assert.match(page, /editor\.js\?v=20261015-timeline-cut-sync-v146/);
+  assert.match(page, /style\.css\?v=20261015-timeline-cut-sync-v146/);
   assert.match(styles, /\.editor-caption\.longform\{font-size:2\.05cqw;text-shadow:-1px -1px 0 #111,1px -1px 0 #111/);
   assert.match(source, /Raw original · no edits\/captions/);
   assert.match(source, /cuts, captions and animations are not shown/);

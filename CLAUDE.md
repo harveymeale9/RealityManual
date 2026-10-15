@@ -19382,3 +19382,30 @@ player carries a persistent amber warning that cuts, captions and animations
 are not shown. This makes the playback mode explicit instead of allowing a
 healthy edited file to look broken. Editor JavaScript and stylesheet cache keys
 were both advanced so existing browsers receive the correction on reload.
+
+---
+
+# 622. Timeline Cuts Stay in the Live Edited Preview and Keep Both Clocks Synchronized (2026-10-15)
+
+Deleting a split section from a recording that already had a rendered preview
+incorrectly changed the player to its raw source interpretation. The trim was
+saved, but the browser then showed the full pre-automation recording with no
+live captions and reset-looking playback, making a successful edit appear to
+have removed every earlier decision.
+
+Render-affecting decisions now enter an explicit **Working preview** backed by
+the lightweight source file but driven by the complete current cut list,
+captions and camera treatment. **Previous preview**, **Working preview**, and
+**Raw original · no edits/captions** remain distinct when an old rendered file
+exists. A timeline deletion pins the replacement player to the selected source
+boundary, disables its action while saving, and confirms success with a short
+**Cut applied · Ns removed** toast. Raw-source warnings appear only after an
+explicit Raw selection.
+
+Both the detailed source-timeline playhead and the automatic speech-map
+playhead now sample the preview's real media clock on every animation frame.
+The old 80ms CSS interpolation was disabled, preventing visible lag at 1.5× and
+2× playback. A mocked-API headless Chromium workflow reproduced the exact
+split/select/Delete path and verified retained automatic cuts, captions,
+position, feedback, and both playheads at 1×, 1.5× and 2×. The complete
+ops-service suite passes with 237 tests.
