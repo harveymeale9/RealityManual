@@ -517,8 +517,12 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /Preparing browser-safe preview…/);
   assert.match(source, /Playback will unlock automatically/);
   assert.match(source, /\(mediaUnavailable \? '' : ' src="' \+ previewUrl/);
-  assert.match(page, /editor\.js\?v=20261015-durable-review-position-v147/);
-  assert.match(page, /style\.css\?v=20261015-production-audio-loader-v149/);
+  assert.match(source, /editor-manual-cut-handle/);
+  assert.match(source, /Adjusted automatic timeline cut/);
+  assert.match(source, /Cut edge moved/);
+  assert.match(page, /editor\.js\?v=20261015-production-audio-timeline-v150/);
+  assert.match(page, /style\.css\?v=20261015-production-audio-timeline-v150/);
+  assert.match(styles, /\.editor-manual-cut-handle/);
   assert.match(styles, /\.editor-caption\.longform\{font-size:2\.05cqw;text-shadow:-1px -1px 0 #111,1px -1px 0 #111/);
   assert.match(source, /Raw original · no edits\/captions/);
   assert.match(source, /cuts, captions and animations are not shown/);
@@ -587,6 +591,22 @@ test('manual timeline trims remove the selected source interval and ripple later
   const cuts = editor.cutsForProject(project);
   assert.deepEqual(cuts, [{ id: 'timeline-test', start: 2, end: 4, reason: 'manual_trim' }]);
   assert.deepEqual(editor.keepSegments(project.duration, cuts), [{ start: 0, end: 2 }, { start: 4, end: 10 }]);
+});
+
+test('manual timeline exposes separate draggable automatic and precise cut boundaries', function () {
+  const project = {
+    duration: 12,
+    autoSilenceEnabled: true,
+    silenceThresholdSeconds: 1,
+    retainedPauseSeconds: 0.24,
+    words: [{ index: 0, text: 'Hello', start: 2, end: 2.4 }, { index: 1, text: 'again', start: 6, end: 6.4 }],
+    restoredAutoCutIds: ['lead'],
+    manualTrimCuts: [{ id: 'manual-one', start: 7, end: 7.5, note: 'Manual cut' }]
+  };
+  const editable = editor.editableTimelineCuts(project);
+  assert.equal(editable.some(function (cut) { return cut.id === 'lead'; }), false);
+  assert.equal(editable.find(function (cut) { return cut.id === 'gap-0'; }).editableOrigin, 'automatic');
+  assert.equal(editable.find(function (cut) { return cut.id === 'manual-one'; }).editableOrigin, 'manual');
 });
 
 test('likely restarted lines are surfaced without being automatically removed', function () {

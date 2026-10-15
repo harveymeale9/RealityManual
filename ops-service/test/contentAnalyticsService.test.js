@@ -69,5 +69,5 @@ test('Content Analytics owns its analytics route while competitor research keeps
   assert.match(app, /id: 'outlier-analysis', label: 'Outlier Analysis'/);
   assert.match(app, /button\.addEventListener\('mouseenter', select\)/);
   assert.match(page, /data-tabs="content-analytics,sales-analytics,website-analytics"/);
-  assert.match(page, /app\.js\?v=20261015-production-audio-loader-v149/);
+  assert.match(page, /app\.js\?v=20261015-production-audio-timeline-v150/);
 });

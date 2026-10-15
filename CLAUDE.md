@@ -19481,3 +19481,40 @@ in both the horizontal group menu and the icon rail. Routes and permissions are
 unchanged; this is only the requested workflow ordering. Cache keys for the
 updated JavaScript and stylesheet were advanced together. The complete
 ops-service suite passes with 240 tests.
+
+---
+
+# 626. Production Soundtrack Selection Autoplays a Seekable Video Preview (2026-10-15)
+
+Choosing a backing track in Content Production now starts the synchronized
+video preview from the beginning as soon as that mix is ready. The previous
+and next soundtrack buttons use the same behavior, so auditioning the library
+does not require a second Preview click for every track. A track that is still
+mixing remains visibly pending and is started automatically when its cached
+preview becomes available.
+
+Each Production video now has a clearly bordered seek timeline with an
+elapsed/total time readout. It follows playback continuously and remains
+interactive while a soundtrack plays; seeking the picture seeks the mixed
+soundtrack to the same moment, with drift correction during playback. Pressing
+Preview after a pause resumes from the chosen point, while changing tracks
+deliberately restarts at 0:00 for a fair comparison. Cache keys cover the
+combined Production and restored draggable-Editor-cut UI changes. The complete
+ops-service suite passes with 241 tests.
+
+---
+
+# 627. Editor Cut Boundaries Are Directly Adjustable (2026-10-15)
+
+The detailed Editor source timeline now exposes each removable interval as a
+first-class editable cut with independent start and end handles. Coral handles
+identify manual cuts and gold handles identify automatic silence cuts. Moving
+a manual edge updates that precise trim in place; moving an automatic edge
+restores the generated cut and records the adjusted interval as a durable
+manual decision, so a later automatic analysis cannot silently undo it.
+
+Pointer dragging updates the interval visually without rebuilding on every
+movement, then persists one edit at release and leaves the playhead at the
+adjusted boundary. This retains the fast decision-first architecture: multiple
+cut changes stay cheap, while the explicit preview rebuild remains the only
+expensive full encode. Approved projects remain read-only.

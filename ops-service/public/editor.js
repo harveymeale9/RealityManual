@@ -610,6 +610,14 @@
     var cuts = (item.cuts || []).map(function (cut) {
       return '<i class="editor-manual-cut" style="left:' + pct(cut.start) + '%;width:' + widthPct(cut.start, cut.end) + '%" title="Removed ' + formatTime(cut.start) + '–' + formatTime(cut.end) + '"></i>';
     }).join('');
+    var editableCuts = (item.editableTimelineCuts || []).map(function (cut) {
+      var start = Math.max(0, Math.min(duration, Number(cut.start) || 0));
+      var end = Math.max(start, Math.min(duration, Number(cut.end) || start));
+      if (end - start < 0.02) return '';
+      var origin = cut.editableOrigin === 'automatic' ? 'automatic' : 'manual';
+      return '<span class="editor-manual-cut-editable ' + origin + '" data-cut-id="' + esc(cut.id) + '" data-cut-origin="' + origin + '" data-cut-start="' + start.toFixed(3) + '" data-cut-end="' + end.toFixed(3) + '" style="left:' + pct(start) + '%;width:' + widthPct(start, end) + '%" title="' + (origin === 'automatic' ? 'Automatic' : 'Manual') + ' cut ' + formatTime(start) + '–' + formatTime(end) + '">' +
+        (locked ? '' : '<button type="button" class="editor-manual-cut-handle start" data-cut-edge="start" aria-label="Drag the start of this cut"></button><button type="button" class="editor-manual-cut-handle end" data-cut-edge="end" aria-label="Drag the end of this cut"></button>') + '</span>';
+    }).join('');
     var markers = splits.map(function (time) {
       return '<i class="editor-manual-split" style="left:' + pct(time) + '%" title="Split at ' + formatTime(time) + '"></i>';
     }).join('');
@@ -619,11 +627,11 @@
     for (var time = 0; time <= duration; time += tickStep) {
       ticks += '<i style="left:' + pct(time) + '%"><span>' + formatTime(time) + '</span></i>';
     }
-    return '<section class="editor-manual-timeline" id="editorManualTimeline"><div class="editor-manual-timeline-head"><div><div class="eyebrow">Source timeline</div><h3>Video + voice</h3><span>Click to seek. Add two splits, select the section between them, then press Delete/Backspace or use the button. The following clip ripples left automatically.</span></div><div class="editor-manual-timeline-actions">' +
+    return '<section class="editor-manual-timeline" id="editorManualTimeline"><div class="editor-manual-timeline-head"><div><div class="eyebrow">Source timeline</div><h3>Video + voice</h3><span>Click to seek. Drag either handle on a red cut to adjust its edge; gold handles mark automatic cuts. Add two splits and delete between them to make a new cut.</span></div><div class="editor-manual-timeline-actions">' +
       '<button type="button" class="btn-secondary btn-tiny" id="editorTimelineAddSplit" ' + (locked ? 'disabled' : '') + '>Split at playhead</button><button type="button" class="btn-secondary btn-tiny" id="editorTimelineClearSplits" ' + (!splits.length || locked ? 'disabled' : '') + '>Clear splits</button><button type="button" class="btn-primary btn-tiny" id="editorTimelineDelete" ' + (!selection || locked ? 'disabled' : '') + '>Delete selected section</button></div></div>' +
       '<div class="editor-manual-timeline-hint"><span id="editorTimelineZoomLabel">' + zoom.toFixed(0) + ' px/sec</span><span>Ctrl/⌘ + scroll to zoom · normal scroll moves along the timeline</span></div>' +
       '<div class="editor-manual-timeline-viewport" id="editorManualTimelineViewport"><div class="editor-manual-timeline-inner" id="editorManualTimelineInner" style="width:' + effectiveWidth + 'px">' +
-        '<div class="editor-manual-ruler">' + ticks + '</div><div class="editor-manual-lane editor-manual-video-lane"><b>VIDEO</b>' + segments + cuts + '</div>' +
+        '<div class="editor-manual-ruler">' + ticks + '</div><div class="editor-manual-lane editor-manual-video-lane"><b>VIDEO</b>' + segments + cuts + editableCuts + '</div>' +
         '<div class="editor-manual-lane editor-manual-voice-lane"><b>VOICE</b>' + voice + cuts + '</div>' + markers + '<i class="editor-manual-playhead" id="editorManualPlayhead"></i></div></div></section>';
   }
 
@@ -1855,6 +1863,85 @@
         var label = root.querySelector('#editorTimelineZoomLabel');
         if (label) label.textContent = nextZoom.toFixed(0) + ' px/sec';
       }, { passive: false });
+
+      manualTimelineInner.querySelectorAll('.editor-manual-cut-handle').forEach(function (handle) {
+        handle.onclick = function (event) { event.preventDefault(); event.stopPropagation(); };
+        handle.onpointerdown = function (event) {
+          if (event.button !== undefined && event.button !== 0) return;
+          var editable = handle.closest('.editor-manual-cut-editable');
+          var cutId = editable && editable.dataset.cutId;
+          var origin = editable && editable.dataset.cutOrigin;
+          var sourceCut = (project.editableTimelineCuts || []).find(function (cut) {
+            return cut.id === cutId && cut.editableOrigin === origin;
+          });
+          if (!editable || !sourceCut) return;
+          event.preventDefault();
+          event.stopPropagation();
+          var edge = handle.dataset.cutEdge;
+          var duration = Math.max(0.01, Number(project.duration) || 0.01);
+          var originalStart = Number(sourceCut.start);
+          var originalEnd = Number(sourceCut.end);
+          var nextStart = originalStart;
+          var nextEnd = originalEnd;
+          var minimumCut = 0.04;
+          editable.classList.add('dragging');
+          handle.setPointerCapture(event.pointerId);
+
+          function updateFromPointer(pointerEvent) {
+            var rect = manualTimelineInner.getBoundingClientRect();
+            var sourceTime = Math.max(0, Math.min(duration, (pointerEvent.clientX - rect.left) / Math.max(1, rect.width) * duration));
+            if (edge === 'start') nextStart = Math.min(originalEnd - minimumCut, sourceTime);
+            else nextEnd = Math.max(originalStart + minimumCut, sourceTime);
+            nextStart = Number(Math.max(0, nextStart).toFixed(3));
+            nextEnd = Number(Math.min(duration, nextEnd).toFixed(3));
+            editable.style.left = (nextStart / duration * 100).toFixed(5) + '%';
+            editable.style.width = (Math.max(minimumCut, nextEnd - nextStart) / duration * 100).toFixed(5) + '%';
+            editable.title = (origin === 'automatic' ? 'Automatic' : 'Manual') + ' cut ' + formatTime(nextStart) + '–' + formatTime(nextEnd);
+          }
+
+          function removeDragListeners() {
+            window.removeEventListener('pointermove', updateFromPointer);
+            window.removeEventListener('pointerup', finishDrag);
+            window.removeEventListener('pointercancel', cancelDrag);
+            editable.classList.remove('dragging');
+          }
+
+          function finishDrag(pointerEvent) {
+            removeDragListeners();
+            try { handle.releasePointerCapture(event.pointerId); } catch (error) {}
+            if (pointerEvent) updateFromPointer(pointerEvent);
+            if (Math.abs(nextStart - originalStart) < 0.001 && Math.abs(nextEnd - originalEnd) < 0.001) return;
+            preserveTimelinePlaybackPosition();
+            previewSeekTimes[project.id] = edge === 'start' ? nextStart : nextEnd;
+            storeReviewProgress(project.id, previewSeekTimes[project.id]);
+            save(function (latest) {
+              var trims = (latest.manualTrimCuts || []).slice();
+              var restored = (latest.restoredAutoCutIds || []).slice();
+              if (origin === 'automatic') {
+                if (restored.indexOf(cutId) === -1) restored.push(cutId);
+                trims.unshift({ id: 'adjusted-' + cutId + '-' + Date.now().toString(36), start: nextStart, end: nextEnd, note: 'Adjusted automatic timeline cut' });
+              } else {
+                trims = trims.map(function (cut) {
+                  return cut.id === cutId ? Object.assign({}, cut, { start: nextStart, end: nextEnd }) : cut;
+                });
+              }
+              return { manualTrimCuts: trims, restoredAutoCutIds: restored };
+            }).then(function (item) {
+              if (item) showEditorActionFeedback('Cut edge moved · now ' + formatTime(nextStart) + '–' + formatTime(nextEnd));
+            });
+          }
+
+          function cancelDrag() {
+            removeDragListeners();
+            editable.style.left = (originalStart / duration * 100).toFixed(5) + '%';
+            editable.style.width = ((originalEnd - originalStart) / duration * 100).toFixed(5) + '%';
+          }
+
+          window.addEventListener('pointermove', updateFromPointer);
+          window.addEventListener('pointerup', finishDrag);
+          window.addEventListener('pointercancel', cancelDrag);
+        };
+      });
     }
     var addTimelineSplit = root.querySelector('#editorTimelineAddSplit');
     if (addTimelineSplit) addTimelineSplit.onclick = function () {

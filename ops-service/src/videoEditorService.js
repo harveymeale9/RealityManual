@@ -555,6 +555,20 @@ function cutsForProject(project) {
   return mergeCuts(auto.concat(manual, precise), project.duration);
 }
 
+function editableTimelineCuts(project) {
+  const restored = new Set(Array.isArray(project && project.restoredAutoCutIds) ? project.restoredAutoCutIds : []);
+  const automatic = project && project.autoSilenceEnabled === false ? [] : calculateAutoCuts(project && project.words || [], project && project.duration, {
+    thresholdSeconds: project && project.silenceThresholdSeconds,
+    retainedPauseSeconds: effectiveRetainedPauseSeconds(project)
+  }).filter(function (cut) { return !restored.has(cut.id); }).map(function (cut) {
+    return Object.assign({}, cut, { editableOrigin: 'automatic' });
+  });
+  const precise = normalizeManualTrimCuts(project && project.manualTrimCuts, project && project.duration).map(function (cut) {
+    return Object.assign({}, cut, { editableOrigin: 'manual' });
+  });
+  return automatic.concat(precise).sort(function (a, b) { return a.start - b.start || a.end - b.end; });
+}
+
 function sourceLayout(project) {
   return Number(project && project.height) > Number(project && project.width) ? 'vertical' : 'horizontal';
 }
@@ -1616,6 +1630,7 @@ function setup(options) {
   }
   function projectDetail(project) {
     project.cuts = cutsForProject(project);
+    project.editableTimelineCuts = editableTimelineCuts(project);
     project.captionGroups = captionGroups(project, project.cuts);
     project.gapDecisions = gapDecisions(project);
     project.retakeCandidates = retakeCandidatesForProject(project);
@@ -3619,6 +3634,7 @@ module.exports = {
   normalizeManualTrimCuts,
   mergeCuts,
   cutsForProject,
+  editableTimelineCuts,
   keepSegments,
   editorTimelineSegments,
   renderCaptionGroups,

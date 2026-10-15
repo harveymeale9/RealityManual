@@ -4312,12 +4312,35 @@
     frameLoader.innerHTML = '<span class="spinner" aria-hidden="true"></span><span>Loading frame…</span>';
     var scrub = document.createElement('input');
     scrub.type = 'range';
+    scrub.className = 'upload-row-preview-scrub';
+    scrub.setAttribute('aria-label', 'Video preview position');
     scrub.min = '0';
     scrub.max = '100';
     scrub.step = '0.1';
     scrub.value = '0';
+    var scrubWrap = document.createElement('div');
+    scrubWrap.className = 'upload-row-preview-timeline';
+    var scrubTime = document.createElement('output');
+    scrubTime.className = 'upload-row-preview-time';
+    scrubTime.textContent = '0:00 / 0:00';
+    scrubWrap.appendChild(scrub);
+    scrubWrap.appendChild(scrubTime);
+    var scrubDragging = false;
+    function formatPreviewClock(seconds) {
+      seconds = Math.max(0, Math.floor(Number(seconds) || 0));
+      var hours = Math.floor(seconds / 3600);
+      var minutes = Math.floor((seconds % 3600) / 60);
+      var secs = String(seconds % 60).padStart(2, '0');
+      return (hours ? hours + ':' + String(minutes).padStart(2, '0') : minutes) + ':' + secs;
+    }
+    function updatePreviewTimeline(seconds) {
+      var current = Math.max(0, Number(seconds) || 0);
+      if (!scrubDragging) scrub.value = String(current);
+      scrubTime.textContent = formatPreviewClock(current) + ' / ' + formatPreviewClock(videoEl.duration);
+    }
     videoEl.addEventListener('loadedmetadata', function () {
       if (videoEl.duration) scrub.max = videoEl.duration;
+      updatePreviewTimeline(videoEl.currentTime);
       // Real orientation, read straight off the decoded video — covers
       // both a fresh upload (already stored at creation time, see
       // handleFiles) and a legacy piece uploaded before this field
@@ -4335,8 +4358,11 @@
       }
     });
     var frameMatchesThumbnail = !!p.thumbnailDataUrl;
+    scrub.addEventListener('pointerdown', function () { scrubDragging = true; });
+    scrub.addEventListener('pointerup', function () { scrubDragging = false; updatePreviewTimeline(videoEl.currentTime); });
     scrub.addEventListener('input', function () {
       try { videoEl.currentTime = parseFloat(scrub.value); } catch (e) {}
+      updatePreviewTimeline(scrub.value);
       frameMatchesThumbnail = false;
       // Seeking can synchronously drop readyState below HAVE_CURRENT_DATA.
       // Keep the button unavailable only until the requested frame arrives;
@@ -4398,7 +4424,7 @@
     videoShell.appendChild(frameLoader);
     frameSection.appendChild(videoShell);
     frameSection.appendChild(videoPreviewControls);
-    frameSection.appendChild(scrub);
+    frameSection.appendChild(scrubWrap);
     frameSection.appendChild(captureBtn);
     // Disabled while a spinner covers the frame area until the video
     // actually has a frame to give — found live (2026-09-20, headless-browser test
@@ -4486,6 +4512,7 @@
     var previewCompleted = 0;
     var previewFailed = 0;
     var previewCancelled = false;
+    var pendingAutoPlayTrack = '';
 
     function updatePreviewReadiness() {
       if (previewCancelled) return;
@@ -4501,6 +4528,12 @@
       audioPreviewProgress.classList.toggle('is-preparing', preparing);
       audioSection.setAttribute('aria-busy', preparing ? 'true' : 'false');
       setPreviewButtonState();
+      if (pendingAutoPlayTrack && pendingAutoPlayTrack === audioSelect.value &&
+          (pendingAutoPlayTrack === '__none__' || previewUrls[pendingAutoPlayTrack])) {
+        var readyTrack = pendingAutoPlayTrack;
+        pendingAutoPlayTrack = '';
+        startSynchronizedPreview(readyTrack, true);
+      }
     }
 
     function setPreviewButtonState() {
@@ -4520,6 +4553,7 @@
     function stopAudioPreview(message) {
       previewRequest++;
       previewPlaying = false;
+      pendingAutoPlayTrack = '';
       previewAudio.pause();
       videoEl.pause();
       videoEl.muted = true;
@@ -4527,17 +4561,40 @@
       if (message !== undefined) audioPreviewStatus.textContent = message;
     }
 
-    function startSynchronizedPreview(trackId) {
-      previewAudio.src = previewUrls[trackId];
-      previewAudio.currentTime = 0;
-      videoEl.currentTime = 0;
-      videoEl.muted = true;
+    function startSynchronizedPreview(trackId, restart) {
+      var startAt = restart ? 0 : Math.max(0, Number(videoEl.currentTime) || 0);
+      if (restart) videoEl.currentTime = 0;
+      pendingAutoPlayTrack = '';
       previewPlaying = true;
+      if (trackId === '__none__') {
+        previewAudio.pause();
+        videoEl.muted = false;
+        setPreviewButtonState();
+        audioPreviewStatus.textContent = restart ? 'Playing the original audio from the start.' : 'Playing the original audio from ' + formatPreviewClock(startAt) + '.';
+        videoEl.play().catch(function () { stopAudioPreview('Press Preview to play.'); });
+        return;
+      }
+      var previewUrl = previewUrls[trackId];
+      if (previewAudio.getAttribute('src') !== previewUrl) previewAudio.src = previewUrl;
+      try { previewAudio.currentTime = startAt; } catch (e) {}
+      videoEl.muted = true;
       setPreviewButtonState();
-      audioPreviewStatus.textContent = 'Playing from the start.';
+      audioPreviewStatus.textContent = restart ? 'Playing from the start. Drag the timeline to audition another point.' : 'Playing from ' + formatPreviewClock(startAt) + '.';
       Promise.all([videoEl.play(), previewAudio.play()]).catch(function () {
         stopAudioPreview('Preview is ready. Press Preview to play it.');
       });
+    }
+
+    function playSelectedPreviewFromStart() {
+      var trackId = audioSelect.value;
+      if (!trackId) return;
+      if (trackId === '__none__' || previewUrls[trackId]) {
+        startSynchronizedPreview(trackId, true);
+      } else {
+        pendingAutoPlayTrack = trackId;
+        audioPreviewStatus.textContent = 'Mixing the selected backing track… The video will start automatically when it is ready.';
+        setPreviewButtonState();
+      }
     }
 
     audioSelect.addEventListener('change', function () {
@@ -4547,22 +4604,13 @@
       syncTags(p);
       Store.put('pieces', p).then(refreshHead);
       updatePreviewReadiness();
+      playSelectedPreviewFromStart();
     });
     audioPreviewBtn.addEventListener('click', function () {
       if (previewPlaying) { stopAudioPreview(''); return; }
       var trackId = audioSelect.value;
       if (!trackId) return;
-      if (trackId === '__none__') {
-        previewRequest++;
-        videoEl.currentTime = 0;
-        videoEl.muted = false;
-        previewPlaying = true;
-        setPreviewButtonState();
-        audioPreviewStatus.textContent = 'Playing the original audio from the start.';
-        videoEl.play().catch(function () { stopAudioPreview('Press Preview to play.'); });
-        return;
-      }
-      if (previewUrls[trackId]) { startSynchronizedPreview(trackId); return; }
+      if (trackId === '__none__' || previewUrls[trackId]) { startSynchronizedPreview(trackId, false); return; }
       audioPreviewStatus.textContent = 'This soundtrack preview is still preparing…';
     });
     videoPreviewBtn.addEventListener('click', function () {
@@ -4574,7 +4622,6 @@
       index = index < 0 ? 0 : (index + offset + choices.length) % choices.length;
       audioSelect.value = choices[index];
       audioSelect.dispatchEvent(new Event('change', { bubbles: true }));
-      if (audioSelect.value === '__none__' || previewUrls[audioSelect.value]) audioPreviewBtn.click();
     }
     audioPrevious.addEventListener('click', function () { selectAdjacentTrack(-1); });
     audioNext.addEventListener('click', function () { selectAdjacentTrack(1); });
@@ -4589,6 +4636,13 @@
         previewAudio.currentTime = videoEl.currentTime || 0;
       }
       previewAudio.play().catch(function () {});
+    });
+    videoEl.addEventListener('timeupdate', function () {
+      updatePreviewTimeline(videoEl.currentTime);
+      if (!previewPlaying || audioSelect.value === '__none__' || !previewAudio.src || videoEl.seeking) return;
+      if (Math.abs((previewAudio.currentTime || 0) - (videoEl.currentTime || 0)) > 0.35) {
+        try { previewAudio.currentTime = videoEl.currentTime || 0; } catch (e) {}
+      }
     });
     videoEl.addEventListener('seeked', function () {
       if (!previewPlaying || audioSelect.value === '__none__' || !previewAudio.src) return;
