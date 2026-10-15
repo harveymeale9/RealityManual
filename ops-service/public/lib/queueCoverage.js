@@ -102,7 +102,6 @@
       else if (waiting > 0) { state = 'queued'; waiting--; }
       if (state === 'open' && deadline === null) deadline = slot - PREPARATION_LEAD_MS;
       timeline.push({ at: slot, state: state });
-      if (deadline !== null && timeline.length >= 6) break;
     }
     var covered = timeline.findIndex(function (item) { return item.state === 'open'; });
     if (covered === -1) covered = timeline.length;
@@ -111,7 +110,7 @@
       scheduledCount: matches.filter(function (piece) { return futureScheduled(piece, now); }).length,
       coveredSlots: covered, coveredThrough: covered ? timeline[covered - 1].at : null,
       nextNeededAt: deadline, daysUntilNeeded: deadline === null ? null : Math.max(0, Math.ceil((deadline - now) / DAY_MS)),
-      timeline: timeline.slice(0, 6)
+      timeline: timeline.slice(0, 6), allSlots: timeline
     };
   }
 
@@ -119,12 +118,22 @@
     options = options || {};
     var pieces = Array.isArray(options.pieces) ? options.pieces : [];
     var now = Number(options.now) || Date.now();
-    var count = Math.max(8, pieces.length + 3);
+    // Include the full visible 15-day path even when the queue is empty or
+    // Buffer has several posting times on a single day.
+    var count = Math.max(120, pieces.length + 3);
     var shorts = shortformSlots(now, pieces, options.postingSchedule, count);
-    return {
-      longform: coverageFor('longform', pieces, now, longformSlots(now, pieces, options.longformTime, count), false),
-      shortform: coverageFor('shortform', pieces, now, shorts.slots, shorts.estimated)
-    };
+    var longform = coverageFor('longform', pieces, now, longformSlots(now, pieces, options.longformTime, count), false);
+    var shortform = coverageFor('shortform', pieces, now, shorts.slots, shorts.estimated);
+    var firstDay = localMidnight(now);
+    var days = [];
+    for (var day = 0; day < 15; day++) {
+      var at = firstDay + day * DAY_MS;
+      var key = localDayKey(at);
+      days.push({ at: at, today: day === 0,
+        longform: longform.allSlots.filter(function (slot) { return localDayKey(slot.at) === key; }),
+        shortform: shortform.allSlots.filter(function (slot) { return localDayKey(slot.at) === key; }) });
+    }
+    return { longform: longform, shortform: shortform, days: days };
   }
 
   return { calculate: calculate, longformSlots: longformSlots, shortformSlots: shortformSlots };

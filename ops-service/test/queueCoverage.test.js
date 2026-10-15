@@ -61,3 +61,20 @@ test('Final Check does not count as ready and paused Buffer days cannot be promi
   assert.equal(new Date(result.timeline[0].at).toISOString(), '2026-10-15T18:55:00.000Z');
   assert.equal(new Date(result.timeline[1].at).toISOString(), '2026-10-22T18:55:00.000Z');
 });
+
+test('15-day map starts today in Bangkok and marks every slot separately', function () {
+  const twiceDaily = DAILY.map(function (day) { return Object.assign({}, day, { times: ['12:00', '14:00'] }); });
+  const now = Date.parse('2026-10-15T01:00:00Z'); // 08:00 on 15 October in Bangkok
+  const pieces = [
+    { id: 'scheduled', contentType: 'short', stage: 'scheduled', scheduledAt: '2026-10-15T05:00:00Z' },
+    ready('next', 'short')
+  ];
+  const result = coverage.calculate({ pieces: pieces, now: now, postingSchedule: twiceDaily });
+  assert.equal(result.days.length, 15);
+  assert.equal(new Date(result.days[0].at).toISOString(), '2026-10-14T17:00:00.000Z');
+  assert.equal(new Date(result.days[14].at).toISOString(), '2026-10-28T17:00:00.000Z');
+  assert.deepEqual(result.days[0].shortform.map(function (slot) { return slot.state; }), ['scheduled', 'queued']);
+  assert.deepEqual(result.days[1].shortform.map(function (slot) { return slot.state; }), ['open', 'open']);
+  assert.equal(result.days[0].today, true);
+  assert.equal(result.days[1].today, false);
+});

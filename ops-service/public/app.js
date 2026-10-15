@@ -3017,29 +3017,44 @@
     function timeLabel(value) {
       return new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date(value));
     }
-    function card(label, item, cadence) {
+    function summary(label, item, cadence) {
       var title = item.nextNeededAt === null ? 'Next refill date unavailable' :
         'Next video ready by ' + dateLabel(item.nextNeededAt) + (item.estimated ? '' : ' · ' + timeLabel(item.nextNeededAt));
       var sub = item.nextNeededAt === null ? 'Connect Buffer to confirm the short-form cadence.' :
         item.coveredSlots + ' slot' + (item.coveredSlots === 1 ? '' : 's') + ' covered · ' +
         item.daysUntilNeeded + ' day' + (item.daysUntilNeeded === 1 ? '' : 's') + ' until refill';
-      var timeline = item.timeline.map(function (slot) {
-        return '<span class="queue-coverage-slot queue-coverage-slot--' + slot.state + '" title="' +
-          escapeHtml(dateLabel(slot.at) + ' · ' + slot.state) + '"><span class="queue-coverage-slot-dot"></span>' +
-          escapeHtml(dateLabel(slot.at).replace(/^\w+ /, '')) + '</span>';
-      }).join('');
-      return '<section class="queue-coverage-card" aria-label="' + label + ' publishing runway">' +
+      return '<section class="queue-coverage-summary" aria-label="' + label + ' publishing runway">' +
         '<div class="queue-coverage-head"><span>' + label + '</span><span>' + cadence + '</span></div>' +
         '<strong class="queue-coverage-deadline">' + title + '</strong>' +
         '<div class="queue-coverage-meta">' + sub + ' · ' + item.readyCount + ' ready in queue' +
           (item.scheduledCount ? ' · ' + item.scheduledCount + ' already scheduled' : '') + '</div>' +
-        '<div class="queue-coverage-timeline" aria-label="Upcoming publishing slots">' + timeline + '</div>' +
-        '<div class="queue-coverage-legend">Green: queued · Blue: scheduled · Amber: needs a video</div>' +
-        (item.estimated ? '<div class="queue-coverage-note">Daily estimate from the last short; Buffer schedule is temporarily unavailable.</div>' : '') +
       '</section>';
     }
-    queueCoverage.innerHTML = card('Long-form', runway.longform, 'Every 3 days') +
-      card('Short-form', runway.shortform, 'Buffer cadence');
+    function slotMarkers(slots, label) {
+      if (!slots.length) return '<span class="queue-map-no-slot" aria-label="No ' + label + ' slot">—</span>';
+      return slots.map(function (slot) {
+        var stateLabel = slot.state === 'open' ? 'Needs a video' : slot.state === 'scheduled' ? 'Scheduled' : 'Ready in queue';
+        var detail = label + ' · ' + timeLabel(slot.at) + ' · ' + stateLabel;
+        return '<span class="queue-map-slot queue-map-slot--' + slot.state + '" title="' + escapeHtml(detail) +
+          '" aria-label="' + escapeHtml(detail) + '">' + (slot.state === 'open' ? '!' : '✓') + '</span>';
+      }).join('');
+    }
+    var days = runway.days.map(function (day) {
+      var date = dateLabel(day.at);
+      return '<div class="queue-map-day' + (day.today ? ' queue-map-day--today' : '') + '" aria-label="' + escapeHtml(date) + '">' +
+        '<div class="queue-map-date"><span>' + escapeHtml(date.split(' ')[0]) + '</span><strong>' + escapeHtml(date.replace(/^\w+ /, '')) + '</strong></div>' +
+        '<div class="queue-map-path"><span class="queue-map-node"></span></div>' +
+        '<div class="queue-map-lane"><small>LONG</small><span>' + slotMarkers(day.longform, 'Long-form') + '</span></div>' +
+        '<div class="queue-map-lane"><small>SHORT</small><span>' + slotMarkers(day.shortform, 'Short-form') + '</span></div>' +
+      '</div>';
+    }).join('');
+    queueCoverage.innerHTML = '<div class="queue-coverage-summary-row">' +
+      summary('Long-form', runway.longform, 'Every 3 days') +
+      summary('Short-form', runway.shortform, 'Buffer cadence') + '</div>' +
+      '<div class="queue-map-head"><div><strong>Next 15 days</strong><span>Today → forward · Bangkok time</span><span class="queue-map-swipe">Swipe timeline →</span></div>' +
+        '<div class="queue-map-key"><span class="queue-map-key-ready">✓ Ready</span><span class="queue-map-key-scheduled">✓ Scheduled</span><span class="queue-map-key-open">! Needs video</span><span>— No slot</span></div></div>' +
+      '<div class="queue-map-scroll" aria-label="15-day publishing map"><div class="queue-map-days">' + days + '</div></div>' +
+      (runway.shortform.estimated ? '<div class="queue-coverage-note">Short-form dates are daily estimates from the last actual post while Buffer’s schedule is unavailable.</div>' : '');
   }
 
   function renderOverview() {

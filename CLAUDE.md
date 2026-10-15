@@ -19754,3 +19754,27 @@ lose its outline. The legacy video-analysis candidate lookup also includes To
 Film. Ideation progression ranks and weekly-report stage labels/milestones
 include the new stage. The Store script cache key was advanced so an open
 browser tab picks up the new column after refresh.
+
+---
+
+# 637. Fifteen-Day Publishing Map (2026-10-15)
+
+Harvey asked for a more visual version of the publishing runway. Content
+Pipeline now shows a connected 15-day Bangkok-calendar path starting today,
+under the existing long-form and short-form refill summaries. Each day has
+separate LONG and SHORT lanes. Every actual future publishing slot is marked
+individually: green check for a ready video in Publishing Queue, blue check
+for an already-scheduled video, amber exclamation for an uncovered slot, and
+a muted dash where no slot exists. Multiple daily Buffer slots produce multiple
+markers rather than an ambiguous single daily status. The path scrolls
+horizontally on phones, with a visible swipe hint.
+
+The map reuses the runway's existing cadence/queue calculation and adds no
+API calls. The calculation now retains enough future slots to cover the full
+15 days even when the queue is empty, while preserving the first-uncovered
+refill deadline. Short-form dates remain explicitly estimated when Buffer's
+actual calendar is unavailable. Unit tests cover the Bangkok day boundary,
+all 15 days, and multiple scheduled/queued/open short slots on one day.
+Chromium desktop and phone checks confirmed all 15 day columns and a contained
+mobile horizontal scroll without page overflow. App, style, and coverage
+module cache keys were advanced.
