@@ -30,3 +30,23 @@ test('fresh public counters supersede stale Buffer zeroes without allowing count
   assert.equal(metrics.freshestCount(null, 18), 18);
   assert.equal(metrics.freshestCount(null, null), null);
 });
+
+test('live counters merge with cached Buffer details when Buffer is temporarily unavailable', function () {
+  assert.deepEqual(metrics.mergeMetrics({
+    views: { value: 0 },
+    reactions: { value: 0 },
+    totalTimeWatched: { value: 2.5 },
+    averageTimeWatched: { value: 7 }
+  }, {
+    views: 351, likes: 18, comments: 2, shares: 3, saves: 4
+  }), {
+    views: 351,
+    likes: 18,
+    comments: 2,
+    shares: 3,
+    saves: 4,
+    reach: null,
+    watchTimeSeconds: 150,
+    averageWatchSeconds: 7
+  });
+});

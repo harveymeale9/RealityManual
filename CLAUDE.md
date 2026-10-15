@@ -19317,3 +19317,10 @@ value into a fabricated zero.
 
 Automated coverage verifies strict TikTok URL acceptance, matching-video JSON
 parsing, null handling, and monotonic merging against stale Buffer counters.
+
+The live rollout also exposed Buffer HTTP 429 responses. Buffer retrieval and
+public-counter retrieval are now isolated: a Buffer rate limit no longer stops
+the public TikTok request, and the collector combines current public counters
+with the last stored Buffer watch-time snapshot. The provider reports this as
+partial rather than failed, so one slower upstream can no longer turn real
+TikTok activity back into a dashboard zero.

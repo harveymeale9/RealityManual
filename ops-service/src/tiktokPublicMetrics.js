@@ -54,9 +54,31 @@ function freshestCount(primary, fallback) {
   return Math.max(first, second);
 }
 
+function bufferMetric(metrics, names) {
+  for (const name of names) {
+    if (metrics && metrics[name] && metrics[name].value != null) return nonNegative(metrics[name].value);
+  }
+  return null;
+}
+
+function mergeMetrics(bufferMetrics, publicMetrics) {
+  const totalTimeWatched = bufferMetric(bufferMetrics, ['totalTimeWatched']);
+  return {
+    views: freshestCount(bufferMetric(bufferMetrics, ['views']), publicMetrics && publicMetrics.views),
+    likes: freshestCount(bufferMetric(bufferMetrics, ['reactions', 'likes']), publicMetrics && publicMetrics.likes),
+    comments: freshestCount(bufferMetric(bufferMetrics, ['comments']), publicMetrics && publicMetrics.comments),
+    shares: freshestCount(bufferMetric(bufferMetrics, ['shares', 'reposts']), publicMetrics && publicMetrics.shares),
+    saves: freshestCount(bufferMetric(bufferMetrics, ['saves']), publicMetrics && publicMetrics.saves),
+    reach: bufferMetric(bufferMetrics, ['reach']),
+    watchTimeSeconds: totalTimeWatched == null ? null : totalTimeWatched * 60,
+    averageWatchSeconds: bufferMetric(bufferMetrics, ['averageTimeWatched'])
+  };
+}
+
 module.exports = {
   videoIdFromUrl: videoIdFromUrl,
   parsePublicMetrics: parsePublicMetrics,
   fetchPublicMetrics: fetchPublicMetrics,
-  freshestCount: freshestCount
+  freshestCount: freshestCount,
+  mergeMetrics: mergeMetrics
 };

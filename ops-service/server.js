@@ -1289,12 +1289,6 @@ const weeklyReports = weeklyReportService.setup(db, {
 function storedPieces() {
   return stmts.getAll.all('pieces').map(function (row) { return recordConcurrency.decodeRow(row); });
 }
-function bufferMetric(metrics, names) {
-  for (const name of names) {
-    if (metrics && metrics[name] && metrics[name].value != null) return Number(metrics[name].value) || 0;
-  }
-  return null;
-}
 const contentAnalytics = contentAnalyticsService.setup(db, {
   intervalMs: Number(process.env.CONTENT_ANALYTICS_INTERVAL_MS || 60 * 60 * 1000),
   listPieces: storedPieces,
@@ -1318,30 +1312,36 @@ const contentAnalytics = contentAnalyticsService.setup(db, {
     tiktok: async function (pieces) {
       if (!buffer.configured) throw new Error('TikTok via Buffer is not connected.');
       const rows = [];
+      let bufferUnavailable = false;
       for (const piece of pieces.filter(function (item) { return !!item.tiktokPublishId; })) {
-        const post = await buffer.getPost(piece.tiktokPublishId);
-        const metrics = bufferPublicationSyncService.metricsObject(post.metrics);
+        let post = null;
+        try { post = await buffer.getPost(piece.tiktokPublishId); }
+        catch (error) { bufferUnavailable = true; }
+        // A Buffer request can be rate-limited independently of the public
+        // post. Retain its last stored rich metrics while still refreshing
+        // the live counters rather than failing the entire TikTok provider.
+        const metrics = post
+          ? bufferPublicationSyncService.metricsObject(post.metrics)
+          : (piece.tiktokMetrics || {});
         // Buffer refreshes sent-post analytics about once per day. The public
         // TikTok video page carries current counters, so use it to close that
         // gap while retaining Buffer's richer watch-time fields. This is a
         // best-effort supplement: a temporary public-page failure must never
         // hide the official Buffer snapshot.
         let publicMetrics = null;
-        const publicUrl = post.externalLink || piece.tiktokExternalLink || '';
+        const publicUrl = (post && post.externalLink) || piece.tiktokExternalLink || '';
         try { publicMetrics = await tiktokPublicMetrics.fetchPublicMetrics(publicUrl); }
         catch (error) { publicMetrics = null; }
-        const totalTimeWatched = bufferMetric(metrics, ['totalTimeWatched']);
-        rows.push({ pieceId: piece.id, platform: 'tiktok', metrics: {
-          views: tiktokPublicMetrics.freshestCount(bufferMetric(metrics, ['views']), publicMetrics && publicMetrics.views),
-          likes: tiktokPublicMetrics.freshestCount(bufferMetric(metrics, ['reactions', 'likes']), publicMetrics && publicMetrics.likes),
-          comments: tiktokPublicMetrics.freshestCount(bufferMetric(metrics, ['comments']), publicMetrics && publicMetrics.comments),
-          shares: tiktokPublicMetrics.freshestCount(bufferMetric(metrics, ['shares', 'reposts']), publicMetrics && publicMetrics.shares),
-          saves: tiktokPublicMetrics.freshestCount(bufferMetric(metrics, ['saves']), publicMetrics && publicMetrics.saves),
-          reach: bufferMetric(metrics, ['reach']), watchTimeSeconds: totalTimeWatched == null ? null : totalTimeWatched * 60,
-          averageWatchSeconds: bufferMetric(metrics, ['averageTimeWatched'])
-        } });
+        if (!post && !publicMetrics && !Object.keys(metrics).length) continue;
+        rows.push({ pieceId: piece.id, platform: 'tiktok', metrics: tiktokPublicMetrics.mergeMetrics(metrics, publicMetrics) });
       }
-      return { pieces: rows, channels: [], status: { audienceAvailable: false, note: 'Video counters are live; watch-time details follow Buffer’s daily refresh. TikTok audience totals are not exposed by the connection.' } };
+      return { pieces: rows, channels: [], status: {
+        audienceAvailable: false,
+        partial: bufferUnavailable,
+        note: bufferUnavailable
+          ? 'Video counters are live. Buffer is temporarily unavailable, so watch-time details use the last saved snapshot.'
+          : 'Video counters are live; watch-time details follow Buffer’s daily refresh. TikTok audience totals are not exposed by the connection.'
+      } };
     },
     instagram: async function (pieces) {
       const auth = stmts.getMetaAuth.get();
