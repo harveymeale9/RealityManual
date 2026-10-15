@@ -8,21 +8,24 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   baaf0bc..b72ff22  main       -> origin/main
+   b72ff22..acc60f2  main       -> origin/main
 + git merge --ff-only origin/main
-Updating baaf0bc..b72ff22
+Updating b72ff22..acc60f2
 Fast-forward
- CLAUDE.md                                   |   28 +
- ops-service/.ci/last-run.log                | 1849 +--------------------------
- ops-service/public/editor.js                |   44 +-
- ops-service/public/index.html               |    4 +-
- ops-service/public/style.css                |    6 +-
- ops-service/server.js                       |    6 +-
- ops-service/src/videoEditorService.js       |   79 +-
- ops-service/test/videoEditorService.test.js |   24 +-
- 8 files changed, 241 insertions(+), 1799 deletions(-)
+ CLAUDE.md                                        | 22 ++++++
+ ops-service/.ci/last-run.log                     | 96 +++++++++++-------------
+ ops-service/public/app.js                        |  6 +-
+ ops-service/public/index.html                    |  6 +-
+ ops-service/public/lib/voiceClient.js            |  7 +-
+ ops-service/public/style.css                     |  2 +
+ ops-service/public/voice-mobile.html             | 10 ++-
+ ops-service/server.js                            | 12 ++-
+ ops-service/test/contentAnalyticsService.test.js |  2 +-
+ ops-service/test/videoEditorService.test.js      |  2 +-
+ ops-service/test/voiceClient.test.js             | 13 ++++
+ 11 files changed, 111 insertions(+), 67 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=b72ff224bb7193765c2180c4af27a37349d12958
++ NEW_HEAD=acc60f25019f7111a8aa87085a8f840d1fa68640
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -31,13 +34,12 @@ Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
 + LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
 ++ cat /root/ops-service-data/last-image-commit.txt
-+ LAST_BUILD_COMMIT=baaf0bca7da1cb263c8cf86c6eb328f4b64b324d
++ LAST_BUILD_COMMIT=b72ff224bb7193765c2180c4af27a37349d12958
 + NEEDS_REBUILD=1
-+ '[' -n baaf0bca7da1cb263c8cf86c6eb328f4b64b324d ']'
-+ git cat-file -e 'baaf0bca7da1cb263c8cf86c6eb328f4b64b324d^{commit}'
-++ git diff --name-only baaf0bca7da1cb263c8cf86c6eb328f4b64b324d b72ff224bb7193765c2180c4af27a37349d12958 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
-+ '[' -z 'ops-service/server.js
-ops-service/src/videoEditorService.js' ']'
++ '[' -n b72ff224bb7193765c2180c4af27a37349d12958 ']'
++ git cat-file -e 'b72ff224bb7193765c2180c4af27a37349d12958^{commit}'
+++ git diff --name-only b72ff224bb7193765c2180c4af27a37349d12958 acc60f25019f7111a8aa87085a8f840d1fa68640 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -z ops-service/server.js ']'
 + '[' 0 = 1 ']'
 + '[' 1 = 0 ']'
 + UPLOAD_DRAIN_WAITED=0
@@ -74,26 +76,23 @@ ops-service/src/videoEditorService.js' ']'
 #0 building with "default" instance using docker driver
 
 #1 [internal] load build definition from Dockerfile
-#1 transferring dockerfile: 2.04kB done
+#1 transferring dockerfile: 2.04kB 0.0s done
 #1 DONE 0.0s
 
 #2 [internal] load metadata for docker.io/library/node:22-slim
-#2 DONE 0.2s
+#2 DONE 0.3s
 
 #3 [internal] load .dockerignore
-#3 transferring context: 136B 0.0s done
+#3 transferring context: 136B done
 #3 DONE 0.0s
 
-#4 [internal] load build context
+#4 [ 1/10] FROM docker.io/library/node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
+#4 resolve docker.io/library/node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 0.0s done
 #4 DONE 0.0s
 
-#5 [ 1/10] FROM docker.io/library/node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
-#5 resolve docker.io/library/node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 0.0s done
+#5 [internal] load build context
+#5 transferring context: 875.83kB 0.0s done
 #5 DONE 0.0s
-
-#4 [internal] load build context
-#4 transferring context: 834.59kB 0.0s done
-#4 DONE 0.0s
 
 #6 [ 2/10] RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && python3 -m pip install --break-system-packages --no-cache-dir yt-dlp==2026.8.19     && rm -rf /var/lib/apt/lists/*
 #6 CACHED
@@ -114,41 +113,41 @@ ops-service/src/videoEditorService.js' ']'
 #11 DONE 0.1s
 
 #12 [ 8/10] COPY public ./public
-#12 DONE 0.2s
+#12 DONE 0.4s
 
 #13 [ 9/10] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
-#13 DONE 15.1s
+#13 DONE 15.9s
 
 #14 [10/10] RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
 #14 DONE 0.3s
 
 #15 exporting to image
 #15 exporting layers
-#15 exporting layers 4.0s done
-#15 exporting manifest sha256:f400f7f7d3d267f4c04eb4c9479bb5f7b731f4b8b7bf2b6155d50bc83c0b556b done
-#15 exporting config sha256:368264d246e02d0bb5e131bfb720ed7e6be5c135bf14b235fcf1767f22fccf47 done
-#15 exporting attestation manifest sha256:839649e4eb94ff1ccd65291a112ae0365b74d1cdfcbf16dc2a538f05c2c37d5b 0.0s done
-#15 exporting manifest list sha256:2e9aacba1e3b32465b381cd17f80ee37b79bae3502bb2822abf22a3c783af009 0.0s done
+#15 exporting layers 5.6s done
+#15 exporting manifest sha256:4faf9369913830f50278ba255023f516ca3b16639197ca5737a4f44047bc4b4d 0.0s done
+#15 exporting config sha256:238d6321fa0cbcd8232ad54b0cd304c5d4c014e2ee0bee81f2b38b335b5b8885 0.0s done
+#15 exporting attestation manifest sha256:3b3e0881484e6a089926811bae3a2b85ed5ddcd2f02761a717e318da2a59f074 0.0s done
+#15 exporting manifest list sha256:52c5f2dfd5a1b2bc3ce3fdf2379b4f7c850f4d3c582fa94eb62542a109ad2515 0.0s done
 #15 naming to docker.io/library/rm-ops-service:latest done
 #15 unpacking to docker.io/library/rm-ops-service:latest
-#15 unpacking to docker.io/library/rm-ops-service:latest 1.7s done
-#15 DONE 5.8s
+#15 unpacking to docker.io/library/rm-ops-service:latest 2.2s done
+#15 DONE 8.0s
 + docker stop rm-ops-service
 rm-ops-service
 + docker rm rm-ops-service
 rm-ops-service
 + docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-data:/data -v /root/realitymanual-backend-data:/store-data:ro -v /srv/realitymanual-repo:/repo -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
-56d836bc36927909d70304f441bf6e39c36b9c66a05f613e910c7014e1ecfb6e
-+ echo b72ff224bb7193765c2180c4af27a37349d12958
+9bd9aeaaf4f50831adb48b380882e847180f63afa61201b7674ab0f535eaef20
++ echo acc60f25019f7111a8aa87085a8f840d1fa68640
 ++ git -C /root/realitymanual-repo rev-parse --short HEAD
-+ echo 'rm-ops-service redeployed at b72ff22'
-rm-ops-service redeployed at b72ff22
++ echo 'rm-ops-service redeployed at acc60f2'
+rm-ops-service redeployed at acc60f2
 + docker image prune -f
 Deleted Images:
-untagged: sha256:661013713c51447a936f58168d013e5d8f293e1cabaa10da641301d6e2803618
-deleted: sha256:661013713c51447a936f58168d013e5d8f293e1cabaa10da641301d6e2803618
-deleted: sha256:61c57714a54c2c1576c9014b77c49b5ed72218b7fd44188b58012608e75493e7
-deleted: sha256:0017e23b3849cc34bfddb29baa0ef1961c2ac51995f923fe701397341b031601
+untagged: sha256:b9e742a11f3fb53f016c8b08bc761f4871aa52dcb0cb7b111e0da0fe58341c79
+deleted: sha256:b9e742a11f3fb53f016c8b08bc761f4871aa52dcb0cb7b111e0da0fe58341c79
+deleted: sha256:38ccaaf837bd51ae111b31050aad09c97023c31b5fec156351b1665fec34facc
+deleted: sha256:4874c6218eb92131e24da5273fb9eb0a28c1c058acab3aa9b44a2e583a12ce5b
 
 Total reclaimed space: 15.67kB
 + docker builder prune -f --max-used-space 8GB
