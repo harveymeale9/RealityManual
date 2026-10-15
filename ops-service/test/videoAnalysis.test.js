@@ -44,6 +44,8 @@ test('final video mix uses the selected ambient percentage and clamps unsafe val
 
   const withOutro = videoAnalysis.legacyFinalVideoArgs('/video', '/music', '/out', 13, 12, 2);
   assert.match(withOutro.join(' '), /volume=0\.13,afade=t=out:st=10\.000:d=2\.000\[bg\]/);
+  const horizontalOutro = videoAnalysis.legacyFinalVideoArgs('/video', '/music', '/out', 13, 12, 0.3);
+  assert.match(horizontalOutro.join(' '), /volume=0\.13,afade=t=out:st=11\.700:d=0\.300\[bg\]/);
   assert.equal(withOutro[withOutro.indexOf('-ar') + 1], '48000');
 });
 

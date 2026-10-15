@@ -2531,6 +2531,13 @@ async function runBuildFinalVideo(id) {
   let productionPicturePath = '';
   try {
     let videoPath = path.join(UPLOADS_DIR, 'videos', id);
+    let audioPath = null;
+    if (piece.audioTrackId && piece.audioTrackId !== '__none__') {
+      const candidate = path.join(UPLOADS_DIR, 'audioTracks', piece.audioTrackId);
+      if (fs.existsSync(candidate)) audioPath = candidate;
+      // A missing/deleted track just falls back to no-music rather than
+      // failing the whole build over it.
+    }
     // Editor hands Production a tiny decision preview so title, thumbnail and
     // soundtrack work never waits on a 4K encode. Only when Production sends
     // the piece to Final Check do we render the original source and saved edit
@@ -2544,15 +2551,8 @@ async function runBuildFinalVideo(id) {
         current.finalBuildProgress = Math.min(95, Math.max(0, Math.round(Number(percent) * 0.95)));
         current.updatedAt = new Date().toISOString();
         savePieceRecord(current);
-      });
+      }, { includeMusicTail: !!audioPath });
       videoPath = productionPicturePath;
-    }
-    let audioPath = null;
-    if (piece.audioTrackId && piece.audioTrackId !== '__none__') {
-      const candidate = path.join(UPLOADS_DIR, 'audioTracks', piece.audioTrackId);
-      if (fs.existsSync(candidate)) audioPath = candidate;
-      // A missing/deleted track just falls back to no-music (remux only)
-      // rather than failing the whole build over it.
     }
     const finalId = id + FINAL_VIDEO_SUFFIX;
     const outPath = path.join(UPLOADS_DIR, 'videos', finalId);
@@ -2561,7 +2561,10 @@ async function runBuildFinalVideo(id) {
     const settingsRow = stmts.getOne.get('settings', 'settings');
     const settings = settingsRow ? JSON.parse(settingsRow.data) : {};
     const mixProfile = videoAnalysis.normalizeAudioMixSettings(settings);
-    const mixResult = await videoAnalysis.buildFinalVideo(videoPath, audioPath, outPath, settings);
+    const horizontalLongform = piece.videoIsVertical === false || piece.contentType === 'longform';
+    const mixResult = await videoAnalysis.buildFinalVideo(videoPath, audioPath, outPath, settings, {
+      musicOutroSeconds: horizontalLongform ? 0.3 : 2
+    });
 
     const stat = fs.statSync(outPath);
     const finalRecord = { id: finalId, fileName: 'final.mp4', sizeBytes: stat.size, mimeType: 'video/mp4', createdAt: new Date().toISOString() };

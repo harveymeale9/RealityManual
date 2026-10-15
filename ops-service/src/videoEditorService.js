@@ -28,6 +28,8 @@ const HORIZONTAL_OPENING_ZOOM_SECONDS = 5;
 const PAGE_CHANGE_CUT_SECONDS = 3;
 const PAGE_CHANGE_FADE_SECONDS = 0.28;
 const VIDEO_OUTRO_SECONDS = 2;
+const HORIZONTAL_VISUAL_OUTRO_SECONDS = 1.7;
+const HORIZONTAL_MUSIC_TAIL_SECONDS = 0.3;
 // Footage is deliberately recorded wide enough to show a little table. The
 // opening move settles toward the exact centre of the recorded frame and that
 // composition remains the baseline for the rest of the shot. Initial portrait
@@ -83,6 +85,18 @@ function renderShapeForProject(project, layout, master) {
   return {
     width: Math.max(2, Math.floor((cropWidth * scale) / 2) * 2),
     height: Math.max(2, Math.floor((cropHeight * scale) / 2) * 2)
+  };
+}
+
+function renderOutroTiming(layout, includeMusicTail) {
+  if (layout !== 'horizontal') {
+    return { visualFadeSeconds: VIDEO_OUTRO_SECONDS, totalSeconds: VIDEO_OUTRO_SECONDS, musicTailSeconds: 0 };
+  }
+  const musicTailSeconds = includeMusicTail ? HORIZONTAL_MUSIC_TAIL_SECONDS : 0;
+  return {
+    visualFadeSeconds: HORIZONTAL_VISUAL_OUTRO_SECONDS,
+    totalSeconds: HORIZONTAL_VISUAL_OUTRO_SECONDS + musicTailSeconds,
+    musicTailSeconds: musicTailSeconds
   };
 }
 
@@ -2192,9 +2206,13 @@ function setup(options) {
       const segments = editorTimelineSegments(project, cuts);
       if (!segments.length) throw new Error('Every part of the recording is currently cut. Restore some transcript first.');
       const contentDuration = segments.reduce(function (sum, segment) { return sum + segment.end - segment.start; }, 0);
-      const expectedDuration = contentDuration + VIDEO_OUTRO_SECONDS;
-      const assPath = path.join(projectDir(id), 'captions.ass');
       const layout = effectiveLayout(project);
+      // Landscape footage must be fully black before a hand reaching for the
+      // camera can become visible. Editor/no-music renders end at that point;
+      // a music-backed production master retains a short black-only tail.
+      const outro = renderOutroTiming(layout, master && options.includeMusicTail === true);
+      const expectedDuration = contentDuration + outro.totalSeconds;
+      const assPath = path.join(projectDir(id), 'captions.ass');
       const renderShape = renderShapeForProject(project, layout, master);
       const outputPath = master ? masterOutputPath : renderPath(id);
       if (project.captionsEnabled !== false) fs.writeFileSync(assPath, buildAss(renderShape, renderCaptionGroups(project, cuts, segments)));
@@ -2265,12 +2283,12 @@ function setup(options) {
       else filters.push('[normalizedv]null[captionedv]');
       // Avoid the abrupt end-card cut: hold the final composed frame, fade it
       // to black, and keep a silent dialogue bed beneath the soundtrack tail.
-      filters.push('[captionedv]tpad=stop_mode=clone:stop_duration=' + VIDEO_OUTRO_SECONDS.toFixed(3) +
-        ',fade=t=out:st=' + contentDuration.toFixed(3) + ':d=' + VIDEO_OUTRO_SECONDS.toFixed(3) +
+      filters.push('[captionedv]tpad=stop_mode=clone:stop_duration=' + outro.totalSeconds.toFixed(3) +
+        ',fade=t=out:st=' + contentDuration.toFixed(3) + ':d=' + outro.visualFadeSeconds.toFixed(3) +
         ',fps=30000/1001[outv]');
       const requestedVoiceGain = voiceGainFilter(project.voiceGainAdjustments, contentDuration);
       if (requestedVoiceGain) filters.push('[outa]' + requestedVoiceGain + '[leveledouta]');
-      filters.push('[' + (requestedVoiceGain ? 'leveledouta' : 'outa') + ']apad=pad_dur=' + VIDEO_OUTRO_SECONDS.toFixed(3) + '[outaextended]');
+      filters.push('[' + (requestedVoiceGain ? 'leveledouta' : 'outa') + ']apad=pad_dur=' + outro.totalSeconds.toFixed(3) + '[outaextended]');
       let lastReportedProgress = -1;
       const ffmpegInputs = ['-hide_banner', '-loglevel', 'error', '-y', '-filter_complex_threads', String(EDITOR_FFMPEG_THREADS), '-autorotate', '1', '-i', renderSourcePath];
       readyClips.forEach(function (clip) { ffmpegInputs.push('-i', insertedClipPath(id, clip.id)); });
@@ -2338,7 +2356,8 @@ function setup(options) {
         status: 'passed', checkedAt: new Date().toISOString(), checks: qualityChecks,
         width: renderedMedia.width, height: renderedMedia.height, pixelFormat: renderedMedia.pixelFormat,
         duration: renderedMedia.duration, videoDuration: renderedMedia.videoDuration,
-        contentDuration: contentDuration, outroSeconds: VIDEO_OUTRO_SECONDS, audioPeakDb: audioPeakDb,
+        contentDuration: contentDuration, outroSeconds: outro.totalSeconds,
+        visualFadeSeconds: outro.visualFadeSeconds, musicTailSeconds: outro.musicTailSeconds, audioPeakDb: audioPeakDb,
         insertedClipLoudness: mainVoiceLufs === null ? null : {
           mainVoiceLufs: mainVoiceLufs,
           clips: readyClips.map(function (clip) {
@@ -3548,11 +3567,13 @@ function setup(options) {
     analyzeProjectRetakes: analyzeProjectRetakes,
     matchProjectPlanningPiece: matchProjectPlanningPiece,
     renderProject: renderProject,
-    renderProductionMaster: async function (id, outputPath, onProgress) {
+    renderProductionMaster: async function (id, outputPath, onProgress, renderOptions) {
+      renderOptions = renderOptions || {};
       const project = getProject(id);
       if (!project) throw new Error('The Editor project no longer exists.');
       if (!project.sourceStorageObjectKey) {
-        return renderProject(id, { masterOutputPath: outputPath, onProgress: onProgress });
+        return renderProject(id, { masterOutputPath: outputPath, onProgress: onProgress,
+          includeMusicTail: renderOptions.includeMusicTail === true });
       }
       if (!storage || !storage.configured || typeof storage.readStream !== 'function') {
         throw new Error('The archived camera master is temporarily unavailable.');
@@ -3565,7 +3586,8 @@ function setup(options) {
         return await renderProject(id, {
           masterOutputPath: outputPath,
           sourceOverridePath: restoredSourcePath,
-          onProgress: onProgress
+          onProgress: onProgress,
+          includeMusicTail: renderOptions.includeMusicTail === true
         });
       } finally {
         fs.rm(restoredSourcePath, { force: true }, function () {});
@@ -3587,6 +3609,7 @@ module.exports = {
   createPriorityTaskQueue,
   encoderConcurrencyForCpuCount,
   renderShapeForProject,
+  renderOutroTiming,
   verifiedRenderMatches,
   parseIntegratedLoudness,
   insertedClipGainDb,

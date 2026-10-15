@@ -297,12 +297,15 @@ async function measureMusicPeak(inputPath, usedDurationSeconds) {
 // With no selected music, dialogue is still normalized and peak-protected.
 // Legacy mode deliberately retains the old percentage/remux behavior for A/B
 // comparison until Harvey is happy with the measured workflow.
-async function buildFinalVideo(videoPath, audioPath, outPath, mixInput) {
+async function buildFinalVideo(videoPath, audioPath, outPath, mixInput, outputOptions) {
   const settings = normalizeAudioMixSettings(mixInput);
+  outputOptions = outputOptions || {};
+  const musicOutroSeconds = Number.isFinite(Number(outputOptions.musicOutroSeconds))
+    ? Math.max(0, Number(outputOptions.musicOutroSeconds)) : VIDEO_OUTRO_SECONDS;
   const programmeDuration = audioPath ? await mediaDuration(videoPath) : null;
   if (settings.mode === 'legacy_percent') {
     await runFfmpeg(legacyFinalVideoArgs(videoPath, audioPath, outPath, settings.legacyPercent,
-      programmeDuration, VIDEO_OUTRO_SECONDS), 'legacy final-video build');
+      programmeDuration, musicOutroSeconds), 'legacy final-video build');
     return { mode: settings.mode };
   }
   const tempAudioPath = outPath + '.loudness-mix.flac';
@@ -310,7 +313,7 @@ async function buildFinalVideo(videoPath, audioPath, outPath, mixInput) {
     const dialogueMeasurement = await measureLoudness(videoPath, settings);
     const musicMeasurement = audioPath ? await measureMusicPeak(audioPath, programmeDuration) : null;
     await runFfmpeg(measuredMixAudioArgs(videoPath, audioPath, tempAudioPath, settings, dialogueMeasurement,
-      musicMeasurement, programmeDuration, VIDEO_OUTRO_SECONDS), 'measured audio mix');
+      musicMeasurement, programmeDuration, musicOutroSeconds), 'measured audio mix');
     const mixMeasurement = await measureLoudness(tempAudioPath, settings);
     await runFfmpeg(measuredFinalVideoArgs(videoPath, tempAudioPath, outPath, settings, mixMeasurement), 'loudness-normalized final-video build');
     return { mode: settings.mode, dialogue: dialogueMeasurement, music: musicMeasurement, mix: mixMeasurement };

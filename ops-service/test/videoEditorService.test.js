@@ -232,6 +232,18 @@ test('decision previews stay tiny while production masters preserve native resol
   assert.deepEqual(editor.renderShapeForProject({ width: 1920, height: 1080 }, 'vertical', true), { width: 606, height: 1080 });
 });
 
+test('horizontal outros fade within 1.7 seconds and reserve only a music-backed black tail', function () {
+  assert.deepEqual(editor.renderOutroTiming('horizontal', false), {
+    visualFadeSeconds: 1.7, totalSeconds: 1.7, musicTailSeconds: 0
+  });
+  assert.deepEqual(editor.renderOutroTiming('horizontal', true), {
+    visualFadeSeconds: 1.7, totalSeconds: 2, musicTailSeconds: 0.3
+  });
+  assert.deepEqual(editor.renderOutroTiming('vertical', true), {
+    visualFadeSeconds: 2, totalSeconds: 2, musicTailSeconds: 0
+  });
+});
+
 test('encoder queue never overlaps two jobs for the same recording', async function () {
   const queue = editor.createPriorityTaskQueue(2);
   const order = [];
@@ -1072,17 +1084,19 @@ test('final render splices an inserted clip and its caption timeline between sou
     await new Promise(function (resolve) { setTimeout(resolve, 30); });
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
-  assert.ok(stored.editedDuration > 3.9 && stored.editedDuration < 4.1);
+  assert.ok(stored.editedDuration > 3.6 && stored.editedDuration < 3.8);
   assert.equal(stored.renderVersion, 26);
   assert.equal(stored.renderQuality.contentDuration, 2);
-  assert.equal(stored.renderQuality.outroSeconds, 2);
+  assert.equal(stored.renderQuality.outroSeconds, 1.7);
+  assert.equal(stored.renderQuality.visualFadeSeconds, 1.7);
+  assert.equal(stored.renderQuality.musicTailSeconds, 0);
   assert.ok(stored.renderQuality.insertedClipLoudness.clips[0].gainDb > 18);
   assert.ok(stored.renderQuality.insertedClipLoudness.clips[0].gainDb < 22);
   const rendered = path.join(projectDir, 'render.mp4');
   const renderedStreams = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type,duration',
     '-of', 'json', rendered], { encoding: 'utf8' })).streams;
   const renderedVideo = renderedStreams.find(function (stream) { return stream.codec_type === 'video'; });
-  assert.ok(Number(renderedVideo.duration) > 3.9, 'the visual stream itself includes the complete outro: ' + renderedVideo.duration);
+  assert.ok(Number(renderedVideo.duration) > 3.6, 'the visual stream itself includes the complete outro: ' + renderedVideo.duration);
   function rangeLufs(start, duration) {
     const measured = spawnSync('ffmpeg', ['-hide_banner', '-nostats', '-ss', String(start), '-t', String(duration), '-i', rendered,
       '-vn', '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json', '-f', 'null', '-'], { encoding: 'utf8' });
@@ -1096,7 +1110,7 @@ test('final render splices an inserted clip and its caption timeline between sou
     return Array.from(frame.subarray(0, 3));
   }
   const beforeOutro = frameRgb(1.75);
-  const nearEnd = frameRgb(3.9);
+  const nearEnd = frameRgb(3.65);
   assert.ok(beforeOutro.reduce(function (sum, channel) { return sum + channel; }, 0) >
     nearEnd.reduce(function (sum, channel) { return sum + channel; }, 0) + 80,
   'the last content frame remains visibly brighter before the outro: ' + JSON.stringify({ beforeOutro: beforeOutro, nearEnd: nearEnd }));

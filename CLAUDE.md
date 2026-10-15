@@ -19436,3 +19436,26 @@ whole page, rebuilds the preview, and verifies the player plus both timeline
 playheads return to the same source moment throughout.
 
 The complete ops-service suite passes with 238 tests.
+
+---
+
+# 624. Horizontal Outros Hide the Camera-Reach Within 1.7 Seconds (2026-10-15)
+
+Long-form landscape footage previously held the final camera frame while fading
+it over the full two-second outro. On **Devotion isn't love**, that was long
+enough for the hand reaching toward the recording controls to remain visible.
+Landscape Editor previews and music-free Production masters now fade fully to
+black and end within 1.7 seconds. Portrait behavior is deliberately unchanged.
+
+When a landscape Production master has backing music, the picture still fades
+fully to black over those same 1.7 seconds, then remains black for exactly 0.3
+seconds while the music fades during that remaining tail. The master renderer
+is told whether a real selected audio file exists before encoding, so a deleted
+or explicitly absent track does not create an unnecessary black tail. The
+music mixer likewise uses the landscape-only 0.3-second fade rather than
+starting a two-second music fade while the picture is still visible.
+
+Regression coverage locks the landscape/no-music 1.7-second ending, the
+music-backed 1.7 + 0.3 timing, the unchanged portrait timing, the actual final
+black frame, and the 0.3-second FFmpeg audio-fade expression. The complete
+ops-service suite passes with 240 tests.
