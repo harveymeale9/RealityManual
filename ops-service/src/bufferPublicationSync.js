@@ -1,5 +1,7 @@
 'use strict';
 
+const publishBatchState = require('./publishBatchState');
+
 const FIFTEEN_MINUTES = 15 * 60 * 1000;
 
 function clean(value, max) { return String(value == null ? '' : value).trim().slice(0, max || 1000); }
@@ -76,14 +78,16 @@ function setup(db, options) {
         if (post.externalLink) piece.tiktokExternalLink = post.externalLink;
 
         if (status === 'sent') {
-          piece.stage = 'live';
           piece.tiktokPublishStatus = 'done';
           piece.tiktokPublishError = '';
           piece.postedAt = post.sentAt || piece.postedAt || post.dueAt || checkedAt;
           piece.tiktokMetrics = metricsObject(post.metrics);
           piece.tiktokMetricsUpdatedAt = post.metricsUpdatedAt || null;
           metricsCount += Object.keys(piece.tiktokMetrics).length ? 1 : 0;
-          live += 1;
+          piece.stage = publishBatchState.completedStage(piece, piece.publishBatchPlatforms) || 'scheduled';
+          if (piece.stage === 'live') live += 1;
+          else if (piece.stage === 'final_check') failed += 1;
+          else scheduled += 1;
         } else if (status === 'error') {
           piece.stage = 'final_check';
           piece.scheduledAt = '';
@@ -93,9 +97,10 @@ function setup(db, options) {
           failed += 1;
         } else {
           // Buffer's remaining pre-publication states are scheduled/sending.
-          piece.stage = 'scheduled';
           piece.tiktokPublishStatus = status === 'sending' ? 'running' : 'done';
-          scheduled += 1;
+          piece.stage = publishBatchState.completedStage(piece, piece.publishBatchPlatforms) === 'final_check' ? 'final_check' : 'scheduled';
+          if (piece.stage === 'final_check') failed += 1;
+          else scheduled += 1;
         }
         if (comparable(piece) !== before) {
           piece.tiktokBufferCheckedAt = checkedAt;

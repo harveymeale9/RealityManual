@@ -36,6 +36,7 @@ const recordConcurrency = require('./src/recordConcurrency');
 const backgroundMonitorService = require('./src/backgroundMonitorService');
 const bufferService = require('./src/bufferService');
 const bufferPublicationSyncService = require('./src/bufferPublicationSync');
+const publishBatchState = require('./src/publishBatchState');
 const metaAuth = require('./src/metaAuth');
 const instagramInsightsAuth = require('./src/instagramInsightsAuth');
 const metaPublisherService = require('./src/metaPublisher');
@@ -1564,11 +1565,10 @@ const bufferPublicationSync = bufferPublicationSyncService.setup(db, {
     const latest = getPieceRecord(piece.id);
     if (!latest) return;
     const previousStage = latest.stage;
-    ['stage', 'scheduledAt', 'postedAt', 'tiktokPublishStatus', 'tiktokPublishError',
-      'tiktokBufferStatus', 'tiktokBufferCheckedAt', 'tiktokExternalLink',
-      'tiktokBufferSupportUrl', 'tiktokMetrics', 'tiktokMetricsUpdatedAt'].forEach(function (field) {
-      latest[field] = piece[field];
-    });
+    // Reconcile against the newest direct-upload statuses, not the snapshot
+    // taken before Buffer's network request. Otherwise a slow Buffer response
+    // can put an already-completed batch back in Scheduled (or vice versa).
+    if (!publishBatchState.applyBufferSnapshot(latest, piece)) return;
     latest.updatedAt = piece.updatedAt;
     savePieceRecord(latest);
     if (previousStage === 'scheduled' && latest.stage !== 'scheduled') schedulePublishingQueueDrain();
@@ -3498,13 +3498,11 @@ async function runPlatformPublishBatch(id, destinations, options) {
   latest.queuedPublishDestinations = [];
   latest.publishingDequeuedAt = new Date().toISOString();
   const allPlatforms = Array.isArray(latest.publishBatchPlatforms) ? latest.publishBatchPlatforms : destinations.map(function (d) { return d.platform; });
-  const hasError = allPlatforms.some(function (platform) { return latest[publishStatusField(platform)] === 'error'; });
+  const completedStage = publishBatchState.completedStage(latest, allPlatforms);
+  const hasError = completedStage === 'final_check';
   const allDone = allPlatforms.every(function (platform) { return latest[publishStatusField(platform)] === 'done'; });
-  if (hasError) latest.stage = 'final_check';
-  else if (allDone) {
-    latest.stage = allPlatforms.indexOf('tiktok') !== -1 ? 'scheduled' : 'live';
-    latest.postedAt = new Date().toISOString();
-  }
+  if (completedStage) latest.stage = completedStage;
+  if (completedStage === 'live' && !latest.postedAt) latest.postedAt = new Date().toISOString();
   if (latest.directShortReleaseRunning || latest.directLongformReleaseRunning) {
     if (latest.directShortReleaseRunning) {
       latest.directShortPublishStatus = hasError ? 'error' : (allDone ? 'done' : latest.directShortPublishStatus);

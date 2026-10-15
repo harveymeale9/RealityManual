@@ -87,3 +87,29 @@ test('already-live TikTok posts do not consume lifecycle polling quota', async f
   sync.close();
   db.close();
 });
+
+test('Buffer sent during an unfinished direct batch does not prematurely mark the card Live', async function () {
+  const db = new Database(':memory:');
+  const piece = {
+    id: 'racing', stage: 'scheduled', tiktokPublishProvider: 'buffer', tiktokPublishId: 'post',
+    publishBatchPlatforms: ['ytshort', 'tiktok', 'instagram', 'facebook'],
+    youtubePublishStatus: 'running', tiktokPublishStatus: 'done',
+    instagramPublishStatus: 'done', facebookPublishStatus: 'done'
+  };
+  const sync = syncService.setup(db, {
+    autoStart: false,
+    listPieces: async function () { return [piece]; },
+    fetchPost: async function () { return { id: 'post', status: 'sent', sentAt: '2026-10-15T18:56:47Z' }; },
+    savePiece: async function () {}
+  });
+  const first = await sync.run();
+  assert.equal(first.scheduled, 1);
+  assert.equal(piece.stage, 'scheduled');
+  assert.equal(piece.tiktokBufferStatus, 'sent');
+  piece.youtubePublishStatus = 'done';
+  const second = await sync.run();
+  assert.equal(second.live, 1);
+  assert.equal(piece.stage, 'live');
+  sync.close();
+  db.close();
+});

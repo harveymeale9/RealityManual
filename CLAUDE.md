@@ -19778,3 +19778,27 @@ all 15 days, and multiple scheduled/queued/open short slots on one day.
 Chromium desktop and phone checks confirmed all 15 day columns and a contained
 mobile horizontal scroll without page overflow. App, style, and coverage
 module cache keys were advanced.
+
+---
+
+# 638. Buffer/Direct-Upload Race Left a Published Short in Scheduled (2026-10-15)
+
+Harvey saw **The Propagation of Success** still in Scheduled roughly eleven
+minutes after its Buffer slot. Its YouTube, Instagram, Facebook, and TikTok
+publish IDs and links were present; Buffer had already reported TikTok `sent`.
+The 18:56:52 Buffer sync moved it to Live, but the multi-platform release job
+finished five seconds later and unconditionally set any batch containing
+TikTok back to Scheduled. A manual Buffer reconciliation at 19:10 UTC
+confirmed `sent` and restored the real card to Posted / Live.
+
+Both completion paths now use a shared stage decision: a post is Live only
+when every requested direct platform is `done` and Buffer reports TikTok
+`sent`; a direct failure returns to Final Check; otherwise it remains
+Scheduled. The release job no longer overwrites Buffer's actual sent time
+with its own finish time. Buffer sync also recomputes stage against the latest
+direct-upload statuses at save time, so a delayed network response cannot
+reverse a concurrently completed batch. Older pre-`sent` responses cannot
+regress a card already confirmed sent. Tests cover both finish orders and
+the stale-snapshot merge. The existing fifteen-minute Buffer polling interval
+is unchanged to preserve the API allowance for publishing; an actual post may
+still briefly remain Scheduled until Buffer's next confirmation.
