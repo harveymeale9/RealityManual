@@ -50,6 +50,7 @@ const r2StorageService = require('./src/r2Storage');
 const rangeResponse = require('./src/rangeResponse');
 const kanbanBackupService = require('./src/kanbanBackupService');
 const contentAnalyticsService = require('./src/contentAnalyticsService');
+const tiktokPublicMetrics = require('./src/tiktokPublicMetrics');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
@@ -1320,15 +1321,27 @@ const contentAnalytics = contentAnalyticsService.setup(db, {
       for (const piece of pieces.filter(function (item) { return !!item.tiktokPublishId; })) {
         const post = await buffer.getPost(piece.tiktokPublishId);
         const metrics = bufferPublicationSyncService.metricsObject(post.metrics);
+        // Buffer refreshes sent-post analytics about once per day. The public
+        // TikTok video page carries current counters, so use it to close that
+        // gap while retaining Buffer's richer watch-time fields. This is a
+        // best-effort supplement: a temporary public-page failure must never
+        // hide the official Buffer snapshot.
+        let publicMetrics = null;
+        const publicUrl = post.externalLink || piece.tiktokExternalLink || '';
+        try { publicMetrics = await tiktokPublicMetrics.fetchPublicMetrics(publicUrl); }
+        catch (error) { publicMetrics = null; }
         const totalTimeWatched = bufferMetric(metrics, ['totalTimeWatched']);
         rows.push({ pieceId: piece.id, platform: 'tiktok', metrics: {
-          views: bufferMetric(metrics, ['views']), likes: bufferMetric(metrics, ['reactions', 'likes']),
-          comments: bufferMetric(metrics, ['comments']), shares: bufferMetric(metrics, ['shares', 'reposts']),
+          views: tiktokPublicMetrics.freshestCount(bufferMetric(metrics, ['views']), publicMetrics && publicMetrics.views),
+          likes: tiktokPublicMetrics.freshestCount(bufferMetric(metrics, ['reactions', 'likes']), publicMetrics && publicMetrics.likes),
+          comments: tiktokPublicMetrics.freshestCount(bufferMetric(metrics, ['comments']), publicMetrics && publicMetrics.comments),
+          shares: tiktokPublicMetrics.freshestCount(bufferMetric(metrics, ['shares', 'reposts']), publicMetrics && publicMetrics.shares),
+          saves: tiktokPublicMetrics.freshestCount(bufferMetric(metrics, ['saves']), publicMetrics && publicMetrics.saves),
           reach: bufferMetric(metrics, ['reach']), watchTimeSeconds: totalTimeWatched == null ? null : totalTimeWatched * 60,
           averageWatchSeconds: bufferMetric(metrics, ['averageTimeWatched'])
         } });
       }
-      return { pieces: rows, channels: [], status: { audienceAvailable: false, note: 'TikTok audience totals are not exposed by the connected Buffer API.' } };
+      return { pieces: rows, channels: [], status: { audienceAvailable: false, note: 'Video counters are live; watch-time details follow Buffer’s daily refresh. TikTok audience totals are not exposed by the connection.' } };
     },
     instagram: async function (pieces) {
       const auth = stmts.getMetaAuth.get();

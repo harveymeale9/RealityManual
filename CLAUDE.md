@@ -19283,3 +19283,37 @@ Normal transcript edits still wait for Harvey's Rebuild preview button.
 Automated coverage locks the landscape border and shadow values independently
 from the unchanged portrait style. The complete ops-service suite passes with
 231 tests.
+
+---
+
+# 619. Live TikTok Counters and Honest Instagram Availability (2026-10-15)
+
+The first published short exposed an important provider-freshness distinction.
+Buffer's post-metrics response was structurally valid but remained frozen at
+its publish-time snapshot—zero views with `metricsUpdatedAt` still at 19:00—
+while the live TikTok post already showed activity. Buffer documents that its
+metrics ingestion runs roughly daily, so polling that same response hourly
+cannot provide a live dashboard.
+
+Content Analytics now supplements Buffer with the public TikTok video's own
+hydration payload. Current public views, likes, comments, shares and saves are
+merged monotonically with Buffer's counters, while Buffer remains authoritative
+for watch-time fields unavailable on the public page. A public-page outage or
+markup change falls back safely to Buffer rather than failing the provider.
+The real first post was verified at 351 views and 18 likes during rollout,
+replacing the stale stored zero on the next analytics refresh.
+
+Instagram is a separate, confirmed permission boundary rather than the same
+freshness bug. Both the saved user token and Page token return Meta error #10
+for the Reel insights edge, even though the current grant successfully returns
+the live four likes and zero comments. The anonymous Reel document contains
+those engagement counts but does not expose a play/view counter. Historical
+live authorization already proved that `instagram_manage_insights` is rejected
+by this app's installed Facebook Login bundle, so it must not be silently
+reintroduced and break publishing authorization. Instagram views therefore
+remain an explicit unavailable value until the Meta app has an approved
+insights-capable login/permission path; the dashboard never turns that missing
+value into a fabricated zero.
+
+Automated coverage verifies strict TikTok URL acceptance, matching-video JSON
+parsing, null handling, and monotonic merging against stale Buffer counters.
