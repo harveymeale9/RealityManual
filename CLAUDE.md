@@ -19168,3 +19168,46 @@ of tasks ahead. The earlier generic “Codex is working on it” text made every
 queued follow-up look active even though the backend processes only one turn at
 a time; per-message **Never mind** cancellation remains available when the
 active task should be stopped.
+
+---
+
+# 615. First-Party Cross-Platform Content Analytics (2026-10-15)
+
+The Analytics area now starts with a real **Content Analytics** view alongside
+Sales and Website Analytics. The existing YouTube competitor dashboard remains
+under Research as **Outlier Analysis**; its route was renamed from the
+ambiguous `#content-analytics` to `#outlier-analysis` so research about other
+creators and measurement of Reality Manual posts are no longer conflated.
+
+The dashboard is designed for two distinct questions. Its newest-first piece
+table answers “which videos are working?” with total and per-platform views
+plus an interaction rate. Hovering, focusing, or tapping a row opens a larger
+detail surface with an hourly view-history line for YouTube, TikTok, Instagram,
+and Facebook, direct post links, likes, comments, shares, saves, and watch-time
+fields where the provider exposes them. Separate audience cards answer “are the
+accounts growing?” with subscriber/follower snapshots by platform. The header
+summarizes published pieces, measured views, measurable interactions,
+interaction rate, and known audience. Copy explicitly warns that platform view
+definitions differ, so combined reach is directional while within-platform
+trend, watch time, and interaction quality are the stronger comparisons.
+
+`content_metric_snapshots` and `content_channel_snapshots` retain one upserted
+snapshot per UTC hour for 365 days. A collector runs hourly and can be refreshed
+manually; each provider is isolated so one unavailable API does not hide good
+data from the others. The API and navigation are admin-only. YouTube uses the
+existing owner-authorized Data API for per-video views/likes/comments and
+channel subscribers/views. TikTok uses Buffer's normalized post metrics,
+including views, reactions, comments, shares, reach, and watch time; Buffer
+does not expose TikTok follower totals through the connected API, which the UI
+states rather than guessing. Facebook uses the Reel `video_insights` response
+for plays and watch time plus Graph engagement summaries. Instagram's current
+grant exposes Reel likes/comments and account follower/media totals; Reel view
+insights return a real permission error under the app's existing supported
+Facebook Login scope set, so those views remain an explicit dash with a notice
+that an additional approved Instagram Insights permission is required. Missing
+metrics are always `null`, never manufactured zeroes.
+
+Automated coverage verifies snapshot history and 24-hour deltas, partial
+provider isolation, YouTube channel statistics, Facebook Reel insight
+normalization, and Instagram's permission-limited fallback. The complete
+ops-service suite passes with 228 tests.

@@ -339,6 +339,25 @@ async function fetchVideoStatistics(accessToken, videoIds) {
   return results;
 }
 
+async function fetchOwnChannelStatistics(accessToken, channelId) {
+  const url = new URL(CHANNELS_LIST_URL);
+  url.searchParams.set('part', 'snippet,statistics');
+  if (channelId) url.searchParams.set('id', String(channelId));
+  else url.searchParams.set('mine', 'true');
+  const res = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
+  if (!res.ok) throw new Error('YouTube channel statistics lookup failed (' + res.status + '): ' + (await res.text()));
+  const item = ((await res.json()).items || [])[0];
+  if (!item) return null;
+  const statistics = item.statistics || {};
+  return {
+    id: item.id,
+    title: item.snippet && item.snippet.title || item.id,
+    followers: statistics.hiddenSubscriberCount ? null : (Number(statistics.subscriberCount) || 0),
+    totalViews: Number(statistics.viewCount) || 0,
+    mediaCount: Number(statistics.videoCount) || 0
+  };
+}
+
 // Used by the daily Posted / Live audit. An authenticated videos.list call
 // returns the connected channel's private/unlisted items as well as public
 // ones; an id omitted from a successful response is no longer available to
@@ -413,4 +432,4 @@ async function uploadVideo(accessToken, filePath, mimeType, metadata) {
   return { videoId: data.id };
 }
 
-module.exports = { SCOPES, isConfigured, buildAuthUrl, exchangeCode, refreshAccessToken, fetchChannelInfo, fetchVideoStatistics, fetchVideoStatuses, fetchCompetitorChannel, competitorChannelFilter, markOneInTenOutliers, fetchPublicCaptionTranscript, parseCaptionXml, uploadVideo };
+module.exports = { SCOPES, isConfigured, buildAuthUrl, exchangeCode, refreshAccessToken, fetchChannelInfo, fetchVideoStatistics, fetchOwnChannelStatistics, fetchVideoStatuses, fetchCompetitorChannel, competitorChannelFilter, markOneInTenOutliers, fetchPublicCaptionTranscript, parseCaptionXml, uploadVideo };

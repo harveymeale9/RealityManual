@@ -123,11 +123,102 @@ function setup(options) {
     return { id: clean(published.id, 100), url: clean(details.permalink, 1000) || null, containerId: clean(created.id, 100) };
   }
 
+  function insightValue(rows, name) {
+    const row = (rows || []).find(function (item) { return item && item.name === name; });
+    if (!row) return null;
+    if (row.total_value && row.total_value.value != null) return row.total_value.value;
+    return row.values && row.values[0] ? row.values[0].value : null;
+  }
+
+  function sumValues(value) {
+    if (value == null) return 0;
+    if (typeof value === 'number') return value;
+    if (typeof value !== 'object') return Number(value) || 0;
+    return Object.keys(value).reduce(function (sum, key) { return sum + sumValues(value[key]); }, 0);
+  }
+
+  function namedValue(value, names) {
+    if (!value || typeof value !== 'object') return 0;
+    const wanted = names.map(function (name) { return name.toLowerCase(); });
+    const key = Object.keys(value).find(function (candidate) { return wanted.indexOf(candidate.toLowerCase()) !== -1; });
+    return key ? Number(value[key]) || 0 : 0;
+  }
+
+  async function fetchFacebookVideoMetrics(input) {
+    const id = encodeURIComponent(clean(input.videoId, 100));
+    const token = clean(input.pageToken, 2000);
+    const responses = await Promise.all([
+      graphGet('/' + id + '/video_insights', { access_token: token }, 'Facebook Reel insights lookup failed'),
+      graphGet('/' + id, { fields: 'likes.summary(true),comments.summary(true)', access_token: token }, 'Facebook Reel engagement lookup failed')
+    ]);
+    const rows = responses[0].data || [];
+    const details = responses[1] || {};
+    const social = insightValue(rows, 'post_video_social_actions') || {};
+    const reactions = insightValue(rows, 'post_video_likes_by_reaction_type') || {};
+    const views = insightValue(rows, 'fb_reels_total_plays');
+    const initialPlays = insightValue(rows, 'blue_reels_play_count');
+    return {
+      views: views == null ? initialPlays : views,
+      likes: details.likes && details.likes.summary ? Number(details.likes.summary.total_count) || sumValues(reactions) : sumValues(reactions),
+      comments: details.comments && details.comments.summary ? Number(details.comments.summary.total_count) || 0 : namedValue(social, ['comments', 'comment']),
+      shares: namedValue(social, ['shares', 'share']),
+      watchTimeSeconds: Number(insightValue(rows, 'post_video_view_time')) / 1000 || 0,
+      averageWatchSeconds: Number(insightValue(rows, 'post_video_avg_time_watched')) / 1000 || 0
+    };
+  }
+
+  async function fetchInstagramMediaMetrics(input) {
+    const id = encodeURIComponent(clean(input.mediaId, 100));
+    const token = clean(input.pageToken, 2000);
+    const details = await graphGet('/' + id, {
+      fields: 'id,permalink,like_count,comments_count', access_token: token
+    }, 'Instagram Reel engagement lookup failed');
+    let insightRows = [];
+    let insightsAvailable = true;
+    let insightsError = '';
+    try {
+      const insights = await graphGet('/' + id + '/insights', {
+        metric: 'views,reach,saved,shares,total_interactions', metric_type: 'total_value', access_token: token
+      }, 'Instagram Reel insights lookup failed');
+      insightRows = insights.data || [];
+    } catch (error) {
+      insightsAvailable = false;
+      insightsError = clean(error.message, 300);
+    }
+    return {
+      views: insightValue(insightRows, 'views'), reach: insightValue(insightRows, 'reach'),
+      likes: Number(details.like_count) || 0, comments: Number(details.comments_count) || 0,
+      shares: insightValue(insightRows, 'shares'), saves: insightValue(insightRows, 'saved'),
+      insightsAvailable: insightsAvailable, insightsError: insightsError
+    };
+  }
+
+  async function fetchAudienceMetrics(input) {
+    const token = clean(input.pageToken, 2000);
+    const results = {};
+    if (input.pageId) {
+      const page = await graphGet('/' + encodeURIComponent(clean(input.pageId, 100)), {
+        fields: 'followers_count,fan_count', access_token: token
+      }, 'Facebook audience lookup failed');
+      results.facebook = { followers: Number(page.followers_count) || Number(page.fan_count) || 0 };
+    }
+    if (input.instagramAccountId) {
+      const instagram = await graphGet('/' + encodeURIComponent(clean(input.instagramAccountId, 100)), {
+        fields: 'followers_count,media_count', access_token: token
+      }, 'Instagram audience lookup failed');
+      results.instagram = { followers: Number(instagram.followers_count) || 0, mediaCount: Number(instagram.media_count) || 0 };
+    }
+    return results;
+  }
+
   return {
     mediaUrl: mediaUrl,
     verifyMediaSignature: verifyMediaSignature,
     publishFacebookVideo: publishFacebookVideo,
-    publishInstagramReel: publishInstagramReel
+    publishInstagramReel: publishInstagramReel,
+    fetchFacebookVideoMetrics: fetchFacebookVideoMetrics,
+    fetchInstagramMediaMetrics: fetchInstagramMediaMetrics,
+    fetchAudienceMetrics: fetchAudienceMetrics
   };
 }
 

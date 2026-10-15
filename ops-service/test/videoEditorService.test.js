@@ -464,7 +464,7 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /Playback will unlock automatically/);
   assert.match(source, /\(mediaUnavailable \? '' : ' src="' \+ previewUrl/);
   assert.match(page, /editor\.js\?v=20261014-longform-caption-size-v142/);
-  assert.match(page, /style\.css\?v=20261014-longform-caption-size-v139/);
+  assert.match(page, /style\.css\?v=20261015-content-analytics-v140/);
 });
 
 test('startup probing preserves an active browser preview encode', function () {

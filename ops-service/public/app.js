@@ -68,10 +68,11 @@
         { id: 'settings', label: 'Content Settings' }
       ] },
     { label: 'Research', tabs: [
-        { id: 'content-analytics', label: 'Outlier Analysis' },
+        { id: 'outlier-analysis', label: 'Outlier Analysis' },
         { id: 'idea-research', label: 'Idea Research' }
       ] },
     { label: 'Analytics', tabs: [
+        { id: 'content-analytics', label: 'Content Analytics' },
         { id: 'sales-analytics', label: 'Sales Analytics' },
         { id: 'website-analytics', label: 'Website Analytics' }
       ] },
@@ -237,6 +238,7 @@
   var STOREFRONT_API_BASE = 'https://api.realitymanual.com';
 
   var salesAnalyticsTimer = null;
+  var contentAnalyticsTimer = null;
 
   function salesMoney(cents, currency) {
     try {
@@ -425,6 +427,138 @@
       });
   }
 
+  var CONTENT_PLATFORM_META = {
+    youtube: { label: 'YouTube', color: '#ff5f67' },
+    tiktok: { label: 'TikTok', color: '#68e3db' },
+    instagram: { label: 'Instagram', color: '#d98cff' },
+    facebook: { label: 'Facebook', color: '#63a8ff' }
+  };
+
+  function contentNumber(value) {
+    return value == null ? '—' : Number(value).toLocaleString('en-US');
+  }
+  function contentPercent(value) {
+    return value == null ? '—' : Number(value).toFixed(value < 1 ? 2 : 1).replace(/\.0$/, '') + '%';
+  }
+  function contentDate(value) {
+    var date = new Date(value || 0);
+    return isNaN(date.getTime()) ? 'Unknown' : date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+  function contentViews(piece, platform) {
+    var row = piece.platforms && piece.platforms[platform];
+    return row && row.views != null ? contentNumber(row.views) : '—';
+  }
+
+  function contentLineChart(piece) {
+    var series = Object.keys(CONTENT_PLATFORM_META).map(function (platform) {
+      var metric = piece.platforms && piece.platforms[platform];
+      var points = metric && metric.history ? metric.history.filter(function (point) { return point.views != null; }) : [];
+      return { platform: platform, points: points };
+    }).filter(function (series) { return series.points.length; });
+    if (!series.length) return '<div class="content-chart-empty">View history will appear after the first platform snapshot.</div>';
+    var timestamps = [];
+    var values = [0];
+    series.forEach(function (item) { item.points.forEach(function (point) { timestamps.push(new Date(point.at).getTime()); values.push(Number(point.views) || 0); }); });
+    var minTime = Math.min.apply(Math, timestamps);
+    var maxTime = Math.max.apply(Math, timestamps);
+    var maxValue = Math.max.apply(Math, values.concat([1]));
+    var plot = { left: 48, top: 18, width: 642, height: 170 };
+    function x(time) { return minTime === maxTime ? plot.left + plot.width / 2 : plot.left + (time - minTime) / (maxTime - minTime) * plot.width; }
+    function y(value) { return plot.top + plot.height - (Number(value) || 0) / maxValue * plot.height; }
+    var grid = [0, .25, .5, .75, 1].map(function (ratio) {
+      var py = plot.top + plot.height * (1 - ratio);
+      return '<line x1="' + plot.left + '" y1="' + py + '" x2="' + (plot.left + plot.width) + '" y2="' + py + '" />' +
+        '<text x="40" y="' + (py + 4) + '">' + contentNumber(Math.round(maxValue * ratio)) + '</text>';
+    }).join('');
+    var paths = series.map(function (item) {
+      var color = CONTENT_PLATFORM_META[item.platform].color;
+      var coords = item.points.map(function (point) { return x(new Date(point.at).getTime()).toFixed(1) + ',' + y(point.views).toFixed(1); });
+      var line = coords.length > 1 ? '<polyline points="' + coords.join(' ') + '" fill="none" stroke="' + color + '" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />' : '';
+      var dots = item.points.map(function (point) {
+        return '<circle cx="' + x(new Date(point.at).getTime()).toFixed(1) + '" cy="' + y(point.views).toFixed(1) + '" r="4" fill="' + color + '"><title>' + escapeHtml(CONTENT_PLATFORM_META[item.platform].label + ': ' + contentNumber(point.views) + ' views · ' + contentDate(point.at)) + '</title></circle>';
+      }).join('');
+      return line + dots;
+    }).join('');
+    var legend = series.map(function (item) { return '<span style="--series:' + CONTENT_PLATFORM_META[item.platform].color + '">' + CONTENT_PLATFORM_META[item.platform].label + '</span>'; }).join('');
+    return '<div class="content-chart-legend">' + legend + '</div><svg class="content-line-chart" viewBox="0 0 720 215" role="img" aria-label="Views over time by platform"><g class="content-chart-grid">' + grid + '</g>' + paths +
+      '<text class="content-chart-time" x="48" y="208">' + escapeHtml(contentDate(new Date(minTime).toISOString())) + '</text>' +
+      '<text class="content-chart-time end" x="690" y="208">' + escapeHtml(minTime === maxTime ? 'History starts here' : contentDate(new Date(maxTime).toISOString())) + '</text></svg>';
+  }
+
+  function contentDetailMarkup(piece) {
+    var platformCards = Object.keys(piece.platforms || {}).map(function (platform) {
+      var metric = piece.platforms[platform];
+      var meta = CONTENT_PLATFORM_META[platform];
+      var actions = Number(metric.likes || 0) + Number(metric.comments || 0) + Number(metric.shares || 0) + Number(metric.saves || 0);
+      return '<article class="content-platform-card" style="--series:' + meta.color + '"><header><span>' + meta.label + '</span>' +
+        (metric.url ? '<a href="' + escapeHtml(metric.url) + '" target="_blank" rel="noopener">Open ↗</a>' : '') + '</header>' +
+        '<strong>' + contentNumber(metric.views) + '<small>views</small></strong>' +
+        '<div><span>' + contentNumber(metric.likes) + ' likes</span><span>' + contentNumber(metric.comments) + ' comments</span><span>' + contentNumber(metric.shares) + ' shares</span></div>' +
+        (metric.views == null ? '<p>Views are not available from the current connection yet.</p>' : '<p>' + contentNumber(actions) + ' measurable interactions' + (metric.averageWatchSeconds != null ? ' · ' + Number(metric.averageWatchSeconds).toFixed(1) + 's avg watch' : '') + '</p>') +
+      '</article>';
+    }).join('');
+    return '<div class="content-detail-head"><div><div class="eyebrow">Piece performance</div><h3>' + escapeHtml(piece.title) + '</h3><p>Published ' + escapeHtml(contentDate(piece.postedAt)) + ' · ' + contentNumber(piece.views) + ' measured views across platforms.</p></div><strong>' + contentPercent(piece.engagementRate) + '<small>interaction rate</small></strong></div>' +
+      '<div class="content-chart-shell"><div class="content-chart-title"><span>Views over time</span><small>Hourly snapshots · platform definitions differ</small></div>' + contentLineChart(piece) + '</div>' +
+      '<div class="content-platform-grid">' + platformCards + '</div>';
+  }
+
+  function renderContentAnalytics(forceRefresh) {
+    clearTimeout(contentAnalyticsTimer);
+    panelMain.innerHTML = '<div class="content-dashboard content-loading"><div class="eyebrow">Cross-platform performance</div><h2>Content Analytics</h2><p>Collecting the latest video and audience metrics…</p></div>';
+    fetch(forceRefresh ? '/api/reports/content-analytics/refresh' : '/api/reports/content-analytics', {
+      method: forceRefresh ? 'POST' : 'GET', credentials: 'include'
+    }).then(function (response) {
+      if (!response.ok) throw new Error('content_analytics_' + response.status);
+      return response.json();
+    }).then(function (data) {
+      if (currentTabId() !== 'content-analytics') return;
+      var notices = Object.keys(data.providerStatus || {}).map(function (platform) {
+        var status = data.providerStatus[platform];
+        if (!status || (!status.error && !status.note)) return '';
+        return '<div class="content-provider-note ' + (status.available ? 'partial' : 'error') + '"><strong>' + CONTENT_PLATFORM_META[platform].label + '</strong><span>' + escapeHtml(status.note || status.error) + '</span></div>';
+      }).join('');
+      var audience = data.audience.map(function (row) {
+        var meta = CONTENT_PLATFORM_META[row.platform];
+        return '<article class="content-audience-card" style="--series:' + meta.color + '"><span>' + meta.label + '</span><strong>' + contentNumber(row.followers) + '</strong><small>followers / subscribers</small>' +
+          '<p>' + (row.followerChange7d == null ? 'Growth tracking starts with today’s snapshot.' : '+' + contentNumber(row.followerChange7d) + ' in 7 days') + '</p></article>';
+      }).join('');
+      var rows = data.pieces.length ? data.pieces.map(function (piece, index) {
+        return '<button type="button" class="content-piece-row' + (index === 0 ? ' active' : '') + '" data-piece-index="' + index + '">' +
+          '<span class="content-piece-title"><b>' + escapeHtml(piece.title) + '</b><small>' + escapeHtml(contentDate(piece.postedAt)) + '</small></span>' +
+          '<span><small>Total</small><b>' + contentNumber(piece.views) + '</b></span>' +
+          '<span><small>YT</small><b>' + contentViews(piece, 'youtube') + '</b></span>' +
+          '<span><small>TT</small><b>' + contentViews(piece, 'tiktok') + '</b></span>' +
+          '<span><small>IG</small><b>' + contentViews(piece, 'instagram') + '</b></span>' +
+          '<span><small>FB</small><b>' + contentViews(piece, 'facebook') + '</b></span>' +
+          '<span><small>Rate</small><b>' + contentPercent(piece.engagementRate) + '</b></span></button>';
+      }).join('') : '<div class="content-empty"><strong>No published pieces yet</strong><span>Performance appears here after the first platform post is linked to Content Studio.</span></div>';
+
+      panelMain.innerHTML = '<div class="content-dashboard"><header class="content-dashboard-head"><div><div class="eyebrow">Cross-platform performance</div><h2>Content Analytics</h2><p>Compare every piece, then inspect how each platform compounds over time.</p></div><div><span>' + (data.lastCollectedAt ? 'Updated ' + contentDate(data.lastCollectedAt) : 'First snapshot pending') + '</span><button type="button" class="btn-secondary btn-tiny" id="contentRefresh">Refresh metrics</button></div></header>' +
+        '<section class="content-summary-grid"><article><span>Published pieces</span><strong>' + contentNumber(data.summary.pieces) + '</strong></article><article><span>Measured views</span><strong>' + contentNumber(data.summary.totalViews) + '</strong></article><article><span>Interactions</span><strong>' + contentNumber(data.summary.totalEngagements) + '</strong></article><article><span>Interaction rate</span><strong>' + contentPercent(data.summary.engagementRate) + '</strong></article><article><span>Known audience</span><strong>' + contentNumber(data.summary.followers) + '</strong></article></section>' +
+        (notices ? '<section class="content-provider-notes">' + notices + '</section>' : '') +
+        '<section class="content-block"><div class="content-block-head"><div><span>Audience</span><h3>Platform growth</h3></div><small>Followers are not additive identities; the total is directional.</small></div><div class="content-audience-grid">' + audience + '</div></section>' +
+        '<div class="content-performance-layout"><section class="content-block content-piece-list"><div class="content-block-head"><div><span>Library</span><h3>Pieces by publish date</h3></div><small>Hover, focus, or tap a title</small></div><div class="content-piece-columns"><span>Piece</span><span>Total</span><span>YT</span><span>TT</span><span>IG</span><span>FB</span><span>Rate</span></div>' + rows + '</section>' +
+        '<section class="content-block content-piece-detail" id="contentPieceDetail">' + (data.pieces[0] ? contentDetailMarkup(data.pieces[0]) : '') + '</section></div>' +
+        '<p class="content-definition">Views are useful for reach, but watch time/retention and interactions are stronger quality signals. Platform view definitions are not identical, so compare each platform’s trend and use the combined total as a directional measure—not a laboratory-perfect one.</p></div>';
+      var refresh = document.getElementById('contentRefresh');
+      if (refresh) refresh.addEventListener('click', function () { renderContentAnalytics(true); });
+      var detail = document.getElementById('contentPieceDetail');
+      panelMain.querySelectorAll('.content-piece-row').forEach(function (button) {
+        function select() {
+          panelMain.querySelectorAll('.content-piece-row').forEach(function (row) { row.classList.toggle('active', row === button); });
+          detail.innerHTML = contentDetailMarkup(data.pieces[Number(button.dataset.pieceIndex)]);
+        }
+        button.addEventListener('mouseenter', select);
+        button.addEventListener('focus', select);
+        button.addEventListener('click', select);
+      });
+      contentAnalyticsTimer = setTimeout(function () { if (currentTabId() === 'content-analytics') renderContentAnalytics(false); }, 5 * 60 * 1000);
+    }).catch(function () {
+      if (currentTabId() !== 'content-analytics') return;
+      panelMain.innerHTML = '<div class="tab-placeholder wide"><div class="eyebrow">Temporarily unavailable</div><h2>Content Analytics</h2><p>The existing publishing data is safe. Reopen this tab to retry the metric connection.</p></div>';
+    });
+  }
+
   function renderActiveTab() {
     var active = currentTabId();
     if (active !== 'editor' && window.RMEditor && typeof window.RMEditor.unmount === 'function') window.RMEditor.unmount();
@@ -458,7 +592,9 @@
     panelMain.classList.toggle('panel-main--mailbox', active === 'mailbox');
     panelMain.classList.toggle('panel-main--website-analytics', active === 'website-analytics');
     panelMain.classList.toggle('panel-main--sales-analytics', active === 'sales-analytics');
+    panelMain.classList.toggle('panel-main--content-analytics', active === 'content-analytics');
     if (active !== 'sales-analytics') { clearTimeout(salesAnalyticsTimer); salesAnalyticsTimer = null; }
+    if (active !== 'content-analytics') { clearTimeout(contentAnalyticsTimer); contentAnalyticsTimer = null; }
     if (active !== 'project-manager' && pmSync) { pmSync.stop(); pmSync = null; }
     if (active === 'project-manager') {
       panelMain.innerHTML = PM_MARKUP;
@@ -485,6 +621,8 @@
     } else if (active === 'sales-analytics') {
       renderSalesAnalytics();
     } else if (active === 'content-analytics') {
+      renderContentAnalytics(false);
+    } else if (active === 'outlier-analysis') {
       window.RMCompetitors.mount(panelMain);
     } else if (active === 'idea-research') {
       window.RMResearch.mount(panelMain);

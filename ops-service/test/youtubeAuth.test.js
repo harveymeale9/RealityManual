@@ -30,6 +30,22 @@ test('YouTube statistics lookup returns numeric performance totals without expos
   ]);
 });
 
+test('YouTube channel statistics expose audience growth inputs', async function (t) {
+  const originalFetch = global.fetch;
+  t.after(function () { global.fetch = originalFetch; });
+  global.fetch = async function (url, options) {
+    const parsed = new URL(String(url));
+    assert.equal(parsed.pathname, '/youtube/v3/channels');
+    assert.equal(parsed.searchParams.get('part'), 'snippet,statistics');
+    assert.equal(parsed.searchParams.get('id'), 'channel-1');
+    assert.equal(options.headers.Authorization, 'Bearer token');
+    return { ok: true, json: async function () { return { items: [{ id: 'channel-1', snippet: { title: 'Reality Manual' }, statistics: { subscriberCount: '12', viewCount: '345', videoCount: '6' } }] }; } };
+  };
+  assert.deepEqual(await youtubeAuth.fetchOwnChannelStatistics('token', 'channel-1'), {
+    id: 'channel-1', title: 'Reality Manual', followers: 12, totalViews: 345, mediaCount: 6
+  });
+});
+
 test('YouTube status lookup exposes public visibility and omits no ids itself', async function (t) {
   const originalFetch = global.fetch;
   t.after(function () { global.fetch = originalFetch; });

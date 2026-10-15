@@ -65,3 +65,34 @@ test('Meta media URLs are short-lived and tamper evident', function () {
   assert.equal(service.verifyMediaSignature('piece-1', url.searchParams.get('expires'), url.searchParams.get('sig'), 'secret'), true);
   assert.equal(service.verifyMediaSignature('piece-2', url.searchParams.get('expires'), url.searchParams.get('sig'), 'secret'), false);
 });
+
+test('Meta analytics normalize Facebook Reel plays, engagement and watch time', async function () {
+  let calls = 0;
+  const service = metaPublisher.setup({ fetchImpl: async function () {
+    calls++;
+    if (calls === 1) return response({ data: [
+      { name: 'fb_reels_total_plays', values: [{ value: 42 }] },
+      { name: 'post_video_view_time', values: [{ value: 12500 }] },
+      { name: 'post_video_avg_time_watched', values: [{ value: 6250 }] },
+      { name: 'post_video_social_actions', values: [{ value: { shares: 3 } }] }
+    ] });
+    return response({ likes: { summary: { total_count: 5 } }, comments: { summary: { total_count: 2 } } });
+  } });
+  assert.deepEqual(await service.fetchFacebookVideoMetrics({ videoId: 'fb-1', pageToken: 'token' }), {
+    views: 42, likes: 5, comments: 2, shares: 3, watchTimeSeconds: 12.5, averageWatchSeconds: 6.25
+  });
+});
+
+test('Instagram analytics preserve public engagement when insights permission is unavailable', async function () {
+  let calls = 0;
+  const service = metaPublisher.setup({ fetchImpl: async function () {
+    calls++;
+    if (calls === 1) return response({ id: 'ig-1', like_count: 4, comments_count: 1 });
+    return { ok: false, status: 400, json: async function () { return { error: { message: 'permission missing' } }; } };
+  } });
+  const metrics = await service.fetchInstagramMediaMetrics({ mediaId: 'ig-1', pageToken: 'token' });
+  assert.equal(metrics.likes, 4);
+  assert.equal(metrics.comments, 1);
+  assert.equal(metrics.views, null);
+  assert.equal(metrics.insightsAvailable, false);
+});

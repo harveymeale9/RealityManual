@@ -49,6 +49,7 @@ const editorTranscriptSampling = require('./src/editorTranscriptSampling');
 const r2StorageService = require('./src/r2Storage');
 const rangeResponse = require('./src/rangeResponse');
 const kanbanBackupService = require('./src/kanbanBackupService');
+const contentAnalyticsService = require('./src/contentAnalyticsService');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
@@ -1284,6 +1285,84 @@ const weeklyReports = weeklyReportService.setup(db, {
   }
 });
 
+function storedPieces() {
+  return stmts.getAll.all('pieces').map(function (row) { return recordConcurrency.decodeRow(row); });
+}
+function bufferMetric(metrics, names) {
+  for (const name of names) {
+    if (metrics && metrics[name] && metrics[name].value != null) return Number(metrics[name].value) || 0;
+  }
+  return null;
+}
+const contentAnalytics = contentAnalyticsService.setup(db, {
+  intervalMs: Number(process.env.CONTENT_ANALYTICS_INTERVAL_MS || 60 * 60 * 1000),
+  listPieces: storedPieces,
+  collectors: {
+    youtube: async function (pieces) {
+      const auth = stmts.getYoutubeAuth.get();
+      if (!auth || !auth.refresh_token) throw new Error('YouTube is not connected.');
+      const token = await getValidYoutubeAccessToken();
+      const relevant = pieces.filter(function (piece) { return !!piece.youtubeVideoId; });
+      const stats = relevant.length ? await youtubeAuth.fetchVideoStatistics(token, relevant.map(function (piece) { return piece.youtubeVideoId; })) : [];
+      const byId = new Map(stats.map(function (row) { return [row.id, row]; }));
+      const channel = await youtubeAuth.fetchOwnChannelStatistics(token, auth.channel_id);
+      return {
+        pieces: relevant.map(function (piece) {
+          const metric = byId.get(piece.youtubeVideoId);
+          return metric ? { pieceId: piece.id, platform: 'youtube', metrics: metric } : null;
+        }).filter(Boolean),
+        channels: channel ? [{ platform: 'youtube', followers: channel.followers, totalViews: channel.totalViews, mediaCount: channel.mediaCount }] : []
+      };
+    },
+    tiktok: async function (pieces) {
+      if (!buffer.configured) throw new Error('TikTok via Buffer is not connected.');
+      const rows = [];
+      for (const piece of pieces.filter(function (item) { return !!item.tiktokPublishId; })) {
+        const post = await buffer.getPost(piece.tiktokPublishId);
+        const metrics = bufferPublicationSyncService.metricsObject(post.metrics);
+        const totalTimeWatched = bufferMetric(metrics, ['totalTimeWatched']);
+        rows.push({ pieceId: piece.id, platform: 'tiktok', metrics: {
+          views: bufferMetric(metrics, ['views']), likes: bufferMetric(metrics, ['reactions', 'likes']),
+          comments: bufferMetric(metrics, ['comments']), shares: bufferMetric(metrics, ['shares', 'reposts']),
+          reach: bufferMetric(metrics, ['reach']), watchTimeSeconds: totalTimeWatched == null ? null : totalTimeWatched * 60,
+          averageWatchSeconds: bufferMetric(metrics, ['averageTimeWatched'])
+        } });
+      }
+      return { pieces: rows, channels: [], status: { audienceAvailable: false, note: 'TikTok audience totals are not exposed by the connected Buffer API.' } };
+    },
+    instagram: async function (pieces) {
+      const auth = stmts.getMetaAuth.get();
+      if (!auth || !auth.page_access_token || !auth.instagram_account_id) throw new Error('Instagram is not connected.');
+      const rows = [];
+      let insightsAvailable = true;
+      for (const piece of pieces.filter(function (item) { return !!item.instagramMediaId; })) {
+        const metrics = await metaPublisher.fetchInstagramMediaMetrics({ mediaId: piece.instagramMediaId, pageToken: auth.page_access_token });
+        if (!metrics.insightsAvailable) insightsAvailable = false;
+        rows.push({ pieceId: piece.id, platform: 'instagram', metrics: metrics });
+      }
+      const audience = await metaPublisher.fetchAudienceMetrics({ instagramAccountId: auth.instagram_account_id, pageToken: auth.page_access_token });
+      return {
+        pieces: rows,
+        channels: audience.instagram ? [{ platform: 'instagram', followers: audience.instagram.followers, mediaCount: audience.instagram.mediaCount }] : [],
+        status: insightsAvailable ? {} : { partial: true, note: 'Likes and comments are live. Reel views need an additional Instagram Insights permission in the Meta app.' }
+      };
+    },
+    facebook: async function (pieces) {
+      const auth = stmts.getMetaAuth.get();
+      if (!auth || !auth.page_access_token || !auth.page_id) throw new Error('Facebook is not connected.');
+      const rows = [];
+      for (const piece of pieces.filter(function (item) { return !!item.facebookVideoId; })) {
+        rows.push({ pieceId: piece.id, platform: 'facebook', metrics: await metaPublisher.fetchFacebookVideoMetrics({
+          videoId: piece.facebookVideoId, pageToken: auth.page_access_token
+        }) });
+      }
+      const audience = await metaPublisher.fetchAudienceMetrics({ pageId: auth.page_id, pageToken: auth.page_access_token });
+      return { pieces: rows, channels: audience.facebook ? [{ platform: 'facebook', followers: audience.facebook.followers }] : [] };
+    }
+  }
+});
+contentAnalytics.start();
+
 // Hourly host-filesystem guard. The container's root overlay reports the
 // underlying VPS filesystem capacity, so this catches Docker growth and all
 // other host usage without granting the service a Docker socket or extra host
@@ -1377,6 +1456,19 @@ app.get('/api/reports/sales-dashboard', requireAuth, function (req, res) {
   catch (error) {
     console.error('Sales dashboard read failed:', error.message);
     res.status(503).json({ error: 'sales_dashboard_unavailable' });
+  }
+});
+app.get('/api/reports/content-analytics', requireAuth, function (req, res) {
+  res.set('Cache-Control', 'no-store');
+  res.json(contentAnalytics.dashboard());
+});
+app.post('/api/reports/content-analytics/refresh', requireAuth, async function (req, res) {
+  try {
+    res.set('Cache-Control', 'no-store');
+    res.json(await contentAnalytics.collect());
+  } catch (error) {
+    console.error('Content analytics refresh failed:', error.message);
+    res.status(502).json({ error: 'content_analytics_refresh_failed', message: String(error.message || error).slice(0, 300) });
   }
 });
 app.post('/api/reports/weekly/run', requireAuth, async function (req, res) {
