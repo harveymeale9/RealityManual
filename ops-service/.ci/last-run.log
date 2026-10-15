@@ -8,20 +8,17 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   acc60f2..335a964  main       -> origin/main
+   335a964..5607c07  main       -> origin/main
 + git merge --ff-only origin/main
-Updating acc60f2..335a964
+Updating 335a964..5607c07
 Fast-forward
- CLAUDE.md                                   | 16 ++++++
- ops-service/.ci/last-run.log                | 89 ++++++++++++++---------------
- ops-service/public/index.html               |  2 +-
- ops-service/public/style.css                |  2 +-
- ops-service/public/voice-mobile.html        |  2 +-
- ops-service/src/videoEditorService.js       | 15 +++--
- ops-service/test/videoEditorService.test.js | 14 +++--
- 7 files changed, 82 insertions(+), 58 deletions(-)
+ CLAUDE.md                                   |   5 +-
+ ops-service/.ci/last-run.log                | 100 ++++++++++++++--------------
+ ops-service/src/videoEditorService.js       |   2 +-
+ ops-service/test/videoEditorService.test.js |   4 +-
+ 4 files changed, 57 insertions(+), 54 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=335a964753e236171850361efcbd21d6cc4ba829
++ NEW_HEAD=5607c07083e0f9a0117d917fd162b91340c905cb
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -30,11 +27,11 @@ Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
 + LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
 ++ cat /root/ops-service-data/last-image-commit.txt
-+ LAST_BUILD_COMMIT=acc60f25019f7111a8aa87085a8f840d1fa68640
++ LAST_BUILD_COMMIT=335a964753e236171850361efcbd21d6cc4ba829
 + NEEDS_REBUILD=1
-+ '[' -n acc60f25019f7111a8aa87085a8f840d1fa68640 ']'
-+ git cat-file -e 'acc60f25019f7111a8aa87085a8f840d1fa68640^{commit}'
-++ git diff --name-only acc60f25019f7111a8aa87085a8f840d1fa68640 335a964753e236171850361efcbd21d6cc4ba829 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -n 335a964753e236171850361efcbd21d6cc4ba829 ']'
++ git cat-file -e '335a964753e236171850361efcbd21d6cc4ba829^{commit}'
+++ git diff --name-only 335a964753e236171850361efcbd21d6cc4ba829 5607c07083e0f9a0117d917fd162b91340c905cb -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z ops-service/src/videoEditorService.js ']'
 + '[' 0 = 1 ']'
 + '[' 1 = 0 ']'
@@ -82,27 +79,24 @@ Already up to date.
 #3 transferring context: 136B done
 #3 DONE 0.0s
 
-#4 [internal] load build context
+#4 [ 1/10] FROM docker.io/library/node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
+#4 resolve docker.io/library/node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 0.0s done
 #4 DONE 0.0s
 
-#5 [ 1/10] FROM docker.io/library/node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
-#5 resolve docker.io/library/node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 0.1s done
-#5 DONE 0.1s
+#5 [internal] load build context
+#5 transferring context: 209.79kB done
+#5 DONE 0.0s
 
-#4 [internal] load build context
-#4 transferring context: 489.63kB 0.0s done
-#4 DONE 0.0s
-
-#6 [ 4/10] COPY package.json ./
+#6 [ 3/10] WORKDIR /app
 #6 CACHED
 
-#7 [ 5/10] RUN npm install --omit=dev
+#7 [ 2/10] RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && python3 -m pip install --break-system-packages --no-cache-dir yt-dlp==2026.8.19     && rm -rf /var/lib/apt/lists/*
 #7 CACHED
 
-#8 [ 2/10] RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && python3 -m pip install --break-system-packages --no-cache-dir yt-dlp==2026.8.19     && rm -rf /var/lib/apt/lists/*
+#8 [ 4/10] COPY package.json ./
 #8 CACHED
 
-#9 [ 3/10] WORKDIR /app
+#9 [ 5/10] RUN npm install --omit=dev
 #9 CACHED
 
 #10 [ 6/10] COPY server.js ./
@@ -115,39 +109,38 @@ Already up to date.
 #12 DONE 0.1s
 
 #13 [ 9/10] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
-#13 DONE 15.2s
+#13 DONE 13.7s
 
 #14 [10/10] RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
 #14 DONE 0.2s
 
 #15 exporting to image
 #15 exporting layers
-#15 exporting layers 3.9s done
-#15 exporting manifest sha256:8c304b93b39d53b4172b347cea0953db76eeb2bc635b68e2daa602333c75c3e3
-#15 exporting manifest sha256:8c304b93b39d53b4172b347cea0953db76eeb2bc635b68e2daa602333c75c3e3 0.0s done
-#15 exporting config sha256:f9457887b12e5cb80518430169d6be627d949c11f1f8814136cde16394619c1d 0.0s done
-#15 exporting attestation manifest sha256:5f26bd19c4d59ac78a61535d6441dc9a87835260e03ea65a8031cd49501375df 0.0s done
-#15 exporting manifest list sha256:81f03a3542907e290b8018c4bf319ee2974c544c66c079452bbc82469f318e98 done
+#15 exporting layers 3.2s done
+#15 exporting manifest sha256:7618436c2a8ffe115f925cee1b688fa0004e6619d66c1683a3bee804f868f15b 0.0s done
+#15 exporting config sha256:a78cacd4cbedd7432086c64799293649386acf62c669fcb84e1f08b0192dbc71 0.0s done
+#15 exporting attestation manifest sha256:249682711f46b7f27dc7905494a7b1ef0c87005828d5e35bf2e85799a62ed4a4 0.0s done
+#15 exporting manifest list sha256:7ce33e52efccff149c81d0c3f87b80f1882a4a9c89a8d86ae7bf270d44fef1f0 0.0s done
 #15 naming to docker.io/library/rm-ops-service:latest done
 #15 unpacking to docker.io/library/rm-ops-service:latest
-#15 unpacking to docker.io/library/rm-ops-service:latest 2.3s done
-#15 DONE 6.3s
+#15 unpacking to docker.io/library/rm-ops-service:latest 1.4s done
+#15 DONE 4.7s
 + docker stop rm-ops-service
 rm-ops-service
 + docker rm rm-ops-service
 rm-ops-service
 + docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-data:/data -v /root/realitymanual-backend-data:/store-data:ro -v /srv/realitymanual-repo:/repo -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
-1fae09b15c4f70060d9353598b38d9edcc47b16e256e5e528f59a0b77b8aaa4d
-+ echo 335a964753e236171850361efcbd21d6cc4ba829
+d84307856e1470f4c885bafced8269b90ef8bd86bc45536e3b32f24f70d5d6f6
++ echo 5607c07083e0f9a0117d917fd162b91340c905cb
 ++ git -C /root/realitymanual-repo rev-parse --short HEAD
-+ echo 'rm-ops-service redeployed at 335a964'
-rm-ops-service redeployed at 335a964
++ echo 'rm-ops-service redeployed at 5607c07'
+rm-ops-service redeployed at 5607c07
 + docker image prune -f
 Deleted Images:
-untagged: sha256:2e9aacba1e3b32465b381cd17f80ee37b79bae3502bb2822abf22a3c783af009
-deleted: sha256:2e9aacba1e3b32465b381cd17f80ee37b79bae3502bb2822abf22a3c783af009
-deleted: sha256:f400f7f7d3d267f4c04eb4c9479bb5f7b731f4b8b7bf2b6155d50bc83c0b556b
-deleted: sha256:839649e4eb94ff1ccd65291a112ae0365b74d1cdfcbf16dc2a538f05c2c37d5b
+untagged: sha256:52c5f2dfd5a1b2bc3ce3fdf2379b4f7c850f4d3c582fa94eb62542a109ad2515
+deleted: sha256:52c5f2dfd5a1b2bc3ce3fdf2379b4f7c850f4d3c582fa94eb62542a109ad2515
+deleted: sha256:4faf9369913830f50278ba255023f516ca3b16639197ca5737a4f44047bc4b4d
+deleted: sha256:3b3e0881484e6a089926811bae3a2b85ed5ddcd2f02761a717e318da2a59f074
 
 Total reclaimed space: 15.67kB
 + docker builder prune -f --max-used-space 8GB
