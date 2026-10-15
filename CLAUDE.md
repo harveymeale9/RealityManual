@@ -19353,3 +19353,12 @@ Regression coverage locks native-resolution motion preparation, the tighter
 voice-first cut and the edited-preview reopening rule. The two affected real
 recordings are rebuilt explicitly rather than advancing the global renderer
 version and needlessly re-encoding every unrelated active project.
+
+Both real replacements completed and passed the Editor's frame, audio,
+duration, pixel-format and file-integrity checks. **Devotion isn't love** now
+starts its retained timeline at source 6.320s and **Why God Is All That Is**
+(the recording linked to *Prove To Me God Exists Without The Bible*) starts at
+source 2.600s, exactly 80ms before each first timed word. Frame contact sheets
+from 0–5 seconds confirm both encoded files move from the wide frame into the
+112.5% centred composition. The complete ops-service suite passes with 236
+tests.
