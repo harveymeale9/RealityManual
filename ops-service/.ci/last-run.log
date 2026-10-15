@@ -11,23 +11,20 @@ From https://github.com/harveymeale9/RealityManual
 + git merge --ff-only origin/main
 Already up to date.
 ++ git rev-parse HEAD
-+ NEW_HEAD=a37ebb3efa2988ed7bd55bf8bcd816930b4f5eb8
++ NEW_HEAD=f86146f8a3571c2ef7c7f8dc222dc0d2d12a1e7d
 + git -C /srv/realitymanual-repo fetch origin main
 warning: redirecting to https://github.com/harveymeale9/RealityManual.git/
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   7a1f9cd..a37ebb3  main       -> origin/main
+   a37ebb3..f86146f  main       -> origin/main
 + git -C /srv/realitymanual-repo merge --ff-only origin/main
-Updating 7a1f9cd..a37ebb3
+Updating a37ebb3..f86146f
 Fast-forward
- CLAUDE.md                                   |  27 +++++
- ops-service/.ci/last-run.log                | 155 ++++++----------------------
- ops-service/public/editor.js                |  74 ++++++++++---
- ops-service/public/index.html               |   4 +-
- ops-service/public/style.css                |   2 +
- ops-service/public/voice-mobile.html        |   2 +-
- ops-service/test/videoEditorService.test.js |  18 +++-
- 7 files changed, 136 insertions(+), 146 deletions(-)
+ CLAUDE.md                                   |  3 ++-
+ ops-service/.ci/last-run.log                | 42 ++++++++++++-----------------
+ ops-service/public/editor.js                | 10 +++----
+ ops-service/test/videoEditorService.test.js |  4 +--
+ 4 files changed, 25 insertions(+), 34 deletions(-)
 + chown -R 1000:1000 /srv/realitymanual-repo
 + LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
 ++ cat /root/ops-service-data/last-image-commit.txt
@@ -35,12 +32,12 @@ Fast-forward
 + NEEDS_REBUILD=1
 + '[' -n cdab5f8d810d5ebfa363deaa096671174f23cfc2 ']'
 + git cat-file -e 'cdab5f8d810d5ebfa363deaa096671174f23cfc2^{commit}'
-++ git diff --name-only cdab5f8d810d5ebfa363deaa096671174f23cfc2 a37ebb3efa2988ed7bd55bf8bcd816930b4f5eb8 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
+++ git diff --name-only cdab5f8d810d5ebfa363deaa096671174f23cfc2 f86146f8a3571c2ef7c7f8dc222dc0d2d12a1e7d -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z '' ']'
 + NEEDS_REBUILD=0
 + '[' 0 = 1 ']'
 + '[' 0 = 0 ']'
-+ echo 'no backend changes between cdab5f8d810d5ebfa363deaa096671174f23cfc2 and a37ebb3efa2988ed7bd55bf8bcd816930b4f5eb8 — already live via git pull, skipping rebuild/restart'
-no backend changes between cdab5f8d810d5ebfa363deaa096671174f23cfc2 and a37ebb3efa2988ed7bd55bf8bcd816930b4f5eb8 — already live via git pull, skipping rebuild/restart
++ echo 'no backend changes between cdab5f8d810d5ebfa363deaa096671174f23cfc2 and f86146f8a3571c2ef7c7f8dc222dc0d2d12a1e7d — already live via git pull, skipping rebuild/restart'
+no backend changes between cdab5f8d810d5ebfa363deaa096671174f23cfc2 and f86146f8a3571c2ef7c7f8dc222dc0d2d12a1e7d — already live via git pull, skipping rebuild/restart
 + exit 0
 ssh exit code: 0
