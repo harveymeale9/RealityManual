@@ -19272,7 +19272,10 @@ Landscape ASS exports now use a 2px base outline, 3px spoken-word emphasis
 outline and 1px shadow instead of the shared portrait 3px/4px/2px treatment.
 Portrait output is deliberately unchanged. The browser Editor preview has the
 same landscape-only reduction, and its stylesheet cache key was advanced so
-the correction appears without a stale cached rule.
+the correction appears without a stale cached rule. The Editor render version
+was advanced as well, causing unapproved cached previews to regenerate once
+with the corrected stroke rather than leaving the active recordings on their
+old baked caption treatment.
 
 Automated coverage locks the landscape border and shadow values independently
 from the unchanged portrait style. The complete ops-service suite passes with

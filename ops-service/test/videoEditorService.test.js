@@ -977,7 +977,7 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.equal(stored.renderQuality.status, 'passed');
-  assert.equal(stored.renderVersion, 25);
+  assert.equal(stored.renderVersion, 26);
   assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), true);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
@@ -1031,7 +1031,7 @@ test('final render splices an inserted clip and its caption timeline between sou
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.ok(stored.editedDuration > 3.9 && stored.editedDuration < 4.1);
-  assert.equal(stored.renderVersion, 25);
+  assert.equal(stored.renderVersion, 26);
   assert.equal(stored.renderQuality.contentDuration, 2);
   assert.equal(stored.renderQuality.outroSeconds, 2);
   assert.ok(stored.renderQuality.insertedClipLoudness.clips[0].gainDb > 18);
