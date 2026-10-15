@@ -19362,3 +19362,23 @@ source 2.600s, exactly 80ms before each first timed word. Frame contact sheets
 from 0–5 seconds confirm both encoded files move from the wide frame into the
 112.5% centred composition. The complete ops-service suite passes with 236
 tests.
+
+---
+
+# 621. Raw-Source Playback Can No Longer Masquerade as a Missing Edit (2026-10-15)
+
+The follow-up report that the second horizontal recording had no captions was
+not a renderer failure. Its current verified `render.mp4` has captions enabled,
+and a frame read directly from the live file at 0.8 seconds visibly contains
+the baked yellow words “I recently came across a”. The Editor was still capable
+of remaining on its deliberately unedited source playback in an already-open
+workspace, where cuts, captions and camera animation are all absent.
+
+When polling observes that a newly completed render has replaced the prior
+render SHA, the workspace now switches to **Editing preview** automatically and
+clears any temporary raw-source choice. Deliberate source inspection remains
+available, but the button now says **Raw original · no edits/captions** and the
+player carries a persistent amber warning that cuts, captions and animations
+are not shown. This makes the playback mode explicit instead of allowing a
+healthy edited file to look broken. Editor JavaScript and stylesheet cache keys
+were both advanced so existing browsers receive the correction on reload.

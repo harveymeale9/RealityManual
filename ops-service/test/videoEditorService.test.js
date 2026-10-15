@@ -475,9 +475,12 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /Preparing browser-safe preview…/);
   assert.match(source, /Playback will unlock automatically/);
   assert.match(source, /\(mediaUnavailable \? '' : ' src="' \+ previewUrl/);
-  assert.match(page, /editor\.js\?v=20261015-opening-preview-v144/);
-  assert.match(page, /style\.css\?v=20261015-landscape-caption-stroke-v143/);
+  assert.match(page, /editor\.js\?v=20261015-raw-preview-warning-v145/);
+  assert.match(page, /style\.css\?v=20261015-raw-preview-warning-v145/);
   assert.match(styles, /\.editor-caption\.longform\{font-size:2\.05cqw;text-shadow:-1px -1px 0 #111,1px -1px 0 #111/);
+  assert.match(source, /Raw original · no edits\/captions/);
+  assert.match(source, /cuts, captions and animations are not shown/);
+  assert.match(source, /if \(completedReplacement\)/);
 });
 
 test('startup probing preserves an active browser preview encode', function () {

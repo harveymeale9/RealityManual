@@ -973,12 +973,22 @@
       if (quietBlockedByExplicit || requestToken !== openRequestToken || !editorMounted()) return;
       if (!quiet && pendingExplicitOpenToken === requestToken) pendingExplicitOpenToken = 0;
       var previousProject = project;
+      var completedReplacement = !!(previousProject && previousProject.id === item.id && item.renderStatus === 'ready' &&
+        String(item.renderSha256 || '') && String(previousProject.renderSha256 || '') !== String(item.renderSha256 || ''));
       var progressOnly = !!(quiet && previousProject && previousProject.id === item.id && previousProject.renderStatus === 'running' && item.renderStatus === 'running');
       var unchanged = !!(quiet && previousProject && previousProject.id === item.id &&
         String(previousProject.updatedAt || '') === String(item.updatedAt || '') &&
         String(previousProject.renderSha256 || '') === String(item.renderSha256 || '') &&
         Number(previousProject.editRevision || 0) === Number(item.editRevision || 0));
       if (item.renderStatus === 'ready') delete localPreviewRebuilds[item.id];
+      // A completed replacement is the thing Harvey is here to review. Do not
+      // leave an already-open workspace parked on the raw camera master: that
+      // view deliberately has no cuts, baked captions or entrance treatment
+      // and previously made a healthy render look broken after polling.
+      if (completedReplacement) {
+        delete explicitSourcePreviews[item.id];
+        previewModes[item.id] = 'final';
+      }
       project = item;
       if (!quiet && !item.productionPieceId && !item.editStarted) {
         item.editStarted = true;
@@ -1180,7 +1190,7 @@
     var sourcePreviewPreparing = previewMode === 'source' && project.browserPreviewRequired &&
       ['pending', 'running'].indexOf(project.browserPreviewStatus) !== -1;
     var mediaUnavailable = previewLocked || sourcePreviewPreparing;
-    var sourcePreviewLabel = browserSafeSource ? 'Browser-safe source copy' : 'Original master';
+    var sourcePreviewLabel = browserSafeSource ? 'Raw browser-safe copy · no edits/captions' : 'Raw original · no edits/captions';
     var previewVersion = previewMode === 'final'
       ? ((project.renderSha256 || project.lastRenderAt || project.updatedAt || '') + '-preview-' + (project.renderPreviewVersion || 0))
       : (browserSafeSource ? project.updatedAt : project.sourceSha256 || project.updatedAt || '');
@@ -1218,7 +1228,10 @@
       ? '<div class="editor-preview-rebuild" id="editorSourcePreviewPreparing" role="status" aria-live="polite"><div class="editor-preview-rebuild-spinner"></div><strong>Preparing browser-safe preview…</strong><span>This is actively encoding. Playback will unlock automatically; your camera master and editing controls remain available.</span><div><i style="width:4%"></i></div></div>'
       : '';
     var initialLoadingOverlayHtml = mediaUnavailable ? '' : '<div class="editor-preview-loading" id="editorPreviewLoading" role="status" aria-live="polite"><div></div><strong>Loading preview…</strong></div>';
-    var previewPlayerHtml = '<div class="editor-preview' + (mediaUnavailable ? ' rebuilding' : '') + '" id="editorPreview" tabindex="' + (mediaUnavailable ? '-1' : '0') + '" aria-busy="' + (mediaUnavailable ? 'true' : 'false') + '" aria-label="Video review. Space plays or pauses. Left and right arrows move two seconds."><div class="editor-video-frame ' + layout + '"><video id="editorVideo" data-preview-mode="' + previewMode + '" data-seek-time="' + previewSeek.toFixed(3) + '" playsinline preload="auto"' + (mediaUnavailable ? '' : ' src="' + previewUrl + '"') + '></video>' +
+    var rawSourceNoticeHtml = previewMode === 'source' && project.renderStatus === 'ready'
+      ? '<div class="editor-raw-source-notice">Raw original · cuts, captions and animations are not shown</div>'
+      : '';
+    var previewPlayerHtml = '<div class="editor-preview' + (mediaUnavailable ? ' rebuilding' : '') + '" id="editorPreview" tabindex="' + (mediaUnavailable ? '-1' : '0') + '" aria-busy="' + (mediaUnavailable ? 'true' : 'false') + '" aria-label="Video review. Space plays or pauses. Left and right arrows move two seconds."><div class="editor-video-frame ' + layout + '"><video id="editorVideo" data-preview-mode="' + previewMode + '" data-seek-time="' + previewSeek.toFixed(3) + '" playsinline preload="auto"' + (mediaUnavailable ? '' : ' src="' + previewUrl + '"') + '></video>' + rawSourceNoticeHtml +
       '<div class="editor-preview-outro" id="editorPreviewOutro" aria-hidden="true"></div>' +
       '<div class="editor-caption" id="editorCaption"></div>' +
       '<div class="editor-player-controls" id="editorPlayerControls"><button type="button" class="editor-player-icon" id="editorPlayerPlay" aria-label="Play" disabled>▶</button><span id="editorPlayerCurrent">0:00</span><input type="range" id="editorPlayerSeek" min="0" max="1" step="0.01" value="0" aria-label="Video position" disabled><span id="editorPlayerDuration">' + formatTime(previewMode === 'final' ? editedDuration(project) : project.duration) + '</span><i id="editorPlayerBuffering" hidden>Loading</i><button type="button" class="editor-player-icon" id="editorPlayerMute" aria-label="Mute" disabled>VOL</button><button type="button" class="editor-player-icon" id="editorPlayerFullscreen" aria-label="Full screen" disabled>⛶</button></div>' +
