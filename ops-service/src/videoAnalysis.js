@@ -300,21 +300,27 @@ async function measureMusicPeak(inputPath, usedDurationSeconds) {
 async function buildFinalVideo(videoPath, audioPath, outPath, mixInput, outputOptions) {
   const settings = normalizeAudioMixSettings(mixInput);
   outputOptions = outputOptions || {};
+  const reportStage = typeof outputOptions.onStage === 'function' ? outputOptions.onStage : function () {};
   const musicOutroSeconds = Number.isFinite(Number(outputOptions.musicOutroSeconds))
     ? Math.max(0, Number(outputOptions.musicOutroSeconds)) : VIDEO_OUTRO_SECONDS;
   const programmeDuration = audioPath ? await mediaDuration(videoPath) : null;
   if (settings.mode === 'legacy_percent') {
+    reportStage('finalizing_video');
     await runFfmpeg(legacyFinalVideoArgs(videoPath, audioPath, outPath, settings.legacyPercent,
       programmeDuration, musicOutroSeconds), 'legacy final-video build');
     return { mode: settings.mode };
   }
   const tempAudioPath = outPath + '.loudness-mix.flac';
   try {
+    reportStage('measuring_audio');
     const dialogueMeasurement = await measureLoudness(videoPath, settings);
     const musicMeasurement = audioPath ? await measureMusicPeak(audioPath, programmeDuration) : null;
+    reportStage('mixing_audio');
     await runFfmpeg(measuredMixAudioArgs(videoPath, audioPath, tempAudioPath, settings, dialogueMeasurement,
       musicMeasurement, programmeDuration, musicOutroSeconds), 'measured audio mix');
+    reportStage('measuring_mix');
     const mixMeasurement = await measureLoudness(tempAudioPath, settings);
+    reportStage('finalizing_video');
     await runFfmpeg(measuredFinalVideoArgs(videoPath, tempAudioPath, outPath, settings, mixMeasurement), 'loudness-normalized final-video build');
     return { mode: settings.mode, dialogue: dialogueMeasurement, music: musicMeasurement, mix: mixMeasurement };
   } finally {

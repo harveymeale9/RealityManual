@@ -19518,3 +19518,28 @@ movement, then persists one edit at release and leaves the playhead at the
 adjusted boundary. This retains the fast decision-first architecture: multiple
 cut changes stay cheap, while the explicit preview rebuild remains the only
 expensive full encode. Approved projects remain read-only.
+
+---
+
+# 628. Kanban Shows the Final-Build Step and Prevents Duplicate Builds (2026-10-15)
+
+The #186 **Prove To Me God Exists Without The Bible** card stayed in In
+Production after Harvey sent it to Final Check. Its stored build state was
+actually `error`, with `ENOENT` for the temporary full-resolution picture.
+The service log recorded two build failures for the same piece within ten
+milliseconds. A repeated build request could run two production jobs against
+one shared picture path; one job removed or cleaned up the file while the
+other still needed it. The final-build runner now keeps one in-flight promise
+per piece and joins duplicate requests to that job.
+
+Each production job stores its current step: source preparation, full-resolution
+picture render, dialogue/music measurement, soundtrack mix, level check, final
+video encode, and verification. The Kanban's In Production card displays that
+step, the picture render percentage, an analysis wait, or a clear build failure
+with a retry direction. While a piece is active, the board checks every three
+seconds and updates only the progress strip when its other visible card content
+is unchanged, preserving any playable Final Check video on the same board.
+The Content Production row receives the same server-owned step and progress
+fields through its existing poller. A normal client save cannot overwrite
+those fields with an older snapshot. The complete ops-service suite passes
+with 241 tests.

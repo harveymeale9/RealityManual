@@ -3076,6 +3076,43 @@
     return '<div class="card-performance">' + (parts.length ? '<span>' + parts.join(' · ') + '</span>' : '') + link + '</div>';
   }
 
+  function productionProgressHtml(piece) {
+    if (!piece || piece.stage !== 'in_production' || !piece.hasVideo) return '';
+    var status = piece.finalBuildStatus;
+    var analyzing = piece.analysisStatus === 'pending' || piece.analysisStatus === 'running';
+    var label = '';
+    var detail = '';
+    var percent = Math.max(0, Math.min(95, Math.round(Number(piece.finalBuildProgress) || 0)));
+    if (status === 'pending') label = 'Preparing final video…';
+    else if (status === 'running') {
+      var steps = {
+        preparing: 'Preparing source and audio…',
+        rendering_picture: 'Rendering full-resolution video…',
+        measuring_audio: 'Measuring dialogue and music…',
+        mixing_audio: 'Mixing soundtrack…',
+        measuring_mix: 'Checking audio levels…',
+        finalizing_video: 'Encoding final video with audio…',
+        verifying: 'Verifying final video…'
+      };
+      label = steps[piece.finalBuildStep] || (percent > 0 ? 'Rendering full-resolution video…' : 'Preparing final video…');
+      if (piece.finalBuildStep === 'rendering_picture' && percent > 0) detail = percent + '%';
+    } else if (status === 'error') {
+      label = 'Final video build failed';
+      detail = 'Open Content Production to retry.';
+    } else if (status === 'done' && analyzing) {
+      label = 'Final video ready';
+      detail = 'Finishing transcription and title matching…';
+    } else if (analyzing) label = 'Transcribing and matching title…';
+    if (!label) return '';
+    var busy = status === 'pending' || status === 'running';
+    return '<div class="card-processing' + (status === 'error' ? ' error' : '') + '" role="status" aria-live="polite"' +
+      (status === 'error' && piece.finalBuildError ? ' title="' + escapeHtml(piece.finalBuildError) + '"' : '') + '>' +
+      '<span class="card-processing-heading"><span class="card-processing-indicator" aria-hidden="true"></span>' + escapeHtml(label) + '</span>' +
+      (detail ? '<span class="card-processing-detail">' + escapeHtml(detail) + '</span>' : '') +
+      (busy ? '<span class="card-processing-track"><i style="width:' + Math.max(3, percent) + '%"></i></span>' : '') +
+      '</div>';
+  }
+
   function cardHtml(id, piece) {
     var title = (piece.title || '').trim();
     var titleHtml = title ? escapeHtml(title) : 'Untitled piece';
@@ -3124,6 +3161,7 @@
         // not just there.
         '<div class="chip-row">' + chipHtml(piece, { hideVideoChip: true }) + '</div>' +
         tagsHtml +
+        productionProgressHtml(piece) +
         tiktokPerformanceHtml(piece) +
         '<div class="card-foot">' +
           '<span class="card-time">' + fmtTime(piece.updatedAt) + '</span>' +
@@ -3863,6 +3901,32 @@
   var youtubePublishPollTimer = null;
   var contentOpsRefreshTimer = null;
 
+  function hasProcessingProductionCard() {
+    return Object.keys(pieces).some(function (id) {
+      var p = pieces[id];
+      return p.stage === 'in_production' && (p.finalBuildStatus === 'pending' || p.finalBuildStatus === 'running' ||
+        p.analysisStatus === 'pending' || p.analysisStatus === 'running');
+    });
+  }
+
+  function sameProductionCardContent(before, after) {
+    if (!before || before.stage !== 'in_production' || after.stage !== 'in_production') return false;
+    return JSON.stringify([before.title, before.seq, before.thumbnailDataUrl, before.tags, before.platforms,
+      before.contentType, before.storageStatus, before.tiktokMetrics, before.tiktokExternalLink]) ===
+      JSON.stringify([after.title, after.seq, after.thumbnailDataUrl, after.tags, after.platforms,
+        after.contentType, after.storageStatus, after.tiktokMetrics, after.tiktokExternalLink]);
+  }
+
+  function updateProductionCardProgress(id) {
+    var card = board.querySelector('.card[data-id="' + id + '"]');
+    if (!card) return false;
+    var existing = card.querySelector('.card-processing');
+    var markup = productionProgressHtml(pieces[id]);
+    if (existing) existing.remove();
+    if (markup) card.querySelector('.card-foot').insertAdjacentHTML('beforebegin', markup);
+    return true;
+  }
+
   // The natural publishing queue and Buffer publish later, independently of the browser tab that queued
   // the post. Refresh the board while it is open so Scheduled -> Posted/Live
   // and newly available metrics appear without a manual reload.
@@ -3877,22 +3941,26 @@
       Store.getAll('pieces').then(function (rows) {
         var incoming = {};
         var changed = rows.length !== Object.keys(pieces).length;
+        var progressOnly = !changed;
+        var progressIds = [];
         rows.forEach(function (piece) {
           incoming[piece.id] = true;
           var current = pieces[piece.id];
           if (!current || current._recordVersion !== piece._recordVersion) {
+            if (!sameProductionCardContent(current, piece)) progressOnly = false;
+            else progressIds.push(piece.id);
             pieces[piece.id] = piece;
             changed = true;
           }
         });
         Object.keys(pieces).forEach(function (id) {
-          if (!incoming[id]) { delete pieces[id]; changed = true; }
+          if (!incoming[id]) { delete pieces[id]; changed = true; progressOnly = false; }
         });
-        if (changed) render();
+        if (changed && (!progressOnly || !progressIds.every(updateProductionCardProgress))) render();
       }).finally(function () {
-        if (currentTabId() === 'content-ops') contentOpsRefreshTimer = setTimeout(refreshContentOps, 60000);
+        if (currentTabId() === 'content-ops') contentOpsRefreshTimer = setTimeout(refreshContentOps, hasProcessingProductionCard() ? 3000 : 60000);
       });
-    }, 60000);
+    }, hasProcessingProductionCard() ? 3000 : 60000);
   }
 
   function maybeStartYoutubePublishPoll() {
@@ -3970,7 +4038,6 @@
     bindPanning();
     bindKanbanContextMenu();
     bindVisibilityRepoll();
-    startContentOpsRefresh();
     document.getElementById('btnNew').addEventListener('click', function () { createDraft('ideation', render); });
 
     activeTypeFilter = '';
@@ -3990,7 +4057,7 @@
     // changed (not just "something changed") can use this instead of the
     // plain notify above to get a real move animation for that one card.
     window.__rmOnPieceMoved = animateBoardMove;
-    ensurePiecesLoaded().then(render);
+    ensurePiecesLoaded().then(function () { render(); startContentOpsRefresh(); });
     // Final Check cards (see finalCheckCardHtml below) show the real
     // rendered caption inline, which needs Settings' caption templates —
     // fetched once here rather than only when Harvey happens to visit
@@ -4972,7 +5039,7 @@
             var localManualTitles = existing.ytTitlesManuallyEdited === true;
             var remoteManualTitles = r.ytTitlesManuallyEdited === true;
             ['analysisStatus', 'analysisError', 'analysisMatchedPieceId', 'transcript',
-             'finalBuildStatus', 'finalBuildError', 'stage', 'updatedAt', '_recordVersion'
+             'finalBuildStatus', 'finalBuildError', 'finalBuildProgress', 'finalBuildStep', 'stage', 'updatedAt', '_recordVersion'
             ].forEach(function (k) { if (k in r) existing[k] = r[k]; });
             // An old poll response containing generated suggestions must not
             // clobber a title currently being typed. A manual choice from the

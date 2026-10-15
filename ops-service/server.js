@@ -1638,6 +1638,7 @@ app.get('/api/store/:storeName/:id', function (req, res) {
 // silently break that reset.
 const SERVER_OWNED_PIECE_FIELDS = [
   'analysisStatus', 'analysisError', 'analysisMatchedPieceId', 'stage',
+  'finalBuildProgress', 'finalBuildStep',
   'queuedPublishDestinations', 'publishingQueuedAt', 'publishingDequeuedAt',
   'publishingQueueSelection', 'publishBatchPlatforms'
 ];
@@ -2521,12 +2522,30 @@ app.post('/api/videos/:id/analyze', requireAuthOrReviewer, function (req, res) {
 // overwriting the raw upload) specifically so re-running this later
 // (Harvey picks a different audio track and sends it again) always
 // splices from the untouched original, not from a previous splice.
-async function runBuildFinalVideo(id) {
+const finalBuildJobs = new Map();
+function runBuildFinalVideo(id) {
+  if (finalBuildJobs.has(id)) return finalBuildJobs.get(id);
+  const job = executeBuildFinalVideo(id).finally(function () { finalBuildJobs.delete(id); });
+  finalBuildJobs.set(id, job);
+  return job;
+}
+
+async function executeBuildFinalVideo(id) {
   const piece = getPieceRecord(id);
   if (!piece) return; // deleted before this started — nothing to do
   piece.finalBuildStatus = 'running';
   piece.finalBuildProgress = 0;
+  piece.finalBuildStep = 'preparing';
+  piece.finalBuildError = '';
   savePieceRecord(piece);
+
+  function updateBuildStep(step) {
+    const current = getPieceRecord(id);
+    if (!current || current.finalBuildStatus !== 'running') return;
+    current.finalBuildStep = step;
+    current.updatedAt = new Date().toISOString();
+    savePieceRecord(current);
+  }
 
   let productionPicturePath = '';
   try {
@@ -2543,6 +2562,7 @@ async function runBuildFinalVideo(id) {
     // the piece to Final Check do we render the original source and saved edit
     // decisions at native resolution (capped at 4K).
     if (piece.editorProjectId === id && videoEditor && typeof videoEditor.renderProductionMaster === 'function') {
+      updateBuildStep('rendering_picture');
       productionPicturePath = path.join(UPLOADS_DIR, 'videos', id + '-picture-building.mp4');
       await fs.promises.rm(productionPicturePath, { force: true });
       await videoEditor.renderProductionMaster(id, productionPicturePath, function (percent) {
@@ -2562,10 +2582,13 @@ async function runBuildFinalVideo(id) {
     const settings = settingsRow ? JSON.parse(settingsRow.data) : {};
     const mixProfile = videoAnalysis.normalizeAudioMixSettings(settings);
     const horizontalLongform = piece.videoIsVertical === false || piece.contentType === 'longform';
+    updateBuildStep('mixing_audio');
     const mixResult = await videoAnalysis.buildFinalVideo(videoPath, audioPath, outPath, settings, {
-      musicOutroSeconds: horizontalLongform ? 0.3 : 2
+      musicOutroSeconds: horizontalLongform ? 0.3 : 2,
+      onStage: updateBuildStep
     });
 
+    updateBuildStep('verifying');
     const stat = fs.statSync(outPath);
     const finalRecord = { id: finalId, fileName: 'final.mp4', sizeBytes: stat.size, mimeType: 'video/mp4', createdAt: new Date().toISOString() };
     stmts.upsert.run('videos', finalId, JSON.stringify(finalRecord), new Date().toISOString());
@@ -2574,6 +2597,7 @@ async function runBuildFinalVideo(id) {
     if (!latest) return; // deleted while this was running
     latest.finalBuildStatus = 'done';
     latest.finalBuildProgress = 100;
+    latest.finalBuildStep = 'complete';
     latest.finalAudioMix = mixResult.mode === 'legacy_percent'
       ? { mode: mixResult.mode, ambientMusicVolumePercent: mixProfile.legacyPercent, builtAt: new Date().toISOString() }
       : { mode: mixResult.mode, dialogueLufsTarget: mixProfile.dialogueLufs,
@@ -2594,6 +2618,7 @@ async function runBuildFinalVideo(id) {
     if (!latest) return;
     latest.finalBuildStatus = 'error';
     latest.finalBuildProgress = 0;
+    latest.finalBuildStep = 'error';
     latest.finalBuildError = String(e.message || e).slice(0, 500);
     // Deliberately NOT touching stage here — it stays In Production so
     // Harvey can just try again (e.g. pick a different track) rather
