@@ -12,6 +12,14 @@ test('Final Check exposes one publishing-queue action and no visibility selector
   assert.doesNotMatch(source, /privacyStatus:\s*privacyStatus/);
 });
 
+test('Final Check waits for the 720p copy rather than preloading the 4K publish master', function () {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const card = source.slice(source.indexOf('function finalCheckCardHtml('), source.indexOf('// Platforms that have a real backend publish integration.'));
+  assert.doesNotMatch(card, /src="\/api\/files\/videos\/.*-final/);
+  assert.match(source, /final-review-status/);
+  assert.match(source, /-final-review/);
+});
+
 test('Publishing Queue is natural inventory with no configurable reserve targets', function () {
   const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const store = fs.readFileSync(path.join(__dirname, '..', 'public', 'lib', 'store.js'), 'utf8');

@@ -3234,12 +3234,9 @@
           ' value="' + escapeHtml(titles[i] || '') + '" placeholder="' + placeholder + '"' +
           (canEditPiece(piece) ? '' : ' disabled') + ' /></label>';
     }).join('') + '<span class="fc-title-save" aria-live="polite"></span></div>';
-    // A piece never reaches this stage without its final (audio-spliced)
-    // video already having been built — server.js's runBuildFinalVideo
-    // only flips the stage to final_check once that's genuinely done —
-    // so this always points at the real "<id>-final" file, never the raw
-    // upload, matching Harvey's whole point of this stage: what's playing
-    // here is what actually gets published.
+    // The publish master is already complete at this stage. Playback uses a
+    // 720p picture rendition with the master AAC stream copied unchanged;
+    // the full-resolution <id>-final file is still the only publish input.
     //
     // Deliberately no way to open the shared editor modal from here —
     // Harvey's explicit ask: Final Check should be a closed, complete
@@ -3281,7 +3278,7 @@
         '<div class="fc-video-wrap' + (piece.videoIsVertical ? ' is-vertical' : '') + '">' +
           '<video class="fc-video" data-id="' + id + '" playsinline preload="auto"' +
             (piece.thumbnailDataUrl ? ' poster="' + piece.thumbnailDataUrl + '"' : '') +
-            ' src="/api/files/videos/' + encodeURIComponent(id) + '-final"></video>' +
+            '></video>' +
           '<div class="fc-video-overlay">' +
             '<span class="fc-play-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 6l10 6-10 6V6Z"/></svg></span>' +
           '</div>' +
@@ -3290,6 +3287,8 @@
           '<button type="button" class="fc-play-toggle" aria-label="Play video">Play</button>' +
           '<input class="fc-seek" type="range" min="0" max="1000" value="0" disabled aria-label="Seek through video" />' +
           '<span class="fc-video-time">0:00 / 0:00</span>' +
+          '<span class="fc-review-status" aria-live="polite">Preparing 720p review…</span>' +
+          '<button type="button" class="fc-review-retry" hidden>Retry review copy</button>' +
         '</div>' +
         titlesHtml +
         fcCaptionSectionHtml(id, piece, boardSettingsCache) +
@@ -3579,6 +3578,43 @@
       var playButton = controls && controls.querySelector('.fc-play-toggle');
       var seek = controls && controls.querySelector('.fc-seek');
       var time = controls && controls.querySelector('.fc-video-time');
+      var reviewStatus = controls && controls.querySelector('.fc-review-status');
+      var reviewRetry = controls && controls.querySelector('.fc-review-retry');
+      var reviewId = v.dataset.id;
+      if (playButton) playButton.disabled = true;
+      function loadReviewCopy() {
+        if (!document.body.contains(wrap)) return;
+        fetch('/api/videos/' + encodeURIComponent(reviewId) + '/final-review-status').then(function (response) {
+          if (!response.ok) throw new Error('Review copy status is unavailable.');
+          return response.json();
+        }).then(function (result) {
+          if (!document.body.contains(wrap)) return;
+          if (result.status === 'ready') {
+            v.src = '/api/files/videos/' + encodeURIComponent(reviewId) + '-final-review';
+            v.load();
+            if (playButton) playButton.disabled = false;
+            if (reviewStatus) reviewStatus.textContent = '720p review · published audio';
+            if (reviewRetry) reviewRetry.hidden = true;
+          } else if (result.status === 'preparing') {
+            if (reviewStatus) reviewStatus.textContent = 'Preparing 720p review…';
+            setTimeout(loadReviewCopy, 3000);
+          } else {
+            if (reviewStatus) reviewStatus.textContent = result.message || 'Review copy unavailable.';
+            if (reviewRetry) reviewRetry.hidden = result.status !== 'error';
+          }
+        }).catch(function () {
+          if (!document.body.contains(wrap)) return;
+          if (reviewStatus) reviewStatus.textContent = 'Checking review copy…';
+          setTimeout(loadReviewCopy, 5000);
+        });
+      }
+      if (reviewRetry) reviewRetry.addEventListener('click', function () {
+        reviewRetry.hidden = true;
+        if (reviewStatus) reviewStatus.textContent = 'Retrying 720p review…';
+        fetch('/api/videos/' + encodeURIComponent(reviewId) + '/final-review-retry', { method: 'POST' })
+          .then(function () { loadReviewCopy(); })
+          .catch(function () { reviewRetry.hidden = false; });
+      });
       function formatTime(seconds) {
         if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
         var whole = Math.floor(seconds);
@@ -3622,10 +3658,9 @@
       v.addEventListener('durationchange', syncTime);
       v.addEventListener('timeupdate', syncTime);
       v.addEventListener('seeked', syncTime);
-      // The Final Check column can be offscreen in the horizontal Kanban.
-      // Start fetching each final video when Content Ops renders, not when
-      // its card first enters the viewport or receives a click.
-      if (v.networkState === v.NETWORK_EMPTY) v.load();
+      // Start preparing the small copy when Content Ops renders, even when
+      // this column is offscreen. Never preload the 4K publish file here.
+      loadReviewCopy();
       syncPlayState();
       syncTime();
     });

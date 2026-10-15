@@ -1107,16 +1107,19 @@ body.role-reviewer #pmBackFab {
    playback starts/stops/ends by means other than clicking the icon
    itself. */
 .fc-video-wrap.is-playing .fc-play-icon { opacity: 0; transform: scale(0.85); }
-.fc-player-controls { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.fc-player-controls { display: flex; align-items: center; gap: 9px; min-width: 0; flex-wrap: wrap; }
 .fc-play-toggle {
   flex: none; border: 1px solid var(--border); border-radius: 6px;
   background: var(--surface); color: var(--ink); padding: 6px 10px;
   font: inherit; font-size: 0.8rem; cursor: pointer;
 }
 .fc-play-toggle:hover { border-color: var(--accent); }
+.fc-play-toggle:disabled { cursor: wait; opacity: 0.55; }
 .fc-seek { flex: 1; min-width: 0; accent-color: var(--accent); cursor: pointer; }
 .fc-seek:disabled { cursor: wait; opacity: 0.55; }
 .fc-video-time { flex: none; color: var(--ink-soft); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+.fc-review-status { color: var(--ink-soft); font-size: 0.72rem; }
+.fc-review-retry { border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--ink); padding: 5px 8px; cursor: pointer; }
 .fc-caption-section { display: flex; flex-direction: column; gap: 6px; }
 .fc-caption {
   font-size: 0.85rem; color: var(--ink-soft); white-space: pre-wrap;

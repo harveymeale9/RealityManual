@@ -51,6 +51,7 @@ const rangeResponse = require('./src/rangeResponse');
 const kanbanBackupService = require('./src/kanbanBackupService');
 const contentAnalyticsService = require('./src/contentAnalyticsService');
 const tiktokPublicMetrics = require('./src/tiktokPublicMetrics');
+const finalReviewPreviewService = require('./src/finalReviewPreview');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
@@ -91,6 +92,12 @@ const FILE_STORES = ['videos', 'audioTracks'];
 const ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const FINAL_VIDEO_SUFFIX = '-final';
+const FINAL_REVIEW_SUFFIX = '-final-review';
+const finalReviewPreview = finalReviewPreviewService.setup();
+function finalReviewPath(id) { return path.join(UPLOADS_DIR, 'videos', id + FINAL_REVIEW_SUFFIX); }
+function finalReviewPicturePath(piece) {
+  return piece && piece.editorProjectId === piece.id ? path.join(DATA_DIR, 'editor', piece.id, 'render.mp4') : '';
+}
 let productionAudioPreviews = null;
 const R2_PUBLISHED_RETENTION_DAYS = Math.max(1, Math.min(365, Number(process.env.R2_PUBLISHED_RETENTION_DAYS) || 14));
 const R2_KANBAN_BACKUP_RETENTION_DAYS = 7;
@@ -1575,10 +1582,11 @@ function mergeReviewerSettingsWrite(existing, incoming) {
   return merged;
 }
 // videos/audioTracks records are keyed by the same id as their owning
-// piece (final-build files use "<pieceId>-final") — this resolves either
+// piece (final-build files use "<pieceId>-final" and review copies use
+// "<pieceId>-final-review") — this resolves either
 // back to the piece id so ownership can be checked against it.
 function ownerPieceIdFor(storeName, id) {
-  return storeName === 'videos' ? id.replace(/-final$/, '') : id;
+  return storeName === 'videos' ? id.replace(/-(?:final-review|final)$/, '') : id;
 }
 function pieceOwnedByReviewer(pieceId) {
   const row = stmts.getOne.get('pieces', pieceId);
@@ -2169,7 +2177,7 @@ async function ensurePublishMediaArchived(id) {
 function releaseLocalPublishMedia(id) {
   const piece = getPieceRecord(id);
   if (!piece || piece.storageStatus !== 'ready' || !piece.storageObjectKey) return false;
-  [path.join(UPLOADS_DIR, 'videos', id), path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX)]
+  [path.join(UPLOADS_DIR, 'videos', id), path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX), finalReviewPath(id)]
     .forEach(function (filePath) { fs.rm(filePath, { force: true }, function () {}); });
   // The approved Editor project remains in its durable database row/history,
   // but its large camera master, proxy and render are no longer needed after
@@ -2496,6 +2504,27 @@ async function runVideoAnalysis(id, existingTranscript) {
   }
 }
 
+// Legacy Final Check cards also get a review copy on demand. The browser
+// polls this lightweight status before attaching a video src, so it never
+// accidentally downloads the multi-gigabyte publish master for playback.
+app.get('/api/videos/:id/final-review-status', requireAuthOrReviewer, function (req, res) {
+  const id = req.params.id;
+  const piece = isValidId(id) && getPieceRecord(id);
+  if (!piece) return res.status(404).json({ error: 'not_found' });
+  const source = path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX);
+  if (req.sessionRole === 'youtube-reviewer' && !pieceOwnedByReviewer(id) &&
+      !finalReviewPreview.fresh(source, finalReviewPath(id))) return res.status(403).json({ error: 'forbidden' });
+  res.json(finalReviewPreview.start(id, source, finalReviewPath(id), finalReviewPicturePath(piece)));
+});
+app.post('/api/videos/:id/final-review-retry', requireAuthOrReviewer, function (req, res) {
+  const id = req.params.id;
+  const piece = isValidId(id) && getPieceRecord(id);
+  if (!piece) return res.status(404).json({ error: 'not_found' });
+  if (req.sessionRole === 'youtube-reviewer' && !pieceOwnedByReviewer(id)) return res.status(403).json({ error: 'forbidden' });
+  const source = path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX);
+  res.json(finalReviewPreview.retry(id, source, finalReviewPath(id), finalReviewPicturePath(piece)));
+});
+
 // requireAuthOrReviewer added here (this route previously had no auth
 // guard at all, relying on nothing — a real pre-existing gap, closed
 // while touching this route for the reviewer-access work rather than a
@@ -2611,6 +2640,9 @@ async function executeBuildFinalVideo(id) {
     // still genuinely in progress.
     latest.updatedAt = new Date().toISOString();
     savePieceRecord(latest);
+    // Prepare the small review rendition in the background. It is never a
+    // publishing input, and failure cannot replace or damage the 4K master.
+    finalReviewPreview.retry(id, outPath, finalReviewPath(id), finalReviewPicturePath(latest));
     maybeAdvanceToFinalCheck(id);
   } catch (e) {
     console.error('final video build failed for ' + id + ':', e.message);

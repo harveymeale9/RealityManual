@@ -19585,3 +19585,38 @@ The new protocol has a focused chunk-order test; the full ops-service suite
 passes all 242 tests. The deploy script's existing active-work drain now also
 waits for pending or running final-video builds before restarting the container.
 This lets the backend change deploy after #186's active final render finishes.
+
+---
+
+# 631. Final Check Uses a 720p Review Copy with the Published Audio (2026-10-15)
+
+The Final Check player previously preloaded the multi-gigabyte 4K publish
+master. Harvey mainly checks the soundtrack and asked for a quicker 720p
+player, while keeping the 4K file for publishing. The server now prepares a
+separate 720p H.264 review rendition, copying the AAC packets from
+`<piece-id>-final` without remixing or re-encoding them. For Editor-produced
+videos, the picture comes from the already-built small Editor render after
+its duration is verified against the final master; that avoids decoding 4K
+again. Direct uploads without that matching render fall back to downscaling
+the final master. The original publish master remains untouched and remains
+the only input to every platform.
+
+Review copies are built in the background after a final master completes, or
+on demand for older Final Check cards. A dedicated status endpoint lets the
+Kanban show preparation/retry state and attach a video source only when the
+720p copy is complete; the browser never falls back to loading the 4K master.
+The copy is atomically installed, checked against the master modification
+time, deduplicated per piece, and removed with other local media after R2
+archival. FFmpeg is limited to two threads so preparation does not consume the
+whole VPS. Tests verify 720p dimensions, exact AAC packet hashes (including
+the Editor-picture route), retry behavior, and preservation of the 4K master;
+the full suite passes 246/246.
+
+Instagram Insights remain a separate Meta permission issue (§619): the live
+owner grant has publishing scopes but not `instagram_manage_insights`, and
+Meta returns error #10 on individual `views` and `reach` requests using
+either its Page or user token. Meta's current Instagram Insights documentation
+allows an Instagram Login path using `instagram_business_basic` and
+`instagram_business_manage_insights`. Standard Access suffices for an account
+owned or managed by an app-role user; Harvey must configure that product in
+the Meta app and authorize his account before the collector can use it.
