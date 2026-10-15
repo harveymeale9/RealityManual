@@ -1,0 +1,63 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const coverage = require('../public/lib/queueCoverage');
+const cadence = require('../src/shortformSchedule');
+
+const NOW = Date.parse('2026-10-15T15:36:00Z');
+const DAILY = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'].map(function (day) {
+  return { day: day, paused: false, times: ['01:55'] };
+});
+function ready(id, type) {
+  return { id: id, contentType: type, hasVideo: true, stage: 'publishing_queue', queuedPublishDestinations: [{ platform: 'youtube' }] };
+}
+
+test('runway uses the next uncovered long-form slot, not the date of the last ready video', function () {
+  const pieces = [
+    { id: 'published', contentType: 'longform', stage: 'live', postedAt: '2026-10-15T11:05:58Z' },
+    ready('next', 'longform')
+  ];
+  const result = coverage.calculate({ pieces: pieces, now: NOW, longformTime: '13:55', postingSchedule: DAILY });
+  assert.equal(new Date(result.longform.coveredThrough).toISOString(), '2026-10-18T06:55:00.000Z');
+  assert.equal(new Date(result.longform.nextNeededAt).toISOString(), '2026-10-21T06:35:00.000Z');
+  assert.equal(result.longform.coveredSlots, 1);
+  assert.equal(result.longform.readyCount, 1);
+  assert.equal(result.longform.timeline[0].state, 'queued');
+  assert.equal(result.longform.timeline[1].state, 'open');
+  assert.equal(result.longform.timeline[0].at,
+    Date.parse(cadence.nextAvailableBangkokLongformSlots(NOW, '13:55', [pieces[0].postedAt], 1)[0]));
+});
+
+test('short-form runway counts the actual Buffer calendar and scheduled inventory', function () {
+  const pieces = [
+    { id: 'sent', contentType: 'short', stage: 'live', scheduledAt: '2026-10-14T18:55:00Z' },
+    { id: 'scheduled', contentType: 'short', stage: 'scheduled', scheduledAt: '2026-10-15T18:55:00Z' },
+    ready('one', 'short'), ready('two', 'ultra_short'), ready('three', 'long_short')
+  ];
+  const result = coverage.calculate({ pieces: pieces, now: NOW, postingSchedule: DAILY }).shortform;
+  assert.equal(result.estimated, false);
+  assert.equal(result.coveredSlots, 4);
+  assert.equal(result.timeline[0].state, 'scheduled');
+  assert.equal(result.timeline[1].state, 'queued');
+  assert.equal(new Date(result.nextNeededAt).toISOString(), '2026-10-19T18:35:00.000Z');
+});
+
+test('when Buffer is unavailable, short dates are labelled estimates from the last real slot', function () {
+  const pieces = [{ id: 'last', contentType: 'short', stage: 'live', scheduledAt: '2026-10-14T19:03:20Z' }, ready('one', 'short')];
+  const result = coverage.calculate({ pieces: pieces, now: NOW }).shortform;
+  assert.equal(result.estimated, true);
+  assert.equal(new Date(result.coveredThrough).toISOString(), '2026-10-15T19:03:20.000Z');
+  assert.equal(new Date(result.nextNeededAt).toISOString(), '2026-10-16T18:43:20.000Z');
+  assert.equal(coverage.calculate({ pieces: [ready('one', 'short')], now: NOW }).shortform.nextNeededAt, null);
+});
+
+test('Final Check does not count as ready and paused Buffer days cannot be promised', function () {
+  const fridayOnly = DAILY.map(function (day) { return Object.assign({}, day, { paused: day.day !== 'fri' }); });
+  const pieces = [{ id: 'unapproved', contentType: 'short', hasVideo: true, stage: 'final_check' }];
+  const result = coverage.calculate({ pieces: pieces, now: NOW, postingSchedule: fridayOnly }).shortform;
+  assert.equal(result.readyCount, 0);
+  assert.equal(result.coveredSlots, 0);
+  assert.equal(new Date(result.timeline[0].at).toISOString(), '2026-10-15T18:55:00.000Z');
+  assert.equal(new Date(result.timeline[1].at).toISOString(), '2026-10-22T18:55:00.000Z');
+});

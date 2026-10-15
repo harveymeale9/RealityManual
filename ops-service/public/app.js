@@ -2973,11 +2973,12 @@
         '</div>' +
         '<button class="btn-primary" id="btnNew">+ New Piece</button>' +
       '</div>' +
+      '<div class="queue-coverage" id="queueCoverage" aria-label="Publishing runway"></div>' +
       '<div class="overview-row" id="overviewRow"></div>' +
       '<div class="board-wrap" id="boardWrap"><div class="board" id="board"></div></div>' +
     '</div>';
 
-  var board, statStrip, overviewRow, boardWrap, draggingId = null;
+  var board, statStrip, overviewRow, queueCoverage, boardWrap, draggingId = null;
   var boardSettingsCache = null;
   // Which caption tab is currently selected on each Final Check card,
   // keyed by piece id — ephemeral (not persisted, resets on page load),
@@ -2999,6 +3000,46 @@
       '<span><span class="n">' + total + '</span>total</span>' +
       '<span><span class="n">' + activeCount + '</span>in motion</span>' +
       '<span><span class="n">' + liveCount + '</span>live</span>';
+  }
+
+  function renderQueueCoverage() {
+    if (!queueCoverage || !window.RMQueueCoverage) return;
+    var status = tiktokStatusCache && tiktokStatusCache.connected ? tiktokStatusCache : null;
+    var runway = window.RMQueueCoverage.calculate({
+      pieces: Object.keys(pieces).map(function (id) { return pieces[id]; }),
+      now: Date.now(),
+      longformTime: boardSettingsCache && boardSettingsCache.longformScheduleTime,
+      postingSchedule: status && status.channel && status.channel.postingSchedule
+    });
+    function dateLabel(value) {
+      return new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', weekday: 'short', day: 'numeric', month: 'short' }).format(new Date(value));
+    }
+    function timeLabel(value) {
+      return new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date(value));
+    }
+    function card(label, item, cadence) {
+      var title = item.nextNeededAt === null ? 'Next refill date unavailable' :
+        'Next video ready by ' + dateLabel(item.nextNeededAt) + (item.estimated ? '' : ' · ' + timeLabel(item.nextNeededAt));
+      var sub = item.nextNeededAt === null ? 'Connect Buffer to confirm the short-form cadence.' :
+        item.coveredSlots + ' slot' + (item.coveredSlots === 1 ? '' : 's') + ' covered · ' +
+        item.daysUntilNeeded + ' day' + (item.daysUntilNeeded === 1 ? '' : 's') + ' until refill';
+      var timeline = item.timeline.map(function (slot) {
+        return '<span class="queue-coverage-slot queue-coverage-slot--' + slot.state + '" title="' +
+          escapeHtml(dateLabel(slot.at) + ' · ' + slot.state) + '"><span class="queue-coverage-slot-dot"></span>' +
+          escapeHtml(dateLabel(slot.at).replace(/^\w+ /, '')) + '</span>';
+      }).join('');
+      return '<section class="queue-coverage-card" aria-label="' + label + ' publishing runway">' +
+        '<div class="queue-coverage-head"><span>' + label + '</span><span>' + cadence + '</span></div>' +
+        '<strong class="queue-coverage-deadline">' + title + '</strong>' +
+        '<div class="queue-coverage-meta">' + sub + ' · ' + item.readyCount + ' ready in queue' +
+          (item.scheduledCount ? ' · ' + item.scheduledCount + ' already scheduled' : '') + '</div>' +
+        '<div class="queue-coverage-timeline" aria-label="Upcoming publishing slots">' + timeline + '</div>' +
+        '<div class="queue-coverage-legend">Green: queued · Blue: scheduled · Amber: needs a video</div>' +
+        (item.estimated ? '<div class="queue-coverage-note">Daily estimate from the last short; Buffer schedule is temporarily unavailable.</div>' : '') +
+      '</section>';
+    }
+    queueCoverage.innerHTML = card('Long-form', runway.longform, 'Every 3 days') +
+      card('Short-form', runway.shortform, 'Buffer cadence');
   }
 
   function renderOverview() {
@@ -3471,6 +3512,7 @@
       }
     });
     renderStats();
+    renderQueueCoverage();
     renderOverview();
     bindBoardEvents();
   }
@@ -4117,6 +4159,7 @@
   function bootContentOps() {
     board = document.getElementById('board');
     statStrip = document.getElementById('statStrip');
+    queueCoverage = document.getElementById('queueCoverage');
     overviewRow = document.getElementById('overviewRow');
     boardWrap = document.getElementById('boardWrap');
 

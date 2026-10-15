@@ -19709,3 +19709,29 @@ channel discovery, and honoring a 429 retry window. Full ops-service suite
 passes with 254 tests. The separate
 Instagram tester invitation was still Pending during this work; this Buffer
 change does not touch the Instagram publishing or Insights authorization.
+
+---
+
+# 635. Publishing Runway Above Content Pipeline (2026-10-15)
+
+Harvey wanted to see the first date by which another long-form or short-form
+video must be ready, based on the videos actually waiting to publish. Content
+Pipeline now has two compact runway cards above the Kanban, visible on desktop
+and mobile. Each shows the first uncovered publishing slot (with a 20-minute
+preparation lead), days until it, covered-slot count, videos ready in Publishing
+Queue, videos already Scheduled, and six color-coded upcoming slots. A legend
+explains the colors. Only Publishing Queue cards with a video and selected
+publishing destinations count as ready; Final Check and earlier stages do not.
+
+Long-form slots use the existing every-three-Bangkok-calendar-days cadence,
+anchored to the earliest live/scheduled long-form post and the board's configured
+publish time. Short-form slots use Buffer's actual weekly posting calendar when
+available. If Buffer's calendar cannot be fetched (for example, while its API
+quota is exhausted), the card explicitly labels its daily projection as an
+estimate derived from the last actual short-form slot. It does not invent the
+old midnight/noon slots or change the publishing worker's refusal to schedule
+without Buffer's real calendar. The calculation is in the browser-only
+`public/lib/queueCoverage.js` and does not add API calls or spend Buffer quota.
+Unit tests cover long-form, actual Buffer calendar, fallback, and exclusion of
+not-yet-ready pieces. Real Chromium checks confirmed the two cards render on
+desktop and phone-sized viewports.
