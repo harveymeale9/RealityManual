@@ -19397,7 +19397,8 @@ Render-affecting decisions now enter an explicit **Working preview** backed by
 the lightweight source file but driven by the complete current cut list,
 captions and camera treatment. **Previous preview**, **Working preview**, and
 **Raw original · no edits/captions** remain distinct when an old rendered file
-exists. A timeline deletion pins the replacement player to the selected source
+exists. Reopening an unfinished dirty project selects Working preview, while a
+clean rebuilt project still selects Editing preview. A timeline deletion pins the replacement player to the selected source
 boundary, disables its action while saving, and confirms success with a short
 **Cut applied · Ns removed** toast. Raw-source warnings appear only after an
 explicit Raw selection.

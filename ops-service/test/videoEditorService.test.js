@@ -304,9 +304,9 @@ test('page-change zoom uses one centred fractional resampling stage', function (
   assert.equal(editor.cameraMotionPreparationFilter({ width: 720, height: 404 }, false), ',scale=720:404,setsar=1');
 });
 
-test('ready Editor projects reopen on the edited preview rather than a remembered raw source', function () {
+test('clean Editor projects reopen rendered while dirty projects reopen in the live working preview', function () {
   const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'editor.js'), 'utf8');
-  assert.match(source, /var mode = item\.renderStatus === 'ready' \? 'final' : 'source';/);
+  assert.match(source, /var mode = item\.renderStatus === 'ready' && !item\.renderDirty \? 'final' : 'source';/);
   assert.doesNotMatch(source, /saved\.mode === 'source' \|\| item\.renderStatus !== 'ready'/);
 });
 

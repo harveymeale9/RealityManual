@@ -280,12 +280,10 @@
     var sourceTime = Number(saved && saved.sourceTime);
     var duration = Number(item.duration) || 0;
     if (!Number.isFinite(sourceTime) || sourceTime < 1 || (duration > 0 && sourceTime >= duration - 1)) return;
-    // A ready recording always reopens on its actual edited preview. Remembering
-    // an earlier Original master inspection made a finished edit appear to have
-    // retained its setup silence and omitted its baked opening zoom. Source
-    // review remains available from the explicit button during this workspace
-    // visit, but it is not the durable default for the next opening.
-    var mode = item.renderStatus === 'ready' ? 'final' : 'source';
+    // A clean ready recording reopens on its actual rendered preview. A dirty
+    // one reopens on the live working preview so every newer decision is shown
+    // without falling back to either the stale render or the raw master.
+    var mode = item.renderStatus === 'ready' && !item.renderDirty ? 'final' : 'source';
     delete explicitSourcePreviews[item.id];
     previewModes[item.id] = mode;
     previewSeekTimes[item.id] = mode === 'final' ? sourceToEditedTime(sourceTime, cutsForClient(item), item) : sourceTime;
