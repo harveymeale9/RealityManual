@@ -4,38 +4,30 @@
 + RUN_ARGS=(-d --name "$CONTAINER" --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v "$DATA_DIR:/data" -v /root/realitymanual-backend-data:/store-data:ro -v "$RUNTIME_REPO_DIR:/repo" -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file "$ENV_FILE")
 + cd /root/realitymanual-repo
 ++ git status --porcelain
-+ '[' -n ' M ops-service/public/editor.js
- M ops-service/public/index.html
- M ops-service/public/style.css
- M ops-service/public/voice-mobile.html
- M ops-service/test/videoEditorService.test.js' ']'
-+ echo 'local changes present in /root/realitymanual-repo — auto-stashing before pull'
-local changes present in /root/realitymanual-repo — auto-stashing before pull
-++ date -u +%FT%TZ
-+ git stash push -u -m 'deploy.sh auto-stash 2026-10-15T06:54:18Z'
-Saved working directory and index state On main: deploy.sh auto-stash 2026-10-15T06:54:18Z
++ '[' -n '' ']'
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   cdab5f8..7a1f9cd  main       -> origin/main
 + git merge --ff-only origin/main
-Updating cdab5f8..7a1f9cd
-Fast-forward
- CLAUDE.md                                   | 29 +++++++++
- ops-service/.ci/last-run.log                | 95 ++++++++++++++---------------
- ops-service/public/editor.js                | 17 +++++-
- ops-service/public/index.html               |  4 +-
- ops-service/public/style.css                |  1 +
- ops-service/test/videoEditorService.test.js |  7 ++-
- 6 files changed, 99 insertions(+), 54 deletions(-)
+Already up to date.
 ++ git rev-parse HEAD
-+ NEW_HEAD=7a1f9cdf223f2736644bb347c00d4c8fbeab7f2e
++ NEW_HEAD=a37ebb3efa2988ed7bd55bf8bcd816930b4f5eb8
 + git -C /srv/realitymanual-repo fetch origin main
 warning: redirecting to https://github.com/harveymeale9/RealityManual.git/
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
+   7a1f9cd..a37ebb3  main       -> origin/main
 + git -C /srv/realitymanual-repo merge --ff-only origin/main
-Already up to date.
+Updating 7a1f9cd..a37ebb3
+Fast-forward
+ CLAUDE.md                                   |  27 +++++
+ ops-service/.ci/last-run.log                | 155 ++++++----------------------
+ ops-service/public/editor.js                |  74 ++++++++++---
+ ops-service/public/index.html               |   4 +-
+ ops-service/public/style.css                |   2 +
+ ops-service/public/voice-mobile.html        |   2 +-
+ ops-service/test/videoEditorService.test.js |  18 +++-
+ 7 files changed, 136 insertions(+), 146 deletions(-)
 + chown -R 1000:1000 /srv/realitymanual-repo
 + LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
 ++ cat /root/ops-service-data/last-image-commit.txt
@@ -43,12 +35,12 @@ Already up to date.
 + NEEDS_REBUILD=1
 + '[' -n cdab5f8d810d5ebfa363deaa096671174f23cfc2 ']'
 + git cat-file -e 'cdab5f8d810d5ebfa363deaa096671174f23cfc2^{commit}'
-++ git diff --name-only cdab5f8d810d5ebfa363deaa096671174f23cfc2 7a1f9cdf223f2736644bb347c00d4c8fbeab7f2e -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
+++ git diff --name-only cdab5f8d810d5ebfa363deaa096671174f23cfc2 a37ebb3efa2988ed7bd55bf8bcd816930b4f5eb8 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z '' ']'
 + NEEDS_REBUILD=0
 + '[' 0 = 1 ']'
 + '[' 0 = 0 ']'
-+ echo 'no backend changes between cdab5f8d810d5ebfa363deaa096671174f23cfc2 and 7a1f9cdf223f2736644bb347c00d4c8fbeab7f2e — already live via git pull, skipping rebuild/restart'
-no backend changes between cdab5f8d810d5ebfa363deaa096671174f23cfc2 and 7a1f9cdf223f2736644bb347c00d4c8fbeab7f2e — already live via git pull, skipping rebuild/restart
++ echo 'no backend changes between cdab5f8d810d5ebfa363deaa096671174f23cfc2 and a37ebb3efa2988ed7bd55bf8bcd816930b4f5eb8 — already live via git pull, skipping rebuild/restart'
+no backend changes between cdab5f8d810d5ebfa363deaa096671174f23cfc2 and a37ebb3efa2988ed7bd55bf8bcd816930b4f5eb8 — already live via git pull, skipping rebuild/restart
 + exit 0
 ssh exit code: 0
