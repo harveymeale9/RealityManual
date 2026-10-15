@@ -2622,13 +2622,28 @@ function setup(options) {
     for (const row of rows) {
       let snapshot;
       try { snapshot = JSON.parse(row.data); } catch (error) { continue; }
-      if (!snapshot || snapshot.productionPieceId || snapshot.renderStatus !== 'ready' || !snapshot.renderSha256 || !isId(snapshot.id)) continue;
+      if (!snapshot || snapshot.productionPieceId || !isId(snapshot.id)) continue;
+      // A renderer-version upgrade may have invalidated this preview during a
+      // previous restart. Finish that one-time migration automatically even
+      // though ordinary transcript edits deliberately require Harvey's
+      // explicit Rebuild preview click.
+      if (snapshot.renderStatus !== 'ready' || !snapshot.renderSha256) {
+        if (snapshot.renderRebuildPending && Number(snapshot.renderVersion) !== EDITOR_RENDER_VERSION &&
+          !snapshot.renderDirty && automaticReviewReady(snapshot)) {
+          const projectId = snapshot.id;
+          setImmediate(function () { renderProject(projectId).catch(function () {}); });
+        }
+        continue;
+      }
       if (Number(snapshot.renderVersion) !== EDITOR_RENDER_VERSION) {
         const current = getProject(snapshot.id);
         if (!current || current.productionPieceId || current.renderStatus !== 'ready' || current.renderSha256 !== snapshot.renderSha256) continue;
         invalidateProjectRender(current);
         saveProject(current);
-        if (automaticReviewReady(current)) setImmediate(function () { maybeAutoRender(current.id); });
+        if (!snapshot.renderDirty && automaticReviewReady(current)) {
+          const projectId = current.id;
+          setImmediate(function () { renderProject(projectId).catch(function () {}); });
+        }
         continue;
       }
       const valid = await verifiedRenderMatches(snapshot, renderPath(snapshot.id));

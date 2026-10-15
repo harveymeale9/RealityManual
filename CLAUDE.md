@@ -19275,7 +19275,10 @@ same landscape-only reduction, and its stylesheet cache key was advanced so
 the correction appears without a stale cached rule. The Editor render version
 was advanced as well, causing unapproved cached previews to regenerate once
 with the corrected stroke rather than leaving the active recordings on their
-old baked caption treatment.
+old baked caption treatment. Renderer-version migrations are the sole
+exception to the Editor's decision-first, explicit-rebuild rule: they resume
+automatically even if one service restart already removed the obsolete file.
+Normal transcript edits still wait for Harvey's Rebuild preview button.
 
 Automated coverage locks the landscape border and shadow values independently
 from the unchanged portrait style. The complete ops-service suite passes with
