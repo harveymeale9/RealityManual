@@ -11,6 +11,28 @@ const { execFileSync, spawnSync } = require('node:child_process');
 const express = require('express');
 const Database = require('better-sqlite3');
 const editor = require('../src/videoEditorService');
+const { maskCaption } = require('../public/lib/captionMask');
+
+test('viewer captions mask whole swear words without changing transcript text or harmless words', function () {
+  const spoken = 'Fucking shit, BULLSHIT! This class assistant is not a bitch.';
+  assert.equal(maskCaption(spoken), 'F*cking sh*t, BULLSH*T! This class assistant is not a b*tch.');
+  assert.equal(spoken, 'Fucking shit, BULLSHIT! This class assistant is not a bitch.');
+  assert.equal(maskCaption('f*cking sh*t'), 'f*cking sh*t');
+});
+
+test('both landscape and portrait ASS renders mask spoken words and fallback captions', function () {
+  const group = { start: 0, end: 1, text: 'Fucking shit!', words: [
+    { text: 'Fucking', start: 0, end: 0.5 }, { text: 'shit!', start: 0.5, end: 1 }
+  ] };
+  for (const shape of [{ width: 1920, height: 1080 }, { width: 1080, height: 1920 }]) {
+    const ass = editor.buildAss(shape, [group, { start: 1, end: 2, text: 'What the fuck?' }]);
+    assert.match(ass, /F\*cking/);
+    assert.match(ass, /sh\*t!/);
+    assert.match(ass, /What the f\*ck\?/);
+    assert.doesNotMatch(ass, /Fucking|shit!|the fuck\?/);
+  }
+  assert.equal(group.words[0].text, 'Fucking');
+});
 
 test('INSERT CLIP directives parse YouTube ranges and preserve the caption cue', function () {
   const directives = editor.parseInsertClipDirectives('<p>INSERT CLIP: https://youtu.be/abc123 0:24-0:28, “The problem we face is that we do not understand God.”</p>');
@@ -520,7 +542,8 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /editor-manual-cut-handle/);
   assert.match(source, /Adjusted automatic timeline cut/);
   assert.match(source, /Cut edge moved/);
-  assert.match(page, /editor\.js\?v=20261015-production-audio-timeline-v150/);
+  assert.match(page, /lib\/captionMask\.js\?v=20261015-mask-swears/);
+  assert.match(page, /editor\.js\?v=20261015-mask-swears-v151/);
   assert.match(page, /style\.css\?v=20261015-kanban-processing-v151/);
   assert.match(styles, /\.editor-manual-cut-handle/);
   assert.match(styles, /\.editor-caption\.longform\{font-size:2\.05cqw;text-shadow:-1px -1px 0 #111,1px -1px 0 #111/);

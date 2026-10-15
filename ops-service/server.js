@@ -52,6 +52,7 @@ const kanbanBackupService = require('./src/kanbanBackupService');
 const contentAnalyticsService = require('./src/contentAnalyticsService');
 const tiktokPublicMetrics = require('./src/tiktokPublicMetrics');
 const finalReviewPreviewService = require('./src/finalReviewPreview');
+const { maskCaption } = require('./public/lib/captionMask');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
@@ -2916,7 +2917,7 @@ async function runBufferTiktokPublish(id, opts) {
       // `text` is Buffer's name for the visible TikTok caption. Final Check
       // supplies the fully rendered, platform-specific Content Settings
       // caption (including any piece tokens), not the YouTube/card title.
-      text: opts.caption || piece.title || 'Untitled',
+      text: maskCaption(opts.caption || piece.title || 'Untitled'),
       videoUrl: buffer.mediaUrl(id),
       thumbnailOffset: Math.round((Number(piece.thumbnailTimeSeconds) || 0) * 1000)
     });
@@ -3227,7 +3228,7 @@ async function runPlatformPublishBatch(id, destinations, options) {
     if (tiktokDestination) {
       try {
         const result = await buffer.createTiktokVideoPost({
-          text: tiktokDestination.caption || tiktokDestination.title || 'Untitled',
+          text: maskCaption(tiktokDestination.caption || tiktokDestination.title || 'Untitled'),
           videoUrl: buffer.mediaUrl(id),
           thumbnailOffset: Math.round((Number(initialPiece && initialPiece.thumbnailTimeSeconds) || 0) * 1000),
           dueAt: dueAt
@@ -3281,7 +3282,7 @@ async function runPlatformPublishBatch(id, destinations, options) {
         try {
           const accessToken = await getValidYoutubeAccessToken();
           result = await youtubeAuth.uploadVideo(accessToken, media.path, mimeType, {
-            title: destination.title || 'Untitled', description: destination.caption || '',
+            title: destination.title || 'Untitled', description: maskCaption(destination.caption || ''),
             privacyStatus: destination.privacyStatus || 'private'
           });
         } finally { media.cleanup(); }
@@ -3293,7 +3294,7 @@ async function runPlatformPublishBatch(id, destinations, options) {
       } else if (platform === 'tiktok') {
         const current = getPieceRecord(id);
         const result = await buffer.createTiktokVideoPost({
-          text: destination.caption || destination.title || 'Untitled',
+          text: maskCaption(destination.caption || destination.title || 'Untitled'),
           videoUrl: buffer.mediaUrl(id),
           thumbnailOffset: Math.round((Number(current && current.thumbnailTimeSeconds) || 0) * 1000)
         });
@@ -3316,14 +3317,14 @@ async function runPlatformPublishBatch(id, destinations, options) {
               result = await metaPublisher.publishFacebookVideoResumable({
                 pageId: auth.page_id, pageToken: auth.page_access_token,
                 videoPath: media.path, title: destination.title || 'Untitled',
-                description: destination.caption || ''
+                description: maskCaption(destination.caption || '')
               });
             } finally { media.cleanup(); }
           } else {
             result = await metaPublisher.publishFacebookVideo({
               pageId: auth.page_id, pageToken: auth.page_access_token,
               videoUrl: metaPublisher.mediaUrl(id, auth.app_secret, 60 * 60 * 1000), mimeType: mimeType,
-              title: destination.title || 'Untitled', description: destination.caption || ''
+              title: destination.title || 'Untitled', description: maskCaption(destination.caption || '')
             });
           }
           updatePieceFields(id, {
@@ -3333,7 +3334,7 @@ async function runPlatformPublishBatch(id, destinations, options) {
           if (!auth.instagram_account_id) throw new Error('The selected Facebook Page has no linked Instagram professional account.');
           const result = await metaPublisher.publishInstagramReel({
             instagramAccountId: auth.instagram_account_id, pageToken: auth.page_access_token,
-            videoUrl: metaPublisher.mediaUrl(id, auth.app_secret), caption: destination.caption || ''
+            videoUrl: metaPublisher.mediaUrl(id, auth.app_secret), caption: maskCaption(destination.caption || '')
           });
           updatePieceFields(id, {
             instagramPublishStatus: 'done', instagramPublishError: '', instagramMediaId: result.id,

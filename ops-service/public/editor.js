@@ -2218,7 +2218,7 @@
           // its own emphasis target and insert a real text node between them.
           if (index) caption.appendChild(document.createTextNode(' '));
           var span = document.createElement('span');
-          span.textContent = word.text;
+          span.textContent = window.RealityCaptionMask.maskCaption(word.text);
           var emphasisEnd = index + 1 < group.words.length ? group.words[index + 1].sourceStart : group.sourceEnd;
           span.className = video.currentTime >= word.sourceStart && video.currentTime < emphasisEnd ? 'active' : '';
           caption.appendChild(span);
@@ -2228,12 +2228,12 @@
           var wordEnd = index + 1 < group.words.length ? group.words[index + 1].sourceStart : group.sourceEnd;
           return video.currentTime >= word.sourceStart && video.currentTime < wordEnd;
         })[0];
-        caption.textContent = spokenWord ? spokenWord.text : '';
+        caption.textContent = spokenWord ? window.RealityCaptionMask.maskCaption(spokenWord.text) : '';
         if (spokenWord) {
           var characters = Array.from(String(spokenWord.text || '')).length;
           caption.style.fontSize = (Math.max(3, Math.min(8, 8 * 15 / Math.max(15, characters)))).toFixed(2) + 'cqw';
         }
-      } else if (group) caption.textContent = group.text;
+      } else if (group) caption.textContent = window.RealityCaptionMask.maskCaption(group.text);
       caption.classList.toggle('visible', !!group && project.captionsEnabled !== false);
     });
     video.addEventListener('pause', persistCurrentReviewProgress);

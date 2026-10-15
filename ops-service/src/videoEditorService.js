@@ -8,6 +8,7 @@ const os = require('os');
 const path = require('path');
 const { execFile, spawn } = require('child_process');
 const { pipeline } = require('stream/promises');
+const { maskCaption } = require('../public/lib/captionMask');
 
 const STORE_NAME = 'editorProjects';
 // OBS long-form masters can exceed the original 4.5 GiB ceiling even when
@@ -1307,7 +1308,7 @@ function buildAss(project, groups) {
   const events = [];
   (groups || []).forEach(function (group) {
     if (!Array.isArray(group.words) || !group.words.length) {
-      events.push('Dialogue: 0,' + assTime(group.start) + ',' + assTime(group.end) + ',Default,,0,0,0,,' + escapeAss(group.text));
+      events.push('Dialogue: 0,' + assTime(group.start) + ',' + assTime(group.end) + ',Default,,0,0,0,,' + escapeAss(maskCaption(group.text)));
       return;
     }
     if (!isLongform) {
@@ -1333,7 +1334,7 @@ function buildAss(project, groups) {
           const eventEnd = followingWord ? followingWord.start : windowEnd;
           if (eventEnd <= eventStart) return;
           const text = windowWords.map(function (word, wordIndex) {
-            const escaped = escapeAss(word.text);
+            const escaped = escapeAss(maskCaption(word.text));
             if (fittedSize < fontSize) {
               return wordIndex === activeIndex
                 ? '{\\fs' + fittedEmphasizedSize + '\\bord4}' + escaped
@@ -1358,7 +1359,7 @@ function buildAss(project, groups) {
       const eventEnd = activeIndex + 1 < group.words.length ? group.words[activeIndex + 1].start : group.end;
       if (eventEnd <= eventStart) return;
       const text = group.words.map(function (word, wordIndex) {
-        const escaped = escapeAss(word.text);
+        const escaped = escapeAss(maskCaption(word.text));
         if (fittedLongformSize < fontSize) {
           return wordIndex === activeIndex
             ? '{\\fs' + fittedEmphasizedSize + '\\bord' + emphasizedOutlineWidth + '}' + escaped

@@ -19620,3 +19620,20 @@ allows an Instagram Login path using `instagram_business_basic` and
 `instagram_business_manage_insights`. Standard Access suffices for an account
 owned or managed by an app-role user; Harvey must configure that product in
 the Meta app and authorize his account before the collector can use it.
+
+---
+
+# 632. Viewer Captions Mask Swear Words (2026-10-15)
+
+Harvey wants future long- and short-form video captions to display an asterisk
+inside swear words (`fucking` → `f*cking`, `shit` → `sh*t`). A single shared
+`public/lib/captionMask.js` helper now applies whole-word, case-preserving
+masking at presentation boundaries: the Editor's source-preview overlay, ASS
+subtitles burned into both portrait and landscape renders (including inserted
+clip fallback captions), and outbound YouTube descriptions, TikTok text, and
+Facebook/Instagram captions. The original timed transcript, edit decisions,
+stored caption copy, and video audio stay untouched; no published video is
+silently changed. Masking at actual publish time also covers previously queued
+cards. Whole-word matching avoids changing innocuous embedded strings such as
+`class` or `assistant`. Focused tests cover both render shapes and the masking
+examples.
