@@ -19458,4 +19458,26 @@ starting a two-second music fade while the picture is still visible.
 Regression coverage locks the landscape/no-music 1.7-second ending, the
 music-backed 1.7 + 0.3 timing, the unchanged portrait timing, the actual final
 black frame, and the 0.3-second FFmpeg audio-fade expression. The complete
+ops-service suite passes with 240 tests. `EDITOR_RENDER_VERSION` is 27 so an
+existing unapproved landscape preview is rebuilt once with the corrected
+outro after deployment instead of retaining renderer-version-26 timing.
+
+---
+
+# 625. Production Audio Preparation Is Visible and Editor Leads Its Menu (2026-10-15)
+
+Content Production previously disabled both preview controls while its cached
+backing-audio mixes were being built, but communicated that state through one
+small passive status line. The row now shows a bordered live-status panel with
+an animated spinner, completed/total progress, and explicit copy explaining
+that the selected preview will unlock automatically. The disabled audio and
+video preview buttons say **Preparing…** / **Mixing audio…** and carry matching
+tooltips instead of looking like dead controls. The region exposes `aria-busy`
+and a polite status announcement for assistive technology, and clears its
+loading treatment as soon as all mixes are ready.
+
+The Content Ops navigation now orders **Editor** before **Content Production**
+in both the horizontal group menu and the icon rail. Routes and permissions are
+unchanged; this is only the requested workflow ordering. Cache keys for the
+updated JavaScript and stylesheet were advanced together. The complete
 ops-service suite passes with 240 tests.

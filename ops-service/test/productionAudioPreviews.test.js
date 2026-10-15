@@ -7,6 +7,21 @@ const os = require('os');
 const path = require('path');
 const previews = require('../src/productionAudioPreviews');
 
+test('Production makes soundtrack preparation visible and orders Editor before Content Production', function () {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const page = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'public', 'style.css'), 'utf8');
+  assert.match(app, /Mixing backing-audio previews/);
+  assert.match(app, /selected preview will unlock automatically when ready/);
+  assert.match(app, /upload-row-audio-preview-spinner/);
+  assert.match(app, /audioSection\.setAttribute\('aria-busy'/);
+  assert.match(styles, /\.upload-row-audio-preview-progress\.is-preparing/);
+  assert.match(styles, /\.upload-row-audio-preview-spinner/);
+  assert.ok(app.indexOf("{ id: 'editor', label: 'Editor' }") < app.indexOf("{ id: 'upload-files', label: 'Content Production' }"));
+  assert.ok(page.indexOf('data-tab="editor" title="Editor"') < page.indexOf('data-tab="upload-files" title="Content Production"'));
+  assert.match(page, /app\.js\?v=20261015-production-audio-loader-v149/);
+});
+
 test('Production preview cache deduplicates work, persists results, and invalidates changed settings', async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-production-audio-'));
   t.after(function () { fs.rmSync(dir, { recursive: true, force: true }); });

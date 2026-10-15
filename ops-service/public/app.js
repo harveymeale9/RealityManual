@@ -63,8 +63,8 @@
     { label: 'Content Ops', tabs: [
         { id: 'content-ops', label: 'Content Pipeline' },
         { id: 'content-ideation', label: 'Content Ideation' },
-        { id: 'upload-files', label: 'Content Production' },
         { id: 'editor', label: 'Editor' },
+        { id: 'upload-files', label: 'Content Production' },
         { id: 'settings', label: 'Content Settings' }
       ] },
     { label: 'Research', tabs: [
@@ -4467,6 +4467,15 @@
     audioPreviewBtn.textContent = 'Preview';
     var audioPreviewStatus = document.createElement('span');
     audioPreviewStatus.className = 'upload-row-audio-preview-status';
+    var audioPreviewProgress = document.createElement('div');
+    audioPreviewProgress.className = 'upload-row-audio-preview-progress';
+    audioPreviewProgress.setAttribute('role', 'status');
+    audioPreviewProgress.setAttribute('aria-live', 'polite');
+    var audioPreviewSpinner = document.createElement('span');
+    audioPreviewSpinner.className = 'spinner upload-row-audio-preview-spinner';
+    audioPreviewSpinner.setAttribute('aria-hidden', 'true');
+    audioPreviewProgress.appendChild(audioPreviewSpinner);
+    audioPreviewProgress.appendChild(audioPreviewStatus);
     var previewAudio = document.createElement('audio');
     previewAudio.preload = 'auto';
     previewAudio.hidden = true;
@@ -4481,8 +4490,16 @@
     function updatePreviewReadiness() {
       if (previewCancelled) return;
       if (!audioTracks.length) audioPreviewStatus.textContent = 'No backing tracks are currently in the library.';
-      else if (previewCompleted < audioTracks.length) audioPreviewStatus.textContent = 'Preparing soundtrack previews ' + previewCompleted + '/' + audioTracks.length + '…';
+      else if (previewCompleted < audioTracks.length) {
+        var selectedStillMixing = audioSelect.value && audioSelect.value !== '__none__' && !previewUrls[audioSelect.value];
+        audioPreviewStatus.textContent = 'Mixing backing-audio previews ' + previewCompleted + '/' + audioTracks.length + '… ' +
+          (selectedStillMixing ? 'The selected preview will unlock automatically when ready.' : 'Each preview unlocks automatically when ready.');
+      }
       else audioPreviewStatus.textContent = (audioTracks.length - previewFailed) + ' soundtrack previews ready' + (previewFailed ? ' · ' + previewFailed + ' failed' : '') + '. Switching is instant.';
+      var preparing = audioTracks.length > 0 && previewCompleted < audioTracks.length;
+      audioPreviewSpinner.hidden = !preparing;
+      audioPreviewProgress.classList.toggle('is-preparing', preparing);
+      audioSection.setAttribute('aria-busy', preparing ? 'true' : 'false');
       setPreviewButtonState();
     }
 
@@ -4491,9 +4508,11 @@
       var ready = audioSelect.value === '__none__' || !!previewUrls[audioSelect.value];
       var canPreview = selectable && ready && videoReady;
       audioPreviewBtn.disabled = !canPreview;
-      audioPreviewBtn.textContent = previewPlaying ? 'Stop' : 'Preview';
+      audioPreviewBtn.textContent = previewPlaying ? 'Stop' : (selectable && !ready ? 'Preparing…' : 'Preview');
+      audioPreviewBtn.title = selectable && !ready ? 'This backing-audio mix is still being built and will unlock automatically.' : '';
       videoPreviewBtn.disabled = !canPreview;
-      videoPreviewBtn.textContent = previewPlaying ? '■ Stop video' : '▶ Preview video';
+      videoPreviewBtn.textContent = previewPlaying ? '■ Stop video' : (selectable && !ready ? 'Mixing audio…' : '▶ Preview video');
+      videoPreviewBtn.title = selectable && !ready ? 'Video preview will unlock when the selected backing-audio mix is ready.' : '';
       audioPrevious.disabled = audioTracks.length < 2;
       audioNext.disabled = audioTracks.length < 2;
     }
@@ -4594,7 +4613,10 @@
         if (previewCompleted < audioTracks.length) previewStatusTimer = setTimeout(refreshPreviewStatus, 1200);
       }).catch(function () {
         if (previewCancelled) return;
-        audioPreviewStatus.textContent = 'Soundtrack previews are still preparing in Production.';
+        audioPreviewStatus.textContent = 'Backing-audio previews are still mixing in Production. Preview controls will unlock automatically.';
+        audioPreviewSpinner.hidden = false;
+        audioPreviewProgress.classList.add('is-preparing');
+        audioSection.setAttribute('aria-busy', 'true');
         previewStatusTimer = setTimeout(refreshPreviewStatus, 2000);
       });
     }
@@ -4607,7 +4629,7 @@
     audioPicker.appendChild(audioPreviewBtn);
     audioPicker.appendChild(audioNext);
     audioSection.appendChild(audioPicker);
-    audioSection.appendChild(audioPreviewStatus);
+    audioSection.appendChild(audioPreviewProgress);
     audioSection.appendChild(previewAudio);
 
     // --- Title picker. Longform gets up to 3 (auto-populated from the

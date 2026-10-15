@@ -518,7 +518,7 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /Playback will unlock automatically/);
   assert.match(source, /\(mediaUnavailable \? '' : ' src="' \+ previewUrl/);
   assert.match(page, /editor\.js\?v=20261015-durable-review-position-v147/);
-  assert.match(page, /style\.css\?v=20261015-timeline-cut-sync-v146/);
+  assert.match(page, /style\.css\?v=20261015-production-audio-loader-v149/);
   assert.match(styles, /\.editor-caption\.longform\{font-size:2\.05cqw;text-shadow:-1px -1px 0 #111,1px -1px 0 #111/);
   assert.match(source, /Raw original · no edits\/captions/);
   assert.match(source, /cuts, captions and animations are not shown/);
@@ -1031,7 +1031,7 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.equal(stored.renderQuality.status, 'passed');
-  assert.equal(stored.renderVersion, 26);
+  assert.equal(stored.renderVersion, 27);
   assert.equal(fs.existsSync(path.join(projectDir, 'render.mp4')), true);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
@@ -1085,7 +1085,7 @@ test('final render splices an inserted clip and its caption timeline between sou
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
   assert.ok(stored.editedDuration > 3.6 && stored.editedDuration < 3.8);
-  assert.equal(stored.renderVersion, 26);
+  assert.equal(stored.renderVersion, 27);
   assert.equal(stored.renderQuality.contentDuration, 2);
   assert.equal(stored.renderQuality.outroSeconds, 1.7);
   assert.equal(stored.renderQuality.visualFadeSeconds, 1.7);
