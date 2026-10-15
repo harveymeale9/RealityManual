@@ -756,7 +756,7 @@ function editorPlanningCandidates(project) {
     if (!piece || piece.hasVideo) return false;
     if (piece.id === (project && project.planningPieceId)) return true;
     if (claimedByOtherEditorProjects.has(piece.id)) return false;
-    return piece.stage === 'outline_completed' || piece.stage === 'uploaded';
+    return piece.stage === 'outline_completed' || piece.stage === 'to_film' || piece.stage === 'uploaded';
   }).sort(function (a, b) {
     if (a.id === (project && project.planningPieceId)) return -1;
     if (b.id === (project && project.planningPieceId)) return 1;
@@ -769,7 +769,7 @@ function editorPlanningCandidates(project) {
 
 function editorPlanningPiece(id) {
   const piece = getPieceRecord(id);
-  if (!piece || piece.hasVideo || !['outline_completed', 'uploaded'].includes(piece.stage)) return null;
+  if (!piece || piece.hasVideo || !['outline_completed', 'to_film', 'uploaded'].includes(piece.stage)) return null;
   return { id: piece.id, seq: piece.seq, title: piece.title, stage: piece.stage, notesHtml: String(piece.notesHtml || '') };
 }
 
@@ -879,7 +879,7 @@ function advanceEditorPlanningPiece(input) {
   const project = input && input.project;
   if (!project || !project.planningPieceId) return;
   const piece = getPieceRecord(project.planningPieceId);
-  if (!piece || piece.hasVideo || !['outline_completed', 'uploaded'].includes(piece.stage)) return;
+  if (!piece || piece.hasVideo || !['outline_completed', 'to_film', 'uploaded'].includes(piece.stage)) return;
   piece.stage = 'uploaded';
   piece.updatedAt = new Date().toISOString();
   piece.editorProjectId = project.id;
@@ -2197,7 +2197,7 @@ function migrateSplitPlanningAndVideoStages() {
       let changed = false;
       if (!piece.hasVideo && piece.stage === 'edited') nextStage = 'uploaded';
       if (!piece.hasVideo && linkedPlanningEditors.has(piece.id) &&
-          ['outline_completed', 'filmed', 'uploaded', 'edited'].includes(piece.stage)) {
+          ['outline_completed', 'to_film', 'filmed', 'uploaded', 'edited'].includes(piece.stage)) {
         nextStage = 'uploaded';
         const editorProjectId = linkedPlanningEditors.get(piece.id);
         if (piece.editorProjectId !== editorProjectId) {
@@ -2606,7 +2606,7 @@ async function runVideoAnalysis(id, existingTranscript) {
   try {
     const candidates = stmts.getAll.all('pieces')
       .map(function (r) { try { return JSON.parse(r.data); } catch (e) { return null; } })
-      .filter(function (p) { return p && !p.hasVideo && p.stage === 'uploaded'; })
+      .filter(function (p) { return p && !p.hasVideo && ['to_film', 'uploaded'].includes(p.stage); })
       .map(function (p) {
         const probe = (p.notesHtml || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
         return { id: p.id, seq: p.seq, title: p.title, notesSnippet: probe.slice(0, 400) };

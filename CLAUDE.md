@@ -19735,3 +19735,22 @@ without Buffer's real calendar. The calculation is in the browser-only
 Unit tests cover long-form, actual Buffer calendar, fallback, and exclusion of
 not-yet-ready pieces. Real Chromium checks confirmed the two cards render on
 desktop and phone-sized viewports.
+
+---
+
+# 636. To Film Planning Stage (2026-10-15)
+
+The manual planning Kanban now has **To Film** immediately after **Outline
+Completed** and before **Filmed** (the existing `uploaded` planning stage).
+This separates an outline being finished from a piece being lined up for
+recording. It is a normal manual column: cards can be dragged into and out of
+it, and the card stage selector includes it. It does not automatically mark a
+video as filmed or create an Editor project.
+
+Editor planning-card matching now includes `to_film` alongside completed
+outlines and already-filmed cards. A matching new recording still advances its
+planning card to Filmed, so moving a card into To Film cannot make the upload
+lose its outline. The legacy video-analysis candidate lookup also includes To
+Film. Ideation progression ranks and weekly-report stage labels/milestones
+include the new stage. The Store script cache key was advanced so an open
+browser tab picks up the new column after refresh.

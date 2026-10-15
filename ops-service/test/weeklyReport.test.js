@@ -11,6 +11,13 @@ test('Active Pieces is a named weekly pipeline milestone', function () {
   assert.ok(weeklyReportService.MILESTONE_STAGES.indexOf('active_pieces') < weeklyReportService.MILESTONE_STAGES.indexOf('outline_completed'));
 });
 
+test('To Film is reported between completed outlines and filmed videos', function () {
+  assert.equal(weeklyReportService.STAGE_LABELS.to_film, 'To Film');
+  const stages = weeklyReportService.MILESTONE_STAGES;
+  assert.ok(stages.indexOf('outline_completed') < stages.indexOf('to_film'));
+  assert.ok(stages.indexOf('to_film') < stages.indexOf('uploaded'));
+});
+
 function storefront(start, end, previous) {
   return {
     period: { start: start, end: end },
