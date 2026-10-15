@@ -5446,6 +5446,22 @@
             '<span class="platform-connect-status" id="metaPageMessage"></span>' +
           '</div>' +
         '</div>' +
+        '<div class="platform-connect-card meta-connect-card" id="instagramInsightsCard">' +
+          '<div class="platform-connect-info">' +
+            '<span class="platform-connect-name">Instagram Insights · view counts</span>' +
+            '<span class="platform-connect-status" id="instagramInsightsStatus">Checking…</span>' +
+          '</div>' +
+          '<button type="button" class="btn-secondary btn-tiny" id="instagramInsightsConnectBtn" disabled>…</button>' +
+          '<div class="meta-credential-fields">' +
+            '<label>Instagram App ID<input class="title-input settings-input" id="instagramInsightsAppId" inputmode="numeric" autocomplete="off" /></label>' +
+            '<label>Instagram App Secret<input class="title-input settings-input" id="instagramInsightsAppSecret" type="password" autocomplete="new-password" placeholder="Not shown after saving" /></label>' +
+            '<button type="button" class="btn-secondary btn-tiny" id="instagramInsightsSaveBtn">Save Instagram credentials</button>' +
+            '<span class="platform-connect-status" id="instagramInsightsMessage"></span>' +
+          '</div>' +
+          '<p class="settings-hint">In Meta, open <strong>Set up Instagram business login</strong> and add ' +
+            '<code>https://ops.realitymanual.com/api/instagram/oauth/callback</code> under Valid OAuth Redirect URIs. ' +
+            'Do not put it in the Webhooks Callback URL field. This analytics login does not change Facebook/Instagram publishing.</p>' +
+        '</div>' +
       '</section>' +
       '<section class="settings-section">' +
         '<h3>API keys</h3>' +
@@ -5666,6 +5682,48 @@
       .catch(function () { statusEl.textContent = 'Status unavailable.'; btn.disabled = true; });
   }
 
+  function renderInstagramInsightsCard() {
+    var card = document.getElementById('instagramInsightsCard');
+    if (!card) return;
+    if (IS_REVIEWER) { card.remove(); return; }
+    var status = document.getElementById('instagramInsightsStatus');
+    var button = document.getElementById('instagramInsightsConnectBtn');
+    var appId = document.getElementById('instagramInsightsAppId');
+    var secret = document.getElementById('instagramInsightsAppSecret');
+    var save = document.getElementById('instagramInsightsSaveBtn');
+    var message = document.getElementById('instagramInsightsMessage');
+    fetch('/api/instagram/insights/status', { credentials: 'include' })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('Status unavailable.')); })
+      .then(function (data) {
+        appId.value = data.appId || '';
+        secret.value = '';
+        secret.placeholder = data.hasAppSecret ? 'Saved securely · enter only to replace' : 'Paste Instagram App Secret';
+        status.textContent = data.connected
+          ? 'Connected to @' + (data.username || 'Instagram') + ' for analytics.'
+          : (data.configured ? 'Credentials saved. Connect Instagram to retrieve Reel views.' :
+            'Use the Instagram App ID and Secret shown in Business Login setup.');
+        button.disabled = !data.configured;
+        button.textContent = data.connected ? 'Disconnect insights' : 'Connect insights';
+        button.onclick = data.connected ? function () {
+          button.disabled = true;
+          fetch('/api/instagram/insights/disconnect', { method: 'POST', credentials: 'include' })
+            .then(renderInstagramInsightsCard).catch(function () { status.textContent = 'Could not disconnect Instagram Insights.'; button.disabled = false; });
+        } : function () { window.location.href = '/api/instagram/oauth/start'; };
+        save.onclick = function () {
+          save.disabled = true;
+          message.textContent = 'Saving…';
+          fetch('/api/instagram/insights/config', {
+            method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ appId: appId.value.trim(), appSecret: secret.value })
+          }).then(function (r) { return r.json().then(function (body) {
+            if (!r.ok) throw new Error(body.error || 'Could not save Instagram credentials.');
+          }); }).then(function () { message.textContent = 'Saved.'; renderInstagramInsightsCard(); })
+            .catch(function (error) { message.textContent = error.message; })
+            .finally(function () { save.disabled = false; });
+        };
+      }).catch(function (error) { status.textContent = error.message; button.disabled = true; });
+  }
+
   var settingsCache = null;
   var settingsSaveTimer = null;
 
@@ -5860,6 +5918,7 @@
       renderYoutubeConnectCard();
       renderTiktokConnectCard();
       renderMetaConnectCard();
+      renderInstagramInsightsCard();
 
       var audioMixModeSelect = document.getElementById('audioMixModeSelect');
       var dialogueLufsSelect = document.getElementById('dialogueLufsSelect');

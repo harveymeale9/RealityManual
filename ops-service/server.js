@@ -37,6 +37,7 @@ const backgroundMonitorService = require('./src/backgroundMonitorService');
 const bufferService = require('./src/bufferService');
 const bufferPublicationSyncService = require('./src/bufferPublicationSync');
 const metaAuth = require('./src/metaAuth');
+const instagramInsightsAuth = require('./src/instagramInsightsAuth');
 const metaPublisherService = require('./src/metaPublisher');
 const shortformSchedule = require('./src/shortformSchedule');
 const topicSchedule = require('./src/topicSchedule');
@@ -207,6 +208,13 @@ db.exec(
   '  instagram_account_id TEXT,' +
   '  instagram_username TEXT,' +
   '  updated_at TEXT NOT NULL' +
+  ');' +
+  // Instagram Business Login is analytics-only. Its app credentials and token
+  // are separate from the Facebook Login grant used for publishing.
+  'CREATE TABLE IF NOT EXISTS instagram_insights_oauth (' +
+  '  id INTEGER PRIMARY KEY CHECK (id = 1),' +
+  '  app_id TEXT, app_secret TEXT, account_id TEXT, username TEXT,' +
+  '  access_token TEXT, expires_at TEXT, refreshed_at TEXT, updated_at TEXT NOT NULL' +
   ');'
 );
 
@@ -356,6 +364,26 @@ const stmts = {
   clearMetaConnection: db.prepare(
     'UPDATE meta_oauth SET user_access_token = NULL, expires_at = NULL, page_id = NULL, page_name = NULL, ' +
     'page_access_token = NULL, instagram_account_id = NULL, instagram_username = NULL, updated_at = ? WHERE id = 1'
+  ),
+  getInstagramInsightsAuth: db.prepare('SELECT * FROM instagram_insights_oauth WHERE id = 1'),
+  upsertInstagramInsightsConfig: db.prepare(
+    'INSERT INTO instagram_insights_oauth (id, app_id, app_secret, updated_at) VALUES (1, ?, ?, ?) ' +
+    'ON CONFLICT(id) DO UPDATE SET app_id = excluded.app_id, app_secret = excluded.app_secret, ' +
+    'account_id = CASE WHEN instagram_insights_oauth.app_id = excluded.app_id AND instagram_insights_oauth.app_secret = excluded.app_secret THEN instagram_insights_oauth.account_id ELSE NULL END, ' +
+    'username = CASE WHEN instagram_insights_oauth.app_id = excluded.app_id AND instagram_insights_oauth.app_secret = excluded.app_secret THEN instagram_insights_oauth.username ELSE NULL END, ' +
+    'access_token = CASE WHEN instagram_insights_oauth.app_id = excluded.app_id AND instagram_insights_oauth.app_secret = excluded.app_secret THEN instagram_insights_oauth.access_token ELSE NULL END, ' +
+    'expires_at = CASE WHEN instagram_insights_oauth.app_id = excluded.app_id AND instagram_insights_oauth.app_secret = excluded.app_secret THEN instagram_insights_oauth.expires_at ELSE NULL END, ' +
+    'refreshed_at = CASE WHEN instagram_insights_oauth.app_id = excluded.app_id AND instagram_insights_oauth.app_secret = excluded.app_secret THEN instagram_insights_oauth.refreshed_at ELSE NULL END, ' +
+    'updated_at = excluded.updated_at'
+  ),
+  saveInstagramInsightsGrant: db.prepare(
+    'UPDATE instagram_insights_oauth SET account_id = ?, username = ?, access_token = ?, expires_at = ?, refreshed_at = ?, updated_at = ? WHERE id = 1'
+  ),
+  refreshInstagramInsightsGrant: db.prepare(
+    'UPDATE instagram_insights_oauth SET access_token = ?, expires_at = ?, refreshed_at = ?, updated_at = ? WHERE id = 1'
+  ),
+  clearInstagramInsightsGrant: db.prepare(
+    'UPDATE instagram_insights_oauth SET account_id = NULL, username = NULL, access_token = NULL, expires_at = NULL, refreshed_at = NULL, updated_at = ? WHERE id = 1'
   )
 };
 
@@ -1156,6 +1184,95 @@ app.post('/api/meta/disconnect', requireAuth, function (req, res) {
   res.json({ ok: true });
 });
 
+// Separate Instagram Business Login grant for Reel insights. The existing
+// Facebook Login/Page token remains the sole publishing connection.
+const INSTAGRAM_INSIGHTS_REDIRECT_URI = 'https://ops.realitymanual.com/api/instagram/oauth/callback';
+function instagramInsightsConfig(row) {
+  return row ? { appId: row.app_id, appSecret: row.app_secret, redirectUri: INSTAGRAM_INSIGHTS_REDIRECT_URI } : null;
+}
+app.get('/api/instagram/insights/status', requireAuth, function (req, res) {
+  const row = stmts.getInstagramInsightsAuth.get();
+  const configured = instagramInsightsAuth.validConfig(instagramInsightsConfig(row));
+  res.json({ configured: configured, appId: configured ? row.app_id : '', hasAppSecret: !!(row && row.app_secret),
+    connected: !!(configured && row.access_token), username: row && row.username || null,
+    expiresAt: row && row.expires_at || null, redirectUri: INSTAGRAM_INSIGHTS_REDIRECT_URI });
+});
+app.post('/api/instagram/insights/config', requireAuth, function (req, res) {
+  const body = req.body || {};
+  const appId = String(body.appId || '').trim();
+  const existing = stmts.getInstagramInsightsAuth.get();
+  const appSecret = String(body.appSecret || '').trim() ||
+    (existing && existing.app_id === appId ? existing.app_secret : '');
+  if (!instagramInsightsAuth.validConfig({ appId: appId, appSecret: appSecret, redirectUri: INSTAGRAM_INSIGHTS_REDIRECT_URI })) {
+    return res.status(400).json({ error: 'Enter the Instagram App ID and Instagram App Secret from Business Login setup.' });
+  }
+  stmts.upsertInstagramInsightsConfig.run(appId, appSecret, new Date().toISOString());
+  res.json({ ok: true });
+});
+app.get('/api/instagram/oauth/start', requireAuth, function (req, res) {
+  const config = instagramInsightsConfig(stmts.getInstagramInsightsAuth.get());
+  if (!instagramInsightsAuth.validConfig(config)) return res.status(400).send('Save the Instagram App ID and Secret in Content Settings first.');
+  const state = crypto.randomBytes(16).toString('hex');
+  res.cookie('instagram_insights_oauth_state', state, { httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 10 * 60 * 1000 });
+  res.redirect(instagramInsightsAuth.buildAuthUrl(config, state));
+});
+app.get('/api/instagram/oauth/callback', requireAuth, async function (req, res) {
+  const expectedState = req.cookies && req.cookies.instagram_insights_oauth_state;
+  res.clearCookie('instagram_insights_oauth_state', { path: '/' });
+  if (req.query.error) return res.redirect('/#settings');
+  if (!expectedState || !req.query.state || req.query.state !== expectedState) {
+    return res.status(400).send('Instagram OAuth state did not match. Please connect again from Content Settings.');
+  }
+  const config = instagramInsightsConfig(stmts.getInstagramInsightsAuth.get());
+  if (!instagramInsightsAuth.validConfig(config)) return res.status(400).send('Instagram app credentials are not configured.');
+  try {
+    const short = await instagramInsightsAuth.exchangeCode(config, req.query.code);
+    const long = await instagramInsightsAuth.exchangeLongLived(short.accessToken, config.appSecret);
+    const account = await instagramInsightsAuth.profile(long.access_token);
+    if (!account.id || !account.username) throw new Error('Instagram did not return the connected account identity.');
+    const publishing = stmts.getMetaAuth.get();
+    if (publishing && publishing.instagram_username &&
+        String(publishing.instagram_username).toLowerCase() !== String(account.username).toLowerCase()) {
+      throw new Error('You signed in as @' + String(account.username).slice(0, 100) +
+        ', but publishing is connected to @' + publishing.instagram_username + '. Sign in to the same Instagram account.');
+    }
+    const now = new Date();
+    const expiresAt = long.expires_in ? new Date(now.getTime() + Number(long.expires_in) * 1000).toISOString() : null;
+    stmts.saveInstagramInsightsGrant.run(String(account.id), String(account.username), long.access_token,
+      expiresAt, now.toISOString(), now.toISOString());
+    res.redirect('/#settings');
+  } catch (error) {
+    console.error('Instagram insights OAuth failed:', error.message);
+    res.status(502).send('Instagram insights connection failed: ' + String(error.message || error).slice(0, 500));
+  }
+});
+app.post('/api/instagram/insights/disconnect', requireAuth, function (req, res) {
+  if (stmts.getInstagramInsightsAuth.get()) stmts.clearInstagramInsightsGrant.run(new Date().toISOString());
+  res.json({ ok: true });
+});
+
+async function validInstagramInsightsToken() {
+  const row = stmts.getInstagramInsightsAuth.get();
+  if (!row || !row.access_token) return null;
+  const expiry = Date.parse(row.expires_at || '');
+  if (!Number.isFinite(expiry)) return row.access_token;
+  const now = Date.now();
+  if (expiry < now) throw new Error('Instagram insights authorization expired. Reconnect in Content Settings.');
+  if (expiry - now > 14 * 24 * 60 * 60 * 1000 ||
+      now - Date.parse(row.refreshed_at || '') < 24 * 60 * 60 * 1000) return row.access_token;
+  try {
+    const refreshed = await instagramInsightsAuth.refreshLongLived(row.access_token);
+    if (!refreshed.access_token || !Number(refreshed.expires_in)) throw new Error('Instagram did not return a renewed token.');
+    const stamp = new Date();
+    stmts.refreshInstagramInsightsGrant.run(refreshed.access_token,
+      new Date(stamp.getTime() + Number(refreshed.expires_in) * 1000).toISOString(), stamp.toISOString(), stamp.toISOString());
+    return refreshed.access_token;
+  } catch (error) {
+    console.error('Instagram insights token refresh failed:', error.message);
+    return row.access_token; // Still valid until the recorded expiry.
+  }
+}
+
 // --- TikTok OAuth (Login Kit) — see src/tiktokAuth.js for the token
 // exchange/publish calls themselves. Same placeholder-until-configured
 // shape as the YouTube routes above.
@@ -1355,17 +1472,44 @@ const contentAnalytics = contentAnalyticsService.setup(db, {
       const auth = stmts.getMetaAuth.get();
       if (!auth || !auth.page_access_token || !auth.instagram_account_id) throw new Error('Instagram is not connected.');
       const rows = [];
-      let insightsAvailable = true;
+      const insightsRow = stmts.getInstagramInsightsAuth.get();
+      let insightsToken = null;
+      let insightsMedia = [];
+      let insightsProblem = '';
+      if (insightsRow && insightsRow.access_token) {
+        try {
+          if (auth.instagram_username && String(insightsRow.username).toLowerCase() !== String(auth.instagram_username).toLowerCase()) {
+            throw new Error('Instagram insights is connected to a different account. Reconnect in Content Settings.');
+          }
+          insightsToken = await validInstagramInsightsToken();
+          insightsMedia = await instagramInsightsAuth.mediaCatalog(insightsToken);
+        } catch (error) {
+          insightsProblem = String(error.message || error).slice(0, 300);
+          insightsToken = null;
+        }
+      }
       for (const piece of pieces.filter(function (item) { return !!item.instagramMediaId; })) {
         const metrics = await metaPublisher.fetchInstagramMediaMetrics({ mediaId: piece.instagramMediaId, pageToken: auth.page_access_token });
-        if (!metrics.insightsAvailable) insightsAvailable = false;
+        if (insightsToken && !metrics.insightsAvailable) {
+          const media = instagramInsightsAuth.findMedia(insightsMedia, piece);
+          if (media) {
+            try {
+              Object.assign(metrics, await instagramInsightsAuth.mediaInsights(media.id, insightsToken));
+              metrics.insightsAvailable = true;
+              metrics.insightsError = '';
+            } catch (error) { insightsProblem = String(error.message || error).slice(0, 300); }
+          } else insightsProblem = 'The published Reel was not found among the connected Instagram account’s recent media.';
+        }
         rows.push({ pieceId: piece.id, platform: 'instagram', metrics: metrics });
       }
       const audience = await metaPublisher.fetchAudienceMetrics({ instagramAccountId: auth.instagram_account_id, pageToken: auth.page_access_token });
+      const insightsAvailable = rows.every(function (row) { return row.metrics.insightsAvailable; });
       return {
         pieces: rows,
         channels: audience.instagram ? [{ platform: 'instagram', followers: audience.instagram.followers, mediaCount: audience.instagram.mediaCount }] : [],
-        status: insightsAvailable ? {} : { partial: true, note: 'Likes and comments are live. Reel views need an additional Instagram Insights permission in the Meta app.' }
+        status: insightsAvailable ? {} : { partial: true, note: insightsProblem ||
+          (insightsToken ? 'Likes and comments are live, but Instagram did not return Reel views.' :
+            'Likes and comments are live. Connect Instagram Insights in Content Settings to retrieve Reel views.') }
       };
     },
     facebook: async function (pieces) {

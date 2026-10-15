@@ -2161,7 +2161,8 @@ body.role-reviewer #pmBackFab {
 .meta-credential-fields { width: 100%; display: grid; grid-template-columns: minmax(150px, 0.8fr) minmax(220px, 1.2fr) auto; gap: 9px; align-items: end; padding-top: 10px; border-top: 1px solid var(--border-soft); }
 .meta-credential-fields label { display: flex; flex-direction: column; gap: 5px; color: var(--ink-soft); font-size: 0.74rem; }
 .meta-credential-fields .settings-input { width: 100%; }
-.meta-credential-fields #metaCredentialMessage { grid-column: 1 / -1; }
+.meta-credential-fields #metaCredentialMessage, .meta-credential-fields #instagramInsightsMessage { grid-column: 1 / -1; }
+#instagramInsightsCard > .settings-hint { width: 100%; margin: 0; }
 .meta-page-fields { width: 100%; display: grid; grid-template-columns: minmax(260px, 1fr) auto; gap: 9px; align-items: end; padding-top: 10px; border-top: 1px solid var(--border-soft); }
 .meta-page-fields label { display: flex; flex-direction: column; gap: 5px; color: var(--ink-soft); font-size: 0.74rem; }
 .meta-page-fields .settings-input { width: 100%; }

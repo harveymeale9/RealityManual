@@ -19637,3 +19637,38 @@ silently changed. Masking at actual publish time also covers previously queued
 cards. Whole-word matching avoids changing innocuous embedded strings such as
 `class` or `assistant`. Focused tests cover both render shapes and the masking
 examples.
+
+---
+
+# 633. Separate Instagram Business Login for Reel Views (2026-10-15)
+
+Harvey granted the Instagram Business Login permissions to address the Content
+Analytics Instagram-view gap (§619), but the screenshot showed the proposed
+OAuth redirect URL pasted into Meta's **Webhooks Callback URL** field. Those are
+different mechanisms: we do not subscribe to message webhooks. The OAuth URL
+belongs under **Set up Instagram business login → Valid OAuth Redirect URIs**.
+
+Content Studio now has a second, analytics-only Instagram OAuth connection at
+`/api/instagram/oauth/{start,callback}`, using the promised callback
+`https://ops.realitymanual.com/api/instagram/oauth/callback`. It requests only
+`instagram_business_basic` and `instagram_business_manage_insights`. The
+Instagram App ID, Instagram App Secret, and long-lived token are stored in a
+separate `instagram_insights_oauth` table; the browser sees only connection
+status and the non-secret ID. Harvey enters raw credentials himself through
+the protected Settings card. CSRF state, account-username matching against the
+existing publishing account, a separate disconnect, and token renewal before
+expiry guard the connection. The established Facebook Login/Page token remains
+the only token used for publishing, so analytics setup cannot disrupt posts.
+
+The Instagram analytics collector continues to use the Page token for likes,
+comments and audience, but supplements missing Reel views with the new
+Instagram token. It lists the connected account's media, matches existing
+published Reels by media ID or canonical permalink (the two login families may
+use different IDs), and queries `views` separately from optional reach/save/
+share metrics so an unsupported optional metric cannot hide the view count.
+Provider status reports incomplete or mismatched connections rather than
+inventing zero views. Existing saved metrics are not rewritten until a real
+authorized collection runs. The Settings UI gives Harvey the exact OAuth field
+and warns against the webhook field. Focused OAuth/mapping tests and the full
+252-test suite pass; live Meta authorization still requires Harvey's Instagram
+App credentials and account consent.
