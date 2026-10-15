@@ -1241,6 +1241,13 @@ function buildAss(project, groups) {
   // visually crowd neighbouring words. Keep their emphasis gentler and add
   // explicit word room below; vertical three-word windows retain 12%.
   const emphasizedSize = Math.round(fontSize * (isLongform ? 1.08 : 1.12));
+  // Landscape captions are materially smaller than portrait captions, so the
+  // old 3px/4px borders swallowed too much of each yellow glyph. Use a lighter
+  // treatment for landscape only; portrait captions retain their existing
+  // heavier border for phone-sized output.
+  const outlineWidth = isLongform ? 2 : 3;
+  const emphasizedOutlineWidth = isLongform ? 3 : 4;
+  const shadowWidth = isLongform ? 1 : 2;
   // Vertical captions sit low over the otherwise-unused lower page area.
   // 22% from the bottom matches the Editor preview and Harvey's marked
   // reference line; the former 30% placement sat visibly over the page text.
@@ -1252,7 +1259,7 @@ function buildAss(project, groups) {
     '[Script Info]', 'ScriptType: v4.00+', 'PlayResX: ' + width, 'PlayResY: ' + height,
     'ScaledBorderAndShadow: yes', '', '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
-    'Style: Default,Arial,' + fontSize + ',&H0063DFF4,&H0063DFF4,&H00101010,&H80000000,-1,0,0,0,100,100,0,0,1,3,2,2,40,40,' + marginV + ',1',
+    'Style: Default,Arial,' + fontSize + ',&H0063DFF4,&H0063DFF4,&H00101010,&H80000000,-1,0,0,0,100,100,0,0,1,' + outlineWidth + ',' + shadowWidth + ',2,40,40,' + marginV + ',1',
     '', '[Events]', 'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text'
   ];
   const events = [];
@@ -1312,10 +1319,10 @@ function buildAss(project, groups) {
         const escaped = escapeAss(word.text);
         if (fittedLongformSize < fontSize) {
           return wordIndex === activeIndex
-            ? '{\\fs' + fittedEmphasizedSize + '\\bord4}' + escaped
-            : '{\\fs' + fittedLongformSize + '\\bord3}' + escaped;
+            ? '{\\fs' + fittedEmphasizedSize + '\\bord' + emphasizedOutlineWidth + '}' + escaped
+            : '{\\fs' + fittedLongformSize + '\\bord' + outlineWidth + '}' + escaped;
         }
-        return wordIndex === activeIndex ? '{\\fs' + emphasizedSize + '\\bord4}' + escaped + '{\\r}' : escaped;
+        return wordIndex === activeIndex ? '{\\fs' + emphasizedSize + '\\bord' + emphasizedOutlineWidth + '}' + escaped + '{\\r}' : escaped;
       // Two non-collapsing spaces reserve enough room for the highlighted
       // word to grow without its outline touching either neighbour.
       }).join('\\h\\h');

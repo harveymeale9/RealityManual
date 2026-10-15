@@ -19261,3 +19261,19 @@ for deliberate new lines; mobile remains explicit-Send only.
 Automated coverage verifies the shared limit, expandable composer behavior,
 explicit oversize response and absence of the old truncation. The complete
 ops-service suite passes with 231 tests.
+
+---
+
+# 618. Lighter Landscape Caption Outlines (2026-10-15)
+
+Horizontal video captions keep their approved font size and position, but no
+longer surround the smaller yellow lettering with an oversized black border.
+Landscape ASS exports now use a 2px base outline, 3px spoken-word emphasis
+outline and 1px shadow instead of the shared portrait 3px/4px/2px treatment.
+Portrait output is deliberately unchanged. The browser Editor preview has the
+same landscape-only reduction, and its stylesheet cache key was advanced so
+the correction appears without a stale cached rule.
+
+Automated coverage locks the landscape border and shadow values independently
+from the unchanged portrait style. The complete ops-service suite passes with
+231 tests.
