@@ -324,6 +324,22 @@ test('a new Editor cut stays in the captioned working preview with synchronized 
   assert.match(styles, /\.editor-playhead\{transition:none\}/);
 });
 
+test('Editor remembers one source position across refresh, project switches and preview rebuilds', function () {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'editor.js'), 'utf8');
+  assert.match(source, /localStorage\.setItem\(reviewProgressKey\(id\), JSON\.stringify\(value\)\)/);
+  assert.match(source, /sourceTime: Math\.max\(0, Number\(sourceTime\) \|\| 0\)/);
+  assert.match(source, /saved && typeof saved === 'object' \? Number\(saved\.sourceTime\) : NaN/);
+  assert.match(source, /!video\.getAttribute\('src'\)/);
+  assert.match(source, /persistCurrentReviewProgress\(\);\s+clearTimeout\(pollTimer\)/);
+  assert.match(source, /persistCurrentReviewProgress\(\);\s+stopManualRevisionDictation\(\)/);
+  assert.match(source, /video\.addEventListener\('pause', persistCurrentReviewProgress\)/);
+  assert.match(source, /video\.addEventListener\('seeked', persistCurrentReviewProgress\)/);
+  assert.match(source, /var renderProjectId = project\.id;\s+var wasRebuild = !!project\.renderDirty;\s+persistCurrentReviewProgress\(\);/);
+  assert.match(source, /if \(saved\.timelineOpen\) manualTimelineOpen\[item\.id\] = true;/);
+  assert.match(source, /manualTimelineViewStates\[item\.id\] = \{/);
+  assert.match(source, /if \(project\) \{ restoreReviewProgress\(project\); renderWorkspace\(\); \}/);
+});
+
 test('horizontal camera motion zooms into the exact frame centre', function () {
   const filter = editor.cameraMotionFilter({
     renderShape: { width: 1920, height: 1080 },
@@ -489,7 +505,7 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /Preparing browser-safe preview…/);
   assert.match(source, /Playback will unlock automatically/);
   assert.match(source, /\(mediaUnavailable \? '' : ' src="' \+ previewUrl/);
-  assert.match(page, /editor\.js\?v=20261015-timeline-cut-sync-v146/);
+  assert.match(page, /editor\.js\?v=20261015-durable-review-position-v147/);
   assert.match(page, /style\.css\?v=20261015-timeline-cut-sync-v146/);
   assert.match(styles, /\.editor-caption\.longform\{font-size:2\.05cqw;text-shadow:-1px -1px 0 #111,1px -1px 0 #111/);
   assert.match(source, /Raw original · no edits\/captions/);

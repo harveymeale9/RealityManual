@@ -58,6 +58,7 @@
   });
 
   window.addEventListener('beforeunload', function () {
+    persistCurrentReviewProgress();
     Object.keys(audioPreviewBatches).forEach(releaseAudioPreviewBatch);
   });
 
@@ -273,13 +274,40 @@
     return 'rmEditorReviewProgress:' + String(id || '');
   }
 
+  function storeReviewProgress(id, sourceTime) {
+    if (!id || !Number.isFinite(Number(sourceTime))) return;
+    var timelineViewport = root && root.querySelector('#editorManualTimelineViewport');
+    var value = {
+      sourceTime: Math.max(0, Number(sourceTime) || 0),
+      timelineOpen: !!manualTimelineOpen[id],
+      timelineZoom: Number(manualTimelineZoom[id]) || 0,
+      timelineScrollLeft: timelineViewport ? Number(timelineViewport.scrollLeft) || 0 : null
+    };
+    try { localStorage.setItem(reviewProgressKey(id), JSON.stringify(value)); } catch (error) {}
+    // Keep the old tab-scoped value current during the rollout so a browser
+    // with an older cached Editor script can still resume this recording.
+    try { sessionStorage.setItem(reviewProgressKey(id), JSON.stringify(value)); } catch (error) {}
+  }
+
+  function persistCurrentReviewProgress() {
+    if (!editorMounted() || !project) return;
+    var video = root.querySelector('#editorVideo');
+    if (!video || !video.getAttribute('src') || !Number.isFinite(Number(video.currentTime))) return;
+    var sourceTime = video.dataset.previewMode === 'final'
+      ? editedToSourceTime(video.currentTime, project)
+      : Number(video.currentTime) || 0;
+    storeReviewProgress(project.id, sourceTime);
+  }
+
   function restoreReviewProgress(item) {
     if (!item || Object.prototype.hasOwnProperty.call(previewSeekTimes, item.id)) return;
     var saved;
-    try { saved = JSON.parse(sessionStorage.getItem(reviewProgressKey(item.id)) || 'null'); } catch (error) {}
-    var sourceTime = Number(saved && saved.sourceTime);
+    try {
+      saved = JSON.parse(localStorage.getItem(reviewProgressKey(item.id)) || sessionStorage.getItem(reviewProgressKey(item.id)) || 'null');
+    } catch (error) {}
+    var sourceTime = saved && typeof saved === 'object' ? Number(saved.sourceTime) : NaN;
     var duration = Number(item.duration) || 0;
-    if (!Number.isFinite(sourceTime) || sourceTime < 1 || (duration > 0 && sourceTime >= duration - 1)) return;
+    if (!Number.isFinite(sourceTime) || sourceTime < 0 || (duration > 0 && sourceTime > duration)) return;
     // A clean ready recording reopens on its actual rendered preview. A dirty
     // one reopens on the live working preview so every newer decision is shown
     // without falling back to either the stale render or the raw master.
@@ -287,6 +315,14 @@
     delete explicitSourcePreviews[item.id];
     previewModes[item.id] = mode;
     previewSeekTimes[item.id] = mode === 'final' ? sourceToEditedTime(sourceTime, cutsForClient(item), item) : sourceTime;
+    if (saved.timelineOpen) manualTimelineOpen[item.id] = true;
+    if (Number(saved.timelineZoom) > 0) manualTimelineZoom[item.id] = Number(saved.timelineZoom);
+    if (saved.timelineOpen) {
+      manualTimelineViewStates[item.id] = {
+        sourceTime: sourceTime,
+        scrollLeft: Number.isFinite(Number(saved.timelineScrollLeft)) ? Number(saved.timelineScrollLeft) : null
+      };
+    }
   }
 
   function cutsForClient(item) {
@@ -294,6 +330,7 @@
   }
 
   function clearReviewProgress(id) {
+    try { localStorage.removeItem(reviewProgressKey(id)); } catch (error) {}
     try { sessionStorage.removeItem(reviewProgressKey(id)); } catch (error) {}
   }
 
@@ -663,6 +700,7 @@
         renderList();
         var currentBelongs = project && (listFilter === 'sent' ? !!project.productionPieceId : !project.productionPieceId);
         if (currentBelongs) return;
+        persistCurrentReviewProgress();
         project = null; selected.clear();
         var preferred = preferredProjectForFilter(listFilter);
         if (preferred) openProject(preferred.id);
@@ -973,6 +1011,7 @@
   }
 
   function openProject(id, quiet) {
+    persistCurrentReviewProgress();
     clearTimeout(pollTimer);
     // A poll/render refresh is allowed to update the current recording, but it
     // must never supersede a deliberate card or Next/Previous click. Quiet
@@ -1724,6 +1763,7 @@
       manualTimelineOpen[project.id] = openingTimeline;
       previewSeekTimes[project.id] = Number(video.currentTime) || 0;
       if (openingTimeline) manualTimelineViewStates[project.id] = { sourceTime: currentSourcePlayhead(), center: true };
+      storeReviewProgress(project.id, currentSourcePlayhead());
       renderWorkspace();
     };
     var manualTimelineViewport = root.querySelector('#editorManualTimelineViewport');
@@ -1769,7 +1809,7 @@
       requestAnimationFrame(function () {
         if (!project || project.id !== restoreProjectId || !manualTimelineViewport.isConnected) return;
         var maximum = Math.max(0, manualTimelineInner.scrollWidth - manualTimelineViewport.clientWidth);
-        if (Number.isFinite(Number(state.scrollLeft))) {
+        if (state.scrollLeft !== null && state.scrollLeft !== undefined && Number.isFinite(Number(state.scrollLeft))) {
           manualTimelineViewport.scrollLeft = Math.max(0, Math.min(maximum, Number(state.scrollLeft)));
           return;
         }
@@ -1853,6 +1893,7 @@
       previewModes[cutProjectId] = 'source';
       delete explicitSourcePreviews[cutProjectId];
       previewSeekTimes[cutProjectId] = selection.start;
+      storeReviewProgress(cutProjectId, selection.start);
       cutRequest.then(function (item) {
         if (!item) return;
         showEditorActionFeedback('Cut applied · ' + removedSeconds.toFixed(2) + 's removed');
@@ -2034,13 +2075,7 @@
       var now = Date.now();
       if (sourcePlayheadTime >= 1 && now - lastReviewProgressSaveAt >= 500) {
         lastReviewProgressSaveAt = now;
-        try {
-          sessionStorage.setItem(reviewProgressKey(videoProjectId), JSON.stringify({
-            sourceTime: sourcePlayheadTime,
-            mode: previewingFinal ? 'final' : 'source',
-            explicitSource: !previewingFinal && !!explicitSourcePreviews[videoProjectId]
-          }));
-        } catch (error) {}
+        storeReviewProgress(videoProjectId, sourcePlayheadTime);
       }
       var currentWord = (project.words || []).find(function (word) {
         return sourcePlayheadTime >= Number(word.start) && sourcePlayheadTime <= Number(word.end) + 0.08;
@@ -2114,6 +2149,8 @@
       } else if (group) caption.textContent = group.text;
       caption.classList.toggle('visible', !!group && project.captionsEnabled !== false);
     });
+    video.addEventListener('pause', persistCurrentReviewProgress);
+    video.addEventListener('seeked', persistCurrentReviewProgress);
     video.addEventListener('ended', function () { clearReviewProgress(videoProjectId); syncPlayerControls(); });
     root.querySelectorAll('.editor-timeline-segment').forEach(function (segment) {
       segment.onclick = function () {
@@ -2341,6 +2378,7 @@
     if (renderButton) renderButton.onclick = function () {
         var renderProjectId = project.id;
         var wasRebuild = !!project.renderDirty;
+        persistCurrentReviewProgress();
         renderButton.disabled = true;
         renderButton.textContent = wasRebuild ? 'Starting preview rebuild…' : 'Starting editing preview…';
         retryTransientOnce(function () {
@@ -2619,6 +2657,7 @@
 
   window.RMEditor = {
     unmount: function () {
+      persistCurrentReviewProgress();
       stopManualRevisionDictation();
       clearTimeout(pollTimer);
       clearTimeout(desktopUploaderPollTimer);
@@ -2643,7 +2682,7 @@
       // starting the Editor again. Paint the in-memory project immediately,
       // then reconcile it with the server in the background.
       if (projects.length) renderList();
-      if (project) renderWorkspace();
+      if (project) { restoreReviewProgress(project); renderWorkspace(); }
       var expectedMountToken = mountToken;
       pollDesktopUploaderStatus(expectedMountToken);
       loadProjects(expectedMountToken).catch(function (error) {

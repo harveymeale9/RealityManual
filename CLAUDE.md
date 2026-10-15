@@ -19410,3 +19410,29 @@ The old 80ms CSS interpolation was disabled, preventing visible lag at 1.5× and
 split/select/Delete path and verified retained automatic cuts, captions,
 position, feedback, and both playheads at 1×, 1.5× and 2×. The complete
 ops-service suite passes with 237 tests.
+
+---
+
+# 623. Editor Review Position Survives Refresh, Project Switching and Rebuilds (2026-10-15)
+
+Each Editor recording now keeps one durable source-timeline review position in
+browser local storage. The position is captured during playback, pause, seek,
+page unload, Editor unmount, project navigation and immediately before a
+preview rebuild. Using source time as the canonical coordinate means the same
+visual point can be restored correctly whether the recording reopens in its
+source-backed Working preview or its shorter rendered Editing preview.
+
+The open/zoom/scroll state of the detailed source timeline is stored with that
+position. Returning after a refresh or after inspecting another recording
+therefore restores the player, source timeline and automatic speech-map
+playhead together rather than starting at zero. A rebuild's temporary locked
+player has no media URL and is deliberately forbidden from overwriting the
+saved point with zero; once the new render is ready, the source timestamp is
+mapped into that render's edited clock.
+
+A mocked-API headless Chromium workflow now leaves a cut-aware recording at a
+nontrivial source timestamp, opens another recording and returns, refreshes the
+whole page, rebuilds the preview, and verifies the player plus both timeline
+playheads return to the same source moment throughout.
+
+The complete ops-service suite passes with 238 tests.
