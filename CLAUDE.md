@@ -19211,3 +19211,31 @@ Automated coverage verifies snapshot history and 24-hour deltas, partial
 provider isolation, YouTube channel statistics, Facebook Reel insight
 normalization, and Instagram's permission-limited fallback. The complete
 ops-service suite passes with 228 tests.
+
+---
+
+# 616. Readable Editor Transcripts and Batch Retake Removal (2026-10-15)
+
+Long-form Editor transcripts no longer render as one uninterrupted wall of
+words. The API now supplies visual paragraph starts derived from genuine
+recording pauses, sentence boundaries and bounded paragraph length. When a
+recording is linked to its planning card, recognisable paragraph openings in
+the outline reinforce those boundaries. The transcript remains a sequence of
+the same individually timed word controls, so paragraph presentation does not
+weaken frame-accurate selection, restoration or caption timing.
+
+The retake scan now explicitly searches the whole transcript for every earlier
+attempt and preserves the latest complete take. Deterministic adjacent-line
+repeat detection supplements the semantic scan, while the deliberate Antoine
+Matthias marker remains supported. These are still suggestions, never silent
+cuts: active earlier takes appear in amber and a new **Remove highlighted
+sections** action adds all of their word ranges to the same durable manual-cut
+decision set used by normal transcript deletion. It performs one metadata save
+and deliberately does not render. Harvey can review the proposed removals,
+apply them together, make any additional cuts, and press **Rebuild preview**
+once at the end. Restoring a suggested word makes its amber recommendation
+visible again.
+
+Automated coverage now verifies pause/length paragraph boundaries, matched
+planning-card paragraph alignment and the one-explicit-rebuild UI contract.
+The complete ops-service suite passes with 230 tests.

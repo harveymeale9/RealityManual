@@ -1136,9 +1136,21 @@
     var suspectedMistakeIndices = new Set((project.retakeHighlights || []).flatMap(function (candidate) {
       return (candidate.removeWordIndices || []).map(Number);
     }));
-    var suspectedMistakeCount = (project.retakeHighlights || []).length;
+    var activeRetakeHighlights = (project.retakeHighlights || []).filter(function (candidate) {
+      return (candidate.removeWordIndices || []).some(function (index) { return !removed.has(Number(index)); });
+    });
+    var suspectedMistakeCount = activeRetakeHighlights.length;
+    var highlightedWordIndices = Array.from(suspectedMistakeIndices).filter(function (index) { return !removed.has(index); });
     var clipsByWord = {};
     (project.insertedClips || []).forEach(function (clip) { (clipsByWord[clip.afterWordIndex] || (clipsByWord[clip.afterWordIndex] = [])).push(clip); });
+    var paragraphStarts = new Set((project.transcriptParagraphStartIndices || []).map(Number));
+    var transcriptHtml = '';
+    (project.words || []).forEach(function (word, position) {
+      if (position === 0 || paragraphStarts.has(Number(word.index))) transcriptHtml += (position ? '</p>' : '') + '<p class="editor-transcript-paragraph">';
+      var markers = (clipsByWord[word.index] || []).map(function (clip) { return '<span class="editor-clip-marker" title="Inserted from ' + esc(clip.sourceUrl || 'planning clip') + '">CLIP</span> '; }).join('');
+      transcriptHtml += '<span class="editor-word' + (removed.has(word.index) ? ' removed' : '') + (suspectedMistakeIndices.has(Number(word.index)) && !removed.has(word.index) ? ' suspected-mistake' : '') + (word.originalText ? ' corrected' : '') + '" data-index="' + word.index + '" data-start="' + word.start + '" data-end="' + word.end + '"' + (word.originalText ? ' title="Originally transcribed as: ' + esc(word.originalText) + '"' : suspectedMistakeIndices.has(Number(word.index)) ? ' title="Possible mistake or retake. Review before cutting."' : '') + '>' + esc(word.text) + '</span> ' + markers;
+    });
+    if ((project.words || []).length) transcriptHtml += '</p>';
     var reviewProjects = visibleProjectsForCurrentFilter();
     var reviewProjectIndex = reviewProjects.findIndex(function (item) { return item.id === project.id; });
     var cutSeconds = Math.max(0, Number(project.duration) - editedDuration(project));
@@ -1232,16 +1244,13 @@
         '<div class="editor-transcript-actions"><button class="btn-secondary btn-tiny" id="editorUndo" ' + (!project.canUndoCut ? 'disabled' : '') + '>Undo last decision</button><button class="btn-secondary btn-tiny" id="editorPlaySelection" disabled>Play selected</button>' +
         '<button class="btn-secondary btn-tiny editor-insert-clip" id="editorInsertClip" disabled>Insert clip here</button>' +
         '<button class="btn-secondary btn-tiny" id="editorCorrect" disabled>Correct word</button><button class="btn-secondary btn-tiny" id="editorRestore" disabled>Restore selected</button><button class="btn-primary btn-tiny" id="editorCut" disabled>Cut selected</button></div></div>' +
-        '<div class="editor-transcript-review-note ' + esc(project.retakeAnalysisStatus || 'unavailable') + '">' +
+        '<div class="editor-transcript-review-note ' + esc(project.retakeAnalysisStatus || 'unavailable') + '"><span>' +
           (['pending', 'running', 'pending_transcript'].indexOf(project.retakeAnalysisStatus) !== -1 ? 'Scanning for likely mistakes and retakes…' :
             project.retakeAnalysisStatus === 'error' ? 'The highlight scan was unavailable. You can still edit the full transcript normally.' :
-            suspectedMistakeCount ? '<strong>' + suspectedMistakeCount + ' possible ' + (suspectedMistakeCount === 1 ? 'mistake' : 'mistakes') + ' highlighted.</strong> Review the amber text and cut only what you do not want.' :
-            'No obvious mistakes or retakes were found. Review the transcript normally.') + '</div>' +
+            suspectedMistakeCount ? '<strong>' + suspectedMistakeCount + ' earlier ' + (suspectedMistakeCount === 1 ? 'take' : 'takes') + ' highlighted.</strong> Check the amber text, then remove all suggestions in one step.' :
+            'No active mistake or retake highlights remain. Review the transcript normally.') + '</span><button type="button" class="btn-primary btn-tiny" id="editorRemoveHighlights" ' + (!highlightedWordIndices.length || rendering || sentToProduction ? 'disabled' : '') + '>Remove highlighted sections</button></div>' +
         '<div class="editor-correction-tray" id="editorCorrectionTray" hidden><div><strong>Correct caption word</strong><span id="editorCorrectionNote">Timing stays exactly where it is.</span><em id="editorCorrectionError" hidden></em></div><input id="editorCorrectionInput" maxlength="40" autocomplete="off" aria-label="Corrected caption word"><div><button type="button" class="btn-secondary btn-tiny" id="editorCorrectionCancel">Cancel</button><button type="button" class="btn-secondary btn-tiny" id="editorCorrectionOriginal" hidden>Use original</button><button type="button" class="btn-primary btn-tiny" id="editorCorrectionSave">Save correction</button></div></div>' +
-        '<div class="editor-transcript' + (rendering || sentToProduction ? ' locked' : '') + '" id="editorTranscript" tabindex="0">' + (project.words || []).map(function (word) {
-          var markers = (clipsByWord[word.index] || []).map(function (clip) { return '<span class="editor-clip-marker" title="Inserted from ' + esc(clip.sourceUrl || 'planning clip') + '">CLIP</span> '; }).join('');
-          return '<span class="editor-word' + (removed.has(word.index) ? ' removed' : '') + (suspectedMistakeIndices.has(Number(word.index)) && !removed.has(word.index) ? ' suspected-mistake' : '') + (word.originalText ? ' corrected' : '') + '" data-index="' + word.index + '" data-start="' + word.start + '" data-end="' + word.end + '"' + (word.originalText ? ' title="Originally transcribed as: ' + esc(word.originalText) + '"' : suspectedMistakeIndices.has(Number(word.index)) ? ' title="Possible mistake or retake. Review before cutting."' : '') + '>' + esc(word.text) + '</span> ' + markers;
-        }).join('') + '</div>' +
+        '<div class="editor-transcript' + (rendering || sentToProduction ? ' locked' : '') + '" id="editorTranscript" tabindex="0">' + transcriptHtml + '</div>' +
         ((project.insertedClips || []).length ? '<div class="editor-inserted-clips">' + (project.insertedClips || []).map(function (clip) { return '<div><span><strong>' + (clip.status === 'ready' ? 'Inserted clip' : 'Preparing clip…') + '</strong>' + esc(clip.transcriptText || clip.quote || clip.sourceUrl) + '</span><button type="button" class="btn-secondary btn-tiny editor-remove-clip" data-clip-id="' + esc(clip.id) + '" ' + (clip.status !== 'ready' ? 'disabled' : '') + '>Remove</button></div>'; }).join('') + '</div>' : '') +
         (project.clipInsertStatus === 'error' ? '<div class="editor-clip-error">' + esc(project.clipInsertError || 'The clip could not be prepared.') + '</div>' : '') +
         '<p class="editor-selection-hint">Select the word a clip should follow, or drag across words to cut footage. Press Delete to cut, Ctrl/⌘ Z to undo, or Escape to clear.</p></section>' +
@@ -2157,6 +2166,25 @@
     });
     root.querySelector('#editorCut').onclick = function () { alterSelected(true); };
     root.querySelector('#editorRestore').onclick = function () { alterSelected(false); };
+    var removeHighlightsButton = root.querySelector('#editorRemoveHighlights');
+    if (removeHighlightsButton) removeHighlightsButton.onclick = function () {
+      var alreadyRemoved = new Set((project.removedWordIndices || []).map(Number));
+      var recommendationIndices = Array.from(new Set((project.retakeHighlights || []).flatMap(function (candidate) {
+        return (candidate.removeWordIndices || []).map(Number);
+      }))).filter(function (index) { return !alreadyRemoved.has(index); });
+      if (!recommendationIndices.length) return;
+      removeHighlightsButton.disabled = true;
+      removeHighlightsButton.textContent = 'Removing…';
+      save(function (latest) {
+        var next = new Set((latest.removedWordIndices || []).map(Number));
+        recommendationIndices.forEach(function (index) { next.add(index); });
+        return { removedWordIndices: Array.from(next).sort(function (a, b) { return a - b; }) };
+      }).then(function (item) {
+        if (!item) return;
+        editorNotice = 'Highlighted earlier takes were removed. Make any other transcript cuts, then rebuild the preview once.';
+        renderNotice();
+      });
+    };
     root.querySelector('#editorPlaySelection').onclick = function () {
       var chosen = Array.from(selected).sort(function (a, b) { return a - b; });
       var firstWord = chosen.length ? (project.words || [])[chosen[0]] : null;

@@ -455,6 +455,8 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /Keep cutting mistakes, then press Rebuild preview once/);
   assert.doesNotMatch(source, /scheduleAutoRender\(project\.id, EDIT_RENDER_DEBOUNCE_MS\)/);
   assert.match(source, /suspected-mistake/);
+  assert.match(source, /Remove highlighted sections/);
+  assert.match(source, /transcriptParagraphStartIndices/);
   assert.doesNotMatch(source, /Removed automatically/);
   assert.doesNotMatch(source, /Every automatic silence cut/);
   assert.match(source, /No changes have been made\. The first editable preview is being prepared/);
@@ -463,8 +465,8 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /Preparing browser-safe preview…/);
   assert.match(source, /Playback will unlock automatically/);
   assert.match(source, /\(mediaUnavailable \? '' : ' src="' \+ previewUrl/);
-  assert.match(page, /editor\.js\?v=20261014-longform-caption-size-v142/);
-  assert.match(page, /style\.css\?v=20261015-content-analytics-v140/);
+  assert.match(page, /editor\.js\?v=20261015-editor-paragraphs-v143/);
+  assert.match(page, /style\.css\?v=20261015-editor-paragraphs-v141/);
 });
 
 test('startup probing preserves an active browser preview encode', function () {
@@ -541,6 +543,24 @@ test('likely restarted lines are surfaced without being automatically removed', 
   assert.equal(candidates.length, 1);
   assert.equal(candidates[0].confidence, 'high');
   assert.deepEqual(candidates[0].removeWordIndices, [0, 1]);
+});
+
+test('transcript paragraphs follow spoken pauses and stay readable during uninterrupted speech', function () {
+  const words = Array.from({ length: 100 }, function (_, index) {
+    const start = index * .25 + (index >= 20 ? 1.6 : 0);
+    return { index: index, text: index === 79 ? 'point.' : 'word' + index, start: start, end: start + .18 };
+  });
+  const starts = editor.transcriptParagraphStartIndices(words, '');
+  assert.deepEqual(starts, [0, 20, 80]);
+});
+
+test('matched planning-card paragraph openings reinforce transcript paragraph breaks', function () {
+  const text = ['Opening', 'thought', 'sets', 'this', 'up.', 'Now', 'the', 'causal', 'framework', 'becomes', 'clear.', 'Finally', 'the', 'practical', 'conclusion', 'lands.'];
+  const words = text.map(function (word, index) {
+    return { index: index, text: word, start: index * .25, end: index * .25 + .18 };
+  });
+  const notes = '<p>Opening thought sets this up.</p><p>Now the causal framework becomes clear.</p><p>Finally the practical conclusion lands.</p>';
+  assert.deepEqual(editor.transcriptParagraphStartIndices(words, notes), [0, 5, 11]);
 });
 
 test('Antoine Matthias is highlighted without automatically removing the marked take', function () {

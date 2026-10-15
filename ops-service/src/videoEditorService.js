@@ -795,6 +795,74 @@ function retakeCandidates(words) {
   return output;
 }
 
+function transcriptToken(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9']/g, '');
+}
+
+function planningParagraphs(notesHtml) {
+  return String(notesHtml || '')
+    .replace(/<\s*br\s*\/?\s*>/gi, '\n')
+    .replace(/<\/(?:p|li|h[1-6]|blockquote|div)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .split(/\n+/)
+    .map(function (value) { return value.replace(/\s+/g, ' ').trim(); })
+    .filter(function (value) { return value.split(/\s+/).length >= 4; });
+}
+
+// The transcript remains word-addressable for frame-accurate cuts, but its
+// visual paragraphs should follow the way Harvey actually spoke. Long pauses
+// are the strongest signal; sentence endings and bounded paragraph lengths
+// keep a long uninterrupted take readable. When a planning card is linked,
+// recognisable paragraph openings from that outline reinforce those breaks.
+function transcriptParagraphStartIndices(words, notesHtml) {
+  const timedWords = Array.isArray(words) ? words : [];
+  if (!timedWords.length) return [];
+  const starts = new Set([Number(timedWords[0].index)]);
+  let paragraphStartPosition = 0;
+  for (let position = 1; position < timedWords.length; position++) {
+    const previous = timedWords[position - 1] || {};
+    const current = timedWords[position] || {};
+    const gap = Number(current.start) - Number(previous.end);
+    const length = position - paragraphStartPosition;
+    const sentenceEnded = /[.!?]["'’”)]*$/.test(String(previous.text || ''));
+    const naturalBreak = length >= 8 && Number.isFinite(gap) && gap >= 1.35;
+    const sentenceBreak = length >= 12 && sentenceEnded && Number.isFinite(gap) && gap >= 0.65;
+    const boundedBreak = length >= 90 || (length >= 60 && sentenceEnded);
+    if (naturalBreak || sentenceBreak || boundedBreak) {
+      starts.add(Number(current.index));
+      paragraphStartPosition = position;
+    }
+  }
+
+  const transcriptTokens = timedWords.map(function (word) { return transcriptToken(word.text); });
+  let searchFrom = 0;
+  planningParagraphs(notesHtml).forEach(function (paragraph) {
+    const anchor = paragraph.split(/\s+/).map(transcriptToken).filter(Boolean).slice(0, 5);
+    if (anchor.length < 4) return;
+    for (let position = searchFrom; position < transcriptTokens.length; position++) {
+      let cursor = position;
+      let matched = 0;
+      let firstMatchPosition = -1;
+      while (cursor < transcriptTokens.length && cursor < position + 14 && matched < anchor.length) {
+        if (transcriptTokens[cursor] === anchor[matched]) {
+          if (firstMatchPosition < 0) firstMatchPosition = cursor;
+          matched++;
+        }
+        cursor++;
+      }
+      if (matched < 4) continue;
+      if (firstMatchPosition >= 4) starts.add(Number(timedWords[firstMatchPosition].index));
+      searchFrom = cursor;
+      break;
+    }
+  });
+  return Array.from(starts).filter(Number.isInteger).sort(function (a, b) { return a - b; });
+}
+
 // Harvey says this deliberately unusual two-word phrase whenever the words
 // immediately before it were a false start. Keep the matcher tolerant of the
 // small spelling variations speech-to-text commonly produces, but require
@@ -1517,6 +1585,8 @@ function setup(options) {
     project.gapDecisions = gapDecisions(project);
     project.retakeCandidates = retakeCandidatesForProject(project);
     project.retakeHighlights = retakeHighlightsForProject(project);
+    const planningPiece = project.planningPieceId && typeof getPlanningPiece === 'function' ? getPlanningPiece(project.planningPieceId) : null;
+    project.transcriptParagraphStartIndices = transcriptParagraphStartIndices(project.words || [], planningPiece && planningPiece.notesHtml);
     project.unresolvedRetakeCount = unresolvedRetakeCount(project);
     project.appliedRetakeCount = appliedRetakeCount(project);
     project.layoutReviewRequired = layoutReviewRequired(project);
@@ -1860,10 +1930,14 @@ function setup(options) {
         if (!project) return;
         const markerDecisions = retakeMarkerDecisions(project.words || []);
         const markerIndices = new Set(markerDecisions.flatMap(function (decision) { return decision.removeWordIndices; }));
-        const semanticDecisions = normalizeRetakeDecisions(raw && raw.decisions, project.words || [], { highlightOnly: true }).filter(function (decision) {
+        const repeatedTakeDecisions = retakeCandidates(project.words || []).filter(function (decision) {
           return !decision.removeWordIndices.some(function (index) { return markerIndices.has(index); });
         });
-        project.retakeDecisions = markerDecisions.concat(semanticDecisions);
+        const deterministicIndices = new Set(markerDecisions.concat(repeatedTakeDecisions).flatMap(function (decision) { return decision.removeWordIndices; }));
+        const semanticDecisions = normalizeRetakeDecisions(raw && raw.decisions, project.words || [], { highlightOnly: true }).filter(function (decision) {
+          return !decision.removeWordIndices.some(function (index) { return deterministicIndices.has(index); });
+        });
+        project.retakeDecisions = markerDecisions.concat(repeatedTakeDecisions, semanticDecisions);
         project.autoRetakeRemovedWordIndices = [];
         project.retakeAnalysisStatus = 'ready';
         project.retakeAnalysisError = '';
@@ -3514,6 +3588,7 @@ module.exports = {
   cleanOrphanedEditorTempFiles,
   gapDecisions,
   retakeCandidates,
+  transcriptParagraphStartIndices,
   retakeMarkerDecisions,
   repeatedLineEvidence,
   retakeCandidatesForProject,
