@@ -12,27 +12,37 @@ function setup(options) {
   const configuredChannelId = clean(options.tiktokChannelId, 300);
   const fetchImpl = options.fetchImpl || fetch;
   const mediaBaseUrl = clean(options.mediaBaseUrl || 'https://ops.realitymanual.com', 500).replace(/\/$/, '');
+  let channelCache = null;
+  let channelCacheExpiresAt = 0;
+  let readCooldownUntil = 0;
 
-  async function graphql(query, variables) {
+  async function graphql(query, variables, backgroundRead) {
     if (!apiKey) throw new Error('Buffer API key is not configured.');
+    if (backgroundRead && Date.now() < readCooldownUntil) {
+      throw new Error('Buffer background reads paused after HTTP 429.');
+    }
     const response = await fetchImpl(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
       body: JSON.stringify({ query: query, variables: variables || {} })
     });
     const payload = await response.json().catch(function () { return {}; });
+    if (response.status === 429) {
+      const seconds = Number(response.headers && response.headers.get('retry-after'));
+      readCooldownUntil = Date.now() + Math.max(60, Number.isFinite(seconds) ? seconds : 15 * 60) * 1000;
+    }
     if (!response.ok) throw new Error('Buffer API HTTP ' + response.status + '.');
     if (payload.errors && payload.errors.length) throw new Error('Buffer API: ' + clean(payload.errors[0].message, 500));
     return payload.data || {};
   }
 
   async function listChannels() {
-    const account = await graphql('query { account { organizations { id name } } }');
+    const account = await graphql('query { account { organizations { id name } } }', null, true);
     const organizations = account.account && account.account.organizations || [];
     const channels = [];
     for (const organization of organizations) {
       const data = await graphql('query Channels($input: ChannelsInput!) { channels(input: $input) { id displayName descriptor service isDisconnected isLocked isQueuePaused externalLink timezone allowedActions products scopes postingSchedule { day paused times } } }',
-        { input: { organizationId: organization.id } });
+        { input: { organizationId: organization.id } }, true);
       (data.channels || []).forEach(function (channel) {
         channels.push(Object.assign({ organizationId: organization.id, organizationName: organization.name }, channel));
       });
@@ -41,17 +51,22 @@ function setup(options) {
   }
 
   async function resolveTiktokChannel() {
+    if (channelCache && Date.now() < channelCacheExpiresAt) return channelCache;
     const channels = await listChannels();
+    let selected;
     if (configuredChannelId) {
-      const selected = channels.find(function (channel) { return channel.id === configuredChannelId; });
+      selected = channels.find(function (channel) { return channel.id === configuredChannelId; });
       if (!selected) throw new Error('BUFFER_TIKTOK_CHANNEL_ID does not match an accessible Buffer channel.');
       if (String(selected.service).toLowerCase() !== 'tiktok') throw new Error('Configured Buffer channel is not TikTok.');
-      return selected;
+    } else {
+      const candidates = channels.filter(function (channel) { return String(channel.service).toLowerCase() === 'tiktok'; });
+      if (!candidates.length) throw new Error('No TikTok channel is connected in Buffer.');
+      if (candidates.length > 1) throw new Error('Multiple TikTok channels found; set BUFFER_TIKTOK_CHANNEL_ID explicitly.');
+      selected = candidates[0];
     }
-    const candidates = channels.filter(function (channel) { return String(channel.service).toLowerCase() === 'tiktok'; });
-    if (!candidates.length) throw new Error('No TikTok channel is connected in Buffer.');
-    if (candidates.length > 1) throw new Error('Multiple TikTok channels found; set BUFFER_TIKTOK_CHANNEL_ID explicitly.');
-    return candidates[0];
+    channelCache = selected;
+    channelCacheExpiresAt = Date.now() + 60 * 60 * 1000;
+    return selected;
   }
 
   function signMedia(pieceId, expires) {
@@ -108,7 +123,7 @@ function setup(options) {
         metrics { type name value unit }
         metricsUpdatedAt
       }
-    }`, { input: { id: clean(postId, 300) } });
+    }`, { input: { id: clean(postId, 300) } }, true);
     if (!data.post) throw new Error('Buffer post was not found.');
     return data.post;
   }

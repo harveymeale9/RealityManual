@@ -67,3 +67,23 @@ test('a Buffer lookup failure never moves that card and does not block other pos
   sync.close();
   db.close();
 });
+
+test('already-live TikTok posts do not consume lifecycle polling quota', async function () {
+  const db = new Database(':memory:');
+  const fetched = [];
+  const sync = syncService.setup(db, {
+    autoStart: false,
+    listPieces: async function () { return [
+      { id: 'live', stage: 'live', tiktokPublishProvider: 'buffer', tiktokPublishId: 'old' },
+      { id: 'failed', stage: 'final_check', tiktokPublishStatus: 'error', tiktokPublishProvider: 'buffer', tiktokPublishId: 'bad' },
+      { id: 'due', stage: 'scheduled', tiktokPublishProvider: 'buffer', tiktokPublishId: 'new' }
+    ]; },
+    fetchPost: async function (id) { fetched.push(id); return { id: id, status: 'scheduled' }; },
+    savePiece: async function () {}
+  });
+  const result = await sync.run();
+  assert.equal(result.checked, 1);
+  assert.deepEqual(fetched, ['new']);
+  sync.close();
+  db.close();
+});

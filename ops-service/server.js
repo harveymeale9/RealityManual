@@ -1398,13 +1398,20 @@ const weeklyReports = weeklyReportService.setup(db, {
     });
     const results = [];
     for (const piece of tracked) {
-      const post = await buffer.getPost(piece.tiktokPublishId);
+      const metrics = Object.assign({}, piece.tiktokMetrics || {});
+      let publicMetrics = null;
+      try { publicMetrics = await tiktokPublicMetrics.fetchPublicMetrics(piece.tiktokExternalLink); }
+      catch (error) { publicMetrics = null; }
+      const current = tiktokPublicMetrics.mergeMetrics(metrics, publicMetrics);
+      [['views', current.views], ['reactions', current.likes], ['comments', current.comments], ['shares', current.shares]].forEach(function (entry) {
+        if (entry[1] != null) metrics[entry[0]] = { name: entry[0], value: entry[1], unit: 'count' };
+      });
       results.push({
         pieceId: piece.id,
         title: piece.title || 'Untitled',
-        postedAt: post.sentAt || piece.postedAt || null,
-        externalLink: post.externalLink || piece.tiktokExternalLink || '',
-        metrics: bufferPublicationSyncService.metricsObject(post.metrics)
+        postedAt: piece.postedAt || null,
+        externalLink: piece.tiktokExternalLink || '',
+        metrics: metrics
       });
     }
     return results;
@@ -1437,35 +1444,20 @@ const contentAnalytics = contentAnalyticsService.setup(db, {
     tiktok: async function (pieces) {
       if (!buffer.configured) throw new Error('TikTok via Buffer is not connected.');
       const rows = [];
-      let bufferUnavailable = false;
       for (const piece of pieces.filter(function (item) { return !!item.tiktokPublishId; })) {
-        let post = null;
-        try { post = await buffer.getPost(piece.tiktokPublishId); }
-        catch (error) { bufferUnavailable = true; }
-        // A Buffer request can be rate-limited independently of the public
-        // post. Retain its last stored rich metrics while still refreshing
-        // the live counters rather than failing the entire TikTok provider.
-        const metrics = post
-          ? bufferPublicationSyncService.metricsObject(post.metrics)
-          : (piece.tiktokMetrics || {});
-        // Buffer refreshes sent-post analytics about once per day. The public
-        // TikTok video page carries current counters, so use it to close that
-        // gap while retaining Buffer's richer watch-time fields. This is a
-        // best-effort supplement: a temporary public-page failure must never
-        // hide the official Buffer snapshot.
+        // Buffer ingests sent-post metrics only daily. Keep the last lifecycle
+        // snapshot and use the public video page for current counters; the
+        // analytics collector must not spend posting API quota every hour.
+        const metrics = piece.tiktokMetrics || {};
         let publicMetrics = null;
-        const publicUrl = (post && post.externalLink) || piece.tiktokExternalLink || '';
-        try { publicMetrics = await tiktokPublicMetrics.fetchPublicMetrics(publicUrl); }
+        try { publicMetrics = await tiktokPublicMetrics.fetchPublicMetrics(piece.tiktokExternalLink || ''); }
         catch (error) { publicMetrics = null; }
-        if (!post && !publicMetrics && !Object.keys(metrics).length) continue;
+        if (!publicMetrics && !Object.keys(metrics).length) continue;
         rows.push({ pieceId: piece.id, platform: 'tiktok', metrics: tiktokPublicMetrics.mergeMetrics(metrics, publicMetrics) });
       }
       return { pieces: rows, channels: [], status: {
         audienceAvailable: false,
-        partial: bufferUnavailable,
-        note: bufferUnavailable
-          ? 'Video counters are live. Buffer is temporarily unavailable, so watch-time details use the last saved snapshot.'
-          : 'Video counters are live; watch-time details follow Buffer’s daily refresh. TikTok audience totals are not exposed by the connection.'
+        note: 'Video counters use the public post; watch-time details use the last saved Buffer snapshot. TikTok audience totals are not exposed by the connection.'
       } };
     },
     instagram: async function (pieces) {
@@ -3185,8 +3177,12 @@ async function nextPublishingQueueSlot(type, pieces, nowValue) {
     } catch (error) {
       console.error('Could not read Buffer schedule while checking the publishing queue:', error.message);
     }
-    publishingBufferScheduleCache = { expiresAt: nowValue + 10 * 60 * 1000, postingSchedule: postingSchedule };
+    const validSchedule = postingSchedule.length > 0;
+    publishingBufferScheduleCache = { expiresAt: nowValue + (validSchedule ? 6 * 60 * 60 * 1000 : 10 * 60 * 1000), postingSchedule: postingSchedule };
   }
+  // The fallback midnight/noon calendar is not Harvey's actual Buffer slot.
+  // During a quota outage, leave the short in queue and retry the lookup.
+  if (!postingSchedule.length) return '';
   const occupied = pieces.filter(function (piece) {
     return shortformSchedule.isShortform(piece) && piece.stage === 'scheduled' && piece.scheduledAt;
   }).map(function (piece) { return piece.scheduledAt; });
@@ -3347,21 +3343,25 @@ async function runPlatformPublishBatch(id, destinations, options) {
     const tiktokDestination = destinations.find(function (destination) { return destination.platform === 'tiktok'; });
     const directDestinations = destinations.filter(function (destination) { return destination.platform !== 'tiktok'; });
     let dueAt = null;
-    let postingSchedule = [];
-    try {
-      const bufferStatus = await buffer.status();
-      if (bufferStatus.connected && bufferStatus.channel && bufferStatus.channel.timezone === 'Asia/Bangkok') {
-        postingSchedule = bufferStatus.channel.postingSchedule || [];
-      }
-    } catch (error) {
-      console.error('Could not read Buffer schedule; using midnight/noon Bangkok fallback:', error.message);
-    }
+    let postingSchedule = publishingBufferScheduleCache.postingSchedule;
     const pieces = allPieceRecords();
     const occupied = pieces.filter(function (other) {
       return other.id !== id && shortformSchedule.isShortform(other) && other.stage === 'scheduled' && other.scheduledAt;
     }).map(function (other) { return other.scheduledAt; });
     const forcedDueAt = publishingQueue.preparationDue(options.dueAt, Date.now(), publishingQueue.PREPARATION_LEAD_MS + 60 * 1000)
       ? options.dueAt : '';
+    if (!forcedDueAt && !postingSchedule.length) {
+      const bufferStatus = await buffer.status();
+      if (bufferStatus.connected && bufferStatus.channel && bufferStatus.channel.timezone === 'Asia/Bangkok') {
+        postingSchedule = bufferStatus.channel.postingSchedule || [];
+      }
+    }
+    if (tiktokDestination && !forcedDueAt && !postingSchedule.length) {
+      updatePieceFields(id, { tiktokPublishStatus: 'error',
+        tiktokPublishError: 'Buffer posting calendar is unavailable. No fallback publish time was used; retry when Buffer API access returns.',
+        stage: 'final_check' });
+      return;
+    }
     const candidates = forcedDueAt ? [forcedDueAt] : shortformSchedule.nextAvailableBangkokSlots(Date.now(), postingSchedule, occupied, 32);
     // The natural queue decides which video goes next; the chosen video uses
     // the next daily Buffer slot. Topic separation must not manufacture empty

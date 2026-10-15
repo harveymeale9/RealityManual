@@ -19672,3 +19672,40 @@ authorized collection runs. The Settings UI gives Harvey the exact OAuth field
 and warns against the webhook field. Focused OAuth/mapping tests and the full
 252-test suite pass; live Meta authorization still requires Harvey's Instagram
 App credentials and account consent.
+
+---
+
+# 634. Reserve Buffer API Calls for TikTok Publishing (2026-10-15)
+
+Buffer warned that the app was approaching its API quota. A live header check
+then showed the 24-hour bucket exhausted (`r=0`, HTTP 429, about 3 hours until
+reset), even though the 15-minute bucket still had ample room. The cause was
+unnecessary repeated reads: lifecycle sync polled already-live posts every 15
+minutes, Content Analytics fetched each sent post every hour even though
+Buffer itself only refreshes those metrics daily, the weekly report fetched
+them again, and Publishing Queue re-read the channel calendar every 10 minutes.
+Those reads share the same allowance as TikTok scheduling, so a full bucket can
+prevent a new short-form post being queued.
+
+Lifecycle sync now polls only still-scheduled posts or Final Check items that
+have not already failed. Sent-post analytics and the weekly report use the
+last saved Buffer watch-time metrics plus current public TikTok counters; they
+no longer call Buffer. Publishing Queue caches the seven-day posting calendar
+for six hours, and Buffer channel discovery is cached for one hour, reducing
+each additional publish from three API calls to one while the channel cache is
+warm. A 429 honors `Retry-After` for background reads rather than repeatedly
+hammering Buffer. When the real Buffer posting calendar cannot be read and no
+valid cached calendar is available, Publishing Queue leaves shorts waiting and
+retries after ten minutes; it must not silently substitute the obsolete
+midnight/noon fallback and publish at the wrong hour. The actual queue-selected
+slot is reused by the release batch instead of asking Buffer for its schedule
+again. Direct publishing remains attempted normally and any genuine quota
+rejection is surfaced; this cannot override Buffer's own quota before its
+reset. Existing Buffer-scheduled posts are managed by Buffer independently
+of Content Studio's reads.
+
+Tests cover no repeated read of live/terminal-failure posts, reuse of
+channel discovery, and honoring a 429 retry window. Full ops-service suite
+passes with 254 tests. The separate
+Instagram tester invitation was still Pending during this work; this Buffer
+change does not touch the Instagram publishing or Insights authorization.

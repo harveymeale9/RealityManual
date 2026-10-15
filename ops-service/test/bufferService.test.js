@@ -31,6 +31,8 @@ test('Buffer discovers the sole TikTok channel and queues a signed video post', 
   const result = await service.createTiktokVideoPost({ text: 'Exact Content Studio TikTok caption', videoUrl: url, thumbnailOffset: 2750 });
   assert.equal(result.post.id, 'post-1');
   assert.equal(calls.length, 3);
+  await service.createTiktokVideoPost({ text: 'Exact Content Studio TikTok caption', videoUrl: url, thumbnailOffset: 2750 });
+  assert.equal(calls.length, 4, 'channel discovery is reused instead of spending two reads per post');
 });
 
 test('Buffer refuses ambiguous TikTok channels and reports missing configuration safely', async function () {
@@ -75,4 +77,16 @@ test('Buffer returns authoritative lifecycle, destination link, and normalized p
   const post = await service.getPost('post-1');
   assert.equal(post.status, 'sent');
   assert.equal(post.metrics[0].value, 1200);
+});
+
+test('Buffer background reads honor a 429 retry window without repeated API calls', async function () {
+  let calls = 0;
+  const service = bufferService.setup({ apiKey: 'test-key', fetchImpl: async function () {
+    calls++;
+    return { ok: false, status: 429, headers: { get: function (name) { return name === 'retry-after' ? '600' : null; } },
+      json: async function () { return {}; } };
+  } });
+  await assert.rejects(service.getPost('post-1'), /HTTP 429/);
+  await assert.rejects(service.getPost('post-1'), /background reads paused/);
+  assert.equal(calls, 1);
 });

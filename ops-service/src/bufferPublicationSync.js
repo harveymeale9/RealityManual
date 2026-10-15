@@ -52,8 +52,12 @@ function setup(db, options) {
     const startedAt = new Date().toISOString();
     db.prepare("UPDATE buffer_publication_sync_state SET status='running',last_started_at=?,last_error=NULL WHERE id=1").run(startedAt);
     const pieces = (await options.listPieces()).filter(function (piece) {
+      // Sent posts are already settled. Their current counters come from the
+      // public video page; repeatedly reading them here burns the same API
+      // allowance needed to schedule the next post.
       return piece && piece.tiktokPublishProvider === 'buffer' && piece.tiktokPublishId &&
-        ['scheduled', 'live', 'final_check'].indexOf(piece.stage) !== -1;
+        (piece.stage === 'scheduled' ||
+          (piece.stage === 'final_check' && piece.tiktokPublishStatus !== 'error'));
     });
     let scheduled = 0;
     let live = 0;
