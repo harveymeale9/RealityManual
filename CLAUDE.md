@@ -19543,3 +19543,22 @@ The Content Production row receives the same server-owned step and progress
 fields through its existing poller. A normal client save cannot overwrite
 those fields with an older snapshot. The complete ops-service suite passes
 with 241 tests.
+
+---
+
+# 629. Final Check Preloads Video and Has a Seek Timeline (2026-10-15)
+
+Harvey could play a Final Check video but could not jump to later sections:
+the card deliberately hid native controls after earlier browser click failures.
+The card now keeps its reliable click-anywhere playback and adds a separate
+Play/Pause button, seek slider, and elapsed/total time below the frame. The
+slider seeks through the actual final file using the existing byte-range video
+endpoint. The video element uses `preload="auto"`, and Content Ops explicitly
+starts loading it when the Kanban renders, even when the Final Check column is
+offscreen. Browsers still control how much of a large 4K file they buffer;
+seeking does not require downloading the whole file first.
+
+A headless Chromium check loaded the real 3.4 GB final video in a mocked
+Final Check card: metadata became available, the seek control enabled, and
+moving it to 50% set playback to 366.816 of 733.632 seconds. No production
+piece was moved back to Final Check for that check.

@@ -3257,9 +3257,8 @@
     // target, and a big green play-button glyph (`.fc-play-icon`, hidden
     // once playing) doubles as both "click anywhere to play" affordance
     // and the placeholder Harvey asked for. Losing native scrub/volume/
-    // fullscreen is the real trade-off — acceptable for a quick review
-    // clip; worth adding a minimal custom scrub bar later if that's
-    // missed in practice.
+    // fullscreen was the original trade-off. The separate controls below
+    // provide reliable seeking without putting native chrome in the click path.
     //
     // Third attempt at click-to-play (2026-09-19, same day): Harvey
     // reported this version played *nothing at all* on click, worse than
@@ -3280,12 +3279,17 @@
     return '' +
       '<div class="final-check-card" data-id="' + id + '">' +
         '<div class="fc-video-wrap' + (piece.videoIsVertical ? ' is-vertical' : '') + '">' +
-          '<video class="fc-video" data-id="' + id + '" playsinline preload="metadata"' +
+          '<video class="fc-video" data-id="' + id + '" playsinline preload="auto"' +
             (piece.thumbnailDataUrl ? ' poster="' + piece.thumbnailDataUrl + '"' : '') +
             ' src="/api/files/videos/' + encodeURIComponent(id) + '-final"></video>' +
           '<div class="fc-video-overlay">' +
             '<span class="fc-play-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 6l10 6-10 6V6Z"/></svg></span>' +
           '</div>' +
+        '</div>' +
+        '<div class="fc-player-controls">' +
+          '<button type="button" class="fc-play-toggle" aria-label="Play video">Play</button>' +
+          '<input class="fc-seek" type="range" min="0" max="1000" value="0" disabled aria-label="Seek through video" />' +
+          '<span class="fc-video-time">0:00 / 0:00</span>' +
         '</div>' +
         titlesHtml +
         fcCaptionSectionHtml(id, piece, boardSettingsCache) +
@@ -3571,13 +3575,59 @@
     board.querySelectorAll('.fc-video-wrap').forEach(function (wrap) {
       var v = wrap.querySelector('video');
       if (!v) return;
-      function syncPlayState() { wrap.classList.toggle('is-playing', !v.paused); }
+      var controls = wrap.nextElementSibling;
+      var playButton = controls && controls.querySelector('.fc-play-toggle');
+      var seek = controls && controls.querySelector('.fc-seek');
+      var time = controls && controls.querySelector('.fc-video-time');
+      function formatTime(seconds) {
+        if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
+        var whole = Math.floor(seconds);
+        var hours = Math.floor(whole / 3600);
+        var minutes = Math.floor((whole % 3600) / 60);
+        var secondsPart = String(whole % 60).padStart(2, '0');
+        return hours ? hours + ':' + String(minutes).padStart(2, '0') + ':' + secondsPart : minutes + ':' + secondsPart;
+      }
+      function syncPlayState() {
+        wrap.classList.toggle('is-playing', !v.paused);
+        if (playButton) {
+          playButton.textContent = v.paused ? 'Play' : 'Pause';
+          playButton.setAttribute('aria-label', v.paused ? 'Play video' : 'Pause video');
+        }
+      }
+      function syncTime() {
+        var duration = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : 0;
+        if (seek) {
+          seek.disabled = !duration;
+          if (!seek.matches(':active')) seek.value = duration ? String(Math.round(v.currentTime / duration * 1000)) : '0';
+        }
+        if (time) time.textContent = formatTime(v.currentTime) + ' / ' + formatTime(duration);
+      }
       v.addEventListener('click', function () {
         if (v.paused) v.play().catch(function () {}); else v.pause();
       });
+      if (playButton) playButton.addEventListener('click', function () {
+        if (v.paused) v.play().catch(function () {}); else v.pause();
+      });
+      if (seek) {
+        seek.addEventListener('input', function () {
+          if (time && Number.isFinite(v.duration)) time.textContent = formatTime(v.duration * Number(seek.value) / 1000) + ' / ' + formatTime(v.duration);
+        });
+        seek.addEventListener('change', function () {
+          if (Number.isFinite(v.duration)) v.currentTime = v.duration * Number(seek.value) / 1000;
+        });
+      }
       v.addEventListener('play', syncPlayState);
       v.addEventListener('pause', syncPlayState);
+      v.addEventListener('loadedmetadata', syncTime);
+      v.addEventListener('durationchange', syncTime);
+      v.addEventListener('timeupdate', syncTime);
+      v.addEventListener('seeked', syncTime);
+      // The Final Check column can be offscreen in the horizontal Kanban.
+      // Start fetching each final video when Content Ops renders, not when
+      // its card first enters the viewport or receives a click.
+      if (v.networkState === v.NETWORK_EMPTY) v.load();
       syncPlayState();
+      syncTime();
     });
     // Final Check title edits persist without re-rendering the card (which
     // would reset video playback). Input updates the in-memory publish value
