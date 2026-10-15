@@ -712,7 +712,7 @@
               '<button type="button" class="pm-mic-btn" id="pmMicBtn" title="Record voice message" aria-label="Record voice message">' +
                 '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/></svg>' +
               '</button>' +
-              '<textarea id="pmTextInput" class="pm-textarea" rows="1" placeholder="Message Codex… (attach images or MP4s too)"></textarea>' +
+              '<textarea id="pmTextInput" class="pm-textarea" rows="1" maxlength="100000" placeholder="Message Codex… paste long prompts here too"></textarea>' +
               '<button type="button" class="pm-send-btn" id="pmSendBtn" title="Send" aria-label="Send">' +
                 '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4Z"/></svg>' +
               '</button>' +
@@ -1467,7 +1467,9 @@
     });
     function autoresize() {
       textInput.style.height = 'auto';
-      textInput.style.height = Math.min(textInput.scrollHeight, 160) + 'px';
+      var longPromptHeight = Math.max(160, Math.min(520, Math.round(window.innerHeight * 0.55)));
+      textInput.style.height = Math.min(textInput.scrollHeight, longPromptHeight) + 'px';
+      textInput.classList.toggle('long-prompt', textInput.scrollHeight > 160);
     }
     textInput.addEventListener('input', autoresize);
 

@@ -99,3 +99,16 @@ test('desktop Project Manager distinguishes queued follow-ups from the active ru
   assert.match(desktop, /task' \+ \(ahead === 1 \? '' : 's'\) \+ ' ahead'/);
   assert.match(desktop, /is actively working on this/);
 });
+
+test('Project Manager accepts long pasted prompts without silently truncating them', function () {
+  const desktop = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
+  const mobile = fs.readFileSync(path.join(__dirname, '../public/voice-mobile.html'), 'utf8');
+  const server = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
+  assert.match(desktop, /maxlength="100000"/);
+  assert.match(desktop, /classList\.toggle\('long-prompt'/);
+  assert.match(mobile, /maxlength="100000"/);
+  assert.match(mobile, /classList\.toggle\('long-prompt'/);
+  assert.match(server, /MAX_VOICE_MESSAGE_CHARS = 100000/);
+  assert.doesNotMatch(server, /rawText\.trim\(\)\.slice\(0, 4000\)/);
+  assert.match(server, /error: 'message_too_long'/);
+});

@@ -829,6 +829,8 @@ body.role-reviewer #pmBackFab {
   padding: 12px 14px; border-radius: 8px; max-height: 160px;
 }
 .pm-textarea:focus { outline: none; border-color: var(--accent); }
+.pm-textarea.long-prompt { min-height: 160px; max-height: 55vh; resize: vertical; }
+@media(max-width:700px){.pm-textarea.long-prompt{min-height:120px;max-height:45vh}}
 .pm-attach-btn, .pm-mic-btn, .pm-send-btn {
   width: 46px; height: 46px; border-radius: 8px; border: 1px solid var(--border);
   background: var(--surface-2); color: var(--ink-soft); display: flex; align-items: center; justify-content: center;

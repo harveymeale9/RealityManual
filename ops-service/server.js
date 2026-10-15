@@ -3891,6 +3891,7 @@ const voiceMessageUpload = multer({
   dest: path.join(DATA_DIR, 'tmp'),
   limits: { fileSize: 500 * 1024 * 1024, files: 8 }
 });
+const MAX_VOICE_MESSAGE_CHARS = 100000;
 
 function voiceAttachmentRecords(row) {
   return voiceAttachments.parseRecords(row, 8);
@@ -3910,14 +3911,21 @@ app.post('/api/voice/messages', voiceMessageUpload.fields([
   { name: 'image', maxCount: 1 }
 ]), function (req, res) {
   const uploadedFiles = [].concat((req.files && req.files.attachments) || [], (req.files && req.files.images) || [], (req.files && req.files.image) || []).slice(0, 8);
-  const rawText = (req.body && req.body.text) || '';
+  const rawText = String((req.body && req.body.text) || '');
   const mode = req.body && req.body.mode;
-  const trimmed = rawText.trim().slice(0, 4000);
+  const trimmed = rawText.trim();
   const rawReplyToId = (req.body && req.body.replyToId) || null;
   const replyToId = (typeof rawReplyToId === 'string' && rawReplyToId.trim()) ? rawReplyToId.trim().slice(0, 64) : null;
   const preference = stmts.getVoicePreference.get();
   const agent = normalizeVoiceAgent((req.body && req.body.agent) || (preference && preference.selected_agent));
   function cleanupUpload() { removeUploadedFiles(uploadedFiles); }
+  if (trimmed.length > MAX_VOICE_MESSAGE_CHARS) {
+    cleanupUpload();
+    return res.status(413).json({
+      error: 'message_too_long',
+      message: 'That prompt is over 100,000 characters. Split it into two messages and send them one after the other.'
+    });
+  }
   if (!trimmed && !uploadedFiles.length) { cleanupUpload(); return res.status(400).json({ error: 'invalid_text' }); }
   if (mode !== 'respond' && mode !== 'execute') { cleanupUpload(); return res.status(400).json({ error: 'invalid_mode' }); }
   if (uploadedFiles.some(function (file) { return !voiceAttachments.extensionForUpload(file); })) {

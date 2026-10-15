@@ -19239,3 +19239,25 @@ visible again.
 Automated coverage now verifies pause/length paragraph boundaries, matched
 planning-card paragraph alignment and the one-explicit-rebuild UI contract.
 The complete ops-service suite passes with 230 tests.
+
+---
+
+# 617. Long Project Manager Prompts Are Preserved (2026-10-15)
+
+Project Manager messages previously had a hidden server-side `slice(0, 4000)`
+despite neither composer showing a limit. Pasting a long prompt therefore
+looked successful but silently discarded everything after character 4,000.
+Messages now preserve up to 100,000 characters. Anything larger receives an
+explicit, readable 413 response asking Harvey to split it instead of silently
+altering his instruction.
+
+The desktop and mobile composers declare the same 100,000-character boundary
+and grow into a scrollable long-prompt writing area—up to 55% of the desktop
+viewport or 45% on mobile—when pasted text exceeds the compact chat height.
+The JSON send path now surfaces the server's real error message just like the
+attachment path. Line breaks remain intact and desktop still uses Shift+Enter
+for deliberate new lines; mobile remains explicit-Send only.
+
+Automated coverage verifies the shared limit, expandable composer behavior,
+explicit oversize response and absence of the old truncation. The complete
+ops-service suite passes with 231 tests.

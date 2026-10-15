@@ -168,7 +168,12 @@ window.RMVoice = (function () {
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
-    }).then(function (r) { if (!r.ok) throw new Error('Could not send message'); return r.json(); });
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (body) {
+        if (!r.ok) throw new Error(body.message || 'Could not send message');
+        return body;
+      });
+    });
   }
 
   function getMessage(id) {
