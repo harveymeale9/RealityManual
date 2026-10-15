@@ -19324,3 +19324,32 @@ the public TikTok request, and the collector combines current public counters
 with the last stored Buffer watch-time snapshot. The provider reports this as
 partial rather than failed, so one slower upstream can no longer turn real
 TikTok activity back into a dashboard zero.
+
+---
+
+# 620. Smooth Native-Sampled Openings and Voice-First Review (2026-10-15)
+
+The first live review of the new horizontal recordings exposed two effects
+that looked related in the Editor but had different causes. The decision
+preview's camera move was genuinely capable of a one-pixel wobble: the 4K
+camera frame was being reduced to 720px before `zoompan`, leaving the motion
+filter only low-resolution integer crop coordinates. Camera-motion segments
+now remain at their native cropped resolution until `zoompan` samples directly
+to the output size. A five-second benchmark on the real **Devotion isn't love**
+source was also slightly faster than the pre-scaled route, so the correction
+does not trade smoothness for slower preview preparation.
+
+The **Prove To Me God Exists Without The Bible** rendered preview already
+removed its source lead-in and contained the five-second opening zoom. The UI
+could nevertheless remember that Harvey had inspected **Original master** and
+reopen the recording in that raw mode later. That reproduced both reported
+symptoms at once: the uncut setup footage and no baked animation. Ready
+recordings now always reopen on **Editing preview**; Original master remains an
+explicit temporary inspection mode. Future leading-silence cuts also retain
+only 80ms before the first timed word instead of 180ms, so finished videos begin
+essentially when speech begins while preserving the opening consonant.
+
+Regression coverage locks native-resolution motion preparation, the tighter
+voice-first cut and the edited-preview reopening rule. The two affected real
+recordings are rebuilt explicitly rather than advancing the global renderer
+version and needlessly re-encoding every unrelated active project.

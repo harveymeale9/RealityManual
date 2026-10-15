@@ -43,6 +43,7 @@ const EDITOR_RENDER_VERSION = 26;
 const AUTO_CUT_BOUNDARY_VERSION = 3;
 const DEFAULT_RETAINED_PAUSE_SECONDS = 0.24;
 const MIN_RETAINED_PAUSE_SECONDS = 0.08;
+const LEADING_SPEECH_HANDLE_SECONDS = 0.08;
 const TRANSCRIPT_CUT_HANDLE_SECONDS = 0.12;
 const CUT_ISLAND_BRIDGE_SECONDS = 0.12;
 const PAGE_CHANGE_SSIM_THRESHOLD = 0.5;
@@ -444,7 +445,10 @@ function calculateAutoCuts(words, duration, options) {
   if (!words.length || !Number.isFinite(Number(duration)) || Number(duration) <= 0) return cuts;
   const total = Number(duration);
   const lead = words[0].start;
-  if (lead > 0.45) cuts.push({ id: 'lead', start: 0, end: Math.max(0, lead - 0.18), reason: 'leading_silence' });
+  // The recording should begin essentially when Harvey begins speaking. Keep
+  // only a tiny consonant-safety handle; the previous 180ms allowance made a
+  // visible setup beat survive before the first line on some long-form takes.
+  if (lead > 0.45) cuts.push({ id: 'lead', start: 0, end: Number(Math.max(0, lead - LEADING_SPEECH_HANDLE_SECONDS).toFixed(3)), reason: 'leading_silence' });
   for (let i = 0; i < words.length - 1; i++) {
     const gapStart = words[i].end;
     const gapEnd = words[i + 1].start;
@@ -731,6 +735,16 @@ function cameraMotionFilter(options) {
   const y = '(ih-ih/' + zoom + ')*0.5';
   return ",zoompan=z='" + zoom + "':x='" + x + "':y='" + y + "':d=1:s=" +
     renderShape.width + 'x' + renderShape.height + ':fps=30000/1001,setsar=1';
+}
+
+function cameraMotionPreparationFilter(renderShape, motionEnabled) {
+  // Keep the cropped camera frame at native resolution until zoompan samples
+  // it. Pre-scaling a 4K source to the 720px decision-preview size first made
+  // zoompan's integer crop coordinates alternate by whole output pixels,
+  // producing a real wobble in the encoded review file. Direct native-to-
+  // output sampling keeps that quantisation below one displayed pixel.
+  if (motionEnabled) return ',setsar=1';
+  return ',scale=' + renderShape.width + ':' + renderShape.height + ',setsar=1';
 }
 
 function openingPushInFilter(renderShape, elapsedStart, durationSeconds) {
@@ -2211,10 +2225,12 @@ function setup(options) {
         // 29.97 fps and its visual stream ends well before its audio.
         let videoFilter = '[' + inputIndex + ':v]trim=start=' + segment.start.toFixed(3) + ':end=' + segment.end.toFixed(3) + ',setpts=PTS-STARTPTS,fps=30000/1001';
         if (layout === 'vertical') {
-          videoFilter += ",crop=w='min(iw\\,ih*9/16)':h='min(ih\\,iw*16/9)':x='(iw-ow)/2':y='(ih-oh)/2',scale=" + renderShape.width + ':' + renderShape.height + ',setsar=1';
+          videoFilter += ",crop=w='min(iw\\,ih*9/16)':h='min(ih\\,iw*16/9)':x='(iw-ow)/2':y='(ih-oh)/2'";
         } else {
-          videoFilter += ",crop=w='min(iw\\,ih*16/9)':h='min(ih\\,iw*9/16)':x='(iw-ow)/2':y='(ih-oh)/2',scale=" + renderShape.width + ':' + renderShape.height + ',setsar=1';
+          videoFilter += ",crop=w='min(iw\\,ih*16/9)':h='min(ih\\,iw*9/16)':x='(iw-ow)/2':y='(ih-oh)/2'";
         }
+        const cameraMotionEnabled = segment.type === 'source' && project.openingPushInEnabled !== false;
+        videoFilter += cameraMotionPreparationFilter(renderShape, cameraMotionEnabled);
         if (segment.type === 'source') {
           const motion = cameraMotionForSegment(segment, cuts, layout, project.pageChangeCutIds);
           videoFilter += cameraMotionFilter({ renderShape: renderShape, layout: layout, elapsedStart: motion.elapsed, durationSeconds: motion.duration, targetScale: cameraMotionTargetScale(layout, motion, segment.cameraResetAfterInsert === true), openingEnabled: project.openingPushInEnabled !== false });
@@ -3627,6 +3643,7 @@ module.exports = {
   openingPushInScale,
   openingPushInFilter,
   cameraMotionFilter,
+  cameraMotionPreparationFilter,
   normalizeVoiceGainAdjustments,
   voiceGainFilter,
   reconcileAutomaticRetakeCuts,

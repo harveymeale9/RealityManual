@@ -300,6 +300,14 @@ test('page-change zoom uses one centred fractional resampling stage', function (
   assert.equal((filter.match(/zoompan=/g) || []).length, 1);
   assert.match(filter, /0\.250/);
   assert.match(filter, /\*0\.5/);
+  assert.equal(editor.cameraMotionPreparationFilter({ width: 720, height: 404 }, true), ',setsar=1');
+  assert.equal(editor.cameraMotionPreparationFilter({ width: 720, height: 404 }, false), ',scale=720:404,setsar=1');
+});
+
+test('ready Editor projects reopen on the edited preview rather than a remembered raw source', function () {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'editor.js'), 'utf8');
+  assert.match(source, /var mode = item\.renderStatus === 'ready' \? 'final' : 'source';/);
+  assert.doesNotMatch(source, /saved\.mode === 'source' \|\| item\.renderStatus !== 'ready'/);
 });
 
 test('horizontal camera motion zooms into the exact frame centre', function () {
@@ -368,6 +376,7 @@ test('render duration tolerance stays strict for long-form output', function () 
 test('automatic cuts preserve natural handles around long pauses', function () {
   const cuts = editor.calculateAutoCuts(words, 9);
   assert.deepEqual(cuts.map(function (cut) { return cut.reason; }), ['leading_silence', 'long_pause', 'long_pause', 'trailing_silence']);
+  assert.equal(cuts[0].end, 0.92);
   assert.equal(cuts[1].start, 1.92);
   assert.equal(cuts[1].end, 3.88);
 });
@@ -466,7 +475,7 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /Preparing browser-safe preview…/);
   assert.match(source, /Playback will unlock automatically/);
   assert.match(source, /\(mediaUnavailable \? '' : ' src="' \+ previewUrl/);
-  assert.match(page, /editor\.js\?v=20261015-editor-paragraphs-v143/);
+  assert.match(page, /editor\.js\?v=20261015-opening-preview-v144/);
   assert.match(page, /style\.css\?v=20261015-landscape-caption-stroke-v143/);
   assert.match(styles, /\.editor-caption\.longform\{font-size:2\.05cqw;text-shadow:-1px -1px 0 #111,1px -1px 0 #111/);
 });
@@ -514,7 +523,7 @@ test('precise manual trims bridge residual fragments between automatic and trans
     id: 'manual-mumble-26s', start: 32.71, end: 64.71, note: 'Remove residual mumble', reason: 'manual_trim'
   }]);
   assert.deepEqual(editor.cutsForProject(project), [{
-    id: 'lead', start: 0, end: 32.02, reason: 'leading_silence'
+    id: 'lead', start: 0, end: 32.12, reason: 'leading_silence'
   }, {
     id: '', start: 32.64, end: 64.78, reason: 'combined'
   }, {
