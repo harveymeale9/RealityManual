@@ -19562,3 +19562,26 @@ A headless Chromium check loaded the real 3.4 GB final video in a mocked
 Final Check card: metadata became available, the seek control enabled, and
 moving it to 50% set playback to 366.816 of 733.632 seconds. No production
 piece was moved back to Final Check for that check.
+
+---
+
+# 630. Large Facebook Videos Use Resumable Upload (2026-10-15)
+
+Harvey asked for #185 **Why you're playing the wrong game...** to go live
+directly on YouTube and Facebook after its delayed final build. YouTube's
+direct upload succeeded and the API confirmed `public` and `processed`.
+Facebook's existing `file_url` request returned HTTP 504 on the 3.4 GB final
+file, but the Page video list later showed that same request had published the
+video successfully. The second attempted upload was stopped and its unfinished
+upload session canceled before its publish phase. The card was reconciled to
+the verified Facebook video ID and both platform statuses `done`, with its
+stage `live` and its stale Publishing Queue destinations cleared.
+
+For future files larger than 1 GiB, the server now uses Meta's page-video
+start/transfer/finish protocol with the byte ranges Meta requests. Small
+videos keep the existing URL-based path. This avoids one multi-gigabyte
+`file_url` request timing out ambiguously and inviting a duplicate retry.
+The new protocol has a focused chunk-order test; the full ops-service suite
+passes all 242 tests. The deploy script's existing active-work drain now also
+waits for pending or running final-video builds before restarting the container.
+This lets the backend change deploy after #186's active final render finishes.

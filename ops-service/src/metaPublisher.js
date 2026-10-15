@@ -73,6 +73,65 @@ function setup(options) {
     return { id: clean(payload.id, 100), url: 'https://www.facebook.com/watch/?v=' + encodeURIComponent(clean(payload.id, 100)) };
   }
 
+  // Meta's file_url path can time out while fetching multi-gigabyte long-form
+  // masters. Its page-video upload session accepts small sequential chunks,
+  // so no single request waits for the entire file to cross the network.
+  async function publishFacebookVideoResumable(input) {
+    const filePath = input.videoPath;
+    const fileSize = fs.statSync(filePath).size;
+    const endpoint = GRAPH_VIDEO_URL + '/' + encodeURIComponent(clean(input.pageId, 100)) + '/videos';
+    async function phase(fields, chunk) {
+      const body = new FormData();
+      Object.keys(fields).forEach(function (key) { body.set(key, String(fields[key])); });
+      body.set('access_token', clean(input.pageToken, 2000));
+      if (chunk) body.set('video_file_chunk', new Blob([chunk], { type: 'application/octet-stream' }), 'chunk.mp4');
+      const response = await fetchImpl(endpoint, { method: 'POST', body: body });
+      return jsonResponse(response, 'Facebook video ' + fields.upload_phase + ' failed');
+    }
+
+    const started = await phase({ upload_phase: 'start', file_size: fileSize });
+    const sessionId = clean(started.upload_session_id, 100);
+    const videoId = clean(started.video_id, 100);
+    if (!sessionId || !videoId) throw new Error('Facebook did not return a video upload session.');
+    let start = Number(started.start_offset);
+    let end = Number(started.end_offset);
+    const file = await fs.promises.open(filePath, 'r');
+    try {
+      while (start < fileSize) {
+        const length = Math.min(end - start, fileSize - start);
+        if (!Number.isSafeInteger(length) || length <= 0 || length > 100 * 1024 * 1024) {
+          throw new Error('Facebook returned an invalid video chunk range.');
+        }
+        const chunk = Buffer.allocUnsafe(length);
+        const read = await file.read(chunk, 0, length, start);
+        if (read.bytesRead !== length) throw new Error('Could not read the complete Facebook video chunk.');
+        let transferred;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            transferred = await phase({ upload_phase: 'transfer', upload_session_id: sessionId, start_offset: start }, chunk);
+            break;
+          } catch (error) {
+            if (attempt === 2) throw error;
+            await sleep(2000 * (attempt + 1));
+          }
+        }
+        const nextStart = Number(transferred.start_offset);
+        const nextEnd = Number(transferred.end_offset);
+        if (!Number.isSafeInteger(nextStart) || nextStart <= start || !Number.isSafeInteger(nextEnd)) {
+          throw new Error('Facebook video transfer did not advance.');
+        }
+        start = nextStart;
+        end = nextEnd;
+      }
+    } finally { await file.close(); }
+    const finished = await phase({
+      upload_phase: 'finish', upload_session_id: sessionId,
+      title: clean(input.title, 255), description: clean(input.description, 60000)
+    });
+    if (finished.success !== true) throw new Error('Facebook did not confirm the finished video upload.');
+    return { id: videoId, url: 'https://www.facebook.com/watch/?v=' + encodeURIComponent(videoId) };
+  }
+
   async function graphPost(pathname, fields, label) {
     const response = await fetchImpl(GRAPH_URL + pathname, {
       method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -215,6 +274,7 @@ function setup(options) {
     mediaUrl: mediaUrl,
     verifyMediaSignature: verifyMediaSignature,
     publishFacebookVideo: publishFacebookVideo,
+    publishFacebookVideoResumable: publishFacebookVideoResumable,
     publishInstagramReel: publishInstagramReel,
     fetchFacebookVideoMetrics: fetchFacebookVideoMetrics,
     fetchInstagramMediaMetrics: fetchInstagramMediaMetrics,

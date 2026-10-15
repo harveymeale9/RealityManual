@@ -151,11 +151,17 @@ while [ -f "$DATA_DIR/db.sqlite" ]; do
         OR COALESCE(json_extract(data,'$.clipInsertStatus'),'')='preparing'
       );
   " 2>/dev/null || echo 0)"
-  if [ "$ACTIVE_UPLOAD_QUEUE" = "0" ] && [ "$ACTIVE_EDITOR_PROCESSING" = "0" ]; then break; fi
+  ACTIVE_FINAL_BUILD="$(sqlite3 "$DATA_DIR/db.sqlite" "
+    SELECT COUNT(*) FROM records
+    WHERE store_name='pieces'
+      AND json_extract(data,'$.stage')='in_production'
+      AND json_extract(data,'$.finalBuildStatus') IN ('pending','running');
+  " 2>/dev/null || echo 0)"
+  if [ "$ACTIVE_UPLOAD_QUEUE" = "0" ] && [ "$ACTIVE_EDITOR_PROCESSING" = "0" ] && [ "$ACTIVE_FINAL_BUILD" = "0" ]; then break; fi
   if [ "$UPLOAD_DRAIN_WAITED" -ge "$UPLOAD_DRAIN_LIMIT" ]; then
-    fail "timed out waiting for the active laptop upload queue to drain"
+    fail "timed out waiting for active upload or video processing to finish"
   fi
-  echo "laptop upload or oversized-source preparation is active — deferring container restart (${UPLOAD_DRAIN_WAITED}s elapsed)"
+  echo "upload, Editor processing, or final-video build is active — deferring container restart (${UPLOAD_DRAIN_WAITED}s elapsed)"
   sleep 15
   UPLOAD_DRAIN_WAITED=$((UPLOAD_DRAIN_WAITED + 15))
 done

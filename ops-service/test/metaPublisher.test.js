@@ -2,6 +2,9 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const metaPublisher = require('../src/metaPublisher');
 
 function response(payload) { return { ok: true, status: 200, json: async function () { return payload; } }; }
@@ -36,6 +39,40 @@ test('Meta publisher lets Facebook fetch an archived video without a large multi
   assert.equal(call.options.body.get('file_url'), 'https://r2.example/final.mp4?signature=valid');
   assert.equal(call.options.body.get('description'), 'Facebook caption');
   assert.equal(result.id, 'fb-video-2');
+});
+
+test('Meta publisher sends a large Facebook video in the ranges Meta requests', async function () {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'meta-chunks-'));
+  const file = path.join(dir, 'final.mp4');
+  fs.writeFileSync(file, 'abcdefgh');
+  const phases = [];
+  const service = metaPublisher.setup({ fetchImpl: async function (url, options) {
+    assert.equal(url, metaPublisher.GRAPH_VIDEO_URL + '/page-1/videos');
+    const body = options.body;
+    const phase = body.get('upload_phase');
+    phases.push(phase);
+    assert.equal(body.get('access_token'), 'page-token');
+    if (phase === 'start') {
+      assert.equal(body.get('file_size'), '8');
+      return response({ upload_session_id: 'session-1', video_id: 'video-1', start_offset: '0', end_offset: '4' });
+    }
+    if (phase === 'transfer') {
+      const offset = Number(body.get('start_offset'));
+      assert.equal(await body.get('video_file_chunk').text(), offset ? 'efgh' : 'abcd');
+      return response({ start_offset: String(offset + 4), end_offset: String(Math.min(8, offset + 8)) });
+    }
+    assert.equal(body.get('title'), 'Chosen title');
+    assert.equal(body.get('description'), 'Facebook caption');
+    return response({ success: true });
+  } });
+  try {
+    const result = await service.publishFacebookVideoResumable({
+      pageId: 'page-1', pageToken: 'page-token', videoPath: file,
+      title: 'Chosen title', description: 'Facebook caption'
+    });
+    assert.deepEqual(phases, ['start', 'transfer', 'transfer', 'finish']);
+    assert.equal(result.url, 'https://www.facebook.com/watch/?v=video-1');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('Meta publisher creates, waits for, and publishes an Instagram Reel', async function () {

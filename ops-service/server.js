@@ -3274,13 +3274,26 @@ async function runPlatformPublishBatch(id, destinations, options) {
         const auth = stmts.getMetaAuth.get();
         if (!auth || !auth.page_access_token || !auth.page_id) throw new Error('Facebook + Instagram is not connected to a publishing Page.');
         if (platform === 'facebook') {
-          const directUrl = metaPublisher.mediaUrl(id, auth.app_secret, 60 * 60 * 1000);
+          const current = getPieceRecord(id);
+          const localSize = fs.existsSync(finalPath) ? fs.statSync(finalPath).size : 0;
+          const mediaSize = Number(current && current.storageSizeBytes) || localSize;
           let result;
-          result = await metaPublisher.publishFacebookVideo({
-            pageId: auth.page_id, pageToken: auth.page_access_token,
-            videoUrl: directUrl, mimeType: mimeType,
-            title: destination.title || 'Untitled', description: destination.caption || ''
-          });
+          if (mediaSize > 1024 * 1024 * 1024) {
+            const media = await localPublishMedia(id);
+            try {
+              result = await metaPublisher.publishFacebookVideoResumable({
+                pageId: auth.page_id, pageToken: auth.page_access_token,
+                videoPath: media.path, title: destination.title || 'Untitled',
+                description: destination.caption || ''
+              });
+            } finally { media.cleanup(); }
+          } else {
+            result = await metaPublisher.publishFacebookVideo({
+              pageId: auth.page_id, pageToken: auth.page_access_token,
+              videoUrl: metaPublisher.mediaUrl(id, auth.app_secret, 60 * 60 * 1000), mimeType: mimeType,
+              title: destination.title || 'Untitled', description: destination.caption || ''
+            });
+          }
           updatePieceFields(id, {
             facebookPublishStatus: 'done', facebookPublishError: '', facebookVideoId: result.id, facebookUrl: result.url
           });
