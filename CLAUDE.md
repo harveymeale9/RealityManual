@@ -19830,4 +19830,8 @@ check still prevents deleting a card that moved to Scheduled on another
 device. This does not claim to cancel a post already submitted to Buffer;
 such a card must be handled in Scheduled/Buffer. Other-stage right-click
 delete keeps its prior behavior, with the orphaned 720p review copy now cleaned
-up too. App, Store, and style cache keys were advanced.
+up too. App, Store, and style cache keys were advanced. The full ops-service
+suite passes with 267 tests. After deployment, a synthetic queue card with no
+publish destinations was created and deleted through the actual right-click
+menu; its read endpoint returned 404 afterward and all four real queued videos
+remained untouched.
