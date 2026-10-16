@@ -124,12 +124,22 @@
     var shorts = shortformSlots(now, pieces, options.postingSchedule, count);
     var longform = coverageFor('longform', pieces, now, longformSlots(now, pieces, options.longformTime, count), false);
     var shortform = coverageFor('shortform', pieces, now, shorts.slots, shorts.estimated);
+    // Past slots are omitted from the refill calculation, but a post that
+    // actually went live today should remain visible on the 15-day map.
+    var published = pieces.filter(function (piece) { return piece && piece.stage === 'live'; })
+      .map(function (piece) { return { piece: piece, at: timestamp(piece.postedAt) }; })
+      .filter(function (item) { return item.at !== null && item.at <= now; });
     var firstDay = localMidnight(now);
     var days = [];
     for (var day = 0; day < 15; day++) {
       var at = firstDay + day * DAY_MS;
       var key = localDayKey(at);
+      var publishedToday = published.filter(function (item) { return localDayKey(item.at) === key; });
       days.push({ at: at, today: day === 0,
+        publishedLongform: publishedToday.filter(function (item) { return item.piece.contentType === 'longform'; })
+          .map(function (item) { return { at: item.at, state: 'published' }; }),
+        publishedShortform: publishedToday.filter(function (item) { return isShort(item.piece); })
+          .map(function (item) { return { at: item.at, state: 'published' }; }),
         longform: longform.allSlots.filter(function (slot) { return localDayKey(slot.at) === key; }),
         shortform: shortform.allSlots.filter(function (slot) { return localDayKey(slot.at) === key; }) });
     }

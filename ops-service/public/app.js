@@ -3034,7 +3034,8 @@
     function slotMarkers(slots, label) {
       if (!slots.length) return '<span class="queue-map-no-slot" aria-label="No ' + label + ' slot">—</span>';
       return slots.map(function (slot) {
-        var stateLabel = slot.state === 'open' ? 'Needs a video' : slot.state === 'scheduled' ? 'Scheduled' : 'Ready in queue';
+        var stateLabel = slot.state === 'open' ? 'Needs a video' : slot.state === 'scheduled' ? 'Scheduled' :
+          slot.state === 'published' ? 'Published' : 'Ready in queue';
         var detail = label + ' · ' + timeLabel(slot.at) + ' · ' + stateLabel;
         return '<span class="queue-map-slot queue-map-slot--' + slot.state + '" title="' + escapeHtml(detail) +
           '" aria-label="' + escapeHtml(detail) + '">' + (slot.state === 'open' ? '!' : '✓') + '</span>';
@@ -3045,15 +3046,15 @@
       return '<div class="queue-map-day' + (day.today ? ' queue-map-day--today' : '') + '" aria-label="' + escapeHtml(date) + '">' +
         '<div class="queue-map-date"><span>' + escapeHtml(date.split(' ')[0]) + '</span><strong>' + escapeHtml(date.replace(/^\w+ /, '')) + '</strong></div>' +
         '<div class="queue-map-path"><span class="queue-map-node"></span></div>' +
-        '<div class="queue-map-lane"><small>LONG</small><span>' + slotMarkers(day.longform, 'Long-form') + '</span></div>' +
-        '<div class="queue-map-lane"><small>SHORT</small><span>' + slotMarkers(day.shortform, 'Short-form') + '</span></div>' +
+        '<div class="queue-map-lane"><small>LONG</small><span>' + slotMarkers(day.publishedLongform.concat(day.longform), 'Long-form') + '</span></div>' +
+        '<div class="queue-map-lane"><small>SHORT</small><span>' + slotMarkers(day.publishedShortform.concat(day.shortform), 'Short-form') + '</span></div>' +
       '</div>';
     }).join('');
     queueCoverage.innerHTML = '<div class="queue-coverage-summary-row">' +
       summary('Long-form', runway.longform, 'Every 3 days') +
       summary('Short-form', runway.shortform, 'Buffer cadence') + '</div>' +
       '<div class="queue-map-head"><div><strong>Next 15 days</strong><span>Today → forward · Bangkok time</span><span class="queue-map-swipe">Swipe timeline →</span></div>' +
-        '<div class="queue-map-key"><span class="queue-map-key-ready">✓ Ready</span><span class="queue-map-key-scheduled">✓ Scheduled</span><span class="queue-map-key-open">! Needs video</span><span>— No slot</span></div></div>' +
+        '<div class="queue-map-key"><span class="queue-map-key-published">✓ Published</span><span class="queue-map-key-ready">✓ Ready</span><span class="queue-map-key-scheduled">✓ Scheduled</span><span class="queue-map-key-open">! Needs video</span><span>— No slot</span></div></div>' +
       '<div class="queue-map-scroll" aria-label="15-day publishing map"><div class="queue-map-days">' + days + '</div></div>' +
       (runway.shortform.estimated ? '<div class="queue-coverage-note">Short-form dates are daily estimates from the last actual post while Buffer’s schedule is unavailable.</div>' : '');
   }

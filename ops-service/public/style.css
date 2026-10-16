@@ -1819,6 +1819,7 @@ body.role-reviewer #pmBackFab {
 .queue-map-swipe { display: none; }
 .queue-map-key { display: flex; flex-wrap: wrap; gap: 11px; }
 .queue-map-key .queue-map-key-ready { color: var(--accent); }
+.queue-map-key .queue-map-key-published { color: #ff716c; }
 .queue-map-key .queue-map-key-scheduled { color: #62a8ff; }
 .queue-map-key .queue-map-key-open { color: #ffb45a; }
 .queue-map-scroll { overflow-x: auto; max-width: 100%; border: 1px solid var(--border); border-radius: 10px; background: rgba(7, 18, 14, .9); scrollbar-color: var(--accent-soft) transparent; }
@@ -1840,6 +1841,7 @@ body.role-reviewer #pmBackFab {
 .queue-map-lane > span { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px; }
 .queue-map-slot { display: inline-grid; place-items: center; width: 19px; height: 19px; border-radius: 5px; font-size: .65rem; font-weight: 800; }
 .queue-map-slot--queued { color: #07180f; background: var(--accent); }
+.queue-map-slot--published { color: #270806; background: #ff716c; }
 .queue-map-slot--scheduled { color: #091728; background: #62a8ff; }
 .queue-map-slot--open { color: #231303; background: #ffb45a; }
 .queue-map-no-slot { color: var(--ink-faint); font-size: .8rem; }

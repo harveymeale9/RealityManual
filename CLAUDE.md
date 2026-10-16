@@ -19851,3 +19851,20 @@ for long card lists. This is scoped to Content Pipeline rather than changing
 the editor or other dashboard tabs. Chromium checks at 1366px wide and
 600/720/900px tall confirmed that scrolling the main panel brings the board
 into view at each height. App/style cache keys were advanced.
+
+---
+
+# 641. Published Posts Visible on Today's Publishing Map (2026-10-16)
+
+Harvey noticed that the 15-day map showed a dash for today's short-form lane
+even though a short had already gone live. The map was intentionally generated
+only from future refill slots, but that made today's completed work disappear.
+Each day now also shows a coral **Published** check for every Live piece whose
+actual `postedAt` falls on that Bangkok calendar day. These markers are display
+history only: they do not consume queued inventory, alter upcoming slot colors,
+or change the refill deadline. A distinct legend entry separates Published
+from green Ready and blue Scheduled. The existing live record for *The
+Propagation of Success* has `postedAt` 2026-10-15 18:56 UTC (October 16 in
+Bangkok), and the updated calculation correctly places one published marker
+in today's short-form lane. Unit coverage guards both the marker and unchanged
+future-slot accounting; app, style, and coverage-module cache keys were bumped.

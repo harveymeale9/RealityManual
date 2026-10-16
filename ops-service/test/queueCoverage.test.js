@@ -78,3 +78,20 @@ test('15-day map starts today in Bangkok and marks every slot separately', funct
   assert.equal(result.days[0].today, true);
   assert.equal(result.days[1].today, false);
 });
+
+test('today shows posts already published without using them to cover future slots', function () {
+  const now = Date.parse('2026-10-15T23:00:00Z'); // 06:00 Friday in Bangkok
+  const pieces = [
+    { id: 'live-short', contentType: 'short', stage: 'live', postedAt: '2026-10-15T18:56:47Z', scheduledAt: '2026-10-15T18:55:00Z' },
+    { id: 'yesterday', contentType: 'longform', stage: 'live', postedAt: '2026-10-15T10:00:00Z' },
+    ready('next-short', 'short')
+  ];
+  const noonSchedule = DAILY.map(function (day) { return Object.assign({}, day, { times: ['12:00'] }); });
+  const result = coverage.calculate({ pieces: pieces, now: now, postingSchedule: noonSchedule });
+  assert.deepEqual(result.days[0].publishedShortform.map(function (slot) { return slot.state; }), ['published']);
+  assert.equal(result.days[0].publishedShortform[0].at, Date.parse(pieces[0].postedAt));
+  assert.deepEqual(result.days[0].publishedLongform, []);
+  assert.equal(result.days[0].shortform[0].state, 'queued');
+  assert.equal(result.shortform.readyCount, 1);
+  assert.equal(result.shortform.coveredSlots, 1);
+});
