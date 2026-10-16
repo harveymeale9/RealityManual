@@ -2225,14 +2225,25 @@
           caption.appendChild(span);
         });
       } else if (group && Array.isArray(group.words)) {
-        var spokenWord = group.words.filter(function (word, index) {
+        var spokenIndex = group.words.findIndex(function (word, index) {
           var wordEnd = index + 1 < group.words.length ? group.words[index + 1].sourceStart : group.sourceEnd;
           return video.currentTime >= word.sourceStart && video.currentTime < wordEnd;
-        })[0];
-        caption.textContent = spokenWord ? window.RealityCaptionMask.maskCaption(spokenWord.text) : '';
-        if (spokenWord) {
-          var characters = Array.from(String(spokenWord.text || '')).length;
-          caption.style.fontSize = (Math.max(3, Math.min(8, 8 * 15 / Math.max(15, characters)))).toFixed(2) + 'cqw';
+        });
+        if (spokenIndex !== -1) {
+          // Match the rendered vertical caption's three-word windows: keep
+          // the whole window visible while emphasis follows the spoken word.
+          var windowStart = Math.floor(spokenIndex / 3) * 3;
+          var windowWords = group.words.slice(windowStart, windowStart + 3);
+          var characters = Array.from(windowWords.map(function (word) { return word.text; }).join(' ')).length;
+          var fit = Math.max(0.36, Math.min(1, 18 / Math.max(18, characters)));
+          caption.style.fontSize = (8 * fit).toFixed(2) + 'cqw';
+          windowWords.forEach(function (word, index) {
+            if (index) caption.appendChild(document.createTextNode(' '));
+            var span = document.createElement('span');
+            span.textContent = window.RealityCaptionMask.maskCaption(word.text);
+            span.className = windowStart + index === spokenIndex ? 'active' : '';
+            caption.appendChild(span);
+          });
         }
       } else if (group) caption.textContent = window.RealityCaptionMask.maskCaption(group.text);
       caption.classList.toggle('visible', !!group && project.captionsEnabled !== false);

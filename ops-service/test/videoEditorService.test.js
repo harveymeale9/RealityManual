@@ -543,8 +543,8 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /Adjusted automatic timeline cut/);
   assert.match(source, /Cut edge moved/);
   assert.match(page, /lib\/captionMask\.js\?v=20261015-mask-swears/);
-  assert.match(page, /editor\.js\?v=20261016-sticky-cut-v152/);
-  assert.match(page, /style\.css\?v=20261016-sticky-cut-v158/);
+  assert.match(page, /editor\.js\?v=20261016-vertical-preview-v153/);
+  assert.match(page, /style\.css\?v=20261016-vertical-preview-v159/);
   assert.match(source, /class="editor-sticky-cut"><button type="button" class="btn-primary btn-tiny" id="editorCut" disabled>Cut selected/);
   assert.match(source, /root\.querySelector\('#editorCut'\)\.onclick = function \(\) \{ alterSelected\(true\); \}/);
   assert.match(styles, /\.editor-sticky-cut\{position:sticky;top:0/);
@@ -975,6 +975,16 @@ test('vertical captions show three-word windows with spoken-word emphasis', func
   ] }]);
   assert.match(fitted, /\{\\fs59\\bord4\}extraordinary/);
   assert.match(fitted, /\{\\fs53\\bord3\}captions/);
+});
+
+test('Editor source preview keeps vertical three-word windows rather than one spoken word', function () {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'editor.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'public', 'style.css'), 'utf8');
+  assert.match(source, /Math\.floor\(spokenIndex \/ 3\) \* 3/);
+  assert.match(source, /group\.words\.slice\(windowStart, windowStart \+ 3\)/);
+  assert.match(source, /windowStart \+ index === spokenIndex \? 'active' : ''/);
+  assert.match(source, /RealityCaptionMask\.maskCaption\(word\.text\)/);
+  assert.match(styles, /\.editor-caption\.shortform\{white-space:normal\}/);
 });
 
 test('batch preprocessing serializes expensive transcription', { timeout: 15000 }, async function (t) {

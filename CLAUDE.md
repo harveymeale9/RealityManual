@@ -19883,3 +19883,19 @@ row stays visible while the transcript section is scrolled, then leaves with
 that section rather than floating over the rest of the Editor. Chromium
 checks at laptop and phone widths confirmed it stays at the viewport top while
 scrolling long transcripts. Editor and style cache keys were advanced.
+
+---
+
+# 643. Vertical Editor Preview Uses Multi-Word Captions (2026-10-16)
+
+Harvey spotted a one-word yellow caption in a vertical Editor preview even
+though vertical exports had used three-word emphasis windows since §563. The
+source/working preview overlay in `public/editor.js` had its own older branch
+that replaced the whole caption with only the currently spoken word; the ASS
+render path was already correct. The overlay now keeps the same three-word
+window visible while emphasis advances by word, masks swearing as before, and
+fits longer windows to the portrait frame. Portrait preview captions may wrap
+within their safe width instead of overflowing. This changes the live Editor
+preview, not finished exported files or the user's edit decisions. Focused
+tests guard the preview grouping and existing ASS three-word output; Editor
+and style asset cache keys were advanced.
