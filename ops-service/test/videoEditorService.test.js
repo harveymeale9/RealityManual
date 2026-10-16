@@ -543,8 +543,11 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /Adjusted automatic timeline cut/);
   assert.match(source, /Cut edge moved/);
   assert.match(page, /lib\/captionMask\.js\?v=20261015-mask-swears/);
-  assert.match(page, /editor\.js\?v=20261015-mask-swears-v151/);
-  assert.match(page, /style\.css\?v=20261016-published-map-v157/);
+  assert.match(page, /editor\.js\?v=20261016-sticky-cut-v152/);
+  assert.match(page, /style\.css\?v=20261016-sticky-cut-v158/);
+  assert.match(source, /class="editor-sticky-cut"><button type="button" class="btn-primary btn-tiny" id="editorCut" disabled>Cut selected/);
+  assert.match(source, /root\.querySelector\('#editorCut'\)\.onclick = function \(\) \{ alterSelected\(true\); \}/);
+  assert.match(styles, /\.editor-sticky-cut\{position:sticky;top:0/);
   assert.match(styles, /\.editor-manual-cut-handle/);
   assert.match(styles, /\.editor-caption\.longform\{font-size:2\.05cqw;text-shadow:-1px -1px 0 #111,1px -1px 0 #111/);
   assert.match(source, /Raw original · no edits\/captions/);

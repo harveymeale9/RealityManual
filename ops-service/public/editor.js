@@ -1323,7 +1323,8 @@
       '<section class="editor-transcript-panel"><div class="editor-transcript-head"><div><div class="eyebrow">Transcript editor</div><h3>Select words to cut footage</h3></div>' +
         '<div class="editor-transcript-actions"><button class="btn-secondary btn-tiny" id="editorUndo" ' + (!project.canUndoCut ? 'disabled' : '') + '>Undo last decision</button><button class="btn-secondary btn-tiny" id="editorPlaySelection" disabled>Play selected</button>' +
         '<button class="btn-secondary btn-tiny editor-insert-clip" id="editorInsertClip" disabled>Insert clip here</button>' +
-        '<button class="btn-secondary btn-tiny" id="editorCorrect" disabled>Correct word</button><button class="btn-secondary btn-tiny" id="editorRestore" disabled>Restore selected</button><button class="btn-primary btn-tiny" id="editorCut" disabled>Cut selected</button></div></div>' +
+        '<button class="btn-secondary btn-tiny" id="editorCorrect" disabled>Correct word</button><button class="btn-secondary btn-tiny" id="editorRestore" disabled>Restore selected</button></div></div>' +
+        '<div class="editor-sticky-cut"><button type="button" class="btn-primary btn-tiny" id="editorCut" disabled>Cut selected</button></div>' +
         '<div class="editor-transcript-review-note ' + esc(project.retakeAnalysisStatus || 'unavailable') + '"><span>' +
           (['pending', 'running', 'pending_transcript'].indexOf(project.retakeAnalysisStatus) !== -1 ? 'Scanning for likely mistakes and retakes…' :
             project.retakeAnalysisStatus === 'error' ? 'The highlight scan was unavailable. You can still edit the full transcript normally.' :

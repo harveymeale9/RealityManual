@@ -19868,3 +19868,18 @@ Propagation of Success* has `postedAt` 2026-10-15 18:56 UTC (October 16 in
 Bangkok), and the updated calculation correctly places one published marker
 in today's short-form lane. Unit coverage guards both the marker and unchanged
 future-slot accounting; app, style, and coverage-module cache keys were bumped.
+
+---
+
+# 642. Sticky Transcript Cut Action in Editor (2026-10-16)
+
+Harvey was selecting words deep in a long recording transcript and had to
+scroll back to its heading to press **Cut selected**. The existing button was
+moved from the heading's action cluster into a compact sticky row at the top
+of the transcript section. It is the same `editorCut` control, so the existing
+selection-enabled/locked state and `alterSelected(true)` handler remain the
+single cut path; no duplicate cut state or rebuild is introduced. The sticky
+row stays visible while the transcript section is scrolled, then leaves with
+that section rather than floating over the rest of the Editor. Chromium
+checks at laptop and phone widths confirmed it stays at the viewport top while
+scrolling long transcripts. Editor and style cache keys were advanced.
