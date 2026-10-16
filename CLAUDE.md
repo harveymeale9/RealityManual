@@ -19959,3 +19959,20 @@ keys, suppression without restoring the cut, and the PATCH path. A headless
 browser check right-clicked a real timeline marker with PATCH intercepted;
 the menu appeared and sent only the suppression key, not any footage cuts.
 Editor/style cache keys were advanced.
+
+---
+
+# 647. Active Editor Openings Audited and Long-Form Lead Corrected (2026-10-16)
+
+Harvey asked for every recording still active in Editor to begin just before
+its first retained spoken word, preserving all existing decisions. Four
+unapproved Editor projects were audited using their actual merged cut and
+retained-segment calculations. Three already started 80 ms before their first
+kept word and were left untouched. *What the manifestation gurus forgot to
+tell you* still retained 0–0.329 s because its manually adjusted opening cut
+started at 0.329 s even though speech began at 1.74 s. Through the Editor
+PATCH API with an edit-revision precondition, that cut alone was extended
+from 0.329–1.66 s to 0–1.66 s. Its other decisions, including 346 transcript
+word cuts, remained unchanged. The first kept frame is now 1.66 s, 80 ms
+before the first kept word. A normal Editor preview rebuild was requested.
+Already-approved/sent projects were not modified.
