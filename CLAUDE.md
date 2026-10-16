@@ -19835,3 +19835,19 @@ suite passes with 267 tests. After deployment, a synthetic queue card with no
 publish destinations was created and deleted through the actual right-click
 menu; its read endpoint returned 404 afterward and all four real queued videos
 remained untouched.
+
+---
+
+# 640. Pipeline Runway No Longer Hides Kanban on Short Laptops (2026-10-16)
+
+After the 15-day publishing map was added, its fixed vertical space could
+consume nearly all of the pipeline's viewport-height flex layout. The board
+wrapper was the shrinking flex child, and its vertical overflow was hidden,
+so the columns could collapse below the timeline with no parent scroll path.
+The Content Pipeline now gives its main panel a vertical scrollbar, lets the
+pipeline grow taller than that panel, and reserves a usable responsive height
+for the horizontally scrolling board. Column bodies retain their own scroll
+for long card lists. This is scoped to Content Pipeline rather than changing
+the editor or other dashboard tabs. Chromium checks at 1366px wide and
+600/720/900px tall confirmed that scrolling the main panel brings the board
+into view at each height. App/style cache keys were advanced.

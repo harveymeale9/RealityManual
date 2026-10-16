@@ -402,6 +402,7 @@ body.role-reviewer #pmBackFab {
 
 .panel-main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .panel-main--ideation { overflow-y: auto; overscroll-behavior: contain; }
+.panel-main--pipeline { overflow-y: auto; overscroll-behavior: contain; }
 .panel-main--website-analytics,
 .panel-main--sales-analytics { overflow-y: auto; overscroll-behavior: contain; }
 .panel-main--manuscript { overflow: hidden; }
@@ -942,6 +943,11 @@ body.role-reviewer #pmBackFab {
    reference point, rather than guessing which individual paddings/font
    sizes to hand-tune. */
 .ops-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 18px clamp(16px, 3vw, 36px) 0; zoom: 0.75; }
+/* The publishing runway can be taller than a laptop's spare viewport. Let the
+   entire pipeline scroll, and reserve a usable board height instead of letting
+   the flex remainder collapse to zero below the timeline. */
+.ops-panel--pipeline { flex: 0 0 auto; min-height: 100%; }
+.ops-panel--pipeline .board-wrap { flex: 0 0 auto; height: clamp(480px, calc(100dvh - 200px), 900px); }
 /* 0.75 was tuned for a laptop-width viewport; on a genuinely large desktop
    monitor the same shrink made cards too small to read (Harvey) despite
    solving the original "can't see enough" complaint there — scale back up

@@ -544,7 +544,7 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /Cut edge moved/);
   assert.match(page, /lib\/captionMask\.js\?v=20261015-mask-swears/);
   assert.match(page, /editor\.js\?v=20261015-mask-swears-v151/);
-  assert.match(page, /style\.css\?v=20261016-queue-preview-v155/);
+  assert.match(page, /style\.css\?v=20261016-pipeline-scroll-v156/);
   assert.match(styles, /\.editor-manual-cut-handle/);
   assert.match(styles, /\.editor-caption\.longform\{font-size:2\.05cqw;text-shadow:-1px -1px 0 #111,1px -1px 0 #111/);
   assert.match(source, /Raw original · no edits\/captions/);

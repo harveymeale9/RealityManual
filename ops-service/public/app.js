@@ -593,6 +593,7 @@
     panelMain.classList.toggle('panel-main--website-analytics', active === 'website-analytics');
     panelMain.classList.toggle('panel-main--sales-analytics', active === 'sales-analytics');
     panelMain.classList.toggle('panel-main--content-analytics', active === 'content-analytics');
+    panelMain.classList.toggle('panel-main--pipeline', active === 'content-ops');
     if (active !== 'sales-analytics') { clearTimeout(salesAnalyticsTimer); salesAnalyticsTimer = null; }
     if (active !== 'content-analytics') { clearTimeout(contentAnalyticsTimer); contentAnalyticsTimer = null; }
     if (active !== 'project-manager' && pmSync) { pmSync.stop(); pmSync = null; }
