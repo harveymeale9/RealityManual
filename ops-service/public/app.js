@@ -3195,6 +3195,22 @@
     // after noticing a normal (non-Final-Check) kanban card gave no
     // visual hint at all of which video it actually was.
     var thumbHtml = piece.thumbnailDataUrl ? '<div class="card-thumb"><img src="' + piece.thumbnailDataUrl + '" alt="" /></div>' : '';
+    if (piece.stage === 'publishing_queue' && piece.hasVideo) {
+      // Reuse Final Check's 720p review player and its existing playback
+      // binding. Never attach the multi-gigabyte publish master to the board.
+      thumbHtml = '<div class="fc-video-wrap queue-video-wrap' + (piece.videoIsVertical ? ' is-vertical' : '') + '">' +
+        '<video class="fc-video" data-id="' + id + '" playsinline preload="metadata"' +
+          (piece.thumbnailDataUrl ? ' poster="' + piece.thumbnailDataUrl + '"' : '') + '></video>' +
+        '<div class="fc-video-overlay"><span class="fc-play-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 6l10 6-10 6V6Z"/></svg></span></div>' +
+        '</div>' +
+        '<div class="fc-player-controls queue-player-controls">' +
+          '<button type="button" class="fc-play-toggle" aria-label="Play video">Play</button>' +
+          '<input class="fc-seek" type="range" min="0" max="1000" value="0" disabled aria-label="Seek through video" />' +
+          '<span class="fc-video-time">0:00 / 0:00</span>' +
+          '<span class="fc-review-status" aria-live="polite">Preparing 720p review…</span>' +
+          '<button type="button" class="fc-review-retry" hidden>Retry review copy</button>' +
+        '</div>';
+    }
     // Replaces the old "Thumbnail Selected" stage column — same auto-set
     // tags rendered as small chips wherever a video piece's card shows up
     // (this board and the upload list), see syncTags.
@@ -3593,7 +3609,7 @@
   function bindBoardEvents() {
     board.querySelectorAll('.card').forEach(function (el) {
       el.addEventListener('click', function (e) {
-        if (e.target.closest('.card-move, .card-external-link')) return;
+        if (e.target.closest('.card-move, .card-external-link, .queue-video-wrap, .queue-player-controls')) return;
         var piece = pieces[el.dataset.id];
         if (piece && piece.stage === 'in_editor' && piece.editorProjectId) {
           localStorage.setItem('rmEditorListFilter', 'active');
@@ -3938,7 +3954,7 @@
       var delBtn = document.createElement('button');
       delBtn.type = 'button';
       delBtn.className = 'kanban-ctx-item kanban-ctx-delete';
-      delBtn.textContent = 'Delete';
+      delBtn.textContent = pieces[id] && pieces[id].stage === 'publishing_queue' ? 'Delete queued video' : 'Delete';
       delBtn.addEventListener('click', function (e) { e.stopPropagation(); renderConfirm(); });
       menu.appendChild(delBtn);
     }
@@ -3946,14 +3962,18 @@
       menu.innerHTML = '';
       var label = document.createElement('div');
       label.className = 'kanban-ctx-label';
-      label.textContent = 'Delete this piece?';
+      var queuedVideo = pieces[id] && pieces[id].stage === 'publishing_queue';
+      label.textContent = queuedVideo ? 'Delete this video from the queue? It will not be scheduled.' : 'Delete this piece?';
       var confirmBtn = document.createElement('button');
       confirmBtn.type = 'button';
       confirmBtn.className = 'kanban-ctx-item kanban-ctx-confirm';
-      confirmBtn.textContent = 'Confirm delete';
+      confirmBtn.textContent = queuedVideo ? 'Delete queued video' : 'Confirm delete';
       confirmBtn.addEventListener('click', function (e) {
         e.stopPropagation();
         var p = pieces[id];
+        if (!p) { closeKanbanCtxMenu(); return; }
+        confirmBtn.disabled = true;
+        label.textContent = 'Deleting…';
         if (p && p.stage === 'in_editor' && p.editorProjectId) {
           fetch('/api/editor/' + encodeURIComponent(p.editorProjectId), {
             method: 'DELETE', credentials: 'include'
@@ -3962,15 +3982,21 @@
             delete pieces[id];
             closeKanbanCtxMenu();
             render();
-          }).catch(function () { closeKanbanCtxMenu(); });
+          }).catch(function (error) { label.textContent = error.message || 'Could not delete the recording.'; });
           return;
         }
         Store.del('pieces', id, p).then(function () {
           delete pieces[id];
-          if (p && p.hasVideo) { Store.del('videos', id); Store.del('videos', id + '-final'); }
+          // The server cleans queue media and R2 after removing the queue
+          // record. Other stages retain the existing file cleanup path.
+          if (p.hasVideo && p.stage !== 'publishing_queue') {
+            Store.del('videos', id);
+            Store.del('videos', id + '-final');
+            Store.del('videos', id + '-final-review');
+          }
           closeKanbanCtxMenu();
           render();
-        }).catch(function () { closeKanbanCtxMenu(); });
+        }).catch(function (error) { label.textContent = error.message || 'Could not delete this video.'; });
       });
       var cancelBtn = document.createElement('button');
       cancelBtn.type = 'button';

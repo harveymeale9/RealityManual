@@ -1120,6 +1120,14 @@ body.role-reviewer #pmBackFab {
 .fc-video-time { flex: none; color: var(--ink-soft); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
 .fc-review-status { color: var(--ink-soft); font-size: 0.72rem; }
 .fc-review-retry { border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--ink); padding: 5px 8px; cursor: pointer; }
+.queue-video-wrap .fc-video { aspect-ratio: 16 / 9; object-fit: contain; }
+.queue-video-wrap.is-vertical .fc-video { aspect-ratio: 9 / 16; max-height: 340px; }
+.queue-video-wrap .fc-play-icon { width: 46px; height: 46px; }
+.queue-video-wrap .fc-play-icon svg { width: 22px; height: 22px; }
+.queue-player-controls { gap: 5px; }
+.queue-player-controls .fc-play-toggle { padding: 4px 7px; font-size: .7rem; }
+.queue-player-controls .fc-video-time { font-size: .66rem; }
+.queue-player-controls .fc-review-status { font-size: .65rem; }
 .fc-caption-section { display: flex; flex-direction: column; gap: 6px; }
 .fc-caption {
   font-size: 0.85rem; color: var(--ink-soft); white-space: pre-wrap;

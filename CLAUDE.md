@@ -19802,3 +19802,32 @@ regress a card already confirmed sent. Tests cover both finish orders and
 the stale-snapshot merge. The existing fifteen-minute Buffer polling interval
 is unchanged to preserve the API allowance for publishing; an actual post may
 still briefly remain Scheduled until Buffer's next confirmation.
+
+---
+
+# 639. Publishing Queue Preview and Safe Right-Click Delete (2026-10-16)
+
+Harvey wanted to play approved videos while they still sit in Publishing
+Queue, then be able to change his mind and delete one without it later being
+scheduled. The ordinary queue card now embeds the same 720p review player
+used in Final Check (including play/pause, seek, status, and retry), rather
+than only a static thumbnail. Player clicks are excluded from the generic
+card click-to-open-modal handler. The player loads the lightweight
+`-final-review` asset, never the 4K publish master. A real Chromium check
+confirmed playback started from that URL without opening the editor modal.
+
+The existing right-click Delete menu now says **Delete queued video** for
+those cards, with an explicit confirmation that it will not be scheduled.
+The server removes the queue record before requesting another drain, so an
+unclaimed deleted card is absent from future selection. It also removes that
+card's raw/final/review files and metadata and best-effort deletes its exact
+R2 object. The browser no longer relies on follow-up file-delete calls for
+queue cards. If the scheduler has already claimed the card, the delete API
+returns 423 instead of pretending it cancelled an external operation; both
+the in-memory claim and a persisted pending/running claim are checked. The
+menu displays the failure instead of silently closing. A 409 stale-version
+check still prevents deleting a card that moved to Scheduled on another
+device. This does not claim to cancel a post already submitted to Buffer;
+such a card must be handled in Scheduled/Buffer. Other-stage right-click
+delete keeps its prior behavior, with the orphaned 720p review copy now cleaned
+up too. App, Store, and style cache keys were advanced.

@@ -23,7 +23,7 @@ test('Production makes soundtrack preparation visible and orders Editor before C
   assert.match(styles, /\.upload-row-preview-timeline/);
   assert.ok(app.indexOf("{ id: 'editor', label: 'Editor' }") < app.indexOf("{ id: 'upload-files', label: 'Content Production' }"));
   assert.ok(page.indexOf('data-tab="editor" title="Editor"') < page.indexOf('data-tab="upload-files" title="Content Production"'));
-  assert.match(page, /app\.js\?v=20261015-publishing-map-v154/);
+  assert.match(page, /app\.js\?v=20261016-queue-preview-v155/);
 });
 
 test('Production preview cache deduplicates work, persists results, and invalidates changed settings', async function (t) {

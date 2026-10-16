@@ -115,7 +115,7 @@ window.RMStore = (function () {
             conflict.code = 'stale_write';
             throw conflict;
           }
-          if (!r.ok) throw new Error(data.error || 'Could not delete.');
+          if (!r.ok) throw new Error(data.message || data.error || 'Could not delete.');
           return data;
         });
       });

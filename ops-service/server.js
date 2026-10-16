@@ -60,6 +60,10 @@ const DATA_DIR = process.env.DATA_DIR || '/data';
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 const VOICE_ATTACHMENTS_DIR = path.join(DATA_DIR, 'voice-attachments');
 const DB_PATH = path.join(DATA_DIR, 'db.sqlite');
+// Queue selection has asynchronous storage/Buffer work. A queued card may be
+// deleted only before this claim; once claimed, its external publish may
+// already be in flight and deletion must refuse rather than pretend to cancel.
+const publishingQueueClaims = new Set();
 const WORK_LOG_PATH = path.join(DATA_DIR, 'work-log.md');
 const DOWNLOADS_DIR = path.join(DATA_DIR, 'downloads');
 // Host-native Codex resolves attached-image paths against this shared data
@@ -1894,10 +1898,19 @@ app.delete('/api/store/:storeName/:id', function (req, res) {
       return res.status(403).json({ error: 'forbidden' });
     }
   }
+  let queuedPieceToDelete = null;
   if (storeName === 'pieces') {
     const existingRow = stmts.getOne.get(storeName, id);
     if (existingRow) {
       const current = recordConcurrency.decodeRow(existingRow);
+      const durableQueueClaim = current.stage === 'publishing_queue' && current.publishingQueueSelection &&
+        Array.isArray(current.queuedPublishDestinations) && current.queuedPublishDestinations.some(function (destination) {
+          return ['pending', 'running'].includes(current[publishStatusField(destination.platform)]);
+        });
+      if (current.stage === 'publishing_queue' && (publishingQueueClaims.has(id) || durableQueueClaim)) {
+        return res.status(423).json({ error: 'queue_publish_in_progress',
+          message: 'This video is already being scheduled. It was not deleted; refresh the board to see its current state.' });
+      }
       if (!recordConcurrency.matchesPieceVersion(existingRow, req.get('x-record-version'))) {
         return res.status(409).json({
           error: 'stale_write',
@@ -1905,9 +1918,23 @@ app.delete('/api/store/:storeName/:id', function (req, res) {
           latest: current
         });
       }
+      if (current.stage === 'publishing_queue') queuedPieceToDelete = current;
     }
   }
   stmts.del.run(storeName, id);
+  if (queuedPieceToDelete) {
+    // The database removal is the scheduling cancellation. Clean up this
+    // video's own media too; browser-only cleanup could be interrupted.
+    ['', FINAL_VIDEO_SUFFIX, FINAL_REVIEW_SUFFIX].forEach(function (suffix) {
+      stmts.del.run('videos', id + suffix);
+      fs.rm(path.join(UPLOADS_DIR, 'videos', id + suffix), { force: true }, function () {});
+    });
+    if (queuedPieceToDelete.storageObjectKey && r2Storage.configured) {
+      r2Storage.deleteKey(queuedPieceToDelete.storageObjectKey)
+        .catch(function (error) { console.error('Could not remove deleted queue media from R2:', error.message); });
+    }
+    schedulePublishingQueueDrain();
+  }
   if (FILE_STORES.indexOf(storeName) !== -1) {
     const filePath = path.join(UPLOADS_DIR, storeName, id);
     fs.rm(filePath, { force: true }, function () {});
@@ -3211,31 +3238,35 @@ async function drainPublishingQueue() {
   if (!selection || !selection.piece) return;
   const candidate = getPieceRecord(selection.piece.id);
   if (!candidate || candidate.stage !== 'publishing_queue' || !Array.isArray(candidate.queuedPublishDestinations) || !candidate.queuedPublishDestinations.length) return;
-
-  candidate.publishingQueueSelection = {
-    selectedAt: new Date().toISOString(),
-    score: Math.round(selection.score * 1000) / 1000,
-    topicSimilarity: Math.round(selection.strongestTopicMatch * 1000) / 1000,
-    typePenalty: Math.round(selection.typePenalty * 1000) / 1000,
-    ageRank: selection.ageRank,
-    ageForced: selection.ageForced === true,
-    queueWaitDays: Math.round(selection.queueWaitDays * 10) / 10,
-    dueAt: dueAt
-  };
-  candidate.queuedPublishDestinations.forEach(function (destination) {
-    candidate[publishStatusField(destination.platform)] = 'pending';
-    candidate[publishErrorField(destination.platform)] = '';
-  });
-  candidate.updatedAt = new Date().toISOString();
-  savePieceRecord(candidate);
-  await runPlatformPublishBatch(candidate.id, candidate.queuedPublishDestinations, { dueAt: dueAt });
-  const result = getPieceRecord(candidate.id);
-  // A platform/storage failure returns the card to Final Check. Do not burn
-  // through the rest of the queue while the same external fault persists.
-  if (!result || result.stage !== 'scheduled') return;
-  // Re-read all pieces before considering the other format so its topic choice
-  // sees the slot this pass just committed.
-  publishingQueueDrainRequested = true;
+  publishingQueueClaims.add(candidate.id);
+  try {
+    candidate.publishingQueueSelection = {
+      selectedAt: new Date().toISOString(),
+      score: Math.round(selection.score * 1000) / 1000,
+      topicSimilarity: Math.round(selection.strongestTopicMatch * 1000) / 1000,
+      typePenalty: Math.round(selection.typePenalty * 1000) / 1000,
+      ageRank: selection.ageRank,
+      ageForced: selection.ageForced === true,
+      queueWaitDays: Math.round(selection.queueWaitDays * 10) / 10,
+      dueAt: dueAt
+    };
+    candidate.queuedPublishDestinations.forEach(function (destination) {
+      candidate[publishStatusField(destination.platform)] = 'pending';
+      candidate[publishErrorField(destination.platform)] = '';
+    });
+    candidate.updatedAt = new Date().toISOString();
+    savePieceRecord(candidate);
+    await runPlatformPublishBatch(candidate.id, candidate.queuedPublishDestinations, { dueAt: dueAt });
+    const result = getPieceRecord(candidate.id);
+    // A platform/storage failure returns the card to Final Check. Do not burn
+    // through the rest of the queue while the same external fault persists.
+    if (!result || result.stage !== 'scheduled') return;
+    // Re-read all pieces before considering the other format so its topic choice
+    // sees the slot this pass just committed.
+    publishingQueueDrainRequested = true;
+  } finally {
+    publishingQueueClaims.delete(candidate.id);
+  }
 }
 
 function schedulePublishingQueueDrain() {
