@@ -931,6 +931,25 @@ test('only visually confirmed page changes fade out and back from black', functi
   assert.deepEqual(editor.pageChangeFadesForSegment({ type: 'insert', start: 0, end: 2 }, cuts, ['page']), { fadeIn: false, fadeOut: false });
 });
 
+test('merged cuts have separate page-turn identities and can suppress one without restoring footage', function () {
+  const cuts = [
+    { id: '', start: 8.94, end: 30.502, reason: 'combined' },
+    { id: '', start: 110.4, end: 146.6, reason: 'combined' }
+  ];
+  const first = editor.pageChangeCutKey(cuts[0]);
+  const second = editor.pageChangeCutKey(cuts[1]);
+  assert.notEqual(first, second);
+  assert.deepEqual(editor.confirmedPageChangeCutKeys({ pageChangeCutIds: [first] }, cuts), [first]);
+  assert.ok(Math.abs(editor.cameraResetStarts(cuts, [first])[1] - 8.94) < 0.001);
+  assert.deepEqual(editor.pageChangeFadesForSegment({ type: 'source', start: 30.502, end: 40 }, cuts, [first]), { fadeIn: true, fadeOut: false });
+  assert.deepEqual(editor.pageChangeFadesForSegment({ type: 'source', start: 146.6, end: 150 }, cuts, [first]), { fadeIn: false, fadeOut: false });
+  assert.deepEqual(editor.confirmedPageChangeCutKeys({ pageChangeCutIds: [first, second], suppressedPageChangeCutKeys: [first] }, cuts), [second]);
+  assert.deepEqual(editor.confirmedPageChangeCutKeys({ pageChangeCutIds: [''], suppressedPageChangeCutKeys: [first] }, cuts), [second]);
+  const client = fs.readFileSync(path.join(__dirname, '..', 'public', 'editor.js'), 'utf8');
+  assert.match(client, /editorPageChangeMenu/);
+  assert.match(client, /suppressedPageChangeCutKeys/);
+});
+
 test('caption groups omit deleted words and carry raw and edited timing', function () {
   const project = { words: words, removedWordIndices: [2, 3] };
   const cuts = [{ start: 1.8, end: 4.95 }];
@@ -1211,7 +1230,7 @@ test('final render blinks through black across a visually confirmed page change'
     retakeAnalysisStatus: 'unavailable', planningMatchStatus: 'unavailable', renderStatus: 'queued',
     automaticRenderStartedAt: '', createdAt: now, updatedAt: now
   }), now);
-  editor.setup({ db: db, dataDir: dir, transcribeDetailed: async function () { return { text: '', words: [] }; } });
+  const service = editor.setup({ db: db, dataDir: dir, transcribeDetailed: async function () { return { text: '', words: [] }; } });
   let stored;
   for (let attempt = 0; attempt < 1200; attempt++) {
     stored = JSON.parse(db.prepare('SELECT data FROM records WHERE store_name=? AND id=?').get('editorProjects', 'page-blink-1').data);
@@ -1232,6 +1251,17 @@ test('final render blinks through black across a visually confirmed page change'
   const bluePage = frameBrightness(1.15);
   assert.ok(fadeOut < whitePage * 0.35, JSON.stringify({ whitePage: whitePage, fadeOut: fadeOut }));
   assert.ok(fadeIn < bluePage * 0.45, JSON.stringify({ bluePage: bluePage, fadeIn: fadeIn }));
+  const app = express(); app.use(express.json()); app.use('/api/editor', service.router);
+  const server = app.listen(0); t.after(function () { server.close(); });
+  const base = 'http://127.0.0.1:' + server.address().port;
+  const response = await fetch(base + '/api/editor/page-blink-1', { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ suppressedPageChangeCutKeys: ['gap-0'], expectedEditRevision: stored.editRevision || 0 }) });
+  assert.equal(response.status, 200);
+  const suppressed = await response.json();
+  assert.deepEqual(suppressed.pageChangeCutIds, []);
+  assert.deepEqual(suppressed.suppressedPageChangeCutKeys, ['gap-0']);
+  assert.deepEqual(suppressed.cuts, editor.cutsForProject(stored), 'suppressing the effect must retain the same cut');
+  assert.equal(suppressed.renderDirty, true);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
 

@@ -374,7 +374,7 @@
     cuts.forEach(function (cut) {
       if (cut.reason !== 'long_pause' && cut.reason !== 'combined') return;
       if (Number(cut.end) - Number(cut.start) < 3) return;
-      if (!confirmedPageChanges.has(String(cut.id))) return;
+      if (!confirmedPageChanges.has(pageChangeCutKey(cut))) return;
       var boundary = sourceToEditedTime(cut.end, cuts);
       if (boundary <= editedTime + 0.001) resetAt = Math.max(resetAt, boundary);
     });
@@ -383,6 +383,10 @@
       elapsed: Math.max(0, editedTime - resetAt),
       duration: (item.effectiveLayout || 'horizontal') === 'horizontal' && resetAt === 0 ? 5 : 3
     };
+  }
+
+  function pageChangeCutKey(cut) {
+    return String(cut && cut.id || '') || 'merged-' + Number(cut.start).toFixed(3) + '-' + Number(cut.end).toFixed(3);
   }
 
   function editedToSourceTime(editedTime, item) {
@@ -618,6 +622,11 @@
       return '<span class="editor-manual-cut-editable ' + origin + '" data-cut-id="' + esc(cut.id) + '" data-cut-origin="' + origin + '" data-cut-start="' + start.toFixed(3) + '" data-cut-end="' + end.toFixed(3) + '" style="left:' + pct(start) + '%;width:' + widthPct(start, end) + '%" title="' + (origin === 'automatic' ? 'Automatic' : 'Manual') + ' cut ' + formatTime(start) + '–' + formatTime(end) + '">' +
         (locked ? '' : '<button type="button" class="editor-manual-cut-handle start" data-cut-edge="start" aria-label="Drag the start of this cut"></button><button type="button" class="editor-manual-cut-handle end" data-cut-edge="end" aria-label="Drag the end of this cut"></button>') + '</span>';
     }).join('');
+    var confirmedPageChanges = new Set((item.pageChangeCutIds || []).map(String));
+    var pageMarkers = (item.cuts || []).filter(function (cut) { return confirmedPageChanges.has(pageChangeCutKey(cut)); }).map(function (cut) {
+      var key = pageChangeCutKey(cut);
+      return '<button type="button" class="editor-page-change-marker" data-page-cut-key="' + esc(key) + '" style="left:' + pct(cut.end) + '%" title="Page-turn zoom + fade at ' + formatTime(cut.end) + ' · right-click to remove" aria-label="Page-turn zoom and fade at ' + formatTime(cut.end) + '">↗</button>';
+    }).join('');
     var markers = splits.map(function (time) {
       return '<i class="editor-manual-split" style="left:' + pct(time) + '%" title="Split at ' + formatTime(time) + '"></i>';
     }).join('');
@@ -627,12 +636,13 @@
     for (var time = 0; time <= duration; time += tickStep) {
       ticks += '<i style="left:' + pct(time) + '%"><span>' + formatTime(time) + '</span></i>';
     }
-    return '<section class="editor-manual-timeline" id="editorManualTimeline"><div class="editor-manual-timeline-head"><div><div class="eyebrow">Source timeline</div><h3>Video + voice</h3><span>Click to seek. Drag either handle on a red cut to adjust its edge; gold handles mark automatic cuts. Add two splits and delete between them to make a new cut.</span></div><div class="editor-manual-timeline-actions">' +
+    return '<section class="editor-manual-timeline" id="editorManualTimeline"><div class="editor-manual-timeline-head"><div><div class="eyebrow">Source timeline</div><h3>Video + voice</h3><span>Click to seek. Drag either handle on a red cut to adjust its edge; gold handles mark automatic cuts. Right-click a page-turn marker to remove its zoom and fade without restoring the cut.</span></div><div class="editor-manual-timeline-actions">' +
       '<button type="button" class="btn-secondary btn-tiny" id="editorTimelineAddSplit" ' + (locked ? 'disabled' : '') + '>Split at playhead</button><button type="button" class="btn-secondary btn-tiny" id="editorTimelineClearSplits" ' + (!splits.length || locked ? 'disabled' : '') + '>Clear splits</button><button type="button" class="btn-primary btn-tiny" id="editorTimelineDelete" ' + (!selection || locked ? 'disabled' : '') + '>Delete selected section</button></div></div>' +
       '<div class="editor-manual-timeline-hint"><span id="editorTimelineZoomLabel">' + zoom.toFixed(0) + ' px/sec</span><span>Ctrl/⌘ + scroll to zoom · normal scroll moves along the timeline</span></div>' +
       '<div class="editor-manual-timeline-viewport" id="editorManualTimelineViewport"><div class="editor-manual-timeline-inner" id="editorManualTimelineInner" style="width:' + effectiveWidth + 'px">' +
-        '<div class="editor-manual-ruler">' + ticks + '</div><div class="editor-manual-lane editor-manual-video-lane"><b>VIDEO</b>' + segments + cuts + editableCuts + '</div>' +
-        '<div class="editor-manual-lane editor-manual-voice-lane"><b>VOICE</b>' + voice + cuts + '</div>' + markers + '<i class="editor-manual-playhead" id="editorManualPlayhead"></i></div></div></section>';
+        '<div class="editor-manual-ruler">' + ticks + '</div><div class="editor-manual-lane editor-manual-video-lane"><b>VIDEO</b>' + segments + cuts + editableCuts + pageMarkers + '</div>' +
+        '<div class="editor-manual-lane editor-manual-voice-lane"><b>VOICE</b>' + voice + cuts + '</div>' + markers + '<i class="editor-manual-playhead" id="editorManualPlayhead"></i></div></div>' +
+        '<div class="editor-page-change-menu" id="editorPageChangeMenu" hidden><button type="button" id="editorRemovePageChange">Remove zoom + fade here</button></div></section>';
   }
 
   function processingStepsHtml(item) {
@@ -1828,7 +1838,53 @@
       });
     }
     if (manualTimelineViewport && manualTimelineInner) {
+      var pageChangeMenu = root.querySelector('#editorPageChangeMenu');
+      var selectedPageChangeKey = '';
+      function showPageChangeMenu(key, clientX, clientY) {
+        if (!pageChangeMenu || previewLocked || !key) return;
+        selectedPageChangeKey = key;
+        pageChangeMenu.hidden = false;
+        pageChangeMenu.style.left = Math.max(8, Math.min(window.innerWidth - 220, clientX)) + 'px';
+        pageChangeMenu.style.top = Math.max(8, Math.min(window.innerHeight - 54, clientY)) + 'px';
+      }
+      manualTimelineInner.addEventListener('contextmenu', function (event) {
+        var marker = event.target.closest('.editor-page-change-marker');
+        var editable = event.target.closest('.editor-manual-cut-editable');
+        var key = marker && marker.dataset.pageCutKey;
+        if (!key && editable) key = pageChangeCutKey({ id: editable.dataset.cutId, start: Number(editable.dataset.cutStart), end: Number(editable.dataset.cutEnd) });
+        if (editable && (project.pageChangeCutIds || []).indexOf(key) === -1) {
+          var cutStart = Number(editable.dataset.cutStart);
+          var cutEnd = Number(editable.dataset.cutEnd);
+          var matchingPageCut = (project.cuts || []).find(function (cut) {
+            return cut.start <= cutEnd && cut.end >= cutStart && (project.pageChangeCutIds || []).indexOf(pageChangeCutKey(cut)) !== -1;
+          });
+          if (matchingPageCut) key = pageChangeCutKey(matchingPageCut);
+        }
+        if (!key || (project.pageChangeCutIds || []).indexOf(key) === -1 || previewLocked) return;
+        event.preventDefault();
+        showPageChangeMenu(key, event.clientX, event.clientY);
+      });
+      var removePageChange = root.querySelector('#editorRemovePageChange');
+      if (removePageChange) removePageChange.onclick = function () {
+        var key = selectedPageChangeKey;
+        pageChangeMenu.hidden = true;
+        if (!key) return;
+        preserveTimelinePlaybackPosition();
+        save(function (latest) {
+          return { suppressedPageChangeCutKeys: Array.from(new Set((latest.suppressedPageChangeCutKeys || []).concat([key]))) };
+        }).then(function (item) {
+          if (item) showEditorActionFeedback('Page-turn zoom + fade removed here · video cut kept');
+        });
+      };
       manualTimelineInner.onclick = function (event) {
+        var pageMarker = event.target.closest('.editor-page-change-marker');
+        if (pageMarker) {
+          event.preventDefault();
+          event.stopPropagation();
+          showPageChangeMenu(pageMarker.dataset.pageCutKey, event.clientX, event.clientY);
+          return;
+        }
+        if (pageChangeMenu) pageChangeMenu.hidden = true;
         var segment = event.target.closest('.editor-manual-segment');
         var rect = manualTimelineInner.getBoundingClientRect();
         var sourceTime = Math.max(0, Math.min(Number(project.duration) || 0,
@@ -2084,7 +2140,7 @@
       if (previewingWorkingEdit) {
         var confirmedPageChanges = new Set((project.pageChangeCutIds || []).map(String));
         (project.cuts || []).forEach(function (cut) {
-          if (!confirmedPageChanges.has(String(cut.id))) return;
+          if (!confirmedPageChanges.has(pageChangeCutKey(cut))) return;
           if (sourcePlayheadTime >= cut.start - PAGE_CHANGE_FADE_SECONDS && sourcePlayheadTime < cut.start) {
             overlayOpacity = Math.max(overlayOpacity,
               (sourcePlayheadTime - (cut.start - PAGE_CHANGE_FADE_SECONDS)) / PAGE_CHANGE_FADE_SECONDS);
@@ -2717,7 +2773,7 @@
     var mutationId = window.crypto && typeof window.crypto.randomUUID === 'function'
       ? window.crypto.randomUUID()
       : 'edit-' + Date.now() + '-' + Math.random().toString(36).slice(2);
-    var renderKeys = ['removedWordIndices', 'manualTrimCuts', 'wordCorrection', 'autoSilenceEnabled', 'restoredAutoCutIds', 'captionsEnabled',
+    var renderKeys = ['removedWordIndices', 'manualTrimCuts', 'wordCorrection', 'autoSilenceEnabled', 'restoredAutoCutIds', 'captionsEnabled', 'suppressedPageChangeCutKeys',
       'layoutOverride', 'openingPushInEnabled', 'silenceThresholdSeconds', 'retainedPauseSeconds'];
     var renderWillChange = typeof patch === 'function' || renderKeys.some(function (key) {
       return patch && Object.prototype.hasOwnProperty.call(patch, key);

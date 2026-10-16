@@ -19933,3 +19933,29 @@ covers 0.2 s, 3.7 s, and 13.56 s lead-ins, and the focused Editor suite passes
 with 91 tests. Explicitly restored opening cuts remain manual overrides;
 the currently edited manifestation recording has one, so this default does
 not silently replace Harvey's saved decisions there.
+
+---
+
+# 646. Per-Page-Turn Zoom/Fade Removal in the Editor Timeline (2026-10-16)
+
+Harvey found a page-turn fade/zoom where no page had turned and asked to
+right-click the timeline effect to remove it without restoring the underlying
+footage cut. The source timeline now marks confirmed page-turn effects at
+their cut boundary. Right-clicking that marker (or either handle on its
+contributing cut) opens **Remove zoom + fade here**; clicking the marker also
+opens the action for touch/keyboard use. The choice persists as a suppressed
+page-change key, makes the edit dirty for an explicit Rebuild, and leaves the
+video/audio cut and other page changes intact. Undo restores the prior choice.
+
+This exposed a separate root cause for repeated false effects: merged cuts
+lost their IDs, so detection of one merged page change stored the empty string
+and the camera/fade logic treated *every* merged cut as confirmed. Merged cuts
+now get a deterministic key from their source boundaries, used consistently
+by detection, rendering, preview, and suppression. Existing empty-string
+results are expanded only for legacy review until the next render recomputes
+individual keys. Server validation limits suppression to current substantial
+page-turn candidates. Focused Editor tests (92 passing) cover distinct merged
+keys, suppression without restoring the cut, and the PATCH path. A headless
+browser check right-clicked a real timeline marker with PATCH intercepted;
+the menu appeared and sent only the suppression key, not any footage cuts.
+Editor/style cache keys were advanced.

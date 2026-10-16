@@ -547,6 +547,21 @@ function mergeCuts(cuts, duration) {
   return merged;
 }
 
+// Merged transcript/automatic cuts lose their original ID. A blank ID used
+// to make one detected page turn apply to every merged cut in the recording.
+function pageChangeCutKey(cut) {
+  return String(cut && cut.id || '') || 'merged-' + Number(cut.start).toFixed(3) + '-' + Number(cut.end).toFixed(3);
+}
+
+function confirmedPageChangeCutKeys(project, cuts) {
+  const stored = new Set((project.pageChangeCutIds || []).map(String));
+  const suppressed = new Set((project.suppressedPageChangeCutKeys || []).map(String));
+  return (cuts || []).filter(function (cut) {
+    const key = pageChangeCutKey(cut);
+    return (stored.has(key) || (!cut.id && stored.has(''))) && !suppressed.has(key);
+  }).map(pageChangeCutKey);
+}
+
 function cutsForProject(project) {
   const restored = new Set(Array.isArray(project.restoredAutoCutIds) ? project.restoredAutoCutIds : []);
   const auto = project.autoSilenceEnabled === false ? [] : calculateAutoCuts(project.words || [], project.duration, {
@@ -632,7 +647,8 @@ function advanceEditRevision(project) {
 function patchAffectsRender(body) {
   body = body && typeof body === 'object' ? body : {};
   return ['removedWordIndices', 'manualTrimCuts', 'wordCorrection', 'autoSilenceEnabled', 'restoredAutoCutIds', 'captionsEnabled',
-    'layoutOverride', 'openingPushInEnabled', 'silenceThresholdSeconds', 'retainedPauseSeconds', 'voiceGainAdjustments'].some(function (key) {
+    'layoutOverride', 'openingPushInEnabled', 'silenceThresholdSeconds', 'retainedPauseSeconds', 'voiceGainAdjustments',
+    'suppressedPageChangeCutKeys'].some(function (key) {
     return Object.prototype.hasOwnProperty.call(body, key);
   });
 }
@@ -681,7 +697,7 @@ function cameraResetStarts(cuts, confirmedCutIds) {
     // removed silence is a reliable voice-only signal that Harvey turned the
     // page; otherwise the camera would restart throughout ordinary speech.
     if (Number(cut.end) - Number(cut.start) < PAGE_CHANGE_CUT_SECONDS) return;
-    if (confirmed && !confirmed.has(String(cut.id))) return;
+    if (confirmed && !confirmed.has(pageChangeCutKey(cut))) return;
     const boundary = mapSourceTimeToEdited(cut.end, cuts);
     if (boundary > resetStarts[resetStarts.length - 1] + 0.001) resetStarts.push(boundary);
   });
@@ -742,7 +758,7 @@ async function detectVisualPageChangeCutIds(filePath, cuts) {
         '-filter_complex', '[0:v]scale=320:180,format=gray[a];[1:v]scale=320:180,format=gray[b];[a][b]ssim',
         '-frames:v', '1', '-an', '-f', 'null', '-'], 'Page-change frame comparison');
       const match = String(result.stderr || '').match(/All:([0-9.]+)/);
-      if (match && visualPageChangeFromSsim(Number(match[1]))) confirmed.push(String(cut.id));
+      if (match && visualPageChangeFromSsim(Number(match[1]))) confirmed.push(pageChangeCutKey(cut));
     } catch (error) {
       // A failed visual check must not invent camera movement. The silence cut
       // remains valid; only its optional page-reveal motion is omitted.
@@ -1157,7 +1173,7 @@ function segmentAudioFades(segments, index, duration) {
 function pageChangeFadesForSegment(segment, cuts, confirmedCutIds) {
   if (!segment || segment.type !== 'source') return { fadeIn: false, fadeOut: false };
   const confirmed = new Set((confirmedCutIds || []).map(String));
-  const pageCuts = (cuts || []).filter(function (cut) { return confirmed.has(String(cut.id)); });
+  const pageCuts = (cuts || []).filter(function (cut) { return confirmed.has(pageChangeCutKey(cut)); });
   return {
     fadeIn: pageCuts.some(function (cut) { return Math.abs(Number(cut.end) - Number(segment.start)) <= 0.02; }),
     fadeOut: pageCuts.some(function (cut) { return Math.abs(Number(cut.start) - Number(segment.end)) <= 0.02; })
@@ -1633,6 +1649,7 @@ function setup(options) {
   }
   function projectDetail(project) {
     project.cuts = cutsForProject(project);
+    project.pageChangeCutIds = confirmedPageChangeCutKeys(project, project.cuts);
     project.editableTimelineCuts = editableTimelineCuts(project);
     project.captionGroups = captionGroups(project, project.cuts);
     project.gapDecisions = gapDecisions(project);
@@ -2219,7 +2236,9 @@ function setup(options) {
         saveProject(project);
       }
       const cuts = cutsForProject(project);
-      project.pageChangeCutIds = await detectVisualPageChangeCutIds(renderSourcePath, cuts);
+      const detectedPageChanges = await detectVisualPageChangeCutIds(renderSourcePath, cuts);
+      const suppressedPageChanges = new Set((project.suppressedPageChangeCutKeys || []).map(String));
+      project.pageChangeCutIds = detectedPageChanges.filter(function (key) { return !suppressedPageChanges.has(key); });
       saveProject(project);
       const segments = editorTimelineSegments(project, cuts);
       if (!segments.length) throw new Error('Every part of the recording is currently cut. Restore some transcript first.');
@@ -2817,6 +2836,7 @@ function setup(options) {
         autoRetakeRemovedWordIndices: [],
         dismissedRetakeIds: [],
         restoredAutoCutIds: [],
+        suppressedPageChangeCutKeys: [],
         autoSilenceEnabled: true,
         silenceThresholdSeconds: 1,
         retainedPauseSeconds: DEFAULT_RETAINED_PAUSE_SECONDS,
@@ -3085,6 +3105,7 @@ function setup(options) {
     const currentRemovedWordIndices = (project.removedWordIndices || []).map(Number).sort(function (a, b) { return a - b; });
     const currentDismissedRetakeIds = (project.dismissedRetakeIds || []).map(String).sort();
     const currentRestoredAutoCutIds = (project.restoredAutoCutIds || []).map(String).sort();
+    const currentSuppressedPageChangeCutKeys = (project.suppressedPageChangeCutKeys || []).map(String).sort();
     const currentManualTrimCuts = normalizeManualTrimCuts(project.manualTrimCuts, project.duration);
     const currentAutoSilenceEnabled = project.autoSilenceEnabled !== false;
     const currentSilenceThresholdSeconds = Number(project.silenceThresholdSeconds) || 1;
@@ -3099,6 +3120,16 @@ function setup(options) {
     const nextRestoredAutoCutIds = Array.isArray(req.body && req.body.restoredAutoCutIds)
       ? Array.from(new Set(req.body.restoredAutoCutIds.map(String).filter(function (id) { return /^(lead|tail|gap-\d+)$/.test(id); }))).sort()
       : currentRestoredAutoCutIds;
+    const validPageChangeKeys = new Set(cutsForProject(project).filter(function (cut) {
+      return (cut.reason === 'long_pause' || cut.reason === 'combined') && cut.end - cut.start >= PAGE_CHANGE_CUT_SECONDS;
+    }).map(pageChangeCutKey));
+    if (req.body && Object.prototype.hasOwnProperty.call(req.body, 'suppressedPageChangeCutKeys') &&
+        (!Array.isArray(req.body.suppressedPageChangeCutKeys) || req.body.suppressedPageChangeCutKeys.some(function (key) { return !validPageChangeKeys.has(String(key)); }))) {
+      return res.status(400).json({ error: 'invalid_page_change', message: 'That page-turn marker is no longer on this timeline.' });
+    }
+    const nextSuppressedPageChangeCutKeys = Array.isArray(req.body && req.body.suppressedPageChangeCutKeys)
+      ? Array.from(new Set(req.body.suppressedPageChangeCutKeys.map(String))).sort()
+      : currentSuppressedPageChangeCutKeys;
     const nextManualTrimCuts = Array.isArray(req.body && req.body.manualTrimCuts)
       ? normalizeManualTrimCuts(req.body.manualTrimCuts, project.duration)
       : currentManualTrimCuts;
@@ -3119,6 +3150,7 @@ function setup(options) {
         dismissedRetakeIds: currentDismissedRetakeIds,
         autoRetakeRemovedWordIndices: (project.autoRetakeRemovedWordIndices || []).map(Number),
         restoredAutoCutIds: currentRestoredAutoCutIds,
+        suppressedPageChangeCutKeys: currentSuppressedPageChangeCutKeys,
         manualTrimCuts: currentManualTrimCuts,
         autoSilenceEnabled: currentAutoSilenceEnabled,
         silenceThresholdSeconds: currentSilenceThresholdSeconds,
@@ -3139,6 +3171,7 @@ function setup(options) {
       });
     }
     if (JSON.stringify(nextRestoredAutoCutIds) !== JSON.stringify(currentRestoredAutoCutIds) ||
+        JSON.stringify(nextSuppressedPageChangeCutKeys) !== JSON.stringify(currentSuppressedPageChangeCutKeys) ||
         JSON.stringify(nextManualTrimCuts) !== JSON.stringify(currentManualTrimCuts) ||
         nextAutoSilenceEnabled !== currentAutoSilenceEnabled ||
         Number(nextSilenceThresholdSeconds) !== currentSilenceThresholdSeconds ||
@@ -3157,6 +3190,7 @@ function setup(options) {
     }
     project.autoSilenceEnabled = nextAutoSilenceEnabled;
     project.restoredAutoCutIds = nextRestoredAutoCutIds;
+    project.suppressedPageChangeCutKeys = nextSuppressedPageChangeCutKeys;
     project.manualTrimCuts = nextManualTrimCuts;
     if (typeof (req.body && req.body.captionsEnabled) === 'boolean') project.captionsEnabled = req.body.captionsEnabled;
     if (typeof (req.body && req.body.openingPushInEnabled) === 'boolean') project.openingPushInEnabled = req.body.openingPushInEnabled;
@@ -3267,6 +3301,7 @@ function setup(options) {
       project.dismissedRetakeIds = Array.isArray(snapshot && snapshot.dismissedRetakeIds) ? snapshot.dismissedRetakeIds : [];
       project.autoRetakeRemovedWordIndices = Array.isArray(snapshot && snapshot.autoRetakeRemovedWordIndices) ? snapshot.autoRetakeRemovedWordIndices : [];
       if (Array.isArray(snapshot && snapshot.restoredAutoCutIds)) project.restoredAutoCutIds = snapshot.restoredAutoCutIds;
+      if (Array.isArray(snapshot && snapshot.suppressedPageChangeCutKeys)) project.suppressedPageChangeCutKeys = snapshot.suppressedPageChangeCutKeys;
       if (Array.isArray(snapshot && snapshot.manualTrimCuts)) project.manualTrimCuts = snapshot.manualTrimCuts;
       if (typeof (snapshot && snapshot.autoSilenceEnabled) === 'boolean') project.autoSilenceEnabled = snapshot.autoSilenceEnabled;
       if (Number.isFinite(Number(snapshot && snapshot.silenceThresholdSeconds))) project.silenceThresholdSeconds = Number(snapshot.silenceThresholdSeconds);
@@ -3636,6 +3671,8 @@ module.exports = {
   calculateManualCuts,
   normalizeManualTrimCuts,
   mergeCuts,
+  pageChangeCutKey,
+  confirmedPageChangeCutKeys,
   cutsForProject,
   editableTimelineCuts,
   keepSegments,
