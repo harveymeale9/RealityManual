@@ -19899,3 +19899,20 @@ within their safe width instead of overflowing. This changes the live Editor
 preview, not finished exported files or the user's edit decisions. Focused
 tests guard the preview grouping and existing ASS three-word output; Editor
 and style asset cache keys were advanced.
+
+---
+
+# 644. Recovery of Accidental Full-Recording Editor Trim (2026-10-16)
+
+The Editor project for *What the manifestation gurus forgot to tell you*
+failed its final render with "Every part of the recording is currently cut."
+Its saved decisions contained a manual timeline cut from 0:00 through the
+entire 19:40.72 source, plus 346 selected transcript-word cuts and a separate
+0.329–1.66-second opening cut. The full-source cut had been added before most
+of the transcript edits, so repeatedly using Undo would have discarded those
+later decisions. With Harvey's explicit approval, the full-source cut alone
+was removed through the Editor PATCH API with an edit-revision precondition.
+The 346 word cuts and separate opening cut remained unchanged. The resulting
+timeline calculation retains about 783.6 seconds across 54 segments, and a
+normal Editor render was requested to replace the failed preview. This was a
+targeted project-data correction, not a change to global editing behavior.
