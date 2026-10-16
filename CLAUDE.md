@@ -19916,3 +19916,20 @@ The 346 word cuts and separate opening cut remained unchanged. The resulting
 timeline calculation retains about 783.6 seconds across 54 segments, and a
 normal Editor render was requested to replace the failed preview. This was a
 targeted project-data correction, not a change to global editing behavior.
+
+---
+
+# 645. Future Recordings Start Immediately Before Speech (2026-10-16)
+
+Harvey's normal recording workflow includes reaching across the table to
+start the camera, moving his hand back, then speaking. The Editor already made
+an automatic opening cut that kept only an 80 ms safety handle before the
+first timed transcript word, but its old 450 ms minimum could leave a short
+visible setup beat intact. The minimum now only suppresses cuts too short to
+be perceptible; new recordings with either short or long pre-speech setup
+start 80 ms before the first timed word. This is a visual and audio source
+trim in the rendered edit, not merely a caption offset. A regression test
+covers 0.2 s, 3.7 s, and 13.56 s lead-ins, and the focused Editor suite passes
+with 91 tests. Explicitly restored opening cuts remain manual overrides;
+the currently edited manifestation recording has one, so this default does
+not silently replace Harvey's saved decisions there.

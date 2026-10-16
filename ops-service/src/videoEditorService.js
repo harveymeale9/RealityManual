@@ -463,7 +463,9 @@ function calculateAutoCuts(words, duration, options) {
   // The recording should begin essentially when Harvey begins speaking. Keep
   // only a tiny consonant-safety handle; the previous 180ms allowance made a
   // visible setup beat survive before the first line on some long-form takes.
-  if (lead > 0.45) cuts.push({ id: 'lead', start: 0, end: Number(Math.max(0, lead - LEADING_SPEECH_HANDLE_SECONDS).toFixed(3)), reason: 'leading_silence' });
+  // Even a short camera-start movement should not become the first frame.
+  // Only skip a lead cut when it would be shorter than one perceptible edit.
+  if (lead > LEADING_SPEECH_HANDLE_SECONDS + 0.08) cuts.push({ id: 'lead', start: 0, end: Number(Math.max(0, lead - LEADING_SPEECH_HANDLE_SECONDS).toFixed(3)), reason: 'leading_silence' });
   for (let i = 0; i < words.length - 1; i++) {
     const gapStart = words[i].end;
     const gapEnd = words[i + 1].start;

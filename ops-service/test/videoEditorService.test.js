@@ -445,6 +445,19 @@ test('automatic cuts preserve natural handles around long pauses', function () {
   assert.equal(cuts[1].end, 3.88);
 });
 
+test('a new recording starts just before its first timed word, even with a brief setup', function () {
+  for (const firstWordStart of [0.2, 3.7, 13.56]) {
+    const project = {
+      duration: firstWordStart + 2,
+      autoSilenceEnabled: true,
+      words: [{ index: 0, text: 'Hello', start: firstWordStart, end: firstWordStart + 0.4 }],
+      removedWordIndices: [], restoredAutoCutIds: [], manualTrimCuts: []
+    };
+    const firstFrame = editor.keepSegments(project.duration, editor.cutsForProject(project))[0].start;
+    assert.ok(Math.abs(firstFrame - (firstWordStart - 0.08)) < 0.001, String(firstWordStart));
+  }
+});
+
 test('sub-perceptual islands between adjacent cuts are removed continuously', function () {
   assert.deepEqual(editor.mergeCuts([
     { id: 'first', start: 1, end: 2, reason: 'long_pause' },
