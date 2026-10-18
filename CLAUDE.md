@@ -20235,3 +20235,20 @@ counts, with zero-filled gaps; the partial current day remains only in the
 Today tile. Website Analytics renders a responsive SVG line/area graph with
 daily hover counts, date and count axes, above the unchanged 14-day bars. No
 new external analytics source or tracking was introduced.
+
+---
+
+# 658. Thirty-Day Cross-Platform Content View Growth (2026-10-18)
+
+Content Analytics now includes a prominent 30-day cumulative view graph with
+separate YouTube, TikTok, Instagram and Facebook lines, a measured total line,
+and a dashed linear trendline fitted only to observed total-view days. The
+daily series comes from the existing hourly `content_metric_snapshots`; for
+each connected piece/platform it uses the latest non-null view count as of
+that day, carrying a count forward between observations. It does not confuse
+cumulative views with new daily views. A missing platform metric stays unknown,
+not zero. Dates before the first tracked snapshot stay blank, because hourly
+collection only started on 15 October and old platform counts cannot be
+backdated honestly. The UI states this boundary and cautions that platform
+view definitions differ. No additional platform API calls are triggered by
+opening the graph; the existing dashboard response supplies the 30-day series.

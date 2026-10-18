@@ -2897,6 +2897,22 @@ body.role-reviewer #pmBackFab {
 @media(max-width:1100px){.content-summary-grid{grid-template-columns:repeat(3,1fr)}.content-performance-layout{grid-template-columns:1fr}.content-piece-detail{min-height:420px}}
 @media(max-width:700px){.content-dashboard{padding:22px 13px 42px}.content-dashboard h2{font-size:32px}.content-dashboard-head{align-items:flex-start;flex-direction:column}.content-dashboard-head>div:last-child{width:100%;justify-content:space-between}.content-summary-grid{grid-template-columns:repeat(2,1fr)}.content-audience-grid{grid-template-columns:1fr 1fr}.content-audience-card:nth-child(2){border-right:0}.content-audience-card:nth-child(-n+2){border-bottom:1px solid #1d3227}.content-piece-columns{display:none}.content-piece-row{grid-template-columns:minmax(150px,2fr) repeat(3,minmax(42px,.55fr))}.content-piece-row>span:nth-child(5),.content-piece-row>span:nth-child(6),.content-piece-row>span:nth-child(7){display:none}.content-piece-detail{padding:13px}.content-detail-head{flex-direction:column}.content-detail-head>strong{text-align:left}.content-chart-title{flex-direction:column}.content-platform-grid{grid-template-columns:1fr}.content-platform-card>div{flex-wrap:wrap}.content-block-head{align-items:flex-start;flex-direction:column}}
 
+.content-overall{margin-bottom:14px}
+.content-overall-body{padding:16px 18px 11px}
+.content-overall-legend{display:flex;flex-wrap:wrap;gap:8px 18px;color:#a7bbaf;font-size:10px}
+.content-overall-legend span{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.content-overall-legend i{display:inline-block;width:17px;height:3px;background:var(--series)}
+.content-overall-legend strong{color:#e2f1e7;font:600 11px var(--font-mono)}
+.content-overall-legend .content-overall-trend-key i{background:transparent;border-top:2px dashed #e9d899}
+.content-overall svg{display:block;width:100%;height:auto;margin:8px 0 0;overflow:visible}
+.content-overall .content-chart-grid text{font:11px var(--font-mono)}
+.content-overall-date{fill:#668272;font:11px var(--font-mono)}
+.content-overall-trend{stroke:#e9d899;stroke-width:2;stroke-dasharray:7 5;vector-effect:non-scaling-stroke}
+.content-overall-hit{cursor:crosshair}
+.content-overall-hit:hover{stroke:#e6f8e9;stroke-width:1.5}
+.content-overall-body p{margin:7px 0 0;color:#708a79;font-size:10px;line-height:1.55}
+@media(max-width:700px){.content-overall-body{padding:12px 10px}.content-overall-legend{gap:8px 11px;font-size:9px}.content-overall .content-block-head small{font-size:9px}}
+
 /* Precise source-timeline cut adjustment. Manual handles are coral; automatic handles are gold. */
 .editor-page-change-marker{position:absolute;z-index:8;top:4px;transform:translateX(-50%);width:22px;height:22px;padding:0;border:1px solid #f6c66b;border-radius:5px;background:#423211;color:#ffe29a;font:700 13px/20px var(--font-mono);cursor:context-menu;box-shadow:0 0 0 1px #120e04,0 0 8px rgba(240,201,95,.45)}
 .editor-page-change-marker:hover,.editor-page-change-marker:focus-visible{background:#6a501b;outline:2px solid #f6c66b;outline-offset:1px}

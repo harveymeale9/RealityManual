@@ -37,12 +37,21 @@ test('content analytics stores honest cross-platform snapshots and calculates gr
   assert.equal(dashboard.pieces[0].platforms.instagram.likes, 4);
   assert.equal(dashboard.providerStatus.instagram.partial, true);
   assert.equal(dashboard.pieces[0].platforms.facebook.averageWatchSeconds, 6.5);
+  assert.equal(dashboard.viewHistory.length, 30);
+  assert.equal(dashboard.viewHistory.at(-2).total, null);
+  assert.equal(dashboard.viewHistory.at(-1).total, 60);
+  assert.equal(dashboard.viewHistory.at(-1).instagram, null);
 
   clock = new Date('2026-10-02T11:15:00Z');
   youtubeViews = 25;
   dashboard = await service.collect();
   assert.equal(dashboard.pieces[0].platforms.youtube.viewsChange24h, 15);
   assert.equal(dashboard.pieces[0].platforms.youtube.history.length, 2);
+  assert.equal(dashboard.viewHistory.at(-2).total, 60);
+  assert.equal(dashboard.viewHistory.at(-1).total, 75);
+  assert.equal(dashboard.viewHistory.at(-1).youtube, 25);
+  clock = new Date('2026-10-03T11:15:00Z');
+  assert.equal(service.dashboard().viewHistory.at(-1).total, 75); // carry last measured counts between polls
   assert.equal(db.prepare('SELECT count(*) AS count FROM content_metric_snapshots').get().count, 8);
 });
 
@@ -62,12 +71,40 @@ test('content analytics isolates one unavailable provider without hiding real me
   assert.match(dashboard.providerStatus.tiktok.error, /Buffer unavailable/);
 });
 
+test('overall view growth sums connected pieces without inventing pre-snapshot history', function () {
+  const db = new Database(':memory:');
+  const service = analytics.setup(db, {
+    now: function () { return new Date('2026-10-18T12:00:00Z'); },
+    listPieces: function () { return [
+      { id: 'one', stage: 'live', youtubeVideoId: 'yt', tiktokPublishId: 'tt' },
+      { id: 'two', stage: 'live', facebookVideoId: 'fb', instagramMediaId: 'ig' }
+    ]; }
+  });
+  const insert = db.prepare(`INSERT INTO content_metric_snapshots (piece_id,platform,captured_at,views) VALUES (?,?,?,?)`);
+  insert.run('one', 'youtube', '2026-10-15T10:00:00Z', 10);
+  insert.run('one', 'tiktok', '2026-10-15T10:00:00Z', 7);
+  insert.run('one', 'youtube', '2026-10-16T10:00:00Z', 20);
+  insert.run('two', 'facebook', '2026-10-16T10:00:00Z', 5);
+  insert.run('two', 'instagram', '2026-10-16T10:00:00Z', null);
+  insert.run('one', 'youtube', '2026-10-18T10:00:00Z', 28);
+  const history = service.dashboard().viewHistory;
+  assert.equal(history.length, 30);
+  assert.equal(history.find((day) => day.day === '2026-10-14').total, null);
+  assert.equal(history.find((day) => day.day === '2026-10-15').total, 17);
+  assert.equal(history.find((day) => day.day === '2026-10-16').total, 32);
+  assert.equal(history.find((day) => day.day === '2026-10-17').total, 32);
+  assert.equal(history.find((day) => day.day === '2026-10-18').total, 40);
+  assert.equal(history.at(-1).instagram, null);
+  db.close();
+});
+
 test('Content Analytics owns its analytics route while competitor research keeps a distinct route', function () {
   const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const page = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   assert.match(app, /id: 'content-analytics', label: 'Content Analytics'/);
   assert.match(app, /id: 'outlier-analysis', label: 'Outlier Analysis'/);
   assert.match(app, /button\.addEventListener\('mouseenter', select\)/);
+  assert.match(app, /contentOverallChart\(data\)/);
   assert.match(page, /data-tabs="content-analytics,sales-analytics,website-analytics"/);
-  assert.match(page, /app\.js\?v=20261018-website-line-v164/);
+  assert.match(page, /app\.js\?v=20261018-content-growth-v165/);
 });

@@ -596,6 +596,63 @@
       '<text class="content-chart-time end" x="690" y="208">' + escapeHtml(minTime === maxTime ? 'History starts here' : contentDate(new Date(maxTime).toISOString())) + '</text></svg>';
   }
 
+  function contentOverallChart(data) {
+    var days = Array.isArray(data.viewHistory) ? data.viewHistory : [];
+    if (days.length !== 30) return '';
+    var firstIndex = days.findIndex(function (day) { return day.total != null; });
+    var series = [{ key: 'total', label: 'Total', color: '#ecfff1' }].concat(Object.keys(CONTENT_PLATFORM_META).map(function (platform) {
+      return { key: platform, label: CONTENT_PLATFORM_META[platform].label, color: CONTENT_PLATFORM_META[platform].color };
+    }));
+    if (firstIndex < 0) return '<section class="content-block content-overall"><div class="content-block-head"><div><span>Last 30 days</span><h3>Views across platforms</h3></div></div><div class="content-chart-empty">The first view snapshot will start this graph. Earlier views cannot be reconstructed.</div></section>';
+    var observed = days.map(function (day, index) { return { index: index, value: day.total }; }).filter(function (point) { return point.value != null; });
+    var trend = [];
+    if (observed.length > 1) {
+      var meanX = observed.reduce(function (sum, point) { return sum + point.index; }, 0) / observed.length;
+      var meanY = observed.reduce(function (sum, point) { return sum + point.value; }, 0) / observed.length;
+      var denominator = observed.reduce(function (sum, point) { return sum + Math.pow(point.index - meanX, 2); }, 0);
+      var slope = denominator ? observed.reduce(function (sum, point) { return sum + (point.index - meanX) * (point.value - meanY); }, 0) / denominator : 0;
+      [observed[0].index, observed[observed.length - 1].index].forEach(function (index) {
+        trend.push({ index: index, value: Math.max(0, meanY + slope * (index - meanX)) });
+      });
+    }
+    var values = days.flatMap(function (day) { return series.map(function (item) { return Number(day[item.key]) || 0; }); }).concat(trend.map(function (point) { return point.value; }));
+    var maximum = Math.max(4, ...values);
+    var magnitude = Math.pow(10, Math.floor(Math.log10(maximum / 4)));
+    var ceiling = Math.ceil(maximum / (4 * magnitude)) * 4 * magnitude;
+    var x = function (index) { return 60 + index * 810 / 29; };
+    var y = function (value) { return 222 - value / ceiling * 194; };
+    var grid = [0, .25, .5, .75, 1].map(function (ratio) {
+      var py = y(ceiling * ratio).toFixed(1);
+      return '<line x1="60" y1="' + py + '" x2="870" y2="' + py + '" />' +
+        '<text x="52" y="' + (Number(py) + 4) + '">' + contentNumber(Math.round(ceiling * ratio)) + '</text>';
+    }).join('');
+    var paths = series.map(function (item) {
+      var points = days.map(function (day, index) { return day[item.key] == null ? null : { index: index, value: Number(day[item.key]) || 0, day: day.day }; }).filter(Boolean);
+      if (!points.length) return '';
+      var coords = points.map(function (point) { return x(point.index).toFixed(1) + ',' + y(point.value).toFixed(1); });
+      var line = points.length > 1 ? '<polyline points="' + coords.join(' ') + '" fill="none" stroke="' + item.color + '" stroke-width="' + (item.key === 'total' ? 3.5 : 2) + '" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />' : '';
+      var markers = points.map(function (point) {
+        return '<circle cx="' + x(point.index).toFixed(1) + '" cy="' + y(point.value).toFixed(1) + '" r="8" fill="transparent" class="content-overall-hit"><title>' + escapeHtml(item.label + ' · ' + point.day + ': ' + contentNumber(point.value) + ' views') + '</title></circle>';
+      }).join('');
+      return line + markers;
+    }).join('');
+    var trendPath = trend.length ? '<line x1="' + x(trend[0].index).toFixed(1) + '" y1="' + y(trend[0].value).toFixed(1) + '" x2="' + x(trend[1].index).toFixed(1) + '" y2="' + y(trend[1].value).toFixed(1) + '" class="content-overall-trend" />' : '';
+    var axisDates = [0, 7, 14, 21, 29].map(function (index) {
+      var date = new Date(days[index].day + 'T00:00:00Z');
+      var label = date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+      return '<text x="' + x(index).toFixed(1) + '" y="259" class="content-overall-date" text-anchor="' + (index === 0 ? 'start' : index === 29 ? 'end' : 'middle') + '">' + escapeHtml(label) + '</text>';
+    }).join('');
+    var latest = days[29];
+    var legend = series.map(function (item) {
+      return '<span style="--series:' + item.color + '"><i></i>' + item.label + ' <strong>' + contentNumber(latest[item.key]) + '</strong></span>';
+    }).join('') + (trend.length ? '<span class="content-overall-trend-key"><i></i>Linear trend</span>' : '');
+    var firstDate = new Date(days[firstIndex].day + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+    return '<section class="content-block content-overall"><div class="content-block-head"><div><span>Last 30 days · UTC</span><h3>Views across platforms</h3></div><small>Cumulative measured views, not daily new views</small></div>' +
+      '<div class="content-overall-body"><div class="content-overall-legend">' + legend + '</div>' +
+      '<svg viewBox="0 0 900 270" role="img" aria-label="Thirty-day cumulative view history by platform, total, and linear trend" preserveAspectRatio="xMidYMid meet"><g class="content-chart-grid">' + grid + '</g>' + paths + trendPath + axisDates + '</svg>' +
+      '<p>History starts ' + escapeHtml(firstDate) + '; earlier dates are unknown, not zero. Each line carries forward its last measured count between snapshots. Platform view definitions differ, so the total is directional.</p></div></section>';
+  }
+
   function contentDetailMarkup(piece) {
     var platformCards = Object.keys(piece.platforms || {}).map(function (platform) {
       var metric = piece.platforms[platform];
@@ -647,6 +704,7 @@
       panelMain.innerHTML = '<div class="content-dashboard"><header class="content-dashboard-head"><div><div class="eyebrow">Cross-platform performance</div><h2>Content Analytics</h2><p>Compare every piece, then inspect how each platform compounds over time.</p></div><div><span>' + (data.lastCollectedAt ? 'Updated ' + contentDate(data.lastCollectedAt) : 'First snapshot pending') + '</span><button type="button" class="btn-secondary btn-tiny" id="contentRefresh">Refresh metrics</button></div></header>' +
         '<section class="content-summary-grid"><article><span>Published pieces</span><strong>' + contentNumber(data.summary.pieces) + '</strong></article><article><span>Measured views</span><strong>' + contentNumber(data.summary.totalViews) + '</strong></article><article><span>Interactions</span><strong>' + contentNumber(data.summary.totalEngagements) + '</strong></article><article><span>Interaction rate</span><strong>' + contentPercent(data.summary.engagementRate) + '</strong></article><article><span>Known audience</span><strong>' + contentNumber(data.summary.followers) + '</strong></article></section>' +
         (notices ? '<section class="content-provider-notes">' + notices + '</section>' : '') +
+        contentOverallChart(data) +
         '<section class="content-block"><div class="content-block-head"><div><span>Audience</span><h3>Platform growth</h3></div><small>Followers are not additive identities; the total is directional.</small></div><div class="content-audience-grid">' + audience + '</div></section>' +
         '<div class="content-performance-layout"><section class="content-block content-piece-list"><div class="content-block-head"><div><span>Library</span><h3>Pieces by publish date</h3></div><small>Hover, focus, or tap a title</small></div><div class="content-piece-columns"><span>Piece</span><span>Total</span><span>YT</span><span>TT</span><span>IG</span><span>FB</span><span>Rate</span></div>' + rows + '</section>' +
         '<section class="content-block content-piece-detail" id="contentPieceDetail">' + (data.pieces[0] ? contentDetailMarkup(data.pieces[0]) : '') + '</section></div>' +

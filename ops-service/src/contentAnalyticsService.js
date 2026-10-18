@@ -28,6 +28,40 @@ function platformUrl(piece, platform) {
   return '';
 }
 
+// A view count is a cumulative platform counter, not a day's new views. Use
+// the last non-null observation for each connected piece as of each day;
+// dates before the first observation stay unknown rather than becoming zero.
+function overallViewHistory(metricRows, pieceRows, nowValue) {
+  const eligible = new Set();
+  pieceRows.forEach(function (piece) {
+    Object.keys(piece.platforms).forEach(function (platform) { eligible.add(piece.id + ':' + platform); });
+  });
+  const today = new Date(nowValue);
+  today.setUTCHours(0, 0, 0, 0);
+  const start = new Date(today.getTime() - 29 * DAY_MS);
+  const latest = new Map();
+  let cursor = 0;
+  return Array.from({ length: 30 }, function (_, index) {
+    const day = new Date(start.getTime() + index * DAY_MS);
+    const end = new Date(day.getTime() + DAY_MS).toISOString();
+    while (cursor < metricRows.length && metricRows[cursor].captured_at < end) {
+      const row = metricRows[cursor++];
+      const key = row.piece_id + ':' + row.platform;
+      if (eligible.has(key) && row.views != null) latest.set(key, Math.max(0, Number(row.views) || 0));
+    }
+    const totals = Object.fromEntries(PLATFORMS.map(function (platform) { return [platform, null]; }));
+    let total = 0;
+    let measured = false;
+    latest.forEach(function (views, key) {
+      const platform = key.slice(key.lastIndexOf(':') + 1);
+      totals[platform] = (totals[platform] || 0) + views;
+      total += views;
+      measured = true;
+    });
+    return Object.assign({ day: day.toISOString().slice(0, 10), total: measured ? total : null }, totals);
+  });
+}
+
 function setup(db, options) {
   options = options || {};
   const intervalMs = Math.max(5 * 60 * 1000, Number(options.intervalMs) || HOUR_MS);
@@ -199,6 +233,7 @@ function setup(db, options) {
         engagementRate: totalViews ? rateEligibleEngagements / totalViews * 100 : null,
         followers: knownFollowers.length ? knownFollowers.reduce(function (sum, row) { return sum + Number(row.followers || 0); }, 0) : null
       },
+      viewHistory: overallViewHistory(metricRows, pieceRows, now()),
       audience: audience, pieces: pieceRows
     };
   }
