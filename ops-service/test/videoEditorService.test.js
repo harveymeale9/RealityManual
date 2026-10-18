@@ -464,6 +464,26 @@ test('a new recording starts just before its first timed word, even with a brief
   }
 });
 
+test('future recordings always remove the camera-stop tail and cannot reopen it by adjusting the automatic cut', function () {
+  const project = {
+    duration: 10, endingProtectionEnabled: true, autoSilenceEnabled: false,
+    restoredAutoCutIds: ['tail'],
+    words: [{ index: 0, text: 'Done.', start: 1, end: 7 }],
+    manualTrimCuts: []
+  };
+  assert.deepEqual(editor.cutsForProject(project), [{ id: 'tail', start: 7.08, end: 10, reason: 'trailing_silence' }]);
+  project.manualTrimCuts = [{ id: 'adjusted-tail-example', start: 7.17, end: 8.5, note: 'Adjusted automatic timeline cut' }];
+  assert.deepEqual(editor.cutsForProject(project), [{ id: 'adjusted-tail-example', start: 7.17, end: 10, reason: 'manual_trim' }]);
+  assert.deepEqual(editor.editableTimelineCuts(project).map(function (cut) { return [cut.id, cut.start, cut.end]; }),
+    [['adjusted-tail-example', 7.17, 10]]);
+  project.manualTrimCuts[0].start = 9.5;
+  project.manualTrimCuts[0].end = 9.8;
+  assert.equal(editor.cutsForProject(project)[0].start, 7.25, 'an ending cut cannot be dragged past the final speech handle');
+  project.manualTrimCuts = [];
+  project.duration = 7.3;
+  assert.deepEqual(editor.cutsForProject(project), [{ id: 'tail', start: 7.08, end: 7.3, reason: 'trailing_silence' }]);
+});
+
 test('sub-perceptual islands between adjacent cuts are removed continuously', function () {
   assert.deepEqual(editor.mergeCuts([
     { id: 'first', start: 1, end: 2, reason: 'long_pause' },
@@ -562,7 +582,7 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /Adjusted automatic timeline cut/);
   assert.match(source, /Cut edge moved/);
   assert.match(page, /lib\/captionMask\.js\?v=20261015-mask-swears/);
-  assert.match(page, /editor\.js\?v=20261018-outro-controls-v155/);
+  assert.match(page, /editor\.js\?v=20261018-protected-ending-v156/);
   assert.match(page, /style\.css\?v=20261018-outro-controls-v161/);
   assert.match(source, /id="editorTimelineUndo"/);
   assert.match(source, /id="editorTimelineFadeSeconds"/);
@@ -1716,6 +1736,8 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(createdProjects.length, 1);
   assert.equal(createdProjects[0].id, project.id);
   assert.equal(project.audioTrackId, '__none__');
+  assert.equal(project.endingProtectionEnabled, true);
+  assert.equal(project.outroFadeSeconds, 1.5);
   assert.equal(project.mimeType, 'video/quicktime');
   assert.equal(project.videoCodec, 'h264');
   assert.equal(project.browserPreviewRequired, true);
@@ -1882,18 +1904,29 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.retainedPauseSeconds, 0.24);
   assert.equal(project.canUndoCut, false);
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-    outroFadeSeconds: 1.5, expectedEditRevision: project.editRevision
+    outroFadeSeconds: 1.2, expectedEditRevision: project.editRevision
   }) });
   assert.equal(response.status, 200);
   project = await response.json();
-  assert.equal(project.outroFadeSeconds, 1.5);
+  assert.equal(project.outroFadeSeconds, 1.2);
   assert.equal(project.canUndoCut, true);
   assert.equal(project.renderDirty, true);
   response = await fetch(base + '/api/editor/' + project.id + '/undo-cut', { method: 'POST' });
   assert.equal(response.status, 200);
   project = await response.json();
-  assert.equal(project.outroFadeSeconds, 0);
+  assert.equal(project.outroFadeSeconds, 1.5);
   assert.equal(project.canUndoCut, false);
+  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+    manualTrimCuts: [{ id: 'adjusted-tail-test', start: 4.3, end: 4.7 }], expectedEditRevision: project.editRevision
+  }) });
+  assert.equal(response.status, 200);
+  project = await response.json();
+  assert.equal(project.manualTrimCuts[0].end, project.duration, 'the PATCH route closes an adjusted ending cut to the source end');
+  assert.equal(project.cuts.at(-1).end, project.duration);
+  response = await fetch(base + '/api/editor/' + project.id + '/undo-cut', { method: 'POST' });
+  assert.equal(response.status, 200);
+  project = await response.json();
+  assert.deepEqual(project.manualTrimCuts, []);
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ captionsEnabled: false, wordCorrection: { index: 0, text: 'Once' } }) });
   assert.equal(response.status, 200);
   project = await response.json();

@@ -20039,3 +20039,35 @@ cuts and transcript edits were retained, and the change remains undoable.
 The preview was rebuilt successfully: render quality passed, the project is
 `ready` and not dirty, and inspected closing frames show the final book shot
 fading to fully black without the camera-reach shot.
+
+---
+
+# 651. Protected Endings and 1.5-Second Fade for Future Editor Recordings (2026-10-18)
+
+Harvey wants the same clean ending on every future long-form and short-form
+video: preserve the final spoken word, remove the residual camera-stop/mouse
+click footage, and fade the held final frame to black over 1.5 seconds. The
+two recent repairs exposed a persistent failure mode: dragging the automatic
+`tail` cut converted it to an `adjusted-tail-*` manual interval whose right
+edge could stop before the source ended, making the unwanted footage visible
+again. The automatic tail also previously disappeared if automatic pause
+removal was disabled or `tail` was in `restoredAutoCutIds`.
+
+New Editor uploads now set `endingProtectionEnabled: true` and default
+`outroFadeSeconds: 1.5`, regardless of video orientation. Protected endings
+cut source footage from 80 ms after the final timed word through the actual
+source end, including when that gap is only 160 ms or automatic pause removal
+is otherwise off. A manually adjusted tail can still move its left edge within
+the speech-safe handle, but its right edge is server-enforced at the source end
+and that handle is hidden in the browser. A stale `restoredAutoCutIds: ['tail']`
+cannot reopen the tail. Existing Editor projects are left at their saved
+settings and timing; the two repaired recordings remain as described above.
+
+Both preview and Production master rendering already use the per-project
+visual fade; the vertical Production soundtrack fade now reads that setting
+too, while horizontal masters retain their separate 0.3-second music-only
+black tail. This is timing derived from transcription, not a guarantee that
+an untranscribed sound occurring inside the 80 ms word-safety handle will be
+detected; final audio review remains important. Unit and upload/render/API
+tests cover the new default, a disabled pause-removal setting, stale restored
+tail, a dragged cut whose right edge is too short, the short-gap case, and undo.

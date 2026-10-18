@@ -619,8 +619,9 @@
       var end = Math.max(start, Math.min(duration, Number(cut.end) || start));
       if (end - start < 0.02) return '';
       var origin = cut.editableOrigin === 'automatic' ? 'automatic' : 'manual';
+      var protectedTail = item.endingProtectionEnabled === true && (cut.id === 'tail' || /^adjusted-tail-/.test(cut.id));
       return '<span class="editor-manual-cut-editable ' + origin + '" data-cut-id="' + esc(cut.id) + '" data-cut-origin="' + origin + '" data-cut-start="' + start.toFixed(3) + '" data-cut-end="' + end.toFixed(3) + '" style="left:' + pct(start) + '%;width:' + widthPct(start, end) + '%" title="' + (origin === 'automatic' ? 'Automatic' : 'Manual') + ' cut ' + formatTime(start) + '–' + formatTime(end) + '">' +
-        (locked ? '' : '<button type="button" class="editor-manual-cut-handle start" data-cut-edge="start" aria-label="Drag the start of this cut"></button><button type="button" class="editor-manual-cut-handle end" data-cut-edge="end" aria-label="Drag the end of this cut"></button>') + '</span>';
+        (locked ? '' : '<button type="button" class="editor-manual-cut-handle start" data-cut-edge="start" aria-label="Drag the start of this cut"></button>' + (protectedTail ? '' : '<button type="button" class="editor-manual-cut-handle end" data-cut-edge="end" aria-label="Drag the end of this cut"></button>')) + '</span>';
     }).join('');
     var confirmedPageChanges = new Set((item.pageChangeCutIds || []).map(String));
     var pageMarkers = (item.cuts || []).filter(function (cut) { return confirmedPageChanges.has(pageChangeCutKey(cut)); }).map(function (cut) {
@@ -636,7 +637,7 @@
     for (var time = 0; time <= duration; time += tickStep) {
       ticks += '<i style="left:' + pct(time) + '%"><span>' + formatTime(time) + '</span></i>';
     }
-    return '<section class="editor-manual-timeline" id="editorManualTimeline"><div class="editor-manual-timeline-head"><div><div class="eyebrow">Source timeline</div><h3>Video + voice</h3><span>Click to seek. Drag either handle on a red cut to adjust its edge; gold handles mark automatic cuts. Right-click a page-turn marker to remove its zoom and fade without restoring the cut.</span></div><div class="editor-manual-timeline-actions">' +
+    return '<section class="editor-manual-timeline" id="editorManualTimeline"><div class="editor-manual-timeline-head"><div><div class="eyebrow">Source timeline</div><h3>Video + voice</h3><span>Click to seek. Drag cut handles to adjust timing.' + (item.endingProtectionEnabled ? ' The ending cut stays anchored to the source end.' : '') + ' Gold handles mark automatic cuts. Right-click a page-turn marker to remove its zoom and fade without restoring the cut.</span></div><div class="editor-manual-timeline-actions">' +
       '<label class="editor-timeline-fade">Fade to black <input type="number" id="editorTimelineFadeSeconds" min="0.3" max="4" step="0.1" value="' + (Number(item.outroFadeSeconds) > 0 ? Number(item.outroFadeSeconds) : (item.effectiveLayout === 'vertical' ? 2 : 1.7)) + '" ' + (locked ? 'disabled' : '') + ' aria-label="Fade to black duration in seconds"> s</label>' +
       '<button type="button" class="btn-secondary btn-tiny" id="editorTimelineUndo" ' + (!item.canUndoCut || locked ? 'disabled' : '') + '>Undo last decision</button><button type="button" class="btn-secondary btn-tiny" id="editorTimelineAddSplit" ' + (locked ? 'disabled' : '') + '>Split at playhead</button><button type="button" class="btn-secondary btn-tiny" id="editorTimelineClearSplits" ' + (!splits.length || locked ? 'disabled' : '') + '>Clear splits</button><button type="button" class="btn-primary btn-tiny" id="editorTimelineDelete" ' + (!selection || locked ? 'disabled' : '') + '>Delete selected section</button></div></div>' +
       '<div class="editor-manual-timeline-hint"><span id="editorTimelineZoomLabel">' + zoom.toFixed(0) + ' px/sec</span><span>Ctrl/⌘ + scroll to zoom · normal scroll moves along the timeline</span></div>' +
@@ -1948,7 +1949,13 @@
           function updateFromPointer(pointerEvent) {
             var rect = manualTimelineInner.getBoundingClientRect();
             var sourceTime = Math.max(0, Math.min(duration, (pointerEvent.clientX - rect.left) / Math.max(1, rect.width) * duration));
-            if (edge === 'start') nextStart = Math.min(originalEnd - minimumCut, sourceTime);
+            if (edge === 'start') {
+              nextStart = Math.min(originalEnd - minimumCut, sourceTime);
+              if (project.endingProtectionEnabled === true && (cutId === 'tail' || /^adjusted-tail-/.test(cutId)) && project.words && project.words.length) {
+                var lastWordEnd = Number(project.words[project.words.length - 1].end) || 0;
+                nextStart = Math.min(originalEnd - minimumCut, Math.max(lastWordEnd + 0.08, Math.min(lastWordEnd + 0.25, nextStart)));
+              }
+            }
             else nextEnd = Math.max(originalStart + minimumCut, sourceTime);
             nextStart = Number(Math.max(0, nextStart).toFixed(3));
             nextEnd = Number(Math.min(duration, nextEnd).toFixed(3));

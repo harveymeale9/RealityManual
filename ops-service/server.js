@@ -2775,9 +2775,11 @@ async function executeBuildFinalVideo(id) {
     const settings = settingsRow ? JSON.parse(settingsRow.data) : {};
     const mixProfile = videoAnalysis.normalizeAudioMixSettings(settings);
     const horizontalLongform = piece.videoIsVertical === false || piece.contentType === 'longform';
+    const editorRow = piece.editorProjectId ? stmts.getOne.get('editorProjects', piece.editorProjectId) : null;
+    const editorFadeSeconds = editorRow ? Number(JSON.parse(editorRow.data).outroFadeSeconds) || 0 : 0;
     updateBuildStep('mixing_audio');
     const mixResult = await videoAnalysis.buildFinalVideo(videoPath, audioPath, outPath, settings, {
-      musicOutroSeconds: horizontalLongform ? 0.3 : 2,
+      musicOutroSeconds: horizontalLongform ? 0.3 : (editorFadeSeconds > 0 ? editorFadeSeconds : 2),
       onStage: updateBuildStep
     });
 

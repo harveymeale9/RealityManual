@@ -28,6 +28,8 @@ const PAGE_ZOOM_SECONDS = 3;
 const HORIZONTAL_OPENING_ZOOM_SECONDS = 5;
 const PAGE_CHANGE_CUT_SECONDS = 3;
 const PAGE_CHANGE_FADE_SECONDS = 0.28;
+const PROTECTED_ENDING_HANDLE_SECONDS = 0.08;
+const PROTECTED_ENDING_MAX_HANDLE_SECONDS = 0.25;
 const VIDEO_OUTRO_SECONDS = 2;
 const HORIZONTAL_VISUAL_OUTRO_SECONDS = 1.7;
 const HORIZONTAL_MUSIC_TAIL_SECONDS = 0.3;
@@ -478,9 +480,11 @@ function calculateAutoCuts(words, duration, options) {
     cuts.push({ id: 'gap-' + i, gapIndex: i, start: gapStart + handle, end: gapEnd - handle, reason: 'long_pause' });
   }
   const tail = total - words[words.length - 1].end;
-  if (tail > 0.55) cuts.push({
+  const protectedEnding = options.protectEnding === true;
+  const endingHandle = protectedEnding ? PROTECTED_ENDING_HANDLE_SECONDS : 0.25;
+  if (tail > (protectedEnding ? endingHandle + 0.08 : 0.55)) cuts.push({
     id: 'tail',
-    start: Math.min(total, words[words.length - 1].end + 0.25),
+    start: Math.min(total, words[words.length - 1].end + endingHandle),
     end: total,
     reason: 'trailing_silence'
   });
@@ -531,6 +535,22 @@ function normalizeManualTrimCuts(cuts, duration) {
   }).filter(Boolean).sort(function (a, b) { return a.start - b.start || a.end - b.end; });
 }
 
+function protectedManualTrimCuts(project, cuts) {
+  const normalized = normalizeManualTrimCuts(cuts, project && project.duration);
+  if (!project || project.endingProtectionEnabled !== true || !(project.words || []).length) return normalized;
+  const lastWordEnd = Number(project.words[project.words.length - 1].end);
+  const duration = Number(project.duration) || 0;
+  const latestSafeStart = Math.min(lastWordEnd + PROTECTED_ENDING_MAX_HANDLE_SECONDS, duration - 0.08);
+  return normalized.map(function (cut) {
+    if (!/^adjusted-tail-/.test(cut.id)) return cut;
+    return Object.assign({}, cut, {
+      start: Number(clamp(cut.start, Math.min(lastWordEnd + PROTECTED_ENDING_HANDLE_SECONDS, latestSafeStart),
+        latestSafeStart).toFixed(3)),
+      end: duration
+    });
+  });
+}
+
 function mergeCuts(cuts, duration) {
   const total = Math.max(0, Number(duration) || 0);
   const sorted = (cuts || []).map(function (cut) {
@@ -578,25 +598,35 @@ function confirmedPageChangeCutKeys(project, cuts) {
 
 function cutsForProject(project) {
   const restored = new Set(Array.isArray(project.restoredAutoCutIds) ? project.restoredAutoCutIds : []);
-  const auto = project.autoSilenceEnabled === false ? [] : calculateAutoCuts(project.words || [], project.duration, {
+  const precise = protectedManualTrimCuts(project, project.manualTrimCuts);
+  const hasAdjustedEnding = project.endingProtectionEnabled === true && precise.some(function (cut) { return /^adjusted-tail-/.test(cut.id); });
+  const auto = calculateAutoCuts(project.words || [], project.duration, {
     thresholdSeconds: project.silenceThresholdSeconds,
-    retainedPauseSeconds: effectiveRetainedPauseSeconds(project)
-  }).filter(function (cut) { return !restored.has(cut.id); });
+    retainedPauseSeconds: effectiveRetainedPauseSeconds(project),
+    protectEnding: project.endingProtectionEnabled === true
+  }).filter(function (cut) {
+    if (cut.id === 'tail' && project.endingProtectionEnabled === true) return !hasAdjustedEnding;
+    return project.autoSilenceEnabled !== false && !restored.has(cut.id);
+  });
   const manual = calculateManualCuts(project.words || [], project.removedWordIndices || [], project.duration);
-  const precise = normalizeManualTrimCuts(project.manualTrimCuts, project.duration);
   return mergeCuts(auto.concat(manual, precise), project.duration);
 }
 
 function editableTimelineCuts(project) {
   const restored = new Set(Array.isArray(project && project.restoredAutoCutIds) ? project.restoredAutoCutIds : []);
-  const automatic = project && project.autoSilenceEnabled === false ? [] : calculateAutoCuts(project && project.words || [], project && project.duration, {
-    thresholdSeconds: project && project.silenceThresholdSeconds,
-    retainedPauseSeconds: effectiveRetainedPauseSeconds(project)
-  }).filter(function (cut) { return !restored.has(cut.id); }).map(function (cut) {
-    return Object.assign({}, cut, { editableOrigin: 'automatic' });
-  });
-  const precise = normalizeManualTrimCuts(project && project.manualTrimCuts, project && project.duration).map(function (cut) {
+  const precise = protectedManualTrimCuts(project, project && project.manualTrimCuts).map(function (cut) {
     return Object.assign({}, cut, { editableOrigin: 'manual' });
+  });
+  const hasAdjustedEnding = project && project.endingProtectionEnabled === true && precise.some(function (cut) { return /^adjusted-tail-/.test(cut.id); });
+  const automatic = calculateAutoCuts(project && project.words || [], project && project.duration, {
+    thresholdSeconds: project && project.silenceThresholdSeconds,
+    retainedPauseSeconds: effectiveRetainedPauseSeconds(project),
+    protectEnding: project && project.endingProtectionEnabled === true
+  }).filter(function (cut) {
+    if (cut.id === 'tail' && project && project.endingProtectionEnabled === true) return !hasAdjustedEnding;
+    return project && project.autoSilenceEnabled !== false && !restored.has(cut.id);
+  }).map(function (cut) {
+    return Object.assign({}, cut, { editableOrigin: 'automatic' });
   });
   return automatic.concat(precise).sort(function (a, b) { return a.start - b.start || a.end - b.end; });
 }
@@ -2853,6 +2883,8 @@ function setup(options) {
         dismissedRetakeIds: [],
         restoredAutoCutIds: [],
         suppressedPageChangeCutKeys: [],
+        endingProtectionEnabled: true,
+        outroFadeSeconds: 1.5,
         autoSilenceEnabled: true,
         silenceThresholdSeconds: 1,
         retainedPauseSeconds: DEFAULT_RETAINED_PAUSE_SECONDS,
@@ -3122,7 +3154,7 @@ function setup(options) {
     const currentDismissedRetakeIds = (project.dismissedRetakeIds || []).map(String).sort();
     const currentRestoredAutoCutIds = (project.restoredAutoCutIds || []).map(String).sort();
     const currentSuppressedPageChangeCutKeys = (project.suppressedPageChangeCutKeys || []).map(String).sort();
-    const currentManualTrimCuts = normalizeManualTrimCuts(project.manualTrimCuts, project.duration);
+    const currentManualTrimCuts = protectedManualTrimCuts(project, project.manualTrimCuts);
     const currentAutoSilenceEnabled = project.autoSilenceEnabled !== false;
     const currentSilenceThresholdSeconds = Number(project.silenceThresholdSeconds) || 1;
     const currentRetainedPauseSeconds = effectiveRetainedPauseSeconds(project);
@@ -3156,7 +3188,7 @@ function setup(options) {
       ? Array.from(new Set(req.body.suppressedPageChangeCutKeys.map(String))).sort()
       : currentSuppressedPageChangeCutKeys;
     const nextManualTrimCuts = Array.isArray(req.body && req.body.manualTrimCuts)
-      ? normalizeManualTrimCuts(req.body.manualTrimCuts, project.duration)
+      ? protectedManualTrimCuts(project, req.body.manualTrimCuts)
       : currentManualTrimCuts;
     const nextAutoSilenceEnabled = typeof (req.body && req.body.autoSilenceEnabled) === 'boolean' ? req.body.autoSilenceEnabled : currentAutoSilenceEnabled;
     const nextSilenceThresholdSeconds = Number.isFinite(Number(req.body && req.body.silenceThresholdSeconds)) ? clamp(req.body.silenceThresholdSeconds, 0.65, 5) : currentSilenceThresholdSeconds;
