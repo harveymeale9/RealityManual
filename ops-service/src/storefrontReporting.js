@@ -105,7 +105,7 @@ function startOfUtcDay(value) {
 function getWebsiteTraffic(db, nowValue) {
   const today = startOfUtcDay(nowValue || Date.now());
   const start = new Date(today);
-  start.setUTCDate(start.getUTCDate() - 14);
+  start.setUTCDate(start.getUTCDate() - 30);
   const startDay = start.toISOString().slice(0, 10);
   const todayDay = today.toISOString().slice(0, 10);
   const dailyRows = db.prepare(`
@@ -125,7 +125,7 @@ function getWebsiteTraffic(db, nowValue) {
   dailyRows.concat(rawRows).forEach(function (row) {
     counts.set(row.day, (counts.get(row.day) || 0) + Number(row.page_views || 0));
   });
-  const daily = Array.from({ length: 14 }, function (_, index) {
+  const lineDaily = Array.from({ length: 30 }, function (_, index) {
     const date = new Date(start);
     date.setUTCDate(date.getUTCDate() + index);
     const day = date.toISOString().slice(0, 10);
@@ -133,9 +133,10 @@ function getWebsiteTraffic(db, nowValue) {
   });
   return {
     timezone: 'UTC',
-    daily: daily,
-    previous_7_days: daily.slice(0, 7).reduce(function (sum, row) { return sum + row.page_views; }, 0),
-    last_7_days: daily.slice(7).reduce(function (sum, row) { return sum + row.page_views; }, 0)
+    line_daily: lineDaily,
+    daily: lineDaily.slice(-14),
+    previous_7_days: lineDaily.slice(-14, -7).reduce(function (sum, row) { return sum + row.page_views; }, 0),
+    last_7_days: lineDaily.slice(-7).reduce(function (sum, row) { return sum + row.page_views; }, 0)
   };
 }
 

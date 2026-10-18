@@ -406,10 +406,45 @@
         '<span class="website-traffic-date">' + escapeHtml(shortDate) + '</span>' +
       '</div>';
     }).join('');
+    var lineDays = Array.isArray(traffic.line_daily) && traffic.line_daily.length === 30 ? traffic.line_daily : [];
+    var lineChart = '';
+    if (lineDays.length) {
+      var counts = lineDays.map(function (row) { return Math.max(0, Number(row.page_views) || 0); });
+      var ceiling = Math.max(1, Math.ceil(Math.max(...counts) / 5) * 5);
+      var xAt = function (index) { return 48 + index * 832 / (lineDays.length - 1); };
+      var yAt = function (count) { return 205 - count * 175 / ceiling; };
+      var points = counts.map(function (count, index) { return xAt(index).toFixed(1) + ' ' + yAt(count).toFixed(1); });
+      var linePath = 'M ' + points.join(' L ');
+      var areaPath = linePath + ' L 880 205 L 48 205 Z';
+      var ticks = [ceiling, Math.round(ceiling / 2), 0].map(function (value) {
+        var y = yAt(value).toFixed(1);
+        return '<line x1="48" y1="' + y + '" x2="880" y2="' + y + '" class="website-line-grid" />' +
+          '<text x="40" y="' + (Number(y) + 4) + '" text-anchor="end" class="website-line-axis">' + value + '</text>';
+      }).join('');
+      var dates = [0, 7, 14, 21, 29].map(function (index) {
+        var row = lineDays[index];
+        var date = new Date(row.day + 'T00:00:00Z');
+        var label = Number.isNaN(date.getTime()) ? row.day : date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+        return '<text x="' + xAt(index).toFixed(1) + '" y="239" text-anchor="' + (index === 0 ? 'start' : index === 29 ? 'end' : 'middle') + '" class="website-line-axis">' + escapeHtml(label) + '</text>';
+      }).join('');
+      var markers = lineDays.map(function (row, index) {
+        var count = counts[index];
+        var x = xAt(index).toFixed(1);
+        var y = yAt(count).toFixed(1);
+        return '<circle cx="' + x + '" cy="' + y + '" r="3" class="website-line-dot" />' +
+          '<circle cx="' + x + '" cy="' + y + '" r="11" class="website-line-hit"><title>' + escapeHtml(row.day) + ': ' + count + ' page views</title></circle>';
+      }).join('');
+      lineChart = '<div class="website-line"><div class="website-line-heading"><span class="eyebrow">Last 30 full days</span><span>Daily verified page views · hover for counts</span></div>' +
+        '<svg viewBox="0 0 900 250" role="img" aria-label="Daily verified page views for the last 30 completed UTC days" preserveAspectRatio="xMidYMid meet">' +
+        '<path d="' + areaPath + '" class="website-line-area" />' + ticks +
+        '<path d="' + linePath + '" class="website-line-path" />' + markers + dates + '</svg></div>';
+    }
     return '<section class="website-traffic" aria-label="Website pageview trend">' +
       '<div class="website-traffic-head"><div><span class="eyebrow">Traffic trend · completed UTC days</span>' +
         '<h3>Page views, day by day</h3></div>' +
         '<p>Last 7 full days <strong>' + current + '</strong> <span class="website-traffic-change ' + trendClass + '">' + escapeHtml(comparison) + '</span></p></div>' +
+      lineChart +
+      '<div class="website-bars-heading eyebrow">Last 14 full days · exact daily counts</div>' +
       '<div class="website-traffic-chart" aria-label="Fourteen daily pageview counts">' + bars + '</div>' +
       '<div class="website-traffic-foot"><span>Previous 7 days: ' + previous + '</span><span>Latest 7 days: ' + current + '</span></div>' +
     '</section>';

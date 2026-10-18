@@ -583,7 +583,7 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /Cut edge moved/);
   assert.match(page, /lib\/captionMask\.js\?v=20261015-mask-swears/);
   assert.match(page, /editor\.js\?v=20261018-protected-ending-v156/);
-  assert.match(page, /style\.css\?v=20261018-website-trend-v163/);
+  assert.match(page, /style\.css\?v=20261018-website-line-v164/);
   assert.match(source, /id="editorTimelineUndo"/);
   assert.match(source, /id="editorTimelineFadeSeconds"/);
   assert.match(source, /class="editor-sticky-cut"><button type="button" class="btn-primary btn-tiny" id="editorCut" disabled>Cut selected/);

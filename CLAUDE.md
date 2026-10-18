@@ -20221,3 +20221,17 @@ mix profile through `normalizeAudioMixSettings` discarded `duckingEnabled`
 and could reset other normalized fields. The normalizer is now idempotent, so
 an explicitly enabled ducking profile survives both the audition and final
 mix helpers; a regression test locks that behavior.
+
+---
+
+# 657. Website Analytics 30-Day Traffic Line (2026-10-18)
+
+Harvey asked for a GSC-style line graph in addition to the existing two-week
+bar chart. The same private `/api/reports/website-traffic` endpoint now returns
+`line_daily` with the latest 30 completed UTC days, while its original `daily`
+array remains the latest 14 days for the existing bars and week-over-week
+comparison. Both series come from the same verified compacted-plus-raw pageview
+counts, with zero-filled gaps; the partial current day remains only in the
+Today tile. Website Analytics renders a responsive SVG line/area graph with
+daily hover counts, date and count axes, above the unchanged 14-day bars. No
+new external analytics source or tracking was introduced.

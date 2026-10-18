@@ -25,7 +25,8 @@ test('website traffic chart combines compacted and live verified pageviews acros
     CREATE TABLE analytics_events(created_at TEXT,event_name TEXT,verified_human INTEGER);
   `);
   const daily = db.prepare('INSERT INTO analytics_daily_events VALUES (?,?,?)');
-  daily.run('2026-10-03', 'page_view', 99); // outside chart
+  daily.run('2026-09-17', 'page_view', 500); // outside the 30-day line
+  daily.run('2026-10-03', 'page_view', 99); // in the line, outside the 14-day bars
   daily.run('2026-10-05', 'page_view', 3);
   daily.run('2026-10-11', 'page_view', 4);
   daily.run('2026-10-12', 'page_view', 5);
@@ -36,6 +37,10 @@ test('website traffic chart combines compacted and live verified pageviews acros
   event.run('2026-10-18T09:00:00.000Z', 'page_view', 1); // partial today
   const result = reporting.getWebsiteTraffic(db, '2026-10-18T12:00:00.000Z');
   assert.equal(result.daily.length, 14);
+  assert.equal(result.line_daily.length, 30);
+  assert.equal(result.line_daily[0].day, '2026-09-18');
+  assert.equal(result.line_daily.find((row) => row.day === '2026-10-03').page_views, 99);
+  assert.equal(result.line_daily.find((row) => row.day === '2026-09-17'), undefined);
   assert.equal(result.daily[0].day, '2026-10-04');
   assert.equal(result.daily[13].day, '2026-10-17');
   assert.equal(result.daily.find((row) => row.day === '2026-10-04').page_views, 0);
@@ -47,6 +52,7 @@ test('website traffic chart combines compacted and live verified pageviews acros
   const serverSource = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   assert.match(appSource, /website-traffic/);
   assert.match(appSource, /websiteTrafficHtml\(traffic\)/);
+  assert.match(appSource, /class="website-line-path"/);
   assert.match(serverSource, /app\.get\('\/api\/reports\/website-traffic', requireAuth/);
   db.close();
 });
