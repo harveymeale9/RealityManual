@@ -1612,11 +1612,41 @@ app.get('/api/reports/weekly/status', requireAuth, function (req, res) {
 app.get('/api/reports/sales-dashboard', requireAuth, function (req, res) {
   try {
     res.set('Cache-Control', 'no-store');
-    res.json(storefrontReporting.getSalesDashboard(getStorefrontReportDb()));
+    const dashboard = storefrontReporting.getSalesDashboard(getStorefrontReportDb());
+    const notes = new Map(stmts.getAll.all('refundNotes').map(function (row) {
+      try { const item = JSON.parse(row.data); return [item.orderId, item.note]; }
+      catch (error) { return [null, null]; }
+    }));
+    dashboard.recent_refunds.forEach(function (refund) {
+      refund.note = String(notes.get(refund.id) || '');
+      if (refund.note) {
+        refund.reason = refund.note;
+        refund.reason_source = 'admin_note';
+      }
+    });
+    res.json(dashboard);
   }
   catch (error) {
     console.error('Sales dashboard read failed:', error.message);
     res.status(503).json({ error: 'sales_dashboard_unavailable' });
+  }
+});
+app.put('/api/reports/refunds/:id/note', requireAuth, function (req, res) {
+  const id = req.params.id;
+  const note = req.body && req.body.note;
+  if (!isValidId(id) || typeof note !== 'string' || note.length > 500) {
+    return res.status(400).json({ error: 'invalid_refund_note' });
+  }
+  try {
+    const order = getStorefrontReportDb().prepare('SELECT order_status FROM orders WHERE id = ?').get(id);
+    if (!order || order.order_status !== 'REFUNDED') return res.status(404).json({ error: 'refund_not_found' });
+    const trimmed = note.trim();
+    if (trimmed) stmts.upsert.run('refundNotes', id, JSON.stringify({ orderId: id, note: trimmed }), new Date().toISOString());
+    else stmts.del.run('refundNotes', id);
+    res.set('Cache-Control', 'no-store').json({ ok: true, note: trimmed });
+  } catch (error) {
+    console.error('Refund note save failed:', error.message);
+    res.status(503).json({ error: 'refund_note_unavailable' });
   }
 });
 app.get('/api/reports/content-analytics', requireAuth, function (req, res) {

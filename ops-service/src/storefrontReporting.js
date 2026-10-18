@@ -98,6 +98,16 @@ function startOfUtcDay(value) {
   return date;
 }
 
+function fulfillmentIssueSummary(message) {
+  const detail = String(message || '').toLowerCase();
+  if (!detail.trim()) return '';
+  const issues = [];
+  if (/title.*inactive|inactive.*title/.test(detail)) issues.push('title inactive');
+  if (/not have enough funds|insufficient funds/.test(detail)) issues.push('insufficient BookVault funds');
+  if (/customs declaration/.test(detail)) issues.push('customs declaration missing');
+  return issues.length ? 'BookVault: ' + issues.join(', ') : 'BookVault fulfillment failed';
+}
+
 // Private, admin-only dashboard data. Deliberately omits customer contact and
 // address fields; the panel needs operational sales state, not a second copy
 // of the customer database in the browser.
@@ -159,6 +169,30 @@ function getSalesDashboard(db, nowValue) {
     };
   });
 
+  const recentRefunds = db.prepare(`
+    SELECT id, created_at, updated_at, country, total_price_cents, currency,
+      fulfillment_last_error,
+      (SELECT error_type FROM error_logs WHERE order_id = orders.id AND service = 'refund'
+        ORDER BY created_at DESC LIMIT 1) AS refund_error_type
+    FROM orders WHERE order_status = 'REFUNDED'
+    ORDER BY updated_at DESC LIMIT 100
+  `).all().map(function (row) {
+    return {
+      id: row.id,
+      created_at: row.created_at,
+      refunded_at: row.updated_at,
+      country: row.country || '—',
+      total_price_cents: Number(row.total_price_cents) || 0,
+      currency: row.currency || 'usd',
+      reason: row.refund_error_type === 'fulfillment_exhausted_refunded'
+        ? 'Automatically refunded after BookVault could not fulfill the order.' : '',
+      system_reason: row.refund_error_type === 'fulfillment_exhausted_refunded'
+        ? 'Automatically refunded after BookVault could not fulfill the order.' : '',
+      reason_source: row.refund_error_type === 'fulfillment_exhausted_refunded' ? 'automatic' : 'unrecorded',
+      fulfillment_context: fulfillmentIssueSummary(row.fulfillment_last_error)
+    };
+  });
+
   return {
     generated_at: end,
     timezone: 'UTC',
@@ -170,7 +204,8 @@ function getSalesDashboard(db, nowValue) {
     },
     daily: daily,
     countries: countries,
-    recent_orders: recentOrders
+    recent_orders: recentOrders,
+    recent_refunds: recentRefunds
   };
 }
 

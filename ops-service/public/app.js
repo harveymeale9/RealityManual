@@ -321,6 +321,20 @@
           '<div class="sales-order-ops">' + operations + '</div></div>';
       }).join('') : '<div class="sales-empty sales-empty-orders"><strong>No orders yet</strong><span>Tomorrow’s purchase will appear here as soon as checkout creates it, with payment, BookVault, email, and Resend status.</span></div>';
 
+      var refunds = (data.recent_refunds || []).map(function (refund) {
+        var date = new Date(refund.refunded_at);
+        return '<article class="sales-refund-row" data-refund-id="' + escapeHtml(refund.id) + '">' +
+          '<div class="sales-refund-top"><strong>#' + escapeHtml(String(refund.id || '').slice(0, 8).toUpperCase()) + '</strong>' +
+            '<time datetime="' + escapeHtml(refund.refunded_at || '') + '">' + (isNaN(date.getTime()) ? 'Date unavailable' : date.toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })) + '</time>' +
+            '<b>' + salesMoney(refund.total_price_cents, refund.currency) + '</b></div>' +
+          '<p><span>Reason</span> <strong class="sales-refund-reason-text">' + escapeHtml(refund.reason || 'Reason not recorded') + '</strong></p>' +
+          (refund.fulfillment_context ? '<small>Fulfillment context: ' + escapeHtml(refund.fulfillment_context) + '</small>' : '') +
+          '<details class="sales-refund-note-editor"><summary>' + (refund.note ? 'Edit reason note' : 'Add reason note') + '</summary>' +
+            '<textarea maxlength="500" rows="2" aria-label="Refund reason note" placeholder="Why was this order refunded?">' + escapeHtml(refund.note || '') + '</textarea>' +
+            '<div><button type="button" class="btn-secondary btn-tiny sales-refund-save">Save note</button><span class="sales-refund-save-status" role="status"></span></div></details>' +
+          '</article>';
+      }).join('') || '<div class="sales-empty">No refunds recorded.</div>';
+
       var thirty = data.periods.last_30_days;
       panelMain.innerHTML = '<div class="sales-dashboard">' +
         '<header class="sales-dashboard-head"><div><div class="eyebrow">Live storefront database</div><h2>Sales Analytics</h2><p>Revenue, orders, fulfillment and customer-email delivery.</p></div>' +
@@ -328,17 +342,44 @@
         '<section class="sales-metric-grid">' + periodCards + '</section>' +
         '<section class="sales-secondary-grid">' +
           '<article><span>30-day average order</span><strong>' + salesMoney(thirty.average_order_cents) + '</strong></article>' +
-          '<article><span>30-day refunds</span><strong>' + thirty.refunded_orders + '</strong><small>' + salesMoney(thirty.refunded_value_cents) + '</small></article>' +
+          '<article><span>30-day refunds</span><strong>' + thirty.refunded_orders + '</strong><small>' + salesMoney(thirty.refunded_value_cents) + ' · <button type="button" class="sales-refund-jump" id="salesRefundJump">View reasons</button></small></article>' +
           '<article><span>Landing → order</span><strong>' + salesConversion(thirty.paid_orders, analytics, 'landing_page_view') + '</strong><small>verified visits</small></article>' +
           '<article><span>Checkout → order</span><strong>' + salesConversion(thirty.paid_orders, analytics, 'checkout_view') + '</strong><small>verified visits</small></article>' +
         '</section>' +
         '<div class="sales-dashboard-columns"><section class="sales-block sales-chart-block"><div class="sales-block-head"><div><span>Revenue</span><h3>Last 30 days</h3></div><b>' + salesMoney(thirty.revenue_cents) + '</b></div><div class="sales-chart">' + chart + '</div></section>' +
           '<section class="sales-block"><div class="sales-block-head"><div><span>Markets</span><h3>Revenue by country</h3></div></div><div class="sales-country-list">' + countries + '</div></section></div>' +
+        '<section class="sales-block sales-refunds" id="salesRefunds"><div class="sales-block-head"><div><span>Money returned</span><h3>Refunds &amp; reasons</h3></div><small>' + data.periods.all_time.refunded_orders + ' all time · newest 100 shown</small></div><div class="sales-refund-list">' + refunds + '</div></section>' +
         '<section class="sales-block sales-orders"><div class="sales-block-head"><div><span>Operations</span><h3>Recent orders</h3></div><small>Newest 25 · refreshes every 30 seconds</small></div><div class="sales-order-list">' + recentOrders + '</div></section>' +
       '</div>';
       var refresh = document.getElementById('salesRefresh');
       if (refresh) refresh.addEventListener('click', renderSalesAnalytics);
-      salesAnalyticsTimer = setTimeout(function () { if (currentTabId() === 'sales-analytics') renderSalesAnalytics(); }, 30000);
+      var refundJump = document.getElementById('salesRefundJump');
+      if (refundJump) refundJump.addEventListener('click', function () { document.getElementById('salesRefunds').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+      panelMain.querySelectorAll('.sales-refund-row').forEach(function (row) {
+        var button = row.querySelector('.sales-refund-save');
+        button.addEventListener('click', function () {
+          var note = row.querySelector('textarea').value.trim();
+          var status = row.querySelector('.sales-refund-save-status');
+          button.disabled = true;
+          status.textContent = 'Saving…';
+          fetch('/api/reports/refunds/' + encodeURIComponent(row.dataset.refundId) + '/note', {
+            method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note: note })
+          }).then(function (response) { if (!response.ok) throw new Error('save_failed'); return response.json(); }).then(function () {
+            var refund = (data.recent_refunds || []).find(function (item) { return item.id === row.dataset.refundId; });
+            row.querySelector('.sales-refund-reason-text').textContent = note || (refund && refund.system_reason) || 'Reason not recorded';
+            row.querySelector('summary').textContent = note ? 'Edit reason note' : 'Add reason note';
+            status.textContent = 'Saved';
+          }).catch(function () { status.textContent = 'Could not save. Try again.'; }).finally(function () { button.disabled = false; });
+        });
+      });
+      salesAnalyticsTimer = setTimeout(function refreshSalesAnalytics() {
+        if (currentTabId() !== 'sales-analytics') return;
+        if (document.activeElement && document.activeElement.closest('.sales-refund-note-editor')) {
+          salesAnalyticsTimer = setTimeout(refreshSalesAnalytics, 30000);
+          return;
+        }
+        renderSalesAnalytics();
+      }, 30000);
     }).catch(function () {
       if (currentTabId() !== 'sales-analytics') return;
       renderAnalyticsPlaceholder('sales-analytics');
@@ -414,6 +455,7 @@
             '<div class="funnel-section">' +
               '<div class="eyebrow">Funnel — last 30 days</div>' +
               '<div class="funnel-list">' + funnelRows + '</div>' +
+              (refundedOrders ? '<a class="analytics-internal-link" href="#sales-analytics">View refunded orders and reasons in Sales Analytics</a>' : '') +
             '</div>' +
             '<div class="funnel-section">' +
               '<div class="eyebrow">Top UTM sources — last 30 days</div>' +

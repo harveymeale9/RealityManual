@@ -20096,3 +20096,34 @@ forced two full board renders by changing and clearing the type filter during
 playback: the same video element stayed attached, playing, and advanced from
 1.5 to 4.8 seconds rather than resetting. A source regression assertion
 covers the retention/rebinding hooks.
+
+---
+
+# 653. Refund Reasons in Private Sales Analytics (2026-10-18)
+
+Harvey asked whether the Website Analytics refund count was his own recent
+test order, and for future refunds to show both the order and the reason. A
+read-only production audit found exactly one `REFUNDED` storefront order:
+`1ccac84e-975a-424b-be98-3b9b754a9298`, purchased 2026-10-13 for $82.29.
+The recorded customer name matches Harvey, and §587 already records that he
+requested cancellation of this test order after BookVault rejected it. No
+other order is refunded. The saved BookVault errors name an inactive title,
+insufficient BookVault funds, and a missing customs declaration; those were
+the fulfillment problems, not an assertion that BookVault initiated Harvey's
+manual refund.
+
+The private Sales Analytics API now includes the 100 latest refunded orders
+independently of the newest-25 order list. Each has a reference, amount, date,
+an explicit reason or "Reason not recorded," and a sanitized fulfillment
+context. Automatic refund reasons come from the storefront's `refund` error
+type; raw provider errors and customer contact/address fields are never
+returned. A dedicated **Refunds & reasons** section appears above Recent
+orders, the 30-day refund tile jumps to it, and Website Analytics links there
+when its funnel has refunds. Admins can add/edit a plain-language reason note
+for manual refunds using a dedicated authenticated endpoint. Notes live only
+in the ops database's `refundNotes` records; the storefront payment and order
+records remain untouched. The 30-second refresh waits while a note editor has
+focus. The current test order's owner-requested explanation is added through
+that endpoint after deploy. Reporting tests cover the separate refund list,
+automatic vs. unrecorded reasons, sanitized BookVault context, and exclusion
+of customer PII.

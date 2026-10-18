@@ -9,8 +9,12 @@ const reporting = require('../src/storefrontReporting');
 
 test('website analytics shows refunds and one count per funnel row', function () {
   const appSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const serverSource = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   assert.match(appSource, /order_refunded: 'Order refunded'/);
   assert.match(appSource, /last_30_days\.refunded_orders/);
+  assert.match(appSource, /Refunds &amp; reasons/);
+  assert.match(appSource, /View refunded orders and reasons in Sales Analytics/);
+  assert.match(serverSource, /app\.put\('\/api\/reports\/refunds\/:id\/note', requireAuth/);
   assert.doesNotMatch(appSource, /f\.unique_sessions \+ ' visits'/);
 });
 
@@ -56,14 +60,15 @@ test('sales dashboard returns live periods, a filled daily series and privacy-sa
       total_price_cents INTEGER, currency TEXT, country TEXT, shipping_service_name TEXT,
       bookvault_order_id TEXT, confirmation_email_sent_at TEXT, shipping_email_sent_at TEXT,
       resend_contact_synced_at TEXT, created_at TEXT, updated_at TEXT,
-      customer_name TEXT, email TEXT, street1 TEXT
+      customer_name TEXT, email TEXT, street1 TEXT, fulfillment_last_error TEXT
     );
+    CREATE TABLE error_logs(order_id TEXT, service TEXT, error_type TEXT, created_at TEXT);
   `);
-  const order = db.prepare('INSERT INTO orders VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
-  order.run('paid-1','BOOKVAULT_ACCEPTED','succeeded',2,14200,'usd','GB','Tracked','BV-1','2026-10-09T10:03:00.000Z',null,'2026-10-09T10:04:00.000Z','2026-10-09T10:00:00.000Z','2026-10-09T10:04:00.000Z','Private Person','private@example.com','Secret street');
-  order.run('paid-2','SHIPPED','succeeded',1,7100,'usd','US','Standard','BV-2','2026-10-10T08:03:00.000Z','2026-10-10T09:00:00.000Z','2026-10-10T08:04:00.000Z','2026-10-10T08:00:00.000Z','2026-10-10T09:00:00.000Z','Private Person','private@example.com','Secret street');
-  order.run('refund','REFUNDED','succeeded',1,7100,'usd','US','Standard',null,null,null,null,'2026-10-08T08:00:00.000Z','2026-10-10T09:30:00.000Z','Private Person','private@example.com','Secret street');
-  order.run('pending','PAYMENT_PENDING','requires_payment_method',1,7100,'usd','US','Standard',null,null,null,null,'2026-10-10T09:00:00.000Z','2026-10-10T09:00:00.000Z','Private Person','private@example.com','Secret street');
+  const order = db.prepare('INSERT INTO orders VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+  order.run('paid-1','BOOKVAULT_ACCEPTED','succeeded',2,14200,'usd','GB','Tracked','BV-1','2026-10-09T10:03:00.000Z',null,'2026-10-09T10:04:00.000Z','2026-10-09T10:00:00.000Z','2026-10-09T10:04:00.000Z','Private Person','private@example.com','Secret street',null);
+  order.run('paid-2','SHIPPED','succeeded',1,7100,'usd','US','Standard','BV-2','2026-10-10T08:03:00.000Z','2026-10-10T09:00:00.000Z','2026-10-10T08:04:00.000Z','2026-10-10T08:00:00.000Z','2026-10-10T09:00:00.000Z','Private Person','private@example.com','Secret street',null);
+  order.run('refund','REFUNDED','succeeded',1,7100,'usd','US','Standard',null,null,null,null,'2026-10-08T08:00:00.000Z','2026-10-10T09:30:00.000Z','Private Person','private@example.com','Secret street','Title inactive; insufficient funds; customs declaration required; private@example.com');
+  order.run('pending','PAYMENT_PENDING','requires_payment_method',1,7100,'usd','US','Standard',null,null,null,null,'2026-10-10T09:00:00.000Z','2026-10-10T09:00:00.000Z','Private Person','private@example.com','Secret street',null);
 
   const dashboard = reporting.getSalesDashboard(db, '2026-10-10T12:00:00.000Z');
   assert.equal(dashboard.periods.today.paid_orders, 1);
@@ -75,6 +80,11 @@ test('sales dashboard returns live periods, a filled daily series and privacy-sa
   assert.equal(dashboard.recent_orders.length, 4);
   assert.equal(dashboard.recent_orders[0].id, 'pending');
   assert.equal(dashboard.recent_orders[1].shipping_email_sent, true);
+  assert.equal(dashboard.recent_refunds.length, 1);
+  assert.equal(dashboard.recent_refunds[0].reason_source, 'unrecorded');
+  assert.equal(dashboard.recent_refunds[0].fulfillment_context, 'BookVault: title inactive, insufficient BookVault funds, customs declaration missing');
+  db.prepare('INSERT INTO error_logs VALUES (?,?,?,?)').run('refund','refund','fulfillment_exhausted_refunded','2026-10-10T09:30:00.000Z');
+  assert.equal(reporting.getSalesDashboard(db, '2026-10-10T12:00:00.000Z').recent_refunds[0].reason_source, 'automatic');
   assert.equal(JSON.stringify(dashboard).includes('private@example.com'), false);
   assert.equal(JSON.stringify(dashboard).includes('Secret street'), false);
   db.close();

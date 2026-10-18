@@ -2522,6 +2522,7 @@ body.role-reviewer #pmBackFab {
 .sales-secondary-grid article { min-height: 78px; padding: 14px 17px; background: var(--surface-2); }
 .sales-secondary-grid strong { color: var(--ink); font: 600 1.2rem var(--font-display); }
 .sales-secondary-grid small { margin-left: 7px; color: var(--ink-faint); font-size: .66rem; }
+.sales-refund-jump { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer; }
 .sales-dashboard-columns { display: grid; grid-template-columns: minmax(0,1.65fr) minmax(270px,.75fr); gap: 14px; margin-bottom: 14px; }
 .sales-block { min-width: 0; border: 1px solid var(--border); border-radius: 9px; background: rgba(8,15,11,.91); overflow: hidden; }
 .sales-block-head { min-height: 66px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 13px 17px; border-bottom: 1px solid var(--border-soft); }
@@ -2542,6 +2543,22 @@ body.role-reviewer #pmBackFab {
 .sales-country-row span { color: var(--ink-soft); font-size: .7rem; }
 .sales-country-row b { font: 600 .76rem var(--font-mono); font-variant-numeric: tabular-nums; }
 .sales-empty { padding: 24px 17px; color: var(--ink-faint); font-size: .75rem; }
+.sales-refunds { margin-bottom: 14px; scroll-margin-top: 16px; }
+.sales-refund-row { padding: 14px 17px; border-bottom: 1px solid var(--border-soft); }
+.sales-refund-row:last-child { border-bottom: 0; }
+.sales-refund-top { display: flex; align-items: baseline; gap: 12px; }
+.sales-refund-top strong { color: #f08a81; font: 700 .74rem var(--font-mono); }
+.sales-refund-top time { color: var(--ink-faint); font: .65rem var(--font-mono); }
+.sales-refund-top b { margin-left: auto; color: var(--ink); font: 600 .8rem var(--font-mono); }
+.sales-refund-row p { margin: 10px 0 4px; color: var(--ink-soft); font-size: .77rem; line-height: 1.5; }
+.sales-refund-row p span { color: var(--ink-faint); font: 700 .62rem var(--font-mono); text-transform: uppercase; }
+.sales-refund-row p strong { color: var(--ink); font-weight: 600; }
+.sales-refund-row > small { display: block; color: var(--ink-faint); font-size: .67rem; line-height: 1.45; }
+.sales-refund-note-editor { margin-top: 9px; color: var(--accent); font-size: .68rem; }
+.sales-refund-note-editor summary { width: max-content; cursor: pointer; }
+.sales-refund-note-editor textarea { display: block; width: min(100%,650px); margin: 9px 0 7px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 5px; color: var(--ink); background: var(--surface-2); font: .74rem/1.5 var(--font-body); resize: vertical; }
+.sales-refund-note-editor > div { display: flex; align-items: center; gap: 10px; }
+.sales-refund-save-status { color: var(--ink-faint); }
 .sales-orders { margin-bottom: 20px; }
 .sales-order-list { width: 100%; }
 .sales-order-row { display: grid; grid-template-columns: 128px minmax(145px,.7fr) minmax(135px,.8fr) 90px minmax(270px,1.4fr); align-items: center; gap: 13px; min-height: 67px; padding: 10px 17px; border-bottom: 1px solid var(--border-soft); }
