@@ -22,6 +22,7 @@ const openaiStructured = require('./openaiStructured');
 var BROWSER_SAFE_VIDEO_CODECS = ['h264', 'vp8', 'vp9', 'av1'];
 var VIDEO_OUTRO_SECONDS = 2;
 var PUBLISH_AUDIO_SAMPLE_RATE = '48000';
+const musicPeakCache = new Map();
 
 function probeVideoCodec(videoPath) {
   return new Promise(function (resolve) {
@@ -85,12 +86,12 @@ function normalizeAudioMixSettings(input) {
   }
   input = input || {};
   return {
-    mode: input.audioMixMode === 'legacy_percent' ? 'legacy_percent' : 'loudness',
-    dialogueLufs: clampNumber(input.dialogueLufsTarget, -16, -18, -14, 1),
+    mode: input.audioMixMode === 'legacy_percent' || input.mode === 'legacy_percent' ? 'legacy_percent' : 'loudness',
+    dialogueLufs: clampNumber(input.dialogueLufsTarget === undefined ? input.dialogueLufs : input.dialogueLufsTarget, -16, -18, -14, 1),
     musicBelowDialogueDb: clampNumber(input.musicBelowDialogueDb, 20, 15, 25, 1),
-    truePeakDbtp: clampNumber(input.audioTruePeakDbtp, -1.5, -3, -1, 0.5),
-    duckingEnabled: input.musicDuckingEnabled === true,
-    legacyPercent: normalizeAmbientVolumePercent(input.ambientMusicVolumePercent)
+    truePeakDbtp: clampNumber(input.audioTruePeakDbtp === undefined ? input.truePeakDbtp : input.audioTruePeakDbtp, -1.5, -3, -1, 0.5),
+    duckingEnabled: (input.musicDuckingEnabled === undefined ? input.duckingEnabled : input.musicDuckingEnabled) === true,
+    legacyPercent: normalizeAmbientVolumePercent(input.ambientMusicVolumePercent === undefined ? input.legacyPercent : input.ambientMusicVolumePercent)
   };
 }
 
@@ -249,6 +250,22 @@ function measuredFinalAudioArgs(tempAudioPath, outPath, settings, mixMeasurement
     '-c:a', 'libmp3lame', '-b:a', previewBitrate(options), '-ar', PUBLISH_AUDIO_SAMPLE_RATE, '-f', 'mp3', outPath];
 }
 
+// Content Production only asks which track fits the voice. Calibrate the
+// same relative gains and ducking as the master, but encode that mix once
+// instead of writing a full-length FLAC, re-measuring it, and encoding it
+// again. The final publishing build still performs those mastering passes.
+function productionAuditionArgs(dialoguePath, audioPath, outPath, settings, dialogueMeasurement, musicMeasurement, programmeDuration, options) {
+  settings = normalizeAudioMixSettings(settings);
+  const measured = measuredMixAudioArgs(dialoguePath, audioPath, outPath, settings,
+    dialogueMeasurement, musicMeasurement, programmeDuration, VIDEO_OUTRO_SECONDS);
+  const filter = measured[measured.indexOf('-filter_complex') + 1];
+  const limit = Math.pow(10, settings.truePeakDbtp / 20).toFixed(6);
+  return ['-y', '-i', dialoguePath, '-stream_loop', '-1', '-i', audioPath,
+    '-filter_complex', filter + ';[mix]alimiter=limit=' + limit + ':level=false[audition]',
+    '-map', '[audition]', '-c:a', 'libmp3lame', '-b:a', previewBitrate(options),
+    '-ar', PUBLISH_AUDIO_SAMPLE_RATE, '-f', 'mp3', outPath];
+}
+
 function legacyAudioPreviewArgs(dialoguePath, audioPath, outPath, ambientVolumePercent, options, programmeDuration, outroSeconds) {
   const volume = (normalizeAmbientVolumePercent(ambientVolumePercent) / 100).toFixed(2);
   return ['-y', '-i', dialoguePath, '-stream_loop', '-1', '-i', audioPath,
@@ -283,9 +300,28 @@ async function mediaDuration(inputPath) {
   });
 }
 
+function musicPeakMeasurementDuration(usedDurationSeconds, trackDuration) {
+  const programme = Number(usedDurationSeconds);
+  return Number.isFinite(programme) && programme > 0
+    ? Math.min(programme, trackDuration + 3)
+    : trackDuration;
+}
+
 async function measureMusicPeak(inputPath, usedDurationSeconds) {
-  const result = await runFfmpeg(musicPeakMeasureArgs(inputPath, usedDurationSeconds), 'music peak measurement');
-  return parseMusicPeakMeasurement(result.stderr);
+  // Once a short music file loops, every three-second EBU window is already
+  // represented by one full loop plus its first three seconds. Decoding a
+  // 90-second track for a 20-minute programme adds no new loudness evidence.
+  const trackDuration = await mediaDuration(inputPath);
+  const measuredDuration = musicPeakMeasurementDuration(usedDurationSeconds, trackDuration);
+  const stat = fs.statSync(inputPath);
+  const key = JSON.stringify([inputPath, stat.size, stat.mtimeMs, measuredDuration]);
+  if (musicPeakCache.has(key)) return musicPeakCache.get(key);
+  const job = runFfmpeg(musicPeakMeasureArgs(inputPath, measuredDuration), 'music peak measurement')
+    .then(function (result) { return parseMusicPeakMeasurement(result.stderr); })
+    .catch(function (error) { musicPeakCache.delete(key); throw error; });
+  musicPeakCache.set(key, job);
+  if (musicPeakCache.size > 256) musicPeakCache.delete(musicPeakCache.keys().next().value);
+  return job;
 }
 
 // The actual "final" video Harvey reviews in Final Check and eventually
@@ -359,6 +395,20 @@ async function buildAudioPreview(dialoguePath, audioPath, outPath, mixInput, out
   } finally {
     fs.rmSync(tempAudioPath, { force: true });
   }
+}
+
+async function buildProductionAudioPreview(dialoguePath, audioPath, outPath, mixInput, outputOptions, preparedInput) {
+  const prepared = preparedInput || await prepareAudioPreview(dialoguePath, mixInput);
+  const settings = prepared.settings || normalizeAudioMixSettings(mixInput);
+  if (settings.mode === 'legacy_percent') {
+    await runFfmpeg(legacyAudioPreviewArgs(dialoguePath, audioPath, outPath, settings.legacyPercent,
+      outputOptions, prepared.programmeDuration, VIDEO_OUTRO_SECONDS), 'legacy Production audition');
+    return { mode: settings.mode };
+  }
+  const musicMeasurement = await measureMusicPeak(audioPath, prepared.programmeDuration);
+  await runFfmpeg(productionAuditionArgs(dialoguePath, audioPath, outPath, settings,
+    prepared.dialogueMeasurement, musicMeasurement, prepared.programmeDuration, outputOptions), 'Production audition');
+  return { mode: settings.mode, dialogue: prepared.dialogueMeasurement, music: musicMeasurement };
 }
 
 // videoPath: the uploaded video file on disk. tmpDir: scratch space to
@@ -441,6 +491,7 @@ module.exports = {
   matchAndGenerateTitles,
   buildFinalVideo,
   buildAudioPreview,
+  buildProductionAudioPreview,
   prepareAudioPreview,
   ensureBrowserCompatibleVideo,
   applyGeneratedTitleSuggestions,
@@ -450,12 +501,14 @@ module.exports = {
   legacyFinalVideoArgs,
   loudnessMeasureArgs,
   musicPeakMeasureArgs,
+  musicPeakMeasurementDuration,
   parseLoudnessMeasurement,
   parseMusicPeakMeasurement,
   measuredMixAudioArgs,
   finalLoudnormFilter,
   measuredFinalVideoArgs,
   measuredFinalAudioArgs,
+  productionAuditionArgs,
   legacyAudioPreviewArgs,
   musicOutroFade
 };

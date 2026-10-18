@@ -46,6 +46,7 @@ const publishPolicy = require('./src/publishPolicy');
 const publishingQueue = require('./src/publishingQueue');
 const videoEditorService = require('./src/videoEditorService');
 const productionAudioPreviewService = require('./src/productionAudioPreviews');
+const productionVideoPreviewService = require('./src/productionVideoPreview');
 const editorRetakeAnalysis = require('./src/editorRetakeAnalysis');
 const editorTranscriptSampling = require('./src/editorTranscriptSampling');
 const r2StorageService = require('./src/r2Storage');
@@ -106,6 +107,7 @@ function finalReviewPicturePath(piece) {
   return piece && piece.editorProjectId === piece.id ? path.join(DATA_DIR, 'editor', piece.id, 'render.mp4') : '';
 }
 let productionAudioPreviews = null;
+let productionVideoPreviews = null;
 const R2_PUBLISHED_RETENTION_DAYS = Math.max(1, Math.min(365, Number(process.env.R2_PUBLISHED_RETENTION_DAYS) || 14));
 const R2_KANBAN_BACKUP_RETENTION_DAYS = 7;
 const r2Storage = r2StorageService.setup({
@@ -2206,8 +2208,12 @@ productionAudioPreviews = productionAudioPreviewService.setup({
     const row = stmts.getOne.get('settings', 'settings');
     return row ? JSON.parse(row.data) : {};
   },
-  buildAudioPreview: videoAnalysis.buildAudioPreview,
+  buildAudioPreview: videoAnalysis.buildProductionAudioPreview,
   prepareAudioPreview: videoAnalysis.prepareAudioPreview
+});
+productionVideoPreviews = productionVideoPreviewService.setup({
+  rootDir: path.join(DATA_DIR, 'production-video-previews'),
+  getVideoPath: function (id) { return isValidId(id) ? path.join(UPLOADS_DIR, 'videos', id) : ''; }
 });
 
 setImmediate(function () {
@@ -2216,7 +2222,9 @@ setImmediate(function () {
     catch (error) { return ''; }
   }).filter(Boolean);
   productionAudioPreviews.prune(productionIds);
+  productionVideoPreviews.prune(productionIds);
   productionIds.forEach(function (id) {
+    productionVideoPreviews.start(id);
     productionAudioPreviews.warm(id).catch(function (error) {
       console.error('[production-audio] startup warm failed for ' + id + ':', error.message);
     });
@@ -2571,6 +2579,7 @@ async function sendEditorProjectToProduction(input) {
   setImmediate(function () { productionAudioPreviews.warm(piece.id).catch(function (error) {
     console.error('[production-audio] handoff warm failed for ' + piece.id + ':', error.message);
   }); });
+  setImmediate(function () { productionVideoPreviews.start(piece.id); });
   return { pieceId: piece.id, piece: piece, planningPiece: planningPiece, alreadySent: false, workflowWarning: '' };
 }
 
@@ -2701,6 +2710,7 @@ async function runVideoAnalysis(id, existingTranscript) {
   }
   const completed = getPieceRecord(id);
   if (completed && completed.stage === 'in_production') {
+    productionVideoPreviews.start(id);
     productionAudioPreviews.warm(id).catch(function (error) {
       console.error('[production-audio] analysis warm failed for ' + id + ':', error.message);
     });
@@ -2928,6 +2938,65 @@ app.get('/api/videos/:id/audio-previews', requireAuthOrReviewer, function (req, 
     console.error('[production-audio] status warm failed for ' + id + ':', error.message);
   });
   res.json(productionAudioPreviews.status(id));
+});
+app.post('/api/videos/:id/audio-preview-priority/:trackId', requireAuthOrReviewer, function (req, res) {
+  const { id, trackId } = req.params;
+  if (!isValidId(id) || !isValidId(trackId)) return res.status(400).json({ error: 'invalid_params' });
+  const piece = getPieceRecord(id);
+  if (!piece) return res.status(404).json({ error: 'piece_not_found' });
+  if (req.sessionRole === 'youtube-reviewer' && piece.createdBy !== 'youtube-reviewer') return res.status(403).json({ error: 'forbidden' });
+  if (!stmts.getOne.get('audioTracks', trackId)) return res.status(404).json({ error: 'track_not_found' });
+  try {
+    productionAudioPreviews.ensure(id, trackId, { priority: true }).catch(function (error) {
+      console.error('[production-audio] selected preview failed for ' + id + ':', error.message);
+    });
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(422).json({ error: 'audio_preview_unavailable' });
+  }
+});
+
+function productionPreviewPiece(req, res) {
+  const id = req.params.id;
+  const piece = isValidId(id) && getPieceRecord(id);
+  if (!piece) { res.status(404).json({ error: 'piece_not_found' }); return null; }
+  if (req.sessionRole === 'youtube-reviewer' && piece.createdBy !== 'youtube-reviewer') {
+    res.status(403).json({ error: 'forbidden' }); return null;
+  }
+  return piece;
+}
+
+app.get('/api/videos/:id/production-preview-status', requireAuthOrReviewer, function (req, res) {
+  if (!productionPreviewPiece(req, res)) return;
+  res.set('Cache-Control', 'no-store');
+  res.json(productionVideoPreviews.start(req.params.id));
+});
+app.post('/api/videos/:id/production-preview-retry', requireAuthOrReviewer, function (req, res) {
+  if (!productionPreviewPiece(req, res)) return;
+  res.json(productionVideoPreviews.retry(req.params.id));
+});
+app.get('/api/videos/:id/production-preview', requireAuthOrReviewer, function (req, res) {
+  if (!productionPreviewPiece(req, res)) return;
+  const file = productionVideoPreviews.readyPath(req.params.id);
+  if (!file) return res.status(404).json({ error: 'preview_not_ready' });
+  res.set('Cache-Control', 'private, max-age=7200');
+  rangeResponse.sendFile(req, res, file, 'video/mp4');
+});
+app.get('/api/videos/:id/production-thumbnail-frame', requireAuthOrReviewer, async function (req, res) {
+  if (!productionPreviewPiece(req, res)) return;
+  const seconds = Number(req.query.t);
+  if (!Number.isFinite(seconds) || seconds < 0 || seconds > 6 * 60 * 60) {
+    return res.status(400).json({ error: 'invalid_time' });
+  }
+  const source = path.join(UPLOADS_DIR, 'videos', req.params.id);
+  if (!fs.existsSync(source)) return res.status(404).json({ error: 'video_not_found' });
+  try {
+    const jpeg = await productionVideoPreviewService.frameJpeg(source, seconds);
+    res.set('Cache-Control', 'no-store');
+    res.type('image/jpeg').send(jpeg);
+  } catch (error) {
+    res.status(422).json({ error: 'frame_capture_failed' });
+  }
 });
 
 // --- Real YouTube publish: the actual videos.insert-equivalent, using the

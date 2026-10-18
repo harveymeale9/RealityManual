@@ -20176,3 +20176,48 @@ existing analytics if this optional trend endpoint is unavailable. A service
 test covers completed-day boundaries, compacted/raw merging, missing days,
 excluded bots, and today not appearing in the comparison. The main storefront
 analytics summary endpoint and its existing 30-day counts were not changed.
+
+---
+
+# 656. Lightweight Content Production Music Auditions (2026-10-18)
+
+Harvey reported that preparing all 36 library soundtracks after a video enters
+Content Production takes too long. Those 36 outputs are audio-only mixes, not
+36 video encodes; the Production UI separately streamed the source video at
+its existing resolution. It now prepares **one** reusable 360p/15fps H.264
+video audition copy per piece with mono 64kbps AAC for the No Music option.
+The proxy is keyed to the source file, atomically installed, range-served by
+authenticated routes, and removed from the cache on the next startup after a
+piece leaves Production. If that encode fails, Production explicitly falls
+back to the original source rather than blocking music selection. The actual
+source and the final publishing master are unchanged.
+
+Thumbnail selection must not inherit the tiny audition resolution. Its button
+now asks the server for a JPEG frame at the selected timestamp from the
+original Production source, bounded to 1280px on its longest side, and only
+saves the thumbnail after that succeeds. The Production video and audio remain
+separately synchronized as before, including seek and No Music playback.
+
+Production audio auditions still use the measured dialogue gain, sustained
+music-peak calibration, optional ducking, and peak limiter. Because this stage
+is for choosing the *track*, the relative voice/music balance matters more
+than final integrated loudness. The audition now encodes the measured mix in
+one FFmpeg pass at 96kbps MP3 instead of writing a full-length lossless mix,
+re-measuring it, then encoding a 192kbps MP3. The selected track's final
+publishing render still receives the full multi-pass loudness normalization.
+The changed cache identity prevents stale exact/192kbps results from masking
+the new faster audition. For a music file shorter than the programme, peak
+analysis now stops after one full loop plus three seconds—the complete set of
+possible three-second loudness windows—instead of decoding the same track
+through the whole long-form video. That measurement is cached by track file
+identity and measured duration for reuse across pieces and the final build.
+The soundtrack Harvey selects is promoted ahead of other waiting mixes, so
+the first playable choice no longer waits behind all 36 library entries.
+Concurrency remains bounded to two on this two-core VPS. Unit/real-FFmpeg
+tests cover the video size, seeking, source-quality thumbnail, retry/cache,
+audio delivery bitrate, and priority ordering. While testing this path, an
+existing double-normalization issue surfaced: passing an already normalized
+mix profile through `normalizeAudioMixSettings` discarded `duckingEnabled`
+and could reset other normalized fields. The normalizer is now idempotent, so
+an explicitly enabled ducking profile survives both the audition and final
+mix helpers; a regression test locks that behavior.

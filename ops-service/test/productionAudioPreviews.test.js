@@ -23,7 +23,7 @@ test('Production makes soundtrack preparation visible and orders Editor before C
   assert.match(styles, /\.upload-row-preview-timeline/);
   assert.ok(app.indexOf("{ id: 'editor', label: 'Editor' }") < app.indexOf("{ id: 'upload-files', label: 'Content Production' }"));
   assert.ok(page.indexOf('data-tab="editor" title="Editor"') < page.indexOf('data-tab="upload-files" title="Content Production"'));
-  assert.match(page, /app\.js\?v=20261018-website-trend-v160/);
+  assert.match(page, /app\.js\?v=20261018-production-audition-v161/);
 });
 
 test('Production preview cache deduplicates work, persists results, and invalidates changed settings', async function (t) {
@@ -37,7 +37,7 @@ test('Production preview cache deduplicates work, persists results, and invalida
     getVideoPath: function () { return video; }, getAudioTrackPath: function () { return track; },
     getAudioTracks: function () { return [{ id: 'track-1' }]; }, getMixSettings: function () { return settings; },
     prepareAudioPreview: async function () { preparations++; return { shared: true }; },
-    buildAudioPreview: async function (_video, _track, output, _settings, _options, prepared) { assert.deepEqual(prepared, { shared: true }); builds++; await new Promise(function (resolve) { setTimeout(resolve, 20); }); fs.writeFileSync(output, Buffer.alloc(2048)); }
+    buildAudioPreview: async function (_video, _track, output, _settings, outputOptions, prepared) { assert.deepEqual(prepared, { shared: true }); assert.equal(outputOptions.bitrate, '96k'); builds++; await new Promise(function (resolve) { setTimeout(resolve, 20); }); fs.writeFileSync(output, Buffer.alloc(2048)); }
   });
   const first = await Promise.all([service.ensure('piece-1', 'track-1'), service.ensure('piece-1', 'track-1')]);
   assert.equal(first[0], first[1]); assert.equal(builds, 1); assert.equal(preparations, 1); assert.ok(fs.statSync(first[0]).size > 1024);
@@ -56,4 +56,18 @@ test('Production preview queue bounds simultaneous mixes', async function () {
     return enqueue(async function () { active++; peak = Math.max(peak, active); await new Promise(function (resolve) { setTimeout(resolve, 10); }); active--; });
   }));
   assert.equal(peak, 2);
+});
+
+test('selected soundtrack jumps ahead of other waiting preview mixes', async function () {
+  const enqueue = previews.createQueue(1);
+  const order = [];
+  let releaseFirst;
+  const gate = new Promise(function (resolve) { releaseFirst = resolve; });
+  const first = enqueue(async function () { await gate; order.push('first'); }, 'first');
+  const second = enqueue(async function () { order.push('second'); }, 'second');
+  const selected = enqueue(async function () { order.push('selected'); }, 'selected');
+  enqueue.promote('selected');
+  releaseFirst();
+  await Promise.all([first, second, selected]);
+  assert.deepEqual(order, ['first', 'selected', 'second']);
 });

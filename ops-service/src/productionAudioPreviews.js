@@ -17,12 +17,19 @@ function createQueue(concurrency) {
       });
     }
   }
-  return function enqueue(task) {
+  function enqueue(task, key, urgent) {
     return new Promise(function (resolve, reject) {
-      waiting.push({ task: task, resolve: resolve, reject: reject });
+      const item = { task: task, resolve: resolve, reject: reject, key: key };
+      if (urgent) waiting.unshift(item);
+      else waiting.push(item);
       drain();
     });
+  }
+  enqueue.promote = function (key) {
+    const index = waiting.findIndex(function (item) { return item.key === key; });
+    if (index > 0) waiting.unshift(waiting.splice(index, 1)[0]);
   };
+  return enqueue;
 }
 
 function setup(options) {
@@ -51,17 +58,21 @@ function setup(options) {
       video: [videoPath, video.size, video.mtimeMs], settings: settings
     })).digest('hex');
     const hash = crypto.createHash('sha256').update(JSON.stringify({
-      video: [video.size, video.mtimeMs], audio: [audio.size, audio.mtimeMs], settings: settings
+      video: [video.size, video.mtimeMs], audio: [audio.size, audio.mtimeMs], settings: settings,
+      delivery: 'production-audition-96k-single-pass-v3'
     })).digest('hex').slice(0, 24);
     const dir = path.join(rootDir, pieceId);
     return { videoPath: videoPath, audioPath: audioPath, settings: settings, dir: dir,
       path: path.join(dir, trackId + '-' + hash + '.mp3'), hash: hash, preparationKey: preparationKey };
   }
 
-  function ensure(pieceId, trackId) {
+  function ensure(pieceId, trackId, options) {
     const identity = previewIdentity(pieceId, trackId);
     try { if (fs.statSync(identity.path).size > 1024) return Promise.resolve(identity.path); } catch (error) {}
-    if (jobs.has(identity.path)) return jobs.get(identity.path);
+    if (jobs.has(identity.path)) {
+      if (options && options.priority) enqueue.promote(identity.path);
+      return jobs.get(identity.path);
+    }
     const job = enqueue(async function () {
       fs.mkdirSync(identity.dir, { recursive: true });
       const tempPath = identity.path + '.tmp-' + crypto.randomUUID();
@@ -79,7 +90,7 @@ function setup(options) {
           preparationJobs.set(preparationKey, preparation);
         }
         const prepared = await preparation;
-        await buildAudioPreview(identity.videoPath, identity.audioPath, tempPath, identity.settings, { bitrate: '192k' }, prepared);
+        await buildAudioPreview(identity.videoPath, identity.audioPath, tempPath, identity.settings, { bitrate: '96k' }, prepared);
         if (fs.statSync(tempPath).size <= 1024) throw new Error('The backing-audio preview was empty.');
         await fs.promises.rename(tempPath, identity.path);
         const prefix = trackId + '-';
@@ -92,7 +103,7 @@ function setup(options) {
       } finally {
         fs.rm(tempPath, { force: true }, function () {});
       }
-    }).finally(function () { jobs.delete(identity.path); });
+    }, identity.path, options && options.priority).finally(function () { jobs.delete(identity.path); });
     jobs.set(identity.path, job);
     return job;
   }

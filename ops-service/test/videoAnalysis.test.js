@@ -2,6 +2,10 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { execFileSync } = require('child_process');
 const videoAnalysis = require('../src/videoAnalysis');
 
 test('late analysis suggestions never replace a manually chosen title', function () {
@@ -58,6 +62,8 @@ test('measured audio profile normalizes safe settings and builds independent dia
   assert.equal(videoAnalysis.normalizeAudioMixSettings({ musicBelowDialogueDb: 99 }).musicBelowDialogueDb, 25);
   assert.equal(videoAnalysis.normalizeAudioMixSettings({ audioTruePeakDbtp: -2.3 }).truePeakDbtp, -2.5);
   assert.equal(videoAnalysis.normalizeAudioMixSettings({ audioMixMode: 'legacy_percent', ambientMusicVolumePercent: 13 }).legacyPercent, 13);
+  const normalizedDucking = videoAnalysis.normalizeAudioMixSettings({ musicDuckingEnabled: true, dialogueLufsTarget: -15, audioTruePeakDbtp: -2 });
+  assert.deepEqual(videoAnalysis.normalizeAudioMixSettings(normalizedDucking), normalizedDucking);
 
   const measured = videoAnalysis.parseLoudnessMeasurement('noise\n{\n"input_i" : "-22.00",\n"input_tp" : "-3.00",\n"input_lra" : "2.00",\n"input_thresh" : "-32.00",\n"target_offset" : "0.20"\n}\n');
   assert.equal(measured.inputI, -22);
@@ -90,6 +96,8 @@ test('music calibration uses the loudest valid three-second EBU R128 window', fu
   const unboundedArgs = videoAnalysis.musicPeakMeasureArgs('/music');
   assert.equal(unboundedArgs.includes('-t'), false);
   assert.equal(unboundedArgs.includes('-stream_loop'), false);
+  assert.equal(videoAnalysis.musicPeakMeasurementDuration(765, 66.5), 69.5);
+  assert.equal(videoAnalysis.musicPeakMeasurementDuration(30, 66.5), 30);
 });
 
 test('measured final pass uses two-pass loudnorm values and a true-peak safeguard', function () {
@@ -109,4 +117,29 @@ test('measured final pass uses two-pass loudnorm values and a true-peak safeguar
   assert.equal(safeFallback[safeFallback.indexOf('-b:a') + 1], '192k');
   const previewOutro = videoAnalysis.legacyAudioPreviewArgs('/voice', '/music', '/preview.mp3', 10, {}, 8, 2);
   assert.match(previewOutro.join(' '), /afade=t=out:st=6\.000:d=2\.000/);
+  const audition = videoAnalysis.productionAuditionArgs('/voice', '/music', '/audition.mp3',
+    { musicDuckingEnabled: true }, { inputI: -16 }, { loudestShortTermLufs: -20 }, 8, { bitrate: '96k' });
+  assert.match(audition.join(' '), /sidechaincompress/);
+  assert.match(audition.join(' '), /alimiter=limit=0\.841395:level=false\[audition\]/);
+  assert.equal(audition[audition.indexOf('-b:a') + 1], '96k');
+  assert.equal(audition.includes('flac'), false);
+});
+
+test('Production audition makes playable low-bitrate audio without a lossless intermediate', async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-audition-mix-'));
+  t.after(function () { fs.rmSync(dir, { recursive: true, force: true }); });
+  const voice = path.join(dir, 'voice.mp4');
+  const music = path.join(dir, 'music.mp3');
+  const output = path.join(dir, 'audition.mp3');
+  execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'color=size=320x180:rate=15:color=black',
+    '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-t', '4',
+    '-c:v', 'libx264', '-threads', '1', '-c:a', 'aac', voice]);
+  execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=330:sample_rate=48000',
+    '-t', '2', '-c:a', 'libmp3lame', music]);
+  await videoAnalysis.buildProductionAudioPreview(voice, music, output, { musicDuckingEnabled: true }, { bitrate: '96k' });
+  const probe = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration,bit_rate',
+    '-of', 'json', output])).format;
+  assert.ok(Number(probe.duration) >= 4);
+  assert.ok(Number(probe.bit_rate) < 110000);
+  assert.equal(fs.existsSync(output + '.loudness-mix.flac'), false);
 });

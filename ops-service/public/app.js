@@ -4659,7 +4659,7 @@
     var videoReady = videoEl.readyState >= 2;
     var frameLoader = document.createElement('div');
     frameLoader.className = 'upload-row-frame-loader';
-    frameLoader.innerHTML = '<span class="spinner" aria-hidden="true"></span><span>Loading frame…</span>';
+    frameLoader.innerHTML = '<span class="spinner" aria-hidden="true"></span><span>Preparing 360p music preview…</span>';
     var scrub = document.createElement('input');
     scrub.type = 'range';
     scrub.className = 'upload-row-preview-scrub';
@@ -4720,43 +4720,40 @@
       // forever even though the new frame was visibly on screen.
       setCaptureButtonState(false);
     });
-    // Used only after Harvey explicitly presses the button. Returns false
-    // (does nothing saved) if the video has no real frame data to draw yet — this used
-    // to silently produce a blank image for any video the browser
-    // couldn't decode (HEVC uploads in particular, see
-    // ensureBrowserCompatibleVideo in videoAnalysis.js, the actual fix);
-    // now that server-side normalization guarantees a decodable video,
-    // videoWidth/videoHeight being 0 here should only mean "hasn't
-    // loaded far enough yet," not "never will."
-    function captureCurrentFrame() {
-      if (!videoEl.videoWidth || !videoEl.videoHeight) return false;
-      var canvas = document.createElement('canvas');
-      canvas.width = videoEl.videoWidth;
-      canvas.height = videoEl.videoHeight;
-      var ctx = canvas.getContext('2d');
-      try { ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height); } catch (e) { return false; }
-      p.thumbnailDataUrl = canvas.toDataURL('image/jpeg', 0.85);
-      p.thumbnailTimeSeconds = Number(videoEl.currentTime) || 0;
+    // The playback proxy is intentionally tiny. Capture the selected frame
+    // from the original Production source so publishing thumbnails do not
+    // inherit the audition video's 360p resolution.
+    async function captureCurrentFrame() {
+      if (!videoEl.videoWidth || !videoEl.videoHeight) throw new Error('Video frame not ready');
+      var selectedTime = Number(videoEl.currentTime) || 0;
+      var response = await fetch('/api/videos/' + encodeURIComponent(p.id) + '/production-thumbnail-frame?t=' + encodeURIComponent(selectedTime.toFixed(3)), { credentials: 'include' });
+      if (!response.ok) throw new Error('Could not capture the source frame');
+      var imageBlob = await response.blob();
+      var dataUrl = await new Promise(function (resolve, reject) {
+        var reader = new FileReader();
+        reader.onload = function () { resolve(reader.result); };
+        reader.onerror = reject;
+        reader.readAsDataURL(imageBlob);
+      });
+      p.thumbnailDataUrl = dataUrl;
+      p.thumbnailTimeSeconds = selectedTime;
       p.updatedAt = nowIso();
       syncTags(p);
-      // Only this row's own thumbnail/tags need to update — routing this
-      // through a full renderUploadLists() used to tear down and rebuild
-      // every row in the list (re-fetching every other row's video blob
-      // in the process), which is what looked like the whole panel
-      // flashing/disappearing for a moment on every single click.
-      return Store.put('pieces', p).then(refreshHead);
+      await Store.put('pieces', p);
+      refreshHead();
     }
     var captureBtn = document.createElement('button');
     captureBtn.type = 'button';
     captureBtn.className = 'btn-secondary btn-tiny upload-row-capture';
     captureBtn.addEventListener('click', function () {
-      var save = captureCurrentFrame();
-      if (!save) return;
-      frameMatchesThumbnail = true;
-      setCaptureButtonState(true);
-      Promise.resolve(save).catch(function () {
+      captureBtn.disabled = true;
+      captureBtn.textContent = 'Capturing source frame…';
+      captureCurrentFrame().then(function () {
+        frameMatchesThumbnail = true;
+        setCaptureButtonState(true);
+      }).catch(function () {
         frameMatchesThumbnail = false;
-        setCaptureButtonState(true, 'Could not save — try again');
+        setCaptureButtonState(true, 'Could not capture — try again');
       });
     });
     var videoPreviewControls = document.createElement('div');
@@ -4808,11 +4805,30 @@
       frameLoader.innerHTML = '<span>Video preview could not load.</span>';
       setFrameControlsReady(false);
     });
-    // Stream the source directly with HTTP byte ranges. The old Store.get()
-    // path first downloaded the entire file into a Blob — disastrous for a
-    // multi-GB recording when Production only needs enough bytes to decode a
-    // frame. The saved poster is visible while the first media range arrives.
-    videoEl.src = '/api/files/videos/' + encodeURIComponent(p.id);
+    // One small 360p picture serves every soundtrack audition for this piece;
+    // the original source is fetched only for an explicitly chosen thumbnail.
+    var videoPreviewPoll = null;
+    function loadProductionPicture() {
+      if (!videoEl.isConnected) return;
+      fetch('/api/videos/' + encodeURIComponent(p.id) + '/production-preview-status', { credentials: 'include', cache: 'no-store' })
+        .then(function (response) { if (!response.ok) throw new Error('Preview status unavailable'); return response.json(); })
+        .then(function (result) {
+          if (!videoEl.isConnected) return;
+          if (result.status === 'ready') {
+            videoEl.src = '/api/videos/' + encodeURIComponent(p.id) + '/production-preview?v=' + encodeURIComponent(result.version || 'ready');
+            videoPreviewHint.textContent = '360p audition · voice + selected backing track';
+          } else if (result.status === 'preparing') {
+            videoPreviewPoll = setTimeout(loadProductionPicture, 2000);
+          } else {
+            // An unusual encode failure must not prevent music selection.
+            videoPreviewHint.textContent = 'Low-res preview unavailable · using source video';
+            videoEl.src = '/api/files/videos/' + encodeURIComponent(p.id);
+          }
+        }).catch(function () {
+          if (videoEl.isConnected) videoPreviewPoll = setTimeout(loadProductionPicture, 3000);
+        });
+    }
+    videoPreviewPoll = setTimeout(loadProductionPicture, 0);
 
     // --- Audio dropdown
     var audioSection = document.createElement('div');
@@ -4947,12 +4963,21 @@
       }
     }
 
+    function prioritizeSelectedAudio() {
+      var trackId = audioSelect.value;
+      if (!trackId || trackId === '__none__' || previewUrls[trackId]) return;
+      fetch('/api/videos/' + encodeURIComponent(p.id) + '/audio-preview-priority/' + encodeURIComponent(trackId), {
+        method: 'POST', credentials: 'include'
+      }).catch(function () {});
+    }
+
     audioSelect.addEventListener('change', function () {
       stopAudioPreview('');
       p.audioTrackId = audioSelect.value;
       p.updatedAt = nowIso();
       syncTags(p);
       Store.put('pieces', p).then(refreshHead);
+      prioritizeSelectedAudio();
       updatePreviewReadiness();
       playSelectedPreviewFromStart();
     });
@@ -5024,9 +5049,10 @@
         previewStatusTimer = setTimeout(refreshPreviewStatus, 2000);
       });
     }
-    row._cancelAudioPreviews = function () { previewCancelled = true; clearTimeout(previewStatusTimer); };
+    row._cancelAudioPreviews = function () { previewCancelled = true; clearTimeout(previewStatusTimer); clearTimeout(videoPreviewPoll); };
     updatePreviewReadiness();
     refreshPreviewStatus();
+    prioritizeSelectedAudio();
     audioSection.appendChild(audioLabel);
     audioPicker.appendChild(audioPrevious);
     audioPicker.appendChild(audioSelect);
