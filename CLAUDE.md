@@ -20123,7 +20123,10 @@ when its funnel has refunds. Admins can add/edit a plain-language reason note
 for manual refunds using a dedicated authenticated endpoint. Notes live only
 in the ops database's `refundNotes` records; the storefront payment and order
 records remain untouched. The 30-second refresh waits while a note editor has
-focus. The current test order's owner-requested explanation is added through
-that endpoint after deploy. Reporting tests cover the separate refund list,
+focus. After validating the exact order remained `REFUNDED` and that no note
+already existed, the current test order's owner-requested explanation was
+saved as one targeted ops `refundNotes` record while the backend deploy waited
+for an active Production master render; future notes use the authenticated
+endpoint. Reporting tests cover the separate refund list,
 automatic vs. unrecorded reasons, sanitized BookVault context, and exclusion
 of customer PII.
