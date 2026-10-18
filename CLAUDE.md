@@ -19976,3 +19976,27 @@ from 0.329–1.66 s to 0–1.66 s. Its other decisions, including 346 transcript
 word cuts, remained unchanged. The first kept frame is now 1.66 s, 80 ms
 before the first kept word. A normal Editor preview rebuild was requested.
 Already-approved/sent projects were not modified.
+
+---
+
+# 648. Page-Turn Suppression Survives Manual Cut-Edge Adjustments (2026-10-18)
+
+Harvey right-clicked a mistaken page-turn zoom/fade on the 4:21
+*Manifestation gurus short* Editor timeline and got “That page-turn marker
+is no longer on this timeline.” The project already had a saved suppression
+for merged cut `8.940–30.502`, but a later manual edge adjustment changed
+that cut to `8.940–30.597`. Merged page-turn keys derive from cut endpoints,
+so this small adjustment both resurrected the dismissed effect and left a
+stale suppression key in the array the browser resubmitted. The PATCH route
+rejected the whole request because it validated every key against only the
+current cuts.
+
+Saved merged-cut suppressions now match current merged cuts whose start and
+end are each within 0.5 s of the saved boundaries, both when displaying
+markers and when building the final render. PATCH still rejects newly
+invented invalid marker keys but permits already-saved stale keys to remain
+in the array, so they cannot prevent a second valid dismissal. No video or
+audio cut is restored by this change. Regression tests cover the specific
+30.502→30.597 adjustment, a larger nonmatch, and resubmitting an old key
+alongside a new valid one. Two existing Editor test asset-version assertions
+were also updated to the already-current page-turn bundle versions.

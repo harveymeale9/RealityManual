@@ -553,12 +553,23 @@ function pageChangeCutKey(cut) {
   return String(cut && cut.id || '') || 'merged-' + Number(cut.start).toFixed(3) + '-' + Number(cut.end).toFixed(3);
 }
 
+function pageChangeSuppressionMatches(savedKey, currentKey) {
+  if (savedKey === currentKey) return true;
+  // A merged cut has no stable source ID. Small manual edge adjustments must
+  // not resurrect a page-turn effect the editor already dismissed.
+  const saved = /^merged-(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)$/.exec(String(savedKey));
+  const current = /^merged-(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)$/.exec(String(currentKey));
+  return !!(saved && current && Math.abs(Number(saved[1]) - Number(current[1])) <= 0.5 &&
+    Math.abs(Number(saved[2]) - Number(current[2])) <= 0.5);
+}
+
 function confirmedPageChangeCutKeys(project, cuts) {
   const stored = new Set((project.pageChangeCutIds || []).map(String));
-  const suppressed = new Set((project.suppressedPageChangeCutKeys || []).map(String));
+  const suppressed = (project.suppressedPageChangeCutKeys || []).map(String);
   return (cuts || []).filter(function (cut) {
     const key = pageChangeCutKey(cut);
-    return (stored.has(key) || (!cut.id && stored.has(''))) && !suppressed.has(key);
+    return (stored.has(key) || (!cut.id && stored.has(''))) &&
+      !suppressed.some(function (saved) { return pageChangeSuppressionMatches(saved, key); });
   }).map(pageChangeCutKey);
 }
 
@@ -2237,8 +2248,10 @@ function setup(options) {
       }
       const cuts = cutsForProject(project);
       const detectedPageChanges = await detectVisualPageChangeCutIds(renderSourcePath, cuts);
-      const suppressedPageChanges = new Set((project.suppressedPageChangeCutKeys || []).map(String));
-      project.pageChangeCutIds = detectedPageChanges.filter(function (key) { return !suppressedPageChanges.has(key); });
+      const suppressedPageChanges = (project.suppressedPageChangeCutKeys || []).map(String);
+      project.pageChangeCutIds = detectedPageChanges.filter(function (key) {
+        return !suppressedPageChanges.some(function (saved) { return pageChangeSuppressionMatches(saved, key); });
+      });
       saveProject(project);
       const segments = editorTimelineSegments(project, cuts);
       if (!segments.length) throw new Error('Every part of the recording is currently cut. Restore some transcript first.');
@@ -3124,7 +3137,9 @@ function setup(options) {
       return (cut.reason === 'long_pause' || cut.reason === 'combined') && cut.end - cut.start >= PAGE_CHANGE_CUT_SECONDS;
     }).map(pageChangeCutKey));
     if (req.body && Object.prototype.hasOwnProperty.call(req.body, 'suppressedPageChangeCutKeys') &&
-        (!Array.isArray(req.body.suppressedPageChangeCutKeys) || req.body.suppressedPageChangeCutKeys.some(function (key) { return !validPageChangeKeys.has(String(key)); }))) {
+        (!Array.isArray(req.body.suppressedPageChangeCutKeys) || req.body.suppressedPageChangeCutKeys.some(function (key) {
+          return !validPageChangeKeys.has(String(key)) && !currentSuppressedPageChangeCutKeys.includes(String(key));
+        }))) {
       return res.status(400).json({ error: 'invalid_page_change', message: 'That page-turn marker is no longer on this timeline.' });
     }
     const nextSuppressedPageChangeCutKeys = Array.isArray(req.body && req.body.suppressedPageChangeCutKeys)
@@ -3672,6 +3687,7 @@ module.exports = {
   normalizeManualTrimCuts,
   mergeCuts,
   pageChangeCutKey,
+  pageChangeSuppressionMatches,
   confirmedPageChangeCutKeys,
   cutsForProject,
   editableTimelineCuts,

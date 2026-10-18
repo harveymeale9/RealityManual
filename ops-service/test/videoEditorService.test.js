@@ -556,8 +556,8 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /Adjusted automatic timeline cut/);
   assert.match(source, /Cut edge moved/);
   assert.match(page, /lib\/captionMask\.js\?v=20261015-mask-swears/);
-  assert.match(page, /editor\.js\?v=20261016-vertical-preview-v153/);
-  assert.match(page, /style\.css\?v=20261016-vertical-preview-v159/);
+  assert.match(page, /editor\.js\?v=20261016-page-turn-menu-v154/);
+  assert.match(page, /style\.css\?v=20261016-page-turn-menu-v160/);
   assert.match(source, /class="editor-sticky-cut"><button type="button" class="btn-primary btn-tiny" id="editorCut" disabled>Cut selected/);
   assert.match(source, /root\.querySelector\('#editorCut'\)\.onclick = function \(\) \{ alterSelected\(true\); \}/);
   assert.match(styles, /\.editor-sticky-cut\{position:sticky;top:0/);
@@ -945,6 +945,10 @@ test('merged cuts have separate page-turn identities and can suppress one withou
   assert.deepEqual(editor.pageChangeFadesForSegment({ type: 'source', start: 146.6, end: 150 }, cuts, [first]), { fadeIn: false, fadeOut: false });
   assert.deepEqual(editor.confirmedPageChangeCutKeys({ pageChangeCutIds: [first, second], suppressedPageChangeCutKeys: [first] }, cuts), [second]);
   assert.deepEqual(editor.confirmedPageChangeCutKeys({ pageChangeCutIds: [''], suppressedPageChangeCutKeys: [first] }, cuts), [second]);
+  const adjustedFirst = { id: '', start: 8.94, end: 30.597, reason: 'combined' };
+  assert.equal(editor.pageChangeSuppressionMatches(first, editor.pageChangeCutKey(adjustedFirst)), true);
+  assert.deepEqual(editor.confirmedPageChangeCutKeys({ pageChangeCutIds: [''], suppressedPageChangeCutKeys: [first] }, [adjustedFirst, cuts[1]]), [second]);
+  assert.equal(editor.pageChangeSuppressionMatches(first, 'merged-8.940-31.600'), false);
   const client = fs.readFileSync(path.join(__dirname, '..', 'public', 'editor.js'), 'utf8');
   assert.match(client, /editorPageChangeMenu/);
   assert.match(client, /suppressedPageChangeCutKeys/);
@@ -1254,12 +1258,15 @@ test('final render blinks through black across a visually confirmed page change'
   const app = express(); app.use(express.json()); app.use('/api/editor', service.router);
   const server = app.listen(0); t.after(function () { server.close(); });
   const base = 'http://127.0.0.1:' + server.address().port;
+  const staleSuppression = 'merged-8.940-30.502';
+  stored.suppressedPageChangeCutKeys = [staleSuppression];
+  db.prepare('UPDATE records SET data=? WHERE store_name=? AND id=?').run(JSON.stringify(stored), 'editorProjects', 'page-blink-1');
   const response = await fetch(base + '/api/editor/page-blink-1', { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ suppressedPageChangeCutKeys: ['gap-0'], expectedEditRevision: stored.editRevision || 0 }) });
+    body: JSON.stringify({ suppressedPageChangeCutKeys: [staleSuppression, 'gap-0'], expectedEditRevision: stored.editRevision || 0 }) });
   assert.equal(response.status, 200);
   const suppressed = await response.json();
   assert.deepEqual(suppressed.pageChangeCutIds, []);
-  assert.deepEqual(suppressed.suppressedPageChangeCutKeys, ['gap-0']);
+  assert.deepEqual(suppressed.suppressedPageChangeCutKeys, ['gap-0', staleSuppression]);
   assert.deepEqual(suppressed.cuts, editor.cutsForProject(stored), 'suppressing the effect must retain the same cut');
   assert.equal(suppressed.renderDirty, true);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
