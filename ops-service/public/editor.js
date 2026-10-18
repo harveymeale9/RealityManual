@@ -637,7 +637,8 @@
       ticks += '<i style="left:' + pct(time) + '%"><span>' + formatTime(time) + '</span></i>';
     }
     return '<section class="editor-manual-timeline" id="editorManualTimeline"><div class="editor-manual-timeline-head"><div><div class="eyebrow">Source timeline</div><h3>Video + voice</h3><span>Click to seek. Drag either handle on a red cut to adjust its edge; gold handles mark automatic cuts. Right-click a page-turn marker to remove its zoom and fade without restoring the cut.</span></div><div class="editor-manual-timeline-actions">' +
-      '<button type="button" class="btn-secondary btn-tiny" id="editorTimelineAddSplit" ' + (locked ? 'disabled' : '') + '>Split at playhead</button><button type="button" class="btn-secondary btn-tiny" id="editorTimelineClearSplits" ' + (!splits.length || locked ? 'disabled' : '') + '>Clear splits</button><button type="button" class="btn-primary btn-tiny" id="editorTimelineDelete" ' + (!selection || locked ? 'disabled' : '') + '>Delete selected section</button></div></div>' +
+      '<label class="editor-timeline-fade">Fade to black <input type="number" id="editorTimelineFadeSeconds" min="0.3" max="4" step="0.1" value="' + (Number(item.outroFadeSeconds) > 0 ? Number(item.outroFadeSeconds) : (item.effectiveLayout === 'vertical' ? 2 : 1.7)) + '" ' + (locked ? 'disabled' : '') + ' aria-label="Fade to black duration in seconds"> s</label>' +
+      '<button type="button" class="btn-secondary btn-tiny" id="editorTimelineUndo" ' + (!item.canUndoCut || locked ? 'disabled' : '') + '>Undo last decision</button><button type="button" class="btn-secondary btn-tiny" id="editorTimelineAddSplit" ' + (locked ? 'disabled' : '') + '>Split at playhead</button><button type="button" class="btn-secondary btn-tiny" id="editorTimelineClearSplits" ' + (!splits.length || locked ? 'disabled' : '') + '>Clear splits</button><button type="button" class="btn-primary btn-tiny" id="editorTimelineDelete" ' + (!selection || locked ? 'disabled' : '') + '>Delete selected section</button></div></div>' +
       '<div class="editor-manual-timeline-hint"><span id="editorTimelineZoomLabel">' + zoom.toFixed(0) + ' px/sec</span><span>Ctrl/⌘ + scroll to zoom · normal scroll moves along the timeline</span></div>' +
       '<div class="editor-manual-timeline-viewport" id="editorManualTimelineViewport"><div class="editor-manual-timeline-inner" id="editorManualTimelineInner" style="width:' + effectiveWidth + 'px">' +
         '<div class="editor-manual-ruler">' + ticks + '</div><div class="editor-manual-lane editor-manual-video-lane"><b>VIDEO</b>' + segments + cuts + editableCuts + pageMarkers + '</div>' +
@@ -2155,8 +2156,9 @@
           return cut.end >= video.duration - 0.02;
         })[0];
         if (trailingCut && sourcePlayheadTime >= trailingCut.start) {
+          var outroFadeSeconds = Number(project.outroFadeSeconds) > 0 ? Number(project.outroFadeSeconds) : (isLongformVideo() ? 1.7 : 2);
           overlayOpacity = Math.max(overlayOpacity, Math.max(0, Math.min(1,
-            (sourcePlayheadTime - trailingCut.start) / Math.max(0.01, trailingCut.end - trailingCut.start))));
+            (sourcePlayheadTime - trailingCut.start) / Math.max(0.01, outroFadeSeconds))));
         }
       }
       if (previewOutro) previewOutro.style.opacity = Math.max(0, Math.min(1, overlayOpacity)).toFixed(3);
@@ -2494,6 +2496,18 @@
       if (event.key === 'Escape') { event.preventDefault(); closeWordCorrection(); }
     };
     root.querySelector('#editorUndo').onclick = undo;
+    var timelineUndo = root.querySelector('#editorTimelineUndo');
+    if (timelineUndo) timelineUndo.onclick = undo;
+    var timelineFadeSeconds = root.querySelector('#editorTimelineFadeSeconds');
+    if (timelineFadeSeconds) timelineFadeSeconds.onchange = function () {
+      var seconds = Number(this.value);
+      if (!Number.isFinite(seconds) || seconds < 0.3 || seconds > 4) {
+        alert('Fade to black must be between 0.3 and 4 seconds.');
+        renderWorkspace();
+        return;
+      }
+      save({ outroFadeSeconds: seconds });
+    };
     root.querySelector('#editorAutoSilence').onchange = function () {
       save({ autoSilenceEnabled: this.checked }, true);
     };
@@ -2773,7 +2787,7 @@
     var mutationId = window.crypto && typeof window.crypto.randomUUID === 'function'
       ? window.crypto.randomUUID()
       : 'edit-' + Date.now() + '-' + Math.random().toString(36).slice(2);
-    var renderKeys = ['removedWordIndices', 'manualTrimCuts', 'wordCorrection', 'autoSilenceEnabled', 'restoredAutoCutIds', 'captionsEnabled', 'suppressedPageChangeCutKeys',
+    var renderKeys = ['removedWordIndices', 'manualTrimCuts', 'wordCorrection', 'autoSilenceEnabled', 'restoredAutoCutIds', 'captionsEnabled', 'suppressedPageChangeCutKeys', 'outroFadeSeconds',
       'layoutOverride', 'openingPushInEnabled', 'silenceThresholdSeconds', 'retainedPauseSeconds'];
     var renderWillChange = typeof patch === 'function' || renderKeys.some(function (key) {
       return patch && Object.prototype.hasOwnProperty.call(patch, key);

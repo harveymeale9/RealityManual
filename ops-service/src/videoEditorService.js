@@ -89,14 +89,17 @@ function renderShapeForProject(project, layout, master) {
   };
 }
 
-function renderOutroTiming(layout, includeMusicTail) {
+function renderOutroTiming(layout, includeMusicTail, requestedFadeSeconds) {
+  const defaultFadeSeconds = layout === 'horizontal' ? HORIZONTAL_VISUAL_OUTRO_SECONDS : VIDEO_OUTRO_SECONDS;
+  const fadeSeconds = Number.isFinite(Number(requestedFadeSeconds)) && Number(requestedFadeSeconds) > 0
+    ? clamp(Number(requestedFadeSeconds), 0.3, 4) : defaultFadeSeconds;
   if (layout !== 'horizontal') {
-    return { visualFadeSeconds: VIDEO_OUTRO_SECONDS, totalSeconds: VIDEO_OUTRO_SECONDS, musicTailSeconds: 0 };
+    return { visualFadeSeconds: fadeSeconds, totalSeconds: fadeSeconds, musicTailSeconds: 0 };
   }
   const musicTailSeconds = includeMusicTail ? HORIZONTAL_MUSIC_TAIL_SECONDS : 0;
   return {
-    visualFadeSeconds: HORIZONTAL_VISUAL_OUTRO_SECONDS,
-    totalSeconds: HORIZONTAL_VISUAL_OUTRO_SECONDS + musicTailSeconds,
+    visualFadeSeconds: fadeSeconds,
+    totalSeconds: fadeSeconds + musicTailSeconds,
     musicTailSeconds: musicTailSeconds
   };
 }
@@ -659,7 +662,7 @@ function patchAffectsRender(body) {
   body = body && typeof body === 'object' ? body : {};
   return ['removedWordIndices', 'manualTrimCuts', 'wordCorrection', 'autoSilenceEnabled', 'restoredAutoCutIds', 'captionsEnabled',
     'layoutOverride', 'openingPushInEnabled', 'silenceThresholdSeconds', 'retainedPauseSeconds', 'voiceGainAdjustments',
-    'suppressedPageChangeCutKeys'].some(function (key) {
+    'suppressedPageChangeCutKeys', 'outroFadeSeconds'].some(function (key) {
     return Object.prototype.hasOwnProperty.call(body, key);
   });
 }
@@ -2260,7 +2263,7 @@ function setup(options) {
       // Landscape footage must be fully black before a hand reaching for the
       // camera can become visible. Editor/no-music renders end at that point;
       // a music-backed production master retains a short black-only tail.
-      const outro = renderOutroTiming(layout, master && options.includeMusicTail === true);
+      const outro = renderOutroTiming(layout, master && options.includeMusicTail === true, project.outroFadeSeconds);
       const expectedDuration = contentDuration + outro.totalSeconds;
       const assPath = path.join(projectDir(id), 'captions.ass');
       const renderShape = renderShapeForProject(project, layout, master);
@@ -3124,6 +3127,13 @@ function setup(options) {
     const currentSilenceThresholdSeconds = Number(project.silenceThresholdSeconds) || 1;
     const currentRetainedPauseSeconds = effectiveRetainedPauseSeconds(project);
     const currentVoiceGainAdjustments = normalizeVoiceGainAdjustments(project.voiceGainAdjustments, project.duration);
+    const currentOutroFadeSeconds = Number(project.outroFadeSeconds) || 0;
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'outroFadeSeconds') &&
+        (!Number.isFinite(Number(req.body.outroFadeSeconds)) || Number(req.body.outroFadeSeconds) < 0.3 || Number(req.body.outroFadeSeconds) > 4)) {
+      return res.status(400).json({ error: 'invalid_outro_fade', message: 'Fade to black must be between 0.3 and 4 seconds.' });
+    }
+    const nextOutroFadeSeconds = Object.prototype.hasOwnProperty.call(req.body || {}, 'outroFadeSeconds')
+      ? Number(Number(req.body.outroFadeSeconds).toFixed(2)) : currentOutroFadeSeconds;
     const nextRemovedWordIndices = Array.isArray(req.body && req.body.removedWordIndices)
       ? Array.from(new Set(req.body.removedWordIndices.map(Number).filter(function (index) { return Number.isInteger(index) && index >= 0 && index < (project.words || []).length; }))).sort(function (a, b) { return a - b; })
       : currentRemovedWordIndices;
@@ -3169,7 +3179,8 @@ function setup(options) {
         manualTrimCuts: currentManualTrimCuts,
         autoSilenceEnabled: currentAutoSilenceEnabled,
         silenceThresholdSeconds: currentSilenceThresholdSeconds,
-        retainedPauseSeconds: currentRetainedPauseSeconds
+        retainedPauseSeconds: currentRetainedPauseSeconds,
+        outroFadeSeconds: currentOutroFadeSeconds
       };
       project.cutDecisionHistory = (Array.isArray(project.cutDecisionHistory) ? project.cutDecisionHistory : []).concat([snapshot]).slice(-50);
       decisionSnapshotSaved = true;
@@ -3190,7 +3201,8 @@ function setup(options) {
         JSON.stringify(nextManualTrimCuts) !== JSON.stringify(currentManualTrimCuts) ||
         nextAutoSilenceEnabled !== currentAutoSilenceEnabled ||
         Number(nextSilenceThresholdSeconds) !== currentSilenceThresholdSeconds ||
-        Number(nextRetainedPauseSeconds) !== currentRetainedPauseSeconds) saveDecisionSnapshot();
+        Number(nextRetainedPauseSeconds) !== currentRetainedPauseSeconds ||
+        nextOutroFadeSeconds !== currentOutroFadeSeconds) saveDecisionSnapshot();
     if (req.body && req.body.wordCorrection && typeof req.body.wordCorrection === 'object') {
       const index = Number(req.body.wordCorrection.index);
       const word = Number.isInteger(index) && index >= 0 ? (project.words || [])[index] : null;
@@ -3223,6 +3235,7 @@ function setup(options) {
     }
     project.silenceThresholdSeconds = nextSilenceThresholdSeconds;
     project.retainedPauseSeconds = nextRetainedPauseSeconds;
+    project.outroFadeSeconds = nextOutroFadeSeconds;
     project.voiceGainAdjustments = nextVoiceGainAdjustments;
     project.autoCutBoundaryVersion = AUTO_CUT_BOUNDARY_VERSION;
     if (typeof (req.body && req.body.planningPieceId) === 'string' && typeof getPlanningCandidates === 'function') {
@@ -3321,6 +3334,7 @@ function setup(options) {
       if (typeof (snapshot && snapshot.autoSilenceEnabled) === 'boolean') project.autoSilenceEnabled = snapshot.autoSilenceEnabled;
       if (Number.isFinite(Number(snapshot && snapshot.silenceThresholdSeconds))) project.silenceThresholdSeconds = Number(snapshot.silenceThresholdSeconds);
       if (Number.isFinite(Number(snapshot && snapshot.retainedPauseSeconds))) project.retainedPauseSeconds = Number(snapshot.retainedPauseSeconds);
+      if (Number.isFinite(Number(snapshot && snapshot.outroFadeSeconds))) project.outroFadeSeconds = Number(snapshot.outroFadeSeconds);
     }
     project.cutDecisionHistory = history;
     markProjectRenderDirty(project);

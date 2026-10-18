@@ -20000,3 +20000,27 @@ audio cut is restored by this change. Regression tests cover the specific
 30.502→30.597 adjustment, a larger nonmatch, and resubmitting an old key
 alongside a new valid one. Two existing Editor test asset-version assertions
 were also updated to the already-current page-turn bundle versions.
+
+---
+
+# 649. Per-Recording Outro Fade Speed and Timeline Undo (2026-10-18)
+
+On the long-form *What the manifestation gurus forgot to tell you*, an edited
+end cut stopped at 1178.753 s instead of the 1180.720 s source end. That left
+a 1.967 s retained tail containing Harvey's arm reaching to stop the camera;
+the existing 1.7 s landscape fade could only run after that footage. The
+spoken ending finishes at 1175.520 s, and the existing tail cut begins at
+1175.617 s, leaving its 97 ms speech handle. The targeted repair extends
+that same cut to the source end rather than changing earlier edits.
+
+The Editor now stores an optional per-recording `outroFadeSeconds` (0.3–4 s).
+The timeline header exposes its duration input and an **Undo last decision**
+button using the existing edit-history endpoint. Changing fade duration is a
+render-affecting, undoable PATCH; both Editor previews and Production masters
+use it, including the existing landscape music-only black tail. The live
+working preview's black overlay uses the chosen duration rather than stretching
+across the entire removed source tail. Existing recordings without a custom
+value retain the 1.7 s landscape / 2 s portrait defaults. The Editor JS/CSS
+cache keys were advanced. Unit, API/undo, and FFmpeg render tests cover the
+1.5 s setting; a headless browser check confirmed both timeline controls
+render and have their handlers attached.

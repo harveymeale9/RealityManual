@@ -264,6 +264,12 @@ test('horizontal outros fade within 1.7 seconds and reserve only a music-backed 
   assert.deepEqual(editor.renderOutroTiming('vertical', true), {
     visualFadeSeconds: 2, totalSeconds: 2, musicTailSeconds: 0
   });
+  assert.deepEqual(editor.renderOutroTiming('horizontal', false, 1.5), {
+    visualFadeSeconds: 1.5, totalSeconds: 1.5, musicTailSeconds: 0
+  });
+  assert.deepEqual(editor.renderOutroTiming('horizontal', true, 1.5), {
+    visualFadeSeconds: 1.5, totalSeconds: 1.8, musicTailSeconds: 0.3
+  });
 });
 
 test('encoder queue never overlaps two jobs for the same recording', async function () {
@@ -556,8 +562,10 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /Adjusted automatic timeline cut/);
   assert.match(source, /Cut edge moved/);
   assert.match(page, /lib\/captionMask\.js\?v=20261015-mask-swears/);
-  assert.match(page, /editor\.js\?v=20261016-page-turn-menu-v154/);
-  assert.match(page, /style\.css\?v=20261016-page-turn-menu-v160/);
+  assert.match(page, /editor\.js\?v=20261018-outro-controls-v155/);
+  assert.match(page, /style\.css\?v=20261018-outro-controls-v161/);
+  assert.match(source, /id="editorTimelineUndo"/);
+  assert.match(source, /id="editorTimelineFadeSeconds"/);
   assert.match(source, /class="editor-sticky-cut"><button type="button" class="btn-primary btn-tiny" id="editorCut" disabled>Cut selected/);
   assert.match(source, /root\.querySelector\('#editorCut'\)\.onclick = function \(\) \{ alterSelected\(true\); \}/);
   assert.match(styles, /\.editor-sticky-cut\{position:sticky;top:0/);
@@ -1164,7 +1172,7 @@ test('final render splices an inserted clip and its caption timeline between sou
     words: [{ index: 0, text: 'Before', start: 0.1, end: 0.5 }, { index: 1, text: 'after.', start: 0.55, end: 0.9 }],
     insertedClips: [{ id: 'clip-1', directiveId: 'directive-1', status: 'ready', duration: 1, afterWordIndex: 0, afterSourceTime: 0.5, words: [{ index: 0, text: 'External.', start: 0.1, end: 0.8 }] }],
     clipInsertStatus: 'ready', removedWordIndices: [], dismissedRetakeIds: [], restoredAutoCutIds: [], autoSilenceEnabled: false,
-    silenceThresholdSeconds: 1, retainedPauseSeconds: 0.38, captionsEnabled: true, openingPushInEnabled: true,
+    silenceThresholdSeconds: 1, retainedPauseSeconds: 0.38, captionsEnabled: true, openingPushInEnabled: true, outroFadeSeconds: 1.5,
     layoutOverride: 'horizontal', cropCenterX: 0.5, transcriptionStatus: 'ready', classificationStatus: 'unavailable',
     retakeAnalysisStatus: 'unavailable', planningMatchStatus: 'unavailable', renderStatus: 'queued', automaticRenderStartedAt: '', createdAt: now, updatedAt: now
   }), now);
@@ -1176,11 +1184,11 @@ test('final render splices an inserted clip and its caption timeline between sou
     await new Promise(function (resolve) { setTimeout(resolve, 30); });
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
-  assert.ok(stored.editedDuration > 3.6 && stored.editedDuration < 3.8);
+  assert.ok(stored.editedDuration > 3.4 && stored.editedDuration < 3.6);
   assert.equal(stored.renderVersion, 27);
   assert.equal(stored.renderQuality.contentDuration, 2);
-  assert.equal(stored.renderQuality.outroSeconds, 1.7);
-  assert.equal(stored.renderQuality.visualFadeSeconds, 1.7);
+  assert.equal(stored.renderQuality.outroSeconds, 1.5);
+  assert.equal(stored.renderQuality.visualFadeSeconds, 1.5);
   assert.equal(stored.renderQuality.musicTailSeconds, 0);
   assert.ok(stored.renderQuality.insertedClipLoudness.clips[0].gainDb > 18);
   assert.ok(stored.renderQuality.insertedClipLoudness.clips[0].gainDb < 22);
@@ -1188,7 +1196,7 @@ test('final render splices an inserted clip and its caption timeline between sou
   const renderedStreams = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type,duration',
     '-of', 'json', rendered], { encoding: 'utf8' })).streams;
   const renderedVideo = renderedStreams.find(function (stream) { return stream.codec_type === 'video'; });
-  assert.ok(Number(renderedVideo.duration) > 3.6, 'the visual stream itself includes the complete outro: ' + renderedVideo.duration);
+  assert.ok(Number(renderedVideo.duration) > 3.45, 'the visual stream itself includes the complete outro: ' + renderedVideo.duration);
   function rangeLufs(start, duration) {
     const measured = spawnSync('ffmpeg', ['-hide_banner', '-nostats', '-ss', String(start), '-t', String(duration), '-i', rendered,
       '-vn', '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json', '-f', 'null', '-'], { encoding: 'utf8' });
@@ -1202,7 +1210,7 @@ test('final render splices an inserted clip and its caption timeline between sou
     return Array.from(frame.subarray(0, 3));
   }
   const beforeOutro = frameRgb(1.75);
-  const nearEnd = frameRgb(3.65);
+  const nearEnd = frameRgb(3.45);
   assert.ok(beforeOutro.reduce(function (sum, channel) { return sum + channel; }, 0) >
     nearEnd.reduce(function (sum, channel) { return sum + channel; }, 0) + 80,
   'the last content frame remains visibly brighter before the outro: ' + JSON.stringify({ beforeOutro: beforeOutro, nearEnd: nearEnd }));
@@ -1872,6 +1880,19 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   assert.equal(project.autoSilenceEnabled, true);
   assert.equal(project.silenceThresholdSeconds, 1);
   assert.equal(project.retainedPauseSeconds, 0.24);
+  assert.equal(project.canUndoCut, false);
+  response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+    outroFadeSeconds: 1.5, expectedEditRevision: project.editRevision
+  }) });
+  assert.equal(response.status, 200);
+  project = await response.json();
+  assert.equal(project.outroFadeSeconds, 1.5);
+  assert.equal(project.canUndoCut, true);
+  assert.equal(project.renderDirty, true);
+  response = await fetch(base + '/api/editor/' + project.id + '/undo-cut', { method: 'POST' });
+  assert.equal(response.status, 200);
+  project = await response.json();
+  assert.equal(project.outroFadeSeconds, 0);
   assert.equal(project.canUndoCut, false);
   response = await fetch(base + '/api/editor/' + project.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ captionsEnabled: false, wordCorrection: { index: 0, text: 'Once' } }) });
   assert.equal(response.status, 200);
