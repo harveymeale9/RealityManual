@@ -20071,3 +20071,28 @@ an untranscribed sound occurring inside the 80 ms word-safety handle will be
 detected; final audio review remains important. Unit and upload/render/API
 tests cover the new default, a disabled pause-removal setting, stale restored
 tail, a dragged cut whose right edge is too short, the short-gap case, and undo.
+
+---
+
+# 652. Final Check Playback Survives Kanban Refresh (2026-10-18)
+
+Harvey reported *7 needs short* restarting after roughly five seconds in
+Final Check. Its 720p review file and publish master both probe to 98.176 s,
+with matching video and audio durations, and the review file decodes cleanly.
+The problem was the Content Pipeline polling loop: while another Production
+card is processing it polls every three seconds, and any non-progress-only
+piece change calls `render()`. That replaced all Kanban markup, including an
+actively playing Final Check `<video>`, resetting it to time zero.
+
+`render()` now detaches and retains the actual video wrapper and adjacent
+controls for every in-progress Final Check playback, then inserts those same
+nodes into the newly rendered matching card. Existing playback state, media
+buffer, seek position, and bound handlers survive; `bindBoardEvents()` skips
+rebinding a retained wrapper. If a card really leaves Final Check during the
+refresh, its detached video is paused to avoid ghost audio. Fresh or ended
+players still render normally. The asset version was advanced. A headless
+Chromium check played the real *7 needs short* review past 10 seconds and
+forced two full board renders by changing and clearing the type filter during
+playback: the same video element stayed attached, playing, and advanced from
+1.5 to 4.8 seconds rather than resetting. A source regression assertion
+covers the retention/rebinding hooks.

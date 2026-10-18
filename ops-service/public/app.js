@@ -3493,6 +3493,21 @@
 
   function render() {
     var scrollLeft = boardWrap.scrollLeft;
+    // A background Production/queue refresh can redraw the entire board every
+    // three seconds. Keep an in-progress Final Check player as the very same
+    // DOM node: replacing <video> restarts playback from zero even though the
+    // review file itself is complete. Preserve its controls too, because their
+    // event handlers close over this player and its wrapper.
+    var activeFinalCheckPlayers = [];
+    board.querySelectorAll('.final-check-card[data-id]').forEach(function (card) {
+      var wrap = card.querySelector('.fc-video-wrap');
+      var video = wrap && wrap.querySelector('video');
+      var controls = wrap && wrap.nextElementSibling;
+      if (!video || !controls || video.ended || (video.paused && !(video.currentTime > 0))) return;
+      activeFinalCheckPlayers.push({ id: card.dataset.id, wrap: wrap, controls: controls });
+      wrap.remove();
+      controls.remove();
+    });
     // Rebuilding the board replaces every `.column-body`, which otherwise
     // resets each stage to the top. This is especially disruptive when an
     // editor opened halfway down a busy column closes and calls render().
@@ -3538,6 +3553,25 @@
           (isAutoCol ? '' : '<button class="column-add" data-stage="' + s.id + '">+ Add card</button>') +
         '</div>';
     }).join('');
+    activeFinalCheckPlayers.forEach(function (saved) {
+      var card = Array.from(board.querySelectorAll('.final-check-card[data-id]')).find(function (candidate) {
+        return candidate.dataset.id === saved.id;
+      });
+      if (!card) {
+        var departedVideo = saved.wrap.querySelector('video');
+        if (departedVideo) departedVideo.pause();
+        return;
+      }
+      var newWrap = card.querySelector('.fc-video-wrap');
+      var newControls = newWrap && newWrap.nextElementSibling;
+      if (!newWrap || !newControls) {
+        var missingVideo = saved.wrap.querySelector('video');
+        if (missingVideo) missingVideo.pause();
+        return;
+      }
+      newWrap.replaceWith(saved.wrap);
+      newControls.replaceWith(saved.controls);
+    });
     boardWrap.scrollLeft = scrollLeft;
     board.querySelectorAll('.column-body[data-stage]').forEach(function (body) {
       if (Object.prototype.hasOwnProperty.call(columnScrollTops, body.dataset.stage)) {
@@ -3647,6 +3681,8 @@
     // `pointer-events: none` in CSS — purely decorative, paints the green
     // play icon and nothing else.
     board.querySelectorAll('.fc-video-wrap').forEach(function (wrap) {
+      if (wrap.dataset.playerBound === 'true') return;
+      wrap.dataset.playerBound = 'true';
       var v = wrap.querySelector('video');
       if (!v) return;
       var controls = wrap.nextElementSibling;

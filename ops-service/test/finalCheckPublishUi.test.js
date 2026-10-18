@@ -20,6 +20,14 @@ test('Final Check waits for the 720p copy rather than preloading the 4K publish 
   assert.match(source, /-final-review/);
 });
 
+test('Kanban refresh retains an in-progress Final Check video and its bound controls', function () {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.match(source, /activeFinalCheckPlayers\.push\(\{ id: card\.dataset\.id, wrap: wrap, controls: controls \}\)/);
+  assert.match(source, /newWrap\.replaceWith\(saved\.wrap\)/);
+  assert.match(source, /newControls\.replaceWith\(saved\.controls\)/);
+  assert.match(source, /if \(wrap\.dataset\.playerBound === 'true'\) return/);
+});
+
 test('Publishing Queue is natural inventory with no configurable reserve targets', function () {
   const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const store = fs.readFileSync(path.join(__dirname, '..', 'public', 'lib', 'store.js'), 'utf8');
