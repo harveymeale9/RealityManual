@@ -18,6 +18,39 @@ test('website analytics shows refunds and one count per funnel row', function ()
   assert.doesNotMatch(appSource, /f\.unique_sessions \+ ' visits'/);
 });
 
+test('website traffic chart combines compacted and live verified pageviews across two completed weeks', function () {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE analytics_daily_events(day TEXT,event_name TEXT,event_count INTEGER);
+    CREATE TABLE analytics_events(created_at TEXT,event_name TEXT,verified_human INTEGER);
+  `);
+  const daily = db.prepare('INSERT INTO analytics_daily_events VALUES (?,?,?)');
+  daily.run('2026-10-03', 'page_view', 99); // outside chart
+  daily.run('2026-10-05', 'page_view', 3);
+  daily.run('2026-10-11', 'page_view', 4);
+  daily.run('2026-10-12', 'page_view', 5);
+  daily.run('2026-10-16', 'checkout_view', 100); // wrong event
+  const event = db.prepare('INSERT INTO analytics_events VALUES (?,?,?)');
+  event.run('2026-10-17T09:00:00.000Z', 'page_view', 1);
+  event.run('2026-10-17T10:00:00.000Z', 'page_view', 0); // excluded bot
+  event.run('2026-10-18T09:00:00.000Z', 'page_view', 1); // partial today
+  const result = reporting.getWebsiteTraffic(db, '2026-10-18T12:00:00.000Z');
+  assert.equal(result.daily.length, 14);
+  assert.equal(result.daily[0].day, '2026-10-04');
+  assert.equal(result.daily[13].day, '2026-10-17');
+  assert.equal(result.daily.find((row) => row.day === '2026-10-04').page_views, 0);
+  assert.equal(result.daily.find((row) => row.day === '2026-10-17').page_views, 1);
+  assert.equal(result.previous_7_days, 3);
+  assert.equal(result.last_7_days, 10);
+  assert.equal(JSON.stringify(result).includes('2026-10-18'), false);
+  const appSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const serverSource = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  assert.match(appSource, /website-traffic/);
+  assert.match(appSource, /websiteTrafficHtml\(traffic\)/);
+  assert.match(serverSource, /app\.get\('\/api\/reports\/website-traffic', requireAuth/);
+  db.close();
+});
+
 test('storefront report aggregates traffic, funnel, paid sales and refunds without returning PII', function () {
   const db = new Database(':memory:');
   db.exec(`

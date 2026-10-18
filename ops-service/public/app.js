@@ -386,6 +386,35 @@
     });
   }
 
+  function websiteTrafficHtml(traffic) {
+    if (!traffic || !Array.isArray(traffic.daily) || traffic.daily.length !== 14) return '';
+    var current = Number(traffic.last_7_days) || 0;
+    var previous = Number(traffic.previous_7_days) || 0;
+    var difference = current - previous;
+    var comparison = previous
+      ? (difference > 0 ? '+' : '') + Math.round(difference / previous * 100) + '% vs previous 7 days'
+      : (current ? 'New traffic vs previous 7 days' : 'No pageviews in either week');
+    var trendClass = difference > 0 ? 'is-up' : difference < 0 ? 'is-down' : 'is-flat';
+    var maximum = Math.max(1, ...traffic.daily.map(function (row) { return Number(row.page_views) || 0; }));
+    var bars = traffic.daily.map(function (row, index) {
+      var count = Math.max(0, Number(row.page_views) || 0);
+      var date = new Date(row.day + 'T00:00:00Z');
+      var shortDate = Number.isNaN(date.getTime()) ? row.day : date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+      return '<div class="website-traffic-day' + (index >= 7 ? ' is-current' : '') + '" role="img" aria-label="' + escapeHtml(row.day) + ': ' + count + ' page views" title="' + escapeHtml(row.day) + ': ' + count + ' page views">' +
+        '<span class="website-traffic-value">' + count + '</span>' +
+        '<span class="website-traffic-track"><i style="height:' + (count ? Math.max(4, count / maximum * 100) : 0) + '%"></i></span>' +
+        '<span class="website-traffic-date">' + escapeHtml(shortDate) + '</span>' +
+      '</div>';
+    }).join('');
+    return '<section class="website-traffic" aria-label="Website pageview trend">' +
+      '<div class="website-traffic-head"><div><span class="eyebrow">Traffic trend · completed UTC days</span>' +
+        '<h3>Page views, day by day</h3></div>' +
+        '<p>Last 7 full days <strong>' + current + '</strong> <span class="website-traffic-change ' + trendClass + '">' + escapeHtml(comparison) + '</span></p></div>' +
+      '<div class="website-traffic-chart" aria-label="Fourteen daily pageview counts">' + bars + '</div>' +
+      '<div class="website-traffic-foot"><span>Previous 7 days: ' + previous + '</span><span>Latest 7 days: ' + current + '</span></div>' +
+    '</section>';
+  }
+
   function renderWebsiteAnalytics() {
     panelMain.innerHTML = '<div class="tab-placeholder wide"><div class="eyebrow">Loading…</div><h2>Website Analytics</h2></div>';
     Promise.all([
@@ -393,12 +422,16 @@
         .then(function (res) { if (!res.ok) throw new Error('bad_status'); return res.json(); }),
       fetch('/api/reports/sales-dashboard', { credentials: 'include' })
         .then(function (res) { return res.ok ? res.json() : null; })
+        .catch(function () { return null; }),
+      fetch('/api/reports/website-traffic', { credentials: 'include' })
+        .then(function (res) { return res.ok ? res.json() : null; })
         .catch(function () { return null; })
     ])
       .then(function (results) {
         if (currentTabId() !== 'website-analytics') return; // navigated away before this resolved
         var data = results[0];
         var sales = results[1];
+        var traffic = results[2];
 
         var funnelLabels = {
           page_view: 'Page viewed',
@@ -447,6 +480,7 @@
                 '<div class="overview-tile-stat"><span class="n">' + data.last_30_days.page_views + '</span> page views</div>' +
                 '<div class="overview-tile-sub">' + data.last_30_days.unique_visitors + ' verified daily visits</div></div>' +
             '</div>' +
+            websiteTrafficHtml(traffic) +
             '<div class="funnel-section"><div class="eyebrow">What is counted</div>' +
               '<p class="analytics-definition">' + escapeHtml(data.visitor_definition || '') + '</p>' +
               '<p class="analytics-definition">Known bots, automated checks, and ' + Number(data.excluded_unverified_events || 0) + ' older/unverified events are excluded.</p>' +

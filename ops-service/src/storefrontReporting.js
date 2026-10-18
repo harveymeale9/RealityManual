@@ -98,6 +98,47 @@ function startOfUtcDay(value) {
   return date;
 }
 
+// The storefront compacts completed UTC days into analytics_daily_events,
+// while the current day remains in analytics_events. Keep the two sources
+// separate and show completed days only so a partial today cannot look like
+// a traffic collapse beside yesterday's full count.
+function getWebsiteTraffic(db, nowValue) {
+  const today = startOfUtcDay(nowValue || Date.now());
+  const start = new Date(today);
+  start.setUTCDate(start.getUTCDate() - 14);
+  const startDay = start.toISOString().slice(0, 10);
+  const todayDay = today.toISOString().slice(0, 10);
+  const dailyRows = db.prepare(`
+    SELECT day, SUM(event_count) AS page_views
+    FROM analytics_daily_events
+    WHERE event_name = 'page_view' AND day >= ? AND day < ?
+    GROUP BY day
+  `).all(startDay, todayDay);
+  const rawRows = db.prepare(`
+    SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS page_views
+    FROM analytics_events
+    WHERE event_name = 'page_view' AND verified_human = 1
+      AND created_at >= ? AND created_at < ?
+    GROUP BY substr(created_at, 1, 10)
+  `).all(start.toISOString(), today.toISOString());
+  const counts = new Map();
+  dailyRows.concat(rawRows).forEach(function (row) {
+    counts.set(row.day, (counts.get(row.day) || 0) + Number(row.page_views || 0));
+  });
+  const daily = Array.from({ length: 14 }, function (_, index) {
+    const date = new Date(start);
+    date.setUTCDate(date.getUTCDate() + index);
+    const day = date.toISOString().slice(0, 10);
+    return { day: day, page_views: counts.get(day) || 0 };
+  });
+  return {
+    timezone: 'UTC',
+    daily: daily,
+    previous_7_days: daily.slice(0, 7).reduce(function (sum, row) { return sum + row.page_views; }, 0),
+    last_7_days: daily.slice(7).reduce(function (sum, row) { return sum + row.page_views; }, 0)
+  };
+}
+
 function fulfillmentIssueSummary(message) {
   const detail = String(message || '').toLowerCase();
   if (!detail.trim()) return '';
@@ -212,5 +253,6 @@ function getSalesDashboard(db, nowValue) {
 module.exports = {
   FUNNEL_STEPS: FUNNEL_STEPS,
   getPeriodReport: getPeriodReport,
+  getWebsiteTraffic: getWebsiteTraffic,
   getSalesDashboard: getSalesDashboard
 };

@@ -20154,3 +20154,25 @@ review copy remuxed from the existing Editor picture and final-master audio.
 The finished copy was decoded successfully, and headless Chromium verified
 that clicking Play advances the real Final Check video. No transcript edits,
 Production master, or publish settings were changed.
+
+---
+
+# 655. Website Analytics Shows a Two-Week Pageview Trend (2026-10-18)
+
+Harvey wanted to see whether storefront traffic is growing, not just today's
+and the last 30 days' totals. Website Analytics now has a 14-day bar chart:
+the older seven days are muted, the latest seven are green, each day has its
+verified pageview count, and the header shows the latest seven-day total plus
+its percentage change against the preceding seven days. The period is the
+latest 14 **completed UTC days**; today's partial count remains in the
+existing Today tile and cannot falsely appear as a sudden drop in the chart.
+
+The private `/api/reports/website-traffic` endpoint reads the storefront
+database through the existing read-only bind mount. It combines compacted
+`analytics_daily_events` totals with any remaining verified raw
+`analytics_events`, fills missing days with zero, and returns counts only—no
+browser identifiers or customer data. The page continues to render its
+existing analytics if this optional trend endpoint is unavailable. A service
+test covers completed-day boundaries, compacted/raw merging, missing days,
+excluded bots, and today not appearing in the comparison. The main storefront
+analytics summary endpoint and its existing 30-day counts were not changed.
