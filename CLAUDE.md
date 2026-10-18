@@ -20024,3 +20024,18 @@ value retain the 1.7 s landscape / 2 s portrait defaults. The Editor JS/CSS
 cache keys were advanced. Unit, API/undo, and FFmpeg render tests cover the
 1.5 s setting; a headless browser check confirmed both timeline controls
 render and have their handlers attached.
+
+---
+
+# 650. Seven Needs Short Ending Repaired (2026-10-18)
+
+The vertical *7 needs short* recording had the same accidental retained tail
+as the prior long-form outro: its manually adjusted cut ran from 211.930 to
+213.797 s, then resumed the last 2.083 s showing Harvey reaching toward the
+camera. The final spoken word ended at 211.680 s. Through the Editor PATCH
+API with edit-revision precondition, only that cut was extended to the source
+end at 215.880 s and this recording's outro fade was set to 1.5 s. All earlier
+cuts and transcript edits were retained, and the change remains undoable.
+The preview was rebuilt successfully: render quality passed, the project is
+`ready` and not dirty, and inspected closing frames show the final book shot
+fading to fully black without the camera-reach shot.
