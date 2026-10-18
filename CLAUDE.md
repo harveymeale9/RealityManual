@@ -20130,3 +20130,27 @@ for an active Production master render; future notes use the authenticated
 endpoint. Reporting tests cover the separate refund list,
 automatic vs. unrecorded reasons, sanitized BookVault context, and exclusion
 of customer PII.
+
+---
+
+# 654. Long-form Final Check Review Should Reuse the Editor Picture (2026-10-18)
+
+Harvey's 12m46s long-form Final Check card had a disabled Play button because
+its 720p review copy was still preparing. The Editor picture was already
+720x404, but its video duration (765.331 s) differed from the 4K publish
+master (765.632 s) by 0.300 s, exceeding the review service's 0.1 s match
+tolerance. It needlessly started a multi-minute full 4K decode/720p encode.
+
+The matching tolerance is now 0.5 s to allow this small end-tail difference,
+and the matched Editor picture is stream-copied instead of re-encoded. The
+AAC audio remains a bit-for-bit copy of the 4K publish master; the publish
+master is never modified. A direct-upload video with no matching small
+picture still uses the normal 720p encode. The regression test gives the
+master an extra 0.32 s and checks that the resulting small review retains
+the Editor dimensions and exact source audio packets.
+
+For the affected live piece, the slow review encode was stopped and its
+review copy remuxed from the existing Editor picture and final-master audio.
+The finished copy was decoded successfully, and headless Chromium verified
+that clicking Play advances the real Final Check video. No transcript edits,
+Production master, or publish settings were changed.

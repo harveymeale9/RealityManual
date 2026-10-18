@@ -66,9 +66,9 @@ test('matching Editor picture is used with the exact final-master audio', async 
     const picture = path.join(dir, 'editor.mp4');
     const output = path.join(dir, 'review.mp4');
     execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc=size=1920x1080:rate=25',
-      '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-t', '1', '-c:v', 'libx264', '-threads', '2',
+      '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-t', '1.32', '-c:v', 'libx264', '-threads', '2',
       '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-y', source]);
-    execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', source, '-vf', 'scale=720:404',
+    execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', source, '-t', '1', '-vf', 'scale=720:404',
       '-an', '-c:v', 'libx264', '-threads', '2', '-y', picture]);
     assert.equal(preview.matchingPicture(source, picture), picture);
     const service = preview.setup();
@@ -76,7 +76,7 @@ test('matching Editor picture is used with the exact final-master audio', async 
     await service.jobs.get('piece');
     assert.equal(service.start('piece', source, output, picture).status, 'ready');
     const probe = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_streams', '-of', 'json', output]));
-    assert.equal(probe.streams.find(s => s.codec_type === 'video').width, 1280);
+    assert.equal(probe.streams.find(s => s.codec_type === 'video').width, 720);
     const audioHashes = file => execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'a', '-show_packets',
       '-show_entries', 'packet=data_hash', '-show_data_hash', 'sha256', '-of', 'csv=p=0', file], { encoding: 'utf8' });
     assert.equal(audioHashes(output), audioHashes(source));

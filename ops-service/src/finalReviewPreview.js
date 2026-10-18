@@ -13,8 +13,10 @@ function ffmpegArgs(source, output, picture) {
     '-hide_banner', '-loglevel', 'error', '-nostdin', '-y', '-i', picture || source,
     ...(picture ? ['-i', source] : []),
     '-map', '0:v:0', '-map', picture ? '1:a:0?' : '0:a:0?', '-sn', '-dn',
-    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease:force_divisible_by=2',
-    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '29', '-pix_fmt', 'yuv420p',
+    ...(picture ? ['-c:v', 'copy'] : [
+      '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease:force_divisible_by=2',
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '29', '-pix_fmt', 'yuv420p'
+    ]),
     '-threads', '2', '-c:a', 'copy', '-movflags', '+faststart', output
   ];
 }
@@ -30,7 +32,9 @@ function matchingPicture(source, picture) {
     const master = probe(source);
     const small = probe(picture);
     if (!master || !small || !Number.isFinite(Number(master.duration)) || !Number.isFinite(Number(small.duration))) return '';
-    if (Math.abs(Number(master.duration) - Number(small.duration)) > 0.1) return '';
+    // The 4K master can contain a few extra tenths of a second of black/audio
+    // tail after the Editor picture. That must not force a full 4K transcode.
+    if (Math.abs(Number(master.duration) - Number(small.duration)) > 0.5) return '';
     if (Number(small.width) > 1280 || Number(small.height) > 720) return '';
     return picture;
   } catch (error) { return ''; }
