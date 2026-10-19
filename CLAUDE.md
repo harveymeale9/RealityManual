@@ -20399,3 +20399,25 @@ the live repo. The manuscript test asserts page 7's continuous text uses
 manuscript with `cache: 'no-store'` and has a new client asset version so a
 browser refresh does not keep displaying the prior response under the API's
 five-minute private-cache header.
+
+---
+
+# 667. TikTok Audience Count from the Public Profile (2026-10-19)
+
+Content Analytics previously left TikTok followers blank because Buffer does
+not provide an account audience count. TikTok's official `follower_count`
+field requires the `user.info.stats` scope, while the existing TikTok Login Kit
+grant only requests `user.info.basic` and `video.publish`. Changing the grant
+would require additional app approval and a fresh account authorization.
+
+The hourly TikTok analytics collector now derives the canonical public profile
+URL from a linked TikTok video, fetches that profile once, and reads
+`webapp.user-detail.userInfo.stats.followerCount` from its hydration payload.
+It validates the returned `uniqueId` against the requested handle and accepts
+a genuine zero, but never stores an unverified or missing value as zero. A
+failed public fetch keeps the last verified audience snapshot and reports a
+partial-provider notice. This is intentionally a best-effort public-page
+source: TikTok may change its markup or restrict anonymous requests, in which
+case the official approved scope would be the durable replacement. Live check
+against `@the.reality.manual` returned 9 followers. Parser/fetch regression
+tests and the full 290-test ops-service suite pass.

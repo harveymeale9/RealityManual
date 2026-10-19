@@ -24,6 +24,27 @@ test('TikTok public metric fetch accepts only canonical public video URLs', asyn
   assert.equal(calls, 0);
 });
 
+test('TikTok public audience reads only the requested profile and preserves zero', async function () {
+  const url = 'https://tiktok.com/@the.reality.manual/video/7696601252985113862';
+  const profile = metrics.profileFromVideoUrl(url);
+  assert.deepEqual(profile, { handle: 'the.reality.manual', url: 'https://www.tiktok.com/@the.reality.manual' });
+  assert.equal(metrics.profileFromVideoUrl('https://evil.example/@the.reality.manual/video/123'), null);
+  const payload = { __DEFAULT_SCOPE__: { 'webapp.user-detail': { userInfo: {
+    user: { uniqueId: 'the.reality.manual' }, stats: { followerCount: 0 }
+  } } } };
+  const html = '<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application/json">' + JSON.stringify(payload) + '</script>';
+  assert.deepEqual(metrics.parsePublicAudience(html, profile.handle), { followers: 0 });
+  assert.equal(metrics.parsePublicAudience(html, 'another.creator'), null);
+  assert.equal(metrics.parsePublicAudience('<html>blocked</html>', profile.handle), null);
+  let called = '';
+  const result = await metrics.fetchPublicAudience(url, async function (requestUrl) {
+    called = requestUrl;
+    return { ok: true, text: async function () { return html; } };
+  });
+  assert.equal(called, profile.url);
+  assert.deepEqual(result, { followers: 0 });
+});
+
 test('fresh public counters supersede stale Buffer zeroes without allowing counts to move backwards', function () {
   assert.equal(metrics.freshestCount(0, 351), 351);
   assert.equal(metrics.freshestCount(400, 351), 400);

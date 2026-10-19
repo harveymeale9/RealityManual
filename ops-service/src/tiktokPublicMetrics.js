@@ -1,6 +1,7 @@
 'use strict';
 
 const VIDEO_URL = /^https:\/\/(?:www\.)?tiktok\.com\/@[^/]+\/video\/(\d+)(?:[/?#]|$)/i;
+const PROFILE_FROM_VIDEO = /^https:\/\/(?:www\.)?tiktok\.com\/@([a-z0-9._]+)\/video\/\d+(?:[/?#]|$)/i;
 const REHYDRATION_SCRIPT = /<script[^>]+id=["']__UNIVERSAL_DATA_FOR_REHYDRATION__["'][^>]*>([\s\S]*?)<\/script>/i;
 
 function nonNegative(value) {
@@ -12,6 +13,39 @@ function nonNegative(value) {
 function videoIdFromUrl(value) {
   const match = String(value || '').trim().match(VIDEO_URL);
   return match ? match[1] : '';
+}
+
+function profileFromVideoUrl(value) {
+  const match = String(value || '').trim().match(PROFILE_FROM_VIDEO);
+  return match ? { handle: match[1], url: 'https://www.tiktok.com/@' + match[1] } : null;
+}
+
+function parsePublicAudience(html, expectedHandle) {
+  const match = String(html || '').match(REHYDRATION_SCRIPT);
+  if (!match) return null;
+  let payload;
+  try { payload = JSON.parse(match[1]); } catch (error) { return null; }
+  const detail = payload && payload.__DEFAULT_SCOPE__ && payload.__DEFAULT_SCOPE__['webapp.user-detail'];
+  const info = detail && detail.userInfo;
+  const handle = info && info.user && info.user.uniqueId;
+  if (!handle || String(handle).toLowerCase() !== String(expectedHandle || '').toLowerCase()) return null;
+  const followers = nonNegative(info.stats && info.stats.followerCount);
+  return followers == null ? null : { followers: followers };
+}
+
+async function fetchPublicAudience(videoUrl, fetchImpl) {
+  const profile = profileFromVideoUrl(videoUrl);
+  if (!profile) return null;
+  fetchImpl = fetchImpl || fetch;
+  const response = await fetchImpl(profile.url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
+      'Accept-Language': 'en-US,en;q=0.9'
+    },
+    signal: typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(12000) : undefined
+  });
+  if (!response.ok) return null;
+  return parsePublicAudience(await response.text(), profile.handle);
 }
 
 function parsePublicMetrics(html, expectedVideoId) {
@@ -77,6 +111,9 @@ function mergeMetrics(bufferMetrics, publicMetrics) {
 
 module.exports = {
   videoIdFromUrl: videoIdFromUrl,
+  profileFromVideoUrl: profileFromVideoUrl,
+  parsePublicAudience: parsePublicAudience,
+  fetchPublicAudience: fetchPublicAudience,
   parsePublicMetrics: parsePublicMetrics,
   fetchPublicMetrics: fetchPublicMetrics,
   freshestCount: freshestCount,

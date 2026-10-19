@@ -1468,6 +1468,14 @@ const contentAnalytics = contentAnalyticsService.setup(db, {
     tiktok: async function (pieces) {
       if (!buffer.configured) throw new Error('TikTok via Buffer is not connected.');
       const rows = [];
+      const publicVideo = pieces.find(function (item) {
+        return !!tiktokPublicMetrics.profileFromVideoUrl(item.tiktokExternalLink);
+      });
+      let publicAudience = null;
+      if (publicVideo) {
+        try { publicAudience = await tiktokPublicMetrics.fetchPublicAudience(publicVideo.tiktokExternalLink); }
+        catch (error) { publicAudience = null; }
+      }
       for (const piece of pieces.filter(function (item) { return !!item.tiktokPublishId; })) {
         // Buffer ingests sent-post metrics only daily. Keep the last lifecycle
         // snapshot and use the public video page for current counters; the
@@ -1479,9 +1487,13 @@ const contentAnalytics = contentAnalyticsService.setup(db, {
         if (!publicMetrics && !Object.keys(metrics).length) continue;
         rows.push({ pieceId: piece.id, platform: 'tiktok', metrics: tiktokPublicMetrics.mergeMetrics(metrics, publicMetrics) });
       }
-      return { pieces: rows, channels: [], status: {
-        audienceAvailable: false,
-        note: 'Video counters use the public post; watch-time details use the last saved Buffer snapshot. TikTok audience totals are not exposed by the connection.'
+      return { pieces: rows,
+        channels: publicAudience ? [{ platform: 'tiktok', followers: publicAudience.followers }] : [],
+        status: {
+        audienceAvailable: !!publicAudience,
+        partial: !publicAudience,
+        note: publicAudience ? 'TikTok followers and video counters use the public profile and posts; watch-time details use the last saved Buffer snapshot.' :
+          'TikTok public profile follower count is temporarily unavailable; the last verified count is retained.'
       } };
     },
     instagram: async function (pieces) {
