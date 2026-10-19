@@ -12,6 +12,11 @@ const corpus = require('../src/ideationCorpus');
 const manuscriptSearchIndex = require('../src/manuscriptSearchIndex');
 const manualConceptIndex = require('../src/manualConceptIndex');
 
+test('Text & copy requests fresh canonical text after a manuscript correction', function () {
+  const client = fs.readFileSync(path.join(__dirname, '..', 'public', 'manuscript.js'), 'utf8');
+  assert.match(client, /api\('\/text', \{ cache: 'no-store' \}\)/);
+});
+
 test('manuscript reader serves illustrated selectable spreads and instant persistent semantic search', async function (t) {
   let calls = 0;
   const fakeProviders = {

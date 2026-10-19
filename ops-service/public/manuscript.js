@@ -280,7 +280,7 @@
     showBookLoader(book);
 
     if (!fullTextLoadPromise) {
-      fullTextLoadPromise = api('/text').then(function (data) {
+      fullTextLoadPromise = api('/text', { cache: 'no-store' }).then(function (data) {
         pageCount = data.pageCount;
         fullTextPages = data.pages || [];
         return fullTextPages;

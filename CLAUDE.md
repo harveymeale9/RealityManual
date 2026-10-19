@@ -20395,4 +20395,7 @@ artwork and its OCR word layer already say "fourteen"; only the root canonical
 search index at service startup, so a source-only Git pull does not refresh
 the running reader; restart the ops service after the corrected source reaches
 the live repo. The manuscript test asserts page 7's continuous text uses
-"fourteen" and does not regress to "thirteen".
+"fourteen" and does not regress to "thirteen". Text & Copy now fetches the
+manuscript with `cache: 'no-store'` and has a new client asset version so a
+browser refresh does not keep displaying the prior response under the API's
+five-minute private-cache header.
