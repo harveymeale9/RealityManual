@@ -1397,8 +1397,11 @@ function getStorefrontReportDb() {
   }
   return storefrontReportDb;
 }
+function excludedSalesOrderIds() {
+  return stmts.getAll.all('salesExclusions').map(function (row) { return row.id; });
+}
 function readStorefrontReport(start, end) {
-  return storefrontReporting.getPeriodReport(getStorefrontReportDb(), start, end);
+  return storefrontReporting.getPeriodReport(getStorefrontReportDb(), start, end, excludedSalesOrderIds());
 }
 
 const weeklyReports = weeklyReportService.setup(db, {
@@ -1637,7 +1640,7 @@ app.get('/api/reports/website-traffic', requireAuth, function (req, res) {
 app.get('/api/reports/sales-dashboard', requireAuth, function (req, res) {
   try {
     res.set('Cache-Control', 'no-store');
-    const dashboard = storefrontReporting.getSalesDashboard(getStorefrontReportDb());
+    const dashboard = storefrontReporting.getSalesDashboard(getStorefrontReportDb(), undefined, excludedSalesOrderIds());
     const notes = new Map(stmts.getAll.all('refundNotes').map(function (row) {
       try { const item = JSON.parse(row.data); return [item.orderId, item.note]; }
       catch (error) { return [null, null]; }
@@ -1654,6 +1657,30 @@ app.get('/api/reports/sales-dashboard', requireAuth, function (req, res) {
   catch (error) {
     console.error('Sales dashboard read failed:', error.message);
     res.status(503).json({ error: 'sales_dashboard_unavailable' });
+  }
+});
+app.put('/api/reports/sales-exclusions/:id', requireAuth, function (req, res) {
+  const id = req.params.id;
+  if (!isValidId(id)) return res.status(400).json({ error: 'invalid_order_id' });
+  try {
+    const order = getStorefrontReportDb().prepare('SELECT id FROM orders WHERE id = ?').get(id);
+    if (!order) return res.status(404).json({ error: 'order_not_found' });
+    stmts.upsert.run('salesExclusions', id, JSON.stringify({ orderId: id, reason: 'owner_test_order' }), new Date().toISOString());
+    res.set('Cache-Control', 'no-store').json({ ok: true, excluded: true });
+  } catch (error) {
+    console.error('Sales exclusion save failed:', error.message);
+    res.status(503).json({ error: 'sales_exclusion_unavailable' });
+  }
+});
+app.delete('/api/reports/sales-exclusions/:id', requireAuth, function (req, res) {
+  const id = req.params.id;
+  if (!isValidId(id)) return res.status(400).json({ error: 'invalid_order_id' });
+  try {
+    stmts.del.run('salesExclusions', id);
+    res.set('Cache-Control', 'no-store').json({ ok: true, excluded: false });
+  } catch (error) {
+    console.error('Sales exclusion removal failed:', error.message);
+    res.status(503).json({ error: 'sales_exclusion_unavailable' });
   }
 });
 app.put('/api/reports/refunds/:id/note', requireAuth, function (req, res) {

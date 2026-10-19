@@ -23,17 +23,23 @@ const PAID_ORDER_SQL = `order_status != 'REFUNDED'
   AND (stripe_payment_status IN ('succeeded','paid')
     OR order_status IN ('PAYMENT_RECEIVED','BOOKVAULT_PENDING','BOOKVAULT_ACCEPTED','FULFILLMENT_RETRY','SHIPPED','COMPLETE'))`;
 
-function salesTotals(db, start, end) {
+function excludedOrderFilter(excludedIds) {
+  const ids = Array.from(new Set(Array.from(excludedIds || []).filter(function (id) { return typeof id === 'string' && id; })));
+  return { sql: ids.length ? ' AND id NOT IN (' + ids.map(function () { return '?'; }).join(',') + ')' : '', ids: ids };
+}
+
+function salesTotals(db, start, end, excludedIds) {
+  const excluded = excludedOrderFilter(excludedIds);
   const paid = db.prepare(`
     SELECT COUNT(*) AS orders, COALESCE(SUM(quantity),0) AS units,
       COALESCE(SUM(total_price_cents),0) AS revenue_cents,
       COALESCE(AVG(total_price_cents),0) AS average_order_cents
-    FROM orders WHERE created_at >= ? AND created_at < ? AND ${PAID_ORDER_SQL}
-  `).get(start, end);
+    FROM orders WHERE created_at >= ? AND created_at < ? AND ${PAID_ORDER_SQL}${excluded.sql}
+  `).get(start, end, ...excluded.ids);
   const refunds = db.prepare(`
     SELECT COUNT(*) AS orders, COALESCE(SUM(total_price_cents),0) AS value_cents
-    FROM orders WHERE updated_at >= ? AND updated_at < ? AND order_status='REFUNDED'
-  `).get(start, end);
+    FROM orders WHERE updated_at >= ? AND updated_at < ? AND order_status='REFUNDED'${excluded.sql}
+  `).get(start, end, ...excluded.ids);
   return {
     paid_orders: Number(paid.orders) || 0,
     units: Number(paid.units) || 0,
@@ -47,7 +53,8 @@ function salesTotals(db, start, end) {
 // Reads the storefront database through a read-only Docker bind mount. This
 // keeps order/customer data inside the VPS and exposes only aggregate numbers
 // to the weekly reporter—no public revenue endpoint and no copied credential.
-function getPeriodReport(db, start, end) {
+function getPeriodReport(db, start, end, excludedIds) {
+  const excluded = excludedOrderFilter(excludedIds);
   const events = eventMap(db.prepare(`
     SELECT event_name, COUNT(*) AS count, COUNT(DISTINCT session_id) AS unique_sessions
     FROM analytics_events WHERE created_at >= ? AND created_at < ? GROUP BY event_name
@@ -56,7 +63,7 @@ function getPeriodReport(db, start, end) {
   const landing = events.landing_page_view || { count: 0, unique_sessions: 0 };
   const checkout = events.checkout_view || { count: 0, unique_sessions: 0 };
   const completed = events.order_complete || { count: 0, unique_sessions: 0 };
-  const sales = salesTotals(db, start, end);
+  const sales = salesTotals(db, start, end, excluded.ids);
   const topSources = db.prepare(`SELECT utm_source AS label, COUNT(DISTINCT session_id) AS sessions
     FROM analytics_events WHERE created_at >= ? AND created_at < ? AND utm_source IS NOT NULL AND utm_source != ''
     GROUP BY utm_source ORDER BY sessions DESC LIMIT 8`).all(start, end);
@@ -64,8 +71,8 @@ function getPeriodReport(db, start, end) {
     FROM analytics_events WHERE created_at >= ? AND created_at < ? AND utm_campaign IS NOT NULL AND utm_campaign != ''
     GROUP BY utm_campaign ORDER BY sessions DESC LIMIT 8`).all(start, end);
   const countries = db.prepare(`SELECT country AS label, COUNT(*) AS orders, COALESCE(SUM(total_price_cents),0) AS revenue_cents
-    FROM orders WHERE created_at >= ? AND created_at < ? AND ${PAID_ORDER_SQL}
-    GROUP BY country ORDER BY orders DESC,revenue_cents DESC LIMIT 8`).all(start, end);
+    FROM orders WHERE created_at >= ? AND created_at < ? AND ${PAID_ORDER_SQL}${excluded.sql}
+    GROUP BY country ORDER BY orders DESC,revenue_cents DESC LIMIT 8`).all(start, end, ...excluded.ids);
   return {
     period: { start: start, end: end },
     website: {
@@ -153,7 +160,8 @@ function fulfillmentIssueSummary(message) {
 // Private, admin-only dashboard data. Deliberately omits customer contact and
 // address fields; the panel needs operational sales state, not a second copy
 // of the customer database in the browser.
-function getSalesDashboard(db, nowValue) {
+function getSalesDashboard(db, nowValue, excludedIds) {
+  const excluded = excludedOrderFilter(excludedIds);
   const now = new Date(nowValue || Date.now());
   const end = now.toISOString();
   const todayStart = startOfUtcDay(now);
@@ -164,9 +172,9 @@ function getSalesDashboard(db, nowValue) {
   const dailyRows = db.prepare(`
     SELECT substr(created_at,1,10) AS day, COUNT(*) AS orders,
       COALESCE(SUM(quantity),0) AS units, COALESCE(SUM(total_price_cents),0) AS revenue_cents
-    FROM orders WHERE created_at >= ? AND created_at < ? AND ${PAID_ORDER_SQL}
+    FROM orders WHERE created_at >= ? AND created_at < ? AND ${PAID_ORDER_SQL}${excluded.sql}
     GROUP BY substr(created_at,1,10) ORDER BY day ASC
-  `).all(thirtyStart.toISOString(), end);
+  `).all(thirtyStart.toISOString(), end, ...excluded.ids);
   const dailyMap = {};
   dailyRows.forEach(function (row) { dailyMap[row.day] = row; });
   const daily = [];
@@ -180,9 +188,9 @@ function getSalesDashboard(db, nowValue) {
   const countries = db.prepare(`
     SELECT country, COUNT(*) AS orders, COALESCE(SUM(quantity),0) AS units,
       COALESCE(SUM(total_price_cents),0) AS revenue_cents
-    FROM orders WHERE ${PAID_ORDER_SQL}
+    FROM orders WHERE ${PAID_ORDER_SQL}${excluded.sql}
     GROUP BY country ORDER BY revenue_cents DESC,orders DESC LIMIT 12
-  `).all().map(function (row) {
+  `).all(...excluded.ids).map(function (row) {
     return { country: row.country || '—', orders: Number(row.orders) || 0, units: Number(row.units) || 0, revenue_cents: Number(row.revenue_cents) || 0 };
   });
 
@@ -191,8 +199,8 @@ function getSalesDashboard(db, nowValue) {
       stripe_payment_status, shipping_service_name, bookvault_order_id,
       confirmation_email_sent_at, shipping_email_sent_at,
       resend_contact_synced_at, created_at, updated_at
-    FROM orders ORDER BY created_at DESC LIMIT 25
-  `).all().map(function (row) {
+    FROM orders WHERE 1=1${excluded.sql} ORDER BY created_at DESC LIMIT 25
+  `).all(...excluded.ids).map(function (row) {
     return {
       id: row.id,
       quantity: Number(row.quantity) || 0,
@@ -216,9 +224,9 @@ function getSalesDashboard(db, nowValue) {
       fulfillment_last_error,
       (SELECT error_type FROM error_logs WHERE order_id = orders.id AND service = 'refund'
         ORDER BY created_at DESC LIMIT 1) AS refund_error_type
-    FROM orders WHERE order_status = 'REFUNDED'
+    FROM orders WHERE order_status = 'REFUNDED'${excluded.sql}
     ORDER BY updated_at DESC LIMIT 100
-  `).all().map(function (row) {
+  `).all(...excluded.ids).map(function (row) {
     return {
       id: row.id,
       created_at: row.created_at,
@@ -235,19 +243,32 @@ function getSalesDashboard(db, nowValue) {
     };
   });
 
+  const excludedOrders = excluded.ids.length ? db.prepare(`
+    SELECT id, order_status, total_price_cents, currency, created_at
+    FROM orders WHERE id IN (${excluded.ids.map(function () { return '?'; }).join(',')})
+    ORDER BY created_at DESC
+  `).all(...excluded.ids).map(function (row) {
+    return {
+      id: row.id, order_status: row.order_status,
+      total_price_cents: Number(row.total_price_cents) || 0,
+      currency: row.currency || 'usd', created_at: row.created_at
+    };
+  }) : [];
+
   return {
     generated_at: end,
     timezone: 'UTC',
     periods: {
-      today: salesTotals(db, todayStart.toISOString(), end),
-      last_7_days: salesTotals(db, sevenStart.toISOString(), end),
-      last_30_days: salesTotals(db, thirtyStart.toISOString(), end),
-      all_time: salesTotals(db, allStart, end)
+      today: salesTotals(db, todayStart.toISOString(), end, excluded.ids),
+      last_7_days: salesTotals(db, sevenStart.toISOString(), end, excluded.ids),
+      last_30_days: salesTotals(db, thirtyStart.toISOString(), end, excluded.ids),
+      all_time: salesTotals(db, allStart, end, excluded.ids)
     },
     daily: daily,
     countries: countries,
     recent_orders: recentOrders,
-    recent_refunds: recentRefunds
+    recent_refunds: recentRefunds,
+    excluded_orders: excludedOrders
   };
 }
 

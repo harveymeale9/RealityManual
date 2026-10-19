@@ -2616,6 +2616,15 @@ body.role-reviewer #pmBackFab {
 .sales-order-ops { display: flex; flex-wrap: wrap; gap: 5px; }
 .sales-order-ops span { padding: 4px 6px; border: 1px solid var(--border-soft); border-radius: 4px; color: var(--ink-faint); font: .54rem var(--font-mono); white-space: nowrap; }
 .sales-order-ops span.done { border-color: #23563a; color: #66d894; background: rgba(33,95,57,.12); }
+.sales-test-order-action { padding: 3px 0; border: 0; background: none; color: var(--ink-faint); font: .62rem var(--font-mono); text-decoration: underline; cursor: pointer; }
+.sales-test-order-action:hover { color: var(--accent); }
+.sales-test-order-action:disabled { opacity: .55; cursor: default; }
+.sales-refund-row > .sales-test-order-action { display: block; margin-top: 8px; }
+.sales-excluded-block { margin: -5px 0 20px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 8px; color: var(--ink-soft); font: .72rem var(--font-body); }
+.sales-excluded-block summary { color: var(--accent); cursor: pointer; }
+.sales-excluded-block p { margin: 9px 0; color: var(--ink-faint); }
+.sales-excluded-order { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border-soft); }
+.sales-excluded-order .sales-test-order-action { margin-left: auto; }
 .sales-empty-orders { display: flex; flex-direction: column; gap: 6px; padding-block: 32px; text-align: center; }
 .sales-empty-orders strong { color: var(--ink-soft); font-size: .88rem; }
 .sales-empty-orders span { line-height: 1.5; }

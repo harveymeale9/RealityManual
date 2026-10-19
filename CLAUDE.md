@@ -20339,3 +20339,30 @@ video needs, retaining the hook, natural keywords and no-spoiler guardrails.
 The validation character ceiling is back to 1,800 so a sound ~200-word
 description is not rejected, and the source-hash style version changed so
 any old cached shorter draft is regenerated for a future YouTube upload.
+
+---
+
+# 664. Reversible Owner Test-Order Exclusions in Sales Analytics (2026-10-19)
+
+Harvey asked to remove his October 13 self-orders from the Sales Analytics
+list and prevent them skewing the figures. A read-only storefront check found
+two records under his name: the refunded `1ccac84e-975a-424b-be98-3b9b754a9298`
+($82.29, responsible for the one displayed refund) and the accepted
+`45bec149-7dc4-4cf4-a84e-e5c0fa3cd1f7` ($82.29, responsible for the one
+paid order and all displayed revenue). The storefront database is still
+read-only to ops, and neither real Stripe nor storefront order records is
+deleted or changed.
+
+Instead, an admin-only `salesExclusions` record in the ops database marks
+specific order IDs as owner test orders. Sales Analytics and weekly sales
+reporting omit marked IDs from paid/refund counts, revenue, average order,
+daily chart, countries, and recent order/refund lists. The dashboard shows
+them only in a collapsed "test orders excluded" section with a Restore action;
+an Exclude action on ordinary order and refund rows handles future test
+orders. The private API validates an ID against the live storefront order
+table before marking it, and exposes no customer PII. The website event
+funnel remains raw: pageviews, checkout events and other visitor events are
+not erased because order exclusion does not identify every event in the
+owner's browser session. Tests cover excluded/restore-style reporting and
+unchanged storefront data. The two identified IDs are marked in the ops
+database after deployment, not hard-coded into reporting logic.

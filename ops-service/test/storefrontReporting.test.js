@@ -15,6 +15,10 @@ test('website analytics shows refunds and one count per funnel row', function ()
   assert.match(appSource, /Refunds &amp; reasons/);
   assert.match(appSource, /View refunded orders and reasons in Sales Analytics/);
   assert.match(serverSource, /app\.put\('\/api\/reports\/refunds\/:id\/note', requireAuth/);
+  assert.match(serverSource, /app\.put\('\/api\/reports\/sales-exclusions\/:id', requireAuth/);
+  assert.match(serverSource, /app\.delete\('\/api\/reports\/sales-exclusions\/:id', requireAuth/);
+  assert.match(appSource, /Exclude test order/);
+  assert.match(appSource, /Restore to reporting/);
   assert.doesNotMatch(appSource, /f\.unique_sessions \+ ' visits'/);
 });
 
@@ -126,5 +130,43 @@ test('sales dashboard returns live periods, a filled daily series and privacy-sa
   assert.equal(reporting.getSalesDashboard(db, '2026-10-10T12:00:00.000Z').recent_refunds[0].reason_source, 'automatic');
   assert.equal(JSON.stringify(dashboard).includes('private@example.com'), false);
   assert.equal(JSON.stringify(dashboard).includes('Secret street'), false);
+  db.close();
+});
+
+test('owner test-order exclusions remove paid and refunded orders from sales reporting but keep a reversible reference', function () {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE analytics_events(session_id TEXT,event_name TEXT,utm_source TEXT,utm_campaign TEXT,created_at TEXT);
+    CREATE TABLE orders(
+      id TEXT, order_status TEXT, stripe_payment_status TEXT, quantity INTEGER,
+      total_price_cents INTEGER, currency TEXT, country TEXT, shipping_service_name TEXT,
+      bookvault_order_id TEXT, confirmation_email_sent_at TEXT, shipping_email_sent_at TEXT,
+      resend_contact_synced_at TEXT, created_at TEXT, updated_at TEXT,
+      fulfillment_last_error TEXT
+    );
+    CREATE TABLE error_logs(order_id TEXT, service TEXT, error_type TEXT, created_at TEXT);
+  `);
+  const order = db.prepare('INSERT INTO orders VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+  order.run('real-paid', 'BOOKVAULT_ACCEPTED', 'succeeded', 2, 15000, 'usd', 'US', null, null, null, null, null, '2026-10-13T08:00:00.000Z', '2026-10-13T08:00:00.000Z', null);
+  order.run('owner-paid', 'BOOKVAULT_ACCEPTED', 'succeeded', 1, 8229, 'usd', 'TH', null, null, null, null, null, '2026-10-13T09:00:00.000Z', '2026-10-13T09:00:00.000Z', null);
+  order.run('owner-refund', 'REFUNDED', 'succeeded', 1, 8229, 'usd', 'TH', null, null, null, null, null, '2026-10-13T07:00:00.000Z', '2026-10-13T10:00:00.000Z', null);
+  const excluded = ['owner-paid', 'owner-refund'];
+  const dashboard = reporting.getSalesDashboard(db, '2026-10-19T12:00:00.000Z', excluded);
+  assert.equal(dashboard.periods.all_time.paid_orders, 1);
+  assert.equal(dashboard.periods.all_time.revenue_cents, 15000);
+  assert.equal(dashboard.periods.all_time.refunded_orders, 0);
+  assert.equal(dashboard.periods.last_30_days.average_order_cents, 15000);
+  assert.equal(dashboard.daily.find((row) => row.day === '2026-10-13').revenue_cents, 15000);
+  assert.deepEqual(dashboard.countries.map((row) => row.country), ['US']);
+  assert.deepEqual(dashboard.recent_orders.map((row) => row.id), ['real-paid']);
+  assert.equal(dashboard.recent_refunds.length, 0);
+  assert.deepEqual(dashboard.excluded_orders.map((row) => row.id), ['owner-paid', 'owner-refund']);
+  const weekly = reporting.getPeriodReport(db, '2026-10-13T00:00:00.000Z', '2026-10-14T00:00:00.000Z', excluded);
+  assert.equal(weekly.sales.paid_orders, 1);
+  assert.equal(weekly.sales.refunded_orders, 0);
+  assert.deepEqual(weekly.sales.countries.map((row) => row.country), ['US']);
+  const restored = reporting.getSalesDashboard(db, '2026-10-19T12:00:00.000Z', ['owner-refund']);
+  assert.equal(restored.periods.all_time.paid_orders, 2);
+  assert.equal(restored.periods.all_time.revenue_cents, 23229);
   db.close();
 });

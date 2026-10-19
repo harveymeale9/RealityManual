@@ -314,12 +314,12 @@
             '<span class="' + (order.confirmation_email_sent ? 'done' : '') + '">Email ' + (order.confirmation_email_sent ? 'sent' : 'pending') + '</span>' +
             '<span class="' + (order.resend_contact_synced ? 'done' : '') + '">Resend ' + (order.resend_contact_synced ? 'tagged' : 'pending') + '</span>'
           : '<span>Awaiting payment</span>';
-        return '<div class="sales-order-row">' +
+        return '<div class="sales-order-row" data-sales-order-id="' + escapeHtml(order.id) + '">' +
           '<time datetime="' + escapeHtml(order.created_at || '') + '">' + (isNaN(date.getTime()) ? '—' : date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })) + '</time>' +
           '<strong>#' + escapeHtml(String(order.id || '').slice(0, 8).toUpperCase()) + '<small>' + escapeHtml(order.country) + ' · ' + order.quantity + ' book' + (order.quantity === 1 ? '' : 's') + '</small></strong>' +
           '<span class="sales-order-status ' + salesStatusTone(order.order_status) + '">' + escapeHtml(salesStatusLabel(order.order_status)) + '</span>' +
           '<b>' + salesMoney(order.total_price_cents, order.currency) + '</b>' +
-          '<div class="sales-order-ops">' + operations + '</div></div>';
+          '<div class="sales-order-ops">' + operations + '<button type="button" class="sales-test-order-action" data-sales-action="exclude">Exclude test order</button></div></div>';
       }).join('') : '<div class="sales-empty sales-empty-orders"><strong>No orders yet</strong><span>Tomorrow’s purchase will appear here as soon as checkout creates it, with payment, BookVault, email, and Resend status.</span></div>';
 
       var refunds = (data.recent_refunds || []).map(function (refund) {
@@ -330,11 +330,20 @@
             '<b>' + salesMoney(refund.total_price_cents, refund.currency) + '</b></div>' +
           '<p><span>Reason</span> <strong class="sales-refund-reason-text">' + escapeHtml(refund.reason || 'Reason not recorded') + '</strong></p>' +
           (refund.fulfillment_context ? '<small>Fulfillment context: ' + escapeHtml(refund.fulfillment_context) + '</small>' : '') +
+          '<button type="button" class="sales-test-order-action" data-sales-action="exclude">Exclude test order</button>' +
           '<details class="sales-refund-note-editor"><summary>' + (refund.note ? 'Edit reason note' : 'Add reason note') + '</summary>' +
             '<textarea maxlength="500" rows="2" aria-label="Refund reason note" placeholder="Why was this order refunded?">' + escapeHtml(refund.note || '') + '</textarea>' +
             '<div><button type="button" class="btn-secondary btn-tiny sales-refund-save">Save note</button><span class="sales-refund-save-status" role="status"></span></div></details>' +
           '</article>';
       }).join('') || '<div class="sales-empty">No refunds recorded.</div>';
+
+      var excludedOrders = (data.excluded_orders || []).map(function (order) {
+        return '<div class="sales-excluded-order" data-sales-order-id="' + escapeHtml(order.id) + '"><span>#' +
+          escapeHtml(String(order.id || '').slice(0, 8).toUpperCase()) + ' · ' +
+          escapeHtml(salesStatusLabel(order.order_status)) + ' · ' +
+          salesMoney(order.total_price_cents, order.currency) + '</span>' +
+          '<button type="button" class="sales-test-order-action" data-sales-action="restore">Restore to reporting</button></div>';
+      }).join('');
 
       var thirty = data.periods.last_30_days;
       panelMain.innerHTML = '<div class="sales-dashboard">' +
@@ -351,11 +360,25 @@
           '<section class="sales-block"><div class="sales-block-head"><div><span>Markets</span><h3>Revenue by country</h3></div></div><div class="sales-country-list">' + countries + '</div></section></div>' +
         '<section class="sales-block sales-refunds" id="salesRefunds"><div class="sales-block-head"><div><span>Money returned</span><h3>Refunds &amp; reasons</h3></div><small>' + data.periods.all_time.refunded_orders + ' all time · newest 100 shown</small></div><div class="sales-refund-list">' + refunds + '</div></section>' +
         '<section class="sales-block sales-orders"><div class="sales-block-head"><div><span>Operations</span><h3>Recent orders</h3></div><small>Newest 25 · refreshes every 30 seconds</small></div><div class="sales-order-list">' + recentOrders + '</div></section>' +
+        (excludedOrders ? '<details class="sales-excluded-block"><summary>' + data.excluded_orders.length + ' test order' + (data.excluded_orders.length === 1 ? '' : 's') + ' excluded from sales reporting</summary><p>These remain in Stripe and the storefront database. Restore one here if it was marked by mistake.</p>' + excludedOrders + '</details>' : '') +
       '</div>';
       var refresh = document.getElementById('salesRefresh');
       if (refresh) refresh.addEventListener('click', renderSalesAnalytics);
       var refundJump = document.getElementById('salesRefundJump');
       if (refundJump) refundJump.addEventListener('click', function () { document.getElementById('salesRefunds').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+      panelMain.querySelectorAll('[data-sales-action]').forEach(function (button) {
+        button.addEventListener('click', function () {
+          var row = button.closest('[data-sales-order-id], [data-refund-id]');
+          var orderId = row && (row.dataset.salesOrderId || row.dataset.refundId);
+          var restore = button.dataset.salesAction === 'restore';
+          if (!orderId || (!restore && !window.confirm('Exclude this test order from sales totals, refunds, and recent order lists? The storefront order will be kept.'))) return;
+          button.disabled = true;
+          fetch('/api/reports/sales-exclusions/' + encodeURIComponent(orderId), {
+            method: restore ? 'DELETE' : 'PUT', credentials: 'include'
+          }).then(function (response) { if (!response.ok) throw new Error('save_failed'); renderSalesAnalytics(); })
+            .catch(function () { button.disabled = false; button.textContent = 'Could not save — retry'; });
+        });
+      });
       panelMain.querySelectorAll('.sales-refund-row').forEach(function (row) {
         var button = row.querySelector('.sales-refund-save');
         button.addEventListener('click', function () {
