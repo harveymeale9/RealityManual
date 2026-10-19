@@ -33,7 +33,8 @@ test('AI instructions use the edited transcript and constrain spoiler and invent
   assert.match(prompt, /manifestation gurus/);
   assert.match(prompt, /without revealing its final conclusion/i);
   assert.match(prompt, /Do not invent claims/i);
-  assert.match(prompt, /50–100 words/);
+  assert.match(prompt, /50–200 words/);
+  assert.match(prompt, /do not pad a simple premise/);
   assert.match(prompt, /specific question or hook/);
   assert.throws(() => descriptions.descriptionPrompt({ transcript: 'too short' }), /transcript/i);
 });

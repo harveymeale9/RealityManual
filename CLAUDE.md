@@ -20327,3 +20327,15 @@ as an alias of the already-installed `[DESCRIPTION]` shortcode; the saved
 Content Settings template was not rewritten. The generation style version is
 part of the cache hash so any description generated under the older, longer
 prompt will be regenerated before future YouTube upload.
+
+---
+
+# 663. Flexible YouTube Description Length (2026-10-19)
+
+Harvey clarified that 50–200 words is acceptable; the short sample was a
+style example rather than a strict 100-word ceiling. The generation prompt
+now allows that full range while asking for only the length the individual
+video needs, retaining the hook, natural keywords and no-spoiler guardrails.
+The validation character ceiling is back to 1,800 so a sound ~200-word
+description is not rejected, and the source-hash style version changed so
+any old cached shorter draft is regenerated for a future YouTube upload.
