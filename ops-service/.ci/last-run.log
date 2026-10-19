@@ -8,25 +8,24 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   6ad0712..cd7e1ea  main       -> origin/main
+   cd7e1ea..f8aa353  main       -> origin/main
 + git merge --ff-only origin/main
-Updating 6ad0712..cd7e1ea
+Updating cd7e1ea..f8aa353
 Fast-forward
- CLAUDE.md                                    |   28 +
- ops-service/.ci/last-run.log                 | 1731 +-------------------------
- ops-service/public/app.js                    |   14 +-
- ops-service/public/index.html                |    4 +-
- ops-service/public/lib/store.js              |   17 +-
- ops-service/server.js                        |   62 +-
- ops-service/src/youtubeDescription.js        |   81 ++
- ops-service/test/captionPolicy.test.js       |    8 +
- ops-service/test/finalCheckPublishUi.test.js |    2 +-
- ops-service/test/youtubeDescription.test.js  |   63 +
- 10 files changed, 281 insertions(+), 1729 deletions(-)
- create mode 100644 ops-service/src/youtubeDescription.js
- create mode 100644 ops-service/test/youtubeDescription.test.js
+ CLAUDE.md                                        |  15 +++
+ ops-service/.ci/last-run.log                     | 154 ++++++++++++++++++++---
+ ops-service/public/app.js                        |   4 +-
+ ops-service/public/index.html                    |   4 +-
+ ops-service/public/lib/store.js                  |   4 +-
+ ops-service/src/youtubeDescription.js            |  17 +--
+ ops-service/test/captionPolicy.test.js           |   2 +
+ ops-service/test/contentAnalyticsService.test.js |   2 +-
+ ops-service/test/finalCheckPublishUi.test.js     |   2 +-
+ ops-service/test/productionAudioPreviews.test.js |   2 +-
+ ops-service/test/youtubeDescription.test.js      |  15 ++-
+ 11 files changed, 186 insertions(+), 35 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=cd7e1eafb5d4a1867e920a35788b86b356684578
++ NEW_HEAD=f8aa35318994d068c11c40e274216c865e1b002e
 + git -C /srv/realitymanual-repo fetch origin main
 warning: redirecting to https://github.com/harveymeale9/RealityManual.git/
 From https://github.com/harveymeale9/RealityManual
@@ -36,13 +35,12 @@ Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
 + LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
 ++ cat /root/ops-service-data/last-image-commit.txt
-+ LAST_BUILD_COMMIT=b2602cfcd368491b543383b86abeb115a807dd11
++ LAST_BUILD_COMMIT=cd7e1eafb5d4a1867e920a35788b86b356684578
 + NEEDS_REBUILD=1
-+ '[' -n b2602cfcd368491b543383b86abeb115a807dd11 ']'
-+ git cat-file -e 'b2602cfcd368491b543383b86abeb115a807dd11^{commit}'
-++ git diff --name-only b2602cfcd368491b543383b86abeb115a807dd11 cd7e1eafb5d4a1867e920a35788b86b356684578 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
-+ '[' -z 'ops-service/server.js
-ops-service/src/youtubeDescription.js' ']'
++ '[' -n cd7e1eafb5d4a1867e920a35788b86b356684578 ']'
++ git cat-file -e 'cd7e1eafb5d4a1867e920a35788b86b356684578^{commit}'
+++ git diff --name-only cd7e1eafb5d4a1867e920a35788b86b356684578 f8aa35318994d068c11c40e274216c865e1b002e -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -z ops-service/src/youtubeDescription.js ']'
 + '[' 0 = 1 ']'
 + '[' 1 = 0 ']'
 + UPLOAD_DRAIN_WAITED=0
@@ -87,11 +85,11 @@ ops-service/src/youtubeDescription.js' ']'
 #0 building with "default" instance using docker driver
 
 #1 [internal] load build definition from Dockerfile
-#1 transferring dockerfile: 2.04kB 0.0s done
+#1 transferring dockerfile: 2.04kB done
 #1 DONE 0.0s
 
 #2 [internal] load metadata for docker.io/library/node:22-slim
-#2 DONE 0.3s
+#2 DONE 0.1s
 
 #3 [internal] load .dockerignore
 #3 transferring context: 136B done
@@ -102,8 +100,8 @@ ops-service/src/youtubeDescription.js' ']'
 #4 DONE 0.0s
 
 #5 [internal] load build context
-#5 transferring context: 887.12kB 0.0s done
-#5 DONE 0.1s
+#5 transferring context: 401.93kB 0.0s done
+#5 DONE 0.0s
 
 #6 [ 2/10] RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && python3 -m pip install --break-system-packages --no-cache-dir yt-dlp==2026.8.19     && rm -rf /var/lib/apt/lists/*
 #6 CACHED
@@ -118,48 +116,48 @@ ops-service/src/youtubeDescription.js' ']'
 #9 CACHED
 
 #10 [ 6/10] COPY server.js ./
-#10 DONE 0.1s
+#10 CACHED
 
 #11 [ 7/10] COPY src ./src
 #11 DONE 0.1s
 
 #12 [ 8/10] COPY public ./public
-#12 DONE 0.7s
+#12 DONE 0.1s
 
 #13 [ 9/10] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
-#13 DONE 15.8s
+#13 DONE 11.5s
 
 #14 [10/10] RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
-#14 DONE 0.8s
+#14 DONE 0.2s
 
 #15 exporting to image
 #15 exporting layers
-#15 exporting layers 4.0s done
-#15 exporting manifest sha256:d0181008281cdbb3bd0068990b23fa8e6990c21aa8639c37dfb28e3c90446133 0.0s done
-#15 exporting config sha256:958c55ea08b436fcef9d5343e11b11acd4e96673e890877bae717eabee72d044 0.0s done
-#15 exporting attestation manifest sha256:3fbbef2e3a3673900a3f60a013e18694c8535da7479b4768815ce25b0739dd99 0.0s done
-#15 exporting manifest list sha256:96760ffe17925916845da383ea890fb6abdcdb11e6fe3040619b23f72bbac53e
-#15 exporting manifest list sha256:96760ffe17925916845da383ea890fb6abdcdb11e6fe3040619b23f72bbac53e 0.0s done
+#15 exporting layers 2.9s done
+#15 exporting manifest sha256:32f6bac6f55a659355f319f0b65bab65d2a3bc259dc6fabbd649a786392106b2
+#15 exporting manifest sha256:32f6bac6f55a659355f319f0b65bab65d2a3bc259dc6fabbd649a786392106b2 0.0s done
+#15 exporting config sha256:06ea8a8c35c475509412991bfa1907b9039933fc07aea91bdf5a8b52234877c7 0.0s done
+#15 exporting attestation manifest sha256:d4915db0c5fd716a9440f316181210a101a1b7b2978f59522482f38914339e7a 0.0s done
+#15 exporting manifest list sha256:4f15dbbe8bed93f6f5fd1fef1fb02896de22196cb6932d571632e9873ec1e167 0.0s done
 #15 naming to docker.io/library/rm-ops-service:latest done
 #15 unpacking to docker.io/library/rm-ops-service:latest
-#15 unpacking to docker.io/library/rm-ops-service:latest 3.9s done
-#15 DONE 8.0s
+#15 unpacking to docker.io/library/rm-ops-service:latest 1.6s done
+#15 DONE 4.7s
 + docker stop rm-ops-service
 rm-ops-service
 + docker rm rm-ops-service
 rm-ops-service
 + docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-data:/data -v /root/realitymanual-backend-data:/store-data:ro -v /srv/realitymanual-repo:/repo -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
-a3e49c2f3b0a6f74b18686290ba940d12a0737b922c5b32914ee79deb3d58d2e
-+ echo cd7e1eafb5d4a1867e920a35788b86b356684578
+0ccc8ab495fb44f38527693737490e9f313021be6421c1354fa9ce8467a5c26e
++ echo f8aa35318994d068c11c40e274216c865e1b002e
 ++ git -C /root/realitymanual-repo rev-parse --short HEAD
-+ echo 'rm-ops-service redeployed at cd7e1ea'
-rm-ops-service redeployed at cd7e1ea
++ echo 'rm-ops-service redeployed at f8aa353'
+rm-ops-service redeployed at f8aa353
 + docker image prune -f
 Deleted Images:
-untagged: sha256:5c75bc8c66ce74e8d6d8f410e3ad3966a1e16b1370218a95b34d4b717f277db3
-deleted: sha256:5c75bc8c66ce74e8d6d8f410e3ad3966a1e16b1370218a95b34d4b717f277db3
-deleted: sha256:206f201371be726d98e3eda8764d94d2509fbc99a25bceb19eee30fca006493a
-deleted: sha256:793c5abfdb89a08abb81a26af4d06a3a9317b2501f7fba3cf47f880a2a5040a7
+untagged: sha256:dd9f9d39528fb094d2d2f5c32fb692599a988b93c4b890baaae00b33f1b3c98f
+deleted: sha256:dd9f9d39528fb094d2d2f5c32fb692599a988b93c4b890baaae00b33f1b3c98f
+deleted: sha256:596fa095c29e6cfa8d2a4bab6ac3f401a5aac5cd12a4da87aa5665795f21055e
+deleted: sha256:f00593cffc98144d1709dbc862ba6184dc21921ecb496c3bbc88e07d1b2a9789
 
 Total reclaimed space: 15.67kB
 + docker builder prune -f --max-used-space 8GB
