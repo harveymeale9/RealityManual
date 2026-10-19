@@ -20252,3 +20252,20 @@ collection only started on 15 October and old platform counts cannot be
 backdated honestly. The UI states this boundary and cautions that platform
 view definitions differ. No additional platform API calls are triggered by
 opening the graph; the existing dashboard response supplies the 30-day series.
+
+---
+
+# 659. Content View Chart Uses Available History and Selectable Windows (2026-10-19)
+
+The first cross-platform content-view graph mapped all 30 calendar days across
+its width, leaving most of the chart blank because metric snapshots only began
+on 15 October. Harvey wanted the recorded data itself to fill the chart and
+quick switches for 7, 30 and 90 days. The dashboard now returns the latest 90
+daily as-of counters. The browser selects the requested trailing window, then
+removes its leading unknown days before computing chart coordinates and date
+ticks. Thus 7/30/90 mean *maximum lookback*, not invented backfill: while
+only five days are tracked, each selection uses the full chart width for those
+five days and says so. Range buttons update the chart without new provider API
+calls, preserve the selection across normal dashboard refreshes, and show their
+active state. The individual platform, total and fitted-trend lines retain
+their original cumulative-view semantics.

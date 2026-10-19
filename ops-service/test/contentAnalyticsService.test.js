@@ -37,7 +37,7 @@ test('content analytics stores honest cross-platform snapshots and calculates gr
   assert.equal(dashboard.pieces[0].platforms.instagram.likes, 4);
   assert.equal(dashboard.providerStatus.instagram.partial, true);
   assert.equal(dashboard.pieces[0].platforms.facebook.averageWatchSeconds, 6.5);
-  assert.equal(dashboard.viewHistory.length, 30);
+  assert.equal(dashboard.viewHistory.length, 90);
   assert.equal(dashboard.viewHistory.at(-2).total, null);
   assert.equal(dashboard.viewHistory.at(-1).total, 60);
   assert.equal(dashboard.viewHistory.at(-1).instagram, null);
@@ -88,7 +88,7 @@ test('overall view growth sums connected pieces without inventing pre-snapshot h
   insert.run('two', 'instagram', '2026-10-16T10:00:00Z', null);
   insert.run('one', 'youtube', '2026-10-18T10:00:00Z', 28);
   const history = service.dashboard().viewHistory;
-  assert.equal(history.length, 30);
+  assert.equal(history.length, 90);
   assert.equal(history.find((day) => day.day === '2026-10-14').total, null);
   assert.equal(history.find((day) => day.day === '2026-10-15').total, 17);
   assert.equal(history.find((day) => day.day === '2026-10-16').total, 32);
@@ -104,7 +104,8 @@ test('Content Analytics owns its analytics route while competitor research keeps
   assert.match(app, /id: 'content-analytics', label: 'Content Analytics'/);
   assert.match(app, /id: 'outlier-analysis', label: 'Outlier Analysis'/);
   assert.match(app, /button\.addEventListener\('mouseenter', select\)/);
-  assert.match(app, /contentOverallChart\(data\)/);
+  assert.match(app, /contentOverallChart\(data, contentOverallRangeDays\)/);
+  assert.match(app, /data-content-range/);
   assert.match(page, /data-tabs="content-analytics,sales-analytics,website-analytics"/);
-  assert.match(page, /app\.js\?v=20261018-content-growth-v165/);
+  assert.match(page, /app\.js\?v=20261019-content-range-v166/);
 });

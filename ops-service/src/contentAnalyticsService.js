@@ -38,10 +38,10 @@ function overallViewHistory(metricRows, pieceRows, nowValue) {
   });
   const today = new Date(nowValue);
   today.setUTCHours(0, 0, 0, 0);
-  const start = new Date(today.getTime() - 29 * DAY_MS);
+  const start = new Date(today.getTime() - 89 * DAY_MS);
   const latest = new Map();
   let cursor = 0;
-  return Array.from({ length: 30 }, function (_, index) {
+  return Array.from({ length: 90 }, function (_, index) {
     const day = new Date(start.getTime() + index * DAY_MS);
     const end = new Date(day.getTime() + DAY_MS).toISOString();
     while (cursor < metricRows.length && metricRows[cursor].captured_at < end) {

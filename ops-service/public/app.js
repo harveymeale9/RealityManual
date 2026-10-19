@@ -239,6 +239,7 @@
 
   var salesAnalyticsTimer = null;
   var contentAnalyticsTimer = null;
+  var contentOverallRangeDays = 30;
 
   function salesMoney(cents, currency) {
     try {
@@ -596,14 +597,19 @@
       '<text class="content-chart-time end" x="690" y="208">' + escapeHtml(minTime === maxTime ? 'History starts here' : contentDate(new Date(maxTime).toISOString())) + '</text></svg>';
   }
 
-  function contentOverallChart(data) {
-    var days = Array.isArray(data.viewHistory) ? data.viewHistory : [];
-    if (days.length !== 30) return '';
-    var firstIndex = days.findIndex(function (day) { return day.total != null; });
+  function contentOverallChart(data, rangeDays) {
+    rangeDays = [7, 30, 90].indexOf(Number(rangeDays)) !== -1 ? Number(rangeDays) : 30;
+    var history = Array.isArray(data.viewHistory) ? data.viewHistory : [];
+    var windowDays = history.slice(-rangeDays);
+    var firstIndex = windowDays.findIndex(function (day) { return day.total != null; });
+    var days = firstIndex < 0 ? [] : windowDays.slice(firstIndex);
+    var controls = '<div class="content-overall-ranges" role="group" aria-label="View history range">' + [7, 30, 90].map(function (option) {
+      return '<button type="button" data-content-range="' + option + '" aria-pressed="' + (option === rangeDays) + '">' + option + 'd</button>';
+    }).join('') + '</div>';
     var series = [{ key: 'total', label: 'Total', color: '#ecfff1' }].concat(Object.keys(CONTENT_PLATFORM_META).map(function (platform) {
       return { key: platform, label: CONTENT_PLATFORM_META[platform].label, color: CONTENT_PLATFORM_META[platform].color };
     }));
-    if (firstIndex < 0) return '<section class="content-block content-overall"><div class="content-block-head"><div><span>Last 30 days</span><h3>Views across platforms</h3></div></div><div class="content-chart-empty">The first view snapshot will start this graph. Earlier views cannot be reconstructed.</div></section>';
+    if (!days.length) return '<section class="content-block content-overall"><div class="content-block-head"><div><span>Last ' + rangeDays + ' days</span><h3>Views across platforms</h3></div>' + controls + '</div><div class="content-chart-empty">The first view snapshot will start this graph. Earlier views cannot be reconstructed.</div></section>';
     var observed = days.map(function (day, index) { return { index: index, value: day.total }; }).filter(function (point) { return point.value != null; });
     var trend = [];
     if (observed.length > 1) {
@@ -619,7 +625,7 @@
     var maximum = Math.max(4, ...values);
     var magnitude = Math.pow(10, Math.floor(Math.log10(maximum / 4)));
     var ceiling = Math.ceil(maximum / (4 * magnitude)) * 4 * magnitude;
-    var x = function (index) { return 60 + index * 810 / 29; };
+    var x = function (index) { return days.length === 1 ? 465 : 60 + index * 810 / (days.length - 1); };
     var y = function (value) { return 222 - value / ceiling * 194; };
     var grid = [0, .25, .5, .75, 1].map(function (ratio) {
       var py = y(ceiling * ratio).toFixed(1);
@@ -630,27 +636,29 @@
       var points = days.map(function (day, index) { return day[item.key] == null ? null : { index: index, value: Number(day[item.key]) || 0, day: day.day }; }).filter(Boolean);
       if (!points.length) return '';
       var coords = points.map(function (point) { return x(point.index).toFixed(1) + ',' + y(point.value).toFixed(1); });
-      var line = points.length > 1 ? '<polyline points="' + coords.join(' ') + '" fill="none" stroke="' + item.color + '" stroke-width="' + (item.key === 'total' ? 3.5 : 2) + '" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />' : '';
+      var line = points.length > 1 ? '<polyline points="' + coords.join(' ') + '" fill="none" stroke="' + item.color + '" stroke-width="' + (item.key === 'total' ? 3.5 : 2) + '" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />' : '<circle cx="' + x(points[0].index).toFixed(1) + '" cy="' + y(points[0].value).toFixed(1) + '" r="4" fill="' + item.color + '" />';
       var markers = points.map(function (point) {
         return '<circle cx="' + x(point.index).toFixed(1) + '" cy="' + y(point.value).toFixed(1) + '" r="8" fill="transparent" class="content-overall-hit"><title>' + escapeHtml(item.label + ' · ' + point.day + ': ' + contentNumber(point.value) + ' views') + '</title></circle>';
       }).join('');
       return line + markers;
     }).join('');
     var trendPath = trend.length ? '<line x1="' + x(trend[0].index).toFixed(1) + '" y1="' + y(trend[0].value).toFixed(1) + '" x2="' + x(trend[1].index).toFixed(1) + '" y2="' + y(trend[1].value).toFixed(1) + '" class="content-overall-trend" />' : '';
-    var axisDates = [0, 7, 14, 21, 29].map(function (index) {
+    var axisCount = Math.min(5, days.length);
+    var axisDates = Array.from({ length: axisCount }, function (_, position) {
+      var index = axisCount === 1 ? 0 : Math.round(position * (days.length - 1) / (axisCount - 1));
       var date = new Date(days[index].day + 'T00:00:00Z');
       var label = date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-      return '<text x="' + x(index).toFixed(1) + '" y="259" class="content-overall-date" text-anchor="' + (index === 0 ? 'start' : index === 29 ? 'end' : 'middle') + '">' + escapeHtml(label) + '</text>';
+      return '<text x="' + x(index).toFixed(1) + '" y="259" class="content-overall-date" text-anchor="' + (axisCount === 1 ? 'middle' : position === 0 ? 'start' : position === axisCount - 1 ? 'end' : 'middle') + '">' + escapeHtml(label) + '</text>';
     }).join('');
-    var latest = days[29];
+    var latest = days[days.length - 1];
     var legend = series.map(function (item) {
       return '<span style="--series:' + item.color + '"><i></i>' + item.label + ' <strong>' + contentNumber(latest[item.key]) + '</strong></span>';
     }).join('') + (trend.length ? '<span class="content-overall-trend-key"><i></i>Linear trend</span>' : '');
-    var firstDate = new Date(days[firstIndex].day + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-    return '<section class="content-block content-overall"><div class="content-block-head"><div><span>Last 30 days · UTC</span><h3>Views across platforms</h3></div><small>Cumulative measured views, not daily new views</small></div>' +
+    var firstDate = new Date(days[0].day + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+    return '<section class="content-block content-overall"><div class="content-block-head"><div><span>Last ' + rangeDays + ' days · UTC</span><h3>Views across platforms</h3></div>' + controls + '</div>' +
       '<div class="content-overall-body"><div class="content-overall-legend">' + legend + '</div>' +
-      '<svg viewBox="0 0 900 270" role="img" aria-label="Thirty-day cumulative view history by platform, total, and linear trend" preserveAspectRatio="xMidYMid meet"><g class="content-chart-grid">' + grid + '</g>' + paths + trendPath + axisDates + '</svg>' +
-      '<p>History starts ' + escapeHtml(firstDate) + '; earlier dates are unknown, not zero. Each line carries forward its last measured count between snapshots. Platform view definitions differ, so the total is directional.</p></div></section>';
+      '<svg viewBox="0 0 900 270" role="img" aria-label="Cumulative view history by platform, total, and linear trend for the selected period" preserveAspectRatio="xMidYMid meet"><g class="content-chart-grid">' + grid + '</g>' + paths + trendPath + axisDates + '</svg>' +
+      '<p>Showing ' + days.length + ' days with known totals in this ' + rangeDays + '-day window, from ' + escapeHtml(firstDate) + '. No blank pre-tracking dates are plotted. Counts carry forward between snapshots; platform view definitions differ.</p></div></section>';
   }
 
   function contentDetailMarkup(piece) {
@@ -704,13 +712,21 @@
       panelMain.innerHTML = '<div class="content-dashboard"><header class="content-dashboard-head"><div><div class="eyebrow">Cross-platform performance</div><h2>Content Analytics</h2><p>Compare every piece, then inspect how each platform compounds over time.</p></div><div><span>' + (data.lastCollectedAt ? 'Updated ' + contentDate(data.lastCollectedAt) : 'First snapshot pending') + '</span><button type="button" class="btn-secondary btn-tiny" id="contentRefresh">Refresh metrics</button></div></header>' +
         '<section class="content-summary-grid"><article><span>Published pieces</span><strong>' + contentNumber(data.summary.pieces) + '</strong></article><article><span>Measured views</span><strong>' + contentNumber(data.summary.totalViews) + '</strong></article><article><span>Interactions</span><strong>' + contentNumber(data.summary.totalEngagements) + '</strong></article><article><span>Interaction rate</span><strong>' + contentPercent(data.summary.engagementRate) + '</strong></article><article><span>Known audience</span><strong>' + contentNumber(data.summary.followers) + '</strong></article></section>' +
         (notices ? '<section class="content-provider-notes">' + notices + '</section>' : '') +
-        contentOverallChart(data) +
+        contentOverallChart(data, contentOverallRangeDays) +
         '<section class="content-block"><div class="content-block-head"><div><span>Audience</span><h3>Platform growth</h3></div><small>Followers are not additive identities; the total is directional.</small></div><div class="content-audience-grid">' + audience + '</div></section>' +
         '<div class="content-performance-layout"><section class="content-block content-piece-list"><div class="content-block-head"><div><span>Library</span><h3>Pieces by publish date</h3></div><small>Hover, focus, or tap a title</small></div><div class="content-piece-columns"><span>Piece</span><span>Total</span><span>YT</span><span>TT</span><span>IG</span><span>FB</span><span>Rate</span></div>' + rows + '</section>' +
         '<section class="content-block content-piece-detail" id="contentPieceDetail">' + (data.pieces[0] ? contentDetailMarkup(data.pieces[0]) : '') + '</section></div>' +
         '<p class="content-definition">Views are useful for reach, but watch time/retention and interactions are stronger quality signals. Platform view definitions are not identical, so compare each platform’s trend and use the combined total as a directional measure—not a laboratory-perfect one.</p></div>';
       var refresh = document.getElementById('contentRefresh');
       if (refresh) refresh.addEventListener('click', function () { renderContentAnalytics(true); });
+      panelMain.querySelector('.content-dashboard').addEventListener('click', function (event) {
+        var button = event.target.closest('[data-content-range]');
+        if (!button) return;
+        var range = Number(button.dataset.contentRange);
+        if ([7, 30, 90].indexOf(range) === -1) return;
+        contentOverallRangeDays = range;
+        panelMain.querySelector('.content-overall').outerHTML = contentOverallChart(data, range);
+      });
       var detail = document.getElementById('contentPieceDetail');
       panelMain.querySelectorAll('.content-piece-row').forEach(function (button) {
         function select() {
