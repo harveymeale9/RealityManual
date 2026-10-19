@@ -20382,3 +20382,17 @@ dashboard and weekly sales reporter. A regression test uses the exact
 `getAll` row shape. Verification must check the authenticated live HTTP
 response, not only direct reporting-module calls, before declaring a sales
 exclusion effective.
+
+---
+
+# 666. Page 7 Rule Count in Canonical Manuscript Text (2026-10-19)
+
+Harvey spotted that the page-7 Text & Copy manuscript said "the thirteen
+Rules of Reality" although the book contains fourteen. The printed page-7
+artwork and its OCR word layer already say "fourteen"; only the root canonical
+`THE_REALITY_MANUAL_COMPLETE_MANUSCRIPT.txt` was stale. That source now says
+"the fourteen Rules of Reality". The manuscript API loads a page snapshot and
+search index at service startup, so a source-only Git pull does not refresh
+the running reader; restart the ops service after the corrected source reaches
+the live repo. The manuscript test asserts page 7's continuous text uses
+"fourteen" and does not regress to "thirteen".

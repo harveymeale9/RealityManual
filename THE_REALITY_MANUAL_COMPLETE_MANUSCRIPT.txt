@@ -96,7 +96,7 @@ V. ON THE EXISTENCE OF AN OPTIMAL STRATEGY
 
 Once the objective and ruleset of a game are known, it becomes theoretically possible to derive an optimal strategy, which is, by definition, the most effective way to approach the game.
 
-The Reality Manual sets forth a framework describing not only the objective of the game of life, but also the thirteen Rules of Reality which govern it, and the strategic knowledge necessary to develop a highly effective life strategy, thereby maximizing one’s odds of winning the game.
+The Reality Manual sets forth a framework describing not only the objective of the game of life, but also the fourteen Rules of Reality which govern it, and the strategic knowledge necessary to develop a highly effective life strategy, thereby maximizing one’s odds of winning the game.
 
 ==END PAGE 7==
 

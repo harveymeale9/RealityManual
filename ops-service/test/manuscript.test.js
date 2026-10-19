@@ -82,6 +82,8 @@ test('manuscript reader serves illustrated selectable spreads and instant persis
   assert.equal(continuousText.pages.length, 180);
   assert.deepEqual(continuousText.pages.map(function (page) { return page.page; }), Array.from({ length: 180 }, function (_, index) { return index + 1; }));
   assert.match(continuousText.pages[0].text, /The Absurdity of Life/i);
+  assert.match(continuousText.pages[6].text, /the fourteen Rules of Reality which govern it/);
+  assert.doesNotMatch(continuousText.pages[6].text, /the thirteen Rules of Reality/);
   assert.equal(continuousText.pages.every(function (page) { return !page.artwork; }), true, 'continuous text response must not include heavy artwork metadata');
   const spread = await request('/pages/4');
   assert.equal(spread.left.page, 4);
