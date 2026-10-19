@@ -7,6 +7,17 @@ const path = require('node:path');
 const Database = require('better-sqlite3');
 const reporting = require('../src/storefrontReporting');
 
+test('saved sales exclusions decode IDs from records.getAll data rows', function () {
+  const rows = [
+    { data: JSON.stringify({ orderId: 'owner-order-1' }), updated_at: '2026-10-19T00:00:00.000Z' },
+    { data: '{broken' },
+    { data: JSON.stringify({ orderId: 'bad id' }) }
+  ];
+  assert.deepEqual(reporting.idsFromExclusionRows(rows), ['owner-order-1']);
+  const serverSource = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  assert.match(serverSource, /idsFromExclusionRows\(stmts\.getAll\.all\('salesExclusions'\)\)/);
+});
+
 test('website analytics shows refunds and one count per funnel row', function () {
   const appSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const serverSource = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');

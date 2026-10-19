@@ -1398,7 +1398,7 @@ function getStorefrontReportDb() {
   return storefrontReportDb;
 }
 function excludedSalesOrderIds() {
-  return stmts.getAll.all('salesExclusions').map(function (row) { return row.id; });
+  return storefrontReporting.idsFromExclusionRows(stmts.getAll.all('salesExclusions'));
 }
 function readStorefrontReport(start, end) {
   return storefrontReporting.getPeriodReport(getStorefrontReportDb(), start, end, excludedSalesOrderIds());

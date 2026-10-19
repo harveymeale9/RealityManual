@@ -20366,3 +20366,19 @@ not erased because order exclusion does not identify every event in the
 owner's browser session. Tests cover excluded/restore-style reporting and
 unchanged storefront data. The two identified IDs are marked in the ops
 database after deployment, not hard-coded into reporting logic.
+
+---
+
+# 665. Sales Exclusion Decoder Fix (2026-10-19)
+
+The first exclusion release stored both owner test-order IDs correctly but
+Sales Analytics still showed $82.29. The live route read exclusions using
+`stmts.getAll`, whose SELECT returns only `data` and `updated_at`; the route
+incorrectly mapped `row.id`, yielding `undefined` IDs and silently applying
+no filters. Direct unit tests of the reporting SQL had passed because they
+supplied explicit IDs. The route now decodes `orderId` from each persisted
+JSON record, rejects malformed IDs, and passes those values to both the
+dashboard and weekly sales reporter. A regression test uses the exact
+`getAll` row shape. Verification must check the authenticated live HTTP
+response, not only direct reporting-module calls, before declaring a sales
+exclusion effective.

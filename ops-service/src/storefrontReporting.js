@@ -23,6 +23,15 @@ const PAID_ORDER_SQL = `order_status != 'REFUNDED'
   AND (stripe_payment_status IN ('succeeded','paid')
     OR order_status IN ('PAYMENT_RECEIVED','BOOKVAULT_PENDING','BOOKVAULT_ACCEPTED','FULFILLMENT_RETRY','SHIPPED','COMPLETE'))`;
 
+// records.getAll returns data/updated_at, not id. Decode the persisted ID
+// rather than reading row.id (which silently leaves every exclusion inactive).
+function idsFromExclusionRows(rows) {
+  return (rows || []).map(function (row) {
+    try { return JSON.parse(row.data).orderId; }
+    catch (error) { return ''; }
+  }).filter(function (id) { return typeof id === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(id); });
+}
+
 function excludedOrderFilter(excludedIds) {
   const ids = Array.from(new Set(Array.from(excludedIds || []).filter(function (id) { return typeof id === 'string' && id; })));
   return { sql: ids.length ? ' AND id NOT IN (' + ids.map(function () { return '?'; }).join(',') + ')' : '', ids: ids };
@@ -274,6 +283,7 @@ function getSalesDashboard(db, nowValue, excludedIds) {
 
 module.exports = {
   FUNNEL_STEPS: FUNNEL_STEPS,
+  idsFromExclusionRows: idsFromExclusionRows,
   getPeriodReport: getPeriodReport,
   getWebsiteTraffic: getWebsiteTraffic,
   getSalesDashboard: getSalesDashboard
