@@ -47,6 +47,8 @@ test('YouTube preserves DESCRIPTION for server expansion while other platforms o
   assert.equal(Store.renderPlatformCaption(template, 'ytlong', link), 'Read it: ' + link + '\n\n[DESCRIPTION]');
   assert.equal(Store.renderPlatformCaption(template, 'ytlong', link, 'About the video.'), 'Read it: ' + link + '\n\nAbout the video.');
   assert.equal(Store.renderPlatformCaption('Intro\n\n[DESCRIPTION]', 'facebook', link), 'Intro');
+  assert.equal(Store.renderPlatformCaption('Intro\n\n[DESC]', 'ytlong', link), 'Intro\n\n[DESC]');
+  assert.equal(Store.renderPlatformCaption('Intro\n\n[DESC]', 'facebook', link), 'Intro');
 });
 
 test('link-free platform captions cannot publish an old saved LINK shortcode', function () {

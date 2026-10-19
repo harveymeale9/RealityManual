@@ -2749,7 +2749,7 @@
       .map(function (o) {
         var template = group[o.key] || '';
         var publishText = Store.renderPlatformCaption(template, o.key, buildUtmLink(p, settings, o.key));
-        var text = publishText.replace(/\[DESCRIPTION\]/gi, '[AI video description added at publish time]');
+        var text = publishText.replace(/\[(?:DESCRIPTION|DESC)\]/gi, '[AI video description added at publish time]');
         var hasText = !!publishText.trim();
         return {
           key: o.key,
@@ -5712,7 +5712,7 @@
           'for several platforms at once, each getting its own independently-set caption (Final Check shows all of ' +
           'them with a toggle when there\'s more than one). Facebook and long-form YouTube publish the caption you ' +
           'choose and support an optional <code>[LINK]</code> token for the tracked store URL. Nothing is added or ' +
-          'removed from Facebook automatically. Long-form YouTube also supports <code>[DESCRIPTION]</code>: at publish time it becomes one or two transcript-grounded paragraphs about the video, beneath your standard wording. YouTube Shorts, Instagram and TikTok are kept link-free.</p>' +
+          'removed from Facebook automatically. Long-form YouTube also supports <code>[DESCRIPTION]</code> (or <code>[DESC]</code>): at publish time it becomes a short, transcript-grounded hook and topic summary beneath your standard wording. YouTube Shorts, Instagram and TikTok are kept link-free.</p>' +
         '<div class="caption-group-tabs" id="captionGroupTabs">' +
           '<button type="button" class="caption-group-tab active" data-group="shortform">Short-form</button>' +
           '<button type="button" class="caption-group-tab" data-group="longform">Longform</button>' +

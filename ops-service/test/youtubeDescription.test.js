@@ -23,18 +23,22 @@ test('the YouTube caption migration appends the shortcode without changing exist
 test('a pre-existing shortcode is not duplicated by migration', function () {
   const migrated = descriptions.upgradeSettings({ captions: { longform: { ytlong: 'Intro\n\n[description]' } } });
   assert.equal(migrated.captions.longform.ytlong, 'Intro\n\n[description]');
+  const shortAlias = descriptions.upgradeSettings({ captions: { longform: { ytlong: 'Intro\n\n[DESC]' } } });
+  assert.equal(shortAlias.captions.longform.ytlong, 'Intro\n\n[DESC]');
 });
 
 test('AI instructions use the edited transcript and constrain spoiler and invented detail', function () {
   const prompt = descriptions.descriptionPrompt(piece);
   assert.match(prompt, /EDITED TRANSCRIPT:/);
   assert.match(prompt, /manifestation gurus/);
-  assert.match(prompt, /do not reveal its final conclusion/i);
+  assert.match(prompt, /without revealing its final conclusion/i);
   assert.match(prompt, /Do not invent claims/i);
+  assert.match(prompt, /50–100 words/);
+  assert.match(prompt, /specific question or hook/);
   assert.throws(() => descriptions.descriptionPrompt({ transcript: 'too short' }), /transcript/i);
 });
 
-test('generation validates prose and keeps one or two paragraphs', async function () {
+test('generation validates concise prose in up to three short paragraphs', async function () {
   const text = await descriptions.generate(piece, async function (prompt, schema, options) {
     assert.match(prompt, /manifestation gurus/);
     assert.equal(schema.required[0], 'paragraphs');
@@ -45,14 +49,21 @@ test('generation validates prose and keeps one or two paragraphs', async functio
     ] };
   });
   assert.equal(text.split('\n\n').length, 2);
+  assert.equal(descriptions.normalizeResult({ paragraphs: [
+    'What does the promise of manifestation leave out?',
+    'Can an intention alone change an outcome when the necessary conditions are absent?',
+    'This video explores intention-setting, practical action, and the gap between popular self-help advice and the conditions required for a real-world result.'
+  ] }).split('\n\n').length, 3);
   assert.throws(() => descriptions.normalizeResult({ paragraphs: ['Read https://example.test now. '.repeat(5)] }), /validation/);
   assert.throws(() => descriptions.normalizeResult({ paragraphs: ['Use [DESCRIPTION] now. '.repeat(7)] }), /validation/);
+  assert.throws(() => descriptions.normalizeResult({ paragraphs: ['Use [DESC] now. '.repeat(7)] }), /validation/);
 });
 
 test('shortcode expansion replaces every occurrence and fails closed without prose', function () {
   assert.equal(descriptions.expand('Get the book: [LINK]\n\n[DESCRIPTION]', 'A specific video summary.'),
     'Get the book: [LINK]\n\nA specific video summary.');
   assert.equal(descriptions.expand('First [description], then [DESCRIPTION]', 'Summary'), 'First Summary, then Summary');
+  assert.equal(descriptions.expand('Intro\n\n[DESC]', 'Summary'), 'Intro\n\nSummary');
   assert.throws(() => descriptions.expand('Intro\n\n[DESCRIPTION]', ''), /missing/);
   assert.equal(descriptions.expand('No shortcode', ''), 'No shortcode');
 });

@@ -364,12 +364,12 @@ window.RMStore = (function () {
     if (!captionAllowsTrackedLink(platform)) text = stripCaptionLink(text);
     else if (/\[LINK\]/i.test(text)) text = applyCaptionLink(text, link).trim();
     if (platform !== 'ytlong' && platform !== 'ytshort') {
-      return text.replace(/[ \t]*\[DESCRIPTION\][ \t]*/gi, '').replace(/\n{3,}/g, '\n\n').trim();
+      return text.replace(/[ \t]*\[(?:DESCRIPTION|DESC)\][ \t]*/gi, '').replace(/\n{3,}/g, '\n\n').trim();
     }
     // Keep the token intact in the publish payload; the server expands it
     // from the saved edited transcript immediately before YouTube upload.
     if (description !== undefined) {
-      return text.replace(/\[DESCRIPTION\]/gi, String(description || '').trim())
+      return text.replace(/\[(?:DESCRIPTION|DESC)\]/gi, String(description || '').trim())
         .replace(/\n{3,}/g, '\n\n').trim();
     }
     // Supported platforms preserve opt-in behavior: [LINK] expands, but no URL

@@ -20312,3 +20312,18 @@ token; existing YouTube uploads and already-queued payloads are not rewritten.
 
 Regression tests cover the migration/opt-out, transcript instructions,
 generation validation, token policy and replacement, and source invalidation.
+
+---
+
+# 662. Concise YouTube Description Style and `[DESC]` Alias (2026-10-19)
+
+Harvey supplied an example much shorter than the initial 100–220-word brief:
+a direct question or two followed by a compact explanation of the topic,
+without the video's payoff. The generated description prompt now targets
+roughly 50–100 words in two or three short paragraphs, using a question-led
+hook when it fits the transcript. It still requires natural, relevant terms
+and disallows invented details, URLs, CTAs, and spoilers. `[DESC]` now works
+as an alias of the already-installed `[DESCRIPTION]` shortcode; the saved
+Content Settings template was not rewritten. The generation style version is
+part of the cache hash so any description generated under the older, longer
+prompt will be regenerated before future YouTube upload.
