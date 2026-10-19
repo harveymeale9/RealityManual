@@ -20284,3 +20284,31 @@ Total/YT/TT/IG/FB as five equally sized, labelled metrics. Only the
 interaction-rate column is omitted in this compact view; its value remains in
 the selected piece detail. This is a CSS-only display fix, with no changes to
 stored metrics or collectors.
+
+---
+
+# 661. Transcript-Grounded YouTube Description Shortcode (2026-10-19)
+
+Harvey wants his standard long-form YouTube description and `[LINK]` wording
+followed by one or two AI-written paragraphs about each video's actual topic.
+Content Settings now supports `[DESCRIPTION]`; the existing saved long-form
+YouTube template receives that token once, after its current text, without
+rewriting the current copy. A migration version marker means a later manual
+removal remains an opt-out. New default settings include the token. Final Check
+shows a placeholder but sends the literal token in the publish payload, and
+non-YouTube captions strip the token.
+
+The ops server generates the prose from the piece's edited transcript and
+YouTube title, requesting natural topic/search language without disclosing the
+whole conclusion or inventing facts. It caches the result against a hash of
+those inputs. Long-form generation is attempted when the publishing queue
+prepares the scheduled release, ahead of upload; the upload path expands the
+token and rechecks the hash, so later transcript/title changes trigger new
+prose. If the transcript is missing, generation fails, or the final YouTube
+description exceeds 5,000 characters, publishing fails visibly rather than
+sending a raw token or silently truncating the description. Browser writes
+cannot erase the server-owned cache. This applies to future publishes with the
+token; existing YouTube uploads and already-queued payloads are not rewritten.
+
+Regression tests cover the migration/opt-out, transcript instructions,
+generation validation, token policy and replacement, and source invalidation.

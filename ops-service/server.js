@@ -18,6 +18,7 @@ const speechText = require('./src/speechText');
 const videoAnalysis = require('./src/videoAnalysis');
 const voiceAttachments = require('./src/voiceAttachments');
 const youtubeAuth = require('./src/youtubeAuth');
+const youtubeDescription = require('./src/youtubeDescription');
 const tiktokAuth = require('./src/tiktokAuth');
 const ideationService = require('./src/ideationService');
 const outlineLearningService = require('./src/outlineLearningService');
@@ -393,6 +394,19 @@ const stmts = {
     'UPDATE instagram_insights_oauth SET account_id = NULL, username = NULL, access_token = NULL, expires_at = NULL, refreshed_at = NULL, updated_at = ? WHERE id = 1'
   )
 };
+
+// One-time, opt-out-friendly template migration: append the generated block
+// beneath Harvey's existing YouTube wording/link, then remember that the
+// choice was offered so a later manual removal is not silently undone.
+try {
+  const row = stmts.getOne.get('settings', 'settings');
+  if (row) {
+    const upgraded = youtubeDescription.upgradeSettings(JSON.parse(row.data));
+    if (upgraded) stmts.upsert.run('settings', 'settings', JSON.stringify(upgraded), new Date().toISOString());
+  }
+} catch (error) {
+  console.error('YouTube description template migration failed:', error.message);
+}
 
 setInterval(function () {
   stmts.purgeSessions.run(new Date().toISOString());
@@ -1830,7 +1844,8 @@ const SERVER_OWNED_PIECE_FIELDS = [
   'analysisStatus', 'analysisError', 'analysisMatchedPieceId', 'stage',
   'finalBuildProgress', 'finalBuildStep',
   'queuedPublishDestinations', 'publishingQueuedAt', 'publishingDequeuedAt',
-  'publishingQueueSelection', 'publishBatchPlatforms'
+  'publishingQueueSelection', 'publishBatchPlatforms',
+  'youtubeDescriptionText', 'youtubeDescriptionSourceHash'
 ];
 app.put('/api/store/:storeName/:id', function (req, res) {
   const { storeName, id } = req.params;
@@ -1903,9 +1918,12 @@ app.put('/api/store/:storeName/:id', function (req, res) {
     }
   }
 
-  const record = storeName === 'pieces'
+  let record = storeName === 'pieces'
     ? recordConcurrency.preparePieceWrite(existingPieceRow, req.body, id).record
     : Object.assign({}, req.body, { id: id });
+  if (storeName === 'settings' && req.sessionRole !== 'youtube-reviewer') {
+    record = youtubeDescription.upgradeSettings(record) || record;
+  }
   const writeStamp = new Date().toISOString();
   stmts.upsert.run(storeName, id, JSON.stringify(record), writeStamp);
   if (storeName === 'pieces') {
@@ -3257,6 +3275,26 @@ function updatePieceFields(id, fields) {
   savePieceRecord(latest);
   return latest;
 }
+const youtubeDescriptionsInFlight = new Map();
+async function ensureYoutubeDescription(id) {
+  const piece = getPieceRecord(id);
+  if (!piece) throw new Error('YouTube description piece not found');
+  const hash = youtubeDescription.sourceHash(piece);
+  if (piece.youtubeDescriptionSourceHash === hash && piece.youtubeDescriptionText) return piece.youtubeDescriptionText;
+  const key = id + ':' + hash;
+  if (youtubeDescriptionsInFlight.has(key)) return youtubeDescriptionsInFlight.get(key);
+  const task = (async function () {
+    const text = await youtubeDescription.generate(piece, openaiStructured.generate);
+    const latest = getPieceRecord(id);
+    if (!latest || youtubeDescription.sourceHash(latest) !== hash) {
+      throw new Error('YouTube description source changed; retry the publish');
+    }
+    updatePieceFields(id, { youtubeDescriptionText: text, youtubeDescriptionSourceHash: hash });
+    return text;
+  })().finally(function () { youtubeDescriptionsInFlight.delete(key); });
+  youtubeDescriptionsInFlight.set(key, task);
+  return task;
+}
 function uniquePublishDestinations(destinations) {
   const seen = new Set();
   return destinations.filter(function (destination) {
@@ -3441,6 +3479,19 @@ async function runPlatformPublishBatch(id, destinations, options) {
   const isScheduledLongformRelease = initialPiece && initialPiece.contentType === 'longform' &&
     !initialPiece.directLongformReleaseRunning;
   if (isScheduledLongformRelease) {
+    if (destinations.some(function (destination) {
+      return destination.platform === 'ytlong' && youtubeDescription.hasToken(destination.caption);
+    })) {
+      try { await ensureYoutubeDescription(id); }
+      catch (error) {
+        updatePieceFields(id, {
+          stage: 'final_check', queuedPublishDestinations: [],
+          youtubePublishStatus: 'error',
+          youtubePublishError: 'YouTube description could not be generated: ' + String(error.message || error).slice(0, 400)
+        });
+        return;
+      }
+    }
     const settingsRow = stmts.getOne.get('settings', 'settings');
     let settings = {};
     try { settings = settingsRow ? JSON.parse(settingsRow.data) : {}; } catch (error) { settings = {}; }
@@ -3562,12 +3613,17 @@ async function runPlatformPublishBatch(id, destinations, options) {
     updatePieceFields(id, running);
     try {
       if (platform === 'ytlong' || platform === 'ytshort') {
+        let description = destination.caption || '';
+        if (youtubeDescription.hasToken(description)) {
+          description = youtubeDescription.expand(description, await ensureYoutubeDescription(id));
+          if (description.length > 5000) throw new Error('YouTube description exceeds the 5,000-character limit');
+        }
         const media = await localPublishMedia(id);
         let result;
         try {
           const accessToken = await getValidYoutubeAccessToken();
           result = await youtubeAuth.uploadVideo(accessToken, media.path, mimeType, {
-            title: destination.title || 'Untitled', description: maskCaption(destination.caption || ''),
+            title: destination.title || 'Untitled', description: maskCaption(description),
             privacyStatus: destination.privacyStatus || 'private'
           });
         } finally { media.cleanup(); }

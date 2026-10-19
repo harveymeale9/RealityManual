@@ -230,7 +230,7 @@ window.RMStore = (function () {
       // older shape.
       captions: {
         shortform: { ytshort: '', tiktok: '', instagram: '', facebook: '' },
-        longform: { ytlong: '', facebook: '' }
+        longform: { ytlong: '[DESCRIPTION]', facebook: '' }
       },
       // Final Check defaults to measured loudness matching. The percentage
       // value remains available only as an explicit Legacy A/B fallback.
@@ -359,10 +359,19 @@ window.RMStore = (function () {
       .trim();
   }
 
-  function renderPlatformCaption(template, platform, link) {
+  function renderPlatformCaption(template, platform, link, description) {
     var text = String(template || '').trim();
-    if (!captionAllowsTrackedLink(platform)) return stripCaptionLink(text);
-    if (/\[LINK\]/i.test(text)) return applyCaptionLink(text, link).trim();
+    if (!captionAllowsTrackedLink(platform)) text = stripCaptionLink(text);
+    else if (/\[LINK\]/i.test(text)) text = applyCaptionLink(text, link).trim();
+    if (platform !== 'ytlong' && platform !== 'ytshort') {
+      return text.replace(/[ \t]*\[DESCRIPTION\][ \t]*/gi, '').replace(/\n{3,}/g, '\n\n').trim();
+    }
+    // Keep the token intact in the publish payload; the server expands it
+    // from the saved edited transcript immediately before YouTube upload.
+    if (description !== undefined) {
+      return text.replace(/\[DESCRIPTION\]/gi, String(description || '').trim())
+        .replace(/\n{3,}/g, '\n\n').trim();
+    }
     // Supported platforms preserve opt-in behavior: [LINK] expands, but no URL
     // is added when the selected template does not contain the shortcode.
     return text;

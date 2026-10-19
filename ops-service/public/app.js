@@ -2748,14 +2748,16 @@
       .filter(function (o) { return platforms.indexOf(o.key) !== -1; })
       .map(function (o) {
         var template = group[o.key] || '';
-        var text = Store.renderPlatformCaption(template, o.key, buildUtmLink(p, settings, o.key));
-        var hasText = !!text.trim();
+        var publishText = Store.renderPlatformCaption(template, o.key, buildUtmLink(p, settings, o.key));
+        var text = publishText.replace(/\[DESCRIPTION\]/gi, '[AI video description added at publish time]');
+        var hasText = !!publishText.trim();
         return {
           key: o.key,
           label: o.label,
           template: template,
           empty: !hasText,
-          text: hasText ? text : ''
+          text: hasText ? text : '',
+          publishText: hasText ? publishText : ''
         };
       });
   }
@@ -4040,7 +4042,7 @@
 
         var destinations = unpublishedPlatforms.map(function (platform) {
           var captionEntry = captions.filter(function (c) { return c.key === platform; })[0];
-          var caption = (captionEntry && !captionEntry.empty) ? captionEntry.text : '';
+          var caption = (captionEntry && !captionEntry.empty) ? captionEntry.publishText : '';
           return { platform: platform, title: title, caption: caption };
         });
         fetch('/api/publish/' + encodeURIComponent(id), {
@@ -5710,7 +5712,7 @@
           'for several platforms at once, each getting its own independently-set caption (Final Check shows all of ' +
           'them with a toggle when there\'s more than one). Facebook and long-form YouTube publish the caption you ' +
           'choose and support an optional <code>[LINK]</code> token for the tracked store URL. Nothing is added or ' +
-          'removed from Facebook automatically. YouTube Shorts, Instagram and TikTok are kept link-free.</p>' +
+          'removed from Facebook automatically. Long-form YouTube also supports <code>[DESCRIPTION]</code>: at publish time it becomes one or two transcript-grounded paragraphs about the video, beneath your standard wording. YouTube Shorts, Instagram and TikTok are kept link-free.</p>' +
         '<div class="caption-group-tabs" id="captionGroupTabs">' +
           '<button type="button" class="caption-group-tab active" data-group="shortform">Short-form</button>' +
           '<button type="button" class="caption-group-tab" data-group="longform">Longform</button>' +
@@ -5727,7 +5729,7 @@
         '</div>' +
         '<div class="caption-group-panel" data-group="longform" id="captionPanelLongform" hidden>' +
           '<label class="field-label">YouTube caption</label>' +
-          '<textarea class="notes-input settings-textarea" id="caption-longform-ytlong" placeholder="e.g. Grab your copy of the book here [LINK]!"></textarea>' +
+          '<textarea class="notes-input settings-textarea" id="caption-longform-ytlong" placeholder="Get the book here: [LINK]\n\n[DESCRIPTION]"></textarea>' +
           '<label class="field-label" style="margin-top:14px;display:block;">Facebook caption</label>' +
           '<textarea class="notes-input settings-textarea" id="caption-longform-facebook" placeholder="Choose your Facebook caption — [LINK] is optional"></textarea>' +
         '</div>' +

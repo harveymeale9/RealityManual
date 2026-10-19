@@ -41,6 +41,14 @@ test('long-form YouTube expands LINK without forcing one into an unlinked templa
   assert.equal(Store.renderPlatformCaption('A useful description', 'ytlong', link), 'A useful description');
 });
 
+test('YouTube preserves DESCRIPTION for server expansion while other platforms omit it', function () {
+  const template = 'Read it: [LINK]\n\n[DESCRIPTION]';
+  const link = 'https://realitymanual.com/book';
+  assert.equal(Store.renderPlatformCaption(template, 'ytlong', link), 'Read it: ' + link + '\n\n[DESCRIPTION]');
+  assert.equal(Store.renderPlatformCaption(template, 'ytlong', link, 'About the video.'), 'Read it: ' + link + '\n\nAbout the video.');
+  assert.equal(Store.renderPlatformCaption('Intro\n\n[DESCRIPTION]', 'facebook', link), 'Intro');
+});
+
 test('link-free platform captions cannot publish an old saved LINK shortcode', function () {
   ['ytshort', 'instagram', 'tiktok'].forEach(function (platform) {
     const rendered = Store.renderPlatformCaption('A useful caption\n\nRead it: [LINK]!', platform, 'https://example.test');
