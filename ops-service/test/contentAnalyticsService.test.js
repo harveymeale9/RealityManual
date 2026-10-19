@@ -101,11 +101,15 @@ test('overall view growth sums connected pieces without inventing pre-snapshot h
 test('Content Analytics owns its analytics route while competitor research keeps a distinct route', function () {
   const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const page = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const style = fs.readFileSync(path.join(__dirname, '..', 'public', 'style.css'), 'utf8');
   assert.match(app, /id: 'content-analytics', label: 'Content Analytics'/);
   assert.match(app, /id: 'outlier-analysis', label: 'Outlier Analysis'/);
   assert.match(app, /button\.addEventListener\('mouseenter', select\)/);
   assert.match(app, /contentOverallChart\(data, contentOverallRangeDays\)/);
   assert.match(app, /data-content-range/);
+  assert.match(style, /\.content-piece-list\{container-type:inline-size\}/);
+  assert.match(style, /@container \(max-width:600px\)/);
+  assert.match(style, /\.content-piece-row>span:nth-child\(6\)\{display:block\}/);
   assert.match(page, /data-tabs="content-analytics,sales-analytics,website-analytics"/);
   assert.match(page, /app\.js\?v=20261019-content-range-v166/);
 });

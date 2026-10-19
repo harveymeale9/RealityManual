@@ -2917,6 +2917,17 @@ body.role-reviewer #pmBackFab {
 .content-overall-body p{margin:7px 0 0;color:#708a79;font-size:10px;line-height:1.55}
 @media(max-width:700px){.content-overall-body{padding:12px 10px}.content-overall-legend{gap:8px 11px;font-size:9px}.content-overall .content-block-head small{font-size:9px}}
 
+/* The list can be narrow even on a laptop beside the detail panel. */
+.content-piece-list{container-type:inline-size}
+@container (max-width:600px){
+  .content-piece-columns{display:none}
+  .content-piece-row{grid-template-columns:repeat(5,minmax(0,1fr));gap:8px 3px}
+  .content-piece-row>span:first-child{grid-column:1/-1;text-align:left}
+  .content-piece-row>span:not(:first-child){text-align:center}
+  .content-piece-row>span:nth-child(5),.content-piece-row>span:nth-child(6){display:block}
+  .content-piece-row>span:nth-child(7){display:none}
+}
+
 /* Precise source-timeline cut adjustment. Manual handles are coral; automatic handles are gold. */
 .editor-page-change-marker{position:absolute;z-index:8;top:4px;transform:translateX(-50%);width:22px;height:22px;padding:0;border:1px solid #f6c66b;border-radius:5px;background:#423211;color:#ffe29a;font:700 13px/20px var(--font-mono);cursor:context-menu;box-shadow:0 0 0 1px #120e04,0 0 8px rgba(240,201,95,.45)}
 .editor-page-change-marker:hover,.editor-page-change-marker:focus-visible{background:#6a501b;outline:2px solid #f6c66b;outline-offset:1px}

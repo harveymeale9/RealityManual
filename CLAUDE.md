@@ -20269,3 +20269,18 @@ five days and says so. Range buttons update the chart without new provider API
 calls, preserve the selection across normal dashboard refreshes, and show their
 active state. The individual platform, total and fitted-trend lines retain
 their original cumulative-view semantics.
+
+---
+
+# 660. Facebook Metrics Visible in Narrow Content Analytics Lists (2026-10-19)
+
+The Content Analytics piece table already rendered Facebook views in its HTML,
+but the desktop row's minimum column widths exceeded its ~450px list pane at
+common laptop widths. The pane's `overflow:hidden` clipped Facebook off the
+right edge. The <=700px viewport CSS also hid several platform cells outright.
+The narrow-list layout now depends on the list's own width, not the browser
+viewport: each row uses two lines, with the title across the width and
+Total/YT/TT/IG/FB as five equally sized, labelled metrics. Only the
+interaction-rate column is omitted in this compact view; its value remains in
+the selected piece detail. This is a CSS-only display fix, with no changes to
+stored metrics or collectors.
