@@ -20455,3 +20455,36 @@ browsers load the fix. Browser verification reproduced the old stuck state,
 then confirmed reviewer -> admin shows all five top-level sections and can
 open Analytics without a page refresh. The full 291-test ops-service suite
 passes.
+
+---
+
+# 670. Persistent Cross-Platform Comment Activity Alerts (2026-10-20)
+
+Harvey wants to visit YouTube, TikTok, Instagram, and Facebook less often
+without leaving comments unnoticed for days. Content Studio already gathers
+per-post comment totals roughly hourly for all four in Content Analytics:
+YouTube and Meta use their connected APIs, while TikTok uses public post
+counters with the saved Buffer snapshot as a fallback. A separate high-rate
+poll would consume quota without improving the underlying sources.
+
+The analytics snapshot transaction now also maintains a per-post/platform
+`content_comment_watch` high-water count and persistent pending count. The
+first positive scan creates a one-time review alert for comments already
+present; later increases add only the difference, even if the visible count
+temporarily falls after deletion/moderation. Null/unavailable counts never
+become zero or clear alerts. Admin-only endpoints list pending alerts and
+mark a post/platform reviewed. The global Content Studio header shows a
+Comments badge; its panel shows the platform, piece, count, detection time,
+direct post link, a "Mark reviewed" control, and a one-day visual warning.
+The browser polls only the local alert endpoint every minute, not external
+platform APIs. Failed provider scans are reported in the panel.
+
+This is deliberately labeled **comment activity to check**, not verified
+unanswered comments. Aggregate counters cannot identify the author, text,
+whether Harvey has replied, or exact comment age; even Harvey's own reply
+may increase a count. The user opens the platform to respond and manually
+marks the alert reviewed. TikTok public-page failures or provider outages may
+delay detection and are not represented as a guarantee of completeness.
+Real-browser testing covered the badge, panel, link, and review flow; unit
+tests cover initial counts, new counts, review, persistence, and no duplicate
+alerts after a count rebounds. Full 292-test ops-service suite passes.

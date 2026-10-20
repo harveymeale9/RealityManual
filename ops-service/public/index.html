@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,400&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=20261019-sales-test-orders-v1" />
+  <link rel="stylesheet" href="style.css?v=20261020-comment-alerts-v1" />
 </head>
 <body>
 
@@ -125,11 +125,18 @@
         </div>
         <nav class="panel-tabs" id="panelTabs"></nav>
         <div class="panel-actions">
+          <button type="button" class="link-btn comment-alert-button" id="commentAlertBtn" aria-label="Comment activity" aria-expanded="false" hidden>Comments <span id="commentAlertCount" hidden></span></button>
           <button type="button" class="link-btn" id="switchAdminBtn" title="Other menus are available with the admin login" hidden>Reviewer mode · Switch to admin</button>
           <a class="link-btn" id="quickAddLink" href="quick-add.html" target="_blank" rel="noopener">Quick add ↗</a>
           <button class="avatar-btn" id="logoutBtn" title="Log out" aria-label="Log out">H</button>
         </div>
       </header>
+      <section class="comment-alert-panel" id="commentAlertPanel" aria-label="Comments to check" hidden>
+        <div class="comment-alert-head"><strong>Comments to check</strong><button type="button" class="link-btn" id="commentAlertClose" aria-label="Close comment alerts">Close</button></div>
+        <p>New comment activity across your published posts. Open the post to reply, then mark it reviewed here. Counts cannot tell whether you have already replied.</p>
+        <div id="commentAlertList">Checking for comments…</div>
+        <small id="commentAlertStatus"></small>
+      </section>
       <!-- Secondary tab strip for whichever group is active (Content Ops,
            Research, or Analytics) —
            app.js's renderSubtabs() fills this in and leaves it empty (so it
@@ -294,6 +301,6 @@
   <script src="lib/captionMask.js?v=20261015-mask-swears"></script>
   <script src="lib/queueCoverage.js?v=20261016-published-map"></script>
   <script src="editor.js?v=20261018-protected-ending-v156"></script>
-  <script src="app.js?v=20261020-role-navigation-v1"></script>
+  <script src="app.js?v=20261020-comment-alerts-v1"></script>
 </body>
 </html>

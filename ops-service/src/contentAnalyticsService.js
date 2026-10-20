@@ -85,6 +85,13 @@ function setup(db, options) {
       total_views INTEGER, media_count INTEGER,
       PRIMARY KEY (platform, captured_at)
     );
+    CREATE TABLE IF NOT EXISTS content_comment_watch (
+      piece_id TEXT NOT NULL, platform TEXT NOT NULL,
+      high_water_count INTEGER NOT NULL DEFAULT 0,
+      pending_count INTEGER NOT NULL DEFAULT 0,
+      first_unreviewed_at TEXT, last_unreviewed_at TEXT, observed_at TEXT NOT NULL,
+      PRIMARY KEY (piece_id, platform)
+    );
     CREATE TABLE IF NOT EXISTS content_analytics_state (
       id INTEGER PRIMARY KEY CHECK (id = 1), last_attempt_at TEXT,
       last_collected_at TEXT, last_error TEXT, provider_status_json TEXT NOT NULL DEFAULT '{}'
@@ -103,6 +110,30 @@ function setup(db, options) {
     (platform,captured_at,followers,total_views,media_count) VALUES (?,?,?,?,?)
     ON CONFLICT(platform,captured_at) DO UPDATE SET followers=excluded.followers,
       total_views=excluded.total_views,media_count=excluded.media_count`);
+  const getCommentWatch = db.prepare('SELECT * FROM content_comment_watch WHERE piece_id=? AND platform=?');
+  const insertCommentWatch = db.prepare(`INSERT INTO content_comment_watch
+    (piece_id,platform,high_water_count,pending_count,first_unreviewed_at,last_unreviewed_at,observed_at)
+    VALUES (?,?,?,?,?,?,?)`);
+  const advanceCommentWatch = db.prepare(`UPDATE content_comment_watch SET high_water_count=?,pending_count=?,
+    first_unreviewed_at=?,last_unreviewed_at=?,observed_at=? WHERE piece_id=? AND platform=?`);
+  const touchCommentWatch = db.prepare('UPDATE content_comment_watch SET observed_at=? WHERE piece_id=? AND platform=?');
+
+  function observeComments(pieceId, platform, count, stamp) {
+    if (count == null) return;
+    const watch = getCommentWatch.get(pieceId, platform);
+    if (!watch) {
+      // First scan deliberately flags existing comments for one review;
+      // otherwise an old unanswered comment could be silently missed.
+      insertCommentWatch.run(pieceId, platform, count, count, count ? stamp : null, count ? stamp : null, stamp);
+    } else if (count > watch.high_water_count) {
+      advanceCommentWatch.run(count, watch.pending_count + count - watch.high_water_count,
+        watch.pending_count ? watch.first_unreviewed_at : stamp, stamp, stamp, pieceId, platform);
+    } else {
+      // Keep the high-water mark when comments are deleted or hidden, so a
+      // later rebound does not generate a duplicate alert.
+      touchCommentWatch.run(stamp, pieceId, platform);
+    }
+  }
 
   function saveResults(results, stamp) {
     const bucket = hourBucket(stamp);
@@ -114,6 +145,7 @@ function setup(db, options) {
           numberOrNull(metric.views), numberOrNull(metric.likes), numberOrNull(metric.comments),
           numberOrNull(metric.shares), numberOrNull(metric.saves), numberOrNull(metric.reach),
           numberOrNull(metric.watchTimeSeconds), numberOrNull(metric.averageWatchSeconds));
+        observeComments(row.pieceId, row.platform, numberOrNull(metric.comments), bucket);
       });
       (results.channels || []).forEach(function (row) {
         if (!row || PLATFORMS.indexOf(row.platform) === -1) return;
@@ -243,6 +275,26 @@ function setup(db, options) {
     if (state.last_attempt_at && Date.now() - new Date(state.last_attempt_at).getTime() < intervalMs) return Promise.resolve(dashboard());
     return collect();
   }
+
+  function commentAlerts() {
+    const byId = new Map(listPieces().filter(relevantPiece).map(function (piece) { return [piece.id, piece]; }));
+    return db.prepare('SELECT * FROM content_comment_watch WHERE pending_count > 0 ORDER BY first_unreviewed_at, platform').all()
+      .map(function (watch) {
+        const piece = byId.get(watch.piece_id);
+        if (!piece) return null;
+        return {
+          pieceId: watch.piece_id, platform: watch.platform, title: clean(piece.title, 300) || 'Untitled',
+          count: watch.pending_count, firstDetectedAt: watch.first_unreviewed_at,
+          lastDetectedAt: watch.last_unreviewed_at, postUrl: platformUrl(piece, watch.platform)
+        };
+      }).filter(Boolean);
+  }
+
+  function markCommentsReviewed(pieceId, platform) {
+    if (PLATFORMS.indexOf(platform) === -1) return false;
+    return db.prepare(`UPDATE content_comment_watch SET pending_count=0,first_unreviewed_at=NULL,
+      last_unreviewed_at=NULL WHERE piece_id=? AND platform=? AND pending_count>0`).run(pieceId, platform).changes > 0;
+  }
   function start() {
     if (timer) return;
     timer = setInterval(function () { runDue().catch(function () {}); }, Math.min(intervalMs, 15 * 60 * 1000));
@@ -250,7 +302,8 @@ function setup(db, options) {
     setTimeout(function () { runDue().catch(function () {}); }, 10000).unref?.();
   }
 
-  return { collect: collect, runDue: runDue, dashboard: dashboard, start: start };
+  return { collect: collect, runDue: runDue, dashboard: dashboard, start: start,
+    commentAlerts: commentAlerts, markCommentsReviewed: markCommentsReviewed };
 }
 
 module.exports = { setup: setup, PLATFORMS: PLATFORMS, hourBucket: hourBucket, relevantPiece: relevantPiece };

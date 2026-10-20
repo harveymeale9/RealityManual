@@ -49,6 +49,7 @@
   // one in bootProjectManager().
   var pmSpeakingUnsub = null;
   var pmAutoSpeechUnsub = null;
+  var commentAlertTimer = null;
 
   // Nav hierarchy (Harvey's restructure, 2026-09-19): top level is just
   // Project Manager / Content Ops / Research / Analytics / Mailbox — the
@@ -147,6 +148,79 @@
   var panelSubtabs = document.getElementById('panelSubtabs');
   var panelMain = document.getElementById('panelMain');
   var sideRail = document.getElementById('sideRail');
+  var commentAlertBtn = document.getElementById('commentAlertBtn');
+  var commentAlertPanel = document.getElementById('commentAlertPanel');
+
+  function safeCommentPostUrl(value, platform) {
+    try {
+      var url = new URL(value);
+      var hosts = { youtube: ['youtube.com', 'youtu.be'], tiktok: ['tiktok.com'],
+        instagram: ['instagram.com'], facebook: ['facebook.com', 'fb.watch'] };
+      return url.protocol === 'https:' && (hosts[platform] || []).some(function (host) {
+        return url.hostname === host || url.hostname.endsWith('.' + host);
+      }) ? url.href : '';
+    } catch (error) { return ''; }
+  }
+
+  function loadCommentAlerts() {
+    if (IS_REVIEWER) return;
+    fetch('/api/reports/comment-alerts', { credentials: 'include' }).then(function (response) {
+      if (!response.ok) throw new Error('Comment check unavailable');
+      return response.json();
+    }).then(function (data) {
+      var alerts = data.alerts || [];
+      var total = alerts.reduce(function (sum, row) { return sum + Number(row.count || 0); }, 0);
+      var badge = document.getElementById('commentAlertCount');
+      badge.textContent = total > 99 ? '99+' : String(total);
+      badge.hidden = total === 0;
+      commentAlertBtn.setAttribute('aria-label', total ? total + ' comments to check' : 'No comments to check');
+      document.getElementById('commentAlertList').innerHTML = alerts.length ? alerts.map(function (row) {
+        var url = safeCommentPostUrl(row.postUrl, row.platform);
+        var waiting = Date.now() - new Date(row.firstDetectedAt).getTime() >= 24 * 60 * 60 * 1000;
+        return '<article class="comment-alert-row' + (waiting ? ' comment-alert-row--old' : '') + '"><small>' + escapeHtml(row.platform.toUpperCase()) + ' · ' +
+          Number(row.count || 0) + ' comment' + (Number(row.count) === 1 ? '' : 's') + ' to check</small>' +
+          '<strong>' + escapeHtml(row.title) + '</strong><small>' + (waiting ? 'Waiting since ' : 'Detected ') + escapeHtml(contentDate(row.firstDetectedAt)) + '</small>' +
+          '<div class="comment-alert-row-actions">' + (url ? '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener">Open post ↗</a>' : '<span>Post link unavailable</span>') +
+          '<button type="button" data-comment-platform="' + escapeHtml(row.platform) + '" data-comment-piece="' + escapeHtml(row.pieceId) + '">Mark reviewed</button></div></article>';
+      }).join('') : '<div class="comment-alert-row">No comment activity is waiting for review.</div>';
+      var incomplete = Object.keys(data.providerStatus || {}).filter(function (platform) {
+        return data.providerStatus[platform] && (!data.providerStatus[platform].available || data.providerStatus[platform].partial);
+      });
+      document.getElementById('commentAlertStatus').textContent =
+        (data.lastCheckedAt ? 'Last platform check: ' + contentDate(data.lastCheckedAt) + '. ' : 'First platform check pending. ') +
+        (incomplete.length ? 'Some checks incomplete: ' + incomplete.join(', ') + '.' : 'Checks run about hourly.');
+    }).catch(function () {
+      document.getElementById('commentAlertStatus').textContent = 'Comment status could not be loaded. Try again shortly.';
+    });
+  }
+
+  function syncCommentAlertPolling() {
+    clearInterval(commentAlertTimer);
+    commentAlertTimer = null;
+    commentAlertBtn.hidden = IS_REVIEWER;
+    if (IS_REVIEWER) { commentAlertPanel.hidden = true; return; }
+    loadCommentAlerts();
+    commentAlertTimer = setInterval(loadCommentAlerts, 60000);
+  }
+
+  commentAlertBtn.addEventListener('click', function () {
+    commentAlertPanel.hidden = !commentAlertPanel.hidden;
+    commentAlertBtn.setAttribute('aria-expanded', String(!commentAlertPanel.hidden));
+    if (!commentAlertPanel.hidden) loadCommentAlerts();
+  });
+  document.getElementById('commentAlertClose').addEventListener('click', function () {
+    commentAlertPanel.hidden = true;
+    commentAlertBtn.setAttribute('aria-expanded', 'false');
+  });
+  commentAlertPanel.addEventListener('click', function (event) {
+    var button = event.target.closest('button[data-comment-piece]');
+    if (!button) return;
+    button.disabled = true;
+    fetch('/api/reports/comment-alerts/' + encodeURIComponent(button.dataset.commentPlatform) + '/' +
+      encodeURIComponent(button.dataset.commentPiece) + '/reviewed', { method: 'POST', credentials: 'include' })
+      .then(function (response) { if (!response.ok) throw new Error('Could not mark reviewed'); loadCommentAlerts(); })
+      .catch(function () { button.disabled = false; document.getElementById('commentAlertStatus').textContent = 'Could not mark reviewed. Please try again.'; });
+  });
 
   function currentTabId() {
     var h = (location.hash || '').replace('#', '');
@@ -849,6 +923,7 @@
     avatarBtn.title = IS_REVIEWER ? 'Log out (Reviewer account)' : 'Log out';
     document.getElementById('switchAdminBtn').hidden = !IS_REVIEWER;
     renderTabs();
+    syncCommentAlertPolling();
     if (IS_REVIEWER && editorUnreadTimer) {
       clearInterval(editorUnreadTimer);
       editorUnreadTimer = null;

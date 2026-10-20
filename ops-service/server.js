@@ -1468,6 +1468,7 @@ const contentAnalytics = contentAnalyticsService.setup(db, {
     tiktok: async function (pieces) {
       if (!buffer.configured) throw new Error('TikTok via Buffer is not connected.');
       const rows = [];
+      let unavailablePublicPosts = 0;
       const publicVideo = pieces.find(function (item) {
         return !!tiktokPublicMetrics.profileFromVideoUrl(item.tiktokExternalLink);
       });
@@ -1484,6 +1485,7 @@ const contentAnalytics = contentAnalyticsService.setup(db, {
         let publicMetrics = null;
         try { publicMetrics = await tiktokPublicMetrics.fetchPublicMetrics(piece.tiktokExternalLink || ''); }
         catch (error) { publicMetrics = null; }
+        if (!publicMetrics) unavailablePublicPosts++;
         if (!publicMetrics && !Object.keys(metrics).length) continue;
         rows.push({ pieceId: piece.id, platform: 'tiktok', metrics: tiktokPublicMetrics.mergeMetrics(metrics, publicMetrics) });
       }
@@ -1491,9 +1493,10 @@ const contentAnalytics = contentAnalyticsService.setup(db, {
         channels: publicAudience ? [{ platform: 'tiktok', followers: publicAudience.followers }] : [],
         status: {
         audienceAvailable: !!publicAudience,
-        partial: !publicAudience,
-        note: publicAudience ? 'TikTok followers and video counters use the public profile and posts; watch-time details use the last saved Buffer snapshot.' :
-          'TikTok public profile follower count is temporarily unavailable; the last verified count is retained.'
+        partial: !publicAudience || unavailablePublicPosts > 0,
+        note: unavailablePublicPosts ? 'Some TikTok public posts could not be checked; comment alerts for those posts may be delayed.' :
+          (publicAudience ? 'TikTok followers and video counters use the public profile and posts; watch-time details use the last saved Buffer snapshot.' :
+            'TikTok public profile follower count is temporarily unavailable; the last verified count is retained.')
       } };
     },
     instagram: async function (pieces) {
@@ -1725,6 +1728,23 @@ app.post('/api/reports/content-analytics/refresh', requireAuth, async function (
     console.error('Content analytics refresh failed:', error.message);
     res.status(502).json({ error: 'content_analytics_refresh_failed', message: String(error.message || error).slice(0, 300) });
   }
+});
+app.get('/api/reports/comment-alerts', requireAuth, function (req, res) {
+  const state = db.prepare('SELECT last_collected_at,provider_status_json FROM content_analytics_state WHERE id=1').get();
+  let providerStatus = {};
+  try { providerStatus = JSON.parse(state && state.provider_status_json || '{}'); } catch (error) { /* stale status */ }
+  res.set('Cache-Control', 'no-store').json({
+    alerts: contentAnalytics.commentAlerts(),
+    lastCheckedAt: state && state.last_collected_at || null,
+    providerStatus: providerStatus
+  });
+});
+app.post('/api/reports/comment-alerts/:platform/:id/reviewed', requireAuth, function (req, res) {
+  if (!isValidId(req.params.id) || contentAnalyticsService.PLATFORMS.indexOf(req.params.platform) === -1) {
+    return res.status(400).json({ error: 'invalid_comment_alert' });
+  }
+  const reviewed = contentAnalytics.markCommentsReviewed(req.params.id, req.params.platform);
+  res.set('Cache-Control', 'no-store').json({ ok: true, reviewed: reviewed });
 });
 app.post('/api/reports/weekly/run', requireAuth, async function (req, res) {
   try { res.json(await weeklyReports.runDue()); }

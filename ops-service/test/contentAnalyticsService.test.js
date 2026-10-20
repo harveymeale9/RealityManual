@@ -111,5 +111,33 @@ test('Content Analytics owns its analytics route while competitor research keeps
   assert.match(style, /@container \(max-width:600px\)/);
   assert.match(style, /\.content-piece-row>span:nth-child\(6\)\{display:block\}/);
   assert.match(page, /data-tabs="content-analytics,sales-analytics,website-analytics"/);
-  assert.match(page, /app\.js\?v=20261020-role-navigation-v1/);
+  assert.match(page, /app\.js\?v=20261020-comment-alerts-v1/);
+});
+
+test('comment watch flags existing and newly increased counts until reviewed without duplicate rebound alerts', async function () {
+  const db = new Database(':memory:');
+  const piece = { id: 'piece-1', title: 'Example', stage: 'live', youtubeVideoId: 'yt-1',
+    tiktokPublishId: 'tt-1', instagramMediaId: 'ig-1', facebookVideoId: 'fb-1',
+    youtubeUrl: 'https://www.youtube.com/watch?v=yt-1' };
+  const counts = { youtube: 2, tiktok: 0, instagram: 1, facebook: null };
+  const collectors = Object.fromEntries(analytics.PLATFORMS.map(function (platform) {
+    return [platform, async function () { return { pieces: [{ pieceId: piece.id, platform: platform,
+      metrics: { comments: counts[platform], views: 1 } }] }; }];
+  }));
+  const service = analytics.setup(db, { listPieces: function () { return [piece]; }, collectors: collectors });
+  await service.collect();
+  assert.deepEqual(service.commentAlerts().map(function (row) { return [row.platform, row.count]; }),
+    [['instagram', 1], ['youtube', 2]]);
+  assert.equal(service.markCommentsReviewed('piece-1', 'youtube'), true);
+  assert.equal(service.markCommentsReviewed('piece-1', 'unknown'), false);
+  assert.deepEqual(service.commentAlerts().map(function (row) { return row.platform; }), ['instagram']);
+  counts.youtube = 3; counts.tiktok = 2;
+  await service.collect();
+  assert.deepEqual(service.commentAlerts().map(function (row) { return [row.platform, row.count]; }),
+    [['instagram', 1], ['tiktok', 2], ['youtube', 1]]);
+  counts.youtube = 1; await service.collect();
+  counts.youtube = 3; await service.collect();
+  assert.equal(service.commentAlerts().find(function (row) { return row.platform === 'youtube'; }).count, 1);
+  const restarted = analytics.setup(db, { listPieces: function () { return [piece]; } });
+  assert.equal(restarted.commentAlerts().length, 3);
 });
