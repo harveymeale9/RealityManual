@@ -20434,3 +20434,24 @@ same normalization to an older cached result, without rewriting the separate
 standard caption template. The style version changed so cached drafts are
 regenerated before future uploads. Focused tests cover both generation and
 cached expansion; the full 290-test ops-service suite passes.
+
+---
+
+# 669. Admin Navigation Restored After Reviewer Login (2026-10-20)
+
+Harvey reported that the dashboard only showed Content Ops and all other
+menus were unavailable. A real-browser reproduction confirmed the restricted
+`youtube-reviewer` session deliberately displays only Content Ops. The actual
+bug was switching from that session to the admin password in the same SPA:
+`initApp()` returned early once initialized, so it kept the old reviewer tab
+list and `body.role-reviewer` CSS even though the new session was admin.
+
+Role-dependent navigation, avatar state, and reviewer-only hint now resync on
+every login, before the initialized-app branch. Reviewer mode offers a visible
+"Switch to admin" button that signs out and shows the login form; no reviewer
+server permissions were broadened. Editor badge polling resumes on admin
+login and stops on reviewer login. The app script cache version changed so
+browsers load the fix. Browser verification reproduced the old stuck state,
+then confirmed reviewer -> admin shows all five top-level sections and can
+open Analytics without a page refresh. The full 291-test ops-service suite
+passes.

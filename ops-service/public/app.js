@@ -132,9 +132,11 @@
     });
   });
 
-  document.getElementById('logoutBtn').addEventListener('click', function () {
+  function signOut() {
     Auth.logout().then(showLogin);
-  });
+  }
+  document.getElementById('logoutBtn').addEventListener('click', signOut);
+  document.getElementById('switchAdminBtn').addEventListener('click', signOut);
 
   /* ============================================================
      TAB SHELL
@@ -840,15 +842,26 @@
     }
   }
 
-  function initApp() {
-    if (appInitialized) { renderActiveTab(); return; }
-    appInitialized = true;
+  function syncRoleNavigation() {
     document.body.classList.toggle('role-reviewer', IS_REVIEWER);
-    if (IS_REVIEWER) {
-      var avatarBtn = document.getElementById('logoutBtn');
-      if (avatarBtn) { avatarBtn.textContent = 'R'; avatarBtn.title = 'Log out (Reviewer account)'; }
-    }
+    var avatarBtn = document.getElementById('logoutBtn');
+    avatarBtn.textContent = IS_REVIEWER ? 'R' : 'H';
+    avatarBtn.title = IS_REVIEWER ? 'Log out (Reviewer account)' : 'Log out';
+    document.getElementById('switchAdminBtn').hidden = !IS_REVIEWER;
     renderTabs();
+    if (IS_REVIEWER && editorUnreadTimer) {
+      clearInterval(editorUnreadTimer);
+      editorUnreadTimer = null;
+    }
+  }
+
+  function initApp() {
+    // Rebuild role-dependent chrome on every login, including a reviewer ->
+    // admin switch in the same SPA. The first-load-only branch used to leave
+    // the reviewer tab list and body class in place after admin login.
+    syncRoleNavigation();
+    if (appInitialized) { startEditorUnreadBadgePolling(); renderActiveTab(); return; }
+    appInitialized = true;
     bindSideRail();
     window.RMMailbox.startBadgePolling();
     startEditorUnreadBadgePolling();
