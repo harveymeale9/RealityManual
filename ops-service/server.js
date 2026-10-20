@@ -2982,10 +2982,9 @@ app.post('/api/videos/:id/build-final', requireAuthOrReviewer, function (req, re
 // On-demand Content Production audition. This returns only the finished
 // mixed audio, not another copy of the (potentially very large) video: the
 // browser keeps the already-loaded raw video muted and plays this audio in
-// lockstep beside it. The exact same measured mixer and saved Settings used
-// by runBuildFinalVideo are used here, so choosing a track is an honest
-// preview of what Final Check will receive. Nothing is persisted; the scratch
-// MP3 is removed as soon as the response has been sent.
+// lockstep beside it. Production auditions temporarily boost only the music
+// bed by 3.5 dB for track selection. The final build still uses the saved
+// Content Settings without that boost. Cached audition MP3s are versioned.
 async function sendProductionAudioPreview(req, res, next) {
   const { id } = req.params;
   const audioTrackId = req.params.trackId || req.body && req.body.audioTrackId;

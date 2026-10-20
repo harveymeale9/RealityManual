@@ -5281,6 +5281,10 @@
     audioPicker.appendChild(audioPreviewBtn);
     audioPicker.appendChild(audioNext);
     audioSection.appendChild(audioPicker);
+    var auditionNote = document.createElement('small');
+    auditionNote.className = 'upload-row-audition-note';
+    auditionNote.textContent = 'Music is +3.5 dB for track selection only. Final video uses Content Settings loudness.';
+    audioSection.appendChild(auditionNote);
     audioSection.appendChild(audioPreviewProgress);
     audioSection.appendChild(previewAudio);
 

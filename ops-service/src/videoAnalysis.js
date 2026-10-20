@@ -21,6 +21,9 @@ const openaiStructured = require('./openaiStructured');
 // worked around client-side.
 var BROWSER_SAFE_VIDEO_CODECS = ['h264', 'vp8', 'vp9', 'av1'];
 var VIDEO_OUTRO_SECONDS = 2;
+// Music is intentionally easier to hear while choosing a soundtrack. This
+// offset is only applied to Content Production audition MP3s, never masters.
+var PRODUCTION_AUDITION_MUSIC_BOOST_DB = 3.5;
 var PUBLISH_AUDIO_SAMPLE_RATE = '48000';
 const musicPeakCache = new Map();
 
@@ -194,7 +197,7 @@ function musicDbGain(target, measured) {
   return baseline === null ? 0 : clampNumber(target - baseline, 0, -30, 30, 0.01);
 }
 
-function measuredMixAudioArgs(videoPath, audioPath, tempAudioPath, settings, dialogueMeasurement, musicMeasurement, programmeDuration, outroSeconds) {
+function measuredMixAudioArgs(videoPath, audioPath, tempAudioPath, settings, dialogueMeasurement, musicMeasurement, programmeDuration, outroSeconds, musicBoostDb) {
   settings = normalizeAudioMixSettings(settings);
   const dialogueGain = dbGain(settings.dialogueLufs, dialogueMeasurement).toFixed(2);
   const args = ['-y', '-i', videoPath];
@@ -204,7 +207,7 @@ function measuredMixAudioArgs(videoPath, audioPath, tempAudioPath, settings, dia
   }
   args.push('-stream_loop', '-1', '-i', audioPath);
   const musicTarget = settings.dialogueLufs - settings.musicBelowDialogueDb;
-  const musicGain = musicDbGain(musicTarget, musicMeasurement).toFixed(2);
+  const musicGain = (musicDbGain(musicTarget, musicMeasurement) + (Number(musicBoostDb) || 0)).toFixed(2);
   let filter;
   if (settings.duckingEnabled) {
     // A mild sidechain pass lowers music only while dialogue is active. The
@@ -257,7 +260,7 @@ function measuredFinalAudioArgs(tempAudioPath, outPath, settings, mixMeasurement
 function productionAuditionArgs(dialoguePath, audioPath, outPath, settings, dialogueMeasurement, musicMeasurement, programmeDuration, options) {
   settings = normalizeAudioMixSettings(settings);
   const measured = measuredMixAudioArgs(dialoguePath, audioPath, outPath, settings,
-    dialogueMeasurement, musicMeasurement, programmeDuration, VIDEO_OUTRO_SECONDS);
+    dialogueMeasurement, musicMeasurement, programmeDuration, VIDEO_OUTRO_SECONDS, PRODUCTION_AUDITION_MUSIC_BOOST_DB);
   const filter = measured[measured.indexOf('-filter_complex') + 1];
   const limit = Math.pow(10, settings.truePeakDbtp / 20).toFixed(6);
   return ['-y', '-i', dialoguePath, '-stream_loop', '-1', '-i', audioPath,
@@ -266,8 +269,11 @@ function productionAuditionArgs(dialoguePath, audioPath, outPath, settings, dial
     '-ar', PUBLISH_AUDIO_SAMPLE_RATE, '-f', 'mp3', outPath];
 }
 
-function legacyAudioPreviewArgs(dialoguePath, audioPath, outPath, ambientVolumePercent, options, programmeDuration, outroSeconds) {
-  const volume = (normalizeAmbientVolumePercent(ambientVolumePercent) / 100).toFixed(2);
+function legacyAudioPreviewArgs(dialoguePath, audioPath, outPath, ambientVolumePercent, options, programmeDuration, outroSeconds, musicBoostDb) {
+  const baseVolume = normalizeAmbientVolumePercent(ambientVolumePercent) / 100;
+  const volume = musicBoostDb
+    ? (baseVolume * Math.pow(10, musicBoostDb / 20)).toFixed(4)
+    : baseVolume.toFixed(2);
   return ['-y', '-i', dialoguePath, '-stream_loop', '-1', '-i', audioPath,
     '-filter_complex', '[1:a]volume=' + volume + musicOutroFade(programmeDuration, outroSeconds) + '[bg];[0:a][bg]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]',
     '-map', '[aout]', '-c:a', 'libmp3lame', '-b:a', previewBitrate(options), '-ar', PUBLISH_AUDIO_SAMPLE_RATE, '-f', 'mp3', outPath];
@@ -364,9 +370,8 @@ async function buildFinalVideo(videoPath, audioPath, outPath, mixInput, outputOp
   }
 }
 
-// Audio-only audition used by Editor soundtrack previews. It deliberately
-// calls the same measurement and mix helpers as Final Check, so a preview is
-// representative of the production render rather than a lighter browser mix.
+// Audio-only preview preparation shared by soundtrack auditions. Music gain
+// is selected at render time, so Production can boost auditions independently.
 async function prepareAudioPreview(dialoguePath, mixInput) {
   const settings = normalizeAudioMixSettings(mixInput);
   const programmeDuration = await mediaDuration(dialoguePath);
@@ -402,7 +407,7 @@ async function buildProductionAudioPreview(dialoguePath, audioPath, outPath, mix
   const settings = prepared.settings || normalizeAudioMixSettings(mixInput);
   if (settings.mode === 'legacy_percent') {
     await runFfmpeg(legacyAudioPreviewArgs(dialoguePath, audioPath, outPath, settings.legacyPercent,
-      outputOptions, prepared.programmeDuration, VIDEO_OUTRO_SECONDS), 'legacy Production audition');
+      outputOptions, prepared.programmeDuration, VIDEO_OUTRO_SECONDS, PRODUCTION_AUDITION_MUSIC_BOOST_DB), 'legacy Production audition');
     return { mode: settings.mode };
   }
   const musicMeasurement = await measureMusicPeak(audioPath, prepared.programmeDuration);

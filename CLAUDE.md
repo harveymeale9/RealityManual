@@ -20511,3 +20511,23 @@ checked after the code change returned 14 page views in the 30-day dashboard
 window, no pre-cutoff points above zero, and 13 views in the latest seven
 completed days. The full 293-test ops-service suite passes, including a
 boundary test for 13/14 October and compacted plus raw records.
+
+---
+
+# 672. Louder Music for Content Production Auditions Only (2026-10-20)
+
+Harvey found the backing track too quiet while choosing music in Content
+Production, even though the quieter level is correct for published videos.
+Production's soundtrack-only audition MP3s now raise the music bed by **3.5 dB**
+relative to the configured mix. The measured-loudness path adds the boost to
+the calibrated music gain before the existing ducking and peak limiter; the
+legacy-percentage path applies the equivalent amplitude multiplier. The
+dialogue gain is unchanged. Final Check and published-video rendering do not
+receive the boost and continue to use Content Settings exactly as before.
+
+The Production UI explains that its preview music is deliberately louder.
+The cache delivery version changed so all previously rendered soundtrack
+auditions regenerate at the new level; shared voice/music measurements remain
+reusable. Tests pin the +3.5 dB audition gain, unboosted master and legacy
+preview gains, low-bitrate FFmpeg output, and cache behavior. Full 293-test
+ops-service suite passes.

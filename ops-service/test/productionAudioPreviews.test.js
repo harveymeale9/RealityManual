@@ -21,9 +21,10 @@ test('Production makes soundtrack preparation visible and orders Editor before C
   assert.match(styles, /\.upload-row-audio-preview-progress\.is-preparing/);
   assert.match(styles, /\.upload-row-audio-preview-spinner/);
   assert.match(styles, /\.upload-row-preview-timeline/);
+  assert.match(app, /Music is \+3\.5 dB for track selection only\. Final video uses Content Settings loudness\./);
   assert.ok(app.indexOf("{ id: 'editor', label: 'Editor' }") < app.indexOf("{ id: 'upload-files', label: 'Content Production' }"));
   assert.ok(page.indexOf('data-tab="editor" title="Editor"') < page.indexOf('data-tab="upload-files" title="Content Production"'));
-  assert.match(page, /app\.js\?v=20261020-comment-alerts-v1/);
+  assert.match(page, /app\.js\?v=20261020-production-audition-boost-v1/);
 });
 
 test('Production preview cache deduplicates work, persists results, and invalidates changed settings', async function (t) {

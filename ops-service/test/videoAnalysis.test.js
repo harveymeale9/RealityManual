@@ -120,6 +120,16 @@ test('measured final pass uses two-pass loudnorm values and a true-peak safeguar
   const audition = videoAnalysis.productionAuditionArgs('/voice', '/music', '/audition.mp3',
     { musicDuckingEnabled: true }, { inputI: -16 }, { loudestShortTermLufs: -20 }, 8, { bitrate: '96k' });
   assert.match(audition.join(' '), /sidechaincompress/);
+  assert.match(audition.join(' '), /\[1:a\]volume=-12\.50dB/);
+  const masterMix = videoAnalysis.measuredMixAudioArgs('/voice', '/music', '/mix.flac',
+    { musicDuckingEnabled: true }, { inputI: -16 }, { loudestShortTermLufs: -20 }, 8, 2);
+  assert.match(masterMix.join(' '), /\[1:a\]volume=-16\.00dB/);
+  const legacyAudition = videoAnalysis.legacyAudioPreviewArgs('/voice', '/music', '/audition.mp3',
+    10, { bitrate: '96k' }, 8, 2, 3.5);
+  assert.match(legacyAudition.join(' '), /\[1:a\]volume=0\.1496/);
+  const legacyNormal = videoAnalysis.legacyAudioPreviewArgs('/voice', '/music', '/preview.mp3',
+    10, { bitrate: '96k' }, 8, 2);
+  assert.match(legacyNormal.join(' '), /\[1:a\]volume=0\.10/);
   assert.match(audition.join(' '), /alimiter=limit=0\.841395:level=false\[audition\]/);
   assert.equal(audition[audition.indexOf('-b:a') + 1], '96k');
   assert.equal(audition.includes('flac'), false);

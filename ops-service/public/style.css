@@ -2087,6 +2087,7 @@ body.role-reviewer #pmBackFab {
 .upload-row-audio-picker select { min-width: 0; width: 100%; }
 .upload-row-audio-preview { white-space: nowrap; }
 .upload-row-audio-preview-status { min-height: 1.2em; font-size: 0.68rem; line-height: 1.35; color: var(--ink-faint); }
+.upload-row-audition-note { display: block; font-size: 0.68rem; line-height: 1.35; color: var(--ink-faint); }
 .upload-row-audio-preview-progress { display: flex; min-height: 28px; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid transparent; border-radius: 5px; }
 .upload-row-audio-preview-progress.is-preparing { border-color: rgba(108, 226, 151, .22); background: rgba(47, 140, 84, .08); }
 .upload-row-audio-preview-spinner { width: 15px; height: 15px; flex: 0 0 15px; border-width: 2px; }

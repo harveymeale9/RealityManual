@@ -59,7 +59,7 @@ function setup(options) {
     })).digest('hex');
     const hash = crypto.createHash('sha256').update(JSON.stringify({
       video: [video.size, video.mtimeMs], audio: [audio.size, audio.mtimeMs], settings: settings,
-      delivery: 'production-audition-96k-single-pass-v3'
+      delivery: 'production-audition-96k-music-plus-3.5db-v4'
     })).digest('hex').slice(0, 24);
     const dir = path.join(rootDir, pieceId);
     return { videoPath: videoPath, audioPath: audioPath, settings: settings, dir: dir,
