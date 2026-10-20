@@ -45,6 +45,7 @@ test('website traffic chart combines compacted and live verified pageviews acros
   daily.run('2026-10-05', 'page_view', 3);
   daily.run('2026-10-11', 'page_view', 4);
   daily.run('2026-10-12', 'page_view', 5);
+  daily.run('2026-10-14', 'page_view', 2);
   daily.run('2026-10-16', 'checkout_view', 100); // wrong event
   const event = db.prepare('INSERT INTO analytics_events VALUES (?,?,?)');
   event.run('2026-10-17T09:00:00.000Z', 'page_view', 1);
@@ -54,14 +55,17 @@ test('website traffic chart combines compacted and live verified pageviews acros
   assert.equal(result.daily.length, 14);
   assert.equal(result.line_daily.length, 30);
   assert.equal(result.line_daily[0].day, '2026-09-18');
-  assert.equal(result.line_daily.find((row) => row.day === '2026-10-03').page_views, 99);
+  assert.equal(result.line_daily.find((row) => row.day === '2026-10-03').page_views, 0);
+  assert.equal(result.line_daily.find((row) => row.day === '2026-10-12').page_views, 0);
+  assert.equal(result.line_daily.find((row) => row.day === '2026-10-14').page_views, 2);
   assert.equal(result.line_daily.find((row) => row.day === '2026-09-17'), undefined);
   assert.equal(result.daily[0].day, '2026-10-04');
   assert.equal(result.daily[13].day, '2026-10-17');
   assert.equal(result.daily.find((row) => row.day === '2026-10-04').page_views, 0);
   assert.equal(result.daily.find((row) => row.day === '2026-10-17').page_views, 1);
-  assert.equal(result.previous_7_days, 3);
-  assert.equal(result.last_7_days, 10);
+  assert.equal(result.previous_7_days, 0);
+  assert.equal(result.last_7_days, 3);
+  assert.equal(result.excluded_before, '2026-10-14');
   assert.equal(JSON.stringify(result).includes('2026-10-18'), false);
   const appSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const serverSource = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
@@ -69,6 +73,41 @@ test('website traffic chart combines compacted and live verified pageviews acros
   assert.match(appSource, /websiteTrafficHtml\(traffic\)/);
   assert.match(appSource, /class="website-line-path"/);
   assert.match(serverSource, /app\.get\('\/api\/reports\/website-traffic', requireAuth/);
+  db.close();
+});
+
+test('website summary excludes all activity through October 13 without losing current visits', function () {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE analytics_daily_events(day TEXT,event_name TEXT,event_count INTEGER,verified_visits INTEGER);
+    CREATE TABLE analytics_daily_utm_sources(day TEXT,utm_source TEXT,verified_visits INTEGER);
+    CREATE TABLE analytics_events(created_at TEXT,event_name TEXT,session_id TEXT,utm_source TEXT,verified_human INTEGER);
+  `);
+  const daily = db.prepare('INSERT INTO analytics_daily_events VALUES (?,?,?,?)');
+  daily.run('2026-10-13', 'page_view', 50, 10);
+  daily.run('2026-10-13', 'checkout_view', 2, 2);
+  daily.run('2026-10-14', 'page_view', 3, 2);
+  daily.run('2026-10-14', 'checkout_view', 1, 1);
+  db.prepare('INSERT INTO analytics_daily_utm_sources VALUES (?,?,?)').run('2026-10-13', 'owner', 5);
+  db.prepare('INSERT INTO analytics_daily_utm_sources VALUES (?,?,?)').run('2026-10-14', 'youtube', 2);
+  const raw = db.prepare('INSERT INTO analytics_events VALUES (?,?,?,?,?)');
+  raw.run('2026-10-13T23:59:59.000Z', 'page_view', 'owner', 'owner', 1);
+  raw.run('2026-10-19T09:00:00.000Z', 'page_view', 'viewer', 'youtube', 1);
+  raw.run('2026-10-20T09:00:00.000Z', 'page_view', 'today', 'tiktok', 1);
+  raw.run('2026-10-20T10:00:00.000Z', 'page_view', 'bot', '', 0);
+  const result = reporting.getWebsiteAnalyticsSummary(db, '2026-10-20T12:00:00.000Z');
+  assert.equal(result.excluded_before, '2026-10-14');
+  assert.deepEqual(result.today, { page_views: 1, unique_visitors: 1 });
+  assert.deepEqual(result.last_30_days, { page_views: 5, unique_visitors: 4 });
+  assert.equal(result.funnel.find((row) => row.step === 'page_view').count, 5);
+  assert.equal(result.funnel.find((row) => row.step === 'checkout_view').count, 1);
+  assert.deepEqual(result.top_utm_sources, [
+    { source: 'youtube', sessions: 3 }, { source: 'tiktok', sessions: 1 }
+  ]);
+  assert.equal(result.excluded_unverified_events, 1);
+  const appSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.match(appSource, /fetch\('\/api\/reports\/website-summary'/);
+  assert.match(appSource, /excludes activity through 13 October 2026/);
   db.close();
 });
 

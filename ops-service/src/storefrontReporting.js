@@ -7,6 +7,10 @@ const FUNNEL_STEPS = [
   'checkout_started', 'payment_submitted', 'order_complete', 'order_failed'
 ];
 
+// Harvey's own pre-launch browsing through 13 October is excluded from the
+// Content Studio Website Analytics dashboard, without deleting store records.
+const WEBSITE_ANALYTICS_START_DAY = '2026-10-14';
+
 function eventMap(rows) {
   const result = {};
   rows.forEach(function (row) {
@@ -114,6 +118,67 @@ function startOfUtcDay(value) {
   return date;
 }
 
+function getWebsiteAnalyticsSummary(db, nowValue) {
+  const today = startOfUtcDay(nowValue || Date.now());
+  const thirtyStart = new Date(today);
+  thirtyStart.setUTCDate(thirtyStart.getUTCDate() - 29);
+  const startDay = [thirtyStart.toISOString().slice(0, 10), WEBSITE_ANALYTICS_START_DAY].sort().at(-1);
+  const startTime = startDay + 'T00:00:00.000Z';
+  const todayTime = today.toISOString();
+  const todayEvents = eventMap(db.prepare(`
+    SELECT event_name, COUNT(*) AS count, COUNT(DISTINCT session_id) AS unique_sessions
+    FROM analytics_events WHERE verified_human = 1 AND created_at >= ?
+    GROUP BY event_name
+  `).all([todayTime, startTime].sort().at(-1)));
+  const dailyEvents = eventMap(db.prepare(`
+    SELECT event_name, SUM(event_count) AS count, SUM(verified_visits) AS unique_sessions
+    FROM analytics_daily_events WHERE day >= ?
+    GROUP BY event_name
+  `).all(startDay));
+  const rawEvents = eventMap(db.prepare(`
+    SELECT event_name, COUNT(*) AS count, COUNT(DISTINCT session_id) AS unique_sessions
+    FROM analytics_events WHERE verified_human = 1 AND created_at >= ?
+    GROUP BY event_name
+  `).all(startTime));
+  const events = {};
+  for (const name of new Set([...Object.keys(dailyEvents), ...Object.keys(rawEvents)])) {
+    events[name] = {
+      count: (dailyEvents[name]?.count || 0) + (rawEvents[name]?.count || 0),
+      unique_sessions: (dailyEvents[name]?.unique_sessions || 0) + (rawEvents[name]?.unique_sessions || 0)
+    };
+  }
+  const sources = new Map();
+  db.prepare(`SELECT utm_source, SUM(verified_visits) AS sessions
+    FROM analytics_daily_utm_sources WHERE day >= ? GROUP BY utm_source`).all(startDay)
+    .concat(db.prepare(`SELECT utm_source, COUNT(DISTINCT session_id) AS sessions
+      FROM analytics_events WHERE verified_human = 1 AND created_at >= ?
+        AND utm_source IS NOT NULL AND utm_source != '' GROUP BY utm_source`).all(startTime))
+    .forEach(function (row) {
+      sources.set(row.utm_source, (sources.get(row.utm_source) || 0) + Number(row.sessions || 0));
+    });
+  const excluded = db.prepare(`SELECT COUNT(*) AS count FROM analytics_events
+    WHERE verified_human = 0 AND created_at >= ?`).get(thirtyStart.toISOString());
+  return {
+    excluded_before: WEBSITE_ANALYTICS_START_DAY,
+    today: {
+      page_views: todayEvents.page_view?.count || 0,
+      unique_visitors: todayEvents.page_view?.unique_sessions || 0
+    },
+    last_30_days: {
+      page_views: events.page_view?.count || 0,
+      unique_visitors: events.page_view?.unique_sessions || 0
+    },
+    funnel: FUNNEL_STEPS.map(function (step) {
+      return { step: step, count: events[step]?.count || 0, unique_sessions: events[step]?.unique_sessions || 0 };
+    }),
+    top_utm_sources: [...sources.entries()].map(function ([source, sessions]) {
+      return { source: source, sessions: sessions };
+    }).sort(function (a, b) { return b.sessions - a.sessions; }).slice(0, 10),
+    excluded_unverified_events: Number(excluded.count) || 0,
+    visitor_definition: 'A verified browser visit after real interaction or seven visible seconds. Individual event rows are reduced to anonymous daily totals; different browsers or days may represent the same person.'
+  };
+}
+
 // The storefront compacts completed UTC days into analytics_daily_events,
 // while the current day remains in analytics_events. Keep the two sources
 // separate and show completed days only so a partial today cannot look like
@@ -129,14 +194,14 @@ function getWebsiteTraffic(db, nowValue) {
     FROM analytics_daily_events
     WHERE event_name = 'page_view' AND day >= ? AND day < ?
     GROUP BY day
-  `).all(startDay, todayDay);
+  `).all([startDay, WEBSITE_ANALYTICS_START_DAY].sort().at(-1), todayDay);
   const rawRows = db.prepare(`
     SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS page_views
     FROM analytics_events
     WHERE event_name = 'page_view' AND verified_human = 1
       AND created_at >= ? AND created_at < ?
     GROUP BY substr(created_at, 1, 10)
-  `).all(start.toISOString(), today.toISOString());
+  `).all([start.toISOString(), WEBSITE_ANALYTICS_START_DAY + 'T00:00:00.000Z'].sort().at(-1), today.toISOString());
   const counts = new Map();
   dailyRows.concat(rawRows).forEach(function (row) {
     counts.set(row.day, (counts.get(row.day) || 0) + Number(row.page_views || 0));
@@ -149,6 +214,7 @@ function getWebsiteTraffic(db, nowValue) {
   });
   return {
     timezone: 'UTC',
+    excluded_before: WEBSITE_ANALYTICS_START_DAY,
     line_daily: lineDaily,
     daily: lineDaily.slice(-14),
     previous_7_days: lineDaily.slice(-14, -7).reduce(function (sum, row) { return sum + row.page_views; }, 0),
@@ -283,8 +349,10 @@ function getSalesDashboard(db, nowValue, excludedIds) {
 
 module.exports = {
   FUNNEL_STEPS: FUNNEL_STEPS,
+  WEBSITE_ANALYTICS_START_DAY: WEBSITE_ANALYTICS_START_DAY,
   idsFromExclusionRows: idsFromExclusionRows,
   getPeriodReport: getPeriodReport,
   getWebsiteTraffic: getWebsiteTraffic,
+  getWebsiteAnalyticsSummary: getWebsiteAnalyticsSummary,
   getSalesDashboard: getSalesDashboard
 };

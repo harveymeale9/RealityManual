@@ -20488,3 +20488,26 @@ delay detection and are not represented as a guarantee of completeness.
 Real-browser testing covered the badge, panel, link, and review flow; unit
 tests cover initial counts, new counts, review, persistence, and no duplicate
 alerts after a count rebounds. Full 292-test ops-service suite passes.
+
+---
+
+# 671. Exclude Owner's Early Website Visits from Website Analytics (2026-10-20)
+
+Harvey identified all storefront page views through **13 October 2026 UTC** as
+his own testing, which made Website Analytics' traffic graph and 30-day total
+misleading. Content Studio now applies a fixed reporting cutoff of
+`2026-10-14` to its private Website Analytics summary and traffic endpoints.
+The 30-day and Today tiles, funnel, UTM sources, 14-day bars, 30-day line, and
+week-over-week comparison all use the same cutoff. Earlier chart dates show
+zero rather than the owner's views, and the page explains the exclusion.
+
+The underlying storefront analytics rows and daily aggregates were **not
+deleted**: the exclusion is reversible and scoped to the Website Analytics
+dashboard, not sales accounting or weekly reports. The dashboard summary now
+comes from the same read-only storefront database mount as the traffic chart,
+instead of directly calling the public storefront summary endpoint (which
+still includes the historical data for its existing consumers). Live data
+checked after the code change returned 14 page views in the 30-day dashboard
+window, no pre-cutoff points above zero, and 13 views in the latest seven
+completed days. The full 293-test ops-service suite passes, including a
+boundary test for 13/14 October and compacted plus raw records.

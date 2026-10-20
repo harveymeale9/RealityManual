@@ -1652,6 +1652,15 @@ app.get('/api/reports/website-traffic', requireAuth, function (req, res) {
     res.status(503).json({ error: 'website_traffic_unavailable' });
   }
 });
+app.get('/api/reports/website-summary', requireAuth, function (req, res) {
+  try {
+    res.set('Cache-Control', 'no-store');
+    res.json(storefrontReporting.getWebsiteAnalyticsSummary(getStorefrontReportDb()));
+  } catch (error) {
+    console.error('Website summary read failed:', error.message);
+    res.status(503).json({ error: 'website_summary_unavailable' });
+  }
+});
 app.get('/api/reports/sales-dashboard', requireAuth, function (req, res) {
   try {
     res.set('Cache-Control', 'no-store');

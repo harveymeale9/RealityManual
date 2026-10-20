@@ -553,7 +553,7 @@
   function renderWebsiteAnalytics() {
     panelMain.innerHTML = '<div class="tab-placeholder wide"><div class="eyebrow">Loading…</div><h2>Website Analytics</h2></div>';
     Promise.all([
-      fetch(STOREFRONT_API_BASE + '/api/analytics/summary')
+      fetch('/api/reports/website-summary', { credentials: 'include' })
         .then(function (res) { if (!res.ok) throw new Error('bad_status'); return res.json(); }),
       fetch('/api/reports/sales-dashboard', { credentials: 'include' })
         .then(function (res) { return res.ok ? res.json() : null; })
@@ -618,7 +618,7 @@
             websiteTrafficHtml(traffic) +
             '<div class="funnel-section"><div class="eyebrow">What is counted</div>' +
               '<p class="analytics-definition">' + escapeHtml(data.visitor_definition || '') + '</p>' +
-              '<p class="analytics-definition">Known bots, automated checks, and ' + Number(data.excluded_unverified_events || 0) + ' older/unverified events are excluded.</p>' +
+              '<p class="analytics-definition">Website Analytics excludes activity through 13 October 2026 (your pre-launch visits). Original storefront records are retained. Known bots, automated checks, and ' + Number(data.excluded_unverified_events || 0) + ' older/unverified events are also excluded.</p>' +
               '<a class="analytics-internal-link" href="https://realitymanual.com/?rm_internal=1" target="_blank" rel="noopener">Exclude this browser from storefront analytics</a>' +
             '</div>' +
             '<div class="funnel-section">' +
