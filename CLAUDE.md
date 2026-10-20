@@ -20421,3 +20421,16 @@ source: TikTok may change its markup or restrict anonymous requests, in which
 case the official approved scope would be the durable replacement. Live check
 against `@the.reality.manual` returned 9 followers. Parser/fetch regression
 tests and the full 290-test ops-service suite pass.
+
+---
+
+# 668. Plain Punctuation in AI YouTube Descriptions (2026-10-20)
+
+Harvey requested no em or en dashes in the AI-written YouTube description
+prose. The generation prompt now explicitly forbids both, and result
+normalization replaces either character with a spaced ASCII hyphen if the
+model still emits one. The `[DESC]`/`[DESCRIPTION]` expansion applies the
+same normalization to an older cached result, without rewriting the separate
+standard caption template. The style version changed so cached drafts are
+regenerated before future uploads. Focused tests cover both generation and
+cached expansion; the full 290-test ops-service suite passes.

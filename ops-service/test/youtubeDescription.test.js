@@ -33,7 +33,8 @@ test('AI instructions use the edited transcript and constrain spoiler and invent
   assert.match(prompt, /manifestation gurus/);
   assert.match(prompt, /without revealing its final conclusion/i);
   assert.match(prompt, /Do not invent claims/i);
-  assert.match(prompt, /50–200 words/);
+  assert.match(prompt, /50 to 200 words/);
+  assert.match(prompt, /Do not use em dashes or en dashes/);
   assert.match(prompt, /do not pad a simple premise/);
   assert.match(prompt, /specific question or hook/);
   assert.throws(() => descriptions.descriptionPrompt({ transcript: 'too short' }), /transcript/i);
@@ -58,6 +59,12 @@ test('generation validates concise prose in up to three short paragraphs', async
   assert.throws(() => descriptions.normalizeResult({ paragraphs: ['Read https://example.test now. '.repeat(5)] }), /validation/);
   assert.throws(() => descriptions.normalizeResult({ paragraphs: ['Use [DESCRIPTION] now. '.repeat(7)] }), /validation/);
   assert.throws(() => descriptions.normalizeResult({ paragraphs: ['Use [DESC] now. '.repeat(7)] }), /validation/);
+  const plain = descriptions.normalizeResult({ paragraphs: [
+    'What happens when intention meets reality? This video explores the promise of manifestation—without giving away the final argument—and considers the years 2020–2025.'
+  ] });
+  assert.doesNotMatch(plain, /[\u2013\u2014]/);
+  assert.match(plain, /manifestation - without/);
+  assert.match(plain, /2020 - 2025/);
 });
 
 test('shortcode expansion replaces every occurrence and fails closed without prose', function () {
@@ -65,6 +72,8 @@ test('shortcode expansion replaces every occurrence and fails closed without pro
     'Get the book: [LINK]\n\nA specific video summary.');
   assert.equal(descriptions.expand('First [description], then [DESCRIPTION]', 'Summary'), 'First Summary, then Summary');
   assert.equal(descriptions.expand('Intro\n\n[DESC]', 'Summary'), 'Intro\n\nSummary');
+  assert.equal(descriptions.expand('Standard—copy\n\n[DESC]', 'An older—cached summary–here.'),
+    'Standard—copy\n\nAn older - cached summary - here.');
   assert.throws(() => descriptions.expand('Intro\n\n[DESCRIPTION]', ''), /missing/);
   assert.equal(descriptions.expand('No shortcode', ''), 'No shortcode');
 });
