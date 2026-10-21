@@ -20718,3 +20718,28 @@ unchanged. A real FFmpeg regression checks frame zero in both the portrait
 Editor decision preview and full-resolution Production master: both show the
 source color rather than black, and both keep the opening audio silent.
 Existing finished outputs remain unchanged until explicitly rebuilt.
+
+---
+
+# 679. Existing Production Auditions Lose Legacy Black Openings (2026-10-21)
+
+Several portrait Editor decisions had been rendered in the short window after
+§677 added a black-to-book opening and before §678 removed it. Five of those
+had already entered Production, so changing the future master renderer alone
+did not fix the 360p video shown while Harvey picks music. One more remained
+in Editor, where Harvey started a normal preview rebuild under the corrected
+renderer.
+
+The Production audition-video service now reads the Editor render's recorded
+opening-preroll duration for portrait pieces. It starts the 360p picture at
+the first fully visible frame and holds that frame through the existing
+preroll, preserving the video's length and the separately mapped audio. Its
+cache identity includes this option, so the affected existing auditions
+regenerate automatically on deployment; unrelated previews retain their
+existing cache version. This also covers the next portrait videos entering
+Production. The approved source files and saved Editor cuts are not rewritten.
+When Production sends a piece to Final Check, the full-resolution master is
+rendered from those same saved decisions using §678's visible opening, so it
+also has no black first frame. A real FFmpeg test verifies the old black
+opening becomes a visible first frame at unchanged duration without modifying
+the source file.

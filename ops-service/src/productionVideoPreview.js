@@ -7,11 +7,20 @@ const { spawn } = require('child_process');
 
 // This is only the Production audition picture. The Editor render or original
 // upload remains the source for thumbnails and the publish master.
-function ffmpegArgs(source, output) {
+function ffmpegArgs(source, output, openingHoldSeconds) {
+  const opening = Number(openingHoldSeconds) || 0;
+  // Older portrait Editor renders baked a black fade into the opening. The
+  // Production audition copy can replace just that opening with the first
+  // fully visible book frame; its source and audio remain untouched. Applying
+  // this to newer portrait renders is harmless because their opening is
+  // already a held, visible frame.
+  const openingFilter = opening > 0
+    ? 'trim=start=' + opening.toFixed(3) + ',setpts=PTS-STARTPTS,tpad=start_mode=clone:start_duration=' + opening.toFixed(3) + ',setpts=PTS-STARTPTS,'
+    : '';
   return [
     '-hide_banner', '-loglevel', 'error', '-nostdin', '-y', '-i', source,
     '-map', '0:v:0', '-map', '0:a:0?', '-sn', '-dn',
-    '-vf', 'scale=640:360:force_original_aspect_ratio=decrease:force_divisible_by=2,fps=15',
+    '-vf', openingFilter + 'scale=640:360:force_original_aspect_ratio=decrease:force_divisible_by=2,fps=15',
     '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '36', '-pix_fmt', 'yuv420p',
     '-g', '15', '-threads', '1',
     '-c:a', 'aac', '-b:a', '64k', '-ac', '1', '-ar', '24000',
@@ -48,9 +57,10 @@ function frameJpeg(source, seconds) {
 function setup(options) {
   const rootDir = options.rootDir;
   const getVideoPath = options.getVideoPath;
-  const run = options.run || function (source, output) {
+  const getOpeningHoldSeconds = options.getOpeningHoldSeconds || function () { return 0; };
+  const run = options.run || function (source, output, openingHoldSeconds) {
     return new Promise(function (resolve, reject) {
-      const child = spawn('ffmpeg', ffmpegArgs(source, output), { stdio: ['ignore', 'ignore', 'pipe'] });
+      const child = spawn('ffmpeg', ffmpegArgs(source, output, openingHoldSeconds), { stdio: ['ignore', 'ignore', 'pipe'] });
       let details = '';
       child.stderr.on('data', function (chunk) { details = (details + chunk.toString()).slice(-1000); });
       child.on('error', reject);
@@ -68,11 +78,14 @@ function setup(options) {
     const source = getVideoPath(id);
     if (!source || !fs.existsSync(source)) return null;
     const stat = fs.statSync(source);
+    const openingHoldSeconds = Math.max(0, Math.min(1, Number(getOpeningHoldSeconds(id)) || 0));
     const version = crypto.createHash('sha256')
-      .update(JSON.stringify([source, stat.size, stat.mtimeMs, '360p-v1']))
+      .update(JSON.stringify(openingHoldSeconds > 0
+        ? [source, stat.size, stat.mtimeMs, '360p-v1', openingHoldSeconds]
+        : [source, stat.size, stat.mtimeMs, '360p-v1']))
       .digest('hex').slice(0, 20);
     return { source: source, stat: stat, version: version,
-      dir: path.join(rootDir, id), path: path.join(rootDir, id, version + '.mp4') };
+      openingHoldSeconds: openingHoldSeconds, dir: path.join(rootDir, id), path: path.join(rootDir, id, version + '.mp4') };
   }
 
   function readyPath(id) {
@@ -90,7 +103,7 @@ function setup(options) {
     if (errors.has(item.path)) return { status: 'error', message: errors.get(item.path) };
     fs.mkdirSync(item.dir, { recursive: true });
     const temp = item.path + '.' + crypto.randomUUID() + '.tmp.mp4';
-    const job = Promise.resolve().then(function () { return run(item.source, temp); }).then(function () {
+    const job = Promise.resolve().then(function () { return run(item.source, temp, item.openingHoldSeconds); }).then(function () {
       const current = fs.statSync(item.source);
       if (current.size !== item.stat.size || current.mtimeMs !== item.stat.mtimeMs) {
         throw new Error('The source video changed while its Production preview was being made.');

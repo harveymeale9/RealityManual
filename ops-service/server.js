@@ -2336,7 +2336,15 @@ productionAudioPreviews = productionAudioPreviewService.setup({
 });
 productionVideoPreviews = productionVideoPreviewService.setup({
   rootDir: path.join(DATA_DIR, 'production-video-previews'),
-  getVideoPath: function (id) { return isValidId(id) ? path.join(UPLOADS_DIR, 'videos', id) : ''; }
+  getVideoPath: function (id) { return isValidId(id) ? path.join(UPLOADS_DIR, 'videos', id) : ''; },
+  getOpeningHoldSeconds: function (id) {
+    const piece = getPieceRecord(id);
+    if (!piece || piece.videoIsVertical !== true || piece.editorProjectId !== id) return 0;
+    const row = stmts.getOne.get('editorProjects', id);
+    if (!row) return 0;
+    try { return Number(JSON.parse(row.data).renderQuality?.openingPrerollSeconds) || 0; }
+    catch (error) { return 0; }
+  }
 });
 
 setImmediate(function () {

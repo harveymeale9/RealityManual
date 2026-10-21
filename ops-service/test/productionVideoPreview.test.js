@@ -69,3 +69,36 @@ test('Production preview failure is retryable without changing the source', asyn
   assert.equal(service.start('piece').status, 'ready');
   assert.equal(fs.readFileSync(source, 'utf8'), 'original');
 });
+
+test('portrait audition preview replaces a legacy black opening without changing source or audio timing', async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-production-opening-'));
+  t.after(function () { fs.rmSync(dir, { recursive: true, force: true }); });
+  const source = path.join(dir, 'source.mp4');
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=lime:size=360x640:rate=30',
+    '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-t', '2',
+    '-filter_complex', '[0:v]fade=t=in:st=0:d=0.3:color=black[v];[1:a]adelay=300|300[a]',
+    '-map', '[v]', '-map', '[a]', '-c:v', 'libx264', '-threads', '2', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-y', source]);
+  const originalSize = fs.statSync(source).size;
+  let openingHoldSeconds = 0;
+  const service = preview.setup({ rootDir: path.join(dir, 'cache'), getVideoPath: function () { return source; },
+    getOpeningHoldSeconds: function () { return openingHoldSeconds; } });
+  service.start('portrait');
+  await Array.from(service.jobs.values())[0];
+  const fadedCopy = service.readyPath('portrait');
+  const firstRgb = function (file) {
+    return execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', file, '-frames:v', '1',
+      '-vf', 'scale=1:1,format=rgb24', '-f', 'rawvideo', 'pipe:1']);
+  };
+  assert.ok(firstRgb(fadedCopy)[1] < 30, 'legacy first frame is black');
+  openingHoldSeconds = 0.3;
+  assert.equal(service.start('portrait').status, 'preparing');
+  await Array.from(service.jobs.values())[0];
+  const visibleCopy = service.readyPath('portrait');
+  assert.notEqual(visibleCopy, fadedCopy);
+  assert.ok(firstRgb(visibleCopy)[1] > 150, 'repaired first frame is green');
+  const duration = Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration',
+    '-of', 'default=noprint_wrappers=1:nokey=1', visibleCopy]));
+  assert.ok(Math.abs(duration - 2) < 0.15, 'duration is preserved');
+  assert.equal(fs.statSync(source).size, originalSize);
+  assert.ok(fs.existsSync(source));
+});
