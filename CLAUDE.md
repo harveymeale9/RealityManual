@@ -20698,3 +20698,23 @@ shot, silent opening audio, shifted captions, and the still-complete outro;
 page-turn fade checks use their new absolute times. Existing verified outputs
 are not silently rebuilt or altered; the rule applies when an Editor preview
 or Production master is next rendered.
+
+---
+
+# 678. Portrait Openings Keep a Visible Feed Cover (2026-10-21)
+
+Harvey raised a real packaging risk with §677: although a 0.3-second fade
+looks fine once autoplay begins, a platform may select the first encoded frame
+as the static feed/profile cover, making a vertical video appear black before
+anyone presses Play. Buffer's TikTok upload path also sends a zero-millisecond
+thumbnail offset when no frame time was chosen, so autoplay alone cannot
+protect that cover.
+
+Portrait renders now hold the first retained, visible book frame for the
+0.3-second speech buffer, with **no black fade**. Landscape renders keep their
+black-to-book fade, since they have a separate thumbnail workflow. The saved
+cuts, 0.3-second audio silence, shifted captions, and ending fade are
+unchanged. A real FFmpeg regression checks frame zero in both the portrait
+Editor decision preview and full-resolution Production master: both show the
+source color rather than black, and both keep the opening audio silent.
+Existing finished outputs remain unchanged until explicitly rebuilt.

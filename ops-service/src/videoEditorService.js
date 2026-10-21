@@ -2401,9 +2401,15 @@ function setup(options) {
       // zoompan/concat can leave a coarse inherited time base. Normalize it
       // before extending the stream, otherwise FFmpeg may drop the held frames
       // or interpret a two-second pad as hundreds of seconds.
+      // A black first encoded frame can become the static cover on short-form
+      // feeds even if autoplay fades up immediately. Portrait videos therefore
+      // show the first retained book frame throughout the speech preroll;
+      // landscape videos keep their black-to-book opening treatment.
       filters.push('[joinedv]settb=AVTB,setpts=N/(30000/1001*TB)' +
         ',tpad=start_mode=clone:start_duration=' + OPENING_PREROLL_SECONDS.toFixed(3) +
-        ',setpts=N/(30000/1001*TB),fade=t=in:st=0:d=' + OPENING_PREROLL_SECONDS.toFixed(3) + ':color=black[normalizedv]');
+        ',setpts=N/(30000/1001*TB)' +
+        (layout === 'horizontal' ? ',fade=t=in:st=0:d=' + OPENING_PREROLL_SECONDS.toFixed(3) + ':color=black' : '') +
+        '[normalizedv]');
       if (project.captionsEnabled !== false) filters.push("[normalizedv]subtitles='" + assPath.replace(/'/g, "'\\''") + "'[captionedv]");
       else filters.push('[normalizedv]null[captionedv]');
       // Avoid the abrupt end-card cut: hold the final composed frame, fade it

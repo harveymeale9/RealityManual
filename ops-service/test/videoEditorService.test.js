@@ -1299,6 +1299,49 @@ test('final render splices an inserted clip and its caption timeline between sou
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
 
+test('portrait preview and Production master begin on a visible frame before speech', { timeout: 45000 }, async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-visible-opening-'));
+  const projectDir = path.join(dir, 'editor', 'visible-opening-1'); fs.mkdirSync(projectDir, { recursive: true });
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi',
+    '-i', 'color=c=green:s=180x320:d=1.2:r=30000/1001', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1.2',
+    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-f', 'mp4', path.join(projectDir, 'source')]);
+  const db = new Database(path.join(dir, 'test.sqlite'));
+  db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
+  const now = new Date().toISOString();
+  db.prepare('INSERT INTO records VALUES (?, ?, ?, ?)').run('editorProjects', 'visible-opening-1', JSON.stringify({
+    id: 'visible-opening-1', name: 'Visible opening', fileName: 'take.mp4', duration: 1.2, width: 180, height: 320,
+    words: [{ index: 0, text: 'Hello.', start: 0.08, end: 0.8 }],
+    removedWordIndices: [], dismissedRetakeIds: [], restoredAutoCutIds: [], autoSilenceEnabled: false,
+    captionsEnabled: false, openingPushInEnabled: false, layoutOverride: 'vertical',
+    transcriptionStatus: 'ready', classificationStatus: 'unavailable', retakeAnalysisStatus: 'unavailable',
+    planningMatchStatus: 'unavailable', renderStatus: 'queued', createdAt: now, updatedAt: now
+  }), now);
+  const service = editor.setup({ db: db, dataDir: dir, transcribeDetailed: async function () { return { text: '', words: [] }; } });
+  t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+  let stored;
+  for (let attempt = 0; attempt < 1200; attempt++) {
+    stored = JSON.parse(db.prepare('SELECT data FROM records WHERE store_name=? AND id=?').get('editorProjects', 'visible-opening-1').data);
+    if (stored.renderStatus === 'ready' || stored.renderStatus === 'error') break;
+    await new Promise(function (resolve) { setTimeout(resolve, 30); });
+  }
+  assert.equal(stored.renderStatus, 'ready', stored.renderError);
+  stored.productionPieceId = 'test-piece';
+  db.prepare('UPDATE records SET data=? WHERE store_name=? AND id=?').run(JSON.stringify(stored), 'editorProjects', 'visible-opening-1');
+  const masterPath = path.join(dir, 'production-master.mp4');
+  await service.renderProductionMaster('visible-opening-1', masterPath);
+  for (const rendered of [path.join(projectDir, 'render.mp4'), masterPath]) {
+    const firstFrame = execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', rendered,
+      '-frames:v', '1', '-vf', 'scale=1:1', '-pix_fmt', 'rgb24', '-f', 'rawvideo', 'pipe:1']);
+    const rgb = Array.from(firstFrame.subarray(0, 3));
+    assert.ok(rgb[1] > 90 && rgb[0] < 50 && rgb[2] < 50, 'first encoded frame is the book shot, not black: ' + JSON.stringify(rgb));
+    const openingAudio = execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', rendered,
+      '-t', '0.25', '-vn', '-f', 'f32le', '-acodec', 'pcm_f32le', 'pipe:1']);
+    let peak = 0;
+    for (let index = 0; index < openingAudio.length; index += 4) peak = Math.max(peak, Math.abs(openingAudio.readFloatLE(index)));
+    assert.ok(peak < 0.001, 'speech still waits through the visible opening: ' + peak);
+  }
+});
+
 test('final render blinks through black across a visually confirmed page change', { timeout: 45000 }, async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-page-blink-'));
   const projectDir = path.join(dir, 'editor', 'page-blink-1'); fs.mkdirSync(projectDir, { recursive: true });
