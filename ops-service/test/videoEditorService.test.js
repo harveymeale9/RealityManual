@@ -140,7 +140,7 @@ test('restart cleanup removes only Editor-owned temporary files regardless of ag
 
 test('upload capacity reserves the source, one full-size render and operating space', function () {
   const gib = 1024 * 1024 * 1024;
-  assert.equal(editor.maxUploadBytes, 16 * gib);
+  assert.equal(editor.maxUploadBytes, 128 * gib);
   assert.equal(editor.oversizedSourceBytes, 6 * gib);
   assert.equal(editor.requiredEditorCapacity(2 * gib, false), 6 * gib);
   assert.equal(editor.requiredEditorCapacity(2 * gib, true), 4 * gib);
@@ -582,7 +582,7 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /Adjusted automatic timeline cut/);
   assert.match(source, /Cut edge moved/);
   assert.match(page, /lib\/captionMask\.js\?v=20261015-mask-swears/);
-  assert.match(page, /editor\.js\?v=20261018-protected-ending-v156/);
+  assert.match(page, /editor\.js\?v=20261021-r2-batch-intake-v157/);
   assert.match(page, /style\.css\?v=20261021-sales-alerts-v1/);
   assert.match(source, /id="editorTimelineUndo"/);
   assert.match(source, /id="editorTimelineFadeSeconds"/);
@@ -1586,6 +1586,99 @@ test('manual Editor revisions remain locked until their linked Project Manager t
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request: 'A follow-up request.' })
   });
   assert.equal(response.status, 202);
+});
+
+test('R2 intake keeps a completed recording queued without consuming VPS disk', { timeout: 20000 }, async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-cloud-'));
+  const camera = path.join(dir, 'take.mp4');
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=320x180:d=1:r=12',
+    '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', camera]);
+  const db = new Database(path.join(dir, 'test.sqlite'));
+  db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
+  let failPart = true;
+  let storedParts = 0;
+  let freeBytes = 0;
+  const storage = {
+    configured: true,
+    uploadEditorSource: async function () { throw new Error('Already archived original must not be uploaded again.'); },
+    beginEditorSource: async function (id) { return { key: 'editor-sources/' + id + '/original.mp4', uploadId: 'r2-upload-1' }; },
+    uploadEditorSourcePart: async function (_id, _uploadId, partNumber) {
+      if (failPart) { failPart = false; throw new Error('temporary R2 failure'); }
+      storedParts++;
+      return { PartNumber: partNumber, ETag: '"part-1"' };
+    },
+    finishEditorSource: async function (id, _uploadId, parts, sizeBytes) {
+      assert.equal(parts.length, 1);
+      return { key: 'editor-sources/' + id + '/original.mp4', sizeBytes: sizeBytes, etag: 'whole' };
+    },
+    downloadKey: async function (_key, destination) {
+      fs.copyFileSync(camera, destination);
+      return { path: destination, sizeBytes: fs.statSync(destination).size };
+    },
+    abortEditorSource: async function () {}
+  };
+  const service = editor.setup({ db: db, dataDir: dir, storage: storage, availableDiskBytes: function () { return freeBytes; },
+    transcribeDetailed: async function () { return { text: '', words: [] }; } });
+  const app = express(); app.use(express.json()); app.use('/api/editor', service.router);
+  const server = http.createServer(app);
+  await new Promise(function (resolve) { server.listen(0, '127.0.0.1', resolve); });
+  t.after(function () { server.close(); db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+  const base = 'http://127.0.0.1:' + server.address().port;
+  const bytes = fs.readFileSync(camera);
+  let response = await fetch(base + '/api/editor', { method: 'POST' });
+  assert.equal(response.status, 411);
+  response = await fetch(base + '/api/editor/uploads', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fileName: 'take.mp4', mimeType: 'video/mp4', sizeBytes: bytes.length, name: 'Tomorrow take' }) });
+  assert.equal(response.status, 201);
+  const session = await response.json();
+  assert.equal((await (await fetch(base + '/api/editor/uploads/' + session.id)).json()).receivedBytes, 0);
+  const chunkUrl = base + '/api/editor/uploads/' + session.id + '/chunks/0';
+  const headers = { 'Content-Type': 'application/octet-stream', 'X-Upload-Offset': '0' };
+  response = await fetch(chunkUrl, { method: 'POST', headers: headers, body: bytes });
+  assert.equal(response.status, 503);
+  assert.equal((await (await fetch(base + '/api/editor/uploads/' + session.id)).json()).receivedBytes, 0);
+  response = await fetch(chunkUrl, { method: 'POST', headers: headers, body: bytes });
+  assert.equal(response.status, 200);
+  assert.equal((await (await fetch(chunkUrl, { method: 'POST', headers: headers, body: bytes })).json()).duplicate, true);
+  assert.equal(storedParts, 1);
+  // A fresh service instance reads the durable R2 part ledger after restart.
+  const resumed = editor.setup({ db: db, dataDir: dir, storage: storage, availableDiskBytes: function () { return freeBytes; },
+    transcribeDetailed: async function () { return { text: '', words: [] }; } });
+  app.use('/resumed', resumed.router);
+  assert.equal((await (await fetch(base + '/resumed/uploads/' + session.id)).json()).receivedBytes, bytes.length);
+  response = await fetch(base + '/resumed/uploads/' + session.id + '/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  assert.equal(response.status, 202);
+  assert.equal((await response.json()).cloudQueueStatus, 'queued');
+  const queued = await (await fetch(base + '/api/editor/' + session.id)).json();
+  assert.equal(queued.name, 'Tomorrow take');
+  assert.equal((await (await fetch(base + '/api/editor')).json())[0].cloudQueueStatus, 'queued');
+  assert.equal(fs.readdirSync(path.join(dir, 'tmp')).length, 0);
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM records WHERE store_name = 'editorCloudIntake'").get().count, 1);
+  response = await fetch(base + '/api/editor/uploads', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fileName: 'hundred-gig-take.mp4', sizeBytes: 100 * 1024 * 1024 * 1024 }) });
+  assert.equal(response.status, 201);
+  const hugeSession = await response.json();
+  assert.equal(fs.readdirSync(path.join(dir, 'tmp')).length, 0);
+  assert.equal((await fetch(base + '/api/editor/uploads/' + hugeSession.id, { method: 'DELETE' })).status, 204);
+  response = await fetch(base + '/api/editor/uploads', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fileName: 'too-large.mp4', sizeBytes: 129 * 1024 * 1024 * 1024 }) });
+  assert.equal(response.status, 413);
+  response = await fetch(base + '/api/editor/uploads/' + session.id + '/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  assert.equal(response.status, 202);
+  freeBytes = 100 * 1024 * 1024 * 1024;
+  await new Promise(function (resolve) { setTimeout(resolve, 20); });
+  await service.processCloudIntake();
+  const imported = await (await fetch(base + '/api/editor/' + session.id)).json();
+  assert.equal(imported.cloudQueueStatus, undefined);
+  assert.equal(imported.sourceStorageObjectKey, 'editor-sources/' + session.id + '/original.mp4');
+  assert.equal(imported.sourcePreparationStatus, 'ready');
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM records WHERE store_name = 'editorCloudIntake'").get().count, 0);
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const current = await (await fetch(base + '/api/editor/' + session.id)).json();
+    if (current.transcriptionStatus === 'error' || current.transcriptionStatus === 'ready') break;
+    await new Promise(function (resolve) { setTimeout(resolve, 20); });
+  }
+  await new Promise(function (resolve) { setTimeout(resolve, 100); });
 });
 
 test('chunked Editor upload crosses proxy-sized files with accurate idempotent assembly', { timeout: 20000 }, async function (t) {

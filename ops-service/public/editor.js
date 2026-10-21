@@ -41,7 +41,7 @@
   var manualRevisionStream = null;
   var uploadStatusText = '';
   var uploadStatusPercent = 0;
-  var MAX_RECORDING_BYTES = Math.floor(4.5 * 1024 * 1024 * 1024);
+  var MAX_RECORDING_BYTES = 128 * 1024 * 1024 * 1024;
   var RESTING_CAMERA_SCALE = 1.25;
   var VERTICAL_OPENING_CAMERA_SCALE = 1.125;
   var HORIZONTAL_OPENING_CAMERA_SCALE = 1.125;
@@ -435,6 +435,9 @@
       return position > 1 ? label + ' · ' + (position - 1) + ' ahead' : position === 1 ? 'Next: ' + label.toLowerCase() : label;
     }
     if (item.productionPieceId) return item.workflowWarning ? 'Sent · workflow warning' : 'Sent to Production';
+    if (item.cloudQueueStatus === 'preparing') return 'R2 secured · entering Editor';
+    if (item.cloudQueueStatus === 'error') return 'R2 secured · needs attention';
+    if (item.cloudQueueStatus === 'queued') return 'R2 secured · waiting for workspace';
     var manualRevision = activeManualRevision(item);
     if (manualRevision) return manualRevision.status === 'running' ? 'Updating manually' : 'Manual revision queued';
     if (item.oversizedSource && item.sourcePreparationStatus === 'queued') return 'Waiting to secure large recording';
@@ -477,6 +480,7 @@
 
   function sessionBucket(item) {
     if (item.productionPieceId) return item.workflowWarning ? 'warning' : 'sent';
+    if (item.cloudQueueStatus) return item.cloudQueueStatus === 'error' ? 'attention' : 'working';
     if (activeManualRevision(item)) return 'working';
     if (item.oversizedSource && item.sourcePreparationStatus === 'error') return 'attention';
     if (item.transcriptionStatus === 'error' || (item.browserPreviewStatus === 'error' && item.renderStatus !== 'ready') || framingFailureIsBlocking(item) || item.clipInsertStatus === 'error' || item.renderStatus === 'error' || item.layoutReviewRequired) return 'attention';
@@ -962,13 +966,13 @@
       return true;
     });
     if (!files.length) {
-      if (oversized.length) return alert('These recordings are larger than the 4.5 GB per-file limit:\n\n' + oversized.join('\n') + '\n\nSplit or trim each raw take, then try again.');
+      if (oversized.length) return alert('These recordings are larger than the 128 GiB per-file limit:\n\n' + oversized.join('\n') + '\n\nSplit or trim each raw take, then try again.');
       if (unsupported.length) return alert('These files do not look like supported recordings:\n\n' + unsupported.join('\n') + '\n\nUse MP4, MOV, M4V, WebM, MKV, or AVI.');
       return alert('Drop one or more video files.');
     }
     var created = [];
     var projectAtBatchStart = project && project.id || '';
-    var failures = oversized.map(function (name) { return name + ': larger than the 4.5 GB per-file limit'; });
+    var failures = oversized.map(function (name) { return name + ': larger than the 128 GiB per-file limit'; });
     unsupported.forEach(function (name) { failures.push(name + ': unsupported file type'); });
     editorNotice = '';
     renderNotice();
@@ -1061,7 +1065,7 @@
         previewModes[item.id] = 'final';
       }
       project = item;
-      if (!quiet && !item.productionPieceId && !item.editStarted) {
+      if (!quiet && !item.productionPieceId && !item.editStarted && !item.cloudQueueStatus) {
         item.editStarted = true;
         projects = projects.map(function (entry) {
           return entry.id === item.id ? Object.assign({}, entry, { editStarted: true }) : entry;
@@ -1112,7 +1116,7 @@
   }
 
   function projectIsActive(item) {
-    return !!item && (!!activeManualRevision(item) || ['queued', 'archiving', 'compacting'].indexOf(item.sourcePreparationStatus) !== -1 ||
+    return !!item && (!!item.cloudQueueStatus || !!activeManualRevision(item) || ['queued', 'archiving', 'compacting'].indexOf(item.sourcePreparationStatus) !== -1 ||
       ['pending', 'running'].indexOf(item.transcriptionStatus) !== -1 ||
       ['pending', 'running'].indexOf(item.browserPreviewStatus) !== -1 ||
       ['pending', 'running'].indexOf(item.classificationStatus) !== -1 ||
@@ -1155,6 +1159,25 @@
     activeAudioPanelRefresh = null;
     var workspace = root.querySelector('#editorWorkspace');
     if (!workspace || !project) return;
+    if (project.cloudQueueStatus) {
+      var cloudFailed = project.cloudQueueStatus === 'error';
+      workspace.innerHTML = '<div class="editor-processing" role="status"><div class="editor-processing-icon' + (cloudFailed ? ' error' : '') + '">' + (cloudFailed ? '!' : '') + '</div>' +
+        '<div class="eyebrow">Recording secured in Cloudflare R2</div><h2>' + esc(displayName(project)) + '</h2>' +
+        '<p>' + (cloudFailed ? esc(project.cloudQueueError || 'This recording needs attention before it can enter the Editor.') :
+          project.cloudQueueStatus === 'preparing' ? 'Downloading and preparing the next editing master. The original is safe in R2.' :
+          'Waiting for enough local editing workspace. You can keep recording and uploading; the original is safe in R2 and this will enter the Editor automatically when space is available.') + '</p>' +
+        '<button type="button" class="editor-delete" id="editorDeleteCloud">Delete queued recording</button></div>';
+      workspace.querySelector('#editorDeleteCloud').onclick = function () {
+        if (!confirm('Permanently delete this R2-stored recording? This cannot be undone.')) return;
+        var id = project.id;
+        api('/api/editor/' + encodeURIComponent(id), { method: 'DELETE' }).then(function () {
+          projects = projects.filter(function (item) { return item.id !== id; });
+          delete projectDetails[id]; project = null; renderList();
+          workspace.innerHTML = '<div class="editor-empty"><strong>Recording deleted</strong><span>Select another recording.</span></div>';
+        }).catch(function (error) { alert(error.message); });
+      };
+      return;
+    }
     var manualRevision = activeManualRevision(project);
     if (manualRevision) {
       workspace.innerHTML = '<div class="editor-manual-working" role="status" aria-live="polite"><div class="editor-processing-icon"></div>' +

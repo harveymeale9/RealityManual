@@ -15,7 +15,12 @@ const STORE_NAME = 'editorProjects';
 // the Editor has ample workspace. This is only a sanity ceiling; the
 // per-upload source+render reservation below remains the authoritative and
 // substantially stricter admission check against current disk capacity.
-const MAX_UPLOAD_BYTES = 16 * 1024 * 1024 * 1024;
+// 16 MiB multipart parts keep even 128 GiB below R2's 10,000-part limit.
+// Files above the old local ceiling are accepted only through R2-backed intake.
+const MAX_UPLOAD_BYTES = 128 * 1024 * 1024 * 1024;
+const MAX_LOCAL_UPLOAD_BYTES = 16 * 1024 * 1024 * 1024;
+const CLOUD_UPLOAD_STORE = 'editorCloudUploads';
+const CLOUD_INTAKE_STORE = 'editorCloudIntake';
 // Raw OBS captures above this point are durable originals, not practical
 // working files. Archive them to R2 and replace the local copy with a compact,
 // high-quality editing master before any transcript, preview or render work.
@@ -383,7 +388,7 @@ function cleanOrphanedEditorTempFiles(directory) {
   catch (error) { return 0; }
   let removed = 0;
   entries.filter(function (entry) {
-    return entry.isFile() && (/^editor-upload-/.test(entry.name) || /^editor-.+\.mp3$/.test(entry.name));
+    return entry.isFile() && (/^editor-upload-/.test(entry.name) || /^editor-cloud-[A-Za-z0-9_-]+$/.test(entry.name) || /^editor-.+\.mp3$/.test(entry.name));
   }).forEach(function (entry) {
     try { fs.rmSync(path.join(directory, entry.name), { force: true }); removed++; }
     catch (error) {}
@@ -1510,7 +1515,7 @@ function setup(options) {
       callback(null, name);
     }
   });
-  const upload = multer({ storage: uploadStorage, limits: { fileSize: MAX_UPLOAD_BYTES } });
+  const upload = multer({ storage: uploadStorage, limits: { fileSize: MAX_LOCAL_UPLOAD_BYTES } });
   const getStmt = db.prepare('SELECT data FROM records WHERE store_name = ? AND id = ?');
   const listStmt = db.prepare('SELECT data FROM records WHERE store_name = ? ORDER BY updated_at DESC');
   const putStmt = db.prepare('INSERT INTO records (store_name, id, data, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(store_name, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at');
@@ -1537,6 +1542,9 @@ function setup(options) {
   const sourceHashClaims = createKeyedClaimRegistry();
   const sourcePreparationJobs = new Map();
   const chunkUploadSessions = new Map();
+  const cloudChunkBusy = new Set();
+  let cloudIntakeRunning = false;
+  let cloudIntakeActiveId = '';
   let transcriptionChain = Promise.resolve();
   let retakeChain = Promise.resolve();
   let planningMatchChain = Promise.resolve();
@@ -1651,6 +1659,21 @@ function setup(options) {
     putStmt.run(STORE_NAME, project.id, JSON.stringify(project), project.updatedAt);
     return project;
   }
+  function readCloudRecord(store, id) {
+    const row = getStmt.get(store, id);
+    if (!row) return null;
+    try { return JSON.parse(row.data); } catch (error) { return null; }
+  }
+  function saveCloudRecord(store, record) {
+    record.updatedAt = new Date().toISOString();
+    putStmt.run(store, record.id, JSON.stringify(record), record.updatedAt);
+    return record;
+  }
+  function cloudIntakeList() {
+    return listStmt.all(CLOUD_INTAKE_STORE).map(function (row) {
+      try { return JSON.parse(row.data); } catch (error) { return null; }
+    }).filter(Boolean);
+  }
   function manualRevisionEntries(project) {
     return Array.isArray(project && project.manualRevisions) ? project.manualRevisions : [];
   }
@@ -1721,16 +1744,23 @@ function setup(options) {
   function insertedClipPath(id, clipId) { return path.join(projectDir(id), 'inserted-clip-' + clipId + '.mp4'); }
   function isId(id) { return /^[A-Za-z0-9_-]{1,128}$/.test(String(id || '')); }
   function availableDiskBytes() {
+    if (typeof options.availableDiskBytes === 'function') return options.availableDiskBytes();
     try {
       const stat = fs.statfsSync(dataDir);
       return Number(stat.bavail) * Number(stat.bsize || stat.frsize || 4096);
-    } catch (error) { return Infinity; }
+    } catch (error) { return 0; }
   }
   function ensureUploadCapacity(req, res, next) {
     const contentLength = Number(req.headers['content-length']);
+    if (!Number.isFinite(contentLength) || contentLength <= 0) {
+      return res.status(411).json({ error: 'upload_length_required', message: 'Use the resumable Editor uploader for large recordings.' });
+    }
+    if (contentLength > MAX_LOCAL_UPLOAD_BYTES + 1024 * 1024) {
+      return res.status(413).json({ error: 'local_upload_too_large', message: 'Use the resumable Editor uploader so this recording can be secured in R2.' });
+    }
     const projects = listStmt.all(STORE_NAME).map(function (row) { try { return JSON.parse(row.data); } catch (error) { return null; } }).filter(Boolean);
     const outstanding = outstandingEditorCapacity(projects);
-    const requestedCapacity = Number.isFinite(contentLength) && contentLength > 0 ? requiredEditorCapacity(contentLength, false) : 0;
+    const requestedCapacity = requiredEditorCapacity(contentLength, false);
     if (requestedCapacity && availableDiskBytes() < requestedCapacity + outstanding + uploadCapacityReservations.total()) {
       return res.status(507).json({ error: 'insufficient_storage', message: 'There is not enough free workspace to safely edit this recording. Clear old Editor files or VPS storage, then try again.' });
     }
@@ -2798,7 +2828,7 @@ function setup(options) {
         return withQueuePositions(projectListSummary(project));
       } catch (e) { return null; }
     }).filter(Boolean);
-    res.json(projects);
+    res.json(cloudIntakeList().filter(function (intake) { return !projects.some(function (project) { return project.id === intake.id; }); }).concat(projects));
   });
 
   async function acceptStoredEditorUpload(req, res) {
@@ -2841,14 +2871,14 @@ function setup(options) {
       // The first claimant rejected an invalid/incomplete file. Compete for a
       // fresh claim so this independently received copy can still be probed.
     }
-    const id = crypto.randomUUID();
+    const id = req.cloudIntake ? req.cloudIntake.id : crypto.randomUUID();
     try {
       fs.mkdirSync(projectDir(id), { recursive: true });
       fs.renameSync(req.file.path, sourcePath(id));
       const media = await probe(sourcePath(id));
       if (!media.duration || !media.width || !media.height || !media.hasAudio) throw new Error('The recording must contain playable video and audio.');
       const now = new Date().toISOString();
-      const oversizedSource = req.file.size > OVERSIZED_SOURCE_BYTES;
+      const oversizedSource = !!req.cloudIntake || req.file.size > OVERSIZED_SOURCE_BYTES;
       const project = saveProject({
         id: id,
         name: String((req.body && req.body.name) || req.file.originalname || 'Untitled recording').slice(0, 200),
@@ -2860,11 +2890,11 @@ function setup(options) {
         oversizedSource: oversizedSource,
         sourcePreparationStatus: oversizedSource ? 'queued' : 'not_required',
         sourcePreparationError: '',
-        sourceStorageProvider: '',
-        sourceStorageObjectKey: '',
-        sourceStorageSizeBytes: 0,
-        sourceStorageEtag: '',
-        sourceStoredAt: '',
+        sourceStorageProvider: req.cloudIntake ? 'cloudflare_r2' : '',
+        sourceStorageObjectKey: req.cloudIntake ? req.cloudIntake.key : '',
+        sourceStorageSizeBytes: req.cloudIntake ? req.cloudIntake.sizeBytes : 0,
+        sourceStorageEtag: req.cloudIntake ? req.cloudIntake.etag : '',
+        sourceStoredAt: req.cloudIntake ? req.cloudIntake.storedAt : '',
         sourcePreparedAt: '',
         duration: media.duration,
         width: media.width,
@@ -2955,6 +2985,79 @@ function setup(options) {
     }
   }
 
+  async function processCloudIntake() {
+    if (cloudIntakeRunning || !storage || !storage.configured) return;
+    cloudIntakeRunning = true;
+    try {
+      for (const intake of cloudIntakeList().sort(function (a, b) { return String(a.createdAt).localeCompare(String(b.createdAt)); })) {
+        if (!isId(intake.id)) continue;
+        const existing = getProject(intake.id);
+        if (existing && fs.existsSync(sourcePath(intake.id))) {
+          delStmt.run(CLOUD_INTAKE_STORE, intake.id);
+          continue;
+        }
+        if (intake.cloudQueueStatus === 'error') continue;
+        const projects = listStmt.all(STORE_NAME).map(function (row) { try { return JSON.parse(row.data); } catch (error) { return null; } }).filter(Boolean);
+        const needed = requiredEditorCapacity(intake.sizeBytes, false);
+        if (availableDiskBytes() < needed + outstandingEditorCapacity(projects) + uploadCapacityReservations.total()) break;
+        const reservation = uploadCapacityReservations.reserve(needed);
+        const temporary = path.join(tempDir, 'editor-cloud-' + intake.id);
+        cloudIntakeActiveId = intake.id;
+        try {
+          intake.cloudQueueStatus = 'preparing';
+          intake.cloudQueueError = '';
+          saveCloudRecord(CLOUD_INTAKE_STORE, intake);
+          await fs.promises.rm(temporary, { force: true });
+          const downloaded = await storage.downloadKey(intake.key, temporary, {
+            minimumFreeBytes: requiredEditorCapacity(intake.sizeBytes, true) + outstandingEditorCapacity(projects)
+          });
+          if (downloaded.sizeBytes !== intake.sizeBytes) throw new Error('R2 recording size changed during retrieval.');
+          uploadCapacityReservations.release(reservation);
+          const outcome = await new Promise(function (resolve, reject) {
+            const response = { status: function (code) { this.code = code; return this; }, json: function (body) { resolve({ code: this.code || 200, body: body }); } };
+            acceptStoredEditorUpload({
+              file: { path: temporary, size: downloaded.sizeBytes, originalname: intake.fileName, mimetype: intake.mimeType },
+              body: { name: intake.name }, desktopUploaderDeviceId: intake.desktopUploaderDeviceId || '', cloudIntake: intake
+            }, response).catch(reject);
+          });
+          if (outcome.code !== 202) {
+            const failure = new Error(outcome.body && outcome.body.message || 'The recording could not enter the Editor.');
+            failure.permanent = outcome.code >= 400 && outcome.code < 500;
+            throw failure;
+          }
+          delStmt.run(CLOUD_INTAKE_STORE, intake.id);
+          await prepareOversizedSource(intake.id);
+        } catch (error) {
+          uploadCapacityReservations.release(reservation);
+          await fs.promises.rm(temporary, { force: true }).catch(function () {});
+          // Invalid media needs human attention, but transient R2/network
+          // failures can be retried by the next intake sweep.
+          const current = readCloudRecord(CLOUD_INTAKE_STORE, intake.id);
+          if (current) {
+            current.cloudQueueStatus = error.permanent ? 'error' : 'queued';
+            current.cloudQueueError = String(error.message || error).slice(0, 300);
+            saveCloudRecord(CLOUD_INTAKE_STORE, current);
+          }
+          console.warn('Cloud Editor intake deferred:', intake.id, String(error.message || error).slice(0, 200));
+          break;
+        } finally { cloudIntakeActiveId = ''; }
+      }
+    } finally { cloudIntakeRunning = false; }
+  }
+
+  listStmt.all(CLOUD_INTAKE_STORE).forEach(function (row) {
+    try {
+      const intake = JSON.parse(row.data);
+      if (intake.cloudQueueStatus === 'preparing') {
+        intake.cloudQueueStatus = 'queued';
+        saveCloudRecord(CLOUD_INTAKE_STORE, intake);
+      }
+    } catch (error) {}
+  });
+  setImmediate(function () { processCloudIntake().catch(function (error) { console.error('Cloud Editor intake failed:', error.message); }); });
+  const cloudIntakeTimer = setInterval(function () { processCloudIntake().catch(function (error) { console.error('Cloud Editor intake failed:', error.message); }); }, 60 * 1000);
+  if (cloudIntakeTimer.unref) cloudIntakeTimer.unref();
+
   router.post('/', ensureUploadCapacity, cleanAbortedUpload, upload.single('video'), acceptStoredEditorUpload);
 
   function releaseChunkUploadSession(uploadId, removeFile) {
@@ -2971,15 +3074,25 @@ function setup(options) {
     chunkUploadSessions.forEach(function (session, uploadId) {
       if (session.touchedAt < cutoff) releaseChunkUploadSession(uploadId, true);
     });
+    const cloudCutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    listStmt.all(CLOUD_UPLOAD_STORE).forEach(function (row) {
+      let session;
+      try { session = JSON.parse(row.data); } catch (error) { return; }
+      if (!session || !isId(session.id) || cloudChunkBusy.has(session.id) || Number(session.touchedAt || Date.parse(session.updatedAt)) >= cloudCutoff) return;
+      delStmt.run(CLOUD_UPLOAD_STORE, session.id);
+      if (session.status !== 'complete' && session.r2UploadId) {
+        storage.abortEditorSource(session.id, session.r2UploadId).catch(function (error) { console.warn('Could not abort stale R2 upload:', error.message); });
+      }
+    });
   }, 15 * 60 * 1000);
   if (typeof chunkUploadCleanupTimer.unref === 'function') chunkUploadCleanupTimer.unref();
 
-  router.post('/uploads', function (req, res) {
+  router.post('/uploads', async function (req, res) {
     const fileName = String(req.body && req.body.fileName || 'recording.mp4').slice(0, 255);
     const mimeType = normalizedVideoMimeType(fileName, req.body && req.body.mimeType);
     const sizeBytes = Number(req.body && req.body.sizeBytes);
     if (!Number.isInteger(sizeBytes) || sizeBytes <= 0 || sizeBytes > MAX_UPLOAD_BYTES) {
-      return res.status(413).json({ error: 'invalid_upload_size', message: 'This recording is empty or larger than the 16 GiB upload limit.' });
+      return res.status(413).json({ error: 'invalid_upload_size', message: 'This recording is empty or larger than the 128 GiB upload limit.' });
     }
     if (sizeBytes > OVERSIZED_SOURCE_BYTES && (!storage || !storage.configured || typeof storage.uploadEditorSource !== 'function')) {
       return res.status(503).json({ error: 'large_recording_storage_unavailable', message: 'R2 storage must be available before a recording over 6 GiB can enter the Editor.' });
@@ -2989,6 +3102,30 @@ function setup(options) {
     const availableBytes = availableDiskBytes();
     const outstandingBytes = outstandingEditorCapacity(projects);
     const reservedBytes = uploadCapacityReservations.total();
+    const cloudThreshold = Number.isFinite(options.cloudIntakeThresholdBytes) ? options.cloudIntakeThresholdBytes : OVERSIZED_SOURCE_BYTES;
+    const useCloud = !!(storage && storage.configured && typeof storage.beginEditorSource === 'function' &&
+      (sizeBytes > cloudThreshold || availableBytes < requestedCapacity + outstandingBytes + reservedBytes));
+    if (useCloud) {
+      const uploadId = crypto.randomUUID();
+      let remote;
+      try {
+        remote = await storage.beginEditorSource(uploadId, mimeType);
+        saveCloudRecord(CLOUD_UPLOAD_STORE, {
+          id: uploadId, key: remote.key, r2UploadId: remote.uploadId,
+          fileName: fileName, mimeType: mimeType,
+          name: String(req.body && req.body.name || fileName.replace(/\.[^.]+$/, '')).slice(0, 200),
+          sizeBytes: sizeBytes, receivedBytes: 0, nextChunkIndex: 0, parts: [],
+          status: 'uploading', desktopUploaderDeviceId: req.desktopUploaderDeviceId || '',
+          createdAt: new Date().toISOString()
+        });
+        return res.status(201).json({ id: uploadId, chunkSize: EDITOR_UPLOAD_CHUNK_BYTES, receivedBytes: 0 });
+      } catch (error) {
+        if (remote) storage.abortEditorSource(uploadId, remote.uploadId).catch(function () {});
+        console.warn('Editor R2 upload could not start:', String(error.message || error).slice(0, 200));
+        return res.status(503).json({ error: 'cloud_upload_unavailable', message: 'R2 intake is temporarily unavailable. The recording remains safely on your computer and will retry.' });
+      }
+    }
+    if (sizeBytes > MAX_LOCAL_UPLOAD_BYTES) return res.status(507).json({ error: 'insufficient_storage', message: 'This recording needs R2 intake, which is not available. The original remains on your computer.' });
     if (availableBytes < requestedCapacity + outstandingBytes + reservedBytes) {
       console.warn('editor upload rejected for capacity', JSON.stringify({
         fileName: fileName, sizeBytes: sizeBytes, availableBytes: availableBytes,
@@ -3019,16 +3156,17 @@ function setup(options) {
   });
 
   router.get('/uploads/:uploadId', function (req, res) {
-    const session = chunkUploadSessions.get(req.params.uploadId);
+    const session = chunkUploadSessions.get(req.params.uploadId) || readCloudRecord(CLOUD_UPLOAD_STORE, req.params.uploadId);
     if (!session || (req.desktopUploaderDeviceId && session.desktopUploaderDeviceId !== req.desktopUploaderDeviceId)) {
       return res.status(404).json({ error: 'upload_session_missing' });
     }
     session.touchedAt = Date.now();
+    if (session.r2UploadId) saveCloudRecord(CLOUD_UPLOAD_STORE, session);
     res.json({ id: session.id, chunkSize: EDITOR_UPLOAD_CHUNK_BYTES, receivedBytes: session.receivedBytes, sizeBytes: session.sizeBytes, nextChunkIndex: session.nextChunkIndex });
   });
 
   router.post('/uploads/:uploadId/chunks/:chunkIndex', express.raw({ type: 'application/octet-stream', limit: EDITOR_UPLOAD_CHUNK_BYTES + 1024 }), async function (req, res) {
-    const session = chunkUploadSessions.get(req.params.uploadId);
+    const session = chunkUploadSessions.get(req.params.uploadId) || readCloudRecord(CLOUD_UPLOAD_STORE, req.params.uploadId);
     if (!session) return res.status(404).json({ error: 'upload_session_missing', message: 'This upload session expired. The Editor will restart it automatically.' });
     if (req.desktopUploaderDeviceId && session.desktopUploaderDeviceId !== req.desktopUploaderDeviceId) return res.status(404).json({ error: 'upload_session_missing' });
     const chunkIndex = Number(req.params.chunkIndex);
@@ -3051,6 +3189,22 @@ function setup(options) {
     if (!body.length || body.length !== expectedBytes) {
       return res.status(400).json({ error: 'invalid_upload_chunk_size', message: 'A video chunk arrived incomplete. The Editor will retry it.' });
     }
+    if (session.r2UploadId) {
+      if (session.status !== 'uploading') return res.status(409).json({ error: 'upload_already_complete' });
+      if (cloudChunkBusy.has(session.id)) return res.status(409).json({ error: 'upload_chunk_busy', message: 'The previous chunk is still being secured. Retry this chunk.' });
+      cloudChunkBusy.add(session.id);
+      try {
+        const part = await storage.uploadEditorSourcePart(session.id, session.r2UploadId, chunkIndex + 1, body);
+        session.parts.push(part);
+        session.receivedBytes += body.length;
+        session.nextChunkIndex++;
+        session.touchedAt = Date.now();
+        saveCloudRecord(CLOUD_UPLOAD_STORE, session);
+        return res.json({ receivedBytes: session.receivedBytes, nextChunkIndex: session.nextChunkIndex });
+      } catch (error) {
+        return res.status(503).json({ error: 'cloud_chunk_failed', message: 'R2 could not secure this chunk. The uploader will retry it.' });
+      } finally { cloudChunkBusy.delete(session.id); }
+    }
     try { await fs.promises.appendFile(session.path, body); }
     catch (error) {
       releaseChunkUploadSession(session.id, true);
@@ -3063,11 +3217,54 @@ function setup(options) {
   });
 
   router.post('/uploads/:uploadId/complete', async function (req, res) {
-    const session = chunkUploadSessions.get(req.params.uploadId);
+    const session = chunkUploadSessions.get(req.params.uploadId) || readCloudRecord(CLOUD_UPLOAD_STORE, req.params.uploadId);
     if (!session) return res.status(404).json({ error: 'upload_session_missing', message: 'This upload session expired. Please try the recording again.' });
     if (req.desktopUploaderDeviceId && session.desktopUploaderDeviceId !== req.desktopUploaderDeviceId) return res.status(404).json({ error: 'upload_session_missing' });
+    if (session.r2UploadId && session.status === 'complete') {
+      const secured = getProject(session.id) || readCloudRecord(CLOUD_INTAKE_STORE, session.id);
+      return secured ? res.status(202).json(secured) : res.status(410).json({ error: 'recording_removed', message: 'This recording was removed from the Editor. The laptop original has not been deleted.' });
+    }
     if (session.receivedBytes !== session.sizeBytes) {
-      return res.status(409).json({ error: 'upload_incomplete', receivedBytes: session.receivedBytes, sizeBytes: session.sizeBytes });
+      // Installed desktop listeners historically treated any 409 from
+      // completion as a duplicate and marked the local file done. Cloud
+      // intake must never use 409 for an incomplete original.
+      return res.status(session.r2UploadId ? 503 : 409).json({ error: 'upload_incomplete', receivedBytes: session.receivedBytes, sizeBytes: session.sizeBytes });
+    }
+    if (session.r2UploadId) {
+      if (cloudChunkBusy.has(session.id)) return res.status(503).json({ error: 'upload_chunk_busy' });
+      let remote;
+      try {
+        remote = await storage.finishEditorSource(session.id, session.r2UploadId, session.parts, session.sizeBytes);
+      } catch (error) {
+        // CompleteMultipartUpload may have succeeded just before a network
+        // timeout. A verified HeadObject makes the final step idempotent.
+        try {
+          remote = await storage.headKey(session.key);
+          if (remote.sizeBytes !== session.sizeBytes) throw error;
+        } catch (headError) {
+          return res.status(503).json({ error: 'cloud_completion_failed', message: 'R2 could not verify the complete recording. Please retry completion.' });
+        }
+      }
+      const intake = {
+        id: session.id, key: session.key, name: session.name,
+        fileName: session.fileName, mimeType: session.mimeType, sizeBytes: session.sizeBytes,
+        etag: remote.etag, storedAt: new Date().toISOString(),
+        cloudQueueStatus: 'queued', cloudQueueError: '',
+        desktopUploaderDeviceId: session.desktopUploaderDeviceId,
+        createdAt: session.createdAt
+      };
+      try {
+        db.transaction(function () {
+          saveCloudRecord(CLOUD_INTAKE_STORE, intake);
+          session.status = 'complete';
+          session.touchedAt = Date.now();
+          saveCloudRecord(CLOUD_UPLOAD_STORE, session);
+        })();
+      } catch (error) {
+        return res.status(503).json({ error: 'cloud_queue_unavailable', message: 'R2 secured the recording but the Editor queue could not save it yet. Retry completion.' });
+      }
+      setImmediate(function () { processCloudIntake().catch(function (error) { console.error('Cloud Editor intake failed:', error.message); }); });
+      return res.status(202).json(intake);
     }
     chunkUploadSessions.delete(session.id);
     uploadCapacityReservations.release(session.reservationToken);
@@ -3079,8 +3276,15 @@ function setup(options) {
   });
 
   router.delete('/uploads/:uploadId', function (req, res) {
-    const session = chunkUploadSessions.get(req.params.uploadId);
+    const session = chunkUploadSessions.get(req.params.uploadId) || readCloudRecord(CLOUD_UPLOAD_STORE, req.params.uploadId);
     if (session && req.desktopUploaderDeviceId && session.desktopUploaderDeviceId !== req.desktopUploaderDeviceId) return res.status(404).json({ error: 'upload_session_missing' });
+    if (session && session.r2UploadId) {
+      if (session.status === 'complete') return res.status(409).json({ error: 'recording_already_secured' });
+      if (cloudChunkBusy.has(session.id)) return res.status(409).json({ error: 'upload_chunk_busy' });
+      delStmt.run(CLOUD_UPLOAD_STORE, session.id);
+      storage.abortEditorSource(session.id, session.r2UploadId).catch(function (error) { console.warn('Could not abort unfinished R2 upload:', error.message); });
+      return res.status(204).end();
+    }
     releaseChunkUploadSession(req.params.uploadId, true);
     res.status(204).end();
   });
@@ -3130,7 +3334,10 @@ function setup(options) {
   router.get('/:id', function (req, res) {
     if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
     const project = getProject(req.params.id);
-    if (!project) return res.status(404).json({ error: 'not_found' });
+    if (!project) {
+      const intake = readCloudRecord(CLOUD_INTAKE_STORE, req.params.id);
+      return intake ? res.json(intake) : res.status(404).json({ error: 'not_found' });
+    }
     res.json(withQueuePositions(projectDetail(project)));
     maybeAutoRender(project.id);
   });
@@ -3645,6 +3852,13 @@ function setup(options) {
 
   router.delete('/:id', function (req, res) {
     if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
+    const queued = readCloudRecord(CLOUD_INTAKE_STORE, req.params.id);
+    if (queued) {
+      if (cloudIntakeActiveId === queued.id) return res.status(409).json({ error: 'cloud_intake_in_progress', message: 'Wait for this recording to finish entering the Editor before deleting it.' });
+      delStmt.run(CLOUD_INTAKE_STORE, queued.id);
+      storage.deleteKey(queued.key).catch(function (error) { console.warn('Could not remove queued R2 recording:', error.message); });
+      return res.json({ ok: true });
+    }
     if (sourcePreparationJobs.has(req.params.id)) return res.status(409).json({ error: 'source_preparation_in_progress', message: 'Wait for this large recording to finish archiving and compacting before deleting it.' });
     if (renderJobs.has(req.params.id)) return res.status(409).json({ error: 'render_in_progress', message: 'Wait for the editing preview to finish before deleting this recording.' });
     if (clipInsertJobs.has(req.params.id)) return res.status(409).json({ error: 'clip_insert_running', message: 'Wait for the inserted clip to finish preparing before deleting this recording.' });
@@ -3675,6 +3889,7 @@ function setup(options) {
 
   return {
     router: router,
+    processCloudIntake: processCloudIntake,
     transcribeProject: transcribeProject,
     generateBrowserPreview: generateBrowserPreview,
     classifyProject: classifyProject,

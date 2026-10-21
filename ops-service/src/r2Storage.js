@@ -3,13 +3,18 @@
 const fs = require('fs');
 const path = require('path');
 const { pipeline } = require('stream/promises');
+const { Transform } = require('stream');
 const {
   S3Client,
   HeadBucketCommand,
   HeadObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
-  ListObjectsV2Command
+  ListObjectsV2Command,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  CompleteMultipartUploadCommand,
+  AbortMultipartUploadCommand
 } = require('@aws-sdk/client-s3');
 const { Upload } = require('@aws-sdk/lib-storage');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
@@ -35,7 +40,11 @@ function setup(options) {
     HeadObjectCommand: HeadObjectCommand,
     GetObjectCommand: GetObjectCommand,
     DeleteObjectCommand: DeleteObjectCommand,
-    ListObjectsV2Command: ListObjectsV2Command
+    ListObjectsV2Command: ListObjectsV2Command,
+    CreateMultipartUploadCommand: CreateMultipartUploadCommand,
+    UploadPartCommand: UploadPartCommand,
+    CompleteMultipartUploadCommand: CompleteMultipartUploadCommand,
+    AbortMultipartUploadCommand: AbortMultipartUploadCommand
   };
   const client = options.client || (configured ? new S3Client({
     region: 'auto',
@@ -105,6 +114,53 @@ function setup(options) {
     return uploadPath(editorSourceKey(projectId), filePath, contentType, { editorprojectid: clean(projectId, 128) });
   }
 
+  async function beginEditorSource(projectId, contentType) {
+    requireConfigured();
+    const key = editorSourceKey(projectId);
+    const result = await client.send(new commandTypes.CreateMultipartUploadCommand({
+      Bucket: bucket, Key: key, ContentType: clean(contentType, 100) || 'video/mp4',
+      Metadata: { editorprojectid: clean(projectId, 128) }
+    }));
+    if (!result.UploadId) throw new Error('R2 did not return a multipart upload id.');
+    return { key: key, uploadId: result.UploadId };
+  }
+
+  async function uploadEditorSourcePart(projectId, uploadId, partNumber, body) {
+    requireConfigured();
+    if (!uploadId || !Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10000 || !Buffer.isBuffer(body)) {
+      throw new Error('Invalid Editor source part.');
+    }
+    const result = await client.send(new commandTypes.UploadPartCommand({
+      Bucket: bucket, Key: editorSourceKey(projectId), UploadId: uploadId,
+      PartNumber: partNumber, Body: body, ContentLength: body.length
+    }));
+    if (!result.ETag) throw new Error('R2 did not acknowledge the uploaded part.');
+    return { PartNumber: partNumber, ETag: result.ETag };
+  }
+
+  async function finishEditorSource(projectId, uploadId, parts, expectedBytes) {
+    requireConfigured();
+    if (!uploadId || !Array.isArray(parts) || !parts.length || parts.length > 10000 ||
+        parts.some(function (part, index) { return part.PartNumber !== index + 1 || !part.ETag; })) {
+      throw new Error('Editor source multipart upload is incomplete.');
+    }
+    const key = editorSourceKey(projectId);
+    await client.send(new commandTypes.CompleteMultipartUploadCommand({
+      Bucket: bucket, Key: key, UploadId: uploadId, MultipartUpload: { Parts: parts }
+    }));
+    const remote = await headKey(key);
+    if (remote.sizeBytes !== expectedBytes) throw new Error('R2 source verification failed: remote size did not match the recording.');
+    return remote;
+  }
+
+  async function abortEditorSource(projectId, uploadId) {
+    requireConfigured();
+    if (!uploadId) return;
+    await client.send(new commandTypes.AbortMultipartUploadCommand({
+      Bucket: bucket, Key: editorSourceKey(projectId), UploadId: uploadId
+    }));
+  }
+
   function safeDataKey(value) {
     const key = clean(value, 1000);
     if (!/^backups\/[A-Za-z0-9_./-]+\.json$/.test(key) || key.includes('..')) {
@@ -167,13 +223,28 @@ function setup(options) {
     return objects;
   }
 
-  async function downloadKey(key, destination) {
+  async function downloadKey(key, destination, options) {
     requireConfigured();
+    options = options || {};
     await fs.promises.mkdir(path.dirname(destination), { recursive: true });
     const response = await client.send(new commandTypes.GetObjectCommand({ Bucket: bucket, Key: key }));
     if (!response.Body) throw new Error('R2 returned an empty object body.');
     try {
-      await pipeline(response.Body, fs.createWriteStream(destination, { flags: 'wx' }));
+      const minimumFreeBytes = Math.max(0, Number(options.minimumFreeBytes) || 0);
+      if (minimumFreeBytes) {
+        const guard = new Transform({ transform: function (chunk, encoding, callback) {
+          try {
+            const stat = fs.statfsSync(path.dirname(destination));
+            if (Number(stat.bavail) * Number(stat.bsize || stat.frsize || 4096) < minimumFreeBytes + chunk.length) {
+              return callback(new Error('Local editing workspace filled while restoring the R2 recording.'));
+            }
+            callback(null, chunk);
+          } catch (error) { callback(error); }
+        } });
+        await pipeline(response.Body, guard, fs.createWriteStream(destination, { flags: 'wx' }));
+      } else {
+        await pipeline(response.Body, fs.createWriteStream(destination, { flags: 'wx' }));
+      }
       const stat = await fs.promises.stat(destination);
       if (!stat.isFile() || stat.size <= 0) throw new Error('R2 download was empty.');
       return { path: destination, sizeBytes: stat.size, contentType: clean(response.ContentType, 100) || 'video/mp4' };
@@ -227,6 +298,10 @@ function setup(options) {
     headKey: headKey,
     uploadFile: uploadFile,
     uploadEditorSource: uploadEditorSource,
+    beginEditorSource: beginEditorSource,
+    uploadEditorSourcePart: uploadEditorSourcePart,
+    finishEditorSource: finishEditorSource,
+    abortEditorSource: abortEditorSource,
     uploadJson: uploadJson,
     readJson: readJson,
     listKeys: listKeys,

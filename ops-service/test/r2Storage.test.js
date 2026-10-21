@@ -19,8 +19,37 @@ const commandTypes = {
   HeadObjectCommand: command('headObject'),
   GetObjectCommand: command('getObject'),
   DeleteObjectCommand: command('deleteObject'),
-  ListObjectsV2Command: command('listObjects')
+  ListObjectsV2Command: command('listObjects'),
+  CreateMultipartUploadCommand: command('createMultipart'),
+  UploadPartCommand: command('uploadPart'),
+  CompleteMultipartUploadCommand: command('completeMultipart'),
+  AbortMultipartUploadCommand: command('abortMultipart')
 };
+
+test('Editor cloud intake secures multipart chunks and verifies completed size', async function () {
+  const calls = [];
+  const storage = storageModule.setup({
+    endpoint: 'https://account.r2.cloudflarestorage.com', bucket: 'bucket', accessKeyId: 'key', secretAccessKey: 'secret',
+    commandTypes: commandTypes,
+    client: { send: async function (cmd) {
+      calls.push(cmd);
+      if (cmd.name === 'createMultipart') return { UploadId: 'remote-1' };
+      if (cmd.name === 'uploadPart') return { ETag: '"part-1"' };
+      if (cmd.name === 'headObject') return { ContentLength: 16 * 1024 * 1024, ETag: '"whole"' };
+      return {};
+    } }
+  });
+  const session = await storage.beginEditorSource('editor-1', 'video/mp4');
+  assert.equal(session.key, 'editor-sources/editor-1/original.mp4');
+  const part = await storage.uploadEditorSourcePart('editor-1', session.uploadId, 1, Buffer.alloc(16 * 1024 * 1024));
+  assert.deepEqual(part, { PartNumber: 1, ETag: '"part-1"' });
+  const remote = await storage.finishEditorSource('editor-1', session.uploadId, [part], 16 * 1024 * 1024);
+  assert.equal(remote.sizeBytes, 16 * 1024 * 1024);
+  assert.equal(calls.find(function (cmd) { return cmd.name === 'completeMultipart'; }).input.MultipartUpload.Parts[0].ETag, '"part-1"');
+  await storage.abortEditorSource('editor-1', session.uploadId);
+  assert.equal(calls.at(-1).name, 'abortMultipart');
+  await assert.rejects(storage.finishEditorSource('editor-1', session.uploadId, [part], 1), /size did not match/);
+});
 
 test('R2 storage reports missing configuration without constructing a client', async function () {
   const storage = storageModule.setup({});
@@ -101,6 +130,8 @@ test('R2 uploads are multipart, verified by size, downloadable and privately sig
   const downloaded = await storage.downloadKey(uploaded.key, destination);
   assert.equal(downloaded.sizeBytes, 4096);
   assert.deepEqual(fs.readFileSync(destination), fs.readFileSync(source));
+  await assert.rejects(storage.downloadKey(uploaded.key, path.join(dir, 'blocked.mp4'), { minimumFreeBytes: Number.MAX_SAFE_INTEGER }), /workspace filled/);
+  assert.equal(fs.existsSync(path.join(dir, 'blocked.mp4')), false);
   const streamed = await storage.readStream(uploaded.key, 'bytes=0-1023');
   assert.equal(streamed.contentLength, 4096);
   assert.equal(streamed.contentRange, 'bytes 0-1023/4096');

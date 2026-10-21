@@ -20565,3 +20565,65 @@ older unread orders. A real Chromium test with mocked sales responses showed
 the `7` badge, navigated directly to Sales Analytics, rendered seven rows,
 and cleared the badge after acknowledging the same seven IDs. Full 294-test
 ops-service suite passes.
+
+---
+
+# 674. Large Filming Batches Enter R2 Before Consuming Editor Disk (2026-10-21)
+
+Harvey expects batches of five or six longform OBS recordings, potentially
+around 100 GB in aggregate, while the 96 GB VPS already holds active media.
+The previous laptop/browser chunk intake appended every source to `/data/tmp`
+before R2 archival and rejected the next file when conservative local
+source-plus-render reservations ran out. The durable Windows queue did retain
+those originals on the laptop, but a large batch could not all enter Content
+Studio and an interrupted local chunk session lost its server-side progress.
+
+The Editor's chunk-session API now sends any recording above 6 GiB directly
+through sequential 16 MiB R2 multipart parts. It also chooses R2 for a smaller
+recording if local capacity admission would fail. The authenticated server
+proxies each part to the private bucket and acknowledges it only after R2
+returns its part ETag; no full-size VPS upload temp file is created. Part
+metadata, byte offset, upload ID, and owning desktop device are saved in the
+ops SQLite database after each acknowledgement, so the installed laptop
+listener can resume from the last durable part after a service restart.
+Completion verifies the R2 object's exact byte count before the laptop is
+told it may mark the file uploaded. A repeated completion is idempotent,
+including the case where R2 completed but the response was lost. Unfinished
+R2 sessions are aborted after seven inactive days; completed originals are
+not affected. The per-file ceiling is now 128 GiB, still below R2's 10,000
+multipart-part limit at the existing chunk size. A queued 100 GB batch uses
+roughly zero additional VPS media disk until processing starts, but its
+transfer time still depends on the laptop's upload speed.
+The older one-shot multipart endpoint remains local-only, with its original
+16 GiB file ceiling; it now rejects unknown-length requests and oversized
+bodies before writing, and an unreadable disk-capacity measurement fails
+closed instead of being treated as infinite free space.
+
+Verified originals appear in Editor as **R2 secured · waiting for workspace**.
+A one-at-a-time, restart-safe intake worker downloads the oldest queued
+recording only when the existing source-plus-render capacity guard says it
+fits. It verifies the downloaded size, creates the normal Editor project,
+and waits for the oversized-source compact-master step before starting the
+next download. That compact step reuses the already-verified R2 original and
+does not upload it a second time. The queue status is visible during download;
+the R2 download itself checks local free space on every streamed chunk and
+aborts/cleans its partial file before eroding the reserved render workspace.
+the original remains in R2 if import or preparation fails. Queue records can
+be deliberately deleted from the Editor, which removes their R2 object.
+Existing active Editor projects and their media are never silently evicted;
+if their local working copies occupy the remaining disk, later originals stay
+safe and visible in R2 until workspace is freed. This is intentional
+backpressure, not a promise that all 100 GB can be edited simultaneously.
+
+The installed desktop listener remains protocol-compatible and still retains
+OBS originals locally until the server returns a verified completion. Cloud
+incomplete/busy completions return 503 rather than 409 because older listener
+builds interpret every 409 as a duplicate and would mark an incomplete file
+done. Browser batch uploads use the same R2 path and display cloud-queued
+recordings, but unlike the installed laptop listener they do not retain an
+upload session across tab closure. Tests cover multipart ETags and size
+verification, a failed part followed by retry, idempotent completion, durable
+queued metadata, and eventual import/compaction. A live 6 MiB R2 multipart
+object passed complete/head verification and was deleted immediately after
+the check; a headless Chromium check rendered the waiting Editor card without
+runtime errors. The full ops-service suite passes.
