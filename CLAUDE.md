@@ -20766,3 +20766,23 @@ as well as future mismatches. Final Check URLs now include the review file's
 version so an open browser will not keep a stale cached video after repair.
 An FFmpeg regression covers the mismatch and verifies that the repaired
 review has the master's visible first frame and exactly the same audio packets.
+
+---
+
+# 681. Manual Visible Opening for “You Must Accept That Life Is a Game” (2026-10-21)
+
+Unlike the four Final Check stale-picture cases in §680, this portrait
+video's publish master itself started with roughly half a second of black,
+while the first spoken word began around 0.40 seconds. Harvey explicitly
+asked to fix this last video too. Its Final Check card had no R2 publish
+archive yet. The original camera source at 2.45 seconds contained a clean,
+caption-free shot of the open book. That frame now occupies only the first
+0.5 seconds of the publish master, after which the original rendered picture
+continues. The master was re-encoded at high quality; its AAC audio was copied
+byte-for-byte, preserving the first word, music, all later cuts and captions,
+the 2,472-frame video length, and 82.538-second audio duration. A new 720p
+review copy was built from the repaired master, and the final-video database
+record's size was corrected. Both files fully decoded and their opening
+frames were visually and numerically checked at 0, 0.3, and 0.6 seconds.
+The replaced versions were backed up in a dedicated task temp directory
+during verification, not deleted from the source project.
