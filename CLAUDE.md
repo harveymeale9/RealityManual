@@ -20652,3 +20652,24 @@ already-stored semantic suggestions, so the stale “I mean” mark disappears
 without deleting or changing any transcript cuts. The explicit Antoine
 Matthias marker remains an exception, and genuine repeated takes remain
 visible. Focused Editor tests cover both regressions.
+
+---
+
+# 676. Failed Editor Recordings Can Be Deleted From Processing Screens (2026-10-21)
+
+The 32.72-second portrait recording `2026-10-21 14-08-12` was stuck on
+**Transcription needs attention** with no way to reach the usual Delete
+recording button. Its AAC audio was effectively silent throughout (mean
+-83.3 dB, maximum -45.4 dB, and the entire 32.704-second audio track below
+-40 dB), so retrying transcription could not recover spoken words. The
+recording had no linked planning or Production item and no R2 original. At
+Harvey's request, its exact Editor database row and 159 MB working directory
+were deleted; other recordings were untouched.
+
+The Editor now offers **Delete recording** on both transcription-error and
+large-source-preparation-error screens. It uses the same confirmed DELETE
+endpoint and local-list cleanup as the normal ready-state button, rather than
+introducing a second deletion path. The backend already permitted deletion of
+these failed states; the early-return processing UI had hidden the control.
+Focused tests cover the visible control and deletion of a transcript-less
+recording through the normal API.

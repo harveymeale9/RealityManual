@@ -582,7 +582,10 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /Adjusted automatic timeline cut/);
   assert.match(source, /Cut edge moved/);
   assert.match(page, /lib\/captionMask\.js\?v=20261015-mask-swears/);
-  assert.match(page, /editor\.js\?v=20261021-r2-batch-intake-v157/);
+  assert.match(page, /editor\.js\?v=20261021-failed-recording-delete-v158/);
+  assert.match(source, /Transcription needs attention/);
+  assert.match(source, /id="editorDeleteFailed">Delete recording/);
+  assert.match(source, /workspace\.querySelector\('#editorDeleteFailed'\)\.onclick = function \(\) \{ deleteCurrentRecording\(this\); \}/);
   assert.match(page, /style\.css\?v=20261021-portrait-caption-preview-v2/);
   assert.match(source, /id="editorTimelineUndo"/);
   assert.match(source, /id="editorTimelineFadeSeconds"/);
@@ -1109,6 +1112,15 @@ test('batch preprocessing serializes expensive transcription', { timeout: 15000 
   assert.equal(maxTranscriptions, 1);
   assert.equal((await (await fetch(base + '/api/editor/' + first.id)).json()).transcriptionStatus, 'error');
   assert.equal((await (await fetch(base + '/api/editor/' + second.id)).json()).transcriptionStatus, 'error');
+  // A transcript-less recording must still be removable through the same
+  // endpoint used by the processing-screen Delete button.
+  const deleted = await fetch(base + '/api/editor/' + first.id, { method: 'DELETE' });
+  assert.equal(deleted.status, 200);
+  assert.equal((await fetch(base + '/api/editor/' + first.id)).status, 404);
+  for (let attempt = 0; attempt < 30 && fs.existsSync(path.join(dir, 'editor', first.id)); attempt++) {
+    await new Promise(function (resolve) { setTimeout(resolve, 10); });
+  }
+  assert.equal(fs.existsSync(path.join(dir, 'editor', first.id)), false);
 });
 
 test('service restart automatically resumes an interrupted transcription', { timeout: 10000 }, async function (t) {

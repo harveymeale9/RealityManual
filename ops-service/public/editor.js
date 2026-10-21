@@ -1155,6 +1155,39 @@
     }, 1800);
   }
 
+  function deleteCurrentRecording(deleteButton) {
+    if (!project) return;
+    var message = project.productionPieceId
+      ? 'Remove this Editor source and render? The approved Content Production copy will remain safe.'
+      : 'Permanently delete this original recording and its rendered edit? This cannot be undone.';
+    if (!confirm(message)) return;
+    var id = project.id;
+    if (deleteButton) { deleteButton.disabled = true; deleteButton.textContent = 'Deleting…'; }
+    api('/api/editor/' + encodeURIComponent(id), { method: 'DELETE' }).then(function () {
+      clearTimeout(renderRefreshTimers[id]); delete renderRefreshTimers[id];
+      ['active', 'sent'].forEach(function (filter) {
+        var key = rememberedProjectKey(filter);
+        if (localStorage.getItem(key) === id) localStorage.removeItem(key);
+      });
+      projects = projects.filter(function (item) { return item.id !== id; });
+      delete projectDetails[id];
+      delete localPreviewRebuilds[id];
+      delete explicitSourcePreviews[id];
+      clearReviewProgress(id);
+      project = null; selected.clear(); renderList();
+      var workspace = root && root.querySelector('#editorWorkspace');
+      if (workspace) workspace.innerHTML = '<div class="editor-empty"><strong>Recording deleted</strong><span>Select another recording or upload a new one.</span></div>';
+      var next = listFilter === 'active' ? nextActionableProject() : projects.filter(function (item) { return !!item.productionPieceId; })[0];
+      if (next && editorMounted()) openProject(next.id);
+    }).catch(function (error) {
+      if (deleteButton && deleteButton.isConnected) {
+        deleteButton.disabled = false;
+        deleteButton.textContent = project && project.productionPieceId ? 'Remove Editor files' : 'Delete recording';
+      }
+      alert('The recording was not deleted. ' + error.message);
+    });
+  }
+
   function renderWorkspace() {
     activeAudioPanelRefresh = null;
     var workspace = root.querySelector('#editorWorkspace');
@@ -1197,7 +1230,8 @@
           : 'This recording is over 6 GiB, so its untouched original is being archived to R2 before local editing begins.';
       workspace.innerHTML = '<div class="editor-processing"><div class="editor-processing-icon' + (sourceFailed ? ' error' : '') + '">' + (sourceFailed ? '!' : '') + '</div>' +
         '<h2>' + sourceHeading + '</h2><p>' + esc(sourceMessage) + '</p>' + processingStepsHtml(project) +
-        (sourceFailed ? '<button class="btn-primary" id="editorSourceRetry">Retry large recording preparation</button>' : '') + '</div>';
+        (sourceFailed ? '<button class="btn-primary" id="editorSourceRetry">Retry large recording preparation</button><button type="button" class="editor-delete" id="editorDeleteFailed">Delete recording</button>' : '') + '</div>';
+      if (sourceFailed) workspace.querySelector('#editorDeleteFailed').onclick = function () { deleteCurrentRecording(this); };
       if (sourceFailed) workspace.querySelector('#editorSourceRetry').onclick = function () {
         var button = workspace.querySelector('#editorSourceRetry');
         var retryProjectId = project.id;
@@ -1222,7 +1256,8 @@
         '<h2>' + (isError ? 'Transcription needs attention' : 'Building the transcript…') + '</h2><p>' +
         esc(isError ? project.transcriptionError : 'We are finding every spoken word and its exact position in the recording.') + '</p>' +
         processingStepsHtml(project) +
-        (isError ? '<button class="btn-primary" id="editorRetry">Retry transcription</button>' : '') + '</div>';
+        (isError ? '<button class="btn-primary" id="editorRetry">Retry transcription</button><button type="button" class="editor-delete" id="editorDeleteFailed">Delete recording</button>' : '') + '</div>';
+      if (isError) workspace.querySelector('#editorDeleteFailed').onclick = function () { deleteCurrentRecording(this); };
       if (isError) workspace.querySelector('#editorRetry').onclick = function () {
         var retryButton = workspace.querySelector('#editorRetry');
         var retryProjectId = project.id;
@@ -2636,38 +2671,7 @@
       if (typeof window.__rmOpenContentProduction === 'function') window.__rmOpenContentProduction(project.productionPieceId);
       else location.hash = 'upload-files';
     };
-    root.querySelector('#editorDelete').onclick = function () {
-      var message = project.productionPieceId
-        ? 'Remove this Editor source and render? The approved Content Production copy will remain safe.'
-        : 'Permanently delete this original recording and its rendered edit? This cannot be undone.';
-      if (!confirm(message)) return;
-      var id = project.id;
-      var deleteButton = root.querySelector('#editorDelete');
-      if (deleteButton) { deleteButton.disabled = true; deleteButton.textContent = 'Deleting…'; }
-      api('/api/editor/' + id, { method: 'DELETE' }).then(function () {
-        clearTimeout(renderRefreshTimers[id]); delete renderRefreshTimers[id];
-        ['active', 'sent'].forEach(function (filter) {
-          var key = rememberedProjectKey(filter);
-          if (localStorage.getItem(key) === id) localStorage.removeItem(key);
-        });
-        projects = projects.filter(function (item) { return item.id !== id; });
-        delete projectDetails[id];
-        delete localPreviewRebuilds[id];
-        delete explicitSourcePreviews[id];
-        clearReviewProgress(id);
-        project = null; selected.clear(); renderList();
-        var workspace = root && root.querySelector('#editorWorkspace');
-        if (workspace) workspace.innerHTML = '<div class="editor-empty"><strong>Recording deleted</strong><span>Select another recording or upload a new one.</span></div>';
-        var next = listFilter === 'active' ? nextActionableProject() : projects.filter(function (item) { return !!item.productionPieceId; })[0];
-        if (next && editorMounted()) openProject(next.id);
-      }).catch(function (error) {
-        if (deleteButton && deleteButton.isConnected) {
-          deleteButton.disabled = false;
-          deleteButton.textContent = project && project.productionPieceId ? 'Remove Editor files' : 'Delete recording';
-        }
-        alert('The recording was not deleted. ' + error.message);
-      });
-    };
+    root.querySelector('#editorDelete').onclick = function () { deleteCurrentRecording(this); };
     if (editingLocked) {
       ['#editorAnalyze', '#editorAutoSilence', '#editorCaptions', '#editorOpeningPushIn', '#editorClearAutomation', '#editorPacing', '#editorAnalyzeRetakes', '#editorUndo', '#editorCorrect', '#editorRestore', '#editorCut'].forEach(function (selector) {
         var control = root.querySelector(selector); if (control) control.disabled = true;
