@@ -21,6 +21,21 @@ function ffmpegArgs(source, output, picture) {
   ];
 }
 
+function openingBrightness(file) {
+  const frame = execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-nostdin', '-i', file,
+    '-frames:v', '1', '-vf', 'scale=16:16,format=gray', '-f', 'rawvideo', 'pipe:1'], { timeout: 15000 });
+  if (frame.length !== 256) throw new Error('Could not inspect the opening frame.');
+  return frame.reduce(function (total, value) { return total + value; }, 0) / frame.length;
+}
+
+function blackOpeningMismatch(source, picture) {
+  // The publish master is authoritative. Old Editor decision previews can
+  // have a black first frame despite the corrected master starting on the
+  // book. They must never be reused as Final Check picture or accepted as a
+  // fresh review copy.
+  return openingBrightness(picture) < 25 && openingBrightness(source) > 40;
+}
+
 function matchingPicture(source, picture) {
   if (!picture || !fs.existsSync(picture)) return '';
   try {
@@ -36,6 +51,7 @@ function matchingPicture(source, picture) {
     // tail after the Editor picture. That must not force a full 4K transcode.
     if (Math.abs(Number(master.duration) - Number(small.duration)) > 0.5) return '';
     if (Number(small.width) > 1280 || Number(small.height) > 720) return '';
+    if (blackOpeningMismatch(source, picture)) return '';
     return picture;
   } catch (error) { return ''; }
 }
@@ -63,9 +79,27 @@ function setup(options) {
   };
   const jobs = new Map();
   const errors = new Map();
+  const openingChecks = new Map();
 
-  function start(id, source, output, picture) {
-    if (fresh(source, output)) return { status: 'ready' };
+  function reviewIsFresh(source, output) {
+    if (!fresh(source, output)) return false;
+    const original = fs.statSync(source);
+    const preview = fs.statSync(output);
+    const key = [source, original.size, original.mtimeMs, output, preview.size, preview.mtimeMs].join(':');
+    if (openingChecks.has(key)) return openingChecks.get(key);
+    let aligned = false;
+    try { aligned = !blackOpeningMismatch(source, output); }
+    catch (error) { /* Regenerate from the verified master if inspection fails. */ }
+    if (openingChecks.size >= 256) openingChecks.clear();
+    openingChecks.set(key, aligned);
+    return aligned;
+  }
+
+  function start(id, source, output, picture, force) {
+    if (!force && reviewIsFresh(source, output)) {
+      const stat = fs.statSync(output);
+      return { status: 'ready', version: Math.round(stat.mtimeMs) + '-' + stat.size };
+    }
     if (jobs.has(id)) return { status: 'preparing' };
     if (errors.has(id)) return { status: 'error', message: errors.get(id) };
     if (!fs.existsSync(source)) return { status: 'missing' };
@@ -92,7 +126,7 @@ function setup(options) {
 
   function retry(id, source, output, picture) {
     errors.delete(id);
-    return start(id, source, output, picture);
+    return start(id, source, output, picture, true);
   }
 
   return { start: start, retry: retry, fresh: fresh, jobs: jobs };

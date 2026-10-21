@@ -20743,3 +20743,26 @@ rendered from those same saved decisions using §678's visible opening, so it
 also has no black first frame. A real FFmpeg test verifies the old black
 opening becomes a visible first frame at unchanged duration without modifying
 the source file.
+
+---
+
+# 680. Final Check Cannot Reuse a Black Editor Opening (2026-10-21)
+
+Four portrait videos in Final Check (How to get ahead in life, Do NOT Get 1%
+Better Everyday, The absurdity of your existence, and Life is very simple)
+appeared to retain the black-to-book opening even though their full-resolution
+publish masters already began on a visible book frame. The culprit was the
+720p Final Check review-copy optimization: it copied picture from the older
+Editor decision preview and audio from the new master. Duration matching alone
+declared the two pictures equivalent, despite their different first frames.
+
+The four review copies were regenerated directly from their verified publish
+masters, atomically replacing only those viewing copies. The masters, saved
+cuts, and production audio were untouched. The review-copy service now
+compares opening-frame brightness when considering an Editor picture or a
+cached review: if the master begins visibly but the candidate begins black,
+it rebuilds from the master. This catches other already-created review copies
+as well as future mismatches. Final Check URLs now include the review file's
+version so an open browser will not keep a stale cached video after repair.
+An FFmpeg regression covers the mismatch and verifies that the repaired
+review has the master's visible first frame and exactly the same audio packets.

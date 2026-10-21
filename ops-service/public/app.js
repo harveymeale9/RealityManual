@@ -4053,7 +4053,7 @@
         }).then(function (result) {
           if (!document.body.contains(wrap)) return;
           if (result.status === 'ready') {
-            v.src = '/api/files/videos/' + encodeURIComponent(reviewId) + '-final-review';
+            v.src = '/api/files/videos/' + encodeURIComponent(reviewId) + '-final-review?v=' + encodeURIComponent(result.version || 'ready');
             v.load();
             if (playButton) playButton.disabled = false;
             if (reviewStatus) reviewStatus.textContent = '720p review · published audio';
