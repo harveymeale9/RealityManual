@@ -336,15 +336,28 @@ function setup(db, options) {
         threadId: row.thread_id, inReplyTo: row.id, to: [sender], cc: [],
         subject: subject, textBody: textBody, htmlBody: htmlBody
       });
-      const sentAt = new Date().toISOString();
-      db.prepare("UPDATE mail_courtesy_replies SET status='sent',sent_at=?,last_error=NULL WHERE message_id=?").run(sentAt, row.id);
-      return true;
     } catch (error) {
       db.prepare("UPDATE mail_courtesy_replies SET status='failed',last_error=? WHERE message_id=?")
         .run(clean(error.message, 1000), row.id);
       console.error('[mail-triage] courtesy reply failed for ' + row.id + ':', error.message);
       return false;
     }
+    // This is a notice about an action we actually took, not an alert for the
+    // cold pitch itself. Keep it separate from topic-consolidated inbound mail.
+    const sentAt = new Date().toISOString();
+    const alertId = crypto.createHash('sha256').update('courtesy-reply\n' + row.id).digest('hex').slice(0, 32);
+    const displaySubject = clean(row.subject, 300).replace(/[\r\n]+/g, ' ') || '(no subject)';
+    const notice = '✉️ **Courtesy reply sent**\n\n' +
+      'I replied to ' + sender + ' about “' + displaySubject + '” with our standard polite decline. ' +
+      'We are not looking for agency support at the moment. No action needed; the reply is in Mailbox Sent.';
+    db.transaction(function () {
+      db.prepare("UPDATE mail_courtesy_replies SET status='sent',sent_at=?,last_error=NULL WHERE message_id=?").run(sentAt, row.id);
+      db.prepare(`INSERT OR IGNORE INTO voice_messages
+        (id,mode,transcript,status,reply_text,created_at,completed_at,agent,notification_kind,notification_unread,source_ref)
+        VALUES(?,'notification',?,'done',?,?,?,?, 'mail_alert',1,?)`)
+        .run(alertId, 'Courtesy reply: ' + displaySubject, notice, sentAt, sentAt, 'codex', row.id);
+    })();
+    return true;
   }
 
   let processing = false;

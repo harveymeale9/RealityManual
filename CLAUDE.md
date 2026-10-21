@@ -20786,3 +20786,18 @@ record's size was corrected. Both files fully decoded and their opening
 frames were visually and numerically checked at 0, 0.3, and 0.6 seconds.
 The replaced versions were backed up in a dedicated task temp directory
 during verification, not deleted from the source project.
+
+# 682. Project Manager Notice After Automatic Courtesy Replies (2026-10-21)
+
+Harvey wants visibility when the mailbox sends its occasional polite decline
+to a genuine individual sales/agency pitch, without changing which messages
+qualify or asking him to review each pitch. After `sendAutomated` confirms
+delivery and stores the reply in Mailbox Sent, mail triage now inserts one
+unread `mail_alert` in the Project Manager conversation. The notice identifies
+the recipient and subject, says the standard agency-support decline was sent,
+and points to Sent. It uses a deterministic per-inbound-message ID plus the
+existing unique source reference, so retries cannot stack notices. It does not
+retroactively alert for old replies, nor alert for rejected candidates or
+failed sends. The existing seven-day courtesy cadence and other safeguards
+remain unchanged. The mail triage integration test checks the sent-only notice
+and no duplication on another queue pass.

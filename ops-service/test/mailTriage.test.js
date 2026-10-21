@@ -164,7 +164,15 @@ test('occasional courtesy replies go only to authenticated individual sales pitc
   assert.match(delivered[0].message.textBody, /not looking for agency support/i);
   assert.equal(db.prepare("SELECT count(*) AS n FROM mail_courtesy_replies WHERE status='sent'").get().n, 1);
   assert.equal(db.prepare("SELECT count(*) AS n FROM mailbox_messages WHERE direction='outbound' AND status='sent'").get().n, 1);
+  const notices = db.prepare("SELECT * FROM voice_messages WHERE notification_kind='mail_alert'").all();
+  assert.equal(notices.length, 1, 'only the confirmed courtesy send creates a Project Manager notice');
+  assert.equal(notices[0].notification_unread, 1);
+  assert.equal(notices[0].source_ref, pitch.id);
+  assert.match(notices[0].reply_text, /Courtesy reply sent/);
+  assert.match(notices[0].reply_text, /alex@agency\.example/);
+  assert.match(notices[0].reply_text, /Mailbox Sent/);
   assert.equal((await triage.processPending(10)).processed, 0, 'completed messages are never replied to twice');
+  assert.equal(db.prepare("SELECT count(*) AS n FROM voice_messages WHERE notification_kind='mail_alert'").get().n, 1);
   triage.close();
 });
 
