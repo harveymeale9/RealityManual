@@ -47,6 +47,7 @@ const publishPolicy = require('./src/publishPolicy');
 const publishingQueue = require('./src/publishingQueue');
 const videoEditorService = require('./src/videoEditorService');
 const productionAudioPreviewService = require('./src/productionAudioPreviews');
+const salesAlertService = require('./src/salesAlertService');
 const productionVideoPreviewService = require('./src/productionVideoPreview');
 const editorRetakeAnalysis = require('./src/editorRetakeAnalysis');
 const editorTranscriptSampling = require('./src/editorTranscriptSampling');
@@ -1404,6 +1405,16 @@ function readStorefrontReport(start, end) {
   return storefrontReporting.getPeriodReport(getStorefrontReportDb(), start, end, excludedSalesOrderIds());
 }
 
+const salesAlerts = salesAlertService.setup({
+  db: db,
+  paidOrderIds: function () { return storefrontReporting.paidOrderIds(getStorefrontReportDb(), excludedSalesOrderIds()); },
+  baselineOrderIds: function () { return storefrontReporting.paidOrderIds(getStorefrontReportDb()); }
+});
+// Establish the baseline at deployment, not on Harvey's next visit. Existing
+// orders are not retroactively labelled new, but later paid orders are.
+try { salesAlerts.initialize(); }
+catch (error) { console.error('Sales alert baseline unavailable:', error.message); }
+
 const weeklyReports = weeklyReportService.setup(db, {
   recipient: process.env.WEEKLY_REPORT_RECIPIENT || 'harveymeale9@gmail.com',
   timeZone: process.env.WEEKLY_REPORT_TIME_ZONE || 'Europe/London',
@@ -1664,7 +1675,10 @@ app.get('/api/reports/website-summary', requireAuth, function (req, res) {
 app.get('/api/reports/sales-dashboard', requireAuth, function (req, res) {
   try {
     res.set('Cache-Control', 'no-store');
-    const dashboard = storefrontReporting.getSalesDashboard(getStorefrontReportDb(), undefined, excludedSalesOrderIds());
+    const unseen = salesAlerts.status().unseenOrderIds;
+    const dashboard = storefrontReporting.getSalesDashboard(getStorefrontReportDb(), undefined, excludedSalesOrderIds(), unseen);
+    const visibleIds = new Set(dashboard.recent_orders.map(function (order) { return order.id; }));
+    dashboard.unseen_sales_order_ids = unseen.filter(function (id) { return visibleIds.has(id); });
     const notes = new Map(stmts.getAll.all('refundNotes').map(function (row) {
       try { const item = JSON.parse(row.data); return [item.orderId, item.note]; }
       catch (error) { return [null, null]; }
@@ -1683,12 +1697,35 @@ app.get('/api/reports/sales-dashboard', requireAuth, function (req, res) {
     res.status(503).json({ error: 'sales_dashboard_unavailable' });
   }
 });
+app.get('/api/reports/sales-alerts', requireAuth, function (req, res) {
+  try {
+    res.set('Cache-Control', 'no-store').json({ count: salesAlerts.status().count });
+  } catch (error) {
+    console.error('Sales alert read failed:', error.message);
+    res.status(503).json({ error: 'sales_alerts_unavailable' });
+  }
+});
+app.post('/api/reports/sales-alerts/viewed', requireAuth, function (req, res) {
+  try {
+    if (!Array.isArray(req.body && req.body.orderIds) || req.body.orderIds.length > 1000) {
+      return res.status(400).json({ error: 'invalid_order_ids' });
+    }
+    const status = salesAlerts.markViewed(req.body.orderIds);
+    res.set('Cache-Control', 'no-store').json({ count: status.count });
+  } catch (error) {
+    console.error('Sales alert acknowledgement failed:', error.message);
+    res.status(503).json({ error: 'sales_alerts_unavailable' });
+  }
+});
 app.put('/api/reports/sales-exclusions/:id', requireAuth, function (req, res) {
   const id = req.params.id;
   if (!isValidId(id)) return res.status(400).json({ error: 'invalid_order_id' });
   try {
     const order = getStorefrontReportDb().prepare('SELECT id FROM orders WHERE id = ?').get(id);
     if (!order) return res.status(404).json({ error: 'order_not_found' });
+    // Excluding an unread test purchase should not resurrect its alert if the
+    // order is later restored to reporting.
+    salesAlerts.markViewed([id]);
     stmts.upsert.run('salesExclusions', id, JSON.stringify({ orderId: id, reason: 'owner_test_order' }), new Date().toISOString());
     res.set('Cache-Control', 'no-store').json({ ok: true, excluded: true });
   } catch (error) {

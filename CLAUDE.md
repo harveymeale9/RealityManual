@@ -20531,3 +20531,37 @@ auditions regenerate at the new level; shared voice/music measurements remain
 reusable. Tests pin the +3.5 dB audition gain, unboosted master and legacy
 preview gains, low-bitrate FFmpeg output, and cache behavior. Full 293-test
 ops-service suite passes.
+
+---
+
+# 673. Persistent New-Sale Badge on Analytics (2026-10-21)
+
+Harvey wants a count of paid orders he has not yet seen next to Sales
+Analytics, cleared automatically by opening the panel. The admin-only
+`/api/reports/sales-alerts` endpoint now reports the count and the sales
+dashboard includes the IDs of unread orders it actually renders. After the
+panel loads, the browser acknowledges precisely those IDs through
+`POST /api/reports/sales-alerts/viewed`; a sale arriving between the dashboard
+snapshot and acknowledgement therefore remains unread. The app checks the
+local endpoint once a minute, not Stripe. The count appears on the Analytics
+top-level menu, Sales Analytics subtab, Analytics rail icon, and Sales rail
+icon; clicking the numbered Analytics entry goes straight to Sales Analytics.
+There is no extra manual "mark seen" step.
+
+The ops SQLite database holds one seen row per order, shared across Harvey's
+devices and preserved across restarts. On first deployment it seeds all
+already-paid orders as seen, so old purchases do not appear as new. The count
+uses the same paid, non-refunded, owner-test-excluded definition as the sales
+dashboard. Order IDs rather than a time cursor also catch checkouts that turn
+paid later, even when their creation timestamp is older than another sale.
+New but older-than-25 orders are appended to the visible recent-orders list
+before they can be acknowledged. Excluding an order marks it seen so restoring
+an old test order cannot create a false alert. No customer contact or address
+data is returned by the alert endpoint.
+
+Tests cover seven unread sales, a new sale racing with acknowledgement,
+restart persistence, late payment, refunds, exclusions, and visibility of
+older unread orders. A real Chromium test with mocked sales responses showed
+the `7` badge, navigated directly to Sales Analytics, rendered seven rows,
+and cleared the badge after acknowledging the same seven IDs. Full 294-test
+ops-service suite passes.

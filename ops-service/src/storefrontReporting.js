@@ -41,6 +41,14 @@ function excludedOrderFilter(excludedIds) {
   return { sql: ids.length ? ' AND id NOT IN (' + ids.map(function () { return '?'; }).join(',') + ')' : '', ids: ids };
 }
 
+// Use the same paid/non-refunded and owner-test exclusions for the new-sales
+// badge as Sales Analytics uses for revenue and order totals.
+function paidOrderIds(db, excludedIds) {
+  const excluded = excludedOrderFilter(excludedIds);
+  return db.prepare(`SELECT id FROM orders WHERE ${PAID_ORDER_SQL}${excluded.sql}
+    ORDER BY created_at DESC, id DESC`).all(...excluded.ids).map(function (row) { return row.id; });
+}
+
 function salesTotals(db, start, end, excludedIds) {
   const excluded = excludedOrderFilter(excludedIds);
   const paid = db.prepare(`
@@ -235,7 +243,7 @@ function fulfillmentIssueSummary(message) {
 // Private, admin-only dashboard data. Deliberately omits customer contact and
 // address fields; the panel needs operational sales state, not a second copy
 // of the customer database in the browser.
-function getSalesDashboard(db, nowValue, excludedIds) {
+function getSalesDashboard(db, nowValue, excludedIds, unseenOrderIds) {
   const excluded = excludedOrderFilter(excludedIds);
   const now = new Date(nowValue || Date.now());
   const end = now.toISOString();
@@ -269,13 +277,26 @@ function getSalesDashboard(db, nowValue, excludedIds) {
     return { country: row.country || '—', orders: Number(row.orders) || 0, units: Number(row.units) || 0, revenue_cents: Number(row.revenue_cents) || 0 };
   });
 
-  const recentOrders = db.prepare(`
-    SELECT id, quantity, total_price_cents, currency, country, order_status,
+  const recentOrderFields = `id, quantity, total_price_cents, currency, country, order_status,
       stripe_payment_status, shipping_service_name, bookvault_order_id,
       confirmation_email_sent_at, shipping_email_sent_at,
-      resend_contact_synced_at, created_at, updated_at
+      resend_contact_synced_at, created_at, updated_at`;
+  const newestRows = db.prepare(`
+    SELECT ${recentOrderFields}
     FROM orders WHERE 1=1${excluded.sql} ORDER BY created_at DESC LIMIT 25
-  `).all(...excluded.ids).map(function (row) {
+  `).all(...excluded.ids);
+  const newestIds = new Set(newestRows.map(function (row) { return row.id; }));
+  const olderUnseenIds = Array.from(new Set(unseenOrderIds || [])).filter(function (id) {
+    return typeof id === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(id) && !newestIds.has(id);
+  });
+  const olderUnseenRows = olderUnseenIds.length ? db.prepare(`
+    SELECT ${recentOrderFields} FROM orders
+    WHERE id IN (${olderUnseenIds.map(function () { return '?'; }).join(',')})
+      AND ${PAID_ORDER_SQL}${excluded.sql}
+  `).all(...olderUnseenIds, ...excluded.ids) : [];
+  const recentOrders = newestRows.concat(olderUnseenRows)
+    .sort(function (a, b) { return String(b.created_at).localeCompare(String(a.created_at)); })
+    .map(function (row) {
     return {
       id: row.id,
       quantity: Number(row.quantity) || 0,
@@ -292,7 +313,7 @@ function getSalesDashboard(db, nowValue, excludedIds) {
       created_at: row.created_at,
       updated_at: row.updated_at
     };
-  });
+    });
 
   const recentRefunds = db.prepare(`
     SELECT id, created_at, updated_at, country, total_price_cents, currency,
@@ -351,6 +372,7 @@ module.exports = {
   FUNNEL_STEPS: FUNNEL_STEPS,
   WEBSITE_ANALYTICS_START_DAY: WEBSITE_ANALYTICS_START_DAY,
   idsFromExclusionRows: idsFromExclusionRows,
+  paidOrderIds: paidOrderIds,
   getPeriodReport: getPeriodReport,
   getWebsiteTraffic: getWebsiteTraffic,
   getWebsiteAnalyticsSummary: getWebsiteAnalyticsSummary,

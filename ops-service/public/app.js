@@ -50,6 +50,9 @@
   var pmSpeakingUnsub = null;
   var pmAutoSpeechUnsub = null;
   var commentAlertTimer = null;
+  var salesAlertTimer = null;
+  var salesAlertCount = 0;
+  var salesAlertRequest = 0;
 
   // Nav hierarchy (Harvey's restructure, 2026-09-19): top level is just
   // Project Manager / Content Ops / Research / Analytics / Mailbox — the
@@ -228,6 +231,48 @@
     return match ? match.id : TABS[0].id;
   }
 
+  function setSalesAlertCount(value) {
+    salesAlertCount = Math.max(0, Number(value) || 0);
+    document.querySelectorAll('[data-sales-alert-badge]').forEach(function (badge) {
+      badge.textContent = salesAlertCount > 99 ? '99+' : String(salesAlertCount);
+      badge.hidden = salesAlertCount === 0;
+    });
+    document.querySelectorAll('[data-sales-alert-link]').forEach(function (link) {
+      // An unread count on Analytics opens the actual Sales panel directly.
+      link.href = salesAlertCount ? '#sales-analytics' : '#content-analytics';
+      link.dataset.tab = salesAlertCount ? 'sales-analytics' : 'content-analytics';
+      link.title = salesAlertCount ? salesAlertCount + ' new sale' + (salesAlertCount === 1 ? '' : 's') + ' · open Sales Analytics' : 'Analytics';
+    });
+  }
+
+  function refreshSalesAlertCount() {
+    if (IS_REVIEWER) return;
+    var request = ++salesAlertRequest;
+    fetch('/api/reports/sales-alerts', { credentials: 'include', cache: 'no-store' })
+      .then(function (response) { if (!response.ok) throw new Error('Sales alerts unavailable'); return response.json(); })
+      .then(function (data) { if (request === salesAlertRequest) setSalesAlertCount(data.count); })
+      .catch(function () {});
+  }
+
+  function acknowledgeVisibleSales(orderIds) {
+    if (!orderIds || !orderIds.length) { refreshSalesAlertCount(); return; }
+    var request = ++salesAlertRequest;
+    fetch('/api/reports/sales-alerts/viewed', {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderIds: orderIds })
+    }).then(function (response) { if (!response.ok) throw new Error('Could not acknowledge sales'); return response.json(); })
+      .then(function (data) { if (request === salesAlertRequest) setSalesAlertCount(data.count); })
+      .catch(function () { refreshSalesAlertCount(); });
+  }
+
+  function syncSalesAlertPolling() {
+    clearInterval(salesAlertTimer);
+    salesAlertTimer = null;
+    if (IS_REVIEWER) { ++salesAlertRequest; setSalesAlertCount(0); return; }
+    refreshSalesAlertCount();
+    salesAlertTimer = setInterval(refreshSalesAlertCount, 60000);
+  }
+
   // One link per GROUP now, not per leaf tab — each links to its group's
   // first leaf (e.g. "Content Ops" -> #content-ops, which is the Content
   // Pipeline leaf), and is marked active whenever the current leaf is any
@@ -238,8 +283,11 @@
     var groups = IS_REVIEWER ? GROUPS.filter(function (g) { return g.label === 'Content Ops'; }) : GROUPS.filter(function (g) { return !g.railOnly; });
     panelTabs.innerHTML = groups.map(function (g) {
       var ids = g.tabs.map(function (t) { return t.id; });
-      return '<a href="#' + ids[0] + '" class="panel-tab" data-tabs="' + ids.join(',') + '">' + g.label + '</a>';
+      return '<a href="#' + ids[0] + '" class="panel-tab" data-tabs="' + ids.join(',') + '"' +
+        (g.label === 'Analytics' ? ' data-sales-alert-link' : '') + '>' + g.label +
+        (g.label === 'Analytics' ? '<span class="sales-alert-badge" data-sales-alert-badge hidden></span>' : '') + '</a>';
     }).join('');
+    setSalesAlertCount(salesAlertCount);
   }
 
   // Secondary strip shown under the top tabs whenever the active group has
@@ -255,8 +303,10 @@
     var visibleTabs = IS_REVIEWER ? group.tabs.filter(function (t) { return REVIEWER_ALLOWED_TABS.indexOf(t.id) !== -1; }) : group.tabs;
     if (visibleTabs.length < 2) { panelSubtabs.innerHTML = ''; return; }
     panelSubtabs.innerHTML = visibleTabs.map(function (t) {
-      return '<a href="#' + t.id + '" class="panel-subtab' + (t.id === active ? ' active' : '') + '">' + t.label + '</a>';
+      return '<a href="#' + t.id + '" class="panel-subtab' + (t.id === active ? ' active' : '') + '">' + t.label +
+        (t.id === 'sales-analytics' ? '<span class="sales-alert-badge" data-sales-alert-badge hidden></span>' : '') + '</a>';
     }).join('');
+    setSalesAlertCount(salesAlertCount);
   }
 
   /* The left icon rail is a second entry point into the same tabs above —
@@ -480,6 +530,9 @@
         }
         renderSalesAnalytics();
       }, 30000);
+      // Only acknowledge orders included in the just-rendered dashboard.
+      // A sale that arrives between the snapshot and this POST stays unread.
+      acknowledgeVisibleSales(data.unseen_sales_order_ids || []);
     }).catch(function () {
       if (currentTabId() !== 'sales-analytics') return;
       renderAnalyticsPlaceholder('sales-analytics');
@@ -924,6 +977,7 @@
     document.getElementById('switchAdminBtn').hidden = !IS_REVIEWER;
     renderTabs();
     syncCommentAlertPolling();
+    syncSalesAlertPolling();
     if (IS_REVIEWER && editorUnreadTimer) {
       clearInterval(editorUnreadTimer);
       editorUnreadTimer = null;

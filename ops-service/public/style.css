@@ -348,6 +348,9 @@ body.role-reviewer #pmBackFab {
 }
 .panel-tab:hover { color: var(--ink-soft); background: none; }
 .panel-tab.active { color: var(--accent); background: none; border-bottom-color: var(--accent); }
+.sales-alert-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-left: 6px; padding: 0 4px; border-radius: 99px; background: var(--error); color: #fff; font: 700 .61rem var(--font-mono); letter-spacing: 0; vertical-align: middle; }
+.sales-alert-badge[hidden] { display: none; }
+.side-rail-btn .sales-alert-badge { position: absolute; top: 3px; right: 2px; margin: 0; border: 2px solid var(--surface); }
 
 /* Second-level nav for whichever group is active (Content Ops's 3 panels,
    Analytics's 3 tabs) — app.js's renderSubtabs() fills this in, or leaves

@@ -180,6 +180,13 @@ test('sales dashboard returns live periods, a filled daily series and privacy-sa
   assert.equal(reporting.getSalesDashboard(db, '2026-10-10T12:00:00.000Z').recent_refunds[0].reason_source, 'automatic');
   assert.equal(JSON.stringify(dashboard).includes('private@example.com'), false);
   assert.equal(JSON.stringify(dashboard).includes('Secret street'), false);
+  for (let i = 0; i < 28; i++) {
+    order.run('newer-' + i,'PAYMENT_PENDING','requires_payment_method',1,7100,'usd','US','Standard',null,null,null,null,
+      '2026-10-10T11:' + String(i).padStart(2, '0') + ':00.000Z','2026-10-10T11:30:00.000Z','Private Person','private@example.com','Secret street',null);
+  }
+  const withOlderUnseen = reporting.getSalesDashboard(db, '2026-10-10T12:00:00.000Z', [], ['paid-1']);
+  assert.equal(withOlderUnseen.recent_orders.some((item) => item.id === 'paid-1'), true,
+    'every unread paid order must be visible before its alert can clear');
   db.close();
 });
 
@@ -201,6 +208,7 @@ test('owner test-order exclusions remove paid and refunded orders from sales rep
   order.run('owner-paid', 'BOOKVAULT_ACCEPTED', 'succeeded', 1, 8229, 'usd', 'TH', null, null, null, null, null, '2026-10-13T09:00:00.000Z', '2026-10-13T09:00:00.000Z', null);
   order.run('owner-refund', 'REFUNDED', 'succeeded', 1, 8229, 'usd', 'TH', null, null, null, null, null, '2026-10-13T07:00:00.000Z', '2026-10-13T10:00:00.000Z', null);
   const excluded = ['owner-paid', 'owner-refund'];
+  assert.deepEqual(reporting.paidOrderIds(db, excluded), ['real-paid']);
   const dashboard = reporting.getSalesDashboard(db, '2026-10-19T12:00:00.000Z', excluded);
   assert.equal(dashboard.periods.all_time.paid_orders, 1);
   assert.equal(dashboard.periods.all_time.revenue_cents, 15000);
