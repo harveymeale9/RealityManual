@@ -20627,3 +20627,28 @@ queued metadata, and eventual import/compaction. A live 6 MiB R2 multipart
 object passed complete/head verification and was deleted immediately after
 the check; a headless Chromium check rendered the waiting Editor card without
 runtime errors. The full ops-service suite passes.
+
+---
+
+# 675. Portrait Preview Caption Weight and Genuine-Retake Highlights (2026-10-21)
+
+Harvey reported that some portrait Editor captions, including the preview for
+*Desire is NOT the root of all suffering*, looked bloated compared with videos
+already in Production. The Editor's 404px ASS preview used the same fixed 3px
+outline, 4px active-word outline, 2px shadow, and 40px side margins as a
+1080px Production master. Font size was already proportional to frame width,
+so the preview border was nearly three times as heavy relative to each glyph.
+Portrait ASS outline, shadow, and margins now scale with output width, with
+1080px values unchanged. The live source-preview overlay also uses a lighter
+portrait text shadow. This changes future Editor previews without changing the
+approved 1080px Production caption treatment or any saved edit decisions.
+
+Harvey also pointed out that “I mean” was highlighted as a recording mistake
+in *Separation and negative emotions*, although he uses it deliberately for
+effect. The semantic reviewer prompt now asks only for actual repeated
+sections, and normalization requires meaningful lexical repetition even for
+non-destructive highlights. The display filter applies that same rule to
+already-stored semantic suggestions, so the stale “I mean” mark disappears
+without deleting or changing any transcript cuts. The explicit Antoine
+Matthias marker remains an exception, and genuine repeated takes remain
+visible. Focused Editor tests cover both regressions.

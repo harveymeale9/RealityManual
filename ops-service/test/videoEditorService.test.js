@@ -583,7 +583,7 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /Cut edge moved/);
   assert.match(page, /lib\/captionMask\.js\?v=20261015-mask-swears/);
   assert.match(page, /editor\.js\?v=20261021-r2-batch-intake-v157/);
-  assert.match(page, /style\.css\?v=20261021-sales-alerts-v1/);
+  assert.match(page, /style\.css\?v=20261021-portrait-caption-preview-v2/);
   assert.match(source, /id="editorTimelineUndo"/);
   assert.match(source, /id="editorTimelineFadeSeconds"/);
   assert.match(source, /class="editor-sticky-cut"><button type="button" class="btn-primary btn-tiny" id="editorCut" disabled>Cut selected/);
@@ -768,7 +768,7 @@ test('unrelated semantic ranges can never become automatic retake cuts', functio
   assert.deepEqual(project.autoRetakeRemovedWordIndices, []);
 });
 
-test('highlight-only analysis may surface a suspicious restart without cutting it', function () {
+test('highlight-only analysis omits conversational bridges without a repeated take', function () {
   const timed = [
     { index: 0, text: 'I', start: 0, end: .1 }, { index: 1, text: 'mean', start: .15, end: .4 },
     { index: 2, text: 'no.', start: .45, end: .7 }, { index: 3, text: 'Here', start: 1.2, end: 1.45 },
@@ -778,9 +778,11 @@ test('highlight-only analysis may surface a suspicious restart without cutting i
   const raw = [{ removeStartIndex: 0, removeEndIndex: 2, replacementStartIndex: 3, replacementEndIndex: 6, confidence: 'review', reason: 'The opening looks abandoned.' }];
   assert.deepEqual(editor.normalizeRetakeDecisions(raw, timed), []);
   const highlights = editor.normalizeRetakeDecisions(raw, timed, { highlightOnly: true });
-  assert.deepEqual(highlights.map(function (candidate) { return candidate.removeWordIndices; }), [[0, 1, 2]]);
-  assert.equal(highlights[0].confidence, 'review');
-  assert.deepEqual(editor.retakeHighlightsForProject({ retakeWorkflowVersion: 3, retakeDecisions: highlights }), highlights);
+  assert.deepEqual(highlights, []);
+  assert.deepEqual(editor.retakeHighlightsForProject({ retakeWorkflowVersion: 3, retakeDecisions: [{
+    id: 'smart-retake-3-199-200', source: 'semantic', removeWordIndices: [0, 1],
+    firstText: 'I mean,', replacementText: 'really think about them.'
+  }] }), []);
 });
 
 test('conceptual repetition and continuations never become retake review cards', function () {
@@ -1039,6 +1041,19 @@ test('vertical captions show three-word windows with spoken-word emphasis', func
   ] }]);
   assert.match(fitted, /\{\\fs59\\bord4\}extraordinary/);
   assert.match(fitted, /\{\\fs53\\bord3\}captions/);
+});
+
+test('portrait preview borders and margins scale with the production master', function () {
+  const group = [{ start: 0, end: 1, text: 'three spoken words', words: [
+    { text: 'three', start: 0, end: .3 }, { text: 'spoken', start: .3, end: .6 },
+    { text: 'words', start: .6, end: 1 }
+  ] }];
+  const preview = editor.buildAss({ width: 404, height: 720 }, group);
+  const master = editor.buildAss({ width: 1080, height: 1920 }, group);
+  assert.match(preview, /Style: Default,Arial,32,.*1\.12,0\.75,2,15,15,158,1/);
+  assert.match(preview, /\\bord1\.5/);
+  assert.match(master, /Style: Default,Arial,86,.*3,2,2,40,40,422,1/);
+  assert.match(master, /\\bord4/);
 });
 
 test('Editor source preview keeps vertical three-word windows rather than one spoken word', function () {
