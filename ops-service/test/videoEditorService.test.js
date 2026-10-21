@@ -1046,6 +1046,18 @@ test('vertical captions show three-word windows with spoken-word emphasis', func
   assert.match(fitted, /\{\\fs53\\bord3\}captions/);
 });
 
+test('opening preroll delays caption words without changing their spacing', function () {
+  const groups = [{ start: 0.08, end: 0.8, text: 'First spoken word', words: [
+    { text: 'First', start: 0.08, end: 0.25 },
+    { text: 'spoken', start: 0.25, end: 0.5 },
+    { text: 'word', start: 0.5, end: 0.8 }
+  ] }];
+  const ass = editor.buildAss({ width: 1080, height: 1920 }, groups, 0.3);
+  assert.match(ass, /Dialogue: 0,0:00:00\.38,0:00:00\.55/);
+  assert.match(ass, /Dialogue: 0,0:00:00\.55,0:00:00\.80/);
+  assert.match(ass, /Dialogue: 0,0:00:00\.80,0:00:01\.10/);
+});
+
 test('portrait preview borders and margins scale with the production master', function () {
   const group = [{ start: 0, end: 1, text: 'three spoken words', words: [
     { text: 'three', start: 0, end: .3 }, { text: 'spoken', start: .3, end: .6 },
@@ -1231,9 +1243,10 @@ test('final render splices an inserted clip and its caption timeline between sou
     await new Promise(function (resolve) { setTimeout(resolve, 30); });
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
-  assert.ok(stored.editedDuration > 3.4 && stored.editedDuration < 3.6);
+  assert.ok(stored.editedDuration > 3.7 && stored.editedDuration < 3.9);
   assert.equal(stored.renderVersion, 27);
   assert.equal(stored.renderQuality.contentDuration, 2);
+  assert.equal(stored.renderQuality.openingPrerollSeconds, 0.3);
   assert.equal(stored.renderQuality.outroSeconds, 1.5);
   assert.equal(stored.renderQuality.visualFadeSeconds, 1.5);
   assert.equal(stored.renderQuality.musicTailSeconds, 0);
@@ -1243,27 +1256,46 @@ test('final render splices an inserted clip and its caption timeline between sou
   const renderedStreams = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type,duration',
     '-of', 'json', rendered], { encoding: 'utf8' })).streams;
   const renderedVideo = renderedStreams.find(function (stream) { return stream.codec_type === 'video'; });
-  assert.ok(Number(renderedVideo.duration) > 3.45, 'the visual stream itself includes the complete outro: ' + renderedVideo.duration);
+  assert.ok(Number(renderedVideo.duration) > 3.75, 'the visual stream itself includes the opening and complete outro: ' + renderedVideo.duration);
   function rangeLufs(start, duration) {
     const measured = spawnSync('ffmpeg', ['-hide_banner', '-nostats', '-ss', String(start), '-t', String(duration), '-i', rendered,
       '-vn', '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json', '-f', 'null', '-'], { encoding: 'utf8' });
     assert.equal(measured.status, 0, measured.stderr);
     return editor.parseIntegratedLoudness(measured.stderr);
   }
-  assert.ok(Math.abs(rangeLufs(0.05, 0.4) - rangeLufs(0.55, 0.9)) < 1);
+  assert.ok(Math.abs(rangeLufs(0.45, 0.4) - rangeLufs(0.95, 0.9)) < 1);
   function frameRgb(at) {
     const frame = execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', rendered,
       '-frames:v', '1', '-vf', "select='gte(t," + at + ")',scale=1:1", '-pix_fmt', 'rgb24', '-f', 'rawvideo', 'pipe:1']);
     return Array.from(frame.subarray(0, 3));
   }
-  const beforeOutro = frameRgb(1.75);
-  const nearEnd = frameRgb(3.45);
+  const openingBlack = frameRgb(0.03);
+  const openingBook = frameRgb(0.43);
+  assert.ok(openingBlack.every(function (channel) { return channel < 30; }),
+    'the held first frame begins black: ' + JSON.stringify(openingBlack));
+  assert.ok(openingBook.reduce(function (sum, channel) { return sum + channel; }, 0) >
+    openingBlack.reduce(function (sum, channel) { return sum + channel; }, 0) + 80,
+  'the first retained frame is visible before speech: ' + JSON.stringify(openingBook));
+  const beforeOutro = frameRgb(2.05);
+  const nearEnd = frameRgb(3.75);
   assert.ok(beforeOutro.reduce(function (sum, channel) { return sum + channel; }, 0) >
     nearEnd.reduce(function (sum, channel) { return sum + channel; }, 0) + 80,
   'the last content frame remains visibly brighter before the outro: ' + JSON.stringify({ beforeOutro: beforeOutro, nearEnd: nearEnd }));
   assert.ok(nearEnd.every(function (channel) { return channel < 30; }),
     'the held final frame fades fully to black: ' + JSON.stringify(nearEnd));
-  assert.match(fs.readFileSync(path.join(projectDir, 'captions.ass'), 'utf8'), /External/);
+  const openingAudio = execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', rendered,
+    '-t', '0.25', '-vn', '-f', 'f32le', '-acodec', 'pcm_f32le', 'pipe:1']);
+  let openingPeak = 0;
+  for (let index = 0; index < openingAudio.length; index += 4) openingPeak = Math.max(openingPeak, Math.abs(openingAudio.readFloatLE(index)));
+  assert.ok(openingPeak < 0.001, 'speech stays silent through the opening fade: ' + openingPeak);
+  const speechAudio = execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-ss', '0.4', '-i', rendered,
+    '-t', '0.15', '-vn', '-f', 'f32le', '-acodec', 'pcm_f32le', 'pipe:1']);
+  let speechPeak = 0;
+  for (let index = 0; index < speechAudio.length; index += 4) speechPeak = Math.max(speechPeak, Math.abs(speechAudio.readFloatLE(index)));
+  assert.ok(speechPeak > 0.01, 'the first spoken audio remains after the brief opening: ' + speechPeak);
+  const ass = fs.readFileSync(path.join(projectDir, 'captions.ass'), 'utf8');
+  assert.match(ass, /External/);
+  assert.match(ass, /Dialogue: 0,0:00:00\.40/);
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
 
@@ -1304,10 +1336,10 @@ test('final render blinks through black across a visually confirmed page change'
       '-frames:v', '1', '-vf', "select='gte(t," + at + ")',scale=1:1", '-pix_fmt', 'rgb24', '-f', 'rawvideo', 'pipe:1']);
     return Array.from(frame.subarray(0, 3)).reduce(function (sum, channel) { return sum + channel; }, 0);
   }
-  const whitePage = frameBrightness(0.65);
-  const fadeOut = frameBrightness(0.84);
-  const fadeIn = frameBrightness(0.90);
-  const bluePage = frameBrightness(1.15);
+  const whitePage = frameBrightness(0.95);
+  const fadeOut = frameBrightness(1.14);
+  const fadeIn = frameBrightness(1.20);
+  const bluePage = frameBrightness(1.45);
   assert.ok(fadeOut < whitePage * 0.35, JSON.stringify({ whitePage: whitePage, fadeOut: fadeOut }));
   assert.ok(fadeIn < bluePage * 0.45, JSON.stringify({ bluePage: bluePage, fadeIn: fadeIn }));
   const app = express(); app.use(express.json()); app.use('/api/editor', service.router);

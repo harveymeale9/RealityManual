@@ -20673,3 +20673,28 @@ introducing a second deletion path. The backend already permitted deletion of
 these failed states; the early-return processing UI had hidden the control.
 Focused tests cover the visible control and deletion of a transcript-less
 recording through the normal API.
+
+---
+
+# 677. Short Black-to-Book Opening Before First Speech (2026-10-21)
+
+New Editor decision previews and full-resolution Production masters now begin
+with a 0.3-second held frame of the *first retained book shot*, faded up from
+black. The voice track receives the same 0.3 seconds of silence, and ASS
+caption events move by exactly 0.3 seconds. The existing 80 ms leading speech
+handle still protects first consonants, so an ordinarily cut recording now
+speaks about 0.38 seconds after playback begins. This gives autoplay viewers
+time to register the image and keeps them from missing the first word. The
+opening is added after the saved cut decisions, so it cannot resurrect the
+camera-start hand movement or modify any transcript edits. The held frame
+replaces a dead-air source segment rather than retaining extra raw footage.
+
+The initial implementation exposed a time-base interaction between the new
+start pad and existing end pad: video could finish 0.3 seconds before audio.
+Resetting video PTS after the start pad fixes that mismatch. Render duration,
+subtitle times, ending fade start, and quality metadata include the new
+opening. Focused FFmpeg tests check an actual black first frame, visible first
+shot, silent opening audio, shifted captions, and the still-complete outro;
+page-turn fade checks use their new absolute times. Existing verified outputs
+are not silently rebuilt or altered; the rule applies when an Editor preview
+or Production master is next rendered.

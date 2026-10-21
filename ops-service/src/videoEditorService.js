@@ -38,6 +38,9 @@ const PROTECTED_ENDING_MAX_HANDLE_SECONDS = 0.25;
 const VIDEO_OUTRO_SECONDS = 2;
 const HORIZONTAL_VISUAL_OUTRO_SECONDS = 1.7;
 const HORIZONTAL_MUSIC_TAIL_SECONDS = 0.3;
+// Give autoplay viewers a moment to register the book before the first word.
+// Hold the first retained frame, not the camera-start footage removed by cuts.
+const OPENING_PREROLL_SECONDS = 0.3;
 // Footage is deliberately recorded wide enough to show a little table. The
 // opening move settles toward the exact centre of the recorded frame and that
 // composition remains the baseline for the rest of the shot. Initial portrait
@@ -1344,7 +1347,8 @@ function escapeAss(text) {
   return String(text || '').replace(/\\/g, '\\\\').replace(/\{/g, '\\{').replace(/\}/g, '\\}').replace(/\r?\n/g, '\\N');
 }
 
-function buildAss(project, groups) {
+function buildAss(project, groups, startOffsetSeconds) {
+  const startOffset = Math.max(0, Number(startOffsetSeconds) || 0);
   const width = Math.max(360, Math.round(Number(project.width) || 1080));
   const height = Math.max(360, Math.round(Number(project.height) || 1920));
   const isLongform = width >= height;
@@ -1381,7 +1385,7 @@ function buildAss(project, groups) {
   const events = [];
   (groups || []).forEach(function (group) {
     if (!Array.isArray(group.words) || !group.words.length) {
-      events.push('Dialogue: 0,' + assTime(group.start) + ',' + assTime(group.end) + ',Default,,0,0,0,,' + escapeAss(maskCaption(group.text)));
+      events.push('Dialogue: 0,' + assTime(group.start + startOffset) + ',' + assTime(group.end + startOffset) + ',Default,,0,0,0,,' + escapeAss(maskCaption(group.text)));
       return;
     }
     if (!isLongform) {
@@ -1415,7 +1419,7 @@ function buildAss(project, groups) {
             }
             return wordIndex === activeIndex ? '{\\fs' + emphasizedSize + '\\bord' + emphasizedOutlineWidth + '}' + escaped + '{\\r}' : escaped;
           }).join(' ');
-          events.push('Dialogue: 0,' + assTime(eventStart) + ',' + assTime(eventEnd) + ',Default,,0,0,0,,' + text);
+          events.push('Dialogue: 0,' + assTime(eventStart + startOffset) + ',' + assTime(eventEnd + startOffset) + ',Default,,0,0,0,,' + text);
         });
       }
       return;
@@ -1442,7 +1446,7 @@ function buildAss(project, groups) {
       // Two non-collapsing spaces reserve enough room for the highlighted
       // word to grow without its outline touching either neighbour.
       }).join('\\h\\h');
-      events.push('Dialogue: 0,' + assTime(eventStart) + ',' + assTime(eventEnd) + ',Default,,0,0,0,,' + text);
+      events.push('Dialogue: 0,' + assTime(eventStart + startOffset) + ',' + assTime(eventEnd + startOffset) + ',Default,,0,0,0,,' + text);
     });
   });
   return header.concat(events).join('\n') + '\n';
@@ -2330,11 +2334,11 @@ function setup(options) {
       // camera can become visible. Editor/no-music renders end at that point;
       // a music-backed production master retains a short black-only tail.
       const outro = renderOutroTiming(layout, master && options.includeMusicTail === true, project.outroFadeSeconds);
-      const expectedDuration = contentDuration + outro.totalSeconds;
+      const expectedDuration = OPENING_PREROLL_SECONDS + contentDuration + outro.totalSeconds;
       const assPath = path.join(projectDir(id), 'captions.ass');
       const renderShape = renderShapeForProject(project, layout, master);
       const outputPath = master ? masterOutputPath : renderPath(id);
-      if (project.captionsEnabled !== false) fs.writeFileSync(assPath, buildAss(renderShape, renderCaptionGroups(project, cuts, segments)));
+      if (project.captionsEnabled !== false) fs.writeFileSync(assPath, buildAss(renderShape, renderCaptionGroups(project, cuts, segments), OPENING_PREROLL_SECONDS));
       const filters = [];
       const readyClips = (project.insertedClips || []).filter(function (clip) { return clip.status === 'ready'; });
       const clipInputIndex = new Map(readyClips.map(function (clip, index) { return [clip.id, index + 1]; }));
@@ -2397,17 +2401,20 @@ function setup(options) {
       // zoompan/concat can leave a coarse inherited time base. Normalize it
       // before extending the stream, otherwise FFmpeg may drop the held frames
       // or interpret a two-second pad as hundreds of seconds.
-      filters.push('[joinedv]settb=AVTB,setpts=N/(30000/1001*TB)[normalizedv]');
+      filters.push('[joinedv]settb=AVTB,setpts=N/(30000/1001*TB)' +
+        ',tpad=start_mode=clone:start_duration=' + OPENING_PREROLL_SECONDS.toFixed(3) +
+        ',setpts=N/(30000/1001*TB),fade=t=in:st=0:d=' + OPENING_PREROLL_SECONDS.toFixed(3) + ':color=black[normalizedv]');
       if (project.captionsEnabled !== false) filters.push("[normalizedv]subtitles='" + assPath.replace(/'/g, "'\\''") + "'[captionedv]");
       else filters.push('[normalizedv]null[captionedv]');
       // Avoid the abrupt end-card cut: hold the final composed frame, fade it
       // to black, and keep a silent dialogue bed beneath the soundtrack tail.
       filters.push('[captionedv]tpad=stop_mode=clone:stop_duration=' + outro.totalSeconds.toFixed(3) +
-        ',fade=t=out:st=' + contentDuration.toFixed(3) + ':d=' + outro.visualFadeSeconds.toFixed(3) +
+        ',fade=t=out:st=' + (OPENING_PREROLL_SECONDS + contentDuration).toFixed(3) + ':d=' + outro.visualFadeSeconds.toFixed(3) +
         ',fps=30000/1001[outv]');
       const requestedVoiceGain = voiceGainFilter(project.voiceGainAdjustments, contentDuration);
       if (requestedVoiceGain) filters.push('[outa]' + requestedVoiceGain + '[leveledouta]');
-      filters.push('[' + (requestedVoiceGain ? 'leveledouta' : 'outa') + ']apad=pad_dur=' + outro.totalSeconds.toFixed(3) + '[outaextended]');
+      filters.push('[' + (requestedVoiceGain ? 'leveledouta' : 'outa') + ']adelay=delays=' + Math.round(OPENING_PREROLL_SECONDS * 1000) +
+        ':all=1,apad=pad_dur=' + outro.totalSeconds.toFixed(3) + '[outaextended]');
       let lastReportedProgress = -1;
       const ffmpegInputs = ['-hide_banner', '-loglevel', 'error', '-y', '-filter_complex_threads', String(EDITOR_FFMPEG_THREADS), '-autorotate', '1', '-i', renderSourcePath];
       readyClips.forEach(function (clip) { ffmpegInputs.push('-i', insertedClipPath(id, clip.id)); });
@@ -2475,7 +2482,7 @@ function setup(options) {
         status: 'passed', checkedAt: new Date().toISOString(), checks: qualityChecks,
         width: renderedMedia.width, height: renderedMedia.height, pixelFormat: renderedMedia.pixelFormat,
         duration: renderedMedia.duration, videoDuration: renderedMedia.videoDuration,
-        contentDuration: contentDuration, outroSeconds: outro.totalSeconds,
+        contentDuration: contentDuration, openingPrerollSeconds: OPENING_PREROLL_SECONDS, outroSeconds: outro.totalSeconds,
         visualFadeSeconds: outro.visualFadeSeconds, musicTailSeconds: outro.musicTailSeconds, audioPeakDb: audioPeakDb,
         insertedClipLoudness: mainVoiceLufs === null ? null : {
           mainVoiceLufs: mainVoiceLufs,
