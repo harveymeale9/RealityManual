@@ -11,7 +11,7 @@ From https://github.com/harveymeale9/RealityManual
 + git merge --ff-only origin/main
 Already up to date.
 ++ git rev-parse HEAD
-+ NEW_HEAD=da670ff7efa1b70bca2cf6c5173204a605f0ac1f
++ NEW_HEAD=9705d43e0c90b4ebf99844509901d4957acabae9
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -20,16 +20,16 @@ Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
 + LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
 ++ cat /root/ops-service-data/last-image-commit.txt
-+ LAST_BUILD_COMMIT=c3f365e2b65a6aa7428e6cc859a1163e69fbb502
++ LAST_BUILD_COMMIT=9705d43e0c90b4ebf99844509901d4957acabae9
 + NEEDS_REBUILD=1
-+ '[' -n c3f365e2b65a6aa7428e6cc859a1163e69fbb502 ']'
-+ git cat-file -e 'c3f365e2b65a6aa7428e6cc859a1163e69fbb502^{commit}'
-++ git diff --name-only c3f365e2b65a6aa7428e6cc859a1163e69fbb502 da670ff7efa1b70bca2cf6c5173204a605f0ac1f -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -n 9705d43e0c90b4ebf99844509901d4957acabae9 ']'
++ git cat-file -e '9705d43e0c90b4ebf99844509901d4957acabae9^{commit}'
+++ git diff --name-only 9705d43e0c90b4ebf99844509901d4957acabae9 9705d43e0c90b4ebf99844509901d4957acabae9 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z '' ']'
 + NEEDS_REBUILD=0
 + '[' 0 = 1 ']'
 + '[' 0 = 0 ']'
-+ echo 'no backend changes between c3f365e2b65a6aa7428e6cc859a1163e69fbb502 and da670ff7efa1b70bca2cf6c5173204a605f0ac1f — already live via git pull, skipping rebuild/restart'
-no backend changes between c3f365e2b65a6aa7428e6cc859a1163e69fbb502 and da670ff7efa1b70bca2cf6c5173204a605f0ac1f — already live via git pull, skipping rebuild/restart
++ echo 'no backend changes between 9705d43e0c90b4ebf99844509901d4957acabae9 and 9705d43e0c90b4ebf99844509901d4957acabae9 — already live via git pull, skipping rebuild/restart'
+no backend changes between 9705d43e0c90b4ebf99844509901d4957acabae9 and 9705d43e0c90b4ebf99844509901d4957acabae9 — already live via git pull, skipping rebuild/restart
 + exit 0
 ssh exit code: 0
