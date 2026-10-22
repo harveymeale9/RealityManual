@@ -2,7 +2,24 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { EventEmitter } = require('node:events');
 const namecheapMailbox = require('../src/namecheapMailbox');
+
+test('late IMAP socket errors do not terminate the service or strand Editor work', async function () {
+  let client;
+  class TimeoutClient extends EventEmitter {
+    constructor() { super(); client = this; this.usable = false; }
+    async connect() { this.usable = true; throw new Error('Socket timeout'); }
+    async logout() { this.usable = false; }
+  }
+  const provider = namecheapMailbox.create({ password: 'synthetic-test-password' }, {
+    ImapFlow: TimeoutClient,
+    nodemailer: { createTransport: function () { return { verify: async function () {} }; } }
+  });
+  await assert.rejects(provider.sync({}), /Socket timeout/);
+  assert.ok(client.listenerCount('error') > 0);
+  assert.doesNotThrow(function () { client.emit('error', new Error('late socket timeout')); });
+});
 
 test('Namecheap provider maps encrypted IMAP mail and sends with the support identity', async function () {
   const sent = [];

@@ -1195,6 +1195,41 @@ test('restart resumes a safe render whose kickoff died before FFmpeg queued', { 
   t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 });
 
+test('restart resumes dirty explicit rebuilds, including an orphan left by older recovery', { timeout: 60000 }, async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-dirty-resume-'));
+  const db = new Database(path.join(dir, 'test.sqlite'));
+  db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
+  const now = new Date().toISOString();
+  for (const [id, status, progress] of [['dirty-running', 'running', 42], ['dirty-orphan', '', 53]]) {
+    const folder = path.join(dir, 'editor', id); fs.mkdirSync(folder, { recursive: true });
+    execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=320x180:d=1:r=12',
+      '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-f', 'mp4', path.join(folder, 'source')]);
+    db.prepare('INSERT INTO records VALUES (?, ?, ?, ?)').run('editorProjects', id, JSON.stringify({
+      id: id, name: id, fileName: 'take.mp4', duration: 1, width: 320, height: 180,
+      words: [{ index: 0, text: 'Hello.', start: 0.2, end: 0.8 }], removedWordIndices: [], dismissedRetakeIds: [], restoredAutoCutIds: [],
+      autoSilenceEnabled: true, silenceThresholdSeconds: 1, retainedPauseSeconds: 0.38, captionsEnabled: false,
+      layoutOverride: 'horizontal', cropCenterX: 0.5, transcriptionStatus: 'ready', classificationStatus: 'unavailable',
+      retakeAnalysisStatus: 'unavailable', planningMatchStatus: 'unavailable', renderStatus: status, renderProgress: progress,
+      renderDirty: true, renderRebuildPending: true, automaticRenderStartedAt: '', createdAt: now, updatedAt: now
+    }), now);
+  }
+  editor.setup({ db: db, dataDir: dir, transcribeDetailed: async function () { return { text: '', words: [] }; } });
+  let projects = [];
+  for (let attempt = 0; attempt < 1600; attempt++) {
+    projects = ['dirty-running', 'dirty-orphan'].map(function (id) {
+      return JSON.parse(db.prepare('SELECT data FROM records WHERE store_name=? AND id=?').get('editorProjects', id).data);
+    });
+    if (projects.every(function (project) { return project.renderStatus === 'ready' || project.renderStatus === 'error'; })) break;
+    await new Promise(function (resolve) { setTimeout(resolve, 30); });
+  }
+  for (const project of projects) {
+    assert.equal(project.renderStatus, 'ready', project.renderError);
+    assert.equal(project.renderRebuildPending, false);
+    assert.equal(project.renderDirty, false);
+  }
+  t.after(function () { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+});
+
 test('restart cancels only a legacy automatic first render', async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-cancel-auto-render-'));
   const db = new Database(path.join(dir, 'test.sqlite'));

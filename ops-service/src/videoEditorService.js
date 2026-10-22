@@ -2625,13 +2625,21 @@ function setup(options) {
       // automatic full render with automaticRenderStartedAt. Those jobs are
       // redundant now and must not be resumed after this migration. Explicit
       // user rebuilds never carry that marker and remain restart-safe.
-      const legacyAutomaticRender = !!project.automaticRenderStartedAt && !project.renderDirty &&
+      // A startup migration may mark an old automatic take dirty above; it
+      // still is not an explicitly requested rebuild and must not resume.
+      const legacyAutomaticRender = !!project.automaticRenderStartedAt &&
         !project.renderSha256 && !project.lastRenderAt;
       const resumeRender = (project.renderStatus === 'running' || project.renderStatus === 'queued') && !legacyAutomaticRender;
       const resumeRetakes = ['running', 'pending', 'pending_transcript'].includes(project.retakeAnalysisStatus);
       const resumePlanning = ['running', 'pending', 'pending_transcript'].includes(project.planningMatchStatus);
       const orphanedRenderKickoff = !project.renderStatus && !!project.automaticRenderStartedAt && !legacyAutomaticRender;
-      const resumeInterruptedRender = resumeRender || orphanedRenderKickoff;
+      // Older recovery cleared an interrupted explicit rebuild to a blank
+      // status, then refused to restart it because renderDirty was true.
+      // Positive saved progress distinguishes that orphan from edits which
+      // Harvey has not yet asked to render.
+      const orphanedExplicitRebuild = !project.renderStatus && project.renderRebuildPending &&
+        Number(project.renderProgress) > 0 && Number(project.renderProgress) < 100;
+      const resumeInterruptedRender = resumeRender || orphanedRenderKickoff || orphanedExplicitRebuild;
       if (project.transcriptionStatus === 'running' || project.transcriptionStatus === 'pending') {
         project.transcriptionStatus = 'pending';
         project.transcriptionError = '';
@@ -2644,7 +2652,7 @@ function setup(options) {
         project.renderStatus = '';
         project.renderError = '';
         project.automaticRenderStartedAt = '';
-        if (legacyAutomaticRender) project.renderProgress = 0;
+        if (legacyAutomaticRender && !project.renderDirty) project.renderProgress = 0;
       }
       if (orphanedRenderKickoff) project.automaticRenderStartedAt = '';
       if (['running', 'pending', 'pending_transcript'].includes(project.retakeAnalysisStatus)) {
@@ -2655,7 +2663,7 @@ function setup(options) {
         project.planningMatchStatus = project.transcriptionStatus === 'ready' ? 'pending' : 'pending_transcript';
         project.planningMatchError = '';
       }
-      if (migrated || resumeTranscription || resumePreview || resumeRender || resumeRetakes || resumePlanning || orphanedRenderKickoff) saveProject(project);
+      if (migrated || resumeTranscription || resumePreview || resumeRender || resumeRetakes || resumePlanning || orphanedRenderKickoff || orphanedExplicitRebuild) saveProject(project);
       setImmediate(function () {
         if (sourceNeedsPreparation && project.sourcePreparationStatus !== 'error') prepareOversizedSource(project.id);
         if (resumeTranscription) transcribeProject(project.id);
@@ -2664,7 +2672,7 @@ function setup(options) {
         if (!resumeTranscription && project.transcriptionStatus === 'ready' && resumePlanning) matchProjectPlanningPiece(project.id);
         // Only a render that was explicitly in flight is resumed. A newly
         // uploaded recording stays editable until Rebuild preview is pressed.
-        if (resumeInterruptedRender && !project.renderDirty) renderProject(project.id);
+        if (resumeInterruptedRender) renderProject(project.id);
       });
     } catch (e) {}
   });

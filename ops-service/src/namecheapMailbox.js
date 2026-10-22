@@ -72,7 +72,7 @@ function create(config, dependencies) {
   });
 
   function imapClient() {
-    return new ImapClient({
+    const client = new ImapClient({
       host: config.imapHost,
       port: config.imapPort,
       secure: config.imapSecure,
@@ -82,12 +82,17 @@ function create(config, dependencies) {
       greetingTimeout: 12000,
       socketTimeout: 45000
     });
+    // ImapFlow emits a late 'error' on socket timeout as well as rejecting
+    // the active operation. Without a listener, EventEmitter terminates the
+    // entire ops service (including any in-flight Editor render).
+    if (typeof client.on === 'function') client.on('error', function () {});
+    return client;
   }
 
   async function sync(syncState) {
     const client = imapClient();
-    await client.connect();
     try {
+      await client.connect();
       const lock = await client.getMailboxLock('INBOX');
       try {
         const uidValidity = String(client.mailbox.uidValidity || '');
@@ -159,8 +164,8 @@ function create(config, dependencies) {
 
   async function verify() {
     const client = imapClient();
-    await client.connect();
-    if (client.usable) await client.logout();
+    try { await client.connect(); }
+    finally { if (client.usable) await client.logout().catch(function () {}); }
     await smtp.verify();
     return true;
   }

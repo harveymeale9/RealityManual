@@ -20973,3 +20973,35 @@ it should resume the deferred recording as verified queue offload creates
 headroom. Focused tests cover the verification order, failure/claim guards,
 and retained review. Check actual deploy and live SQLite/R2 state before
 claiming the backlog has been reclaimed.
+
+---
+
+# 689. Interrupted Editor Preview Rebuilds After a Mailbox Timeout (2026-10-22)
+
+Harvey saw multiple Editor videos showing “Preparing updated preview…” without
+progress. Live inspection found one 25-minute preview actively rendering and
+advancing, but two other explicit rebuilds stuck with blank `renderStatus`,
+`renderRebuildPending=true`, and dirty edits. The ops-service had restarted at
+15:00 UTC after ImapFlow emitted an unhandled socket-timeout `error` event.
+Startup recovery cleared in-flight render status, but its restart condition
+wrongly required `!renderDirty`; explicit rebuilds are normally dirty, so they
+never restarted. A previous restart had already left one at 53% saved progress
+and another at 0% with no live job.
+
+Recovery now resumes explicitly queued/running renders regardless of dirty
+edits, and also recognizes the older blank-status orphan when it has a pending
+rebuild and positive saved progress. It still does not auto-render ordinary
+unsent edits, or resurrect legacy automatic renders cancelled during the old
+retake migration. The 0%-progress orphan cannot be distinguished from an
+unrequested edit after the earlier recovery erased its in-flight status; it
+must be requeued once through the normal Editor render route. Regression tests
+cover dirty restart, older orphan recovery, and preservation of the legacy
+automatic-render boundary.
+
+The Namecheap IMAP transport now attaches an `error` listener immediately on
+client creation so a late socket timeout cannot terminate the Node process and
+kill FFmpeg jobs. Connect is inside the cleanup `try/finally`; mailbox sync
+still reports failures to its existing retry/logging layer. A test emits a
+late error after a synthetic connection timeout. Deploy of the backend should
+wait for any active Editor render per `deploy.sh`; verify the affected projects
+and actual preview files before reporting that they are unblocked.
