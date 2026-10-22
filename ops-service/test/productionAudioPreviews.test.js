@@ -24,7 +24,7 @@ test('Production makes soundtrack preparation visible and orders Editor before C
   assert.match(app, /Music is \+3\.5 dB for track selection only\. Final video uses Content Settings loudness\./);
   assert.ok(app.indexOf("{ id: 'editor', label: 'Editor' }") < app.indexOf("{ id: 'upload-files', label: 'Content Production' }"));
   assert.ok(page.indexOf('data-tab="editor" title="Editor"') < page.indexOf('data-tab="upload-files" title="Content Production"'));
-  assert.match(page, /app\.js\?v=20261022-longform-60h-v1/);
+  assert.match(page, /app\.js\?v=20261022-longform-single-timeline-v1/);
 });
 
 test('Production preview cache deduplicates work, persists results, and invalidates changed settings', async function (t) {

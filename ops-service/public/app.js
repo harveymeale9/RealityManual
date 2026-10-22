@@ -3393,20 +3393,11 @@
       '</div>';
     }).join('');
     var longformHours = Number(boardSettingsCache && boardSettingsCache.longformIntervalHours) || 60;
-    var longformSlots = runway.longform.timeline.map(function (slot, index) {
-      var stateLabel = slot.state === 'open' ? 'Needs video' : slot.state === 'scheduled' ? 'Scheduled' : 'Ready in queue';
-      return '<div class="queue-longform-slot queue-longform-slot--' + slot.state + '" aria-label="Long-form slot ' + (index + 1) +
-        ', ' + escapeHtml(dateLabel(slot.at) + ' ' + timeLabel(slot.at) + ', ' + stateLabel) + '">' +
-        '<small>#' + (index + 1) + '</small><strong>' + escapeHtml(dateLabel(slot.at)) + '</strong>' +
-        '<span>' + escapeHtml(timeLabel(slot.at)) + '</span><em>' + stateLabel + '</em></div>';
-    }).join('');
     queueCoverage.innerHTML = '<div class="queue-coverage-summary-row">' +
       summary('Long-form', runway.longform, 'Every ' + longformHours + ' hours') +
       summary('Short-form', runway.shortform, 'Buffer cadence') + '</div>' +
-      '<div class="queue-map-head"><div><strong>Next 15 long-form slots</strong><span>Asia/Bangkok · elapsed hours, so the clock moves</span></div>' +
-        '<label class="queue-longform-control">Hours between uploads <input id="opsLongformIntervalHours" type="number" min="1" max="720" step="1" value="' + longformHours + '"' + (IS_REVIEWER ? ' disabled' : '') + '></label></div>' +
-      '<div class="queue-longform-scroll" aria-label="Next 15 long-form publication times"><div class="queue-longform-strip">' + longformSlots + '</div></div>' +
-      '<div class="queue-map-head"><div><strong>Next 15 days</strong><span>Today → forward · Bangkok time</span><span class="queue-map-swipe">Swipe timeline →</span></div>' +
+      '<div class="queue-map-head"><div><strong>Next 15 days</strong><span>Today → forward · Bangkok time</span><span class="queue-map-swipe">Swipe timeline →</span>' +
+        '<label class="queue-longform-control">Hours between long-form uploads <input id="opsLongformIntervalHours" type="number" min="1" max="720" step="1" value="' + longformHours + '"' + (IS_REVIEWER ? ' disabled' : '') + '></label></div>' +
         '<div class="queue-map-key"><span class="queue-map-key-published">✓ Published</span><span class="queue-map-key-ready">✓ Ready</span><span class="queue-map-key-scheduled">✓ Scheduled</span><span class="queue-map-key-open">! Needs video</span><span>— No slot</span></div></div>' +
       '<div class="queue-map-scroll" aria-label="15-day publishing map"><div class="queue-map-days">' + days + '</div></div>' +
       (runway.shortform.estimated ? '<div class="queue-coverage-note">Short-form dates are daily estimates from the last actual post while Buffer’s schedule is unavailable.</div>' : '');

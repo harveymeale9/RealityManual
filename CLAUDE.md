@@ -21038,3 +21038,17 @@ runway assets have new cachebusters. Regression tests assert the 23 October
 anchor, 60-hour movement, occupied-slot behavior, configurable interval, and
 runway/backend agreement. Verify the live settings and actual deployment before
 declaring the next release scheduled.
+
+---
+
+# 691. One Content Ops Publication Timeline (2026-10-22)
+
+Harvey confirmed that the separate 15-slot long-form strip was redundant:
+the normal 15-day publication timeline already marks long-form dates (with
+Bangkok slot times on marker hover/focus). Remove only that extra strip, not
+the fixed-anchor 60-hour scheduling logic or its runway calculations. The
+editable hours-between-long-form-uploads control remains in Content Ops,
+beside the normal timeline heading, and also remains in Content Settings.
+The two runway summary cards and normal daily timeline remain unchanged.
+The app/CSS cachebusters were updated so the removed strip does not linger
+in an old browser asset.
