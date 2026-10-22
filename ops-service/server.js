@@ -2762,6 +2762,14 @@ function maybeAdvanceToFinalCheck(id) {
   piece.stage = 'final_check';
   piece.updatedAt = new Date().toISOString();
   savePieceRecord(piece);
+  // The final edit and title are settled at this handoff. Prepare the
+  // transcript-based captions now, without making Final Check depend on an
+  // external model request; publishing still rechecks freshness as a fallback.
+  setImmediate(function () {
+    prepareFinalCheckDescriptions(id).catch(function (error) {
+      console.warn('Final Check description preparation failed for ' + id + ':', String(error.message || error).slice(0, 300));
+    });
+  });
 }
 
 // A hung analysis job (transcription or the model matching call
@@ -3503,6 +3511,29 @@ async function ensureSocialDescription(id) {
   })().finally(function () { socialDescriptionsInFlight.delete(key); });
   socialDescriptionsInFlight.set(key, task);
   return task;
+}
+async function prepareFinalCheckDescriptions(id) {
+  const piece = getPieceRecord(id);
+  if (!piece || piece.stage !== 'final_check') return;
+  const row = stmts.getOne.get('settings', 'settings');
+  let settings = {};
+  try { settings = row ? JSON.parse(row.data) : {}; } catch (error) { return; }
+  const group = piece.contentType === 'longform' ? 'longform' : 'shortform';
+  const templates = settings.captions && settings.captions[group] || {};
+  const selected = Array.isArray(piece.platforms) ? piece.platforms : [];
+  const jobs = [];
+  if (group === 'longform' && selected.includes('ytlong') && youtubeDescription.hasToken(templates.ytlong)) {
+    jobs.push(ensureYoutubeDescription(id));
+  }
+  if (selected.some(function (platform) {
+    return socialDescription.supports(platform) && socialDescription.hasToken(templates[platform]);
+  })) jobs.push(ensureSocialDescription(id));
+  const results = await Promise.allSettled(jobs);
+  results.forEach(function (result) {
+    if (result.status === 'rejected') {
+      console.warn('Final Check description preparation failed for ' + id + ':', String(result.reason && result.reason.message || result.reason).slice(0, 300));
+    }
+  });
 }
 async function socialCaptionForDestination(id, destination) {
   let caption = String(destination && (destination.caption ||

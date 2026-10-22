@@ -73,3 +73,17 @@ test('each short-form publisher expands the cached text before its API call', fu
   assert.match(server, /caption: maskCaption\(socialCaption\)/);
   assert.match(server, /'socialDescriptionText', 'socialDescriptionSourceHash'/);
 });
+
+test('descriptions are prepared on Final Check entry, while publish keeps its freshness check', function () {
+  const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.match(server, /piece\.stage = 'final_check';[\s\S]*?prepareFinalCheckDescriptions\(id\)/);
+  assert.match(server, /if \(!piece \|\| piece\.stage !== 'final_check'\) return;/);
+  assert.match(server, /selected\.includes\('ytlong'\) && youtubeDescription\.hasToken\(templates\.ytlong\)/);
+  assert.match(server, /socialDescription\.supports\(platform\) && socialDescription\.hasToken\(templates\[platform\]\)/);
+  assert.match(server, /socialDescription\.destinationCaption\(destination, await ensureSocialDescription\(id\)\)/);
+  assert.match(app, /var generated = o\.key === 'ytlong' \? p\.youtubeDescriptionText : p\.socialDescriptionText;/);
+  assert.match(app, /publishText: hasText \? publishText : ''/);
+  assert.match(app, /onlyFinalCheckDescriptionChanged\(current, piece\)/);
+  assert.match(app, /captionIds\.every\(updateFinalCheckCaption\)/);
+});

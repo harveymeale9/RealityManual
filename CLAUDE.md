@@ -20909,3 +20909,31 @@ upload. A fresh SQLite backup was taken at
 `/root/ops-service-data/social-desc-all-platforms-prebackfill-20261022.sqlite`.
 The backfill is idempotent and retains each original caption for publish-time
 refresh. All 312 ops-service tests passed before deployment.
+
+---
+
+# 687. Prepare Descriptions at the Production → Final Check Handoff (2026-10-22)
+
+Harvey clarified the count and timing: the earlier “68” meant **17 queued
+videos × four short-form destinations**, not 68 videos ready to post. Those 17
+queue records already have complete literal addenda and remain untouched.
+Future AI descriptions should be prepared only once a video has finished
+Production and entered Final Check, when the edited transcript and title have
+settled. Nothing is generated for an unapproved Production card.
+
+`maybeAdvanceToFinalCheck` now starts a non-blocking description preparation
+job immediately after committing that stage transition. It checks the actual
+selected platforms and Content Settings tokens: short-form platforms share
+one brief social addendum, long-form Facebook uses that same brief addendum,
+and long-form YouTube uses its separate fuller generator. The cached prose is
+displayed in Final Check below the existing caption/CTA; the publish payload
+still carries the shortcode so posting can recheck the edited transcript/title
+hash and regenerate if the source changed later. A model failure is logged and
+does not strand the video outside Final Check; the existing publish-time
+generation and per-platform retry path remain the safety net.
+
+Content Ops refresh updates a Final Check caption section in place when only
+the generated description fields changed, preserving playback position instead
+of rebuilding the whole video card. The frontend asset URL was versioned to
+show this UI change promptly. Focused tests cover the handoff, platform/token
+filter, publish-time fallback and non-disruptive caption refresh.

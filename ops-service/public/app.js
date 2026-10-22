@@ -2915,7 +2915,9 @@
       .map(function (o) {
         var template = group[o.key] || '';
         var publishText = Store.renderPlatformCaption(template, o.key, buildUtmLink(p, settings, o.key));
-        var text = publishText.replace(/\[(?:DESCRIPTION|DESC)\]/gi, '[AI video description added at publish time]');
+        var generated = o.key === 'ytlong' ? p.youtubeDescriptionText : p.socialDescriptionText;
+        var text = publishText.replace(/\[(?:DESCRIPTION|DESC)\]/gi,
+          generated || '[AI video description being prepared]');
         var hasText = !!publishText.trim();
         return {
           key: o.key,
@@ -4465,6 +4467,26 @@
     return true;
   }
 
+  function onlyFinalCheckDescriptionChanged(before, after) {
+    if (!before || before.stage !== 'final_check' || after.stage !== 'final_check') return false;
+    var ignored = { socialDescriptionText: true, socialDescriptionSourceHash: true,
+      youtubeDescriptionText: true, youtubeDescriptionSourceHash: true,
+      updatedAt: true, _recordVersion: true };
+    var comparable = function (piece) {
+      return Object.keys(piece).filter(function (key) { return !ignored[key]; }).sort()
+        .map(function (key) { return [key, piece[key]]; });
+    };
+    return JSON.stringify(comparable(before)) === JSON.stringify(comparable(after));
+  }
+
+  function updateFinalCheckCaption(id) {
+    var section = board.querySelector('.fc-caption-section[data-id="' + id + '"]');
+    if (!section || !boardSettingsCache || !pieces[id]) return false;
+    section.innerHTML = fcCaptionInnerHtml(id, pieces[id], boardSettingsCache);
+    bindCaptionTabs(section);
+    return true;
+  }
+
   // The natural publishing queue and Buffer publish later, independently of the browser tab that queued
   // the post. Refresh the board while it is open so Scheduled -> Posted/Live
   // and newly available metrics appear without a manual reload.
@@ -4481,12 +4503,14 @@
         var changed = rows.length !== Object.keys(pieces).length;
         var progressOnly = !changed;
         var progressIds = [];
+        var captionIds = [];
         rows.forEach(function (piece) {
           incoming[piece.id] = true;
           var current = pieces[piece.id];
           if (!current || current._recordVersion !== piece._recordVersion) {
-            if (!sameProductionCardContent(current, piece)) progressOnly = false;
-            else progressIds.push(piece.id);
+            if (sameProductionCardContent(current, piece)) progressIds.push(piece.id);
+            else if (onlyFinalCheckDescriptionChanged(current, piece)) captionIds.push(piece.id);
+            else progressOnly = false;
             pieces[piece.id] = piece;
             changed = true;
           }
@@ -4494,7 +4518,8 @@
         Object.keys(pieces).forEach(function (id) {
           if (!incoming[id]) { delete pieces[id]; changed = true; progressOnly = false; }
         });
-        if (changed && (!progressOnly || !progressIds.every(updateProductionCardProgress))) render();
+        if (changed && (!progressOnly || !progressIds.every(updateProductionCardProgress) ||
+            !captionIds.every(updateFinalCheckCaption))) render();
       }).finally(function () {
         if (currentTabId() === 'content-ops') contentOpsRefreshTimer = setTimeout(refreshContentOps, hasProcessingProductionCard() ? 3000 : 60000);
       });
