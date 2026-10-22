@@ -965,21 +965,13 @@ body.role-reviewer #pmBackFab {
    board, but the original 400px stage columns and tall, three-line headers
    spent too much of it on chrome. Keep the 75% density that Harvey chose,
    then use that reclaimed room: five normal stages fit across a typical
-   1366px laptop instead of roughly four, and the shorter headers/summary
-   strip leave materially more height for actual cards. This is deliberately
+   1366px laptop instead of roughly four, and the shorter headers leave
+   materially more height for actual cards. This is deliberately
    scoped to the pipeline so analytics pages which also use .ops-panel retain
    their existing reading width. */
 @media (min-width: 641px) and (max-width: 1599px) {
   .ops-panel--pipeline { padding: 12px clamp(12px, 2vw, 24px) 0; }
   .ops-panel--pipeline .ops-toolbar { gap: 10px; padding-bottom: 8px; }
-  .ops-panel--pipeline .overview-row {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 7px;
-    padding-bottom: 9px;
-  }
-  .ops-panel--pipeline .overview-tile { padding: 8px 10px; border-radius: 9px; }
-  .ops-panel--pipeline .overview-tile-head { margin-bottom: 3px; }
-  .ops-panel--pipeline .overview-tile-sub2 { margin-top: 3px; padding-top: 3px; }
   .ops-panel--pipeline .board { gap: 18px; }
   .ops-panel--pipeline .column { width: 330px; }
   .ops-panel--pipeline .column[data-stage="final_check"] { width: 660px; }
@@ -1886,9 +1878,6 @@ body.role-reviewer #pmBackFab {
 .overview-tile-stat { font-family: var(--font-mono); font-size: 1.15rem; color: var(--accent); }
 .overview-tile-stat .n { font-variant-numeric: tabular-nums; }
 .overview-tile-sub { font-size: 0.72rem; color: var(--ink-faint); margin-top: 2px; }
-.overview-tile-sub2 { font-size: 0.7rem; color: var(--ink-faint); margin-top: 4px; border-top: 1px solid var(--border-soft); padding-top: 4px; }
-.overview-tile.overview-errors { border-color: rgba(255,98,89,0.35); background: var(--error-soft); }
-.overview-tile.overview-errors .overview-tile-stat { color: var(--error); }
 
 /* ---------- video section inside the shared modal ---------- */
 
@@ -2830,9 +2819,6 @@ body.role-reviewer #pmBackFab {
   .teleprompter-scroll::-webkit-scrollbar { width: 22px; }
   .teleprompter-script { width: calc(100% - 50px); padding-top: 24px; font-size: clamp(18px,5vw,20px); line-height: 1.55; }
   .title-input { font-size: 1.4rem; }
-  /* Same space problem as the tabs above — the per-content-type overview
-     is a nice-to-have summary, not needed to actually see/edit pieces, so
-     it's dropped on mobile entirely rather than fighting it for room. */
   .overview-row { display: none; }
   .ops-panel { padding-top: 10px; }
   .ideation-workspace { padding: 10px 10px 80px; }.ideation-hero { display: block; padding: 17px; }.ideation-hero p { font-size: .86rem; }.idea-provider { width: 100%; margin-top: 18px; }.idea-queue-bar { display: grid; font-size: .61rem; }

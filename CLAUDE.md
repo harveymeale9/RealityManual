@@ -20834,3 +20834,13 @@ Meta error messages now retain Graph error codes/subcodes for diagnosis.
 Focused tests cover partial stage decisions, queue occupancy, saved-container
 reuse, ambiguous Instagram success recovery, and the alert/retry UI contract;
 the complete ops-service suite passes 306/306.
+
+# 684. Remove Unused Content Ops Summary Cards (2026-10-22)
+
+Harvey no longer uses the five-card strip between the publishing runway and
+Kanban board (Ultra-Short, Short, Long-Short, Longform, and Errors). Removed
+its markup, renderer, data read, and strip-specific styling. The 15-day
+publishing runway, stage statistics in the toolbar, Kanban columns, and
+underlying publishing/error records are unchanged. The same overview tile
+styles remain available to Website Analytics. A focused UI contract test
+guards that the runway and board stay present without the removed strip.

@@ -111,7 +111,7 @@ test('Content Analytics owns its analytics route while competitor research keeps
   assert.match(style, /@container \(max-width:600px\)/);
   assert.match(style, /\.content-piece-row>span:nth-child\(6\)\{display:block\}/);
   assert.match(page, /data-tabs="content-analytics,sales-analytics,website-analytics"/);
-  assert.match(page, /app\.js\?v=20261022-publishing-retry-v1/);
+  assert.match(page, /app\.js\?v=20261022-remove-ops-overview-v1/);
 });
 
 test('comment watch flags existing and newly increased counts until reviewed without duplicate rebound alerts', async function () {

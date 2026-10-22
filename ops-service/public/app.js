@@ -3328,11 +3328,10 @@
         '<button class="btn-primary" id="btnNew">+ New Piece</button>' +
       '</div>' +
       '<div class="queue-coverage" id="queueCoverage" aria-label="Publishing runway"></div>' +
-      '<div class="overview-row" id="overviewRow"></div>' +
       '<div class="board-wrap" id="boardWrap"><div class="board" id="board"></div></div>' +
     '</div>';
 
-  var board, statStrip, overviewRow, queueCoverage, boardWrap, draggingId = null;
+  var board, statStrip, queueCoverage, boardWrap, draggingId = null;
   var boardSettingsCache = null;
   // Which caption tab is currently selected on each Final Check card,
   // keyed by piece id — ephemeral (not persisted, resets on page load),
@@ -3410,36 +3409,6 @@
         '<div class="queue-map-key"><span class="queue-map-key-published">✓ Published</span><span class="queue-map-key-ready">✓ Ready</span><span class="queue-map-key-scheduled">✓ Scheduled</span><span class="queue-map-key-open">! Needs video</span><span>— No slot</span></div></div>' +
       '<div class="queue-map-scroll" aria-label="15-day publishing map"><div class="queue-map-days">' + days + '</div></div>' +
       (runway.shortform.estimated ? '<div class="queue-coverage-note">Short-form dates are daily estimates from the last actual post while Buffer’s schedule is unavailable.</div>' : '');
-  }
-
-  function renderOverview() {
-    if (!overviewRow) return;
-    var now = Date.now();
-    var tiles = Store.CONTENT_TYPES.map(function (ct) {
-      var items = Object.keys(pieces).map(function (k) { return pieces[k]; }).filter(function (p) { return p.contentType === ct.id && p.hasVideo; });
-      var queued = items.filter(function (p) { return p.stage === 'publishing_queue'; });
-      var scheduled = items.filter(function (p) { return p.stage === 'scheduled'; });
-      var live = items.filter(function (p) { return p.stage === 'live'; });
-      var furthest = 0;
-      scheduled.forEach(function (p) {
-        if (p.scheduledAt) {
-          var days = (new Date(p.scheduledAt).getTime() - now) / 86400000;
-          if (days > furthest) furthest = days;
-        }
-      });
-      return '<div class="overview-tile">' +
-        '<div class="overview-tile-head"><span class="dot" style="background:' + ct.color + '"></span>' + ct.label + '</div>' +
-        '<div class="overview-tile-sub2">' + queued.length + ' in publishing queue</div>' +
-        '<div class="overview-tile-stat"><span class="n">' + scheduled.length + '</span> scheduled</div>' +
-        '<div class="overview-tile-sub">' + (scheduled.length ? furthest.toFixed(1) + ' days out' : 'nothing queued') + '</div>' +
-        '<div class="overview-tile-sub2">' + live.length + ' posted</div>' +
-      '</div>';
-    }).join('');
-    overviewRow.innerHTML = tiles + '<div class="overview-tile overview-errors" id="overviewErrorsTile"><div class="overview-tile-head">Errors</div><div class="overview-tile-stat"><span class="n" id="overviewErrorCount">0</span> logged</div><div class="overview-tile-sub">none yet — this fills in once posting is connected</div></div>';
-    Store.getAll('errors').then(function (rows) {
-      var el = document.getElementById('overviewErrorCount');
-      if (el) el.textContent = rows.length;
-    });
   }
 
   // opts.hideVideoChip: Final Check cards (finalCheckCardHtml) only ever
@@ -3944,7 +3913,6 @@
     });
     renderStats();
     renderQueueCoverage();
-    renderOverview();
     bindBoardEvents();
   }
 
@@ -4603,7 +4571,6 @@
     board = document.getElementById('board');
     statStrip = document.getElementById('statStrip');
     queueCoverage = document.getElementById('queueCoverage');
-    overviewRow = document.getElementById('overviewRow');
     boardWrap = document.getElementById('boardWrap');
 
     bindPanning();
