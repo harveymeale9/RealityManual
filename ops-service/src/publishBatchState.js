@@ -12,7 +12,15 @@ function statusField(platform) {
 // reported "sent". Both paths must make the same final stage decision.
 function completedStage(piece, platforms) {
   const targets = Array.isArray(platforms) && platforms.length ? platforms : ['tiktok'];
-  if (targets.some(function (platform) { return piece[statusField(platform)] === 'error'; })) return 'final_check';
+  if (targets.some(function (platform) { return piece[statusField(platform)] === 'error'; })) {
+    // A partial release is not a failed Final Check. At least one destination
+    // is already public; keep the card in Live while that failed destination
+    // is retried independently. Before anything is public, keep it Scheduled.
+    const publiclyPosted = targets.some(function (platform) {
+      return platform === 'tiktok' ? piece.tiktokBufferStatus === 'sent' : piece[statusField(platform)] === 'done';
+    });
+    return publiclyPosted ? 'live' : 'scheduled';
+  }
   if (!targets.every(function (platform) { return piece[statusField(platform)] === 'done'; })) return null;
   if (targets.includes('tiktok') && piece.tiktokBufferStatus !== 'sent') return 'scheduled';
   return 'live';
@@ -25,8 +33,7 @@ function applyBufferSnapshot(latest, snapshot) {
     'tiktokBufferSupportUrl', 'tiktokMetrics', 'tiktokMetricsUpdatedAt'].forEach(function (field) {
     latest[field] = snapshot[field];
   });
-  latest.stage = snapshot.tiktokPublishStatus === 'error' ? 'final_check' :
-    (completedStage(latest, latest.publishBatchPlatforms) || 'scheduled');
+  latest.stage = completedStage(latest, latest.publishBatchPlatforms) || 'scheduled';
   return true;
 }
 

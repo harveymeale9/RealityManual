@@ -20801,3 +20801,36 @@ retroactively alert for old replies, nor alert for rejected candidates or
 failed sends. The existing seven-day courtesy cadence and other safeguards
 remain unchanged. The mail triage integration test checks the sent-only notice
 and no duplication on another queue pass.
+
+# 683. Partial Platform Releases Stay Live and Retry Only Failed Destinations (2026-10-22)
+
+The short `#202 Understand This & You Can Sell Anything` was selected for the
+2026-10-22 01:51 Bangkok slot. YouTube, TikTok, and Facebook succeeded, but
+Meta's Instagram `media_publish` returned only `An unknown error occurred`.
+The previous batch state rule sent the entire card back to Final Check on any
+single-platform error, making three genuinely posted releases disappear from
+Posted / Live. A read-only query of the connected Instagram account's media
+feed found no post from that release. We retried **Instagram only** using the
+verified R2 final, and Meta confirmed Reel `18196048933403027` at
+`https://www.instagram.com/reel/Deyc0EamLWh/`. The database now records its
+container and media IDs, all four platform statuses `done`, and stage `live`.
+
+Future partial releases remain in Posted / Live as soon as any selected
+destination is public, or Scheduled if none is public yet. The exact failed
+destination payload is saved on the piece and a one-minute worker retries just
+those destinations with increasing delays (1 minute through 6 hours, without
+an attempt limit). A confirmed successful platform is never resubmitted by this worker.
+The card shows the failed platform and next retry time; a durable Project
+Manager publishing alert appears at the first failure, updates after repeated
+failures, and resolves when all selected platforms succeed. Old partial
+Scheduled cards do not block the following cadence slot, and R2 cleanup does
+not delete source media while retries remain.
+
+Instagram containers are checkpointed immediately after creation and reused
+on retries. If `media_publish` reports an ambiguous error, the system checks
+the container's status and the account's recent feed before it can create a
+new Reel, avoiding duplicate Instagram posts after a lost success response.
+Meta error messages now retain Graph error codes/subcodes for diagnosis.
+Focused tests cover partial stage decisions, queue occupancy, saved-container
+reuse, ambiguous Instagram success recovery, and the alert/retry UI contract;
+the complete ops-service suite passes 306/306.

@@ -21,7 +21,9 @@ function setup(options) {
     const payload = await response.json().catch(function () { return {}; });
     if (!response.ok || payload.error) {
       const detail = payload.error && (payload.error.error_user_msg || payload.error.message);
-      throw new Error(label + ': ' + clean(detail || ('HTTP ' + response.status), 500));
+      const code = payload.error && payload.error.code != null ? ' (Meta code ' + payload.error.code +
+        (payload.error.error_subcode != null ? ', subcode ' + payload.error.error_subcode : '') + ')' : '';
+      throw new Error(label + ': ' + clean(detail || ('HTTP ' + response.status), 450) + code);
     }
     return payload;
   }
@@ -149,19 +151,57 @@ function setup(options) {
   async function publishInstagramReel(input) {
     const accountId = encodeURIComponent(clean(input.instagramAccountId, 100));
     const token = clean(input.pageToken, 2000);
-    const created = await graphPost('/' + accountId + '/media', {
-      media_type: 'REELS', video_url: clean(input.videoUrl, 2000),
-      caption: clean(input.caption, 2200), share_to_feed: 'true', access_token: token
-    }, 'Instagram Reel container creation failed');
-    if (!created.id) throw new Error('Instagram Reel container creation failed: no container id returned.');
+    let containerId = clean(input.containerId, 100);
+    let containerCreatedAt = clean(input.containerCreatedAt, 60);
+    if (containerId) {
+      const previous = await graphGet('/' + encodeURIComponent(containerId), {
+        fields: 'status_code,status', access_token: token
+      }, 'Instagram Reel processing check failed');
+      if (previous.status_code === 'ERROR' || previous.status_code === 'EXPIRED') containerId = '';
+    }
+    if (!containerId) {
+      const created = await graphPost('/' + accountId + '/media', {
+        media_type: 'REELS', video_url: clean(input.videoUrl, 2000),
+        caption: clean(input.caption, 2200), share_to_feed: 'true', access_token: token
+      }, 'Instagram Reel container creation failed');
+      if (!created.id) throw new Error('Instagram Reel container creation failed: no container id returned.');
+      containerId = clean(created.id, 100);
+      containerCreatedAt = new Date().toISOString();
+      if (input.onContainerCreated) await input.onContainerCreated(containerId, containerCreatedAt);
+    }
+
+    async function publishedResult(mediaId) {
+      let details = {};
+      try {
+        details = await graphGet('/' + encodeURIComponent(mediaId), {
+          fields: 'id,permalink', access_token: token
+        }, 'Instagram Reel permalink lookup failed');
+      } catch (error) { /* publishing succeeded; a missing permalink is non-fatal */ }
+      return { id: mediaId, url: clean(details.permalink, 1000) || null, containerId: containerId };
+    }
+    async function recoverPublishedContainer() {
+      const recent = await graphGet('/' + accountId + '/media', {
+        fields: 'id,caption,permalink,timestamp', limit: '30', access_token: token
+      }, 'Instagram published Reel lookup failed');
+      const cutoff = Date.parse(containerCreatedAt) - 120000;
+      const matches = (recent.data || []).filter(function (item) {
+        return clean(item.caption, 2200) === clean(input.caption, 2200) &&
+          Number.isFinite(cutoff) && Date.parse(item.timestamp) >= cutoff;
+      });
+      if (matches.length !== 1) throw new Error('Instagram container is published but its Reel could not be identified safely; no duplicate was created.');
+      const mediaId = clean(matches[0].id, 100);
+      if (input.onPublished) await input.onPublished(mediaId, containerId);
+      return { id: mediaId, url: clean(matches[0].permalink, 1000) || null, containerId: containerId };
+    }
 
     const maxPolls = Math.max(1, Number(input.maxPolls) || 60);
     let ready = false;
     for (let attempt = 0; attempt < maxPolls; attempt += 1) {
-      const status = await graphGet('/' + encodeURIComponent(clean(created.id, 100)), {
+      const status = await graphGet('/' + encodeURIComponent(containerId), {
         fields: 'status_code,status', access_token: token
       }, 'Instagram Reel processing check failed');
       if (status.status_code === 'FINISHED') { ready = true; break; }
+      if (status.status_code === 'PUBLISHED') return recoverPublishedContainer();
       if (status.status_code === 'ERROR' || status.status_code === 'EXPIRED') {
         throw new Error('Instagram Reel processing failed: ' + clean(status.status || status.status_code, 500));
       }
@@ -169,17 +209,24 @@ function setup(options) {
     }
     if (!ready) throw new Error('Instagram Reel processing timed out before Meta marked it ready.');
 
-    const published = await graphPost('/' + accountId + '/media_publish', {
-      creation_id: clean(created.id, 100), access_token: token
-    }, 'Instagram Reel publish failed');
-    if (!published.id) throw new Error('Instagram Reel publish failed: no media id returned.');
-    let details = {};
+    let published;
     try {
-      details = await graphGet('/' + encodeURIComponent(clean(published.id, 100)), {
-        fields: 'id,permalink', access_token: token
-      }, 'Instagram Reel permalink lookup failed');
-    } catch (error) { /* publishing succeeded; a missing permalink is non-fatal */ }
-    return { id: clean(published.id, 100), url: clean(details.permalink, 1000) || null, containerId: clean(created.id, 100) };
+      published = await graphPost('/' + accountId + '/media_publish', {
+        creation_id: containerId, access_token: token
+      }, 'Instagram Reel publish failed');
+    } catch (error) {
+      // A Graph error can arrive after Meta committed the post. Recheck the
+      // durable container before another attempt can create a duplicate.
+      const status = await graphGet('/' + encodeURIComponent(containerId), {
+        fields: 'status_code,status', access_token: token
+      }, 'Instagram Reel processing check failed').catch(function () { return null; });
+      if (status && status.status_code === 'PUBLISHED') return recoverPublishedContainer();
+      throw error;
+    }
+    if (!published.id) throw new Error('Instagram Reel publish failed: no media id returned.');
+    const mediaId = clean(published.id, 100);
+    if (input.onPublished) await input.onPublished(mediaId, containerId);
+    return publishedResult(mediaId);
   }
 
   function insightValue(rows, name) {

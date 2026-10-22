@@ -59,6 +59,7 @@ function setup(db, options) {
       // allowance needed to schedule the next post.
       return piece && piece.tiktokPublishProvider === 'buffer' && piece.tiktokPublishId &&
         (piece.stage === 'scheduled' ||
+          (piece.stage === 'live' && piece.tiktokBufferStatus && piece.tiktokBufferStatus !== 'sent') ||
           (piece.stage === 'final_check' && piece.tiktokPublishStatus !== 'error'));
     });
     let scheduled = 0;
@@ -89,18 +90,16 @@ function setup(db, options) {
           else if (piece.stage === 'final_check') failed += 1;
           else scheduled += 1;
         } else if (status === 'error') {
-          piece.stage = 'final_check';
-          piece.scheduledAt = '';
           piece.tiktokPublishStatus = 'error';
           piece.tiktokPublishError = clean(post.error && post.error.message || 'Buffer could not publish this TikTok post.', 500);
           piece.tiktokBufferSupportUrl = clean(post.error && post.error.supportUrl, 500) || null;
+          piece.stage = publishBatchState.completedStage(piece, piece.publishBatchPlatforms) || 'scheduled';
           failed += 1;
         } else {
           // Buffer's remaining pre-publication states are scheduled/sending.
           piece.tiktokPublishStatus = status === 'sending' ? 'running' : 'done';
-          piece.stage = publishBatchState.completedStage(piece, piece.publishBatchPlatforms) === 'final_check' ? 'final_check' : 'scheduled';
-          if (piece.stage === 'final_check') failed += 1;
-          else scheduled += 1;
+          piece.stage = publishBatchState.completedStage(piece, piece.publishBatchPlatforms) || 'scheduled';
+          scheduled += 1;
         }
         if (comparable(piece) !== before) {
           piece.tiktokBufferCheckedAt = checkedAt;

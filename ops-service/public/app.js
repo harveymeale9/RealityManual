@@ -1246,11 +1246,12 @@
       return el;
     }
 
+    function isPmAlert(kind) { return kind === 'mail_alert' || kind === 'publish_alert'; }
     function updateAlertCount(count) {
       count = Number(count) || 0;
       alertBadge.textContent = count > 99 ? '99+' : String(count);
       alertBadge.hidden = count < 1;
-      alertButton.setAttribute('aria-label', count ? count + ' unread mailbox alert' + (count === 1 ? '' : 's') : 'No unread mailbox alerts');
+      alertButton.setAttribute('aria-label', count ? count + ' unread alert' + (count === 1 ? '' : 's') : 'No unread alerts');
       Voice.setAppBadge(count);
     }
     function refreshAlertCount() {
@@ -1259,7 +1260,7 @@
     function syncVisibleMailAlerts(rows) {
       var active = {};
       rows.forEach(function (row) {
-        if (row.notification_kind === 'mail_alert') active[row.id] = true;
+        if (isPmAlert(row.notification_kind)) active[row.id] = true;
       });
       thread.querySelectorAll('.pm-msg-assistant--mail-alert[data-msg-id]').forEach(function (el) {
         if (!active[el.dataset.msgId]) el.remove();
@@ -1278,7 +1279,7 @@
       clearEmptyNote();
       agent = 'codex';
       replyAttachments = Array.isArray(replyAttachments) ? replyAttachments.filter(Boolean) : [];
-      var isMailAlert = notificationKind === 'mail_alert';
+      var isMailAlert = isPmAlert(notificationKind);
       var isAction = /^\[NEEDS_ACTION\]/i.test(text || '');
       var wrap = document.createElement('div');
       wrap.className = 'pm-msg pm-msg-assistant ' + (isMailAlert ? 'pm-msg-assistant--mail-alert' : 'pm-msg-assistant--' + agent) +
@@ -1286,7 +1287,7 @@
       if (msgId) wrap.dataset.msgId = msgId;
       var agentLabel = document.createElement('div');
       agentLabel.className = 'pm-msg-agent-label';
-      agentLabel.textContent = isMailAlert ? 'Mailbox alert' : agentName(agent) + ':';
+      agentLabel.textContent = notificationKind === 'publish_alert' ? 'Publishing alert' : (isMailAlert ? 'Mailbox alert' : agentName(agent) + ':');
       wrap.appendChild(agentLabel);
       if (replyToText && !isMailAlert) {
         var replyTo = document.createElement('div');
@@ -1350,8 +1351,8 @@
         var mailboxBtn = document.createElement('button');
         mailboxBtn.type = 'button';
         mailboxBtn.className = 'pm-reply-btn';
-        mailboxBtn.textContent = 'Open Mailbox';
-        mailboxBtn.addEventListener('click', function () { window.location.hash = 'mailbox'; });
+        mailboxBtn.textContent = notificationKind === 'publish_alert' ? 'Open Content Ops' : 'Open Mailbox';
+        mailboxBtn.addEventListener('click', function () { window.location.hash = notificationKind === 'publish_alert' ? 'content-ops' : 'mailbox'; });
         meta.appendChild(mailboxBtn);
         wrap.addEventListener('click', function () {
           if (!wrap.classList.contains('pm-msg-notification-unread')) return;
@@ -1489,7 +1490,7 @@
     }
 
     function renderQueue(rows) {
-      rows = rows.filter(function (r) { return r.notification_kind !== 'mail_alert'; });
+      rows = rows.filter(function (r) { return !isPmAlert(r.notification_kind); });
       var inflight = rows.filter(function (r) { return r.status === 'pending' || r.status === 'running'; }).slice().reverse();
       var recentDone = rows.filter(function (r) { return r.status === 'done' || r.status === 'error' || r.status === 'cancelled'; })
         .slice()
@@ -1661,8 +1662,8 @@
     var lastAlertRefresh = 0;
 
     pmSync = Voice.syncThread({
-      onNewMessage: function (row) { if (row.notification_kind !== 'mail_alert') addMessage('user', row.transcript, row.id, row.attachments, row.reply_to_snippet); },
-      onPending: function (row) { if (row.notification_kind !== 'mail_alert') addTyping(row.id, row.agent); },
+      onNewMessage: function (row) { if (!isPmAlert(row.notification_kind)) addMessage('user', row.transcript, row.id, row.attachments, row.reply_to_snippet); },
+      onPending: function (row) { if (!isPmAlert(row.notification_kind)) addTyping(row.id, row.agent); },
       onEarlyAck: function (row) {
         // Swap the generic "Codex is working on it…" placeholder for Codex's own
         // real, contextual first line the moment it's available — visible
@@ -1682,7 +1683,7 @@
         var replyText = row.reply_text || '';
         var newlyArrived = pastFirstTick;
         var shouldAutoplay = newlyArrived && Voice.isAutoSpeechEnabled() && Voice.isActiveHere() &&
-          row.notification_kind !== 'mail_alert';
+          !isPmAlert(row.notification_kind);
         delete voiceAutoSpeak[row.id];
 
         function revealReply() {
@@ -1700,7 +1701,7 @@
           }
         }
 
-        if (newlyArrived && row.notification_kind !== 'mail_alert' && replyText) {
+        if (newlyArrived && !isPmAlert(row.notification_kind) && replyText) {
           if (typingEl) typingEl.querySelector('.pm-typing-copy').textContent = agentName(row.agent) + ' is preparing voice playback…';
           // Do not expose a Play button that still has to synthesize audio.
           // If the provider is unavailable, fail open after the bounded TTS
@@ -1729,10 +1730,10 @@
       onUpdate: function (row) {
         var existing = thread.querySelector('.pm-msg-assistant[data-msg-id="' + row.id + '"]');
         if (!existing) return;
-        addAssistantMessage(row.reply_text || '', row.notification_kind === 'mail_alert' ? null : row.transcript,
+        addAssistantMessage(row.reply_text || '', isPmAlert(row.notification_kind) ? null : row.transcript,
           row.id, existing, row.agent, row.notification_kind, !!row.notification_unread, row.replyAttachments);
         if (existing) existing.remove();
-        if (row.notification_kind === 'mail_alert') {
+        if (isPmAlert(row.notification_kind)) {
           if (pastFirstTick && row.notification_unread && Voice.isActiveHere()) Voice.playPing();
           refreshAlertCount();
         }
@@ -3523,6 +3524,16 @@
       '</div>';
   }
 
+  function publishRetryHtml(piece) {
+    var failed = Array.isArray(piece.publishRetryDestinations) ? piece.publishRetryDestinations : [];
+    if (!failed.length) return '';
+    var names = failed.map(function (destination) { return PUBLISH_PLATFORM_LABELS[destination.platform] || destination.platform; }).join(', ');
+    var next = piece.publishRetryNextAt ? 'Next retry ' + fmtFull(piece.publishRetryNextAt) : 'Retry pending';
+    return '<div class="card-processing error" role="status"><span class="card-processing-heading">Retrying ' +
+      escapeHtml(names) + ' only</span><span class="card-processing-detail">' + escapeHtml(next) +
+      ' · Other platforms are not reposted.</span></div>';
+  }
+
   function cardHtml(id, piece) {
     var title = (piece.title || '').trim();
     var titleHtml = title ? escapeHtml(title) : 'Untitled piece';
@@ -3588,6 +3599,7 @@
         '<div class="chip-row">' + chipHtml(piece, { hideVideoChip: true }) + '</div>' +
         tagsHtml +
         productionProgressHtml(piece) +
+        publishRetryHtml(piece) +
         tiktokPerformanceHtml(piece) +
         '<div class="card-foot">' +
           '<span class="card-time">' + fmtTime(piece.updatedAt) + '</span>' +

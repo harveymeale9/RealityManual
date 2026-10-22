@@ -46,6 +46,16 @@ test('Publishing Queue is natural inventory with no configurable reserve targets
   assert.match(server, /schedulePublishingQueueDrain\(\)/);
 });
 
+test('partial releases remain visible with a destination-specific retry notice', function () {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  assert.match(source, /Other platforms are not reposted/);
+  assert.match(source, /publishRetryDestinations/);
+  assert.match(server, /retryFailedPlatforms\(\)/);
+  assert.match(server, /runPlatformPublishBatch\(piece\.id, failed, \{ retryFailed: true \}\)/);
+  assert.match(server, /notification_kind IN \('mail_alert','publish_alert'\)/);
+});
+
 test('Kanban presents the durable uploaded stage to users as Filmed', function () {
   const store = fs.readFileSync(path.join(__dirname, '..', 'public', 'lib', 'store.js'), 'utf8');
   const page = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');

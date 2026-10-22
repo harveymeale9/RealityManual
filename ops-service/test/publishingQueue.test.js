@@ -64,6 +64,13 @@ test('each cadence selects one next video only when that format has no scheduled
   assert.deepEqual(queue.readyQueues(waiting, waiting.concat(longScheduled, shortScheduled)), []);
 });
 
+test('an overdue partial failure does not block the next cadence slot', function () {
+  const waiting = [piece('next-short', 'short', 1)];
+  const partial = { id: 'partial', stage: 'scheduled', contentType: 'short',
+    scheduledAt: '2026-01-01T00:00:00.000Z', publishRetryDestinations: [{ platform: 'instagram' }] };
+  assert.deepEqual(queue.readyQueues(waiting, waiting.concat(partial)).map(function (group) { return group.type; }), ['shortform']);
+});
+
 test('a queue slot becomes actionable only during its twenty-minute preparation window', function () {
   const now = Date.parse('2026-10-13T06:35:00.000Z');
   assert.equal(queue.preparationDue('2026-10-13T06:55:00.000Z', now), true);

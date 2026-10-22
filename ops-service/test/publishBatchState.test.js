@@ -25,7 +25,14 @@ test('a finished direct batch stays Scheduled only while Buffer has not sent Tik
   piece.tiktokBufferStatus = 'sent';
   assert.equal(completedStage(piece, platforms), 'live');
   piece.facebookPublishStatus = 'error';
-  assert.equal(completedStage(piece, platforms), 'final_check');
+  assert.equal(completedStage(piece, platforms), 'live');
+});
+
+test('a failed platform before any public release remains Scheduled for retry', function () {
+  assert.equal(completedStage({
+    youtubePublishStatus: 'error', tiktokPublishStatus: 'done',
+    tiktokBufferStatus: 'scheduled', instagramPublishStatus: 'scheduled', facebookPublishStatus: 'scheduled'
+  }, platforms), 'scheduled');
 });
 
 test('a late Buffer response merges with the newest direct-upload statuses', function () {

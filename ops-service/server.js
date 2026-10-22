@@ -274,6 +274,7 @@ try { db.exec('ALTER TABLE voice_messages ADD COLUMN attachments_json TEXT'); } 
 // lets both bubbles render their own durable media after reload.
 try { db.exec('ALTER TABLE voice_messages ADD COLUMN reply_attachments_json TEXT'); } catch (e) { /* already exists */ }
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_mail_alert_source ON voice_messages(source_ref) WHERE notification_kind='mail_alert' AND source_ref IS NOT NULL");
+db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_publish_alert_source ON voice_messages(source_ref) WHERE notification_kind='publish_alert' AND source_ref IS NOT NULL");
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_email_instruction_source ON voice_messages(source_ref) WHERE notification_kind='conversation' AND source_ref IS NOT NULL");
 // Older production databases have a legacy claude_session_id column. It is
 // intentionally left in place as inert history while Codex is the sole live
@@ -311,10 +312,10 @@ const stmts = {
   getVoiceMessage: db.prepare('SELECT * FROM voice_messages WHERE id = ?'),
   getVoiceMessageBySource: db.prepare("SELECT * FROM voice_messages WHERE notification_kind='conversation' AND source_ref=?"),
   listVoiceMessages: db.prepare("SELECT * FROM voice_messages WHERE notification_kind!='superseded_mail_alert' ORDER BY created_at DESC LIMIT ?"),
-  countUnreadVoiceNotifications: db.prepare("SELECT count(*) AS n FROM voice_messages WHERE notification_kind='mail_alert' AND notification_unread=1"),
-  listUnreadVoiceNotificationIds: db.prepare("SELECT id FROM voice_messages WHERE notification_kind='mail_alert' AND notification_unread=1 ORDER BY created_at DESC LIMIT 100"),
-  markVoiceNotificationRead: db.prepare("UPDATE voice_messages SET notification_unread=0 WHERE id=? AND notification_kind='mail_alert'"),
-  markAllVoiceNotificationsRead: db.prepare("UPDATE voice_messages SET notification_unread=0 WHERE notification_kind='mail_alert' AND notification_unread=1"),
+  countUnreadVoiceNotifications: db.prepare("SELECT count(*) AS n FROM voice_messages WHERE notification_kind IN ('mail_alert','publish_alert') AND notification_unread=1"),
+  listUnreadVoiceNotificationIds: db.prepare("SELECT id FROM voice_messages WHERE notification_kind IN ('mail_alert','publish_alert') AND notification_unread=1 ORDER BY created_at DESC LIMIT 100"),
+  markVoiceNotificationRead: db.prepare("UPDATE voice_messages SET notification_unread=0 WHERE id=? AND notification_kind IN ('mail_alert','publish_alert')"),
+  markAllVoiceNotificationsRead: db.prepare("UPDATE voice_messages SET notification_unread=0 WHERE notification_kind IN ('mail_alert','publish_alert') AND notification_unread=1"),
   getInflightVoiceMessages: db.prepare("SELECT * FROM voice_messages WHERE status IN ('pending','running') ORDER BY created_at ASC"),
   getVoiceSession: db.prepare('SELECT codex_session_id FROM voice_session WHERE id = 1'),
   upsertCodexSession: db.prepare(
@@ -1620,6 +1621,9 @@ const bufferPublicationSync = bufferPublicationSyncService.setup(db, {
     if (!publishBatchState.applyBufferSnapshot(latest, piece)) return;
     latest.updatedAt = piece.updatedAt;
     savePieceRecord(latest);
+    if (latest.tiktokPublishStatus === 'error' && latest.tiktokPublishDestination) {
+      recordPublishRetryState(latest.id, [latest.tiktokPublishDestination], false);
+    }
     if (previousStage === 'scheduled' && latest.stage !== 'scheduled') schedulePublishingQueueDrain();
   }
 });
@@ -1950,6 +1954,8 @@ const SERVER_OWNED_PIECE_FIELDS = [
   'finalBuildProgress', 'finalBuildStep',
   'queuedPublishDestinations', 'publishingQueuedAt', 'publishingDequeuedAt',
   'publishingQueueSelection', 'publishBatchPlatforms',
+  'publishRetryDestinations', 'publishRetryAttempts', 'publishRetryNextAt',
+  'tiktokPublishDestination', 'instagramContainerId', 'instagramContainerCreatedAt',
   'youtubeDescriptionText', 'youtubeDescriptionSourceHash'
 ];
 app.put('/api/store/:storeName/:id', function (req, res) {
@@ -2591,6 +2597,7 @@ async function purgeExpiredPublishedMedia() {
     const piece = recordConcurrency.decodeRow(row);
     const publishedAt = Date.parse(piece && piece.postedAt || '');
     if (!piece || piece.stage !== 'live' || piece.storageStatus !== 'ready' || !piece.storageObjectKey ||
+        (Array.isArray(piece.publishRetryDestinations) && piece.publishRetryDestinations.length) ||
         !Number.isFinite(publishedAt) || publishedAt > cutoff) continue;
     try {
       await r2Storage.deleteKey(piece.storageObjectKey);
@@ -3387,6 +3394,69 @@ function updatePieceFields(id, fields) {
   savePieceRecord(latest);
   return latest;
 }
+const publishRetryInFlight = new Set();
+const PUBLISH_RETRY_DELAYS_MS = [60 * 1000, 5 * 60 * 1000, 15 * 60 * 1000, 60 * 60 * 1000, 3 * 60 * 60 * 1000, 6 * 60 * 60 * 1000];
+function publishRetryDelay(attempts) {
+  return PUBLISH_RETRY_DELAYS_MS[Math.min(Math.max(0, attempts), PUBLISH_RETRY_DELAYS_MS.length - 1)];
+}
+function notifyPublishRetry(piece, resolved) {
+  const id = crypto.createHash('sha256').update('publish-retry\n' + piece.id).digest('hex').slice(0, 32);
+  const failures = (piece.publishRetryDestinations || []).map(function (destination) {
+    return destination.platform + ': ' + (piece[publishErrorField(destination.platform)] || 'publish failed');
+  });
+  const message = resolved
+    ? '✅ **Publishing recovered**\n\n' + piece.title +
+      ' was accepted by every selected platform. Any still-scheduled Buffer post will move to Live when sent.'
+    : '⚠️ **Publishing needs attention**\n\n' + piece.title +
+      (piece.stage === 'live' ? ' is already live where it succeeded. ' : ' has a platform failure before its release completed. ') +
+      'Only the failed destination(s) will be retried automatically; confirmed successful posts will not be sent again.\n\n' +
+      failures.join('\n') + '\n\nNext retry: ' + (piece.publishRetryNextAt || 'soon') + '. ' +
+      'If this keeps failing, this alert will update. You do not need to republish the whole video.';
+  const stamp = new Date().toISOString();
+  db.prepare(`INSERT INTO voice_messages
+    (id,mode,transcript,status,reply_text,created_at,completed_at,agent,notification_kind,notification_unread,source_ref)
+    VALUES(?,'notification',?,'done',?,?,?,?, 'publish_alert',1,?)
+    ON CONFLICT(id) DO UPDATE SET reply_text=excluded.reply_text,created_at=excluded.created_at,
+      completed_at=excluded.completed_at,notification_unread=1`)
+    .run(id, 'Publishing: ' + String(piece.title || '').slice(0, 250), message, stamp, stamp, 'codex', piece.id);
+}
+function recordPublishRetryState(id, destinations, attemptedRetry) {
+  const piece = getPieceRecord(id);
+  if (!piece) return;
+  if (piece.createdBy === 'youtube-reviewer') {
+    if ((destinations || []).some(function (destination) { return piece[publishStatusField(destination.platform)] === 'error'; })) {
+      piece.stage = 'final_check';
+      savePieceRecord(piece);
+    }
+    return;
+  }
+  const previous = Array.isArray(piece.publishRetryDestinations) ? piece.publishRetryDestinations : [];
+  const byPlatform = new Map();
+  previous.concat(destinations || []).forEach(function (destination) {
+    if (destination && PUBLISH_PLATFORMS.includes(destination.platform)) byPlatform.set(destination.platform, destination);
+  });
+  const failed = Array.from(byPlatform.values()).filter(function (destination) {
+    return piece[publishStatusField(destination.platform)] === 'error';
+  });
+  const hadRetry = previous.length > 0;
+  piece.publishRetryDestinations = failed;
+  if (failed.length) {
+    piece.publishRetryAttempts = attemptedRetry ? (Number(piece.publishRetryAttempts) || 0) + 1 : 0;
+    piece.publishRetryNextAt = new Date(Date.now() + publishRetryDelay(piece.publishRetryAttempts)).toISOString();
+    piece.stage = publishBatchState.completedStage(piece, piece.publishBatchPlatforms) || 'scheduled';
+  } else {
+    piece.publishRetryNextAt = '';
+    piece.publishRetryAttempts = 0;
+    piece.stage = publishBatchState.completedStage(piece, piece.publishBatchPlatforms) || piece.stage;
+  }
+  piece.updatedAt = new Date().toISOString();
+  savePieceRecord(piece);
+  if (failed.length && (!hadRetry || piece.publishRetryAttempts === 3 || piece.publishRetryAttempts % 12 === 0)) {
+    notifyPublishRetry(piece, false);
+  } else if (!failed.length && hadRetry) {
+    notifyPublishRetry(piece, true);
+  }
+}
 const youtubeDescriptionsInFlight = new Map();
 async function ensureYoutubeDescription(id) {
   const piece = getPieceRecord(id);
@@ -3441,6 +3511,57 @@ function topicAwarePublishingSlot(piece, candidates, pieces) {
 let publishingQueueDrainRunning = false;
 let publishingQueueDrainRequested = false;
 let publishingBufferScheduleCache = { expiresAt: 0, postingSchedule: [] };
+let publishRetryWorkerRunning = false;
+
+async function retryFailedPlatforms() {
+  if (publishRetryWorkerRunning) return;
+  publishRetryWorkerRunning = true;
+  try {
+    const now = Date.now();
+    const due = allPieceRecords().filter(function (piece) {
+      return piece && Array.isArray(piece.publishRetryDestinations) && piece.publishRetryDestinations.length &&
+        (!piece.publishRetryNextAt || Date.parse(piece.publishRetryNextAt) <= now) &&
+        (!piece.scheduledAt || Date.parse(piece.scheduledAt) <= now ||
+          piece.publishRetryDestinations.every(function (d) { return d.platform === 'tiktok'; }));
+    });
+    for (const piece of due) {
+      if (publishRetryInFlight.has(piece.id)) continue;
+      publishRetryInFlight.add(piece.id);
+      try {
+        const latest = getPieceRecord(piece.id);
+        const failed = (latest.publishRetryDestinations || []).filter(function (destination) {
+          return latest[publishStatusField(destination.platform)] !== 'done';
+        });
+        failed.forEach(function (destination) {
+          if (latest[publishStatusField(destination.platform)] !== 'error') {
+            latest[publishStatusField(destination.platform)] = 'error';
+            latest[publishErrorField(destination.platform)] ||= 'Previous retry was interrupted; trying again.';
+          }
+        });
+        if (failed.length) savePieceRecord(latest);
+        if (failed.length) await runPlatformPublishBatch(piece.id, failed, { retryFailed: true });
+        else recordPublishRetryState(piece.id, [], false);
+      } catch (error) {
+        console.error('Publishing retry failed for ' + piece.id + ':', error.message);
+        const latest = getPieceRecord(piece.id);
+        if (latest) {
+          (latest.publishRetryDestinations || []).forEach(function (destination) {
+            if (latest[publishStatusField(destination.platform)] !== 'done') {
+              latest[publishStatusField(destination.platform)] = 'error';
+              latest[publishErrorField(destination.platform)] = String(error.message || error).slice(0, 500);
+            }
+          });
+          savePieceRecord(latest);
+          recordPublishRetryState(piece.id, latest.publishRetryDestinations || [], true);
+        }
+      } finally {
+        publishRetryInFlight.delete(piece.id);
+      }
+    }
+  } finally {
+    publishRetryWorkerRunning = false;
+  }
+}
 
 async function nextPublishingQueueSlot(type, pieces, nowValue) {
   if (type === 'longform') {
@@ -3558,7 +3679,8 @@ async function runPlatformPublishBatch(id, destinations, options) {
       const fields = {}; fields[publishStatusField(destination.platform)] = 'error'; fields[publishErrorField(destination.platform)] = 'finished video not found on disk';
       updatePieceFields(id, fields);
     });
-    updatePieceFields(id, { stage: 'final_check', queuedPublishDestinations: [] });
+    updatePieceFields(id, { stage: 'scheduled', scheduledAt: options.dueAt || openingPiece && openingPiece.scheduledAt || '', queuedPublishDestinations: [] });
+    recordPublishRetryState(id, destinations, options.retryFailed);
     return;
   }
   // Archive before assigning a future release time. A schedule is only
@@ -3572,7 +3694,8 @@ async function runPlatformPublishBatch(id, destinations, options) {
       fields[publishErrorField(destination.platform)] = 'R2 storage failed: ' + String(error.message || error).slice(0, 450);
       updatePieceFields(id, fields);
     });
-    updatePieceFields(id, { stage: 'final_check', queuedPublishDestinations: [] });
+    updatePieceFields(id, { stage: 'scheduled', scheduledAt: options.dueAt || openingPiece && openingPiece.scheduledAt || '', queuedPublishDestinations: [] });
+    recordPublishRetryState(id, destinations, options.retryFailed);
     return;
   }
   const videoRow = stmts.getOne.get('videos', id + FINAL_VIDEO_SUFFIX);
@@ -3590,17 +3713,21 @@ async function runPlatformPublishBatch(id, destinations, options) {
   const initialPiece = getPieceRecord(id);
   const isScheduledLongformRelease = initialPiece && initialPiece.contentType === 'longform' &&
     !initialPiece.directLongformReleaseRunning;
-  if (isScheduledLongformRelease) {
+  if (isScheduledLongformRelease && !options.retryFailed) {
     if (destinations.some(function (destination) {
       return destination.platform === 'ytlong' && youtubeDescription.hasToken(destination.caption);
     })) {
       try { await ensureYoutubeDescription(id); }
       catch (error) {
-        updatePieceFields(id, {
-          stage: 'final_check', queuedPublishDestinations: [],
-          youtubePublishStatus: 'error',
-          youtubePublishError: 'YouTube description could not be generated: ' + String(error.message || error).slice(0, 400)
+        const failed = { stage: 'scheduled', scheduledAt: options.dueAt || initialPiece.scheduledAt || '', queuedPublishDestinations: [] };
+        destinations.forEach(function (destination) {
+          failed[publishStatusField(destination.platform)] = 'error';
+          failed[publishErrorField(destination.platform)] = destination.platform === 'ytlong'
+            ? 'YouTube description could not be generated: ' + String(error.message || error).slice(0, 400)
+            : 'Waiting for the same release-time retry after YouTube preparation failed.';
         });
+        updatePieceFields(id, failed);
+        recordPublishRetryState(id, destinations, false);
         return;
       }
     }
@@ -3643,7 +3770,7 @@ async function runPlatformPublishBatch(id, destinations, options) {
   }
   const isScheduledShortRelease = shortformSchedule.isShortform(initialPiece) &&
     !(initialPiece && initialPiece.directShortReleaseRunning);
-  if (isScheduledShortRelease) {
+  if (isScheduledShortRelease && !options.retryFailed) {
     const tiktokDestination = destinations.find(function (destination) { return destination.platform === 'tiktok'; });
     const directDestinations = destinations.filter(function (destination) { return destination.platform !== 'tiktok'; });
     let dueAt = null;
@@ -3663,7 +3790,9 @@ async function runPlatformPublishBatch(id, destinations, options) {
     if (tiktokDestination && !forcedDueAt && !postingSchedule.length) {
       updatePieceFields(id, { tiktokPublishStatus: 'error',
         tiktokPublishError: 'Buffer posting calendar is unavailable. No fallback publish time was used; retry when Buffer API access returns.',
-        stage: 'final_check' });
+        stage: 'scheduled', queuedPublishDestinations: [], scheduledPublishDestinations: directDestinations,
+        directShortPublishStatus: directDestinations.length ? 'scheduled' : 'not_required' });
+      recordPublishRetryState(id, destinations, false);
       return;
     }
     const candidates = forcedDueAt ? [forcedDueAt] : shortformSchedule.nextAvailableBangkokSlots(Date.now(), postingSchedule, occupied, 32);
@@ -3685,16 +3814,19 @@ async function runPlatformPublishBatch(id, destinations, options) {
         updatePieceFields(id, {
           tiktokPublishStatus: 'done', tiktokPublishError: '', tiktokPublishProvider: 'buffer',
           tiktokPublishId: result.post.id, tiktokBufferStatus: result.post.status,
-          scheduledAt: dueAt
+          scheduledAt: dueAt, tiktokPublishDestination: tiktokDestination
         });
       } catch (error) {
         console.error('tiktok publish failed for ' + id + ':', error.message);
         updatePieceFields(id, {
           tiktokPublishStatus: 'error',
           tiktokPublishError: String(error.message || error).slice(0, 500),
-          stage: 'final_check',
-          queuedPublishDestinations: []
+          stage: 'scheduled', scheduledAt: dueAt,
+          queuedPublishDestinations: [], scheduledPublishDestinations: directDestinations,
+          directShortPublishStatus: directDestinations.length ? 'scheduled' : 'not_required',
+          tiktokPublishDestination: tiktokDestination
         });
+        recordPublishRetryState(id, destinations, false);
         return;
       }
     }
@@ -3749,12 +3881,13 @@ async function runPlatformPublishBatch(id, destinations, options) {
         const result = await buffer.createTiktokVideoPost({
           text: maskCaption(destination.caption || destination.title || 'Untitled'),
           videoUrl: buffer.mediaUrl(id),
-          thumbnailOffset: Math.round((Number(current && current.thumbnailTimeSeconds) || 0) * 1000)
+          thumbnailOffset: Math.round((Number(current && current.thumbnailTimeSeconds) || 0) * 1000),
+          dueAt: options.retryFailed ? new Date(Math.max(Date.now() + 120000, Date.parse(current && current.scheduledAt) || 0)).toISOString() : undefined
         });
         updatePieceFields(id, {
           tiktokPublishStatus: 'done', tiktokPublishError: '', tiktokPublishProvider: 'buffer',
           tiktokPublishId: result.post.id, tiktokBufferStatus: result.post.status,
-          scheduledAt: result.post.dueAt || null
+          scheduledAt: result.post.dueAt || null, tiktokPublishDestination: destination
         });
       } else {
         const auth = stmts.getMetaAuth.get();
@@ -3785,9 +3918,19 @@ async function runPlatformPublishBatch(id, destinations, options) {
           });
         } else {
           if (!auth.instagram_account_id) throw new Error('The selected Facebook Page has no linked Instagram professional account.');
+          const current = getPieceRecord(id);
           const result = await metaPublisher.publishInstagramReel({
             instagramAccountId: auth.instagram_account_id, pageToken: auth.page_access_token,
-            videoUrl: metaPublisher.mediaUrl(id, auth.app_secret), caption: maskCaption(destination.caption || '')
+            videoUrl: metaPublisher.mediaUrl(id, auth.app_secret), caption: maskCaption(destination.caption || ''),
+            containerId: current && current.instagramContainerId,
+            containerCreatedAt: current && current.instagramContainerCreatedAt,
+            onContainerCreated: function (containerId, createdAt) {
+              updatePieceFields(id, { instagramContainerId: containerId, instagramContainerCreatedAt: createdAt });
+            },
+            onPublished: function (mediaId, containerId) {
+              updatePieceFields(id, { instagramMediaId: mediaId, instagramContainerId: containerId,
+                instagramPublishStatus: 'done', instagramPublishError: '' });
+            }
           });
           updatePieceFields(id, {
             instagramPublishStatus: 'done', instagramPublishError: '', instagramMediaId: result.id,
@@ -3825,6 +3968,7 @@ async function runPlatformPublishBatch(id, destinations, options) {
   }
   latest.updatedAt = new Date().toISOString();
   savePieceRecord(latest);
+  recordPublishRetryState(id, destinations, options.retryFailed);
   if (allDone) releaseLocalPublishMedia(id);
 }
 
@@ -3863,11 +4007,18 @@ async function releaseDueDirectPosts() {
       if (latest) {
         if (latest.contentType === 'longform') latest.directLongformPublishStatus = 'error';
         else latest.directShortPublishStatus = 'error';
+        (latest.scheduledPublishDestinations || []).forEach(function (destination) {
+          if (latest[publishStatusField(destination.platform)] !== 'done') {
+            latest[publishStatusField(destination.platform)] = 'error';
+            latest[publishErrorField(destination.platform)] = String(error.message || error).slice(0, 500);
+          }
+        });
         latest.directShortReleaseRunning = false;
         latest.directLongformReleaseRunning = false;
-        latest.stage = 'final_check';
+        latest.stage = publishBatchState.completedStage(latest, latest.publishBatchPlatforms) || 'scheduled';
         latest.updatedAt = new Date().toISOString();
         savePieceRecord(latest);
+        recordPublishRetryState(piece.id, latest.scheduledPublishDestinations || [], false);
       }
     } finally {
       directReleasesInFlight.delete(piece.id);
@@ -4907,6 +5058,11 @@ const httpServer = app.listen(PORT, function () {
   schedulePublishingQueueDrain();
   const publishingQueueTimer = setInterval(schedulePublishingQueueDrain, 60 * 1000);
   if (publishingQueueTimer.unref) publishingQueueTimer.unref();
+  retryFailedPlatforms().catch(function (error) { console.error('initial publishing retry check failed:', error.message); });
+  const publishingRetryTimer = setInterval(function () {
+    retryFailedPlatforms().catch(function (error) { console.error('publishing retry check failed:', error.message); });
+  }, 60 * 1000);
+  if (publishingRetryTimer.unref) publishingRetryTimer.unref();
   releaseDueDirectPosts().catch(function (error) { console.error('initial direct release check failed:', error.message); });
   setInterval(function () {
     releaseDueDirectPosts().catch(function (error) { console.error('direct release check failed:', error.message); });

@@ -96,6 +96,47 @@ test('Meta publisher creates, waits for, and publishes an Instagram Reel', async
   assert.equal(calls[0].options.body.get('caption'), 'Instagram caption');
 });
 
+test('Instagram retry reuses its saved container instead of creating another Reel', async function () {
+  const calls = [];
+  const service = metaPublisher.setup({
+    fetchImpl: async function (url) {
+      calls.push(url);
+      if (url.includes('/container-saved')) return response({ status_code: 'FINISHED' });
+      if (url.includes('/ig-1/media_publish')) return response({ id: 'ig-media-saved' });
+      if (url.includes('/ig-media-saved')) return response({ id: 'ig-media-saved', permalink: 'https://www.instagram.com/reel/saved/' });
+      throw new Error('A second container must not be created');
+    }
+  });
+  const result = await service.publishInstagramReel({
+    instagramAccountId: 'ig-1', pageToken: 'token', caption: 'Caption',
+    containerId: 'container-saved', containerCreatedAt: '2026-10-22T00:00:00Z'
+  });
+  assert.equal(result.id, 'ig-media-saved');
+  assert.equal(calls.filter(function (url) { return /\/ig-1\/media$/.test(url); }).length, 0);
+});
+
+test('Instagram publish error recovers a Reel that Meta actually committed', async function () {
+  let checks = 0;
+  let publishedId = '';
+  const service = metaPublisher.setup({
+    fetchImpl: async function (url) {
+      if (url.includes('/container-saved')) return response({ status_code: ++checks < 3 ? 'FINISHED' : 'PUBLISHED' });
+      if (url.includes('/ig-1/media_publish')) return { ok: false, status: 500,
+        json: async function () { return { error: { message: 'An unknown error occurred' } }; } };
+      if (url.includes('/ig-1/media?')) return response({ data: [{ id: 'ig-media-1',
+        caption: 'Caption', timestamp: '2026-10-22T00:01:00Z', permalink: 'https://www.instagram.com/reel/recovered/' }] });
+      throw new Error('Unexpected Graph request: ' + url);
+    }
+  });
+  const result = await service.publishInstagramReel({
+    instagramAccountId: 'ig-1', pageToken: 'token', caption: 'Caption',
+    containerId: 'container-saved', containerCreatedAt: '2026-10-22T00:00:00Z',
+    onPublished: function (id) { publishedId = id; }
+  });
+  assert.equal(result.id, 'ig-media-1');
+  assert.equal(publishedId, 'ig-media-1');
+});
+
 test('Meta media URLs are short-lived and tamper evident', function () {
   const service = metaPublisher.setup({ mediaBaseUrl: 'https://ops.example' });
   const url = new URL(service.mediaUrl('piece-1', 'secret', 60000));

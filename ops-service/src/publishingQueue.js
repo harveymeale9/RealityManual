@@ -93,7 +93,8 @@ function chooseCandidate(queue, allPieces, nowValue) {
 function readyQueues(queue, allPieces) {
   const queued = Array.isArray(queue) ? queue : [];
   const occupied = new Set((Array.isArray(allPieces) ? allPieces : []).filter(function (piece) {
-    return piece && piece.stage === 'scheduled';
+    return piece && piece.stage === 'scheduled' && !(Array.isArray(piece.publishRetryDestinations) &&
+      piece.publishRetryDestinations.length && Date.parse(piece.scheduledAt) <= Date.now());
   }).map(queueType));
   return ['longform', 'shortform'].map(function (type) {
     return { type: type, pieces: queued.filter(function (piece) { return queueType(piece) === type; }) };

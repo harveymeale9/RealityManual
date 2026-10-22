@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
 const syncService = require('../src/bufferPublicationSync');
 
-test('Buffer sync advances sent posts, returns failures to Final Check, and stores metrics', async function () {
+test('Buffer sync advances sent posts, keeps failures retryable, and stores metrics', async function () {
   const db = new Database(':memory:');
   const pieces = [
     { id: 'queued', stage: 'scheduled', tiktokPublishProvider: 'buffer', tiktokPublishId: 'b1' },
@@ -37,7 +37,7 @@ test('Buffer sync advances sent posts, returns failures to Final Check, and stor
   assert.equal(pieces[1].postedAt, '2026-09-27T08:00:05Z');
   assert.equal(pieces[1].tiktokMetrics.views.value, 2500);
   assert.equal(pieces[1].tiktokExternalLink, 'https://tiktok.example/video/2');
-  assert.equal(pieces[2].stage, 'final_check');
+  assert.equal(pieces[2].stage, 'scheduled');
   assert.match(pieces[2].tiktokPublishError, /rejected/);
   assert.equal(saved.length, 3);
   assert.equal(sync.status().state.status, 'ok');
