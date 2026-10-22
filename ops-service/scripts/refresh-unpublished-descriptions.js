@@ -17,6 +17,7 @@ const rows = db.prepare("SELECT id,data FROM records WHERE store_name='pieces' A
 const destinationFields = ['queuedPublishDestinations', 'scheduledPublishDestinations', 'publishRetryDestinations'];
 
 function needsSocial(piece) {
+  if (piece.socialDescriptionSourceHash === social.sourceHash(piece) && piece.socialDescriptionText) return false;
   if (piece.stage === 'final_check') return (piece.platforms || []).some(social.supports);
   return destinationFields.some(function (field) {
     return Array.isArray(piece[field]) && piece[field].some(function (destination) { return social.supports(destination.platform); });
@@ -24,7 +25,11 @@ function needsSocial(piece) {
 }
 
 function needsYoutube(piece) {
-  return piece.stage === 'final_check' && (piece.platforms || []).includes('ytlong');
+  if (piece.youtubeDescriptionSourceHash === youtube.sourceHash(piece) && piece.youtubeDescriptionText) return false;
+  if (piece.stage === 'final_check') return (piece.platforms || []).includes('ytlong');
+  return destinationFields.some(function (field) {
+    return Array.isArray(piece[field]) && piece[field].some(function (destination) { return destination.platform === 'ytlong'; });
+  });
 }
 
 function saveIfCurrent(snapshot, prose) {

@@ -21077,3 +21077,16 @@ overwriting concurrent queue approvals. Published pieces are intentionally
 not changed. Run against the live `/data/db.sqlite` after a SQLite online
 backup and after the updated backend is deployed; audit the unpublished
 captions and Final Check preview afterward.
+
+The live backup is
+`/root/ops-service-data/descriptions-pre-no-name-refresh-20261022.sqlite`.
+After the updated backend deployed, the migration refreshed all 18 then-
+unpublished pieces (17 short-form and one long-form) with zero failures.
+The long-form piece advanced into Publishing Queue during the run, so its
+separate YouTube description was refreshed in a second, stale-only pass.
+The script now recognizes queued YouTube long-form destinations and skips
+already-current prose, making that rerun safe. Final audit found 18 current
+social addenda, one current YouTube description, and 70 frozen destination
+payloads, with zero occurrences of `Harvey`/`Meale` in generated or queued
+caption text and no mismatched social addenda. Existing CTA/base captions,
+schedule, and already-Live pieces were not changed.
