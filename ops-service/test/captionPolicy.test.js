@@ -13,6 +13,12 @@ function loadStore() {
 
 const Store = loadStore();
 
+test('new Content Settings include the social description shortcode only on Meta captions', function () {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'lib', 'store.js'), 'utf8');
+  assert.match(source, /shortform: \{ ytshort: '', tiktok: '', instagram: '\[DESCRIPTION\]', facebook: '\[DESCRIPTION\]' \}/);
+  assert.match(source, /longform: \{ ytlong: '\[DESCRIPTION\]', facebook: '\[DESCRIPTION\]' \}/);
+});
+
 test('tracked caption links are allowed on Facebook and long-form YouTube', function () {
   assert.equal(Store.captionAllowsTrackedLink('facebook'), true);
   assert.equal(Store.captionAllowsTrackedLink('ytlong'), true);
@@ -41,14 +47,16 @@ test('long-form YouTube expands LINK without forcing one into an unlinked templa
   assert.equal(Store.renderPlatformCaption('A useful description', 'ytlong', link), 'A useful description');
 });
 
-test('YouTube preserves DESCRIPTION for server expansion while other platforms omit it', function () {
+test('YouTube and Meta preserve DESCRIPTION for server expansion while TikTok omits it', function () {
   const template = 'Read it: [LINK]\n\n[DESCRIPTION]';
   const link = 'https://realitymanual.com/book';
   assert.equal(Store.renderPlatformCaption(template, 'ytlong', link), 'Read it: ' + link + '\n\n[DESCRIPTION]');
   assert.equal(Store.renderPlatformCaption(template, 'ytlong', link, 'About the video.'), 'Read it: ' + link + '\n\nAbout the video.');
-  assert.equal(Store.renderPlatformCaption('Intro\n\n[DESCRIPTION]', 'facebook', link), 'Intro');
+  assert.equal(Store.renderPlatformCaption('Intro\n\n[DESCRIPTION]', 'facebook', link), 'Intro\n\n[DESCRIPTION]');
+  assert.equal(Store.renderPlatformCaption('Intro\n\n[DESCRIPTION]', 'instagram', link), 'Intro\n\n[DESCRIPTION]');
   assert.equal(Store.renderPlatformCaption('Intro\n\n[DESC]', 'ytlong', link), 'Intro\n\n[DESC]');
-  assert.equal(Store.renderPlatformCaption('Intro\n\n[DESC]', 'facebook', link), 'Intro');
+  assert.equal(Store.renderPlatformCaption('Intro\n\n[DESC]', 'facebook', link), 'Intro\n\n[DESC]');
+  assert.equal(Store.renderPlatformCaption('Intro\n\n[DESC]', 'tiktok', link), 'Intro');
 });
 
 test('link-free platform captions cannot publish an old saved LINK shortcode', function () {

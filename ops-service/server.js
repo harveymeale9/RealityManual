@@ -19,6 +19,7 @@ const videoAnalysis = require('./src/videoAnalysis');
 const voiceAttachments = require('./src/voiceAttachments');
 const youtubeAuth = require('./src/youtubeAuth');
 const youtubeDescription = require('./src/youtubeDescription');
+const socialDescription = require('./src/socialDescription');
 const tiktokAuth = require('./src/tiktokAuth');
 const ideationService = require('./src/ideationService');
 const outlineLearningService = require('./src/outlineLearningService');
@@ -403,8 +404,10 @@ const stmts = {
 try {
   const row = stmts.getOne.get('settings', 'settings');
   if (row) {
-    const upgraded = youtubeDescription.upgradeSettings(JSON.parse(row.data));
-    if (upgraded) stmts.upsert.run('settings', 'settings', JSON.stringify(upgraded), new Date().toISOString());
+    const current = JSON.parse(row.data);
+    const youtubeUpgraded = youtubeDescription.upgradeSettings(current) || current;
+    const upgraded = socialDescription.upgradeSettings(youtubeUpgraded) || youtubeUpgraded;
+    if (upgraded !== current) stmts.upsert.run('settings', 'settings', JSON.stringify(upgraded), new Date().toISOString());
   }
 } catch (error) {
   console.error('YouTube description template migration failed:', error.message);
@@ -1956,7 +1959,8 @@ const SERVER_OWNED_PIECE_FIELDS = [
   'publishingQueueSelection', 'publishBatchPlatforms',
   'publishRetryDestinations', 'publishRetryAttempts', 'publishRetryNextAt',
   'tiktokPublishDestination', 'instagramContainerId', 'instagramContainerCreatedAt',
-  'youtubeDescriptionText', 'youtubeDescriptionSourceHash'
+  'youtubeDescriptionText', 'youtubeDescriptionSourceHash',
+  'socialDescriptionText', 'socialDescriptionSourceHash'
 ];
 app.put('/api/store/:storeName/:id', function (req, res) {
   const { storeName, id } = req.params;
@@ -2034,6 +2038,7 @@ app.put('/api/store/:storeName/:id', function (req, res) {
     : Object.assign({}, req.body, { id: id });
   if (storeName === 'settings' && req.sessionRole !== 'youtube-reviewer') {
     record = youtubeDescription.upgradeSettings(record) || record;
+    record = socialDescription.upgradeSettings(record) || record;
   }
   const writeStamp = new Date().toISOString();
   stmts.upsert.run(storeName, id, JSON.stringify(record), writeStamp);
@@ -3477,6 +3482,26 @@ async function ensureYoutubeDescription(id) {
   youtubeDescriptionsInFlight.set(key, task);
   return task;
 }
+const socialDescriptionsInFlight = new Map();
+async function ensureSocialDescription(id) {
+  const piece = getPieceRecord(id);
+  if (!piece) throw new Error('Social description piece not found');
+  const hash = socialDescription.sourceHash(piece);
+  if (piece.socialDescriptionSourceHash === hash && piece.socialDescriptionText) return piece.socialDescriptionText;
+  const key = id + ':' + hash;
+  if (socialDescriptionsInFlight.has(key)) return socialDescriptionsInFlight.get(key);
+  const task = (async function () {
+    const text = await socialDescription.generate(piece, openaiStructured.generate);
+    const latest = getPieceRecord(id);
+    if (!latest || socialDescription.sourceHash(latest) !== hash) {
+      throw new Error('Social description source changed; retry the publish');
+    }
+    updatePieceFields(id, { socialDescriptionText: text, socialDescriptionSourceHash: hash });
+    return text;
+  })().finally(function () { socialDescriptionsInFlight.delete(key); });
+  socialDescriptionsInFlight.set(key, task);
+  return task;
+}
 function uniquePublishDestinations(destinations) {
   const seen = new Set();
   return destinations.filter(function (destination) {
@@ -3892,6 +3917,10 @@ async function runPlatformPublishBatch(id, destinations, options) {
       } else {
         const auth = stmts.getMetaAuth.get();
         if (!auth || !auth.page_access_token || !auth.page_id) throw new Error('Facebook + Instagram is not connected to a publishing Page.');
+        let socialCaption = destination.caption || '';
+        if (socialDescription.hasToken(socialCaption) || typeof destination.socialDescriptionBaseCaption === 'string') {
+          socialCaption = socialDescription.destinationCaption(destination, await ensureSocialDescription(id));
+        }
         if (platform === 'facebook') {
           const current = getPieceRecord(id);
           const localSize = fs.existsSync(finalPath) ? fs.statSync(finalPath).size : 0;
@@ -3903,14 +3932,14 @@ async function runPlatformPublishBatch(id, destinations, options) {
               result = await metaPublisher.publishFacebookVideoResumable({
                 pageId: auth.page_id, pageToken: auth.page_access_token,
                 videoPath: media.path, title: destination.title || 'Untitled',
-                description: maskCaption(destination.caption || '')
+                description: maskCaption(socialCaption)
               });
             } finally { media.cleanup(); }
           } else {
             result = await metaPublisher.publishFacebookVideo({
               pageId: auth.page_id, pageToken: auth.page_access_token,
               videoUrl: metaPublisher.mediaUrl(id, auth.app_secret, 60 * 60 * 1000), mimeType: mimeType,
-              title: destination.title || 'Untitled', description: maskCaption(destination.caption || '')
+              title: destination.title || 'Untitled', description: maskCaption(socialCaption)
             });
           }
           updatePieceFields(id, {
@@ -3921,7 +3950,7 @@ async function runPlatformPublishBatch(id, destinations, options) {
           const current = getPieceRecord(id);
           const result = await metaPublisher.publishInstagramReel({
             instagramAccountId: auth.instagram_account_id, pageToken: auth.page_access_token,
-            videoUrl: metaPublisher.mediaUrl(id, auth.app_secret), caption: maskCaption(destination.caption || ''),
+            videoUrl: metaPublisher.mediaUrl(id, auth.app_secret), caption: maskCaption(socialCaption),
             containerId: current && current.instagramContainerId,
             containerCreatedAt: current && current.instagramContainerCreatedAt,
             onContainerCreated: function (containerId, createdAt) {

@@ -229,8 +229,8 @@ window.RMStore = (function () {
       // migration below, which preserves any real text saved under either
       // older shape.
       captions: {
-        shortform: { ytshort: '', tiktok: '', instagram: '', facebook: '' },
-        longform: { ytlong: '[DESCRIPTION]', facebook: '' }
+        shortform: { ytshort: '', tiktok: '', instagram: '[DESCRIPTION]', facebook: '[DESCRIPTION]' },
+        longform: { ytlong: '[DESCRIPTION]', facebook: '[DESCRIPTION]' }
       },
       // Final Check defaults to measured loudness matching. The percentage
       // value remains available only as an explicit Legacy A/B fallback.
@@ -363,11 +363,11 @@ window.RMStore = (function () {
     var text = String(template || '').trim();
     if (!captionAllowsTrackedLink(platform)) text = stripCaptionLink(text);
     else if (/\[LINK\]/i.test(text)) text = applyCaptionLink(text, link).trim();
-    if (platform !== 'ytlong' && platform !== 'ytshort') {
+    if (platform !== 'ytlong' && platform !== 'ytshort' && platform !== 'instagram' && platform !== 'facebook') {
       return text.replace(/[ \t]*\[(?:DESCRIPTION|DESC)\][ \t]*/gi, '').replace(/\n{3,}/g, '\n\n').trim();
     }
-    // Keep the token intact in the publish payload; the server expands it
-    // from the saved edited transcript immediately before YouTube upload.
+    // Keep the token intact in supported publish payloads; the server expands
+    // it from the saved edited transcript immediately before each upload.
     if (description !== undefined) {
       return text.replace(/\[(?:DESCRIPTION|DESC)\]/gi, String(description || '').trim())
         .replace(/\n{3,}/g, '\n\n').trim();

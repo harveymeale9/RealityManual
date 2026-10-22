@@ -20844,3 +20844,37 @@ publishing runway, stage statistics in the toolbar, Kanban columns, and
 underlying publishing/error records are unchanged. The same overview tile
 styles remain available to Website Analytics. A focused UI contract test
 guards that the runway and board stay present without the removed strip.
+
+# 685. Transcript-Grounded Instagram and Facebook Caption Addenda (2026-10-22)
+
+Harvey wants the standard Instagram and Facebook captions followed by a brief
+description of each actual video, comparable to long-form YouTube's shortcode
+but capped at 50 words. Content Settings' short-form Instagram and Facebook
+and long-form Facebook templates receive `[DESCRIPTION]` once, below their
+existing wording. The versioned migration preserves any existing copy and
+respects a later manual removal. New settings use the same defaults. The
+Final Check publish payload retains the token for those Meta destinations,
+while TikTok remains shortcode-free and all existing link rules are unchanged.
+
+`socialDescription.js` generates one shared, transcript-grounded social
+addendum per piece. Its prompt requests one to three natural sentences about
+the specific topic, with no invented details, keyword list, hashtag, CTA,
+spoiler, URL, or em/en dash. Validation caps it at 50 words. The result is
+cached against the title, edited transcript and style version; the server
+rechecks the hash at publish time and expands the shortcode before either
+Meta API call. A generation failure follows the existing per-platform retry
+path instead of posting a literal token or publishing an incomplete caption.
+The cache fields are server-owned so ordinary Kanban saves cannot erase them.
+
+At implementation time, 17 pieces were in Publishing Queue and none were
+already Scheduled. A SQLite online backup was taken at
+`/root/ops-service-data/social-desc-prebackfill-20261022.sqlite`. A one-time
+script generated and checked distinct addenda for all 17, then saved literal
+prose into their frozen Instagram and Facebook destination captions. This
+keeps those upcoming releases safe even if the backend deployment waits for
+the current multi-gigabyte laptop upload: the old server can publish the
+complete literal caption. The original standard caption is retained on each
+destination so the new backend can refresh the addendum if the transcript or
+title changes before release. The script uses a transactional versioned write,
+skips pieces that have left the queue, and is safe to rerun without duplicate
+prose. The Editor media and posting schedule were untouched.
