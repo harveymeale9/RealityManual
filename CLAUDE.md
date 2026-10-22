@@ -20937,3 +20937,39 @@ the generated description fields changed, preserving playback position instead
 of rebuilding the whole video card. The frontend asset URL was versioned to
 show this UI change promptly. Focused tests cover the handoff, platform/token
 filter, publish-time fallback and non-disruptive caption refresh.
+
+---
+
+# 688. Offload Publishing Queue Media to R2 Before the VPS Fills (2026-10-22)
+
+Harvey's October 22 laptop batch included a 7.1 GB recording verified in R2
+but deferred at Editor intake for local workspace. At inspection the 96 GB VPS
+disk was 76% full, with 36 GB in Editor workspaces and 6.3 GB in local uploads.
+Moving an Editor card to Production reduces its reserved Editor headroom, but
+also creates a Production render, so it does not by itself guarantee immediate
+disk recovery. Formerly, R2 archival and local cleanup happened only when the
+publish queue scheduled a card. Seventeen cards already in Publishing Queue
+still held local media.
+
+A background, single-flight queue archiver now checks queued cards every minute
+and immediately after a new queue entry. It first requires a fresh 720p Final
+Check review, then uploads the exact publish-ready final to R2 and verifies its
+remote byte size. Approved Editor originals from older projects are also
+uploaded and byte-size-verified if they were not already in R2; the Editor
+project retains its R2 source key and edit decisions. Source uploads are
+serialized per project so the queue worker and schedule worker cannot collide.
+Only after both R2 objects are verified does it remove the large local Editor
+workspace, Production raw, and final master. It retains the lightweight review
+copy while the card remains in Publishing Queue, and the status route recognizes
+that review without requiring the removed local master. Scheduled and direct
+publish paths can rehydrate the final from R2 as before. A missing review,
+failed R2 check, changed queue stage, or active publish claim leaves local media
+in place and is retried safely. Existing scheduled cleanup awaits its file
+removals rather than marking media released before asynchronous deletion ends.
+
+This is a storage handoff, not a change to the recording-upload pipeline or a
+deletion of laptop originals. Editor intake remains disk-admission-controlled;
+it should resume the deferred recording as verified queue offload creates
+headroom. Focused tests cover the verification order, failure/claim guards,
+and retained review. Check actual deploy and live SQLite/R2 state before
+claiming the backlog has been reclaimed.

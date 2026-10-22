@@ -58,6 +58,7 @@ const kanbanBackupService = require('./src/kanbanBackupService');
 const contentAnalyticsService = require('./src/contentAnalyticsService');
 const tiktokPublicMetrics = require('./src/tiktokPublicMetrics');
 const finalReviewPreviewService = require('./src/finalReviewPreview');
+const queuedMediaArchiver = require('./src/queuedMediaArchiver');
 const { maskCaption } = require('./public/lib/captionMask');
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
@@ -2479,10 +2480,10 @@ function ensureMissingEditorVideoCards() {
 }
 ensureMissingEditorVideoCards();
 
-// R2 is the durable source of publish-ready media once a card is scheduled.
+// R2 is the durable source of publish-ready media once a card enters the queue.
 // Uploads are claimed per piece so a retry/double click cannot start two large
 // multipart transfers. The local final remains available during Final Check;
-// after the verified R2 copy is scheduled, redundant Production + Editor
+// after the verified R2 copy is queued, redundant Production + Editor
 // media can be reclaimed from the small VPS disk.
 const r2ArchiveJobs = new Map();
 async function ensurePublishMediaArchived(id) {
@@ -2527,17 +2528,84 @@ async function ensurePublishMediaArchived(id) {
   return job;
 }
 
-function releaseLocalPublishMedia(id) {
+const editorSourceArchiveJobs = new Map();
+async function ensureApprovedEditorSourceArchived(id) {
+  if (editorSourceArchiveJobs.has(id)) return editorSourceArchiveJobs.get(id);
+  const job = archiveApprovedEditorSource(id).finally(function () { editorSourceArchiveJobs.delete(id); });
+  editorSourceArchiveJobs.set(id, job);
+  return job;
+}
+
+async function archiveApprovedEditorSource(id) {
+  const row = stmts.getOne.get('editorProjects', id);
+  if (!row) return; // Direct uploads and legacy pieces have no Editor source.
+  const project = JSON.parse(row.data);
+  const source = path.join(DATA_DIR, 'editor', id, 'source');
+  if (project.sourceStorageObjectKey && project.sourceStorageSizeBytes) {
+    try {
+      const remote = await r2Storage.headKey(project.sourceStorageObjectKey);
+      if (remote.sizeBytes === Number(project.sourceStorageSizeBytes)) return;
+    } catch (error) { /* Re-upload the retained local original below. */ }
+  }
+  if (!fs.existsSync(source)) throw new Error('The Editor source has no verified R2 copy; local media was retained.');
+  const remote = await r2Storage.uploadEditorSource(id, source, project.mimeType || 'video/mp4');
+  // The project is read-only after approval; update only its archival fields
+  // while preserving every edit decision and metadata field in the latest row.
+  const currentRow = stmts.getOne.get('editorProjects', id);
+  if (!currentRow) throw new Error('The Editor project disappeared during R2 archival.');
+  const current = JSON.parse(currentRow.data);
+  Object.assign(current, {
+    sourceStorageProvider: 'cloudflare_r2', sourceStorageObjectKey: remote.key,
+    sourceStorageSizeBytes: remote.sizeBytes, sourceStorageEtag: remote.etag,
+    sourceStoredAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+  });
+  stmts.upsert.run('editorProjects', id, JSON.stringify(current), current.updatedAt);
+}
+
+async function releaseLocalPublishMedia(id, options) {
+  options = options || {};
   const piece = getPieceRecord(id);
   if (!piece || piece.storageStatus !== 'ready' || !piece.storageObjectKey) return false;
-  [path.join(UPLOADS_DIR, 'videos', id), path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX), finalReviewPath(id)]
-    .forEach(function (filePath) { fs.rm(filePath, { force: true }, function () {}); });
-  // The approved Editor project remains in its durable database row/history,
-  // but its large camera master, proxy and render are no longer needed after
-  // the exact publish-ready output has been verified in R2.
-  fs.rm(path.join(DATA_DIR, 'editor', id), { recursive: true, force: true }, function () {});
-  updatePieceFields(id, { localMediaReleasedAt: new Date().toISOString() });
-  return true;
+  const media = [path.join(UPLOADS_DIR, 'videos', id), path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX)];
+  // Publishing Queue still needs its lightweight preview player. The verified
+  // full-resolution final and Editor workspace can live exclusively in R2.
+  if (!options.keepReview) media.push(finalReviewPath(id));
+  try {
+    await ensureApprovedEditorSourceArchived(id);
+    // The approved Editor project remains in its durable database row/history,
+    // but its camera master, proxy and render are redundant after R2 verifies
+    // the exact publish-ready output. Delete the local final last so a failed
+    // cleanup can be retried while its authoritative source is still here.
+    await fs.promises.rm(path.join(DATA_DIR, 'editor', id), { recursive: true, force: true });
+    for (const filePath of media) await fs.promises.rm(filePath, { force: true });
+    updatePieceFields(id, { localMediaReleasedAt: new Date().toISOString() });
+    return true;
+  } catch (error) {
+    console.warn('Local publish-media cleanup deferred for ' + id + ':', String(error.message || error).slice(0, 300));
+    return false;
+  }
+}
+
+let queuedMediaArchiveRunning = false;
+async function archiveQueuedPublishMedia() {
+  if (queuedMediaArchiveRunning || !r2Storage.configured) return;
+  queuedMediaArchiveRunning = true;
+  try {
+    await queuedMediaArchiver.archiveReadyQueue({
+      list: allPieceRecords,
+      get: getPieceRecord,
+      claimed: function (id) { return publishingQueueClaims.has(id); },
+      sourceExists: function (id) { return fs.existsSync(path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX)); },
+      reviewStatus: function (id, piece) {
+        const source = path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX);
+        return finalReviewPreview.start(id, source, finalReviewPath(id), finalReviewPicturePath(piece));
+      },
+      ensureArchived: ensurePublishMediaArchived,
+      ensureEditorSource: ensureApprovedEditorSourceArchived,
+      releaseLocal: releaseLocalPublishMedia,
+      warn: function (id, message) { console.warn('Queue media archive deferred for ' + id + ':', message); }
+    });
+  } finally { queuedMediaArchiveRunning = false; }
 }
 
 async function localPublishMedia(id) {
@@ -2878,6 +2946,12 @@ app.get('/api/videos/:id/final-review-status', requireAuthOrReviewer, function (
   const source = path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX);
   if (req.sessionRole === 'youtube-reviewer' && !pieceOwnedByReviewer(id) &&
       !finalReviewPreview.fresh(source, finalReviewPath(id))) return res.status(403).json({ error: 'forbidden' });
+  if (!fs.existsSync(source) && piece.storageStatus === 'ready' && piece.localMediaReleasedAt) {
+    try {
+      const review = fs.statSync(finalReviewPath(id));
+      if (review.size > 1024) return res.json({ status: 'ready', version: Math.round(review.mtimeMs) + '-' + review.size });
+    } catch (error) { /* Keep the missing status visible if the local review was lost. */ }
+  }
   res.json(finalReviewPreview.start(id, source, finalReviewPath(id), finalReviewPicturePath(piece)));
 });
 app.post('/api/videos/:id/final-review-retry', requireAuthOrReviewer, function (req, res) {
@@ -3837,7 +3911,7 @@ async function runPlatformPublishBatch(id, destinations, options) {
     });
     latest.updatedAt = new Date().toISOString();
     savePieceRecord(latest);
-    releaseLocalPublishMedia(id);
+    await releaseLocalPublishMedia(id);
     return;
   }
   const isScheduledShortRelease = shortformSchedule.isShortform(initialPiece) &&
@@ -3919,7 +3993,7 @@ async function runPlatformPublishBatch(id, destinations, options) {
     });
     latest.updatedAt = new Date().toISOString();
     savePieceRecord(latest);
-    releaseLocalPublishMedia(id);
+    await releaseLocalPublishMedia(id);
     return;
   }
 
@@ -4043,7 +4117,7 @@ async function runPlatformPublishBatch(id, destinations, options) {
   latest.updatedAt = new Date().toISOString();
   savePieceRecord(latest);
   recordPublishRetryState(id, destinations, options.retryFailed);
-  if (allDone) releaseLocalPublishMedia(id);
+  if (allDone) await releaseLocalPublishMedia(id);
 }
 
 const directReleasesInFlight = new Set();
@@ -4163,7 +4237,10 @@ app.post('/api/publish/:id', requireAuthOrReviewer, async function (req, res) {
     platforms: destinations.map(function (d) { return d.platform; })
   });
   if (reviewerPublish) runPlatformPublishBatch(id, destinations).catch(function (error) { console.error('unhandled reviewer publish error for ' + id + ':', error.message); });
-  else schedulePublishingQueueDrain();
+  else {
+    schedulePublishingQueueDrain();
+    archiveQueuedPublishMedia().catch(function (error) { console.error('new queue media archive failed:', error.message); });
+  }
 });
 
 // --- Voice app: talk to the headless Codex Project Manager by voice or text ---
@@ -5130,6 +5207,11 @@ const httpServer = app.listen(PORT, function () {
   recoverInflightVoiceMessages();
   recoverInflightVideoJobs();
   schedulePublishingQueueDrain();
+  archiveQueuedPublishMedia().catch(function (error) { console.error('initial queue media archive failed:', error.message); });
+  const queueArchiveTimer = setInterval(function () {
+    archiveQueuedPublishMedia().catch(function (error) { console.error('queue media archive failed:', error.message); });
+  }, 60 * 1000);
+  if (queueArchiveTimer.unref) queueArchiveTimer.unref();
   const publishingQueueTimer = setInterval(schedulePublishingQueueDrain, 60 * 1000);
   if (publishingQueueTimer.unref) publishingQueueTimer.unref();
   retryFailedPlatforms().catch(function (error) { console.error('initial publishing retry check failed:', error.message); });
