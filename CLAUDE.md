@@ -21052,3 +21052,28 @@ beside the normal timeline heading, and also remains in Content Settings.
 The two runway summary cards and normal daily timeline remain unchanged.
 The app/CSS cachebusters were updated so the removed strip does not linger
 in an old browser asset.
+
+---
+
+# 692. Generated Video Descriptions Never Name the Presenter (2026-10-22)
+
+Harvey does not want his name in public captions. A newly prepared Final Check
+social addendum had opened with “Harvey explains…”, even though the intended
+description was of the video's ideas, not its presenter. Both the brief shared
+social addendum and the longer YouTube description now instruct the model to
+describe the topic directly, never name or refer to the creator/presenter,
+and reject output containing `Harvey` or `Meale` (case-insensitive). A
+validation failure gets one regeneration attempt, then fails closed instead
+of publishing unwanted wording. Style-version bumps invalidate the old
+cached descriptions when these generators are used again.
+
+`scripts/refresh-unpublished-descriptions.js` is a one-time migration for
+Final Check, Publishing Queue, and Scheduled pieces. It regenerates prose
+from each edited transcript, updates the cached text/hash, and refreshes
+literal queued social captions from their saved standard-caption base so
+CTA/link copy is preserved and no addendum is duplicated. It generates
+outside SQLite transactions and uses compare-and-swap writes to avoid
+overwriting concurrent queue approvals. Published pieces are intentionally
+not changed. Run against the live `/data/db.sqlite` after a SQLite online
+backup and after the updated backend is deployed; audit the unpublished
+captions and Final Check preview afterward.

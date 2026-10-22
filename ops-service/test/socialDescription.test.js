@@ -36,6 +36,7 @@ test('social prose is transcript-grounded, short, and safe for both Meta caption
     assert.match(prompt, /Desire can be confused/);
     assert.match(prompt, /no more than 50 words/);
     assert.match(prompt, /without spoiling/);
+    assert.match(prompt, /never name or refer to the creator/);
     assert.equal(schema.required[0], 'description');
     assert.equal(options.name, 'social_video_description');
     return { description: 'Is desire itself the problem? This video looks at wanting, fear of loss, and the emotions behind suffering—without giving away its conclusion.' };
@@ -45,7 +46,20 @@ test('social prose is transcript-grounded, short, and safe for both Meta caption
   assert.equal(descriptions.expand('Book line.\n\n[DESC]', prose), 'Book line.\n\n' + prose);
   assert.throws(() => descriptions.normalizeResult({ description: 'word '.repeat(51) }), /validation/);
   assert.throws(() => descriptions.normalizeResult({ description: 'Explore this idea at https://example.test and learn about desire and suffering in this video.' }), /validation/);
+  assert.throws(() => descriptions.normalizeResult({ description: 'Harvey explains how wanting and fear shape a person’s experience of suffering and raises a question about the role of desire.' }), /validation/);
   assert.throws(() => descriptions.descriptionPrompt({ transcript: 'too short' }), /transcript/i);
+});
+
+test('social prose retries rather than accepting the creator name', async function () {
+  let calls = 0;
+  const text = await descriptions.generate(piece, async function () {
+    calls++;
+    return { description: calls === 1
+      ? 'Harvey explores desire and fear of loss, asking whether wanting something is truly the root of human suffering.'
+      : 'Is desire itself the problem? This video explores wanting, fear of loss, and what may actually make a person suffer.' };
+  });
+  assert.equal(calls, 2);
+  assert.doesNotMatch(text, /Harvey/i);
 });
 
 test('a frozen queued caption carries real prose before deployment and refreshes from its base later', function () {

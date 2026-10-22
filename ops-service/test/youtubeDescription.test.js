@@ -59,12 +59,26 @@ test('generation validates concise prose in up to three short paragraphs', async
   assert.throws(() => descriptions.normalizeResult({ paragraphs: ['Read https://example.test now. '.repeat(5)] }), /validation/);
   assert.throws(() => descriptions.normalizeResult({ paragraphs: ['Use [DESCRIPTION] now. '.repeat(7)] }), /validation/);
   assert.throws(() => descriptions.normalizeResult({ paragraphs: ['Use [DESC] now. '.repeat(7)] }), /validation/);
+  assert.throws(() => descriptions.normalizeResult({ paragraphs: ['Harvey explains why manifestation cannot be reduced to simply wanting an outcome, and considers the practical conditions that help an intention become real.'] }), /validation/);
   const plain = descriptions.normalizeResult({ paragraphs: [
     'What happens when intention meets reality? This video explores the promise of manifestation—without giving away the final argument—and considers the years 2020–2025.'
   ] });
   assert.doesNotMatch(plain, /[\u2013\u2014]/);
   assert.match(plain, /manifestation - without/);
   assert.match(plain, /2020 - 2025/);
+});
+
+test('YouTube prose retries rather than accepting the creator name', async function () {
+  let calls = 0;
+  const text = await descriptions.generate(piece, async function (prompt) {
+    assert.match(prompt, /Never name or refer to the creator/);
+    calls++;
+    return { paragraphs: [calls === 1
+      ? 'Harvey explains why manifestation needs more than intention, including the choices and real-world conditions that can make an outcome possible.'
+      : 'Can intention alone produce the outcome you want? This video explores the gap between setting a goal and creating the real-world conditions that let it happen.'] };
+  });
+  assert.equal(calls, 2);
+  assert.doesNotMatch(text, /Harvey/i);
 });
 
 test('shortcode expansion replaces every occurrence and fails closed without prose', function () {
