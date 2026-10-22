@@ -2241,18 +2241,13 @@
     return candidates.filter(function (candidate) { return candidate > afterMs; })[0] || (localMidnight + 36 * 3600000 - offset);
   }
 
-  function nextBangkokLongformSlot(afterMs, selectedTime, latestMs) {
-    var offset = 7 * 60 * 60 * 1000;
-    var match = String(selectedTime || '').match(/^([01]\d|2[0-3]):([0-5]\d)$/);
-    var hour = match ? Number(match[1]) : 7;
-    var minute = match ? Number(match[2]) : 55;
-    var anchor = new Date((latestMs || afterMs) + offset);
-    var localDay = Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), anchor.getUTCDate());
-    if (latestMs) localDay += 3 * 86400000;
-    var candidate = localDay + hour * 3600000 + minute * 60000 - offset;
-    if (!latestMs && candidate <= afterMs) candidate += 86400000;
-    while (candidate <= afterMs) candidate += 3 * 86400000;
-    return candidate;
+  function nextLongformSlot(afterMs, anchor, intervalHours) {
+    var start = Date.parse(anchor || '');
+    if (!Number.isFinite(start)) start = Date.parse('2026-10-23T16:00:00.000Z');
+    var hours = Number(intervalHours);
+    if (!Number.isInteger(hours) || hours < 1 || hours > 720) hours = 60;
+    var interval = hours * 3600000;
+    return start + Math.max(0, Math.floor((afterMs - start) / interval) + 1) * interval;
   }
 
   // Fills as many consecutive shorts slots as there are approved pieces
@@ -2312,15 +2307,7 @@
         scheduleShorts(settings);
         return;
       }
-      var latest = null;
-      Object.keys(pieces).forEach(function (id) {
-        var o = pieces[id];
-        if (o.id !== p.id && o.contentType === 'longform' && o.scheduledAt && (o.stage === 'scheduled' || o.stage === 'live')) {
-          var t = new Date(o.scheduledAt).getTime();
-          if (!latest || t > latest) latest = t;
-        }
-      });
-      p.scheduledAt = new Date(nextBangkokLongformSlot(Date.now(), settings.longformScheduleTime, latest)).toISOString();
+      p.scheduledAt = new Date(nextLongformSlot(Date.now(), settings.longformScheduleAnchor, settings.longformIntervalHours)).toISOString();
       p.stage = 'scheduled';
     });
   }
@@ -3363,7 +3350,8 @@
     var runway = window.RMQueueCoverage.calculate({
       pieces: Object.keys(pieces).map(function (id) { return pieces[id]; }),
       now: Date.now(),
-      longformTime: boardSettingsCache && boardSettingsCache.longformScheduleTime,
+      longformAnchor: boardSettingsCache && boardSettingsCache.longformScheduleAnchor,
+      longformIntervalHours: boardSettingsCache && boardSettingsCache.longformIntervalHours,
       postingSchedule: status && status.channel && status.channel.postingSchedule
     });
     function dateLabel(value) {
@@ -3404,13 +3392,33 @@
         '<div class="queue-map-lane"><small>SHORT</small><span>' + slotMarkers(day.publishedShortform.concat(day.shortform), 'Short-form') + '</span></div>' +
       '</div>';
     }).join('');
+    var longformHours = Number(boardSettingsCache && boardSettingsCache.longformIntervalHours) || 60;
+    var longformSlots = runway.longform.timeline.map(function (slot, index) {
+      var stateLabel = slot.state === 'open' ? 'Needs video' : slot.state === 'scheduled' ? 'Scheduled' : 'Ready in queue';
+      return '<div class="queue-longform-slot queue-longform-slot--' + slot.state + '" aria-label="Long-form slot ' + (index + 1) +
+        ', ' + escapeHtml(dateLabel(slot.at) + ' ' + timeLabel(slot.at) + ', ' + stateLabel) + '">' +
+        '<small>#' + (index + 1) + '</small><strong>' + escapeHtml(dateLabel(slot.at)) + '</strong>' +
+        '<span>' + escapeHtml(timeLabel(slot.at)) + '</span><em>' + stateLabel + '</em></div>';
+    }).join('');
     queueCoverage.innerHTML = '<div class="queue-coverage-summary-row">' +
-      summary('Long-form', runway.longform, 'Every 3 days') +
+      summary('Long-form', runway.longform, 'Every ' + longformHours + ' hours') +
       summary('Short-form', runway.shortform, 'Buffer cadence') + '</div>' +
+      '<div class="queue-map-head"><div><strong>Next 15 long-form slots</strong><span>Asia/Bangkok · elapsed hours, so the clock moves</span></div>' +
+        '<label class="queue-longform-control">Hours between uploads <input id="opsLongformIntervalHours" type="number" min="1" max="720" step="1" value="' + longformHours + '"' + (IS_REVIEWER ? ' disabled' : '') + '></label></div>' +
+      '<div class="queue-longform-scroll" aria-label="Next 15 long-form publication times"><div class="queue-longform-strip">' + longformSlots + '</div></div>' +
       '<div class="queue-map-head"><div><strong>Next 15 days</strong><span>Today → forward · Bangkok time</span><span class="queue-map-swipe">Swipe timeline →</span></div>' +
         '<div class="queue-map-key"><span class="queue-map-key-published">✓ Published</span><span class="queue-map-key-ready">✓ Ready</span><span class="queue-map-key-scheduled">✓ Scheduled</span><span class="queue-map-key-open">! Needs video</span><span>— No slot</span></div></div>' +
       '<div class="queue-map-scroll" aria-label="15-day publishing map"><div class="queue-map-days">' + days + '</div></div>' +
       (runway.shortform.estimated ? '<div class="queue-coverage-note">Short-form dates are daily estimates from the last actual post while Buffer’s schedule is unavailable.</div>' : '');
+    var intervalInput = document.getElementById('opsLongformIntervalHours');
+    if (intervalInput) intervalInput.addEventListener('change', function () {
+      var hours = Number(intervalInput.value);
+      if (!Number.isInteger(hours) || hours < 1 || hours > 720) { intervalInput.value = longformHours; return; }
+      boardSettingsCache.longformIntervalHours = hours;
+      boardSettingsCache.cadence.longform = { every: hours, unit: 'hours' };
+      Store.saveSettings(boardSettingsCache).then(function () { renderQueueCoverage(); })
+        .catch(function () { intervalInput.value = longformHours; });
+    });
   }
 
   // opts.hideVideoChip: Final Check cards (finalCheckCardHtml) only ever
@@ -6246,14 +6254,16 @@
     var dis = IS_REVIEWER ? ' disabled' : '';
     grid.innerHTML = '<div class="cadence-row" data-key="longform">' +
       '<span class="cadence-label">Direct longform <span class="ink-faint">(YouTube / Facebook)</span></span>' +
-      '<span class="cadence-inputs">First video at the next <input type="time" class="cadence-time" id="longformScheduleTime" value="' +
-        escapeHtml(settingsCache.longformScheduleTime || '07:55') + '"' + dis + ' /> <span>Asia/Bangkok, then every 3 days</span></span>' +
+      '<span class="cadence-inputs">First slot: 23 Oct 2026, 11:00 p.m. Bangkok · then every <input type="number" min="1" max="720" step="1" class="cadence-time" id="longformIntervalHours" value="' +
+        escapeHtml(settingsCache.longformIntervalHours || 60) + '"' + dis + ' /> <span>hours (the clock moves)</span></span>' +
     '</div>';
-    var timeInput = document.getElementById('longformScheduleTime');
-    timeInput.addEventListener('change', function () {
-      settingsCache.longformScheduleTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(timeInput.value) ? timeInput.value : '07:55';
-      settingsCache.cadence.longform = { every: 3, unit: 'days' };
-      timeInput.value = settingsCache.longformScheduleTime;
+    var intervalInput = document.getElementById('longformIntervalHours');
+    intervalInput.addEventListener('change', function () {
+      var hours = Number(intervalInput.value);
+      if (!Number.isInteger(hours) || hours < 1 || hours > 720) { intervalInput.value = settingsCache.longformIntervalHours; return; }
+      settingsCache.longformIntervalHours = hours;
+      settingsCache.cadence.longform = { every: hours, unit: 'hours' };
+      intervalInput.value = hours;
       saveSettingsDebounced();
     });
   }

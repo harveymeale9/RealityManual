@@ -1971,6 +1971,20 @@ app.put('/api/store/:storeName/:id', function (req, res) {
     delete req.body.publishingQueueTarget;
     delete req.body.publishingQueueShortTarget;
     delete req.body.publishingQueueLongformTarget;
+    // Tabs opened before the moving-hour cadence must not silently restore
+    // the old three-day rule during an unrelated Content Settings save.
+    const previousRow = stmts.getOne.get('settings', id);
+    let previous = {};
+    try { previous = previousRow ? JSON.parse(previousRow.data) : {}; } catch (error) { previous = {}; }
+    const anchor = Date.parse(req.body.longformScheduleAnchor || previous.longformScheduleAnchor || '');
+    req.body.longformScheduleAnchor = Number.isFinite(anchor)
+      ? new Date(anchor).toISOString() : shortformSchedule.LONGFORM_ANCHOR;
+    req.body.longformIntervalHours = shortformSchedule.normalizeLongformIntervalHours(
+      req.body.longformIntervalHours === undefined ? previous.longformIntervalHours : req.body.longformIntervalHours
+    );
+    req.body.cadence = Object.assign({}, req.body.cadence || {}, {
+      longform: { every: req.body.longformIntervalHours, unit: 'hours' }
+    });
   }
 
   let existingPiece = null;
@@ -3717,8 +3731,8 @@ async function nextPublishingQueueSlot(type, pieces, nowValue) {
     const occupied = pieces.filter(function (piece) {
       return piece.contentType === 'longform' && (piece.stage === 'scheduled' || piece.stage === 'live') && (piece.scheduledAt || piece.postedAt);
     }).map(function (piece) { return piece.scheduledAt || piece.postedAt; });
-    return shortformSchedule.nextAvailableBangkokLongformSlots(
-      nowValue, settings.longformScheduleTime || '07:55', occupied, 1
+    return shortformSchedule.nextAvailableLongformSlots(
+      nowValue, settings.longformScheduleAnchor, settings.longformIntervalHours, occupied, 1
     )[0] || '';
   }
   let postingSchedule = publishingBufferScheduleCache.postingSchedule;
@@ -3853,7 +3867,7 @@ async function runPlatformPublishBatch(id, destinations, options) {
   // Studio chooses an exact topic-aware slot from Buffer's Bangkok posting
   // calendar, then creates TikTok as a custom-scheduled post at that instant
   // and retains the direct-platform payload until the same time. Longform
-  // keeps its separate three-day Bangkok rhythm, but both rhythms compare
+  // keeps its separate elapsed-hour rhythm, but both rhythms compare
   // against every format so a long and short treatment of the same subject
   // are deliberately kept apart.
   const initialPiece = getPieceRecord(id);
@@ -3887,12 +3901,11 @@ async function runPlatformPublishBatch(id, destinations, options) {
     }).map(function (other) { return other.scheduledAt || other.postedAt; });
     const forcedDueAt = publishingQueue.preparationDue(options.dueAt, Date.now(), publishingQueue.PREPARATION_LEAD_MS + 60 * 1000)
       ? options.dueAt : '';
-    const candidates = forcedDueAt ? [forcedDueAt] : shortformSchedule.nextAvailableBangkokLongformSlots(
-      Date.now(), settings.longformScheduleTime || '07:55', occupied, 10
+    const candidates = forcedDueAt ? [forcedDueAt] : shortformSchedule.nextAvailableLongformSlots(
+      Date.now(), settings.longformScheduleAnchor, settings.longformIntervalHours, occupied, 10
     );
     // Queue selection already chose the best topic for this turn. Commit it
-    // to the next cadence slot rather than moving it days later and leaving
-    // an artificial hole in the three-day release rhythm.
+    // to the next cadence slot rather than leaving an artificial gap.
     const scheduled = topicAwarePublishingSlot(initialPiece, candidates.slice(0, 1), pieces);
     const dueAt = scheduled.dueAt;
     const latest = getPieceRecord(id);

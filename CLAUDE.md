@@ -21005,3 +21005,36 @@ still reports failures to its existing retry/logging layer. A test emits a
 late error after a synthetic connection timeout. Deploy of the backend should
 wait for any active Editor render per `deploy.sh`; verify the affected projects
 and actual preview files before reporting that they are unblocked.
+
+---
+
+# 690. Long-form Releases Every 60 Elapsed Hours from 23 October (2026-10-22)
+
+Harvey replaced the long-form three-calendar-day fixed-clock rhythm with a
+specific first slot: **23 October 2026 at 11:00 p.m. Asia/Bangkok**, equal to
+`2026-10-23T16:00:00.000Z`. Subsequent slots are 60 actual elapsed hours apart,
+so their Bangkok wall-clock times move between 11:00 p.m. and 11:00 a.m.
+The date/time is an explicit anchor, not derived from old Live long-form posts
+(the last of those belonged to the former schedule). If a slot is not filled,
+the clock keeps its anchored rhythm instead of drifting to the next approval.
+
+`shortformSchedule.nextLongformSlot` and `nextAvailableLongformSlots` are the
+backend source for queue selection and direct YouTube/Facebook release. Both
+read `longformScheduleAnchor` and `longformIntervalHours` from Content Settings,
+defaulting to the above anchor and 60 hours. The interval is an editable whole
+number from 1 to 720 hours. The settings write boundary preserves these fields
+when an older browser tab sends a settings record without them; it also keeps
+the older `cadence.longform` shape consistent as `{every: N, unit: 'hours'}`.
+Existing scheduled cards, if any, remain untouched; at implementation time
+there were none, and no long-form card was yet waiting in Publishing Queue.
+
+Content Ops' runway now has a dedicated horizontally scrollable row showing
+the **next 15 individual long-form slots**, with each date, moving Bangkok
+time, and open/queued/scheduled state. The existing 15-day day map remains for
+short-form context and today's published markers. Both the runway and Content
+Settings expose the hours-between-uploads input. The browser's legacy approval
+fallback uses the same fixed-anchor calculation. The Content Settings and
+runway assets have new cachebusters. Regression tests assert the 23 October
+anchor, 60-hour movement, occupied-slot behavior, configurable interval, and
+runway/backend agreement. Verify the live settings and actual deployment before
+declaring the next release scheduled.

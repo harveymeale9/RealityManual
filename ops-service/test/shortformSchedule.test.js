@@ -37,46 +37,20 @@ test('topic scheduler can fill open short-form slots instead of appending after 
   ]);
 });
 
-test('longform uses the chosen Bangkok time on a three-day calendar rhythm', function () {
-  assert.equal(
-    schedule.nextBangkokLongformSlot(Date.parse('2026-09-28T00:00:00Z'), '07:55', null),
-    '2026-09-28T00:55:00.000Z'
-  );
-  assert.equal(
-    schedule.nextBangkokLongformSlot(Date.parse('2026-09-28T02:00:00Z'), '07:55', null),
-    '2026-09-29T00:55:00.000Z'
-  );
-  assert.equal(
-    schedule.nextBangkokLongformSlot(Date.parse('2026-09-29T00:00:00Z'), '07:55', '2026-09-28T00:55:00.000Z'),
-    '2026-10-01T00:55:00.000Z'
-  );
+test('longform starts 23 October at 11 p.m. Bangkok and moves every 60 elapsed hours', function () {
+  const anchor = schedule.LONGFORM_ANCHOR;
+  assert.equal(anchor, '2026-10-23T16:00:00.000Z');
+  assert.equal(schedule.nextLongformSlot(Date.parse('2026-10-22T15:00:00Z'), anchor, 60), anchor);
+  assert.equal(schedule.nextLongformSlot(Date.parse(anchor), anchor, 60), '2026-10-26T04:00:00.000Z');
+  assert.equal(schedule.nextLongformSlot(Date.parse('2026-10-26T04:00:00Z'), anchor, 60), '2026-10-28T16:00:00.000Z');
 });
 
-test('the first longform uses the very next 1:55 PM Bangkok occurrence', function () {
-  assert.equal(
-    schedule.nextBangkokLongformSlot(Date.parse('2026-10-13T05:00:00Z'), '13:55', null),
-    '2026-10-13T06:55:00.000Z'
-  );
-  assert.equal(
-    schedule.nextBangkokLongformSlot(Date.parse('2026-10-13T07:00:00Z'), '13:55', null),
-    '2026-10-14T06:55:00.000Z'
-  );
-  assert.equal(
-    schedule.nextBangkokLongformSlot(Date.parse('2026-10-14T00:00:00Z'), '13:55', '2026-10-13T06:55:00.000Z'),
-    '2026-10-16T06:55:00.000Z'
-  );
-});
-
-test('longform time input is normalized and safely defaults to the shorts midpoint', function () {
-  assert.equal(schedule.normalizeLongformTime('19:05'), '19:05');
-  assert.equal(schedule.normalizeLongformTime('bad'), '07:55');
-});
-
-test('topic scheduler retains the three-day longform rhythm while filling intentional gaps', function () {
-  assert.deepEqual(schedule.nextAvailableBangkokLongformSlots(
-    Date.parse('2026-09-29T02:00:00Z'), '07:55',
-    ['2026-09-28T00:55:00.000Z', '2026-10-04T00:55:00.000Z'], 3
-  ), [
-    '2026-10-01T00:55:00.000Z', '2026-10-07T00:55:00.000Z', '2026-10-10T00:55:00.000Z'
+test('longform hour control validates whole hours and occupied slots never shift the cadence', function () {
+  assert.equal(schedule.normalizeLongformIntervalHours(48), 48);
+  assert.equal(schedule.normalizeLongformIntervalHours(0), 60);
+  assert.equal(schedule.normalizeLongformIntervalHours(2.5), 60);
+  assert.deepEqual(schedule.nextAvailableLongformSlots(Date.parse('2026-10-22T15:00:00Z'), schedule.LONGFORM_ANCHOR, 60,
+    ['2026-10-26T04:00:00.000Z'], 3), [
+    '2026-10-23T16:00:00.000Z', '2026-10-28T16:00:00.000Z', '2026-10-31T04:00:00.000Z'
   ]);
 });

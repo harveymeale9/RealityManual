@@ -199,7 +199,7 @@ window.RMStore = (function () {
   var SHORT_TYPES = ['ultra_short', 'short', 'long_short'];
   var DEFAULT_CADENCE = {
     shorts: { every: 8, unit: 'hours' },
-    longform: { every: 3, unit: 'days' }
+    longform: { every: 60, unit: 'hours' }
   };
 
   var SETTINGS_ID = 'settings';
@@ -208,7 +208,8 @@ window.RMStore = (function () {
     return {
       id: SETTINGS_ID,
       cadence: JSON.parse(JSON.stringify(DEFAULT_CADENCE)),
-      longformScheduleTime: '07:55',
+      longformScheduleAnchor: '2026-10-23T16:00:00.000Z',
+      longformIntervalHours: 60,
       lastShortType: '',
       // Captions are organized by content shape, per Harvey (2026-09-20) —
       // one field per platform that shape can actually be tagged with,
@@ -303,7 +304,11 @@ window.RMStore = (function () {
       delete s.publishingQueueTarget;
       delete s.publishingQueueShortTarget;
       delete s.publishingQueueLongformTarget;
-      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(s.longformScheduleTime || ''))) s.longformScheduleTime = d.longformScheduleTime;
+      if (!Number.isFinite(Date.parse(s.longformScheduleAnchor || ''))) s.longformScheduleAnchor = d.longformScheduleAnchor;
+      var longformHours = Number(s.longformIntervalHours);
+      s.longformIntervalHours = Number.isInteger(longformHours) && longformHours >= 1 && longformHours <= 720
+        ? longformHours : d.longformIntervalHours;
+      s.cadence.longform = { every: s.longformIntervalHours, unit: 'hours' };
       return s;
     });
   }
