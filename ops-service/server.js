@@ -3332,7 +3332,9 @@ async function runBufferTiktokPublish(id, opts) {
       // `text` is Buffer's name for the visible TikTok caption. Final Check
       // supplies the fully rendered, platform-specific Content Settings
       // caption (including any piece tokens), not the YouTube/card title.
-      text: maskCaption(opts.caption || piece.title || 'Untitled'),
+      text: maskCaption(await socialCaptionForDestination(id, {
+        platform: 'tiktok', caption: opts.caption || piece.title || 'Untitled'
+      })),
       videoUrl: buffer.mediaUrl(id),
       thumbnailOffset: Math.round((Number(piece.thumbnailTimeSeconds) || 0) * 1000)
     });
@@ -3501,6 +3503,20 @@ async function ensureSocialDescription(id) {
   })().finally(function () { socialDescriptionsInFlight.delete(key); });
   socialDescriptionsInFlight.set(key, task);
   return task;
+}
+async function socialCaptionForDestination(id, destination) {
+  let caption = String(destination && (destination.caption ||
+    (destination.platform === 'tiktok' ? destination.title || 'Untitled' : '')) || '');
+  if (socialDescription.supports(destination && destination.platform) &&
+      (socialDescription.hasToken(caption) || typeof destination.socialDescriptionBaseCaption === 'string')) {
+    caption = socialDescription.destinationCaption(destination, await ensureSocialDescription(id));
+  }
+  // Buffer and Instagram otherwise truncate at 2,200 characters, which can
+  // silently remove the generated addendum at the end of Harvey's caption.
+  if (['tiktok', 'instagram'].includes(destination && destination.platform) && caption.length > 2200) {
+    throw new Error('Caption exceeds the 2,200-character platform limit');
+  }
+  return caption;
 }
 function uniquePublishDestinations(destinations) {
   const seen = new Set();
@@ -3830,7 +3846,7 @@ async function runPlatformPublishBatch(id, destinations, options) {
     if (tiktokDestination) {
       try {
         const result = await buffer.createTiktokVideoPost({
-          text: maskCaption(tiktokDestination.caption || tiktokDestination.title || 'Untitled'),
+          text: maskCaption(await socialCaptionForDestination(id, tiktokDestination)),
           videoUrl: buffer.mediaUrl(id),
           thumbnailOffset: Math.round((Number(initialPiece && initialPiece.thumbnailTimeSeconds) || 0) * 1000),
           dueAt: dueAt
@@ -3883,10 +3899,11 @@ async function runPlatformPublishBatch(id, destinations, options) {
     try {
       if (platform === 'ytlong' || platform === 'ytshort') {
         let description = destination.caption || '';
-        if (youtubeDescription.hasToken(description)) {
+        if (platform === 'ytlong' && youtubeDescription.hasToken(description)) {
           description = youtubeDescription.expand(description, await ensureYoutubeDescription(id));
-          if (description.length > 5000) throw new Error('YouTube description exceeds the 5,000-character limit');
         }
+        if (platform === 'ytshort') description = await socialCaptionForDestination(id, destination);
+        if (description.length > 5000) throw new Error('YouTube description exceeds the 5,000-character limit');
         const media = await localPublishMedia(id);
         let result;
         try {
@@ -3904,7 +3921,7 @@ async function runPlatformPublishBatch(id, destinations, options) {
       } else if (platform === 'tiktok') {
         const current = getPieceRecord(id);
         const result = await buffer.createTiktokVideoPost({
-          text: maskCaption(destination.caption || destination.title || 'Untitled'),
+          text: maskCaption(await socialCaptionForDestination(id, destination)),
           videoUrl: buffer.mediaUrl(id),
           thumbnailOffset: Math.round((Number(current && current.thumbnailTimeSeconds) || 0) * 1000),
           dueAt: options.retryFailed ? new Date(Math.max(Date.now() + 120000, Date.parse(current && current.scheduledAt) || 0)).toISOString() : undefined
@@ -3917,10 +3934,7 @@ async function runPlatformPublishBatch(id, destinations, options) {
       } else {
         const auth = stmts.getMetaAuth.get();
         if (!auth || !auth.page_access_token || !auth.page_id) throw new Error('Facebook + Instagram is not connected to a publishing Page.');
-        let socialCaption = destination.caption || '';
-        if (socialDescription.hasToken(socialCaption) || typeof destination.socialDescriptionBaseCaption === 'string') {
-          socialCaption = socialDescription.destinationCaption(destination, await ensureSocialDescription(id));
-        }
+        const socialCaption = await socialCaptionForDestination(id, destination);
         if (platform === 'facebook') {
           const current = getPieceRecord(id);
           const localSize = fs.existsSync(finalPath) ? fs.statSync(finalPath).size : 0;

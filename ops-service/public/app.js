@@ -5860,16 +5860,16 @@
           'for several platforms at once, each getting its own independently-set caption (Final Check shows all of ' +
           'them with a toggle when there\'s more than one). Facebook and long-form YouTube publish the caption you ' +
           'choose and support an optional <code>[LINK]</code> token for the tracked store URL. Nothing is added or ' +
-          'removed from Facebook automatically. <code>[DESCRIPTION]</code> (or <code>[DESC]</code>) adds transcript-grounded topic text beneath your standard wording: a short addendum on Instagram and Facebook, or a fuller description on long-form YouTube. YouTube Shorts, Instagram and TikTok are kept link-free.</p>' +
+          'removed from Facebook automatically. <code>[DESCRIPTION]</code> (or <code>[DESC]</code>) adds transcript-grounded topic text beneath your standard wording: a short addendum on YouTube Shorts, TikTok, Instagram and Facebook, or a fuller description on long-form YouTube. YouTube Shorts, Instagram and TikTok are kept link-free.</p>' +
         '<div class="caption-group-tabs" id="captionGroupTabs">' +
           '<button type="button" class="caption-group-tab active" data-group="shortform">Short-form</button>' +
           '<button type="button" class="caption-group-tab" data-group="longform">Longform</button>' +
         '</div>' +
         '<div class="caption-group-panel" data-group="shortform" id="captionPanelShortform">' +
           '<label class="field-label">YT Shorts caption</label>' +
-          '<textarea class="notes-input settings-textarea" id="caption-shortform-ytshort" placeholder="Shorts caption — no external link"></textarea>' +
+          '<textarea class="notes-input settings-textarea" id="caption-shortform-ytshort" placeholder="Shorts caption — no external link\n\n[DESCRIPTION]"></textarea>' +
           '<label class="field-label" style="margin-top:14px;display:block;">TikTok caption</label>' +
-          '<textarea class="notes-input settings-textarea" id="caption-shortform-tiktok" placeholder="TikTok caption — no external link"></textarea>' +
+          '<textarea class="notes-input settings-textarea" id="caption-shortform-tiktok" placeholder="TikTok caption — no external link\n\n[DESCRIPTION]"></textarea>' +
           '<label class="field-label" style="margin-top:14px;display:block;">Instagram caption</label>' +
           '<textarea class="notes-input settings-textarea" id="caption-shortform-instagram" placeholder="Instagram caption — no external link\n\n[DESCRIPTION]"></textarea>' +
           '<label class="field-label" style="margin-top:14px;display:block;">Facebook caption</label>' +

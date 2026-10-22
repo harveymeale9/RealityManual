@@ -229,7 +229,7 @@ window.RMStore = (function () {
       // migration below, which preserves any real text saved under either
       // older shape.
       captions: {
-        shortform: { ytshort: '', tiktok: '', instagram: '[DESCRIPTION]', facebook: '[DESCRIPTION]' },
+        shortform: { ytshort: '[DESCRIPTION]', tiktok: '[DESCRIPTION]', instagram: '[DESCRIPTION]', facebook: '[DESCRIPTION]' },
         longform: { ytlong: '[DESCRIPTION]', facebook: '[DESCRIPTION]' }
       },
       // Final Check defaults to measured loudness matching. The percentage
@@ -363,7 +363,7 @@ window.RMStore = (function () {
     var text = String(template || '').trim();
     if (!captionAllowsTrackedLink(platform)) text = stripCaptionLink(text);
     else if (/\[LINK\]/i.test(text)) text = applyCaptionLink(text, link).trim();
-    if (platform !== 'ytlong' && platform !== 'ytshort' && platform !== 'instagram' && platform !== 'facebook') {
+    if (platform !== 'ytlong' && platform !== 'ytshort' && platform !== 'tiktok' && platform !== 'instagram' && platform !== 'facebook') {
       return text.replace(/[ \t]*\[(?:DESCRIPTION|DESC)\][ \t]*/gi, '').replace(/\n{3,}/g, '\n\n').trim();
     }
     // Keep the token intact in supported publish payloads; the server expands

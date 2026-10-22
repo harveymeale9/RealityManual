@@ -20878,3 +20878,34 @@ destination so the new backend can refresh the addendum if the transcript or
 title changes before release. The script uses a transactional versioned write,
 skips pieces that have left the queue, and is safe to rerun without duplicate
 prose. The Editor media and posting schedule were untouched.
+
+---
+
+# 686. Transcript Addenda on Every Short-Form Platform (2026-10-22)
+
+Harvey clarified that the brief, transcript-grounded social description belongs
+below his standard caption on YouTube Shorts and TikTok too, not just Instagram
+and Facebook. Long-form YouTube keeps its separate, fuller 50–200-word
+description after the standard text/link; long-form Facebook keeps the brief
+social version. The short-form Content Settings defaults now include
+`[DESCRIPTION]` for all four platforms. The version-2 settings migration adds
+the token to saved Shorts and TikTok captions once, while preserving the
+Instagram/Facebook migration's existing text and any later manual opt-out.
+Shorts, TikTok, and Instagram remain link-free.
+
+The same cached, edited-transcript-based 12–50-word addendum now expands for
+Shorts before the YouTube API upload and for TikTok before Buffer creates its
+scheduled post, including the direct/retry paths. An unresolved token or failed
+generation cannot be published as literal shortcode text. TikTok and Instagram
+captions are checked against their 2,200-character limit before either API can
+silently truncate the addendum. The long-form YouTube generator and CTA/link
+policy were not changed.
+
+All 17 pieces still in Publishing Queue were backfilled again from their
+existing cached descriptions, this time putting literal prose beneath the
+standard caption in all 68 frozen Shorts/TikTok/Instagram/Facebook payloads.
+This protects already-queued releases if a backend deploy must wait for an
+upload. A fresh SQLite backup was taken at
+`/root/ops-service-data/social-desc-all-platforms-prebackfill-20261022.sqlite`.
+The backfill is idempotent and retains each original caption for publish-time
+refresh. All 312 ops-service tests passed before deployment.

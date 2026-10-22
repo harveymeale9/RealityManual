@@ -10,15 +10,24 @@ const piece = { title: 'Desire is NOT the root of all suffering',
   transcript: 'Desire can be confused with the fear of losing something. The question is what actually causes suffering when a person wants a different outcome. '.repeat(4) };
 
 test('social template migration preserves Harvey’s copy and later opt-out', function () {
-  const original = { captions: { shortform: { instagram: 'Instagram copy', facebook: 'Facebook copy' }, longform: { facebook: 'Long Facebook copy' } } };
+  const original = { captions: { shortform: { ytshort: 'Shorts copy', tiktok: 'TikTok copy', instagram: 'Instagram copy', facebook: 'Facebook copy' }, longform: { facebook: 'Long Facebook copy' } } };
   const migrated = descriptions.upgradeSettings(original);
+  assert.equal(migrated.captions.shortform.ytshort, 'Shorts copy\n\n[DESCRIPTION]');
+  assert.equal(migrated.captions.shortform.tiktok, 'TikTok copy\n\n[DESCRIPTION]');
   assert.equal(migrated.captions.shortform.instagram, 'Instagram copy\n\n[DESCRIPTION]');
   assert.equal(migrated.captions.shortform.facebook, 'Facebook copy\n\n[DESCRIPTION]');
   assert.equal(migrated.captions.longform.facebook, 'Long Facebook copy\n\n[DESCRIPTION]');
   assert.equal(original.captions.shortform.instagram, 'Instagram copy');
   assert.equal(descriptions.upgradeSettings(migrated), null);
-  migrated.captions.shortform.instagram = 'Manual opt-out';
-  assert.equal(descriptions.upgradeSettings(migrated), null);
+  const prior = { captions: { shortform: { ytshort: 'Shorts copy', tiktok: 'TikTok copy', instagram: 'Manual opt-out', facebook: 'FB copy\n\n[DESCRIPTION]' }, longform: { facebook: 'FB copy\n\n[DESCRIPTION]' } }, socialDescriptionTemplateVersion: 1 };
+  const expanded = descriptions.upgradeSettings(prior);
+  assert.equal(expanded.captions.shortform.instagram, 'Manual opt-out', 'do not re-add a manually removed Meta token');
+  assert.equal(expanded.captions.shortform.facebook, 'FB copy\n\n[DESCRIPTION]');
+  assert.equal(expanded.captions.shortform.ytshort, 'Shorts copy\n\n[DESCRIPTION]');
+  assert.equal(expanded.captions.shortform.tiktok, 'TikTok copy\n\n[DESCRIPTION]');
+  assert.equal(expanded.socialDescriptionTemplateVersion, 2);
+  expanded.captions.shortform.tiktok = 'Manual opt-out';
+  assert.equal(descriptions.upgradeSettings(expanded), null);
   assert.equal(descriptions.appendToken('Already [DESC]'), 'Already [DESC]');
 });
 
@@ -47,13 +56,19 @@ test('a frozen queued caption carries real prose before deployment and refreshes
   assert.deepEqual(descriptions.backfillDestination(queued, text), queued, 'a rerun never duplicates the prose');
   const changed = 'This video considers the difference between wanting an outcome and fearing that it may never arrive.';
   assert.equal(descriptions.destinationCaption(queued, changed), 'Standard copy.\n\n' + changed);
-  assert.equal(descriptions.backfillDestination({ platform: 'tiktok', caption: 'TikTok copy.' }, text).caption, 'TikTok copy.');
+  for (const platform of ['ytshort', 'tiktok', 'facebook']) {
+    assert.equal(descriptions.backfillDestination({ platform, caption: platform + ' copy.' }, text).caption,
+      platform + ' copy.\n\n' + text);
+  }
   assert.notEqual(descriptions.sourceHash(piece), descriptions.sourceHash({ ...piece, transcript: piece.transcript + ' More.' }));
 });
 
-test('Meta publish expands the cached text before both platform API calls', function () {
+test('each short-form publisher expands the cached text before its API call', function () {
   const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   assert.match(server, /socialDescription\.destinationCaption\(destination, await ensureSocialDescription\(id\)\)/);
+  assert.match(server, /platform === 'ytshort'\) description = await socialCaptionForDestination\(id, destination\)/);
+  assert.match(server, /text: maskCaption\(await socialCaptionForDestination\(id, tiktokDestination\)\)/);
+  assert.match(server, /text: maskCaption\(await socialCaptionForDestination\(id, destination\)\)/);
   assert.match(server, /description: maskCaption\(socialCaption\)/);
   assert.match(server, /caption: maskCaption\(socialCaption\)/);
   assert.match(server, /'socialDescriptionText', 'socialDescriptionSourceHash'/);
