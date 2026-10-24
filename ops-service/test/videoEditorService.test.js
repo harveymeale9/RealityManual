@@ -42,6 +42,32 @@ test('INSERT CLIP directives parse YouTube ranges and preserve the caption cue',
   assert.match(directives[0].quote, /problem we face/);
 });
 
+test('audio-only planning directives keep two time-first uses in card order', function () {
+  const directives = editor.parseInsertClipDirectives('<p>Insert Clip: 0:00-0:09 - https://www.youtube.com/watch?v=-FGhjxw1CBY</p>' +
+    '<p>Later: Insert Clip: 0:00-0:09 - https://www.youtube.com/watch?v=-FGhjxw1CBY</p>');
+  assert.equal(directives.length, 2);
+  assert.equal(directives[0].sourceStart, 0);
+  assert.equal(directives[0].sourceEnd, 9);
+  assert.equal(directives[0].sourceUrl, 'https://www.youtube.com/watch?v=-FGhjxw1CBY');
+  assert.notEqual(directives[0].id, directives[1].id);
+});
+
+test('audio-only clip visualization renders a dark audio card and preserves the audio', { timeout: 60000 }, function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-audio-interlude-'));
+  t.after(function () { fs.rmSync(dir, { recursive: true, force: true }); });
+  const output = path.join(dir, 'interlude.mp4');
+  const result = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-filter_complex_threads', '2', '-f', 'lavfi', '-i', 'sine=frequency=660:duration=0.5',
+    '-f', 'lavfi', '-i', 'color=c=black:s=640x360:r=30000/1001:d=0.5',
+    '-filter_complex', editor.audioInterludeVideoFilter(0.5), '-t', '0.5', '-map', '[v]', '-map', '0:a:0',
+    '-c:v', 'libx264', '-preset', 'ultrafast', '-threads', '2', '-c:a', 'aac', output], { encoding: 'utf8', timeout: 55000 });
+  assert.equal(result.status, 0, String(result.error || result.stderr));
+  const streams = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type,width,height', '-of', 'json', output], { encoding: 'utf8' })).streams;
+  assert.ok(streams.some(function (stream) { return stream.codec_type === 'audio'; }));
+  assert.ok(streams.some(function (stream) { return stream.codec_type === 'video' && stream.width === 640 && stream.height === 360; }));
+  const first = execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', output, '-frames:v', '1', '-vf', 'scale=1:1', '-pix_fmt', 'rgb24', '-f', 'rawvideo', 'pipe:1']);
+  assert.ok(Array.from(first.subarray(0, 3)).every(function (channel) { return channel < 15; }));
+});
+
 test('inserted clips are gain-matched to the main voice loudness', function () {
   const measured = editor.parseIntegratedLoudness('noise\n{\n  "input_i" : "-24.37",\n  "input_tp" : "-8.00"\n}\n');
   assert.equal(measured, -24.37);
@@ -75,6 +101,24 @@ test('inserted clips split the source timeline and supply their own timed captio
   const groups = editor.renderCaptionGroups(project, [], segments);
   assert.deepEqual(groups.map(function (group) { return group.text; }), ['before', 'external', 'after']);
   assert.ok(groups[2].start >= 3.19);
+});
+
+test('two audio-only inserts fade book video on both sides without adding captions', function () {
+  const project = {
+    duration: 6, removedWordIndices: [],
+    words: [{ index: 0, text: 'before', start: 0.2, end: 1 }, { index: 1, text: 'between', start: 2, end: 3 }, { index: 2, text: 'after', start: 4, end: 5 }],
+    insertedClips: [
+      { id: 'first', status: 'ready', audioOnly: true, duration: 9, afterSourceTime: 1, words: [] },
+      { id: 'second', status: 'ready', audioOnly: true, duration: 9, afterSourceTime: 3, words: [] }
+    ]
+  };
+  const segments = editor.editorTimelineSegments(project, []);
+  assert.deepEqual(segments.map(function (segment) { return segment.type; }), ['source', 'insert', 'source', 'insert', 'source']);
+  assert.equal(segments[0].fadeOutToAudioInsert, true);
+  assert.equal(segments[2].fadeInFromAudioInsert, true);
+  assert.equal(segments[2].fadeOutToAudioInsert, true);
+  assert.equal(segments[4].fadeInFromAudioInsert, true);
+  assert.deepEqual(editor.renderCaptionGroups(project, [], segments).map(function (group) { return group.text; }), ['before', 'between', 'after']);
 });
 
 const words = [

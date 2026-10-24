@@ -21090,3 +21090,34 @@ social addenda, one current YouTube description, and 70 frozen destination
 payloads, with zero occurrences of `Harvey`/`Meale` in generated or queued
 caption text and no mismatched social addenda. Existing CTA/base captions,
 schedule, and already-Live pieces were not changed.
+
+---
+
+# 693. Audio-Only Planned Inserts for the Mushroom Story (2026-10-24)
+
+The planning card for “I took a heroic dose of mushrooms and was told the
+meaning of life” contains two `Insert Clip: 0:00-0:09 - <YouTube URL>` cues.
+The original parser only accepted URL-first syntax, so the Editor could not
+use either cue. It now accepts both URL-first and time-first directives,
+preserves their order, and gives repeated uses separate directive IDs.
+
+An insert request may now specify `audioOnly: true`. The Editor downloads
+only the external audio, renders a small black card with a music-note and
+“AUDIO PLAYING” indicator, and fades the book footage out/in over 0.3
+seconds on either side. Music inserts intentionally carry no speech-caption
+events, while all later source captions shift by the inserted duration. A
+second use of the same URL/range reuses the first normalized asset. The
+normal video-and-speech insertion path is unchanged. Existing previews are
+not globally invalidated: inserting an actual clip invalidates that project
+and triggers its usual verified rebuild. The visualizer is deliberately a
+lightweight 640×360 card, not a full-resolution `showwaves` filter; a real
+FFmpeg test showed the latter could exceed available VPS memory during an
+Editor render. Parser, timing/fades, real FFmpeg card output, and the full
+service suite are covered by tests.
+
+For this particular source, YouTube responded to the VPS downloader with a
+sign-in/bot challenge. Its official artist Bandcamp release has the same
+track and makes a nine-second excerpt available for the manual edit. Keep
+the provenance explicit when inserting it; do not silently swap in an
+unrelated recording. Verify both placements and the final preview before
+reporting the edit complete.

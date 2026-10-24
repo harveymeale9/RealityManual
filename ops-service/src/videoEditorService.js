@@ -53,6 +53,7 @@ const VERTICAL_OPENING_PUSH_IN_SCALE = 1.125;
 const HORIZONTAL_OPENING_PUSH_IN_SCALE = 1.125;
 const VERTICAL_REVEAL_PUSH_IN_SCALE = 1.125;
 const EDITOR_RENDER_VERSION = 27;
+const AUDIO_INTERLUDE_FADE_SECONDS = 0.3;
 const AUTO_CUT_BOUNDARY_VERSION = 3;
 const DEFAULT_RETAINED_PAUSE_SECONDS = 0.24;
 const MIN_RETAINED_PAUSE_SECONDS = 0.08;
@@ -320,21 +321,28 @@ function parseInsertClipDirectives(notesHtml) {
   const text = String(notesHtml || '')
     .replace(/<br\s*\/?>/gi, '\n').replace(/<\/p\s*>/gi, '\n').replace(/<[^>]+>/g, ' ')
     .replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/&amp;/gi, '&').replace(/&nbsp;/gi, ' ');
-  const pattern = /INSERT\s+CLIP\s*:\s*(https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)\/[^\s,]+)\s+(\d+(?::\d+){1,2}(?:\.\d+)?)\s*-\s*(\d+(?::\d+){1,2}(?:\.\d+)?)(?:\s*,?\s*[“"]([^”"\n]+)[”"])?/gi;
+  const url = '(https?:\\/\\/(?:www\\.)?(?:youtube\\.com|youtu\\.be)\\/[^\\s,]+)';
+  const time = '(\\d+(?::\\d+){1,2}(?:\\.\\d+)?)';
+  const patterns = [
+    new RegExp('INSERT\\s+CLIP\\s*:\\s*' + url + '\\s+' + time + '\\s*-\\s*' + time + '(?:\\s*,?\\s*[“"]([^”"\\n]+)[”"])?', 'gi'),
+    new RegExp('INSERT\\s+CLIP\\s*:\\s*' + time + '\\s*-\\s*' + time + '\\s*-\\s*' + url + '(?:\\s*,?\\s*[“"]([^”"\\n]+)[”"])?', 'gi')
+  ];
   const directives = [];
-  let match;
-  while ((match = pattern.exec(text))) {
-    const start = clipTimestampSeconds(match[2]);
-    const end = clipTimestampSeconds(match[3]);
-    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || end - start > 60) continue;
-    const sourceUrl = match[1].replace(/[.)\]]+$/, '');
-    directives.push({
-      id: crypto.createHash('sha256').update([sourceUrl, start, end, match.index].join('|')).digest('hex').slice(0, 16),
-      sourceUrl: sourceUrl, sourceStart: start, sourceEnd: end, duration: end - start,
-      quote: String(match[4] || '').trim()
-    });
-  }
-  return directives;
+  patterns.forEach(function (pattern, patternIndex) {
+    let match;
+    while ((match = pattern.exec(text))) {
+      const sourceUrl = (patternIndex === 0 ? match[1] : match[3]).replace(/[.)\]]+$/, '');
+      const start = clipTimestampSeconds(patternIndex === 0 ? match[2] : match[1]);
+      const end = clipTimestampSeconds(patternIndex === 0 ? match[3] : match[2]);
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || end - start > 60) continue;
+      directives.push({
+        id: crypto.createHash('sha256').update([sourceUrl, start, end, match.index].join('|')).digest('hex').slice(0, 16),
+        sourceUrl: sourceUrl, sourceStart: start, sourceEnd: end, duration: end - start,
+        quote: String(match[4] || '').trim(), position: match.index
+      });
+    }
+  });
+  return directives.sort(function (a, b) { return a.position - b.position; }).map(function (item) { delete item.position; return item; });
 }
 
 function approximateWords(text, duration) {
@@ -343,6 +351,16 @@ function approximateWords(text, duration) {
   return tokens.map(function (token, index) {
     return { index: index, text: token, start: index * step, end: Math.min(Number(duration) || step, (index + 1) * step) };
   });
+}
+
+function audioInterludeVideoFilter(duration) {
+  const fade = Math.min(AUDIO_INTERLUDE_FADE_SECONDS, Math.max(0.04, duration / 3));
+  return '[1:v]drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:text=' +
+    "'♪':fontcolor=0x4dffbb:fontsize=100:x=(w-text_w)/2:y=h/2-115" +
+    ",drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:text='AUDIO PLAYING':fontcolor=0xc7e7d6:fontsize=24:x=(w-text_w)/2:y=h/2+30" +
+    ',fade=t=in:st=0:d=' + fade.toFixed(3) + ':color=black' +
+    ',fade=t=out:st=' + Math.max(0, duration - fade).toFixed(3) + ':d=' + fade.toFixed(3) + ':color=black' +
+    ',fps=30000/1001,format=yuv420p[v]';
 }
 
 function hashFile(filePath) {
@@ -1295,9 +1313,11 @@ function editorTimelineSegments(project, cuts) {
     if (containingIndex < 0) return;
     const containing = base[containingIndex];
     const replacement = [];
-    if (at - containing.start >= 0.04) replacement.push({ type: 'source', start: containing.start, end: at });
+    if (at - containing.start >= 0.04) replacement.push({ type: 'source', start: containing.start, end: at,
+      fadeInFromAudioInsert: containing.fadeInFromAudioInsert === true, fadeOutToAudioInsert: clip.audioOnly === true });
     replacement.push({ type: 'insert', clipId: clip.id, start: 0, end: Number(clip.duration), clip: clip });
-    if (containing.end - at >= 0.04) replacement.push({ type: 'source', start: at, end: containing.end, cameraResetAfterInsert: true });
+    if (containing.end - at >= 0.04) replacement.push({ type: 'source', start: at, end: containing.end,
+      cameraResetAfterInsert: true, fadeInFromAudioInsert: clip.audioOnly === true, fadeOutToAudioInsert: containing.fadeOutToAudioInsert === true });
     base.splice.apply(base, [containingIndex, 1].concat(replacement));
   });
   return base;
@@ -2195,7 +2215,8 @@ function setup(options) {
         const word = (project.words || []).find(function (item) { return Number(item.index) === Number(request.afterWordIndex); });
         if (!word || (project.removedWordIndices || []).map(Number).includes(Number(word.index))) throw new Error('Select a retained transcript word to insert the clip after.');
         const clipId = crypto.randomUUID();
-        const clip = Object.assign({}, directive, { id: clipId, directiveId: directive.id, afterWordIndex: Number(word.index), afterSourceTime: Number(word.end), status: 'preparing', planningPieceId: planningPiece.id, planningPieceTitle: planningPiece.title || '', createdAt: new Date().toISOString() });
+        const audioOnly = request.audioOnly === true;
+        const clip = Object.assign({}, directive, { id: clipId, directiveId: directive.id, afterWordIndex: Number(word.index), afterSourceTime: Number(word.end), audioOnly: audioOnly, status: 'preparing', planningPieceId: planningPiece.id, planningPieceTitle: planningPiece.title || '', createdAt: new Date().toISOString() });
         project.insertedClips = (project.insertedClips || []).concat([clip]);
         project.clipInsertStatus = 'preparing'; project.clipInsertError = '';
         invalidateProjectRender(project); advanceEditRevision(project); saveProject(project);
@@ -2203,28 +2224,46 @@ function setup(options) {
         const prefix = 'editor-youtube-' + clipId;
         tempPrefix = prefix;
         const template = path.join(tempDir, prefix + '.%(ext)s');
-        await run('yt-dlp', ['--no-playlist', '--no-warnings', '--download-sections', '*' + directive.sourceStart + '-' + directive.sourceEnd,
-          '--force-keyframes-at-cuts', '-f', 'bv*[height<=1080]+ba/b[height<=1080]', '--merge-output-format', 'mp4', '-o', template, directive.sourceUrl], 'YouTube clip download');
-        const downloadedName = fs.readdirSync(tempDir).find(function (name) { return name.indexOf(prefix + '.') === 0; });
-        if (!downloadedName) throw new Error('YouTube returned no downloadable clip.');
-        const downloaded = path.join(tempDir, downloadedName);
         const target = insertedClipPath(id, clipId);
         const requestedDuration = directive.sourceEnd - directive.sourceStart;
-        await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', downloaded, '-t', requestedDuration.toFixed(3),
-          '-map', '0:v:0', '-map', '0:a:0', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', target], 'clip normalization');
-        fs.rmSync(downloaded, { force: true });
+        const reused = audioOnly && (project.insertedClips || []).find(function (item) {
+          return item.id !== clipId && item.status === 'ready' && item.audioOnly === true && item.sourceUrl === directive.sourceUrl &&
+            Number(item.sourceStart) === directive.sourceStart && Number(item.sourceEnd) === directive.sourceEnd && fs.existsSync(insertedClipPath(id, item.id));
+        });
+        if (reused) {
+          fs.copyFileSync(insertedClipPath(id, reused.id), target);
+        } else {
+          const downloadArgs = ['--no-playlist', '--no-warnings', '--download-sections', '*' + directive.sourceStart + '-' + directive.sourceEnd];
+          if (audioOnly) downloadArgs.push('-f', 'ba/b');
+          else downloadArgs.push('--force-keyframes-at-cuts', '-f', 'bv*[height<=1080]+ba/b[height<=1080]', '--merge-output-format', 'mp4');
+          downloadArgs.push('-o', template, directive.sourceUrl);
+          await run('yt-dlp', downloadArgs, 'YouTube clip download');
+          const downloadedName = fs.readdirSync(tempDir).find(function (name) { return name.indexOf(prefix + '.') === 0; });
+          if (!downloadedName) throw new Error('YouTube returned no downloadable clip.');
+          const downloaded = path.join(tempDir, downloadedName);
+          if (audioOnly) {
+            await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', downloaded, '-f', 'lavfi', '-i',
+              'color=c=black:s=640x360:r=30000/1001:d=' + requestedDuration.toFixed(3), '-filter_complex', audioInterludeVideoFilter(requestedDuration),
+              '-t', requestedDuration.toFixed(3), '-map', '[v]', '-map', '0:a:0', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20',
+              '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', target], 'audio interlude normalization');
+          } else {
+            await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', downloaded, '-t', requestedDuration.toFixed(3),
+              '-map', '0:v:0', '-map', '0:a:0', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', target], 'clip normalization');
+          }
+          fs.rmSync(downloaded, { force: true });
+        }
         const media = await probe(target);
-        if (!media.hasAudio || media.duration < 0.2) throw new Error('The selected YouTube range did not contain usable video and audio.');
+        if (!media.hasAudio || !media.hasVideo || media.duration < 0.2) throw new Error('The selected YouTube range did not contain usable audio and video.');
         const audioPath = path.join(tempDir, 'editor-clip-audio-' + clipId + '.mp3');
         let words = [];
-        try {
+        if (!audioOnly) try {
           await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', target, '-vn', '-ac', '1', '-ar', '16000', '-b:a', '64k', audioPath], 'clip audio extraction');
           const transcription = await transcribeDetailed(fs.readFileSync(audioPath), 'audio/mpeg');
           words = normalizeWords(transcription.words).filter(function (item) { return item.start < media.duration + 0.1; });
         } catch (error) {
           words = approximateWords(directive.quote, media.duration);
         } finally { fs.rmSync(audioPath, { force: true }); }
-        if (!words.length) throw new Error('The clip downloaded, but its speech could not be transcribed and the outline did not include a quoted caption fallback.');
+        if (!audioOnly && !words.length) throw new Error('The clip downloaded, but its speech could not be transcribed and the outline did not include a quoted caption fallback.');
         project = getProject(id);
         if (!project) return;
         const stored = (project.insertedClips || []).find(function (item) { return item.id === clipId; });
@@ -2379,6 +2418,9 @@ function setup(options) {
           const pageFadeDuration = Math.min(PAGE_CHANGE_FADE_SECONDS, Math.max(0.02, segmentDuration / 2));
           if (pageFades.fadeIn) videoFilter += ',fade=t=in:st=0:d=' + pageFadeDuration.toFixed(3) + ':color=black';
           if (pageFades.fadeOut) videoFilter += ',fade=t=out:st=' + Math.max(0, segmentDuration - pageFadeDuration).toFixed(3) + ':d=' + pageFadeDuration.toFixed(3) + ':color=black';
+          const insertFadeDuration = Math.min(AUDIO_INTERLUDE_FADE_SECONDS, Math.max(0.02, segmentDuration / 2));
+          if (segment.fadeInFromAudioInsert) videoFilter += ',fade=t=in:st=0:d=' + insertFadeDuration.toFixed(3) + ':color=black';
+          if (segment.fadeOutToAudioInsert) videoFilter += ',fade=t=out:st=' + Math.max(0, segmentDuration - insertFadeDuration).toFixed(3) + ':d=' + insertFadeDuration.toFixed(3) + ':color=black';
         }
         videoFilter += ',format=yuv420p';
         filters.push(videoFilter + '[v' + index + ']');
@@ -3658,7 +3700,7 @@ function setup(options) {
     if (!Number.isInteger(afterWordIndex)) return res.status(400).json({ error: 'word_required', message: 'Select the transcript word the clip should follow.' });
     project.clipInsertStatus = 'queued'; project.clipInsertError = ''; saveProject(project);
     res.status(202).json({ ok: true, status: 'queued' });
-    prepareInsertedClip(project.id, { afterWordIndex: afterWordIndex, directiveId: String(req.body && req.body.directiveId || '') });
+    prepareInsertedClip(project.id, { afterWordIndex: afterWordIndex, directiveId: String(req.body && req.body.directiveId || ''), audioOnly: req.body && req.body.audioOnly === true });
   });
 
   router.delete('/:id/inserted-clips/:clipId', function (req, res) {
@@ -3969,6 +4011,7 @@ module.exports = {
   verifiedRenderMatches,
   parseIntegratedLoudness,
   insertedClipGainDb,
+  audioInterludeVideoFilter,
   normalizeWords,
   calculateAutoCuts,
   calculateManualCuts,
