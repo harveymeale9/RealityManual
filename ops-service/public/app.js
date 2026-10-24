@@ -2374,7 +2374,7 @@
       pickFrameBtn, thumbScrub, scrubRange, captureFrameBtn, captionReadout,
       utmField, fieldUtmLink, copyUtmBtn, scheduleStatus, approveBtn,
       stageField, stageReadoutField, stageReadout,
-      ytTitlesField, fieldYtTitle1, fieldYtTitle2, fieldYtTitle3,
+      ytTitlesField, fieldYtTitle1,
       kanbanDictateBtn, kanbanDictationStatus,
       teleprompterOpen, teleprompterView, teleprompterTitle,
       teleprompterScroll, teleprompterScript, teleprompterClose;
@@ -2592,8 +2592,6 @@
     fieldUtmLink = document.getElementById('fieldUtmLink');
     ytTitlesField = document.getElementById('ytTitlesField');
     fieldYtTitle1 = document.getElementById('fieldYtTitle1');
-    fieldYtTitle2 = document.getElementById('fieldYtTitle2');
-    fieldYtTitle3 = document.getElementById('fieldYtTitle3');
     copyUtmBtn = document.getElementById('copyUtmBtn');
     scheduleStatus = document.getElementById('scheduleStatus');
     approveBtn = document.getElementById('approveBtn');
@@ -2640,7 +2638,7 @@
     setKanbanDictationTarget(fieldNotes);
     fieldTranscript.addEventListener('input', captureDraftAndDebounceSync);
     fieldTranscript.addEventListener('blur', function () { clearTimeout(saveTimer); syncFromForm(); });
-    [fieldYtTitle1, fieldYtTitle2, fieldYtTitle3].forEach(function (el) {
+    [fieldYtTitle1].forEach(function (el) {
       el.addEventListener('input', captureDraftAndDebounceSync);
       el.addEventListener('blur', function () { clearTimeout(saveTimer); syncFromForm(); });
     });
@@ -2968,8 +2966,6 @@
 
     var ytTitles = p.ytTitles || [];
     fieldYtTitle1.value = ytTitles[0] || '';
-    fieldYtTitle2.value = ytTitles[1] || '';
-    fieldYtTitle3.value = ytTitles[2] || '';
 
     if (!p.hasVideo) {
       videoSection.hidden = true;
@@ -3048,8 +3044,6 @@
     scrubRange.disabled = !editable;
     captureFrameBtn.disabled = !editable;
     fieldYtTitle1.disabled = !editable;
-    fieldYtTitle2.disabled = !editable;
-    fieldYtTitle3.disabled = !editable;
     if (!editable) approveBtn.hidden = true;
     btnDelete.hidden = !editable;
   }
@@ -3138,7 +3132,7 @@
       contentTypeSelectionExplicit: !!(p && p.contentTypeSelectionExplicit),
       notesHtml: fieldNotes.innerHTML,
       platforms: platforms,
-      ytTitles: [fieldYtTitle1.value, fieldYtTitle2.value, fieldYtTitle3.value].filter(function (t) { return t.trim(); })
+      ytTitles: [fieldYtTitle1.value].filter(function (t) { return t.trim(); })
     };
     if (p && p.hasVideo) {
       vals.transcript = fieldTranscript.value;
@@ -3626,22 +3620,15 @@
 
   function finalCheckCardHtml(id, piece) {
     var titles = piece.ytTitles || [];
-    // Final Check is the last safe place to catch a weak/incorrect title,
-    // so these are real autosaving inputs rather than read-only lines. A
-    // short still gets one slot; longform retains its three genuine title
-    // options. The first saved value remains the publish-authoritative title
-    // used by fc-yt-publish-btn below.
-    var titleSlotCount = piece.contentType === 'longform' ? 3 : 1;
-    var titleIndexes = [];
-    for (var titleIndex = 0; titleIndex < titleSlotCount; titleIndex++) titleIndexes.push(titleIndex);
-    var titlesHtml = '<div class="fc-titles" data-id="' + id + '">' + titleIndexes.map(function (i) {
-      var label = titleSlotCount === 1 ? 'Title' : ('Title ' + (i + 1));
-      var placeholder = titleSlotCount === 1 ? 'Add title' : ('Title option ' + (i + 1) + (i ? ' (optional)' : ''));
-      return '<label class="fc-title-line"><strong>' + label + ':</strong>' +
-        '<input type="text" class="fc-title-input" data-id="' + id + '" data-index="' + i + '" maxlength="100"' +
-          ' value="' + escapeHtml(titles[i] || '') + '" placeholder="' + placeholder + '"' +
-          (canEditPiece(piece) ? '' : ' disabled') + ' /></label>';
-    }).join('') + '<span class="fc-title-save" aria-live="polite"></span></div>';
+    // Final Check edits the single title that the publish APIs will use.
+    // Keep the existing autosave/recovery path, but do not offer unused
+    // alternates for long-form videos.
+    var titlesHtml = '<div class="fc-titles" data-id="' + id + '">' +
+      '<label class="fc-title-line"><strong>Title:</strong>' +
+        '<input type="text" class="fc-title-input" data-id="' + id + '" data-index="0" maxlength="100"' +
+          ' value="' + escapeHtml(titles[0] || '') + '" placeholder="Add title"' +
+          (canEditPiece(piece) ? '' : ' disabled') + ' /></label>' +
+      '<span class="fc-title-save" aria-live="polite"></span></div>';
     // The publish master is already complete at this stage. Playback uses a
     // 720p picture rendition with the master AAC stream copied unchanged;
     // the full-resolution <id>-final file is still the only publish input.
@@ -5345,29 +5332,18 @@
     audioSection.appendChild(audioPreviewProgress);
     audioSection.appendChild(previewAudio);
 
-    // --- Title picker. Longform gets up to 3 (auto-populated from the
-    // matched outline once analysis finishes, freely editable either
-    // way) since a longform upload can genuinely be posted under
-    // different titles at different times to see what performs best.
-    // Shortform (ultra-short/short/long-short — practically, vertical)
-    // gets just 1: Harvey, 2026-09-20, "remove the '3 title options' and
-    // put just 1 as theres no way to test/rotate titles" for a short,
-    // which is posted once and done, not re-titled later.
-    var isLongform = p.contentType === 'longform';
-    var titleSlotCount = isLongform ? 3 : 1;
+    // Publish APIs take one title for every video type.
     var titlesSection = document.createElement('div');
     titlesSection.className = 'upload-row-section upload-row-titles';
     var titlesLabel = document.createElement('label');
-    titlesLabel.textContent = isLongform ? 'Title options' : 'Title';
+    titlesLabel.textContent = 'Title';
     titlesSection.appendChild(titlesLabel);
-    var titleSlotIndexes = [];
-    for (var ti = 0; ti < titleSlotCount; ti++) titleSlotIndexes.push(ti);
-    var titleInputs = titleSlotIndexes.map(function (i) {
+    var titleInputs = [0].map(function (i) {
       var input = document.createElement('input');
       input.type = 'text';
       input.className = 'title-input';
       input.maxLength = 100;
-      input.placeholder = isLongform ? ('Title option ' + (i + 1) + (i > 0 ? ' (optional)' : '')) : 'Title';
+      input.placeholder = 'Title';
       input.value = (p.ytTitles || [])[i] || '';
       input.disabled = !canEditRow;
       input.addEventListener('input', function () {

@@ -20,6 +20,18 @@ test('Final Check waits for the 720p copy rather than preloading the 4K publish 
   assert.match(source, /-final-review/);
 });
 
+test('Production, Final Check and the edit form ask for one publishing title', function () {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const page = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const card = source.slice(source.indexOf('function finalCheckCardHtml('), source.indexOf('// Platforms that have a real backend publish integration.'));
+  assert.match(card, /data-index="0"/);
+  assert.doesNotMatch(card, /titleSlotCount|Title option/);
+  assert.match(source, /var titleInputs = \[0\]\.map/);
+  assert.doesNotMatch(source, /fieldYtTitle2|fieldYtTitle3|titleSlotCount/);
+  assert.match(page, /<label>Publishing title<\/label>/);
+  assert.doesNotMatch(page, /fieldYtTitle2|fieldYtTitle3|YouTube can rotate/);
+});
+
 test('Kanban refresh retains an in-progress Final Check video and its bound controls', function () {
   const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   assert.match(source, /activeFinalCheckPlayers\.push\(\{ id: card\.dataset\.id, wrap: wrap, controls: controls \}\)/);
@@ -63,5 +75,5 @@ test('Kanban presents the durable uploaded stage to users as Filmed', function (
   assert.match(store, /id:\s*'uploaded',\s*label:\s*'Filmed'/);
   assert.doesNotMatch(store, /id:\s*'uploaded',\s*label:\s*'Uploaded'/);
   assert.match(page, /store\.js\?v=20261022-longform-60h-v1/);
-  assert.match(page, /app\.js\?v=20261022-longform-single-timeline-v1/);
+  assert.match(page, /app\.js\?v=20261024-single-publish-title-v1/);
 });

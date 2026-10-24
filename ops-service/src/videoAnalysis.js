@@ -448,17 +448,17 @@ function buildMatchPrompt(transcript, candidates) {
     (candidateBlock || '(no candidates)') + '\n\n' +
     'Your job: decide which single candidate (if any) this video most likely corresponds to, based on how ' +
     'well the transcript\'s actual content matches that candidate\'s title/outline. If nothing is a ' +
-    'plausible match, matchedPieceId should be null. Then produce title options for this video: if the ' +
+    'plausible match, matchedPieceId should be null. Then produce one publishing title for this video: if the ' +
     'matched candidate\'s outline itself opens with a short list of alternate headline-style titles (Harvey ' +
     'often writes 1-3 of these right at the top of an outline, e.g. "The Most Powerful People Have Mastered ' +
     'This" / "The Most Powerful People Understand This" / "The Secret The Most Powerful People Have ' +
-    'Mastered"), extract those verbatim, up to 3. If there\'s no matched candidate, or its outline has no ' +
+    'Mastered"), choose the strongest one, keeping its wording verbatim. If there\'s no matched candidate, or its outline has no ' +
     'obvious title list at the top, fall back to just the matched candidate\'s own title as the single entry ' +
     '(or, with no match at all, a short punchy title you generate yourself from the transcript). ' +
     'workingTitle is a short (under 60 char) working label for this video in an upload list — usually just ' +
-    'the first of your titleOptions.\n\n' +
+    'the sole titleOptions entry.\n\n' +
     'Respond with ONLY a single JSON object, no markdown fencing, no other text, in exactly this shape:\n' +
-    '{"matchedPieceId": "<id or null>", "titleOptions": ["...", "..."], "workingTitle": "..."}';
+    '{"matchedPieceId": "<id or null>", "titleOptions": ["one title"], "workingTitle": "..."}';
 }
 
 async function matchAndGenerateTitles(transcript, candidates) {
@@ -468,13 +468,13 @@ async function matchAndGenerateTitles(transcript, candidates) {
     required: ['matchedPieceId', 'titleOptions', 'workingTitle'],
     properties: {
       matchedPieceId: { type: ['string', 'null'] },
-      titleOptions: { type: 'array', maxItems: 3, items: { type: 'string' } },
+      titleOptions: { type: 'array', maxItems: 1, items: { type: 'string' } },
       workingTitle: { type: 'string' }
     }
   }, { timeoutMs: 90000, name: 'uploaded_video_match' });
   return {
     matchedPieceId: result.matchedPieceId || null,
-    titleOptions: Array.isArray(result.titleOptions) ? result.titleOptions.filter(Boolean).slice(0, 3) : [],
+    titleOptions: Array.isArray(result.titleOptions) ? result.titleOptions.filter(Boolean).slice(0, 1) : [],
     workingTitle: String(result.workingTitle || '').trim()
   };
 }
@@ -486,7 +486,7 @@ async function matchAndGenerateTitles(transcript, candidates) {
 // the piece entered Final Check.
 function applyGeneratedTitleSuggestions(piece, result) {
   if (!piece || piece.ytTitlesManuallyEdited) return piece;
-  if (result && Array.isArray(result.titleOptions) && result.titleOptions.length) piece.ytTitles = result.titleOptions;
+  if (result && Array.isArray(result.titleOptions) && result.titleOptions.length) piece.ytTitles = result.titleOptions.slice(0, 1);
   if (result && result.workingTitle && !piece.preserveWorkingTitle) piece.title = result.workingTitle;
   return piece;
 }

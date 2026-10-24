@@ -21121,3 +21121,20 @@ track and makes a nine-second excerpt available for the manual edit. Keep
 the provenance explicit when inserting it; do not silently swap in an
 unrelated recording. Verify both placements and the final preview before
 reporting the edit complete.
+
+---
+
+# 694. One Publishing Title for Every Video Type (2026-10-24)
+
+Harvey confirmed the platform publish APIs use one title, including for
+long-form videos. Production, Final Check, and the shared edit form now show
+one publishing-title input for every video type. The existing first
+`ytTitles` entry remains the authoritative published title; no queued or
+published piece is rewritten merely to hide unused alternates. If Harvey
+edits a title, autosave stores only that chosen value and preserves the
+manual-ownership marker so later transcript analysis cannot overwrite it.
+
+The transcript/planning matcher now asks for one best title and its schema
+allows only one, while still reading the first entry from legacy records.
+This removes a misleading promise that YouTube rotates three titles. A
+frontend cachebuster makes the simplified controls appear after refresh.
