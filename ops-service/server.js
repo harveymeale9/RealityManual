@@ -3502,15 +3502,12 @@ const PUBLISH_RETRY_DELAYS_MS = [60 * 1000, 5 * 60 * 1000, 15 * 60 * 1000, 60 * 
 function publishRetryDelay(attempts) {
   return PUBLISH_RETRY_DELAYS_MS[Math.min(Math.max(0, attempts), PUBLISH_RETRY_DELAYS_MS.length - 1)];
 }
-function notifyPublishRetry(piece, resolved) {
+function notifyPublishRetry(piece) {
   const id = crypto.createHash('sha256').update('publish-retry\n' + piece.id).digest('hex').slice(0, 32);
   const failures = (piece.publishRetryDestinations || []).map(function (destination) {
     return destination.platform + ': ' + (piece[publishErrorField(destination.platform)] || 'publish failed');
   });
-  const message = resolved
-    ? '✅ **Publishing recovered**\n\n' + piece.title +
-      ' was accepted by every selected platform. Any still-scheduled Buffer post will move to Live when sent.'
-    : '⚠️ **Publishing needs attention**\n\n' + piece.title +
+  const message = '⚠️ **Publishing needs attention**\n\n' + piece.title +
       (piece.stage === 'live' ? ' is already live where it succeeded. ' : ' has a platform failure before its release completed. ') +
       'Only the failed destination(s) will be retried automatically; confirmed successful posts will not be sent again.\n\n' +
       failures.join('\n') + '\n\nNext retry: ' + (piece.publishRetryNextAt || 'soon') + '. ' +
@@ -3555,9 +3552,12 @@ function recordPublishRetryState(id, destinations, attemptedRetry) {
   piece.updatedAt = new Date().toISOString();
   savePieceRecord(piece);
   if (failed.length && (!hadRetry || piece.publishRetryAttempts === 3 || piece.publishRetryAttempts % 12 === 0)) {
-    notifyPublishRetry(piece, false);
+    notifyPublishRetry(piece);
   } else if (!failed.length && hadRetry) {
-    notifyPublishRetry(piece, true);
+    // Recovery clears the badge, but does not turn the historical error into
+    // a fresh success notification or bump it to the top of the conversation.
+    db.prepare("UPDATE voice_messages SET notification_unread=0 WHERE notification_kind='publish_alert' AND source_ref=?")
+      .run(piece.id);
   }
 }
 const youtubeDescriptionsInFlight = new Map();

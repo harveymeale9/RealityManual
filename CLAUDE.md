@@ -20822,7 +20822,10 @@ those destinations with increasing delays (1 minute through 6 hours, without
 an attempt limit). A confirmed successful platform is never resubmitted by this worker.
 The card shows the failed platform and next retry time; a durable Project
 Manager publishing alert appears at the first failure, updates after repeated
-failures, and resolves when all selected platforms succeed. Old partial
+failures, and clears its unread badge when all selected platforms succeed.
+Harvey does not want a fresh success or "recovered" notification: the original
+error remains as history without being promoted to the top of the conversation.
+Old partial
 Scheduled cards do not block the following cadence slot, and R2 cleanup does
 not delete source media while retries remain.
 

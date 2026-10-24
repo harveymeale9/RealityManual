@@ -68,6 +68,14 @@ test('partial releases remain visible with a destination-specific retry notice',
   assert.match(server, /notification_kind IN \('mail_alert','publish_alert'\)/);
 });
 
+test('publishing recovery clears the error badge without a success alert', function () {
+  const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const retrySection = server.slice(server.indexOf('function notifyPublishRetry('), server.indexOf('const youtubeDescriptionsInFlight'));
+  assert.match(retrySection, /Publishing needs attention/);
+  assert.doesNotMatch(retrySection, /Publishing recovered|accepted by every selected platform|notifyPublishRetry\(piece, true\)/);
+  assert.match(retrySection, /UPDATE voice_messages SET notification_unread=0 WHERE notification_kind='publish_alert' AND source_ref=\?/);
+});
+
 test('Kanban presents the durable uploaded stage to users as Filmed', function () {
   const store = fs.readFileSync(path.join(__dirname, '..', 'public', 'lib', 'store.js'), 'utf8');
   const page = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
