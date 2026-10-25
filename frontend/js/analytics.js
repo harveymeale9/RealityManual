@@ -151,5 +151,20 @@ window.RMAnalytics = (function () {
 
   track('page_view');
 
+  // A later visit from a specific post must be measurable even when this
+  // browser's checkout funnel still credits its original first touch.
+  // This event is sent only after the same human-verification gate as a
+  // pageview; no session-level history survives daily aggregation.
+  try {
+    var landingParams = new URLSearchParams(window.location.search);
+    var landingSource = landingParams.get('utm_source');
+    if (landingSource) track('utm_landing', {
+      utm_source: landingSource,
+      utm_medium: landingParams.get('utm_medium') || '',
+      utm_campaign: landingParams.get('utm_campaign') || '',
+      utm_content: landingParams.get('utm_content') || ''
+    });
+  } catch (e) {}
+
   return { track: track };
 })();

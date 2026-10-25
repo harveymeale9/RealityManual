@@ -21141,3 +21141,36 @@ The transcript/planning matcher now asks for one best title and its schema
 allows only one, while still reading the first entry from legacy records.
 This removes a misleading promise that YouTube rotates three titles. A
 frontend cachebuster makes the simplified controls appear after refresh.
+
+---
+
+# 695. Per-Video Website Referral Breakdown (2026-10-25)
+
+The caption link for each clickable YouTube long-form and Facebook post
+already uses a per-piece `utm_content` sequence number. Website Analytics
+previously displayed only `utm_source`, and storefront daily compaction
+discarded `utm_content`, making older visits impossible to assign to a video.
+Harvey wants a source-share chart split into individual posts and profile or
+other link traffic, visible in both Content Analytics and Website Analytics.
+
+The storefront now records a separate `utm_landing` event only when a real
+browser opens a URL bearing `utm_source` and passes the existing human check.
+It carries the URL's actual source, medium, campaign, and content even if the
+browser's first-touch acquisition remains a different post or platform; the
+funnel's first-touch data is unchanged. Completed UTC days compact these
+events into anonymous per-link totals in `analytics_daily_utm_landings` before
+removing browser-level event rows. The admin-only website summary merges
+those totals with the current day's verified arrivals. Historical compacted
+days retain only their source and are labelled **Earlier source-only traffic**;
+the system does not guess which video or profile they came from.
+
+Both analytics views display a responsive donut with per-platform shares and
+per-link segments, including the video's Content Studio title when the UTM
+sequence matches a saved piece. A `utm_medium=profile` or
+`utm_content=profile` link is labelled Profile; a missing content tag is
+labelled Other / unspecified, not falsely called a profile click. Figures are
+verified browser/link/day visits, not raw clicks or distinct people across
+the whole month: one browser opening two different links may appear in both.
+Direct/untagged visits are outside this chart. Backend schema and route must
+be deployed before relying on new per-post readings; past detail cannot be
+reconstructed from the old aggregates.

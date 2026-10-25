@@ -64,7 +64,7 @@ const dailyCountsSinceStmt = db.prepare(`
 const utmSourcesSinceStmt = db.prepare(`
   SELECT utm_source, COUNT(DISTINCT session_id) AS sessions
   FROM analytics_events
-  WHERE created_at >= ? AND verified_human = 1
+  WHERE created_at >= ? AND verified_human = 1 AND event_name = 'page_view'
     AND utm_source IS NOT NULL AND utm_source != ''
   GROUP BY utm_source
   ORDER BY sessions DESC
@@ -97,9 +97,21 @@ const completedUtmDaysStmt = db.prepare(`
   SELECT substr(created_at, 1, 10) AS day, utm_source,
          COUNT(DISTINCT session_id) AS verified_visits
   FROM analytics_events
-  WHERE verified_human = 1 AND created_at < ?
+  WHERE verified_human = 1 AND event_name = 'page_view' AND created_at < ?
     AND utm_source IS NOT NULL AND utm_source != ''
   GROUP BY day, utm_source
+`);
+
+const completedUtmLandingDaysStmt = db.prepare(`
+  SELECT substr(created_at, 1, 10) AS day, utm_source,
+         COALESCE(utm_medium, '') AS utm_medium,
+         COALESCE(utm_campaign, '') AS utm_campaign,
+         COALESCE(utm_content, '') AS utm_content,
+         COUNT(DISTINCT session_id) AS verified_visits
+  FROM analytics_events
+  WHERE verified_human = 1 AND event_name = 'utm_landing' AND created_at < ?
+    AND utm_source IS NOT NULL AND utm_source != ''
+  GROUP BY day, utm_source, utm_medium, utm_campaign, utm_content
 `);
 
 const upsertDailyEventStmt = db.prepare(`
@@ -114,6 +126,14 @@ const upsertDailyUtmStmt = db.prepare(`
   INSERT INTO analytics_daily_utm_sources (day, utm_source, verified_visits)
   VALUES (?, ?, ?)
   ON CONFLICT(day, utm_source) DO UPDATE SET
+    verified_visits = excluded.verified_visits
+`);
+
+const upsertDailyUtmLandingStmt = db.prepare(`
+  INSERT INTO analytics_daily_utm_landings
+    (day, utm_source, utm_medium, utm_campaign, utm_content, verified_visits)
+  VALUES (?, ?, ?, ?, ?, ?)
+  ON CONFLICT(day, utm_source, utm_medium, utm_campaign, utm_content) DO UPDATE SET
     verified_visits = excluded.verified_visits
 `);
 
@@ -144,6 +164,7 @@ function aggregateCompletedDays(force = false) {
   if (!force && lastAggregatedCutoff === cutoff) return;
   const eventRows = completedEventDaysStmt.all(cutoff);
   const utmRows = completedUtmDaysStmt.all(cutoff);
+  const landingRows = completedUtmLandingDaysStmt.all(cutoff);
 
   db.exec('BEGIN IMMEDIATE');
   try {
@@ -152,6 +173,10 @@ function aggregateCompletedDays(force = false) {
     });
     utmRows.forEach((row) => {
       upsertDailyUtmStmt.run(row.day, row.utm_source, row.verified_visits);
+    });
+    landingRows.forEach((row) => {
+      upsertDailyUtmLandingStmt.run(row.day, row.utm_source, row.utm_medium,
+        row.utm_campaign, row.utm_content, row.verified_visits);
     });
     deleteAggregatedEventsStmt.run(cutoff);
     db.exec('COMMIT');

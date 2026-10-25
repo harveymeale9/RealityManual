@@ -652,12 +652,6 @@
             '<span class="funnel-count">' + f.count + '</span></div>';
         }).join('');
 
-        var utmRows = data.top_utm_sources.length
-          ? data.top_utm_sources.map(function (u) {
-              return '<div class="funnel-row"><span class="funnel-step">' + escapeHtml(u.source) + '</span><span class="funnel-sessions">' + u.sessions + ' sessions</span></div>';
-            }).join('')
-          : '<div class="empty-slot">No UTM-tagged traffic yet</div>';
-
         panelMain.innerHTML =
           '<div class="ops-panel">' +
             '<div class="overview-row">' +
@@ -679,10 +673,7 @@
               '<div class="funnel-list">' + funnelRows + '</div>' +
               (refundedOrders ? '<a class="analytics-internal-link" href="#sales-analytics">View refunded orders and reasons in Sales Analytics</a>' : '') +
             '</div>' +
-            '<div class="funnel-section">' +
-              '<div class="eyebrow">Top UTM sources — last 30 days</div>' +
-              '<div class="funnel-list">' + utmRows + '</div>' +
-            '</div>' +
+            referralBreakdownHtml(data.referrals) +
           '</div>';
       })
       .catch(function () {
@@ -697,6 +688,46 @@
     instagram: { label: 'Instagram', color: '#d98cff' },
     facebook: { label: 'Facebook', color: '#63a8ff' }
   };
+
+  function referralBreakdownHtml(referrals) {
+    referrals = referrals || { total_sessions: 0, sources: [] };
+    var sources = referrals.sources || [];
+    var total = Number(referrals.total_sessions) || 0;
+    var hues = { youtube: 355, facebook: 215, instagram: 290, tiktok: 176 };
+    var wedges = [];
+    var cursor = 0;
+    var sourceRows = sources.map(function (source, sourceIndex) {
+      var sourceCount = Number(source.sessions) || 0;
+      var hue = Object.prototype.hasOwnProperty.call(hues, String(source.source).toLowerCase())
+        ? hues[String(source.source).toLowerCase()] : (75 + sourceIndex * 47) % 360;
+      var segments = (source.segments || []).map(function (segment, segmentIndex) {
+        var count = Number(segment.sessions) || 0;
+        var color = 'hsl(' + ((hue + segmentIndex * 7) % 360) + ' 76% ' +
+          (segment.legacy ? 30 : 46 + (segmentIndex % 4) * 9) + '%)';
+        var next = cursor + count;
+        if (total && count) wedges.push(color + ' ' + (cursor / total * 100).toFixed(3) + '% ' + (next / total * 100).toFixed(3) + '%');
+        cursor = next;
+        var content = String(segment.content || '');
+        var label = segment.legacy ? 'Earlier source-only traffic' :
+          (segment.medium === 'profile' || content.toLowerCase() === 'profile') ? 'Profile link' :
+          /^\d{1,6}$/.test(content) ? 'Video #' + content + (segment.piece_title ? ' · ' + segment.piece_title : '') :
+          content ? 'Tagged link · ' + content : 'Other / unspecified link';
+        return '<li><i style="background:' + color + '"></i><span title="' + escapeHtml(label) + '">' + escapeHtml(label) + '</span>' +
+          '<strong>' + count.toLocaleString('en-US') + '</strong><small>' + (total ? (count / total * 100).toFixed(1) : '0') + '%</small></li>';
+      }).join('');
+      return '<div class="referral-source"><div class="referral-source-head"><strong>' + escapeHtml(source.source) + '</strong>' +
+        '<span>' + sourceCount.toLocaleString('en-US') + ' · ' + (total ? (sourceCount / total * 100).toFixed(1) : '0') + '%</span></div>' +
+        '<ul>' + segments + '</ul></div>';
+    }).join('');
+    var gradient = wedges.length ? 'conic-gradient(' + wedges.join(',') + ')' : 'linear-gradient(#173024,#173024)';
+    return '<section class="referral-breakdown"><div class="referral-head"><div class="eyebrow">Content → website · last 30 days</div>' +
+      '<h3>Where tagged visits came from</h3></div>' +
+      (total ? '<div class="referral-body"><div class="referral-donut" role="img" aria-label="Share of verified tagged visits by platform and link" style="background:' + gradient + '">' +
+        '<div><strong>' + total.toLocaleString('en-US') + '</strong><span>tagged visits</span></div></div><div class="referral-sources">' + sourceRows + '</div></div>' :
+        '<div class="empty-slot">No verified UTM-tagged visits in this period yet.</div>') +
+      '<p class="referral-definition">' + escapeHtml(referrals.definition || 'Verified tagged arrivals, not raw clicks.') +
+      ' A visit can appear under more than one link if the same browser opens different posts. Older source-only visits cannot be assigned to a particular video or profile.</p></section>';
+  }
 
   function contentNumber(value) {
     return value == null ? '—' : Number(value).toLocaleString('en-US');
@@ -833,12 +864,19 @@
   function renderContentAnalytics(forceRefresh) {
     clearTimeout(contentAnalyticsTimer);
     panelMain.innerHTML = '<div class="content-dashboard content-loading"><div class="eyebrow">Cross-platform performance</div><h2>Content Analytics</h2><p>Collecting the latest video and audience metrics…</p></div>';
-    fetch(forceRefresh ? '/api/reports/content-analytics/refresh' : '/api/reports/content-analytics', {
-      method: forceRefresh ? 'POST' : 'GET', credentials: 'include'
-    }).then(function (response) {
-      if (!response.ok) throw new Error('content_analytics_' + response.status);
-      return response.json();
-    }).then(function (data) {
+    Promise.all([
+      fetch(forceRefresh ? '/api/reports/content-analytics/refresh' : '/api/reports/content-analytics', {
+        method: forceRefresh ? 'POST' : 'GET', credentials: 'include'
+      }).then(function (response) {
+        if (!response.ok) throw new Error('content_analytics_' + response.status);
+        return response.json();
+      }),
+      fetch('/api/reports/website-summary', { credentials: 'include' }).then(function (response) {
+        return response.ok ? response.json() : null;
+      }).catch(function () { return null; })
+    ]).then(function (results) {
+      var data = results[0];
+      var website = results[1];
       if (currentTabId() !== 'content-analytics') return;
       var notices = Object.keys(data.providerStatus || {}).map(function (platform) {
         var status = data.providerStatus[platform];
@@ -865,6 +903,7 @@
         '<section class="content-summary-grid"><article><span>Published pieces</span><strong>' + contentNumber(data.summary.pieces) + '</strong></article><article><span>Measured views</span><strong>' + contentNumber(data.summary.totalViews) + '</strong></article><article><span>Interactions</span><strong>' + contentNumber(data.summary.totalEngagements) + '</strong></article><article><span>Interaction rate</span><strong>' + contentPercent(data.summary.engagementRate) + '</strong></article><article><span>Known audience</span><strong>' + contentNumber(data.summary.followers) + '</strong></article></section>' +
         (notices ? '<section class="content-provider-notes">' + notices + '</section>' : '') +
         contentOverallChart(data, contentOverallRangeDays) +
+        (website ? referralBreakdownHtml(website.referrals) : '') +
         '<section class="content-block"><div class="content-block-head"><div><span>Audience</span><h3>Platform growth</h3></div><small>Followers are not additive identities; the total is directional.</small></div><div class="content-audience-grid">' + audience + '</div></section>' +
         '<div class="content-performance-layout"><section class="content-block content-piece-list"><div class="content-block-head"><div><span>Library</span><h3>Pieces by publish date</h3></div><small>Hover, focus, or tap a title</small></div><div class="content-piece-columns"><span>Piece</span><span>Total</span><span>YT</span><span>TT</span><span>IG</span><span>FB</span><span>Rate</span></div>' + rows + '</section>' +
         '<section class="content-block content-piece-detail" id="contentPieceDetail">' + (data.pieces[0] ? contentDetailMarkup(data.pieces[0]) : '') + '</section></div>' +

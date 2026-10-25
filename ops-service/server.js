@@ -1674,7 +1674,15 @@ app.get('/api/reports/website-traffic', requireAuth, function (req, res) {
 app.get('/api/reports/website-summary', requireAuth, function (req, res) {
   try {
     res.set('Cache-Control', 'no-store');
-    res.json(storefrontReporting.getWebsiteAnalyticsSummary(getStorefrontReportDb()));
+    const summary = storefrontReporting.getWebsiteAnalyticsSummary(getStorefrontReportDb());
+    const titlesBySeq = new Map(storedPieces().filter(function (piece) { return Number.isInteger(piece.seq); })
+      .map(function (piece) { return [String(piece.seq), String(piece.title || '')]; }));
+    summary.referrals.sources.forEach(function (source) {
+      source.segments.forEach(function (segment) {
+        if (/^\d{1,6}$/.test(segment.content)) segment.piece_title = titlesBySeq.get(String(Number(segment.content))) || '';
+      });
+    });
+    res.json(summary);
   } catch (error) {
     console.error('Website summary read failed:', error.message);
     res.status(503).json({ error: 'website_summary_unavailable' });

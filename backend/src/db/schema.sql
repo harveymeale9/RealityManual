@@ -107,3 +107,16 @@ CREATE TABLE IF NOT EXISTS analytics_daily_utm_sources (
   verified_visits INTEGER NOT NULL,
   PRIMARY KEY (day, utm_source)
 );
+
+-- A tagged arrival records the link actually opened, separately from the
+-- browser's first-touch attribution used by the checkout funnel. Completed
+-- days retain only anonymous counts by link, never browser identifiers.
+CREATE TABLE IF NOT EXISTS analytics_daily_utm_landings (
+  day             TEXT NOT NULL,
+  utm_source      TEXT NOT NULL,
+  utm_medium      TEXT NOT NULL DEFAULT '',
+  utm_campaign    TEXT NOT NULL DEFAULT '',
+  utm_content     TEXT NOT NULL DEFAULT '',
+  verified_visits INTEGER NOT NULL,
+  PRIMARY KEY (day, utm_source, utm_medium, utm_campaign, utm_content)
+);

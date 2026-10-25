@@ -81,7 +81,8 @@ test('website summary excludes all activity through October 13 without losing cu
   db.exec(`
     CREATE TABLE analytics_daily_events(day TEXT,event_name TEXT,event_count INTEGER,verified_visits INTEGER);
     CREATE TABLE analytics_daily_utm_sources(day TEXT,utm_source TEXT,verified_visits INTEGER);
-    CREATE TABLE analytics_events(created_at TEXT,event_name TEXT,session_id TEXT,utm_source TEXT,verified_human INTEGER);
+    CREATE TABLE analytics_daily_utm_landings(day TEXT,utm_source TEXT,utm_medium TEXT,utm_campaign TEXT,utm_content TEXT,verified_visits INTEGER);
+    CREATE TABLE analytics_events(created_at TEXT,event_name TEXT,session_id TEXT,utm_source TEXT,verified_human INTEGER,utm_medium TEXT,utm_campaign TEXT,utm_content TEXT);
   `);
   const daily = db.prepare('INSERT INTO analytics_daily_events VALUES (?,?,?,?)');
   daily.run('2026-10-13', 'page_view', 50, 10);
@@ -90,7 +91,7 @@ test('website summary excludes all activity through October 13 without losing cu
   daily.run('2026-10-14', 'checkout_view', 1, 1);
   db.prepare('INSERT INTO analytics_daily_utm_sources VALUES (?,?,?)').run('2026-10-13', 'owner', 5);
   db.prepare('INSERT INTO analytics_daily_utm_sources VALUES (?,?,?)').run('2026-10-14', 'youtube', 2);
-  const raw = db.prepare('INSERT INTO analytics_events VALUES (?,?,?,?,?)');
+  const raw = db.prepare('INSERT INTO analytics_events(created_at,event_name,session_id,utm_source,verified_human) VALUES (?,?,?,?,?)');
   raw.run('2026-10-13T23:59:59.000Z', 'page_view', 'owner', 'owner', 1);
   raw.run('2026-10-19T09:00:00.000Z', 'page_view', 'viewer', 'youtube', 1);
   raw.run('2026-10-20T09:00:00.000Z', 'page_view', 'today', 'tiktok', 1);
@@ -105,10 +106,49 @@ test('website summary excludes all activity through October 13 without losing cu
     { source: 'youtube', sessions: 3 }, { source: 'tiktok', sessions: 1 }
   ]);
   assert.equal(result.excluded_unverified_events, 1);
+  assert.equal(result.referrals.total_sessions, 4);
+  assert.equal(result.referrals.sources.find((row) => row.source === 'youtube').segments[0].legacy, true);
   const appSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   assert.match(appSource, /fetch\('\/api\/reports\/website-summary'/);
   assert.match(appSource, /excludes activity through 13 October 2026/);
   db.close();
+});
+
+test('referral breakdown attributes verified arrivals to posts and keeps older source-only visits honest', function () {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE analytics_daily_events(day TEXT,event_name TEXT,event_count INTEGER,verified_visits INTEGER);
+    CREATE TABLE analytics_daily_utm_sources(day TEXT,utm_source TEXT,verified_visits INTEGER);
+    CREATE TABLE analytics_daily_utm_landings(day TEXT,utm_source TEXT,utm_medium TEXT,utm_campaign TEXT,utm_content TEXT,verified_visits INTEGER);
+    CREATE TABLE analytics_events(created_at TEXT,event_name TEXT,session_id TEXT,utm_source TEXT,verified_human INTEGER,utm_medium TEXT,utm_campaign TEXT,utm_content TEXT);
+  `);
+  db.prepare('INSERT INTO analytics_daily_utm_sources VALUES (?,?,?)').run('2026-10-22', 'youtube', 4);
+  db.prepare('INSERT INTO analytics_daily_utm_landings VALUES (?,?,?,?,?,?)').run('2026-10-24', 'youtube', 'video', 'longform', '230', 3);
+  db.prepare('INSERT INTO analytics_daily_utm_landings VALUES (?,?,?,?,?,?)').run('2026-10-24', 'youtube', 'profile', '', 'profile', 1);
+  const insert = db.prepare('INSERT INTO analytics_events VALUES (?,?,?,?,?,?,?,?)');
+  insert.run('2026-10-25T09:00:00.000Z', 'utm_landing', 'returning', 'youtube', 1, 'video', 'longform', '230');
+  insert.run('2026-10-25T09:01:00.000Z', 'utm_landing', 'returning', 'facebook', 1, 'video', 'short', '201');
+  insert.run('2026-10-25T09:02:00.000Z', 'utm_landing', 'bot', 'facebook', 0, 'video', 'short', '201');
+  insert.run('2026-10-25T09:03:00.000Z', 'page_view', 'returning', 'youtube', 1, '', '', '');
+  const result = reporting.getWebsiteAnalyticsSummary(db, '2026-10-25T12:00:00.000Z').referrals;
+  assert.equal(result.total_sessions, 10);
+  assert.equal(result.detailed_since, '2026-10-24');
+  assert.deepEqual(result.sources.map((row) => [row.source, row.sessions]), [['youtube', 9], ['facebook', 1]]);
+  assert.deepEqual(result.sources[0].segments.map((row) => [row.content, row.sessions, row.legacy]), [
+    ['230', 4, false], ['', 4, true], ['profile', 1, false]
+  ]);
+  db.close();
+});
+
+test('both analytics views show the nested source-and-video referral chart', function () {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const page = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  assert.match(app, /function referralBreakdownHtml\(referrals\)/);
+  assert.match(app, /referralBreakdownHtml\(data\.referrals\)/);
+  assert.match(app, /referralBreakdownHtml\(website\.referrals\)/);
+  assert.match(app, /conic-gradient\(/);
+  assert.match(app, /segment\.piece_title/);
+  assert.match(page, /style\.css\?v=20261025-referral-breakdown-v1/);
 });
 
 test('storefront report aggregates traffic, funnel, paid sales and refunds without returning PII', function () {

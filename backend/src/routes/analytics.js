@@ -7,6 +7,7 @@ const router = express.Router();
 const SUPPORTED_EVENTS = new Set([
   'human_verified',
   'page_view',
+  'utm_landing',
   'landing_page_view',
   'purchase_cta_clicked',
   'checkout_cta_header_clicked',

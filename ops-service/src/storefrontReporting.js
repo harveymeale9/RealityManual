@@ -126,6 +126,58 @@ function startOfUtcDay(value) {
   return date;
 }
 
+// A completed day stores anonymous per-link counts. Older compacted days
+// only retained utm_source, so show them explicitly as source-only history
+// instead of inventing a post or profile attribution.
+function getReferralBreakdown(db, startDay, startTime) {
+  const hasDetail = !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='analytics_daily_utm_landings'").get();
+  const daily = hasDetail ? db.prepare(`SELECT day, utm_source, utm_medium, utm_campaign, utm_content,
+    verified_visits AS sessions FROM analytics_daily_utm_landings WHERE day >= ?`).all(startDay) : [];
+  const raw = db.prepare(`SELECT substr(created_at,1,10) AS day, utm_source,
+    COALESCE(utm_medium,'') AS utm_medium, COALESCE(utm_campaign,'') AS utm_campaign,
+    COALESCE(utm_content,'') AS utm_content, COUNT(DISTINCT session_id) AS sessions,
+    MIN(created_at) AS first_at
+    FROM analytics_events WHERE verified_human=1 AND event_name='utm_landing'
+      AND created_at >= ? AND utm_source IS NOT NULL AND utm_source != ''
+    GROUP BY day, utm_source, utm_medium, utm_campaign, utm_content`).all(startTime);
+  const firstDetailDay = daily.concat(raw).map(function (row) { return row.day; }).sort()[0] || '';
+  const firstRawAt = raw.map(function (row) { return row.first_at; }).sort()[0] || '';
+  const legacyDaily = db.prepare(`SELECT utm_source, SUM(verified_visits) AS sessions
+    FROM analytics_daily_utm_sources WHERE day >= ? AND (? = '' OR day < ?)
+    GROUP BY utm_source`).all(startDay, firstDetailDay, firstDetailDay);
+  const legacyRaw = db.prepare(`SELECT utm_source, COUNT(DISTINCT session_id) AS sessions
+    FROM analytics_events WHERE verified_human=1 AND event_name='page_view'
+      AND created_at >= ? AND (? = '' OR created_at < ?)
+      AND utm_source IS NOT NULL AND utm_source != '' GROUP BY utm_source`)
+    .all(startTime, firstRawAt || (firstDetailDay ? firstDetailDay + 'T00:00:00.000Z' : ''),
+      firstRawAt || (firstDetailDay ? firstDetailDay + 'T00:00:00.000Z' : ''));
+  const groups = new Map();
+  function add(row, legacy) {
+    const source = String(row.utm_source || '').trim();
+    if (!source) return;
+    if (!groups.has(source)) groups.set(source, new Map());
+    const medium = legacy ? '' : String(row.utm_medium || '');
+    const campaign = legacy ? '' : String(row.utm_campaign || '');
+    const content = legacy ? '' : String(row.utm_content || '');
+    const key = JSON.stringify([medium, campaign, content, legacy]);
+    const segments = groups.get(source);
+    if (!segments.has(key)) segments.set(key, { medium, campaign, content, legacy, sessions: 0 });
+    segments.get(key).sessions += Number(row.sessions) || 0;
+  }
+  daily.concat(raw).forEach(function (row) { add(row, false); });
+  legacyDaily.concat(legacyRaw).forEach(function (row) { add(row, true); });
+  const sources = [...groups.entries()].map(function ([source, segments]) {
+    const items = [...segments.values()].sort(function (a, b) { return b.sessions - a.sessions; });
+    return { source, sessions: items.reduce(function (sum, item) { return sum + item.sessions; }, 0), segments: items };
+  }).sort(function (a, b) { return b.sessions - a.sessions; });
+  return {
+    total_sessions: sources.reduce(function (sum, source) { return sum + source.sessions; }, 0),
+    sources,
+    detailed_since: firstDetailDay || null,
+    definition: 'Verified UTM-tagged arrivals, counted once per browser, link and UTC day. Source-only history predates per-link tracking; untagged/direct visits are outside this breakdown.'
+  };
+}
+
 function getWebsiteAnalyticsSummary(db, nowValue) {
   const today = startOfUtcDay(nowValue || Date.now());
   const thirtyStart = new Date(today);
@@ -159,7 +211,7 @@ function getWebsiteAnalyticsSummary(db, nowValue) {
   db.prepare(`SELECT utm_source, SUM(verified_visits) AS sessions
     FROM analytics_daily_utm_sources WHERE day >= ? GROUP BY utm_source`).all(startDay)
     .concat(db.prepare(`SELECT utm_source, COUNT(DISTINCT session_id) AS sessions
-      FROM analytics_events WHERE verified_human = 1 AND created_at >= ?
+      FROM analytics_events WHERE verified_human = 1 AND event_name='page_view' AND created_at >= ?
         AND utm_source IS NOT NULL AND utm_source != '' GROUP BY utm_source`).all(startTime))
     .forEach(function (row) {
       sources.set(row.utm_source, (sources.get(row.utm_source) || 0) + Number(row.sessions || 0));
@@ -182,6 +234,7 @@ function getWebsiteAnalyticsSummary(db, nowValue) {
     top_utm_sources: [...sources.entries()].map(function ([source, sessions]) {
       return { source: source, sessions: sessions };
     }).sort(function (a, b) { return b.sessions - a.sessions; }).slice(0, 10),
+    referrals: getReferralBreakdown(db, startDay, startTime),
     excluded_unverified_events: Number(excluded.count) || 0,
     visitor_definition: 'A verified browser visit after real interaction or seven visible seconds. Individual event rows are reduced to anonymous daily totals; different browsers or days may represent the same person.'
   };

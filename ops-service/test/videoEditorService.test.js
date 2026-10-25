@@ -630,7 +630,7 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /Transcription needs attention/);
   assert.match(source, /id="editorDeleteFailed">Delete recording/);
   assert.match(source, /workspace\.querySelector\('#editorDeleteFailed'\)\.onclick = function \(\) \{ deleteCurrentRecording\(this\); \}/);
-  assert.match(page, /style\.css\?v=20261022-longform-single-timeline-v1/);
+  assert.match(page, /style\.css\?v=20261025-referral-breakdown-v1/);
   assert.match(source, /id="editorTimelineUndo"/);
   assert.match(source, /id="editorTimelineFadeSeconds"/);
   assert.match(source, /class="editor-sticky-cut"><button type="button" class="btn-primary btn-tiny" id="editorCut" disabled>Cut selected/);
