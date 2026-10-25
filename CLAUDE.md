@@ -21254,3 +21254,13 @@ master cannot be approved accidentally. Preserve its chosen 17.5-second
 thumbnail and backing track. Verify the new preview/master frames at both
 insertions, the audio dip, and the eventual Final Check handoff before
 reporting completion.
+
+Live verification (2026-10-25 15:10 UTC): the corrected Editor preview is
+ready at revision 18, and both lyric moments were inspected in actual frames.
+The rebuilt piece is back in `final_check` with `finalBuildStatus=done` and
+no error. The 3840×2160 final and 720×404 review MP4s both probe successfully
+at 623.381 seconds; review frames at the first and second audio cards show
+the timed lyrics, including the closing “love and be free.” The saved final
+mix records a music-bed dip from 413.82 to 433.28 seconds, spanning both
+cards and their spoken bridge. The chosen backing track and 17.5-second
+thumbnail remain unchanged. The item was not approved or published.
