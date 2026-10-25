@@ -21228,3 +21228,29 @@ inspection after build. A real FFmpeg test verifies the background bed is
 audible before and after, and silent during, the excerpt. Do not claim a
 particular Production card completed until its actual final master and
 Final Check status have been verified.
+
+---
+
+# 698. Lyrics on the Two Mushroom Audio Cards (2026-10-25)
+
+Harvey requested captions on both nine-second audio-only music inserts after
+the mushroom video had already reached Final Check. The official excerpt was
+transcribed once for timing: the audible refrain is approximately “Love,
+love, love and be free.” The first “love” starts around 2.12 seconds, the
+second around 4.34 seconds, and the closing phrase around 6.94–7.80 seconds.
+Only the requested refrain is captioned; laughter and uncertain opening
+syllables are not invented as dialogue.
+
+Inserted clips already carry `words`, and the Editor's caption renderer
+places those words on the clip's own segment. The normal `/:id/render` route
+keeps an approved project read-only, but an admin can now explicitly rebuild
+the approved *preview only* by supplying its exact saved
+`approvedPreviewRevision`. This does not unlock transcript editing, approval,
+or publishing. The one-off lyric correction is applied to both existing clip
+records with a SQLite backup and compare-and-swap, then the preview and final
+master are rebuilt from the same saved project. While the master rebuilds,
+the Production card must be held out of Final Check so the old uncaptioned
+master cannot be approved accidentally. Preserve its chosen 17.5-second
+thumbnail and backing track. Verify the new preview/master frames at both
+insertions, the audio dip, and the eventual Final Check handoff before
+reporting completion.

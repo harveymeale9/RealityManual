@@ -3741,7 +3741,12 @@ function setup(options) {
     if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
     const project = getProject(req.params.id);
     if (!project) return res.status(404).json({ error: 'not_found' });
-    if (project.productionPieceId) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked. The approved video is already in Content Production.' });
+    // Approved decisions remain immutable. An admin may explicitly rebuild
+    // only the preview for the exact saved revision after a manual caption
+    // correction; this route does not change the project or re-approve it.
+    const approvedPreviewRevision = req.sessionRole !== 'youtube-reviewer' &&
+      req.body && Number(req.body.approvedPreviewRevision) === Number(project.editRevision);
+    if (project.productionPieceId && !approvedPreviewRevision) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked. The approved video is already in Content Production.' });
     if (project.transcriptionStatus !== 'ready') return res.status(409).json({ error: 'transcript_not_ready' });
     if (['queued', 'preparing'].includes(project.clipInsertStatus)) return res.status(409).json({ error: 'clip_insert_running', message: 'Wait for the inserted clip to finish preparing.' });
     if (['pending', 'running', 'pending_transcript'].includes(project.planningMatchStatus)) {

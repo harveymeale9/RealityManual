@@ -2335,6 +2335,19 @@ test('upload, timed transcription and FFmpeg captioned render work end to end', 
   response = await fetch(base + '/api/editor/' + project.id + '/render', { method: 'POST' });
   assert.equal(response.status, 409);
   assert.equal((await response.json()).error, 'approved_read_only');
+  response = await fetch(base + '/api/editor/' + project.id + '/render', { method: 'POST',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ approvedPreviewRevision: Number(project.editRevision) + 1 }) });
+  assert.equal(response.status, 409, 'a stale approved revision cannot start a rebuild');
+  response = await fetch(base + '/api/editor/' + project.id + '/render', { method: 'POST',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ approvedPreviewRevision: project.editRevision }) });
+  assert.equal(response.status, 202, 'the exact approved revision may rebuild its preview without unlocking edits');
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const current = await (await fetch(base + '/api/editor/' + project.id)).json();
+    if (current.renderStatus === 'ready' && current.renderSha256) break;
+    if (current.renderStatus === 'error') assert.fail(current.renderError);
+    await new Promise(function (resolve) { setTimeout(resolve, 100); });
+  }
+  assert.equal((await (await fetch(base + '/api/editor/' + project.id)).json()).renderStatus, 'ready');
   response = await fetch(base + '/api/editor/' + project.id, { method: 'DELETE' });
   assert.equal(response.status, 409);
   assert.equal((await response.json()).error, 'production_source_required');
