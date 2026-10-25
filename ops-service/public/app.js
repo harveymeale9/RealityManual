@@ -613,6 +613,9 @@
         .catch(function () { return null; }),
       fetch('/api/reports/website-traffic', { credentials: 'include' })
         .then(function (res) { return res.ok ? res.json() : null; })
+        .catch(function () { return null; }),
+      fetch('/api/reports/youtube-clickthrough', { credentials: 'include' })
+        .then(function (res) { return res.ok ? res.json() : null; })
         .catch(function () { return null; })
     ])
       .then(function (results) {
@@ -620,6 +623,7 @@
         var data = results[0];
         var sales = results[1];
         var traffic = results[2];
+        var youtubeClickthrough = results[3];
 
         var funnelLabels = {
           page_view: 'Page viewed',
@@ -662,6 +666,7 @@
                 '<div class="overview-tile-stat"><span class="n">' + data.last_30_days.page_views + '</span> page views</div>' +
                 '<div class="overview-tile-sub">' + data.last_30_days.unique_visitors + ' verified daily visits</div></div>' +
             '</div>' +
+            youtubeClickthroughHtml(youtubeClickthrough) +
             websiteTrafficHtml(traffic) +
             '<div class="funnel-section"><div class="eyebrow">What is counted</div>' +
               '<p class="analytics-definition">' + escapeHtml(data.visitor_definition || '') + '</p>' +
@@ -731,6 +736,41 @@
 
   function contentNumber(value) {
     return value == null ? '—' : Number(value).toLocaleString('en-US');
+  }
+  function youtubeClickthroughHtml(data) {
+    if (!data) return '<section class="youtube-clickthrough"><h3>Long-form YouTube to website</h3><p>Attribution is temporarily unavailable.</p></section>';
+    var days = data.daily || [];
+    var points = days.map(function (row, index) { return row.rolling_rate_percent == null ? null : { index: index, row: row, value: Number(row.rolling_rate_percent) }; }).filter(Boolean);
+    var chart = '';
+    if (points.length) {
+      var ceiling = Math.max(0.1, Math.max.apply(null, points.map(function (point) { return point.value; })) * 1.15);
+      var x = function (index) { return 40 + index * 800 / Math.max(1, days.length - 1); };
+      var y = function (value) { return 155 - value * 125 / ceiling; };
+      var path = '';
+      var lastIndex = -2;
+      points.forEach(function (point) {
+        path += (point.index === lastIndex + 1 ? 'L' : 'M') + x(point.index).toFixed(1) + ',' + y(point.value).toFixed(1) + ' ';
+        lastIndex = point.index;
+      });
+      var dots = points.map(function (point) {
+        return '<circle cx="' + x(point.index).toFixed(1) + '" cy="' + y(point.value).toFixed(1) + '" r="3" class="youtube-clickthrough-dot" />' +
+          '<circle cx="' + x(point.index).toFixed(1) + '" cy="' + y(point.value).toFixed(1) + '" r="9" class="youtube-clickthrough-hit"><title>' +
+          escapeHtml(point.row.day + ': ' + point.value.toFixed(2) + '% rolling 7-day visit-to-view rate; ' + point.row.visits + ' visits and ' + point.row.views + ' views on this UTC day') + '</title></circle>';
+      }).join('');
+      chart = '<svg viewBox="0 0 880 185" role="img" aria-label="Seven-day rolling long-form YouTube website visit-to-view percentage" preserveAspectRatio="xMidYMid meet">' +
+        '<line x1="40" y1="155" x2="840" y2="155" class="youtube-clickthrough-axis" />' +
+        '<path d="' + path.trim() + '" class="youtube-clickthrough-line" />' + dots +
+        '<text x="40" y="180" class="youtube-clickthrough-date">' + escapeHtml(days[0].day) + '</text>' +
+        '<text x="840" y="180" text-anchor="end" class="youtube-clickthrough-date">' + escapeHtml(days[days.length - 1].day) + '</text></svg>';
+    } else chart = '<div class="youtube-clickthrough-empty">The trend starts once matched YouTube view growth is measured.</div>';
+    return '<section class="youtube-clickthrough" aria-label="Long-form YouTube website visit-to-view rate">' +
+      '<div class="youtube-clickthrough-heading"><div><span class="eyebrow">YouTube long-form · ' + escapeHtml(data.period.start) + ' to ' + escapeHtml(data.period.end) + ' UTC</span>' +
+      '<h3>Video views to website visits</h3></div><span>7-day rolling trend</span></div>' +
+      '<div class="youtube-clickthrough-stats"><div><strong>' + contentPercent(data.rate_percent) + '</strong><span>verified visits per 100 video views</span></div>' +
+      '<div><strong>' + (data.views_per_visit == null ? '—' : contentNumber(data.views_per_visit)) + '</strong><span>video views per website visit</span></div>' +
+      '<div><strong>' + contentNumber(data.visits) + ' / ' + contentNumber(data.views) + '</strong><span>matched visits / new views</span></div></div>' +
+      chart + '<p>' + escapeHtml(data.definition) + (data.unmeasured_visits ? ' ' + contentNumber(data.unmeasured_visits) + ' tagged visits to videos without a view snapshot are excluded.' : '') +
+      '</p></section>';
   }
   function contentPercent(value) {
     return value == null ? '—' : Number(value).toFixed(value < 1 ? 2 : 1).replace(/\.0$/, '') + '%';
@@ -873,10 +913,14 @@
       }),
       fetch('/api/reports/website-summary', { credentials: 'include' }).then(function (response) {
         return response.ok ? response.json() : null;
+      }).catch(function () { return null; }),
+      fetch('/api/reports/youtube-clickthrough', { credentials: 'include' }).then(function (response) {
+        return response.ok ? response.json() : null;
       }).catch(function () { return null; })
     ]).then(function (results) {
       var data = results[0];
       var website = results[1];
+      var youtubeClickthrough = results[2];
       if (currentTabId() !== 'content-analytics') return;
       var notices = Object.keys(data.providerStatus || {}).map(function (platform) {
         var status = data.providerStatus[platform];
@@ -902,6 +946,7 @@
       panelMain.innerHTML = '<div class="content-dashboard"><header class="content-dashboard-head"><div><div class="eyebrow">Cross-platform performance</div><h2>Content Analytics</h2><p>Compare every piece, then inspect how each platform compounds over time.</p></div><div><span>' + (data.lastCollectedAt ? 'Updated ' + contentDate(data.lastCollectedAt) : 'First snapshot pending') + '</span><button type="button" class="btn-secondary btn-tiny" id="contentRefresh">Refresh metrics</button></div></header>' +
         '<section class="content-summary-grid"><article><span>Published pieces</span><strong>' + contentNumber(data.summary.pieces) + '</strong></article><article><span>Measured views</span><strong>' + contentNumber(data.summary.totalViews) + '</strong></article><article><span>Interactions</span><strong>' + contentNumber(data.summary.totalEngagements) + '</strong></article><article><span>Interaction rate</span><strong>' + contentPercent(data.summary.engagementRate) + '</strong></article><article><span>Known audience</span><strong>' + contentNumber(data.summary.followers) + '</strong></article></section>' +
         (notices ? '<section class="content-provider-notes">' + notices + '</section>' : '') +
+        youtubeClickthroughHtml(youtubeClickthrough) +
         contentOverallChart(data, contentOverallRangeDays) +
         (website ? referralBreakdownHtml(website.referrals) : '') +
         '<section class="content-block"><div class="content-block-head"><div><span>Audience</span><h3>Platform growth</h3></div><small>Followers are not additive identities; the total is directional.</small></div><div class="content-audience-grid">' + audience + '</div></section>' +

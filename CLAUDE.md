@@ -21174,3 +21174,32 @@ the whole month: one browser opening two different links may appear in both.
 Direct/untagged visits are outside this chart. Backend schema and route must
 be deployed before relying on new per-post readings; past detail cannot be
 reconstructed from the old aggregates.
+
+---
+
+# 696. Matched Long-form YouTube View-to-Website Rate (2026-10-25)
+
+Harvey wants both analytics pages to show what fraction of long-form YouTube
+views turn into tagged website arrivals, the reciprocal number of views per
+arrival, and a trend. The admin-only `/api/reports/youtube-clickthrough` route
+joins Content Studio's hourly cumulative YouTube video-view snapshots to the
+storefront's verified `utm_landing` counts by piece sequence number and UTC
+day. It accepts only live long-form pieces with a YouTube video ID and links
+tagged `utm_source=youtube&utm_medium=video&utm_campaign=longform` plus that
+piece's numeric `utm_content`. Profile links, Shorts, old source-only history,
+unverified browsers, and visits to videos without view snapshots do not enter
+the ratio. Daily compacted counts are preferred over duplicate raw rows for
+the same link/day. The reporting period is the most recent 30 UTC days, but
+never before detailed arrival tracking began on 25 October 2026.
+
+View counters are cumulative. For an older video, the last pre-window snapshot
+is the baseline; if none exists, its first in-window snapshot is a baseline,
+not a fabricated day's new views. A video published inside the window begins
+at zero. The report sums nonnegative daily view changes and matched daily
+arrivals, and supplies a seven-day rolling visit-to-view percentage for the
+shared chart. A zero denominator or zero arrivals leaves views-per-visit
+undefined rather than inventing a value. Both Content Analytics and Website
+Analytics show the same prominent card and explicit sample/attribution note.
+These are verified tagged website visits, counted once per browser/link/day,
+**not raw YouTube click events** or a causal claim that every video view could
+be matched to one person. Old untagged traffic cannot be backfilled.

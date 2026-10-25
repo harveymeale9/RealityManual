@@ -56,6 +56,7 @@ const r2StorageService = require('./src/r2Storage');
 const rangeResponse = require('./src/rangeResponse');
 const kanbanBackupService = require('./src/kanbanBackupService');
 const contentAnalyticsService = require('./src/contentAnalyticsService');
+const youtubeClickthrough = require('./src/youtubeClickthrough');
 const tiktokPublicMetrics = require('./src/tiktokPublicMetrics');
 const finalReviewPreviewService = require('./src/finalReviewPreview');
 const queuedMediaArchiver = require('./src/queuedMediaArchiver');
@@ -1781,6 +1782,15 @@ app.put('/api/reports/refunds/:id/note', requireAuth, function (req, res) {
 app.get('/api/reports/content-analytics', requireAuth, function (req, res) {
   res.set('Cache-Control', 'no-store');
   res.json(contentAnalytics.dashboard());
+});
+app.get('/api/reports/youtube-clickthrough', requireAuth, function (req, res) {
+  try {
+    res.set('Cache-Control', 'no-store');
+    res.json(youtubeClickthrough.report(getStorefrontReportDb(), db, storedPieces()));
+  } catch (error) {
+    console.error('YouTube long-form click-through read failed:', error.message);
+    res.status(503).json({ error: 'youtube_clickthrough_unavailable' });
+  }
 });
 app.post('/api/reports/content-analytics/refresh', requireAuth, async function (req, res) {
   try {
