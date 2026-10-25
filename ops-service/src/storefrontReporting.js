@@ -174,7 +174,7 @@ function getReferralBreakdown(db, startDay, startTime) {
     total_sessions: sources.reduce(function (sum, source) { return sum + source.sessions; }, 0),
     sources,
     detailed_since: firstDetailDay || null,
-    definition: 'Verified UTM-tagged arrivals, counted once per browser, link and UTC day. Source-only history predates per-link tracking; untagged/direct visits are outside this breakdown.'
+    definition: 'Post/profile rows are verified UTM arrivals, counted once per browser, link and UTC day. Earlier source-only rows are archived first-touch visits, not identifiable clicks. Untagged/direct visits are outside this breakdown.'
   };
 }
 

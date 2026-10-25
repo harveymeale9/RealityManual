@@ -721,12 +721,12 @@
     }).join('');
     var gradient = wedges.length ? 'conic-gradient(' + wedges.join(',') + ')' : 'linear-gradient(#173024,#173024)';
     return '<section class="referral-breakdown"><div class="referral-head"><div class="eyebrow">Content → website · last 30 days</div>' +
-      '<h3>Where tagged visits came from</h3></div>' +
+      '<h3>Where attributed traffic came from</h3></div>' +
       (total ? '<div class="referral-body"><div class="referral-donut" role="img" aria-label="Share of verified tagged visits by platform and link" style="background:' + gradient + '">' +
-        '<div><strong>' + total.toLocaleString('en-US') + '</strong><span>tagged visits</span></div></div><div class="referral-sources">' + sourceRows + '</div></div>' :
+        '<div><strong>' + total.toLocaleString('en-US') + '</strong><span>attributed visits</span></div></div><div class="referral-sources">' + sourceRows + '</div></div>' :
         '<div class="empty-slot">No verified UTM-tagged visits in this period yet.</div>') +
-      '<p class="referral-definition">' + escapeHtml(referrals.definition || 'Verified tagged arrivals, not raw clicks.') +
-      ' A visit can appear under more than one link if the same browser opens different posts. Older source-only visits cannot be assigned to a particular video or profile.</p></section>';
+      '<p class="referral-definition">' + escapeHtml(referrals.definition || 'Verified attribution, not raw clicks.') +
+      ' One browser can appear under different links on the same day. Source shares are directional while older source-only history remains in the chart.</p></section>';
   }
 
   function contentNumber(value) {
