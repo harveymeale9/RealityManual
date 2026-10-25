@@ -3047,6 +3047,7 @@ async function executeBuildFinalVideo(id) {
   }
 
   let productionPicturePath = '';
+  let musicDipRanges = [];
   try {
     let videoPath = path.join(UPLOADS_DIR, 'videos', id);
     let audioPath = null;
@@ -3064,13 +3065,14 @@ async function executeBuildFinalVideo(id) {
       updateBuildStep('rendering_picture');
       productionPicturePath = path.join(UPLOADS_DIR, 'videos', id + '-picture-building.mp4');
       await fs.promises.rm(productionPicturePath, { force: true });
-      await videoEditor.renderProductionMaster(id, productionPicturePath, function (percent) {
+      const masterResult = await videoEditor.renderProductionMaster(id, productionPicturePath, function (percent) {
         const current = getPieceRecord(id);
         if (!current || current.finalBuildStatus !== 'running') return;
         current.finalBuildProgress = Math.min(95, Math.max(0, Math.round(Number(percent) * 0.95)));
         current.updatedAt = new Date().toISOString();
         savePieceRecord(current);
       }, { includeMusicTail: !!audioPath });
+      musicDipRanges = masterResult && masterResult.musicDipRanges || [];
       videoPath = productionPicturePath;
     }
     const finalId = id + FINAL_VIDEO_SUFFIX;
@@ -3086,6 +3088,7 @@ async function executeBuildFinalVideo(id) {
     updateBuildStep('mixing_audio');
     const mixResult = await videoAnalysis.buildFinalVideo(videoPath, audioPath, outPath, settings, {
       musicOutroSeconds: horizontalLongform ? 0.3 : (editorFadeSeconds > 0 ? editorFadeSeconds : 2),
+      musicDipRanges: musicDipRanges,
       onStage: updateBuildStep
     });
 
@@ -3104,6 +3107,7 @@ async function executeBuildFinalVideo(id) {
       : { mode: mixResult.mode, dialogueLufsTarget: mixProfile.dialogueLufs,
         musicBelowDialogueDb: mixProfile.musicBelowDialogueDb, truePeakDbtp: mixProfile.truePeakDbtp,
         duckingEnabled: mixProfile.duckingEnabled, builtAt: new Date().toISOString() };
+    if (musicDipRanges.length) latest.finalAudioMix.musicDipRanges = musicDipRanges;
     // Stage only actually advances once analysis has also settled — see
     // maybeAdvanceToFinalCheck's own comment. In the common case (analysis
     // already finished by the time this build completes) this behaves

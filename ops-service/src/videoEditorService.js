@@ -1323,6 +1323,22 @@ function editorTimelineSegments(project, cuts) {
   return base;
 }
 
+function audioOnlyInsertRanges(segments, openingPrerollSeconds) {
+  let cursor = Math.max(0, Number(openingPrerollSeconds) || 0);
+  const ranges = [];
+  (segments || []).forEach(function (segment) {
+    const duration = Math.max(0, Number(segment.end) - Number(segment.start));
+    if (segment.type === 'insert' && segment.clip && segment.clip.audioOnly === true && duration > 0) {
+      // Treat a short spoken bridge between two uses of one audio excerpt as
+      // one interlude: the bed returns only after the second excerpt.
+      if (ranges.length && cursor - ranges[ranges.length - 1].end <= 10) ranges[ranges.length - 1].end = cursor + duration;
+      else ranges.push({ start: cursor, end: cursor + duration });
+    }
+    cursor += duration;
+  });
+  return ranges.map(function (range) { return { start: Number(range.start.toFixed(3)), end: Number(range.end.toFixed(3)) }; });
+}
+
 function renderCaptionGroups(project, cuts, segments) {
   const removed = new Set((project.removedWordIndices || []).map(Number));
   const timed = [];
@@ -2368,6 +2384,7 @@ function setup(options) {
       const segments = editorTimelineSegments(project, cuts);
       if (!segments.length) throw new Error('Every part of the recording is currently cut. Restore some transcript first.');
       const contentDuration = segments.reduce(function (sum, segment) { return sum + segment.end - segment.start; }, 0);
+      const musicDipRanges = audioOnlyInsertRanges(segments, OPENING_PREROLL_SECONDS);
       const layout = effectiveLayout(project);
       // Landscape footage must be fully black before a hand reaching for the
       // camera can become visible. Editor/no-music renders end at that point;
@@ -2511,7 +2528,8 @@ function setup(options) {
           width: renderedMedia.width,
           height: renderedMedia.height,
           duration: renderedMedia.duration,
-          sizeBytes: stat.size
+          sizeBytes: stat.size,
+          musicDipRanges: musicDipRanges
         };
       }
       const renderSha256 = await hashFile(outputPath);
@@ -4012,6 +4030,7 @@ module.exports = {
   parseIntegratedLoudness,
   insertedClipGainDb,
   audioInterludeVideoFilter,
+  audioOnlyInsertRanges,
   normalizeWords,
   calculateAutoCuts,
   calculateManualCuts,

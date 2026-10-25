@@ -21203,3 +21203,28 @@ Analytics show the same prominent card and explicit sample/attribution note.
 These are verified tagged website visits, counted once per browser/link/day,
 **not raw YouTube click events** or a causal claim that every video view could
 be matched to one person. Old untagged traffic cannot be backfilled.
+
+---
+
+# 697. Keep Production Backing Music Out of Audio-only Editor Inserts (2026-10-25)
+
+The mushroom story Editor project has two nine-second audio-only inserts of
+the same song. Its Production card has a separate backing music selection.
+Without special handling the final mix layers that bed over the inserted
+song, making both audio cues muddy. The Editor's full-resolution master now
+returns the exact inserted-audio intervals in its *edited output timeline*,
+including the 0.3-second opening preroll and all retained cuts. Intervals
+separated by a short spoken bridge (10 seconds or less) merge into one music
+dip, so the bed returns only after the second cue.
+
+The final mix applies a 0.3-second fade down before the first insert, keeps
+only the background bed silent through the inserts and short bridge, then
+fades it back over 0.5 seconds after the final insert. The Editor source and
+inserted song remain audible and untouched. Both the measured-loudness and
+legacy-percent final paths accept these intervals; ordinary previews and
+videos without audio-only inserts retain their previous behavior. The
+resolved intervals are saved in `piece.finalAudioMix.musicDipRanges` for
+inspection after build. A real FFmpeg test verifies the background bed is
+audible before and after, and silent during, the excerpt. Do not claim a
+particular Production card completed until its actual final master and
+Final Check status have been verified.

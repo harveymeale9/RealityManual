@@ -7,6 +7,36 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const videoAnalysis = require('../src/videoAnalysis');
+const videoEditor = require('../src/videoEditorService');
+
+test('audio-only inserts share one music dip across a short spoken bridge', function () {
+  const ranges = videoEditor.audioOnlyInsertRanges([
+    { type: 'source', start: 0, end: 10 },
+    { type: 'insert', start: 0, end: 9, clip: { audioOnly: true } },
+    { type: 'source', start: 10, end: 15 },
+    { type: 'insert', start: 0, end: 9, clip: { audioOnly: true } },
+    { type: 'source', start: 15, end: 20 }
+  ], 0.3);
+  assert.deepEqual(ranges, [{ start: 10.3, end: 33.3 }]);
+  assert.match(videoAnalysis.measuredMixAudioArgs('/video', '/music', '/mix.flac', {}, null, null, 40, 0.3, 0, ranges).join(' '), /volume='if\(lt\(t\\,10\.000\)/);
+  assert.match(videoAnalysis.legacyFinalVideoArgs('/video', '/music', '/out', 10, 40, 0.3, ranges).join(' '), /volume='if\(lt\(t\\,10\.000\)/);
+});
+
+test('timed music dip reaches silence, then restores the bed after the excerpt', function () {
+  const filter = 'volume=0.5' + videoAnalysis.musicDipFilter([{ start: 1, end: 2 }]);
+  const pcm = execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000',
+    '-t', '3', '-af', filter, '-f', 's16le', '-ac', '1', '-ar', '48000', 'pipe:1']);
+  function peak(start, end) {
+    let value = 0;
+    for (let sample = Math.floor(start * 48000); sample < Math.floor(end * 48000); sample++) {
+      value = Math.max(value, Math.abs(pcm.readInt16LE(sample * 2)));
+    }
+    return value;
+  }
+  assert.ok(peak(0.2, 0.4) > 1000);
+  assert.equal(peak(1.2, 1.8), 0);
+  assert.ok(peak(2.8, 2.9) > 1000);
+});
 
 test('late analysis suggestions never replace a manually chosen title', function () {
   const generated = {
