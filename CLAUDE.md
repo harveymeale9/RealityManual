@@ -21264,3 +21264,26 @@ the timed lyrics, including the closing “love and be free.” The saved final
 mix records a music-bed dip from 413.82 to 433.28 seconds, spanning both
 cards and their spoken bridge. The chosen backing track and 17.5-second
 thumbnail remain unchanged. The item was not approved or published.
+
+---
+
+# 699. Use Harvey's Supplied Lyric Over Automatic Transcript (2026-10-25)
+
+Harvey corrected §698: the two mushroom audio cards must caption **“It's all
+love, love, love and be free.”** The earlier automatic transcription was not
+an authority for the lyric and led to omitting “It's all.” His spoken wording
+is the source of truth. Both inserted-clip records were updated in one
+compare-and-swap transaction at Editor revision 19, after an online SQLite
+backup at `/root/ops-service-data/mushroom-lyrics-wording-preedit-20261025.sqlite`.
+The opening two words have hand-set timings before the existing “love”
+positions; the rest retain their previous timings.
+
+The approved Editor preview was rebuilt through the exact-revision admin
+route. Actual preview frames on both cards show “It's all love,” and the
+closing frame shows “love and be free.” The old Final Check item was held in
+Production until the corrected 4K master completed at 2026-10-25 16:51 UTC.
+`finalBuildStatus=done`, `stage=final_check`, and both new master/review MP4s
+probe at 623.381 seconds (3840×2160 and 720×404). The *new* review frames
+again show the corrected phrase on both cards. The final mix preserves the
+413.82–433.28-second backing-music dip, the chosen track, and the 17.5-second
+thumbnail. No approval or publication was performed.
