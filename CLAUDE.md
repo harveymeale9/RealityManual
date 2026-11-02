@@ -21420,3 +21420,20 @@ existing BookVault orders and fills missing cost snapshots. Older orders use
 Frankfurter's historical GBP/USD rate for their order day, while same-day
 orders share the backend's hourly cached rate. It does not place a BookVault
 order, charge Stripe, or modify customer data.
+
+Before the live schema migration, SQLite's online backup produced
+`/root/realitymanual-backend-data/reality-manual-pre-profit-20261102.sqlite`
+and passed `PRAGMA integrity_check`. The backend was rebuilt and restarted
+with the same persistent data volume/env; the pre-profit image was kept as
+`rm-storefront-backend:pre-profit-20261102`. The ops-service CI deploy log
+reported SSH exit code 0. The one-off backfill captured seven existing paid
+BookVault orders with zero pending; the October 13 owner test order used its
+historical 1.3245 GBP/USD rate and remains excluded from owner sales totals.
+
+After deployment the authenticated Sales Analytics API reported six included
+paid orders: $507.62 revenue and $207.07 estimated gross profit, with all six
+costs known. The first Canadian sale ($78.08 charged) showed BookVault total
+£37.18, estimated USD cost $49.83 at the then-current 1.34 reference rate,
+and estimated gross profit $28.25. A headless Chromium session loaded the
+actual dashboard: all four period cards, 30 daily bars, and six per-order
+profit rows rendered; desktop and 390px mobile had no document-width overflow.
