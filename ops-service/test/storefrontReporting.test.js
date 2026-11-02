@@ -148,7 +148,7 @@ test('both analytics views show the nested source-and-video referral chart', fun
   assert.match(app, /referralBreakdownHtml\(website\.referrals\)/);
   assert.match(app, /conic-gradient\(/);
   assert.match(app, /segment\.piece_title/);
-  assert.match(page, /style\.css\?v=20261102-mobile-traffic/);
+  assert.match(page, /style\.css\?v=20261102-touch-view-popup/);
 });
 
 test('mobile website analytics exposes today and exact daily pageview counts', function () {

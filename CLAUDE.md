@@ -21455,3 +21455,23 @@ script cache keys were updated so a normal refresh gets the change. Verified
 with the real dashboard in a 390px Chromium viewport: today and all 14 daily
 rows rendered, their values were readable, and there was no horizontal page
 overflow. The storefront reporting test suite passed.
+
+# 705. Touch-Friendly Content View Totals for Yesterday (2026-11-02)
+
+The Content Analytics "Views across platforms" graph used SVG `<title>`
+tooltips on 8-unit point markers. A mobile browser does not reliably show
+those hover tooltips, and the points were too small to tap accurately. Harvey
+specifically needed to inspect yesterday's combined view total on his phone.
+
+The chart now has an explicit Yesterday button showing the cumulative total
+as of that UTC day. Tapping the button or any day's full-height chart target
+opens an in-page popup with the selected date, combined total, and YouTube,
+TikTok, Instagram, and Facebook counts. The popup has a close button and
+closes on an outside tap or Escape. The chart remains cumulative: this is
+the as-of-day total, not views newly earned during that calendar day.
+Range changes rerender both the button and targets from the same history.
+No provider requests or backend reporting calculations changed. Verified in
+a real 390px touch-enabled Chromium viewport against dashboard data: the
+Yesterday button opened the correct date/platform values, close worked,
+chart tap reopened it, and the page had no horizontal overflow. The focused
+Content Analytics and storefront reporting tests passed.

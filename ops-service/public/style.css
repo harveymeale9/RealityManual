@@ -2950,6 +2950,22 @@ body.role-reviewer #pmBackFab {
 .content-overall-hit{cursor:crosshair}
 .content-overall-hit:hover{stroke:#e6f8e9;stroke-width:1.5}
 .content-overall-body p{margin:7px 0 0;color:#708a79;font-size:10px;line-height:1.55}
+.content-overall-body{position:relative}
+.content-overall-yesterday{display:flex;align-items:center;flex-wrap:wrap;gap:5px 10px;margin:12px 0 2px;padding:9px 12px;border:1px solid #325441;border-radius:7px;background:#10261a;color:#aacdb5;text-align:left;font:600 11px var(--font-body);cursor:pointer}
+.content-overall-yesterday strong{color:#eaffef;font:700 13px var(--font-mono)}
+.content-overall-yesterday span{color:#75e9a7;font-size:10px}
+.content-overall-yesterday:hover,.content-overall-yesterday:focus-visible{border-color:#61e99a;outline:1px solid #61e99a}
+.content-overall-day-target{fill:transparent;cursor:pointer}
+.content-overall-day-target:focus-visible{fill:rgba(97,233,154,.12);outline:none}
+.content-overall-popup{position:absolute;z-index:3;top:70px;right:16px;width:min(260px,calc(100% - 32px));padding:15px;border:1px solid #61e99a;border-radius:9px;background:#0a1c11;box-shadow:0 14px 36px rgba(0,0,0,.68);color:#eaffef}
+.content-overall-popup[hidden]{display:none}
+.content-overall-popup-close{position:absolute;top:5px;right:7px;border:0;background:transparent;color:#d9f5e2;font-size:22px;cursor:pointer}
+.content-overall-popup-content small{color:#83bd97;font:700 9px var(--font-mono);text-transform:uppercase;letter-spacing:.08em}
+.content-overall-popup-content h4{margin:5px 0 8px;font:600 16px var(--font-display)}
+.content-overall-popup-total{font:700 25px var(--font-mono)}
+.content-overall-popup-total span{font:500 11px var(--font-body);color:#a7c4b0}
+.content-overall-popup-breakdown{display:grid;grid-template-columns:1fr auto;gap:7px;margin-top:11px;padding-top:10px;border-top:1px solid #25432f;color:#9eb9a8;font-size:11px}
+.content-overall-popup-breakdown strong{color:#d5f5dd;font-family:var(--font-mono)}
 @media(max-width:700px){.content-overall-body{padding:12px 10px}.content-overall-legend{gap:8px 11px;font-size:9px}.content-overall .content-block-head small{font-size:9px}}
 
 /* The list can be narrow even on a laptop beside the detail panel. */

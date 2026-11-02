@@ -896,9 +896,18 @@
       return '<span style="--series:' + item.color + '"><i></i>' + item.label + ' <strong>' + contentNumber(latest[item.key]) + '</strong></span>';
     }).join('') + (trend.length ? '<span class="content-overall-trend-key"><i></i>Linear trend</span>' : '');
     var firstDate = new Date(days[0].day + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+    var yesterday = days.length > 1 ? days[days.length - 2] : null;
+    var dayTargets = days.map(function (day, index) {
+      var halfWidth = days.length === 1 ? 405 : 405 / (days.length - 1);
+      var left = Math.max(60, x(index) - halfWidth);
+      var right = Math.min(870, x(index) + halfWidth);
+      return '<rect x="' + left.toFixed(1) + '" y="18" width="' + (right - left).toFixed(1) + '" height="210" class="content-overall-day-target" data-content-day="' + escapeHtml(day.day) + '" tabindex="0" role="button" aria-label="' + escapeHtml(day.day + ': ' + (day.total == null ? 'view total unavailable' : contentNumber(day.total) + ' total views')) + '" />';
+    }).join('');
     return '<section class="content-block content-overall"><div class="content-block-head"><div><span>Last ' + rangeDays + ' days · UTC</span><h3>Views across platforms</h3></div>' + controls + '</div>' +
       '<div class="content-overall-body"><div class="content-overall-legend">' + legend + '</div>' +
-      '<svg viewBox="0 0 900 270" role="img" aria-label="Cumulative view history by platform, total, and linear trend for the selected period" preserveAspectRatio="xMidYMid meet"><g class="content-chart-grid">' + grid + '</g>' + paths + trendPath + axisDates + '</svg>' +
+      (yesterday ? '<button type="button" class="content-overall-yesterday" data-content-day="' + escapeHtml(yesterday.day) + '">Yesterday · ' + escapeHtml(yesterday.day) + ' <strong>' + (yesterday.total == null ? '—' : contentNumber(yesterday.total)) + ' total views as of that day</strong><span>Tap for breakdown ↗</span></button>' : '') +
+      '<svg viewBox="0 0 900 270" role="img" aria-label="Cumulative view history by platform, total, and linear trend for the selected period. Tap a date for counts." preserveAspectRatio="xMidYMid meet"><g class="content-chart-grid">' + grid + '</g>' + paths + trendPath + axisDates + dayTargets + '</svg>' +
+      '<div class="content-overall-popup" hidden><button type="button" class="content-overall-popup-close" aria-label="Close view breakdown">×</button><div class="content-overall-popup-content"></div></div>' +
       '<p>Showing ' + days.length + ' days with known totals in this ' + rangeDays + '-day window, from ' + escapeHtml(firstDate) + '. No blank pre-tracking dates are plotted. Counts carry forward between snapshots; platform view definitions differ.</p></div></section>';
   }
 
@@ -975,11 +984,39 @@
       if (refresh) refresh.addEventListener('click', function () { renderContentAnalytics(true); });
       panelMain.querySelector('.content-dashboard').addEventListener('click', function (event) {
         var button = event.target.closest('[data-content-range]');
-        if (!button) return;
-        var range = Number(button.dataset.contentRange);
-        if ([7, 30, 90].indexOf(range) === -1) return;
-        contentOverallRangeDays = range;
-        panelMain.querySelector('.content-overall').outerHTML = contentOverallChart(data, range);
+        if (button) {
+          var range = Number(button.dataset.contentRange);
+          if ([7, 30, 90].indexOf(range) === -1) return;
+          contentOverallRangeDays = range;
+          panelMain.querySelector('.content-overall').outerHTML = contentOverallChart(data, range);
+          return;
+        }
+        var chart = panelMain.querySelector('.content-overall');
+        var popup = chart && chart.querySelector('.content-overall-popup');
+        if (!popup) return;
+        var selected = event.target.closest('[data-content-day]');
+        if (selected && chart.contains(selected)) {
+          var row = (data.viewHistory || []).find(function (day) { return day.day === selected.dataset.contentDay; });
+          if (!row) return;
+          var label = new Date(row.day + 'T00:00:00Z').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+          var breakdown = Object.keys(CONTENT_PLATFORM_META).map(function (platform) {
+            return '<span>' + escapeHtml(CONTENT_PLATFORM_META[platform].label) + '</span><strong>' + contentNumber(row[platform]) + '</strong>';
+          }).join('');
+          popup.querySelector('.content-overall-popup-content').innerHTML = '<small>View totals · UTC</small><h4>' + escapeHtml(label) + '</h4><div class="content-overall-popup-total">' + contentNumber(row.total) + ' <span>total views</span></div><div class="content-overall-popup-breakdown">' + breakdown + '</div>';
+          popup.hidden = false;
+          return;
+        }
+        if (event.target.closest('.content-overall-popup-close') || !event.target.closest('.content-overall-popup')) popup.hidden = true;
+      });
+      panelMain.querySelector('.content-dashboard').addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+          var popup = panelMain.querySelector('.content-overall-popup');
+          if (popup) popup.hidden = true;
+        }
+        if ((event.key === 'Enter' || event.key === ' ') && event.target.matches('.content-overall-day-target')) {
+          event.preventDefault();
+          event.target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        }
       });
       var detail = document.getElementById('contentPieceDetail');
       panelMain.querySelectorAll('.content-piece-row').forEach(function (button) {
