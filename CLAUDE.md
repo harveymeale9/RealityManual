@@ -21302,3 +21302,30 @@ in Publishing Queue or Scheduled when this setting was changed, so no existing
 video dates needed alteration. The new values were read back from the live API
 after saving. This is a live settings change; code defaults remain at 60 hours
 if the settings record is ever recreated.
+
+---
+
+# 701. Sales Order Price Breakdown and BookVault Currency Mismatch (2026-11-02)
+
+Harvey asked what shipping was charged on the first real Canadian order after
+the Sales Analytics card showed $78.08 and BookVault displayed shipping of
+£17.41. The stored checkout amounts are $65.00 for one book and $13.08 for
+shipping, totaling the $78.08 USD charged through Stripe. The checkout route
+calculated the shipping quote server-side; the saved service ID 125 and amount
+match a fresh BookVault `/Dispatch` response for the same destination with
+`Currency: "USD"` (`World Post International Untracked`, `DelEst: 12.00`,
+`PickPackFee: 1.08`, `DelTotal: 13.08`). A replay of the otherwise identical
+request with `Currency: "GBP"` returned `DelEst: 15.96`, `PickPackFee: 1.45`,
+`DelTotal: 17.41`. The placed BookVault order is with Bookvault UK, whose
+partner currency is GBP; its order response records `DispatchCost: 17.41`,
+`ProductionCost: 19.77`, and `GrandTotal: 37.18` in GBP. This is an observed
+currency-dependent quote/fulfillment mismatch, not the storefront's static
+shipping fallback. We have not determined whether BookVault's USD quote or the
+integration's choice of quote currency is at fault, and have not changed live
+checkout pricing. Future orders using the same route may underrecover shipping.
+
+Sales Analytics Recent orders now exposes the stored book subtotal and
+shipping price underneath each total, using the storefront's recorded order
+currency. The reporting query returns only those financial fields and no new
+customer PII. Dashboard tests cover the added values. The UI deliberately
+does not treat BookVault's GBP fulfillment cost as a customer charge.

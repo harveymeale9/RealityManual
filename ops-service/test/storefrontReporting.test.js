@@ -190,6 +190,7 @@ test('sales dashboard returns live periods, a filled daily series and privacy-sa
   db.exec(`
     CREATE TABLE orders(
       id TEXT, order_status TEXT, stripe_payment_status TEXT, quantity INTEGER,
+      book_price_cents INTEGER DEFAULT 0, shipping_price_cents INTEGER DEFAULT 0,
       total_price_cents INTEGER, currency TEXT, country TEXT, shipping_service_name TEXT,
       bookvault_order_id TEXT, confirmation_email_sent_at TEXT, shipping_email_sent_at TEXT,
       resend_contact_synced_at TEXT, created_at TEXT, updated_at TEXT,
@@ -197,11 +198,12 @@ test('sales dashboard returns live periods, a filled daily series and privacy-sa
     );
     CREATE TABLE error_logs(order_id TEXT, service TEXT, error_type TEXT, created_at TEXT);
   `);
-  const order = db.prepare('INSERT INTO orders VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+  const order = db.prepare('INSERT INTO orders (id,order_status,stripe_payment_status,quantity,total_price_cents,currency,country,shipping_service_name,bookvault_order_id,confirmation_email_sent_at,shipping_email_sent_at,resend_contact_synced_at,created_at,updated_at,customer_name,email,street1,fulfillment_last_error) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
   order.run('paid-1','BOOKVAULT_ACCEPTED','succeeded',2,14200,'usd','GB','Tracked','BV-1','2026-10-09T10:03:00.000Z',null,'2026-10-09T10:04:00.000Z','2026-10-09T10:00:00.000Z','2026-10-09T10:04:00.000Z','Private Person','private@example.com','Secret street',null);
   order.run('paid-2','SHIPPED','succeeded',1,7100,'usd','US','Standard','BV-2','2026-10-10T08:03:00.000Z','2026-10-10T09:00:00.000Z','2026-10-10T08:04:00.000Z','2026-10-10T08:00:00.000Z','2026-10-10T09:00:00.000Z','Private Person','private@example.com','Secret street',null);
   order.run('refund','REFUNDED','succeeded',1,7100,'usd','US','Standard',null,null,null,null,'2026-10-08T08:00:00.000Z','2026-10-10T09:30:00.000Z','Private Person','private@example.com','Secret street','Title inactive; insufficient funds; customs declaration required; private@example.com');
   order.run('pending','PAYMENT_PENDING','requires_payment_method',1,7100,'usd','US','Standard',null,null,null,null,'2026-10-10T09:00:00.000Z','2026-10-10T09:00:00.000Z','Private Person','private@example.com','Secret street',null);
+  db.prepare('UPDATE orders SET book_price_cents = ?, shipping_price_cents = ? WHERE id = ?').run(6500, 1200, 'paid-1');
 
   const dashboard = reporting.getSalesDashboard(db, '2026-10-10T12:00:00.000Z');
   assert.equal(dashboard.periods.today.paid_orders, 1);
@@ -213,6 +215,8 @@ test('sales dashboard returns live periods, a filled daily series and privacy-sa
   assert.equal(dashboard.recent_orders.length, 4);
   assert.equal(dashboard.recent_orders[0].id, 'pending');
   assert.equal(dashboard.recent_orders[1].shipping_email_sent, true);
+  assert.equal(dashboard.recent_orders.find((item) => item.id === 'paid-1').book_subtotal_cents, 13000);
+  assert.equal(dashboard.recent_orders.find((item) => item.id === 'paid-1').shipping_price_cents, 1200);
   assert.equal(dashboard.recent_refunds.length, 1);
   assert.equal(dashboard.recent_refunds[0].reason_source, 'unrecorded');
   assert.equal(dashboard.recent_refunds[0].fulfillment_context, 'BookVault: title inactive, insufficient BookVault funds, customs declaration missing');
@@ -236,6 +240,7 @@ test('owner test-order exclusions remove paid and refunded orders from sales rep
     CREATE TABLE analytics_events(session_id TEXT,event_name TEXT,utm_source TEXT,utm_campaign TEXT,created_at TEXT);
     CREATE TABLE orders(
       id TEXT, order_status TEXT, stripe_payment_status TEXT, quantity INTEGER,
+      book_price_cents INTEGER DEFAULT 0, shipping_price_cents INTEGER DEFAULT 0,
       total_price_cents INTEGER, currency TEXT, country TEXT, shipping_service_name TEXT,
       bookvault_order_id TEXT, confirmation_email_sent_at TEXT, shipping_email_sent_at TEXT,
       resend_contact_synced_at TEXT, created_at TEXT, updated_at TEXT,
@@ -243,7 +248,7 @@ test('owner test-order exclusions remove paid and refunded orders from sales rep
     );
     CREATE TABLE error_logs(order_id TEXT, service TEXT, error_type TEXT, created_at TEXT);
   `);
-  const order = db.prepare('INSERT INTO orders VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+  const order = db.prepare('INSERT INTO orders (id,order_status,stripe_payment_status,quantity,total_price_cents,currency,country,shipping_service_name,bookvault_order_id,confirmation_email_sent_at,shipping_email_sent_at,resend_contact_synced_at,created_at,updated_at,fulfillment_last_error) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
   order.run('real-paid', 'BOOKVAULT_ACCEPTED', 'succeeded', 2, 15000, 'usd', 'US', null, null, null, null, null, '2026-10-13T08:00:00.000Z', '2026-10-13T08:00:00.000Z', null);
   order.run('owner-paid', 'BOOKVAULT_ACCEPTED', 'succeeded', 1, 8229, 'usd', 'TH', null, null, null, null, null, '2026-10-13T09:00:00.000Z', '2026-10-13T09:00:00.000Z', null);
   order.run('owner-refund', 'REFUNDED', 'succeeded', 1, 8229, 'usd', 'TH', null, null, null, null, null, '2026-10-13T07:00:00.000Z', '2026-10-13T10:00:00.000Z', null);

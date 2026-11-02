@@ -330,7 +330,7 @@ function getSalesDashboard(db, nowValue, excludedIds, unseenOrderIds) {
     return { country: row.country || '—', orders: Number(row.orders) || 0, units: Number(row.units) || 0, revenue_cents: Number(row.revenue_cents) || 0 };
   });
 
-  const recentOrderFields = `id, quantity, total_price_cents, currency, country, order_status,
+  const recentOrderFields = `id, quantity, book_price_cents, shipping_price_cents, total_price_cents, currency, country, order_status,
       stripe_payment_status, shipping_service_name, bookvault_order_id,
       confirmation_email_sent_at, shipping_email_sent_at,
       resend_contact_synced_at, created_at, updated_at`;
@@ -353,6 +353,8 @@ function getSalesDashboard(db, nowValue, excludedIds, unseenOrderIds) {
     return {
       id: row.id,
       quantity: Number(row.quantity) || 0,
+      book_subtotal_cents: (Number(row.book_price_cents) || 0) * (Number(row.quantity) || 0),
+      shipping_price_cents: Number(row.shipping_price_cents) || 0,
       total_price_cents: Number(row.total_price_cents) || 0,
       currency: row.currency || 'usd',
       country: row.country || '—',

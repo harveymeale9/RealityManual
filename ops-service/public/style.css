@@ -2614,12 +2614,14 @@ body.role-reviewer #pmBackFab {
 .sales-refund-save-status { color: var(--ink-faint); }
 .sales-orders { margin-bottom: 20px; }
 .sales-order-list { width: 100%; }
-.sales-order-row { display: grid; grid-template-columns: 128px minmax(145px,.7fr) minmax(135px,.8fr) 90px minmax(270px,1.4fr); align-items: center; gap: 13px; min-height: 67px; padding: 10px 17px; border-bottom: 1px solid var(--border-soft); }
+.sales-order-row { display: grid; grid-template-columns: 128px minmax(145px,.7fr) minmax(135px,.8fr) minmax(155px,.85fr) minmax(270px,1.4fr); align-items: center; gap: 13px; min-height: 67px; padding: 10px 17px; border-bottom: 1px solid var(--border-soft); }
 .sales-order-row:last-child { border-bottom: 0; }
 .sales-order-row time { color: var(--ink-faint); font: .63rem/1.4 var(--font-mono); }
 .sales-order-row > strong { min-width: 0; color: var(--ink); font: 700 .72rem var(--font-mono); }
 .sales-order-row > strong small { display: block; margin-top: 4px; color: var(--ink-faint); font: .62rem var(--font-body); }
-.sales-order-row > b { color: var(--ink); font: 600 .75rem var(--font-mono); text-align: right; }
+.sales-order-price { text-align: right; }
+.sales-order-price b { display: block; color: var(--ink); font: 600 .75rem var(--font-mono); }
+.sales-order-price small { display: block; margin-top: 4px; color: var(--ink-faint); font: .57rem/1.4 var(--font-mono); white-space: nowrap; }
 .sales-order-status { justify-self: start; padding: 5px 7px; border: 1px solid var(--border); border-radius: 999px; color: var(--ink-soft); background: var(--surface-2); font: 700 .57rem var(--font-mono); letter-spacing: .03em; white-space: nowrap; }
 .sales-order-status.good { border-color: #24623d; color: #68e89c; background: rgba(29,108,61,.14); }
 .sales-order-status.bad { border-color: #6a3430; color: #f08a81; background: rgba(120,48,43,.14); }
@@ -2643,7 +2645,7 @@ body.role-reviewer #pmBackFab {
 @media (max-width: 900px) {
   .sales-metric-grid,.sales-secondary-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .sales-dashboard-columns { grid-template-columns: 1fr; }
-  .sales-order-row { grid-template-columns: 110px minmax(130px,.7fr) minmax(120px,.8fr) 80px minmax(240px,1.4fr); min-width: 850px; }
+  .sales-order-row { grid-template-columns: 110px minmax(130px,.7fr) minmax(120px,.8fr) minmax(155px,.85fr) minmax(240px,1.4fr); min-width: 900px; }
   .sales-order-list { overflow-x: auto; }
 }
 @media (max-width: 600px) {
@@ -2659,7 +2661,8 @@ body.role-reviewer #pmBackFab {
   .sales-order-list { overflow: visible; }
   .sales-order-row { min-width: 0; grid-template-columns: minmax(0,1fr) auto; gap: 8px 12px; padding: 14px; }
   .sales-order-row time { grid-column: 1; grid-row: 1; }
-  .sales-order-row > b { grid-column: 2; grid-row: 1; }
+  .sales-order-price { grid-column: 2; grid-row: 1; }
+  .sales-order-price small { white-space: normal; }
   .sales-order-row > strong { grid-column: 1; grid-row: 2; }
   .sales-order-status { grid-column: 2; grid-row: 2; justify-self: end; }
   .sales-order-ops { grid-column: 1 / -1; grid-row: 3; }

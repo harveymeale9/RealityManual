@@ -444,7 +444,8 @@
           '<time datetime="' + escapeHtml(order.created_at || '') + '">' + (isNaN(date.getTime()) ? '—' : date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })) + '</time>' +
           '<strong>#' + escapeHtml(String(order.id || '').slice(0, 8).toUpperCase()) + '<small>' + escapeHtml(order.country) + ' · ' + order.quantity + ' book' + (order.quantity === 1 ? '' : 's') + '</small></strong>' +
           '<span class="sales-order-status ' + salesStatusTone(order.order_status) + '">' + escapeHtml(salesStatusLabel(order.order_status)) + '</span>' +
-          '<b>' + salesMoney(order.total_price_cents, order.currency) + '</b>' +
+          '<div class="sales-order-price"><b>' + salesMoney(order.total_price_cents, order.currency) + '</b>' +
+            '<small>Book ' + salesMoney(order.book_subtotal_cents, order.currency) + ' · Shipping ' + salesMoney(order.shipping_price_cents, order.currency) + '</small></div>' +
           '<div class="sales-order-ops">' + operations + '<button type="button" class="sales-test-order-action" data-sales-action="exclude">Exclude test order</button></div></div>';
       }).join('') : '<div class="sales-empty sales-empty-orders"><strong>No orders yet</strong><span>Tomorrow’s purchase will appear here as soon as checkout creates it, with payment, BookVault, email, and Resend status.</span></div>';
 
