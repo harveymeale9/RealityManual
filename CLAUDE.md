@@ -21368,3 +21368,14 @@ fail-closed behavior, and the 409 boundary. A headless Chromium test of the
 real checkout DOM verified displayed $23.32 shipping/$88.32 total, then a
 mocked changed quote to $24/$89 updated the form without payment confirmation.
 No live PaymentIntent or BookVault order was created during these tests.
+
+Deployment was manual for `rm-storefront-backend` (the storefront backend has
+no deploy CI), using the existing VPS data volume and env file; the previous
+image was retained as `rm-storefront-backend:previous`. The frontend was
+published by its normal GitHub Pages workflow. Post-deploy checks against
+`api.realitymanual.com` with the original Canadian order's postcode returned
+book $65.00, shipping $23.32, total $88.32 USD. The public checkout in a real
+headless browser displayed $23.32/$88.32 and a `Pay $88.32` button. A live
+HTTP request to `create-payment-intent` with the old $78.08 displayed total
+returned 409 and $88.32, with no order ID or client secret, confirming the
+payment guard without placing a charge or print order.
