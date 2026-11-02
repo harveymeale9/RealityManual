@@ -419,7 +419,10 @@
       var periodCards = periodConfig.map(function (entry) {
         var totals = entry[1];
         return '<article class="sales-metric-card"><span>' + entry[0] + '</span>' +
+          '<div class="sales-metric-total-label">Total charged · including shipping</div>' +
           '<strong>' + salesMoney(totals.revenue_cents) + '</strong>' +
+          '<div class="sales-metric-breakdown"><span>Books</span><b>' + salesMoney(totals.book_revenue_cents) + '</b>' +
+            '<span>Shipping charged</span><b>' + salesMoney(totals.shipping_revenue_cents) + '</b></div>' +
           '<div class="sales-metric-profit"><span>Est. gross profit</span><b>' + salesProfit(totals) + '</b></div>' +
           '<small>' + totals.paid_orders + ' paid order' + (totals.paid_orders === 1 ? '' : 's') + ' · ' + totals.units + ' book' + (totals.units === 1 ? '' : 's') +
           (totals.profit_pending_orders ? ' · ' + totals.profit_pending_orders + ' cost pending' : '') + '</small></article>';

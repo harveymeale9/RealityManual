@@ -148,7 +148,7 @@ test('both analytics views show the nested source-and-video referral chart', fun
   assert.match(app, /referralBreakdownHtml\(website\.referrals\)/);
   assert.match(app, /conic-gradient\(/);
   assert.match(app, /segment\.piece_title/);
-  assert.match(page, /style\.css\?v=20261102-touch-view-popup/);
+  assert.match(page, /style\.css\?v=20261102-sales-shipping-split/);
 });
 
 test('mobile website analytics exposes today and exact daily pageview counts', function () {
@@ -166,7 +166,7 @@ test('storefront report aggregates traffic, funnel, paid sales and refunds witho
   const db = new Database(':memory:');
   db.exec(`
     CREATE TABLE analytics_events(session_id TEXT,event_name TEXT,utm_source TEXT,utm_campaign TEXT,created_at TEXT);
-    CREATE TABLE orders(order_status TEXT,stripe_payment_status TEXT,quantity INTEGER,total_price_cents INTEGER,country TEXT,created_at TEXT,updated_at TEXT,bookvault_total_cost_usd_cents INTEGER);
+    CREATE TABLE orders(order_status TEXT,stripe_payment_status TEXT,quantity INTEGER,total_price_cents INTEGER,shipping_price_cents INTEGER DEFAULT 0,country TEXT,created_at TEXT,updated_at TEXT,bookvault_total_cost_usd_cents INTEGER);
   `);
   const event = db.prepare('INSERT INTO analytics_events VALUES (?,?,?,?,?)');
   event.run('a','page_view','tiktok','launch','2026-09-15T10:00:00.000Z');
@@ -225,6 +225,9 @@ test('sales dashboard returns live periods, a filled daily series and privacy-sa
   assert.equal(dashboard.periods.today.paid_orders, 1);
   assert.equal(dashboard.periods.last_7_days.paid_orders, 2);
   assert.equal(dashboard.periods.last_7_days.revenue_cents, 21300);
+  assert.equal(dashboard.periods.last_7_days.book_revenue_cents, 20100);
+  assert.equal(dashboard.periods.last_7_days.shipping_revenue_cents, 1200);
+  assert.equal(dashboard.periods.last_7_days.book_revenue_cents + dashboard.periods.last_7_days.shipping_revenue_cents, dashboard.periods.last_7_days.revenue_cents);
   assert.equal(dashboard.periods.last_7_days.gross_profit_cents, 9200);
   assert.equal(dashboard.periods.last_7_days.profit_known_orders, 1);
   assert.equal(dashboard.periods.last_7_days.profit_pending_orders, 1);
@@ -240,6 +243,9 @@ test('sales dashboard returns live periods, a filled daily series and privacy-sa
   assert.equal(dashboard.recent_orders.find((item) => item.id === 'paid-1').shipping_price_cents, 1200);
   assert.equal(dashboard.recent_orders.find((item) => item.id === 'paid-1').gross_profit_cents, 9200);
   assert.equal(dashboard.recent_orders.find((item) => item.id === 'paid-2').gross_profit_cents, null);
+  const appSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.match(appSource, /Total charged · including shipping/);
+  assert.match(appSource, /salesMoney\(totals\.shipping_revenue_cents\)/);
   assert.equal(dashboard.recent_refunds.length, 1);
   assert.equal(dashboard.recent_refunds[0].reason_source, 'unrecorded');
   assert.equal(dashboard.recent_refunds[0].fulfillment_context, 'BookVault: title inactive, insufficient BookVault funds, customs declaration missing');

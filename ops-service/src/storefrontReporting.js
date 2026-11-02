@@ -54,6 +54,7 @@ function salesTotals(db, start, end, excludedIds) {
   const paid = db.prepare(`
     SELECT COUNT(*) AS orders, COALESCE(SUM(quantity),0) AS units,
       COALESCE(SUM(total_price_cents),0) AS revenue_cents,
+      COALESCE(SUM(shipping_price_cents),0) AS shipping_revenue_cents,
       COALESCE(AVG(total_price_cents),0) AS average_order_cents,
       COUNT(bookvault_total_cost_usd_cents) AS profit_known_orders,
       COALESCE(SUM(CASE WHEN bookvault_total_cost_usd_cents IS NOT NULL
@@ -68,6 +69,8 @@ function salesTotals(db, start, end, excludedIds) {
     paid_orders: Number(paid.orders) || 0,
     units: Number(paid.units) || 0,
     revenue_cents: Number(paid.revenue_cents) || 0,
+    book_revenue_cents: (Number(paid.revenue_cents) || 0) - (Number(paid.shipping_revenue_cents) || 0),
+    shipping_revenue_cents: Number(paid.shipping_revenue_cents) || 0,
     gross_profit_cents: Number(paid.gross_profit_cents) || 0,
     profit_known_orders: Number(paid.profit_known_orders) || 0,
     profit_pending_orders: (Number(paid.orders) || 0) - (Number(paid.profit_known_orders) || 0),

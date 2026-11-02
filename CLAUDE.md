@@ -21475,3 +21475,22 @@ a real 390px touch-enabled Chromium viewport against dashboard data: the
 Yesterday button opened the correct date/platform values, close worked,
 chart tap reopened it, and the page had no horizontal overflow. The focused
 Content Analytics and storefront reporting tests passed.
+
+# 706. Sales Totals Explicitly Separate Books and Shipping (2026-11-02)
+
+Harvey asked whether the $507.62 Sales Analytics figure included shipping.
+It did: the period revenue field sums each paid, non-refunded, non-excluded
+order's `total_price_cents`, which is the amount charged for books plus
+shipping. A read-only check of the live six paid orders reconciled $390.00
+book sales + $117.62 shipping charged = $507.62 total charged. No revenue
+number was missing or changed.
+
+The four sales-period cards now label the main number "Total charged ·
+including shipping" and show book revenue and shipping charged as separate
+lines, with estimated gross profit still below. The reporting query sums
+shipping for the same paid-order filter; book revenue is total charged less
+shipping, so the displayed split always reconciles exactly even if a future
+order has a price adjustment. The period API now carries those two additional
+aggregate fields without exposing customer details. Tests cover the arithmetic
+and visible labels. A 390px touch-enabled browser check showed the live
+$507.62/$390.00/$117.62 split with no horizontal overflow.
