@@ -1,26 +1,16 @@
 const db = require('../db');
 const config = require('../config');
 const bookvaultService = require('./bookvaultService');
+const exchangeRateService = require('./exchangeRateService');
 const errorLogService = require('./errorLogService');
-
-const getRateStmt = db.prepare('SELECT * FROM shipping_rates WHERE country_code = ?');
-const getRestOfWorldStmt = db.prepare("SELECT * FROM shipping_rates WHERE country_code = 'REST_OF_WORLD'");
 
 // The server is the sole authority on price. The browser may tell us which
 // country/postcode/quantity was entered, but never what it should cost.
 //
-// Primary path: a live BookVault shipping quote (POST /Dispatch), priced
-// for the exact country + postcode + quantity entered — see
-// bookvaultService.js and CLAUDE.md §64/§66. Quantity matters here, not
-// just for the book subtotal: BookVault's quote is weight-based, and
-// enough copies can push the order out of a cheaper service's weight
-// bracket entirely (see §66) — always re-quote rather than reusing an
-// earlier quantity's price. If the call fails for any reason (BookVault
-// down, network timeout, postcode BookVault doesn't recognise), we fall
-// back to the static per-country shipping_rates table (scaled by quantity,
-// even though it isn't truly weight-aware) rather than blocking checkout —
-// the customer still gets a price, just a flatter one, and the fallback is
-// logged so it shows up in the admin error log.
+// Get a live GBP quote for the UK partner and convert it to USD. Quantity
+// matters because BookVault's available services depend on parcel weight.
+// Never fall back to a flat rate or a stale FX rate: that was capable of
+// undercharging UK fulfillment while presenting a plausible checkout total.
 async function calculateTotal(countryCode, postalCode, quantity = 1) {
   const bookPriceCents = config.site.bookPriceCents;
   const bookSubtotalCents = bookPriceCents * quantity;
@@ -45,9 +35,9 @@ async function calculateTotal(countryCode, postalCode, quantity = 1) {
       countryCode,
       postalCode,
       quantity,
-      currency: currency.toUpperCase(),
     });
-    shippingPriceCents = quote.shippingPriceCents;
+    if (quote.currency !== 'GBP') throw new Error('BookVault shipping quote was not in GBP.');
+    shippingPriceCents = await exchangeRateService.gbpToUsdCents(quote.shippingPriceCents);
     serviceName = quote.serviceName;
     serviceId = quote.serviceId;
     minDeliveryDays = quote.minDeliveryDays;
@@ -59,7 +49,6 @@ async function calculateTotal(countryCode, postalCode, quantity = 1) {
           countryCode,
           postalCode,
           quantity: 1,
-          currency: currency.toUpperCase(),
         });
         shippingUpgraded = Boolean(baseline.serviceName) && baseline.serviceName !== serviceName;
       } catch {
@@ -74,7 +63,9 @@ async function calculateTotal(countryCode, postalCode, quantity = 1) {
       errorType: 'shipping_quote_failed',
       errorMessage: err.message,
     });
-    shippingPriceCents = staticRateCents(countryCode) * quantity;
+    // A static fallback could undercharge a UK-fulfilled order by a large
+    // amount. Fail closed until both the UK quote and FX rate are available.
+    throw err;
   }
 
   const totalPriceCents = bookSubtotalCents + shippingPriceCents;
@@ -92,16 +83,6 @@ async function calculateTotal(countryCode, postalCode, quantity = 1) {
     maxDeliveryDays,
     shippingUpgraded,
   };
-}
-
-function staticRateCents(countryCode) {
-  const rate = getRateStmt.get(countryCode) || getRestOfWorldStmt.get();
-
-  if (!rate) {
-    throw new Error(`No shipping rate configured for "${countryCode}" and no REST_OF_WORLD fallback exists.`);
-  }
-
-  return rate.price_usd_cents;
 }
 
 function listRates() {

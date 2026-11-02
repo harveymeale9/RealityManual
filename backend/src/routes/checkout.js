@@ -31,6 +31,23 @@ router.post('/create-payment-intent', async (req, res) => {
     return res.status(500).json({ error: 'shipping_unavailable', message: 'Unable to calculate shipping right now.' });
   }
 
+  // The checkout form quotes before submission, but BookVault or the FX rate
+  // can change between that display and this authoritative re-quote. Do not
+  // create a PaymentIntent for an amount the shopper has not just seen.
+  const displayedTotal = Number(body.quoted_total_price_cents);
+  if (!Number.isSafeInteger(displayedTotal) || displayedTotal !== totals.totalPriceCents) {
+    return res.status(409).json({
+      error: 'shipping_quote_changed',
+      message: 'Shipping has been updated. Please review the new total and click Pay again.',
+      book_subtotal_cents: totals.bookSubtotalCents,
+      shipping_price_cents: totals.shippingPriceCents,
+      total_price_cents: totals.totalPriceCents,
+      currency: totals.currency,
+      quantity: totals.quantity,
+      shipping_upgraded: totals.shippingUpgraded,
+    });
+  }
+
   // Order row is created before the Stripe call so we always have an
   // internal order ID to associate with the PaymentIntent's metadata.
   const order = orderService.createOrder({

@@ -34,6 +34,7 @@
   const QUANTITY_MAX = 20;
 
   let currentTotalCents = BOOK_PRICE_CENTS;
+  let lastQuote = null;
   let shippingRequestSeq = 0;
   let postalDebounceTimer = null;
   let checkoutStartedTracked = false;
@@ -139,6 +140,7 @@
     // a postcode edit needs to re-trigger it too, not just a country
     // change. Debounced so we're not firing a request per keystroke.
     postalInput.addEventListener('input', () => {
+      lastQuote = null;
       clearTimeout(postalDebounceTimer);
       postalDebounceTimer = setTimeout(updateShipping, 500);
     });
@@ -182,6 +184,7 @@
   function setQuantity(n) {
     const clamped = Math.min(QUANTITY_MAX, Math.max(QUANTITY_MIN, Math.round(n) || QUANTITY_MIN));
     quantityInput.value = clamped;
+    lastQuote = null;
     // Immediate client-side estimate - updateShipping() below then confirms
     // the real (server-authoritative) number once BookVault responds,
     // including whether this quantity triggers the upgraded-shipping
@@ -193,12 +196,17 @@
   }
 
   async function updateShipping() {
+    const requestId = ++shippingRequestSeq;
+    lastQuote = null;
     const countryCode = countrySelect.value;
     const postalCode = postalInput.value.trim();
     const quantity = getQuantity();
-    if (!countryCode || !postalCode) return;
+    if (!countryCode || !postalCode) {
+      summaryShipping.textContent = 'Enter address';
+      summaryTotal.textContent = '-';
+      return;
+    }
 
-    const requestId = ++shippingRequestSeq;
     summaryShipping.textContent = 'Calculating…';
     summaryTotal.textContent = '-';
 
@@ -213,23 +221,9 @@
 
       // A slower request that resolves after a newer one has already
       // landed would otherwise clobber it with stale numbers.
-      if (requestId !== shippingRequestSeq) return;
-
-      currentTotalCents = data.total_price_cents;
-      summaryBookPrice.textContent = formatCents(data.book_subtotal_cents);
-      summaryShipping.textContent = formatCents(data.shipping_price_cents);
-      summaryTotal.textContent = formatCents(data.total_price_cents);
-      summaryHint.style.display = 'none';
-
-      if (data.shipping_upgraded) {
-        quantityWarningBanner.textContent = `Ordering ${quantity} copies no longer qualifies for the cheapest shipping service. A pricier, faster courier is used instead, which is why shipping costs more per copy than a smaller order.`;
-        quantityWarningBanner.hidden = false;
-      } else {
-        quantityWarningBanner.hidden = true;
-      }
-      submitButton.textContent = `Pay ${formatCents(data.total_price_cents)}`;
-
-      if (elements) elements.update({ amount: currentTotalCents });
+      if (requestId !== shippingRequestSeq || countryCode !== countrySelect.value ||
+          postalCode !== postalInput.value.trim() || quantity !== getQuantity()) return;
+      applyQuote(data, { countryCode, postalCode, quantity });
     } catch (err) {
       if (requestId !== shippingRequestSeq) return;
       summaryShipping.textContent = 'Unavailable';
@@ -237,6 +231,29 @@
       quantityWarningBanner.hidden = true;
       showFormError('We could not calculate shipping for that address. Please check the country and postal code.');
     }
+  }
+
+  function applyQuote(data, address) {
+    currentTotalCents = data.total_price_cents;
+    lastQuote = { ...address, totalPriceCents: data.total_price_cents };
+    summaryBookPrice.textContent = formatCents(data.book_subtotal_cents);
+    summaryShipping.textContent = formatCents(data.shipping_price_cents);
+    summaryTotal.textContent = formatCents(data.total_price_cents);
+    summaryHint.style.display = 'none';
+    if (data.shipping_upgraded) {
+      quantityWarningBanner.textContent = `Ordering ${address.quantity} copies no longer qualifies for the cheapest shipping service. A pricier, faster courier is used instead, which is why shipping costs more per copy than a smaller order.`;
+      quantityWarningBanner.hidden = false;
+    } else {
+      quantityWarningBanner.hidden = true;
+    }
+    submitButton.textContent = `Pay ${formatCents(data.total_price_cents)}`;
+    if (elements) elements.update({ amount: currentTotalCents });
+  }
+
+  function quoteMatches(values) {
+    return lastQuote && lastQuote.countryCode === values.country_code &&
+      lastQuote.postalCode === values.postal_code.trim() &&
+      lastQuote.quantity === values.quantity;
   }
 
   function formatCents(cents) {
@@ -323,6 +340,12 @@
       return;
     }
 
+    if (!quoteMatches(values)) await updateShipping();
+    if (!quoteMatches(values)) {
+      showFormError('Please wait for the current shipping price before paying.');
+      return;
+    }
+
     submitButton.disabled = true;
     submitButton.textContent = 'Processing…';
 
@@ -330,6 +353,7 @@
     if (submitError) {
       showFormError(submitError.message || 'Please check your payment details.');
       submitButton.disabled = false;
+      submitButton.textContent = `Pay ${formatCents(currentTotalCents)}`;
       return;
     }
 
@@ -338,15 +362,34 @@
       const res = await fetch(`${API_BASE_URL}/api/checkout/create-payment-intent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values),
+        body: JSON.stringify({ ...values, quoted_total_price_cents: lastQuote.totalPriceCents }),
       });
       orderResponse = await res.json();
 
       if (!res.ok) {
+        if (res.status === 409 && orderResponse.error === 'shipping_quote_changed') {
+          if (values.country_code === countrySelect.value &&
+              values.postal_code.trim() === postalInput.value.trim() &&
+              values.quantity === getQuantity()) {
+            applyQuote(orderResponse, {
+              countryCode: values.country_code,
+              postalCode: values.postal_code.trim(),
+              quantity: values.quantity,
+            });
+          } else {
+            await updateShipping();
+          }
+        }
         if (orderResponse.fields) {
           Object.entries(orderResponse.fields).forEach(([field, message]) => setFieldError(field, message));
         }
         showFormError(orderResponse.message || 'We could not process your order. Please review your details.');
+        submitButton.disabled = false;
+        submitButton.textContent = `Pay ${formatCents(currentTotalCents)}`;
+        return;
+      }
+      if (orderResponse.total_price_cents !== currentTotalCents || !quoteMatches(values)) {
+        showFormError('Your shipping details changed during checkout. Please review the total and try again.');
         submitButton.disabled = false;
         submitButton.textContent = `Pay ${formatCents(currentTotalCents)}`;
         return;

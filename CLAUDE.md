@@ -21329,3 +21329,42 @@ shipping price underneath each total, using the storefront's recorded order
 currency. The reporting query returns only those financial fields and no new
 customer PII. Dashboard tests cover the added values. The UI deliberately
 does not treat BookVault's GBP fulfillment cost as a customer charge.
+
+---
+
+# 702. Quote UK Fulfillment in GBP and Protect the Displayed Checkout Total (2026-11-02)
+
+Harvey requires the book to be printed by BookVault UK, with the checkout
+shipping amount matching the charge. The first Canadian order exposed a
+BookVault currency anomaly: for the same UK-partner service 125 and actual
+postcode, `/Dispatch` returns `DelTotal: 13.08` when `Currency: "USD"` but
+`DelTotal: 17.41` when `Currency: "GBP"`. Explicit `PartnerID: 1` reproduces
+both amounts; `PartnerID: 0` also resolved to partner 1 for that destination.
+Thus forcing the partner alone does not fix the dollar underquote. The placed
+order's `Partner.ID` is 1 (`Bookvault UK`), `CurrencyID` is GBP, and dispatch
+cost is £17.41. We have not asserted the cause inside BookVault's conversion.
+
+The BookVault client now sends `PartnerID: 1` for both shipping quotes and
+orders, requests the quote in GBP, and rejects a quote whose returned partner
+is not 1. The backend converts GBP shipping to USD cents using Frankfurter's
+daily GBP/USD reference rate, cached for one hour with freshness and response
+checks. It rounds up to a cent; the rate is a reference rate, not a guarantee
+of the actual card-settlement FX cost. The old static shipping-rate fallback
+was removed: if BookVault or the rate service is unavailable, checkout says
+shipping is unavailable rather than risk undercharging. A live non-creating
+replay against the original Canadian postcode returned £17.41, at the day's
+1.339 reference rate producing $23.32 shipping and $88.32 total with the
+$65.00 book. Explicit UK-partner quotes were also checked for US and GB.
+
+`/api/checkout/create-payment-intent` still calculates its own authoritative
+quote, but now requires `quoted_total_price_cents` from the browser. If that
+differs, it returns HTTP 409 and the updated price *before creating an order
+or PaymentIntent*. The checkout form displays the updated total and requires
+another Pay click. Its quote is invalidated when destination or quantity
+changes; stale asynchronous responses cannot overwrite a newer address.
+The checkout script URL was versioned to avoid old cached JS omitting the new
+field. Automated backend tests cover UK partner/currency, FX conversion,
+fail-closed behavior, and the 409 boundary. A headless Chromium test of the
+real checkout DOM verified displayed $23.32 shipping/$88.32 total, then a
+mocked changed quote to $24/$89 updated the form without payment confirmation.
+No live PaymentIntent or BookVault order was created during these tests.

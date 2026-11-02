@@ -14,6 +14,10 @@
 const config = require('../config');
 
 const REQUEST_TIMEOUT_MS = 8000;
+// The title is printed by BookVault UK. Partner 1 is confirmed by the live
+// accepted order and by /Dispatch's PartnerID response; do not let BookVault
+// choose a different partner for a shipping quote than the order uses.
+const UK_PARTNER_ID = 1;
 
 function authHeader() {
   return `basic ${config.bookvault.apiKey}`;
@@ -73,7 +77,7 @@ function orderPayload(order) {
     Status: 'Active',
     DocRef: order.id,
     CustRef: order.id,
-    PartnerID: 0,
+    PartnerID: UK_PARTNER_ID,
     ProductionLevel: 'Standard',
     DispatchRequest: dispatchRequest,
     Notifications: { NotifyCustomer: false },
@@ -161,9 +165,9 @@ async function getOrder(podRef) {
 const PREFERRED_SERVICE_NAME = 'USPS Consolidator';
 
 // Get a live shipping quote for the given quantity of books to a
-// country/postcode. Returns pricing, the selected service, and BookVault's
-// estimated delivery-day range or throws. Callers decide how to handle a failure (shippingService falls
-// back to the static shipping_rates table).
+// country/postcode. Returns a GBP price from BookVault UK, the selected
+// service, and BookVault's estimated delivery-day range or throws. Callers
+// must convert GBP to storefront USD; a quote failure blocks checkout.
 //
 // POST /Dispatch — "Loads all the available dispatch services based on the
 // supplied data to give you the current prices". ServiceLevel "NotSpecified"
@@ -172,7 +176,7 @@ const PREFERRED_SERVICE_NAME = 'USPS Consolidator';
 // full list; falls back to the lowest DelTotal if that service isn't offered
 // for this destination/weight (e.g. every non-US destination, or a large
 // enough order that USPS Consolidator's weight bracket is exceeded).
-async function getShippingQuote({ countryCode, postalCode, quantity = 1, currency = 'USD' }) {
+async function getShippingQuote({ countryCode, postalCode, quantity = 1 }) {
   if (!config.bookvault.titleIsbn) {
     throw new Error('BOOKVAULT_TITLE_ISBN is not configured.');
   }
@@ -188,12 +192,15 @@ async function getShippingQuote({ countryCode, postalCode, quantity = 1, currenc
     CountryCode: countryCode,
     AreaCode: postalCode,
     ServiceLevel: 'NotSpecified',
-    PartnerID: 0, // 0 = let BookVault choose the best print partner for this destination
-    Currency: currency,
+    PartnerID: UK_PARTNER_ID,
+    Currency: 'GBP', // quote in the UK partner's actual billing currency
     ShipmentDate: new Date().toISOString(),
   };
 
   const data = await request('POST', '/Dispatch', body);
+  if (Number(data?.PartnerID) !== UK_PARTNER_ID) {
+    throw new Error('BookVault did not quote the UK print partner.');
+  }
   const services = Array.isArray(data?.Services) ? data.Services : [];
 
   if (services.length === 0) {
@@ -204,8 +211,8 @@ async function getShippingQuote({ countryCode, postalCode, quantity = 1, currenc
   const chosen = preferred || services.reduce((min, s) => (s.DelTotal < min.DelTotal ? s : min), services[0]);
 
   return {
-    shippingPriceCents: Math.round(chosen.DelTotal * 100),
-    currency,
+    shippingPriceCents: Math.round(Number(chosen.DelTotal) * 100),
+    currency: 'GBP',
     serviceName: chosen.ServName || null,
     serviceId: Number(chosen.ServID) || null,
     minDeliveryDays: Number(chosen.MinDeliveryDays) > 0 ? Number(chosen.MinDeliveryDays) : null,
@@ -213,4 +220,4 @@ async function getShippingQuote({ countryCode, postalCode, quantity = 1, currenc
   };
 }
 
-module.exports = { getShippingQuote, submitOrder, getOrder, orderPayload };
+module.exports = { getShippingQuote, submitOrder, getOrder, orderPayload, UK_PARTNER_ID };
