@@ -21287,3 +21287,18 @@ probe at 623.381 seconds (3840×2160 and 720×404). The *new* review frames
 again show the corrected phrase on both cards. The final mix preserves the
 413.82–433.28-second backing-music dip, the chosen track, and the 17.5-second
 thumbnail. No approval or publication was performed.
+
+---
+
+# 700. Long-form Publishing Cadence Returned to Weekly (2026-11-02)
+
+At Harvey's request, the live Content Settings record in `rm-ops-service` was
+changed from `longformIntervalHours: 60` to `168`, with the mirrored
+`cadence.longform` set to `{ every: 168, unit: 'hours' }`. The existing anchor
+`2026-10-23T16:00:00.000Z` was preserved, so future long-form slots recur
+weekly on Friday at 11:00 p.m. Asia/Bangkok. The same backend long-form slot
+calculation governs both YouTube and Facebook. There were no long-form pieces
+in Publishing Queue or Scheduled when this setting was changed, so no existing
+video dates needed alteration. The new values were read back from the live API
+after saving. This is a live settings change; code defaults remain at 60 hours
+if the settings record is ever recreated.
