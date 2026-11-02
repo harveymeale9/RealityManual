@@ -21437,3 +21437,21 @@ costs known. The first Canadian sale ($78.08 charged) showed BookVault total
 and estimated gross profit $28.25. A headless Chromium session loaded the
 actual dashboard: all four period cards, 30 daily bars, and six per-order
 profit rows rendered; desktop and 390px mobile had no document-width overflow.
+
+# 704. Mobile Website Analytics Shows Today and Exact Daily Counts (2026-11-02)
+
+The shared mobile stylesheet hid every `.overview-row`, which accidentally
+removed Website Analytics' only current-day page-view count on phones. The
+14-day chart still rendered, but its 14 compressed columns used approximately
+9px count labels, and the 30-day line chart required hover to read exact
+values. Harvey could not reliably see today's or individual daily traffic.
+
+Website Analytics now restores its overview cards on mobile, with the live
+"Today so far (UTC)" verified page-view count first. Its 14 completed UTC
+days switch from compressed bars to a legible date-and-count list; the
+hover-dependent line chart is hidden only on mobile. Desktop charts and the
+underlying verified-traffic calculations are unchanged. The stylesheet and
+script cache keys were updated so a normal refresh gets the change. Verified
+with the real dashboard in a 390px Chromium viewport: today and all 14 daily
+rows rendered, their values were readable, and there was no horizontal page
+overflow. The storefront reporting test suite passed.

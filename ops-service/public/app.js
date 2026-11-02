@@ -677,7 +677,7 @@
         panelMain.innerHTML =
           '<div class="ops-panel">' +
             '<div class="overview-row">' +
-              '<div class="overview-tile"><div class="overview-tile-head">Today</div>' +
+              '<div class="overview-tile"><div class="overview-tile-head">Today so far (UTC)</div>' +
                 '<div class="overview-tile-stat"><span class="n">' + data.today.page_views + '</span> page views</div>' +
                 '<div class="overview-tile-sub">' + data.today.unique_visitors + ' verified browsers</div></div>' +
               '<div class="overview-tile"><div class="overview-tile-head">Last 30 days</div>' +

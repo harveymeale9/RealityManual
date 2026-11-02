@@ -148,7 +148,18 @@ test('both analytics views show the nested source-and-video referral chart', fun
   assert.match(app, /referralBreakdownHtml\(website\.referrals\)/);
   assert.match(app, /conic-gradient\(/);
   assert.match(app, /segment\.piece_title/);
-  assert.match(page, /style\.css\?v=20261102-gross-profit/);
+  assert.match(page, /style\.css\?v=20261102-mobile-traffic/);
+});
+
+test('mobile website analytics exposes today and exact daily pageview counts', function () {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'style.css'), 'utf8');
+  assert.match(app, /Today so far \(UTC\)/);
+  assert.match(app, /data\.today\.page_views/);
+  assert.match(app, /Last 14 full days · exact daily counts/);
+  assert.match(css, /\.panel-main--website-analytics \.overview-row \{ display: grid/);
+  assert.match(css, /\.website-traffic-chart \{ display: block; height: auto/);
+  assert.match(css, /\.website-traffic-value \{ color: var\(--ink\); font-size: \.88rem/);
 });
 
 test('storefront report aggregates traffic, funnel, paid sales and refunds without returning PII', function () {

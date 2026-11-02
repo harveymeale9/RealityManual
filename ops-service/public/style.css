@@ -2498,15 +2498,22 @@ body.role-reviewer #pmBackFab {
 .website-traffic-date { min-height: 21px; padding-top: 5px; color: var(--ink-faint); font: .61rem var(--font-mono); white-space: nowrap; }
 .website-traffic-foot { display: flex; justify-content: space-between; margin-top: 10px; color: var(--ink-faint); font: .65rem var(--font-mono); }
 @media (max-width: 700px) {
+  /* The shared mobile rule hides overview cards; Website Analytics needs its
+     live today count visible before the completed-day history. */
+  .panel-main--website-analytics .overview-row { display: grid; grid-template-columns: 1fr; }
+  .panel-main--website-analytics .overview-tile:first-child .overview-tile-stat { font-size: 1.45rem; }
   .website-traffic { padding: 14px 10px; margin-inline: 0; }
   .website-traffic-head { align-items: flex-start; flex-direction: column; gap: 9px; }
   .website-traffic-head p { text-align: left; }
   .website-traffic-head p strong { font-size: 1.2rem; }
-  .website-traffic-chart { gap: 1px; height: 150px; }
-  .website-traffic-track { margin-inline: 1px; }
-  .website-traffic-value { font-size: .55rem; }
-  .website-traffic-date { font-size: .5rem; }
-  .website-traffic-day:nth-child(8) { padding-left: 2px; }
+  .website-line { display: none; }
+  .website-traffic-chart { display: block; height: auto; margin-top: 8px; border-bottom: 0; }
+  .website-traffic-day { display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: center; gap: 12px; min-height: 34px; padding: 6px 8px; border-bottom: 1px solid var(--border-soft); text-align: left; }
+  .website-traffic-day:nth-child(8) { border-left: 0; padding-left: 8px; }
+  .website-traffic-day.is-current { background: rgba(57, 95, 67, .1); }
+  .website-traffic-value { color: var(--ink); font-size: .88rem; font-variant-numeric: tabular-nums; }
+  .website-traffic-date { min-height: 0; padding-top: 0; color: var(--ink-soft); font-size: .78rem; }
+  .website-traffic-track { display: none; }
 }
 
 .funnel-section { margin: 0 clamp(16px, 3vw, 36px) 24px; max-width: 640px; }
