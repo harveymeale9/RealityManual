@@ -1,4 +1,5 @@
 const bookvaultService = require('./bookvaultService');
+const bookvaultCostService = require('./bookvaultCostService');
 const config = require('../config');
 const stripeService = require('./stripeService');
 const orderService = require('./orderService');
@@ -71,6 +72,21 @@ async function refundUnfulfillableOrder(order, failureMessage) {
   });
 }
 
+async function captureBookVaultCost(order, bookvaultOrder) {
+  try {
+    await bookvaultCostService.recordBookVaultCost(order, bookvaultOrder);
+  } catch (err) {
+    // Cost reporting must never delay fulfillment or customer email. The
+    // existing 15-minute order poll will retry with BookVault's full order.
+    errorLogService.logError({
+      orderId: order.id,
+      service: 'bookvault',
+      errorType: 'order_cost_capture_failed',
+      errorMessage: err.message,
+    });
+  }
+}
+
 async function submitToBookVault(order) {
   let accepted;
   try {
@@ -115,11 +131,26 @@ async function submitToBookVault(order) {
     });
   }
   orderService.setNextAttempt(order.id, minutesFromNow(STATUS_POLL_MINUTES));
+
+  // Keep the customer-facing acceptance/email path ahead of this optional
+  // cost lookup; a slow BookVault read must not delay confirmation.
+  try {
+    const fullOrder = await bookvaultService.getOrder(accepted.bookvault_order_id);
+    await captureBookVaultCost(accepted, fullOrder);
+  } catch (err) {
+    errorLogService.logError({
+      orderId: accepted.id,
+      service: 'bookvault',
+      errorType: 'order_cost_lookup_failed',
+      errorMessage: err.message,
+    });
+  }
 }
 
 async function checkBookVaultProgress(order) {
   try {
     const current = await bookvaultService.getOrder(order.bookvault_order_id);
+    await captureBookVaultCost(order, current);
     const status = current?.Progress?.Status;
     if (status === 'Dispatched') {
       const shipment = {

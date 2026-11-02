@@ -47,6 +47,16 @@ const setBookVaultAcceptedStmt = db.prepare(`
   WHERE id = ?
 `);
 
+const setBookVaultCostStmt = db.prepare(`
+  UPDATE orders SET bookvault_production_cost_gbp_cents = ?,
+    bookvault_shipping_cost_gbp_cents = ?,
+    bookvault_total_cost_gbp_cents = ?,
+    bookvault_total_cost_usd_cents = ?,
+    bookvault_gbp_usd_rate = ?,
+    bookvault_cost_recorded_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  WHERE id = ? AND bookvault_order_id IS NOT NULL
+`);
+
 const setFulfillmentRetryStmt = db.prepare(`
   UPDATE orders
   SET order_status = 'FULFILLMENT_RETRY', fulfillment_attempts = ?,
@@ -142,6 +152,14 @@ function setBookVaultAccepted(orderId, podRef) {
   return getByIdStmt.get(orderId);
 }
 
+function setBookVaultCost(orderId, cost) {
+  setBookVaultCostStmt.run(
+    cost.productionGbpCents, cost.shippingGbpCents, cost.totalGbpCents,
+    cost.totalUsdCents, cost.gbpUsdRate, orderId,
+  );
+  return getByIdStmt.get(orderId);
+}
+
 function setFulfillmentRetry(orderId, attempts, errorMessage, nextAttemptAt) {
   setFulfillmentRetryStmt.run(attempts, String(errorMessage).slice(0, 2000), nextAttemptAt, orderId);
 }
@@ -192,6 +210,7 @@ module.exports = {
   updateStatusByPaymentIntentId,
   listFulfillmentCandidates,
   setBookVaultAccepted,
+  setBookVaultCost,
   setFulfillmentRetry,
   setOrderStatus,
   setNextAttempt,

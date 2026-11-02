@@ -54,7 +54,10 @@ function salesTotals(db, start, end, excludedIds) {
   const paid = db.prepare(`
     SELECT COUNT(*) AS orders, COALESCE(SUM(quantity),0) AS units,
       COALESCE(SUM(total_price_cents),0) AS revenue_cents,
-      COALESCE(AVG(total_price_cents),0) AS average_order_cents
+      COALESCE(AVG(total_price_cents),0) AS average_order_cents,
+      COUNT(bookvault_total_cost_usd_cents) AS profit_known_orders,
+      COALESCE(SUM(CASE WHEN bookvault_total_cost_usd_cents IS NOT NULL
+        THEN total_price_cents - bookvault_total_cost_usd_cents ELSE 0 END),0) AS gross_profit_cents
     FROM orders WHERE created_at >= ? AND created_at < ? AND ${PAID_ORDER_SQL}${excluded.sql}
   `).get(start, end, ...excluded.ids);
   const refunds = db.prepare(`
@@ -65,6 +68,9 @@ function salesTotals(db, start, end, excludedIds) {
     paid_orders: Number(paid.orders) || 0,
     units: Number(paid.units) || 0,
     revenue_cents: Number(paid.revenue_cents) || 0,
+    gross_profit_cents: Number(paid.gross_profit_cents) || 0,
+    profit_known_orders: Number(paid.profit_known_orders) || 0,
+    profit_pending_orders: (Number(paid.orders) || 0) - (Number(paid.profit_known_orders) || 0),
     average_order_cents: Math.round(Number(paid.average_order_cents) || 0),
     refunded_orders: Number(refunds.orders) || 0,
     refunded_value_cents: Number(refunds.value_cents) || 0
@@ -111,6 +117,9 @@ function getPeriodReport(db, start, end, excludedIds) {
     sales: {
       paid_orders: sales.paid_orders, units: sales.units,
       revenue_cents: sales.revenue_cents,
+      gross_profit_cents: sales.gross_profit_cents,
+      profit_known_orders: sales.profit_known_orders,
+      profit_pending_orders: sales.profit_pending_orders,
       average_order_cents: sales.average_order_cents,
       refunded_orders: sales.refunded_orders, refunded_value_cents: sales.refunded_value_cents,
       countries: countries.map(function (row) {
@@ -307,7 +316,10 @@ function getSalesDashboard(db, nowValue, excludedIds, unseenOrderIds) {
 
   const dailyRows = db.prepare(`
     SELECT substr(created_at,1,10) AS day, COUNT(*) AS orders,
-      COALESCE(SUM(quantity),0) AS units, COALESCE(SUM(total_price_cents),0) AS revenue_cents
+      COALESCE(SUM(quantity),0) AS units, COALESCE(SUM(total_price_cents),0) AS revenue_cents,
+      COUNT(bookvault_total_cost_usd_cents) AS profit_known_orders,
+      COALESCE(SUM(CASE WHEN bookvault_total_cost_usd_cents IS NOT NULL
+        THEN total_price_cents - bookvault_total_cost_usd_cents ELSE 0 END),0) AS gross_profit_cents
     FROM orders WHERE created_at >= ? AND created_at < ? AND ${PAID_ORDER_SQL}${excluded.sql}
     GROUP BY substr(created_at,1,10) ORDER BY day ASC
   `).all(thirtyStart.toISOString(), end, ...excluded.ids);
@@ -318,7 +330,12 @@ function getSalesDashboard(db, nowValue, excludedIds, unseenOrderIds) {
     const day = new Date(thirtyStart); day.setUTCDate(day.getUTCDate() + i);
     const key = day.toISOString().slice(0, 10);
     const row = dailyMap[key] || {};
-    daily.push({ day: key, orders: Number(row.orders) || 0, units: Number(row.units) || 0, revenue_cents: Number(row.revenue_cents) || 0 });
+    const orders = Number(row.orders) || 0;
+    const known = Number(row.profit_known_orders) || 0;
+    daily.push({ day: key, orders: orders, units: Number(row.units) || 0,
+      revenue_cents: Number(row.revenue_cents) || 0,
+      gross_profit_cents: Number(row.gross_profit_cents) || 0,
+      profit_known_orders: known, profit_pending_orders: orders - known });
   }
 
   const countries = db.prepare(`
@@ -330,7 +347,9 @@ function getSalesDashboard(db, nowValue, excludedIds, unseenOrderIds) {
     return { country: row.country || '—', orders: Number(row.orders) || 0, units: Number(row.units) || 0, revenue_cents: Number(row.revenue_cents) || 0 };
   });
 
-  const recentOrderFields = `id, quantity, book_price_cents, shipping_price_cents, total_price_cents, currency, country, order_status,
+  const recentOrderFields = `id, quantity, book_price_cents, shipping_price_cents, total_price_cents,
+      bookvault_production_cost_gbp_cents, bookvault_shipping_cost_gbp_cents,
+      bookvault_total_cost_gbp_cents, bookvault_total_cost_usd_cents, currency, country, order_status,
       stripe_payment_status, shipping_service_name, bookvault_order_id,
       confirmation_email_sent_at, shipping_email_sent_at,
       resend_contact_synced_at, created_at, updated_at`;
@@ -356,6 +375,12 @@ function getSalesDashboard(db, nowValue, excludedIds, unseenOrderIds) {
       book_subtotal_cents: (Number(row.book_price_cents) || 0) * (Number(row.quantity) || 0),
       shipping_price_cents: Number(row.shipping_price_cents) || 0,
       total_price_cents: Number(row.total_price_cents) || 0,
+      bookvault_production_cost_gbp_cents: row.bookvault_production_cost_gbp_cents,
+      bookvault_shipping_cost_gbp_cents: row.bookvault_shipping_cost_gbp_cents,
+      bookvault_total_cost_gbp_cents: row.bookvault_total_cost_gbp_cents,
+      bookvault_total_cost_usd_cents: row.bookvault_total_cost_usd_cents,
+      gross_profit_cents: row.bookvault_total_cost_usd_cents == null ? null
+        : (Number(row.total_price_cents) || 0) - Number(row.bookvault_total_cost_usd_cents),
       currency: row.currency || 'usd',
       country: row.country || '—',
       order_status: row.order_status,

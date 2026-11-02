@@ -21379,3 +21379,44 @@ headless browser displayed $23.32/$88.32 and a `Pay $88.32` button. A live
 HTTP request to `create-payment-intent` with the old $78.08 displayed total
 returned 409 and $88.32, with no order ID or client secret, confirming the
 payment guard without placing a charge or print order.
+
+---
+
+# 703. Sales Analytics Gross Profit from Actual BookVault Costs (2026-11-02)
+
+Harvey asked for per-order, daily and overall gross profit in Sales Analytics.
+It is calculated as the USD amount charged for each paid, non-refunded order
+minus that order's *actual* BookVault `OrderCost.GrandTotal`, converted from
+GBP to USD with a saved GBP/USD reference-rate snapshot. This includes
+BookVault production, dispatch, tax and any extras or surcharges; omitting
+GrandTotal's tax would overstate several November 2 orders. It excludes Stripe
+and bank fees, advertising, and any costs incurred by orders later refunded,
+so it is an estimated product/fulfillment gross profit, not net earnings or
+an exact bank-settlement figure. The first Canadian sale's $13.08 undercharged
+shipping is reflected in its lower profit, not assumed to cancel out.
+
+The backend order table now stores the GBP production, dispatch and grand
+total, their USD-converted grand total, the FX rate used, and a capture
+timestamp. New accepted orders fetch their complete BookVault record after
+customer confirmation, then save costs; each normal 15-minute BookVault poll
+can fill a missing cost or update one changed by tax/other adjustments. A
+later GBP cost revision keeps the order's original FX snapshot so historical
+profit does not drift whenever a new daily rate is published. Cost lookup or
+FX failure never blocks fulfillment; the dashboard marks profit as pending
+until a validated UK/GBP cost is available. Only the private ops dashboard
+reads these figures; no new customer data is exposed.
+
+Sales Analytics now shows estimated gross profit in each period card (including
+all time), per recent order, and as the daily bar chart for the past 30 days.
+The chart tooltip retains daily revenue and warns of orders with costs still
+pending. Existing owner-excluded test orders and refunded orders use the same
+filters as revenue. Backend and reporting tests cover cost capture, tax-inclusive
+grand totals, persistent FX snapshots, pending costs, period/daily aggregation,
+and exclusion behavior.
+
+`backend/scripts/backfill-bookvault-costs.js` is a safe, repeatable migration
+helper for accepted paid orders from before the capture feature. It only GETs
+existing BookVault orders and fills missing cost snapshots. Older orders use
+Frankfurter's historical GBP/USD rate for their order day, while same-day
+orders share the backend's hourly cached rate. It does not place a BookVault
+order, charge Stripe, or modify customer data.

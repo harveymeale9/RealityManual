@@ -28,6 +28,12 @@ CREATE TABLE IF NOT EXISTS orders (
   -- until order submission is built — included now so no migration is
   -- needed when that phase starts.
   bookvault_order_id       TEXT,
+  bookvault_production_cost_gbp_cents INTEGER,
+  bookvault_shipping_cost_gbp_cents   INTEGER,
+  bookvault_total_cost_gbp_cents      INTEGER,
+  bookvault_total_cost_usd_cents      INTEGER,
+  bookvault_gbp_usd_rate              REAL,
+  bookvault_cost_recorded_at          TEXT,
   fulfillment_attempts       INTEGER NOT NULL DEFAULT 0,
   fulfillment_next_attempt_at TEXT,
   fulfillment_last_error     TEXT,

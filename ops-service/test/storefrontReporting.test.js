@@ -148,14 +148,14 @@ test('both analytics views show the nested source-and-video referral chart', fun
   assert.match(app, /referralBreakdownHtml\(website\.referrals\)/);
   assert.match(app, /conic-gradient\(/);
   assert.match(app, /segment\.piece_title/);
-  assert.match(page, /style\.css\?v=20261025-youtube-clickthrough-v1/);
+  assert.match(page, /style\.css\?v=20261102-gross-profit/);
 });
 
 test('storefront report aggregates traffic, funnel, paid sales and refunds without returning PII', function () {
   const db = new Database(':memory:');
   db.exec(`
     CREATE TABLE analytics_events(session_id TEXT,event_name TEXT,utm_source TEXT,utm_campaign TEXT,created_at TEXT);
-    CREATE TABLE orders(order_status TEXT,stripe_payment_status TEXT,quantity INTEGER,total_price_cents INTEGER,country TEXT,created_at TEXT,updated_at TEXT);
+    CREATE TABLE orders(order_status TEXT,stripe_payment_status TEXT,quantity INTEGER,total_price_cents INTEGER,country TEXT,created_at TEXT,updated_at TEXT,bookvault_total_cost_usd_cents INTEGER);
   `);
   const event = db.prepare('INSERT INTO analytics_events VALUES (?,?,?,?,?)');
   event.run('a','page_view','tiktok','launch','2026-09-15T10:00:00.000Z');
@@ -165,10 +165,11 @@ test('storefront report aggregates traffic, funnel, paid sales and refunds witho
   event.run('a','order_complete','tiktok','launch','2026-09-15T10:02:00.000Z');
   event.run('b','page_view','','','2026-09-16T10:00:00.000Z');
   event.run('outside','page_view','other','','2026-09-22T00:00:00.000Z');
-  const order = db.prepare('INSERT INTO orders VALUES (?,?,?,?,?,?,?)');
+  const order = db.prepare('INSERT INTO orders (order_status,stripe_payment_status,quantity,total_price_cents,country,created_at,updated_at) VALUES (?,?,?,?,?,?,?)');
   order.run('COMPLETE','succeeded',2,14200,'GB','2026-09-15T10:02:00.000Z','2026-09-15T10:02:00.000Z');
   order.run('REFUNDED','succeeded',1,7100,'US','2026-09-15T11:00:00.000Z','2026-09-16T11:00:00.000Z');
   order.run('PAYMENT_PENDING','requires_payment_method',1,7100,'US','2026-09-16T11:00:00.000Z','2026-09-16T11:00:00.000Z');
+  db.prepare('UPDATE orders SET bookvault_total_cost_usd_cents = ? WHERE order_status = ?').run(5000, 'COMPLETE');
   const report = reporting.getPeriodReport(db, '2026-09-15T00:00:00.000Z', '2026-09-22T00:00:00.000Z');
   assert.equal(report.website.page_views, 2);
   assert.equal(report.website.unique_visitors, 2);
@@ -179,6 +180,7 @@ test('storefront report aggregates traffic, funnel, paid sales and refunds witho
   assert.equal(report.sales.paid_orders, 1);
   assert.equal(report.sales.units, 2);
   assert.equal(report.sales.revenue_cents, 14200);
+  assert.equal(report.sales.gross_profit_cents, 9200);
   assert.equal(report.sales.refunded_orders, 1);
   assert.deepEqual(report.sales.countries, [{ country: 'GB', orders: 1, revenue_cents: 14200 }]);
   assert.equal(JSON.stringify(report).includes('customer@example.com'), false);
@@ -191,6 +193,8 @@ test('sales dashboard returns live periods, a filled daily series and privacy-sa
     CREATE TABLE orders(
       id TEXT, order_status TEXT, stripe_payment_status TEXT, quantity INTEGER,
       book_price_cents INTEGER DEFAULT 0, shipping_price_cents INTEGER DEFAULT 0,
+      bookvault_production_cost_gbp_cents INTEGER, bookvault_shipping_cost_gbp_cents INTEGER,
+      bookvault_total_cost_gbp_cents INTEGER, bookvault_total_cost_usd_cents INTEGER,
       total_price_cents INTEGER, currency TEXT, country TEXT, shipping_service_name TEXT,
       bookvault_order_id TEXT, confirmation_email_sent_at TEXT, shipping_email_sent_at TEXT,
       resend_contact_synced_at TEXT, created_at TEXT, updated_at TEXT,
@@ -204,11 +208,17 @@ test('sales dashboard returns live periods, a filled daily series and privacy-sa
   order.run('refund','REFUNDED','succeeded',1,7100,'usd','US','Standard',null,null,null,null,'2026-10-08T08:00:00.000Z','2026-10-10T09:30:00.000Z','Private Person','private@example.com','Secret street','Title inactive; insufficient funds; customs declaration required; private@example.com');
   order.run('pending','PAYMENT_PENDING','requires_payment_method',1,7100,'usd','US','Standard',null,null,null,null,'2026-10-10T09:00:00.000Z','2026-10-10T09:00:00.000Z','Private Person','private@example.com','Secret street',null);
   db.prepare('UPDATE orders SET book_price_cents = ?, shipping_price_cents = ? WHERE id = ?').run(6500, 1200, 'paid-1');
+  db.prepare('UPDATE orders SET bookvault_production_cost_gbp_cents = ?, bookvault_shipping_cost_gbp_cents = ?, bookvault_total_cost_gbp_cents = ?, bookvault_total_cost_usd_cents = ? WHERE id = ?').run(1977, 1750, 3727, 5000, 'paid-1');
 
   const dashboard = reporting.getSalesDashboard(db, '2026-10-10T12:00:00.000Z');
   assert.equal(dashboard.periods.today.paid_orders, 1);
   assert.equal(dashboard.periods.last_7_days.paid_orders, 2);
   assert.equal(dashboard.periods.last_7_days.revenue_cents, 21300);
+  assert.equal(dashboard.periods.last_7_days.gross_profit_cents, 9200);
+  assert.equal(dashboard.periods.last_7_days.profit_known_orders, 1);
+  assert.equal(dashboard.periods.last_7_days.profit_pending_orders, 1);
+  assert.equal(dashboard.daily.find((row) => row.day === '2026-10-09').gross_profit_cents, 9200);
+  assert.equal(dashboard.daily.find((row) => row.day === '2026-10-10').profit_pending_orders, 1);
   assert.equal(dashboard.periods.today.refunded_orders, 1);
   assert.equal(dashboard.daily.length, 30);
   assert.deepEqual(dashboard.countries[0], { country: 'GB', orders: 1, units: 2, revenue_cents: 14200 });
@@ -217,6 +227,8 @@ test('sales dashboard returns live periods, a filled daily series and privacy-sa
   assert.equal(dashboard.recent_orders[1].shipping_email_sent, true);
   assert.equal(dashboard.recent_orders.find((item) => item.id === 'paid-1').book_subtotal_cents, 13000);
   assert.equal(dashboard.recent_orders.find((item) => item.id === 'paid-1').shipping_price_cents, 1200);
+  assert.equal(dashboard.recent_orders.find((item) => item.id === 'paid-1').gross_profit_cents, 9200);
+  assert.equal(dashboard.recent_orders.find((item) => item.id === 'paid-2').gross_profit_cents, null);
   assert.equal(dashboard.recent_refunds.length, 1);
   assert.equal(dashboard.recent_refunds[0].reason_source, 'unrecorded');
   assert.equal(dashboard.recent_refunds[0].fulfillment_context, 'BookVault: title inactive, insufficient BookVault funds, customs declaration missing');
@@ -241,6 +253,8 @@ test('owner test-order exclusions remove paid and refunded orders from sales rep
     CREATE TABLE orders(
       id TEXT, order_status TEXT, stripe_payment_status TEXT, quantity INTEGER,
       book_price_cents INTEGER DEFAULT 0, shipping_price_cents INTEGER DEFAULT 0,
+      bookvault_production_cost_gbp_cents INTEGER, bookvault_shipping_cost_gbp_cents INTEGER,
+      bookvault_total_cost_gbp_cents INTEGER, bookvault_total_cost_usd_cents INTEGER,
       total_price_cents INTEGER, currency TEXT, country TEXT, shipping_service_name TEXT,
       bookvault_order_id TEXT, confirmation_email_sent_at TEXT, shipping_email_sent_at TEXT,
       resend_contact_synced_at TEXT, created_at TEXT, updated_at TEXT,
@@ -252,11 +266,14 @@ test('owner test-order exclusions remove paid and refunded orders from sales rep
   order.run('real-paid', 'BOOKVAULT_ACCEPTED', 'succeeded', 2, 15000, 'usd', 'US', null, null, null, null, null, '2026-10-13T08:00:00.000Z', '2026-10-13T08:00:00.000Z', null);
   order.run('owner-paid', 'BOOKVAULT_ACCEPTED', 'succeeded', 1, 8229, 'usd', 'TH', null, null, null, null, null, '2026-10-13T09:00:00.000Z', '2026-10-13T09:00:00.000Z', null);
   order.run('owner-refund', 'REFUNDED', 'succeeded', 1, 8229, 'usd', 'TH', null, null, null, null, null, '2026-10-13T07:00:00.000Z', '2026-10-13T10:00:00.000Z', null);
+  db.prepare('UPDATE orders SET bookvault_total_cost_usd_cents = ? WHERE id = ?').run(6000, 'real-paid');
+  db.prepare('UPDATE orders SET bookvault_total_cost_usd_cents = ? WHERE id = ?').run(1000, 'owner-paid');
   const excluded = ['owner-paid', 'owner-refund'];
   assert.deepEqual(reporting.paidOrderIds(db, excluded), ['real-paid']);
   const dashboard = reporting.getSalesDashboard(db, '2026-10-19T12:00:00.000Z', excluded);
   assert.equal(dashboard.periods.all_time.paid_orders, 1);
   assert.equal(dashboard.periods.all_time.revenue_cents, 15000);
+  assert.equal(dashboard.periods.all_time.gross_profit_cents, 9000);
   assert.equal(dashboard.periods.all_time.refunded_orders, 0);
   assert.equal(dashboard.periods.last_30_days.average_order_cents, 15000);
   assert.equal(dashboard.daily.find((row) => row.day === '2026-10-13').revenue_cents, 15000);
@@ -271,5 +288,6 @@ test('owner test-order exclusions remove paid and refunded orders from sales rep
   const restored = reporting.getSalesDashboard(db, '2026-10-19T12:00:00.000Z', ['owner-refund']);
   assert.equal(restored.periods.all_time.paid_orders, 2);
   assert.equal(restored.periods.all_time.revenue_cents, 23229);
+  assert.equal(restored.periods.all_time.gross_profit_cents, 16229);
   db.close();
 });

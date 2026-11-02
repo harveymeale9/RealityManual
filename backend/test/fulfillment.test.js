@@ -15,6 +15,8 @@ process.env.FULFILLMENT_ENABLED = 'true';
 
 const orderService = require('../src/services/orderService');
 const bookvaultService = require('../src/services/bookvaultService');
+const bookvaultCostService = require('../src/services/bookvaultCostService');
+const exchangeRateService = require('../src/services/exchangeRateService');
 const stripeService = require('../src/services/stripeService');
 const { resendClient } = require('../src/services/resendService');
 const fulfillmentService = require('../src/services/fulfillmentService');
@@ -78,6 +80,11 @@ test('paid order is submitted once, emailed, then dispatch is emailed with track
     submissions += 1;
     return { PodRef: 7001 };
   };
+  bookvaultService.getOrder = async () => ({
+    Partner: { ID: 1, CurrencyID: 'GBP' },
+    OrderCost: { ProductionCost: 19.77, DispatchCost: 17.41, GrandTotal: 39.18 },
+  });
+  exchangeRateService.latestGbpUsdRate = async () => 1.339;
   resendClient.sendEmail = async (message) => {
     sent.push(message);
     return { id: `email_${sent.length}` };
@@ -90,6 +97,10 @@ test('paid order is submitted once, emailed, then dispatch is emailed with track
   let stored = orderService.getById(order.id);
   assert.equal(stored.order_status, 'BOOKVAULT_ACCEPTED');
   assert.equal(stored.bookvault_order_id, '7001');
+  assert.equal(stored.bookvault_production_cost_gbp_cents, 1977);
+  assert.equal(stored.bookvault_shipping_cost_gbp_cents, 1741);
+  assert.equal(stored.bookvault_total_cost_gbp_cents, 3918);
+  assert.equal(stored.bookvault_total_cost_usd_cents, Math.ceil(3918 * 1.339));
   assert.ok(stored.confirmation_email_sent_at);
   assert.equal(submissions, 1);
   assert.equal(synced.length, 1);
@@ -105,6 +116,8 @@ test('paid order is submitted once, emailed, then dispatch is emailed with track
   ]);
 
   bookvaultService.getOrder = async () => ({
+    Partner: { ID: 1, CurrencyID: 'GBP' },
+    OrderCost: { ProductionCost: 19.77, DispatchCost: 17.41, GrandTotal: 39.18 },
     Progress: { Status: 'Dispatched' },
     Tracking: {
       ServName: 'USPS',
@@ -125,6 +138,10 @@ test('an accepted order is never refunded merely because confirmation email is t
   const order = paidOrder();
   let refundCalls = 0;
   bookvaultService.submitOrder = async () => ({ PodRef: 7002 });
+  bookvaultService.getOrder = async () => ({
+    Partner: { ID: 1, CurrencyID: 'GBP' },
+    OrderCost: { ProductionCost: 19.77, DispatchCost: 17.41, GrandTotal: 37.18 },
+  });
   resendClient.syncPurchaserContact = async () => {};
   resendClient.sendEmail = async () => { throw new Error('temporary mail outage'); };
   stripeService.refundPayment = async () => { refundCalls += 1; };
@@ -141,6 +158,10 @@ test('a Resend contact-sync outage does not block confirmation or fulfillment', 
   const order = paidOrder();
   const sent = [];
   bookvaultService.submitOrder = async () => ({ PodRef: 7003 });
+  bookvaultService.getOrder = async () => ({
+    Partner: { ID: 1, CurrencyID: 'GBP' },
+    OrderCost: { ProductionCost: 19.77, DispatchCost: 17.41, GrandTotal: 37.18 },
+  });
   resendClient.syncPurchaserContact = async () => { throw new Error('contacts temporarily unavailable'); };
   resendClient.sendEmail = async (message) => {
     sent.push(message);
@@ -153,4 +174,27 @@ test('a Resend contact-sync outage does not block confirmation or fulfillment', 
   assert.equal(stored.resend_contact_synced_at, null);
   assert.ok(stored.confirmation_email_sent_at);
   assert.equal(sent.length, 1);
+});
+
+test('BookVault cost uses grand total including tax and retains the order FX snapshot', async () => {
+  const order = paidOrder();
+  orderService.setBookVaultAccepted(order.id, '7004');
+  const first = await bookvaultCostService.recordBookVaultCost(orderService.getById(order.id), {
+    Partner: { ID: 1, CurrencyID: 'GBP' },
+    OrderCost: { ProductionCost: 19.77, DispatchCost: 13.64, Tax: 2.33, GrandTotal: 35.74 },
+  });
+  assert.equal(first.bookvault_total_cost_gbp_cents, 3574);
+  assert.equal(first.bookvault_total_cost_usd_cents, Math.ceil(3574 * 1.339));
+  const revised = await bookvaultCostService.recordBookVaultCost(first, {
+    Partner: { ID: 1, CurrencyID: 'GBP' },
+    OrderCost: { ProductionCost: 19.77, DispatchCost: 13.64, Tax: 3.51, GrandTotal: 36.92 },
+  }, 1.1);
+  assert.equal(revised.bookvault_gbp_usd_rate, 1.339);
+  assert.equal(revised.bookvault_total_cost_usd_cents, Math.ceil(3692 * 1.339));
+  assert.throws(() => bookvaultCostService.extractBookVaultCost({
+    Partner: { ID: 2, CurrencyID: 'USD' }, OrderCost: { GrandTotal: 12 },
+  }), /UK GBP/);
+  assert.throws(() => bookvaultCostService.extractBookVaultCost({
+    Partner: { ID: 1, CurrencyID: 'GBP' }, OrderCost: { ProductionCost: 19.77, DispatchCost: 13.64 },
+  }), /missing or invalid/);
 });

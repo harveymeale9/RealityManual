@@ -375,6 +375,10 @@
     }
   }
 
+  function salesProfit(period) {
+    return period.profit_known_orders ? salesMoney(period.gross_profit_cents) : 'Pending';
+  }
+
   function salesStatusLabel(status) {
     return String(status || 'Pending').toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, function (letter) { return letter.toUpperCase(); });
   }
@@ -416,17 +420,23 @@
         var totals = entry[1];
         return '<article class="sales-metric-card"><span>' + entry[0] + '</span>' +
           '<strong>' + salesMoney(totals.revenue_cents) + '</strong>' +
-          '<small>' + totals.paid_orders + ' paid order' + (totals.paid_orders === 1 ? '' : 's') + ' · ' + totals.units + ' book' + (totals.units === 1 ? '' : 's') + '</small></article>';
+          '<div class="sales-metric-profit"><span>Est. gross profit</span><b>' + salesProfit(totals) + '</b></div>' +
+          '<small>' + totals.paid_orders + ' paid order' + (totals.paid_orders === 1 ? '' : 's') + ' · ' + totals.units + ' book' + (totals.units === 1 ? '' : 's') +
+          (totals.profit_pending_orders ? ' · ' + totals.profit_pending_orders + ' cost pending' : '') + '</small></article>';
       }).join('');
 
-      var maximumRevenue = Math.max.apply(Math, data.daily.map(function (day) { return Number(day.revenue_cents) || 0; }).concat([0]));
-      var chart = maximumRevenue ? data.daily.map(function (day, index) {
-        var amount = Number(day.revenue_cents) || 0;
-        var height = amount ? Math.max(5, Math.round(amount / maximumRevenue * 100)) : 2;
+      var maximumProfit = Math.max.apply(Math, data.daily.map(function (day) { return Math.abs(Number(day.gross_profit_cents) || 0); }).concat([0]));
+      var hasProfitData = data.daily.some(function (day) { return day.profit_known_orders > 0; });
+      var chart = hasProfitData ? data.daily.map(function (day, index) {
+        var amount = Number(day.gross_profit_cents) || 0;
+        var height = amount ? Math.max(5, Math.round(Math.abs(amount) / (maximumProfit || 1) * 100)) : 0;
         var label = (index % 5 === 0 || index === data.daily.length - 1) ? day.day.slice(5) : '';
-        return '<div class="sales-chart-column" title="' + escapeHtml(day.day + ': ' + salesMoney(amount) + ' · ' + day.orders + ' orders') + '">' +
+        return '<div class="sales-chart-column' + (amount < 0 ? ' negative' : '') + (amount === 0 ? ' zero' : '') + '" title="' + escapeHtml(day.day + ': ' +
+          (day.profit_known_orders ? salesMoney(amount) + ' gross profit' : 'profit pending') +
+          ' · ' + salesMoney(day.revenue_cents) + ' revenue' +
+          (day.profit_pending_orders ? ' · ' + day.profit_pending_orders + ' cost pending' : '')) + '">' +
           '<div class="sales-chart-track"><i style="height:' + height + '%"></i></div><span>' + label + '</span></div>';
-      }).join('') : '<div class="sales-empty-chart">Your first paid order will appear here automatically.</div>';
+      }).join('') : '<div class="sales-empty-chart">Gross profit appears when BookVault order costs are available.</div>';
 
       var countries = data.countries.length ? data.countries.map(function (country) {
         return '<div class="sales-country-row"><strong>' + escapeHtml(country.country) + '</strong><span>' + country.orders + ' order' + (country.orders === 1 ? '' : 's') + ' · ' + country.units + ' books</span><b>' + salesMoney(country.revenue_cents) + '</b></div>';
@@ -445,7 +455,13 @@
           '<strong>#' + escapeHtml(String(order.id || '').slice(0, 8).toUpperCase()) + '<small>' + escapeHtml(order.country) + ' · ' + order.quantity + ' book' + (order.quantity === 1 ? '' : 's') + '</small></strong>' +
           '<span class="sales-order-status ' + salesStatusTone(order.order_status) + '">' + escapeHtml(salesStatusLabel(order.order_status)) + '</span>' +
           '<div class="sales-order-price"><b>' + salesMoney(order.total_price_cents, order.currency) + '</b>' +
-            '<small>Book ' + salesMoney(order.book_subtotal_cents, order.currency) + ' · Shipping ' + salesMoney(order.shipping_price_cents, order.currency) + '</small></div>' +
+            '<small>Book ' + salesMoney(order.book_subtotal_cents, order.currency) + ' · Shipping ' + salesMoney(order.shipping_price_cents, order.currency) + '</small>' +
+            (paymentSettled ? '<small class="sales-order-profit">Est. gross profit ' +
+              (order.gross_profit_cents === null ? 'pending cost' : salesMoney(order.gross_profit_cents, order.currency)) + '</small>' : '') +
+            (order.bookvault_total_cost_gbp_cents === null ? '' : '<small title="BookVault cost includes any tax, extras and surcharges">BookVault ' +
+              salesMoney(order.bookvault_total_cost_gbp_cents, 'GBP') + ' (print ' +
+              salesMoney(order.bookvault_production_cost_gbp_cents, 'GBP') + ', ship ' +
+              salesMoney(order.bookvault_shipping_cost_gbp_cents, 'GBP') + ')</small>') + '</div>' +
           '<div class="sales-order-ops">' + operations + '<button type="button" class="sales-test-order-action" data-sales-action="exclude">Exclude test order</button></div></div>';
       }).join('') : '<div class="sales-empty sales-empty-orders"><strong>No orders yet</strong><span>Tomorrow’s purchase will appear here as soon as checkout creates it, with payment, BookVault, email, and Resend status.</span></div>';
 
@@ -474,7 +490,7 @@
 
       var thirty = data.periods.last_30_days;
       panelMain.innerHTML = '<div class="sales-dashboard">' +
-        '<header class="sales-dashboard-head"><div><div class="eyebrow">Live storefront database</div><h2>Sales Analytics</h2><p>Revenue, orders, fulfillment and customer-email delivery.</p></div>' +
+        '<header class="sales-dashboard-head"><div><div class="eyebrow">Live storefront database</div><h2>Sales Analytics</h2><p>Revenue, estimated gross profit, orders and fulfillment.</p></div>' +
           '<div><span>Updated ' + new Date(data.generated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</span><button type="button" class="btn-secondary btn-tiny" id="salesRefresh">Refresh</button></div></header>' +
         '<section class="sales-metric-grid">' + periodCards + '</section>' +
         '<section class="sales-secondary-grid">' +
@@ -483,7 +499,8 @@
           '<article><span>Landing → order</span><strong>' + salesConversion(thirty.paid_orders, analytics, 'landing_page_view') + '</strong><small>verified visits</small></article>' +
           '<article><span>Checkout → order</span><strong>' + salesConversion(thirty.paid_orders, analytics, 'checkout_view') + '</strong><small>verified visits</small></article>' +
         '</section>' +
-        '<div class="sales-dashboard-columns"><section class="sales-block sales-chart-block"><div class="sales-block-head"><div><span>Revenue</span><h3>Last 30 days</h3></div><b>' + salesMoney(thirty.revenue_cents) + '</b></div><div class="sales-chart">' + chart + '</div></section>' +
+        '<div class="sales-dashboard-columns"><section class="sales-block sales-chart-block"><div class="sales-block-head"><div><span>Estimated gross profit</span><h3>Last 30 days</h3></div><b>' + salesProfit(thirty) + '</b></div><div class="sales-chart">' + chart + '</div><p class="sales-profit-note">Revenue minus actual BookVault production, shipping, tax and other order costs, converted at a saved reference FX rate. Excludes Stripe and bank fees. ' +
+          (thirty.profit_pending_orders ? thirty.profit_pending_orders + ' paid order' + (thirty.profit_pending_orders === 1 ? '' : 's') + ' awaiting BookVault cost.' : '') + '</p></section>' +
           '<section class="sales-block"><div class="sales-block-head"><div><span>Markets</span><h3>Revenue by country</h3></div></div><div class="sales-country-list">' + countries + '</div></section></div>' +
         '<section class="sales-block sales-refunds" id="salesRefunds"><div class="sales-block-head"><div><span>Money returned</span><h3>Refunds &amp; reasons</h3></div><small>' + data.periods.all_time.refunded_orders + ' all time · newest 100 shown</small></div><div class="sales-refund-list">' + refunds + '</div></section>' +
         '<section class="sales-block sales-orders"><div class="sales-block-head"><div><span>Operations</span><h3>Recent orders</h3></div><small>Newest 25 · refreshes every 30 seconds</small></div><div class="sales-order-list">' + recentOrders + '</div></section>' +
