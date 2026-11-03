@@ -21763,3 +21763,9 @@ falling back to daily slots. The existing six-hour publishing calendar cache
 and one-hour Buffer channel cache remain in place to protect the scarce Buffer
 API quota; a changed Buffer calendar can take up to six hours to be picked up
 by the worker. The next actual slot is more than six hours away.
+
+The automatic ops-service deploy for this change failed before connecting to
+the VPS (`ssh ... port 22: Connection timed out`); it did not deploy code.
+Running the established `ops-service/deploy.sh` locally on the VPS then
+succeeded, rebuilt the container, and a real browser check of the live Settings
+page showed `Mon 01:54 · Thu 01:51 (Asia/Bangkok)` with the other days paused.
