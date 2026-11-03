@@ -21641,3 +21641,11 @@ now retain Meta trace IDs alongside
 codes/subcodes to aid diagnosis. The existing R2 final remains the retry
 source. Tests cover checkpoint timing, published-video recovery, processing
 deferral, and the quiet-retry/email contract.
+
+For this specific piece, a pre-change retry transferred all 4,059,791,921
+bytes without a memory spike and Meta returned video ID
+`29317680924589441`. Meta's subsequent status was still `processing`, not
+`published`, so the persisted `done` flag from the old handler was corrected
+to a Facebook-only retry with the video ID checkpoint intact. The new worker
+will poll that checkpoint and only mark Facebook done when Meta says it is
+published; it must not upload a second copy while processing continues.
