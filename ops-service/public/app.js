@@ -397,6 +397,38 @@
     return visits ? ((Number(orders) || 0) / visits * 100).toFixed(1) + '%' : '—';
   }
 
+  function emailHealthHtml(health, mailbox) {
+    var week = health && health.last_7_days;
+    var month = health && health.last_30_days;
+    var sent = week ? Number(week.sent) || 0 : 0;
+    var bounced = week ? Number(week.bounced) || 0 : 0;
+    var failed = week ? (Number(week.failed) || 0) + (Number(week.suppressed) || 0) : 0;
+    var complaints = week ? Number(week.complained) || 0 : 0;
+    var label = !week ? 'Metrics unavailable' : !sent ? 'No sends in 7 days' :
+      bounced || failed || complaints ? 'Needs attention' : 'No issues reported';
+    var tone = !week ? 'muted' : bounced || failed || complaints ? 'warn' : 'good';
+    var synced = mailbox && mailbox.lastSyncAt ? new Date(mailbox.lastSyncAt) : null;
+    var fresh = !!(mailbox && mailbox.connected && synced && !isNaN(synced.getTime()) && Date.now() - synced.getTime() < 5 * 60 * 1000);
+    return '<section class="sales-block sales-email-health" aria-label="Email health">' +
+      '<div class="sales-block-head"><div><span>Delivery checks</span><h3>Email health</h3></div><small>Storefront + ops inbox</small></div>' +
+      '<div class="sales-email-health-grid">' +
+        '<div><span>Storefront · last 7 days</span><strong class="sales-email-tone-' + tone + '">' + label + '</strong>' +
+          (week ? '<p>' + sent + ' sent · ' + (Number(week.delivered) || 0) + ' delivered · ' + bounced + ' bounced' +
+            (failed ? ' · ' + failed + ' failed/suppressed' : '') + (complaints ? ' · ' + complaints + ' complaints' : '') + '</p>' +
+            '<small>Delivery ' + (sent ? (Number(week.delivery_rate) || 0).toFixed(1) + '%' : '—') +
+            ' · Bounce rate ' + (sent ? (Number(week.bounce_rate) || 0).toFixed(1) + '%' : '—') + '</small>' :
+            '<p>Resend could not return current metrics.</p>') + '</div>' +
+        '<div><span>Storefront · last 30 days</span><strong>' + (month ? (Number(month.sent) || 0) : '—') + ' sent</strong>' +
+          (month ? '<p>' + (Number(month.delivered) || 0) + ' delivered · ' + (Number(month.bounced) || 0) +
+            ' bounced · ' + (Number(month.failed) || 0) + ' failed · ' + (Number(month.complained) || 0) + ' complaints</p>' :
+            '<p>Metrics unavailable.</p>') + '</div>' +
+        '<div><span>Ops inbox · Namecheap</span><strong class="sales-email-tone-' + (fresh ? 'good' : 'warn') + '">' +
+          (fresh ? 'Connected' : mailbox && mailbox.configured ? 'Check connection' : 'Not connected') + '</strong>' +
+          '<p>' + (synced && !isNaN(synced.getTime()) ? 'Last inbox sync ' + synced.toLocaleString() : 'No successful inbox sync recorded') + '</p>' +
+          '<small>Separate SMTP service; no provider bounce-rate feed.</small></div>' +
+      '</div><p class="sales-email-health-note">“Delivered” means the recipient mail server accepted the message, not that it reached the inbox or was read. Resend figures cover realitymanual.com only, not ops-mailbox replies.</p></section>';
+  }
+
   function renderSalesAnalytics() {
     clearTimeout(salesAnalyticsTimer);
     panelMain.innerHTML = '<div class="sales-dashboard sales-loading"><div class="eyebrow">Live storefront database</div><h2>Sales Analytics</h2><p>Loading orders and revenue…</p></div>';
@@ -405,11 +437,15 @@
         if (!res.ok) throw new Error('sales_status_' + res.status);
         return res.json();
       }),
-      fetch(STOREFRONT_API_BASE + '/api/analytics/summary').then(function (res) { return res.ok ? res.json() : null; }).catch(function () { return null; })
+      fetch(STOREFRONT_API_BASE + '/api/analytics/summary').then(function (res) { return res.ok ? res.json() : null; }).catch(function () { return null; }),
+      fetch(STOREFRONT_API_BASE + '/api/analytics/email-health').then(function (res) { return res.ok ? res.json() : null; }).catch(function () { return null; }),
+      fetch('/api/mailbox/status', { credentials: 'include' }).then(function (res) { return res.ok ? res.json() : null; }).catch(function () { return null; })
     ]).then(function (results) {
       if (currentTabId() !== 'sales-analytics') return;
       var data = results[0];
       var analytics = results[1];
+      var emailHealth = results[2];
+      var mailboxStatus = results[3];
       var periodConfig = [
         ['Today', data.periods.today],
         ['Last 7 days', data.periods.last_7_days],
@@ -502,6 +538,7 @@
           '<article><span>Landing → order</span><strong>' + salesConversion(thirty.paid_orders, analytics, 'landing_page_view') + '</strong><small>verified visits</small></article>' +
           '<article><span>Checkout → order</span><strong>' + salesConversion(thirty.paid_orders, analytics, 'checkout_view') + '</strong><small>verified visits</small></article>' +
         '</section>' +
+        emailHealthHtml(emailHealth, mailboxStatus) +
         '<div class="sales-dashboard-columns"><section class="sales-block sales-chart-block"><div class="sales-block-head"><div><span>Estimated gross profit</span><h3>Last 30 days</h3></div><b>' + salesProfit(thirty) + '</b></div><div class="sales-chart">' + chart + '</div><p class="sales-profit-note">Revenue minus actual BookVault production, shipping, tax and other order costs, converted at a saved reference FX rate. Excludes Stripe and bank fees. ' +
           (thirty.profit_pending_orders ? thirty.profit_pending_orders + ' paid order' + (thirty.profit_pending_orders === 1 ? '' : 's') + ' awaiting BookVault cost.' : '') + '</p></section>' +
           '<section class="sales-block"><div class="sales-block-head"><div><span>Markets</span><h3>Revenue by country</h3></div></div><div class="sales-country-list">' + countries + '</div></section></div>' +

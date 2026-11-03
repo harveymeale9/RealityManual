@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 const Database = require('better-sqlite3');
 const reporting = require('../src/storefrontReporting');
 
@@ -148,7 +149,25 @@ test('both analytics views show the nested source-and-video referral chart', fun
   assert.match(app, /referralBreakdownHtml\(website\.referrals\)/);
   assert.match(app, /conic-gradient\(/);
   assert.match(app, /segment\.piece_title/);
-  assert.match(page, /style\.css\?v=20261102-sales-shipping-split/);
+  assert.match(page, /style\.css\?v=20261103-email-health/);
+});
+
+test('email health card separates Resend outcomes from ops inbox connectivity', function () {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const start = source.indexOf('  function emailHealthHtml(');
+  const end = source.indexOf('  function renderSalesAnalytics()', start);
+  assert.ok(start > 0 && end > start);
+  const render = vm.runInNewContext(source.slice(start, end) + '\nemailHealthHtml', { Date });
+  const html = render({
+    last_7_days: { sent: 8, delivered: 7, bounced: 1, failed: 0, suppressed: 0, complained: 0, delivery_rate: 87.5, bounce_rate: 12.5 },
+    last_30_days: { sent: 20, delivered: 19, bounced: 1, failed: 0, complained: 0 }
+  }, { configured: true, connected: true, lastSyncAt: new Date().toISOString() });
+  assert.match(html, /Needs attention/);
+  assert.match(html, /8 sent · 7 delivered · 1 bounced/);
+  assert.match(html, /Bounce rate 12\.5%/);
+  assert.match(html, /Ops inbox · Namecheap.*Connected/);
+  assert.match(render(null, null), /Metrics unavailable/);
+  assert.doesNotMatch(render(null, null), /0 bounced/);
 });
 
 test('mobile website analytics exposes today and exact daily pageview counts', function () {

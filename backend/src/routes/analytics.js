@@ -2,6 +2,7 @@ const express = require('express');
 const analyticsService = require('../services/analyticsService');
 const { classifyAnalyticsRequest } = require('../services/analyticsClassifier');
 const errorLogService = require('../services/errorLogService');
+const emailHealth = require('../services/emailHealthService').createEmailHealthService();
 
 const router = express.Router();
 const SUPPORTED_EVENTS = new Set([
@@ -65,6 +66,20 @@ router.get('/summary', (req, res) => {
       errorMessage: err.message,
     });
     res.status(500).json({ error: 'analytics_unavailable' });
+  }
+});
+
+// Aggregate provider outcomes for the storefront's sending domain only.
+// No recipients, message IDs or subjects are exposed to the dashboard.
+router.get('/email-health', async (req, res) => {
+  try {
+    res.set('Cache-Control', 'public, max-age=300');
+    res.json(await emailHealth.get());
+  } catch (err) {
+    errorLogService.logError({
+      service: 'backend', errorType: 'email_health_failed', errorMessage: err.message,
+    });
+    res.status(503).json({ error: 'email_health_unavailable' });
   }
 });
 

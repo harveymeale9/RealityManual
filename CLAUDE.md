@@ -21576,3 +21576,29 @@ The checkout CSS and JS asset URLs were versioned for cache busting. A
 headless mobile-browser test with mocked non-order-creating quote responses
 confirmed visibility at $18.27, immediate hiding on postcode edit, and
 absence at $12.00 and $10.00. No shipping amount or payment logic changed.
+
+---
+
+# 710. Email Health in Sales Analytics (2026-11-03)
+
+Harvey wanted a quick dashboard view of whether outbound email is working,
+including bounces. Storefront transactional messages use Resend, while the
+Content Studio/Project Manager mailbox uses Namecheap SMTP/IMAP; neither
+provider's status should be presented as the other's. Resend's new metrics
+API returns actual sent, delivered, bounce, failure, suppression and complaint
+counts. The storefront backend now reads 7- and 30-day metrics grouped by
+sending domain, selects only `realitymanual.com` (the same Resend account also
+sends from other domains), caches the aggregate for five minutes, and exposes
+only aggregate counts/rates at `/api/analytics/email-health`. It never exposes
+the Resend key, recipient addresses, message IDs or subjects. Upstream errors
+return 503, rather than misleadingly displaying zero bounces. Unit tests
+cover domain isolation, cache behaviour and failure/retry.
+
+Sales Analytics now shows those 7- and 30-day Resend figures near the top,
+flags any bounce/failure/suppression/complaint, and separately shows the ops
+mailbox's existing connected/last-sync status. It explicitly says that
+Resend `delivered` means the receiving server accepted the email, not that
+the message reached the inbox or was read, and that Namecheap does not supply
+a comparable bounce-rate feed here. A read-only live Resend check before
+deployment returned 6 sent/6 delivered/0 bounced in 7 days and 9/9/0 in
+30 days for `realitymanual.com`; the other account domain was not included.
