@@ -21532,3 +21532,30 @@ logic defect was found. Neither historic order charge was modified.
 An owner alert email about the Canadian shortfall was sent. CI redeployed
 `rm-ops-service` successfully, and the authenticated monitor endpoint showed
 the first weekly audit as `watching` for 9 November 2026 at 09:00 UTC.
+
+---
+
+# 708. BookVault USPS Consolidator Quote Discrepancy Escalated (2026-11-03)
+
+Harvey reported that BookVault's public quote tool shows a materially lower
+UK-to-US consolidator price than the approximately £14 charged to this title.
+An additional read-only `/v3/Dispatch` replay for ISBN 9658364000016, one
+copy, US ZIP 10001, PartnerID 1 (BookVault UK), ServiceLevel NotSpecified,
+returned USPS Consolidator service 128 at `DelEst: 12.19`, `PickPackFee: 1.45`,
+`DelTotal: 13.64` with `Currency: GBP`. The identical request with
+`Currency: USD` returned `DelEst: 9.08`, `PickPackFee: 1.08`, `DelTotal: 10.16`.
+These are not normal FX equivalents. Existing US orders used USPS
+Consolidator and recorded approximately £13.64 of actual BookVault dispatch
+cost; the site currently quotes the GBP figure converted to USD so it does
+not underrecover the observed billed cost. The public quote tool may use a
+different specification or fulfilment option, but the reason is unconfirmed.
+
+Harvey authorized a support inquiry. An email was accepted by SMTP for
+`customers@bookvault.app` from the existing Reality Manual mailbox, subject
+`Urgent: USPS Consolidator quote discrepancy for UK-printed US orders`.
+It provided the exact neutral-ZIP API comparison and asked BookVault to
+reconcile the website, GBP/API, USD/API, and actual billed amounts, identify
+the correct checkout quotation fields, and explain whether a cheaper
+consolidator tariff is available for this title/account. No customer address,
+API credential, payment, or new BookVault order was sent or created. Await
+BookVault's explanation before changing the live checkout price.
