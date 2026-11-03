@@ -149,7 +149,7 @@ test('both analytics views show the nested source-and-video referral chart', fun
   assert.match(app, /referralBreakdownHtml\(website\.referrals\)/);
   assert.match(app, /conic-gradient\(/);
   assert.match(app, /segment\.piece_title/);
-  assert.match(page, /style\.css\?v=20261103-payment-diagnosis/);
+  assert.match(page, /style\.css\?v=20261103-sales-books/);
 });
 
 test('email health card separates Resend outcomes from ops inbox connectivity', function () {
@@ -168,6 +168,14 @@ test('email health card separates Resend outcomes from ops inbox connectivity', 
   assert.match(html, /Ops inbox · Namecheap.*Connected/);
   assert.match(render(null, null), /Metrics unavailable/);
   assert.doesNotMatch(render(null, null), /0 bounced/);
+});
+
+test('Sales Analytics updates only on tab entry or explicit Refresh, never on a background timer', function () {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.match(app, /if \(refresh\) refresh\.addEventListener\('click', renderSalesAnalytics\)/);
+  assert.match(app, /use Refresh for the latest orders/);
+  assert.doesNotMatch(app, /salesAnalyticsTimer|setTimeout\(function refreshSalesAnalytics/);
+  assert.match(app, /request !== salesAnalyticsRequest/);
 });
 
 test('mobile website analytics exposes today and exact daily pageview counts', function () {
@@ -245,6 +253,8 @@ test('sales dashboard returns live periods, a filled daily series and privacy-sa
 
   const dashboard = reporting.getSalesDashboard(db, '2026-10-10T12:00:00.000Z');
   assert.equal(dashboard.periods.today.paid_orders, 1);
+  assert.equal(dashboard.periods.yesterday.units, 2);
+  assert.deepEqual(dashboard.books_sold, { today: 1, yesterday: 2, last_7_days: 3, last_30_days: 3, monthly_average: 3, month_count: 1 });
   assert.equal(dashboard.periods.last_7_days.paid_orders, 2);
   assert.equal(dashboard.periods.last_7_days.revenue_cents, 21300);
   assert.equal(dashboard.periods.last_7_days.book_revenue_cents, 20100);
@@ -284,6 +294,9 @@ test('sales dashboard returns live periods, a filled daily series and privacy-sa
   const withOlderUnseen = reporting.getSalesDashboard(db, '2026-10-10T12:00:00.000Z', [], ['paid-1']);
   assert.equal(withOlderUnseen.recent_orders.some((item) => item.id === 'paid-1'), true,
     'every unread paid order must be visible before its alert can clear');
+  order.run('older-paid','BOOKVAULT_ACCEPTED','succeeded',1,7100,'usd','US','Standard','BV-older',null,null,null,
+    '2026-09-01T10:00:00.000Z','2026-09-01T10:00:00.000Z','Private Person','private@example.com','Secret street',null);
+  assert.equal(reporting.getSalesDashboard(db, '2026-10-10T12:00:00.000Z').books_sold.monthly_average, 2);
   db.close();
 });
 

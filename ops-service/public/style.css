@@ -2573,6 +2573,13 @@ body.role-reviewer #pmBackFab {
 .sales-dashboard-head h2 { margin: 5px 0 7px; font: 600 clamp(1.9rem,3vw,2.7rem)/1 var(--font-display); }
 .sales-dashboard-head p { margin: 0; color: var(--ink-soft); font-size: .82rem; }
 .sales-dashboard-head > div:last-child { display: flex; align-items: center; gap: 10px; color: var(--ink-faint); font: .66rem var(--font-mono); white-space: nowrap; }
+.sales-books-grid { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 10px; margin-bottom: 22px; }
+.sales-books-grid h3 { grid-column: 1 / -1; margin: 0 0 2px; color: var(--ink); font: 600 1.25rem var(--font-display); }
+.sales-books-card { min-width: 0; padding: 20px 18px; border: 1px solid rgba(44,224,125,.48); border-radius: 10px; background: linear-gradient(145deg,rgba(15,38,24,.98),rgba(7,19,13,.98)); }
+.sales-books-card span { display: block; color: var(--ink-soft); font: 700 .67rem var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
+.sales-books-card strong { display: block; margin: 10px 0 7px; color: var(--accent); font: 600 clamp(2.6rem,4.3vw,4.5rem)/.98 var(--font-display); font-variant-numeric: tabular-nums; }
+.sales-books-card small { display: block; color: var(--ink-soft); font-size: .67rem; line-height: 1.35; }
+.sales-revenue-heading { margin: 0 0 10px; color: var(--ink); font: 600 1.25rem var(--font-display); }
 .sales-metric-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; }
 .sales-metric-card { min-width: 0; padding: 17px 18px; border: 1px solid var(--border); border-radius: 9px; background: linear-gradient(145deg,var(--surface),rgba(13,27,19,.96)); }
 .sales-metric-card > span,.sales-secondary-grid article > span { display: block; margin-bottom: 7px; color: var(--ink-faint); font: 700 .63rem var(--font-mono); letter-spacing: .09em; text-transform: uppercase; }
@@ -2684,7 +2691,7 @@ body.role-reviewer #pmBackFab {
   .sales-email-health-grid { grid-template-columns: 1fr; }
   .sales-email-health-grid > div { border-right: 0; border-bottom: 1px solid var(--border-soft); }
   .sales-email-health-grid > div:last-child { border-bottom: 0; }
-  .sales-metric-grid,.sales-secondary-grid,.sales-payment-overview { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .sales-books-grid,.sales-metric-grid,.sales-secondary-grid,.sales-payment-overview { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .sales-dashboard-columns { grid-template-columns: 1fr; }
   .sales-order-row { grid-template-columns: 110px minmax(130px,.7fr) minmax(120px,.8fr) minmax(220px,1fr) minmax(240px,1.4fr); min-width: 1000px; }
   .sales-order-list { overflow-x: auto; }
@@ -2694,6 +2701,9 @@ body.role-reviewer #pmBackFab {
   .sales-dashboard-head { align-items: flex-start; }
   .sales-dashboard-head p,.sales-dashboard-head > div:last-child > span { display: none; }
   .sales-metric-card { padding: 14px 13px; }
+  .sales-books-card { padding: 16px 14px; }
+  .sales-books-card strong { font-size: clamp(2.8rem,13vw,4rem); }
+  .sales-books-card:last-child { grid-column: 1 / -1; }
   .sales-metric-card strong { font-size: 1.35rem; }
   .sales-metric-card small { line-height: 1.4; }
   .sales-secondary-grid article { min-height: 72px; padding: 12px; }

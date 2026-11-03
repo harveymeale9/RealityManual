@@ -363,7 +363,7 @@
   // CLAUDE.md §62/§65). Read-only, unauthenticated aggregate counts, no PII.
   var STOREFRONT_API_BASE = 'https://api.realitymanual.com';
 
-  var salesAnalyticsTimer = null;
+  var salesAnalyticsRequest = 0;
   var contentAnalyticsTimer = null;
   var contentOverallRangeDays = 30;
 
@@ -456,8 +456,12 @@
   }
 
   function renderSalesAnalytics() {
-    clearTimeout(salesAnalyticsTimer);
-    panelMain.innerHTML = '<div class="sales-dashboard sales-loading"><div class="eyebrow">Live storefront database</div><h2>Sales Analytics</h2><p>Loading orders and revenue…</p></div>';
+    var request = ++salesAnalyticsRequest;
+    // Keep the current dashboard in place during an explicit Refresh click.
+    // Background order-alert polling must never replace this tab's DOM.
+    if (!panelMain.querySelector('.sales-dashboard:not(.sales-loading)')) {
+      panelMain.innerHTML = '<div class="sales-dashboard sales-loading"><div class="eyebrow">Live storefront database</div><h2>Sales Analytics</h2><p>Loading orders and revenue…</p></div>';
+    }
     Promise.all([
       fetch('/api/reports/sales-dashboard', { credentials: 'include' }).then(function (res) {
         if (!res.ok) throw new Error('sales_status_' + res.status);
@@ -467,7 +471,7 @@
       fetch(STOREFRONT_API_BASE + '/api/analytics/email-health').then(function (res) { return res.ok ? res.json() : null; }).catch(function () { return null; }),
       fetch('/api/mailbox/status', { credentials: 'include' }).then(function (res) { return res.ok ? res.json() : null; }).catch(function () { return null; })
     ]).then(function (results) {
-      if (currentTabId() !== 'sales-analytics') return;
+      if (currentTabId() !== 'sales-analytics' || request !== salesAnalyticsRequest) return;
       var data = results[0];
       var analytics = results[1];
       var emailHealth = results[2];
@@ -488,6 +492,18 @@
           '<div class="sales-metric-profit"><span>Est. gross profit</span><b>' + salesProfit(totals) + '</b></div>' +
           '<small>' + totals.paid_orders + ' paid order' + (totals.paid_orders === 1 ? '' : 's') + ' · ' + totals.units + ' book' + (totals.units === 1 ? '' : 's') +
           (totals.profit_pending_orders ? ' · ' + totals.profit_pending_orders + ' cost pending' : '') + '</small></article>';
+      }).join('');
+      var books = data.books_sold || {};
+      var bookCards = [
+        ['Today', books.today || 0],
+        ['Yesterday', books.yesterday || 0],
+        ['Last 7 days', books.last_7_days || 0],
+        ['Last 30 days', books.last_30_days || 0],
+        ['Avg. per month', Number(books.monthly_average || 0).toFixed(1)]
+      ].map(function (entry) {
+        return '<article class="sales-books-card"><span>' + entry[0] + '</span><strong>' + entry[1] + '</strong><small>' +
+          (entry[0] === 'Avg. per month' ? 'Since first sale · includes this month' : 'Books sold · paid, not refunded') +
+          '</small></article>';
       }).join('');
 
       var maximumProfit = Math.max.apply(Math, data.daily.map(function (day) { return Math.abs(Number(day.gross_profit_cents) || 0); }).concat([0]));
@@ -567,6 +583,8 @@
       panelMain.innerHTML = '<div class="sales-dashboard">' +
         '<header class="sales-dashboard-head"><div><div class="eyebrow">Live storefront database</div><h2>Sales Analytics</h2><p>Revenue, estimated gross profit, orders and fulfillment.</p></div>' +
           '<div><span>Updated ' + new Date(data.generated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</span><button type="button" class="btn-secondary btn-tiny" id="salesRefresh">Refresh</button></div></header>' +
+        '<section class="sales-books-grid" aria-label="Books sold"><h3>Books sold</h3>' + bookCards + '</section>' +
+        '<h3 class="sales-revenue-heading">Revenue and gross profit</h3>' +
         '<section class="sales-metric-grid">' + periodCards + '</section>' +
         '<section class="sales-secondary-grid">' +
           '<article><span>30-day average order</span><strong>' + salesMoney(thirty.average_order_cents) + '</strong></article>' +
@@ -580,7 +598,7 @@
           (thirty.profit_pending_orders ? thirty.profit_pending_orders + ' paid order' + (thirty.profit_pending_orders === 1 ? '' : 's') + ' awaiting BookVault cost.' : '') + '</p></section>' +
           '<section class="sales-block"><div class="sales-block-head"><div><span>Markets</span><h3>Revenue by country</h3></div></div><div class="sales-country-list">' + countries + '</div></section></div>' +
         '<section class="sales-block sales-refunds" id="salesRefunds"><div class="sales-block-head"><div><span>Money returned</span><h3>Refunds &amp; reasons</h3></div><small>' + data.periods.all_time.refunded_orders + ' all time · newest 100 shown</small></div><div class="sales-refund-list">' + refunds + '</div></section>' +
-        '<section class="sales-block sales-orders"><div class="sales-block-head"><div><span>Operations</span><h3>Recent orders</h3></div><small>Newest 25 · refreshes every 30 seconds</small></div><div class="sales-order-list">' + recentOrders + '</div></section>' +
+        '<section class="sales-block sales-orders"><div class="sales-block-head"><div><span>Operations</span><h3>Recent orders</h3></div><small>Newest 25 · use Refresh for the latest orders</small></div><div class="sales-order-list">' + recentOrders + '</div></section>' +
         (excludedOrders ? '<details class="sales-excluded-block"><summary>' + data.excluded_orders.length + ' test order' + (data.excluded_orders.length === 1 ? '' : 's') + ' excluded from sales reporting</summary><p>These remain in Stripe and the storefront database. Restore one here if it was marked by mistake.</p>' + excludedOrders + '</details>' : '') +
       '</div>';
       var refresh = document.getElementById('salesRefresh');
@@ -617,20 +635,16 @@
           }).catch(function () { status.textContent = 'Could not save. Try again.'; }).finally(function () { button.disabled = false; });
         });
       });
-      salesAnalyticsTimer = setTimeout(function refreshSalesAnalytics() {
-        if (currentTabId() !== 'sales-analytics') return;
-        if (document.activeElement && document.activeElement.closest('.sales-refund-note-editor')) {
-          salesAnalyticsTimer = setTimeout(refreshSalesAnalytics, 30000);
-          return;
-        }
-        renderSalesAnalytics();
-      }, 30000);
       // Only acknowledge orders included in the just-rendered dashboard.
       // A sale that arrives between the snapshot and this POST stays unread.
       acknowledgeVisibleSales(data.unseen_sales_order_ids || []);
     }).catch(function () {
-      if (currentTabId() !== 'sales-analytics') return;
-      renderAnalyticsPlaceholder('sales-analytics');
+      if (currentTabId() !== 'sales-analytics' || request !== salesAnalyticsRequest) return;
+      if (!panelMain.querySelector('.sales-dashboard:not(.sales-loading)')) renderAnalyticsPlaceholder('sales-analytics');
+      else {
+        var refresh = document.getElementById('salesRefresh');
+        if (refresh) refresh.textContent = 'Refresh failed · retry';
+      }
     });
   }
 
@@ -1148,7 +1162,7 @@
     panelMain.classList.toggle('panel-main--sales-analytics', active === 'sales-analytics');
     panelMain.classList.toggle('panel-main--content-analytics', active === 'content-analytics');
     panelMain.classList.toggle('panel-main--pipeline', active === 'content-ops');
-    if (active !== 'sales-analytics') { clearTimeout(salesAnalyticsTimer); salesAnalyticsTimer = null; }
+    if (active !== 'sales-analytics') salesAnalyticsRequest++;
     if (active !== 'content-analytics') { clearTimeout(contentAnalyticsTimer); contentAnalyticsTimer = null; }
     if (active !== 'project-manager' && pmSync) { pmSync.stop(); pmSync = null; }
     if (active === 'project-manager') {

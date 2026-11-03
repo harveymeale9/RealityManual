@@ -313,6 +313,7 @@ function getSalesDashboard(db, nowValue, excludedIds, unseenOrderIds) {
   const now = new Date(nowValue || Date.now());
   const end = now.toISOString();
   const todayStart = startOfUtcDay(now);
+  const yesterdayStart = new Date(todayStart); yesterdayStart.setUTCDate(yesterdayStart.getUTCDate() - 1);
   const sevenStart = new Date(todayStart); sevenStart.setUTCDate(sevenStart.getUTCDate() - 6);
   const thirtyStart = new Date(todayStart); thirtyStart.setUTCDate(thirtyStart.getUTCDate() - 29);
   const allStart = '1970-01-01T00:00:00.000Z';
@@ -453,14 +454,31 @@ function getSalesDashboard(db, nowValue, excludedIds, unseenOrderIds) {
     };
   }) : [];
 
+  const periods = {
+    today: salesTotals(db, todayStart.toISOString(), end, excluded.ids),
+    yesterday: salesTotals(db, yesterdayStart.toISOString(), todayStart.toISOString(), excluded.ids),
+    last_7_days: salesTotals(db, sevenStart.toISOString(), end, excluded.ids),
+    last_30_days: salesTotals(db, thirtyStart.toISOString(), end, excluded.ids),
+    all_time: salesTotals(db, allStart, end, excluded.ids)
+  };
+  const firstPaidMonth = db.prepare(`SELECT MIN(substr(created_at,1,7)) AS month
+    FROM orders WHERE created_at < ? AND ${PAID_ORDER_SQL}${excluded.sql}`).get(end, ...excluded.ids).month;
+  const monthCount = firstPaidMonth
+    ? (todayStart.getUTCFullYear() - Number(firstPaidMonth.slice(0, 4))) * 12 +
+      todayStart.getUTCMonth() - (Number(firstPaidMonth.slice(5, 7)) - 1) + 1
+    : 0;
+
   return {
     generated_at: end,
     timezone: 'UTC',
-    periods: {
-      today: salesTotals(db, todayStart.toISOString(), end, excluded.ids),
-      last_7_days: salesTotals(db, sevenStart.toISOString(), end, excluded.ids),
-      last_30_days: salesTotals(db, thirtyStart.toISOString(), end, excluded.ids),
-      all_time: salesTotals(db, allStart, end, excluded.ids)
+    periods: periods,
+    books_sold: {
+      today: periods.today.units,
+      yesterday: periods.yesterday.units,
+      last_7_days: periods.last_7_days.units,
+      last_30_days: periods.last_30_days.units,
+      monthly_average: monthCount ? Math.round(periods.all_time.units / monthCount * 10) / 10 : 0,
+      month_count: monthCount
     },
     daily: daily,
     countries: countries,

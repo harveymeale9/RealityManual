@@ -21683,3 +21683,23 @@ existing env and persistent data mount. After migration, the two existing
 PaymentIntents: both `card_error` / `try_again_later`. A post-deploy query
 confirmed six live `succeeded` + `BOOKVAULT_ACCEPTED` orders and two live
 `requires_payment_method` + `FAILED` orders in the period.
+
+## Sales Analytics without disruptive auto-redraw and with prominent books sold (2026-11-03)
+
+The Sales Analytics tab previously called `renderSalesAnalytics()` every 30
+seconds. That function first replaced the entire dashboard with a loading
+screen, then reconstructed every card and control, disrupting reading,
+scrolling and refund-note editing. The timer is removed. The dashboard now
+loads on tab entry and on its explicit Refresh button; a manual refresh keeps
+the old dashboard visible until the new data is ready. A request sequence
+guard prevents older fetches from overwriting newer results. The separate
+new-sales alert badge continues polling without redrawing Sales Analytics.
+
+Above revenue, five large cards now show paid, non-refunded books sold today,
+yesterday, in the last seven UTC calendar days, in the last 30 UTC calendar
+days, and the average per calendar month since the first included paid sale.
+The current partial month counts as a month, and months with zero sales after
+the first sale count in the denominator. All five respect the owner test-order
+exclusions and the existing refund filter. The prior monetary cards remain
+below under a separate revenue heading. Reporting tests cover yesterday,
+monthly averaging across months, and no background redraw timer.
