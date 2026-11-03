@@ -6,7 +6,7 @@ const DAY_NAMES = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 // 11 p.m. on 23 October 2026 in Bangkok (UTC+7). Future slots are elapsed
 // hours from this instant, so the local publication clock deliberately moves.
 const LONGFORM_ANCHOR = '2026-10-23T16:00:00.000Z';
-const DEFAULT_LONGFORM_INTERVAL_HOURS = 60;
+const DEFAULT_LONGFORM_INTERVAL_HOURS = 168;
 
 function normalizeTime(value) {
   const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})$/);
@@ -98,6 +98,13 @@ function nextLongformSlot(after, anchor, intervalHours) {
   return new Date(anchorMs + step * intervalMs).toISOString();
 }
 
+function nextLongformReleaseSlot(after, anchor, intervalHours, releaseOnNext) {
+  const afterMs = after instanceof Date ? after.getTime() : Number(after);
+  if (!Number.isFinite(afterMs)) throw new Error('A valid starting time is required.');
+  return releaseOnNext ? new Date(afterMs + 1000).toISOString() :
+    nextLongformSlot(afterMs, anchor, intervalHours);
+}
+
 function nextAvailableLongformSlots(after, anchor, intervalHours, occupiedTimes, count) {
   const afterMs = after instanceof Date ? after.getTime() : Number(after);
   if (!Number.isFinite(afterMs)) throw new Error('A valid starting time is required.');
@@ -120,6 +127,7 @@ module.exports = {
   LONGFORM_ANCHOR: LONGFORM_ANCHOR,
   DEFAULT_LONGFORM_INTERVAL_HOURS: DEFAULT_LONGFORM_INTERVAL_HOURS,
   nextLongformSlot: nextLongformSlot,
+  nextLongformReleaseSlot: nextLongformReleaseSlot,
   nextAvailableLongformSlots: nextAvailableLongformSlots,
   normalizeLongformIntervalHours: normalizeLongformIntervalHours,
   scheduleMap: scheduleMap,

@@ -21769,3 +21769,24 @@ the VPS (`ssh ... port 22: Connection timed out`); it did not deploy code.
 Running the established `ops-service/deploy.sh` locally on the VPS then
 succeeded, rebuilt the container, and a real browser check of the live Settings
 page showed `Mon 01:54 · Thu 01:51 (Asia/Bangkok)` with the other days paused.
+
+## First next long-form immediately, then weekly from that release (2026-11-03)
+
+Harvey clarified that the next approved long-form YouTube/Facebook video is
+not to wait for the old Friday 11 p.m. Bangkok anchor. It should release as
+soon as the completed video is approved into Publishing Queue, then future
+long-form slots should recur every 168 hours from that first release. There
+were no long-form pieces in Publishing Queue or Scheduled when this was
+changed; the next video was still `to_film`, so no existing release was moved
+or published.
+
+The settings field `longformReleaseOnNext` defaults to true for the existing
+record that lacks it. The queue worker treats this as a due-now slot. When it
+saves that first long-form as Scheduled, it atomically sets the anchor to the
+new due time and clears the flag, preventing a restart or another Settings
+save from granting a second immediate slot. Later posts use the normal
+anchored 168-hour schedule. The server preserves the worker-owned flag/anchor
+against stale Settings tabs. Defaults in the scheduler, client settings and
+runway now use 168 hours; Settings and the queue runway explain the one-time
+immediate release. No external post was made for verification; tests cover
+the immediate first timestamp, the next seven-day timestamp and the runway.

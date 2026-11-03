@@ -29,13 +29,13 @@
   }
   function futureScheduled(piece, now) { return piece && piece.stage === 'scheduled' && timestamp(piece.scheduledAt) > now; }
 
-  function longformSlots(now, anchor, intervalHours, count) {
+  function longformSlots(now, anchor, intervalHours, count, releaseOnNext) {
     var start = timestamp(anchor);
     if (start === null) start = Date.parse('2026-10-23T16:00:00.000Z');
     var hours = Number(intervalHours);
-    if (!Number.isInteger(hours) || hours < 1 || hours > 720) hours = 60;
+    if (!Number.isInteger(hours) || hours < 1 || hours > 720) hours = 168;
     var interval = hours * 3600000;
-    var first = start + Math.max(0, Math.floor((now - start) / interval) + 1) * interval;
+    var first = releaseOnNext ? now + 1000 : start + Math.max(0, Math.floor((now - start) / interval) + 1) * interval;
     var slots = [];
     for (var i = 0; i < count; i++) slots.push(first + i * interval);
     return slots;
@@ -115,8 +115,11 @@
     // Buffer has several posting times on a single day.
     var count = Math.max(120, pieces.length + 3);
     var shorts = shortformSlots(now, pieces, options.postingSchedule, count);
+    var firstLongformPending = options.longformReleaseOnNext === true;
+    var hasReadyLongform = pieces.some(function (piece) { return piece.contentType === 'longform' && isReady(piece); });
     var longform = coverageFor('longform', pieces, now,
-      longformSlots(now, options.longformAnchor, options.longformIntervalHours, count), false);
+      firstLongformPending && !hasReadyLongform ? [] :
+        longformSlots(now, options.longformAnchor, options.longformIntervalHours, count, firstLongformPending), false);
     var shortform = coverageFor('shortform', pieces, now, shorts.slots, shorts.estimated);
     // Past slots are omitted from the refill calculation, but a post that
     // actually went live today should remain visible on the 15-day map.

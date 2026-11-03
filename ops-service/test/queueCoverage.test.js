@@ -40,6 +40,18 @@ test('changing hours moves the long-form chart while the 15-day short map stays 
   assert.equal(result.days.length, 15);
 });
 
+test('runway waits for the first approved long-form, then previews immediate and weekly slots', function () {
+  const waiting = coverage.calculate({ pieces: [], now: NOW, longformReleaseOnNext: true,
+    longformIntervalHours: 168, postingSchedule: DAILY });
+  assert.equal(waiting.longform.nextNeededAt, null);
+  assert.equal(waiting.longform.timeline.length, 0);
+  const readyNow = coverage.calculate({ pieces: [ready('first', 'longform')], now: NOW,
+    longformReleaseOnNext: true, longformIntervalHours: 168, postingSchedule: DAILY });
+  assert.equal(readyNow.longform.timeline[0].at, NOW + 1000);
+  assert.equal(readyNow.longform.timeline[0].state, 'queued');
+  assert.equal(readyNow.longform.timeline[1].at, NOW + 1000 + 7 * 86400000);
+});
+
 test('short-form runway counts the actual Buffer calendar and scheduled inventory', function () {
   const pieces = [
     { id: 'sent', contentType: 'short', stage: 'live', scheduledAt: '2026-10-14T18:55:00Z' },

@@ -2004,9 +2004,12 @@ app.put('/api/store/:storeName/:id', function (req, res) {
     const previousRow = stmts.getOne.get('settings', id);
     let previous = {};
     try { previous = previousRow ? JSON.parse(previousRow.data) : {}; } catch (error) { previous = {}; }
-    const anchor = Date.parse(req.body.longformScheduleAnchor || previous.longformScheduleAnchor || '');
+    // The first-release flag and anchor belong to the publishing worker, not
+    // an older Settings tab saving an unrelated field after the first post.
+    const anchor = Date.parse(previous.longformScheduleAnchor || req.body.longformScheduleAnchor || '');
     req.body.longformScheduleAnchor = Number.isFinite(anchor)
       ? new Date(anchor).toISOString() : shortformSchedule.LONGFORM_ANCHOR;
+    req.body.longformReleaseOnNext = previous.longformReleaseOnNext !== false;
     req.body.longformIntervalHours = shortformSchedule.normalizeLongformIntervalHours(
       req.body.longformIntervalHours === undefined ? previous.longformIntervalHours : req.body.longformIntervalHours
     );
@@ -3757,6 +3760,9 @@ async function nextPublishingQueueSlot(type, pieces, nowValue) {
     const settingsRow = stmts.getOne.get('settings', 'settings');
     let settings = {};
     try { settings = settingsRow ? JSON.parse(settingsRow.data) : {}; } catch (error) { settings = {}; }
+    if (settings.longformReleaseOnNext !== false) return shortformSchedule.nextLongformReleaseSlot(
+      nowValue, settings.longformScheduleAnchor, settings.longformIntervalHours, true
+    );
     const occupied = pieces.filter(function (piece) {
       return piece.contentType === 'longform' && (piece.stage === 'scheduled' || piece.stage === 'live') && (piece.scheduledAt || piece.postedAt);
     }).map(function (piece) { return piece.scheduledAt || piece.postedAt; });
@@ -3930,9 +3936,13 @@ async function runPlatformPublishBatch(id, destinations, options) {
     }).map(function (other) { return other.scheduledAt || other.postedAt; });
     const forcedDueAt = publishingQueue.preparationDue(options.dueAt, Date.now(), publishingQueue.PREPARATION_LEAD_MS + 60 * 1000)
       ? options.dueAt : '';
-    const candidates = forcedDueAt ? [forcedDueAt] : shortformSchedule.nextAvailableLongformSlots(
-      Date.now(), settings.longformScheduleAnchor, settings.longformIntervalHours, occupied, 10
-    );
+    const firstRelease = settings.longformReleaseOnNext !== false && initialPiece.createdBy !== 'youtube-reviewer';
+    const candidates = forcedDueAt ? [forcedDueAt] : firstRelease ? [shortformSchedule.nextLongformReleaseSlot(
+      Date.now(), settings.longformScheduleAnchor, settings.longformIntervalHours, true
+    )] :
+      shortformSchedule.nextAvailableLongformSlots(
+        Date.now(), settings.longformScheduleAnchor, settings.longformIntervalHours, occupied, 10
+      );
     // Queue selection already chose the best topic for this turn. Commit it
     // to the next cadence slot rather than leaving an artificial gap.
     const scheduled = topicAwarePublishingSlot(initialPiece, candidates.slice(0, 1), pieces);
@@ -3952,7 +3962,16 @@ async function runPlatformPublishBatch(id, destinations, options) {
       latest[publishErrorField(destination.platform)] = '';
     });
     latest.updatedAt = new Date().toISOString();
-    savePieceRecord(latest);
+    if (firstRelease) {
+      // Consume the one-time immediate release and its anchor together with
+      // the Scheduled card, so a restart cannot queue another immediate post.
+      db.transaction(function () {
+        savePieceRecord(latest);
+        settings.longformScheduleAnchor = dueAt;
+        settings.longformReleaseOnNext = false;
+        stmts.upsert.run('settings', 'settings', JSON.stringify(settings), new Date().toISOString());
+      })();
+    } else savePieceRecord(latest);
     await releaseLocalPublishMedia(id);
     return;
   }

@@ -60,10 +60,17 @@ test('longform starts 23 October at 11 p.m. Bangkok and moves every 60 elapsed h
 
 test('longform hour control validates whole hours and occupied slots never shift the cadence', function () {
   assert.equal(schedule.normalizeLongformIntervalHours(48), 48);
-  assert.equal(schedule.normalizeLongformIntervalHours(0), 60);
-  assert.equal(schedule.normalizeLongformIntervalHours(2.5), 60);
+  assert.equal(schedule.normalizeLongformIntervalHours(0), 168);
+  assert.equal(schedule.normalizeLongformIntervalHours(2.5), 168);
   assert.deepEqual(schedule.nextAvailableLongformSlots(Date.parse('2026-10-22T15:00:00Z'), schedule.LONGFORM_ANCHOR, 60,
     ['2026-10-26T04:00:00.000Z'], 3), [
     '2026-10-23T16:00:00.000Z', '2026-10-28T16:00:00.000Z', '2026-10-31T04:00:00.000Z'
   ]);
+});
+
+test('the next long-form release is immediate, then seven days from its new anchor', function () {
+  const approval = Date.parse('2026-11-10T08:12:00.000Z');
+  const first = schedule.nextLongformReleaseSlot(approval, schedule.LONGFORM_ANCHOR, 168, true);
+  assert.equal(first, '2026-11-10T08:12:01.000Z');
+  assert.equal(schedule.nextLongformReleaseSlot(Date.parse(first), first, 168, false), '2026-11-17T08:12:01.000Z');
 });
