@@ -12,6 +12,7 @@
   const qtyIncreaseButton = document.getElementById('qty-increase');
   const summaryBookPrice = document.getElementById('summary-book-price');
   const summaryShipping = document.getElementById('summary-shipping');
+  const shippingOriginNote = document.getElementById('shipping-origin-note');
   const summaryTotal = document.getElementById('summary-total');
   const summaryHint = document.getElementById('summary-hint');
   const quantityWarningBanner = document.getElementById('quantity-warning-banner');
@@ -32,6 +33,7 @@
   // Not a BookVault limit - a sane cap, matching backend/src/lib/validation.js.
   const QUANTITY_MIN = 1;
   const QUANTITY_MAX = 20;
+  const SHIPPING_ORIGIN_NOTE_THRESHOLD_CENTS = 1200;
 
   let currentTotalCents = BOOK_PRICE_CENTS;
   let lastQuote = null;
@@ -141,6 +143,7 @@
     // change. Debounced so we're not firing a request per keystroke.
     postalInput.addEventListener('input', () => {
       lastQuote = null;
+      shippingOriginNote.hidden = true;
       clearTimeout(postalDebounceTimer);
       postalDebounceTimer = setTimeout(updateShipping, 500);
     });
@@ -198,6 +201,7 @@
   async function updateShipping() {
     const requestId = ++shippingRequestSeq;
     lastQuote = null;
+    shippingOriginNote.hidden = true;
     const countryCode = countrySelect.value;
     const postalCode = postalInput.value.trim();
     const quantity = getQuantity();
@@ -238,6 +242,7 @@
     lastQuote = { ...address, totalPriceCents: data.total_price_cents };
     summaryBookPrice.textContent = formatCents(data.book_subtotal_cents);
     summaryShipping.textContent = formatCents(data.shipping_price_cents);
+    shippingOriginNote.hidden = data.shipping_price_cents <= SHIPPING_ORIGIN_NOTE_THRESHOLD_CENTS;
     summaryTotal.textContent = formatCents(data.total_price_cents);
     summaryHint.style.display = 'none';
     if (data.shipping_upgraded) {

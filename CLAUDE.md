@@ -21559,3 +21559,20 @@ the correct checkout quotation fields, and explain whether a cheaper
 consolidator tariff is available for this title/account. No customer address,
 API credential, payment, or new BookVault order was sent or created. Await
 BookVault's explanation before changing the live checkout price.
+
+---
+
+# 709. Explain Higher UK-Origin Shipping Quotes at Checkout (2026-11-03)
+
+While BookVault investigates the consolidator price discrepancy (§708),
+Harvey asked for a brief customer-facing explanation when shipping is on
+the higher end. The storefront checkout now shows a note immediately below
+the shipping line when the confirmed live shipping quote exceeds $12.00
+(`shipping_price_cents > 1200`): the book is made by the bespoke bookbinder
+in England and shipped from there. The note is hidden for $12.00 or less,
+before a quote is available, during recalculation, and immediately when the
+postcode is edited, so stale quote messaging is not shown for a new address.
+The checkout CSS and JS asset URLs were versioned for cache busting. A
+headless mobile-browser test with mocked non-order-creating quote responses
+confirmed visibility at $18.27, immediate hiding on postcode edit, and
+absence at $12.00 and $10.00. No shipping amount or payment logic changed.

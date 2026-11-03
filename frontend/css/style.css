@@ -1570,6 +1570,13 @@ footer a:hover { color: var(--ink-soft); }
   padding: 0.4rem 0;
 }
 
+.shipping-origin-note {
+  margin: 0.15rem 0 0.65rem;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
 .summary-row.total {
   border-top: 1px solid var(--border);
   margin-top: 0.6rem;
