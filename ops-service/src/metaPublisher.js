@@ -87,7 +87,7 @@ function setup(options) {
       const body = new FormData();
       Object.keys(fields).forEach(function (key) { body.set(key, String(fields[key])); });
       body.set('access_token', clean(input.pageToken, 2000));
-      if (chunk) body.set('video_file_chunk', new Blob([chunk], { type: 'application/octet-stream' }), 'chunk.mp4');
+      if (chunk) body.set('video_file_chunk', chunk, 'chunk.mp4');
       const response = await fetchImpl(endpoint, { method: 'POST', body: body });
       return jsonResponse(response, 'Facebook video ' + fields.upload_phase + ' failed');
     }
@@ -99,36 +99,35 @@ function setup(options) {
     if (input.onSessionStarted) await input.onSessionStarted(videoId, sessionId);
     let start = Number(started.start_offset);
     let end = Number(started.end_offset);
-    const file = await fs.promises.open(filePath, 'r');
-    try {
-      while (start < fileSize) {
-        const length = Math.min(end - start, fileSize - start);
-        if (!Number.isSafeInteger(length) || length <= 0 || length > 100 * 1024 * 1024) {
-          throw new Error('Facebook returned an invalid video chunk range.');
-        }
-        const chunk = Buffer.allocUnsafe(length);
-        const read = await file.read(chunk, 0, length, start);
-        if (read.bytesRead !== length) throw new Error('Could not read the complete Facebook video chunk.');
-        let transferred;
-        for (let attempt = 0; attempt < 3; attempt++) {
-          try {
-            transferred = await phase({ upload_phase: 'transfer', upload_session_id: sessionId, start_offset: start }, chunk);
-            break;
-          } catch (error) {
-            if (attempt === 2) throw error;
-            await sleep(2000 * (attempt + 1));
-          }
-        }
-        const nextStart = Number(transferred.start_offset);
-        const nextEnd = Number(transferred.end_offset);
-        if (!Number.isSafeInteger(nextStart) || nextStart <= start || !Number.isSafeInteger(nextEnd)) {
-          throw new Error('Facebook video transfer did not advance.');
-        }
-        start = nextStart;
-        end = nextEnd;
-        if (input.onProgress) await input.onProgress(start, fileSize);
+    // A file-backed Blob slice streams each requested range without copying
+    // hundreds of megabytes into Node Buffers. The old Buffer -> Blob path
+    // could accumulate almost the whole 4 GB video and trigger a host OOM.
+    const video = await openAsBlob(filePath, { type: 'application/octet-stream' });
+    while (start < fileSize) {
+      const length = Math.min(end - start, fileSize - start);
+      if (!Number.isSafeInteger(length) || length <= 0 || length > 100 * 1024 * 1024) {
+        throw new Error('Facebook returned an invalid video chunk range.');
       }
-    } finally { await file.close(); }
+      const chunk = video.slice(start, start + length, 'application/octet-stream');
+      let transferred;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          transferred = await phase({ upload_phase: 'transfer', upload_session_id: sessionId, start_offset: start }, chunk);
+          break;
+        } catch (error) {
+          if (attempt === 2) throw error;
+          await sleep(2000 * (attempt + 1));
+        }
+      }
+      const nextStart = Number(transferred.start_offset);
+      const nextEnd = Number(transferred.end_offset);
+      if (!Number.isSafeInteger(nextStart) || nextStart <= start || !Number.isSafeInteger(nextEnd)) {
+        throw new Error('Facebook video transfer did not advance.');
+      }
+      start = nextStart;
+      end = nextEnd;
+      if (input.onProgress) await input.onProgress(start, fileSize);
+    }
     const finished = await phase({
       upload_phase: 'finish', upload_session_id: sessionId,
       title: clean(input.title, 255), description: clean(input.description, 60000)

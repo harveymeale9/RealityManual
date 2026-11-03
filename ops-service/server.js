@@ -3529,7 +3529,7 @@ function publishRetryDelay(attempts) {
   return PUBLISH_RETRY_DELAYS_MS[Math.min(Math.max(0, attempts), PUBLISH_RETRY_DELAYS_MS.length - 1)];
 }
 async function notifyPublishRetry(piece) {
-  if ((Number(piece.publishRetryAttempts) || 0) < 3 || piece.publishRetryAlertSentAt ||
+  if ((Number(piece.publishRetryAttempts) || 0) < 5 || piece.publishRetryAlertSentAt ||
       (piece.publishRetryAlertLastAttemptAt && Date.now() - Date.parse(piece.publishRetryAlertLastAttemptAt) < 60 * 60 * 1000)) return;
   const attemptedAt = new Date().toISOString();
   updatePieceFields(piece.id, { publishRetryAlertLastAttemptAt: attemptedAt });
@@ -4118,6 +4118,18 @@ async function runPlatformPublishBatch(id, destinations, options) {
               title: destination.title || 'Untitled', description: maskCaption(socialCaption)
             });
           }
+          // Graph's upload response confirms receipt, not necessarily public
+          // publication. Keep the destination retryable until the video itself
+          // reports published. The worker will recheck this ID before it ever
+          // considers uploading another copy.
+          updatePieceFields(id, { facebookUploadVideoId: result.id });
+          const confirmed = await metaPublisher.reconcileFacebookVideo({
+            pageId: auth.page_id, pageToken: auth.page_access_token,
+            title: destination.title || 'Untitled', videoId: result.id,
+            startedAt: getPieceRecord(id).facebookUploadStartedAt || getPieceRecord(id).scheduledAt
+          });
+          if (!confirmed || !confirmed.id) throw new Error('Facebook accepted the upload but has not confirmed publication yet.');
+          result = confirmed;
           updatePieceFields(id, {
             facebookPublishStatus: 'done', facebookPublishError: '', facebookVideoId: result.id, facebookUrl: result.url,
             facebookUploadVideoId: result.id, facebookUploadSessionId: ''

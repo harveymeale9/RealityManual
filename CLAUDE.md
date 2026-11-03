@@ -21608,13 +21608,15 @@ deployment returned 6 sent/6 delivered/0 bounced in 7 days and 9/9/0 in
 Harvey saw the long-form piece “The two ways you'll completely ruin your life”
 back in Final Check after its scheduled 2026-10-31 release. Its YouTube upload
 was already confirmed (`JwFeCqWJICQ`), but Facebook's ~4 GB resumable upload
-was interrupted by an ops-service restart. Startup recovery in `server.js`
+was interrupted by an ops-service restart. Host kernel logs at 04:09:38 UTC
+show the Node process was OOM-killed (exit 137, ~3.9 GB anonymous RSS),
+not a deliberate deploy. The resumable uploader's old Buffer -> Blob path
+copied each large chunk into memory; this is now replaced with file-backed
+Blob slices that stream the requested range. Startup recovery in `server.js`
 unconditionally set `stage='final_check'` for pending/running platform and
 direct-release statuses, cleared the scheduled destination payload, and did
 not register a platform retry. That bypassed the partial-release state rule
-and left the Facebook failure stranded. The precise trigger of the old restart
-is not preserved in the current container logs; the startup recovery path and
-persisted piece state establish why the card moved back.
+and left the Facebook failure stranded.
 
 An approved release now stores the complete selected destination payload in
 `publishBatchDestinations`. On restart, only unconfirmed destinations become
@@ -21622,7 +21624,7 @@ retry targets. The card stays Live when another platform has posted, or
 Scheduled when none has; it never re-enters Final Check. The one-minute worker
 continues retrying failed destinations with capped six-hour backoff and never
 resubmits a confirmed successful platform. Transient failures no longer create
-Project Manager notifications. After three failed retries, one email alerts
+Project Manager notifications. After five failed retries, one email alerts
 Harvey; failed email delivery is retried hourly. The email includes the failed
 platform, last error, next retry and piece ID, and is not repeated after a
 successful send.
@@ -21632,7 +21634,10 @@ as Graph acknowledges them. Before any retry, Graph checks the checkpointed
 video and the Page's published-video feed. A uniquely matching published
 video is recorded as success; a still-processing upload is deferred; and
 ambiguous duplicate matches stop a new upload. New uploads only happen after
-that reconciliation. Graph error details now retain Meta trace IDs alongside
+that reconciliation. An upload-accepted response alone no longer marks
+Facebook done: the worker waits for Graph to confirm the video is published,
+then records success; processing time remains retryable. Graph error details
+now retain Meta trace IDs alongside
 codes/subcodes to aid diagnosis. The existing R2 final remains the retry
 source. Tests cover checkpoint timing, published-video recovery, processing
 deferral, and the quiet-retry/email contract.

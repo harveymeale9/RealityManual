@@ -71,11 +71,12 @@ test('partial releases remain visible with a destination-specific retry notice',
 test('publishing recovery retries quietly and emails only after repeated failures', function () {
   const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   const retrySection = server.slice(server.indexOf('function notifyPublishRetry('), server.indexOf('const youtubeDescriptionsInFlight'));
-  assert.match(retrySection, /publishRetryAttempts\) \|\| 0\) < 3/);
+  assert.match(retrySection, /publishRetryAttempts\) \|\| 0\) < 5/);
   assert.match(retrySection, /mailbox\.sendAutomated/);
   assert.doesNotMatch(retrySection, /INSERT INTO voice_messages|Publishing recovered/);
   assert.match(server, /piece\.publishBatchDestinations = destinations/);
   assert.match(server, /piece\.stage = publishBatchState\.completedStage\(piece, piece\.publishBatchPlatforms\) \|\| 'scheduled'/);
+  assert.match(server, /Facebook accepted the upload but has not confirmed publication yet/);
 });
 
 test('Kanban presents the durable uploaded stage to users as Filmed', function () {
