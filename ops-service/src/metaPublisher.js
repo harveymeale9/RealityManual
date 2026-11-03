@@ -23,7 +23,8 @@ function setup(options) {
       const detail = payload.error && (payload.error.error_user_msg || payload.error.message);
       const code = payload.error && payload.error.code != null ? ' (Meta code ' + payload.error.code +
         (payload.error.error_subcode != null ? ', subcode ' + payload.error.error_subcode : '') + ')' : '';
-      throw new Error(label + ': ' + clean(detail || ('HTTP ' + response.status), 450) + code);
+      const trace = payload.error && payload.error.fbtrace_id ? ' [trace ' + clean(payload.error.fbtrace_id, 100) + ']' : '';
+      throw new Error(label + ': ' + clean(detail || ('HTTP ' + response.status), 450) + code + trace);
     }
     return payload;
   }
@@ -95,6 +96,7 @@ function setup(options) {
     const sessionId = clean(started.upload_session_id, 100);
     const videoId = clean(started.video_id, 100);
     if (!sessionId || !videoId) throw new Error('Facebook did not return a video upload session.');
+    if (input.onSessionStarted) await input.onSessionStarted(videoId, sessionId);
     let start = Number(started.start_offset);
     let end = Number(started.end_offset);
     const file = await fs.promises.open(filePath, 'r');
@@ -124,6 +126,7 @@ function setup(options) {
         }
         start = nextStart;
         end = nextEnd;
+        if (input.onProgress) await input.onProgress(start, fileSize);
       }
     } finally { await file.close(); }
     const finished = await phase({
@@ -132,6 +135,60 @@ function setup(options) {
     });
     if (finished.success !== true) throw new Error('Facebook did not confirm the finished video upload.');
     return { id: videoId, url: 'https://www.facebook.com/watch/?v=' + encodeURIComponent(videoId) };
+  }
+
+  // Before resending an interrupted upload, check both the checkpointed
+  // video and the Page feed. A lost Graph response must never create a second
+  // public copy. Page /videos contains published videos; an unfinished upload
+  // may only be visible through its checkpointed video id.
+  async function reconcileFacebookVideo(input) {
+    const token = clean(input.pageToken, 2000);
+    const title = clean(input.title, 255);
+    const since = Date.parse(input.startedAt);
+    const checkpointId = clean(input.videoId, 100);
+    if (checkpointId) {
+      let checkpoint;
+      try {
+        checkpoint = await graphGet('/' + encodeURIComponent(checkpointId), {
+          fields: 'id,title,status,created_time', access_token: token
+        }, 'Facebook upload checkpoint lookup failed');
+      } catch (error) {
+        // The Page feed check below remains authoritative for public posts.
+        checkpoint = null;
+      }
+      const phase = checkpoint && checkpoint.status && checkpoint.status.publishing_phase;
+      if (phase && phase.publish_status === 'published') {
+        return { id: checkpointId, url: 'https://www.facebook.com/watch/?v=' + encodeURIComponent(checkpointId) };
+      }
+      const upload = checkpoint && checkpoint.status && checkpoint.status.uploading_phase;
+      const processing = checkpoint && checkpoint.status && checkpoint.status.processing_phase;
+      const age = Date.now() - since;
+      if (checkpoint &&
+          ((upload && upload.status !== 'complete' && age < 30 * 60 * 1000) ||
+           (upload && upload.status === 'complete' && processing && processing.status !== 'complete') ||
+           (phase && phase.status !== 'complete' && phase.publish_status !== 'published' &&
+             upload && upload.status === 'complete'))) {
+        return { pending: true, id: checkpointId, status: checkpoint.status };
+      }
+    }
+    const feed = await graphGet('/' + encodeURIComponent(clean(input.pageId, 100)) + '/videos', {
+      fields: 'id,title,created_time,status', limit: '100', access_token: token
+    }, 'Facebook published-video reconciliation failed');
+    const matches = (feed.data || []).filter(function (video) {
+      return clean(video.title, 255) === title && Number.isFinite(since) &&
+        Date.parse(video.created_time) >= since - 2 * 60 * 60 * 1000;
+    });
+    if (matches.length > 1) throw new Error('Multiple Facebook videos match this release; retry paused to avoid a duplicate.');
+    if (matches.length === 1) {
+      const id = clean(matches[0].id, 100);
+      return { id: id, url: 'https://www.facebook.com/watch/?v=' + encodeURIComponent(id) };
+    }
+    // For a lost response without a checkpoint, Meta may still be processing
+    // the video before it appears in the Page feed. Give it time to settle.
+    if (!checkpointId && Number.isFinite(since) && Date.now() - since < 30 * 60 * 1000) {
+      return { pending: true, status: { reason: 'awaiting_page_feed' } };
+    }
+    return null;
   }
 
   async function graphPost(pathname, fields, label) {
@@ -322,6 +379,7 @@ function setup(options) {
     verifyMediaSignature: verifyMediaSignature,
     publishFacebookVideo: publishFacebookVideo,
     publishFacebookVideoResumable: publishFacebookVideoResumable,
+    reconcileFacebookVideo: reconcileFacebookVideo,
     publishInstagramReel: publishInstagramReel,
     fetchFacebookVideoMetrics: fetchFacebookVideoMetrics,
     fetchInstagramMediaMetrics: fetchInstagramMediaMetrics,

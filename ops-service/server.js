@@ -1977,7 +1977,10 @@ const SERVER_OWNED_PIECE_FIELDS = [
   'finalBuildProgress', 'finalBuildStep',
   'queuedPublishDestinations', 'publishingQueuedAt', 'publishingDequeuedAt',
   'publishingQueueSelection', 'publishBatchPlatforms',
-  'publishRetryDestinations', 'publishRetryAttempts', 'publishRetryNextAt',
+  'publishBatchDestinations', 'publishRetryDestinations', 'publishRetryAttempts', 'publishRetryNextAt',
+  'publishRetryAlertSentAt', 'publishRetryAlertLastAttemptAt',
+  'facebookUploadVideoId', 'facebookUploadSessionId', 'facebookUploadStartedAt',
+  'facebookUploadBytesTransferred', 'facebookUploadTotalBytes', 'facebookReconcileLastAt', 'facebookReconcileStatus',
   'tiktokPublishDestination', 'instagramContainerId', 'instagramContainerCreatedAt',
   'youtubeDescriptionText', 'youtubeDescriptionSourceHash',
   'socialDescriptionText', 'socialDescriptionSourceHash'
@@ -3525,34 +3528,31 @@ const PUBLISH_RETRY_DELAYS_MS = [60 * 1000, 5 * 60 * 1000, 15 * 60 * 1000, 60 * 
 function publishRetryDelay(attempts) {
   return PUBLISH_RETRY_DELAYS_MS[Math.min(Math.max(0, attempts), PUBLISH_RETRY_DELAYS_MS.length - 1)];
 }
-function notifyPublishRetry(piece) {
-  const id = crypto.createHash('sha256').update('publish-retry\n' + piece.id).digest('hex').slice(0, 32);
+async function notifyPublishRetry(piece) {
+  if ((Number(piece.publishRetryAttempts) || 0) < 3 || piece.publishRetryAlertSentAt ||
+      (piece.publishRetryAlertLastAttemptAt && Date.now() - Date.parse(piece.publishRetryAlertLastAttemptAt) < 60 * 60 * 1000)) return;
+  const attemptedAt = new Date().toISOString();
+  updatePieceFields(piece.id, { publishRetryAlertLastAttemptAt: attemptedAt });
   const failures = (piece.publishRetryDestinations || []).map(function (destination) {
     return destination.platform + ': ' + (piece[publishErrorField(destination.platform)] || 'publish failed');
   });
-  const message = '⚠️ **Publishing needs attention**\n\n' + piece.title +
-      (piece.stage === 'live' ? ' is already live where it succeeded. ' : ' has a platform failure before its release completed. ') +
-      'Only the failed destination(s) will be retried automatically; confirmed successful posts will not be sent again.\n\n' +
-      failures.join('\n') + '\n\nNext retry: ' + (piece.publishRetryNextAt || 'soon') + '. ' +
-      'If this keeps failing, this alert will update. You do not need to republish the whole video.';
-  const stamp = new Date().toISOString();
-  db.prepare(`INSERT INTO voice_messages
-    (id,mode,transcript,status,reply_text,created_at,completed_at,agent,notification_kind,notification_unread,source_ref)
-    VALUES(?,'notification',?,'done',?,?,?,?, 'publish_alert',1,?)
-    ON CONFLICT(id) DO UPDATE SET reply_text=excluded.reply_text,created_at=excluded.created_at,
-      completed_at=excluded.completed_at,notification_unread=1`)
-    .run(id, 'Publishing: ' + String(piece.title || '').slice(0, 250), message, stamp, stamp, 'codex', piece.id);
+  try {
+    await mailbox.sendAutomated({
+      to: [process.env.PUBLISH_ALERT_RECIPIENT || process.env.WEEKLY_REPORT_RECIPIENT || 'harveymeale9@gmail.com'],
+      cc: [], subject: 'Publishing still failing: ' + String(piece.title || '').slice(0, 180),
+      textBody: 'The release is staying in ' + (piece.stage === 'live' ? 'Live' : 'Scheduled') +
+        ' and only failed destinations will keep retrying. Confirmed posts will not be sent again.\n\n' +
+        failures.join('\n') + '\n\nNext retry: ' + (piece.publishRetryNextAt || 'soon') +
+        '\nPiece ID: ' + piece.id
+    });
+    updatePieceFields(piece.id, { publishRetryAlertSentAt: new Date().toISOString() });
+  } catch (error) {
+    console.error('Persistent publishing alert email failed for ' + piece.id + ':', error.message);
+  }
 }
 function recordPublishRetryState(id, destinations, attemptedRetry) {
   const piece = getPieceRecord(id);
   if (!piece) return;
-  if (piece.createdBy === 'youtube-reviewer') {
-    if ((destinations || []).some(function (destination) { return piece[publishStatusField(destination.platform)] === 'error'; })) {
-      piece.stage = 'final_check';
-      savePieceRecord(piece);
-    }
-    return;
-  }
   const previous = Array.isArray(piece.publishRetryDestinations) ? piece.publishRetryDestinations : [];
   const byPlatform = new Map();
   previous.concat(destinations || []).forEach(function (destination) {
@@ -3561,7 +3561,6 @@ function recordPublishRetryState(id, destinations, attemptedRetry) {
   const failed = Array.from(byPlatform.values()).filter(function (destination) {
     return piece[publishStatusField(destination.platform)] === 'error';
   });
-  const hadRetry = previous.length > 0;
   piece.publishRetryDestinations = failed;
   if (failed.length) {
     piece.publishRetryAttempts = attemptedRetry ? (Number(piece.publishRetryAttempts) || 0) + 1 : 0;
@@ -3571,17 +3570,16 @@ function recordPublishRetryState(id, destinations, attemptedRetry) {
     piece.publishRetryNextAt = '';
     piece.publishRetryAttempts = 0;
     piece.stage = publishBatchState.completedStage(piece, piece.publishBatchPlatforms) || piece.stage;
+    const allDone = (piece.publishBatchPlatforms || []).every(function (platform) {
+      return piece[publishStatusField(platform)] === 'done';
+    });
+    if (allDone && piece.directLongformPublishStatus === 'error') piece.directLongformPublishStatus = 'done';
+    if (allDone && piece.directShortPublishStatus === 'error') piece.directShortPublishStatus = 'done';
   }
   piece.updatedAt = new Date().toISOString();
   savePieceRecord(piece);
-  if (failed.length && (!hadRetry || piece.publishRetryAttempts === 3 || piece.publishRetryAttempts % 12 === 0)) {
-    notifyPublishRetry(piece);
-  } else if (!failed.length && hadRetry) {
-    // Recovery clears the badge, but does not turn the historical error into
-    // a fresh success notification or bump it to the top of the conversation.
-    db.prepare("UPDATE voice_messages SET notification_unread=0 WHERE notification_kind='publish_alert' AND source_ref=?")
-      .run(piece.id);
-  }
+  // Transient platform errors stay off the conversation feed. Only a
+  // persistent failure generates one email from the retry worker.
 }
 const youtubeDescriptionsInFlight = new Map();
 async function ensureYoutubeDescription(id) {
@@ -3738,6 +3736,8 @@ async function retryFailedPlatforms() {
           recordPublishRetryState(piece.id, latest.publishRetryDestinations || [], true);
         }
       } finally {
+        const after = getPieceRecord(piece.id);
+        if (after && (after.publishRetryDestinations || []).length) await notifyPublishRetry(after);
         publishRetryInFlight.delete(piece.id);
       }
     }
@@ -3822,8 +3822,8 @@ async function drainPublishingQueue() {
     savePieceRecord(candidate);
     await runPlatformPublishBatch(candidate.id, candidate.queuedPublishDestinations, { dueAt: dueAt });
     const result = getPieceRecord(candidate.id);
-    // A platform/storage failure returns the card to Final Check. Do not burn
-    // through the rest of the queue while the same external fault persists.
+    // A platform/storage failure is retried from Scheduled or Live; an
+    // approved release never re-enters Final Check.
     if (!result || result.stage !== 'scheduled') return;
     // Re-read all pieces before considering the other format so its topic choice
     // sees the slot this pass just committed.
@@ -4081,16 +4081,37 @@ async function runPlatformPublishBatch(id, destinations, options) {
           const localSize = fs.existsSync(finalPath) ? fs.statSync(finalPath).size : 0;
           const mediaSize = Number(current && current.storageSizeBytes) || localSize;
           let result;
-          if (mediaSize > 1024 * 1024 * 1024) {
+          const reconcile = (current.facebookUploadStartedAt || options.retryFailed)
+            ? await metaPublisher.reconcileFacebookVideo({
+              pageId: auth.page_id, pageToken: auth.page_access_token,
+              title: destination.title || 'Untitled', videoId: current.facebookUploadVideoId,
+              startedAt: current.facebookUploadStartedAt || current.scheduledAt || current.publishingDequeuedAt
+            }) : null;
+          if (current.facebookUploadStartedAt || options.retryFailed) {
+            updatePieceFields(id, { facebookReconcileLastAt: new Date().toISOString(),
+              facebookReconcileStatus: reconcile ? (reconcile.pending ? 'processing' : 'published') : 'not_found' });
+          }
+          if (reconcile && reconcile.pending) throw new Error('Facebook upload is still processing; will check again before retrying.');
+          if (reconcile && reconcile.id) result = reconcile;
+          else if (mediaSize > 1024 * 1024 * 1024) {
             const media = await localPublishMedia(id);
             try {
               result = await metaPublisher.publishFacebookVideoResumable({
                 pageId: auth.page_id, pageToken: auth.page_access_token,
                 videoPath: media.path, title: destination.title || 'Untitled',
-                description: maskCaption(socialCaption)
+                description: maskCaption(socialCaption),
+                onSessionStarted: function (videoId, sessionId) {
+                  updatePieceFields(id, { facebookUploadVideoId: videoId,
+                    facebookUploadSessionId: sessionId, facebookUploadStartedAt: new Date().toISOString(),
+                    facebookUploadBytesTransferred: 0, facebookUploadTotalBytes: mediaSize });
+                },
+                onProgress: function (bytes, total) {
+                  updatePieceFields(id, { facebookUploadBytesTransferred: bytes, facebookUploadTotalBytes: total });
+                }
               });
             } finally { media.cleanup(); }
           } else {
+            updatePieceFields(id, { facebookUploadStartedAt: new Date().toISOString() });
             result = await metaPublisher.publishFacebookVideo({
               pageId: auth.page_id, pageToken: auth.page_access_token,
               videoUrl: metaPublisher.mediaUrl(id, auth.app_secret, 60 * 60 * 1000), mimeType: mimeType,
@@ -4098,7 +4119,8 @@ async function runPlatformPublishBatch(id, destinations, options) {
             });
           }
           updatePieceFields(id, {
-            facebookPublishStatus: 'done', facebookPublishError: '', facebookVideoId: result.id, facebookUrl: result.url
+            facebookPublishStatus: 'done', facebookPublishError: '', facebookVideoId: result.id, facebookUrl: result.url,
+            facebookUploadVideoId: result.id, facebookUploadSessionId: ''
           });
         } else {
           if (!auth.instagram_account_id) throw new Error('The selected Facebook Page has no linked Instagram professional account.');
@@ -4248,6 +4270,7 @@ app.post('/api/publish/:id', requireAuthOrReviewer, async function (req, res) {
   }
 
   piece.publishBatchPlatforms = uniquePublishDestinations(selected.filter(function (platform) { return PUBLISH_PLATFORMS.includes(platform); }).map(function (platform) { return { platform: platform }; })).map(function (d) { return d.platform; });
+  piece.publishBatchDestinations = destinations;
   const reviewerPublish = req.sessionRole === 'youtube-reviewer';
   destinations.forEach(function (destination) {
     piece[publishStatusField(destination.platform)] = reviewerPublish ? 'pending' : 'queued';
@@ -5201,16 +5224,19 @@ function recoverInflightVideoJobs() {
     if (piece.storageStatus === 'uploading') {
       piece.storageStatus = 'error';
       piece.storageError = 'Service restarted during the R2 upload. Schedule the piece again to retry safely.';
-      piece.stage = 'final_check';
+      if (Array.isArray(piece.publishBatchPlatforms) && piece.publishBatchPlatforms.length) {
+        piece.stage = publishBatchState.completedStage(piece, piece.publishBatchPlatforms) || 'scheduled';
+      }
       changed = true;
     }
+    const interruptedPlatforms = [];
     ['youtube', 'tiktok', 'instagram', 'facebook'].forEach(function (platform) {
       const statusField = platform + 'PublishStatus';
       const errorField = platform + 'PublishError';
       if (piece[statusField] === 'pending' || piece[statusField] === 'running') {
         piece[statusField] = 'error';
         piece[errorField] = 'Service restarted during publishing. Check the platform before retrying because completion could not be confirmed.';
-        piece.stage = 'final_check';
+        interruptedPlatforms.push(platform);
         changed = true;
       }
     });
@@ -5218,14 +5244,27 @@ function recoverInflightVideoJobs() {
       piece.directShortReleaseRunning = false;
       piece.directShortPublishStatus = 'error';
       piece.scheduledPublishDestinations = [];
-      piece.stage = 'final_check';
       changed = true;
     }
     if (piece.directLongformReleaseRunning || piece.directLongformPublishStatus === 'running') {
       piece.directLongformReleaseRunning = false;
       piece.directLongformPublishStatus = 'error';
       piece.scheduledPublishDestinations = [];
-      piece.stage = 'final_check';
+      changed = true;
+    }
+    if (interruptedPlatforms.length || piece.directShortPublishStatus === 'error' ||
+        piece.directLongformPublishStatus === 'error') {
+      const destinations = (Array.isArray(piece.publishBatchDestinations) ? piece.publishBatchDestinations : [])
+        .filter(function (destination) { return piece[publishStatusField(destination.platform)] === 'error'; });
+      // A scheduled release was previously cleared on restart. Restore only
+      // failed destinations from the durable approved payload, never the
+      // platforms already confirmed public.
+      piece.publishRetryDestinations = destinations;
+      piece.publishRetryAttempts = Number(piece.publishRetryAttempts) || 0;
+      piece.publishRetryNextAt = new Date(Date.now() + publishRetryDelay(piece.publishRetryAttempts)).toISOString();
+      piece.scheduledPublishDestinations = [];
+      piece.queuedPublishDestinations = [];
+      piece.stage = publishBatchState.completedStage(piece, piece.publishBatchPlatforms) || 'scheduled';
       changed = true;
     }
     if (changed) {

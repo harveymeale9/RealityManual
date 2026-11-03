@@ -75,6 +75,44 @@ test('Meta publisher sends a large Facebook video in the ranges Meta requests', 
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('Facebook resumable upload checkpoints its video before transferring bytes', async function () {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'meta-checkpoint-'));
+  const file = path.join(dir, 'final.mp4');
+  fs.writeFileSync(file, 'abcd');
+  let checkpointed = false;
+  const service = metaPublisher.setup({ fetchImpl: async function (url, options) {
+    const phase = options.body.get('upload_phase');
+    if (phase === 'start') return response({ upload_session_id: 'session-1', video_id: 'video-1', start_offset: '0', end_offset: '4' });
+    if (phase === 'transfer') assert.equal(checkpointed, true);
+    return phase === 'finish' ? response({ success: true }) : response({ start_offset: '4', end_offset: '4' });
+  } });
+  try {
+    await service.publishFacebookVideoResumable({ pageId: 'page-1', pageToken: 'token', videoPath: file,
+      onSessionStarted: function (videoId, sessionId) {
+        assert.equal(videoId, 'video-1'); assert.equal(sessionId, 'session-1'); checkpointed = true;
+      } });
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('Facebook reconciliation finds one published video and never needs a duplicate upload', async function () {
+  const service = metaPublisher.setup({ fetchImpl: async function (url) {
+    assert.match(url, /\/page-1\/videos/);
+    return response({ data: [{ id: 'video-1', title: 'Exact title', created_time: '2026-11-03T01:00:00+0000' }] });
+  } });
+  const result = await service.reconcileFacebookVideo({ pageId: 'page-1', pageToken: 'token',
+    title: 'Exact title', startedAt: '2026-11-03T00:00:00Z' });
+  assert.equal(result.id, 'video-1');
+});
+
+test('Facebook reconciliation defers an unfinished checkpoint upload', async function () {
+  const service = metaPublisher.setup({ fetchImpl: async function () {
+    return response({ id: 'video-1', status: { uploading_phase: { status: 'in_progress' } } });
+  } });
+  const result = await service.reconcileFacebookVideo({ pageId: 'page-1', pageToken: 'token',
+    videoId: 'video-1', title: 'Exact title', startedAt: new Date().toISOString() });
+  assert.equal(result.pending, true);
+});
+
 test('Meta publisher creates, waits for, and publishes an Instagram Reel', async function () {
   const calls = [];
   const service = metaPublisher.setup({
