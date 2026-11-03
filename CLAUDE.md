@@ -21494,3 +21494,38 @@ order has a price adjustment. The period API now carries those two additional
 aggregate fields without exposing customer details. Tests cover the arithmetic
 and visible labels. A 390px touch-enabled browser check showed the live
 $507.62/$390.00/$117.62 split with no horizontal overflow.
+
+# 707. Weekly Hands-on Shipping Quote Audit (2026-11-03)
+
+Harvey requested a weekly check of each new paid order's destination/postcode,
+shipping charge, BookVault dispatch cost and GBP/USD conversion, with an
+owner notification if anything is materially wrong and an agent-led fix of
+verified pricing logic errors. The ops service now seeds durable `time`
+background monitors for Monday 09:00 UTC, beginning 9 November. Each monitor
+queues a normal Project Manager Codex turn for the preceding Monday-to-Monday
+window. A persisted `weekly_shipping_audit_schedule` cursor and deterministic
+monitor IDs prevent duplicate weeks across service restarts; the hourly
+scheduler creates future weeks and catches up after downtime. Monitoring
+uses the existing credit-aware agent queue and does not create credentials,
+new BookVault orders or payments.
+
+The audit prompt directs the agent to inspect each paid, non-refunded,
+non-owner-test order privately; replay the real country/postcode/quantity
+through the storefront's safe shipping quote flow; compare the USD charge
+with BookVault's actual GBP dispatch cost at the order's saved FX rate;
+distinguish later tariff/FX drift from an original error; and investigate
+differences over the greater of $2 or 10%. Confirmed code/config issues may
+be fixed and deployed, but past customer charges or fulfillment must not be
+changed silently. Material mismatches or unverifiable orders require an
+owner email plus a Project Manager report without exposing address details.
+The monitor scheduler has a focused persistence/idempotency test.
+
+An immediate read-only audit used the actual stored postcodes with the live,
+non-order-creating `/api/shipping/calculate` endpoint. Of six included live
+orders, five charges matched BookVault dispatch cost at saved FX within two
+cents; the first Canadian order (`60b5fe65`) was $13.08 charged versus $23.33
+actual/current quoted shipping. That order preceded the UK/GBP quote fix in
+§702. The other large gap (`45bec149`, Thailand) is Harvey's already-excluded
+October owner test order. The current quote logic returned the correct
+Canadian $23.33 and matched the five later production orders; no new pricing
+logic defect was found. Neither historic order charge was modified.

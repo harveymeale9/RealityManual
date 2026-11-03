@@ -29,6 +29,7 @@ const namecheapMailbox = require('./src/namecheapMailbox');
 const mailTriageService = require('./src/mailTriageService');
 const storefrontReporting = require('./src/storefrontReporting');
 const weeklyReportService = require('./src/weeklyReportService');
+const weeklyShippingAuditSchedule = require('./src/weeklyShippingAuditSchedule');
 const diskMonitorService = require('./src/diskMonitorService');
 const youtubePublicationAudit = require('./src/youtubePublicationAudit');
 const youtubeCompetitorService = require('./src/youtubeCompetitorService');
@@ -4747,6 +4748,10 @@ const backgroundMonitors = backgroundMonitorService.setup(db, {
     return id;
   }
 });
+// Register one durable Project Manager audit for each Monday 09:00 UTC
+// window. The monitor survives restarts and enqueues the normal agent turn;
+// this scheduler only seeds future weeks and never reads customer data.
+weeklyShippingAuditSchedule.setup(db, backgroundMonitors);
 
 app.get('/api/voice/monitors', function (req, res) {
   res.json({ enabled: backgroundMonitors.enabled, monitors: backgroundMonitors.list() });
