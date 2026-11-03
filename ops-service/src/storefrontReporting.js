@@ -138,6 +138,15 @@ function startOfUtcDay(value) {
   return date;
 }
 
+const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000;
+function bangkokDay(value) {
+  return new Date(new Date(value).getTime() + BANGKOK_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+function startOfBangkokDay(value) {
+  return new Date(bangkokDay(value) + 'T00:00:00.000Z').getTime() - BANGKOK_OFFSET_MS;
+}
+
 // A completed day stores anonymous per-link counts. Older compacted days
 // only retained utm_source, so show them explicitly as source-only history
 // instead of inventing a post or profile attribution.
@@ -312,27 +321,27 @@ function getSalesDashboard(db, nowValue, excludedIds, unseenOrderIds) {
   const excluded = excludedOrderFilter(excludedIds);
   const now = new Date(nowValue || Date.now());
   const end = now.toISOString();
-  const todayStart = startOfUtcDay(now);
-  const yesterdayStart = new Date(todayStart); yesterdayStart.setUTCDate(yesterdayStart.getUTCDate() - 1);
-  const sevenStart = new Date(todayStart); sevenStart.setUTCDate(sevenStart.getUTCDate() - 6);
-  const thirtyStart = new Date(todayStart); thirtyStart.setUTCDate(thirtyStart.getUTCDate() - 29);
+  const todayStart = new Date(startOfBangkokDay(now));
+  const yesterdayStart = new Date(todayStart.getTime() - 86400000);
+  const sevenStart = new Date(todayStart.getTime() - 6 * 86400000);
+  const thirtyStart = new Date(todayStart.getTime() - 29 * 86400000);
   const allStart = '1970-01-01T00:00:00.000Z';
 
   const dailyRows = db.prepare(`
-    SELECT substr(created_at,1,10) AS day, COUNT(*) AS orders,
+    SELECT date(created_at, '+7 hours') AS day, COUNT(*) AS orders,
       COALESCE(SUM(quantity),0) AS units, COALESCE(SUM(total_price_cents),0) AS revenue_cents,
       COUNT(bookvault_total_cost_usd_cents) AS profit_known_orders,
       COALESCE(SUM(CASE WHEN bookvault_total_cost_usd_cents IS NOT NULL
         THEN total_price_cents - bookvault_total_cost_usd_cents ELSE 0 END),0) AS gross_profit_cents
     FROM orders WHERE created_at >= ? AND created_at < ? AND ${PAID_ORDER_SQL}${excluded.sql}
-    GROUP BY substr(created_at,1,10) ORDER BY day ASC
+    GROUP BY date(created_at, '+7 hours') ORDER BY day ASC
   `).all(thirtyStart.toISOString(), end, ...excluded.ids);
   const dailyMap = {};
   dailyRows.forEach(function (row) { dailyMap[row.day] = row; });
   const daily = [];
   for (let i = 0; i < 30; i += 1) {
     const day = new Date(thirtyStart); day.setUTCDate(day.getUTCDate() + i);
-    const key = day.toISOString().slice(0, 10);
+    const key = bangkokDay(day);
     const row = dailyMap[key] || {};
     const orders = Number(row.orders) || 0;
     const known = Number(row.profit_known_orders) || 0;
@@ -461,16 +470,16 @@ function getSalesDashboard(db, nowValue, excludedIds, unseenOrderIds) {
     last_30_days: salesTotals(db, thirtyStart.toISOString(), end, excluded.ids),
     all_time: salesTotals(db, allStart, end, excluded.ids)
   };
-  const firstPaidMonth = db.prepare(`SELECT MIN(substr(created_at,1,7)) AS month
+  const firstPaidMonth = db.prepare(`SELECT MIN(substr(date(created_at, '+7 hours'),1,7)) AS month
     FROM orders WHERE created_at < ? AND ${PAID_ORDER_SQL}${excluded.sql}`).get(end, ...excluded.ids).month;
   const monthCount = firstPaidMonth
-    ? (todayStart.getUTCFullYear() - Number(firstPaidMonth.slice(0, 4))) * 12 +
-      todayStart.getUTCMonth() - (Number(firstPaidMonth.slice(5, 7)) - 1) + 1
+    ? (Number(bangkokDay(now).slice(0, 4)) - Number(firstPaidMonth.slice(0, 4))) * 12 +
+      Number(bangkokDay(now).slice(5, 7)) - Number(firstPaidMonth.slice(5, 7)) + 1
     : 0;
 
   return {
     generated_at: end,
-    timezone: 'UTC',
+    timezone: 'Asia/Bangkok',
     periods: periods,
     books_sold: {
       today: periods.today.units,

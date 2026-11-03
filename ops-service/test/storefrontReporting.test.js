@@ -300,6 +300,47 @@ test('sales dashboard returns live periods, a filled daily series and privacy-sa
   db.close();
 });
 
+test('sales periods, chart days and monthly average use Bangkok midnight, not UTC midnight', function () {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE orders(
+      id TEXT, order_status TEXT, stripe_payment_status TEXT, quantity INTEGER,
+      book_price_cents INTEGER, shipping_price_cents INTEGER, total_price_cents INTEGER,
+      bookvault_production_cost_gbp_cents INTEGER, bookvault_shipping_cost_gbp_cents INTEGER,
+      bookvault_total_cost_gbp_cents INTEGER, bookvault_total_cost_usd_cents INTEGER,
+      currency TEXT, country TEXT, shipping_service_name TEXT,
+      payment_failure_type TEXT, payment_failure_code TEXT, payment_decline_code TEXT,
+      payment_failure_message TEXT, fulfillment_last_error TEXT, bookvault_order_id TEXT,
+      confirmation_email_sent_at TEXT, shipping_email_sent_at TEXT, resend_contact_synced_at TEXT,
+      created_at TEXT, updated_at TEXT
+    );
+    CREATE TABLE error_logs(order_id TEXT, service TEXT, error_type TEXT, created_at TEXT);
+  `);
+  const add = db.prepare(`INSERT INTO orders
+    (id,order_status,stripe_payment_status,quantity,total_price_cents,created_at,updated_at)
+    VALUES (?,'BOOKVAULT_ACCEPTED','succeeded',1,6500,?,?)`);
+  for (const [id, at] of [
+    ['october', '2026-10-31T16:59:00.000Z'],
+    ['yesterday', '2026-11-02T16:59:00.000Z'],
+    ['midnight', '2026-11-02T17:00:00.000Z'],
+    ['morning', '2026-11-03T00:00:00.000Z']
+  ]) add.run(id, at, at);
+  const report = reporting.getSalesDashboard(db, '2026-11-03T03:00:00.000Z');
+  assert.equal(report.timezone, 'Asia/Bangkok');
+  assert.equal(report.books_sold.today, 2);
+  assert.equal(report.books_sold.yesterday, 1);
+  assert.equal(report.books_sold.month_count, 2);
+  assert.equal(report.books_sold.monthly_average, 2);
+  assert.equal(report.periods.today.revenue_cents, 13000);
+  assert.equal(report.daily.find((row) => row.day === '2026-11-02').units, 1);
+  assert.equal(report.daily.find((row) => row.day === '2026-11-03').units, 2);
+  assert.equal(report.daily.find((row) => row.day === '2026-10-31').units, 1);
+  const appSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.match(appSource, /Bangkok time \(UTC\+7\)/);
+  assert.match(appSource, /timeZone: 'Asia\/Bangkok'/);
+  db.close();
+});
+
 test('owner test-order exclusions remove paid and refunded orders from sales reporting but keep a reversible reference', function () {
   const db = new Database(':memory:');
   db.exec(`

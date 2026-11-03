@@ -21724,3 +21724,21 @@ delivery checks found the GitHub Pages/Fastly images returning `max-age=600`
 and cache HIT, and the API-hosted video returning byte ranges with
 `Cache-Control: public, max-age=604800, immutable`. Those existing cache
 headers are server/CDN policy rather than headers this page can override.
+
+## Sales Analytics calendar periods use Harvey's UTC+7 timezone (2026-11-03)
+
+Sales Analytics previously grouped orders by UTC midnight while recent order
+timestamps were rendered in the viewer's browser timezone. This made a sale
+shown shortly after local midnight appear in the previous day's totals and
+profit bar. The sales dashboard now uses Asia/Bangkok (UTC+7) boundaries for
+today, yesterday, seven- and thirty-day calendar periods, refunds, payment
+status totals, daily profit bars, and the calendar months used by the
+books-per-month average. Recent order/refund timestamps and the dashboard's
+Updated time are explicitly rendered in the same zone, independently of the
+viewing device's timezone. A boundary test covers 16:59/17:00 UTC across
+Bangkok midnight and the October/November month boundary.
+
+This change is deliberately limited to Sales Analytics. Website traffic's
+historical compacted rows and third-party content-platform snapshots are
+stored as UTC daily totals; they cannot be relabeled as UTC+7 without
+misrepresenting the already-aggregated data. Their UTC labels remain visible.

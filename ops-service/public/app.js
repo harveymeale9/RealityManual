@@ -533,7 +533,7 @@
             '<span class="' + (order.resend_contact_synced ? 'done' : '') + '">Resend ' + (order.resend_contact_synced ? 'tagged' : 'pending') + '</span>'
           : '<span class="unpaid">No confirmed charge</span><span>Not sent to BookVault</span>';
         return '<div class="sales-order-row" data-sales-order-id="' + escapeHtml(order.id) + '">' +
-          '<time datetime="' + escapeHtml(order.created_at || '') + '">' + (isNaN(date.getTime()) ? '—' : date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })) + '</time>' +
+          '<time datetime="' + escapeHtml(order.created_at || '') + '">' + (isNaN(date.getTime()) ? '—' : date.toLocaleString('en-GB', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' })) + '</time>' +
           '<strong>#' + escapeHtml(String(order.id || '').slice(0, 8).toUpperCase()) + '<small>' + escapeHtml(order.country) + ' · ' + order.quantity + ' book' + (order.quantity === 1 ? '' : 's') + '</small></strong>' +
           '<div class="sales-order-state"><span class="sales-order-status ' + salesStatusTone(order.order_status) + '">' + escapeHtml(diagnosis.label) + '</span>' +
             (diagnosis.detail ? '<small>' + escapeHtml(diagnosis.detail) + '</small>' : '') + '</div>' +
@@ -553,7 +553,7 @@
         var date = new Date(refund.refunded_at);
         return '<article class="sales-refund-row" data-refund-id="' + escapeHtml(refund.id) + '">' +
           '<div class="sales-refund-top"><strong>#' + escapeHtml(String(refund.id || '').slice(0, 8).toUpperCase()) + '</strong>' +
-            '<time datetime="' + escapeHtml(refund.refunded_at || '') + '">' + (isNaN(date.getTime()) ? 'Date unavailable' : date.toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })) + '</time>' +
+            '<time datetime="' + escapeHtml(refund.refunded_at || '') + '">' + (isNaN(date.getTime()) ? 'Date unavailable' : date.toLocaleString('en-GB', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' })) + '</time>' +
             '<b>' + salesMoney(refund.total_price_cents, refund.currency) + '</b></div>' +
           '<p><span>Reason</span> <strong class="sales-refund-reason-text">' + escapeHtml(refund.reason || 'Reason not recorded') + '</strong></p>' +
           (refund.fulfillment_context ? '<small>Fulfillment context: ' + escapeHtml(refund.fulfillment_context) + '</small>' : '') +
@@ -581,8 +581,8 @@
         '<div><span>Paid, awaiting BookVault</span><strong>' + (payments.paid_awaiting_bookvault || 0) + '</strong></div>' +
         '<p>Stripe-paid orders are the sales ledger. A Pay-button click is only an attempt; a thank-you-page event can be missed.</p></section>';
       panelMain.innerHTML = '<div class="sales-dashboard">' +
-        '<header class="sales-dashboard-head"><div><div class="eyebrow">Live storefront database</div><h2>Sales Analytics</h2><p>Revenue, estimated gross profit, orders and fulfillment.</p></div>' +
-          '<div><span>Updated ' + new Date(data.generated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</span><button type="button" class="btn-secondary btn-tiny" id="salesRefresh">Refresh</button></div></header>' +
+        '<header class="sales-dashboard-head"><div><div class="eyebrow">Live storefront database · Bangkok time (UTC+7)</div><h2>Sales Analytics</h2><p>Revenue, estimated gross profit, orders and fulfillment.</p></div>' +
+          '<div><span>Updated ' + new Date(data.generated_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' }) + ' UTC+7</span><button type="button" class="btn-secondary btn-tiny" id="salesRefresh">Refresh</button></div></header>' +
         '<section class="sales-books-grid" aria-label="Books sold"><h3>Books sold</h3>' + bookCards + '</section>' +
         '<h3 class="sales-revenue-heading">Revenue and gross profit</h3>' +
         '<section class="sales-metric-grid">' + periodCards + '</section>' +
