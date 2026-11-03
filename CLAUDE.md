@@ -21529,3 +21529,6 @@ actual/current quoted shipping. That order preceded the UK/GBP quote fix in
 October owner test order. The current quote logic returned the correct
 Canadian $23.33 and matched the five later production orders; no new pricing
 logic defect was found. Neither historic order charge was modified.
+An owner alert email about the Canadian shortfall was sent. CI redeployed
+`rm-ops-service` successfully, and the authenticated monitor endpoint showed
+the first weekly audit as `watching` for 9 November 2026 at 09:00 UTC.
