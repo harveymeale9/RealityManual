@@ -350,10 +350,24 @@ function getSalesDashboard(db, nowValue, excludedIds, unseenOrderIds) {
     return { country: row.country || '—', orders: Number(row.orders) || 0, units: Number(row.units) || 0, revenue_cents: Number(row.revenue_cents) || 0 };
   });
 
+  const paymentRows = db.prepare(`
+    SELECT order_status, stripe_payment_status, payment_failure_type, payment_decline_code
+    FROM orders WHERE created_at >= ? AND created_at < ?${excluded.sql}
+  `).all(thirtyStart.toISOString(), end, ...excluded.ids);
+  const paymentOverview = {
+    paid: paymentRows.filter(function (row) { return row.order_status !== 'REFUNDED' && (row.stripe_payment_status === 'succeeded' || row.stripe_payment_status === 'paid'); }).length,
+    issuer_declined: paymentRows.filter(function (row) { return row.order_status === 'FAILED' && row.payment_failure_type === 'card_error' && !!row.payment_decline_code; }).length,
+    payment_other_failed: paymentRows.filter(function (row) { return row.order_status === 'FAILED' && !(row.payment_failure_type === 'card_error' && row.payment_decline_code); }).length,
+    paid_awaiting_bookvault: paymentRows.filter(function (row) {
+      return ['succeeded', 'paid'].includes(row.stripe_payment_status) && !['BOOKVAULT_ACCEPTED', 'SHIPPED', 'COMPLETE', 'REFUNDED'].includes(row.order_status);
+    }).length
+  };
+
   const recentOrderFields = `id, quantity, book_price_cents, shipping_price_cents, total_price_cents,
       bookvault_production_cost_gbp_cents, bookvault_shipping_cost_gbp_cents,
       bookvault_total_cost_gbp_cents, bookvault_total_cost_usd_cents, currency, country, order_status,
-      stripe_payment_status, shipping_service_name, bookvault_order_id,
+      stripe_payment_status, payment_failure_type, payment_failure_code, payment_decline_code,
+      payment_failure_message, fulfillment_last_error, shipping_service_name, bookvault_order_id,
       confirmation_email_sent_at, shipping_email_sent_at,
       resend_contact_synced_at, created_at, updated_at`;
   const newestRows = db.prepare(`
@@ -388,6 +402,11 @@ function getSalesDashboard(db, nowValue, excludedIds, unseenOrderIds) {
       country: row.country || '—',
       order_status: row.order_status,
       stripe_payment_status: row.stripe_payment_status,
+      payment_failure_type: row.payment_failure_type || '',
+      payment_failure_code: row.payment_failure_code || '',
+      payment_decline_code: row.payment_decline_code || '',
+      payment_failure_message: row.payment_failure_message || '',
+      fulfillment_issue: row.order_status === 'FULFILLMENT_RETRY' ? fulfillmentIssueSummary(row.fulfillment_last_error) : '',
       shipping_service_name: row.shipping_service_name,
       bookvault_order_id: row.bookvault_order_id,
       confirmation_email_sent: !!row.confirmation_email_sent_at,
@@ -445,6 +464,7 @@ function getSalesDashboard(db, nowValue, excludedIds, unseenOrderIds) {
     },
     daily: daily,
     countries: countries,
+    payment_overview: paymentOverview,
     recent_orders: recentOrders,
     recent_refunds: recentRefunds,
     excluded_orders: excludedOrders

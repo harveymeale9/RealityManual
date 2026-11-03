@@ -21674,3 +21674,12 @@ funnel labels now call out Pay clicks and thank-you-page events as browser
 signals, not payment counts. Existing failed rows can be backfilled from
 their Stripe PaymentIntents after the schema migration. Backend and ops
 tests cover persistence, clearing, reporting and privacy-safe output.
+
+Before the backend deployment, an online SQLite backup was saved to
+`/root/realitymanual-backend-data/reality-manual-pre-payment-diagnosis-20261103.sqlite`
+and passed `PRAGMA integrity_check`. The rebuilt backend retained its
+existing env and persistent data mount. After migration, the two existing
+`FAILED` rows were backfilled directly from their current Stripe
+PaymentIntents: both `card_error` / `try_again_later`. A post-deploy query
+confirmed six live `succeeded` + `BOOKVAULT_ACCEPTED` orders and two live
+`requires_payment_method` + `FAILED` orders in the period.

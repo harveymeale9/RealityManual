@@ -385,9 +385,35 @@
 
   function salesStatusTone(status) {
     if (['BOOKVAULT_ACCEPTED', 'SHIPPED', 'COMPLETE'].indexOf(status) !== -1) return 'good';
-    if (status === 'REFUNDED' || status === 'PAYMENT_FAILED') return 'bad';
+    if (status === 'REFUNDED' || status === 'PAYMENT_FAILED' || status === 'FAILED') return 'bad';
     if (status === 'FULFILLMENT_RETRY') return 'warn';
     return 'pending';
+  }
+
+  function salesPaymentDiagnosis(order) {
+    if (order.order_status === 'FAILED') {
+      if (order.payment_failure_type === 'card_error' && order.payment_decline_code) {
+        var reason = order.payment_decline_code === 'try_again_later' ? 'Bank says try again later' :
+          order.payment_decline_code === 'insufficient_funds' ? 'Bank reported insufficient funds' :
+          'Bank/card decline: ' + order.payment_decline_code.replace(/_/g, ' ');
+        return { label: 'Issuer declined', detail: reason + '. No charge; not sent to BookVault.' };
+      }
+      if (['api_error', 'invalid_request_error', 'idempotency_error'].indexOf(order.payment_failure_type) !== -1) {
+        return { label: 'Payment system error', detail: 'Our payment integration or Stripe needs investigation. No confirmed charge.' };
+      }
+      return { label: 'Payment not completed', detail: 'Stripe did not confirm payment. Reason unavailable; no BookVault order.' };
+    }
+    if (order.order_status === 'FULFILLMENT_RETRY') {
+      return { label: 'Fulfillment retry', detail: 'Payment succeeded. Our BookVault submission is retrying.' +
+        (order.fulfillment_issue ? ' ' + order.fulfillment_issue + '.' : '') };
+    }
+    if (order.order_status === 'PAYMENT_PENDING') {
+      return { label: 'Checkout not paid', detail: 'Payment was not confirmed. This is a quote, not a sale.' };
+    }
+    if (order.order_status === 'PAYMENT_PROCESSING') {
+      return { label: 'Payment processing', detail: 'Stripe has not confirmed funds yet; BookVault is waiting.' };
+    }
+    return { label: salesStatusLabel(order.order_status), detail: '' };
   }
 
   function salesConversion(orders, analytics, step) {
@@ -484,16 +510,19 @@
       var recentOrders = data.recent_orders.length ? data.recent_orders.map(function (order) {
         var date = new Date(order.created_at);
         var paymentSettled = ['succeeded', 'paid'].indexOf(order.stripe_payment_status) !== -1;
+        var diagnosis = salesPaymentDiagnosis(order);
         var operations = paymentSettled
           ? '<span class="' + (order.bookvault_order_id ? 'done' : '') + '">BookVault ' + (order.bookvault_order_id ? 'accepted' : 'pending') + '</span>' +
             '<span class="' + (order.confirmation_email_sent ? 'done' : '') + '">Email ' + (order.confirmation_email_sent ? 'sent' : 'pending') + '</span>' +
             '<span class="' + (order.resend_contact_synced ? 'done' : '') + '">Resend ' + (order.resend_contact_synced ? 'tagged' : 'pending') + '</span>'
-          : '<span>Awaiting payment</span>';
+          : '<span class="unpaid">No confirmed charge</span><span>Not sent to BookVault</span>';
         return '<div class="sales-order-row" data-sales-order-id="' + escapeHtml(order.id) + '">' +
           '<time datetime="' + escapeHtml(order.created_at || '') + '">' + (isNaN(date.getTime()) ? '—' : date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })) + '</time>' +
           '<strong>#' + escapeHtml(String(order.id || '').slice(0, 8).toUpperCase()) + '<small>' + escapeHtml(order.country) + ' · ' + order.quantity + ' book' + (order.quantity === 1 ? '' : 's') + '</small></strong>' +
-          '<span class="sales-order-status ' + salesStatusTone(order.order_status) + '">' + escapeHtml(salesStatusLabel(order.order_status)) + '</span>' +
-          '<div class="sales-order-price"><b>' + salesMoney(order.total_price_cents, order.currency) + '</b>' +
+          '<div class="sales-order-state"><span class="sales-order-status ' + salesStatusTone(order.order_status) + '">' + escapeHtml(diagnosis.label) + '</span>' +
+            (diagnosis.detail ? '<small>' + escapeHtml(diagnosis.detail) + '</small>' : '') + '</div>' +
+          '<div class="sales-order-price"><b>' + (paymentSettled ? salesMoney(order.total_price_cents, order.currency) :
+            '$0 charged · ' + salesMoney(order.total_price_cents, order.currency) + ' quote') + '</b>' +
             '<small>Book ' + salesMoney(order.book_subtotal_cents, order.currency) + ' · Shipping ' + salesMoney(order.shipping_price_cents, order.currency) + '</small>' +
             (paymentSettled ? '<small class="sales-order-profit">Est. gross profit ' +
               (order.gross_profit_cents === null ? 'pending cost' : salesMoney(order.gross_profit_cents, order.currency)) + '</small>' : '') +
@@ -528,6 +557,13 @@
       }).join('');
 
       var thirty = data.periods.last_30_days;
+      var payments = data.payment_overview || {};
+      var paymentOverview = '<section class="sales-payment-overview" aria-label="Payment and fulfillment status, last 30 days">' +
+        '<div><span>Stripe-paid orders</span><strong>' + (payments.paid || 0) + '</strong></div>' +
+        '<div><span>Issuer declines</span><strong>' + (payments.issuer_declined || 0) + '</strong></div>' +
+        '<div><span>Other payment failures</span><strong>' + (payments.payment_other_failed || 0) + '</strong></div>' +
+        '<div><span>Paid, awaiting BookVault</span><strong>' + (payments.paid_awaiting_bookvault || 0) + '</strong></div>' +
+        '<p>Stripe-paid orders are the sales ledger. A Pay-button click is only an attempt; a thank-you-page event can be missed.</p></section>';
       panelMain.innerHTML = '<div class="sales-dashboard">' +
         '<header class="sales-dashboard-head"><div><div class="eyebrow">Live storefront database</div><h2>Sales Analytics</h2><p>Revenue, estimated gross profit, orders and fulfillment.</p></div>' +
           '<div><span>Updated ' + new Date(data.generated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</span><button type="button" class="btn-secondary btn-tiny" id="salesRefresh">Refresh</button></div></header>' +
@@ -538,6 +574,7 @@
           '<article><span>Landing → order</span><strong>' + salesConversion(thirty.paid_orders, analytics, 'landing_page_view') + '</strong><small>verified visits</small></article>' +
           '<article><span>Checkout → order</span><strong>' + salesConversion(thirty.paid_orders, analytics, 'checkout_view') + '</strong><small>verified visits</small></article>' +
         '</section>' +
+        paymentOverview +
         emailHealthHtml(emailHealth, mailboxStatus) +
         '<div class="sales-dashboard-columns"><section class="sales-block sales-chart-block"><div class="sales-block-head"><div><span>Estimated gross profit</span><h3>Last 30 days</h3></div><b>' + salesProfit(thirty) + '</b></div><div class="sales-chart">' + chart + '</div><p class="sales-profit-note">Revenue minus actual BookVault production, shipping, tax and other order costs, converted at a saved reference FX rate. Excludes Stripe and bank fees. ' +
           (thirty.profit_pending_orders ? thirty.profit_pending_orders + ' paid order' + (thirty.profit_pending_orders === 1 ? '' : 's') + ' awaiting BookVault cost.' : '') + '</p></section>' +
@@ -695,8 +732,8 @@
           checkout_arrival_final: 'Checkout reached from final CTA',
           checkout_view: 'Checkout page viewed',
           checkout_started: 'Checkout form engaged',
-          payment_submitted: 'Payment submitted',
-          order_complete: 'Order completed',
+          payment_submitted: 'Pay clicked (not necessarily paid)',
+          order_complete: 'Thank-you page tracked (not all sales)',
           order_refunded: 'Order refunded',
           order_failed: 'Order failed'
         };
@@ -734,6 +771,7 @@
             '<div class="funnel-section">' +
               '<div class="eyebrow">Funnel — last 30 days</div>' +
               '<div class="funnel-list">' + funnelRows + '</div>' +
+              '<p class="analytics-definition">These are browser events, not Stripe payment totals. Check Sales Analytics for confirmed payments, issuer declines and BookVault status.</p>' +
               (refundedOrders ? '<a class="analytics-internal-link" href="#sales-analytics">View refunded orders and reasons in Sales Analytics</a>' : '') +
             '</div>' +
             referralBreakdownHtml(data.referrals) +

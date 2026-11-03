@@ -149,7 +149,7 @@ test('both analytics views show the nested source-and-video referral chart', fun
   assert.match(app, /referralBreakdownHtml\(website\.referrals\)/);
   assert.match(app, /conic-gradient\(/);
   assert.match(app, /segment\.piece_title/);
-  assert.match(page, /style\.css\?v=20261103-email-health/);
+  assert.match(page, /style\.css\?v=20261103-payment-diagnosis/);
 });
 
 test('email health card separates Resend outcomes from ops inbox connectivity', function () {
@@ -226,6 +226,7 @@ test('sales dashboard returns live periods, a filled daily series and privacy-sa
       bookvault_production_cost_gbp_cents INTEGER, bookvault_shipping_cost_gbp_cents INTEGER,
       bookvault_total_cost_gbp_cents INTEGER, bookvault_total_cost_usd_cents INTEGER,
       total_price_cents INTEGER, currency TEXT, country TEXT, shipping_service_name TEXT,
+      payment_failure_type TEXT, payment_failure_code TEXT, payment_decline_code TEXT, payment_failure_message TEXT,
       bookvault_order_id TEXT, confirmation_email_sent_at TEXT, shipping_email_sent_at TEXT,
       resend_contact_synced_at TEXT, created_at TEXT, updated_at TEXT,
       customer_name TEXT, email TEXT, street1 TEXT, fulfillment_last_error TEXT
@@ -237,6 +238,8 @@ test('sales dashboard returns live periods, a filled daily series and privacy-sa
   order.run('paid-2','SHIPPED','succeeded',1,7100,'usd','US','Standard','BV-2','2026-10-10T08:03:00.000Z','2026-10-10T09:00:00.000Z','2026-10-10T08:04:00.000Z','2026-10-10T08:00:00.000Z','2026-10-10T09:00:00.000Z','Private Person','private@example.com','Secret street',null);
   order.run('refund','REFUNDED','succeeded',1,7100,'usd','US','Standard',null,null,null,null,'2026-10-08T08:00:00.000Z','2026-10-10T09:30:00.000Z','Private Person','private@example.com','Secret street','Title inactive; insufficient funds; customs declaration required; private@example.com');
   order.run('pending','PAYMENT_PENDING','requires_payment_method',1,7100,'usd','US','Standard',null,null,null,null,'2026-10-10T09:00:00.000Z','2026-10-10T09:00:00.000Z','Private Person','private@example.com','Secret street',null);
+  order.run('declined','FAILED','requires_payment_method',1,8327,'usd','US','Standard',null,null,null,null,'2026-10-10T08:30:00.000Z','2026-10-10T08:30:00.000Z','Private Person','private@example.com','Secret street',null);
+  db.prepare('UPDATE orders SET payment_failure_type = ?, payment_failure_code = ?, payment_decline_code = ?, payment_failure_message = ? WHERE id = ?').run('card_error', 'card_declined', 'try_again_later', 'Your card was declined.', 'declined');
   db.prepare('UPDATE orders SET book_price_cents = ?, shipping_price_cents = ? WHERE id = ?').run(6500, 1200, 'paid-1');
   db.prepare('UPDATE orders SET bookvault_production_cost_gbp_cents = ?, bookvault_shipping_cost_gbp_cents = ?, bookvault_total_cost_gbp_cents = ?, bookvault_total_cost_usd_cents = ? WHERE id = ?').run(1977, 1750, 3727, 5000, 'paid-1');
 
@@ -255,9 +258,11 @@ test('sales dashboard returns live periods, a filled daily series and privacy-sa
   assert.equal(dashboard.periods.today.refunded_orders, 1);
   assert.equal(dashboard.daily.length, 30);
   assert.deepEqual(dashboard.countries[0], { country: 'GB', orders: 1, units: 2, revenue_cents: 14200 });
-  assert.equal(dashboard.recent_orders.length, 4);
+  assert.equal(dashboard.recent_orders.length, 5);
   assert.equal(dashboard.recent_orders[0].id, 'pending');
-  assert.equal(dashboard.recent_orders[1].shipping_email_sent, true);
+  assert.equal(dashboard.recent_orders.find((item) => item.id === 'paid-2').shipping_email_sent, true);
+  assert.deepEqual(dashboard.payment_overview, { paid: 2, issuer_declined: 1, payment_other_failed: 0, paid_awaiting_bookvault: 0 });
+  assert.equal(dashboard.recent_orders.find((item) => item.id === 'declined').payment_decline_code, 'try_again_later');
   assert.equal(dashboard.recent_orders.find((item) => item.id === 'paid-1').book_subtotal_cents, 13000);
   assert.equal(dashboard.recent_orders.find((item) => item.id === 'paid-1').shipping_price_cents, 1200);
   assert.equal(dashboard.recent_orders.find((item) => item.id === 'paid-1').gross_profit_cents, 9200);
@@ -292,6 +297,7 @@ test('owner test-order exclusions remove paid and refunded orders from sales rep
       bookvault_production_cost_gbp_cents INTEGER, bookvault_shipping_cost_gbp_cents INTEGER,
       bookvault_total_cost_gbp_cents INTEGER, bookvault_total_cost_usd_cents INTEGER,
       total_price_cents INTEGER, currency TEXT, country TEXT, shipping_service_name TEXT,
+      payment_failure_type TEXT, payment_failure_code TEXT, payment_decline_code TEXT, payment_failure_message TEXT,
       bookvault_order_id TEXT, confirmation_email_sent_at TEXT, shipping_email_sent_at TEXT,
       resend_contact_synced_at TEXT, created_at TEXT, updated_at TEXT,
       fulfillment_last_error TEXT
