@@ -22,6 +22,19 @@ test('Buffer day pauses and changed slots remain authoritative', function () {
   assert.equal(schedule.nextBangkokSlot(Date.parse('2026-09-27T18:00:00Z'), custom), '2026-09-28T18:30:00.000Z');
 });
 
+test('Monday and Thursday Buffer slots are the only shared short-form release times', function () {
+  const custom = daily(['01:54']);
+  custom.forEach(function (day) { day.paused = !['mon', 'thu'].includes(day.day); });
+  custom.find(function (day) { return day.day === 'thu'; }).times = ['01:51'];
+  assert.deepEqual(schedule.nextAvailableBangkokSlots(Date.parse('2026-11-03T04:00:00Z'), custom, [], 3), [
+    '2026-11-04T18:51:00.000Z',
+    '2026-11-08T18:54:00.000Z',
+    '2026-11-11T18:51:00.000Z'
+  ]);
+  custom.forEach(function (day) { day.paused = true; });
+  assert.throws(function () { schedule.nextBangkokSlot(Date.parse('2026-11-03T04:00:00Z'), custom); }, /No active short-form posting slot/);
+});
+
 test('missing Buffer schedule safely falls back to two daily GMT+7 slots', function () {
   assert.equal(schedule.nextBangkokSlot(Date.parse('2026-09-28T06:00:00Z'), []), '2026-09-28T17:00:00.000Z');
   assert.equal(schedule.isShortform({ contentType: 'short' }), true);

@@ -43,6 +43,9 @@ function nextBangkokSlot(after, postingSchedule) {
   const afterMs = after instanceof Date ? after.getTime() : Number(after);
   if (!Number.isFinite(afterMs)) throw new Error('A valid starting time is required.');
   const configured = scheduleMap(postingSchedule);
+  if (Array.isArray(postingSchedule) && postingSchedule.length && !Object.keys(configured).length) {
+    throw new Error('No active short-form posting slot is available in Buffer.');
+  }
   const schedule = Object.keys(configured).length ? configured : fallbackSchedule();
   const localAfter = new Date(afterMs + BANGKOK_OFFSET_MS);
   const localMidnight = Date.UTC(localAfter.getUTCFullYear(), localAfter.getUTCMonth(), localAfter.getUTCDate());

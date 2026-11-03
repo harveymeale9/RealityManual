@@ -6088,7 +6088,7 @@
         '<p class="settings-hint">Approved videos wait naturally in Publishing Queue. When the next slot is available, the scheduler chooses the best short-form or long-form video using topic separation, format variety and age.</p>' +
         '<div class="tiktok-schedule-block shortform-mirror-block">' +
           '<div class="cadence-label">Shared short-form schedule</div>' +
-          '<div class="shortform-schedule-summary" id="directShortScheduleSummary">12:00 AM · 12:00 PM daily (Asia/Bangkok)</div>' +
+          '<div class="shortform-schedule-summary" id="directShortScheduleSummary">Checking Buffer schedule…</div>' +
           '<p class="settings-hint tiktok-schedule-note">YouTube Shorts, Instagram and Facebook automatically mirror the TikTok queue slot assigned by Buffer.</p>' +
         '</div>' +
         '<div class="cadence-grid" id="cadenceGrid"></div>' +
@@ -6305,10 +6305,9 @@
         }
         if (s.connected) {
           var activeDays = s.channel && s.channel.postingSchedule ? s.channel.postingSchedule.filter(function (day) { return !day.paused; }) : [];
-          var slotCounts = activeDays.map(function (day) { return (day.times || []).length; });
-          var uniformSlots = slotCounts.length && slotCounts.every(function (count) { return count === slotCounts[0]; }) ? slotCounts[0] : null;
-          var scheduleNote = uniformSlots !== null
-            ? ' Queue: ' + uniformSlots + ' post' + (uniformSlots === 1 ? '' : 's') + '/day' + (s.channel.timezone ? ' (' + s.channel.timezone + ')' : '') + '.'
+          var weeklySlots = activeDays.reduce(function (count, day) { return count + (day.times || []).length; }, 0);
+          var scheduleNote = s.channel && s.channel.postingSchedule && s.channel.postingSchedule.length
+            ? ' Queue: ' + weeklySlots + ' post' + (weeklySlots === 1 ? '' : 's') + '/week' + (s.channel.timezone ? ' (' + s.channel.timezone + ')' : '') + '.'
             : ' Queue schedule is configured in Buffer.';
           var insightsNote = s.channel && s.channel.canViewInsights ? ' Performance tracking active.' : '';
           statusEl.textContent = 'Buffer can schedule to ' + ((s.channel && s.channel.displayName) || 'the connected TikTok channel') +
@@ -6331,7 +6330,7 @@
     var days = status && status.connected && status.channel ? (status.channel.postingSchedule || []) : [];
     if (!days.length) {
       grid.innerHTML = '<span class="ink-faint">Buffer schedule unavailable.</span>';
-      if (directSummary) directSummary.textContent = '12:00 AM · 12:00 PM daily (Asia/Bangkok fallback)';
+      if (directSummary) directSummary.textContent = 'Buffer schedule unavailable; new shorts wait for its active slots.';
       return;
     }
     var labels = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' };
@@ -6342,13 +6341,12 @@
     }).join('') + '<div class="tiktok-schedule-zone">Timezone: ' + escapeHtml(status.channel.timezone || 'Buffer account') + '</div>';
     if (directSummary) {
       var active = days.filter(function (day) { return !day.paused; });
-      var firstTimes = active.length ? (active[0].times || []) : [];
-      var uniform = active.length && active.every(function (day) {
-        return JSON.stringify(day.times || []) === JSON.stringify(firstTimes);
+      var activeSlots = active.flatMap(function (day) {
+        return (day.times || []).map(function (time) { return (labels[day.day] || day.day) + ' ' + time; });
       });
-      directSummary.textContent = uniform
-        ? firstTimes.join(' · ') + ' daily (' + (status.channel.timezone || 'Buffer timezone') + ')'
-        : 'Mirrors each day’s Buffer slots (' + (status.channel.timezone || 'Buffer timezone') + ')';
+      directSummary.textContent = activeSlots.length
+        ? activeSlots.join(' · ') + ' (' + (status.channel.timezone || 'Buffer timezone') + ')'
+        : 'No active Buffer slots; new shorts will wait.';
     }
   }
 

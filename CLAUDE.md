@@ -21742,3 +21742,24 @@ This change is deliberately limited to Sales Analytics. Website traffic's
 historical compacted rows and third-party content-platform snapshots are
 stored as UTC daily totals; they cannot be relabeled as UTC+7 without
 misrepresenting the already-aggregated data. Their UTC labels remain visible.
+
+## Twice-weekly Buffer short-form cadence (2026-11-03)
+
+Harvey changed the connected TikTok Buffer posting calendar to Monday 01:54
+and Thursday 01:51 Asia/Bangkok, with every other day paused. A live read
+confirmed those exact slots and five shorts still in Publishing Queue, with
+no short already Scheduled at an obsolete time. The coordinated publisher
+already schedules TikTok via Buffer and persists Buffer's returned `dueAt`
+for YouTube Shorts, Instagram and Facebook, so there is no separate direct-
+platform cadence to edit. The next slot from the current Tuesday is Thursday
+5 November at 01:51 Bangkok time.
+
+Settings now lists the actual active days/times in the shared short-form
+summary and reports posts per week rather than the misleading old posts-per-
+day label. It no longer displays the obsolete midnight/noon daily fallback
+when Buffer cannot be read. If Buffer returns a nonempty calendar with every
+day paused, the slot calculator now refuses to schedule rather than silently
+falling back to daily slots. The existing six-hour publishing calendar cache
+and one-hour Buffer channel cache remain in place to protect the scarce Buffer
+API quota; a changed Buffer calendar can take up to six hours to be picked up
+by the worker. The next actual slot is more than six hours away.
