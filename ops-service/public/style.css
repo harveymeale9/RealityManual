@@ -2573,6 +2573,27 @@ body.role-reviewer #pmBackFab {
 .sales-dashboard-head h2 { margin: 5px 0 7px; font: 600 clamp(1.9rem,3vw,2.7rem)/1 var(--font-display); }
 .sales-dashboard-head p { margin: 0; color: var(--ink-soft); font-size: .82rem; }
 .sales-dashboard-head > div:last-child { display: flex; align-items: center; gap: 10px; color: var(--ink-faint); font: .66rem var(--font-mono); white-space: nowrap; }
+.website-health { margin: 18px 0; padding: 20px; border: 1px solid var(--border); border-radius: 10px; background: rgba(8,18,12,.94); }
+.website-health-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.website-health h3 { margin: 5px 0 0; font: 600 1.6rem var(--font-display); }
+.website-health-level { padding: 6px 10px; border-radius: 999px; font: 700 .78rem var(--font-body); white-space: nowrap; }
+.website-health-level.healthy { color: #6cf29d; background: #113b24; }
+.website-health-level.degraded,.website-health-level.unknown { color: #f6d78c; background: #443717; }
+.website-health-level.down { color: #ff9c9c; background: #482020; }
+.website-health-summary { display: flex; align-items: baseline; gap: 12px; margin: 16px 0; }
+.website-health-summary strong { color: var(--accent); font: 600 clamp(2.2rem,5vw,3.8rem)/1 var(--font-display); }
+.website-health-summary span,.website-health > p { color: var(--ink-soft); font-size: .75rem; }
+.website-health-incidents { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: 8px; }
+.website-health-incidents > div { padding: 10px; border: 1px solid var(--border-soft); border-radius: 6px; }
+.website-health-incidents span,.website-health-targets span { display: block; color: var(--ink-soft); font-size: .7rem; }
+.website-health-incidents strong { display: block; margin-top: 5px; color: var(--ink); font: 600 1.3rem var(--font-display); }
+.website-health-targets { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 8px; margin-top: 18px; }
+.website-health-targets h4 { grid-column: 1 / -1; margin: 0; font-size: .83rem; }
+.website-health-targets > div { padding: 8px 0; border-top: 1px solid var(--border-soft); }
+.website-health-targets strong { display: block; margin-top: 5px; font-size: .75rem; }
+.website-health-targets strong.good { color: #6cf29d; }
+.website-health-targets strong.bad { color: #ff9c9c; }
+.website-health > p { margin: 12px 0 0; line-height: 1.45; }
 .sales-books-grid { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 10px; margin-bottom: 22px; }
 .sales-books-grid h3 { grid-column: 1 / -1; margin: 0 0 2px; color: var(--ink); font: 600 1.25rem var(--font-display); }
 .sales-books-card { min-width: 0; padding: 20px 18px; border: 1px solid rgba(44,224,125,.48); border-radius: 10px; background: linear-gradient(145deg,rgba(15,38,24,.98),rgba(7,19,13,.98)); }
@@ -2688,6 +2709,8 @@ body.role-reviewer #pmBackFab {
 .sales-empty-orders span { line-height: 1.5; }
 
 @media (max-width: 900px) {
+  .website-health-incidents { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .website-health-targets { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .sales-email-health-grid { grid-template-columns: 1fr; }
   .sales-email-health-grid > div { border-right: 0; border-bottom: 1px solid var(--border-soft); }
   .sales-email-health-grid > div:last-child { border-bottom: 0; }
@@ -2697,6 +2720,8 @@ body.role-reviewer #pmBackFab {
   .sales-order-list { overflow-x: auto; }
 }
 @media (max-width: 600px) {
+  .website-health { padding: 16px 12px; }
+  .website-health-incidents { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .sales-dashboard { padding: 18px 12px 80px; }
   .sales-dashboard-head { align-items: flex-start; }
   .sales-dashboard-head p,.sales-dashboard-head > div:last-child > span { display: none; }

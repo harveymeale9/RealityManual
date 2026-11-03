@@ -45,7 +45,7 @@
     <section class="home2-hero video-card home2-hero__video" id="video-card" aria-labelledby="home2-video-title">
       <img class="home2-hero__image" src="img/photo/reality-manual-open-book-spread.jpg" alt="The Reality Manual open to a spread and handled with white archival gloves" width="3759" height="1808" fetchpriority="high" />
       <div class="home2-hero__shade" aria-hidden="true"></div>
-      <video class="vsl-player" id="vsl-player" src="https://api.realitymanual.com/media/reality-manual-vsl-1080p.mp4" preload="auto" playsinline webkit-playsinline aria-label="What is The Reality Manual?"></video>
+      <video class="vsl-player" id="vsl-player" src="https://api.realitymanual.com/media/reality-manual-vsl-1080p.mp4" preload="none" playsinline webkit-playsinline aria-label="What is The Reality Manual?"></video>
       <div class="video-inner">
         <p class="eyebrow">Watch the Video</p>
         <h2 id="home2-video-title">What is The Reality Manual?</h2>
@@ -105,26 +105,26 @@
         <div class="inside-grid">
           <figure class="page-card">
             <div class="page-card-media">
-              <img src="img/photo/home2-interiors/reality-manual-five-axes.png" alt="The five axes of belief, oneness, expansion, freedom, and desire inside The Reality Manual" loading="lazy" decoding="async" />
+              <img src="img/photo/home2-interiors/reality-manual-five-axes.webp" alt="The five axes of belief, oneness, expansion, freedom, and desire inside The Reality Manual" loading="lazy" decoding="async" />
             </div>
             <figcaption>The Objective of Life</figcaption>
           </figure>
           <figure class="page-card">
             <div class="page-card-media">
-              <img src="img/photo/home2-interiors/reality-manual-internal-value.png" alt="Rule I, the Rule of Internal Value, inside The Reality Manual" loading="lazy" decoding="async" />
+              <img src="img/photo/home2-interiors/reality-manual-internal-value.webp" alt="Rule I, the Rule of Internal Value, inside The Reality Manual" loading="lazy" decoding="async" />
             </div>
             <figcaption>The 14 Rules of Reality</figcaption>
           </figure>
           <figure class="page-card">
             <div class="page-card-media">
-              <img src="img/photo/home2-interiors/reality-manual-advanced-techniques-omnipresence.png" alt="The omnipresence framework and celestial illustration inside The Reality Manual" loading="lazy" decoding="async" />
+              <img src="img/photo/home2-interiors/reality-manual-advanced-techniques-omnipresence.webp" alt="The omnipresence framework and celestial illustration inside The Reality Manual" loading="lazy" decoding="async" />
             </div>
             <figcaption>Life Strategy</figcaption>
           </figure>
 
           <figure class="page-card">
             <div class="page-card-media">
-              <img src="img/photo/home2-interiors/reality-manual-indirect-pursuit-objective.png" alt="The indirect pursuit of the objective inside The Reality Manual" loading="lazy" decoding="async" />
+              <img src="img/photo/home2-interiors/reality-manual-indirect-pursuit-objective.webp" alt="The indirect pursuit of the objective inside The Reality Manual" loading="lazy" decoding="async" />
             </div>
             <figcaption>Advanced Techniques</figcaption>
           </figure>
@@ -289,9 +289,7 @@
       requestAnimationFrame(function () { videoCard.classList.remove('is-starting'); });
     });
     videoPlayer.addEventListener('error', function () { videoCard.classList.remove('is-starting'); });
-    // Explicit load starts the ranged media request while the visitor reads
-    // the page, instead of waiting for their tap to establish the connection.
-    videoPlayer.load();
+    // Keep the 80 MB video idle until Play; the image above is the preview.
     document.getElementById('play-btn').addEventListener('click', function () {
       if (videoCard.classList.contains('has-video')) return;
       videoCard.classList.add('has-video', 'is-starting');

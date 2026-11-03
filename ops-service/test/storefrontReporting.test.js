@@ -149,7 +149,7 @@ test('both analytics views show the nested source-and-video referral chart', fun
   assert.match(app, /referralBreakdownHtml\(website\.referrals\)/);
   assert.match(app, /conic-gradient\(/);
   assert.match(app, /segment\.piece_title/);
-  assert.match(page, /style\.css\?v=20261103-sales-books/);
+  assert.match(page, /style\.css\?v=20261103-website-health/);
 });
 
 test('email health card separates Resend outcomes from ops inbox connectivity', function () {

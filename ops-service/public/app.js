@@ -712,6 +712,31 @@
     '</section>';
   }
 
+  function websiteHealthHtml(health) {
+    if (!health) return '<section class="website-health"><h3>Website health</h3><p>Health checks are temporarily unavailable.</p></section>';
+    var level = health.level || 'unknown';
+    var title = level === 'healthy' ? 'Healthy' : level === 'down' ? 'Site or checkout down' : level === 'degraded' ? 'Needs attention' : 'Checking';
+    var counts = health.incidents || {};
+    var incidents = [
+      ['403s', counts.http_403 || 0], ['404s', counts.http_404 || 0],
+      ['5xx errors', counts.http_5xx || 0], ['Timeouts', counts.timeout || 0],
+      ['Network errors', counts.network_error || 0], ['Other HTTP', counts.other_http || 0]
+    ].map(function (item) { return '<div><span>' + item[0] + '</span><strong>' + item[1] + '</strong></div>'; }).join('');
+    var targets = (health.latest || []).map(function (row) {
+      var result = row.result === 'ok' ? 'OK · ' + row.duration_ms + ' ms' :
+        row.result === 'http_error' ? 'HTTP ' + row.http_status : row.result.replace(/_/g, ' ');
+      return '<div><span>' + escapeHtml(row.label) + '</span><strong class="' + (row.result === 'ok' ? 'good' : 'bad') + '">' + escapeHtml(result) + '</strong></div>';
+    }).join('');
+    return '<section class="website-health" aria-label="Website health checks">' +
+      '<div class="website-health-head"><div><span class="eyebrow">Availability · last 24 hours</span><h3>Website health</h3></div>' +
+      '<strong class="website-health-level ' + escapeHtml(level) + '">' + title + '</strong></div>' +
+      '<div class="website-health-summary"><strong>' + (health.availability_24h_pct == null ? '—' : Number(health.availability_24h_pct).toFixed(1) + '%') +
+      '</strong><span>successful checks · ' + (health.successful_checks || 0) + ' / ' + (health.total_checks || 0) + '</span></div>' +
+      '<div class="website-health-incidents">' + incidents + '</div>' +
+      '<div class="website-health-targets"><h4>Latest checks</h4>' + targets + '</div>' +
+      '<p>' + escapeHtml(health.definition || '') + '</p></section>';
+  }
+
   function renderWebsiteAnalytics() {
     panelMain.innerHTML = '<div class="tab-placeholder wide"><div class="eyebrow">Loading…</div><h2>Website Analytics</h2></div>';
     Promise.all([
@@ -725,6 +750,9 @@
         .catch(function () { return null; }),
       fetch('/api/reports/youtube-clickthrough', { credentials: 'include' })
         .then(function (res) { return res.ok ? res.json() : null; })
+        .catch(function () { return null; }),
+      fetch('/api/reports/website-health', { credentials: 'include' })
+        .then(function (res) { return res.ok ? res.json() : null; })
         .catch(function () { return null; })
     ])
       .then(function (results) {
@@ -733,6 +761,7 @@
         var sales = results[1];
         var traffic = results[2];
         var youtubeClickthrough = results[3];
+        var health = results[4];
 
         var funnelLabels = {
           page_view: 'Page viewed',
@@ -775,6 +804,7 @@
                 '<div class="overview-tile-stat"><span class="n">' + data.last_30_days.page_views + '</span> page views</div>' +
                 '<div class="overview-tile-sub">' + data.last_30_days.unique_visitors + ' verified daily visits</div></div>' +
             '</div>' +
+            websiteHealthHtml(health) +
             youtubeClickthroughHtml(youtubeClickthrough) +
             websiteTrafficHtml(traffic) +
             '<div class="funnel-section"><div class="eyebrow">What is counted</div>' +

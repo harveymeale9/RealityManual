@@ -28,6 +28,7 @@ const mailboxService = require('./src/mailboxService');
 const namecheapMailbox = require('./src/namecheapMailbox');
 const mailTriageService = require('./src/mailTriageService');
 const storefrontReporting = require('./src/storefrontReporting');
+const websiteHealthMonitor = require('./src/websiteHealthMonitor');
 const weeklyReportService = require('./src/weeklyReportService');
 const weeklyShippingAuditSchedule = require('./src/weeklyShippingAuditSchedule');
 const diskMonitorService = require('./src/diskMonitorService');
@@ -1672,6 +1673,11 @@ app.get('/api/reports/website-traffic', requireAuth, function (req, res) {
     console.error('Website traffic read failed:', error.message);
     res.status(503).json({ error: 'website_traffic_unavailable' });
   }
+});
+const websiteHealth = websiteHealthMonitor.setup(db);
+websiteHealth.start();
+app.get('/api/reports/website-health', requireAuth, function (req, res) {
+  res.set('Cache-Control', 'no-store').json(websiteHealth.status());
 });
 app.get('/api/reports/website-summary', requireAuth, function (req, res) {
   try {

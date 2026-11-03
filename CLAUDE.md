@@ -21703,3 +21703,24 @@ the first sale count in the denominator. All five respect the owner test-order
 exclusions and the existing refund filter. The prior monetary cards remain
 below under a separate revenue heading. Reporting tests cover yesterday,
 monthly averaging across months, and no background redraw timer.
+
+## Website health checks and storefront media delivery (2026-11-03)
+
+Website Analytics now includes a synthetic health panel backed by the ops
+service's `website_health_checks` SQLite table. Every five minutes it checks
+the public homepage, checkout, store API `/health`, hero image, and a one-byte
+range of the homepage video, each with an eight-second deadline. It shows
+the latest result and latency for each target, 24-hour check availability,
+and failed-check counts for 403, 404, 5xx, other HTTP, timeouts, and network
+errors. Rows older than 30 days are pruned. The panel and API explicitly
+identify these as synthetic checks, not totals for every visitor request;
+an unobserved path returning 404 cannot be inferred from this monitor.
+
+The four interior page images used on the storefront homepage were converted
+from PNG (about 7.4 MB total) to WebP (about 0.64 MB total), with their
+original files retained. The 80 MB VSL no longer preloads before a visitor
+presses Play. A browser test confirmed no video request before Play. Live
+delivery checks found the GitHub Pages/Fastly images returning `max-age=600`
+and cache HIT, and the API-hosted video returning byte ranges with
+`Cache-Control: public, max-age=604800, immutable`. Those existing cache
+headers are server/CDN policy rather than headers this page can override.
