@@ -52,6 +52,7 @@ router.post('/stripe', express.raw({ type: 'application/json' }), (req, res) => 
       case 'payment_intent.payment_failed': {
         const pi = event.data.object;
         orderService.updateStatusByPaymentIntentId(pi.id, 'FAILED', pi.status, event.livemode);
+        orderService.recordPaymentFailure(pi.id, pi.last_payment_error);
         break;
       }
       case 'payment_intent.processing': {

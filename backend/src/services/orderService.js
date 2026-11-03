@@ -23,8 +23,19 @@ const getByPaymentIntentStmt = db.prepare('SELECT * FROM orders WHERE stripe_pay
 
 const updateStatusByPaymentIntentStmt = db.prepare(`
   UPDATE orders
-  SET order_status = ?, stripe_payment_status = ?, stripe_livemode = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  SET order_status = ?, stripe_payment_status = ?, stripe_livemode = ?,
+      payment_failure_type = CASE WHEN ? = 'FAILED' THEN payment_failure_type ELSE NULL END,
+      payment_failure_code = CASE WHEN ? = 'FAILED' THEN payment_failure_code ELSE NULL END,
+      payment_decline_code = CASE WHEN ? = 'FAILED' THEN payment_decline_code ELSE NULL END,
+      payment_failure_message = CASE WHEN ? = 'FAILED' THEN payment_failure_message ELSE NULL END,
+      updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
   WHERE stripe_payment_intent_id = ?
+`);
+const setPaymentFailureStmt = db.prepare(`
+  UPDATE orders SET payment_failure_type = ?, payment_failure_code = ?,
+    payment_decline_code = ?, payment_failure_message = ?,
+    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  WHERE stripe_payment_intent_id = ? AND order_status = 'FAILED'
 `);
 
 const fulfillmentCandidatesStmt = db.prepare(`
@@ -139,8 +150,17 @@ function updateStatusByPaymentIntentId(paymentIntentId, newStatus, stripePayment
   if (!order) return null;
   if (order.order_status === newStatus) return order; // already applied — no-op
 
-  updateStatusByPaymentIntentStmt.run(newStatus, stripePaymentStatus, liveMode ? 1 : 0, paymentIntentId);
+  updateStatusByPaymentIntentStmt.run(newStatus, stripePaymentStatus, liveMode ? 1 : 0,
+    newStatus, newStatus, newStatus, newStatus, paymentIntentId);
   return getByPaymentIntentStmt.get(paymentIntentId);
+}
+
+function recordPaymentFailure(paymentIntentId, error) {
+  const clean = (value, max) => value == null ? null : String(value).slice(0, max);
+  setPaymentFailureStmt.run(
+    clean(error?.type, 60), clean(error?.code, 100),
+    clean(error?.decline_code, 100), clean(error?.message, 300), paymentIntentId,
+  );
 }
 
 function listFulfillmentCandidates(limit = 20) {
@@ -208,6 +228,7 @@ module.exports = {
   getById,
   getByPaymentIntentId,
   updateStatusByPaymentIntentId,
+  recordPaymentFailure,
   listFulfillmentCandidates,
   setBookVaultAccepted,
   setBookVaultCost,

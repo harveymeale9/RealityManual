@@ -50,6 +50,10 @@ for (const column of [
   'shipping_email_sent_at TEXT',
   'refund_email_sent_at TEXT',
   'resend_contact_synced_at TEXT',
+  'payment_failure_type TEXT',
+  'payment_failure_code TEXT',
+  'payment_decline_code TEXT',
+  'payment_failure_message TEXT',
 ]) {
   try {
     db.exec(`ALTER TABLE orders ADD COLUMN ${column}`);

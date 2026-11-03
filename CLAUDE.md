@@ -21649,3 +21649,28 @@ bytes without a memory spike and Meta returned video ID
 to a Facebook-only retry with the video ID checkpoint intact. The new worker
 will poll that checkpoint and only mark Facebook done when Meta says it is
 published; it must not upload a second copy while processing continues.
+
+## Payment-failure diagnosis in Sales Analytics (2026-11-03)
+
+The two US rows dated 2026-11-02 that appeared only as “Failed” were not
+failed BookVault submissions or insufficient-funds cases. Their Stripe
+PaymentIntents remained `requires_payment_method`; Stripe's corresponding
+charges had `outcome.type=issuer_declined`, `network_status=declined_by_network`,
+and `decline_code=try_again_later`. Neither card was charged. A live audit
+found six succeeded PaymentIntents, all with accepted BookVault orders, and
+no seventh paid order awaiting fulfillment. The previously visible “7
+payments submitted / 5 orders complete” values were browser events: the
+former fires before `confirmPayment`; the latter fires on the thank-you page
+and can be missed. They are not Stripe payment totals.
+
+The backend now persists Stripe's last payment error type, code, decline
+code and short message on `payment_intent.payment_failed` webhooks, then
+clears them if that PaymentIntent later succeeds. The Sales Analytics API
+includes those fields (without customer PII) and a 30-day payment overview
+distinguishing Stripe-paid orders, issuer declines, other payment failures,
+and paid orders still awaiting BookVault. Recent order rows display an
+explicit diagnosis and show failed totals as uncharged quotes. The website
+funnel labels now call out Pay clicks and thank-you-page events as browser
+signals, not payment counts. Existing failed rows can be backfilled from
+their Stripe PaymentIntents after the schema migration. Backend and ops
+tests cover persistence, clearing, reporting and privacy-safe output.
