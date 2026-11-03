@@ -21790,3 +21790,13 @@ against stale Settings tabs. Defaults in the scheduler, client settings and
 runway now use 168 hours; Settings and the queue runway explain the one-time
 immediate release. No external post was made for verification; tests cover
 the immediate first timestamp, the next seven-day timestamp and the runway.
+
+## Author anonymity question added to storefront FAQ (2026-11-03)
+
+Harvey requested a new first FAQ question, “Who is the author of The Reality
+Manual?”, answered exactly: “For reasons discussed in section 9 of the book,
+the author wishes to remain anonymous.” The root homepage and retained
+`/home2/` alias were both updated so their FAQ content remains aligned. The
+existing book-length, shipping and returns questions remain in their prior
+order beneath it. This is static storefront HTML; no backend or CSS change was
+needed.
