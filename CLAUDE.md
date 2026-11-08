@@ -21942,3 +21942,15 @@ message still offers a working opt-out without promising additional emails.
 The one-email-per-order send guard and opt-in behavior were not changed.
 The review email's eyebrow now reads “A note from the author,” matching the
 first-person sender voice Harvey requested.
+
+## Digital-edition FAQ and print-cost claim check (2026-11-08)
+
+Harvey asked to add “Is there a digital version available?” with the answer
+“Not for the time being.” This was added after the book-length item on both
+the root homepage and retained `/home2/` alias. He also proposed saying each
+book incurs considerably more than $30 in *print costs alone*. A read-only
+check of 12 paid orders with recorded BookVault costs found print/production
+costs of $26.19–$26.63 per copy after the saved GBP/USD conversion, so that
+specific numerical claim is not supported and was not published. Recorded
+all-in BookVault costs including delivery ranged from $32.65 to $57.97; if
+Harvey wants a dollar figure, distinguish printing from printing plus delivery.
