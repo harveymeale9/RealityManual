@@ -21800,3 +21800,21 @@ the author wishes to remain anonymous.” The root homepage and retained
 existing book-length, shipping and returns questions remain in their prior
 order beneath it. This is static storefront HTML; no backend or CSS change was
 needed.
+
+## Storefront FAQ expanded and reordered (2026-11-08)
+
+Harvey supplied eleven replacement FAQ questions/answers, in order, covering
+AI authorship, the book's inspiration, the originality of the 14 Rules, the
+anonymous author, the person in the videos, where to learn more, book length,
+worldwide shipping, price, delivery and returns. The root homepage and
+retained `/home2/` alias now have matching FAQ markup. The YouTube-channel
+link in the sixth answer opens in a new tab with `noopener noreferrer`.
+Multi-paragraph answers have explicit spacing in the shared stylesheet, and
+both pages use a new stylesheet cache key.
+
+One phrase in Harvey's supplied price answer, “each hardcover costing over
+$50 to produce,” was not published: recorded BookVault costs distinguish
+production from shipping/tax, and previous per-book print costs were about
+£19. The rest of that answer was kept. This avoids presenting an all-in cost
+as a production-only cost; confirm the specific cost basis before adding a
+numerical production-cost claim.
