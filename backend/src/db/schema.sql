@@ -44,6 +44,11 @@ CREATE TABLE IF NOT EXISTS orders (
   confirmation_email_sent_at TEXT,
   shipping_email_sent_at     TEXT,
   refund_email_sent_at       TEXT,
+  review_request_opt_in      INTEGER NOT NULL DEFAULT 0,
+  review_request_opt_in_at   TEXT,
+  review_request_email_sent_at TEXT,
+  review_request_skipped_at  TEXT,
+  review_request_opt_out_at  TEXT,
   resend_contact_synced_at   TEXT,
   order_status               TEXT NOT NULL DEFAULT 'PAYMENT_PENDING',
   created_at                 TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -53,6 +58,7 @@ CREATE TABLE IF NOT EXISTS orders (
 CREATE INDEX IF NOT EXISTS idx_orders_stripe_payment_intent ON orders(stripe_payment_intent_id);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(order_status);
 CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
+CREATE INDEX IF NOT EXISTS idx_orders_review_request ON orders(review_request_opt_in, order_status, shipping_email_sent_at);
 
 CREATE TABLE IF NOT EXISTS shipping_rates (
   country_code      TEXT PRIMARY KEY,

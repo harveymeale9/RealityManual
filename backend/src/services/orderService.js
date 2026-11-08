@@ -6,11 +6,13 @@ const insertOrderStmt = db.prepare(`
   INSERT INTO orders (
     id, customer_name, email, phone, country, street1, street2, city, state, postal_code, quantity,
     book_price_cents, shipping_price_cents, shipping_service_name, shipping_service_id, shipping_min_delivery_days,
-    shipping_max_delivery_days, total_price_cents, currency, order_status
+    shipping_max_delivery_days, total_price_cents, currency, review_request_opt_in,
+    review_request_opt_in_at, order_status
   ) VALUES (
     @id, @customer_name, @email, @phone, @country, @street1, @street2, @city, @state, @postal_code, @quantity,
     @book_price_cents, @shipping_price_cents, @shipping_service_name, @shipping_service_id, @shipping_min_delivery_days,
-    @shipping_max_delivery_days, @total_price_cents, @currency, 'PAYMENT_PENDING'
+    @shipping_max_delivery_days, @total_price_cents, @currency, @review_request_opt_in,
+    @review_request_opt_in_at, 'PAYMENT_PENDING'
   )
 `);
 
@@ -47,6 +49,21 @@ const fulfillmentCandidatesStmt = db.prepare(`
     )
     AND (fulfillment_next_attempt_at IS NULL OR fulfillment_next_attempt_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   ORDER BY created_at ASC
+  LIMIT ?
+`);
+
+const reviewRequestCandidatesStmt = db.prepare(`
+  SELECT * FROM orders
+  WHERE stripe_livemode = 1
+    AND order_status = 'SHIPPED'
+    AND bookvault_order_id IS NOT NULL
+    AND shipping_email_sent_at IS NOT NULL
+    AND refund_email_sent_at IS NULL
+    AND review_request_opt_in = 1
+    AND review_request_email_sent_at IS NULL
+    AND review_request_skipped_at IS NULL
+    AND review_request_opt_out_at IS NULL
+  ORDER BY shipping_email_sent_at ASC
   LIMIT ?
 `);
 
@@ -87,7 +104,13 @@ const markEmailSentStmt = {
   confirmation: db.prepare("UPDATE orders SET confirmation_email_sent_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"),
   shipping: db.prepare("UPDATE orders SET shipping_email_sent_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"),
   refund: db.prepare("UPDATE orders SET refund_email_sent_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"),
+  review: db.prepare("UPDATE orders SET review_request_email_sent_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"),
 };
+const markReviewRequestSkippedStmt = db.prepare("UPDATE orders SET review_request_skipped_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?");
+const suppressReviewRequestsStmt = db.prepare(`
+  UPDATE orders SET review_request_opt_out_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  WHERE LOWER(email) = LOWER(?) AND review_request_email_sent_at IS NULL
+`);
 const markResendContactSyncedStmt = db.prepare(`
   UPDATE orders
   SET resend_contact_synced_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
@@ -127,6 +150,8 @@ function createOrder(input) {
     shipping_max_delivery_days: input.shippingMaxDeliveryDays || null,
     total_price_cents: input.totalPriceCents,
     currency: input.currency,
+    review_request_opt_in: input.review_request_opt_in === true ? 1 : 0,
+    review_request_opt_in_at: input.review_request_opt_in === true ? new Date().toISOString() : null,
   });
   return getByIdStmt.get(id);
 }
@@ -167,6 +192,10 @@ function listFulfillmentCandidates(limit = 20) {
   return fulfillmentCandidatesStmt.all(limit);
 }
 
+function listReviewRequestCandidates(limit = 50) {
+  return reviewRequestCandidatesStmt.all(limit);
+}
+
 function setBookVaultAccepted(orderId, podRef) {
   setBookVaultAcceptedStmt.run(String(podRef), orderId);
   return getByIdStmt.get(orderId);
@@ -197,6 +226,17 @@ function markEmailSent(orderId, kind) {
   const statement = markEmailSentStmt[kind];
   if (!statement) throw new Error(`Unknown email kind: ${kind}`);
   statement.run(orderId);
+}
+
+function markReviewRequestSkipped(orderId) {
+  markReviewRequestSkippedStmt.run(orderId);
+}
+
+function suppressReviewRequestsForOrder(orderId) {
+  const order = getByIdStmt.get(orderId);
+  if (!order) return false;
+  suppressReviewRequestsStmt.run(order.email);
+  return true;
 }
 
 function markResendContactSynced(orderId) {
@@ -230,12 +270,15 @@ module.exports = {
   updateStatusByPaymentIntentId,
   recordPaymentFailure,
   listFulfillmentCandidates,
+  listReviewRequestCandidates,
   setBookVaultAccepted,
   setBookVaultCost,
   setFulfillmentRetry,
   setOrderStatus,
   setNextAttempt,
   markEmailSent,
+  markReviewRequestSkipped,
+  suppressReviewRequestsForOrder,
   markResendContactSynced,
   getPurchaseSummaryForEmail,
   toPublicStatus,

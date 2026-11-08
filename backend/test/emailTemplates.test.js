@@ -68,14 +68,20 @@ test('refund email says the refund was issued without promising bank timing', ()
   assert.match(email.text, /\$139\.98 USD/);
 });
 
-test('review request is preview-only for now, personalized, and reply-based', () => {
+test('review request is personalized and offers written or video feedback', () => {
   const preview = reviewRequestEmail(order, { preview: true });
   assert.equal(preview.subject, '[PREVIEW] How are you finding The Reality Manual?');
-  assert.match(preview.html, /Preview Only: Customer Follow-Up Is Not Enabled/);
+  assert.match(preview.html, /Preview Only: Not a Customer Email/);
   assert.match(preview.html, /Hi Ava,/);
   assert.doesNotMatch(preview.html, /<script>alert/);
   assert.match(reviewRequestEmail({ customer_name: '<img>' }).html, /Hi &lt;img&gt;,/);
   assert.match(preview.html, /short review, just reply to this email/);
+  assert.match(preview.html, /https:\/\/www\.instagram\.com\/the_reality_manual\//);
+  assert.match(preview.text, /DM it to us there/);
+  assert.match(preview.text, /unsubscribe here/);
+  assert.match(preview.html, /Unsubscribe here/i);
+  assert.match(preview.headers['List-Unsubscribe'], /api\.realitymanual\.com\/api\/review\/unsubscribe/);
+  assert.equal(preview.headers['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click');
   assert.match(preview.text, /If your book hasn't arrived yet/);
   assert.doesNotMatch(preview.html, /Order:|Tracking:/);
 
@@ -128,4 +134,18 @@ test('Resend client sends HTML and text with domain identity and idempotency', a
     text: 'Hello',
     reply_to: 'info@realitymanual.com',
   });
+});
+
+test('Resend client forwards one-click unsubscribe headers on review requests', async () => {
+  let payload;
+  const client = createResendClient({
+    apiKey: 're_test_key',
+    fromEmail: 'orders@example.com',
+    fetchImpl: async (_url, options) => {
+      payload = JSON.parse(options.body);
+      return { ok: true, status: 200, json: async () => ({ id: 'review-email' }) };
+    },
+  });
+  await client.sendEmail({ to: 'reader@example.com', ...reviewRequestEmail({ id: 'order-1', customer_name: 'Ava' }) });
+  assert.equal(payload.headers['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click');
 });

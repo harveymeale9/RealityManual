@@ -336,6 +336,7 @@
       state: form.state.value,
       postal_code: form.postal_code.value,
       quantity: getQuantity(),
+      review_request_opt_in: form.review_request_opt_in.checked,
     };
 
     const clientErrors = validateClientSide(values);

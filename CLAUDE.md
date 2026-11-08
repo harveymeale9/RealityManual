@@ -21858,3 +21858,43 @@ has one unrelated pre-existing failure: `analyticsAggregation.test.js`
 asserts that the root and `/home2/` HTML files are byte-identical, but they
 already differed at the VSL `preload` attribute in the parent commit (`none`
 versus `auto`). This task did not change either storefront file or that test.
+
+## Opt-in post-delivery review requests (2026-11-08)
+
+After approving the preview, Harvey requested a short-video-review invitation
+and activation of the follow-up automation. The email now invites a written
+reply or a short video sent by reply/link, an Instagram tag or an Instagram DM
+to the connected `@the_reality_manual` account. It thanks anyone taking the
+time to record a video. The reviewed preview was sent to Harvey's corrected
+personal address, `harveymeale9@gmail.com`, not the earlier address supplied
+by voice transcription.
+
+This is an optional review/marketing request, separate from order-status
+messages. Checkout now has an unchecked, explicit one-time review-email opt-in;
+the selection and its timestamp are saved with the order. Existing orders
+default to not opted in, so there is no automatic historical catch-up and no
+assumption that buying the book means consenting to a review solicitation.
+The privacy page describes this use. Each follow-up has an unsubscribe link
+and one-click unsubscribe headers. The unsubscribe endpoint only changes
+state on POST, not GET (link scanners can safely open it), and suppresses
+pending requests for all existing orders under the same email address.
+Order-update emails remain unaffected. The worker also checks the Resend
+contact's unsubscribe status immediately before sending and skips a contact
+whose Resend record is unsubscribed.
+
+The review worker runs at startup and hourly. It only selects live Stripe-paid,
+BookVault-accepted orders marked `SHIPPED` with a dispatch email timestamp,
+an opt-in, and no refund, opt-out, prior send, or skip marker. Its due date is
+the later of 14 calendar days after the shipping email or the saved maximum
+BookVault delivery estimate converted from working days, plus seven further
+calendar days for reading. This is an *estimated* arrival, not carrier proof;
+the copy says “I hope your copy ... has arrived” and invites a reply if not.
+An order-level send timestamp plus Resend's per-order idempotency key prevents
+duplicate follow-ups across worker restarts. Send errors are logged for retry
+on the next sweep; an absent Resend contact defers rather than bypassing its
+unsubscribe status. The new database columns are added via the existing
+startup migration; the static checkout and backend must both be deployed so
+the browser's opt-in can be persisted.
+
+Focused review/template tests pass. The full backend suite retains the same
+unrelated homepage `/home2/` byte-equality failure described above.

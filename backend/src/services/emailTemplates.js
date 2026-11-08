@@ -261,20 +261,21 @@ function orderRefundedEmail(order, { preview = false } = {}) {
   };
 }
 
-// Template only. No production scheduler or customer-send path invokes this
-// until Harvey approves the preview and the delivery-timing rules.
 function reviewRequestEmail(order, { preview = false } = {}) {
   const name = firstName(order.customer_name);
   const subject = `${preview ? '[PREVIEW] ' : ''}How are you finding The Reality Manual?`;
+  const unsubscribeUrl = `https://api.realitymanual.com/api/review/unsubscribe?order=${encodeURIComponent(order.id)}`;
   const body = `
     <p style="margin:0 0 18px;">Hi ${escapeHtml(name)},</p>
     <p style="margin:0 0 18px;">I hope your copy of <em>The Reality Manual</em> has arrived and you've had some time with it.</p>
     <p style="margin:0 0 18px;">How are you finding the book so far? I'd love to hear your honest feedback, whether a passage resonated, challenged you, or left you with a question.</p>
     <p style="margin:0 0 18px;">If you'd be willing to share a short review, just reply to this email with a few lines in your own words. There's no form to fill out, and no pressure if you're still reading.</p>
+    <p style="margin:0 0 18px;">A short video review would mean a great deal too. You can reply here with the video or a link, tag us on Instagram at <a href="https://www.instagram.com/the_reality_manual/" style="color:${BRAND.gold};text-decoration:underline;">@the_reality_manual</a>, or DM it to us there. We'd be especially grateful to anyone who takes the time to record one.</p>
     <p style="margin:0 0 18px;">If your book hasn't arrived yet, please reply and we'll look into it.</p>
+    <p style="margin:0 0 18px;font-size:14px;line-height:23px;">If you'd rather not receive future review requests, <a href="${escapeHtml(unsubscribeUrl)}" style="color:${BRAND.gold};text-decoration:underline;">unsubscribe here</a>. This won't affect your order updates.</p>
     <p style="margin:0;">Thank you for reading,<br>The Reality Manual</p>`;
   const text = [
-    preview ? 'PREVIEW ONLY: CUSTOMER FOLLOW-UP IS NOT ENABLED' : '',
+    preview ? 'PREVIEW ONLY: NOT A CUSTOMER EMAIL' : '',
     'THE REALITY MANUAL',
     '',
     'HOW ARE YOU FINDING THE REALITY MANUAL?',
@@ -287,7 +288,13 @@ function reviewRequestEmail(order, { preview = false } = {}) {
     '',
     "If you'd be willing to share a short review, just reply to this email with a few lines in your own words. There's no form to fill out, and no pressure if you're still reading.",
     '',
+    "A short video review would mean a great deal too. You can reply here with the video or a link, tag us on Instagram at @the_reality_manual, or DM it to us there. We'd be especially grateful to anyone who takes the time to record one.",
+    'Instagram: https://www.instagram.com/the_reality_manual/',
+    '',
     "If your book hasn't arrived yet, please reply and we'll look into it.",
+    '',
+    "If you'd rather not receive future review requests, unsubscribe here. This won't affect your order updates:",
+    unsubscribeUrl,
     '',
     'Thank you for reading,',
     'The Reality Manual',
@@ -297,13 +304,17 @@ function reviewRequestEmail(order, { preview = false } = {}) {
     subject,
     html: layout({
       preview,
-      previewLabel: 'Preview Only: Customer Follow-Up Is Not Enabled',
+      previewLabel: 'Preview Only: Not a Customer Email',
       preheader: "I'd love to hear what you think of The Reality Manual.",
       eyebrow: 'A note from The Reality Manual',
       title: 'How are you finding The Reality Manual?',
       body,
     }),
     text,
+    headers: {
+      'List-Unsubscribe': `<${unsubscribeUrl}>`,
+      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+    },
   };
 }
 

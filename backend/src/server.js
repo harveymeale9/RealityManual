@@ -10,7 +10,9 @@ const shippingRoutes = require('./routes/shipping');
 const checkoutRoutes = require('./routes/checkout');
 const orderRoutes = require('./routes/orders');
 const analyticsRoutes = require('./routes/analytics');
+const reviewRoutes = require('./routes/review');
 const { startFulfillmentWorker } = require('./services/fulfillmentService');
+const { startReviewRequestWorker } = require('./services/reviewRequestService');
 
 const app = express();
 
@@ -41,6 +43,7 @@ app.use('/api/shipping', shippingRoutes);
 app.use('/api/checkout', checkoutRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/review', reviewRoutes);
 
 // The storefront VSL is a finished, immutable marketing asset kept on the
 // backend's persistent data volume rather than baked into the Docker image or
@@ -80,3 +83,4 @@ app.listen(config.port, () => {
 });
 
 startFulfillmentWorker();
+startReviewRequestWorker();

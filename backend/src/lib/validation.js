@@ -88,6 +88,10 @@ function validateCheckoutInput(body = {}) {
     errors.quantity = `Quantity must be a whole number between ${QUANTITY_MIN} and ${QUANTITY_MAX}.`;
   }
 
+  if (body.review_request_opt_in !== undefined && typeof body.review_request_opt_in !== 'boolean') {
+    errors.review_request_opt_in = 'Review email preference must be true or false.';
+  }
+
   return errors;
 }
 

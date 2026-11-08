@@ -72,7 +72,7 @@ function createResendClient({
     return responseBody;
   }
 
-  async function sendEmail({ to, subject, html, text, idempotencyKey, tags }) {
+  async function sendEmail({ to, subject, html, text, idempotencyKey, tags, headers: customHeaders }) {
     assertConfigured();
     if (!to || !subject || !html || !text) {
       throw new Error('A recipient, subject, HTML body, and plain-text body are required.');
@@ -93,6 +93,7 @@ function createResendClient({
     };
     if (replyTo) payload.reply_to = replyTo;
     if (Array.isArray(tags) && tags.length) payload.tags = tags;
+    if (customHeaders && typeof customHeaders === 'object') payload.headers = customHeaders;
 
     const response = await fetchImpl(RESEND_EMAILS_URL, {
       method: 'POST',
@@ -205,7 +206,17 @@ function createResendClient({
     return { id: created.id, created: true, properties };
   }
 
-  return { sendEmail, ensurePurchaserSchema, syncPurchaserContact };
+  async function getContactByEmail(email) {
+    if (!email) throw new Error('A contact email is required.');
+    try {
+      return await request(`/contacts/${encodeURIComponent(String(email).trim().toLowerCase())}`);
+    } catch (error) {
+      if (error.status === 404) return null;
+      throw error;
+    }
+  }
+
+  return { sendEmail, ensurePurchaserSchema, syncPurchaserContact, getContactByEmail };
 }
 
 module.exports = {
