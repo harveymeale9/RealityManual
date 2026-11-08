@@ -21929,3 +21929,14 @@ The service retries failures every 15 minutes; a stale or failed inbox sync
 never turns into a blind follow-up. The script can be run before the deadline
 for a no-send check. Unit validation, a pre-deadline no-send run in the live
 container, and three focused tests passed.
+
+## Review-request voice refinement (2026-11-08)
+
+Harvey asked that the review-request email stop implying repeated future
+solicitations and speak in the author's personal first-person voice. Both HTML
+and plain-text versions now say “tag me,” “DM it to me,” “I'd be especially
+grateful,” and “I'll look into it,” rather than “us/we.” The explanatory
+“if you'd rather not receive future review requests” paragraph was removed.
+A compact “Unsubscribe from review emails” link remains so the optional review
+message still offers a working opt-out without promising additional emails.
+The one-email-per-order send guard and opt-in behavior were not changed.

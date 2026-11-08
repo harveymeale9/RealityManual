@@ -77,9 +77,10 @@ test('review request is personalized and offers written or video feedback', () =
   assert.match(reviewRequestEmail({ customer_name: '<img>' }).html, /Hi &lt;img&gt;,/);
   assert.match(preview.html, /short review, just reply to this email/);
   assert.match(preview.html, /https:\/\/www\.instagram\.com\/the_reality_manual\//);
-  assert.match(preview.text, /DM it to us there/);
-  assert.match(preview.text, /unsubscribe here/);
-  assert.match(preview.html, /Unsubscribe here/i);
+  assert.match(preview.text, /DM it to me there/);
+  assert.match(preview.text, /Unsubscribe from review emails/);
+  assert.doesNotMatch(preview.text, /future review requests|\b(?:we|us|our)\b|we(?:'|’)ll|we(?:'|’)d/i);
+  assert.match(preview.html, /Unsubscribe from review emails/i);
   assert.match(preview.headers['List-Unsubscribe'], /api\.realitymanual\.com\/api\/review\/unsubscribe/);
   assert.equal(preview.headers['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click');
   assert.match(preview.text, /If your book hasn't arrived yet/);
