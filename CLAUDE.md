@@ -21940,3 +21940,5 @@ grateful,” and “I'll look into it,” rather than “us/we.” The explanato
 A compact “Unsubscribe from review emails” link remains so the optional review
 message still offers a working opt-out without promising additional emails.
 The one-email-per-order send guard and opt-in behavior were not changed.
+The review email's eyebrow now reads “A note from the author,” matching the
+first-person sender voice Harvey requested.

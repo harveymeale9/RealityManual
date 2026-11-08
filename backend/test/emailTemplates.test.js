@@ -72,6 +72,7 @@ test('review request is personalized and offers written or video feedback', () =
   const preview = reviewRequestEmail(order, { preview: true });
   assert.equal(preview.subject, '[PREVIEW] How are you finding The Reality Manual?');
   assert.match(preview.html, /Preview Only: Not a Customer Email/);
+  assert.match(preview.html, /A note from the author/);
   assert.match(preview.html, /Hi Ava,/);
   assert.doesNotMatch(preview.html, /<script>alert/);
   assert.match(reviewRequestEmail({ customer_name: '<img>' }).html, /Hi &lt;img&gt;,/);

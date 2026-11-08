@@ -306,7 +306,7 @@ function reviewRequestEmail(order, { preview = false } = {}) {
       preview,
       previewLabel: 'Preview Only: Not a Customer Email',
       preheader: "I'd love to hear what you think of The Reality Manual.",
-      eyebrow: 'A note from The Reality Manual',
+      eyebrow: 'A note from the author',
       title: 'How are you finding The Reality Manual?',
       body,
     }),
