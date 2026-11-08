@@ -21898,3 +21898,34 @@ the browser's opt-in can be persisted.
 
 Focused review/template tests pass. The full backend suite retains the same
 unrelated homepage `/home2/` byte-equality failure described above.
+
+## One-time conditional BookVault follow-ups (2026-11-08)
+
+Harvey asked for follow-ups if BookVault has not replied to two 3 November
+inquiries within the next 70 hours: the USPS Consolidator quote discrepancy
+(§708) and USD-funded bank transfer/USD billing for UK-facility orders. At
+request time the mailbox was syncing without error and contained no substantive
+BookVault response to either. The funding inquiry is a sent message in the
+mailbox at 2026-11-03 02:13:45 UTC; the consolidator inquiry was sent directly
+through SMTP, so only its accepted send and exact subject are recorded in §708,
+not a mailbox thread ID. A generic HubSpot satisfaction survey is not a reply.
+
+`ops-service/src/bookvaultFollowup.js` fixes the deadline at
+**2026-11-11 08:46:29 UTC** (70 hours from this request). On or after that time,
+the one-shot runner first performs a fresh IMAP inbox sync and refuses to send
+anything if that sync fails. It checks each topic separately for a substantive
+human BookVault response; auto-acknowledgements and support-ticket receipts do
+not count. For an unanswered topic it sends one concise follow-up from the
+existing Reality Manual mailbox to `customers@bookvault.app`; the USD-funding
+follow-up uses the original mailbox thread/message ID, while the consolidator
+follow-up uses the original subject because its SMTP send was outside the
+mailbox UI. It persists per-topic decisions and checks sent messages to avoid
+duplicate follow-ups on retries. No account or payment change is requested.
+
+The host's `rm-bookvault-followup.timer` is linked from the tracked
+`ops-service/systemd/` unit files, enabled for this one calendar occurrence,
+and has `Persistent=true` so a reboot past the deadline still triggers it.
+The service retries failures every 15 minutes; a stale or failed inbox sync
+never turns into a blind follow-up. The script can be run before the deadline
+for a no-send check. Unit validation, a pre-deadline no-send run in the live
+container, and three focused tests passed.

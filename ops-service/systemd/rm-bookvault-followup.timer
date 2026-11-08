@@ -1,0 +1,11 @@
+[Unit]
+Description=Check and follow up two unanswered BookVault inquiries after 70 hours
+
+[Timer]
+OnCalendar=2026-11-11 08:46:29 UTC
+AccuracySec=1s
+Persistent=true
+Unit=rm-bookvault-followup.service
+
+[Install]
+WantedBy=timers.target

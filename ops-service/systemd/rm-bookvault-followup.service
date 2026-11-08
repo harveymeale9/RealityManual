@@ -1,0 +1,11 @@
+[Unit]
+Description=One-time BookVault follow-up after a fresh mailbox check
+After=docker.service
+Requires=docker.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker exec rm-ops-service node /repo/ops-service/scripts/runBookvaultFollowup.js
+Restart=on-failure
+RestartSec=15min
