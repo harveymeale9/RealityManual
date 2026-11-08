@@ -4,6 +4,7 @@ const {
   orderConfirmedEmail,
   orderShippedEmail,
   orderRefundedEmail,
+  reviewRequestEmail,
 } = require('../src/services/emailTemplates');
 const { createResendClient } = require('../src/services/resendService');
 
@@ -67,11 +68,28 @@ test('refund email says the refund was issued without promising bank timing', ()
   assert.match(email.text, /\$139\.98 USD/);
 });
 
+test('review request is preview-only for now, personalized, and reply-based', () => {
+  const preview = reviewRequestEmail(order, { preview: true });
+  assert.equal(preview.subject, '[PREVIEW] How are you finding The Reality Manual?');
+  assert.match(preview.html, /Preview Only: Customer Follow-Up Is Not Enabled/);
+  assert.match(preview.html, /Hi Ava,/);
+  assert.doesNotMatch(preview.html, /<script>alert/);
+  assert.match(reviewRequestEmail({ customer_name: '<img>' }).html, /Hi &lt;img&gt;,/);
+  assert.match(preview.html, /short review, just reply to this email/);
+  assert.match(preview.text, /If your book hasn't arrived yet/);
+  assert.doesNotMatch(preview.html, /Order:|Tracking:/);
+
+  const eventualCustomerVersion = reviewRequestEmail({ customer_name: 'Sam Reader' });
+  assert.equal(eventualCustomerVersion.subject, 'How are you finding The Reality Manual?');
+  assert.doesNotMatch(eventualCustomerVersion.html, /Preview Only/);
+});
+
 test('customer-facing email content never contains an em dash', () => {
   const emails = [
     orderConfirmedEmail(order, { preview: true }),
     orderShippedEmail(order, { minDeliveryDays: 2, maxDeliveryDays: 5 }, { preview: true }),
     orderRefundedEmail(order, { preview: true }),
+    reviewRequestEmail(order, { preview: true }),
   ];
   for (const email of emails) {
     assert.doesNotMatch(`${email.subject}\n${email.html}\n${email.text}`, /—/);

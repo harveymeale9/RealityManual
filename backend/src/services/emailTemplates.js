@@ -70,9 +70,9 @@ function detailsTable(rows) {
     </table>`;
 }
 
-function layout({ preview = false, preheader, eyebrow, title, body, details, callout, button }) {
+function layout({ preview = false, previewLabel = 'Sample Preview: Not a Real Order', preheader, eyebrow, title, body, details, callout, button }) {
   const previewBanner = preview
-    ? `<tr><td style="background:${BRAND.gold};color:${BRAND.ink};padding:9px 24px;text-align:center;font-family:Arial,sans-serif;font-size:10px;font-weight:bold;letter-spacing:1.7px;text-transform:uppercase;">Sample Preview: Not a Real Order</td></tr>`
+    ? `<tr><td style="background:${BRAND.gold};color:${BRAND.ink};padding:9px 24px;text-align:center;font-family:Arial,sans-serif;font-size:10px;font-weight:bold;letter-spacing:1.7px;text-transform:uppercase;">${escapeHtml(previewLabel)}</td></tr>`
     : '';
   const buttonMarkup = button
     ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:28px auto 8px;"><tr><td style="border:1px solid ${BRAND.gold};"><a href="${escapeHtml(button.href)}" style="display:inline-block;padding:14px 28px;color:${BRAND.ivory};font-family:Arial,sans-serif;font-size:11px;font-weight:bold;letter-spacing:1.8px;text-decoration:none;text-transform:uppercase;">${escapeHtml(button.label)}</a></td></tr></table>`
@@ -261,9 +261,56 @@ function orderRefundedEmail(order, { preview = false } = {}) {
   };
 }
 
+// Template only. No production scheduler or customer-send path invokes this
+// until Harvey approves the preview and the delivery-timing rules.
+function reviewRequestEmail(order, { preview = false } = {}) {
+  const name = firstName(order.customer_name);
+  const subject = `${preview ? '[PREVIEW] ' : ''}How are you finding The Reality Manual?`;
+  const body = `
+    <p style="margin:0 0 18px;">Hi ${escapeHtml(name)},</p>
+    <p style="margin:0 0 18px;">I hope your copy of <em>The Reality Manual</em> has arrived and you've had some time with it.</p>
+    <p style="margin:0 0 18px;">How are you finding the book so far? I'd love to hear your honest feedback, whether a passage resonated, challenged you, or left you with a question.</p>
+    <p style="margin:0 0 18px;">If you'd be willing to share a short review, just reply to this email with a few lines in your own words. There's no form to fill out, and no pressure if you're still reading.</p>
+    <p style="margin:0 0 18px;">If your book hasn't arrived yet, please reply and we'll look into it.</p>
+    <p style="margin:0;">Thank you for reading,<br>The Reality Manual</p>`;
+  const text = [
+    preview ? 'PREVIEW ONLY: CUSTOMER FOLLOW-UP IS NOT ENABLED' : '',
+    'THE REALITY MANUAL',
+    '',
+    'HOW ARE YOU FINDING THE REALITY MANUAL?',
+    '',
+    `Hi ${name},`,
+    '',
+    "I hope your copy of The Reality Manual has arrived and you've had some time with it.",
+    '',
+    "How are you finding the book so far? I'd love to hear your honest feedback, whether a passage resonated, challenged you, or left you with a question.",
+    '',
+    "If you'd be willing to share a short review, just reply to this email with a few lines in your own words. There's no form to fill out, and no pressure if you're still reading.",
+    '',
+    "If your book hasn't arrived yet, please reply and we'll look into it.",
+    '',
+    'Thank you for reading,',
+    'The Reality Manual',
+  ].filter((line, index, all) => line || index > 0 || all[0]).join('\n');
+
+  return {
+    subject,
+    html: layout({
+      preview,
+      previewLabel: 'Preview Only: Customer Follow-Up Is Not Enabled',
+      preheader: "I'd love to hear what you think of The Reality Manual.",
+      eyebrow: 'A note from The Reality Manual',
+      title: 'How are you finding The Reality Manual?',
+      body,
+    }),
+    text,
+  };
+}
+
 module.exports = {
   escapeHtml,
   orderConfirmedEmail,
   orderShippedEmail,
   orderRefundedEmail,
+  reviewRequestEmail,
 };

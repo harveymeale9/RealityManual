@@ -21818,3 +21818,43 @@ production from shipping/tax, and previous per-book print costs were about
 £19. The rest of that answer was kept. This avoids presenting an all-in cost
 as a production-only cost; confirm the specific cost basis before adding a
 numerical production-cost claim.
+
+## Review-request email preview, not yet automated (2026-11-08)
+
+Harvey asked for a post-delivery review request, but explicitly wanted to
+inspect a test email before allowing any customer automation. A new
+`reviewRequestEmail` template in `backend/src/services/emailTemplates.js`
+matches the existing branded HTML and plain-text mail, addresses the reader
+by first name, asks for honest feedback/review by replying, and invites a
+reply if the book has not arrived. The preview version has an unmistakable
+banner and `[PREVIEW]` subject. It is exported but **not called by the
+fulfillment worker or any scheduler**. Existing confirmation, shipping and
+refund emails are unchanged. Template tests cover escaping, preview markers,
+reply wording, and the storefront's no-em-dash email convention.
+
+A single preview was sent through the existing Resend sender/reply-to
+configuration to Harvey's readmeonline@gmail.com address. Resend accepted it
+and reported `last_event: delivered`. No customer address was used. A read-only
+database check at drafting time found 12 BookVault-accepted orders, zero
+`SHIPPED` orders, and zero shipping emails sent, so no current customer is
+even eligible for a post-delivery review request.
+
+**Proposed timing for approval, not implemented:** use the actual
+`shipping_email_sent_at` as dispatch anchor, then the saved BookVault
+`shipping_max_delivery_days` for that destination/service. Convert the
+maximum estimate from working days to a calendar date, allow at least 14
+calendar days after dispatch (a conservative UK-origin baseline, including
+US consolidator handoff), and then wait seven more calendar days before the
+first request. This gives at least 21 days after dispatch, later for routes
+with longer quoted transit. If a quote lacks a maximum, use the 21-day
+fallback. Delivery is not presently confirmed by a carrier, so the email
+must say "I hope your copy has arrived" and offer help if it has not. Before
+enabling, add an idempotent per-order sent marker, exclude refunds/test orders,
+and verify reply-to behavior; do not send historical catch-up mail without
+Harvey's approval.
+
+Focused email-template tests passed (6/6). The full backend test run still
+has one unrelated pre-existing failure: `analyticsAggregation.test.js`
+asserts that the root and `/home2/` HTML files are byte-identical, but they
+already differed at the VSL `preload` attribute in the parent commit (`none`
+versus `auto`). This task did not change either storefront file or that test.
