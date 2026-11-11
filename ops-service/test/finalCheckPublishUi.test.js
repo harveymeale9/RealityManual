@@ -86,5 +86,5 @@ test('Kanban presents the durable uploaded stage to users as Filmed', function (
   assert.match(store, /id:\s*'uploaded',\s*label:\s*'Filmed'/);
   assert.doesNotMatch(store, /id:\s*'uploaded',\s*label:\s*'Uploaded'/);
   assert.match(page, /store\.js\?v=20261103-longform-first-weekly/);
-  assert.match(page, /app\.js\?v=20261111-sales-line-v2/);
+  assert.match(page, /app\.js\?v=20261111-profit-tooltip/);
 });

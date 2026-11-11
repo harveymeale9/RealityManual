@@ -149,10 +149,10 @@ test('both analytics views show the nested source-and-video referral chart', fun
   assert.match(app, /referralBreakdownHtml\(website\.referrals\)/);
   assert.match(app, /conic-gradient\(/);
   assert.match(app, /segment\.piece_title/);
-  assert.match(page, /style\.css\?v=20261111-sales-line-v2/);
+  assert.match(page, /style\.css\?v=20261111-profit-tooltip/);
 });
 
-test('sales chart shows paid sale counts on profit hover and a daily sales line', async function () {
+test('sales chart shows paid sale counts immediately on hover without a second line graph', async function () {
   const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const start = source.indexOf('  function renderSalesAnalytics()');
   const end = source.indexOf('  function websiteTrafficHtml(', start);
@@ -170,14 +170,18 @@ test('sales chart shows paid sale counts on profit hover and a daily sales line'
     periods: { today: period, last_7_days: period, last_30_days: period, all_time: period },
     books_sold: {}, daily, countries: [], recent_orders: [], recent_refunds: [], excluded_orders: [],
     unseen_sales_order_ids: [] };
-  const panelMain = { innerHTML: '', querySelector: function () { return null; },
+  const listeners = {};
+  const column = { dataset: { salesTooltip: '' }, addEventListener: function (name, handler) { listeners[name] = handler; } };
+  const tooltip = { hidden: true, textContent: '' };
+  const chart = { querySelector: function () { return tooltip; }, querySelectorAll: function () { return [column]; } };
+  const panelMain = { innerHTML: '', querySelector: function (selector) { return selector === '.sales-chart' ? chart : null; },
     querySelectorAll: function () { return []; } };
   let fetched = 0;
   const context = { Date, Math, Number, Promise, panelMain, salesAnalyticsRequest: 0,
     STOREFRONT_API_BASE: '', currentTabId: function () { return 'sales-analytics'; },
     fetch: function () { fetched += 1; const requestNumber = fetched; return Promise.resolve({ ok: true,
       json: function () { return Promise.resolve(requestNumber === 1 ? dashboard : null); } }); },
-    document: { getElementById: function () { return null; } },
+    document: { getElementById: function () { return null; }, activeElement: null },
     salesMoney: function (cents) { return '$' + (Number(cents || 0) / 100).toFixed(2); },
     salesProfit: function () { return '$69.00'; }, salesConversion: function () { return '—'; },
     emailHealthHtml: function () { return ''; }, escapeHtml: function (value) { return String(value); },
@@ -185,11 +189,20 @@ test('sales chart shows paid sale counts on profit hover and a daily sales line'
   const render = vm.runInNewContext(source.slice(start, end) + '\nrenderSalesAnalytics', context);
   render();
   await new Promise(function (resolve) { setImmediate(resolve); });
-  assert.match(panelMain.innerHTML, /2 paid sales · 3 books · \$195\.00 revenue/);
-  assert.match(panelMain.innerHTML, /Paid sales by day/);
-  assert.match(panelMain.innerHTML, /<path class="sales-line-path"/);
-  assert.match(panelMain.innerHTML, /2026-10-30: 2 paid sales/);
-  assert.equal((panelMain.innerHTML.match(/class="sales-line-point(?: zero)?"/g) || []).length, 30);
+  const barTooltip = panelMain.innerHTML.match(/data-sales-tooltip="([^"]*2 paid sales[^"]*)"/);
+  assert.ok(barTooltip);
+  assert.match(barTooltip[1], /2 paid sales · 3 books · \$195\.00 revenue/);
+  assert.doesNotMatch(panelMain.innerHTML, /sales-line-graph|Paid sales by day/);
+  column.dataset.salesTooltip = barTooltip[1];
+  listeners.pointerenter();
+  assert.equal(tooltip.hidden, false);
+  assert.equal(tooltip.textContent, barTooltip[1]);
+  listeners.pointerleave();
+  assert.equal(tooltip.hidden, true);
+  listeners.focus();
+  assert.equal(tooltip.hidden, false);
+  listeners.blur();
+  assert.equal(tooltip.hidden, true);
 });
 
 test('email health card separates Resend outcomes from ops inbox connectivity', function () {

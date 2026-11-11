@@ -22016,3 +22016,13 @@ A render-level test feeds a 30-day fixture with two sales and three books into
 the real Sales Analytics view function, checking the bar hover and all 30 line
 points. Existing cache-version assertions were updated; the focused reporting
 tests and full ops suite pass.
+
+## Sales chart: remove the line and show hover immediately (2026-11-11)
+
+Harvey rejected the daily-sales line graph. It has been removed without changing
+the profit bars or their paid-sale/volume figures. Browser-native `title`
+tooltips introduced a delay before the count appeared; the chart now uses one
+in-page tooltip that opens on `pointerenter` with no timer, also works on
+keyboard focus and touch press, and closes on pointer leave/blur. Bar labels
+remain available to assistive technology. Only the frontend and its cache keys
+changed; the existing private daily sales feed and backend are untouched.
