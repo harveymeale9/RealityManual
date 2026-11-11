@@ -21999,3 +21999,20 @@ ops tests and the two focused backend attribution tests pass. The full backend
 suite still has the previously documented unrelated `/home2/` byte-equality
 test failure. No payment, BookVault order, or historic source backfill was
 created during verification.
+
+## Sales profit chart now shows daily paid sales (2026-11-11)
+
+Harvey asked for the 30-day estimated-gross-profit chart hover to show how many
+sales each day produced, plus a line graph underneath. The existing private
+Sales Analytics `daily` feed already includes `orders` (paid, non-refunded,
+non-owner-test orders) and `units`, bucketed by Bangkok day (UTC+7). The bar
+tooltip now shows both paid sales/orders and books alongside profit, revenue
+and any pending BookVault cost. A second chart beneath the bars plots that
+same daily paid-sale count with a date/count title on each point. No backend
+query, order state, revenue calculation or customer data changed. The CSS and
+app script cache versions changed together so refresh loads the new UI.
+
+A render-level test feeds a 30-day fixture with two sales and three books into
+the real Sales Analytics view function, checking the bar hover and all 30 line
+points. Existing cache-version assertions were updated; the focused reporting
+tests and full ops suite pass.

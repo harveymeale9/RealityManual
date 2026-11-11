@@ -149,7 +149,47 @@ test('both analytics views show the nested source-and-video referral chart', fun
   assert.match(app, /referralBreakdownHtml\(website\.referrals\)/);
   assert.match(app, /conic-gradient\(/);
   assert.match(app, /segment\.piece_title/);
-  assert.match(page, /style\.css\?v=20261103-website-health/);
+  assert.match(page, /style\.css\?v=20261111-sales-line/);
+});
+
+test('sales chart shows paid sale counts on profit hover and a daily sales line', async function () {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const start = source.indexOf('  function renderSalesAnalytics()');
+  const end = source.indexOf('  function websiteTrafficHtml(', start);
+  assert.ok(start > 0 && end > start);
+  const daily = Array.from({ length: 30 }, function (_, index) {
+    return { day: '2026-10-' + String(index + 1).padStart(2, '0'), orders: index === 29 ? 2 : 0,
+      units: index === 29 ? 3 : 0, revenue_cents: index === 29 ? 19500 : 0,
+      gross_profit_cents: index === 29 ? 6900 : 0, profit_known_orders: index === 29 ? 2 : 0,
+      profit_pending_orders: 0 };
+  });
+  const period = { paid_orders: 2, units: 3, revenue_cents: 19500, book_revenue_cents: 19500,
+    shipping_revenue_cents: 0, gross_profit_cents: 6900, profit_pending_orders: 0,
+    average_order_cents: 9750, refunded_orders: 0, refunded_value_cents: 0 };
+  const dashboard = { generated_at: '2026-10-30T12:00:00.000Z',
+    periods: { today: period, last_7_days: period, last_30_days: period, all_time: period },
+    books_sold: {}, daily, countries: [], recent_orders: [], recent_refunds: [], excluded_orders: [],
+    unseen_sales_order_ids: [] };
+  const panelMain = { innerHTML: '', querySelector: function () { return null; },
+    querySelectorAll: function () { return []; } };
+  let fetched = 0;
+  const context = { Date, Math, Number, Promise, panelMain, salesAnalyticsRequest: 0,
+    STOREFRONT_API_BASE: '', currentTabId: function () { return 'sales-analytics'; },
+    fetch: function () { fetched += 1; const requestNumber = fetched; return Promise.resolve({ ok: true,
+      json: function () { return Promise.resolve(requestNumber === 1 ? dashboard : null); } }); },
+    document: { getElementById: function () { return null; } },
+    salesMoney: function (cents) { return '$' + (Number(cents || 0) / 100).toFixed(2); },
+    salesProfit: function () { return '$69.00'; }, salesConversion: function () { return '—'; },
+    emailHealthHtml: function () { return ''; }, escapeHtml: function (value) { return String(value); },
+    acknowledgeVisibleSales: function () {}, renderAnalyticsPlaceholder: function () { throw Error('render failed'); } };
+  const render = vm.runInNewContext(source.slice(start, end) + '\nrenderSalesAnalytics', context);
+  render();
+  await new Promise(function (resolve) { setImmediate(resolve); });
+  assert.match(panelMain.innerHTML, /2 paid sales · 3 books · \$195\.00 revenue/);
+  assert.match(panelMain.innerHTML, /Paid sales by day/);
+  assert.match(panelMain.innerHTML, /<path class="sales-line-path"/);
+  assert.match(panelMain.innerHTML, /2026-10-30: 2 paid sales/);
+  assert.equal((panelMain.innerHTML.match(/class="sales-line-point"/g) || []).length, 30);
 });
 
 test('email health card separates Resend outcomes from ops inbox connectivity', function () {

@@ -534,6 +534,7 @@
           '</small></article>';
       }).join('');
 
+      var thirty = data.periods.last_30_days;
       var maximumProfit = Math.max.apply(Math, data.daily.map(function (day) { return Math.abs(Number(day.gross_profit_cents) || 0); }).concat([0]));
       var hasProfitData = data.daily.some(function (day) { return day.profit_known_orders > 0; });
       var chart = hasProfitData ? data.daily.map(function (day, index) {
@@ -541,11 +542,35 @@
         var height = amount ? Math.max(5, Math.round(Math.abs(amount) / (maximumProfit || 1) * 100)) : 0;
         var label = (index % 5 === 0 || index === data.daily.length - 1) ? day.day.slice(5) : '';
         return '<div class="sales-chart-column' + (amount < 0 ? ' negative' : '') + (amount === 0 ? ' zero' : '') + '" title="' + escapeHtml(day.day + ': ' +
-          (day.profit_known_orders ? salesMoney(amount) + ' gross profit' : 'profit pending') +
+          (day.profit_known_orders || !day.orders ? salesMoney(amount) + ' gross profit' : 'profit pending') +
+          ' · ' + day.orders + ' paid sale' + (day.orders === 1 ? '' : 's') +
+          ' · ' + day.units + ' book' + (day.units === 1 ? '' : 's') +
           ' · ' + salesMoney(day.revenue_cents) + ' revenue' +
           (day.profit_pending_orders ? ' · ' + day.profit_pending_orders + ' cost pending' : '')) + '">' +
           '<div class="sales-chart-track"><i style="height:' + height + '%"></i></div><span>' + label + '</span></div>';
       }).join('') : '<div class="sales-empty-chart">Gross profit appears when BookVault order costs are available.</div>';
+      var maxDailySales = Math.max.apply(Math, data.daily.map(function (day) { return Number(day.orders) || 0; }).concat([1]));
+      var salesLinePoints = data.daily.map(function (day, index) {
+        return { x: 18 + index * 564 / Math.max(1, data.daily.length - 1),
+          y: 116 - (Number(day.orders) || 0) * 90 / maxDailySales };
+      });
+      var salesLine = '<div class="sales-line-head"><h4>Paid sales by day</h4><span>' + thirty.paid_orders +
+        ' in 30 days</span></div><svg class="sales-line-graph" viewBox="0 0 600 148" preserveAspectRatio="none" role="img" aria-label="Paid sales by day over the last 30 days, from ' +
+        escapeHtml(data.daily[0].day) + ' to ' + escapeHtml(data.daily[data.daily.length - 1].day) + '">' +
+        '<line class="sales-line-grid" x1="18" y1="26" x2="582" y2="26"></line>' +
+        '<line class="sales-line-grid" x1="18" y1="116" x2="582" y2="116"></line>' +
+        '<path class="sales-line-path" d="' + salesLinePoints.map(function (point, index) {
+          return (index ? 'L' : 'M') + point.x.toFixed(1) + ' ' + point.y.toFixed(1);
+        }).join(' ') + '"></path>' +
+        data.daily.map(function (day, index) {
+          var point = salesLinePoints[index];
+          return '<circle class="sales-line-point" cx="' + point.x.toFixed(1) + '" cy="' + point.y.toFixed(1) +
+            '" r="4" tabindex="0"><title>' + escapeHtml(day.day + ': ' + day.orders + ' paid sale' +
+              (day.orders === 1 ? '' : 's')) + '</title></circle>';
+        }).join('') +
+        '<text x="18" y="142">' + escapeHtml(data.daily[0].day.slice(5)) + '</text>' +
+        '<text x="582" y="142" text-anchor="end">' + escapeHtml(data.daily[data.daily.length - 1].day.slice(5)) + '</text>' +
+        '<text x="580" y="22" text-anchor="end">' + maxDailySales + '</text></svg>';
 
       var countries = data.countries.length ? data.countries.map(function (country) {
         return '<div class="sales-country-row"><strong>' + escapeHtml(country.country) + '</strong><span>' + country.orders + ' order' + (country.orders === 1 ? '' : 's') + ' · ' + country.units + ' books</span><b>' + salesMoney(country.revenue_cents) + '</b></div>';
@@ -600,7 +625,6 @@
           '<button type="button" class="sales-test-order-action" data-sales-action="restore">Restore to reporting</button></div>';
       }).join('');
 
-      var thirty = data.periods.last_30_days;
       var payments = data.payment_overview || {};
       var paymentOverview = '<section class="sales-payment-overview" aria-label="Payment and fulfillment status, last 30 days">' +
         '<div><span>Stripe-paid orders</span><strong>' + (payments.paid || 0) + '</strong></div>' +
@@ -629,7 +653,7 @@
         '</section>' +
         paymentOverview +
         emailHealthHtml(emailHealth, mailboxStatus) +
-        '<div class="sales-dashboard-columns"><section class="sales-block sales-chart-block"><div class="sales-block-head"><div><span>Estimated gross profit</span><h3>Last 30 days</h3></div><b>' + salesProfit(thirty) + '</b></div><div class="sales-chart">' + chart + '</div><p class="sales-profit-note">Revenue minus actual BookVault production, shipping, tax and other order costs, converted at a saved reference FX rate. Excludes Stripe and bank fees. ' +
+        '<div class="sales-dashboard-columns"><section class="sales-block sales-chart-block"><div class="sales-block-head"><div><span>Estimated gross profit</span><h3>Last 30 days</h3></div><b>' + salesProfit(thirty) + '</b></div><div class="sales-chart">' + chart + '</div><div class="sales-line-wrap">' + salesLine + '</div><p class="sales-profit-note">Revenue minus actual BookVault production, shipping, tax and other order costs, converted at a saved reference FX rate. Excludes Stripe and bank fees. ' +
           (thirty.profit_pending_orders ? thirty.profit_pending_orders + ' paid order' + (thirty.profit_pending_orders === 1 ? '' : 's') + ' awaiting BookVault cost.' : '') + '</p></section>' +
           '<section class="sales-block"><div class="sales-block-head"><div><span>Markets</span><h3>Revenue by country</h3></div></div><div class="sales-country-list">' + countries + '</div></section></div>' +
         '<section class="sales-block sales-refunds" id="salesRefunds"><div class="sales-block-head"><div><span>Money returned</span><h3>Refunds &amp; reasons</h3></div><small>' + data.periods.all_time.refunded_orders + ' all time · newest 100 shown</small></div><div class="sales-refund-list">' + refunds + '</div></section>' +
