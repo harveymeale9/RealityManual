@@ -149,7 +149,7 @@ test('both analytics views show the nested source-and-video referral chart', fun
   assert.match(app, /referralBreakdownHtml\(website\.referrals\)/);
   assert.match(app, /conic-gradient\(/);
   assert.match(app, /segment\.piece_title/);
-  assert.match(page, /style\.css\?v=20261111-sales-line/);
+  assert.match(page, /style\.css\?v=20261111-sales-line-v2/);
 });
 
 test('sales chart shows paid sale counts on profit hover and a daily sales line', async function () {
