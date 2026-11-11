@@ -21986,3 +21986,16 @@ the current raw day and compacted per-link daily counts. As with the existing
 cohort rate; one visitor may contribute multiple arrivals across links/days.
 The UI states that limitation explicitly. Tests cover browser navigation,
 sanitized persistence, report output, test-order exclusion and the rate.
+
+Release `791264b` is live: the storefront backend was rebuilt and recreated
+with its existing data mount/env after an online SQLite backup to
+`/root/realitymanual-backend-data/reality-manual-pre-attribution-20261111.sqlite`
+(integrity check `ok`). The new column exists, the public backend health route
+returns `ok`, and the database quick check passes. The ops-service CI log
+commit `02ae22a` confirms a successful container rebuild at `791264b`; its
+live Sales Analytics source shows the new order label and long-form card.
+GitHub Pages serves the versioned landing/checkout analytics scripts. All 349
+ops tests and the two focused backend attribution tests pass. The full backend
+suite still has the previously documented unrelated `/home2/` byte-equality
+test failure. No payment, BookVault order, or historic source backfill was
+created during verification.
