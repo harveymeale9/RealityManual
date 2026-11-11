@@ -432,7 +432,7 @@
       source.toLowerCase() === 'instagram' ? 'Instagram' : source];
     if (touch.campaign) parts.push(String(touch.campaign).toLowerCase() === 'longform' ? 'long-form' : touch.campaign);
     else if (touch.medium && touch.medium !== 'video') parts.push(touch.medium);
-    if (touch.content) parts.push(/^\d+$/.test(String(touch.content)) ? 'video ' + touch.content : touch.content);
+    if (touch.content) parts.push(touch.video_title || (/^\d+$/.test(String(touch.content)) ? 'video ' + touch.content : touch.content));
     return parts.join(' · ');
   }
 

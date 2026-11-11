@@ -28,6 +28,7 @@ const mailboxService = require('./src/mailboxService');
 const namecheapMailbox = require('./src/namecheapMailbox');
 const mailTriageService = require('./src/mailTriageService');
 const storefrontReporting = require('./src/storefrontReporting');
+const salesVideoTitles = require('./src/salesVideoTitles');
 const websiteHealthMonitor = require('./src/websiteHealthMonitor');
 const weeklyReportService = require('./src/weeklyReportService');
 const weeklyShippingAuditSchedule = require('./src/weeklyShippingAuditSchedule');
@@ -1701,6 +1702,7 @@ app.get('/api/reports/sales-dashboard', requireAuth, function (req, res) {
     res.set('Cache-Control', 'no-store');
     const unseen = salesAlerts.status().unseenOrderIds;
     const dashboard = storefrontReporting.getSalesDashboard(getStorefrontReportDb(), undefined, excludedSalesOrderIds(), unseen);
+    salesVideoTitles.addVideoTitlesToOrders(dashboard.recent_orders, storedPieces());
     const visibleIds = new Set(dashboard.recent_orders.map(function (order) { return order.id; }));
     dashboard.unseen_sales_order_ids = unseen.filter(function (id) { return visibleIds.has(id); });
     const notes = new Map(stmts.getAll.all('refundNotes').map(function (row) {

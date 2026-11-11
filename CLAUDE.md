@@ -22026,3 +22026,15 @@ in-page tooltip that opens on `pointerenter` with no timer, also works on
 keyboard focus and touch press, and closes on pointer leave/blur. Bar labels
 remain available to assistive technology. Only the frontend and its cache keys
 changed; the existing private daily sales feed and backend are untouched.
+
+## Sales order attribution shows video titles (2026-11-11)
+
+Harvey found a recent order's `Last tagged: YouTube · long-form · video 185`
+label unhelpful. The private Sales Analytics response now resolves numeric YouTube
+content IDs against Content Studio's saved piece sequence and adds that piece's
+selected YouTube title (falling back to its working title) to the order's first
+and last-tagged touch. The order row displays the title; unknown/deleted piece
+IDs retain the old numeric fallback. This is response-only enrichment: stored
+checkout attribution and historic orders are not modified, and no YouTube API
+request is made per dashboard refresh. The frontend still HTML-escapes the
+result. The ops test suite (352 tests) passes.
