@@ -7,6 +7,7 @@ window.RMAnalytics = (function () {
   var API_BASE_URL = (window.RM_CONFIG && window.RM_CONFIG.API_BASE_URL) || '';
   var SESSION_KEY = 'rm_session_id';
   var ATTRIBUTION_KEY = 'rm_attribution';
+  var LAST_TAGGED_KEY = 'rm_last_tagged_attribution';
   var INTERNAL_KEY = 'rm_analytics_internal_v1';
   var pending = [];
   var humanVerified = false;
@@ -73,9 +74,33 @@ window.RMAnalytics = (function () {
       utm_term: params.get('utm_term') || '',
       utm_content: params.get('utm_content') || '',
       referrer: document.referrer || '',
+      captured_at: new Date().toISOString(),
     };
     try { localStorage.setItem(ATTRIBUTION_KEY, JSON.stringify(attribution)); } catch (e) {}
     return attribution;
+  }
+
+  // Preserve the latest explicitly tagged arrival separately from first
+  // touch. A later direct visit is not itself another tagged click.
+  getAttribution();
+  try {
+    var taggedParams = new URLSearchParams(window.location.search);
+    if (taggedParams.get('utm_source')) {
+      localStorage.setItem(LAST_TAGGED_KEY, JSON.stringify({
+        utm_source: taggedParams.get('utm_source') || '',
+        utm_medium: taggedParams.get('utm_medium') || '',
+        utm_campaign: taggedParams.get('utm_campaign') || '',
+        utm_content: taggedParams.get('utm_content') || '',
+        referrer: document.referrer || '',
+        captured_at: new Date().toISOString(),
+      }));
+    }
+  } catch (e) {}
+
+  function getCheckoutAttribution() {
+    var lastTagged = null;
+    try { lastTagged = JSON.parse(localStorage.getItem(LAST_TAGGED_KEY) || 'null'); } catch (e) {}
+    return { first: getAttribution(), last_tagged: lastTagged };
   }
 
   function send(eventName, extra) {
@@ -166,5 +191,5 @@ window.RMAnalytics = (function () {
     });
   } catch (e) {}
 
-  return { track: track };
+  return { track: track, getCheckoutAttribution: getCheckoutAttribution };
 })();

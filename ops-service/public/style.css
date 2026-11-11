@@ -2680,6 +2680,11 @@ body.role-reviewer #pmBackFab {
 .sales-order-row time { color: var(--ink-faint); font: .63rem/1.4 var(--font-mono); }
 .sales-order-row > strong { min-width: 0; color: var(--ink); font: 700 .72rem var(--font-mono); }
 .sales-order-row > strong small { display: block; margin-top: 4px; color: var(--ink-faint); font: .62rem var(--font-body); }
+.sales-order-row > strong .sales-order-source { color: var(--accent); overflow-wrap: anywhere; line-height: 1.35; }
+.sales-attribution-block { padding: 16px 19px; }
+.sales-attribution-block > strong { display: block; margin: 7px 0; color: var(--accent); font: 700 clamp(1.7rem,4vw,2.5rem)/1 var(--font-display); }
+.sales-attribution-block > p { margin: 0 0 5px; color: var(--ink-soft); font-size: .76rem; }
+.sales-attribution-block > small { display: block; color: var(--ink-faint); font-size: .65rem; line-height: 1.45; }
 .sales-order-price { text-align: right; }
 .sales-order-price b { display: block; color: var(--ink); font: 600 .75rem var(--font-mono); }
 .sales-order-price small { display: block; margin-top: 4px; color: var(--ink-faint); font: .57rem/1.4 var(--font-mono); white-space: nowrap; }

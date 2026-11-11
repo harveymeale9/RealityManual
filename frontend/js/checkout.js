@@ -368,7 +368,8 @@
       const res = await fetch(`${API_BASE_URL}/api/checkout/create-payment-intent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...values, quoted_total_price_cents: lastQuote.totalPriceCents }),
+        body: JSON.stringify({ ...values, quoted_total_price_cents: lastQuote.totalPriceCents,
+          attribution: RMAnalytics.getCheckoutAttribution() }),
       });
       orderResponse = await res.json();
 

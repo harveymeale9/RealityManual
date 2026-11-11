@@ -10,6 +10,51 @@ const FUNNEL_STEPS = [
 // Harvey's own pre-launch browsing through 13 October is excluded from the
 // Content Studio Website Analytics dashboard, without deleting store records.
 const WEBSITE_ANALYTICS_START_DAY = '2026-10-14';
+// Start on the first full UTC day after order attribution is deployed. Older
+// clicks exist, but their purchases cannot be reconstructed after compaction.
+const ORDER_ATTRIBUTION_START_DAY = '2026-11-12';
+
+function orderAttribution(value) {
+  if (!value) return null; // Orders before checkout attribution was saved.
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? {
+      first: parsed.first || null, last_tagged: parsed.last_tagged || null
+    } : null;
+  } catch { return null; }
+}
+
+function longformOrderConversion(db, excludedIds, hasOrderAttribution) {
+  const empty = { since: ORDER_ATTRIBUTION_START_DAY, arrivals: 0, paid_orders: 0, rate_percent: null };
+  if (!hasOrderAttribution) return empty;
+  const hasDaily = !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='analytics_daily_utm_landings'").get();
+  const hasRaw = !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='analytics_events'").get();
+  const daily = hasDaily ? db.prepare(`SELECT COALESCE(SUM(verified_visits),0) AS n
+    FROM analytics_daily_utm_landings WHERE day >= ? AND lower(utm_source)='youtube'
+      AND lower(utm_medium)='video' AND lower(utm_campaign)='longform'`)
+    .get(ORDER_ATTRIBUTION_START_DAY).n : 0;
+  const raw = hasRaw ? db.prepare(`SELECT COUNT(*) AS n FROM (
+    SELECT substr(created_at,1,10), utm_content, session_id FROM analytics_events
+    WHERE created_at >= ? AND verified_human=1 AND event_name='utm_landing'
+      AND lower(utm_source)='youtube' AND lower(utm_medium)='video'
+      AND lower(utm_campaign)='longform'
+    GROUP BY substr(created_at,1,10), utm_content, session_id)`)
+    .get(ORDER_ATTRIBUTION_START_DAY + 'T00:00:00.000Z').n : 0;
+  const excluded = excludedOrderFilter(excludedIds);
+  const rows = db.prepare(`SELECT attribution_json FROM orders WHERE created_at >= ?
+    AND ${PAID_ORDER_SQL}${excluded.sql}`)
+    .all(ORDER_ATTRIBUTION_START_DAY + 'T00:00:00.000Z', ...excluded.ids);
+  const paid = rows.filter(function (row) {
+    const touch = orderAttribution(row.attribution_json)?.last_tagged;
+    return touch && String(touch.source).toLowerCase() === 'youtube' &&
+      String(touch.medium).toLowerCase() === 'video' &&
+      String(touch.campaign).toLowerCase() === 'longform' &&
+      String(touch.captured_at || '') >= ORDER_ATTRIBUTION_START_DAY + 'T00:00:00.000Z';
+  }).length;
+  const arrivals = Number(daily || 0) + Number(raw || 0);
+  return { since: ORDER_ATTRIBUTION_START_DAY, arrivals, paid_orders: paid,
+    rate_percent: arrivals ? Math.round(paid / arrivals * 1000) / 10 : null };
+}
 
 function eventMap(rows) {
   const result = {};
@@ -373,13 +418,16 @@ function getSalesDashboard(db, nowValue, excludedIds, unseenOrderIds) {
     }).length
   };
 
+  const hasOrderAttribution = db.prepare('PRAGMA table_info(orders)').all()
+    .some(function (column) { return column.name === 'attribution_json'; });
   const recentOrderFields = `id, quantity, book_price_cents, shipping_price_cents, total_price_cents,
       bookvault_production_cost_gbp_cents, bookvault_shipping_cost_gbp_cents,
       bookvault_total_cost_gbp_cents, bookvault_total_cost_usd_cents, currency, country, order_status,
       stripe_payment_status, payment_failure_type, payment_failure_code, payment_decline_code,
       payment_failure_message, fulfillment_last_error, shipping_service_name, bookvault_order_id,
       confirmation_email_sent_at, shipping_email_sent_at,
-      resend_contact_synced_at, created_at, updated_at`;
+      resend_contact_synced_at, created_at, updated_at,
+      ${hasOrderAttribution ? 'attribution_json' : 'NULL AS attribution_json'}`;
   const newestRows = db.prepare(`
     SELECT ${recentOrderFields}
     FROM orders WHERE 1=1${excluded.sql} ORDER BY created_at DESC LIMIT 25
@@ -410,6 +458,7 @@ function getSalesDashboard(db, nowValue, excludedIds, unseenOrderIds) {
         : (Number(row.total_price_cents) || 0) - Number(row.bookvault_total_cost_usd_cents),
       currency: row.currency || 'usd',
       country: row.country || '—',
+      attribution: orderAttribution(row.attribution_json),
       order_status: row.order_status,
       stripe_payment_status: row.stripe_payment_status,
       payment_failure_type: row.payment_failure_type || '',
@@ -492,6 +541,7 @@ function getSalesDashboard(db, nowValue, excludedIds, unseenOrderIds) {
     daily: daily,
     countries: countries,
     payment_overview: paymentOverview,
+    longform_conversion: longformOrderConversion(db, excluded.ids, hasOrderAttribution),
     recent_orders: recentOrders,
     recent_refunds: recentRefunds,
     excluded_orders: excludedOrders

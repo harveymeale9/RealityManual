@@ -21954,3 +21954,35 @@ costs of $26.19–$26.63 per copy after the saved GBP/USD conversion, so that
 specific numerical claim is not supported and was not published. Recorded
 all-in BookVault costs including delivery ranged from $32.65 to $57.97; if
 Harvey wants a dollar figure, distinguish printing from printing plus delivery.
+
+## Paid-order source attribution (2026-11-11)
+
+Harvey asked for the source of each sale and a YouTube long-form visitor-to-order
+rate. The old anonymous `utm_landing` breakdown retained link-arrival counts,
+but `orders` had no attribution fields, and completed analytics days discarded
+event-level source data. Historic purchases therefore cannot be assigned to a
+video or channel reliably; do not backfill them by guessing.
+
+The storefront now captures first touch and the latest explicitly UTM-tagged
+arrival separately in browser storage and passes both with the checkout
+request. The backend sanitizes those tags, strips full referrer URLs down to
+hostnames (query strings can contain private data), and saves one
+`attribution_json` snapshot on the order before creating its PaymentIntent.
+The schema adds that nullable column via the usual startup migration. A direct
+return does not overwrite the last tagged link, and the Sales Analytics order
+row labels it **Last tagged**, not as a verified immediate click. Where first
+touch differs, the row shows that too. Old orders say **Source not recorded**;
+new untagged orders say **Direct / untagged**. These are customer-browser
+marketing tags, not authenticated claims from YouTube or Stripe.
+
+Sales Analytics also has a YouTube long-form tagged-arrival/order card. Its
+measurement window begins **2026-11-12 UTC**, the first full day after this
+release, so the old unattributable sales are never divided by the historic
+clicks. The numerator is Stripe-paid, non-refunded, non-owner-test orders whose
+latest tagged arrival is `youtube / video / longform` within that window. The
+denominator is verified long-form UTM arrivals in the same window, combining
+the current raw day and compacted per-link daily counts. As with the existing
+1.3% sitewide card, this is an arrival-to-order rate, not a distinct-person
+cohort rate; one visitor may contribute multiple arrivals across links/days.
+The UI states that limitation explicitly. Tests cover browser navigation,
+sanitized persistence, report output, test-order exclusion and the rate.

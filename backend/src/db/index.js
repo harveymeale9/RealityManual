@@ -59,6 +59,7 @@ for (const column of [
   'payment_failure_code TEXT',
   'payment_decline_code TEXT',
   'payment_failure_message TEXT',
+  'attribution_json TEXT',
 ]) {
   try {
     db.exec(`ALTER TABLE orders ADD COLUMN ${column}`);

@@ -297,6 +297,24 @@ test('sales dashboard returns live periods, a filled daily series and privacy-sa
   order.run('older-paid','BOOKVAULT_ACCEPTED','succeeded',1,7100,'usd','US','Standard','BV-older',null,null,null,
     '2026-09-01T10:00:00.000Z','2026-09-01T10:00:00.000Z','Private Person','private@example.com','Secret street',null);
   assert.equal(reporting.getSalesDashboard(db, '2026-10-10T12:00:00.000Z').books_sold.monthly_average, 2);
+  db.exec(`ALTER TABLE orders ADD COLUMN attribution_json TEXT;
+    CREATE TABLE analytics_daily_utm_landings(day TEXT, utm_source TEXT, utm_medium TEXT,
+      utm_campaign TEXT, utm_content TEXT, verified_visits INTEGER);`);
+  db.prepare('UPDATE orders SET created_at=?,attribution_json=? WHERE id=?').run(
+    '2026-11-12T12:00:00.000Z', JSON.stringify({
+      first: { source: 'instagram', medium: 'bio', campaign: '', content: '', referrer_host: 'instagram.com' },
+      last_tagged: { source: 'youtube', medium: 'video', campaign: 'longform', content: '235',
+        captured_at: '2026-11-12T11:00:00.000Z' }
+    }), 'paid-1');
+  db.prepare('INSERT INTO analytics_daily_utm_landings VALUES (?,?,?,?,?,?)')
+    .run('2026-11-12', 'youtube', 'video', 'longform', '235', 2);
+  const attributed = reporting.getSalesDashboard(db, '2026-11-13T12:00:00.000Z');
+  assert.equal(attributed.recent_orders.find((item) => item.id === 'paid-1').attribution.last_tagged.content, '235');
+  assert.deepEqual(attributed.longform_conversion, {
+    since: '2026-11-12', arrivals: 2, paid_orders: 1, rate_percent: 50
+  });
+  assert.equal(reporting.getSalesDashboard(db, '2026-11-13T12:00:00.000Z', ['paid-1'])
+    .longform_conversion.paid_orders, 0);
   db.close();
 });
 

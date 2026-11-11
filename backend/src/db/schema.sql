@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS orders (
   shipping_max_delivery_days INTEGER,
   total_price_cents         INTEGER NOT NULL,
   currency                  TEXT NOT NULL DEFAULT 'usd',
+  attribution_json          TEXT,
   -- BookVault's PodRef for this order (see CLAUDE.md §25-28/§64). Unused
   -- until order submission is built — included now so no migration is
   -- needed when that phase starts.

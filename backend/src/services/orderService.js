@@ -1,18 +1,19 @@
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const config = require('../config');
+const { normalizeOrderAttribution } = require('../lib/orderAttribution');
 
 const insertOrderStmt = db.prepare(`
   INSERT INTO orders (
     id, customer_name, email, phone, country, street1, street2, city, state, postal_code, quantity,
     book_price_cents, shipping_price_cents, shipping_service_name, shipping_service_id, shipping_min_delivery_days,
     shipping_max_delivery_days, total_price_cents, currency, review_request_opt_in,
-    review_request_opt_in_at, order_status
+    review_request_opt_in_at, attribution_json, order_status
   ) VALUES (
     @id, @customer_name, @email, @phone, @country, @street1, @street2, @city, @state, @postal_code, @quantity,
     @book_price_cents, @shipping_price_cents, @shipping_service_name, @shipping_service_id, @shipping_min_delivery_days,
     @shipping_max_delivery_days, @total_price_cents, @currency, @review_request_opt_in,
-    @review_request_opt_in_at, 'PAYMENT_PENDING'
+    @review_request_opt_in_at, @attribution_json, 'PAYMENT_PENDING'
   )
 `);
 
@@ -152,6 +153,7 @@ function createOrder(input) {
     currency: input.currency,
     review_request_opt_in: input.review_request_opt_in === true ? 1 : 0,
     review_request_opt_in_at: input.review_request_opt_in === true ? new Date().toISOString() : null,
+    attribution_json: normalizeOrderAttribution(input.attribution),
   });
   return getByIdStmt.get(id);
 }

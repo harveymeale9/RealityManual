@@ -423,6 +423,33 @@
     return visits ? ((Number(orders) || 0) / visits * 100).toFixed(1) + '%' : '—';
   }
 
+  function salesTouchLabel(touch) {
+    if (!touch) return 'Direct / untagged';
+    var source = String(touch.source || '').trim();
+    if (!source) return touch.referrer_host ? touch.referrer_host + ' (untagged)' : 'Direct / untagged';
+    var parts = [source.toLowerCase() === 'youtube' ? 'YouTube' :
+      source.toLowerCase() === 'facebook' ? 'Facebook' :
+      source.toLowerCase() === 'instagram' ? 'Instagram' : source];
+    if (touch.campaign) parts.push(String(touch.campaign).toLowerCase() === 'longform' ? 'long-form' : touch.campaign);
+    else if (touch.medium && touch.medium !== 'video') parts.push(touch.medium);
+    if (touch.content) parts.push(/^\d+$/.test(String(touch.content)) ? 'video ' + touch.content : touch.content);
+    return parts.join(' · ');
+  }
+
+  function salesOrderSource(order) {
+    var attribution = order.attribution;
+    if (!attribution) return '<small class="sales-order-source">Source not recorded</small>';
+    var last = attribution.last_tagged;
+    var first = attribution.first;
+    var primary = last || first;
+    var html = '<small class="sales-order-source">' + (last ? 'Last tagged: ' : 'First touch: ') +
+      escapeHtml(salesTouchLabel(primary)) + '</small>';
+    if (last && first && salesTouchLabel(first) !== salesTouchLabel(last)) {
+      html += '<small class="sales-order-source">First touch: ' + escapeHtml(salesTouchLabel(first)) + '</small>';
+    }
+    return html;
+  }
+
   function emailHealthHtml(health, mailbox) {
     var week = health && health.last_7_days;
     var month = health && health.last_30_days;
@@ -474,6 +501,7 @@
       if (currentTabId() !== 'sales-analytics' || request !== salesAnalyticsRequest) return;
       var data = results[0];
       var analytics = results[1];
+      var longform = data.longform_conversion || { since: '2026-11-12', arrivals: 0, paid_orders: 0, rate_percent: null };
       var emailHealth = results[2];
       var mailboxStatus = results[3];
       var periodConfig = [
@@ -534,7 +562,7 @@
           : '<span class="unpaid">No confirmed charge</span><span>Not sent to BookVault</span>';
         return '<div class="sales-order-row" data-sales-order-id="' + escapeHtml(order.id) + '">' +
           '<time datetime="' + escapeHtml(order.created_at || '') + '">' + (isNaN(date.getTime()) ? '—' : date.toLocaleString('en-GB', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' })) + '</time>' +
-          '<strong>#' + escapeHtml(String(order.id || '').slice(0, 8).toUpperCase()) + '<small>' + escapeHtml(order.country) + ' · ' + order.quantity + ' book' + (order.quantity === 1 ? '' : 's') + '</small></strong>' +
+          '<strong>#' + escapeHtml(String(order.id || '').slice(0, 8).toUpperCase()) + '<small>' + escapeHtml(order.country) + ' · ' + order.quantity + ' book' + (order.quantity === 1 ? '' : 's') + '</small>' + salesOrderSource(order) + '</strong>' +
           '<div class="sales-order-state"><span class="sales-order-status ' + salesStatusTone(order.order_status) + '">' + escapeHtml(diagnosis.label) + '</span>' +
             (diagnosis.detail ? '<small>' + escapeHtml(diagnosis.detail) + '</small>' : '') + '</div>' +
           '<div class="sales-order-price"><b>' + (paymentSettled ? salesMoney(order.total_price_cents, order.currency) :
@@ -591,6 +619,13 @@
           '<article><span>30-day refunds</span><strong>' + thirty.refunded_orders + '</strong><small>' + salesMoney(thirty.refunded_value_cents) + ' · <button type="button" class="sales-refund-jump" id="salesRefundJump">View reasons</button></small></article>' +
           '<article><span>Landing → order</span><strong>' + salesConversion(thirty.paid_orders, analytics, 'landing_page_view') + '</strong><small>verified visits</small></article>' +
           '<article><span>Checkout → order</span><strong>' + salesConversion(thirty.paid_orders, analytics, 'checkout_view') + '</strong><small>verified visits</small></article>' +
+        '</section>' +
+        '<section class="sales-block sales-attribution-block" aria-label="YouTube long-form sales attribution">' +
+          '<div class="sales-block-head"><div><span>Tagged link attribution</span><h3>YouTube long-form → order</h3></div></div>' +
+          '<strong>' + (longform.rate_percent == null ? '—' : Number(longform.rate_percent).toFixed(1) + '%') + '</strong>' +
+          '<p>' + Number(longform.paid_orders || 0) + ' paid orders from ' + Number(longform.arrivals || 0) +
+            ' verified long-form link arrivals since ' + escapeHtml(longform.since) + ' (UTC).</p>' +
+          '<small>New orders save their first touch and latest tagged click. Earlier sales cannot be attributed retrospectively. Link arrivals can include repeat visitors, so this is a tagged-arrival rate, not a unique-person cohort rate.</small>' +
         '</section>' +
         paymentOverview +
         emailHealthHtml(emailHealth, mailboxStatus) +
