@@ -22050,3 +22050,20 @@ include `WebSite` JSON-LD with `name: The Reality Manual` and canonical root
 title remain unchanged. This states the preferred site name to Google; the
 search result cannot be forced or changed instantly and may update only after
 Google recrawls the homepage. The homepage remains crawlable and indexable.
+
+## Project Manager speech output disabled (2026-11-11)
+
+Harvey is not using spoken Project Manager replies and found OpenAI
+`gpt-4o-mini-tts` output charges in Usage. The desktop and dedicated mobile
+Project Manager views no longer show Auto voice or per-reply Play controls,
+request early-ack/final-reply synthesis, or pre-generate audio before showing a
+finished text reply. Replies appear immediately as text. The server's
+`POST /api/voice/tts` now returns `410 tts_disabled` without calling any
+provider, so an already-open stale tab cannot continue generating billable
+audio. The unused OpenAI/ElevenLabs Project Manager synthesis adapters were
+removed. Incoming microphone transcription remains available through the
+existing ElevenLabs speech-to-text path, and local notification pings remain.
+`OPENAI_API_KEY` remains installed because other Content Studio structured
+classification/research functions use it; this change ends Project Manager
+TTS requests, not all OpenAI API usage. Future agents should not restore
+speech output without Harvey explicitly requesting it.

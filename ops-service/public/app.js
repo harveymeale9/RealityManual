@@ -44,11 +44,6 @@
   // rebuilt every time this tab is (re)entered, which would otherwise leak
   // one extra setTimeout chain per visit.
   var pmSync = null;
-  // Same leak-avoidance reasoning as pmSync above — unsubscribe the
-  // previous tab visit's speaking-state listener before registering a new
-  // one in bootProjectManager().
-  var pmSpeakingUnsub = null;
-  var pmAutoSpeechUnsub = null;
   var commentAlertTimer = null;
   var salesAlertTimer = null;
   var salesAlertCount = 0;
@@ -1358,7 +1353,6 @@
               '<span class="pm-agent-option active">Codex</span>' +
               '<button type="button" class="pm-agent-option pm-usage-option" aria-haspopup="dialog">Usage</button>' +
             '</div>' +
-            '<button type="button" class="pm-auto-speech-btn" id="pmAutoSpeechBtn" aria-pressed="true" title="Turn automatic voice responses off"><span>Auto voice</span></button>' +
             '<button type="button" class="pm-alert-btn" id="pmAlertBtn" title="Unread mailbox alerts">✉ Alerts <span class="pm-alert-badge" id="pmAlertBadge" hidden></span></button>' +
             '<a class="link-btn" id="pmMobileLink" href="voice-mobile.html" target="_blank" rel="noopener">Mobile view ↗</a>' +
             '<button type="button" class="pm-reset-btn" id="pmResetBtn">New conversation</button>' +
@@ -1386,7 +1380,7 @@
                 '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4Z"/></svg>' +
               '</button>' +
             '</div>' +
-            '<div class="pm-hint" id="pmVoiceHint">Voice replies are spoken automatically. Typed replies show as text — tap ▶ to hear one.</div>' +
+            '<div class="pm-hint">Voice messages are transcribed; replies appear as text.</div>' +
           '</div>' +
         '</div>' +
         '<div class="pm-col pm-col-activity">' +
@@ -1420,33 +1414,12 @@
     var replyPreviewTextEl = document.getElementById('pmReplyPreviewText');
     var replyPreviewCancelBtn = document.getElementById('pmReplyPreviewCancel');
     var usageButton = document.querySelector('.pm-usage-option');
-    var autoSpeechButton = document.getElementById('pmAutoSpeechBtn');
-    var voiceHint = document.getElementById('pmVoiceHint');
     var alertButton = document.getElementById('pmAlertBtn');
     var alertBadge = document.getElementById('pmAlertBadge');
     var selectedAgent = 'codex';
 
     function agentName() { return 'Codex'; }
     if (window.RMUsage) window.RMUsage.attach(usageButton);
-    function autoSpeechIcon(enabled) {
-      return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6.5 9H3v6h3.5l4.5 4V5Z"/><path d="M15 9.5a4 4 0 0 1 0 5"/>' +
-        (enabled ? '<path d="M18 6.5a8 8 0 0 1 0 11"/>' : '<path d="m16 8 5 8M21 8l-5 8"/>') + '</svg>';
-    }
-    function renderAutoSpeech(enabled) {
-      autoSpeechButton.classList.toggle('is-muted', !enabled);
-      autoSpeechButton.setAttribute('aria-pressed', enabled ? 'true' : 'false');
-      autoSpeechButton.title = enabled ? 'Turn automatic voice responses off' : 'Turn automatic voice responses on';
-      autoSpeechButton.innerHTML = autoSpeechIcon(enabled) + (enabled ? '<span>Auto voice</span>' : '<span>Voice muted</span>');
-      voiceHint.textContent = enabled
-        ? 'Voice replies are spoken automatically. Typed replies show as text — tap ▶ to hear one.'
-        : 'Automatic voice is muted. Tap ▶ on any response whenever you do want to hear it.';
-    }
-    renderAutoSpeech(Voice.isAutoSpeechEnabled());
-    autoSpeechButton.addEventListener('click', function () {
-      Voice.setAutoSpeechEnabled(!Voice.isAutoSpeechEnabled());
-    });
-    if (pmAutoSpeechUnsub) pmAutoSpeechUnsub();
-    pmAutoSpeechUnsub = Voice.onAutoSpeechChange(renderAutoSpeech);
 
     // Tap-to-reply: selecting one of Codex's earlier messages (via the Reply
     // button added in addAssistantMessage below) sets this, shows the
@@ -1473,26 +1446,6 @@
 
     if (pmSync) { pmSync.stop(); pmSync = null; }
 
-    // One shared listener drives the "speaking" highlight/button state for
-    // every bubble in the thread, whichever one is currently playing —
-    // covers both a manual Play-button click and auto-speak starting
-    // playback on its own, which is what desktop was missing before (the
-    // button's own local "am I playing" flag never got set when playback
-    // started from outside its own click handler).
-    if (pmSpeakingUnsub) pmSpeakingUnsub();
-    pmSpeakingUnsub = Voice.onSpeakingChange(function (activeId) {
-      thread.querySelectorAll('.pm-speaking').forEach(function (el) {
-        el.classList.remove('pm-speaking');
-        var btn = el.querySelector('.pm-play-btn');
-        if (btn) { btn.textContent = '▶ Play'; btn.classList.remove('pm-stop-btn'); }
-      });
-      if (activeId === null || typeof activeId === 'undefined') return;
-      var active = thread.querySelector('.pm-msg-assistant[data-msg-id="' + activeId + '"]');
-      if (!active) return;
-      active.classList.add('pm-speaking');
-      var btn = active.querySelector('.pm-play-btn');
-      if (btn) { btn.textContent = '■ Stop'; btn.classList.add('pm-stop-btn'); }
-    });
 
     var emptyNote = thread.querySelector('.pm-empty');
     function clearEmptyNote() { if (emptyNote && emptyNote.parentNode) { emptyNote.parentNode.removeChild(emptyNote); emptyNote = null; } }
@@ -1638,33 +1591,6 @@
       wrap.appendChild(body);
       var meta = document.createElement('div');
       meta.className = 'pm-msg-meta';
-      var playBtn = document.createElement('button');
-      playBtn.type = 'button';
-      playBtn.className = 'pm-play-btn';
-      playBtn.textContent = '▶ Play';
-      // Button state is driven entirely by the shared onSpeakingChange
-      // listener (registered once in bootProjectManager) rather than a
-      // local "am I playing" flag here — that flag used to only ever get
-      // set from this button's own click, so audio started elsewhere
-      // (auto-speak) left the button stuck showing "Play" while audio was
-      // actually going, and clicking it then restarted the same text
-      // instead of stopping it.
-      playBtn.addEventListener('click', function () {
-        playBtn.classList.remove('pm-play-btn-error');
-        playBtn.removeAttribute('title');
-        if (Voice.currentlySpeaking() === msgId) { Voice.stopSpeaking(); return; }
-        playBtn.textContent = 'Loading audio…';
-        Voice.speak(text, msgId, agent, 'reply', { manual: true }).then(function (audio) {
-          if (!audio && Voice.currentlySpeaking() !== msgId) playBtn.textContent = '▶ Play';
-        }).catch(function (error) {
-          playBtn.textContent = error && error.code === 'openai_tts_not_configured'
-            ? 'OpenAI key needed'
-            : (error && error.code === 'tts_timeout' ? '↻ Try again' : 'Audio unavailable');
-          playBtn.title = error && error.message ? error.message : 'Could not play this response.';
-          playBtn.classList.add('pm-play-btn-error');
-        });
-      });
-      meta.appendChild(playBtn);
       if (isMailAlert) {
         var mailboxBtn = document.createElement('button');
         mailboxBtn.type = 'button';
@@ -1957,12 +1883,6 @@
       activityEl.scrollTop = activityEl.scrollHeight;
     }
 
-    // Ids this device sent via voice on itself and therefore wants its
-    // contextual early acknowledgment spoken while work is still underway.
-    // Final replies use the global Auto voice preference regardless of which
-    // input mode/device created them; see onDone below.
-    var voiceAutoSpeak = {};
-
     // The single source of truth for the thread: on first tick it loads
     // whatever's already in the table (so opening this tab resumes the last
     // conversation instead of a blank slate), and on every tick after it
@@ -1984,12 +1904,9 @@
       onPending: function (row) { if (!isPmAlert(row.notification_kind)) addTyping(row.id, row.agent); },
       onEarlyAck: function (row) {
         // Swap the generic "Codex is working on it…" placeholder for Codex's own
-        // real, contextual first line the moment it's available — visible
-        // even for a typed/no-speech send, not just spoken.
+        // real, contextual first line the moment it's available.
         var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
         if (typingEl) typingEl.querySelector('.pm-typing-copy').textContent = row.early_ack;
-        if (!voiceAutoSpeak[row.id] || !Voice.isAutoSpeechEnabled()) return;
-        Voice.speak(row.early_ack, row.id, row.agent, 'early_ack').catch(function () {});
       },
       onDone: function (row) {
         // Look the placeholder up (rather than just removeTyping()) so its
@@ -2000,50 +1917,20 @@
         var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
         var replyText = row.reply_text || '';
         var newlyArrived = pastFirstTick;
-        var shouldAutoplay = newlyArrived && Voice.isAutoSpeechEnabled() && Voice.isActiveHere() &&
-          !isPmAlert(row.notification_kind);
-        delete voiceAutoSpeak[row.id];
-
-        function revealReply() {
-          // Execute-mode replies are real completion summaries now (see
-          // server.js buildVoicePrompt), not throwaway placeholders.
-          addAssistantMessage(replyText, row.transcript, row.id, typingEl, row.agent,
-            row.notification_kind, !!row.notification_unread, row.replyAttachments);
-          if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
-          if (shouldAutoplay) {
-            // prepareSpeech has already placed the first MP3 part in memory,
-            // so this starts from the same event turn as the bubble reveal.
-            Voice.speak(replyText, row.id, row.agent).catch(function () {});
-          } else if (newlyArrived && Voice.isActiveHere()) {
-            Voice.playPing();
-          }
-        }
-
-        if (newlyArrived && !isPmAlert(row.notification_kind) && replyText) {
-          if (typingEl) typingEl.querySelector('.pm-typing-copy').textContent = agentName(row.agent) + ' is preparing voice playback…';
-          // Do not expose a Play button that still has to synthesize audio.
-          // If the provider is unavailable, fail open after the bounded TTS
-          // request and reveal the readable answer rather than hiding it.
-          Voice.prepareSpeech(replyText, row.id, row.agent, 'reply')
-            .catch(function () { return null; })
-            .then(revealReply);
-        } else {
-          revealReply();
-        }
+        addAssistantMessage(replyText, row.transcript, row.id, typingEl, row.agent,
+          row.notification_kind, !!row.notification_unread, row.replyAttachments);
+        if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
+        if (newlyArrived && Voice.isActiveHere()) Voice.playPing();
       },
       onError: function (row) {
         var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
         addMessage('error', row.error_message || 'Something went wrong.', row.id, null, row.transcript, typingEl);
         if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
         if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
-        if (voiceAutoSpeak[row.id]) {
-          delete voiceAutoSpeak[row.id];
-        }
       },
       onCancelled: function (row) {
         var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
         if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
-        delete voiceAutoSpeak[row.id];
       },
       onUpdate: function (row) {
         var existing = thread.querySelector('.pm-msg-assistant[data-msg-id="' + row.id + '"]');
@@ -2082,7 +1969,6 @@
 
     function sendText(text, mode, opts) {
       opts = opts || {};
-      var autoSpeak = !!opts.autoSpeak;
       var images = opts.images || [];
       if (!text.trim() && !images.length) return;
       var replyTo = pendingReplyTo;
@@ -2101,7 +1987,6 @@
           media.src = persistedAttachments[index].url;
           if (previous && previous.indexOf('blob:') === 0) URL.revokeObjectURL(previous);
         });
-        if (autoSpeak) voiceAutoSpeak[created.id] = true;
         pmSync.markKnown(created);
       }).catch(function (err) {
         if (typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
@@ -2109,23 +1994,13 @@
       });
     }
 
-    // Typing means "reply in text" by default — voice is only for when
-    // Harvey actually spoke. Exception per Harvey: if his immediately
-    // preceding message was itself sent by voice, a quick typed follow-up
-    // (e.g. fixing a misheard word) still gets a spoken reply too, so the
-    // conversation doesn't abruptly go silent mid-voice-exchange. One-shot:
-    // this resets to text-only after the typed message, not sticky forever.
-    var lastSendWasVoice = false;
-
     sendBtn.addEventListener('click', function () {
       var text = textInput.value;
       var images = pendingImages.slice();
       textInput.value = '';
       textInput.style.height = 'auto';
-      var carryVoice = lastSendWasVoice;
-      lastSendWasVoice = false;
       clearPendingImages();
-      sendText(text, 'respond', { autoSpeak: carryVoice, images: images });
+      sendText(text, 'respond', { images: images });
     });
     // Desktop keeps the familiar chat behavior: Enter sends, while
     // Shift+Enter inserts a deliberate newline. The dedicated mobile view is
@@ -2214,7 +2089,7 @@
         var text = textInput.value;
         textInput.value = '';
         textInput.style.height = 'auto';
-        if (text.trim()) { lastSendWasVoice = true; sendText(text, 'respond', { autoSpeak: true }); }
+        if (text.trim()) sendText(text, 'respond');
       });
       recognition.addEventListener('error', function (e) {
         clearReadyTimer();
@@ -2257,8 +2132,7 @@
         rec.stop().then(function (blob) { return Voice.transcribe(blob); })
           .then(function (text) {
             if (!text) return;
-            lastSendWasVoice = true;
-            sendText(text, 'respond', { autoSpeak: true });
+            sendText(text, 'respond');
           })
           .catch(function (err) { addMessage('error', (err && err.message) || 'Could not transcribe audio.'); });
         return;

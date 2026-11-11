@@ -8,13 +8,10 @@ const multer = require('multer');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { Readable } = require('stream');
 const Database = require('better-sqlite3');
 const codexRunner = require('./src/codexRunner');
 const openaiStructured = require('./src/openaiStructured');
 const elevenlabs = require('./src/elevenlabs');
-const ttsRouter = require('./src/ttsRouter');
-const speechText = require('./src/speechText');
 const videoAnalysis = require('./src/videoAnalysis');
 const voiceAttachments = require('./src/voiceAttachments');
 const youtubeAuth = require('./src/youtubeAuth');
@@ -5096,75 +5093,10 @@ app.post('/api/voice/transcribe', voiceUpload.single('audio'), function (req, re
   });
 });
 
-app.post('/api/voice/tts', async function (req, res) {
-  const requestedAgent = req.body && req.body.agent;
-  const messageId = req.body && req.body.messageId;
-  const speechKind = req.body && req.body.speechKind === 'early_ack' ? 'early_ack' : 'reply';
-  const messageRow = typeof messageId === 'string' ? stmts.getVoiceMessage.get(messageId) : null;
-  // A persisted message's recorded identity always wins over the browser's
-  // claim. This also makes Play buttons from a slightly stale client route
-  // correctly as long as they send the message ID.
-  let agent = messageRow ? 'codex' : (requestedAgent === 'codex' ? 'codex' : null);
-  let text = req.body && req.body.text;
-
-  // Never default an ambiguous TTS request. Older pre-agent browser tabs sent
-  // text alone; failing closed keeps speech tied to a persisted Codex reply.
-  if (!agent) return res.status(400).json({ error: 'tts_agent_required' });
-
-  // Codex may speak only the two user-facing fields persisted for the
-  // requested message: its contextual early acknowledgment while work is
-  // underway, or its completed final reply. Resolve either one from the
-  // canonical DB row so browser code can never send a command, reasoning
-  // event, log, or Activity line to OpenAI TTS.
-  if (!messageRow) {
-    return res.status(400).json({ error: 'codex_tts_requires_completed_message' });
-  }
-  if (speechKind === 'early_ack') {
-    if (!messageRow.early_ack) return res.status(400).json({ error: 'codex_tts_ack_not_ready' });
-    text = speechText.stripMarkdownForSpeech(messageRow.early_ack);
-  } else {
-    if (messageRow.status !== 'done' || !messageRow.reply_text) {
-      return res.status(400).json({ error: 'codex_tts_requires_completed_message' });
-    }
-    text = speechText.stripMarkdownForSpeech(messageRow.reply_text);
-  }
-
-  if (typeof text !== 'string' || !text.trim()) return res.status(400).json({ error: 'invalid_text' });
-  // New clients request one bounded speech part at a time. This lets playback
-  // begin after roughly a paragraph of audio is ready while the following part
-  // is prepared in the background, instead of leaving a long reply on
-  // "Loading audio" until several minutes of MP3 have downloaded. Keep the
-  // old single-request behavior for a stale tab, but never silently truncate a
-  // current client's reply.
-  const fullSpeechText = text.trim().slice(0, 50000);
-  const speechParts = speechText.splitForSpeech(fullSpeechText, 1800);
-  const hasPartIndex = Number.isInteger(req.body && req.body.partIndex);
-  const partIndex = hasPartIndex ? req.body.partIndex : 0;
-  if (partIndex < 0 || partIndex >= speechParts.length) return res.status(416).json({ error: 'tts_part_out_of_range' });
-  const speechPart = hasPartIndex ? speechParts[partIndex] : fullSpeechText.slice(0, 4096);
-  res.setHeader('X-RM-TTS-Provider', ttsRouter.providerForAgent(agent));
-  res.setHeader('X-RM-TTS-Part-Index', String(partIndex));
-  res.setHeader('X-RM-TTS-Part-Count', String(hasPartIndex ? speechParts.length : 1));
-  try {
-    const audio = await ttsRouter.synthesizeSpeech(agent, speechPart);
-    res.setHeader('Content-Type', audio.contentType);
-    res.setHeader('X-RM-TTS-Streaming', audio.streaming ? '1' : '0');
-    if (Buffer.isBuffer(audio.body)) return res.send(audio.body);
-    res.flushHeaders();
-    const stream = Readable.fromWeb(audio.body);
-    stream.on('error', function (err) {
-      console.error('tts stream failed:', err.message);
-      if (!res.destroyed) res.destroy(err);
-    });
-    res.on('close', function () { if (!stream.destroyed) stream.destroy(); });
-    stream.pipe(res);
-  } catch (e) {
-    console.error('tts failed (' + ttsRouter.providerForAgent(agent) + '):', e.message);
-    if (!res.headersSent) {
-      const status = e.code === 'openai_tts_not_configured' ? 503 : 502;
-      res.status(status).json({ error: e.code || 'tts_failed' });
-    }
-  }
+// Keep a hard server-side block for stale tabs that still have a Play button.
+// Do not call any TTS provider: even merely preparing audio incurs charges.
+app.post('/api/voice/tts', function (req, res) {
+  res.status(410).json({ error: 'tts_disabled' });
 });
 
 app.use(function (err, req, res, next) {

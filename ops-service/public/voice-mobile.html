@@ -162,12 +162,11 @@
           <span class="pm-agent-option active">Codex</span>
           <button type="button" class="pm-agent-option pm-usage-option" aria-haspopup="dialog">Usage</button>
         </div>
-        <button type="button" class="pm-auto-speech-btn pm-auto-speech-btn--mobile" id="vAutoSpeechBtn" aria-pressed="true" title="Turn automatic voice responses off"><span>Auto voice</span></button>
         <button type="button" class="pm-alert-btn v-alert-btn" id="vAlertBtn" title="Unread mailbox alerts">✉ <span class="pm-alert-badge" id="vAlertBadge" hidden></span></button>
       </div>
       <button type="button" class="v-btn v-btn-ask" id="askBtn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/></svg>
-        <span class="v-btn-text"><span class="v-btn-label">Ask &amp; Wait for Reply</span><span class="v-btn-sub">Speak — hear Codex's answer back</span></span>
+        <span class="v-btn-text"><span class="v-btn-label">Ask &amp; Wait for Reply</span><span class="v-btn-sub">Speak — get a text reply</span></span>
       </button>
 
       <div class="v-chat">
@@ -260,31 +259,12 @@
       var replyPreviewTextEl = document.getElementById('vReplyPreviewText');
       var replyPreviewCancelBtn = document.getElementById('vReplyPreviewCancel');
       var usageButton = document.querySelector('.pm-usage-option');
-      var autoSpeechButton = document.getElementById('vAutoSpeechBtn');
       var alertButton = document.getElementById('vAlertBtn');
       var alertBadge = document.getElementById('vAlertBadge');
       var selectedAgent = 'codex';
 
       function agentName() { return 'Codex'; }
       if (window.RMUsage) window.RMUsage.attach(usageButton);
-      function autoSpeechIcon(enabled) {
-        return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6.5 9H3v6h3.5l4.5 4V5Z"/><path d="M15 9.5a4 4 0 0 1 0 5"/>' +
-          (enabled ? '<path d="M18 6.5a8 8 0 0 1 0 11"/>' : '<path d="m16 8 5 8M21 8l-5 8"/>') + '</svg>';
-      }
-      function renderAutoSpeech(enabled) {
-        autoSpeechButton.classList.toggle('is-muted', !enabled);
-        autoSpeechButton.setAttribute('aria-pressed', enabled ? 'true' : 'false');
-        autoSpeechButton.title = enabled ? 'Turn automatic voice responses off' : 'Turn automatic voice responses on';
-        autoSpeechButton.innerHTML = autoSpeechIcon(enabled) + (enabled ? '<span>Auto voice</span>' : '<span>Voice muted</span>');
-        askBtn.querySelector('.v-btn-sub').textContent = enabled
-          ? "Speak — hear Codex's answer back"
-          : 'Speak — response stays text-only while voice is muted';
-      }
-      renderAutoSpeech(Voice.isAutoSpeechEnabled());
-      autoSpeechButton.addEventListener('click', function () {
-        Voice.setAutoSpeechEnabled(!Voice.isAutoSpeechEnabled());
-      });
-      Voice.onAutoSpeechChange(renderAutoSpeech);
 
       function isPmAlert(kind) { return kind === 'mail_alert' || kind === 'publish_alert'; }
       function updateAlertCount(count) {
@@ -472,30 +452,6 @@
         wrap.appendChild(body);
         var meta = document.createElement('div');
         meta.className = 'pm-msg-meta';
-        var playBtn = document.createElement('button');
-        playBtn.type = 'button';
-        playBtn.className = 'pm-play-btn';
-        playBtn.textContent = '▶ Play';
-        // Button state is driven by the shared onSpeakingChange listener
-        // (registered once in startSync) rather than a local flag here —
-        // see app.js's identical comment for why (desktop bug: auto-speak
-        // starting playback never updated a button-local flag).
-        playBtn.addEventListener('click', function () {
-          playBtn.classList.remove('pm-play-btn-error');
-          playBtn.removeAttribute('title');
-          if (Voice.currentlySpeaking() === msgId) { Voice.stopSpeaking(); return; }
-          playBtn.textContent = 'Loading audio…';
-          Voice.speak(text, msgId, agent, 'reply', { manual: true }).then(function (audio) {
-            if (!audio && Voice.currentlySpeaking() !== msgId) playBtn.textContent = '▶ Play';
-          }).catch(function (error) {
-            playBtn.textContent = error && error.code === 'openai_tts_not_configured'
-              ? 'OpenAI key needed'
-              : (error && error.code === 'tts_timeout' ? '↻ Try again' : 'Audio unavailable');
-            playBtn.title = error && error.message ? error.message : 'Could not play this response.';
-            playBtn.classList.add('pm-play-btn-error');
-          });
-        });
-        meta.appendChild(playBtn);
         if (isMailAlert) {
           var mailboxBtn = document.createElement('button');
           mailboxBtn.type = 'button';
@@ -701,11 +657,6 @@
         return el;
       }
 
-      // Ids this device itself sent by voice and therefore wants its
-      // contextual early acknowledgment spoken while work is underway.
-      // Final replies use the shared Auto voice preference on every device.
-      var voiceAutoSpeak = {};
-
       // Same shared engine the desktop Project Manager tab uses (see
       // lib/voiceClient.js): first tick loads whatever's already in the
       // table (so opening the app resumes the last conversation instead of
@@ -721,35 +672,14 @@
         // that replay — only completions noticed on a later tick chime.
         var pastFirstTick = false;
         var lastAlertRefresh = 0;
-        // One shared listener drives the "speaking" highlight/button state
-        // for whichever message is currently playing — startSync() only
-        // ever runs once per page load (guarded above), so no repeated-
-        // registration leak to worry about here the way app.js's
-        // per-tab-visit bootProjectManager needs to guard against.
-        Voice.onSpeakingChange(function (activeId) {
-          thread.querySelectorAll('.pm-speaking').forEach(function (el) {
-            el.classList.remove('pm-speaking');
-            var btn = el.querySelector('.pm-play-btn');
-            if (btn) { btn.textContent = '▶ Play'; btn.classList.remove('pm-stop-btn'); }
-          });
-          if (activeId === null || typeof activeId === 'undefined') return;
-          var active = thread.querySelector('.pm-msg-assistant[data-msg-id="' + activeId + '"]');
-          if (!active) return;
-          active.classList.add('pm-speaking');
-          var btn = active.querySelector('.pm-play-btn');
-          if (btn) { btn.textContent = '■ Stop'; btn.classList.add('pm-stop-btn'); }
-        });
         sync = Voice.syncThread({
           onNewMessage: function (row) { if (!isPmAlert(row.notification_kind)) addMessage('user', row.transcript, row.id, row.attachments, row.reply_to_snippet); },
           onPending: function (row) { if (!isPmAlert(row.notification_kind)) addTyping(row.id, row.agent); },
           onEarlyAck: function (row) {
             // Swap the generic "Codex is working on it…" placeholder for Codex's
-            // own real, contextual first line the moment it's available —
-            // visible even for a typed/no-speech send, not just spoken.
+            // own real, contextual first line the moment it's available.
             var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
             if (typingEl) typingEl.querySelector('.pm-typing-copy').textContent = row.early_ack;
-            if (!voiceAutoSpeak[row.id] || !Voice.isAutoSpeechEnabled()) return;
-            Voice.speak(row.early_ack, row.id, row.agent, 'early_ack').catch(function () {});
           },
           onDone: function (row) {
             // Look the placeholder up (rather than just removeTyping()) so
@@ -758,44 +688,20 @@
             var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
             var replyText = row.reply_text || '';
             var newlyArrived = pastFirstTick;
-            var shouldAutoplay = newlyArrived && Voice.isAutoSpeechEnabled() && Voice.isActiveHere() &&
-              !isPmAlert(row.notification_kind);
-            delete voiceAutoSpeak[row.id];
-
-            function revealReply() {
-              addAssistantMessage(replyText, row.transcript, row.id, typingEl, row.agent,
-                row.notification_kind, !!row.notification_unread, row.replyAttachments);
-              if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
-              if (shouldAutoplay) {
-                Voice.speak(replyText, row.id, row.agent).catch(function () {});
-              } else if (newlyArrived && Voice.isActiveHere()) {
-                Voice.playPing();
-              }
-            }
-
-            if (newlyArrived && !isPmAlert(row.notification_kind) && replyText) {
-              if (typingEl) typingEl.querySelector('.pm-typing-copy').textContent = agentName(row.agent) + ' is preparing voice playback…';
-              Voice.prepareSpeech(replyText, row.id, row.agent, 'reply')
-                .catch(function () { return null; })
-                .then(revealReply);
-            } else {
-              revealReply();
-            }
+            addAssistantMessage(replyText, row.transcript, row.id, typingEl, row.agent,
+              row.notification_kind, !!row.notification_unread, row.replyAttachments);
+            if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
+            if (newlyArrived && Voice.isActiveHere()) Voice.playPing();
           },
           onError: function (row) {
             var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
             addMessage('error', row.error_message || 'Something went wrong.', row.id, null, row.transcript, typingEl);
             if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
             if (pastFirstTick && Voice.isActiveHere()) Voice.playPing();
-            if (voiceAutoSpeak[row.id]) {
-              delete voiceAutoSpeak[row.id];
-              if (Voice.isAutoSpeechEnabled() && row.agent !== 'codex') Voice.speak(row.error_message || 'Something went wrong.', row.id, row.agent).catch(function () {});
-            }
           },
           onCancelled: function (row) {
             var typingEl = thread.querySelector('.pm-typing[data-msg-id="' + row.id + '"]');
             if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
-            delete voiceAutoSpeak[row.id];
           },
           onUpdate: function (row) {
             var existing = thread.querySelector('.pm-msg-assistant[data-msg-id="' + row.id + '"]');
@@ -817,10 +723,7 @@
         });
       }
 
-      // --- Type bar: the "can't speak" fallback, always sends respond mode,
-      // text-only reply (mobile's typed field is a minor fallback, not the
-      // primary interaction the way desktop's chat is — no voice-carryover
-      // rule here). Can still carry file attachments.
+      // --- Type bar: always sends respond mode and can carry attachments.
       function sendTyped(text) {
         var images = pendingImages.slice();
         if (!text.trim() && !images.length) return;
@@ -955,9 +858,6 @@
               // bubble/typing indicator) once it catches up to it.
               typingEl.dataset.msgId = created.id;
               sync.markKnown(created);
-              // Mark it eligible for the contextual acknowledgment while
-              // the shared sync engine handles the prepared final reply.
-              voiceAutoSpeak[created.id] = true;
             });
           }).then(function () {
             hideAllOverlays();
