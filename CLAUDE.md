@@ -22038,3 +22038,15 @@ IDs retain the old numeric fallback. This is response-only enrichment: stored
 checkout attribution and historic orders are not modified, and no YouTube API
 request is made per dashboard refresh. The frontend still HTML-escapes the
 result. The ops test suite (352 tests) passes.
+
+## Storefront Google site-name preference (2026-11-11)
+
+Google's result was displaying `realitymanual.com` above the blue title link
+despite the homepage HTML title already saying "The Reality Manual | A Guide To
+Existing Well". That top label is Google's automatically selected **site name**,
+not the page title. The canonical homepage and retained `/home2/` alias now
+include `WebSite` JSON-LD with `name: The Reality Manual` and canonical root
+`url`, plus matching `og:site_name`. The existing Book JSON-LD and per-page
+title remain unchanged. This states the preferred site name to Google; the
+search result cannot be forced or changed instantly and may update only after
+Google recrawls the homepage. The homepage remains crawlable and indexable.
