@@ -8,17 +8,20 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   08ef71e..3eeee01  main       -> origin/main
+   3eeee01..b5dfeff  main       -> origin/main
 + git merge --ff-only origin/main
-Updating 08ef71e..3eeee01
+Updating 3eeee01..b5dfeff
 Fast-forward
- ops-service/.ci/last-run.log                 | 168 ++++-----------------------
- ops-service/public/app.js                    |   4 +-
- ops-service/public/style.css                 |   2 +
- ops-service/test/storefrontReporting.test.js |   2 +-
- 4 files changed, 28 insertions(+), 148 deletions(-)
+ ops-service/.ci/last-run.log                     | 28 ++++++++++--------------
+ ops-service/public/index.html                    |  4 ++--
+ ops-service/test/contentAnalyticsService.test.js |  2 +-
+ ops-service/test/finalCheckPublishUi.test.js     |  2 +-
+ ops-service/test/productionAudioPreviews.test.js |  2 +-
+ ops-service/test/storefrontReporting.test.js     |  2 +-
+ ops-service/test/videoEditorService.test.js      |  2 +-
+ 7 files changed, 18 insertions(+), 24 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=3eeee018ecc0831399e35ea9286a75822be78387
++ NEW_HEAD=b5dfeff3391455d450038a0d7147568690316e3e
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -31,12 +34,12 @@ Already up to date.
 + NEEDS_REBUILD=1
 + '[' -n 791264bfa3baac29d79ad7d04ff8e2fde13a4d72 ']'
 + git cat-file -e '791264bfa3baac29d79ad7d04ff8e2fde13a4d72^{commit}'
-++ git diff --name-only 791264bfa3baac29d79ad7d04ff8e2fde13a4d72 3eeee018ecc0831399e35ea9286a75822be78387 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
+++ git diff --name-only 791264bfa3baac29d79ad7d04ff8e2fde13a4d72 b5dfeff3391455d450038a0d7147568690316e3e -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z '' ']'
 + NEEDS_REBUILD=0
 + '[' 0 = 1 ']'
 + '[' 0 = 0 ']'
-+ echo 'no backend changes between 791264bfa3baac29d79ad7d04ff8e2fde13a4d72 and 3eeee018ecc0831399e35ea9286a75822be78387 — already live via git pull, skipping rebuild/restart'
-no backend changes between 791264bfa3baac29d79ad7d04ff8e2fde13a4d72 and 3eeee018ecc0831399e35ea9286a75822be78387 — already live via git pull, skipping rebuild/restart
++ echo 'no backend changes between 791264bfa3baac29d79ad7d04ff8e2fde13a4d72 and b5dfeff3391455d450038a0d7147568690316e3e — already live via git pull, skipping rebuild/restart'
+no backend changes between 791264bfa3baac29d79ad7d04ff8e2fde13a4d72 and b5dfeff3391455d450038a0d7147568690316e3e — already live via git pull, skipping rebuild/restart
 + exit 0
 ssh exit code: 0
