@@ -189,7 +189,7 @@ test('sales chart shows paid sale counts on profit hover and a daily sales line'
   assert.match(panelMain.innerHTML, /Paid sales by day/);
   assert.match(panelMain.innerHTML, /<path class="sales-line-path"/);
   assert.match(panelMain.innerHTML, /2026-10-30: 2 paid sales/);
-  assert.equal((panelMain.innerHTML.match(/class="sales-line-point"/g) || []).length, 30);
+  assert.equal((panelMain.innerHTML.match(/class="sales-line-point(?: zero)?"/g) || []).length, 30);
 });
 
 test('email health card separates Resend outcomes from ops inbox connectivity', function () {

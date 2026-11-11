@@ -564,8 +564,8 @@
         }).join(' ') + '"></path>' +
         data.daily.map(function (day, index) {
           var point = salesLinePoints[index];
-          return '<circle class="sales-line-point" cx="' + point.x.toFixed(1) + '" cy="' + point.y.toFixed(1) +
-            '" r="4" tabindex="0"><title>' + escapeHtml(day.day + ': ' + day.orders + ' paid sale' +
+          return '<circle class="sales-line-point' + (day.orders ? '' : ' zero') + '" cx="' + point.x.toFixed(1) + '" cy="' + point.y.toFixed(1) +
+            '" r="6" tabindex="0"><title>' + escapeHtml(day.day + ': ' + day.orders + ' paid sale' +
               (day.orders === 1 ? '' : 's')) + '</title></circle>';
         }).join('') +
         '<text x="18" y="142">' + escapeHtml(data.daily[0].day.slice(5)) + '</text>' +

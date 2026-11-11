@@ -2655,6 +2655,8 @@ body.role-reviewer #pmBackFab {
 .sales-line-grid { stroke: var(--border-soft); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .sales-line-path { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .sales-line-point { fill: var(--accent); stroke: var(--surface); stroke-width: 2; cursor: help; vector-effect: non-scaling-stroke; }
+.sales-line-point.zero { fill: transparent; stroke: transparent; }
+.sales-line-point.zero:hover,.sales-line-point.zero:focus { fill: var(--accent); stroke: var(--surface); }
 .sales-line-point:focus { outline: 2px solid var(--ink); outline-offset: 2px; }
 .sales-line-graph text { fill: var(--ink-faint); font: 10px var(--font-mono); }
 .sales-profit-note { margin: -2px 17px 14px; color: var(--ink-faint); font: .62rem/1.5 var(--font-body); }
