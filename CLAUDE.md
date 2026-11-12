@@ -22084,3 +22084,18 @@ unknown days rather than implying uninterrupted measurement. Day boundaries
 follow the UTC snapshot timestamps; hourly polling means each increase is
 attributed to the day it was observed, not an exact platform event timestamp.
 No provider polling, collector cadence, or stored metric rows changed.
+
+## Daily YouTube views split by video format (2026-11-12)
+
+The Content Analytics daily-view popup now breaks its YouTube total into
+long-form and Shorts, using each published piece's saved `contentType` and the
+same measured per-piece counter increases as the chart. `short`, `ultra_short`
+and `long_short` are grouped as Shorts; an unclassified piece is shown as
+Other/unknown rather than silently assigned to either category. The three
+components reconcile to the displayed YouTube total, and a missing day's
+YouTube measurements remain unknown. This is an API response/UI-only change:
+no historical counters were rewritten or provider calls added. The figures
+are UTC-day *observed counter growth* across tracked videos, not YouTube
+Studio's exact calendar-day analytics; hourly collection can shift a late
+view into the following observation day. For 2026-11-11, the existing 7,466
+measured YouTube increase comprises 6,919 long-form and 547 Shorts views.

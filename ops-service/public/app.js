@@ -1185,7 +1185,13 @@
           if (!row) return;
           var label = new Date(row.day + 'T00:00:00Z').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
           var breakdown = Object.keys(CONTENT_PLATFORM_META).map(function (platform) {
-            return '<span>' + escapeHtml(CONTENT_PLATFORM_META[platform].label) + '</span><strong>' + contentNumber(row[platform]) + '</strong>';
+            var line = '<span>' + escapeHtml(CONTENT_PLATFORM_META[platform].label) + '</span><strong>' + contentNumber(row[platform]) + '</strong>';
+            if (platform === 'youtube' && row.youtube != null) {
+              line += '<span class="content-overall-popup-subrow">↳ Long-form</span><strong>' + contentNumber(row.youtubeLongform) + '</strong>' +
+                '<span class="content-overall-popup-subrow">↳ Shorts</span><strong>' + contentNumber(row.youtubeShortform) + '</strong>' +
+                (row.youtubeOther ? '<span class="content-overall-popup-subrow">↳ Other / unknown format</span><strong>' + contentNumber(row.youtubeOther) + '</strong>' : '');
+            }
+            return line;
           }).join('');
           popup.querySelector('.content-overall-popup-content').innerHTML = '<small>New views · UTC</small><h4>' + escapeHtml(label) + '</h4><div class="content-overall-popup-total">' + contentNumber(row.total) + ' <span>new views' + (row.day === new Date().toISOString().slice(0, 10) ? ' so far' : '') + '</span></div><div class="content-overall-popup-breakdown">' + breakdown + '</div>';
           popup.hidden = false;

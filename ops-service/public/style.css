@@ -3036,6 +3036,7 @@ body.role-reviewer #pmBackFab {
 .content-overall-popup-total span{font:500 11px var(--font-body);color:#a7c4b0}
 .content-overall-popup-breakdown{display:grid;grid-template-columns:1fr auto;gap:7px;margin-top:11px;padding-top:10px;border-top:1px solid #25432f;color:#9eb9a8;font-size:11px}
 .content-overall-popup-breakdown strong{color:#d5f5dd;font-family:var(--font-mono)}
+.content-overall-popup-subrow{padding-left:10px;color:#75a989}
 @media(max-width:700px){.content-overall-body{padding:12px 10px}.content-overall-legend{gap:8px 11px;font-size:9px}.content-overall .content-block-head small{font-size:9px}}
 
 /* The list can be narrow even on a laptop beside the detail panel. */

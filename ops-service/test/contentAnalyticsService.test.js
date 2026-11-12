@@ -109,8 +109,8 @@ test('daily view growth excludes initial counters and long gaps but measures sam
   const service = analytics.setup(db, {
     now: function () { return new Date('2026-10-04T12:00:00Z'); },
     listPieces: function () { return [
-      { id: 'one', stage: 'live', youtubeVideoId: 'yt1' },
-      { id: 'two', stage: 'live', youtubeVideoId: 'yt2' }
+      { id: 'one', stage: 'live', contentType: 'longform', youtubeVideoId: 'yt1' },
+      { id: 'two', stage: 'live', contentType: 'short', youtubeVideoId: 'yt2' }
     ]; }
   });
   const insert = db.prepare('INSERT INTO content_metric_snapshots (piece_id,platform,captured_at,views) VALUES (?,?,?,?)');
@@ -125,7 +125,12 @@ test('daily view growth excludes initial counters and long gaps but measures sam
   assert.equal(history.find((day) => day.day === '2026-09-30').total, null);
   assert.equal(history.find((day) => day.day === '2026-10-01').total, 10);
   assert.equal(history.find((day) => day.day === '2026-10-02').total, 15);
+  assert.equal(history.find((day) => day.day === '2026-10-02').youtubeLongform, 10);
+  assert.equal(history.find((day) => day.day === '2026-10-02').youtubeShortform, 5);
+  assert.equal(history.find((day) => day.day === '2026-10-02').youtubeOther, 0);
+  assert.equal(history.find((day) => day.day === '2026-10-02').youtube, 15);
   assert.equal(history.find((day) => day.day === '2026-10-03').total, null);
+  assert.equal(history.find((day) => day.day === '2026-10-03').youtubeShortform, null);
   assert.equal(history.find((day) => day.day === '2026-10-04').total, 10);
   db.close();
 });
@@ -166,11 +171,13 @@ test('Content Analytics owns its analytics route while competitor research keeps
   assert.match(style, /@container \(max-width:600px\)/);
   assert.match(style, /\.content-piece-row>span:nth-child\(6\)\{display:block\}/);
   assert.match(page, /data-tabs="content-analytics,sales-analytics,website-analytics"/);
-  assert.match(page, /app\.js\?v=20261112-daily-views/);
+  assert.match(page, /app\.js\?v=20261112-youtube-format-views/);
   assert.match(app, /class="content-overall-yesterday" data-content-day=/);
   assert.match(app, /class="content-overall-day-target" data-content-day=/);
   assert.match(app, /class="content-overall-popup" hidden/);
   assert.match(app, /selected\.dataset\.contentDay/);
+  assert.match(app, /↳ Long-form/);
+  assert.match(app, /↳ Shorts/);
   assert.match(style, /\.content-overall-popup\[hidden\]\{display:none\}/);
 });
 

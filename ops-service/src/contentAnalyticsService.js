@@ -67,15 +67,21 @@ function overallViewHistory(metricRows, pieceRows, nowValue) {
 // and a long collection gap cannot safely be assigned to its final day.
 function dailyViewHistory(metricRows, pieceRows, nowValue) {
   const eligible = new Set();
+  const youtubeFormat = new Map();
   pieceRows.forEach(function (piece) {
     Object.keys(piece.platforms).forEach(function (platform) { eligible.add(piece.id + ':' + platform); });
+    if (piece.platforms.youtube) {
+      youtubeFormat.set(piece.id, piece.contentType === 'longform' ? 'youtubeLongform' :
+        ['short', 'ultra_short', 'long_short'].includes(piece.contentType) ? 'youtubeShortform' : 'youtubeOther');
+    }
   });
   const today = new Date(nowValue);
   today.setUTCHours(0, 0, 0, 0);
   const start = today.getTime() - 89 * DAY_MS;
   const days = Array.from({ length: 90 }, function (_, index) {
     const day = new Date(start + index * DAY_MS).toISOString().slice(0, 10);
-    return Object.assign({ day: day, total: null }, Object.fromEntries(PLATFORMS.map(function (platform) { return [platform, null]; })));
+    return Object.assign({ day: day, total: null, youtubeLongform: null, youtubeShortform: null, youtubeOther: null },
+      Object.fromEntries(PLATFORMS.map(function (platform) { return [platform, null]; })));
   });
   const byDay = new Map(days.map(function (day) { return [day.day, day]; }));
   const previous = new Map();
@@ -91,6 +97,13 @@ function dailyViewHistory(metricRows, pieceRows, nowValue) {
     if (!day) return;
     const growth = Math.max(0, views - prior.views);
     day[row.platform] = (day[row.platform] || 0) + growth;
+    if (row.platform === 'youtube') {
+      ['youtubeLongform', 'youtubeShortform', 'youtubeOther'].forEach(function (format) {
+        if (day[format] == null) day[format] = 0;
+      });
+      const format = youtubeFormat.get(row.piece_id) || 'youtubeOther';
+      day[format] += growth;
+    }
     day.total = (day.total || 0) + growth;
   });
   return days;
