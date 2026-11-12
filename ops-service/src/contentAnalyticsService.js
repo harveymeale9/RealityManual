@@ -62,6 +62,40 @@ function overallViewHistory(metricRows, pieceRows, nowValue) {
   });
 }
 
+// Assign each measured increase to the UTC day on which it was observed.
+// A video's first counter is only a baseline (it may predate our tracking),
+// and a long collection gap cannot safely be assigned to its final day.
+function dailyViewHistory(metricRows, pieceRows, nowValue) {
+  const eligible = new Set();
+  pieceRows.forEach(function (piece) {
+    Object.keys(piece.platforms).forEach(function (platform) { eligible.add(piece.id + ':' + platform); });
+  });
+  const today = new Date(nowValue);
+  today.setUTCHours(0, 0, 0, 0);
+  const start = today.getTime() - 89 * DAY_MS;
+  const days = Array.from({ length: 90 }, function (_, index) {
+    const day = new Date(start + index * DAY_MS).toISOString().slice(0, 10);
+    return Object.assign({ day: day, total: null }, Object.fromEntries(PLATFORMS.map(function (platform) { return [platform, null]; })));
+  });
+  const byDay = new Map(days.map(function (day) { return [day.day, day]; }));
+  const previous = new Map();
+  metricRows.forEach(function (row) {
+    const key = row.piece_id + ':' + row.platform;
+    if (!eligible.has(key) || !PLATFORMS.includes(row.platform) || row.views == null) return;
+    const views = Math.max(0, Number(row.views) || 0);
+    const at = new Date(row.captured_at).getTime();
+    const prior = previous.get(key);
+    previous.set(key, { views: views, at: at });
+    if (!prior || !Number.isFinite(at) || at - prior.at > 36 * HOUR_MS || at < prior.at) return;
+    const day = byDay.get(row.captured_at.slice(0, 10));
+    if (!day) return;
+    const growth = Math.max(0, views - prior.views);
+    day[row.platform] = (day[row.platform] || 0) + growth;
+    day.total = (day.total || 0) + growth;
+  });
+  return days;
+}
+
 function setup(db, options) {
   options = options || {};
   const intervalMs = Math.max(5 * 60 * 1000, Number(options.intervalMs) || HOUR_MS);
@@ -266,6 +300,7 @@ function setup(db, options) {
         followers: knownFollowers.length ? knownFollowers.reduce(function (sum, row) { return sum + Number(row.followers || 0); }, 0) : null
       },
       viewHistory: overallViewHistory(metricRows, pieceRows, now()),
+      viewDailyHistory: dailyViewHistory(metricRows, pieceRows, now()),
       audience: audience, pieces: pieceRows
     };
   }

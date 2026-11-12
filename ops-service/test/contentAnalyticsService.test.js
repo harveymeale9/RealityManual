@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 const analytics = require('../src/contentAnalyticsService');
 
 test('content analytics stores honest cross-platform snapshots and calculates growth', async function () {
@@ -41,6 +42,7 @@ test('content analytics stores honest cross-platform snapshots and calculates gr
   assert.equal(dashboard.viewHistory.at(-2).total, null);
   assert.equal(dashboard.viewHistory.at(-1).total, 60);
   assert.equal(dashboard.viewHistory.at(-1).instagram, null);
+  assert.equal(dashboard.viewDailyHistory.at(-1).total, null, 'first counters are baselines, not new views');
 
   clock = new Date('2026-10-02T11:15:00Z');
   youtubeViews = 25;
@@ -50,8 +52,12 @@ test('content analytics stores honest cross-platform snapshots and calculates gr
   assert.equal(dashboard.viewHistory.at(-2).total, 60);
   assert.equal(dashboard.viewHistory.at(-1).total, 75);
   assert.equal(dashboard.viewHistory.at(-1).youtube, 25);
+  assert.equal(dashboard.viewDailyHistory.at(-1).total, 15);
+  assert.equal(dashboard.viewDailyHistory.at(-1).youtube, 15);
+  assert.equal(dashboard.viewDailyHistory.at(-1).instagram, null);
   clock = new Date('2026-10-03T11:15:00Z');
   assert.equal(service.dashboard().viewHistory.at(-1).total, 75); // carry last measured counts between polls
+  assert.equal(service.dashboard().viewDailyHistory.at(-1).total, null, 'no snapshots are not zero-view days');
   assert.equal(db.prepare('SELECT count(*) AS count FROM content_metric_snapshots').get().count, 8);
 });
 
@@ -98,6 +104,55 @@ test('overall view growth sums connected pieces without inventing pre-snapshot h
   db.close();
 });
 
+test('daily view growth excludes initial counters and long gaps but measures same-day increases', function () {
+  const db = new Database(':memory:');
+  const service = analytics.setup(db, {
+    now: function () { return new Date('2026-10-04T12:00:00Z'); },
+    listPieces: function () { return [
+      { id: 'one', stage: 'live', youtubeVideoId: 'yt1' },
+      { id: 'two', stage: 'live', youtubeVideoId: 'yt2' }
+    ]; }
+  });
+  const insert = db.prepare('INSERT INTO content_metric_snapshots (piece_id,platform,captured_at,views) VALUES (?,?,?,?)');
+  insert.run('one', 'youtube', '2026-10-01T10:00:00Z', 100);
+  insert.run('one', 'youtube', '2026-10-01T11:00:00Z', 110);
+  insert.run('one', 'youtube', '2026-10-02T10:00:00Z', 120);
+  insert.run('two', 'youtube', '2026-10-02T10:00:00Z', 10000);
+  insert.run('two', 'youtube', '2026-10-02T11:00:00Z', 10005);
+  insert.run('one', 'youtube', '2026-10-04T10:00:00Z', 140);
+  insert.run('one', 'youtube', '2026-10-04T11:00:00Z', 150);
+  const history = service.dashboard().viewDailyHistory;
+  assert.equal(history.find((day) => day.day === '2026-09-30').total, null);
+  assert.equal(history.find((day) => day.day === '2026-10-01').total, 10);
+  assert.equal(history.find((day) => day.day === '2026-10-02').total, 15);
+  assert.equal(history.find((day) => day.day === '2026-10-03').total, null);
+  assert.equal(history.find((day) => day.day === '2026-10-04').total, 10);
+  db.close();
+});
+
+test('overall chart renders daily growth rather than cumulative totals', function () {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const start = app.indexOf('  function contentOverallChart(');
+  const end = app.indexOf('  function contentDetailMarkup(', start);
+  assert.ok(start > 0 && end > start);
+  const render = vm.runInNewContext(app.slice(start, end) + '\ncontentOverallChart', {
+    CONTENT_PLATFORM_META: { youtube: { label: 'YouTube', color: '#f00' } },
+    contentNumber: function (value) { return value == null ? '—' : Number(value).toLocaleString('en-US'); },
+    escapeHtml: function (value) { return String(value); }
+  });
+  const daily = [
+    { day: '2026-11-10', total: 120, youtube: 120 },
+    { day: '2026-11-11', total: 230, youtube: 230 },
+    { day: '2026-11-12', total: 20, youtube: 20 }
+  ];
+  const html = render({ viewDailyHistory: daily, viewHistory: daily.map((day) => ({ ...day, total: 400000 })) }, 7);
+  assert.match(html, /<h3>New views per day<\/h3>/);
+  assert.match(html, /Yesterday · 2026-11-11 <strong>230 new views<\/strong>/);
+  assert.match(html, /Today so far · UTC/);
+  assert.match(html, /2026-11-12: 20 new views/);
+  assert.doesNotMatch(html, /400,000/);
+});
+
 test('Content Analytics owns its analytics route while competitor research keeps a distinct route', function () {
   const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const page = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
@@ -111,7 +166,7 @@ test('Content Analytics owns its analytics route while competitor research keeps
   assert.match(style, /@container \(max-width:600px\)/);
   assert.match(style, /\.content-piece-row>span:nth-child\(6\)\{display:block\}/);
   assert.match(page, /data-tabs="content-analytics,sales-analytics,website-analytics"/);
-  assert.match(page, /app\.js\?v=20261111-pm-text-only/);
+  assert.match(page, /app\.js\?v=20261112-daily-views/);
   assert.match(app, /class="content-overall-yesterday" data-content-day=/);
   assert.match(app, /class="content-overall-day-target" data-content-day=/);
   assert.match(app, /class="content-overall-popup" hidden/);

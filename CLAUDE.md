@@ -22067,3 +22067,20 @@ existing ElevenLabs speech-to-text path, and local notification pings remain.
 classification/research functions use it; this change ends Project Manager
 TTS requests, not all OpenAI API usage. Future agents should not restore
 speech output without Harvey explicitly requesting it.
+
+## Content Analytics plots new daily views (2026-11-12)
+
+Harvey found the cumulative "Views across platforms" graph too flat to see
+trends. It now shows **new measured views per UTC day** for the combined total
+and each platform, with 7/30/90-day choices, a daily Yesterday button, a
+today-so-far legend, and per-day breakdown popup. The existing cumulative
+`viewHistory` response is retained for compatibility; the dashboard adds
+`viewDailyHistory` derived from consecutive per-piece/platform metric
+snapshots. A video's first observed lifetime counter is only a baseline and
+is never booked as new views. Missing counters/days stay unknown, negative
+counter corrections count as zero growth, and intervals longer than 36 hours
+are not assigned wholesale to the next day. The visual line breaks across
+unknown days rather than implying uninterrupted measurement. Day boundaries
+follow the UTC snapshot timestamps; hourly polling means each increase is
+attributed to the day it was observed, not an exact platform event timestamp.
+No provider polling, collector cadence, or stored metric rows changed.

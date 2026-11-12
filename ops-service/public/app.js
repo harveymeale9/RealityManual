@@ -1014,7 +1014,7 @@
 
   function contentOverallChart(data, rangeDays) {
     rangeDays = [7, 30, 90].indexOf(Number(rangeDays)) !== -1 ? Number(rangeDays) : 30;
-    var history = Array.isArray(data.viewHistory) ? data.viewHistory : [];
+    var history = Array.isArray(data.viewDailyHistory) ? data.viewDailyHistory : [];
     var windowDays = history.slice(-rangeDays);
     var firstIndex = windowDays.findIndex(function (day) { return day.total != null; });
     var days = firstIndex < 0 ? [] : windowDays.slice(firstIndex);
@@ -1024,7 +1024,7 @@
     var series = [{ key: 'total', label: 'Total', color: '#ecfff1' }].concat(Object.keys(CONTENT_PLATFORM_META).map(function (platform) {
       return { key: platform, label: CONTENT_PLATFORM_META[platform].label, color: CONTENT_PLATFORM_META[platform].color };
     }));
-    if (!days.length) return '<section class="content-block content-overall"><div class="content-block-head"><div><span>Last ' + rangeDays + ' days</span><h3>Views across platforms</h3></div>' + controls + '</div><div class="content-chart-empty">The first view snapshot will start this graph. Earlier views cannot be reconstructed.</div></section>';
+    if (!days.length) return '<section class="content-block content-overall"><div class="content-block-head"><div><span>Last ' + rangeDays + ' days · UTC</span><h3>New views per day</h3></div>' + controls + '</div><div class="content-chart-empty">Daily view growth appears after two comparable snapshots. Earlier views cannot be reconstructed.</div></section>';
     var observed = days.map(function (day, index) { return { index: index, value: day.total }; }).filter(function (point) { return point.value != null; });
     var trend = [];
     if (observed.length > 1) {
@@ -1048,12 +1048,23 @@
         '<text x="52" y="' + (Number(py) + 4) + '">' + contentNumber(Math.round(ceiling * ratio)) + '</text>';
     }).join('');
     var paths = series.map(function (item) {
-      var points = days.map(function (day, index) { return day[item.key] == null ? null : { index: index, value: Number(day[item.key]) || 0, day: day.day }; }).filter(Boolean);
+      var groups = [];
+      var current = [];
+      days.forEach(function (day, index) {
+        if (day[item.key] == null) {
+          if (current.length) groups.push(current);
+          current = [];
+        } else current.push({ index: index, value: Number(day[item.key]) || 0, day: day.day });
+      });
+      if (current.length) groups.push(current);
+      var points = groups.flat();
       if (!points.length) return '';
-      var coords = points.map(function (point) { return x(point.index).toFixed(1) + ',' + y(point.value).toFixed(1); });
-      var line = points.length > 1 ? '<polyline points="' + coords.join(' ') + '" fill="none" stroke="' + item.color + '" stroke-width="' + (item.key === 'total' ? 3.5 : 2) + '" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />' : '<circle cx="' + x(points[0].index).toFixed(1) + '" cy="' + y(points[0].value).toFixed(1) + '" r="4" fill="' + item.color + '" />';
+      var line = groups.map(function (group) {
+        var coords = group.map(function (point) { return x(point.index).toFixed(1) + ',' + y(point.value).toFixed(1); });
+        return group.length > 1 ? '<polyline points="' + coords.join(' ') + '" fill="none" stroke="' + item.color + '" stroke-width="' + (item.key === 'total' ? 3.5 : 2) + '" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />' : '<circle cx="' + x(group[0].index).toFixed(1) + '" cy="' + y(group[0].value).toFixed(1) + '" r="4" fill="' + item.color + '" />';
+      }).join('');
       var markers = points.map(function (point) {
-        return '<circle cx="' + x(point.index).toFixed(1) + '" cy="' + y(point.value).toFixed(1) + '" r="8" fill="transparent" class="content-overall-hit"><title>' + escapeHtml(item.label + ' · ' + point.day + ': ' + contentNumber(point.value) + ' views') + '</title></circle>';
+        return '<circle cx="' + x(point.index).toFixed(1) + '" cy="' + y(point.value).toFixed(1) + '" r="8" fill="transparent" class="content-overall-hit"><title>' + escapeHtml(item.label + ' · ' + point.day + ': ' + contentNumber(point.value) + ' new views') + '</title></circle>';
       }).join('');
       return line + markers;
     }).join('');
@@ -1075,14 +1086,14 @@
       var halfWidth = days.length === 1 ? 405 : 405 / (days.length - 1);
       var left = Math.max(60, x(index) - halfWidth);
       var right = Math.min(870, x(index) + halfWidth);
-      return '<rect x="' + left.toFixed(1) + '" y="18" width="' + (right - left).toFixed(1) + '" height="210" class="content-overall-day-target" data-content-day="' + escapeHtml(day.day) + '" tabindex="0" role="button" aria-label="' + escapeHtml(day.day + ': ' + (day.total == null ? 'view total unavailable' : contentNumber(day.total) + ' total views')) + '" />';
+      return '<rect x="' + left.toFixed(1) + '" y="18" width="' + (right - left).toFixed(1) + '" height="210" class="content-overall-day-target" data-content-day="' + escapeHtml(day.day) + '" tabindex="0" role="button" aria-label="' + escapeHtml(day.day + ': ' + (day.total == null ? 'daily views unavailable' : contentNumber(day.total) + ' new views')) + '" />';
     }).join('');
-    return '<section class="content-block content-overall"><div class="content-block-head"><div><span>Last ' + rangeDays + ' days · UTC</span><h3>Views across platforms</h3></div>' + controls + '</div>' +
-      '<div class="content-overall-body"><div class="content-overall-legend">' + legend + '</div>' +
-      (yesterday ? '<button type="button" class="content-overall-yesterday" data-content-day="' + escapeHtml(yesterday.day) + '">Yesterday · ' + escapeHtml(yesterday.day) + ' <strong>' + (yesterday.total == null ? '—' : contentNumber(yesterday.total)) + ' total views as of that day</strong><span>Tap for breakdown ↗</span></button>' : '') +
-      '<svg viewBox="0 0 900 270" role="img" aria-label="Cumulative view history by platform, total, and linear trend for the selected period. Tap a date for counts." preserveAspectRatio="xMidYMid meet"><g class="content-chart-grid">' + grid + '</g>' + paths + trendPath + axisDates + dayTargets + '</svg>' +
+    return '<section class="content-block content-overall"><div class="content-block-head"><div><span>Last ' + rangeDays + ' days · UTC</span><h3>New views per day</h3></div>' + controls + '</div>' +
+      '<div class="content-overall-body"><div class="content-overall-legend"><span class="content-overall-legend-label">Today so far · UTC</span>' + legend + '</div>' +
+      (yesterday ? '<button type="button" class="content-overall-yesterday" data-content-day="' + escapeHtml(yesterday.day) + '">Yesterday · ' + escapeHtml(yesterday.day) + ' <strong>' + (yesterday.total == null ? '—' : contentNumber(yesterday.total)) + ' new views</strong><span>Tap for breakdown ↗</span></button>' : '') +
+      '<svg viewBox="0 0 900 270" role="img" aria-label="New daily views by platform, total, and linear trend for the selected period. Tap a date for counts." preserveAspectRatio="xMidYMid meet"><g class="content-chart-grid">' + grid + '</g>' + paths + trendPath + axisDates + dayTargets + '</svg>' +
       '<div class="content-overall-popup" hidden><button type="button" class="content-overall-popup-close" aria-label="Close view breakdown">×</button><div class="content-overall-popup-content"></div></div>' +
-      '<p>Showing ' + days.length + ' days with known totals in this ' + rangeDays + '-day window, from ' + escapeHtml(firstDate) + '. No blank pre-tracking dates are plotted. Counts carry forward between snapshots; platform view definitions differ.</p></div></section>';
+      '<p>Showing ' + days.length + ' days from ' + escapeHtml(firstDate) + '. Growth is measured between snapshots; a video’s first recorded count and gaps over 36 hours are excluded. Missing platform data stays unknown. Today is partial; platform view definitions differ.</p></div></section>';
   }
 
   function contentDetailMarkup(piece) {
@@ -1170,13 +1181,13 @@
         if (!popup) return;
         var selected = event.target.closest('[data-content-day]');
         if (selected && chart.contains(selected)) {
-          var row = (data.viewHistory || []).find(function (day) { return day.day === selected.dataset.contentDay; });
+          var row = (data.viewDailyHistory || []).find(function (day) { return day.day === selected.dataset.contentDay; });
           if (!row) return;
           var label = new Date(row.day + 'T00:00:00Z').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
           var breakdown = Object.keys(CONTENT_PLATFORM_META).map(function (platform) {
             return '<span>' + escapeHtml(CONTENT_PLATFORM_META[platform].label) + '</span><strong>' + contentNumber(row[platform]) + '</strong>';
           }).join('');
-          popup.querySelector('.content-overall-popup-content').innerHTML = '<small>View totals · UTC</small><h4>' + escapeHtml(label) + '</h4><div class="content-overall-popup-total">' + contentNumber(row.total) + ' <span>total views</span></div><div class="content-overall-popup-breakdown">' + breakdown + '</div>';
+          popup.querySelector('.content-overall-popup-content').innerHTML = '<small>New views · UTC</small><h4>' + escapeHtml(label) + '</h4><div class="content-overall-popup-total">' + contentNumber(row.total) + ' <span>new views' + (row.day === new Date().toISOString().slice(0, 10) ? ' so far' : '') + '</span></div><div class="content-overall-popup-breakdown">' + breakdown + '</div>';
           popup.hidden = false;
           return;
         }
