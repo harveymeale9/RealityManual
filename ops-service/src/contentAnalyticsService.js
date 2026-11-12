@@ -65,6 +65,9 @@ function overallViewHistory(metricRows, pieceRows, nowValue) {
 // Assign each measured increase to the UTC day on which it was observed.
 // A video's first counter is only a baseline (it may predate our tracking),
 // and a long collection gap cannot safely be assigned to its final day.
+// Lifetime counters can briefly fall (for example, a stale TikTok Buffer zero
+// during a public-page outage). Keep the last observed high-water mark so the
+// recovery does not become a second batch of "new" views.
 function dailyViewHistory(metricRows, pieceRows, nowValue) {
   const eligible = new Set();
   const youtubeFormat = new Map();
@@ -84,15 +87,18 @@ function dailyViewHistory(metricRows, pieceRows, nowValue) {
       Object.fromEntries(PLATFORMS.map(function (platform) { return [platform, null]; })));
   });
   const byDay = new Map(days.map(function (day) { return [day.day, day]; }));
-  const previous = new Map();
+  const highWater = new Map();
   metricRows.forEach(function (row) {
     const key = row.piece_id + ':' + row.platform;
     if (!eligible.has(key) || !PLATFORMS.includes(row.platform) || row.views == null) return;
     const views = Math.max(0, Number(row.views) || 0);
     const at = new Date(row.captured_at).getTime();
-    const prior = previous.get(key);
-    previous.set(key, { views: views, at: at });
-    if (!prior || !Number.isFinite(at) || at - prior.at > 36 * HOUR_MS || at < prior.at) return;
+    if (!Number.isFinite(at)) return;
+    const prior = highWater.get(key);
+    if (!prior) { highWater.set(key, { views: views, at: at }); return; }
+    if (at < prior.at || views < prior.views) return;
+    highWater.set(key, { views: views, at: at });
+    if (at - prior.at > 36 * HOUR_MS) return;
     const day = byDay.get(row.captured_at.slice(0, 10));
     if (!day) return;
     const growth = Math.max(0, views - prior.views);

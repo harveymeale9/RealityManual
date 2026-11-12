@@ -22109,3 +22109,26 @@ reset their observed high-water counters. The badge and list refresh after
 the update, and new comment-count increases still create new alerts. The
 button is disabled when there are no pending alerts. The backend action is a
 dedicated authenticated route, not a browser loop over individual posts.
+
+## Daily view counter rebounds no longer inflate growth (2026-11-12)
+
+Harvey spotted 5,605 TikTok "new views" on 12 Nov despite no such spike.
+Inspection of the stored hourly snapshots found older TikTok videos dropping
+from their public lifetime counters to zero when TikTok's public page was
+temporarily unavailable and the only saved Buffer metric was a stale zero.
+On recovery, the old daily-delta algorithm compared the restored lifetime
+count to that zero and booked it as new views, sometimes repeatedly. At the
+16:00 UTC snapshot, the old daily report had 6,292 TikTok views; only 270
+were increases beyond each video's previous observed high. A small YouTube
+counter correction also caused repeat counting; Instagram showed no such
+rebound in that day's stored data.
+
+The 90-day daily history now tracks the last high-water lifetime counter for
+each piece/platform. Lower readings are ignored; a recovery only counts the
+amount above the previous high, and a gap over 36 hours still establishes a
+new baseline rather than assigning all growth to the final day. Historical
+days are recalculated on read from preserved raw snapshots—no database rows
+or external platform metrics were overwritten. The TikTok collector also
+returns an unknown view count instead of a stale Buffer zero when no public
+view count is available, preventing that particular false dip going forward.
+Platform days remain UTC observation days, not exact event-time analytics.

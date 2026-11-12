@@ -97,8 +97,13 @@ function bufferMetric(metrics, names) {
 
 function mergeMetrics(bufferMetrics, publicMetrics) {
   const totalTimeWatched = bufferMetric(bufferMetrics, ['totalTimeWatched']);
+  const bufferViews = bufferMetric(bufferMetrics, ['views']);
+  const publicViews = publicMetrics && publicMetrics.views;
   return {
-    views: freshestCount(bufferMetric(bufferMetrics, ['views']), publicMetrics && publicMetrics.views),
+    // A saved Buffer zero is not a fresh public measurement. When TikTok's
+    // public page is unavailable, leave views unknown instead of creating a
+    // false drop that can later rebound in the daily chart.
+    views: bufferViews === 0 && publicViews == null ? null : freshestCount(bufferViews, publicViews),
     likes: freshestCount(bufferMetric(bufferMetrics, ['reactions', 'likes']), publicMetrics && publicMetrics.likes),
     comments: freshestCount(bufferMetric(bufferMetrics, ['comments']), publicMetrics && publicMetrics.comments),
     shares: freshestCount(bufferMetric(bufferMetrics, ['shares', 'reposts']), publicMetrics && publicMetrics.shares),

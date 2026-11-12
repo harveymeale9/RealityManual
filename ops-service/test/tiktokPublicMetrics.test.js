@@ -50,6 +50,10 @@ test('fresh public counters supersede stale Buffer zeroes without allowing count
   assert.equal(metrics.freshestCount(400, 351), 400);
   assert.equal(metrics.freshestCount(null, 18), 18);
   assert.equal(metrics.freshestCount(null, null), null);
+  assert.equal(metrics.mergeMetrics({ views: { value: 0 } }, null).views, null,
+    'a stale Buffer zero is not a fresh public view count');
+  assert.equal(metrics.mergeMetrics({ views: { value: 0 } }, { views: 0 }).views, 0,
+    'an actual public zero remains measurable');
 });
 
 test('live counters merge with cached Buffer details when Buffer is temporarily unavailable', function () {

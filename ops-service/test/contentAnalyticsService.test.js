@@ -135,6 +135,32 @@ test('daily view growth excludes initial counters and long gaps but measures sam
   db.close();
 });
 
+test('daily views ignore transient lifetime-counter drops and only count growth above the prior high', function () {
+  const db = new Database(':memory:');
+  const service = analytics.setup(db, {
+    now: function () { return new Date('2026-10-04T12:00:00Z'); },
+    listPieces: function () { return [{ id: 'tt', stage: 'live', tiktokPublishId: 'post' }]; }
+  });
+  const insert = db.prepare('INSERT INTO content_metric_snapshots (piece_id,platform,captured_at,views) VALUES (?,?,?,?)');
+  [
+    ['2026-10-01T10:00:00Z', 300],
+    ['2026-10-02T08:00:00Z', 0],
+    ['2026-10-02T09:00:00Z', 300],
+    ['2026-10-02T10:00:00Z', 310],
+    ['2026-10-02T11:00:00Z', 0],
+    ['2026-10-02T12:00:00Z', 310],
+    ['2026-10-02T13:00:00Z', 312],
+    ['2026-10-04T10:00:00Z', 320],
+    ['2026-10-04T11:00:00Z', 321]
+  ].forEach(function (row) { insert.run('tt', 'tiktok', row[0], row[1]); });
+  const history = service.dashboard().viewDailyHistory;
+  assert.equal(history.find((day) => day.day === '2026-10-02').tiktok, 12);
+  assert.equal(history.find((day) => day.day === '2026-10-02').total, 12);
+  assert.equal(history.find((day) => day.day === '2026-10-03').total, null);
+  assert.equal(history.find((day) => day.day === '2026-10-04').tiktok, 1);
+  db.close();
+});
+
 test('overall chart renders daily growth rather than cumulative totals', function () {
   const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const start = app.indexOf('  function contentOverallChart(');
