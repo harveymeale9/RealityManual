@@ -22099,3 +22099,13 @@ are UTC-day *observed counter growth* across tracked videos, not YouTube
 Studio's exact calendar-day analytics; hourly collection can shift a late
 view into the following observation day. For 2026-11-11, the existing 7,466
 measured YouTube increase comprises 6,919 long-form and 547 Shorts views.
+
+## Clear all comment activity alerts (2026-11-12)
+
+The top-right Comments panel now has an admin-only Clear all control. It asks
+for confirmation, then marks all currently pending post/platform comment
+activity reviewed in one database update; it does not delete comments or
+reset their observed high-water counters. The badge and list refresh after
+the update, and new comment-count increases still create new alerts. The
+button is disabled when there are no pending alerts. The backend action is a
+dedicated authenticated route, not a browser loop over individual posts.

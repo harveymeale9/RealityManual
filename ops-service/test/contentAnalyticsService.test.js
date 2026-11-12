@@ -171,7 +171,9 @@ test('Content Analytics owns its analytics route while competitor research keeps
   assert.match(style, /@container \(max-width:600px\)/);
   assert.match(style, /\.content-piece-row>span:nth-child\(6\)\{display:block\}/);
   assert.match(page, /data-tabs="content-analytics,sales-analytics,website-analytics"/);
-  assert.match(page, /app\.js\?v=20261112-youtube-format-views/);
+  assert.match(page, /app\.js\?v=20261112-clear-comments/);
+  assert.match(page, /id="commentAlertClearAll" disabled/);
+  assert.match(app, /comment-alerts\/reviewed-all/);
   assert.match(app, /class="content-overall-yesterday" data-content-day=/);
   assert.match(app, /class="content-overall-day-target" data-content-day=/);
   assert.match(app, /class="content-overall-popup" hidden/);
@@ -207,4 +209,11 @@ test('comment watch flags existing and newly increased counts until reviewed wit
   assert.equal(service.commentAlerts().find(function (row) { return row.platform === 'youtube'; }).count, 1);
   const restarted = analytics.setup(db, { listPieces: function () { return [piece]; } });
   assert.equal(restarted.commentAlerts().length, 3);
+  assert.equal(restarted.markAllCommentsReviewed(), 3);
+  assert.equal(restarted.commentAlerts().length, 0);
+  assert.equal(restarted.markAllCommentsReviewed(), 0, 'clearing an empty queue is harmless');
+  counts.tiktok = 3;
+  await service.collect();
+  assert.deepEqual(service.commentAlerts().map(function (row) { return [row.platform, row.count]; }), [['tiktok', 1]],
+    'a later new comment still raises an alert');
 });

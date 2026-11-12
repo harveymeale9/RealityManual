@@ -1824,6 +1824,10 @@ app.post('/api/reports/comment-alerts/:platform/:id/reviewed', requireAuth, func
   const reviewed = contentAnalytics.markCommentsReviewed(req.params.id, req.params.platform);
   res.set('Cache-Control', 'no-store').json({ ok: true, reviewed: reviewed });
 });
+app.post('/api/reports/comment-alerts/reviewed-all', requireAuth, function (req, res) {
+  const reviewed = contentAnalytics.markAllCommentsReviewed();
+  res.set('Cache-Control', 'no-store').json({ ok: true, reviewed: reviewed });
+});
 app.post('/api/reports/weekly/run', requireAuth, async function (req, res) {
   try { res.json(await weeklyReports.runDue()); }
   catch (error) { res.status(502).json({ error: 'weekly_report_failed', message: String(error.message || error).slice(0, 300) }); }

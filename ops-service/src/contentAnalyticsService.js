@@ -343,6 +343,10 @@ function setup(db, options) {
     return db.prepare(`UPDATE content_comment_watch SET pending_count=0,first_unreviewed_at=NULL,
       last_unreviewed_at=NULL WHERE piece_id=? AND platform=? AND pending_count>0`).run(pieceId, platform).changes > 0;
   }
+  function markAllCommentsReviewed() {
+    return db.prepare(`UPDATE content_comment_watch SET pending_count=0,first_unreviewed_at=NULL,
+      last_unreviewed_at=NULL WHERE pending_count>0`).run().changes;
+  }
   function start() {
     if (timer) return;
     timer = setInterval(function () { runDue().catch(function () {}); }, Math.min(intervalMs, 15 * 60 * 1000));
@@ -351,7 +355,8 @@ function setup(db, options) {
   }
 
   return { collect: collect, runDue: runDue, dashboard: dashboard, start: start,
-    commentAlerts: commentAlerts, markCommentsReviewed: markCommentsReviewed };
+    commentAlerts: commentAlerts, markCommentsReviewed: markCommentsReviewed,
+    markAllCommentsReviewed: markAllCommentsReviewed };
 }
 
 module.exports = { setup: setup, PLATFORMS: PLATFORMS, hourBucket: hourBucket, relevantPiece: relevantPiece };

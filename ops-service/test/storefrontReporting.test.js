@@ -149,7 +149,7 @@ test('both analytics views show the nested source-and-video referral chart', fun
   assert.match(app, /referralBreakdownHtml\(website\.referrals\)/);
   assert.match(app, /conic-gradient\(/);
   assert.match(app, /segment\.piece_title/);
-  assert.match(page, /style\.css\?v=20261112-youtube-format-views/);
+  assert.match(page, /style\.css\?v=20261112-clear-comments/);
 });
 
 test('sales chart shows paid sale counts immediately on hover without a second line graph', async function () {

@@ -171,6 +171,7 @@
       var badge = document.getElementById('commentAlertCount');
       badge.textContent = total > 99 ? '99+' : String(total);
       badge.hidden = total === 0;
+      document.getElementById('commentAlertClearAll').disabled = alerts.length === 0;
       commentAlertBtn.setAttribute('aria-label', total ? total + ' comments to check' : 'No comments to check');
       document.getElementById('commentAlertList').innerHTML = alerts.length ? alerts.map(function (row) {
         var url = safeCommentPostUrl(row.postUrl, row.platform);
@@ -209,6 +210,18 @@
   document.getElementById('commentAlertClose').addEventListener('click', function () {
     commentAlertPanel.hidden = true;
     commentAlertBtn.setAttribute('aria-expanded', 'false');
+  });
+  document.getElementById('commentAlertClearAll').addEventListener('click', function (event) {
+    var button = event.currentTarget;
+    if (button.disabled || !window.confirm('Mark all current comment activity as reviewed?')) return;
+    button.disabled = true;
+    fetch('/api/reports/comment-alerts/reviewed-all', { method: 'POST', credentials: 'include' })
+      .then(function (response) { if (!response.ok) throw new Error('Could not clear comments'); return response.json(); })
+      .then(function () { loadCommentAlerts(); })
+      .catch(function () {
+        button.disabled = false;
+        document.getElementById('commentAlertStatus').textContent = 'Could not clear comments. Please try again.';
+      });
   });
   commentAlertPanel.addEventListener('click', function (event) {
     var button = event.target.closest('button[data-comment-piece]');
