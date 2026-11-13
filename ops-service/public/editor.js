@@ -1051,6 +1051,10 @@
       var completedReplacement = !!(previousProject && previousProject.id === item.id && item.renderStatus === 'ready' &&
         String(item.renderSha256 || '') && String(previousProject.renderSha256 || '') !== String(item.renderSha256 || ''));
       var progressOnly = !!(quiet && previousProject && previousProject.id === item.id && previousProject.renderStatus === 'running' && item.renderStatus === 'running');
+      var sourceProgressOnly = !!(quiet && previousProject && previousProject.id === item.id &&
+        previousProject.browserPreviewStatus === 'running' && item.browserPreviewStatus === 'running' &&
+        projectPollSignature(previousProject) === projectPollSignature(item) &&
+        Number(previousProject.editRevision || 0) === Number(item.editRevision || 0));
       var unchanged = !!(quiet && previousProject && previousProject.id === item.id &&
         String(previousProject.updatedAt || '') === String(item.updatedAt || '') &&
         String(previousProject.renderSha256 || '') === String(item.renderSha256 || '') &&
@@ -1093,18 +1097,25 @@
         schedulePoll();
         return;
       }
-      if (progressOnly) {
-        var percent = Math.round(Number(item.renderProgress) || 0);
-        var label = root.querySelector('#editorRenderProgressLabel');
-        var bar = root.querySelector('#editorRenderProgressBar');
-        var button = root.querySelector('#editorRender');
-        if (label) label.textContent = 'Encoding editing preview · ' + percent + '%';
-        if (bar) bar.style.width = Math.max(2, percent) + '%';
-        if (button) button.textContent = 'Building editing preview… ' + percent + '%';
-        var overlayLabel = root.querySelector('#editorPreviewRebuildLabel');
-        var overlayBar = root.querySelector('#editorPreviewRebuildBar');
-        if (overlayLabel) overlayLabel.textContent = percent >= 99 ? 'Finalising updated preview…' : 'Rebuilding preview… ' + percent + '%';
-        if (overlayBar) overlayBar.style.width = Math.max(2, percent) + '%';
+      if (progressOnly || sourceProgressOnly) {
+        if (progressOnly) {
+          var percent = Math.round(Number(item.renderProgress) || 0);
+          var label = root.querySelector('#editorRenderProgressLabel');
+          var bar = root.querySelector('#editorRenderProgressBar');
+          var button = root.querySelector('#editorRender');
+          if (label) label.textContent = 'Encoding editing preview · ' + percent + '%';
+          if (bar) bar.style.width = Math.max(2, percent) + '%';
+          if (button) button.textContent = 'Building editing preview… ' + percent + '%';
+          var overlayLabel = root.querySelector('#editorPreviewRebuildLabel');
+          var overlayBar = root.querySelector('#editorPreviewRebuildBar');
+          if (overlayLabel) overlayLabel.textContent = percent >= 99 ? 'Finalising updated preview…' : 'Rebuilding preview… ' + percent + '%';
+          if (overlayBar) overlayBar.style.width = Math.max(2, percent) + '%';
+        }
+        var sourcePercent = Math.max(0, Math.min(99, Math.round(Number(item.browserPreviewProgress) || 0)));
+        var sourceLabel = root.querySelector('#editorSourcePreviewProgressLabel');
+        var sourceBar = root.querySelector('#editorSourcePreviewProgressBar');
+        if (sourceLabel) sourceLabel.textContent = 'Encoding browser-safe preview · ' + sourcePercent + '%';
+        if (sourceBar) sourceBar.style.width = sourcePercent + '%';
         schedulePoll();
         return;
       }
@@ -1361,7 +1372,7 @@
       ? '<div class="editor-preview-rebuild' + (rebuildFailed ? ' error' : '') + '" id="editorPreviewRebuild" role="status" aria-live="polite"><div class="editor-preview-rebuild-spinner">' + (rebuildFailed ? '!' : '') + '</div><strong id="editorPreviewRebuildLabel">' + rebuildLabel + '</strong><span>' + (rebuildFailed ? 'Playback remains locked because this file was not regenerated. Use Retry failed steps above.' : initialPreviewBuild ? 'No changes have been made. The first editable preview is being prepared from your new recording.' : 'Your latest edit is being applied. Playback will unlock when the regenerated preview is ready.') + '</span>' + (rebuildFailed ? '' : '<div><i id="editorPreviewRebuildBar" style="width:' + (project.renderStatus === 'running' ? Math.max(2, rebuildPercent) : 4) + '%"></i></div>') + '</div>'
       : '';
     var sourcePreparingOverlayHtml = sourcePreviewPreparing
-      ? '<div class="editor-preview-rebuild" id="editorSourcePreviewPreparing" role="status" aria-live="polite"><div class="editor-preview-rebuild-spinner"></div><strong>Preparing browser-safe preview…</strong><span>This is actively encoding. Playback will unlock automatically; your camera master and editing controls remain available.</span><div><i style="width:4%"></i></div></div>'
+      ? '<div class="editor-preview-rebuild" id="editorSourcePreviewPreparing" role="status" aria-live="polite"><div class="editor-preview-rebuild-spinner"></div><strong id="editorSourcePreviewProgressLabel">' + (project.browserPreviewStatus === 'running' ? 'Encoding browser-safe preview · ' + Math.max(0, Math.min(99, Math.round(Number(project.browserPreviewProgress) || 0))) + '%' : 'Waiting to prepare browser-safe preview…') + '</strong><span>' + (project.browserPreviewStatus === 'running' ? 'Playback will unlock automatically; your camera master and editing controls remain available.' : 'Encoding will start when the preview queue is ready; your editing controls remain available.') + '</span>' + (project.browserPreviewStatus === 'running' ? '<div><i id="editorSourcePreviewProgressBar" style="width:' + Math.max(0, Math.min(99, Math.round(Number(project.browserPreviewProgress) || 0))) + '%"></i></div>' : '') + '</div>'
       : '';
     var initialLoadingOverlayHtml = mediaUnavailable ? '' : '<div class="editor-preview-loading" id="editorPreviewLoading" role="status" aria-live="polite"><div></div><strong>Loading preview…</strong></div>';
     var rawSourceNoticeHtml = previewMode === 'source' && !!explicitSourcePreviews[project.id]

@@ -22160,3 +22160,19 @@ mocked PATCH with the real Editor UI: after a poll, the previous script sent
 an empty cut, and the updated script sent the selected word index. The 101
 Editor tests pass, and the asset cache key is bumped. This is a frontend-only
 change and does not restart the ops-service or its active FFmpeg preview job.
+
+## Browser-safe Editor preview shows measured progress (2026-11-13)
+
+Harvey's browser-safe-preview overlay displayed a bar fixed at `width:4%` for
+the entire source-proxy encode. The source-proxy FFmpeg job only saved
+`pending`/`running`/`ready`/`error`, so the UI had no measured percentage.
+The scrub-proxy encoder now emits FFmpeg `-progress` timestamps, saves a
+throttled `browserPreviewProgress` percentage against the source duration,
+and sets it to 100 only after the output passes its media verification.
+Interrupted or retried jobs reset to zero. The active overlay updates its
+label/bar from the saved percentage without replacing the Editor DOM on each
+poll; while queued, it shows a spinner and no fake percentage bar. This
+preserves transcript selection and the in-progress editing view. The Editor
+asset cache key was bumped. The focused UI/proxy tests and all 101 Editor
+tests passed; the real HEVC-proxy integration test confirms the verified job
+finishes with progress 100.

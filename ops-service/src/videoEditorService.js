@@ -1872,14 +1872,14 @@ function setup(options) {
     } catch (error) { return false; }
   }
 
-  async function buildScrubProxy(inputPath, outputPath, expectedDuration, label) {
-    await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-filter_threads', String(EDITOR_FFMPEG_THREADS), '-autorotate', '1', '-i', inputPath,
+  async function buildScrubProxy(inputPath, outputPath, expectedDuration, label, onProgress) {
+    await runWithProgress('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-filter_threads', String(EDITOR_FFMPEG_THREADS), '-autorotate', '1', '-i', inputPath,
       '-map', '0:v:0', '-map', '0:a:0', '-vf',
       "scale=w='if(gte(iw,ih),trunc(min(720,iw)/2)*2,-2)':h='if(gte(iw,ih),-2,trunc(min(720,ih)/2)*2)',fps=24",
       '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'fastdecode', '-crf', '31', '-pix_fmt', 'yuv420p',
       '-threads', String(EDITOR_FFMPEG_THREADS),
       '-g', '12', '-keyint_min', '12', '-sc_threshold', '0',
-      '-c:a', 'aac', '-b:a', '64k', '-movflags', '+faststart', outputPath], label);
+      '-c:a', 'aac', '-b:a', '64k', '-movflags', '+faststart', '-progress', 'pipe:1', '-nostats', outputPath], label, onProgress);
     if (!await browserPreviewIsValid(outputPath, expectedDuration)) throw new Error('The scrub-optimized browser preview failed verification.');
   }
 
@@ -1978,13 +1978,27 @@ function setup(options) {
       try { project = getProject(id); } catch (error) { return; }
       if (!project || !project.browserPreviewRequired || project.productionPieceId) return;
       project.browserPreviewStatus = 'running';
+      project.browserPreviewProgress = 0;
       project.browserPreviewError = '';
       try { saveProject(project); } catch (error) { return; }
       try {
-        await buildScrubProxy(sourcePath(id), previewPath(id), project.duration, 'source scrub proxy');
+        let lastReportedProgress = -1;
+        await buildScrubProxy(sourcePath(id), previewPath(id), project.duration, 'source scrub proxy', function (encodedSeconds) {
+          const percent = Math.min(99, Math.max(0, Math.floor(encodedSeconds / Math.max(0.01, Number(project.duration) || 0.01) * 100)));
+          if (percent < lastReportedProgress + 2) return;
+          lastReportedProgress = percent;
+          try {
+            const current = getProject(id);
+            if (current && current.browserPreviewStatus === 'running') {
+              current.browserPreviewProgress = percent;
+              saveProject(current);
+            }
+          } catch (error) { /* A test or shutdown may close the database while FFmpeg exits. */ }
+        });
         try { project = getProject(id); } catch (error) { return; }
         if (!project) return;
         project.browserPreviewStatus = 'ready';
+        project.browserPreviewProgress = 100;
         project.browserPreviewError = '';
         project.browserPreviewVersion = BROWSER_PREVIEW_VERSION;
         try { saveProject(project); } catch (error) { return; }
@@ -1993,6 +2007,7 @@ function setup(options) {
         try { project = getProject(id); } catch (readError) { return; }
         if (project) {
           project.browserPreviewStatus = 'error';
+          project.browserPreviewProgress = 0;
           project.browserPreviewError = String(error.message || error).slice(0, 500);
           project.browserPreviewVersion = 0;
           try { saveProject(project); } catch (saveError) { return; }
@@ -2706,6 +2721,7 @@ function setup(options) {
       }
       if (resumePreview) {
         project.browserPreviewStatus = 'pending';
+        project.browserPreviewProgress = 0;
         project.browserPreviewError = '';
       }
       if (project.renderStatus === 'running' || project.renderStatus === 'queued') {
@@ -2777,15 +2793,18 @@ function setup(options) {
         if (needsPreview && !previewValid && !previewJobActive) {
           await fs.promises.rm(previewFile, { force: true });
           current.browserPreviewStatus = 'pending';
+          current.browserPreviewProgress = 0;
           current.browserPreviewError = '';
           current.browserPreviewVersion = 0;
         } else if (needsPreview && previewValid) {
           current.browserPreviewStatus = 'ready';
+          current.browserPreviewProgress = 100;
           current.browserPreviewError = '';
           current.browserPreviewVersion = BROWSER_PREVIEW_VERSION;
         } else if (!needsPreview) {
           await fs.promises.rm(previewFile, { force: true });
           current.browserPreviewStatus = 'not_required';
+          current.browserPreviewProgress = 0;
           current.browserPreviewError = '';
           current.browserPreviewVersion = 0;
         }
@@ -2991,6 +3010,7 @@ function setup(options) {
         sourceRotation: media.rotation,
         browserPreviewRequired: browserPreviewNeeded(req.file.originalname, media),
         browserPreviewStatus: browserPreviewNeeded(req.file.originalname, media) ? 'pending' : 'not_required',
+        browserPreviewProgress: 0,
         browserPreviewError: '',
         browserPreviewVersion: 0,
         transcriptText: '',
@@ -3777,7 +3797,7 @@ function setup(options) {
       project.transcriptionStatus = 'pending'; project.transcriptionError = ''; retried.push('transcription');
     }
     if (project.browserPreviewRequired && project.browserPreviewStatus === 'error') {
-      project.browserPreviewStatus = 'pending'; project.browserPreviewError = ''; retried.push('preview');
+      project.browserPreviewStatus = 'pending'; project.browserPreviewProgress = 0; project.browserPreviewError = ''; retried.push('preview');
     }
     if (project.transcriptionStatus === 'ready' && project.retakeAnalysisStatus === 'error' && typeof analyzeRetakes === 'function') {
       project.retakeAnalysisStatus = 'pending'; project.retakeAnalysisError = ''; retried.push('retakes');

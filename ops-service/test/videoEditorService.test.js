@@ -619,14 +619,16 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /No changes have been made\. The first editable preview is being prepared/);
   assert.match(source, /initial processing—not a change you made/);
   assert.match(source, /var mediaUnavailable = previewLocked \|\| sourcePreviewPreparing/);
-  assert.match(source, /Preparing browser-safe preview…/);
+  assert.match(source, /Encoding browser-safe preview · /);
+  assert.match(source, /editorSourcePreviewProgressBar/);
+  assert.doesNotMatch(source, /editorSourcePreviewPreparing[^\n]*width:4%/);
   assert.match(source, /Playback will unlock automatically/);
   assert.match(source, /\(mediaUnavailable \? '' : ' src="' \+ previewUrl/);
   assert.match(source, /editor-manual-cut-handle/);
   assert.match(source, /Adjusted automatic timeline cut/);
   assert.match(source, /Cut edge moved/);
   assert.match(page, /lib\/captionMask\.js\?v=20261015-mask-swears/);
-  assert.match(page, /editor\.js\?v=20261113-preserve-transcript-selection-v159/);
+  assert.match(page, /editor\.js\?v=20261113-source-preview-progress-v160/);
   assert.match(source, /Transcription needs attention/);
   assert.match(source, /id="editorDeleteFailed">Delete recording/);
   assert.match(source, /workspace\.querySelector\('#editorDeleteFailed'\)\.onclick = function \(\) \{ deleteCurrentRecording\(this\); \}/);
@@ -1677,6 +1679,7 @@ test('an HEVC camera master receives a real browser-safe review proxy', { timeou
     await new Promise(function (resolve) { setTimeout(resolve, 30); });
   }
   assert.equal(stored.browserPreviewStatus, 'ready', stored.browserPreviewError);
+  assert.equal(stored.browserPreviewProgress, 100);
   assert.equal(stored.browserPreviewVersion, 3);
   const proxy = path.join(projectDir, 'preview.mp4');
   assert.ok(fs.statSync(proxy).size > 1024);
