@@ -70,7 +70,7 @@ function detailsTable(rows) {
     </table>`;
 }
 
-function layout({ preview = false, previewLabel = 'Sample Preview: Not a Real Order', preheader, eyebrow, title, body, details, callout, button }) {
+function layout({ preview = false, previewLabel = 'Sample Preview: Not a Real Order', preheader, eyebrow, title, body, details, callout, button, afterButton }) {
   const previewBanner = preview
     ? `<tr><td style="background:${BRAND.gold};color:${BRAND.ink};padding:9px 24px;text-align:center;font-family:Arial,sans-serif;font-size:10px;font-weight:bold;letter-spacing:1.7px;text-transform:uppercase;">${escapeHtml(previewLabel)}</td></tr>`
     : '';
@@ -98,6 +98,7 @@ function layout({ preview = false, previewLabel = 'Sample Preview: Not a Real Or
           ${details || ''}
           ${callout ? `<div style="margin:30px 0 4px;padding:24px;border-left:2px solid ${BRAND.gold};background:${BRAND.ink};color:${BRAND.ivory};font-family:Georgia,'Times New Roman',serif;font-size:16px;line-height:26px;">${callout}</div>` : ''}
           ${buttonMarkup}
+          ${afterButton || ''}
         </td></tr>
         <tr><td style="padding:26px 34px;border-top:1px solid ${BRAND.border};color:${BRAND.soft};font-family:Arial,sans-serif;font-size:11px;line-height:18px;text-align:center;">
           Questions about your order? Reply to this email.<br>
@@ -192,6 +193,9 @@ function orderShippedEmail(order, shipment = {}, { preview = false } = {}) {
     'Delivering to:',
     ...address,
     '',
+    'IF YOUR BOOK ARRIVES DAMAGED',
+    'From time to time, a copy may have a printing defect or be damaged in transit. If this happens to yours, please take photos of the damage or printing errors and reply to this email with them. We’ll get another copy on the way immediately.',
+    '',
     'Questions about your order? Reply to this email.',
     'https://realitymanual.com',
   ].filter(Boolean).join('\n');
@@ -209,6 +213,10 @@ function orderShippedEmail(order, shipment = {}, { preview = false } = {}) {
         ? `Your estimated delivery time is <strong style="color:${BRAND.gold};">${escapeHtml(estimate)}</strong>. Delivery times are estimates and may vary slightly by destination or during busy periods.`
         : 'Your book is finally on its way. We cannot wait for it to reach you.',
       button: trackingUrl ? { label: 'Track your shipment', href: trackingUrl } : null,
+      afterButton: `<div style="margin:30px 0 0;padding:22px 24px;border:1px solid ${BRAND.border};background:${BRAND.ink};">
+        <div style="margin:0 0 10px;color:${BRAND.gold};font-family:Arial,sans-serif;font-size:11px;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;">If your book arrives damaged</div>
+        <div style="color:${BRAND.soft};font-family:Georgia,'Times New Roman',serif;font-size:15px;line-height:24px;">From time to time, a copy may have a printing defect or be damaged in transit. If this happens to yours, please take photos of the damage or printing errors and reply to this email with them. We’ll get another copy on the way immediately.</div>
+      </div>`,
     }),
     text,
   };

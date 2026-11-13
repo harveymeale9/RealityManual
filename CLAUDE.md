@@ -22132,3 +22132,15 @@ or external platform metrics were overwritten. The TikTok collector also
 returns an unknown view count instead of a stale Buffer zero when no public
 view count is available, preventing that particular false dip going forward.
 Platform days remain UTC observation days, not exact event-time analytics.
+
+## Dispatch email damage/printing-defect guidance (2026-11-13)
+
+The customer dispatch email now includes a dedicated section beneath its
+shipping/tracking details explaining that occasional copies may have a printing
+defect or transit damage. Customers are asked to photograph the damage or
+printing errors and reply to the dispatch email with the photos; the message
+promises a replacement copy immediately. The same guidance is present in the
+plain-text fallback. This changes the template only: no existing orders,
+fulfillment state, or automated replacement workflow were altered. A preview
+can be generated with `orderShippedEmail(..., { preview: true })` and sent
+through the existing Resend client; use synthetic order/tracking details.

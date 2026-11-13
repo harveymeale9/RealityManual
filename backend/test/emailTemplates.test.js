@@ -50,10 +50,17 @@ test('dispatch email includes tracking only when BookVault supplies it', () => {
   assert.match(tracked.html, /Track your shipment/);
   assert.match(tracked.html, /https:\/\/tracking\.example\/TRACK-123/);
   assert.match(tracked.text, /TRACK-123/);
+  assert.match(tracked.html, /printing defect or be damaged in transit/);
+  assert.match(tracked.html, /take photos of the damage or printing errors and reply to this email with them/);
+  assert.match(tracked.html, /get another copy on the way immediately/);
+  assert.ok(tracked.html.indexOf('Track your shipment</a>') < tracked.html.indexOf('If your book arrives damaged'));
+  assert.match(tracked.text, /IF YOUR BOOK ARRIVES DAMAGED/);
+  assert.match(tracked.text, /get another copy on the way immediately/);
 
   const untracked = orderShippedEmail(order, { carrierName: 'Local post' });
   assert.doesNotMatch(untracked.html, /Track your shipment/);
   assert.doesNotMatch(untracked.text, /Track your shipment:/);
+  assert.match(untracked.html, /If your book arrives damaged/);
 });
 
 test('refund email says the refund was issued without promising bank timing', () => {
