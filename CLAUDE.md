@@ -22176,3 +22176,25 @@ preserves transcript selection and the in-progress editing view. The Editor
 asset cache key was bumped. The focused UI/proxy tests and all 101 Editor
 tests passed; the real HEVC-proxy integration test confirms the verified job
 finishes with progress 100.
+
+## Customer email replies require Harvey's review before any response (2026-11-13)
+
+Harvey asked to be notified when anyone replies to Reality Manual customer
+emails and to decide the response together before anything is sent. The
+ops-service mailbox no longer sends its previously authorized automatic
+courtesy decline to cold-sales mail: the server passes
+`courtesyRepliesEnabled: false` regardless of the legacy environment switch.
+No customer response is sent by mail triage. Existing explicit owner-approved
+outbound workflows, such as order/dispatch notices, are unaffected.
+
+Human replies to the four storefront transactional/review-email subject
+families are now deterministically marked important and surfaced as unread
+Project Manager mail alerts, even if a reply is just feedback or a review and
+the classifier would otherwise call it routine. Resend sends those outbound
+messages outside the ops-service mailbox, so there is no local sent-thread
+record to join; stable subject matching is the safe fallback. The classifier
+also explicitly treats genuine customer replies as important and is instructed
+not to draft or send a reply. Auto-acknowledgements, out-of-office messages,
+and routine security codes remain suppressed. No matching historical customer
+reply was found at rollout. The focused mail-triage tests pass (8/8), including
+a feedback reply alert, an auto-reply suppression, and no outbound message.

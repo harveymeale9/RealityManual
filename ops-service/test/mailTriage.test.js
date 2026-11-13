@@ -9,6 +9,39 @@ const path = require('path');
 const mailboxService = require('../src/mailboxService');
 const mailTriageService = require('../src/mailTriageService');
 
+test('human replies to storefront emails are alerted even when they only offer feedback', async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-customer-reply-'));
+  const db = new Database(':memory:');
+  db.exec(`CREATE TABLE voice_messages (
+    id TEXT PRIMARY KEY,mode TEXT NOT NULL,transcript TEXT NOT NULL,status TEXT NOT NULL,
+    reply_text TEXT,created_at TEXT NOT NULL,completed_at TEXT,
+    agent TEXT NOT NULL DEFAULT 'codex',notification_kind TEXT NOT NULL DEFAULT 'conversation',
+    notification_unread INTEGER NOT NULL DEFAULT 0,source_ref TEXT
+  ); CREATE UNIQUE INDEX idx_voice_mail_alert_source ON voice_messages(source_ref)
+    WHERE notification_kind='mail_alert' AND source_ref IS NOT NULL;`);
+  const mailbox = mailboxService.setup(db, { dataDir: dir, autoSync: false });
+  t.after(function () { mailbox.close(); db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+  const feedback = mailbox.ingest({ providerId: 'review-reply-1', fromEmail: 'reader@example.com',
+    subject: 'Re: How are you finding The Reality Manual?',
+    textBody: 'I enjoyed chapter 9. Thanks for writing it.', receivedAt: '2026-11-13T17:00:00Z' });
+  mailbox.ingest({ providerId: 'review-auto-1', fromEmail: 'reader2@example.com',
+    subject: 'Automatic reply: How are you finding The Reality Manual?',
+    textBody: 'Out of office until next week.', receivedAt: '2026-11-13T17:01:00Z' });
+  const triage = mailTriageService.setup(db, { autoStart: false, courtesyRepliesEnabled: false,
+    classify: async function () { return { important: false, category: 'Feedback',
+      summary: 'The reader enjoyed chapter 9.', actionRequired: false,
+      suggestedNextStep: 'No action needed.', courtesyReplyEligible: true }; } });
+  const result = await triage.processPending(5);
+  assert.deepEqual({ processed: result.processed, alerted: result.alerted,
+    courtesyRepliesSent: result.courtesyRepliesSent }, { processed: 2, alerted: 1, courtesyRepliesSent: 0 });
+  assert.equal(db.prepare('SELECT important FROM mail_triage WHERE message_id=?').get(feedback.id).important, 1);
+  assert.equal(db.prepare("SELECT count(*) AS n FROM voice_messages WHERE notification_kind='mail_alert'").get().n, 1);
+  assert.match(db.prepare("SELECT reply_text FROM voice_messages WHERE notification_kind='mail_alert'").get().reply_text,
+    /do not reply until Harvey decides/i);
+  assert.equal(db.prepare("SELECT count(*) AS n FROM mailbox_messages WHERE direction='outbound'").get().n, 0);
+  triage.close();
+});
+
 test('mail triage archives every digested email and creates one durable alert only for important mail', async function (t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-mail-triage-'));
   const db = new Database(':memory:');
