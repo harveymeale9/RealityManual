@@ -22144,3 +22144,19 @@ plain-text fallback. This changes the template only: no existing orders,
 fulfillment state, or automated replacement workflow were altered. A preview
 can be generated with `orderShippedEmail(..., { preview: true })` and sent
 through the existing Resend client; use synthetic order/tracking details.
+
+## Editor transcript selection survives background polls (2026-11-13)
+
+Harvey found that **Cut selected** intermittently did nothing while editing a
+transcript. The Editor polls active recordings every 1.8 seconds (including
+while a browser-safe preview is encoding). `openProject(id, true)` cleared its
+in-memory selected-word set even on an unchanged same-project poll, but kept
+the old transcript DOM and enabled button. A later click therefore submitted
+an empty `removedWordIndices` patch despite words still looking selected.
+
+Quiet same-project refreshes now preserve the selection; explicit navigation
+or switching recordings still clears it. The browser reproduction used a
+mocked PATCH with the real Editor UI: after a poll, the previous script sent
+an empty cut, and the updated script sent the selected word index. The 101
+Editor tests pass, and the asset cache key is bumped. This is a frontend-only
+change and does not restart the ops-service or its active FFmpeg preview job.

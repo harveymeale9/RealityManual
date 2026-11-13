@@ -1081,7 +1081,10 @@
       restoreReviewProgress(item);
       localStorage.setItem(rememberedProjectKey(item.productionPieceId ? 'sent' : 'active'), item.id);
       projects = projects.map(function (entry) { return entry.id === item.id ? item : entry; });
-      selected.clear();
+      // Background status polls must not silently discard a word selection.
+      // The transcript still looks selected until it is re-rendered, so a
+      // subsequent Cut selected click would otherwise submit an empty cut.
+      if (!quiet || !previousProject || previousProject.id !== item.id) selected.clear();
       renderList();
       // Re-entry paints the cached verified project immediately. If the
       // authoritative record is byte-for-byte the same edit, keep that media
