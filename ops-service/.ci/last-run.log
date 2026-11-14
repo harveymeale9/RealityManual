@@ -8,19 +8,20 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   bbf2abd..2e58eb6  main       -> origin/main
+   81f48ed..1b83184  main       -> origin/main
 + git merge --ff-only origin/main
-Updating bbf2abd..2e58eb6
+Updating 81f48ed..1b83184
 Fast-forward
- CLAUDE.md                            |  22 ++++++
- ops-service/.ci/last-run.log         | 144 +++++++++++++++++++++++++++++++----
- ops-service/.env.example             |   2 +-
- ops-service/server.js                |   3 +-
- ops-service/src/mailTriageService.js |  22 ++++--
- ops-service/test/mailTriage.test.js  |  33 ++++++++
- 6 files changed, 204 insertions(+), 22 deletions(-)
+ CLAUDE.md                                    | 20 ++++++++
+ ops-service/public/app.js                    | 69 ++++++++++++++++++++++++++++
+ ops-service/public/index.html                |  7 ++-
+ ops-service/public/style.css                 | 25 ++++++++++
+ ops-service/server.js                        |  9 ++++
+ ops-service/src/storefrontReporting.js       | 48 ++++++++++++++++++-
+ ops-service/test/storefrontReporting.test.js | 26 +++++++++++
+ 7 files changed, 201 insertions(+), 3 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=2e58eb6a3ee283f71c41b62e18e59eccc847fbf1
++ NEW_HEAD=1b83184e31eae367da2113428d89d8839c075b0d
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -29,13 +30,13 @@ Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
 + LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
 ++ cat /root/ops-service-data/last-image-commit.txt
-+ LAST_BUILD_COMMIT=bbf2abd7fbea836f8b2c4fd593621bc660c0f53a
++ LAST_BUILD_COMMIT=2e58eb6a3ee283f71c41b62e18e59eccc847fbf1
 + NEEDS_REBUILD=1
-+ '[' -n bbf2abd7fbea836f8b2c4fd593621bc660c0f53a ']'
-+ git cat-file -e 'bbf2abd7fbea836f8b2c4fd593621bc660c0f53a^{commit}'
-++ git diff --name-only bbf2abd7fbea836f8b2c4fd593621bc660c0f53a 2e58eb6a3ee283f71c41b62e18e59eccc847fbf1 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -n 2e58eb6a3ee283f71c41b62e18e59eccc847fbf1 ']'
++ git cat-file -e '2e58eb6a3ee283f71c41b62e18e59eccc847fbf1^{commit}'
+++ git diff --name-only 2e58eb6a3ee283f71c41b62e18e59eccc847fbf1 1b83184e31eae367da2113428d89d8839c075b0d -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z 'ops-service/server.js
-ops-service/src/mailTriageService.js' ']'
+ops-service/src/storefrontReporting.js' ']'
 + '[' 0 = 1 ']'
 + '[' 1 = 0 ']'
 + UPLOAD_DRAIN_WAITED=0
@@ -80,15 +81,15 @@ ops-service/src/mailTriageService.js' ']'
 #0 building with "default" instance using docker driver
 
 #1 [internal] load build definition from Dockerfile
-#1 transferring dockerfile: 2.04kB 0.0s done
+#1 transferring dockerfile: 2.04kB 0.1s done
 #1 DONE 0.1s
 
 #2 [internal] load metadata for docker.io/library/node:22-slim
-#2 DONE 0.7s
+#2 DONE 0.4s
 
 #3 [internal] load .dockerignore
-#3 transferring context: 136B done
-#3 DONE 0.0s
+#3 transferring context: 136B 0.1s done
+#3 DONE 0.1s
 
 #4 [internal] load build context
 #4 DONE 0.0s
@@ -98,65 +99,67 @@ ops-service/src/mailTriageService.js' ']'
 #5 DONE 0.1s
 
 #4 [internal] load build context
-#4 transferring context: 326.18kB 0.0s done
-#4 DONE 0.1s
+#4 transferring context: 987.24kB 0.2s done
+#4 DONE 0.3s
 
-#6 [ 4/10] COPY package.json ./
+#6 [ 2/10] RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && python3 -m pip install --break-system-packages --no-cache-dir yt-dlp==2026.8.19     && rm -rf /var/lib/apt/lists/*
 #6 CACHED
 
-#7 [ 2/10] RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && python3 -m pip install --break-system-packages --no-cache-dir yt-dlp==2026.8.19     && rm -rf /var/lib/apt/lists/*
+#7 [ 3/10] WORKDIR /app
 #7 CACHED
 
-#8 [ 3/10] WORKDIR /app
+#8 [ 4/10] COPY package.json ./
 #8 CACHED
 
 #9 [ 5/10] RUN npm install --omit=dev
 #9 CACHED
 
 #10 [ 6/10] COPY server.js ./
-#10 DONE 0.2s
+#10 DONE 0.4s
 
 #11 [ 7/10] COPY src ./src
-#11 DONE 0.1s
+#11 DONE 0.2s
 
 #12 [ 8/10] COPY public ./public
-#12 DONE 0.1s
+#12 DONE 0.4s
 
 #13 [ 9/10] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
-#13 DONE 16.5s
+#13 DONE 37.1s
 
 #14 [10/10] RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
-#14 DONE 0.4s
+#14 DONE 1.1s
 
 #15 exporting to image
 #15 exporting layers
-#15 exporting layers 3.2s done
-#15 exporting manifest sha256:135a03cf7ff083c6cdb05d3e535374f2ddef47a61206c05e242d7cb786db428d 0.0s done
-#15 exporting config sha256:7f8c2b513492e9d868d59dbc519b56cf0f67472c54594a889799be058a14d842 0.0s done
-#15 exporting attestation manifest sha256:89b5c45ba2556a2c6341854fd8df927d2d1bb60954118cf14414b1ffc2e8503b 0.0s done
-#15 exporting manifest list sha256:239131a64c2814f7b84957c3979f1ac47a7f4c61f93e44aaffd93d9af763bbda done
+#15 exporting layers 9.8s done
+#15 exporting manifest sha256:3e9b33aa08a6144fa4e188e58af068942ac5957de96218d98725da8096ba4510 0.0s done
+#15 exporting config sha256:d30aa4a78624f2ec93434d6a06a8e3ccfce5ca2740a0f89b101ff605242246aa 0.0s done
+#15 exporting attestation manifest sha256:29826166928ac6d0bff0cc9cc8ead1956dd410313353b107658efa31374487a8
+#15 exporting attestation manifest sha256:29826166928ac6d0bff0cc9cc8ead1956dd410313353b107658efa31374487a8 0.1s done
+#15 exporting manifest list sha256:4aa6575ccd39fda749fcda78e549438089c5e687f88b582a3187ec562c2d73d2 0.0s done
+#15 naming to docker.io/library/rm-ops-service:latest
 #15 naming to docker.io/library/rm-ops-service:latest done
 #15 unpacking to docker.io/library/rm-ops-service:latest
-#15 unpacking to docker.io/library/rm-ops-service:latest 1.4s done
-#15 DONE 4.7s
+#15 unpacking to docker.io/library/rm-ops-service:latest 3.4s done
+#15 DONE 13.5s
 + docker stop rm-ops-service
 rm-ops-service
 + docker rm rm-ops-service
 rm-ops-service
 + docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-data:/data -v /root/realitymanual-backend-data:/store-data:ro -v /srv/realitymanual-repo:/repo -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
-e0eb8911a2fb7278258b4f9bd01ae80fef6e473fe8d0b9b575c2a49bb326fa04
-+ echo 2e58eb6a3ee283f71c41b62e18e59eccc847fbf1
+ae3c30cb4925afe8202fa57bbd853ef552c0e0abb9f6fdc4f933e324476e21f9
++ echo 1b83184e31eae367da2113428d89d8839c075b0d
 ++ git -C /root/realitymanual-repo rev-parse --short HEAD
-+ echo 'rm-ops-service redeployed at 2e58eb6'
-rm-ops-service redeployed at 2e58eb6
++ echo 'rm-ops-service redeployed at 1b83184'
+rm-ops-service redeployed at 1b83184
 + docker image prune -f
 Deleted Images:
-untagged: sha256:ea8cb093c8ec6e635c7ea071aad04ef513873c6bf163a0768beadd08c1cb8935
-deleted: sha256:ea8cb093c8ec6e635c7ea071aad04ef513873c6bf163a0768beadd08c1cb8935
-deleted: sha256:0b71a35112e73e47ebd3974528264caa257cf978c634dd4d31375cc22de85e81
-deleted: sha256:62c900df658ff08816604a8a47bc257f806e1c435e51154c8c479c14f94abfbc
+untagged: sha256:b965109b03eb3e9c0caf25e39bdd39699f1429a30ae2cc799179350029eb423f
+deleted: sha256:b965109b03eb3e9c0caf25e39bdd39699f1429a30ae2cc799179350029eb423f
+deleted: sha256:1039d1fb51623da4ad4b24cb8eabd9fd6b5a1400bc67be131ac21c73801962e8
+deleted: sha256:273ee41da81ae9fc5929e97115515183207485fb8696ca0e07d0366e1c92641f
 
-Total reclaimed space: 15.66kB
+Total reclaimed space: 15.67kB
 + docker builder prune -f --max-used-space 8GB
 Total:	0B
 ssh exit code: 0
