@@ -86,4 +86,16 @@ The next real order still uses the VPS backend.
    the Stripe webhook only after all gates pass; keep a rollback route. Do
    not silently migrate against a stale snapshot or dual-write payments.
 
+The VPS backend has a default-on `STOREFRONT_JOBS_ENABLED` handoff switch.
+For the final data copy, pause new VPS checkout, set that switch false and
+restart the backend before copying. The Worker prioritizes newly paid orders
+over imported BookVault status polls. Do not set `FULFILLMENT_ENABLED=true`
+on the Worker while the VPS jobs remain active for the same orders.
+
+The existing `api.realitymanual.com` DNS A record is currently DNS-only.
+Cloudflare Workers Routes require a proxied record. Harvey must change only
+the Proxy status of that record in his dashboard; the scoped deployment
+token cannot edit DNS. Turning proxy on alone leaves the VPS as the origin
+until a Worker route is attached, so checkout need not switch at that step.
+
 Run `npm test` in this directory for the current staging smoke tests.

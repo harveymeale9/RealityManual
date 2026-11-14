@@ -43,6 +43,7 @@ async function processReviewRequest(order, now = new Date()) {
 }
 
 async function processDueReviewRequests(now = new Date()) {
+  if (process.env.STOREFRONT_JOBS_ENABLED === 'false') return;
   if (processing) return;
   processing = true;
   try {

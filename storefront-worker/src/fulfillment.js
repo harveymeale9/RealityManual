@@ -171,7 +171,7 @@ async function processOrder(env, order) {
   } catch (error) { await retry(env, order, error); }
 }
 
-async function claimNext(db) {
+export async function claimNext(db) {
   return db.prepare(`UPDATE orders SET fulfillment_next_attempt_at = strftime('%Y-%m-%dT%H:%M:%fZ','now','+5 minutes')
     WHERE id = (
       SELECT id FROM orders WHERE stripe_livemode = 1
@@ -179,7 +179,12 @@ async function claimNext(db) {
           OR (order_status = 'REFUNDED' AND refund_email_sent_at IS NULL)
           OR (order_status = 'SHIPPED' AND resend_contact_synced_at IS NULL))
         AND (fulfillment_next_attempt_at IS NULL OR fulfillment_next_attempt_at <= strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-      ORDER BY created_at LIMIT 1
+      ORDER BY CASE order_status
+        WHEN 'PAYMENT_RECEIVED' THEN 0
+        WHEN 'FULFILLMENT_RETRY' THEN 1
+        WHEN 'REFUNDED' THEN 2
+        WHEN 'BOOKVAULT_ACCEPTED' THEN 3
+        ELSE 4 END, created_at LIMIT 1
     ) RETURNING *`).first();
 }
 

@@ -24,6 +24,18 @@ const db = require('../src/db');
 
 test.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
 
+test('Cloudflare handoff switch stops VPS fulfillment and payment reconciliation jobs', async () => {
+  const previous = process.env.STOREFRONT_JOBS_ENABLED;
+  process.env.STOREFRONT_JOBS_ENABLED = 'false';
+  try {
+    assert.equal(await fulfillmentService.processPendingOrders(), undefined);
+    assert.equal(await fulfillmentService.reconcilePendingPayments(), undefined);
+  } finally {
+    if (previous === undefined) delete process.env.STOREFRONT_JOBS_ENABLED;
+    else process.env.STOREFRONT_JOBS_ENABLED = previous;
+  }
+});
+
 function paidOrder() {
   const order = orderService.createOrder({
     customer_name: 'Ava Reader',

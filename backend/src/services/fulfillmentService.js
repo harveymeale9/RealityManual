@@ -293,6 +293,10 @@ async function processOrder(order) {
 }
 
 async function processPendingOrders() {
+  // Handoff switch: keep the VPS API available for controlled rollback while
+  // preventing its old queue from racing the Cloudflare Worker on the same
+  // imported orders. The default preserves existing live behavior.
+  if (process.env.STOREFRONT_JOBS_ENABLED === 'false') return;
   if (!config.fulfillment.enabled) return;
   if (processing) return;
   processing = true;
@@ -316,6 +320,7 @@ async function processPendingOrders() {
 }
 
 async function reconcilePendingPayments() {
+  if (process.env.STOREFRONT_JOBS_ENABLED === 'false') return;
   const candidates = orderService.listPaymentReconcileCandidates();
   for (const order of candidates) {
     try {

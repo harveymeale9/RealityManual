@@ -18,6 +18,17 @@ const reviewRoutes = require('../src/routes/review');
 
 test.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
 
+test('Cloudflare handoff switch stops VPS review-request automation', async () => {
+  const previous = process.env.STOREFRONT_JOBS_ENABLED;
+  process.env.STOREFRONT_JOBS_ENABLED = 'false';
+  try {
+    assert.equal(await reviewService.processDueReviewRequests(new Date(Date.now() + 30 * 86400000)), undefined);
+  } finally {
+    if (previous === undefined) delete process.env.STOREFRONT_JOBS_ENABLED;
+    else process.env.STOREFRONT_JOBS_ENABLED = previous;
+  }
+});
+
 function shippedOrder(email, optIn) {
   const order = orderService.createOrder({
     customer_name: 'Ava Reader', email, phone: '+12025550123',

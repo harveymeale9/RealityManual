@@ -102,10 +102,17 @@ export default {
   async scheduled(_event, env, ctx) {
     if (env.FULFILLMENT_ENABLED !== 'true') return;
     ctx.waitUntil((async () => {
-      await reconcilePendingPayments(env);
-      await processPendingOrders(env);
-      if (new Date().getUTCMinutes() < 5) await processDueReviewRequests(env);
-      await aggregateCompletedDays(env);
+      // A temporary Stripe/BookVault/Resend failure must not starve the
+      // other durable jobs for an entire cron interval.
+      for (const [name, task] of [
+        ['payment reconciliation', () => reconcilePendingPayments(env)],
+        ['fulfillment', () => processPendingOrders(env)],
+        ['review requests', () => new Date().getUTCMinutes() < 5 ? processDueReviewRequests(env) : null],
+        ['analytics aggregation', () => aggregateCompletedDays(env)],
+      ]) {
+        try { await task(); }
+        catch (error) { console.error(`${name} sweep failed:`, error); }
+      }
     })());
   },
 };

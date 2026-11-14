@@ -22603,3 +22603,32 @@ scrolling as a narrow-screen fallback. At 801–1400px, the decorative
 wordmark is hidden to preserve room for all six destinations and the comment
 actions. Headless Chromium checked one tab row at 1215px, 900px and 390px,
 without horizontal page overflow. The left icon rail remains available.
+
+## Cloudflare handoff queue safety (2026-11-14)
+
+The staged Worker originally claimed due orders by oldest creation time. A
+fresh paid order could therefore wait behind the imported backlog of older
+BookVault status polls. Its D1 claim now prioritizes newly paid orders, then
+fulfillment retries, refunds, accepted-order polls and contact sync; the claim
+remains an atomic `UPDATE ... RETURNING` so concurrent sweeps do not both own
+the same due item. A regression test places a new paid row behind an older
+accepted row and verifies claim order.
+
+The VPS backend now supports `STOREFRONT_JOBS_ENABLED=false` as a handoff-only
+switch for its fulfillment, Stripe reconciliation and review-request jobs.
+The default leaves all existing behavior unchanged. During the final handoff,
+pause VPS checkout first, disable its jobs, then take a fresh consistent data
+copy into D1; only then may Worker checkout and scheduled jobs start. This
+prevents duplicate BookVault submissions or transactional/review emails on
+the two systems. Keep the VPS API and database for controlled rollback, but
+never let both automated queues process the same paid orders. Unit tests cover
+the VPS switch and Worker priority. The Worker cron now catches each job's
+failure independently, so a transient provider error cannot starve the other
+durable jobs for a whole sweep.
+
+This section describes preparation, not a completed production cutover. The
+Cloudflare reporting token is still owner-only, and the existing `api` DNS A
+record is DNS-only. The deployment token can list the zone/Worker routes but
+cannot read or edit DNS records; Harvey must enable Cloudflare proxy for that
+record before a Worker route can serve the existing API hostname. Until then,
+the live VPS checkout and automation continue unchanged.
