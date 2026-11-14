@@ -15,6 +15,7 @@ const RETRY_MINUTES = [1, 5, 20, 60, 60];
 const FULFILLMENT_WINDOW_MS = 24 * 60 * 60 * 1000;
 const STATUS_POLL_MINUTES = 15;
 let processing = false;
+let lastStripeReconcileAt = 0;
 
 function minutesFromNow(minutes) {
   return new Date(Date.now() + minutes * 60_000).toISOString();
@@ -309,15 +310,41 @@ async function processPendingOrders() {
   }
 }
 
+async function reconcilePendingPayments() {
+  const candidates = orderService.listPaymentReconcileCandidates();
+  for (const order of candidates) {
+    try {
+      const payment = await stripeService.stripe.paymentIntents.retrieve(order.stripe_payment_intent_id);
+      if (payment.status !== 'succeeded' || payment.amount_received !== order.total_price_cents ||
+          String(payment.currency).toLowerCase() !== String(order.currency).toLowerCase() ||
+          payment.metadata?.order_id !== order.id) continue;
+      orderService.updateStatusByPaymentIntentId(payment.id, 'PAYMENT_RECEIVED', payment.status, payment.livemode);
+    } catch (err) {
+      errorLogService.logError({ orderId: order.id, service: 'stripe', errorType: 'payment_reconcile_failed', errorMessage: err.message });
+    }
+  }
+}
+
 function startFulfillmentWorker() {
   // The first pass catches work left durable in SQLite across restarts.
-  setImmediate(() => processPendingOrders().catch((err) => console.error('[fulfillment] worker failed:', err.message)));
+  setImmediate(async () => {
+    try { await reconcilePendingPayments(); await processPendingOrders(); lastStripeReconcileAt = Date.now(); }
+    catch (err) { console.error('[fulfillment] worker failed:', err.message); }
+  });
   const timer = setInterval(
-    () => processPendingOrders().catch((err) => console.error('[fulfillment] worker failed:', err.message)),
+    async () => {
+      try {
+        if (Date.now() - lastStripeReconcileAt >= 5 * 60_000) {
+          await reconcilePendingPayments();
+          lastStripeReconcileAt = Date.now();
+        }
+        await processPendingOrders();
+      } catch (err) { console.error('[fulfillment] worker failed:', err.message); }
+    },
     60_000,
   );
   timer.unref();
   return timer;
 }
 
-module.exports = { processPendingOrders, processOrder, startFulfillmentWorker };
+module.exports = { processPendingOrders, processOrder, reconcilePendingPayments, startFulfillmentWorker };

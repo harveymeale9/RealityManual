@@ -59,6 +59,13 @@ const fulfillmentCandidatesStmt = db.prepare(`
   ORDER BY created_at ASC
   LIMIT ?
 `);
+const paymentReconcileCandidatesStmt = db.prepare(`
+  SELECT * FROM orders
+  WHERE stripe_payment_intent_id IS NOT NULL
+    AND order_status IN ('PAYMENT_PENDING', 'PAYMENT_PROCESSING')
+    AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-24 hours')
+  ORDER BY created_at DESC LIMIT ?
+`);
 
 const reviewRequestCandidatesStmt = db.prepare(`
   SELECT * FROM orders
@@ -212,6 +219,10 @@ function listFulfillmentCandidates(limit = 20) {
   return fulfillmentCandidatesStmt.all(limit);
 }
 
+function listPaymentReconcileCandidates(limit = 40) {
+  return paymentReconcileCandidatesStmt.all(limit);
+}
+
 function listReviewRequestCandidates(limit = 50) {
   return reviewRequestCandidatesStmt.all(limit);
 }
@@ -304,6 +315,7 @@ module.exports = {
   updateStatusByPaymentIntentId,
   recordPaymentFailure,
   listFulfillmentCandidates,
+  listPaymentReconcileCandidates,
   listReviewRequestCandidates,
   setBookVaultAccepted,
   setBookVaultReference,

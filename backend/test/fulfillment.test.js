@@ -89,6 +89,23 @@ test('a delayed Stripe webhook cannot reopen an accepted or refunded order', () 
   assert.equal(orderService.updateStatusByPaymentIntentId(accepted.stripe_payment_intent_id, 'PAYMENT_RECEIVED', 'succeeded', true).order_status, 'REFUNDED');
 });
 
+test('a captured payment is recovered if its Stripe webhook is delayed', async () => {
+  const order = paidOrder();
+  db.prepare("UPDATE orders SET order_status='PAYMENT_PENDING', payment_received_at=NULL WHERE id=?").run(order.id);
+  const originalRetrieve = stripeService.stripe.paymentIntents.retrieve;
+  stripeService.stripe.paymentIntents.retrieve = async () => ({
+    id: order.stripe_payment_intent_id, status: 'succeeded', amount_received: order.total_price_cents,
+    currency: 'usd', livemode: true, metadata: { order_id: order.id },
+  });
+  try {
+    await fulfillmentService.reconcilePendingPayments();
+    assert.equal(orderService.getById(order.id).order_status, 'PAYMENT_RECEIVED');
+    assert.ok(orderService.getById(order.id).payment_received_at);
+  } finally {
+    stripeService.stripe.paymentIntents.retrieve = originalRetrieve;
+  }
+});
+
 test('paid order is submitted once, emailed, then dispatch is emailed with tracking', async () => {
   const order = paidOrder();
   const sent = [];

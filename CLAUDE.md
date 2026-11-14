@@ -22371,3 +22371,10 @@ Pay button and links to the order-status page with explicit â€œdo not pay againâ
 copy. A definite card/validation error still permits correction and retry.
 This avoids an indefinite Processing state and a second charge on an unclear
 first attempt.
+
+The fulfillment worker also reconciles recent pending PaymentIntents directly
+from Stripe on startup and every five minutes. It only promotes a pending
+order when Stripe reports `succeeded` and the amount, currency, and order-ID
+metadata all match the stored order. This is a fallback for delayed/missing
+webhooks; the normal signed webhook remains the primary fast path. It never
+creates a second PaymentIntent or print order merely to check status.
