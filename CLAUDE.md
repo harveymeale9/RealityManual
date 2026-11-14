@@ -22701,6 +22701,18 @@ than creating duplicate charges, emails or print orders. Keep Harvey informed
 of any actual rollback and its cause, but do not wait for approval to perform
 the authorized safe rollback.
 
+At 07:28 UTC the first genuine post-cutover order arrived in production D1.
+Independent read-only Stripe verification found its PaymentIntent live and
+`succeeded`, with the full USD amount received and matching order metadata.
+D1 recorded the confirmation email as sent two seconds after order creation,
+and the order reached `BOOKVAULT_ACCEPTED` with zero retries/errors. A separate
+BookVault GET found the matching DocRef/PodRef in `Active` status, with no
+critical error. Content Studio's live Sales dashboard and Orders health both
+showed that new order; the old VPS database did not, confirming reports are
+reading the D1 snapshot. Worker error logs showed no post-cutover error.
+This establishes the first real checkout-to-Stripe-to-email-to-BookVault path;
+the VPS checkout and jobs remain paused as a controlled recovery option.
+
 ## Sales Analytics section order (2026-11-14)
 
 The `Recent orders` block now renders before `Refunds & reasons`, so refunds
