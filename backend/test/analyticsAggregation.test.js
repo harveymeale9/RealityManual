@@ -98,16 +98,17 @@ test('each homepage checkout placement survives navigation as its own arrival ev
   const homepage = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'index.html'), 'utf8');
   const home2 = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'home2', 'index.html'), 'utf8');
   const checkout = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'js', 'checkout.js'), 'utf8');
-  ['header', 'primary_offer', 'final_cta'].forEach((source) => {
-    assert.match(homepage, new RegExp('checkout\\.html\\?cta_source=' + source));
-  });
-  ['checkout_cta_header_clicked', 'checkout_cta_primary_clicked', 'checkout_cta_final_clicked'].forEach((eventName) => {
-    assert.match(homepage, new RegExp(eventName));
-  });
+  for (const page of [homepage, home2]) {
+    ['header', 'primary_offer', 'final_cta'].forEach((source) => {
+      assert.match(page, new RegExp('checkout\\.html\\?cta_source=' + source));
+    });
+    ['checkout_cta_header_clicked', 'checkout_cta_primary_clicked', 'checkout_cta_final_clicked'].forEach((eventName) => {
+      assert.match(page, new RegExp(eventName));
+    });
+  }
   ['checkout_arrival_header', 'checkout_arrival_primary', 'checkout_arrival_final'].forEach((eventName) => {
     assert.match(checkout, new RegExp(eventName));
   });
-  assert.equal(homepage, home2);
 });
 
 test('checkout uses only the branded confirmation flow and confirmation omits order metadata', () => {

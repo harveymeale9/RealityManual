@@ -22632,3 +22632,13 @@ record is DNS-only. The deployment token can list the zone/Worker routes but
 cannot read or edit DNS records; Harvey must enable Cloudflare proxy for that
 record before a Worker route can serve the existing API hostname. Until then,
 the live VPS checkout and automation continue unchanged.
+
+The full backend suite initially had one unrelated stale assertion requiring
+`frontend/index.html` and `frontend/home2/index.html` to be byte-for-byte
+identical, although their VSL preload settings intentionally differ. The
+test now checks the checkout attribution placements on both pages without
+requiring unrelated markup equality. All 56 backend tests pass; all 22 staged
+Worker tests pass. The VPS backend was rebuilt with the handoff switch unset,
+so its current checkout and jobs remain active; live health and checkout
+availability returned OK after restart. The staged Worker was redeployed with
+checkout still disabled.
