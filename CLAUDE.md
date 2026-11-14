@@ -22818,3 +22818,25 @@ the change; the next available slot is Tuesday 2026-11-17 at 22:00 Bangkok
 time. Existing manually forced immediate publishing remains a separate explicit
 operator action. Tests cover the fixed dates, occupied slots, old immediate
 flag, and runway alignment.
+
+## BookVault title approval and six paid orders reconciled (2026-11-14)
+
+BookVault temporarily returned the title as `Customer Approval`, and six
+paid Worker orders from 18:30-21:34 UTC failed fulfillment with "The title
+ordered is currently inactive - 1". The Worker nevertheless captured each
+Stripe payment and Resend accepted the normal customer order-confirmation
+email within one second of payment; all six rows had
+`confirmation_email_sent_at`. Harvey approved the pending title change in
+BookVault. A read-only title check then returned `Active` and `Validated:true`.
+
+Three orders had already recovered via the scheduled retry. For the other
+three (`6d61463d`, `5bc342da`, `b811ec20`), read-only BookVault DocRef
+lookups returned 404, so their D1 retry timestamps were conditionally moved
+forward, restricted to paid `FULFILLMENT_RETRY` rows with no BookVault ID and
+the exact inactive-title error. No payment or BookVault POST was made manually.
+The next Worker cron used its DocRef-checked submission path. All six orders
+now have distinct matching BookVault PodRefs (3076252, 3076268, 3076270,
+3076272, 3076242, 3076254); independent GETs returned `Active`, progress
+`Created`, and no critical error. `Created` is not dispatched; normal status
+polling and dispatch emails remain in place. Resend API acceptance confirms
+submission, not inbox delivery.
