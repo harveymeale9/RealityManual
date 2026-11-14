@@ -47,6 +47,8 @@ module.exports = {
     enabled: process.env.FULFILLMENT_ENABLED === 'true',
   },
 
+  checkoutPaused: process.env.CHECKOUT_PAUSED === 'true',
+
   // Product/site settings. Admin-editable site settings land in a later phase —
   // for now this is the single source of truth for price/currency.
   site: {

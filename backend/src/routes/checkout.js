@@ -4,10 +4,23 @@ const shippingService = require('../services/shippingService');
 const orderService = require('../services/orderService');
 const stripeService = require('../services/stripeService');
 const errorLogService = require('../services/errorLogService');
+const config = require('../config');
 
 const router = express.Router();
 
+router.get('/availability', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ available: !config.checkoutPaused });
+});
+
 router.post('/create-payment-intent', async (req, res) => {
+  if (config.checkoutPaused) {
+    res.set('Cache-Control', 'no-store');
+    return res.status(503).json({
+      error: 'checkout_temporarily_unavailable',
+      message: 'Orders are temporarily unavailable while we resolve a printer issue. No payment has been taken. Please check back later.',
+    });
+  }
   const body = req.body || {};
   const errors = validateCheckoutInput(body);
 

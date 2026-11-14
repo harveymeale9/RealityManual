@@ -22234,3 +22234,16 @@ older genuinely active orders reporting `Status=Active` with `Acknowledged`
 or `Batched` progress. That order must not be assumed in production. The
 incident and these code defects need urgent owner follow-up; do not silently
 retry fulfillment or modify past charges.
+
+## Emergency checkout pause after BookVault rejection cluster (2026-11-14)
+
+Harvey asked that the checkout never leave customers spinning or expose them
+to repeated charges during this incident. The backend now has an explicit
+`CHECKOUT_PAUSED` switch. Its authoritative create-PaymentIntent route returns
+HTTP 503 before creating any order or Stripe PaymentIntent when paused, with
+a clear no-charge message; `/api/checkout/availability` reports the state with
+`Cache-Control: no-store`. Existing paid-order fulfillment continues so the
+gate does not cancel or alter any previous purchase. Production's existing
+non-secret backend `.env` was set to `CHECKOUT_PAUSED=true` until BookVault
+funding/title state and the remaining paid orders are reconciled. This is an
+emergency sales pause, not a resolution of the provider incident.
