@@ -15,6 +15,8 @@ Do not point production traffic here yet.
   VSL at the content-addressed `storefront/reality-manual-vsl-c1a7775e.mp4`
   key. The Worker serves `/media/reality-manual-vsl-1080p.mp4` with byte ranges.
 - `/health` verifies D1. All other API routes deliberately return 404.
+- `src/orderStore.js` is the first ported D1 component, with atomic payment
+  state transitions. It is tested but not yet wired to a public route.
 
 ## Owner-only credential step
 

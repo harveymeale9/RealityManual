@@ -22493,3 +22493,10 @@ the backend migration is complete or cut over production.** The Worker API,
 durable background jobs, Content Studio report reads, synthetic end-to-end
 tests, fresh final data sync, and rollback plan remain release gates. Keep
 the live VPS backend and Stripe webhook active until those gates pass.
+
+The first D1-specific order-store module has also been added, but is not yet
+connected to an exposed Worker route. Its Stripe payment transitions are
+conditional single-statement updates so concurrent/delayed events cannot
+downgrade paid, BookVault-accepted, shipped, or refunded orders. Unit tests
+exercise a failed-then-paid sequence, duplicate success, late failure, the
+24-hour duplicate-payment lookup, and the limited public status shape.
