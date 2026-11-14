@@ -11,12 +11,51 @@ const {
   orderRefundedEmail,
 } = require('./emailTemplates');
 
-const RETRY_MINUTES = [1, 5, 20, 60, 240];
+const RETRY_MINUTES = [1, 5, 20, 60, 60];
+const FULFILLMENT_WINDOW_MS = 24 * 60 * 60 * 1000;
 const STATUS_POLL_MINUTES = 15;
 let processing = false;
 
 function minutesFromNow(minutes) {
   return new Date(Date.now() + minutes * 60_000).toISOString();
+}
+
+function fulfillmentDeadline(order) {
+  const paidAt = Date.parse(order.payment_received_at || order.created_at || '');
+  return Number.isFinite(paidAt) ? paidAt + FULFILLMENT_WINDOW_MS : null;
+}
+
+async function alertOwner(order, message) {
+  if (order.fulfillment_alert_sent_at) return;
+  try {
+    const shortId = order.id.slice(0, 8);
+    await resendClient.sendEmail({
+      to: process.env.ORDER_ALERT_EMAIL || 'harveymeale9@gmail.com',
+      subject: `Action needed: paid order ${shortId} awaiting BookVault`,
+      html: `<p>A customer payment was accepted, but BookVault has not accepted order ${shortId}.</p><p>${String(message).replaceAll('&', '&amp;').replaceAll('<', '&lt;')}</p><p>Check the BookVault title and GBP funding. The 24-hour refund deadline is ${new Date(fulfillmentDeadline(order) || Date.now()).toISOString()}.</p>`,
+      text: `Paid order ${shortId} is awaiting BookVault. ${message}\n24-hour refund deadline: ${new Date(fulfillmentDeadline(order) || Date.now()).toISOString()}.`,
+      idempotencyKey: `${order.id}-fulfillment-alert`,
+    });
+    orderService.markFulfillmentAlertSent(order.id);
+  } catch (err) {
+    errorLogService.logError({ orderId: order.id, service: 'resend', errorType: 'fulfillment_alert_failed', errorMessage: err.message });
+  }
+}
+
+async function alertOwnerDeadline(order, message) {
+  if (order.fulfillment_deadline_alert_sent_at) return;
+  try {
+    await resendClient.sendEmail({
+      to: process.env.ORDER_ALERT_EMAIL || 'harveymeale9@gmail.com',
+      subject: `URGENT: paid order ${order.id.slice(0, 8)} needs manual refund review`,
+      html: `<p>The 24-hour BookVault deadline passed for paid order ${order.id.slice(0, 8)}, but a safe refund could not be verified.</p><p>${String(message).replaceAll('&', '&amp;').replaceAll('<', '&lt;')}</p>`,
+      text: `The 24-hour BookVault deadline passed for paid order ${order.id.slice(0, 8)}, but a safe refund could not be verified. ${message}`,
+      idempotencyKey: `${order.id}-fulfillment-deadline-alert`,
+    });
+    orderService.markFulfillmentDeadlineAlertSent(order.id);
+  } catch (err) {
+    errorLogService.logError({ orderId: order.id, service: 'resend', errorType: 'fulfillment_deadline_alert_failed', errorMessage: err.message });
+  }
 }
 
 async function sendTemplate(order, kind, template, suffix) {
@@ -93,6 +132,10 @@ async function submitToBookVault(order) {
     const result = await bookvaultService.submitOrder(order);
     accepted = orderService.setBookVaultAccepted(order.id, result.PodRef);
   } catch (err) {
+    if (err.podRef && !order.bookvault_order_id) {
+      orderService.setBookVaultReference(order.id, err.podRef);
+      order = orderService.getById(order.id);
+    }
     const attempts = Number(order.fulfillment_attempts || 0) + 1;
     errorLogService.logError({
       orderId: order.id,
@@ -103,15 +146,27 @@ async function submitToBookVault(order) {
       attemptNumber: attempts,
     });
 
-    if (attempts >= RETRY_MINUTES.length) {
-      await refundUnfulfillableOrder({ ...order, fulfillment_attempts: attempts - 1 }, err.message);
-      return;
+    await alertOwner(order, err.message);
+    const deadline = fulfillmentDeadline(order);
+    if (deadline && Date.now() >= deadline) {
+      try {
+        // A saved BookVault draft must be cancelled before refunding the
+        // shopper, or later funding could fulfill an already-refunded order.
+        await bookvaultService.cancelUnpaidDraft(order.id, order.bookvault_order_id);
+        await refundUnfulfillableOrder(order, err.message);
+        return;
+      } catch (reviewError) {
+        errorLogService.logError({ orderId: order.id, service: 'backend', errorType: 'fulfillment_refund_needs_review', errorMessage: reviewError.message });
+        await alertOwnerDeadline(order, reviewError.message);
+      }
     }
     orderService.setFulfillmentRetry(
       order.id,
       attempts,
       err.message,
-      minutesFromNow(RETRY_MINUTES[attempts - 1]),
+      new Date(deadline && deadline <= Date.now()
+        ? Date.now() + 15 * 60_000
+        : Math.min(Date.now() + RETRY_MINUTES[Math.min(attempts - 1, RETRY_MINUTES.length - 1)] * 60_000, deadline || Infinity)).toISOString(),
     );
     return;
   }
@@ -150,6 +205,12 @@ async function submitToBookVault(order) {
 async function checkBookVaultProgress(order) {
   try {
     const current = await bookvaultService.getOrder(order.bookvault_order_id);
+    if (String(current?.Status).toLowerCase() !== 'active') {
+      orderService.setFulfillmentRetry(order.id, order.fulfillment_attempts || 1,
+        `BookVault reference is not active (${current?.Status || 'unknown'}).`, minutesFromNow(1));
+      await alertOwner(order, `BookVault reference remains ${current?.Status || 'unknown'}.`);
+      return;
+    }
     await captureBookVaultCost(order, current);
     const status = current?.Progress?.Status;
     if (status === 'Dispatched') {
@@ -215,6 +276,12 @@ async function processOrder(order) {
     }
     await checkBookVaultProgress(orderService.getById(order.id));
     return;
+  }
+  // A successful Stripe payment is an accepted storefront order. Tell the
+  // customer promptly; BookVault production is a separate, monitored step.
+  if (!order.confirmation_email_sent_at) {
+    try { await sendTemplate(order, 'confirmation', orderConfirmedEmail(order), 'confirmed'); }
+    catch (err) { errorLogService.logError({ orderId: order.id, service: 'resend', errorType: 'confirmation_email_failed', errorMessage: err.message }); }
   }
   await submitToBookVault(order);
 }

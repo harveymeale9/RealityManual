@@ -122,7 +122,9 @@ function assertAcceptedOrder(data) {
     const messages = Array.isArray(data?.Messages)
       ? data.Messages.map((message) => message.Message || message.Text || JSON.stringify(message)).join('; ')
       : '';
-    throw new Error(messages || 'BookVault did not accept the order.');
+    const error = new Error(messages || 'BookVault did not accept the order.');
+    if (data?.PodRef) error.podRef = data.PodRef;
+    throw error;
   }
   return data;
 }
@@ -136,6 +138,27 @@ async function findOrderByDocRef(docRef) {
   }
 }
 
+async function cancelUnpaidDraft(docRef, podRef) {
+  let order = null;
+  if (podRef) {
+    try { order = await getOrder(podRef); }
+    catch (error) { if (error.status !== 404) throw error; }
+  }
+  if (!order) order = await findOrderByDocRef(docRef);
+  if (!order) return true;
+  if (order.DocRef && order.DocRef !== docRef) throw new Error('BookVault reference mismatch; refund requires manual review.');
+  if (String(order.Status).toLowerCase() !== 'batchpayment' || String(order.Progress?.Status).toLowerCase() !== 'created') {
+    throw new Error('BookVault order is not a verified unpaid draft; refund requires manual review.');
+  }
+  await request('DELETE', `/Order?PodRef=${encodeURIComponent(order.PodRef)}`);
+  try {
+    await getOrder(order.PodRef);
+    throw new Error('BookVault draft still exists after cancellation; refund requires manual review.');
+  } catch (error) { if (error.status !== 404) throw error; }
+  if (await findOrderByDocRef(docRef)) throw new Error('BookVault draft still exists after cancellation; refund requires manual review.');
+  return true;
+}
+
 function assertExistingOrderPaid(order) {
   if (!order?.PodRef) return null;
   // A failed saved-card submission can leave a BookVault draft with a PodRef.
@@ -143,7 +166,9 @@ function assertExistingOrderPaid(order) {
   // Never POST another order with the same DocRef; wait for an actual Active
   // state or let the existing retry/refund policy handle it.
   if (String(order.Status || '').toLowerCase() !== 'active') {
-    throw new Error('Existing BookVault order is not active (status: ' + String(order.Status || 'unknown') + ').');
+    const error = new Error('Existing BookVault order is not active (status: ' + String(order.Status || 'unknown') + ').');
+    error.podRef = order.PodRef;
+    throw error;
   }
   return order;
 }
@@ -152,7 +177,9 @@ async function submitOrder(order) {
   // BookVault has no idempotency key. Looking up our unique DocRef before
   // POSTing prevents duplicate print orders after webhook retries or a
   // timeout where BookVault accepted the order but our response was lost.
-  const existing = await findOrderByDocRef(order.id);
+  const existing = order.bookvault_order_id
+    ? await getOrder(order.bookvault_order_id)
+    : await findOrderByDocRef(order.id);
   if (existing?.PodRef) return assertExistingOrderPaid(existing);
 
   const data = await request(
@@ -160,7 +187,15 @@ async function submitOrder(order) {
     '/Order?payMethod=Saved',
     orderPayload(order),
   );
-  return assertAcceptedOrder(data);
+  const created = assertAcceptedOrder(data);
+  // A PodRef in the POST response can still be an unpaid draft. Check the
+  // saved order before claiming printer acceptance to the storefront.
+  try {
+    return assertExistingOrderPaid(await getOrder(created.PodRef));
+  } catch (error) {
+    error.podRef = created.PodRef;
+    throw error;
+  }
 }
 
 async function getOrder(podRef) {
@@ -233,4 +268,4 @@ async function getShippingQuote({ countryCode, postalCode, quantity = 1 }) {
   };
 }
 
-module.exports = { getShippingQuote, submitOrder, getOrder, orderPayload, assertExistingOrderPaid, UK_PARTNER_ID };
+module.exports = { getShippingQuote, submitOrder, getOrder, findOrderByDocRef, cancelUnpaidDraft, orderPayload, assertExistingOrderPaid, UK_PARTNER_ID };

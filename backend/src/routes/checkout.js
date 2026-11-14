@@ -28,6 +28,13 @@ router.post('/create-payment-intent', async (req, res) => {
     return res.status(400).json({ error: 'validation_failed', fields: errors });
   }
 
+  if (orderService.hasRecentPaidOrder(body.email)) {
+    return res.status(409).json({
+      error: 'recent_payment_exists',
+      message: 'A payment for this email was received recently. Please do not pay again. Check your order email or contact us if you need help.',
+    });
+  }
+
   const countryCode = body.country_code.trim().toUpperCase();
   const postalCode = body.postal_code.trim();
   const quantity = normalizeQuantity(body.quantity); // already validated non-null above

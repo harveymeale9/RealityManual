@@ -138,6 +138,6 @@ test('test order route simulates both confirmation states without real order or 
   assert.doesNotMatch(demoPage, /analytics\.js|marketing\.js/);
   assert.match(confirmationScript, /const demoDurationSeconds = 8/);
   assert.match(confirmationScript, /Replay demo/);
-  assert.match(confirmationScript, /if \(!isDemo\) trackOnce/);
-  assert.match(confirmationScript, /if \(!isDemo && window\.RMMarketing\)/);
+  assert.match(confirmationScript, /function trackPurchase\(order\)/);
+  assert.match(confirmationScript, /if \(isDemo\) return/);
 });

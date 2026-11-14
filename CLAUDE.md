@@ -22313,3 +22313,42 @@ payment; that request was escalated to Harvey, not silently executed. Full
 recipient identities and addresses are deliberately omitted here. Verify the
 remaining drafts/payment outcome before giving those customers a final
 fulfillment or refund confirmation.
+
+## Paid-first checkout with monitored BookVault fulfillment window (2026-11-14)
+
+Harvey decided that a successful Stripe payment should be accepted as a
+storefront order immediately; printer acceptance is an asynchronous
+fulfillment step, not a reason to keep the customer waiting on a spinner.
+The receipt email now says payment/order received and production is being
+arranged, without claiming the printer has accepted it. The confirmation
+page shows the same truthful, non-spinning state for PAYMENT_RECEIVED and
+FULFILLMENT_RETRY, while still showing a separate refunded state. The
+receipt is sent before BookVault submission by the durable worker, and
+email delivery is idempotent across retries.
+
+BookVault attempts now continue on a bounded backoff throughout 24 hours
+from Stripe payment success (legacy rows fall back to order creation time).
+The first failure emails Harvey an owner alert. A PodRef is persisted even
+when BookVault saves an unpaid draft, preventing a duplicate POST if a
+subsequent status read is delayed. Only a read-back with `Status=Active`
+marks the order accepted for production. Already locally accepted records
+are also rechecked; a non-Active reference returns to the retry queue.
+After the deadline, the worker cancels a verified unpaid BookVault draft
+and confirms it is gone before issuing an idempotent Stripe refund and
+customer refund email. If BookVault cancellation/status cannot be verified,
+the worker does **not** refund blindly; it emails Harvey an urgent manual
+review alert and keeps retrying. This is the intentional safety exception
+to the 24-hour goal, preventing an already-refunded draft from later being
+paid and printed.
+
+The Stripe webhook state transition is monotonic: delayed duplicates cannot
+reopen accepted, shipped, or refunded orders. A recent paid order for the
+same email is blocked before another PaymentIntent is created, with a
+customer-facing message not to pay again. The existing global
+`CHECKOUT_PAUSED=true` remains in effect until a real paid order reaches
+BookVault Active and the account/title/GBP balance is reconciled. BookVault
+states that UK-print orders use a separate GBP balance; adding USD funds
+does not fund GBP orders. The two historical BookVault drafts remained
+`BatchPayment`/`Created` on read-only recheck after Harvey's top-up, and
+the third paid order had no BookVault DocRef; do not assume the top-up alone
+unblocked them.

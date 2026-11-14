@@ -23,10 +23,17 @@ const setPaymentIntentStmt = db.prepare(`
 
 const getByIdStmt = db.prepare('SELECT * FROM orders WHERE id = ?');
 const getByPaymentIntentStmt = db.prepare('SELECT * FROM orders WHERE stripe_payment_intent_id = ?');
+const recentPaidByEmailStmt = db.prepare(`
+  SELECT id FROM orders WHERE LOWER(email)=LOWER(?) AND stripe_livemode=1
+    AND order_status IN ('PAYMENT_RECEIVED','FULFILLMENT_RETRY','BOOKVAULT_ACCEPTED','SHIPPED')
+    AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-24 hours')
+  ORDER BY created_at DESC LIMIT 1
+`);
 
 const updateStatusByPaymentIntentStmt = db.prepare(`
   UPDATE orders
   SET order_status = ?, stripe_payment_status = ?, stripe_livemode = ?,
+      payment_received_at = CASE WHEN ? = 'PAYMENT_RECEIVED' THEN COALESCE(payment_received_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) ELSE payment_received_at END,
       payment_failure_type = CASE WHEN ? = 'FAILED' THEN payment_failure_type ELSE NULL END,
       payment_failure_code = CASE WHEN ? = 'FAILED' THEN payment_failure_code ELSE NULL END,
       payment_decline_code = CASE WHEN ? = 'FAILED' THEN payment_decline_code ELSE NULL END,
@@ -75,6 +82,7 @@ const setBookVaultAcceptedStmt = db.prepare(`
       updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
   WHERE id = ?
 `);
+const setBookVaultReferenceStmt = db.prepare('UPDATE orders SET bookvault_order_id = ?, updated_at = strftime(\'%Y-%m-%dT%H:%M:%fZ\', \'now\') WHERE id = ?');
 
 const setBookVaultCostStmt = db.prepare(`
   UPDATE orders SET bookvault_production_cost_gbp_cents = ?,
@@ -100,6 +108,8 @@ const setOrderStatusStmt = db.prepare(`
 const setNextAttemptStmt = db.prepare(`
   UPDATE orders SET fulfillment_next_attempt_at = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?
 `);
+const markFulfillmentAlertStmt = db.prepare("UPDATE orders SET fulfillment_alert_sent_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?");
+const markFulfillmentDeadlineAlertStmt = db.prepare("UPDATE orders SET fulfillment_deadline_alert_sent_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?");
 
 const markEmailSentStmt = {
   confirmation: db.prepare("UPDATE orders SET confirmation_email_sent_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"),
@@ -170,6 +180,10 @@ function getByPaymentIntentId(paymentIntentId) {
   return getByPaymentIntentStmt.get(paymentIntentId);
 }
 
+function hasRecentPaidOrder(email) {
+  return !!recentPaidByEmailStmt.get(String(email || '').trim());
+}
+
 // Idempotent: only actually changes anything if the order isn't already in
 // the target status. Stripe may deliver the same webhook event more than once.
 function updateStatusByPaymentIntentId(paymentIntentId, newStatus, stripePaymentStatus, liveMode = false) {
@@ -177,8 +191,12 @@ function updateStatusByPaymentIntentId(paymentIntentId, newStatus, stripePayment
   if (!order) return null;
   if (order.order_status === newStatus) return order; // already applied — no-op
 
+  // Late Stripe events must never reopen a paid, accepted or refunded order.
+  if (['BOOKVAULT_ACCEPTED', 'SHIPPED', 'REFUNDED'].includes(order.order_status) ||
+      (['PAYMENT_RECEIVED', 'FULFILLMENT_RETRY'].includes(order.order_status) && newStatus !== 'PAYMENT_RECEIVED')) return order;
+
   updateStatusByPaymentIntentStmt.run(newStatus, stripePaymentStatus, liveMode ? 1 : 0,
-    newStatus, newStatus, newStatus, newStatus, paymentIntentId);
+    newStatus, newStatus, newStatus, newStatus, newStatus, paymentIntentId);
   return getByPaymentIntentStmt.get(paymentIntentId);
 }
 
@@ -203,6 +221,11 @@ function setBookVaultAccepted(orderId, podRef) {
   return getByIdStmt.get(orderId);
 }
 
+function setBookVaultReference(orderId, podRef) {
+  setBookVaultReferenceStmt.run(String(podRef), orderId);
+  return getByIdStmt.get(orderId);
+}
+
 function setBookVaultCost(orderId, cost) {
   setBookVaultCostStmt.run(
     cost.productionGbpCents, cost.shippingGbpCents, cost.totalGbpCents,
@@ -222,6 +245,14 @@ function setOrderStatus(orderId, status) {
 
 function setNextAttempt(orderId, nextAttemptAt) {
   setNextAttemptStmt.run(nextAttemptAt, orderId);
+}
+
+function markFulfillmentAlertSent(orderId) {
+  markFulfillmentAlertStmt.run(orderId);
+}
+
+function markFulfillmentDeadlineAlertSent(orderId) {
+  markFulfillmentDeadlineAlertStmt.run(orderId);
 }
 
 function markEmailSent(orderId, kind) {
@@ -269,15 +300,19 @@ module.exports = {
   attachPaymentIntent,
   getById,
   getByPaymentIntentId,
+  hasRecentPaidOrder,
   updateStatusByPaymentIntentId,
   recordPaymentFailure,
   listFulfillmentCandidates,
   listReviewRequestCandidates,
   setBookVaultAccepted,
+  setBookVaultReference,
   setBookVaultCost,
   setFulfillmentRetry,
   setOrderStatus,
   setNextAttempt,
+  markFulfillmentAlertSent,
+  markFulfillmentDeadlineAlertSent,
   markEmailSent,
   markReviewRequestSkipped,
   suppressReviewRequestsForOrder,

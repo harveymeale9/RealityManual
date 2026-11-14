@@ -20,6 +20,7 @@ const exchangeRateService = require('../src/services/exchangeRateService');
 const stripeService = require('../src/services/stripeService');
 const { resendClient } = require('../src/services/resendService');
 const fulfillmentService = require('../src/services/fulfillmentService');
+const db = require('../src/db');
 
 test.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
 
@@ -80,6 +81,14 @@ test('an existing BookVault payment draft is not mistaken for an accepted print 
   }).PodRef, 3072310);
 });
 
+test('a delayed Stripe webhook cannot reopen an accepted or refunded order', () => {
+  const accepted = paidOrder();
+  orderService.setBookVaultAccepted(accepted.id, 7123);
+  assert.equal(orderService.updateStatusByPaymentIntentId(accepted.stripe_payment_intent_id, 'PAYMENT_RECEIVED', 'succeeded', true).order_status, 'BOOKVAULT_ACCEPTED');
+  orderService.setOrderStatus(accepted.id, 'REFUNDED');
+  assert.equal(orderService.updateStatusByPaymentIntentId(accepted.stripe_payment_intent_id, 'PAYMENT_RECEIVED', 'succeeded', true).order_status, 'REFUNDED');
+});
+
 test('paid order is submitted once, emailed, then dispatch is emailed with tracking', async () => {
   const order = paidOrder();
   const sent = [];
@@ -90,6 +99,7 @@ test('paid order is submitted once, emailed, then dispatch is emailed with track
     return { PodRef: 7001 };
   };
   bookvaultService.getOrder = async () => ({
+    Status: 'Active',
     Partner: { ID: 1, CurrencyID: 'GBP' },
     OrderCost: { ProductionCost: 19.77, DispatchCost: 17.41, GrandTotal: 39.18 },
   });
@@ -102,7 +112,7 @@ test('paid order is submitted once, emailed, then dispatch is emailed with track
     synced.push({ contactOrder, summary });
   };
 
-  await fulfillmentService.processOrder(order);
+  await fulfillmentService.processOrder(orderService.getById(order.id));
   let stored = orderService.getById(order.id);
   assert.equal(stored.order_status, 'BOOKVAULT_ACCEPTED');
   assert.equal(stored.bookvault_order_id, '7001');
@@ -116,7 +126,7 @@ test('paid order is submitted once, emailed, then dispatch is emailed with track
   assert.equal(synced[0].summary.purchase_order_count, 1);
   assert.equal(synced[0].summary.lifetime_book_quantity, 1);
   assert.ok(stored.resend_contact_synced_at);
-  assert.equal(sent[0].subject, 'We’re Making Your Copy of The Reality Manual!');
+  assert.equal(sent[0].subject, 'We’ve Received Your Reality Manual Order');
   assert.deepEqual(sent[0].tags, [
     { name: 'email_type', value: 'confirmation_email' },
     { name: 'customer_status', value: 'purchaser' },
@@ -125,6 +135,7 @@ test('paid order is submitted once, emailed, then dispatch is emailed with track
   ]);
 
   bookvaultService.getOrder = async () => ({
+    Status: 'Active',
     Partner: { ID: 1, CurrencyID: 'GBP' },
     OrderCost: { ProductionCost: 19.77, DispatchCost: 17.41, GrandTotal: 39.18 },
     Progress: { Status: 'Dispatched' },
@@ -183,6 +194,55 @@ test('a Resend contact-sync outage does not block confirmation or fulfillment', 
   assert.equal(stored.resend_contact_synced_at, null);
   assert.ok(stored.confirmation_email_sent_at);
   assert.equal(sent.length, 1);
+});
+
+test('paid order is acknowledged and retried without refund before the 24-hour deadline', async () => {
+  const order = paidOrder();
+  const sent = [];
+  bookvaultService.submitOrder = async () => { throw new Error('BookVault unavailable'); };
+  resendClient.sendEmail = async (message) => { sent.push(message); return { id: 'email_test' }; };
+  stripeService.refundPayment = async () => { throw new Error('should not refund yet'); };
+  await fulfillmentService.processOrder(order);
+  const stored = orderService.getById(order.id);
+  assert.equal(stored.order_status, 'FULFILLMENT_RETRY');
+  assert.ok(stored.confirmation_email_sent_at);
+  assert.ok(stored.fulfillment_alert_sent_at);
+  assert.equal(stored.fulfillment_attempts, 1);
+  assert.ok(Date.parse(stored.fulfillment_next_attempt_at) > Date.now());
+  assert.equal(sent[0].subject, 'We’ve Received Your Reality Manual Order');
+  assert.match(sent[1].subject, /Action needed/);
+  assert.equal(orderService.hasRecentPaidOrder(order.email), true);
+});
+
+test('expired paid order cancels a verified BookVault draft before refunding', async () => {
+  const order = paidOrder();
+  db.prepare('UPDATE orders SET payment_received_at=? WHERE id=?').run(new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(), order.id);
+  let cancelled = false;
+  let refunded = false;
+  bookvaultService.submitOrder = async () => { const err = new Error('draft unpaid'); err.podRef = 7124; throw err; };
+  bookvaultService.cancelUnpaidDraft = async (id, podRef) => { assert.equal(id, order.id); assert.equal(String(podRef), '7124'); cancelled = true; };
+  stripeService.refundPayment = async () => { assert.equal(cancelled, true); refunded = true; return { status: 'succeeded' }; };
+  resendClient.sendEmail = async () => ({ id: 'email_test' });
+  await fulfillmentService.processOrder(orderService.getById(order.id));
+  const stored = orderService.getById(order.id);
+  assert.equal(stored.order_status, 'REFUNDED');
+  assert.equal(stored.bookvault_order_id, '7124');
+  assert.equal(refunded, true);
+  assert.ok(stored.refund_email_sent_at);
+});
+
+test('uncertain BookVault draft cancellation is escalated, not refunded', async () => {
+  const order = paidOrder();
+  db.prepare('UPDATE orders SET payment_received_at=? WHERE id=?').run(new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(), order.id);
+  bookvaultService.submitOrder = async () => { throw new Error('draft unpaid'); };
+  bookvaultService.cancelUnpaidDraft = async () => { throw new Error('status uncertain'); };
+  stripeService.refundPayment = async () => { throw new Error('unsafe refund'); };
+  resendClient.sendEmail = async () => ({ id: 'email_test' });
+  await fulfillmentService.processOrder(orderService.getById(order.id));
+  const stored = orderService.getById(order.id);
+  assert.equal(stored.order_status, 'FULFILLMENT_RETRY');
+  assert.ok(stored.fulfillment_deadline_alert_sent_at);
+  assert.ok(Date.parse(stored.fulfillment_next_attempt_at) > Date.now());
 });
 
 test('BookVault cost uses grand total including tax and retains the order FX snapshot', async () => {

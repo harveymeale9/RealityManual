@@ -88,27 +88,18 @@
       statusTitle.removeAttribute('aria-label');
       statusTitle.textContent = 'Our Expert Bookbinders Are Rolling Up Their Sleeves!';
       statusMessage.textContent = "Thank you! Your payment has been received and your order has been confirmed. Please bear in mind that it can take up to 15 business days for us to print your Reality Manual. We'll send you another email as soon as we ship your order!";
-      if (!isDemo) trackOnce('order_complete', order.order_id);
-      if (!isDemo && window.RMMarketing) {
-        RMMarketing.track('Purchase', {
-          value: order.total_price_cents / 100,
-          currency: String(order.currency || 'usd').toUpperCase(),
-          content_ids: ['reality-manual-hardcover'],
-          content_type: 'product',
-          num_items: order.quantity || 1,
-          transaction_id: order.order_id
-        }, order.order_id);
-      }
+      trackPurchase(order);
       return true;
     }
 
     if (['PAYMENT_RECEIVED', 'FULFILLMENT_RETRY'].includes(order.order_status)) {
       spinner.style.display = 'none';
-      statusEyebrow.textContent = 'Payment received';
+      statusEyebrow.textContent = 'Order received';
       statusTitle.removeAttribute('aria-label');
-      statusTitle.textContent = 'We have your payment';
-      statusMessage.textContent = "Our printer has not confirmed your order yet. Please do not pay again. We'll email you when it is confirmed or if a refund is needed.";
-      return false;
+      statusTitle.textContent = 'We have your order';
+      statusMessage.textContent = "Your payment was received and your order is accepted. We are arranging production with our printer. If that takes longer than expected, we aim to resolve it within 24 hours and will email you. Please do not pay again.";
+      trackPurchase(order);
+      return true;
     }
 
     if (order.order_status === 'REFUNDED') {
@@ -136,6 +127,21 @@
     }
 
     return false;
+  }
+
+  function trackPurchase(order) {
+    if (isDemo) return;
+    trackOnce('order_complete', order.order_id);
+    if (window.RMMarketing) {
+      RMMarketing.track('Purchase', {
+        value: order.total_price_cents / 100,
+        currency: String(order.currency || 'usd').toUpperCase(),
+        content_ids: ['reality-manual-hardcover'],
+        content_type: 'product',
+        num_items: order.quantity || 1,
+        transaction_id: order.order_id
+      }, order.order_id);
+    }
   }
 
   function showTerminalState({ title, message, isError, showRetry }) {

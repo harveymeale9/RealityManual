@@ -114,7 +114,7 @@ function layout({ preview = false, previewLabel = 'Sample Preview: Not a Real Or
 function orderConfirmedEmail(order, { preview = false } = {}) {
   const orderNumber = order.display_order_id || order.id;
   const address = addressLines(order);
-  const subject = 'We’re Making Your Copy of The Reality Manual!';
+  const subject = 'We’ve Received Your Reality Manual Order';
   const details = detailsTable([
     ['Order', escapeHtml(orderNumber)],
     ['Edition', 'Hardcover, Deluxe First Edition'],
@@ -123,20 +123,20 @@ function orderConfirmedEmail(order, { preview = false } = {}) {
     ['Delivering to', address.map(escapeHtml).join('<br>')],
   ]);
   const body = `
-    <p style="margin:0 0 18px;">Thank you, ${escapeHtml(firstName(order.customer_name))}. Your order is confirmed, and we’re delighted to begin creating your copy of <em>The Reality Manual</em>.</p>
+    <p style="margin:0 0 18px;">Thank you, ${escapeHtml(firstName(order.customer_name))}. We have received your payment and accepted your order for <em>The Reality Manual</em>.</p>
     <p style="margin:0;">Every copy is printed, bound, carefully inspected and finished to order by one of Europe’s leading printers of bespoke books. Nothing is pulled from a warehouse shelf. Your book receives the time and individual attention needed to create a beautiful volume you can return to and keep for a lifetime.</p>`;
-  const callout = `Thank you for giving us the time to make your book properly. Please allow up to <strong style="color:${BRAND.gold};">15 working days</strong> before dispatch. During that time, our printer will produce, inspect and finish your copy with care. We’ll let you know the moment it begins its journey to you.`;
+  const callout = `We are arranging production with our bespoke printer. If that takes longer than expected, you do not need to pay again or take any action. We aim to resolve any printer issue within 24 hours and will issue a full refund if we cannot fulfill your order. Once in production, please allow up to <strong style="color:${BRAND.gold};">15 working days</strong> before dispatch. We’ll email you when your copy ships.`;
   const text = [
     preview ? 'SAMPLE PREVIEW: NOT A REAL ORDER' : '',
     'THE REALITY MANUAL',
     '',
-    'WE’RE MAKING YOUR COPY OF THE REALITY MANUAL!',
+    'WE’VE RECEIVED YOUR REALITY MANUAL ORDER',
     '',
-    `Thank you, ${firstName(order.customer_name)}. Your order is confirmed, and we’re delighted to begin creating your copy of The Reality Manual.`,
+    `Thank you, ${firstName(order.customer_name)}. We have received your payment and accepted your order for The Reality Manual.`,
     '',
     'Every copy is printed, bound, carefully inspected and finished to order by one of Europe’s leading printers of bespoke books. Nothing is pulled from a warehouse shelf. Your book receives the time and individual attention needed to create a beautiful volume you can return to and keep for a lifetime.',
     '',
-    'Thank you for giving us the time to make your book properly. Please allow up to 15 working days before dispatch. During that time, our printer will produce, inspect and finish your copy with care. We’ll let you know the moment it begins its journey to you.',
+    'We are arranging production with our bespoke printer. If that takes longer than expected, you do not need to pay again or take any action. We aim to resolve any printer issue within 24 hours and will issue a full refund if we cannot fulfill your order. Once in production, please allow up to 15 working days before dispatch. We will email you when your copy ships.',
     '',
     `Order: ${orderNumber}`,
     'Edition: Hardcover, Deluxe First Edition',
@@ -151,7 +151,7 @@ function orderConfirmedEmail(order, { preview = false } = {}) {
 
   return {
     subject,
-    html: layout({ preview, preheader: 'We’re carefully creating your copy of The Reality Manual.', eyebrow: 'Order confirmed', title: 'We’re Making Your Copy of The Reality Manual!', body, details, callout }),
+    html: layout({ preview, preheader: 'We received your payment and are arranging production.', eyebrow: 'Order received', title: 'We’ve Received Your Reality Manual Order', body, details, callout }),
     text,
   };
 }
