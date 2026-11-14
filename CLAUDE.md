@@ -22667,8 +22667,9 @@ verify Stripe, D1, BookVault DocRef/status and confirmation mail, and reconcile
 before any rollback to avoid a duplicate charge or print order.
 
 The VPS API is deliberately retained but paused as a controlled rollback path.
-Content Studio is configured to read the authenticated Worker report snapshot
+Content Studio reads the authenticated Worker report snapshot
 for sales, website analytics and order health; Project Manager and inbound
-mailbox remain on the VPS. The running ops-service must be restarted to load
-its new report-source environment entries. The old VPS database mount may be
+mailbox remain on the VPS. `rm-ops-service` restarted at 06:52 UTC with
+`STOREFRONT_REPORT_SOURCE=worker` and returned HTTP 200; startup logs showed
+no report-source error. The old VPS database mount may be
 retained temporarily for rollback, but is no longer the intended report source.
