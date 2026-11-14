@@ -8,10 +8,90 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
+   5976f7a..778ade3  main       -> origin/main
 + git merge --ff-only origin/main
-Already up to date.
+Updating 5976f7a..778ade3
+Fast-forward
+ CLAUDE.md                                          | 149 ++++++++++
+ ops-service/.ci/last-run.log                       | 152 +---------
+ ops-service/server.js                              |   8 +
+ ops-service/src/storefrontRemoteSnapshot.js        | 101 +++++++
+ ops-service/test/storefrontRemoteSnapshot.test.js  |  42 +++
+ storefront-worker/FAILOVER.md                      |  44 +++
+ storefront-worker/README.md                        |  89 ++++++
+ storefront-worker/package-lock.json                | 305 +++++++++++++++++++++
+ storefront-worker/package.json                     |  11 +
+ .../scripts/copy-live-secrets-to-staging.sh        |  39 +++
+ storefront-worker/scripts/setup-report-auth.sh     |  33 +++
+ storefront-worker/src/analytics.js                 | 126 +++++++++
+ storefront-worker/src/bookvault.js                 | 107 ++++++++
+ storefront-worker/src/bookvaultCost.js             |  40 +++
+ storefront-worker/src/checkout.js                  | 137 +++++++++
+ storefront-worker/src/emailHealth.js               |  35 +++
+ storefront-worker/src/fulfillment.js               | 221 +++++++++++++++
+ storefront-worker/src/index.js                     | 111 ++++++++
+ storefront-worker/src/mail.js                      |  34 +++
+ storefront-worker/src/orderStore.js                | 100 +++++++
+ storefront-worker/src/reportSnapshot.js            |  51 ++++
+ storefront-worker/src/resendContacts.js            |  74 +++++
+ storefront-worker/src/review.js                    |  28 ++
+ storefront-worker/src/reviewRequests.js            |  51 ++++
+ storefront-worker/src/reviewSchedule.js            |  23 ++
+ storefront-worker/src/shipping.js                  |  91 ++++++
+ storefront-worker/src/stripeClient.js              |  40 +++
+ storefront-worker/src/validation.js                |  50 ++++
+ storefront-worker/src/webhook.js                   |  56 ++++
+ storefront-worker/test/analytics.test.js           |  52 ++++
+ storefront-worker/test/bookvault.test.js           |  40 +++
+ storefront-worker/test/bookvaultCost.test.js       |  21 ++
+ storefront-worker/test/checkout.test.js            | 151 ++++++++++
+ storefront-worker/test/orderStore.test.js          |  81 ++++++
+ storefront-worker/test/reportSnapshot.test.js      |  32 +++
+ storefront-worker/test/review.test.js              |  28 ++
+ storefront-worker/test/shipping.test.js            |  50 ++++
+ storefront-worker/test/staging.test.js             |  37 +++
+ storefront-worker/test/stripeClient.test.js        |  27 ++
+ storefront-worker/wrangler.jsonc                   |  30 ++
+ 40 files changed, 2756 insertions(+), 141 deletions(-)
+ create mode 100644 ops-service/src/storefrontRemoteSnapshot.js
+ create mode 100644 ops-service/test/storefrontRemoteSnapshot.test.js
+ create mode 100644 storefront-worker/FAILOVER.md
+ create mode 100644 storefront-worker/README.md
+ create mode 100644 storefront-worker/package-lock.json
+ create mode 100644 storefront-worker/package.json
+ create mode 100644 storefront-worker/scripts/copy-live-secrets-to-staging.sh
+ create mode 100644 storefront-worker/scripts/setup-report-auth.sh
+ create mode 100644 storefront-worker/src/analytics.js
+ create mode 100644 storefront-worker/src/bookvault.js
+ create mode 100644 storefront-worker/src/bookvaultCost.js
+ create mode 100644 storefront-worker/src/checkout.js
+ create mode 100644 storefront-worker/src/emailHealth.js
+ create mode 100644 storefront-worker/src/fulfillment.js
+ create mode 100644 storefront-worker/src/index.js
+ create mode 100644 storefront-worker/src/mail.js
+ create mode 100644 storefront-worker/src/orderStore.js
+ create mode 100644 storefront-worker/src/reportSnapshot.js
+ create mode 100644 storefront-worker/src/resendContacts.js
+ create mode 100644 storefront-worker/src/review.js
+ create mode 100644 storefront-worker/src/reviewRequests.js
+ create mode 100644 storefront-worker/src/reviewSchedule.js
+ create mode 100644 storefront-worker/src/shipping.js
+ create mode 100644 storefront-worker/src/stripeClient.js
+ create mode 100644 storefront-worker/src/validation.js
+ create mode 100644 storefront-worker/src/webhook.js
+ create mode 100644 storefront-worker/test/analytics.test.js
+ create mode 100644 storefront-worker/test/bookvault.test.js
+ create mode 100644 storefront-worker/test/bookvaultCost.test.js
+ create mode 100644 storefront-worker/test/checkout.test.js
+ create mode 100644 storefront-worker/test/orderStore.test.js
+ create mode 100644 storefront-worker/test/reportSnapshot.test.js
+ create mode 100644 storefront-worker/test/review.test.js
+ create mode 100644 storefront-worker/test/shipping.test.js
+ create mode 100644 storefront-worker/test/staging.test.js
+ create mode 100644 storefront-worker/test/stripeClient.test.js
+ create mode 100644 storefront-worker/wrangler.jsonc
 ++ git rev-parse HEAD
-+ NEW_HEAD=5976f7a0c015bd949ca49c6062861e1a33dd72cd
++ NEW_HEAD=778ade30ac432320309bf59148466641c5303b38
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -24,12 +104,128 @@ Already up to date.
 + NEEDS_REBUILD=1
 + '[' -n 1b83184e31eae367da2113428d89d8839c075b0d ']'
 + git cat-file -e '1b83184e31eae367da2113428d89d8839c075b0d^{commit}'
-++ git diff --name-only 1b83184e31eae367da2113428d89d8839c075b0d 5976f7a0c015bd949ca49c6062861e1a33dd72cd -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
-+ '[' -z '' ']'
-+ NEEDS_REBUILD=0
+++ git diff --name-only 1b83184e31eae367da2113428d89d8839c075b0d 778ade30ac432320309bf59148466641c5303b38 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -z 'ops-service/server.js
+ops-service/src/storefrontRemoteSnapshot.js' ']'
 + '[' 0 = 1 ']'
++ '[' 1 = 0 ']'
++ UPLOAD_DRAIN_WAITED=0
++ UPLOAD_DRAIN_LIMIT=7200
++ '[' -f /root/ops-service-data/db.sqlite ']'
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''desktopUploaders'\''
+      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
+      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
+      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
+  '
++ ACTIVE_UPLOAD_QUEUE=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''editorProjects'\''
+      AND (
+        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
+        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'') IN ('\''pending'\'','\''running'\'')
+        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
+        OR (
+          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'') IN ('\''queued'\'','\''running'\'')
+          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
+        )
+        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
+      );
+  '
++ ACTIVE_EDITOR_PROCESSING=0
+++ sqlite3 /root/ops-service-data/db.sqlite '
+    SELECT COUNT(*) FROM records
+    WHERE store_name='\''pieces'\''
+      AND json_extract(data,'\''$.stage'\'')='\''in_production'\''
+      AND json_extract(data,'\''$.finalBuildStatus'\'') IN ('\''pending'\'','\''running'\'');
+  '
++ ACTIVE_FINAL_BUILD=0
 + '[' 0 = 0 ']'
-+ echo 'no backend changes between 1b83184e31eae367da2113428d89d8839c075b0d and 5976f7a0c015bd949ca49c6062861e1a33dd72cd — already live via git pull, skipping rebuild/restart'
-no backend changes between 1b83184e31eae367da2113428d89d8839c075b0d and 5976f7a0c015bd949ca49c6062861e1a33dd72cd — already live via git pull, skipping rebuild/restart
-+ exit 0
++ '[' 0 = 0 ']'
++ '[' 0 = 0 ']'
++ break
++ docker tag rm-ops-service rm-ops-service:previous
++ docker build -t rm-ops-service ./ops-service
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 2.04kB 0.0s done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/node:22-slim
+#2 DONE 0.3s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 136B done
+#3 DONE 0.0s
+
+#4 [ 1/10] FROM docker.io/library/node:22-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee
+#4 resolve docker.io/library/node:22-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee 0.0s done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 689.15kB 0.0s done
+#5 DONE 0.0s
+
+#6 [ 4/10] COPY package.json ./
+#6 CACHED
+
+#7 [ 2/10] RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && python3 -m pip install --break-system-packages --no-cache-dir yt-dlp==2026.8.19     && rm -rf /var/lib/apt/lists/*
+#7 CACHED
+
+#8 [ 3/10] WORKDIR /app
+#8 CACHED
+
+#9 [ 5/10] RUN npm install --omit=dev
+#9 CACHED
+
+#10 [ 6/10] COPY server.js ./
+#10 DONE 0.1s
+
+#11 [ 7/10] COPY src ./src
+#11 DONE 0.1s
+
+#12 [ 8/10] COPY public ./public
+#12 DONE 0.2s
+
+#13 [ 9/10] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
+#13 DONE 17.4s
+
+#14 [10/10] RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
+#14 DONE 0.3s
+
+#15 exporting to image
+#15 exporting layers
+#15 exporting layers 2.5s done
+#15 exporting manifest sha256:eff0b862f5c0b6230cce88154ef652b5fd2cc7a15e903dea78c48aabac85b848 0.0s done
+#15 exporting config sha256:78b89abb6e1f10decc14e56c7869058b0e9e5cbe5fe6a776261cd30e5056c2e5 0.0s done
+#15 exporting attestation manifest sha256:b6f4de22877ccfee44208da58f0036f7aa9162015bbd9e7eef4d5832bef3beef 0.0s done
+#15 exporting manifest list sha256:71261986fa2af160b7673c30a375438b6de2aefec155cfd57c0fcb15dd7aac19 0.0s done
+#15 naming to docker.io/library/rm-ops-service:latest
+#15 naming to docker.io/library/rm-ops-service:latest done
+#15 unpacking to docker.io/library/rm-ops-service:latest
+#15 unpacking to docker.io/library/rm-ops-service:latest 1.3s done
+#15 DONE 3.9s
++ docker stop rm-ops-service
+rm-ops-service
++ docker rm rm-ops-service
+rm-ops-service
++ docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-data:/data -v /root/realitymanual-backend-data:/store-data:ro -v /srv/realitymanual-repo:/repo -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
+45d5ccdd496d8a4d1fbd1fd988999b3afe4c7af6f6b65ebf19db003b8e3bf992
++ echo 778ade30ac432320309bf59148466641c5303b38
+++ git -C /root/realitymanual-repo rev-parse --short HEAD
++ echo 'rm-ops-service redeployed at 778ade3'
+rm-ops-service redeployed at 778ade3
++ docker image prune -f
+Deleted Images:
+untagged: sha256:239131a64c2814f7b84957c3979f1ac47a7f4c61f93e44aaffd93d9af763bbda
+deleted: sha256:239131a64c2814f7b84957c3979f1ac47a7f4c61f93e44aaffd93d9af763bbda
+deleted: sha256:135a03cf7ff083c6cdb05d3e535374f2ddef47a61206c05e242d7cb786db428d
+deleted: sha256:89b5c45ba2556a2c6341854fd8df927d2d1bb60954118cf14414b1ffc2e8503b
+
+Total reclaimed space: 15.67kB
++ docker builder prune -f --max-used-space 8GB
+Total:	0B
 ssh exit code: 0
