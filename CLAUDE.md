@@ -22352,3 +22352,14 @@ does not fund GBP orders. The two historical BookVault drafts remained
 `BatchPayment`/`Created` on read-only recheck after Harvey's top-up, and
 the third paid order had no BookVault DocRef; do not assume the top-up alone
 unblocked them.
+
+Follow-up on the same date: the first live retry of `264d418f` after the
+top-up reached BookVault `Active` (PodRef saved locally), proving the current
+saved-payment path can now work. The older drafts did not auto-convert. One
+customer had explicitly requested a refund for `f83be348`; its unpaid draft
+was deleted in BookVault, read back as `Status=Deleted`, and its full $96.17
+Stripe refund succeeded. The refund email was sent. BookVault preserves a
+deleted order as a readable `Deleted` record rather than returning 404, so
+`cancelUnpaidDraft` now treats that verified terminal state as safe, including
+on repeat calls. The other historical draft remains for manual payment or
+24-hour resolution; do not submit a duplicate BookVault order for it.

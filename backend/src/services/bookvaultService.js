@@ -147,15 +147,21 @@ async function cancelUnpaidDraft(docRef, podRef) {
   if (!order) order = await findOrderByDocRef(docRef);
   if (!order) return true;
   if (order.DocRef && order.DocRef !== docRef) throw new Error('BookVault reference mismatch; refund requires manual review.');
+  if (String(order.Status).toLowerCase() === 'deleted') return true;
   if (String(order.Status).toLowerCase() !== 'batchpayment' || String(order.Progress?.Status).toLowerCase() !== 'created') {
     throw new Error('BookVault order is not a verified unpaid draft; refund requires manual review.');
   }
   await request('DELETE', `/Order?PodRef=${encodeURIComponent(order.PodRef)}`);
   try {
-    await getOrder(order.PodRef);
-    throw new Error('BookVault draft still exists after cancellation; refund requires manual review.');
+    const after = await getOrder(order.PodRef);
+    if (String(after?.Status).toLowerCase() !== 'deleted') {
+      throw new Error('BookVault draft still exists after cancellation; refund requires manual review.');
+    }
   } catch (error) { if (error.status !== 404) throw error; }
-  if (await findOrderByDocRef(docRef)) throw new Error('BookVault draft still exists after cancellation; refund requires manual review.');
+  const byReference = await findOrderByDocRef(docRef);
+  if (byReference && String(byReference.Status).toLowerCase() !== 'deleted') {
+    throw new Error('BookVault draft still exists after cancellation; refund requires manual review.');
+  }
   return true;
 }
 
