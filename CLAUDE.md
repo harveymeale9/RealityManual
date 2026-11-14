@@ -22683,3 +22683,20 @@ webhook probe had created one error-log row, which was identified by its exact
 ID/time and removed so website-health counts again match the original 94.
 No customer order had arrived since cutover, so the first genuine order remains
 under a scheduled follow-up rather than being claimed end-to-end verified.
+
+Harvey explicitly authorized the Project Manager to decide and execute a VPS
+fallback without asking him if live checkout starts failing or paid orders get
+stuck as on 2026-11-14. Treat this as operational rollback authority, **not**
+authority to retry a card charge or BookVault order blindly. A BookVault
+BatchPayment/Created state for a few hours is normal and not by itself a
+rollback trigger. Investigate an actual run of checkout errors, an unavailable
+Worker/D1/Stripe route, or a paid order that fails to receive durable order
+record/confirmation and normal fulfillment retry. Before switching, inspect
+Stripe payment state, D1 order state and BookVault DocRef for each affected
+order; pause Worker checkout and jobs, reconcile/copy any post-cutover paid
+rows into the VPS database, and only then route traffic back and re-enable VPS
+checkout/jobs. Never run both fulfillment queues concurrently. If this cannot
+be reconciled safely, leave checkout paused and alert Harvey promptly rather
+than creating duplicate charges, emails or print orders. Keep Harvey informed
+of any actual rollback and its cause, but do not wait for approval to perform
+the authorized safe rollback.
