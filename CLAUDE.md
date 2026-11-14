@@ -22247,3 +22247,42 @@ gate does not cancel or alter any previous purchase. Production's existing
 non-secret backend `.env` was set to `CHECKOUT_PAUSED=true` until BookVault
 funding/title state and the remaining paid orders are reconciled. This is an
 emergency sales pause, not a resolution of the provider incident.
+
+## BookVault draft acceptance and confirmation UX safeguards (2026-11-14)
+
+The 2026-11-13/14 failure cluster was caused by BookVault rejecting order
+submission for an inactive title and insufficient account funds. Stripe
+successfully captured the payments first. Nine subsequent refunds were
+individually verified as succeeded in Stripe, and two customers had separate
+repeat paid checkout attempts after earlier refunds. No single PaymentIntent
+was seen to be captured twice. Two paid orders remained in fulfillment retry
+at the audit; another had been locally marked accepted even though its
+BookVault PodRef was still `BatchPayment`/`Created`, not `Active`. A PodRef
+alone is not proof of a paid, accepted print order.
+
+`bookvaultService.submitOrder` now rejects an existing non-Active PodRef
+instead of returning it as success; a new POST response with an explicit
+non-Active status is also rejected. The retry path therefore cannot send an
+order-confirmation email merely because BookVault saved an unpaid draft.
+It does not POST another order against the same DocRef. Previously confirmed
+orders are not rewritten by this fix; reconcile the affected one with
+BookVault manually before telling its customer it is in production.
+
+The storefront confirmation screen now handles `REFUNDED` as a terminal
+state, and shows a non-spinning, truthful `PAYMENT_RECEIVED`/
+`FULFILLMENT_RETRY` state that says not to pay again. Each status fetch has
+a ten-second timeout, with a five-minute wall-clock limit and a safe
+unconfirmed-payment message if status cannot be established. The checkout
+checks the new availability endpoint before mounting Stripe and visibly
+disables payment while checkout is paused; the backend payment-creation gate
+remains authoritative for already-open tabs. Future refund emails no longer
+tell customers to make another purchase during a systemic provider outage.
+The confirmation and checkout asset URLs were bumped to bypass old caches.
+
+Focused backend tests passed, and real Chromium DOM checks confirmed the
+refunded, fulfillment-retry, and accepted UI states hide the spinner and
+display the correct titles. The full backend suite has one unrelated
+pre-existing static homepage HTML assertion failure after a separate VSL
+markup change; 43/44 tests otherwise pass. Checkout remains paused until
+BookVault funding/title readiness and the outstanding paid orders are
+reconciled, not merely until this code deploys.

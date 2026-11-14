@@ -117,7 +117,8 @@ function orderPayload(order) {
 }
 
 function assertAcceptedOrder(data) {
-  if (!data || data.CriticalError || !data.PodRef) {
+  if (!data || data.CriticalError || !data.PodRef ||
+      (data.Status && String(data.Status).toLowerCase() !== 'active')) {
     const messages = Array.isArray(data?.Messages)
       ? data.Messages.map((message) => message.Message || message.Text || JSON.stringify(message)).join('; ')
       : '';
@@ -135,12 +136,24 @@ async function findOrderByDocRef(docRef) {
   }
 }
 
+function assertExistingOrderPaid(order) {
+  if (!order?.PodRef) return null;
+  // A failed saved-card submission can leave a BookVault draft with a PodRef.
+  // Returning that reference as accepted sends a false customer confirmation.
+  // Never POST another order with the same DocRef; wait for an actual Active
+  // state or let the existing retry/refund policy handle it.
+  if (String(order.Status || '').toLowerCase() !== 'active') {
+    throw new Error('Existing BookVault order is not active (status: ' + String(order.Status || 'unknown') + ').');
+  }
+  return order;
+}
+
 async function submitOrder(order) {
   // BookVault has no idempotency key. Looking up our unique DocRef before
   // POSTing prevents duplicate print orders after webhook retries or a
   // timeout where BookVault accepted the order but our response was lost.
   const existing = await findOrderByDocRef(order.id);
-  if (existing?.PodRef) return existing;
+  if (existing?.PodRef) return assertExistingOrderPaid(existing);
 
   const data = await request(
     'POST',
@@ -220,4 +233,4 @@ async function getShippingQuote({ countryCode, postalCode, quantity = 1 }) {
   };
 }
 
-module.exports = { getShippingQuote, submitOrder, getOrder, orderPayload, UK_PARTNER_ID };
+module.exports = { getShippingQuote, submitOrder, getOrder, orderPayload, assertExistingOrderPaid, UK_PARTNER_ID };

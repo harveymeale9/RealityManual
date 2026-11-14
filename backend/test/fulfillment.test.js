@@ -71,6 +71,15 @@ test('BookVault payload omits customs declaration for domestic UK orders', () =>
   assert.equal(payload.CustomsDeclaration, undefined);
 });
 
+test('an existing BookVault payment draft is not mistaken for an accepted print order', () => {
+  assert.throws(() => bookvaultService.assertExistingOrderPaid({
+    PodRef: 3074612, Status: 'BatchPayment', Progress: { Status: 'Created' },
+  }), /not active/);
+  assert.equal(bookvaultService.assertExistingOrderPaid({
+    PodRef: 3072310, Status: 'Active', Progress: { Status: 'Acknowledged' },
+  }).PodRef, 3072310);
+});
+
 test('paid order is submitted once, emailed, then dispatch is emailed with tracking', async () => {
   const order = paidOrder();
   const sent = [];

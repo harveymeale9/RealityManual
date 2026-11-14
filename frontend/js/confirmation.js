@@ -1,7 +1,8 @@
 (function () {
   const API_BASE_URL = window.RM_CONFIG.API_BASE_URL;
   const POLL_INTERVAL_MS = 2000;
-  const MAX_POLLS = 150; // ~5 minutes
+  const MAX_WAIT_MS = 5 * 60 * 1000;
+  const REQUEST_TIMEOUT_MS = 10000;
 
   const spinner = document.getElementById('spinner');
   const statusEyebrow = document.getElementById('status-eyebrow');
@@ -13,7 +14,7 @@
   const orderId = params.get('order');
   const isDemo = document.body.dataset.orderDemo === 'true';
 
-  let pollCount = 0;
+  const startedAt = Date.now();
   let timerId = null;
   let trackedEvent = null;
 
@@ -43,10 +44,10 @@
   poll();
 
   async function poll() {
-    pollCount += 1;
-
     try {
-      const res = await fetch(`${API_BASE_URL}/api/orders/${encodeURIComponent(orderId)}/status`);
+      const res = await fetch(`${API_BASE_URL}/api/orders/${encodeURIComponent(orderId)}/status`, {
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
 
       if (res.status === 404) {
         showTerminalState({
@@ -66,10 +67,10 @@
       // Transient network errors shouldn't stop polling - just try again.
     }
 
-    if (pollCount >= MAX_POLLS) {
+    if (Date.now() - startedAt >= MAX_WAIT_MS) {
       showTerminalState({
         title: "This is taking longer than expected",
-        message: "We're still confirming your payment. Please refresh this page in a minute, or contact us if this continues.",
+        message: "Your payment may have been received, but we cannot confirm your printer order yet. Please do not pay again. Check your email for an update or contact us by replying to your order email.",
         isError: false,
       });
       return;
@@ -102,7 +103,21 @@
     }
 
     if (['PAYMENT_RECEIVED', 'FULFILLMENT_RETRY'].includes(order.order_status)) {
+      spinner.style.display = 'none';
+      statusEyebrow.textContent = 'Payment received';
+      statusTitle.removeAttribute('aria-label');
+      statusTitle.textContent = 'We have your payment';
+      statusMessage.textContent = "Our printer has not confirmed your order yet. Please do not pay again. We'll email you when it is confirmed or if a refund is needed.";
       return false;
+    }
+
+    if (order.order_status === 'REFUNDED') {
+      showTerminalState({
+        title: 'Your order was refunded',
+        message: 'Our printer could not accept this order. We issued a full refund to your original payment method; your bank may take several working days to show it. Please do not pay again until we confirm ordering is available.',
+        isError: false,
+      });
+      return true;
     }
 
     if (order.order_status === 'FAILED') {

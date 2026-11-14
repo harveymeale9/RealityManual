@@ -42,6 +42,7 @@
   let checkoutStartedTracked = false;
   let stripe = null;
   let elements = null;
+  let checkoutPaused = false;
 
   const ctaSource = new URLSearchParams(window.location.search).get('cta_source') || '';
   const checkoutArrivalEvent = {
@@ -74,6 +75,14 @@
 
   async function initializeStripe() {
     try {
+      const availability = await fetch(`${API_BASE_URL}/api/checkout/availability`, { cache: 'no-store' });
+      if (!availability.ok) throw new Error('checkout_availability_unavailable');
+      checkoutPaused = !(await availability.json()).available;
+      if (checkoutPaused) {
+        showFormError('Orders are temporarily unavailable while we resolve a printer issue. No payment has been taken. Please check back later.');
+        submitButton.disabled = true;
+        return;
+      }
       const response = await fetch(`${API_BASE_URL}/api/config/stripe`);
       if (!response.ok) throw new Error('stripe_config_unavailable');
       const { publishable_key: publishableKey } = await response.json();
@@ -109,7 +118,7 @@
       const paymentElement = elements.create('payment');
       paymentElement.mount('#payment-element');
       paymentElement.on('ready', () => {
-        submitButton.disabled = false;
+        submitButton.disabled = checkoutPaused;
       });
     } catch (err) {
       showFormError('Secure payment options could not be loaded. Please refresh the page and try again.');
@@ -322,6 +331,7 @@
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (checkoutPaused) return;
     clearFormError();
     clearFieldErrors();
 

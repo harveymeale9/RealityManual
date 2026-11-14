@@ -67,10 +67,9 @@ test('refund email says the refund was issued without promising bank timing', ()
   const email = orderRefundedEmail(order);
   assert.equal(email.subject, 'We Couldn’t Complete Your Order');
   assert.match(email.html, /issued a full refund/);
-  assert.match(email.html, /Try Your Order Again/);
-  assert.match(email.html, /https:\/\/realitymanual\.com\/checkout\.html/);
-  assert.match(email.text, /Please try placing your order once more/);
-  assert.match(email.text, /We’ll be in touch to help resolve it/);
+  assert.doesNotMatch(email.html, /Try Your Order Again/);
+  assert.match(email.text, /Please do not place another order yet/);
+  assert.match(email.text, /We’ll let you know when ordering is available again/);
   assert.match(email.text, /bank may take several working days/);
   assert.match(email.text, /\$139\.98 USD/);
 });

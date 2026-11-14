@@ -228,8 +228,8 @@ function orderRefundedEmail(order, { preview = false } = {}) {
   const subject = `${preview ? '[PREVIEW] ' : ''}We Couldn’t Complete Your Order`;
   const body = `
     <p style="margin:0 0 18px;">We’re sorry, ${escapeHtml(firstName(order.customer_name))}, but our printer was unable to accept your order after several attempts.</p>
-    <p style="margin:0;">Rather than leave you waiting, we have issued a full refund to your original payment method. Please try placing your order once more using the button below. Temporary address, shipping or printer validation issues often resolve on a fresh attempt.</p>`;
-  const callout = 'The refund has left our system, although your bank may take several working days to display it. If your next order encounters the same problem, please do not keep retrying. We’ll be in touch to help resolve it.';
+    <p style="margin:0;">Rather than leave you waiting, we have issued a full refund to your original payment method. Please do not place another order yet. We’ll let you know when ordering is available again.</p>`;
+  const callout = 'The refund has left our system, although your bank may take several working days to display it. If you have questions, please reply to this email.';
   const text = [
     preview ? 'SAMPLE PREVIEW: NOT A REAL ORDER' : '',
     'THE REALITY MANUAL',
@@ -237,14 +237,12 @@ function orderRefundedEmail(order, { preview = false } = {}) {
     'WE COULDN’T COMPLETE YOUR ORDER',
     '',
     `We’re sorry, ${firstName(order.customer_name)}, but our printer was unable to accept your order after several attempts.`,
-    'Rather than leave you waiting, we have issued a full refund to your original payment method. Please try placing your order once more. Temporary address, shipping or printer validation issues often resolve on a fresh attempt.',
+    'Rather than leave you waiting, we have issued a full refund to your original payment method. Please do not place another order yet. We’ll let you know when ordering is available again.',
     '',
     `Order: ${orderNumber}`,
     `Refund: ${total}`,
     '',
-    'Try your order again: https://realitymanual.com/checkout.html',
-    '',
-    'The refund has left our system, although your bank may take several working days to display it. If your next order encounters the same problem, please do not keep retrying. We’ll be in touch to help resolve it.',
+    'The refund has left our system, although your bank may take several working days to display it. If you have questions, please reply to this email.',
     '',
     'Questions about your order? Reply to this email.',
     'https://realitymanual.com',
@@ -263,7 +261,6 @@ function orderRefundedEmail(order, { preview = false } = {}) {
         ['Refund', escapeHtml(total)],
       ]),
       callout,
-      button: { label: 'Try Your Order Again', href: 'https://realitymanual.com/checkout.html' },
     }),
     text,
   };
