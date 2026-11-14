@@ -22459,3 +22459,37 @@ follow-up was therefore sent in that same mailbox thread confirming all three
 refunds, the cancelled draft, and the option to place one new order if still
 wanted. The mailbox recorded the follow-up as sent with a provider message ID.
 No new payment or BookVault order was created in this reconciliation.
+
+## Cloudflare storefront migration stage 1 (2026-11-14)
+
+Harvey approved proceeding with the previously discussed migration of the
+storefront backend off the VPS. Workers Paid is already enabled on his
+Cloudflare account; unrelated tattoo-rankings Workers were left untouched.
+His owner-created Cloudflare deployment token lives in the private
+`/root/.config/realitymanual-cloudflare/deploy.env` (mode 600). The project
+boundary still reserves writing raw credentials for Harvey himself.
+
+`storefront-worker/` now contains an inert **staging-only** Worker at
+`rm-storefront-api-staging.harveymeale9.workers.dev`. Its D1 binding points
+to `rm-storefront-staging` (`cfc8318c-2be0-49ab-89f6-27ea8360fc0f`),
+created in ENAM. A consistent SQLite snapshot was imported once into D1;
+the source remained unchanged and the private temporary export files were
+removed. Spot-checked table counts matched (44 orders, 720 analytics events,
+310 daily events, 83 daily tagged landings, 16 shipping rates, 94 errors,
+zero recovery contacts). This copy is **not continuously synced**.
+
+The current storefront VSL was copied from the VPS to the existing
+`reality-manual-media` R2 bucket under a content-addressed key. The staging
+Worker serves it with HTTP 200/206, seekable byte ranges, and cache headers;
+live media still comes from the old API. The staging `/health` checks D1 and
+advertises `checkout: disabled`. Every other API path, including payment
+creation and Stripe webhooks, returns 404. Browser/Node smoke tests and
+live health/range probes passed.
+
+Harvey was given the single owner-only command in
+`storefront-worker/README.md` to copy four existing secrets into the disabled
+staging Worker; the agent did not perform credential writes. **Do not claim
+the backend migration is complete or cut over production.** The Worker API,
+durable background jobs, Content Studio report reads, synthetic end-to-end
+tests, fresh final data sync, and rollback plan remain release gates. Keep
+the live VPS backend and Stripe webhook active until those gates pass.
