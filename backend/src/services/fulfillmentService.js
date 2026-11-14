@@ -137,17 +137,19 @@ async function submitToBookVault(order) {
       orderService.setBookVaultReference(order.id, err.podRef);
       order = orderService.getById(order.id);
     }
-    const attempts = Number(order.fulfillment_attempts || 0) + 1;
-    errorLogService.logError({
-      orderId: order.id,
-      service: 'bookvault',
-      errorType: 'order_submission_failed',
-      errorMessage: err.message,
-      requestReference: order.id,
-      attemptNumber: attempts,
-    });
-
-    await alertOwner(order, err.message);
+    const pendingPayment = err.pendingPayment === true;
+    const attempts = Number(order.fulfillment_attempts || 0) + (pendingPayment ? 0 : 1);
+    if (!pendingPayment) {
+      errorLogService.logError({
+        orderId: order.id,
+        service: 'bookvault',
+        errorType: 'order_submission_failed',
+        errorMessage: err.message,
+        requestReference: order.id,
+        attemptNumber: attempts,
+      });
+      await alertOwner(order, err.message);
+    }
     const deadline = fulfillmentDeadline(order);
     if (deadline && Date.now() >= deadline) {
       try {
@@ -164,10 +166,10 @@ async function submitToBookVault(order) {
     orderService.setFulfillmentRetry(
       order.id,
       attempts,
-      err.message,
+      pendingPayment ? 'BatchPayment: awaiting BookVault scheduled payment.' : err.message,
       new Date(deadline && deadline <= Date.now()
         ? Date.now() + 15 * 60_000
-        : Math.min(Date.now() + RETRY_MINUTES[Math.min(attempts - 1, RETRY_MINUTES.length - 1)] * 60_000, deadline || Infinity)).toISOString(),
+        : Math.min(Date.now() + (pendingPayment ? STATUS_POLL_MINUTES : RETRY_MINUTES[Math.min(attempts - 1, RETRY_MINUTES.length - 1)]) * 60_000, deadline || Infinity)).toISOString(),
     );
     return;
   }
@@ -207,9 +209,12 @@ async function checkBookVaultProgress(order) {
   try {
     const current = await bookvaultService.getOrder(order.bookvault_order_id);
     if (String(current?.Status).toLowerCase() !== 'active') {
+      const pendingPayment = bookvaultService.isScheduledPaymentPending(current);
       orderService.setFulfillmentRetry(order.id, order.fulfillment_attempts || 1,
-        `BookVault reference is not active (${current?.Status || 'unknown'}).`, minutesFromNow(1));
-      await alertOwner(order, `BookVault reference remains ${current?.Status || 'unknown'}.`);
+        pendingPayment ? 'BatchPayment: awaiting BookVault scheduled payment.' :
+          `BookVault reference is not active (${current?.Status || 'unknown'}).`,
+        minutesFromNow(pendingPayment ? STATUS_POLL_MINUTES : 1));
+      if (!pendingPayment) await alertOwner(order, `BookVault reference remains ${current?.Status || 'unknown'}.`);
       return;
     }
     await captureBookVaultCost(order, current);

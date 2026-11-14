@@ -531,7 +531,7 @@
             '<div><span>BookVault active</span><strong>' + (summary.in_production || 0) + '</strong></div>' +
             '<div><span>Dispatched</span><strong>' + (summary.shipped || 0) + '</strong></div>' +
           '</div>' +
-          '<p class="orders-note">A BookVault reference alone may be an unpaid draft. “BookVault active” means its status was verified; an accepted storefront order does not require immediate printer payment. Issues are retried and flagged to Harvey. Refunds require a verified safe BookVault state.</p>' +
+          '<p class="orders-note">A BookVault payment draft can be normal while its scheduled card payment runs. “BookVault active” means production was verified; storefront orders are accepted before that. Genuine rejections are retried and flagged to Harvey. Refunds require a verified safe BookVault state.</p>' +
           '<div class="orders-list">' + (orders.length ? orders.map(function (order) {
             var code = '#' + String(order.id || '').slice(0, 8).toUpperCase();
             var tone = order.overdue ? ' overdue' : order.awaiting_bookvault ? ' pending' : order.order_status === 'REFUNDED' ? ' refunded' : '';

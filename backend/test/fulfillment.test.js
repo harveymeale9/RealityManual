@@ -75,7 +75,10 @@ test('BookVault payload omits customs declaration for domestic UK orders', () =>
 test('an existing BookVault payment draft is not mistaken for an accepted print order', () => {
   assert.throws(() => bookvaultService.assertExistingOrderPaid({
     PodRef: 3074612, Status: 'BatchPayment', Progress: { Status: 'Created' },
-  }), /not active/);
+  }), error => /not active/.test(error.message) && error.pendingPayment === true);
+  assert.throws(() => bookvaultService.assertExistingOrderPaid({
+    PodRef: 3074613, Status: 'Deleted', Progress: { Status: 'Created' },
+  }), error => error.pendingPayment === false);
   assert.equal(bookvaultService.assertExistingOrderPaid({
     PodRef: 3072310, Status: 'Active', Progress: { Status: 'Acknowledged' },
   }).PodRef, 3072310);
@@ -229,6 +232,46 @@ test('paid order is acknowledged and retried without refund before the 24-hour d
   assert.equal(sent[0].subject, 'We’ve Received Your Reality Manual Order');
   assert.match(sent[1].subject, /Action needed/);
   assert.equal(orderService.hasRecentPaidOrder(order.email), true);
+});
+
+test('scheduled BookVault payment draft waits silently and is not counted as a failed submission', async () => {
+  const order = paidOrder();
+  const sent = [];
+  bookvaultService.submitOrder = async () => {
+    const error = new Error('Existing BookVault order is not active (status: BatchPayment).');
+    error.podRef = '7125';
+    error.pendingPayment = true;
+    throw error;
+  };
+  resendClient.sendEmail = async message => { sent.push(message); return { id: 'email_test' }; };
+  stripeService.refundPayment = async () => { throw new Error('should not refund a scheduled payment'); };
+  await fulfillmentService.processOrder(order);
+  const stored = orderService.getById(order.id);
+  assert.equal(stored.order_status, 'FULFILLMENT_RETRY');
+  assert.equal(stored.bookvault_order_id, '7125');
+  assert.equal(stored.fulfillment_attempts, 0);
+  assert.equal(stored.fulfillment_alert_sent_at, null);
+  assert.equal(stored.fulfillment_last_error, 'BatchPayment: awaiting BookVault scheduled payment.');
+  assert.ok(Date.parse(stored.fulfillment_next_attempt_at) >= Date.now() + 14 * 60_000);
+  assert.equal(sent.length, 1); // customer receipt only; no owner draft alert
+  assert.equal(sent[0].subject, 'We’ve Received Your Reality Manual Order');
+});
+
+test('a previously accepted local reference that is still in BookVault payment batching is not owner-alerted', async () => {
+  const order = paidOrder();
+  orderService.setBookVaultAccepted(order.id, '7126');
+  orderService.markEmailSent(order.id, 'confirmation');
+  bookvaultService.getOrder = async () => ({
+    PodRef: '7126', Status: 'BatchPayment', Progress: { Status: 'Created' },
+  });
+  resendClient.sendEmail = async () => { throw new Error('owner should not be emailed about a batch'); };
+  resendClient.syncPurchaserContact = async () => {};
+  await fulfillmentService.processOrder(orderService.getById(order.id));
+  const stored = orderService.getById(order.id);
+  assert.equal(stored.order_status, 'FULFILLMENT_RETRY');
+  assert.equal(stored.fulfillment_alert_sent_at, null);
+  assert.equal(stored.fulfillment_last_error, 'BatchPayment: awaiting BookVault scheduled payment.');
+  assert.ok(Date.parse(stored.fulfillment_next_attempt_at) >= Date.now() + 14 * 60_000);
 });
 
 test('expired paid order cancels a verified BookVault draft before refunding', async () => {

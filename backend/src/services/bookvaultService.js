@@ -117,8 +117,9 @@ function orderPayload(order) {
 }
 
 function assertAcceptedOrder(data) {
+  const status = String(data?.Status || '').toLowerCase();
   if (!data || data.CriticalError || !data.PodRef ||
-      (data.Status && String(data.Status).toLowerCase() !== 'active')) {
+      (status && status !== 'active' && status !== 'batchpayment')) {
     const messages = Array.isArray(data?.Messages)
       ? data.Messages.map((message) => message.Message || message.Text || JSON.stringify(message)).join('; ')
       : '';
@@ -174,9 +175,16 @@ function assertExistingOrderPaid(order) {
   if (String(order.Status || '').toLowerCase() !== 'active') {
     const error = new Error('Existing BookVault order is not active (status: ' + String(order.Status || 'unknown') + ').');
     error.podRef = order.PodRef;
+    // Scheduled card collection may leave a saved order here for hours.
+    error.pendingPayment = isScheduledPaymentPending(order);
     throw error;
   }
   return order;
+}
+
+function isScheduledPaymentPending(order) {
+  return String(order?.Status || '').toLowerCase() === 'batchpayment' &&
+    String(order?.Progress?.Status || '').toLowerCase() === 'created';
 }
 
 async function submitOrder(order) {
@@ -193,6 +201,8 @@ async function submitOrder(order) {
     '/Order?payMethod=Saved',
     orderPayload(order),
   );
+  // A BatchPayment response is a saved, pending payment rather than a hard
+  // rejection. Its GET state below determines whether to wait or escalate.
   const created = assertAcceptedOrder(data);
   // A PodRef in the POST response can still be an unpaid draft. Check the
   // saved order before claiming printer acceptance to the storefront.
@@ -200,6 +210,11 @@ async function submitOrder(order) {
     return assertExistingOrderPaid(await getOrder(created.PodRef));
   } catch (error) {
     error.podRef = created.PodRef;
+    // The read-after-write can briefly lag a saved BatchPayment response.
+    // Keep its reference and retry the GET without a duplicate POST.
+    if (String(created.Status || '').toLowerCase() === 'batchpayment' && error.status === 404) {
+      error.pendingPayment = true;
+    }
     throw error;
   }
 }
@@ -274,4 +289,4 @@ async function getShippingQuote({ countryCode, postalCode, quantity = 1 }) {
   };
 }
 
-module.exports = { getShippingQuote, submitOrder, getOrder, findOrderByDocRef, cancelUnpaidDraft, orderPayload, assertExistingOrderPaid, UK_PARTNER_ID };
+module.exports = { getShippingQuote, submitOrder, getOrder, findOrderByDocRef, cancelUnpaidDraft, orderPayload, assertExistingOrderPaid, isScheduledPaymentPending, UK_PARTNER_ID };

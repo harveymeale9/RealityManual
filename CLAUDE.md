@@ -22421,3 +22421,26 @@ This change captures consent for a possible one-time recovery message; it does
 **not** start an automatic email campaign or retroactively authorize outreach
 to last night's customers. Any future sender must suppress purchasers, honor
 withdrawals, include required sender/opt-out details, and be tested separately.
+
+## BookVault scheduled payment drafts are normal pending state (2026-11-14)
+
+Harvey clarified that BookVault saved-card payments are collected in batches,
+often hours after submission. A `Status=BatchPayment` and
+`Progress.Status=Created` record with a PodRef is therefore a normal pending
+payment state, not by itself a failed order or a reason to email him. A live
+read-only check of the remaining draft (`fb9e95a6`, PodRef 3074628) still
+showed that state at this change. The storefront customer receipt already
+acknowledges the successful Stripe-paid order immediately, without claiming
+that BookVault is in production.
+
+The fulfillment worker now classifies this exact BookVault state separately:
+it retains the PodRef, polls every 15 minutes, does not increment failed
+submission attempts, and does not send the ordinary first-failure owner
+email. An initial POST with a non-critical `BatchPayment` response is read
+back and classified the same way; a brief 404 on that read is retried without
+posting a duplicate. The Orders health view explains scheduled batches as
+normal. `Status=Active` still gates verified production status. Explicit
+BookVault rejections (for example, an inactive title), unexpected statuses,
+and unsafe refund/deadline cases still alert Harvey. The prior 24-hour
+resolution and safe-cancellation/refund rule is unchanged; a draft is not
+silently assumed paid. Existing owner alerts already sent cannot be recalled.
