@@ -3781,9 +3781,6 @@ async function nextPublishingQueueSlot(type, pieces, nowValue) {
     const settingsRow = stmts.getOne.get('settings', 'settings');
     let settings = {};
     try { settings = settingsRow ? JSON.parse(settingsRow.data) : {}; } catch (error) { settings = {}; }
-    if (settings.longformReleaseOnNext !== false) return shortformSchedule.nextLongformReleaseSlot(
-      nowValue, settings.longformScheduleAnchor, settings.longformIntervalHours, true
-    );
     const occupied = pieces.filter(function (piece) {
       return piece.contentType === 'longform' && (piece.stage === 'scheduled' || piece.stage === 'live') && (piece.scheduledAt || piece.postedAt);
     }).map(function (piece) { return piece.scheduledAt || piece.postedAt; });
@@ -3923,7 +3920,7 @@ async function runPlatformPublishBatch(id, destinations, options) {
   // Studio chooses an exact topic-aware slot from Buffer's Bangkok posting
   // calendar, then creates TikTok as a custom-scheduled post at that instant
   // and retains the direct-platform payload until the same time. Longform
-  // keeps its separate elapsed-hour rhythm, but both rhythms compare
+  // uses its separate Tuesday/Saturday calendar, but both calendars compare
   // against every format so a long and short treatment of the same subject
   // are deliberately kept apart.
   const initialPiece = getPieceRecord(id);
@@ -3957,10 +3954,7 @@ async function runPlatformPublishBatch(id, destinations, options) {
     }).map(function (other) { return other.scheduledAt || other.postedAt; });
     const forcedDueAt = publishingQueue.preparationDue(options.dueAt, Date.now(), publishingQueue.PREPARATION_LEAD_MS + 60 * 1000)
       ? options.dueAt : '';
-    const firstRelease = settings.longformReleaseOnNext !== false && initialPiece.createdBy !== 'youtube-reviewer';
-    const candidates = forcedDueAt ? [forcedDueAt] : firstRelease ? [shortformSchedule.nextLongformReleaseSlot(
-      Date.now(), settings.longformScheduleAnchor, settings.longformIntervalHours, true
-    )] :
+    const candidates = forcedDueAt ? [forcedDueAt] :
       shortformSchedule.nextAvailableLongformSlots(
         Date.now(), settings.longformScheduleAnchor, settings.longformIntervalHours, occupied, 10
       );
@@ -3983,16 +3977,7 @@ async function runPlatformPublishBatch(id, destinations, options) {
       latest[publishErrorField(destination.platform)] = '';
     });
     latest.updatedAt = new Date().toISOString();
-    if (firstRelease) {
-      // Consume the one-time immediate release and its anchor together with
-      // the Scheduled card, so a restart cannot queue another immediate post.
-      db.transaction(function () {
-        savePieceRecord(latest);
-        settings.longformScheduleAnchor = dueAt;
-        settings.longformReleaseOnNext = false;
-        stmts.upsert.run('settings', 'settings', JSON.stringify(settings), new Date().toISOString());
-      })();
-    } else savePieceRecord(latest);
+    savePieceRecord(latest);
     await releaseLocalPublishMedia(id);
     return;
   }

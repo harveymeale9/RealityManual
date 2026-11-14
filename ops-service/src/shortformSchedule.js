@@ -91,18 +91,23 @@ function normalizeLongformIntervalHours(value) {
 function nextLongformSlot(after, anchor, intervalHours) {
   const afterMs = after instanceof Date ? after.getTime() : Number(after);
   if (!Number.isFinite(afterMs)) throw new Error('A valid starting time is required.');
-  const configuredAnchor = Date.parse(anchor || '');
-  const anchorMs = Number.isFinite(configuredAnchor) ? configuredAnchor : Date.parse(LONGFORM_ANCHOR);
-  const intervalMs = normalizeLongformIntervalHours(intervalHours) * 3600000;
-  const step = Math.max(0, Math.floor((afterMs - anchorMs) / intervalMs) + 1);
-  return new Date(anchorMs + step * intervalMs).toISOString();
+  // Tuesday and Saturday, 10 p.m. Asia/Bangkok (3 p.m. UTC). The old
+  // anchor/interval arguments are retained for existing callers only.
+  const local = new Date(afterMs + BANGKOK_OFFSET_MS);
+  const midnight = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate());
+  for (let offset = 0; offset < 8; offset++) {
+    const day = midnight + offset * 86400000;
+    if (![2, 6].includes(new Date(day).getUTCDay())) continue;
+    const candidate = day + 22 * 3600000 - BANGKOK_OFFSET_MS;
+    if (candidate > afterMs) return new Date(candidate).toISOString();
+  }
+  throw new Error('No long-form slot is available.');
 }
 
 function nextLongformReleaseSlot(after, anchor, intervalHours, releaseOnNext) {
   const afterMs = after instanceof Date ? after.getTime() : Number(after);
   if (!Number.isFinite(afterMs)) throw new Error('A valid starting time is required.');
-  return releaseOnNext ? new Date(afterMs + 1000).toISOString() :
-    nextLongformSlot(afterMs, anchor, intervalHours);
+  return nextLongformSlot(afterMs, anchor, intervalHours);
 }
 
 function nextAvailableLongformSlots(after, anchor, intervalHours, occupiedTimes, count) {
@@ -110,12 +115,11 @@ function nextAvailableLongformSlots(after, anchor, intervalHours, occupiedTimes,
   if (!Number.isFinite(afterMs)) throw new Error('A valid starting time is required.');
   const wanted = Math.max(1, Math.min(120, Number(count) || 1));
   const occupiedSet = new Set((occupiedTimes || []).map(function (value) { return Date.parse(value); }).filter(Number.isFinite));
-  const intervalMs = normalizeLongformIntervalHours(intervalHours) * 3600000;
   let candidate = Date.parse(nextLongformSlot(afterMs, anchor, intervalHours));
   const slots = [];
   while (slots.length < wanted) {
     if (!occupiedSet.has(candidate)) slots.push(new Date(candidate).toISOString());
-    candidate += intervalMs;
+    candidate = Date.parse(nextLongformSlot(candidate, anchor, intervalHours));
   }
   return slots;
 }

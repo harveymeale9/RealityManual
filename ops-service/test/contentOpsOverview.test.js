@@ -14,10 +14,11 @@ test('Content Ops shows the publishing runway and board without the unused summa
   assert.doesNotMatch(app, /function renderOverview\(/);
 });
 
-test('Content Ops keeps one publication timeline and the editable long-form interval', function () {
+test('Content Ops keeps one publication timeline with fixed Tuesday/Saturday long-form slots', function () {
   const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const runway = app.slice(app.indexOf('function renderQueueCoverage()'), app.indexOf('// opts.hideVideoChip'));
   assert.match(runway, /Next 15 days/);
-  assert.match(runway, /id="opsLongformIntervalHours"/);
+  assert.match(runway, /Tuesday & Saturday · 10 p\.m\. Bangkok/);
+  assert.doesNotMatch(runway, /id="opsLongformIntervalHours"/);
   assert.doesNotMatch(runway, /Next 15 long-form slots|queue-longform-scroll|queue-longform-slot/);
 });

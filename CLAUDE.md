@@ -22803,3 +22803,18 @@ found malformed Canadian values rejected with HTTP 400 at both quote and
 payment routes, while a valid unspaced value was normalized and quoted. All
 25 Worker tests passed. The static checkout change publishes through GitHub
 Pages on the associated push.
+
+## Long-form slots fixed to Tuesday and Saturday at 10 p.m. Bangkok (2026-11-14)
+
+Harvey replaced the rolling elapsed-hour long-form cadence with two fixed
+weekly slots: Tuesday and Saturday at 10:00 p.m. Asia/Bangkok (15:00 UTC).
+The scheduler, queue runway, and browser fallback now use the same calendar
+calculation; the old anchor/interval settings and one-time immediate-release
+flag cannot move a normal queued release. The obsolete editable hours control
+was removed from Content Ops and Content Settings. YouTube and Facebook for
+one long-form piece retain the same release instant. Occupied slots are skipped
+without shifting future dates. No long-form piece was queued or scheduled at
+the change; the next available slot is Tuesday 2026-11-17 at 22:00 Bangkok
+time. Existing manually forced immediate publishing remains a separate explicit
+operator action. Tests cover the fixed dates, occupied slots, old immediate
+flag, and runway alignment.

@@ -13,15 +13,15 @@ function ready(id, type) {
   return { id: id, contentType: type, hasVideo: true, stage: 'publishing_queue', queuedPublishDestinations: [{ platform: 'youtube' }] };
 }
 
-test('runway follows the fixed 60-hour long-form sequence, not previous publication dates', function () {
+test('runway follows Tuesday and Saturday long-form slots, not previous publication dates', function () {
   const pieces = [
     { id: 'published', contentType: 'longform', stage: 'live', postedAt: '2026-10-15T11:05:58Z' },
     ready('next', 'longform')
   ];
   const result = coverage.calculate({ pieces: pieces, now: NOW, longformAnchor: cadence.LONGFORM_ANCHOR,
     longformIntervalHours: 60, postingSchedule: DAILY });
-  assert.equal(new Date(result.longform.coveredThrough).toISOString(), '2026-10-23T16:00:00.000Z');
-  assert.equal(new Date(result.longform.nextNeededAt).toISOString(), '2026-10-26T03:40:00.000Z');
+  assert.equal(new Date(result.longform.coveredThrough).toISOString(), '2026-10-17T15:00:00.000Z');
+  assert.equal(new Date(result.longform.nextNeededAt).toISOString(), '2026-10-20T14:40:00.000Z');
   assert.equal(result.longform.coveredSlots, 1);
   assert.equal(result.longform.readyCount, 1);
   assert.equal(result.longform.timeline.length, 15);
@@ -29,27 +29,26 @@ test('runway follows the fixed 60-hour long-form sequence, not previous publicat
   assert.equal(result.longform.timeline[1].state, 'open');
   assert.equal(result.longform.timeline[0].at,
     Date.parse(cadence.nextAvailableLongformSlots(NOW, cadence.LONGFORM_ANCHOR, 60, [pieces[0].postedAt], 1)[0]));
-  assert.equal(new Date(result.longform.timeline[14].at).toISOString(), '2026-11-27T16:00:00.000Z');
+  assert.equal(new Date(result.longform.timeline[14].at).toISOString(), '2026-12-05T15:00:00.000Z');
 });
 
-test('changing hours moves the long-form chart while the 15-day short map stays intact', function () {
+test('legacy hour setting cannot move the long-form chart', function () {
   const at = Date.parse('2026-10-22T12:00:00Z');
   const result = coverage.calculate({ pieces: [], now: at, longformAnchor: cadence.LONGFORM_ANCHOR,
     longformIntervalHours: 48, postingSchedule: DAILY });
-  assert.equal(new Date(result.longform.timeline[1].at).toISOString(), '2026-10-25T16:00:00.000Z');
+  assert.equal(new Date(result.longform.timeline[1].at).toISOString(), '2026-10-27T15:00:00.000Z');
   assert.equal(result.days.length, 15);
 });
 
-test('runway waits for the first approved long-form, then previews immediate and weekly slots', function () {
+test('runway previews fixed slots even if the old immediate flag remains set', function () {
   const waiting = coverage.calculate({ pieces: [], now: NOW, longformReleaseOnNext: true,
     longformIntervalHours: 168, postingSchedule: DAILY });
-  assert.equal(waiting.longform.nextNeededAt, null);
-  assert.equal(waiting.longform.timeline.length, 0);
+  assert.equal(waiting.longform.timeline[0].at, Date.parse('2026-10-17T15:00:00Z'));
   const readyNow = coverage.calculate({ pieces: [ready('first', 'longform')], now: NOW,
     longformReleaseOnNext: true, longformIntervalHours: 168, postingSchedule: DAILY });
-  assert.equal(readyNow.longform.timeline[0].at, NOW + 1000);
+  assert.equal(readyNow.longform.timeline[0].at, Date.parse('2026-10-17T15:00:00Z'));
   assert.equal(readyNow.longform.timeline[0].state, 'queued');
-  assert.equal(readyNow.longform.timeline[1].at, NOW + 1000 + 7 * 86400000);
+  assert.equal(readyNow.longform.timeline[1].at, Date.parse('2026-10-20T15:00:00Z'));
 });
 
 test('short-form runway counts the actual Buffer calendar and scheduled inventory', function () {

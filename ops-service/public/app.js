@@ -2536,12 +2536,7 @@
   }
 
   function nextLongformSlot(afterMs, anchor, intervalHours) {
-    var start = Date.parse(anchor || '');
-    if (!Number.isFinite(start)) start = Date.parse('2026-10-23T16:00:00.000Z');
-    var hours = Number(intervalHours);
-    if (!Number.isInteger(hours) || hours < 1 || hours > 720) hours = 168;
-    var interval = hours * 3600000;
-    return start + Math.max(0, Math.floor((afterMs - start) / interval) + 1) * interval;
+    return RMQueueCoverage.longformSlots(afterMs, anchor, intervalHours, 1, false)[0];
   }
 
   // Fills as many consecutive shorts slots as there are approved pieces
@@ -2601,15 +2596,8 @@
         scheduleShorts(settings);
         return;
       }
-      var firstRelease = settings.longformReleaseOnNext !== false;
-      p.scheduledAt = new Date(firstRelease ? Date.now() + 1000 :
-        nextLongformSlot(Date.now(), settings.longformScheduleAnchor, settings.longformIntervalHours)).toISOString();
+      p.scheduledAt = new Date(nextLongformSlot(Date.now(), settings.longformScheduleAnchor, settings.longformIntervalHours)).toISOString();
       p.stage = 'scheduled';
-      if (firstRelease) {
-        settings.longformScheduleAnchor = p.scheduledAt;
-        settings.longformReleaseOnNext = false;
-        return Store.saveSettings(settings);
-      }
     });
   }
 
@@ -3688,30 +3676,15 @@
         '<div class="queue-map-lane"><small>SHORT</small><span>' + slotMarkers(day.publishedShortform.concat(day.shortform), 'Short-form') + '</span></div>' +
       '</div>';
     }).join('');
-    var longformHours = Number(boardSettingsCache && boardSettingsCache.longformIntervalHours) || 168;
-    var firstLongformPending = boardSettingsCache && boardSettingsCache.longformReleaseOnNext !== false;
-    var longformSummary = firstLongformPending
-      ? '<section class="queue-coverage-summary" aria-label="Long-form publishing runway"><div class="queue-coverage-head"><span>Long-form</span><span>First release</span></div>' +
-        '<strong class="queue-coverage-deadline">Next approved video publishes immediately</strong>' +
-        '<div class="queue-coverage-meta">Then every ' + longformHours + ' hours from that release · ' + runway.longform.readyCount + ' ready in queue</div></section>'
-      : summary('Long-form', runway.longform, 'Every ' + longformHours + ' hours');
+    var longformSummary = summary('Long-form', runway.longform, 'Tuesday & Saturday · 10 p.m. Bangkok');
     queueCoverage.innerHTML = '<div class="queue-coverage-summary-row">' +
       longformSummary +
       summary('Short-form', runway.shortform, 'Buffer cadence') + '</div>' +
       '<div class="queue-map-head"><div><strong>Next 15 days</strong><span>Today → forward · Bangkok time</span><span class="queue-map-swipe">Swipe timeline →</span>' +
-        '<label class="queue-longform-control">Hours between long-form uploads <input id="opsLongformIntervalHours" type="number" min="1" max="720" step="1" value="' + longformHours + '"' + (IS_REVIEWER ? ' disabled' : '') + '></label></div>' +
+        '</div>' +
         '<div class="queue-map-key"><span class="queue-map-key-published">✓ Published</span><span class="queue-map-key-ready">✓ Ready</span><span class="queue-map-key-scheduled">✓ Scheduled</span><span class="queue-map-key-open">! Needs video</span><span>— No slot</span></div></div>' +
       '<div class="queue-map-scroll" aria-label="15-day publishing map"><div class="queue-map-days">' + days + '</div></div>' +
       (runway.shortform.estimated ? '<div class="queue-coverage-note">Short-form dates are daily estimates from the last actual post while Buffer’s schedule is unavailable.</div>' : '');
-    var intervalInput = document.getElementById('opsLongformIntervalHours');
-    if (intervalInput) intervalInput.addEventListener('change', function () {
-      var hours = Number(intervalInput.value);
-      if (!Number.isInteger(hours) || hours < 1 || hours > 720) { intervalInput.value = longformHours; return; }
-      boardSettingsCache.longformIntervalHours = hours;
-      boardSettingsCache.cadence.longform = { every: hours, unit: 'hours' };
-      Store.saveSettings(boardSettingsCache).then(function () { renderQueueCoverage(); })
-        .catch(function () { intervalInput.value = longformHours; });
-    });
   }
 
   // opts.hideVideoChip: Final Check cards (finalCheckCardHtml) only ever
@@ -6527,21 +6500,8 @@
     var dis = IS_REVIEWER ? ' disabled' : '';
     grid.innerHTML = '<div class="cadence-row" data-key="longform">' +
       '<span class="cadence-label">Direct longform <span class="ink-faint">(YouTube / Facebook)</span></span>' +
-      '<span class="cadence-inputs">' + (settingsCache.longformReleaseOnNext !== false
-        ? 'Next approved long-form: publish immediately · then every '
-        : 'Next long-form slot: anchored to the first release · every ') +
-        '<input type="number" min="1" max="720" step="1" class="cadence-time" id="longformIntervalHours" value="' +
-        escapeHtml(settingsCache.longformIntervalHours || 168) + '"' + dis + ' /> <span>hours</span></span>' +
+      '<span class="cadence-inputs">Tuesday &amp; Saturday at 10 p.m. Asia/Bangkok</span>' +
     '</div>';
-    var intervalInput = document.getElementById('longformIntervalHours');
-    intervalInput.addEventListener('change', function () {
-      var hours = Number(intervalInput.value);
-      if (!Number.isInteger(hours) || hours < 1 || hours > 720) { intervalInput.value = settingsCache.longformIntervalHours; return; }
-      settingsCache.longformIntervalHours = hours;
-      settingsCache.cadence.longform = { every: hours, unit: 'hours' };
-      intervalInput.value = hours;
-      saveSettingsDebounced();
-    });
   }
 
   var audioListObjectUrls = [];
