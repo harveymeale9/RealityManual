@@ -22798,7 +22798,7 @@ as a second guard. The checkout UI formats valid Canadian codes on blur or
 submit and highlights malformed ones. This fixes the confirmed Canadian
 format gap; `/Dispatch` remains a pricing quote, not a guarantee that every
 other destination's complete address will pass `/Order`. The Worker change
-was deployed as version `7df024b6-f645-483d-bd17-d8fe21aae11b`; live probes
+was deployed as version `88d15a69-1eb9-44be-a124-181e38888509`; live probes
 found malformed Canadian values rejected with HTTP 400 at both quote and
 payment routes, while a valid unspaced value was normalized and quoted. All
 25 Worker tests passed. The static checkout change publishes through GitHub

@@ -32,7 +32,7 @@ export function validateCheckoutInput(body = {}) {
   if (typeof body.email === 'string' && body.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email.trim())) errors.email = 'A valid email address is required.';
   if (typeof body.phone === 'string' && body.phone.trim() && !/^\+?[\d\s\-.()/]{6,35}$/.test(body.phone.trim())) errors.phone = 'A valid phone number is required.';
   if (typeof body.country_code !== 'string' || !/^[A-Z]{2}$/.test(body.country_code.trim())) errors.country_code = 'Please select a valid country.';
-  if (!errors.postal_code && body.country_code?.trim().toUpperCase() === 'CA' &&
+  if (!errors.postal_code && typeof body.country_code === 'string' && body.country_code.trim().toUpperCase() === 'CA' &&
       !normalizePostalCode('CA', body.postal_code)) {
     errors.postal_code = 'Enter a Canadian postal code in the format A1A 1A1.';
   }

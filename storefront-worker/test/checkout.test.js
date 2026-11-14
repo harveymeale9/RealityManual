@@ -105,6 +105,9 @@ test('Canadian postcodes are canonical before quote, payment, and saved BookVaul
     { ...canadian, postal_code: 'not-a-postcode' }), env, '/api/checkout/create-payment-intent', deps);
   assert.equal(invalid.status, 400);
   assert.equal((await invalid.json()).fields.postal_code, 'Enter a Canadian postal code in the format A1A 1A1.');
+  const malformedCountry = await checkoutRoute(makeRequest('/api/checkout/create-payment-intent',
+    { ...canadian, country_code: 123 }), env, '/api/checkout/create-payment-intent', deps);
+  assert.equal(malformedCountry.status, 400);
   assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM orders').get().n, 1);
   sqlite.close();
 });
