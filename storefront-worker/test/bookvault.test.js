@@ -34,6 +34,11 @@ test('existing DocRef prevents a duplicate BookVault POST', async () => {
   assert.deepEqual(calls.map(([, method]) => method), ['GET']);
 });
 
+test('BookVault payload repairs an older unspaced Canadian postal code', () => {
+  const payload = orderPayload({ ...order, country: 'CA', postal_code: 'K1A0B1' }, env.BOOKVAULT_TITLE_ISBN);
+  assert.equal(payload.Address.Postcode, 'K1A 0B1');
+});
+
 test('refund cancellation refuses an active BookVault order', async () => {
   const fetcher = async () => response({ PodRef: 123, DocRef: order.id, Status: 'Active' });
   await assert.rejects(cancelUnpaidDraft(env, order.id, 123, fetcher), /not a verified unpaid draft/);

@@ -1,7 +1,7 @@
 import { calculateTotal } from './shipping.js';
 import { createPaymentIntent, stripeClient } from './stripeClient.js';
 import { attachPaymentIntent, createOrder, getOrderById, hasRecentPaidOrder, toPublicStatus } from './orderStore.js';
-import { normalizeOrderAttribution, normalizeQuantity, validateCheckoutInput } from './validation.js';
+import { normalizeOrderAttribution, normalizePostalCode, normalizeQuantity, validateCheckoutInput } from './validation.js';
 
 const PRODUCT_NAME = 'The Reality Manual';
 const PRODUCT_DESCRIPTION = 'Hardcover — Deluxe First Edition';
@@ -73,10 +73,10 @@ export async function checkoutRoute(request, env, path, { quote = calculateTotal
 
   if (path === '/api/shipping/calculate') {
     const country = String(body.country_code || '').trim().toUpperCase();
-    const postcode = String(body.postal_code || '').trim();
+    const postcode = normalizePostalCode(country, body.postal_code);
     const quantity = normalizeQuantity(body.quantity);
     if (!/^[A-Z]{2}$/.test(country)) return json({ error: 'invalid_country_code', message: 'Please select a valid country.' }, 400);
-    if (!postcode) return json({ error: 'invalid_postal_code', message: 'Please enter a postal/ZIP code.' }, 400);
+    if (!postcode) return json({ error: 'invalid_postal_code', message: country === 'CA' ? 'Enter a Canadian postal code in the format A1A 1A1.' : 'Please enter a postal/ZIP code.' }, 400);
     if (quantity === null) return json({ error: 'invalid_quantity', message: 'Quantity must be a whole number between 1 and 20.' }, 400);
     try {
       const totals = await quote(env, country, postcode, quantity);
@@ -100,7 +100,7 @@ export async function checkoutRoute(request, env, path, { quote = calculateTotal
   }, 409);
 
   const country = body.country_code.trim().toUpperCase();
-  const postcode = body.postal_code.trim();
+  const postcode = normalizePostalCode(country, body.postal_code);
   const quantity = normalizeQuantity(body.quantity);
   let totals;
   try {
@@ -118,7 +118,7 @@ export async function checkoutRoute(request, env, path, { quote = calculateTotal
     }, 409);
   }
 
-  const order = await createOrder(env.DB, body, totals, normalizeOrderAttribution(body.attribution));
+  const order = await createOrder(env.DB, { ...body, postal_code: postcode }, totals, normalizeOrderAttribution(body.attribution));
   try {
     const intent = await createPaymentIntent(payments(env.STRIPE_SECRET_KEY), {
       amountCents: totals.totalPriceCents, currency: totals.currency, orderId: order.id, country, quantity,

@@ -85,6 +85,30 @@ test('changed quote and invalid input do not create a D1 order or Stripe Payment
   sqlite.close();
 });
 
+test('Canadian postcodes are canonical before quote, payment, and saved BookVault address', async () => {
+  const { sqlite, env } = fixture();
+  const canadian = { ...body, country_code: 'CA', postal_code: 'k1a0b1' };
+  const quoted = [];
+  const deps = {
+    quote: async (_env, country, postal) => { quoted.push([country, postal]); return totals; },
+    payments: () => ({ paymentIntents: { create: async () => ({ id: 'pi_ca', client_secret: 'secret' }) } }),
+  };
+  const shipping = await checkoutRoute(makeRequest('/api/shipping/calculate', canadian), env,
+    '/api/shipping/calculate', deps);
+  assert.equal(shipping.status, 200);
+  const payment = await checkoutRoute(makeRequest('/api/checkout/create-payment-intent', canadian), env,
+    '/api/checkout/create-payment-intent', deps);
+  assert.equal(payment.status, 200);
+  assert.deepEqual(quoted, [['CA', 'K1A 0B1'], ['CA', 'K1A 0B1']]);
+  assert.equal(sqlite.prepare('SELECT postal_code FROM orders').get().postal_code, 'K1A 0B1');
+  const invalid = await checkoutRoute(makeRequest('/api/checkout/create-payment-intent',
+    { ...canadian, postal_code: 'not-a-postcode' }), env, '/api/checkout/create-payment-intent', deps);
+  assert.equal(invalid.status, 400);
+  assert.equal((await invalid.json()).fields.postal_code, 'Enter a Canadian postal code in the format A1A 1A1.');
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM orders').get().n, 1);
+  sqlite.close();
+});
+
 test('a signed-style paid webhook changes only the matching fully paid order', async () => {
   const { sqlite, env } = fixture();
   const create = await checkoutRoute(makeRequest('/api/checkout/create-payment-intent', body), env,

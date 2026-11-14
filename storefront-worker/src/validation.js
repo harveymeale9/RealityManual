@@ -7,6 +7,17 @@ export function normalizeQuantity(value) {
   return Number.isInteger(count) && count >= 1 && count <= 20 ? count : null;
 }
 
+// BookVault's /Countries format for Canada includes a mandatory space.
+// /Dispatch will quote a six-character value, but /Order rejects it.
+export function normalizePostalCode(country, value) {
+  if (typeof value !== 'string') return null;
+  const postal = value.trim();
+  if (String(country).trim().toUpperCase() !== 'CA') return postal || null;
+  const compact = postal.toUpperCase().replace(/[\s-]/g, '');
+  return /^[A-Z][0-9][A-Z][0-9][A-Z][0-9]$/.test(compact)
+    ? `${compact.slice(0, 3)} ${compact.slice(3)}` : null;
+}
+
 export function validateCheckoutInput(body = {}) {
   const errors = {};
   for (const [name, max] of Object.entries(limits)) {
@@ -21,6 +32,10 @@ export function validateCheckoutInput(body = {}) {
   if (typeof body.email === 'string' && body.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email.trim())) errors.email = 'A valid email address is required.';
   if (typeof body.phone === 'string' && body.phone.trim() && !/^\+?[\d\s\-.()/]{6,35}$/.test(body.phone.trim())) errors.phone = 'A valid phone number is required.';
   if (typeof body.country_code !== 'string' || !/^[A-Z]{2}$/.test(body.country_code.trim())) errors.country_code = 'Please select a valid country.';
+  if (!errors.postal_code && body.country_code?.trim().toUpperCase() === 'CA' &&
+      !normalizePostalCode('CA', body.postal_code)) {
+    errors.postal_code = 'Enter a Canadian postal code in the format A1A 1A1.';
+  }
   if (normalizeQuantity(body.quantity) === null) errors.quantity = 'Quantity must be a whole number between 1 and 20.';
   if (body.review_request_opt_in !== undefined && typeof body.review_request_opt_in !== 'boolean') errors.review_request_opt_in = 'Review email preference must be true or false.';
   return errors;

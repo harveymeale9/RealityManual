@@ -1,3 +1,5 @@
+import { normalizePostalCode } from './validation.js';
+
 // BookVault has no sandbox or idempotency key. Every POST is preceded by a
 // DocRef lookup, and an ambiguous response is never followed by a blind POST.
 async function request(env, method, path, body, fetcher = fetch) {
@@ -21,6 +23,8 @@ async function request(env, method, path, body, fetcher = fetch) {
 
 export function orderPayload(order, isbn) {
   if (!isbn) throw new Error('BOOKVAULT_TITLE_ISBN is not configured.');
+  const postalCode = normalizePostalCode(order.country, order.postal_code);
+  if (!postalCode) throw new Error('Order postal code is invalid for its country.');
   const payload = {
     Status: 'Active', DocRef: order.id, CustRef: order.id, PartnerID: 1,
     ProductionLevel: 'Standard',
@@ -30,7 +34,7 @@ export function orderPayload(order, isbn) {
     Notifications: { NotifyCustomer: false },
     Address: {
       Addressee: order.customer_name, Address1: order.street1, Address2: order.street2 || '',
-      Town: order.city, County: order.state || order.city, Postcode: order.postal_code,
+      Town: order.city, County: order.state || order.city, Postcode: postalCode,
       Country: { ISO_Code: order.country }, TelNumber: order.phone, Email: order.email,
     },
     OrderLines: [{ LineNumber: 1, ISBN: isbn, Quantity: Number(order.quantity) }],

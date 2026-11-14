@@ -48,6 +48,11 @@
     saveRecoveryChoice();
   });
   const PHONE_REGEX = /^\+?[\d\s\-.()/]{6,35}$/;
+  function canadianPostalCode(value) {
+    const compact = String(value || '').toUpperCase().replace(/[\s-]/g, '');
+    return /^[A-Z][0-9][A-Z][0-9][A-Z][0-9]$/.test(compact)
+      ? `${compact.slice(0, 3)} ${compact.slice(3)}` : null;
+  }
   // Field limits mirror BookVault's OrderAddress schema - see
   // backend/src/lib/validation.js and CLAUDE.md §64 for the source.
   const NAME_MAX = 200;
@@ -182,6 +187,14 @@
       shippingOriginNote.hidden = true;
       clearTimeout(postalDebounceTimer);
       postalDebounceTimer = setTimeout(updateShipping, 500);
+    });
+    postalInput.addEventListener('blur', () => {
+      if (countrySelect.value !== 'CA') return;
+      const formatted = canadianPostalCode(postalInput.value);
+      if (formatted && postalInput.value !== formatted) {
+        postalInput.value = formatted;
+        updateShipping();
+      }
     });
 
     qtyDecreaseButton.addEventListener('click', () => setQuantity(getQuantity() - 1));
@@ -371,6 +384,9 @@
 
     if (!values.postal_code.trim()) errors.postal_code = 'Postal/ZIP code is required.';
     else if (values.postal_code.length > POSTAL_MAX) errors.postal_code = `Must be ${POSTAL_MAX} characters or fewer.`;
+    else if (values.country_code === 'CA' && !canadianPostalCode(values.postal_code)) {
+      errors.postal_code = 'Enter a Canadian postal code in the format A1A 1A1.';
+    }
 
     return errors;
   }
@@ -380,6 +396,11 @@
     if (checkoutPaused) return;
     clearFormError();
     clearFieldErrors();
+
+    if (countrySelect.value === 'CA') {
+      const formatted = canadianPostalCode(postalInput.value);
+      if (formatted) postalInput.value = formatted;
+    }
 
     const values = {
       customer_name: form.customer_name.value,

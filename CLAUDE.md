@@ -22766,3 +22766,40 @@ actual visit-to-view percentage, so individual video figures are directly
 comparable to the aggregate. No attribution events or view counters were
 changed. The existing aggregate is visit-based, not raw YouTube click events,
 and excludes untagged/direct traffic by design.
+
+## Canadian postcode quote/order mismatch (2026-11-14)
+
+Paid order `57d29724` reached Stripe `succeeded` and its customer confirmation
+was sent, but BookVault rejected `/Order` twice with “A valid postcode for
+the country has not been supplied.” The customer had entered a six-character
+Canadian postal code without the separating space. Our frontend and Worker
+had required only a nonempty postcode; BookVault `/Dispatch` returned a normal
+UK-partner quote for both spaced and unspaced forms, so the quote was not an
+address-validity guarantee. A read-only `/Countries` call showed BookVault's
+Canada `PostcodeFormat` requires the space (`ANA NAN`). Four other paid
+Canadian orders in D1 were already accepted with that space. Canada Post's
+own addressing guidance also specifies uppercase with one space after the
+first three characters. No BookVault DocRef existed for the affected order.
+
+The saved postcode was changed **only by inserting that formatting space**
+using a conditional D1 update restricted to this paid retry row. The existing
+DocRef-checked retry then created exactly one BookVault order; D1 changed to
+`BOOKVAULT_ACCEPTED`, and an independent BookVault GET confirmed the matching
+DocRef/PodRef `3075566` in `Active` status with no critical error. Stripe's
+PaymentIntent was independently verified `succeeded` for the recorded $88.10;
+no second payment or manual BookVault POST was made. No customer email was sent
+beyond the previously sent confirmation.
+
+The production Worker now canonicalizes valid Canadian postal codes to
+uppercase `ANA NAN` before the shipping quote and before saving a payable
+order, and rejects malformed Canadian values with a field error before any
+PaymentIntent. The BookVault payload also canonicalizes older unspaced rows
+as a second guard. The checkout UI formats valid Canadian codes on blur or
+submit and highlights malformed ones. This fixes the confirmed Canadian
+format gap; `/Dispatch` remains a pricing quote, not a guarantee that every
+other destination's complete address will pass `/Order`. The Worker change
+was deployed as version `7df024b6-f645-483d-bd17-d8fe21aae11b`; live probes
+found malformed Canadian values rejected with HTTP 400 at both quote and
+payment routes, while a valid unspaced value was normalized and quoted. All
+25 Worker tests passed. The static checkout change publishes through GitHub
+Pages on the associated push.
