@@ -1396,7 +1396,15 @@ async function getValidYoutubeAccessToken() {
 // report builder. Open lazily so a temporary mount problem cannot prevent the
 // rest of Content Studio from starting.
 let storefrontReportDb = null;
+const remoteStorefrontReports = process.env.STOREFRONT_REPORT_SOURCE === 'worker'
+  ? require('./src/storefrontRemoteSnapshot').setup({
+    url: process.env.STOREFRONT_REPORT_URL || 'https://api.realitymanual.com/api/internal/report-snapshot',
+    accessToken: process.env.STOREFRONT_REPORT_TOKEN
+  })
+  : null;
+if (remoteStorefrontReports) remoteStorefrontReports.start();
 function getStorefrontReportDb() {
+  if (remoteStorefrontReports) return remoteStorefrontReports.getDb();
   if (!storefrontReportDb) {
     storefrontReportDb = new Database(process.env.STOREFRONT_DB_PATH || '/store-data/reality-manual.db', {
       readonly: true,

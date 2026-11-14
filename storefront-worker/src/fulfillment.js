@@ -3,6 +3,7 @@ import { cancelUnpaidDraft, getOrder, submitOrder } from './bookvault.js';
 import { orderConfirmedEmail, orderRefundedEmail, orderShippedEmail, quantityBand, sendEmail } from './mail.js';
 import { refundPayment, stripeClient } from './stripeClient.js';
 import { captureBookVaultCost } from './bookvaultCost.js';
+import { syncPurchaserContact } from './resendContacts.js';
 
 const RETRY_MINUTES = [1, 5, 20, 60, 60];
 const STATUS_POLL_MINUTES = 15;
@@ -25,6 +26,25 @@ async function update(db, orderId, sql, ...values) {
 
 async function next(db, order, minutes = STATUS_POLL_MINUTES) {
   await update(db, order.id, 'UPDATE orders SET fulfillment_next_attempt_at = ?', later(minutes));
+}
+
+async function syncPurchaser(env, order) {
+  if (order.resend_contact_synced_at) return true;
+  try {
+    const summary = await env.DB.prepare(`SELECT COUNT(*) AS purchase_order_count,
+      COALESCE(SUM(quantity),0) AS lifetime_book_quantity,
+      COALESCE(MAX(quantity),0) AS largest_order_quantity,
+      MIN(created_at) AS first_purchase_at, MAX(created_at) AS latest_purchase_at
+      FROM orders WHERE LOWER(email) = LOWER(?)
+      AND order_status IN ('BOOKVAULT_ACCEPTED','SHIPPED')`).bind(order.email).first();
+    await syncPurchaserContact(env, order, summary);
+    await update(env.DB, order.id, 'UPDATE orders SET resend_contact_synced_at = ?', nowIso());
+    return true;
+  } catch (error) {
+    await log(env.DB, order.id, 'resend', 'purchaser_contact_sync_failed', error.message);
+    await next(env.DB, order);
+    return false;
+  }
 }
 
 async function sendTemplate(env, order, kind, template, suffix) {
@@ -122,6 +142,10 @@ async function checkProgress(env, order) {
 }
 
 async function processOrder(env, order) {
+  if (order.order_status === 'SHIPPED') {
+    await syncPurchaser(env, order);
+    return;
+  }
   if (order.order_status === 'REFUNDED') {
     if (!order.refund_email_sent_at) await sendTemplate(env, order, 'refund', orderRefundedEmail(order), 'refund');
     await update(env.DB, order.id, 'UPDATE orders SET fulfillment_next_attempt_at = NULL');
@@ -132,6 +156,7 @@ async function processOrder(env, order) {
     catch (error) { await log(env.DB, order.id, 'resend', 'confirmation_email_failed', error.message); }
   }
   if (order.order_status === 'BOOKVAULT_ACCEPTED') {
+    await syncPurchaser(env, order);
     await checkProgress(env, order);
     return;
   }
@@ -151,7 +176,8 @@ async function claimNext(db) {
     WHERE id = (
       SELECT id FROM orders WHERE stripe_livemode = 1
         AND (order_status IN ('PAYMENT_RECEIVED','FULFILLMENT_RETRY','BOOKVAULT_ACCEPTED')
-          OR (order_status = 'REFUNDED' AND refund_email_sent_at IS NULL))
+          OR (order_status = 'REFUNDED' AND refund_email_sent_at IS NULL)
+          OR (order_status = 'SHIPPED' AND resend_contact_synced_at IS NULL))
         AND (fulfillment_next_attempt_at IS NULL OR fulfillment_next_attempt_at <= strftime('%Y-%m-%dT%H:%M:%fZ','now'))
       ORDER BY created_at LIMIT 1
     ) RETURNING *`).first();

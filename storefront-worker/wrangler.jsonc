@@ -10,7 +10,9 @@
     "STRIPE_PUBLISHABLE_KEY": "pk_live_51TYNf5R2O5kp0xhWex3Q5UOtulEZfqMTrNqehGCKy0frmWaSDoyTJlpStmxnxShHSvm8o7t4GfrqsM1TjD7QmEsG00r7RXTHWS",
     "BOOKVAULT_TITLE_ISBN": "9658364000016",
     "RESEND_FROM_EMAIL": "The Reality Manual <orders@realitymanual.com>",
-    "RESEND_REPLY_TO": "info@realitymanual.com"
+    "RESEND_REPLY_TO": "info@realitymanual.com",
+    "REPORTS_ENABLED": "false",
+    "REPORT_ALLOWED_IPS": "187.124.146.235,2a02:4780:4:12d1::1"
   },
   "d1_databases": [
     {

@@ -22569,3 +22569,27 @@ analytics/review/contact and Content Studio reporting migration, live-safe
 configuration verification, fresh D1 sync and in-flight Stripe/BookVault
 reconciliation, and a controlled one-active-backend cutover. Never enable
 checkout on the stale one-time D1 snapshot or advertise the migration as live.
+
+Further stage-2 work added first-party analytics event/summary and daily
+anonymous aggregation, review unsubscribe/request timing, Resend contact
+sync, email-health metrics, and a PII-stripped D1 report snapshot. Content
+Studio has a dormant alternative report source that fetches this snapshot
+every 30 seconds into an in-memory SQLite database, allowing its existing
+sales/website reports to run without writing customer data to VPS disk.
+The source is not enabled in the running ops-service. Targeted report tests
+passed, and a local Wrangler/D1 runtime smoke test with fake provider keys
+passed checkout availability, CORS preflight, analytics event/summary, and
+the scheduled handler. No live payment or print order was created.
+
+A staging read-only report feed was briefly tested using only a VPS IP
+allowlist. A spoofed `CF-Connecting-IP` header changed the allowlist result,
+so IP alone was rejected as insufficient authentication. The feed was
+immediately redeployed closed (`REPORTS_ENABLED=false`) and a bearer-token
+requirement added; live probes now return 403 even with a spoofed IP header.
+The exposed snapshot contained no customer names, emails, phone numbers,
+street addresses or postcodes, but did contain order IDs and business
+metrics. No evidence of third-party access was found, although historical
+request logs were not available to prove none occurred. The credential for
+this private feed must be generated and installed by Harvey, never by the
+agent. `storefront-worker/scripts/setup-report-auth.sh` is an owner-only
+command; it has **not** been run. Production remains on the VPS.

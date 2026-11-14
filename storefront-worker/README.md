@@ -26,6 +26,13 @@ Do not point production traffic here yet.
   duplicate and mismatched webhooks, a paid order through receipt and
   BookVault acceptance, scheduled-payment drafts, and active-order refund
   refusal. These are **not** live-payment or live-BookVault acceptance tests.
+- Analytics ingestion/summary, review unsubscribe/request scheduling, Resend
+  purchaser contacts, and a PII-stripped report snapshot are now staged. A
+  local Cloudflare-runtime smoke test passed with fake provider keys and a
+  separate local D1 database; no live payment or print order was created.
+- The report feed is closed until both an owner-installed bearer token and
+  the known VPS egress IP match. A staging probe showed that trusting a
+  client-supplied IP header alone is unsafe, so `REPORTS_ENABLED=false`.
 
 ## Owner-only credential step
 
@@ -43,16 +50,29 @@ to Git. The script does not affect the live API or any other Worker.
 Harvey ran this script on 2026-11-14; a names-only check confirmed all four
 secrets are present in the staging Worker. Their values were not inspected.
 
+Before private Content Studio reports can switch to D1, Harvey must run this
+second **owner-only** command on the VPS. It generates and installs a new
+report-only bearer token without printing it, leaves reporting switched off,
+and does not affect live checkout:
+
+```bash
+sudo bash /srv/realitymanual-repo/storefront-worker/scripts/setup-report-auth.sh
+```
+
+The Project Manager agent must not run this credential-generation script.
+After Harvey confirms it ran, verify secret **names only**, enable the
+report feed, test the in-memory PII-stripped snapshot, and only then switch
+`STOREFRONT_REPORT_SOURCE=worker` during the final controlled cutover.
+
 See [FAILOVER.md](./FAILOVER.md) for the one-active-backend rule and temporary
 cutover recovery plan. Harvey does not want a permanent redundant checkout.
 The next real order still uses the VPS backend.
 
 ## Remaining release gates
 
-1. Finish and test analytics, review unsubscribe/request, email-health,
-   purchaser contact syncing, retention, and Content Studio report migration.
-   The checkout and fulfillment port above is still disabled and needs more
-   failure-path and Cloudflare-runtime testing before production use.
+1. Finish and test failure paths, retention, and authenticated Content Studio
+   report access. All staged checkout, analytics, email, and report code remains
+   disabled for production traffic; the report token owner step above remains.
 2. Verify the scheduled D1 claim, retries, dispatch email, 24-hour deadline,
    and BookVault cost capture on Cloudflare's runtime with mocked providers.
    Never create a real charge or BookVault order merely to test.
