@@ -97,7 +97,7 @@
       statusEyebrow.textContent = 'Order received';
       statusTitle.removeAttribute('aria-label');
       statusTitle.textContent = 'We have your order';
-      statusMessage.textContent = "Your payment was received and your order is accepted. We are arranging production with our printer. If that takes longer than expected, we aim to resolve it within 24 hours and will email you. Please do not pay again.";
+      statusMessage.textContent = "Your payment was received and your order is accepted. We are arranging production with our printer. If that takes longer than expected, we aim to resolve it within 60 hours and will email you. Please do not pay again.";
       trackPurchase(order);
       return true;
     }

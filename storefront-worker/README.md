@@ -20,7 +20,7 @@ Do not point production traffic here yet.
 - Ported code now includes D1 order creation/status, quote validation,
   opt-in recovery capture, Stripe PaymentIntent creation and signed webhooks,
   BookVault DocRef-safe submission/polling, customer receipt/shipping/refund
-  emails, Stripe payment reconciliation, and guarded 24-hour refund handling.
+  emails, Stripe payment reconciliation, and guarded 60-hour refund handling.
   A five-minute scheduled sweep is inert while fulfillment is disabled.
 - Unit and synthetic request tests cover the browser checkout contract,
   duplicate and mismatched webhooks, a paid order through receipt and
@@ -73,7 +73,7 @@ The next real order still uses the VPS backend.
 1. Finish and test failure paths, retention, and authenticated Content Studio
    report access. All staged checkout, analytics, email, and report code remains
    disabled for production traffic; the report token owner step above remains.
-2. Verify the scheduled D1 claim, retries, dispatch email, 24-hour deadline,
+2. Verify the scheduled D1 claim, retries, dispatch email, 60-hour deadline,
    and BookVault cost capture on Cloudflare's runtime with mocked providers.
    Never create a real charge or BookVault order merely to test.
 3. Replace Content Studio's direct SQLite reads for Sales Analytics and Orders

@@ -508,7 +508,7 @@
           if (order.order_status === 'REFUNDED') return 'Refunded';
           if (order.order_status === 'SHIPPED') return 'Dispatched';
           if (order.order_status === 'BOOKVAULT_ACCEPTED') return 'BookVault active';
-          if (order.awaiting_bookvault) return order.overdue ? 'Over 24h · action needed' : 'Accepted · arranging BookVault';
+          if (order.awaiting_bookvault) return order.overdue ? 'Over 60h · action needed' : 'Accepted · arranging BookVault';
           if (order.order_status === 'FAILED') return 'Payment failed · no order';
           return 'Payment not confirmed';
         }
@@ -516,18 +516,18 @@
           if (!order.deadline_at) return '';
           var minutes = Math.ceil((Date.parse(order.deadline_at) - Date.now()) / 60000);
           return '<span class="orders-deadline' + (minutes <= 0 ? ' overdue' : '') + '">' +
-            (minutes <= 0 ? '24h deadline passed' : '24h check in ' + Math.floor(minutes / 60) + 'h ' + (minutes % 60) + 'm') +
+            (minutes <= 0 ? '60h deadline passed' : '60h check in ' + Math.floor(minutes / 60) + 'h ' + (minutes % 60) + 'm') +
             ' · ' + escapeHtml(dateText(order.deadline_at)) + ' (+7)</span>';
         }
         var summary = data.summary || {};
         panelMain.innerHTML = '<div class="orders-health">' +
           '<header class="orders-head"><div><div class="eyebrow">Storefront · live order health</div><h2>Orders</h2>' +
-          '<p>Payment is accepted immediately. BookVault production is tracked separately for 24 hours.</p></div>' +
+          '<p>Payment is accepted immediately. BookVault production is tracked separately for 60 hours.</p></div>' +
           '<button type="button" class="btn-secondary" id="ordersRefresh">Refresh</button></header>' +
           '<div class="orders-metrics">' +
             '<div><span>Paid · recent 100</span><strong>' + (summary.paid_orders || 0) + '</strong></div>' +
             '<div><span>Arranging BookVault</span><strong>' + (summary.awaiting_bookvault || 0) + '</strong></div>' +
-            '<div class="' + (summary.overdue ? 'needs-attention' : '') + '"><span>Past 24h deadline</span><strong>' + (summary.overdue || 0) + '</strong></div>' +
+            '<div class="' + (summary.overdue ? 'needs-attention' : '') + '"><span>Past 60h deadline</span><strong>' + (summary.overdue || 0) + '</strong></div>' +
             '<div><span>BookVault active</span><strong>' + (summary.in_production || 0) + '</strong></div>' +
             '<div><span>Dispatched</span><strong>' + (summary.shipped || 0) + '</strong></div>' +
           '</div>' +

@@ -22713,6 +22713,20 @@ reading the D1 snapshot. Worker error logs showed no post-cutover error.
 This establishes the first real checkout-to-Stripe-to-email-to-BookVault path;
 the VPS checkout and jobs remain paused as a controlled recovery option.
 
+## BookVault resolution window extended to 60 hours (2026-11-14)
+
+Harvey extended the paid-order BookVault resolution window from 24 to 60
+hours, measured from confirmed Stripe payment (legacy records fall back to
+order creation). This supersedes the 24-hour deadline described in earlier
+incident sections. The Cloudflare Worker and paused VPS fallback both use
+60 hours for guarded cancellation/refund decisions and owner deadline alerts.
+BookVault `BatchPayment`/`Created` remains a normal pending state: the saved
+PodRef is polled without a duplicate order or routine owner alarm. The
+customer receipt, confirmation page, and Content Studio Orders health
+deadline/copy now all say 60 hours. The 24-hour *Stripe pending-payment
+reconciliation* and duplicate-payment checks are separate safeguards and
+were deliberately not changed. Previously sent receipts cannot be altered.
+
 ## Sales Analytics section order (2026-11-14)
 
 The `Recent orders` block now renders before `Refunds & reasons`, so refunds

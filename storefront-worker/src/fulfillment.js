@@ -7,10 +7,10 @@ import { syncPurchaserContact } from './resendContacts.js';
 
 const RETRY_MINUTES = [1, 5, 20, 60, 60];
 const STATUS_POLL_MINUTES = 15;
-const ONE_DAY_MS = 86400000;
+const FULFILLMENT_WINDOW_MS = 60 * 60 * 60 * 1000;
 const nowIso = () => new Date().toISOString();
 const later = (minutes) => new Date(Date.now() + minutes * 60000).toISOString();
-const deadlineAt = (order) => Date.parse(order.payment_received_at || order.created_at) + ONE_DAY_MS;
+export const deadlineAt = (order) => Date.parse(order.payment_received_at || order.created_at) + FULFILLMENT_WINDOW_MS;
 
 async function log(db, orderId, service, type, error, attempt = 1) {
   try {
@@ -71,8 +71,8 @@ async function ownerAlert(env, order, message, deadline = false) {
   const safeMessage = String(message).replaceAll('&', '&amp;').replaceAll('<', '&lt;');
   await sendEmail(env, {
     to: env.ORDER_ALERT_EMAIL || 'harveymeale9@gmail.com', subject,
-    html: `<p>Paid order ${shortId} needs BookVault attention.</p><p>${safeMessage}</p><p>24-hour deadline: ${new Date(deadlineAt(order)).toISOString()}</p>`,
-    text: `Paid order ${shortId} needs BookVault attention. ${message}\n24-hour deadline: ${new Date(deadlineAt(order)).toISOString()}`,
+    html: `<p>Paid order ${shortId} needs BookVault attention.</p><p>${safeMessage}</p><p>60-hour deadline: ${new Date(deadlineAt(order)).toISOString()}</p>`,
+    text: `Paid order ${shortId} needs BookVault attention. ${message}\n60-hour deadline: ${new Date(deadlineAt(order)).toISOString()}`,
     idempotencyKey: `${order.id}-${deadline ? 'fulfillment-deadline-alert' : 'fulfillment-alert'}`,
   });
   await update(env.DB, order.id, `UPDATE orders SET ${column} = ?`, nowIso());

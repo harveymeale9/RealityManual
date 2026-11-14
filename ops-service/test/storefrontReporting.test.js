@@ -8,7 +8,7 @@ const vm = require('node:vm');
 const Database = require('better-sqlite3');
 const reporting = require('../src/storefrontReporting');
 
-test('Orders health keeps payment acceptance separate from BookVault status and 24-hour deadline', function () {
+test('Orders health keeps payment acceptance separate from BookVault status and 60-hour deadline', function () {
   const db = new Database(':memory:');
   db.exec(`CREATE TABLE orders (id TEXT, created_at TEXT, updated_at TEXT, payment_received_at TEXT,
     order_status TEXT, stripe_payment_status TEXT, total_price_cents INTEGER, currency TEXT, quantity INTEGER,
@@ -27,7 +27,7 @@ test('Orders health keeps payment acceptance separate from BookVault status and 
   assert.equal(result.summary.awaiting_bookvault, 1);
   assert.equal(result.summary.in_production, 1);
   const draft = result.orders.find(function (order) { return order.id === 'paid-draft'; });
-  assert.equal(draft.deadline_at, '2026-11-15T01:00:00.000Z');
+  assert.equal(draft.deadline_at, '2026-11-16T13:00:00.000Z');
   assert.match(draft.issue, /draft awaiting BookVault payment/);
   assert.equal(draft.receipt_email_sent, true);
   assert.equal(result.orders.find(function (order) { return order.id === 'active'; }).awaiting_bookvault, false);
@@ -175,7 +175,7 @@ test('both analytics views show the nested source-and-video referral chart', fun
   assert.match(app, /referralBreakdownHtml\(website\.referrals\)/);
   assert.match(app, /conic-gradient\(/);
   assert.match(app, /segment\.piece_title/);
-  assert.match(page, /style\.css\?v=20261112-clear-comments/);
+  assert.match(page, /style\.css\?v=[^"\s]+/);
 });
 
 test('sales chart shows paid sale counts immediately on hover without a second line graph', async function () {

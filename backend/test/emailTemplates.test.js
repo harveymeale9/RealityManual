@@ -29,6 +29,8 @@ test('confirmation email is branded, responsive, plain-text backed, and escapes 
   assert.match(email.html, /leading printers of bespoke books/);
   assert.match(email.html, /time and individual attention/);
   assert.match(email.html, /We are arranging production/);
+  assert.match(email.html, /within 60 hours/);
+  assert.match(email.text, /within 60 hours/);
   assert.doesNotMatch(email.html, /<script>alert/);
   assert.match(email.html, /Ava &lt;script&gt;/);
   assert.match(email.text, /Hardcover, Deluxe First Edition/);

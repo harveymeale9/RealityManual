@@ -228,13 +228,14 @@ test('a Resend contact-sync outage does not block confirmation or fulfillment', 
   assert.equal(sent.length, 1);
 });
 
-test('paid order is acknowledged and retried without refund before the 24-hour deadline', async () => {
+test('25-hour-old paid order is retried without refund before the 60-hour deadline', async () => {
   const order = paidOrder();
+  db.prepare('UPDATE orders SET payment_received_at=? WHERE id=?').run(new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(), order.id);
   const sent = [];
   bookvaultService.submitOrder = async () => { throw new Error('BookVault unavailable'); };
   resendClient.sendEmail = async (message) => { sent.push(message); return { id: 'email_test' }; };
   stripeService.refundPayment = async () => { throw new Error('should not refund yet'); };
-  await fulfillmentService.processOrder(order);
+  await fulfillmentService.processOrder(orderService.getById(order.id));
   const stored = orderService.getById(order.id);
   assert.equal(stored.order_status, 'FULFILLMENT_RETRY');
   assert.ok(stored.confirmation_email_sent_at);
@@ -288,7 +289,7 @@ test('a previously accepted local reference that is still in BookVault payment b
 
 test('expired paid order cancels a verified BookVault draft before refunding', async () => {
   const order = paidOrder();
-  db.prepare('UPDATE orders SET payment_received_at=? WHERE id=?').run(new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(), order.id);
+  db.prepare('UPDATE orders SET payment_received_at=? WHERE id=?').run(new Date(Date.now() - 61 * 60 * 60 * 1000).toISOString(), order.id);
   let cancelled = false;
   let refunded = false;
   bookvaultService.submitOrder = async () => { const err = new Error('draft unpaid'); err.podRef = 7124; throw err; };
@@ -305,7 +306,7 @@ test('expired paid order cancels a verified BookVault draft before refunding', a
 
 test('uncertain BookVault draft cancellation is escalated, not refunded', async () => {
   const order = paidOrder();
-  db.prepare('UPDATE orders SET payment_received_at=? WHERE id=?').run(new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(), order.id);
+  db.prepare('UPDATE orders SET payment_received_at=? WHERE id=?').run(new Date(Date.now() - 61 * 60 * 60 * 1000).toISOString(), order.id);
   bookvaultService.submitOrder = async () => { throw new Error('draft unpaid'); };
   bookvaultService.cancelUnpaidDraft = async () => { throw new Error('status uncertain'); };
   stripeService.refundPayment = async () => { throw new Error('unsafe refund'); };

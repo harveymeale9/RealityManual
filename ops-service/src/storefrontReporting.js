@@ -562,7 +562,7 @@ function getOrdersHealth(db, nowValue, excludedIds) {
     const paid = ['succeeded', 'paid'].includes(row.stripe_payment_status) && row.order_status !== 'REFUNDED';
     const awaitingPrinter = paid && ['PAYMENT_RECEIVED', 'FULFILLMENT_RETRY', 'BOOKVAULT_PENDING'].includes(row.order_status);
     const paidAt = row.payment_received_at || (paid ? row.created_at : null);
-    const deadline = paidAt && awaitingPrinter ? new Date(Date.parse(paidAt) + 24 * 60 * 60 * 1000).toISOString() : null;
+    const deadline = paidAt && awaitingPrinter ? new Date(Date.parse(paidAt) + 60 * 60 * 60 * 1000).toISOString() : null;
     return {
       id: row.id, created_at: row.created_at, updated_at: row.updated_at,
       paid_at: paidAt, deadline_at: deadline,

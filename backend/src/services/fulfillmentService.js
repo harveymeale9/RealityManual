@@ -12,7 +12,7 @@ const {
 } = require('./emailTemplates');
 
 const RETRY_MINUTES = [1, 5, 20, 60, 60];
-const FULFILLMENT_WINDOW_MS = 24 * 60 * 60 * 1000;
+const FULFILLMENT_WINDOW_MS = 60 * 60 * 60 * 1000;
 const STATUS_POLL_MINUTES = 15;
 let processing = false;
 let lastStripeReconcileAt = 0;
@@ -33,8 +33,8 @@ async function alertOwner(order, message) {
     await resendClient.sendEmail({
       to: process.env.ORDER_ALERT_EMAIL || 'harveymeale9@gmail.com',
       subject: `Action needed: paid order ${shortId} awaiting BookVault`,
-      html: `<p>A customer payment was accepted, but BookVault has not accepted order ${shortId}.</p><p>${String(message).replaceAll('&', '&amp;').replaceAll('<', '&lt;')}</p><p>Check the BookVault title and GBP funding. The 24-hour refund deadline is ${new Date(fulfillmentDeadline(order) || Date.now()).toISOString()}.</p>`,
-      text: `Paid order ${shortId} is awaiting BookVault. ${message}\n24-hour refund deadline: ${new Date(fulfillmentDeadline(order) || Date.now()).toISOString()}.`,
+      html: `<p>A customer payment was accepted, but BookVault has not accepted order ${shortId}.</p><p>${String(message).replaceAll('&', '&amp;').replaceAll('<', '&lt;')}</p><p>Check the BookVault title and GBP funding. The 60-hour refund deadline is ${new Date(fulfillmentDeadline(order) || Date.now()).toISOString()}.</p>`,
+      text: `Paid order ${shortId} is awaiting BookVault. ${message}\n60-hour refund deadline: ${new Date(fulfillmentDeadline(order) || Date.now()).toISOString()}.`,
       idempotencyKey: `${order.id}-fulfillment-alert`,
     });
     orderService.markFulfillmentAlertSent(order.id);
@@ -49,8 +49,8 @@ async function alertOwnerDeadline(order, message) {
     await resendClient.sendEmail({
       to: process.env.ORDER_ALERT_EMAIL || 'harveymeale9@gmail.com',
       subject: `URGENT: paid order ${order.id.slice(0, 8)} needs manual refund review`,
-      html: `<p>The 24-hour BookVault deadline passed for paid order ${order.id.slice(0, 8)}, but a safe refund could not be verified.</p><p>${String(message).replaceAll('&', '&amp;').replaceAll('<', '&lt;')}</p>`,
-      text: `The 24-hour BookVault deadline passed for paid order ${order.id.slice(0, 8)}, but a safe refund could not be verified. ${message}`,
+      html: `<p>The 60-hour BookVault deadline passed for paid order ${order.id.slice(0, 8)}, but a safe refund could not be verified.</p><p>${String(message).replaceAll('&', '&amp;').replaceAll('<', '&lt;')}</p>`,
+      text: `The 60-hour BookVault deadline passed for paid order ${order.id.slice(0, 8)}, but a safe refund could not be verified. ${message}`,
       idempotencyKey: `${order.id}-fulfillment-deadline-alert`,
     });
     orderService.markFulfillmentDeadlineAlertSent(order.id);
