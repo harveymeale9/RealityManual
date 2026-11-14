@@ -22289,3 +22289,27 @@ pre-existing static homepage HTML assertion failure after a separate VSL
 markup change; 43/44 tests otherwise pass. Checkout remains paused until
 BookVault funding/title readiness and the outstanding paid orders are
 reconciled, not merely until this code deploys.
+
+## Payment-incident transaction and complaint reconciliation (2026-11-14)
+
+The 12 live successful Stripe PaymentIntents created from 2026-11-13 18:00
+UTC matched 12 storefront orders exactly; there were no unmatched paid
+Stripe intents in that window. Read-only Stripe reconciliation confirmed nine
+full refunds in `succeeded` status and three still-captured payments. The
+remaining three are `264d418f` (fulfillment retry, no BookVault DocRef
+found), `f83be348` and `fb9e95a6` (both locally marked accepted with
+confirmation emails sent, but their BookVault GETs still reported
+`BatchPayment`/`Created`). Do not interpret those draft references as proof
+of production. Checkout remains paused. No payment/refund or BookVault order
+was created or retried during this audit.
+
+Three human customer complaint threads were found for this incident. The
+first was already personally answered in the previous task. The other two
+were personally answered in their existing mailbox threads on 2026-11-14:
+the responses distinguished confirmed refunds from still-captured payments,
+acknowledged the erroneous confirmation/retry advice, and instructed the
+customers not to pay again. One explicitly requested a refund of the third
+payment; that request was escalated to Harvey, not silently executed. Full
+recipient identities and addresses are deliberately omitted here. Verify the
+remaining drafts/payment outcome before giving those customers a final
+fulfillment or refund confirmation.
