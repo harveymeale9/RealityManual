@@ -22700,3 +22700,11 @@ be reconciled safely, leave checkout paused and alert Harvey promptly rather
 than creating duplicate charges, emails or print orders. Keep Harvey informed
 of any actual rollback and its cause, but do not wait for approval to perform
 the authorized safe rollback.
+
+## Sales Analytics section order (2026-11-14)
+
+The `Recent orders` block now renders before `Refunds & reasons`, so refunds
+sit directly below the order list as Harvey requested. The refund jump target
+and reason-note controls are unchanged. This is a static `ops-service/public`
+change, so the existing frontend-only CI path deploys it without restarting
+the Project Manager container.
