@@ -279,6 +279,25 @@
     errorBanner.classList.add('visible');
   }
 
+  function showPaymentUncertain(confirmationUrl) {
+    showFormError('We cannot confirm your payment yet. Please do not pay again. Check your order status here, and watch your email for an update.');
+    const link = document.createElement('a');
+    link.href = confirmationUrl;
+    link.textContent = 'Check order status';
+    link.style.cssText = 'display:block;margin-top:0.5rem;text-decoration:underline';
+    errorBanner.appendChild(link);
+    submitButton.disabled = true;
+    submitButton.textContent = 'Check order status above';
+  }
+
+  function withTimeout(promise, milliseconds) {
+    let timer;
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('payment_step_timeout')), milliseconds); }),
+    ]).finally(() => clearTimeout(timer));
+  }
+
   function clearFormError() {
     errorBanner.textContent = '';
     errorBanner.classList.remove('visible');
@@ -365,7 +384,15 @@
     submitButton.disabled = true;
     submitButton.textContent = 'Processing…';
 
-    const { error: submitError } = await elements.submit();
+    let submitError;
+    try {
+      ({ error: submitError } = await withTimeout(elements.submit(), 30000));
+    } catch {
+      showFormError('Secure payment did not respond. No payment has been started. Please refresh this page and try again.');
+      submitButton.disabled = false;
+      submitButton.textContent = `Pay ${formatCents(currentTotalCents)}`;
+      return;
+    }
     if (submitError) {
       showFormError(submitError.message || 'Please check your payment details.');
       submitButton.disabled = false;
@@ -378,6 +405,7 @@
       const res = await fetch(`${API_BASE_URL}/api/checkout/create-payment-intent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(20000),
         body: JSON.stringify({ ...values, quoted_total_price_cents: lastQuote.totalPriceCents,
           attribution: RMAnalytics.getCheckoutAttribution() }),
       });
@@ -425,15 +453,23 @@
 
     RMAnalytics.track('payment_submitted', { order_id: orderResponse.order_id });
 
-    const { error: confirmError } = await stripe.confirmPayment({
-      elements,
-      clientSecret: orderResponse.client_secret,
-      confirmParams: {
-        return_url: confirmationUrl,
-      },
-    });
+    let confirmError;
+    try {
+      ({ error: confirmError } = await withTimeout(stripe.confirmPayment({
+        elements,
+        clientSecret: orderResponse.client_secret,
+        confirmParams: { return_url: confirmationUrl },
+      }), 35000));
+    } catch {
+      showPaymentUncertain(confirmationUrl);
+      return;
+    }
 
     if (confirmError) {
+      if (!['card_error', 'validation_error'].includes(confirmError.type)) {
+        showPaymentUncertain(confirmationUrl);
+        return;
+      }
       showFormError(confirmError.message || 'Your payment could not be completed. Please try again.');
       submitButton.disabled = false;
       submitButton.textContent = `Pay ${formatCents(currentTotalCents)}`;

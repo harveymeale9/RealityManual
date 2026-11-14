@@ -22363,3 +22363,11 @@ deleted order as a readable `Deleted` record rather than returning 404, so
 `cancelUnpaidDraft` now treats that verified terminal state as safe, including
 on repeat calls. The other historical draft remains for manual payment or
 24-hour resolution; do not submit a duplicate BookVault order for it.
+
+The checkout page also bounds Stripe Element submission (30s), PaymentIntent
+creation (20s), and Stripe confirmation (35s). If confirmation times out or
+returns an indeterminate error after a PaymentIntent exists, it disables the
+Pay button and links to the order-status page with explicit “do not pay again”
+copy. A definite card/validation error still permits correction and retry.
+This avoids an indefinite Processing state and a second charge on an unclear
+first attempt.
