@@ -22727,6 +22727,16 @@ deadline/copy now all say 60 hours. The 24-hour *Stripe pending-payment
 reconciliation* and duplicate-payment checks are separate safeguards and
 were deliberately not changed. Previously sent receipts cannot be altered.
 
+Deployment verification: Worker version `0c7c47f8-b922-4456-8577-c415f8f232d9`
+was deployed to the live API; all 23 Worker, 56 backend and 15 targeted
+Content Studio tests passed. The paused VPS fallback was rebuilt and verified
+with checkout unavailable/jobs disabled. GitHub's storefront and ops-service
+deploy workflows completed successfully. Live confirmation JavaScript and
+Content Studio Orders copy say 60 hours, the running ops-service report code
+computes 60-hour deadlines, and the live Orders health endpoint returned 200.
+At verification, production D1 had no paid orders awaiting BookVault, so no
+in-flight order required migration or deadline adjustment.
+
 ## Sales Analytics section order (2026-11-14)
 
 The `Recent orders` block now renders before `Refunds & reasons`, so refunds
