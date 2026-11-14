@@ -43,6 +43,8 @@ test('matches only long-form video landings to post-tracking view growth, with a
   assert.equal(result.visits, 4);
   assert.equal(result.rate_percent, 8);
   assert.equal(result.views_per_visit, 12.5);
+  assert.deepEqual(result.videos.map((row) => [row.seq, row.views, row.visits, row.rate_percent]),
+    [[11, 30, 3, 10], [12, 20, 1, 5]]);
   assert.deepEqual(result.daily.map((row) => [row.views, row.visits, row.rolling_rate_percent]), [[10, 2, 20], [40, 2, 8]]);
 });
 

@@ -999,7 +999,7 @@
     return '<section class="referral-breakdown"><div class="referral-head"><div class="eyebrow">Content → website · last 30 days</div>' +
       '<h3>Where attributed traffic came from</h3></div>' +
       (total ? '<div class="referral-body"><div class="referral-donut" role="img" aria-label="Share of verified tagged visits by platform and link" style="background:' + gradient + '">' +
-        '<div><strong>' + total.toLocaleString('en-US') + '</strong><span>attributed visits</span></div></div><div class="referral-sources">' + sourceRows + '</div></div>' :
+        '<div><strong>' + total.toLocaleString('en-US') + '</strong><span>attributed visits</span></div></div><div class="referral-sources"><p class="referral-share-label">Percentages below are each link’s share of all ' + total.toLocaleString('en-US') + ' attributed website visits, not clicks per YouTube view.</p>' + sourceRows + '</div></div>' :
         '<div class="empty-slot">No verified UTM-tagged visits in this period yet.</div>') +
       '<p class="referral-definition">' + escapeHtml(referrals.definition || 'Verified attribution, not raw clicks.') +
       ' One browser can appear under different links on the same day. Source shares are directional while older source-only history remains in the chart.</p></section>';
@@ -1034,13 +1034,16 @@
         '<text x="40" y="180" class="youtube-clickthrough-date">' + escapeHtml(days[0].day) + '</text>' +
         '<text x="840" y="180" text-anchor="end" class="youtube-clickthrough-date">' + escapeHtml(days[days.length - 1].day) + '</text></svg>';
     } else chart = '<div class="youtube-clickthrough-empty">The trend starts once matched YouTube view growth is measured.</div>';
+    var videoRows = (data.videos || []).map(function (video) {
+      return '<tr><th scope="row">' + escapeHtml(video.title) + '</th><td>' + contentNumber(video.visits) + '</td><td>' + contentNumber(video.views) + '</td><td>' + contentPercent(video.rate_percent) + '</td></tr>';
+    }).join('');
     return '<section class="youtube-clickthrough" aria-label="Long-form YouTube website visit-to-view rate">' +
       '<div class="youtube-clickthrough-heading"><div><span class="eyebrow">YouTube long-form · ' + escapeHtml(data.period.start) + ' to ' + escapeHtml(data.period.end) + ' UTC</span>' +
       '<h3>Video views to website visits</h3></div><span>7-day rolling trend</span></div>' +
       '<div class="youtube-clickthrough-stats"><div><strong>' + contentPercent(data.rate_percent) + '</strong><span>verified visits per 100 video views</span></div>' +
       '<div><strong>' + (data.views_per_visit == null ? '—' : contentNumber(data.views_per_visit)) + '</strong><span>video views per website visit</span></div>' +
       '<div><strong>' + contentNumber(data.visits) + ' / ' + contentNumber(data.views) + '</strong><span>matched visits / new views</span></div></div>' +
-      chart + '<p>' + escapeHtml(data.definition) + (data.unmeasured_visits ? ' ' + contentNumber(data.unmeasured_visits) + ' tagged visits to videos without a view snapshot are excluded.' : '') +
+      chart + (videoRows ? '<div class="youtube-clickthrough-videos"><h4>Same measure by video</h4><div class="youtube-clickthrough-table-wrap"><table><thead><tr><th scope="col">Long-form video</th><th scope="col">Website visits</th><th scope="col">New views</th><th scope="col">Visits / views</th></tr></thead><tbody>' + videoRows + '</tbody></table></div></div>' : '') + '<p>' + escapeHtml(data.definition) + (data.unmeasured_visits ? ' ' + contentNumber(data.unmeasured_visits) + ' tagged visits to videos without a view snapshot are excluded.' : '') +
       '</p></section>';
   }
   function contentPercent(value) {

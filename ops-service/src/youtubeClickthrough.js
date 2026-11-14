@@ -32,10 +32,12 @@ function report(storeDb, opsDb, pieces, nowValue) {
     byPiece.get(row.piece_id).push(row);
   });
   const measured = new Set();
+  const videoTotals = new Map();
   eligible.forEach(function (piece, seq) {
     const history = byPiece.get(piece.id) || [];
     if (!history.length) return;
     measured.add(seq);
+    videoTotals.set(seq, { seq: Number(seq), title: piece.title || `Video #${seq}`, views: 0, visits: 0 });
     const publishedDuringWindow = dayOf(piece.postedAt) >= start;
     const earlier = history.filter(function (row) { return dayOf(row.captured_at) < start; });
     let previous = publishedDuringWindow ? 0 : earlier.length ? Math.max(0, Number(earlier.at(-1).views)) : null;
@@ -49,7 +51,11 @@ function report(storeDb, opsDb, pieces, nowValue) {
       const current = lastByDay.get(row.day);
       // An older video's first post-start snapshot is a baseline, not a
       // fabricated day's worth of new views. New videos begin at zero.
-      if (previous != null) row.views += Math.max(0, current - previous);
+      if (previous != null) {
+        const growth = Math.max(0, current - previous);
+        row.views += growth;
+        videoTotals.get(seq).views += growth;
+      }
       previous = current;
     });
   });
@@ -75,7 +81,10 @@ function report(storeDb, opsDb, pieces, nowValue) {
     const count = Math.max(0, Number(row.visits) || 0);
     if (!measured.has(seq)) { unmeasuredVisits += count; return; }
     const day = byDay.get(row.day);
-    if (day) day.visits += count;
+    if (day) {
+      day.visits += count;
+      videoTotals.get(seq).visits += count;
+    }
   });
   let views = 0;
   let visits = 0;
@@ -91,6 +100,9 @@ function report(storeDb, opsDb, pieces, nowValue) {
     period: { start, end: today }, views, visits,
     rate_percent: ratio(visits, views), views_per_visit: viewsPerVisit(visits, views),
     measured_videos: measured.size, unmeasured_visits: unmeasuredVisits, daily,
+    videos: [...videoTotals.values()].map(function (row) {
+      return Object.assign({}, row, { rate_percent: ratio(row.visits, row.views) });
+    }).sort(function (a, b) { return b.visits - a.visits || a.seq - b.seq; }),
     definition: 'Verified, UTM-tagged website arrivals from individual YouTube long-form video links divided by measured new views on those same videos. One browser/link/UTC day counts once; these are visits, not raw YouTube click events. Earlier source-only traffic and profile/Shorts links are excluded. Older videos use their first tracking-window snapshot as a baseline.'
   };
 }

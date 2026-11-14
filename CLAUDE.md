@@ -22744,3 +22744,25 @@ sit directly below the order list as Harvey requested. The refund jump target
 and reason-note controls are unchanged. This is a static `ops-service/public`
 change, so the existing frontend-only CI path deploys it without restarting
 the Project Manager container.
+
+## YouTube website-visit rate denominator clarified (2026-11-14)
+
+Harvey noticed the matched long-form card at roughly one website visit per
+several hundred YouTube views while individual links in the referral donut
+showed 3–4%. The latter percentages were **shares of all attributed website
+visits across platforms**, not visits divided by YouTube video views. The
+former already filters to live `contentType=longform` pieces and long-form
+UTM campaign links; Shorts and profile links were not inflating its view
+denominator. A live read on 14 November showed 247 verified matched visits
+from 83,578 new views across eight measured long-form videos, or 0.30%
+(one visit per 338.4 views). The referral donut held 1,408 attributed
+website visits from all platforms; for example, video's 55 visits appear as
+3.9% of that total, which is not its off-site click-through rate.
+
+The referral chart now labels its percentages explicitly as shares of all
+attributed website visits. The long-form card now displays per-video rows
+with the same-window verified website visits, new YouTube views, and their
+actual visit-to-view percentage, so individual video figures are directly
+comparable to the aggregate. No attribution events or view counters were
+changed. The existing aggregate is visit-based, not raw YouTube click events,
+and excludes untagged/direct traffic by design.
