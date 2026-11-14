@@ -22198,3 +22198,39 @@ not to draft or send a reply. Auto-acknowledgements, out-of-office messages,
 and routine security codes remain suppressed. No matching historical customer
 reply was found at rollout. The focused mail-triage tests pass (8/8), including
 a feedback reply alert, an auto-reply suppression, and no outbound message.
+
+## BookVault funding/title rejection stranded paid orders (2026-11-14)
+
+A customer reported a successful card charge but a confirmation page still
+waiting. The corresponding live Stripe PaymentIntent captured $83.10, while
+BookVault rejected every submission attempt with both "title ordered is
+currently inactive" and "not enough funds ... order saved as a draft".
+After five attempts over roughly 90 minutes, the backend issued a full
+Stripe refund; Stripe's refund API reports `succeeded`, the storefront order
+is `REFUNDED`, and the branded refund email was recorded as sent. BookVault
+lookup by this order's DocRef returned 404, so it is not in production. Per
+Harvey's explicit instruction, a human reply was sent in the original mailbox
+thread explaining the refund and advising against a new payment until the
+printer issue is resolved; the copy contained no em dash. Customer identity,
+email address, address, and full order ID are intentionally omitted here.
+
+This was not isolated: nine live orders created from 2026-11-13 18:09 UTC to
+2026-11-14 00:19 UTC were refunded after the same BookVault rejection. Two
+newer paid orders were still in `FULFILLMENT_RETRY` at 02:15 UTC. A read-only
+`ValidateOrder?type=Full` for the refunded order at 02:15 returned HTTP 200
+with `CriticalError=false` and no message text, but that does not prove the
+funding/title problem is stably resolved: retries had failed as recently as
+01:59 UTC. Do not invite customers to retry merely on that single validation.
+
+Two separate code issues were identified but not changed during this
+diagnosis-only request: `frontend/js/confirmation.js` has no `REFUNDED`
+terminal branch, so a refunded order still displays the waiting state until
+its five-minute polling limit; and `backend/src/services/bookvaultService.js`
+returns any existing PodRef as accepted without checking payment/production
+status. One newer order was locally marked `BOOKVAULT_ACCEPTED` and sent a
+confirmation email after three prior submission failures, but BookVault's
+live GET showed `Status=BatchPayment`, `Progress.Status=Created`, unlike
+older genuinely active orders reporting `Status=Active` with `Acknowledged`
+or `Batched` progress. That order must not be assumed in production. The
+incident and these code defects need urgent owner follow-up; do not silently
+retry fulfillment or modify past charges.
