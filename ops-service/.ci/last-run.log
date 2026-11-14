@@ -8,17 +8,18 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   778ade3..298bb50  main       -> origin/main
+   ec7ed5f..49df190  main       -> origin/main
 + git merge --ff-only origin/main
-Updating 778ade3..298bb50
+Updating ec7ed5f..49df190
 Fast-forward
- CLAUDE.md                     |  10 ++
- ops-service/.ci/last-run.log  | 212 ++++++++++++++++++++++++++++++++++++++++--
- ops-service/public/index.html |   2 +-
- ops-service/public/style.css  |  16 +++-
- 4 files changed, 226 insertions(+), 14 deletions(-)
+ CLAUDE.md                                 | 76 +++++++++++++++++++++++++++++++
+ backend/test/analyticsAggregation.test.js | 15 +++---
+ ops-service/public/app.js                 |  2 +-
+ storefront-worker/src/index.js            |  4 +-
+ storefront-worker/wrangler.jsonc          | 10 ++--
+ 5 files changed, 94 insertions(+), 13 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=298bb502aff4e9beae18e27833a2f615496b88ba
++ NEW_HEAD=49df190dbdae7e68dc1976ea3bc0d2d49fa38e0d
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -31,12 +32,12 @@ Already up to date.
 + NEEDS_REBUILD=1
 + '[' -n 778ade30ac432320309bf59148466641c5303b38 ']'
 + git cat-file -e '778ade30ac432320309bf59148466641c5303b38^{commit}'
-++ git diff --name-only 778ade30ac432320309bf59148466641c5303b38 298bb502aff4e9beae18e27833a2f615496b88ba -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
+++ git diff --name-only 778ade30ac432320309bf59148466641c5303b38 49df190dbdae7e68dc1976ea3bc0d2d49fa38e0d -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z '' ']'
 + NEEDS_REBUILD=0
 + '[' 0 = 1 ']'
 + '[' 0 = 0 ']'
-+ echo 'no backend changes between 778ade30ac432320309bf59148466641c5303b38 and 298bb502aff4e9beae18e27833a2f615496b88ba — already live via git pull, skipping rebuild/restart'
-no backend changes between 778ade30ac432320309bf59148466641c5303b38 and 298bb502aff4e9beae18e27833a2f615496b88ba — already live via git pull, skipping rebuild/restart
++ echo 'no backend changes between 778ade30ac432320309bf59148466641c5303b38 and 49df190dbdae7e68dc1976ea3bc0d2d49fa38e0d — already live via git pull, skipping rebuild/restart'
+no backend changes between 778ade30ac432320309bf59148466641c5303b38 and 49df190dbdae7e68dc1976ea3bc0d2d49fa38e0d — already live via git pull, skipping rebuild/restart
 + exit 0
 ssh exit code: 0
