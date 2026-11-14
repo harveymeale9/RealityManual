@@ -14,14 +14,18 @@ Do not point production traffic here yet.
 - Existing R2 bucket `reality-manual-media`, with the current 83,530,009-byte
   VSL at the content-addressed `storefront/reality-manual-vsl-c1a7775e.mp4`
   key. The Worker serves `/media/reality-manual-vsl-1080p.mp4` with byte ranges.
-- `/health` verifies D1. All other API routes deliberately return 404.
-- `src/orderStore.js` is the first ported D1 component, with atomic payment
-  state transitions. It is tested but not yet wired to a public route.
-- `src/shipping.js` ports the live UK BookVault quote and fresh GBP/USD
-  conversion; it is tested but not yet exposed as a staging route.
-- `src/stripeClient.js` uses Stripe's fetch HTTP client, async Web Crypto
-  webhook verification, and order-ID idempotency keys. It is tested but not
-  connected to the public Worker yet.
+- `/health` verifies D1. Checkout and webhook endpoints still return 404
+  because `CHECKOUT_ENABLED` and `FULFILLMENT_ENABLED` are not set. Never set
+  those flags until every remaining release gate below is satisfied.
+- Ported code now includes D1 order creation/status, quote validation,
+  opt-in recovery capture, Stripe PaymentIntent creation and signed webhooks,
+  BookVault DocRef-safe submission/polling, customer receipt/shipping/refund
+  emails, Stripe payment reconciliation, and guarded 24-hour refund handling.
+  A five-minute scheduled sweep is inert while fulfillment is disabled.
+- Unit and synthetic request tests cover the browser checkout contract,
+  duplicate and mismatched webhooks, a paid order through receipt and
+  BookVault acceptance, scheduled-payment drafts, and active-order refund
+  refusal. These are **not** live-payment or live-BookVault acceptance tests.
 
 ## Owner-only credential step
 
@@ -45,14 +49,13 @@ The next real order still uses the VPS backend.
 
 ## Remaining release gates
 
-1. Port the checkout, shipping quote, Stripe webhook, order status, recovery
-   consent, analytics, review unsubscribe, and transactional email routes to
-   Workers/D1 with tests against real request/response contracts.
-2. Port the durable BookVault fulfillment, Stripe reconciliation, dispatch
-   polling, review-request, analytics aggregation, and pruning timers to
-   scheduled Workers/Queues with atomic claims. Preserve the 24-hour
-   paid-first policy, BookVault batch-payment handling, idempotent email and
-   refund rules, and duplicate-payment protection.
+1. Finish and test analytics, review unsubscribe/request, email-health,
+   purchaser contact syncing, retention, and Content Studio report migration.
+   The checkout and fulfillment port above is still disabled and needs more
+   failure-path and Cloudflare-runtime testing before production use.
+2. Verify the scheduled D1 claim, retries, dispatch email, 24-hour deadline,
+   and BookVault cost capture on Cloudflare's runtime with mocked providers.
+   Never create a real charge or BookVault order merely to test.
 3. Replace Content Studio's direct SQLite reads for Sales Analytics and Orders
    health with an authenticated read-only Worker report API; retain the
    Project Manager and inbound mailbox on the VPS.

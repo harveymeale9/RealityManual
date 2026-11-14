@@ -3,6 +3,36 @@
 // order, even if two Worker invocations race.
 const PAID_STATES = new Set(['PAYMENT_RECEIVED', 'FULFILLMENT_RETRY', 'BOOKVAULT_ACCEPTED', 'SHIPPED']);
 
+export async function createOrder(db, body, totals, attributionJson) {
+  const id = crypto.randomUUID();
+  await db.prepare(`
+    INSERT INTO orders (
+      id, customer_name, email, phone, country, street1, street2, city, state, postal_code,
+      quantity, book_price_cents, shipping_price_cents, shipping_service_name, shipping_service_id,
+      shipping_min_delivery_days, shipping_max_delivery_days, total_price_cents, currency,
+      review_request_opt_in, review_request_opt_in_at, attribution_json, order_status
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'PAYMENT_PENDING')
+  `).bind(
+    id, body.customer_name.trim(), body.email.trim(), body.phone.trim(), body.country_code.trim().toUpperCase(),
+    body.street1.trim(), body.street2?.trim() || null, body.city.trim(), body.state?.trim() || null,
+    body.postal_code.trim(), totals.quantity, totals.bookPriceCents, totals.shippingPriceCents,
+    totals.serviceName || null, totals.serviceId || null, totals.minDeliveryDays || null,
+    totals.maxDeliveryDays || null, totals.totalPriceCents, totals.currency,
+    body.review_request_opt_in === true ? 1 : 0,
+    body.review_request_opt_in === true ? new Date().toISOString() : null,
+    attributionJson,
+  ).run();
+  return getOrderById(db, id);
+}
+
+export async function attachPaymentIntent(db, orderId, paymentIntentId) {
+  const result = await db.prepare(`UPDATE orders SET stripe_payment_intent_id = ?,
+    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+    WHERE id = ? AND stripe_payment_intent_id IS NULL AND order_status = 'PAYMENT_PENDING'`)
+    .bind(paymentIntentId, orderId).run();
+  if (result.meta?.changes !== 1) throw new Error('Could not attach Stripe payment to the pending order.');
+}
+
 export async function getOrderById(db, orderId) {
   return db.prepare('SELECT * FROM orders WHERE id = ?').bind(orderId).first();
 }

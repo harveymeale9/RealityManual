@@ -46,7 +46,7 @@ async function bookvaultQuote(env, countryCode, postalCode, quantity, fetcher) {
   };
 }
 
-async function gbpUsdRate(fetcher, now) {
+export async function gbpUsdRate(fetcher, now) {
   const response = await fetcher(RATE_URL, { signal: AbortSignal.timeout(8000) });
   if (!response.ok) throw new Error(`GBP/USD rate request failed (${response.status}).`);
   const data = await response.json();

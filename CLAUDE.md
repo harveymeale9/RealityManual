@@ -22533,3 +22533,39 @@ drain. Once multiple real Worker orders have completed end to end, retire the
 VPS storefront backend rather than maintaining an unsynchronized hot standby.
 The one-active-backend rule and in-flight Stripe/BookVault reconciliation
 requirements still apply; never automatically replay an uncertain payment.
+
+## Cloudflare storefront migration stage 2, still disabled (2026-11-14)
+
+Harvey asked to make the Worker operational rather than route the next live
+order to an inert staging endpoint. A live probe before this change confirmed
+the Worker returned 404 for PaymentIntent creation, while the VPS checkout
+was healthy. No production routing, Stripe webhook, or customer payment was
+changed. The VPS remains the sole active checkout; switching at that point
+would have guaranteed a failed order.
+
+The Worker now has code for the existing browser checkout contract: D1 order
+creation, server-side input and fresh-quote validation, Stripe PaymentIntent
+with order-ID idempotency, recovery-email consent, PII-limited order status,
+and raw signed Stripe webhook processing. A succeeded event must match the
+saved order UUID, full amount, and currency. Conditional D1 transitions
+prevent a late failure or duplicate webhook from reopening a paid order.
+The Worker also has a DocRef-before-POST BookVault client, scheduled-payment
+draft handling, five-minute durable D1 claims, immediate webhook kick plus
+scheduled Stripe reconciliation, customer receipt/shipping/refund email
+paths, guarded 24-hour cancellation/refund logic, and UK-partner GBP cost
+capture. The customer email templates are imported as code from the existing
+backend module so migration does not silently change approved copy. No VPS
+database or backend API is contacted by this Worker code.
+
+This is **staging code, not a release**. `CHECKOUT_ENABLED` and
+`FULFILLMENT_ENABLED` remain unset; public staging payment/webhook paths
+still return 404. Synthetic tests passed for checkout request/response,
+signed-style paid/duplicate/mismatched webhook behavior, one paid order
+through receipt and BookVault acceptance, BookVault pending batches and
+duplicate-preventing lookup, and active-order refund refusal. A Wrangler
+dry-run bundled the Worker. These tests do not prove production reliability.
+The remaining release gates are Cloudflare-runtime failure-path tests,
+analytics/review/contact and Content Studio reporting migration, live-safe
+configuration verification, fresh D1 sync and in-flight Stripe/BookVault
+reconciliation, and a controlled one-active-backend cutover. Never enable
+checkout on the stale one-time D1 snapshot or advertise the migration as live.
