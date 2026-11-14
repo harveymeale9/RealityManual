@@ -294,6 +294,7 @@ body.role-reviewer a[data-tab="project-manager"],
 body.role-reviewer a[data-tab="content-ideation"],
 body.role-reviewer a[data-tab="manuscript"],
 body.role-reviewer a[data-tab="mailbox"],
+body.role-reviewer a[data-tab="orders"],
 body.role-reviewer .side-rail-group-research,
 body.role-reviewer .side-rail-group-analytics,
 body.role-reviewer #quickAddLink,
@@ -412,6 +413,30 @@ body.role-reviewer #pmBackFab {
 .panel-main--pipeline { overflow-y: auto; overscroll-behavior: contain; }
 .panel-main--website-analytics,
 .panel-main--sales-analytics { overflow-y: auto; overscroll-behavior: contain; }
+.panel-main--orders { overflow-y: auto; overscroll-behavior: contain; }
+
+.orders-health { width: min(1280px,100%); margin: 0 auto; padding: 28px clamp(16px,3vw,38px) 70px; }
+.orders-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 22px; }
+.orders-head h2 { margin: 5px 0 8px; font: 600 clamp(2rem,3vw,2.8rem)/1 var(--font-display); }
+.orders-head p,.orders-note { color: var(--ink-soft); font-size: .83rem; line-height: 1.5; }
+.orders-head p { margin: 0; }
+.orders-metrics { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 10px; margin-bottom: 14px; }
+.orders-metrics > div { padding: 17px; background: rgba(4,24,16,.85); border: 1px solid var(--border); border-radius: 10px; }
+.orders-metrics span { display: block; color: var(--ink-soft); font: .63rem var(--font-mono); text-transform: uppercase; letter-spacing: .06em; }
+.orders-metrics strong { display: block; margin-top: 7px; color: var(--accent); font: 600 1.9rem var(--font-display); }
+.orders-metrics .needs-attention strong,.orders-row.overdue .orders-row-state > strong,.orders-deadline.overdue { color: #ff9b75; }
+.orders-note { margin: 0 0 18px; }
+.orders-list { display: grid; gap: 8px; }
+.orders-row { display: grid; grid-template-columns: minmax(180px,.8fr) minmax(0,1.5fr); gap: 16px; padding: 17px 19px; border: 1px solid var(--border); border-radius: 10px; background: rgba(4,24,16,.8); }
+.orders-row.pending { border-color: rgba(229,187,94,.34); }
+.orders-row.overdue { border-color: rgba(255,155,117,.7); }
+.orders-row-main,.orders-row-state { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.orders-row-main strong { font: 700 .95rem var(--font-mono); }
+.orders-row-main span,.orders-row-state span { color: var(--ink-soft); font-size: .75rem; line-height: 1.4; overflow-wrap: anywhere; }
+.orders-row-state > strong { color: var(--accent); font-size: .87rem; }
+.orders-row-state .orders-issue { color: #e5bb5e; }
+.orders-deadline { font-family: var(--font-mono); }
+@media (max-width: 800px) { .orders-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); } .orders-row { grid-template-columns: 1fr; gap: 10px; } .orders-head { align-items: flex-start; } }
 .panel-main--manuscript { overflow: hidden; }
 .panel-main--mailbox { overflow: hidden; }
 .panel-main--ideation + .panel-footer,

@@ -356,6 +356,7 @@ function fulfillmentIssueSummary(message) {
   if (/title.*inactive|inactive.*title/.test(detail)) issues.push('title inactive');
   if (/not have enough funds|insufficient funds/.test(detail)) issues.push('insufficient BookVault funds');
   if (/customs declaration/.test(detail)) issues.push('customs declaration missing');
+  if (/batchpayment|unpaid draft|not active/.test(detail)) issues.push('draft awaiting BookVault payment');
   return issues.length ? 'BookVault: ' + issues.join(', ') : 'BookVault fulfillment failed';
 }
 
@@ -548,6 +549,50 @@ function getSalesDashboard(db, nowValue, excludedIds, unseenOrderIds) {
   };
 }
 
+function getOrdersHealth(db, nowValue, excludedIds) {
+  const excluded = excludedOrderFilter(excludedIds);
+  const now = new Date(nowValue || Date.now());
+  const rows = db.prepare(`SELECT id, created_at, updated_at, payment_received_at,
+      order_status, stripe_payment_status, total_price_cents, currency, quantity,
+      bookvault_order_id, fulfillment_last_error, fulfillment_next_attempt_at,
+      fulfillment_attempts, fulfillment_alert_sent_at, fulfillment_deadline_alert_sent_at,
+      confirmation_email_sent_at, shipping_email_sent_at, refund_email_sent_at
+    FROM orders WHERE 1=1${excluded.sql} ORDER BY created_at DESC LIMIT 100`).all(...excluded.ids);
+  const orders = rows.map(function (row) {
+    const paid = ['succeeded', 'paid'].includes(row.stripe_payment_status) && row.order_status !== 'REFUNDED';
+    const awaitingPrinter = paid && ['PAYMENT_RECEIVED', 'FULFILLMENT_RETRY', 'BOOKVAULT_PENDING'].includes(row.order_status);
+    const paidAt = row.payment_received_at || (paid ? row.created_at : null);
+    const deadline = paidAt && awaitingPrinter ? new Date(Date.parse(paidAt) + 24 * 60 * 60 * 1000).toISOString() : null;
+    return {
+      id: row.id, created_at: row.created_at, updated_at: row.updated_at,
+      paid_at: paidAt, deadline_at: deadline,
+      order_status: row.order_status, stripe_payment_status: row.stripe_payment_status,
+      total_price_cents: Number(row.total_price_cents) || 0, currency: row.currency || 'usd',
+      quantity: Number(row.quantity) || 0, bookvault_order_id: row.bookvault_order_id || null,
+      awaiting_bookvault: awaitingPrinter, overdue: !!deadline && Date.parse(deadline) <= now.getTime(),
+      issue: row.fulfillment_last_error ? fulfillmentIssueSummary(row.fulfillment_last_error) : '',
+      next_attempt_at: row.fulfillment_next_attempt_at || null,
+      attempts: Number(row.fulfillment_attempts) || 0,
+      owner_alert_sent: !!row.fulfillment_alert_sent_at,
+      urgent_alert_sent: !!row.fulfillment_deadline_alert_sent_at,
+      receipt_email_sent: !!row.confirmation_email_sent_at,
+      shipping_email_sent: !!row.shipping_email_sent_at,
+      refund_email_sent: !!row.refund_email_sent_at
+    };
+  });
+  return {
+    generated_at: now.toISOString(), timezone: 'Asia/Bangkok',
+    summary: {
+      paid_orders: orders.filter(function (o) { return ['succeeded', 'paid'].includes(o.stripe_payment_status) && o.order_status !== 'REFUNDED'; }).length,
+      awaiting_bookvault: orders.filter(function (o) { return o.awaiting_bookvault; }).length,
+      overdue: orders.filter(function (o) { return o.overdue; }).length,
+      in_production: orders.filter(function (o) { return o.order_status === 'BOOKVAULT_ACCEPTED'; }).length,
+      shipped: orders.filter(function (o) { return o.order_status === 'SHIPPED'; }).length
+    },
+    orders: orders
+  };
+}
+
 module.exports = {
   FUNNEL_STEPS: FUNNEL_STEPS,
   WEBSITE_ANALYTICS_START_DAY: WEBSITE_ANALYTICS_START_DAY,
@@ -556,5 +601,6 @@ module.exports = {
   getPeriodReport: getPeriodReport,
   getWebsiteTraffic: getWebsiteTraffic,
   getWebsiteAnalyticsSummary: getWebsiteAnalyticsSummary,
-  getSalesDashboard: getSalesDashboard
+  getSalesDashboard: getSalesDashboard,
+  getOrdersHealth: getOrdersHealth
 };

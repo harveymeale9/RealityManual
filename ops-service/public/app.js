@@ -75,6 +75,9 @@
         { id: 'sales-analytics', label: 'Sales Analytics' },
         { id: 'website-analytics', label: 'Website Analytics' }
       ] },
+    { label: 'Orders', tabs: [
+        { id: 'orders', label: 'Orders' }
+      ] },
     { label: 'Mailbox', tabs: [
         { id: 'mailbox', label: 'Mailbox' }
       ] },
@@ -488,6 +491,69 @@
           '<p>' + (synced && !isNaN(synced.getTime()) ? 'Last inbox sync ' + synced.toLocaleString() : 'No successful inbox sync recorded') + '</p>' +
           '<small>Separate SMTP service; no provider bounce-rate feed.</small></div>' +
       '</div><p class="sales-email-health-note">“Delivered” means the recipient mail server accepted the message, not that it reached the inbox or was read. Resend figures cover realitymanual.com only, not ops-mailbox replies.</p></section>';
+  }
+
+  function renderOrdersHealth() {
+    panelMain.innerHTML = '<div class="orders-health"><div class="eyebrow">Live storefront database</div><h2>Orders</h2><p>Loading payment and BookVault status…</p></div>';
+    fetch('/api/reports/orders-health', { credentials: 'include', cache: 'no-store' })
+      .then(function (res) { if (!res.ok) throw new Error('orders_status_' + res.status); return res.json(); })
+      .then(function (data) {
+        if (currentTabId() !== 'orders') return;
+        var orders = data.orders || [];
+        function dateText(value) {
+          var date = new Date(value);
+          return isNaN(date.getTime()) ? '—' : date.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' });
+        }
+        function statusText(order) {
+          if (order.order_status === 'REFUNDED') return 'Refunded';
+          if (order.order_status === 'SHIPPED') return 'Dispatched';
+          if (order.order_status === 'BOOKVAULT_ACCEPTED') return 'BookVault active';
+          if (order.awaiting_bookvault) return order.overdue ? 'Over 24h · action needed' : 'Accepted · arranging BookVault';
+          if (order.order_status === 'FAILED') return 'Payment failed · no order';
+          return 'Payment not confirmed';
+        }
+        function deadlineText(order) {
+          if (!order.deadline_at) return '';
+          var minutes = Math.ceil((Date.parse(order.deadline_at) - Date.now()) / 60000);
+          return '<span class="orders-deadline' + (minutes <= 0 ? ' overdue' : '') + '">' +
+            (minutes <= 0 ? '24h deadline passed' : '24h check in ' + Math.floor(minutes / 60) + 'h ' + (minutes % 60) + 'm') +
+            ' · ' + escapeHtml(dateText(order.deadline_at)) + ' (+7)</span>';
+        }
+        var summary = data.summary || {};
+        panelMain.innerHTML = '<div class="orders-health">' +
+          '<header class="orders-head"><div><div class="eyebrow">Storefront · live order health</div><h2>Orders</h2>' +
+          '<p>Payment is accepted immediately. BookVault production is tracked separately for 24 hours.</p></div>' +
+          '<button type="button" class="btn-secondary" id="ordersRefresh">Refresh</button></header>' +
+          '<div class="orders-metrics">' +
+            '<div><span>Paid · recent 100</span><strong>' + (summary.paid_orders || 0) + '</strong></div>' +
+            '<div><span>Arranging BookVault</span><strong>' + (summary.awaiting_bookvault || 0) + '</strong></div>' +
+            '<div class="' + (summary.overdue ? 'needs-attention' : '') + '"><span>Past 24h deadline</span><strong>' + (summary.overdue || 0) + '</strong></div>' +
+            '<div><span>BookVault active</span><strong>' + (summary.in_production || 0) + '</strong></div>' +
+            '<div><span>Dispatched</span><strong>' + (summary.shipped || 0) + '</strong></div>' +
+          '</div>' +
+          '<p class="orders-note">A BookVault reference alone may be an unpaid draft. “BookVault active” means its status was verified; an accepted storefront order does not require immediate printer payment. Issues are retried and flagged to Harvey. Refunds require a verified safe BookVault state.</p>' +
+          '<div class="orders-list">' + (orders.length ? orders.map(function (order) {
+            var code = '#' + String(order.id || '').slice(0, 8).toUpperCase();
+            var tone = order.overdue ? ' overdue' : order.awaiting_bookvault ? ' pending' : order.order_status === 'REFUNDED' ? ' refunded' : '';
+            return '<article class="orders-row' + tone + '"><div class="orders-row-main"><strong>' + escapeHtml(code) + '</strong>' +
+              '<span>' + escapeHtml(dateText(order.created_at)) + ' (+7)</span><span>' + order.quantity + ' book' + (order.quantity === 1 ? '' : 's') +
+              ' · $' + (order.total_price_cents / 100).toFixed(2) + '</span></div>' +
+              '<div class="orders-row-state"><strong>' + escapeHtml(statusText(order)) + '</strong>' +
+              '<span>Stripe: ' + escapeHtml(order.stripe_payment_status || 'not confirmed') +
+              ' · BookVault: ' + escapeHtml(order.bookvault_order_id ? String(order.bookvault_order_id) : 'no reference yet') + '</span>' +
+              (order.issue ? '<span class="orders-issue">' + escapeHtml(order.issue) + '</span>' : '') +
+              deadlineText(order) +
+              (order.awaiting_bookvault && order.next_attempt_at ? '<span>Next check ' + escapeHtml(dateText(order.next_attempt_at)) + ' (+7)</span>' : '') +
+              '<span>Receipt ' + (order.receipt_email_sent ? 'sent' : 'pending') +
+              (order.owner_alert_sent ? ' · Harvey alerted' : '') +
+              (order.refund_email_sent ? ' · refund email sent' : '') + '</span></div></article>';
+          }).join('') : '<p>No orders yet.</p>') + '</div></div>';
+        panelMain.querySelector('#ordersRefresh').addEventListener('click', renderOrdersHealth);
+      }).catch(function () {
+        if (currentTabId() === 'orders') panelMain.innerHTML = '<div class="orders-health"><h2>Orders</h2><p>Order health is temporarily unavailable. No order status has been changed.</p><button type="button" class="btn-secondary" id="ordersRefresh">Retry</button></div>';
+        var retry = panelMain.querySelector('#ordersRefresh');
+        if (retry) retry.addEventListener('click', renderOrdersHealth);
+      });
   }
 
   function renderSalesAnalytics() {
@@ -1272,6 +1338,7 @@
     panelMain.classList.toggle('panel-main--mailbox', active === 'mailbox');
     panelMain.classList.toggle('panel-main--website-analytics', active === 'website-analytics');
     panelMain.classList.toggle('panel-main--sales-analytics', active === 'sales-analytics');
+    panelMain.classList.toggle('panel-main--orders', active === 'orders');
     panelMain.classList.toggle('panel-main--content-analytics', active === 'content-analytics');
     panelMain.classList.toggle('panel-main--pipeline', active === 'content-ops');
     if (active !== 'sales-analytics') salesAnalyticsRequest++;
@@ -1301,6 +1368,8 @@
       renderWebsiteAnalytics();
     } else if (active === 'sales-analytics') {
       renderSalesAnalytics();
+    } else if (active === 'orders') {
+      renderOrdersHealth();
     } else if (active === 'content-analytics') {
       renderContentAnalytics(false);
     } else if (active === 'outlier-analysis') {

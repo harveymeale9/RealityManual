@@ -8,6 +8,32 @@ const vm = require('node:vm');
 const Database = require('better-sqlite3');
 const reporting = require('../src/storefrontReporting');
 
+test('Orders health keeps payment acceptance separate from BookVault status and 24-hour deadline', function () {
+  const db = new Database(':memory:');
+  db.exec(`CREATE TABLE orders (id TEXT, created_at TEXT, updated_at TEXT, payment_received_at TEXT,
+    order_status TEXT, stripe_payment_status TEXT, total_price_cents INTEGER, currency TEXT, quantity INTEGER,
+    bookvault_order_id TEXT, fulfillment_last_error TEXT, fulfillment_next_attempt_at TEXT,
+    fulfillment_attempts INTEGER, fulfillment_alert_sent_at TEXT, fulfillment_deadline_alert_sent_at TEXT,
+    confirmation_email_sent_at TEXT, shipping_email_sent_at TEXT, refund_email_sent_at TEXT)`);
+  const add = db.prepare(`INSERT INTO orders VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+  const at = '2026-11-14T01:00:00.000Z';
+  add.run('paid-draft', at, at, at, 'FULFILLMENT_RETRY', 'succeeded', 7823, 'usd', 1,
+    '3074628', 'Existing BookVault order is not active (status: BatchPayment).', '2026-11-14T03:00:00.000Z',
+    2, at, null, at, null, null);
+  add.run('active', at, at, at, 'BOOKVAULT_ACCEPTED', 'succeeded', 7944, 'usd', 1,
+    '3074646', null, null, 0, null, null, at, null, null);
+  const result = reporting.getOrdersHealth(db, '2026-11-14T02:00:00.000Z', []);
+  assert.equal(result.summary.paid_orders, 2);
+  assert.equal(result.summary.awaiting_bookvault, 1);
+  assert.equal(result.summary.in_production, 1);
+  const draft = result.orders.find(function (order) { return order.id === 'paid-draft'; });
+  assert.equal(draft.deadline_at, '2026-11-15T01:00:00.000Z');
+  assert.match(draft.issue, /draft awaiting BookVault payment/);
+  assert.equal(draft.receipt_email_sent, true);
+  assert.equal(result.orders.find(function (order) { return order.id === 'active'; }).awaiting_bookvault, false);
+  db.close();
+});
+
 test('saved sales exclusions decode IDs from records.getAll data rows', function () {
   const rows = [
     { data: JSON.stringify({ orderId: 'owner-order-1' }), updated_at: '2026-10-19T00:00:00.000Z' },

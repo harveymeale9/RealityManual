@@ -1721,6 +1721,15 @@ app.get('/api/reports/sales-dashboard', requireAuth, function (req, res) {
     res.status(503).json({ error: 'sales_dashboard_unavailable' });
   }
 });
+app.get('/api/reports/orders-health', requireAuth, function (req, res) {
+  try {
+    res.set('Cache-Control', 'no-store');
+    res.json(storefrontReporting.getOrdersHealth(getStorefrontReportDb(), undefined, excludedSalesOrderIds()));
+  } catch (error) {
+    console.error('Orders health read failed:', error.message);
+    res.status(503).json({ error: 'orders_health_unavailable' });
+  }
+});
 app.get('/api/reports/sales-alerts', requireAuth, function (req, res) {
   try {
     res.set('Cache-Control', 'no-store').json({ count: salesAlerts.status().count });

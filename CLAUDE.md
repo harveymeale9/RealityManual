@@ -22378,3 +22378,23 @@ order when Stripe reports `succeeded` and the amount, currency, and order-ID
 metadata all match the stored order. This is a fallback for delayed/missing
 webhooks; the normal signed webhook remains the primary fast path. It never
 creates a second PaymentIntent or print order merely to check status.
+
+## Dedicated Orders health view (2026-11-14)
+
+Harvey reaffirmed the paid-first policy: customer payment/order acceptance is
+immediate, while BookVault payment/production may settle later in its batching
+cycle. An unpaid BookVault draft is an internal fulfillment issue, not a reason
+to tell the customer their paid storefront order was rejected. The existing
+24-hour monitored retry/deadline policy stays in force, with owner alerts and
+safe refund verification if fulfillment does not resolve.
+
+Content Studio now has an **Orders** top-level menu immediately after Analytics
+and before Mailbox, plus a matching side-rail icon. Its authenticated,
+no-store `/api/reports/orders-health` endpoint reads the storefront database
+read-only and excludes owner-marked test orders. It shows recent paid orders,
+BookVault-pending orders, deadline breaches, verified BookVault-active orders,
+and dispatched orders. Each order shows payment state, BookVault reference,
+last known issue, next check, email/owner-alert status, and the local +7
+24-hour deadline. It deliberately omits customer identity and address data.
+The reviewer role cannot access the route or tab. The panel refreshes on
+entry or an explicit Refresh click, without forcing a whole-page reload.
