@@ -17,6 +17,8 @@ Do not point production traffic here yet.
 - `/health` verifies D1. All other API routes deliberately return 404.
 - `src/orderStore.js` is the first ported D1 component, with atomic payment
   state transitions. It is tested but not yet wired to a public route.
+- `src/shipping.js` ports the live UK BookVault quote and fresh GBP/USD
+  conversion; it is tested but not yet exposed as a staging route.
 
 ## Owner-only credential step
 
@@ -30,6 +32,12 @@ The script reads the existing private `.env` and Cloudflare token and pipes
 four secrets into the **staging** Worker without displaying values. The agent
 must not execute this step or generate new credentials. No secret is committed
 to Git. The script does not affect the live API or any other Worker.
+
+Harvey ran this script on 2026-11-14; a names-only check confirmed all four
+secrets are present in the staging Worker. Their values were not inspected.
+
+See [FAILOVER.md](./FAILOVER.md) for the one-active-backend rule and the VPS
+rollback plan. The next real order still uses the VPS backend.
 
 ## Remaining release gates
 

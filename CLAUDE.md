@@ -22500,3 +22500,19 @@ conditional single-statement updates so concurrent/delayed events cannot
 downgrade paid, BookVault-accepted, shipped, or refunded orders. Unit tests
 exercise a failed-then-paid sequence, duplicate success, late failure, the
 24-hour duplicate-payment lookup, and the limited public status shape.
+
+Harvey then ran the owner-only secret-transfer script. A names-only Cloudflare
+check confirmed `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `BOOKVAULT_API_KEY`
+and `RESEND_API_KEY` on the disabled staging Worker; no values were printed or
+written by the agent. The ported read-only shipping calculator also passed
+mocked failure/selection tests, and a safe BookVault/FX quote for US 10001
+matched the live VPS API ($18.10 shipping, $83.10 total at that moment).
+
+Harvey requested redundancy. `storefront-worker/FAILOVER.md` defines the
+one-active-backend rule: the VPS is currently the only checkout, and a
+timed-out/uncertain payment must never be automatically retried on the other
+backend. A future switch or rollback requires payment/order reconciliation
+first, preserving Stripe PaymentIntent and BookVault DocRef identity. Keep the
+VPS alive through the initial Worker orders and end-to-end checks. A stale
+VPS database is not a safe automatic hot standby; the cross-system recovery
+path remains a release gate before Worker checkout is enabled.
