@@ -22593,3 +22593,13 @@ request logs were not available to prove none occurred. The credential for
 this private feed must be generated and installed by Harvey, never by the
 agent. `storefront-worker/scripts/setup-report-auth.sh` is an owner-only
 command; it has **not** been run. Production remains on the VPS.
+
+## Content Studio primary navigation stays on one row (2026-11-14)
+
+Adding Orders and Mailbox exposed the desktop header's old `flex-wrap` rule:
+the last two destinations fell onto a second line at Harvey's laptop width.
+The header and primary tabs now remain single-row, with horizontal tab
+scrolling as a narrow-screen fallback. At 801–1400px, the decorative
+wordmark is hidden to preserve room for all six destinations and the comment
+actions. Headless Chromium checked one tab row at 1215px, 900px and 390px,
+without horizontal page overflow. The left icon rail remains available.
