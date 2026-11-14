@@ -22257,8 +22257,11 @@ individually verified as succeeded in Stripe, and two customers had separate
 repeat paid checkout attempts after earlier refunds. No single PaymentIntent
 was seen to be captured twice. Two paid orders remained in fulfillment retry
 at the audit; another had been locally marked accepted even though its
-BookVault PodRef was still `BatchPayment`/`Created`, not `Active`. A PodRef
-alone is not proof of a paid, accepted print order.
+BookVault PodRef was still `BatchPayment`/`Created`, not `Active`. A second
+order moved from retry to locally accepted just before rollout; a live
+BookVault GET showed that PodRef also remained `BatchPayment`/`Created`.
+Both had already received confirmation emails. A PodRef alone is not proof
+of a paid, accepted print order.
 
 `bookvaultService.submitOrder` now rejects an existing non-Active PodRef
 instead of returning it as success; a new POST response with an explicit
