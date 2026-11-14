@@ -5,8 +5,27 @@ const orderService = require('../services/orderService');
 const stripeService = require('../services/stripeService');
 const errorLogService = require('../services/errorLogService');
 const config = require('../config');
+const recovery = require('../services/checkoutRecoveryService');
 
 const router = express.Router();
+
+// A shopper must actively opt in. This is deliberately separate from order
+// creation, so an incomplete form can still be recovered without collecting
+// any address or payment details.
+router.post('/recovery-email', (req, res) => {
+  const origin = req.get('Origin');
+  if (!origin || !config.corsOrigins.includes(origin)) return res.sendStatus(403);
+  const { capture_id: captureId, email, consent } = req.body || {};
+  if (typeof captureId !== 'string' || !/^[a-f0-9-]{36}$/i.test(captureId)) return res.sendStatus(400);
+  if (consent === false) {
+    recovery.remove(captureId);
+    return res.sendStatus(204);
+  }
+  if (consent !== true || typeof email !== 'string' || email.length > 254 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return res.sendStatus(400);
+  recovery.save(captureId, email);
+  res.sendStatus(204);
+});
 
 router.get('/availability', (_req, res) => {
   res.set('Cache-Control', 'no-store');

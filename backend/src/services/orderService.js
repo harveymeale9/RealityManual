@@ -2,6 +2,7 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const config = require('../config');
 const { normalizeOrderAttribution } = require('../lib/orderAttribution');
+const checkoutRecovery = require('./checkoutRecoveryService');
 
 const insertOrderStmt = db.prepare(`
   INSERT INTO orders (
@@ -204,6 +205,7 @@ function updateStatusByPaymentIntentId(paymentIntentId, newStatus, stripePayment
 
   updateStatusByPaymentIntentStmt.run(newStatus, stripePaymentStatus, liveMode ? 1 : 0,
     newStatus, newStatus, newStatus, newStatus, newStatus, paymentIntentId);
+  if (newStatus === 'PAYMENT_RECEIVED' && liveMode) checkoutRecovery.removeByEmail(order.email);
   return getByPaymentIntentStmt.get(paymentIntentId);
 }
 

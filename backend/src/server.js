@@ -13,6 +13,7 @@ const analyticsRoutes = require('./routes/analytics');
 const reviewRoutes = require('./routes/review');
 const { startFulfillmentWorker } = require('./services/fulfillmentService');
 const { startReviewRequestWorker } = require('./services/reviewRequestService');
+const { startPruning: startRecoveryPruning } = require('./services/checkoutRecoveryService');
 
 const app = express();
 
@@ -84,3 +85,4 @@ app.listen(config.port, () => {
 
 startFulfillmentWorker();
 startReviewRequestWorker();
+startRecoveryPruning();

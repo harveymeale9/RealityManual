@@ -22398,3 +22398,26 @@ last known issue, next check, email/owner-alert status, and the local +7
 24-hour deadline. It deliberately omits customer identity and address data.
 The reviewer role cannot access the route or tab. The panel refreshes on
 entry or an explicit Refresh click, without forcing a whole-page reload.
+
+## Checkout recovery email capture (2026-11-14)
+
+The BookVault incident exposed a separate gap: a visitor who typed an email
+but never reached a valid full-form submission had no order row, so that
+address was not saved. Read-only reconciliation of the incident window found
+10 refunded checkout attempts from eight distinct addresses. Seven addresses
+had no later kept purchase, and four of those had not contacted support.
+These are payment/refund records, not proof of consent to a retry-link email;
+no incident recovery campaign was sent.
+
+The checkout now has a separate, unchecked option allowing one email with a
+link to retry an incomplete checkout. When deliberately selected and a valid
+email is entered, the browser saves only an opaque capture ID and email through
+`POST /api/checkout/recovery-email`. It updates on email edits and deletes on
+untick. The endpoint requires a permitted browser Origin and explicit consent;
+no name, address, card details or full checkout form is saved in the recovery
+table. A successful live payment removes that email from the table, and any
+unused entries are pruned after 30 days. The privacy policy describes this.
+This change captures consent for a possible one-time recovery message; it does
+**not** start an automatic email campaign or retroactively authorize outreach
+to last night's customers. Any future sender must suppress purchasers, honor
+withdrawals, include required sender/opt-out details, and be tested separately.

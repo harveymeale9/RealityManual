@@ -64,6 +64,16 @@ CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(order_status);
 CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
 CREATE INDEX IF NOT EXISTS idx_orders_review_request ON orders(review_request_opt_in, order_status, shipping_email_sent_at);
 
+-- Optional, explicitly opted-in one-time checkout recovery. No address or
+-- payment details are collected here, and this is not an email campaign list.
+CREATE TABLE IF NOT EXISTS checkout_recovery_contacts (
+  capture_id TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  consented_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_checkout_recovery_updated ON checkout_recovery_contacts(updated_at);
+
 CREATE TABLE IF NOT EXISTS shipping_rates (
   country_code      TEXT PRIMARY KEY,
   country_name      TEXT NOT NULL,

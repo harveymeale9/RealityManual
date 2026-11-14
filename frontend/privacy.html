@@ -46,6 +46,7 @@
         <li>Shipping address (street, city, state/region, postal code, country)</li>
         <li>Order details, including quantity, price, and order status</li>
       </ul>
+      <p>If you optionally tick the checkout recovery box, we save your email address as you fill it in, even if you do not submit an order. This is only for one possible email with a link to retry checkout if you do not buy. Unticking the box removes that saved address. We delete unused recovery entries after 30 days and do not add them to a general mailing list.</p>
       <p>
         <strong>We never see or store your full card number, CVC, or other
         raw payment details.</strong> Checkout is handled entirely by
@@ -66,6 +67,7 @@
         <li>To submit your order, including your name, address, and phone number, to BookVault, our print and fulfillment partner, so your book can be printed and shipped to you</li>
         <li>To email or otherwise contact you about your order if needed (for example, a fulfillment issue or refund)</li>
         <li>If you opt in at checkout, to send one follow-up email after your book's estimated delivery inviting feedback or a review. You can opt out of future review requests by replying to that email.</li>
+        <li>If you separately opt in to checkout recovery and do not complete your purchase, to send at most one checkout retry email.</li>
         <li>To understand overall site traffic and improve the buying experience</li>
       </ul>
       <p>We use browsing and purchase-event data to measure advertising and build audiences such as people who visited the site but did not buy. We do not sell, rent, or trade your personal information.</p>
@@ -75,7 +77,7 @@
       <ul>
         <li><strong>Stripe</strong>, which processes your payment. Stripe's own privacy policy governs how it handles your payment details.</li>
         <li><strong>BookVault</strong>, our print-on-demand fulfillment partner, based in the United Kingdom. We share your name, shipping address, and phone number so they can print and ship your book directly to you.</li>
-        <li><strong>Resend</strong>, our email delivery provider. We share your name and email address so we can send order updates and, only if you opt in, a follow-up review request.</li>
+        <li><strong>Resend</strong>, our email delivery provider. We share your name and email address so we can send order updates and, only if you opt in to each separately, a follow-up review request or a one-time checkout recovery email.</li>
         <li><strong>Meta</strong>, and Google if its advertising tag is configured. Their tags receive page and purchase-event information so we can measure advertising and create or exclude retargeting audiences. We do not send them your checkout form details, name, email address, postal address, phone number, or card information.</li>
       </ul>
       <p>Meta and Google process advertising-event data under their own privacy terms and controls.</p>
@@ -126,7 +128,9 @@
         above) for as long as reasonably necessary for accounting,
         fulfillment, warranty, and legal purposes. Individual first-party
         analytics events are deleted after daily aggregation; anonymous daily
-        totals are retained for historical reporting. Meta and Google
+        totals are retained for historical reporting. Optional checkout recovery
+        email entries are deleted after 30 days or when you untick the option.
+        Meta and Google
         retain advertising-event data according to their own policies and the
         audience-retention settings in our advertising accounts.
       </p>

@@ -54,6 +54,14 @@
             <div class="field-error"></div>
           </div>
 
+          <div class="review-opt-in checkout-recovery-opt-in">
+            <input type="checkbox" id="checkout_recovery_opt_in" name="checkout_recovery_opt_in" />
+            <div>
+              <label for="checkout_recovery_opt_in">If I don't complete checkout, you may email me once with a link to try again.</label>
+              <p>Optional. We save only your email for this and delete it after 30 days. You can untick this at any time. <a href="privacy.html" target="_blank" rel="noopener noreferrer">Privacy policy</a></p>
+            </div>
+          </div>
+
           <div class="field" data-field="phone">
             <label for="phone">Phone</label>
             <input type="tel" id="phone" name="phone" maxlength="35" autocomplete="tel" required />
@@ -150,7 +158,7 @@
   <script src="js/analytics.js?v=20261111-order-attribution"></script>
   <script src="js/marketing.js?v=20261002-auto-meta"></script>
   <script src="js/countries.js"></script>
-  <script src="js/checkout.js?v=20261114-payment-timeout"></script>
+  <script src="js/checkout.js?v=20261114-recovery-opt-in"></script>
   <script>
     document.getElementById('year').textContent = new Date().getFullYear();
   </script>

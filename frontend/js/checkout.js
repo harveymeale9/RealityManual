@@ -20,6 +20,33 @@
   const QTY_ICON_MAX = 5; // beyond this many copies, show a "+N" badge instead of one icon per copy
 
   const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const recoveryOptIn = document.getElementById('checkout_recovery_opt_in');
+  const recoveryCaptureId = crypto.randomUUID();
+  let recoveryTimer = null;
+  let recoveryRequest = Promise.resolve();
+
+  function saveRecoveryChoice() {
+    const email = form.email.value.trim();
+    if (recoveryOptIn.checked && !EMAIL_REGEX.test(email)) return;
+    const payload = { capture_id: recoveryCaptureId, consent: recoveryOptIn.checked };
+    if (recoveryOptIn.checked) payload.email = email;
+    // Preserve click order if the shopper edits the address or unticks the box.
+    recoveryRequest = recoveryRequest.catch(() => {}).then(() => fetch(`${API_BASE_URL}/api/checkout/recovery-email`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload), keepalive: true,
+    }));
+  }
+  recoveryOptIn.addEventListener('change', saveRecoveryChoice);
+  form.email.addEventListener('input', () => {
+    if (!recoveryOptIn.checked) return;
+    clearTimeout(recoveryTimer);
+    recoveryTimer = setTimeout(saveRecoveryChoice, 600);
+  });
+  form.email.addEventListener('blur', () => {
+    if (!recoveryOptIn.checked) return;
+    clearTimeout(recoveryTimer);
+    saveRecoveryChoice();
+  });
   const PHONE_REGEX = /^\+?[\d\s\-.()/]{6,35}$/;
   // Field limits mirror BookVault's OrderAddress schema - see
   // backend/src/lib/validation.js and CLAUDE.md §64 for the source.
