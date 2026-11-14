@@ -22444,3 +22444,18 @@ BookVault rejections (for example, an inactive title), unexpected statuses,
 and unsafe refund/deadline cases still alert Harvey. The prior 24-hour
 resolution and safe-cancellation/refund rule is unchanged; a draft is not
 silently assumed paid. Existing owner alerts already sent cannot be recalled.
+
+## Incident customer refund closure (2026-11-14)
+
+Harvey asked to verify the BookVault order shown as deleted and the 08:40
+local-time refunded sale. Both screenshots identify the same order,
+`f83be348` (BookVault PodRef 3074612), not a new transaction. A live read-only
+Stripe check confirmed its full $96.17 refund succeeded, as did the two
+earlier payments from this same customer. BookVault's live GET reports the
+draft as `Deleted`, so it is not in production. Checkout was available and a
+newer paid order had reached BookVault Active. The customer had previously
+received a personal reply saying the third payment was not yet refunded; a
+follow-up was therefore sent in that same mailbox thread confirming all three
+refunds, the cancelled draft, and the option to place one new order if still
+wanted. The mailbox recorded the follow-up as sent with a provider message ID.
+No new payment or BookVault order was created in this reconciliation.
