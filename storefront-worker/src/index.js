@@ -94,9 +94,9 @@ export default {
     }
     try {
       const result = await env.DB.prepare('SELECT 1 AS ok').first();
-      return new Response(JSON.stringify({ ok: result?.ok === 1, stage: 'staging', checkout: checkoutReady ? 'enabled' : 'disabled' }), { status: 200, headers });
+      return new Response(JSON.stringify({ ok: result?.ok === 1, stage: env.DEPLOYMENT_STAGE || 'staging', checkout: checkoutReady ? 'enabled' : 'disabled' }), { status: 200, headers });
     } catch {
-      return new Response(JSON.stringify({ ok: false, stage: 'staging', checkout: 'disabled' }), { status: 503, headers });
+      return new Response(JSON.stringify({ ok: false, stage: env.DEPLOYMENT_STAGE || 'staging', checkout: 'disabled' }), { status: 503, headers });
     }
   },
   async scheduled(_event, env, ctx) {

@@ -22642,3 +22642,33 @@ Worker tests pass. The VPS backend was rebuilt with the handoff switch unset,
 so its current checkout and jobs remain active; live health and checkout
 availability returned OK after restart. The staged Worker was redeployed with
 checkout still disabled.
+
+## Production Cloudflare storefront handoff (2026-11-14)
+
+Harvey ran the owner-only report-token setup and proxied the `api` DNS record.
+After checking Stripe, the only payment-pending historical row was still
+`requires_payment_method`, not an unrecorded charge. VPS checkout was paused
+and its background jobs disabled before the final SQLite snapshot. The fresh
+production D1 database `rm-storefront-prod` (`602a6f7b-4395-4499-bbe6-e4bc46070ed0`)
+received all 45 existing orders and 835 analytics events. The Worker now uses
+that D1, enables checkout and fulfillment, and serves
+`api.realitymanual.com/*` through the Cloudflare route. It retains the
+existing Worker name `rm-storefront-api-staging` because the owner-installed
+secrets are bound to that Worker; its configured deployment stage is production.
+The Worker cron runs every five minutes. Do not turn VPS jobs back on while
+Worker jobs are active.
+
+The public route passed live health, availability, Stripe publishable config,
+real BookVault shipping quote, invalid-checkout rejection, CORS, and R2 video
+range checks. The authorized D1 report snapshot passed with a bearer token;
+unauthorized access returned 403. No real payment or BookVault order was
+created for testing. The next genuine paid order remains the end-to-end proof:
+verify Stripe, D1, BookVault DocRef/status and confirmation mail, and reconcile
+before any rollback to avoid a duplicate charge or print order.
+
+The VPS API is deliberately retained but paused as a controlled rollback path.
+Content Studio is configured to read the authenticated Worker report snapshot
+for sales, website analytics and order health; Project Manager and inbound
+mailbox remain on the VPS. The running ops-service must be restarted to load
+its new report-source environment entries. The old VPS database mount may be
+retained temporarily for rollback, but is no longer the intended report source.

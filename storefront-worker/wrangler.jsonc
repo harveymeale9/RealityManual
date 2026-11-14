@@ -4,6 +4,7 @@
   "main": "src/index.js",
   "compatibility_date": "2026-11-14",
   "workers_dev": true,
+  "routes": [{ "pattern": "api.realitymanual.com/*", "zone_name": "realitymanual.com" }],
   "triggers": { "crons": ["*/5 * * * *"] },
   "vars": {
     "CORS_ORIGIN": "https://realitymanual.com,https://ops.realitymanual.com",
@@ -11,14 +12,17 @@
     "BOOKVAULT_TITLE_ISBN": "9658364000016",
     "RESEND_FROM_EMAIL": "The Reality Manual <orders@realitymanual.com>",
     "RESEND_REPLY_TO": "info@realitymanual.com",
-    "REPORTS_ENABLED": "false",
+    "DEPLOYMENT_STAGE": "production",
+    "CHECKOUT_ENABLED": "true",
+    "FULFILLMENT_ENABLED": "true",
+    "REPORTS_ENABLED": "true",
     "REPORT_ALLOWED_IPS": "187.124.146.235,2a02:4780:4:12d1::1"
   },
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "rm-storefront-staging",
-      "database_id": "cfc8318c-2be0-49ab-89f6-27ea8360fc0f"
+      "database_name": "rm-storefront-prod",
+      "database_id": "602a6f7b-4395-4499-bbe6-e4bc46070ed0"
     }
   ],
   "r2_buckets": [
