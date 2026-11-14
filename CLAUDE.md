@@ -22516,3 +22516,10 @@ first, preserving Stripe PaymentIntent and BookVault DocRef identity. Keep the
 VPS alive through the initial Worker orders and end-to-end checks. A stale
 VPS database is not a safe automatic hot standby; the cross-system recovery
 path remains a release gate before Worker checkout is enabled.
+
+The staging Stripe adapter now uses the SDK's Fetch HTTP client and async
+WebCrypto webhook verifier, rather than Node-only networking or synchronous
+signature verification. PaymentIntent creation and refunds are keyed to the
+order UUID for Stripe idempotency. Tests verify raw-body signatures, rejection
+after body tampering, payment method types, and stable idempotency keys. This
+adapter remains unexposed until the rest of checkout/fulfillment is ported.

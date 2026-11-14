@@ -19,6 +19,9 @@ Do not point production traffic here yet.
   state transitions. It is tested but not yet wired to a public route.
 - `src/shipping.js` ports the live UK BookVault quote and fresh GBP/USD
   conversion; it is tested but not yet exposed as a staging route.
+- `src/stripeClient.js` uses Stripe's fetch HTTP client, async Web Crypto
+  webhook verification, and order-ID idempotency keys. It is tested but not
+  connected to the public Worker yet.
 
 ## Owner-only credential step
 
