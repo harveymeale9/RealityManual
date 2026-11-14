@@ -22673,3 +22673,13 @@ mailbox remain on the VPS. `rm-ops-service` restarted at 06:52 UTC with
 `STOREFRONT_REPORT_SOURCE=worker` and returned HTTP 200; startup logs showed
 no report-source error. The old VPS database mount may be
 retained temporarily for rollback, but is no longer the intended report source.
+
+At 06:56 UTC after restart, authenticated Content Studio
+`sales-dashboard`, `orders-health`, and `website-summary` routes each returned
+HTTP 200 through the production web service. VPS and D1 both held 45 orders
+and 835 analytics events; there was no cached-DNS event delta. D1 held no
+paid order awaiting fulfillment or confirmation email. A synthetic bad-signature
+webhook probe had created one error-log row, which was identified by its exact
+ID/time and removed so website-health counts again match the original 94.
+No customer order had arrived since cutover, so the first genuine order remains
+under a scheduled follow-up rather than being claimed end-to-end verified.
