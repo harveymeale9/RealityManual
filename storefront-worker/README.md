@@ -39,8 +39,9 @@ to Git. The script does not affect the live API or any other Worker.
 Harvey ran this script on 2026-11-14; a names-only check confirmed all four
 secrets are present in the staging Worker. Their values were not inspected.
 
-See [FAILOVER.md](./FAILOVER.md) for the one-active-backend rule and the VPS
-rollback plan. The next real order still uses the VPS backend.
+See [FAILOVER.md](./FAILOVER.md) for the one-active-backend rule and temporary
+cutover recovery plan. Harvey does not want a permanent redundant checkout.
+The next real order still uses the VPS backend.
 
 ## Remaining release gates
 

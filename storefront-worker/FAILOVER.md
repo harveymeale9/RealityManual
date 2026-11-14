@@ -1,4 +1,4 @@
-# Storefront checkout failover rules
+# Storefront cutover and recovery rules
 
 ## Current state
 
@@ -7,7 +7,7 @@ The Cloudflare Worker is staging-only and returns 404 for payment creation.
 The next real order therefore uses the existing VPS path. Keep that container,
 database, Stripe webhook, and BookVault worker running throughout migration.
 
-## Safe cutover and rollback design
+## Safe cutover and short-term rollback
 
 There must be exactly one backend accepting **new** payment-intent creation at
 any time. Do not add a browser or edge-proxy rule that automatically sends a
@@ -27,17 +27,18 @@ Before changing the active route:
    before reopening checkout. Keep the old primary available for already-paid
    work until its queue is drained or explicitly transferred.
 
-If the Worker fails **before** a payment attempt, the safe fallback is a
-controlled switch of new checkouts back to the VPS after the same reconciliation.
+If the Worker fails **before** a payment attempt, pause checkout and diagnose.
+During the short cutover period, a controlled switch of new checkouts back to
+the VPS is possible only after the same reconciliation.
 If a payment attempt is uncertain, first look up its order/PaymentIntent in
 Stripe and the active ledger; show the customer a “do not pay again” status
 message rather than sending a second payment request. If the Worker fails
 **after** payment, use the original order ID to recover its fulfillment;
 never create a second Stripe charge or BookVault DocRef as a fallback.
 
-Keep the VPS deployment and its database as a warm rollback option after the
-first successful Worker order. Retain it until multiple real orders have been
-verified end to end (payment, receipt, BookVault scheduled payment/acceptance,
-dispatch email, reporting), and then decide whether the extra operational
-cost of maintaining a synchronized standby is worthwhile. An unsynchronized
-VPS copy is **not** an automatic hot failover.
+Harvey does not want a permanent redundant checkout. Keep the VPS deployment
+temporarily through the first verified Worker orders and until its outstanding
+paid-order jobs have drained or been transferred. Verify payment, receipt,
+BookVault scheduled payment/acceptance, dispatch email, and reporting before
+retiring it. After that, an outage should pause checkout and trigger repair;
+do not maintain an unsynchronized VPS copy as a pretend hot failover.

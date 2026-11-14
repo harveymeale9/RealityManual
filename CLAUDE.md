@@ -22514,8 +22514,9 @@ timed-out/uncertain payment must never be automatically retried on the other
 backend. A future switch or rollback requires payment/order reconciliation
 first, preserving Stripe PaymentIntent and BookVault DocRef identity. Keep the
 VPS alive through the initial Worker orders and end-to-end checks. A stale
-VPS database is not a safe automatic hot standby; the cross-system recovery
-path remains a release gate before Worker checkout is enabled.
+VPS database is not a safe automatic hot standby; cutover reconciliation and
+recovery of in-flight orders remain release gates before Worker checkout is
+enabled. The later note below narrows this to a temporary rollback period.
 
 The staging Stripe adapter now uses the SDK's Fetch HTTP client and async
 WebCrypto webhook verifier, rather than Node-only networking or synchronous
@@ -22523,3 +22524,12 @@ signature verification. PaymentIntent creation and refunds are keyed to the
 order UUID for Stripe idempotency. Tests verify raw-body signatures, rejection
 after body tampering, payment method types, and stable idempotency keys. This
 adapter remains unexposed until the rest of checkout/fulfillment is ported.
+
+Harvey subsequently decided a permanent redundant VPS checkout is unnecessary.
+The static site can remain reachable while its API is unavailable, but no new
+order can complete without a working payment backend. Keep the VPS only as a
+temporary rollback/recovery path during cutover and while its paid-order jobs
+drain. Once multiple real Worker orders have completed end to end, retire the
+VPS storefront backend rather than maintaining an unsynchronized hot standby.
+The one-active-backend rule and in-flight Stripe/BookVault reconciliation
+requirements still apply; never automatically replay an uncertain payment.
