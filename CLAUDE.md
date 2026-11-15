@@ -22920,3 +22920,18 @@ was marked dirty so no stale preview can be approved. A normal Editor render
 was queued via its API; at the time of this change it was waiting behind an
 unrelated active 4K production render, which was not interrupted. The card
 remains in Editor for Harvey's review; there was no publication.
+
+## Sales chart tracks customer payments, not BookVault costs (2026-11-15)
+
+Harvey noticed 13 paid orders on 15 Nov but a shorter bar than the nine paid
+orders on 14 Nov. The chart was plotting known gross profit only; four of the
+13 orders were paid by customers but still had no final BookVault cost while
+their BookVault drafts awaited the normal batch-payment cycle. This made
+today's bar appear smaller despite more sales. The 30-day bar chart now uses
+the existing Bangkok-day paid-order count (`daily.orders`) for bar height,
+tooltip, and headline. Its explanatory copy explicitly says BookVault
+acceptance and charges do not control the bar. Estimated gross profit remains
+in the separate summary cards. A regression test uses the observed 9-versus-13
+case with reversed profit amounts and four pending BookVault costs to prevent
+the chart reverting to profit-based heights. No fulfillment or payment flow
+was changed.

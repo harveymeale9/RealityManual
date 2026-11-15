@@ -609,22 +609,18 @@
       }).join('');
 
       var thirty = data.periods.last_30_days;
-      var maximumProfit = Math.max.apply(Math, data.daily.map(function (day) { return Math.abs(Number(day.gross_profit_cents) || 0); }).concat([0]));
-      var hasProfitData = data.daily.some(function (day) { return day.profit_known_orders > 0; });
-      var chart = hasProfitData ? data.daily.map(function (day, index) {
-        var amount = Number(day.gross_profit_cents) || 0;
-        var height = amount ? Math.max(5, Math.round(Math.abs(amount) / (maximumProfit || 1) * 100)) : 0;
+      var maximumOrders = Math.max.apply(Math, data.daily.map(function (day) { return Number(day.orders) || 0; }).concat([0]));
+      var chart = data.daily.map(function (day, index) {
+        var orders = Number(day.orders) || 0;
+        var height = orders ? Math.max(5, Math.round(orders / (maximumOrders || 1) * 100)) : 0;
         var label = (index % 5 === 0 || index === data.daily.length - 1) ? day.day.slice(5) : '';
-        var tooltip = day.day + ': ' +
-          (day.profit_known_orders || !day.orders ? salesMoney(amount) + ' gross profit' : 'profit pending') +
-          ' · ' + day.orders + ' paid sale' + (day.orders === 1 ? '' : 's') +
+        var tooltip = day.day + ': ' + orders + ' paid order' + (orders === 1 ? '' : 's') +
           ' · ' + day.units + ' book' + (day.units === 1 ? '' : 's') +
-          ' · ' + salesMoney(day.revenue_cents) + ' revenue' +
-          (day.profit_pending_orders ? ' · ' + day.profit_pending_orders + ' cost pending' : '');
-        return '<div class="sales-chart-column' + (amount < 0 ? ' negative' : '') + (amount === 0 ? ' zero' : '') +
+          ' · ' + salesMoney(day.revenue_cents) + ' charged';
+        return '<div class="sales-chart-column' + (orders === 0 ? ' zero' : '') +
           '" role="img" tabindex="0" aria-label="' + escapeHtml(tooltip) + '" data-sales-tooltip="' + escapeHtml(tooltip) + '">' +
           '<div class="sales-chart-track"><i style="height:' + height + '%"></i></div><span>' + label + '</span></div>';
-      }).join('') : '<div class="sales-empty-chart">Gross profit appears when BookVault order costs are available.</div>';
+      }).join('');
 
       var countries = data.countries.length ? data.countries.map(function (country) {
         return '<div class="sales-country-row"><strong>' + escapeHtml(country.country) + '</strong><span>' + country.orders + ' order' + (country.orders === 1 ? '' : 's') + ' · ' + country.units + ' books</span><b>' + salesMoney(country.revenue_cents) + '</b></div>';
@@ -707,8 +703,7 @@
         '</section>' +
         paymentOverview +
         emailHealthHtml(emailHealth, mailboxStatus) +
-        '<div class="sales-dashboard-columns"><section class="sales-block sales-chart-block"><div class="sales-block-head"><div><span>Estimated gross profit</span><h3>Last 30 days</h3></div><b>' + salesProfit(thirty) + '</b></div><div class="sales-chart">' + chart + '<div class="sales-chart-tooltip" hidden></div></div><p class="sales-profit-note">Revenue minus actual BookVault production, shipping, tax and other order costs, converted at a saved reference FX rate. Excludes Stripe and bank fees. ' +
-          (thirty.profit_pending_orders ? thirty.profit_pending_orders + ' paid order' + (thirty.profit_pending_orders === 1 ? '' : 's') + ' awaiting BookVault cost.' : '') + '</p></section>' +
+        '<div class="sales-dashboard-columns"><section class="sales-block sales-chart-block"><div class="sales-block-head"><div><span>Stripe-paid customer orders</span><h3>Last 30 days</h3></div><b>' + thirty.paid_orders + '</b></div><div class="sales-chart">' + chart + '<div class="sales-chart-tooltip" hidden></div></div><p class="sales-profit-note">Counted when the customer pays, regardless of when BookVault accepts or charges us. Refunded and excluded test orders are omitted.</p></section>' +
           '<section class="sales-block"><div class="sales-block-head"><div><span>Markets</span><h3>Revenue by country</h3></div></div><div class="sales-country-list">' + countries + '</div></section></div>' +
         '<section class="sales-block sales-orders"><div class="sales-block-head"><div><span>Operations</span><h3>Recent orders</h3></div><small>Newest 25 · use Refresh for the latest orders</small></div><div class="sales-order-list">' + recentOrders + '</div></section>' +
         '<section class="sales-block sales-refunds" id="salesRefunds"><div class="sales-block-head"><div><span>Money returned</span><h3>Refunds &amp; reasons</h3></div><small>' + data.periods.all_time.refunded_orders + ' all time · newest 100 shown</small></div><div class="sales-refund-list">' + refunds + '</div></section>' +

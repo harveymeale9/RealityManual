@@ -178,20 +178,21 @@ test('both analytics views show the nested source-and-video referral chart', fun
   assert.match(page, /style\.css\?v=[^"\s]+/);
 });
 
-test('sales chart shows paid sale counts immediately on hover without a second line graph', async function () {
+test('sales chart heights follow Stripe-paid orders, not BookVault-dependent profit', async function () {
   const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const start = source.indexOf('  function renderSalesAnalytics()');
   const end = source.indexOf('  function websiteTrafficHtml(', start);
   assert.ok(start > 0 && end > start);
   const daily = Array.from({ length: 30 }, function (_, index) {
-    return { day: '2026-10-' + String(index + 1).padStart(2, '0'), orders: index === 29 ? 2 : 0,
-      units: index === 29 ? 3 : 0, revenue_cents: index === 29 ? 19500 : 0,
-      gross_profit_cents: index === 29 ? 6900 : 0, profit_known_orders: index === 29 ? 2 : 0,
-      profit_pending_orders: 0 };
+    return { day: '2026-10-' + String(index + 1).padStart(2, '0'), orders: index === 29 ? 13 : index === 28 ? 9 : 0,
+      units: index === 29 ? 13 : index === 28 ? 9 : 0, revenue_cents: index === 29 ? 103815 : index === 28 ? 75743 : 0,
+      gross_profit_cents: index === 29 ? 33745 : index === 28 ? 34461 : 0,
+      profit_known_orders: index === 29 ? 9 : index === 28 ? 9 : 0,
+      profit_pending_orders: index === 29 ? 4 : 0 };
   });
-  const period = { paid_orders: 2, units: 3, revenue_cents: 19500, book_revenue_cents: 19500,
-    shipping_revenue_cents: 0, gross_profit_cents: 6900, profit_pending_orders: 0,
-    average_order_cents: 9750, refunded_orders: 0, refunded_value_cents: 0 };
+  const period = { paid_orders: 22, units: 22, revenue_cents: 179558, book_revenue_cents: 179558,
+    shipping_revenue_cents: 0, gross_profit_cents: 68206, profit_pending_orders: 4,
+    average_order_cents: 8162, refunded_orders: 0, refunded_value_cents: 0 };
   const dashboard = { generated_at: '2026-10-30T12:00:00.000Z',
     periods: { today: period, last_7_days: period, last_30_days: period, all_time: period },
     books_sold: {}, daily, countries: [], recent_orders: [], recent_refunds: [], excluded_orders: [],
@@ -215,10 +216,14 @@ test('sales chart shows paid sale counts immediately on hover without a second l
   const render = vm.runInNewContext(source.slice(start, end) + '\nrenderSalesAnalytics', context);
   render();
   await new Promise(function (resolve) { setImmediate(resolve); });
-  const barTooltip = panelMain.innerHTML.match(/data-sales-tooltip="([^"]*2 paid sales[^"]*)"/);
+  const barTooltip = panelMain.innerHTML.match(/data-sales-tooltip="([^"]*13 paid orders[^"]*)"/);
   assert.ok(barTooltip);
-  assert.match(barTooltip[1], /2 paid sales · 3 books · \$195\.00 revenue/);
-  assert.doesNotMatch(panelMain.innerHTML, /sales-line-graph|Paid sales by day/);
+  assert.match(barTooltip[1], /13 paid orders · 13 books · \$1038\.15 charged/);
+  assert.match(panelMain.innerHTML, /2026-10-29: 9 paid orders[^]*?height:69%/);
+  assert.match(panelMain.innerHTML, /2026-10-30: 13 paid orders[^]*?height:100%/);
+  assert.match(panelMain.innerHTML, /Stripe-paid customer orders/);
+  assert.match(panelMain.innerHTML, /regardless of when BookVault accepts or charges us/);
+  assert.doesNotMatch(panelMain.innerHTML, /sales-line-graph|Gross profit appears when BookVault/);
   column.dataset.salesTooltip = barTooltip[1];
   listeners.pointerenter();
   assert.equal(tooltip.hidden, false);
