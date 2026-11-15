@@ -22889,3 +22889,15 @@ the old Production copy was not published. The other active final build
 completed normally during this work. Temporary archive download/check frames
 were removed; the normalized inserted clip is retained under the Editor
 project.
+
+## MONEY video returned to Production for soundtrack change (2026-11-15)
+
+At Harvey's request, video card #254, “Money only flows to people who
+understand this” (`5574bd8e-d0f9-417c-8877-0d21f2db777a`), was moved from
+Final Check to `in_production` so its backing audio can be changed. It had no
+scheduled or published state. Its selected audio track and media were left
+untouched; the completed final-build flag was cleared so the next “Send to
+final check” rebuilds the master with Harvey's newly selected track instead
+of treating the prior mix as current. The stage and build state were
+verified in the live records database. No publication or service restart was
+triggered.
