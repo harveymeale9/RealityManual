@@ -23005,3 +23005,12 @@ Production again, the handoff reuses those choices rather than resetting
 them. It invalidates any old final-build status so the revised picture must
 be rebuilt before Final Check. The button opens the returned project in Editor
 and displays server errors inline instead of moving the row optimistically.
+The live route was exercised with a temporary Editor-origin Production card:
+it returned both records to Editor, a second call was idempotent, and the
+temporary card, source link, and stage event were removed afterward. The
+mobile-sized Production UI showed the button on every then-current row and
+cancelling its confirmation left the rows unchanged. Deployment of the route
+waited for active final renders to finish and completed at commit `ff75f1c`.
+While deployment was waiting, Harvey edited the love video and sent it forward
+again; at final verification it was in Final Check. That newer action was
+preserved rather than moving the card back a second time.
