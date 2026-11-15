@@ -22855,3 +22855,37 @@ same FFmpeg PID remained active, its output kept growing, and both public and
 local ops-service `/api/health` returned `ok`. Future pressure relief should
 still follow the R2-verification and queue-archiver rules before any media
 removal; never remove in-progress media to reclaim space.
+
+## Idiot-Proof Guide rock-paper-scissors insert (2026-11-15)
+
+Harvey asked to return “The Idiot-Proof Guide to Reinventing Yourself” to
+Editor and insert `https://www.youtube.com/watch?v=6yrdT5y12kA` at 0:44-0:48
+immediately after his “rock paper scissors world championships” line. The
+card was actually in `in_production`, not yet Final Check, with no final-build
+job for that card. A SQLite backup was made at
+`/root/ops-service-data/idiotproof-reopen-preedit-20261115.sqlite`. The Editor
+project's `productionPieceId`/sent timestamp were cleared and its linked
+video card returned to `in_editor` together, without restarting ops-service
+or interrupting another video's active final render. The existing outline cue
+pointed to a different YouTube URL and was replaced with a parseable cue for
+Harvey's exact URL/range.
+
+YouTube blocked the VPS downloader with a bot check, but the Internet Archive
+held a video-only capture of the exact video ID (640×480 VP9). Its 0:44-0:48
+footage was inspected and normalized to a four-second H.264/AAC Editor asset.
+Because that capture had no audio, the asset carries very faint neutral audio
+rather than falsely attributed original commentary; no external speaker
+captions were invented. The retained transcript occurrence ends at word index
+1496 (`championships.`); placing the insert at the end of its retained shot
+(source 656.772s, 120ms after the word end) avoids a stray 120ms flash before
+the next cut. The Editor timeline resumes the next retained source shot at
+662.952s immediately after the inserted segment.
+
+The Editor decision preview rebuilt to `ready`/100% at edit revision 40,
+with one ready inserted clip and no render error. Actual preview frames inside
+the insert and just after it were inspected: championship match, then Harvey's
+book shot. The card remains in Editor for Harvey to review and approve again;
+the old Production copy was not published. The other active final build
+completed normally during this work. Temporary archive download/check frames
+were removed; the normalized inserted clip is retained under the Editor
+project.
