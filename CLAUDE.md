@@ -22840,3 +22840,18 @@ now have distinct matching BookVault PodRefs (3076252, 3076268, 3076270,
 `Created`, and no critical error. `Created` is not dispatched; normal status
 polling and dispatch emails remain in place. Resend API acceptance confirms
 submission, not inbox delivery.
+
+## VPS disk headroom during active Editor render (2026-11-15)
+
+Harvey reported 93% disk use while Editor project `652f9e11` was actively
+rendering. Direct host measurement on inspection showed 83GB/96GB used (87%)
+with 13GB free; FFmpeg was still writing its picture-building MP4. Docker
+reported 2.427GB of unused build cache, and `/root/.npm/_cacache` held about
+3.2GB with no npm install/build process running. Only those disposable caches
+were cleared (`docker builder prune -f`, `npm cache clean --force`). No Editor
+workspace, recording, render, container, image, or job was removed or stopped.
+Afterward the root filesystem was 79GB/96GB used (83%) with 18GB free. The
+same FFmpeg PID remained active, its output kept growing, and both public and
+local ops-service `/api/health` returned `ok`. Future pressure relief should
+still follow the R2-verification and queue-archiver rules before any media
+removal; never remove in-progress media to reclaim space.
