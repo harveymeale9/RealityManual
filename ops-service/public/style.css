@@ -2776,13 +2776,13 @@ body.role-reviewer #pmBackFab {
   .sales-chart { height: 180px; gap: 2px; padding-inline: 10px; }
   .sales-block-head > small { display: none; }
   .sales-order-list { overflow: visible; }
-  .sales-order-row { min-width: 0; grid-template-columns: minmax(0,1fr) auto; gap: 8px 12px; padding: 14px; }
+  .sales-order-row { min-width: 0; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px 12px; padding: 14px; }
   .sales-order-row time { grid-column: 1; grid-row: 1; }
-  .sales-order-price { grid-column: 2; grid-row: 1; }
+  .sales-order-price { grid-column: 2; grid-row: 1; min-width: 0; }
   .sales-order-price small { white-space: normal; }
-  .sales-order-row > strong { grid-column: 1; grid-row: 2; }
-  .sales-order-state { grid-column: 2; grid-row: 2; justify-self: end; text-align: right; }
-  .sales-order-ops { grid-column: 1 / -1; grid-row: 3; }
+  .sales-order-row > strong { grid-column: 1 / -1; grid-row: 2; }
+  .sales-order-state { grid-column: 1 / -1; grid-row: 3; justify-self: start; text-align: left; }
+  .sales-order-ops { grid-column: 1 / -1; grid-row: 4; }
 }
 
 /* Fixed way back to Project Manager, mobile only (see index.html for why).

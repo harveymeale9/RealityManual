@@ -22935,3 +22935,17 @@ in the separate summary cards. A regression test uses the observed 9-versus-13
 case with reversed profit amounts and four pending BookVault costs to prevent
 the chart reverting to profit-based heights. No fulfillment or payment flow
 was changed.
+
+## Recent orders mobile layout keeps the source and status readable (2026-11-15)
+
+Harvey's phone screenshot showed the Recent orders source URL spelling one
+character per line. At widths below 600px the order row used a two-column
+grid with `auto` for the status column. The long BookVault status detail and
+price made that column consume nearly all available width, leaving the order
+identity/source column at zero width. This was reproduced in headless
+Chromium at 390px: the order title measured 0px wide and the row grew to
+644px tall. The mobile row now gives date/price a balanced two-column header,
+then places identity/source, fulfillment status, and operations on their own
+full-width rows. At 320px and 390px the source/title and status stay readable,
+with no horizontal page overflow; the reproduced 390px row is about 219px
+tall. No order data or status logic changed.
