@@ -22901,3 +22901,22 @@ final check” rebuilds the master with Harvey's newly selected track instead
 of treating the prior mix as current. The stage and build state were
 verified in the live records database. No publication or service restart was
 triggered.
+
+## RPS insert uses Harvey's original audio (2026-11-15)
+
+For Editor project `0ca49b70-7d12-49b5-a6a6-3cfc82bf1889` (The Idiot-Proof
+Guide to Reinventing Yourself), Harvey supplied the original championship
+MP4 at `/root/ops-service-data/voice-attachments/c7bc19a8c8a216cbd421ba51244ba251/0.mp4`.
+The previous four-second insert used a video-only archive capture with a
+near-silent neutral AAC track. The supplied file has H.264 video and audible
+AAC audio at 0:44–0:48. The exact four-second segment was normalized to the
+same 640×480, 29.97 fps, H.264/AAC Editor asset and atomically replaced at
+`/root/ops-service-data/editor/0ca49b70-7d12-49b5-a6a6-3cfc82bf1889/inserted-clip-6b9d4e08-4a61-4890-95e1-2d9a7a9943a4.mp4`.
+The original insert is recoverable as the sibling `.pre-audio.mp4` and the
+records database was backed up at
+`/root/ops-service-data/idiotproof-rps-audio-before-20261115.sqlite`.
+The Editor revision advanced from 40 to 41 and the existing decision preview
+was marked dirty so no stale preview can be approved. A normal Editor render
+was queued via its API; at the time of this change it was waiting behind an
+unrelated active 4K production render, which was not interrupted. The card
+remains in Editor for Harvey's review; there was no publication.
