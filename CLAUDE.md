@@ -22970,3 +22970,17 @@ a non-default speed. The previous preview files are retained as `.pre-speed.mp4`
 siblings and the records DB backup is
 `/root/ops-service-data/video-261-before-speed-20261115.sqlite`. No publish
 or Final Check transition was triggered.
+
+## Happiness video Editor preview shortened just under three minutes (2026-11-15)
+
+For Editor project `3c5816c2-5b51-4232-8f66-b6ac739f75a5`, **Is happiness
+all that matters? Yep.** (#262), Harvey requested a 3:12 preview become just
+under three minutes. Its existing 192.114-second decision preview was sped
+1.071× with FFmpeg `setpts` and pitch-preserving `atempo`. The resulting
+H.264/AAC preview is 179.371 seconds (2:59.37), with audible audio and the
+same 404×720 frame. The Editor project stores `playbackSpeed: 1.071`, revision
+10, updated duration/hash/quality metadata, and remains `in_editor`; the
+verified-render hash check passes. The saved speed also applies to later
+Production masters via the renderer change described above. The prior preview
+is recoverable as `render.pre-speed.mp4` and the database backup is
+`/root/ops-service-data/happiness-speed-before-20261115.sqlite`.
