@@ -2120,6 +2120,8 @@ body.role-reviewer #pmBackFab {
 .upload-row-audio-preview-progress:not(.is-preparing) .upload-row-audio-preview-spinner { display: none; }
 .upload-row-titles .title-input { margin-bottom: 4px; }
 .upload-row-action { display: flex; flex-direction: column; gap: 8px; align-self: stretch; justify-content: center; }
+.upload-row-return-error { color: var(--danger, #e97878); font-size: 0.75rem; line-height: 1.35; }
+.upload-row-return-error:empty { display: none; }
 
 /* "Send to final check" — Harvey wants an instant tick + the row gone,
    not the whole list flashing through a rebuild. Collapses cleanly

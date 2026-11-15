@@ -5682,15 +5682,48 @@
         sendBtn.textContent = 'Send to final check';
       });
     });
-    // "Full editor…" button removed 2026-09-20 per Harvey ("ill nevver
-    // use this") — everything he actually needs to touch for an
-    // in-production video already lives inline in this row (thumbnail,
-    // audio, title(s), platforms), matching the same "closed review
-    // surface, no editor escape hatch" call already made for Final
-    // Check cards in §116. `openPiece`/the shared modal itself are left
-    // intact — Content Ops (the planning kanban) still opens it the
-    // normal way; only this one entry point into it is gone.
+    // This is a deliberate workflow reversal, not a generic "Full editor"
+    // shortcut: the server unlocks the retained source and moves both
+    // records together before the Editor screen is opened.
     actionSection.appendChild(sendBtn);
+    var returnBtn = document.createElement('button');
+    returnBtn.type = 'button';
+    returnBtn.className = 'btn-secondary btn-tiny';
+    returnBtn.textContent = 'Back to Editor';
+    var hasEditorSource = p.editorProjectId === p.id;
+    returnBtn.disabled = !canEditRow || !hasEditorSource || p.finalBuildStatus === 'pending' || p.finalBuildStatus === 'running';
+    if (!hasEditorSource) returnBtn.title = 'This upload has no retained Editor recording.';
+    else if (p.finalBuildStatus === 'pending' || p.finalBuildStatus === 'running') returnBtn.title = 'Wait for the final build to finish.';
+    var returnError = document.createElement('span');
+    returnError.className = 'upload-row-return-error';
+    returnError.setAttribute('role', 'alert');
+    returnBtn.addEventListener('click', function () {
+      if (returnBtn.disabled || !window.confirm('Return this video to Editor? Your Production selections will be kept for when you send it back.')) return;
+      returnBtn.disabled = true;
+      sendBtn.disabled = true;
+      returnBtn.textContent = 'Returning…';
+      returnError.textContent = '';
+      fetch('/api/videos/' + encodeURIComponent(p.id) + '/return-to-editor', { method: 'POST', credentials: 'include' })
+        .then(function (response) { return response.json().then(function (body) {
+          if (!response.ok) throw new Error(body.message || 'Could not return this video to Editor.');
+          return body;
+        }); })
+        .then(function (body) {
+          pieces[p.id] = body.piece;
+          renderUploadLists();
+          localStorage.setItem('rmEditorListFilter', 'active');
+          localStorage.setItem('rmEditorActiveProjectId', p.editorProjectId);
+          location.hash = 'editor';
+        })
+        .catch(function (error) {
+          returnError.textContent = error.message || 'Could not return this video to Editor.';
+          returnBtn.textContent = 'Back to Editor';
+          returnBtn.disabled = false;
+          sendBtn.disabled = !canEditRow;
+        });
+    });
+    actionSection.appendChild(returnBtn);
+    actionSection.appendChild(returnError);
 
     row.appendChild(head);
     row.appendChild(frameSection);

@@ -22984,3 +22984,24 @@ verified-render hash check passes. The saved speed also applies to later
 Production masters via the renderer change described above. The prior preview
 is recoverable as `render.pre-speed.mp4` and the database backup is
 `/root/ops-service-data/happiness-speed-before-20261115.sqlite`.
+
+## Production cards can return to Editor (2026-11-15)
+
+Harvey asked to reopen **Why the very fabric of the universe is love** (#263).
+Its Production card and original Editor project were returned together to
+`in_editor`/unlocked, after confirming no final build was active and the source
+and verified render still existed. The pre-change records database is backed
+up at `/root/ops-service-data/love-video-return-before-20261115.sqlite`.
+The Production media copy was retained and no other card moved.
+
+Every Content Production row now shows **Back to Editor**. The admin-only
+`POST /api/videos/:id/return-to-editor` changes the video card and Editor
+project in one database transaction, refuses an active final build or missing
+Editor source, and is idempotent after a successful return. Uploads that never
+had a retained Editor source show the button disabled with an explanation.
+Returning keeps Production title, selected soundtrack, thumbnail, platform,
+tags, and title choices on the card; when that Editor edit is sent to
+Production again, the handoff reuses those choices rather than resetting
+them. It invalidates any old final-build status so the revised picture must
+be rebuilt before Final Check. The button opens the returned project in Editor
+and displays server errors inline instead of moving the row optimistically.

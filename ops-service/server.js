@@ -2785,6 +2785,7 @@ async function sendEditorProjectToProduction(input) {
   const maxProductionOrder = rows.filter(function (piece) { return piece.stage === 'in_production'; })
     .reduce(function (max, piece) { return Math.max(max, Number(piece.order) || 0); }, 0);
   const duration = Number(project.editedDuration || project.duration) || 0;
+  const returningFromProduction = !!(existing && existing.stage === 'in_editor' && existing.returnedFromProductionAt);
   const vertical = project.effectiveLayout === 'vertical';
   const contentType = ['ultra_short', 'short', 'long_short', 'longform'].includes(project.detectedContentType)
     ? project.detectedContentType
@@ -2796,14 +2797,14 @@ async function sendEditorProjectToProduction(input) {
   const piece = recordConcurrency.stampServerWrite(Object.assign({}, existing || {}, {
     id: project.id,
     seq: existing && existing.seq || maxSeq + 1,
-    title: project.planningPieceTitle || fileNameBase,
-    preserveWorkingTitle: !!project.planningPieceTitle,
+    title: returningFromProduction ? existing.title : (project.planningPieceTitle || fileNameBase),
+    preserveWorkingTitle: returningFromProduction ? !!existing.preserveWorkingTitle : !!project.planningPieceTitle,
     stage: 'in_production',
-    platforms: platforms,
-    contentType: contentType,
-    contentTypeSelectionExplicit: true,
+    platforms: returningFromProduction ? existing.platforms : platforms,
+    contentType: returningFromProduction ? existing.contentType : contentType,
+    contentTypeSelectionExplicit: returningFromProduction ? !!existing.contentTypeSelectionExplicit : true,
     videoIsVertical: vertical,
-    notesHtml: '',
+    notesHtml: returningFromProduction ? existing.notesHtml : '',
     hasVideo: true,
     transcript: (project.words || []).filter(function (word) {
       return (project.removedWordIndices || []).indexOf(word.index) === -1;
@@ -2811,18 +2812,24 @@ async function sendEditorProjectToProduction(input) {
     // Backing-audio selection now starts here in Production. Editor approves
     // only picture, voice, cuts and captions, so no old Editor choice leaks
     // into this card or blocks the handoff.
-    audioTrackId: '',
-    thumbnailDataUrl: '',
-    ytTitles: [],
-    tags: [],
+    audioTrackId: returningFromProduction ? existing.audioTrackId : '',
+    thumbnailDataUrl: returningFromProduction ? existing.thumbnailDataUrl : '',
+    ytTitles: returningFromProduction ? existing.ytTitles : [],
+    tags: returningFromProduction ? existing.tags : [],
     analysisStatus: 'pending',
+    finalBuildStatus: '',
+    finalBuildProgress: 0,
+    finalBuildStep: '',
+    finalBuildError: '',
     scheduledAt: '',
-    order: previousStage === 'in_production' && Number(existing.order) || maxProductionOrder + 10,
+    order: (previousStage === 'in_production' || returningFromProduction) && Number(existing.order) || maxProductionOrder + 10,
     editorProjectId: project.id,
     sourcePlanningPieceId: project.planningPieceId || '',
     createdAt: existing && existing.createdAt || now,
     updatedAt: now
   }));
+  delete piece.returnedFromProductionAt;
+  delete piece.finalAudioMix;
   const videoDir = path.join(UPLOADS_DIR, 'videos');
   const destination = path.join(videoDir, project.id);
   fs.mkdirSync(videoDir, { recursive: true });
@@ -3171,6 +3178,46 @@ async function executeBuildFinalVideo(id) {
     if (productionPicturePath) fs.rm(productionPicturePath, { force: true }, function () {});
   }
 }
+
+// Reopen an Editor-origin Production card without losing its source or the
+// Production selections Harvey has already made. Both records change in one
+// transaction: a card must never say Editor while its project remains locked.
+app.post('/api/videos/:id/return-to-editor', requireAuth, function (req, res) {
+  const id = req.params.id;
+  if (!isValidId(id)) return res.status(400).json({ error: 'invalid_id' });
+  const piece = getPieceRecord(id);
+  if (!piece) return res.status(404).json({ error: 'piece_not_found' });
+  const projectRow = stmts.getOne.get('editorProjects', id);
+  if (piece.editorProjectId !== id || !projectRow) {
+    return res.status(409).json({ error: 'editor_source_unavailable', message: 'This upload has no retained Editor recording to return to.' });
+  }
+  const project = JSON.parse(projectRow.data);
+  if (piece.stage === 'in_editor' && !project.productionPieceId) return res.json({ ok: true, alreadyReturned: true, piece: piece });
+  if (piece.stage !== 'in_production' || project.productionPieceId !== id) {
+    return res.status(409).json({ error: 'stage_changed', message: 'This card is no longer an editable Production handoff.' });
+  }
+  if (finalBuildJobs.has(id) || ['pending', 'running'].includes(piece.finalBuildStatus)) {
+    return res.status(409).json({ error: 'final_build_active', message: 'Wait for the current final build to finish before returning this video to Editor.' });
+  }
+  if (!fs.existsSync(path.join(DATA_DIR, 'editor', id, 'source'))) {
+    return res.status(409).json({ error: 'editor_source_missing', message: 'The original Editor recording is unavailable; the Production card was left untouched.' });
+  }
+  const stamp = new Date().toISOString();
+  piece.stage = 'in_editor';
+  piece.returnedFromProductionAt = stamp;
+  piece.updatedAt = stamp;
+  recordConcurrency.stampServerWrite(piece);
+  project.productionPieceId = '';
+  project.sentToProductionAt = '';
+  project.updatedAt = stamp;
+  db.transaction(function () {
+    stmts.upsert.run('pieces', id, JSON.stringify(piece), stamp);
+    stmts.upsert.run('editorProjects', id, JSON.stringify(project), stamp);
+  })();
+  try { weeklyReports.recordStageChange(piece, 'in_production', 'kanban', stamp); }
+  catch (error) { console.error('[editor] Return stage report failed:', error.message); }
+  res.json({ ok: true, piece: piece, editorProjectId: id });
+});
 
 // Same pre-existing missing-auth gap closed as /api/videos/:id/analyze
 // above.
