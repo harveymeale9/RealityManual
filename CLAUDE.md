@@ -22949,3 +22949,24 @@ then places identity/source, fulfillment status, and operations on their own
 full-width rows. At 320px and 390px the source/title and status stay readable,
 with no horizontal page overflow; the reproduced 390px row is about 219px
 tall. No order data or status logic changed.
+
+## Video #261 keeps its faster pace through the Production master (2026-11-15)
+
+Harvey requested **How To Win The Game of Life** (#261) be shortened from
+3:19.65 to about 2:58–2:59 without changing its edit or leaving Production.
+Its Editor decision preview and Production preview were time-compressed by
+1.1182× with FFmpeg `setpts` plus pitch-preserving `atempo`; the verified
+result is 2:58.536, with H.264/AAC streams and audible audio. The saved Editor
+project now carries `playbackSpeed: 1.1182`, updated duration/hash/quality
+metadata, and revision 5; the Production card remains `in_production`.
+
+The full-resolution Production renderer now applies that saved speed *after*
+captions, fades, and voice gain have been composed, and scales music ducking
+ranges accordingly. This matters because a Production-to-Final-Check build
+re-renders from the untouched camera source, not the small preview; changing
+only the preview would have silently restored the old 3:19 duration. The
+renderer test verifies both decision-preview and native-master duration with
+a non-default speed. The previous preview files are retained as `.pre-speed.mp4`
+siblings and the records DB backup is
+`/root/ops-service-data/video-261-before-speed-20261115.sqlite`. No publish
+or Final Check transition was triggered.

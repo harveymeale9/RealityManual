@@ -2399,13 +2399,19 @@ function setup(options) {
       const segments = editorTimelineSegments(project, cuts);
       if (!segments.length) throw new Error('Every part of the recording is currently cut. Restore some transcript first.');
       const contentDuration = segments.reduce(function (sum, segment) { return sum + segment.end - segment.start; }, 0);
-      const musicDipRanges = audioOnlyInsertRanges(segments, OPENING_PREROLL_SECONDS);
+      // Keep a deliberate programme-speed adjustment with the edit decisions,
+      // so the Production master cannot silently revert to normal speed.
+      const requestedSpeed = Number(project.playbackSpeed);
+      const playbackSpeed = Number.isFinite(requestedSpeed) && requestedSpeed >= 1 && requestedSpeed <= 1.5 ? requestedSpeed : 1;
+      const musicDipRanges = audioOnlyInsertRanges(segments, OPENING_PREROLL_SECONDS).map(function (range) {
+        return { start: range.start / playbackSpeed, end: range.end / playbackSpeed };
+      });
       const layout = effectiveLayout(project);
       // Landscape footage must be fully black before a hand reaching for the
       // camera can become visible. Editor/no-music renders end at that point;
       // a music-backed production master retains a short black-only tail.
       const outro = renderOutroTiming(layout, master && options.includeMusicTail === true, project.outroFadeSeconds);
-      const expectedDuration = OPENING_PREROLL_SECONDS + contentDuration + outro.totalSeconds;
+      const expectedDuration = (OPENING_PREROLL_SECONDS + contentDuration + outro.totalSeconds) / playbackSpeed;
       const assPath = path.join(projectDir(id), 'captions.ass');
       const renderShape = renderShapeForProject(project, layout, master);
       const outputPath = master ? masterOutputPath : renderPath(id);
@@ -2495,11 +2501,15 @@ function setup(options) {
       if (requestedVoiceGain) filters.push('[outa]' + requestedVoiceGain + '[leveledouta]');
       filters.push('[' + (requestedVoiceGain ? 'leveledouta' : 'outa') + ']adelay=delays=' + Math.round(OPENING_PREROLL_SECONDS * 1000) +
         ':all=1,apad=pad_dur=' + outro.totalSeconds.toFixed(3) + '[outaextended]');
+      if (playbackSpeed !== 1) {
+        filters.push('[outv]setpts=(PTS-STARTPTS)/' + playbackSpeed.toFixed(6) + '[spedv]');
+        filters.push('[outaextended]atempo=' + playbackSpeed.toFixed(6) + '[speda]');
+      }
       let lastReportedProgress = -1;
       const ffmpegInputs = ['-hide_banner', '-loglevel', 'error', '-y', '-filter_complex_threads', String(EDITOR_FFMPEG_THREADS), '-autorotate', '1', '-i', renderSourcePath];
       readyClips.forEach(function (clip) { ffmpegInputs.push('-i', insertedClipPath(id, clip.id)); });
       await runWithProgress('ffmpeg', ffmpegInputs.concat(['-filter_complex', filters.join(';'),
-        '-map', '[outv]', '-map', '[outaextended]', '-c:v', 'libx264',
+        '-map', playbackSpeed === 1 ? '[outv]' : '[spedv]', '-map', playbackSpeed === 1 ? '[outaextended]' : '[speda]', '-c:v', 'libx264',
         '-preset', master ? 'veryfast' : 'ultrafast', '-crf', master ? '18' : '30',
         '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', master ? '192k' : '96k',
         '-threads', String(EDITOR_FFMPEG_THREADS),

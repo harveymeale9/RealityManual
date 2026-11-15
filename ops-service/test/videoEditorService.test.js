@@ -1394,7 +1394,7 @@ test('portrait preview and Production master begin on a visible frame before spe
     id: 'visible-opening-1', name: 'Visible opening', fileName: 'take.mp4', duration: 1.2, width: 180, height: 320,
     words: [{ index: 0, text: 'Hello.', start: 0.08, end: 0.8 }],
     removedWordIndices: [], dismissedRetakeIds: [], restoredAutoCutIds: [], autoSilenceEnabled: false,
-    captionsEnabled: false, openingPushInEnabled: false, layoutOverride: 'vertical',
+    captionsEnabled: false, openingPushInEnabled: false, layoutOverride: 'vertical', playbackSpeed: 1.1182,
     transcriptionStatus: 'ready', classificationStatus: 'unavailable', retakeAnalysisStatus: 'unavailable',
     planningMatchStatus: 'unavailable', renderStatus: 'queued', createdAt: now, updatedAt: now
   }), now);
@@ -1407,11 +1407,15 @@ test('portrait preview and Production master begin on a visible frame before spe
     await new Promise(function (resolve) { setTimeout(resolve, 30); });
   }
   assert.equal(stored.renderStatus, 'ready', stored.renderError);
+  const spedExpectedDuration = (stored.renderQuality.openingPrerollSeconds + stored.renderQuality.contentDuration + stored.renderQuality.outroSeconds) / 1.1182;
+  assert.ok(Math.abs(stored.editedDuration - spedExpectedDuration) < 0.04, 'decision preview follows saved programme speed');
   stored.productionPieceId = 'test-piece';
   db.prepare('UPDATE records SET data=? WHERE store_name=? AND id=?').run(JSON.stringify(stored), 'editorProjects', 'visible-opening-1');
   const masterPath = path.join(dir, 'production-master.mp4');
   await service.renderProductionMaster('visible-opening-1', masterPath);
   for (const rendered of [path.join(projectDir, 'render.mp4'), masterPath]) {
+    const duration = Number(JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'json', rendered])).format.duration);
+    assert.ok(Math.abs(duration - spedExpectedDuration) < 0.12, 'preview and master keep the saved speed');
     const firstFrame = execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', rendered,
       '-frames:v', '1', '-vf', 'scale=1:1', '-pix_fmt', 'rgb24', '-f', 'rawvideo', 'pipe:1']);
     const rgb = Array.from(firstFrame.subarray(0, 3));
