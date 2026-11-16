@@ -91,14 +91,14 @@ function normalizeLongformIntervalHours(value) {
 function nextLongformSlot(after, anchor, intervalHours) {
   const afterMs = after instanceof Date ? after.getTime() : Number(after);
   if (!Number.isFinite(afterMs)) throw new Error('A valid starting time is required.');
-  // Tuesday and Saturday, 7 p.m. Asia/Bangkok (noon UTC). The old
+  // Tuesday and Saturday, 10 p.m. Asia/Bangkok (15:00 UTC). The old
   // anchor/interval arguments are retained for existing callers only.
   const local = new Date(afterMs + BANGKOK_OFFSET_MS);
   const midnight = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate());
   for (let offset = 0; offset < 8; offset++) {
     const day = midnight + offset * 86400000;
     if (![2, 6].includes(new Date(day).getUTCDay())) continue;
-    const candidate = day + 19 * 3600000 - BANGKOK_OFFSET_MS;
+    const candidate = day + 22 * 3600000 - BANGKOK_OFFSET_MS;
     if (candidate > afterMs) return new Date(candidate).toISOString();
   }
   throw new Error('No long-form slot is available.');

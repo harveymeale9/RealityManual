@@ -23193,3 +23193,17 @@ check using the live eight-comment payload found the overall desktop strip
 1856px or 390px. The full ops-service suite passed 366/366. This is a
 frontend-only change, so deployment uses the static-file path without a
 container restart.
+
+## Long-form slots returned to 10 p.m. Bangkok (2026-11-16)
+
+Harvey superseded the 7 p.m. Tuesday/Saturday long-form time: both fixed days
+now release at 10:00 p.m. Asia/Bangkok (15:00 UTC). The server scheduler,
+browser queue-runway calculation, Content Ops label, and Content Settings
+label were updated together, with browser asset versions changed so cached
+clients see the new schedule. At the time of the change no long-form card was
+in Scheduled; four were in Publishing Queue, so no existing scheduled release
+time needed migration. Both scheduler and browser preview calculate the next
+normal slot as Tuesday 2026-11-17T15:00:00Z. The full ops-service test suite
+passed 366/366. The deployment requires an ops-service rebuild because the
+server scheduler changed; the existing deploy drain must not interrupt active
+video processing or uploads.
