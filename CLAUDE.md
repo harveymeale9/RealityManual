@@ -23039,3 +23039,15 @@ not authorize deletion of a `Draft`. The Orders health report describes the
 pending state as an unpaid draft. Existing emails already sent cannot be
 recalled. The Worker and VPS unit suites include Draft and critical-error
 cases.
+
+Deployment check: Worker version `d3847f82-9230-474a-889b-f15c990503ef`
+serves the production route, and `api.realitymanual.com/health` returned
+checkout enabled. The paused VPS fallback was rebuilt as
+`rm-storefront-backend:quiet-drafts` with `CHECKOUT_PAUSED=true` and
+`STOREFRONT_JOBS_ENABLED=false`; localhost health returned OK. All 27 Worker
+and 56 backend tests passed. Read-only BookVault GETs confirmed the seven
+emailed orders were `Active/Acknowledged` with no critical error. Three newer
+orders remained `BatchPayment/Created`, which is a normal monitored wait; no
+payment or print-order mutation was made for this verification. BookVault's
+own payment-failure emails are outside our Resend alert path and are not
+suppressed by this change.
