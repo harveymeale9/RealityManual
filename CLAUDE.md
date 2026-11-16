@@ -23131,3 +23131,10 @@ Harvey must click **Reconnect YouTube** in the slider and approve Google's
 new permission once before real comments can populate; the current token
 cannot gain it automatically. A failed reconnect leaves the existing token
 unchanged. No comment API credential or raw token is exposed to the browser.
+The full ops-service suite passed 365/365, and a real mobile-width browser
+test advanced between two mock comments without horizontal overflow. After
+deployment of `ea0b6ca`, the live desktop dashboard and phone page both
+showed the slider and reconnect prompt, the admin API returned the expected
+403-scope reconnect state without exposing a token, and public/local health
+checks returned `ok`. Actual positive-comment content remains unverified
+until Harvey approves the additional Google permission.
