@@ -23138,3 +23138,26 @@ showed the slider and reconnect prompt, the admin API returned the expected
 403-scope reconnect state without exposing a token, and public/local health
 checks returned `ok`. Actual positive-comment content remains unverified
 until Harvey approves the additional Google permission.
+
+## YouTube appreciation cards and stronger relevance filter (2026-11-16)
+
+After connecting YouTube, Harvey showed that the one-line, one-comment
+previous/next strip was hard to browse and surfaced a long philosophical
+comment whose only appreciation was a trailing courtesy thanks. The global
+desktop strip and phone Project Manager strip now render compact horizontal
+cards: three visible on wide desktop, two on mid-width, and a swipeable card
+with the next card peeking in on phone. The row advances automatically every
+6.5 seconds, pauses on hover/focus/drag, supports mouse dragging and native
+touch swiping, allows dot jumps and keyboard arrows, and does not animate for
+reduced-motion users. The left/right arrow buttons were removed. Text is
+still inserted only via textContent and links are restricted to HTTPS YouTube.
+
+The conservative comment filter now requires actual praise of Harvey's work,
+specific personal impact attributable to his content, or detailed gratitude
+for creating/sharing it. Generic short thanks, unrelated life stories, and
+long opinions with a token thanks at the end no longer qualify. The feed
+remains newest-first among qualifying comments and does not moderate YouTube.
+A read-only sample of the live 36 previously selected comments retained 8
+under the new filter. Focused tests and the full ops-service suite passed
+(365/365). Real Chromium checks at 1280px and 390px confirmed card layout,
+dot navigation and no document-level horizontal overflow.

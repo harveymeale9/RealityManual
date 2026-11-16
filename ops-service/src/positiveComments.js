@@ -2,14 +2,21 @@
 
 // Intentionally conservative: this is a quiet appreciation feed, not a
 // general sentiment classifier. Ambiguous/mixed/question comments stay out.
-const POSITIVE = /\b(thank(?:s| you| you so much|ful)|appreciate|grateful|love (?:this|your|these|the way|how you)|loved (?:this|your)|great (?:video|content|work|explanation|message|channel)|amazing|brilliant|excellent|beautiful(?:ly)? (?:said|explained|video|message)|inspiring|inspirational|helpful|helped me|changed my life|needed to hear this|well said|keep (?:it|this) up|this is gold|spot on|you nailed it|so insightful|mind.?blowing)\b/i;
+// Favor feedback about Harvey's work or its effect on the viewer. A passing
+// "thanks" after a long unrelated opinion is not an appreciation card.
+const IMPACT = /\b(?:you (?:have |just )?helped (?:me|us)|this helped (?:me|us)|(?:this|your) (?:video|videos|content|work|book|message) (?:has |have |really )?(?:helped|changed|inspired|motivated) (?:me|us|my|how I)|(?:this|your) (?:video|videos|content|work|book|message) (?:is|was) life.changing|(?:this|your) (?:video|videos|content|work|book|message) (?:made me|makes me)|I needed (?:this|to hear this)|(?:thanks|thank you) for (?:helping|inspiring|motivating) me)\b/i;
+const PRAISE = /\b(?:love|loved) (?:this(?: video| content)?|your (?:work|content|videos?|book|channel|message))\b|\b(?:great|amazing|brilliant|excellent|beautiful|inspiring|inspirational|helpful|insightful|powerful) (?:video|content|work|explanation|message|channel|insight|perspective)\b|\b(?:your|this|these) (?:video|videos|content|work|explanation|message|channel|insight|perspective) (?:is|are|was|were) (?:great|amazing|brilliant|excellent|beautiful|inspiring|inspirational|helpful|insightful|powerful)\b|\b(?:beautifully (?:said|explained)|well said|keep (?:it|this) up|this is gold|spot on|you nailed it|so insightful|mind.?blowing)\b/i;
+const DETAILED_GRATITUDE = /\b(?:thank you|thanks) (?:so much )?for (?:making|creating|sharing) (?:this|these|your) (?:video|videos|content|work)|\bI (?:really |truly )?appreciate (?:your|this) (?:work|content|videos?|message)/i;
 const UNCERTAIN = /[?？]|\b(but|however|although|though|except|not|never|don't|doesn't|cannot|can't|confus(?:ed|ing)|disagree|wrong|bad|hate|stupid|idiot|scam|fake|misleading|unsure|wish you|could you|please explain|why would|what about)\b/i;
 
 function clearlyPositive(text) {
   const value = String(text || '').replace(/\s+/g, ' ').trim();
   if (value.length < 8 || value.length > 600) return false;
   if (/https?:\/\/|www\.|@\w+|(?:\$|€|£)\s*\d/i.test(value)) return false;
-  return POSITIVE.test(value) && !UNCERTAIN.test(value);
+  if (UNCERTAIN.test(value)) return false;
+  if (IMPACT.test(value) || PRAISE.test(value)) return true;
+  // A courtesy "thanks" by itself does not describe praise or impact.
+  return DETAILED_GRATITUDE.test(value);
 }
 
 function normalizeComment(comment, videoId, channelId) {

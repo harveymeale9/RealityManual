@@ -11,6 +11,14 @@ function item(id, text, date, authorChannelId) {
 
 test('strict appreciation filter leaves out mixed, uncertain, negative and spam comments', function () {
   assert.equal(feed.clearlyPositive('Thank you so much, this helped me!'), true);
+  assert.equal(feed.clearlyPositive('Nobody gets enlightened as enlightenment is the dissolution of the illusion of the separate self, In my humble and limited experience. Thank you for the video.'), false);
+  assert.equal(feed.clearlyPositive('Your videos changed how I see my life. Thank you.'), true);
+  assert.equal(feed.clearlyPositive('I love your work. It inspired me to make a change.'), true);
+  assert.equal(feed.clearlyPositive('Thanks for this video'), false);
+  assert.equal(feed.clearlyPositive('Thank you for making these videos'), true);
+  assert.equal(feed.clearlyPositive('Thanks 🔥☀️🌑💪🏾👍🏾'), false);
+  assert.equal(feed.clearlyPositive('I took mushrooms and it changed my life forever'), false);
+  assert.equal(feed.clearlyPositive('Love your neighbor as yourself'), false);
   assert.equal(feed.clearlyPositive('Amazing video, but I disagree with your conclusion.'), false);
   assert.equal(feed.clearlyPositive('Great video? Please explain why.'), false);
   assert.equal(feed.clearlyPositive("Great video. I don't think this works."), false);
@@ -23,7 +31,7 @@ test('comment scan deduplicates replies, skips creator and sorts newest first', 
   const now = Date.parse('2026-11-16T12:00:00Z');
   const channel = 'UCcreator';
   const pages = [
-    { items: [{ snippet: { videoId: 'abcdefghijk', topLevelComment: item('one', 'Thank you for this video', '2026-11-15T12:00:00Z'), totalReplyCount: 2 },
+    { items: [{ snippet: { videoId: 'abcdefghijk', topLevelComment: item('one', 'Thank you for making this video', '2026-11-15T12:00:00Z'), totalReplyCount: 2 },
       replies: { comments: [item('two', 'Amazing work on this channel', '2026-11-16T10:00:00Z')] } }], nextPageToken: 'next' },
     { items: [{ snippet: { videoId: 'abcdefghijk', topLevelComment: item('three', 'Great video, but I disagree', '2026-11-14T12:00:00Z'), totalReplyCount: 0 } },
       { snippet: { videoId: 'abcdefghijk', topLevelComment: item('owner', 'Thank you for watching', '2026-11-13T12:00:00Z', channel), totalReplyCount: 0 } } ] }

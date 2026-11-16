@@ -16,7 +16,12 @@ test('appreciation slider is shared by desktop tabs and the phone Project Manage
   assert.match(phone, /id="vPositiveComments"/);
   assert.match(app, /RMPositiveComments\.mount\(document\.getElementById\('positiveComments'\)\)/);
   assert.match(phone, /RMPositiveComments\.mount\(document\.getElementById\('vPositiveComments'\)\)/);
+  assert.match(desktop, /data-positive-track/);
+  assert.match(phone, /data-positive-track/);
+  assert.doesNotMatch(desktop, /data-positive-prev|data-positive-next/);
   assert.match(client, /quote\.textContent =/);
   assert.match(client, /author\.textContent =/);
-  assert.match(client, /url\.hostname !== 'www\.youtube\.com'/);
+  assert.match(client, /url\.hostname === 'www\.youtube\.com'/);
+  assert.match(client, /setInterval/);
+  assert.match(client, /pointermove/);
 });

@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,400&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=20261116-appreciation" />
+  <link rel="stylesheet" href="style.css?v=20261116-cards" />
 </head>
 <body>
 
@@ -138,11 +138,8 @@
       </header>
       <section class="positive-comments" id="positiveComments" aria-label="Kind words from YouTube">
         <div class="positive-comments-title">Kind words from YouTube <span data-positive-count></span></div>
-        <div class="positive-comments-main">
-          <button type="button" data-positive-prev aria-label="Previous positive comment" disabled>‹</button>
-          <div class="positive-comments-copy"><p data-positive-quote></p><small><span data-positive-author></span> <a data-positive-link href="https://www.youtube.com/" target="_blank" rel="noopener" hidden>View comment ↗</a></small><span data-positive-status>Loading comments…</span><a data-positive-connect href="/api/youtube/oauth/start" hidden>Reconnect YouTube ↗</a></div>
-          <button type="button" data-positive-next aria-label="Next positive comment" disabled>›</button>
-        </div>
+        <div class="positive-comments-track" data-positive-track aria-label="Kind words carousel" tabindex="0"></div>
+        <div class="positive-comments-footer"><span data-positive-status>Loading comments…</span><a data-positive-connect href="/api/youtube/oauth/start" hidden>Reconnect YouTube ↗</a><div class="positive-comments-dots" data-positive-dots aria-label="Jump through kind words"></div></div>
       </section>
       <section class="comment-alert-panel" id="commentAlertPanel" aria-label="Comments to check" hidden>
         <div class="comment-alert-head"><strong>Comments to check</strong><div class="comment-alert-head-actions"><button type="button" class="link-btn" id="commentAlertClearAll" disabled>Clear all</button><button type="button" class="link-btn" id="commentAlertClose" aria-label="Close comment alerts">Close</button></div></div>
@@ -304,7 +301,7 @@
   <script src="lib/auth.js"></script>
   <script src="lib/voiceClient.js?v=20261015-long-prompts-v137"></script>
   <script src="lib/usageDashboard.js?v=20260921-usage"></script>
-  <script src="lib/positiveComments.js?v=20261116-appreciation"></script>
+  <script src="lib/positiveComments.js?v=20261116-cards"></script>
   <script src="ideation.js?v=20260922-idea-not-interested"></script>
   <script src="manuscript.js?v=20261019-page7-fourteen"></script>
   <script src="research.js?v=20260928-source-split-v2"></script>

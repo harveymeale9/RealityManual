@@ -317,38 +317,46 @@ body.role-reviewer #pmBackFab {
 
 .positive-comments {
   flex-shrink: 0;
-  padding: 8px clamp(16px, 3vw, 36px);
+  padding: 10px clamp(16px, 3vw, 36px) 8px;
   border-bottom: 1px solid var(--border-soft);
-  background: #061b11;
+  background: #06150f;
   color: var(--ink);
 }
 .positive-comments-title {
   color: var(--accent); font-size: .67rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: .12em; margin-bottom: 3px;
+  text-transform: uppercase; letter-spacing: .12em; margin-bottom: 7px;
 }
 .positive-comments-title span { color: var(--ink-faint); letter-spacing: 0; margin-left: 5px; }
-.positive-comments-main { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.positive-comments-main > button {
-  flex: 0 0 28px; height: 28px; border: 1px solid var(--border);
-  border-radius: 50%; background: var(--surface-2); color: var(--accent);
-  cursor: pointer; font-size: 1.25rem; line-height: 1;
+.positive-comments-track {
+  display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden; min-width: 0;
+  scroll-snap-type: x mandatory; scroll-behavior: smooth; scrollbar-width: none;
+  cursor: grab; touch-action: pan-x pan-y; overscroll-behavior-inline: contain;
 }
-.positive-comments-main > button:disabled { opacity: .35; cursor: default; }
-.positive-comments-copy { flex: 1; min-width: 0; }
-.positive-comments-copy p {
-  margin: 0; font-size: .83rem; line-height: 1.35; overflow: hidden;
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+.positive-comments-track::-webkit-scrollbar { display: none; }
+.positive-comments-track.is-dragging { cursor: grabbing; scroll-behavior: auto; scroll-snap-type: none; }
+.positive-comments-card {
+  flex: 0 0 calc((100% - 20px) / 3); box-sizing: border-box; min-width: 0;
+  height: 118px; padding: 12px 14px; border: 1px solid #2a493d; border-radius: 8px;
+  background: #0b1515; scroll-snap-align: start; display: flex; flex-direction: column;
 }
-.positive-comments-copy small { color: var(--ink-soft); font-size: .67rem; }
-.positive-comments-copy a { color: var(--accent); margin-left: 7px; }
-.positive-comments-copy [data-positive-connect] { display: inline-block; color: var(--accent); font-size: .68rem; margin: 2px 0 0; }
-.positive-comments-copy [data-positive-connect][hidden] { display: none; }
-.positive-comments-copy [data-positive-status] { display: block; color: var(--ink-faint); font-size: .64rem; }
+.positive-comments-card-author { color: var(--ink); font-size: .72rem; font-weight: 700; margin-bottom: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.positive-comments-card-quote { margin: 0; font-size: .78rem; line-height: 1.35; overflow: hidden; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.positive-comments-card-meta { margin-top: auto; color: var(--ink-soft); font-size: .64rem; display: flex; gap: 8px; align-items: center; }
+.positive-comments-card-meta a, .positive-comments-footer a { color: var(--accent); }
+.positive-comments-footer { display: flex; align-items: center; gap: 8px; min-height: 16px; margin-top: 4px; color: var(--ink-faint); font-size: .64rem; }
+.positive-comments-footer [hidden] { display: none; }
+.positive-comments-dots { margin-left: auto; display: flex; gap: 5px; align-items: center; }
+.positive-comments-dots button { width: 17px; height: 5px; padding: 0; border: 0; border-radius: 5px; background: #38514b; cursor: pointer; }
+.positive-comments-dots button[aria-current="true"] { background: var(--accent); }
+@media (max-width: 950px) { .positive-comments-card { flex-basis: calc((100% - 10px) / 2); } }
+@media (max-width: 600px) { .positive-comments-card { flex-basis: 83%; } }
 .positive-comments--mobile {
   border: 1px solid var(--border-soft); border-radius: 12px;
-  padding: 8px 10px; min-height: 84px;
+  padding: 8px 10px; min-height: 80px;
 }
-.positive-comments--mobile .positive-comments-copy p { -webkit-line-clamp: 2; }
+.positive-comments--mobile .positive-comments-card { flex-basis: 83%; height: 92px; padding: 8px 10px; }
+.positive-comments--mobile .positive-comments-card-quote { -webkit-line-clamp: 2; font-size: .73rem; }
+.positive-comments--mobile .positive-comments-card-meta { font-size: .61rem; }
 body.role-reviewer .positive-comments { display: none; }
 
 .panel-brand { display: flex; align-items: center; gap: 10px; margin-right: 8px; flex-shrink: 0; }
