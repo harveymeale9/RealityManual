@@ -12,7 +12,7 @@ const TABLES = {
     bookvault_production_cost_gbp_cents,bookvault_shipping_cost_gbp_cents,
     bookvault_total_cost_gbp_cents,bookvault_total_cost_usd_cents,bookvault_gbp_usd_rate,
     fulfillment_attempts,fulfillment_next_attempt_at,
-    CASE WHEN fulfillment_last_error LIKE '%BatchPayment%' THEN 'BatchPayment: awaiting BookVault scheduled payment.'
+    CASE WHEN fulfillment_last_error LIKE '%BatchPayment%' OR fulfillment_last_error LIKE '%unpaid draft awaiting payment%' THEN 'BookVault: unpaid draft awaiting payment.'
       WHEN fulfillment_last_error IS NOT NULL THEN 'BookVault fulfillment failed'
       ELSE NULL END AS fulfillment_last_error,
     payment_received_at,fulfillment_alert_sent_at,fulfillment_deadline_alert_sent_at,

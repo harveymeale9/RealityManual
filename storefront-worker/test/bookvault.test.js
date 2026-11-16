@@ -23,6 +23,22 @@ test('a saved BookVault batch is pending, not production acceptance', async () =
   assert.deepEqual(calls.map(([, method]) => method), ['GET', 'POST', 'GET']);
 });
 
+test('an existing BookVault payment draft is monitored without another POST or owner alert', async () => {
+  const calls = [];
+  const fetcher = async (url, options) => {
+    calls.push([url, options.method]);
+    return response({ PodRef: 456, DocRef: order.id, Status: 'Draft', Progress: { Status: 'Created' } });
+  };
+  await assert.rejects(submitOrder(env, order, fetcher),
+    (error) => error.pendingPayment === true && error.podRef === 456);
+  assert.deepEqual(calls.map(([, method]) => method), ['GET']);
+});
+
+test('a BookVault draft with a critical error still escalates', () => {
+  assert.throws(() => assertActive({ PodRef: 456, Status: 'Draft', CriticalError: 'Invalid address' }),
+    (error) => error.pendingPayment === false);
+});
+
 test('existing DocRef prevents a duplicate BookVault POST', async () => {
   const calls = [];
   const fetcher = async (url, options) => {

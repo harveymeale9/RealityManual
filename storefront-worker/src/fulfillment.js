@@ -1,5 +1,5 @@
 import { applyPaymentEvent, getOrderById } from './orderStore.js';
-import { cancelUnpaidDraft, getOrder, submitOrder } from './bookvault.js';
+import { cancelUnpaidDraft, getOrder, isAwaitingBookVaultPayment, submitOrder } from './bookvault.js';
 import { orderConfirmedEmail, orderRefundedEmail, orderShippedEmail, quantityBand, sendEmail } from './mail.js';
 import { refundPayment, stripeClient } from './stripeClient.js';
 import { captureBookVaultCost } from './bookvaultCost.js';
@@ -109,7 +109,7 @@ async function retry(env, order, error) {
   const dueAt = Number.isFinite(deadline) && deadline > Date.now() ? Math.min(Date.now() + minutes * 60000, deadline) : Date.now() + STATUS_POLL_MINUTES * 60000;
   await update(env.DB, order.id,
     "UPDATE orders SET order_status = 'FULFILLMENT_RETRY', fulfillment_attempts = ?, fulfillment_last_error = ?, fulfillment_next_attempt_at = ?",
-    attempts, pending ? 'BatchPayment: awaiting BookVault scheduled payment.' : String(error.message).slice(0, 2000), new Date(dueAt).toISOString());
+    attempts, pending ? 'BookVault: unpaid draft awaiting payment.' : String(error.message).slice(0, 2000), new Date(dueAt).toISOString());
 }
 
 async function checkProgress(env, order) {
@@ -118,7 +118,7 @@ async function checkProgress(env, order) {
     if (String(current?.Status).toLowerCase() !== 'active') {
       const error = new Error(`BookVault reference is not active (${current?.Status || 'unknown'}).`);
       error.podRef = current?.PodRef;
-      error.pendingPayment = String(current?.Status).toLowerCase() === 'batchpayment' && String(current?.Progress?.Status).toLowerCase() === 'created';
+      error.pendingPayment = isAwaitingBookVaultPayment(current);
       await retry(env, order, error);
       return;
     }

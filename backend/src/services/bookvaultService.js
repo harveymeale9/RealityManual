@@ -176,7 +176,7 @@ function assertExistingOrderPaid(order) {
     const error = new Error('Existing BookVault order is not active (status: ' + String(order.Status || 'unknown') + ').');
     error.podRef = order.PodRef;
     // Scheduled card collection may leave a saved order here for hours.
-    error.pendingPayment = isScheduledPaymentPending(order);
+    error.pendingPayment = isAwaitingBookVaultPayment(order);
     throw error;
   }
   return order;
@@ -185,6 +185,11 @@ function assertExistingOrderPaid(order) {
 function isScheduledPaymentPending(order) {
   return String(order?.Status || '').toLowerCase() === 'batchpayment' &&
     String(order?.Progress?.Status || '').toLowerCase() === 'created';
+}
+
+function isAwaitingBookVaultPayment(order) {
+  return isScheduledPaymentPending(order) || (Boolean(order?.PodRef) &&
+    String(order.Status || '').toLowerCase() === 'draft' && !order.CriticalError);
 }
 
 async function submitOrder(order) {
@@ -289,4 +294,4 @@ async function getShippingQuote({ countryCode, postalCode, quantity = 1 }) {
   };
 }
 
-module.exports = { getShippingQuote, submitOrder, getOrder, findOrderByDocRef, cancelUnpaidDraft, orderPayload, assertExistingOrderPaid, isScheduledPaymentPending, UK_PARTNER_ID };
+module.exports = { getShippingQuote, submitOrder, getOrder, findOrderByDocRef, cancelUnpaidDraft, orderPayload, assertExistingOrderPaid, isScheduledPaymentPending, isAwaitingBookVaultPayment, UK_PARTNER_ID };

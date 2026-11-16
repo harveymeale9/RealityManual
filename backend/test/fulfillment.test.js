@@ -91,6 +91,12 @@ test('an existing BookVault payment draft is not mistaken for an accepted print 
   assert.throws(() => bookvaultService.assertExistingOrderPaid({
     PodRef: 3074613, Status: 'Deleted', Progress: { Status: 'Created' },
   }), error => error.pendingPayment === false);
+  assert.throws(() => bookvaultService.assertExistingOrderPaid({
+    PodRef: 3074614, Status: 'Draft', Progress: { Status: 'Created' },
+  }), error => error.pendingPayment === true);
+  assert.throws(() => bookvaultService.assertExistingOrderPaid({
+    PodRef: 3074615, Status: 'Draft', CriticalError: 'Invalid address',
+  }), error => error.pendingPayment === false);
   assert.equal(bookvaultService.assertExistingOrderPaid({
     PodRef: 3072310, Status: 'Active', Progress: { Status: 'Acknowledged' },
   }).PodRef, 3072310);
@@ -264,7 +270,7 @@ test('scheduled BookVault payment draft waits silently and is not counted as a f
   assert.equal(stored.bookvault_order_id, '7125');
   assert.equal(stored.fulfillment_attempts, 0);
   assert.equal(stored.fulfillment_alert_sent_at, null);
-  assert.equal(stored.fulfillment_last_error, 'BatchPayment: awaiting BookVault scheduled payment.');
+  assert.equal(stored.fulfillment_last_error, 'BookVault: unpaid draft awaiting payment.');
   assert.ok(Date.parse(stored.fulfillment_next_attempt_at) >= Date.now() + 14 * 60_000);
   assert.equal(sent.length, 1); // customer receipt only; no owner draft alert
   assert.equal(sent[0].subject, 'We’ve Received Your Reality Manual Order');
@@ -283,7 +289,7 @@ test('a previously accepted local reference that is still in BookVault payment b
   const stored = orderService.getById(order.id);
   assert.equal(stored.order_status, 'FULFILLMENT_RETRY');
   assert.equal(stored.fulfillment_alert_sent_at, null);
-  assert.equal(stored.fulfillment_last_error, 'BatchPayment: awaiting BookVault scheduled payment.');
+  assert.equal(stored.fulfillment_last_error, 'BookVault: unpaid draft awaiting payment.');
   assert.ok(Date.parse(stored.fulfillment_next_attempt_at) >= Date.now() + 14 * 60_000);
 });
 

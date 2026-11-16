@@ -23014,3 +23014,28 @@ waited for active final renders to finish and completed at commit `ff75f1c`.
 While deployment was waiting, Harvey edited the love video and sent it forward
 again; at final verification it was in Final Check. That newer action was
 preserved rather than moving the card back a second time.
+
+## BookVault saved-payment drafts no longer send per-order owner emails (2026-11-16)
+
+Harvey reported a burst of "Action needed: paid order ... awaiting BookVault"
+emails. Production D1 showed that all seven order IDs visible in his screenshot
+(`408859ff`, `749c8637`, `0d2d6613`, `0a8fc653`, `d2188055`,
+`3512920e`, `af67ca12`) had received immediate customer confirmation and
+later reached `BOOKVAULT_ACCEPTED`, each with a distinct BookVault PodRef.
+Their logged submission errors were `BookVault order is not active (status:
+Draft).` The code treated only `BatchPayment/Created` as a routine saved-card
+wait, so a temporary `Draft` after BookVault payment trouble incremented
+failure attempts and sent Harvey one warning per paid order.
+
+Both the live Cloudflare Worker and the paused VPS fallback now classify an
+existing PodRef in `Draft` without a `CriticalError` as a monitored payment
+wait. They retain the reference, poll every 15 minutes, and do not send an
+early per-order owner email or make a duplicate BookVault POST. This is not
+production acceptance: only BookVault `Active` qualifies. Explicit critical
+errors, errors without a saved PodRef, and unsafe 60-hour deadline/refund
+conditions still alert Harvey. Refund cancellation remains restricted to a
+verified `BatchPayment/Created` record; this broader wait classification does
+not authorize deletion of a `Draft`. The Orders health report describes the
+pending state as an unpaid draft. Existing emails already sent cannot be
+recalled. The Worker and VPS unit suites include Draft and critical-error
+cases.

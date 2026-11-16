@@ -62,11 +62,21 @@ export function isScheduledPaymentPending(order) {
     String(order?.Progress?.Status || '').toLowerCase() === 'created';
 }
 
+// A saved-card payment attempt can also leave an existing PodRef in Draft.
+// It is not in production, but it can become Active on a later payment run.
+// Keep polling that same reference without treating each order as a new
+// submission failure. Do not use this broader predicate to authorize a refund
+// cancellation: only a verified BatchPayment/Created order is safe to delete.
+export function isAwaitingBookVaultPayment(order) {
+  return isScheduledPaymentPending(order) || (Boolean(order?.PodRef) &&
+    String(order.Status || '').toLowerCase() === 'draft' && !order.CriticalError);
+}
+
 export function assertActive(order) {
   if (order?.PodRef && String(order.Status || '').toLowerCase() === 'active') return order;
   const error = new Error(`BookVault order is not active (status: ${order?.Status || 'unknown'}).`);
   if (order?.PodRef) error.podRef = order.PodRef;
-  error.pendingPayment = isScheduledPaymentPending(order);
+  error.pendingPayment = isAwaitingBookVaultPayment(order);
   throw error;
 }
 
