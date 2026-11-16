@@ -3671,7 +3671,7 @@
         '<div class="queue-map-lane"><small>SHORT</small><span>' + slotMarkers(day.publishedShortform.concat(day.shortform), 'Short-form') + '</span></div>' +
       '</div>';
     }).join('');
-    var longformSummary = summary('Long-form', runway.longform, 'Tuesday & Saturday · 10 p.m. Bangkok');
+    var longformSummary = summary('Long-form', runway.longform, 'Tuesday & Saturday · 7 p.m. Bangkok');
     queueCoverage.innerHTML = '<div class="queue-coverage-summary-row">' +
       longformSummary +
       summary('Short-form', runway.shortform, 'Buffer cadence') + '</div>' +
@@ -6528,7 +6528,7 @@
     var dis = IS_REVIEWER ? ' disabled' : '';
     grid.innerHTML = '<div class="cadence-row" data-key="longform">' +
       '<span class="cadence-label">Direct longform <span class="ink-faint">(YouTube / Facebook)</span></span>' +
-      '<span class="cadence-inputs">Tuesday &amp; Saturday at 10 p.m. Asia/Bangkok</span>' +
+      '<span class="cadence-inputs">Tuesday &amp; Saturday at 7 p.m. Asia/Bangkok</span>' +
     '</div>';
   }
 

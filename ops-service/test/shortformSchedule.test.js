@@ -50,11 +50,11 @@ test('topic scheduler can fill open short-form slots instead of appending after 
   ]);
 });
 
-test('longform uses Tuesday and Saturday at 10 p.m. Bangkok regardless of old anchor', function () {
-  assert.equal(schedule.nextLongformSlot(Date.parse('2026-11-14T17:47:00Z'), schedule.LONGFORM_ANCHOR, 168), '2026-11-17T15:00:00.000Z');
-  assert.equal(schedule.nextLongformSlot(Date.parse('2026-11-17T14:59:59Z')), '2026-11-17T15:00:00.000Z');
-  assert.equal(schedule.nextLongformSlot(Date.parse('2026-11-17T15:00:00Z')), '2026-11-21T15:00:00.000Z');
-  assert.equal(schedule.nextLongformSlot(Date.parse('2026-11-21T15:00:00Z')), '2026-11-24T15:00:00.000Z');
+test('longform uses Tuesday and Saturday at 7 p.m. Bangkok regardless of old anchor', function () {
+  assert.equal(schedule.nextLongformSlot(Date.parse('2026-11-14T17:47:00Z'), schedule.LONGFORM_ANCHOR, 168), '2026-11-17T12:00:00.000Z');
+  assert.equal(schedule.nextLongformSlot(Date.parse('2026-11-17T11:59:59Z')), '2026-11-17T12:00:00.000Z');
+  assert.equal(schedule.nextLongformSlot(Date.parse('2026-11-17T12:00:00Z')), '2026-11-21T12:00:00.000Z');
+  assert.equal(schedule.nextLongformSlot(Date.parse('2026-11-21T12:00:00Z')), '2026-11-24T12:00:00.000Z');
 });
 
 test('occupied long-form slots never shift the fixed calendar', function () {
@@ -62,14 +62,14 @@ test('occupied long-form slots never shift the fixed calendar', function () {
   assert.equal(schedule.normalizeLongformIntervalHours(0), 168);
   assert.equal(schedule.normalizeLongformIntervalHours(2.5), 168);
   assert.deepEqual(schedule.nextAvailableLongformSlots(Date.parse('2026-11-14T17:47:00Z'), schedule.LONGFORM_ANCHOR, 60,
-    ['2026-11-17T15:00:00.000Z'], 3), [
-    '2026-11-21T15:00:00.000Z', '2026-11-24T15:00:00.000Z', '2026-11-28T15:00:00.000Z'
+    ['2026-11-17T12:00:00.000Z'], 3), [
+    '2026-11-21T12:00:00.000Z', '2026-11-24T12:00:00.000Z', '2026-11-28T12:00:00.000Z'
   ]);
 });
 
 test('the former immediate-release flag cannot bypass the next Tuesday slot', function () {
   const approval = Date.parse('2026-11-10T08:12:00.000Z');
   const first = schedule.nextLongformReleaseSlot(approval, schedule.LONGFORM_ANCHOR, 168, true);
-  assert.equal(first, '2026-11-10T15:00:00.000Z');
-  assert.equal(schedule.nextLongformReleaseSlot(Date.parse(first), first, 168, false), '2026-11-14T15:00:00.000Z');
+  assert.equal(first, '2026-11-10T12:00:00.000Z');
+  assert.equal(schedule.nextLongformReleaseSlot(Date.parse(first), first, 168, false), '2026-11-14T12:00:00.000Z');
 });

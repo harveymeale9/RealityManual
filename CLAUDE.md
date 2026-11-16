@@ -23091,3 +23091,14 @@ pricing logic defect or tariff undercharge was identified. No past charge,
 payment, BookVault order, or production code was changed. Since there was no
 material mismatch or unresolved verification gap, no owner alert email was
 sent; the Project Manager reported an all-clear.
+
+## Long-form slots moved to 7 p.m. Bangkok (2026-11-16)
+
+Harvey's latest instruction superseded his earlier same-day request for
+4 p.m.: keep the fixed Tuesday/Saturday long-form days, but release at
+7:00 p.m. Asia/Bangkok (12:00 UTC), instead of 10 p.m. The server scheduler,
+browser queue-runway fallback, and Content Ops labels were updated together.
+The next normal slot after this change is Tuesday 2026-11-17T12:00:00Z.
+No card was manually moved or explicitly scheduled time rewritten. The
+focused schedule/runway/UI tests passed (18/18), as did the full ops-service
+suite (361/361). Existing explicit immediate-publish actions remain separate.

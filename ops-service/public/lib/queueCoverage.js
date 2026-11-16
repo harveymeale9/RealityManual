@@ -38,7 +38,7 @@
       for (var dayOffset = 0; dayOffset < 8 && slots.length < count; dayOffset++) {
         var day = midnight + dayOffset * DAY_MS;
         if ([2, 6].indexOf(new Date(day).getUTCDay()) === -1) continue;
-        var candidate = day + 22 * 3600000 - BANGKOK_OFFSET_MS;
+        var candidate = day + 19 * 3600000 - BANGKOK_OFFSET_MS;
         if (candidate > cursor) { slots.push(candidate); cursor = candidate; break; }
       }
     }
