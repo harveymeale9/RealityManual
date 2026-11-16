@@ -21,6 +21,9 @@ test('appreciation slider is shared by desktop tabs and the phone Project Manage
   assert.doesNotMatch(desktop, /data-positive-prev|data-positive-next/);
   assert.match(client, /quote\.textContent =/);
   assert.match(client, /author\.textContent =/);
+  assert.match(client, /videoTitle\.textContent = row\.videoTitle/);
+  assert.match(client, /relativeAge\(row\.publishedAt\)/);
+  assert.doesNotMatch(client, /toLocaleDateString/);
   assert.match(client, /url\.hostname === 'www\.youtube\.com'/);
   assert.match(client, /setInterval/);
   assert.match(client, /pointermove/);

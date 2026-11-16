@@ -36,17 +36,44 @@
       try { var url = new URL(value); return url.protocol === 'https:' && url.hostname === 'www.youtube.com' ? url.href : null; }
       catch (error) { return null; }
     }
+    function relativeAge(value) {
+      var elapsed = Math.max(0, Date.now() - Date.parse(value));
+      if (!Number.isFinite(elapsed)) return '';
+      var minutes = Math.floor(elapsed / 60000);
+      if (minutes < 1) return 'just now';
+      if (minutes < 60) return minutes + ' minute' + (minutes === 1 ? '' : 's') + ' ago';
+      var hours = Math.floor(minutes / 60);
+      if (hours < 24) return hours + ' hour' + (hours === 1 ? '' : 's') + ' ago';
+      var days = Math.floor(hours / 24);
+      if (days < 30) return days + ' day' + (days === 1 ? '' : 's') + ' ago';
+      var months = Math.floor(days / 30);
+      if (months < 12) return months + ' month' + (months === 1 ? '' : 's') + ' ago';
+      var years = Math.floor(days / 365);
+      return years + ' year' + (years === 1 ? '' : 's') + ' ago';
+    }
+    function updateAges() {
+      root.querySelectorAll('[data-positive-age]').forEach(function (node) { node.textContent = relativeAge(node.dataset.positiveAge); });
+    }
     function render() {
       track.replaceChildren();
       rows.forEach(function (row) {
         var card = document.createElement('article'); card.className = 'positive-comments-card';
-        var author = document.createElement('div'); author.className = 'positive-comments-card-author'; author.textContent = row.author || 'YouTube viewer';
+        var video = document.createElement('div'); video.className = 'positive-comments-card-video';
+        var videoLabel = document.createElement('span'); videoLabel.className = 'positive-comments-video-label'; videoLabel.textContent = 'ON';
+        var videoTitle = document.createElement('span'); videoTitle.className = 'positive-comments-video-title'; videoTitle.textContent = row.videoTitle || 'YouTube video'; videoTitle.title = videoTitle.textContent;
+        video.append(videoLabel, videoTitle);
+        var identity = document.createElement('div'); identity.className = 'positive-comments-card-identity';
+        var avatar = document.createElement('span'); avatar.className = 'positive-comments-card-avatar'; avatar.setAttribute('aria-hidden', 'true'); avatar.textContent = (row.author || 'V').replace(/^@/, '').charAt(0).toUpperCase();
+        var byline = document.createElement('div'); byline.className = 'positive-comments-card-byline';
+        var author = document.createElement('strong'); author.className = 'positive-comments-card-author'; author.textContent = row.author || 'YouTube viewer';
+        var date = document.createElement('time'); date.className = 'positive-comments-card-age'; date.dateTime = row.publishedAt; date.title = new Date(row.publishedAt).toLocaleString(); date.dataset.positiveAge = row.publishedAt; date.textContent = relativeAge(row.publishedAt);
+        byline.append(author, date); identity.append(avatar, byline);
+        var source = document.createElement('span'); source.className = 'positive-comments-card-source'; source.textContent = 'YouTube'; identity.appendChild(source);
         var quote = document.createElement('p'); quote.className = 'positive-comments-card-quote'; quote.textContent = '“' + row.text + '”';
         var meta = document.createElement('div'); meta.className = 'positive-comments-card-meta';
-        var date = document.createElement('span'); date.textContent = new Date(row.publishedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); meta.appendChild(date);
         var url = safeUrl(row.url);
-        if (url) { var link = document.createElement('a'); link.href = url; link.target = '_blank'; link.rel = 'noopener'; link.textContent = 'View comment ↗'; meta.appendChild(link); }
-        card.append(author, quote, meta); track.appendChild(card);
+        if (url) { var link = document.createElement('a'); link.href = url; link.target = '_blank'; link.rel = 'noopener'; link.textContent = 'View on YouTube ↗'; meta.appendChild(link); }
+        card.append(video, identity, quote, meta); track.appendChild(card);
       });
       count.textContent = rows.length ? '· ' + rows.length : '';
       requestAnimationFrame(function () { goTo(index, 'instant'); });
@@ -84,6 +111,7 @@
     track.addEventListener('scroll', function () { if (track.children.length) { index = Math.min(maxIndex(), Math.max(0, Math.round(track.scrollLeft / Math.max(step(), 1)))); paintDots(); } }, { passive: true });
     track.addEventListener('keydown', function (event) { if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); goTo(index + (event.key === 'ArrowRight' ? 1 : -1)); } });
     window.addEventListener('resize', function () { goTo(index, 'instant'); });
+    setInterval(updateAges, 60000);
     function refresh() {
       if (document.body.classList.contains('role-reviewer')) return;
       fetch('/api/youtube/positive-comments', { credentials: 'include', cache: 'no-store' })

@@ -1053,6 +1053,9 @@ const positiveCommentFeed = positiveComments.create({
   },
   fetchReplies: async function (parentId, pageToken) {
     return youtubeAuth.fetchCommentRepliesPage(await getValidYoutubeAccessToken(), parentId, pageToken);
+  },
+  fetchVideos: async function (videoIds) {
+    return youtubeAuth.fetchVideoStatistics(await getValidYoutubeAccessToken(), videoIds);
   }
 });
 app.get('/api/youtube/positive-comments', requireAuth, function (req, res) {

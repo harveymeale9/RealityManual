@@ -36,6 +36,7 @@ function normalizeComment(comment, videoId, channelId) {
 function create(options) {
   const fetchThreads = options.fetchThreads;
   const fetchReplies = options.fetchReplies;
+  const fetchVideos = options.fetchVideos;
   const now = options.now || Date.now;
   const maxThreadPages = options.maxThreadPages || 150;
   const maxReplyPages = options.maxReplyPages || 150;
@@ -83,6 +84,16 @@ function create(options) {
     const comments = Array.from(found.values()).sort(function (a, b) {
       return b.publishedAt.localeCompare(a.publishedAt) || b.id.localeCompare(a.id);
     }).slice(0, 100);
+    if (comments.length && fetchVideos) {
+      try {
+        const titles = await fetchVideos(Array.from(new Set(comments.map(function (comment) { return comment.videoId; }))));
+        const byId = new Map((titles || []).map(function (video) { return [String(video.id), String(video.title || '').trim().slice(0, 180)]; }));
+        comments.forEach(function (comment) { comment.videoTitle = byId.get(comment.videoId) || 'YouTube video'; });
+      } catch (error) {
+        // A failed title lookup must never hide otherwise valid comments.
+        comments.forEach(function (comment) { comment.videoTitle = 'YouTube video'; });
+      }
+    }
     return { channelId: channelId, comments: comments, checkedAt: new Date(now()).toISOString(), loading: false, partial: partial, error: null, requiresReconnect: false };
   }
 

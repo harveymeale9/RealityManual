@@ -23161,3 +23161,20 @@ A read-only sample of the live 36 previously selected comments retained 8
 under the new filter. Focused tests and the full ops-service suite passed
 (365/365). Real Chromium checks at 1280px and 390px confirmed card layout,
 dot navigation and no document-level horizontal overflow.
+
+## Appreciation cards show video title and relative age (2026-11-16)
+
+Harvey asked that the carousel look more like individual Google-review-style
+comment cards. The cards now have a compact source-video title line, circular
+commenter initial/avatar, author name, relative "hours/days ago" time,
+prominent quote, YouTube source badge, and a link to the original comment.
+These are not actual reviews, so no star rating is fabricated. Relative times
+refresh every minute and the full timestamp remains available on hover.
+
+The shared six-hour YouTube comment scan now fetches video titles in batches
+via the existing `videos.list` helper after selecting comments. A title lookup
+failure falls back to "YouTube video" and does not hide comments; no new
+credential or persistent store is used. The title and author are rendered as
+plain text, and external links remain restricted to HTTPS YouTube. Browser
+checks at 1280px and 390px verified the new title/time layout and no horizontal
+page overflow. The full ops-service suite passed 366/366.

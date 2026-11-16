@@ -38,14 +38,24 @@ test('comment scan deduplicates replies, skips creator and sorts newest first', 
   ];
   const service = feed.create({ now: () => now,
     fetchThreads: async (_channel, token) => token ? pages[1] : pages[0],
-    fetchReplies: async () => ({ items: [item('two', 'Amazing work on this channel', '2026-11-16T10:00:00Z')] }) });
+    fetchReplies: async () => ({ items: [item('two', 'Amazing work on this channel', '2026-11-16T10:00:00Z')] }),
+    fetchVideos: async (ids) => { assert.deepEqual(ids, ['abcdefghijk']); return [{ id: ids[0], title: 'Why Kindness Matters' }]; } });
   assert.equal(service.get(channel).loading, true);
   await new Promise(resolve => setImmediate(resolve));
   const result = service.get(channel);
   assert.equal(result.loading, false);
   assert.deepEqual(result.comments.map(row => row.id), ['two', 'one']);
   assert.match(result.comments[0].url, /watch\?v=abcdefghijk&lc=two/);
+  assert.equal(result.comments[0].videoTitle, 'Why Kindness Matters');
   assert.equal(result.partial, false);
+});
+
+test('video-title lookup failure leaves the positive comments visible', async function () {
+  const service = feed.create({ fetchThreads: async () => ({ items: [{ snippet: { videoId: 'abcdefghijk', topLevelComment: item('one', 'Brilliant video', '2026-11-16T10:00:00Z') } }] }),
+    fetchReplies: async () => ({ items: [] }), fetchVideos: async () => { throw new Error('temporary YouTube failure'); } });
+  service.get('UCcreator');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(service.get('UCcreator').comments[0].videoTitle, 'YouTube video');
 });
 
 test('missing comment scope yields a reconnect prompt without removing the upload scope', async function () {
