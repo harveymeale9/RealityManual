@@ -317,14 +317,14 @@ body.role-reviewer #pmBackFab {
 
 .positive-comments {
   flex-shrink: 0;
-  padding: 10px clamp(16px, 3vw, 36px) 8px;
+  padding: 6px clamp(16px, 3vw, 36px) 4px;
   border-bottom: 1px solid var(--border-soft);
   background: #06150f;
   color: var(--ink);
 }
 .positive-comments-title {
   color: var(--accent); font-size: .67rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: .12em; margin-bottom: 7px;
+  text-transform: uppercase; letter-spacing: .12em; margin-bottom: 4px;
 }
 .positive-comments-title span { color: var(--ink-faint); letter-spacing: 0; margin-left: 5px; }
 .positive-comments-track {
@@ -336,24 +336,24 @@ body.role-reviewer #pmBackFab {
 .positive-comments-track.is-dragging { cursor: grabbing; scroll-behavior: auto; scroll-snap-type: none; }
 .positive-comments-card {
   flex: 0 0 calc((100% - 20px) / 3); box-sizing: border-box; min-width: 0;
-  height: 160px; padding: 12px 14px; border: 1px solid #385046; border-radius: 12px;
+  height: 84px; padding: 6px 9px; border: 1px solid #385046; border-radius: 8px;
   background: linear-gradient(150deg, #122019, #0c1713 72%);
   box-shadow: 0 4px 18px rgba(0, 0, 0, .18); scroll-snap-align: start;
   display: flex; flex-direction: column;
 }
-.positive-comments-card-video { display: flex; gap: 6px; align-items: baseline; min-width: 0; margin-bottom: 10px; color: var(--ink-soft); font-size: .64rem; }
+.positive-comments-card-video { display: flex; gap: 5px; align-items: baseline; min-width: 0; margin-bottom: 2px; color: var(--ink-soft); font-size: .59rem; line-height: 1.1; }
 .positive-comments-video-label { flex-shrink: 0; color: var(--accent); font-size: .56rem; font-weight: 800; letter-spacing: .12em; }
 .positive-comments-video-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.positive-comments-card-identity { display: flex; align-items: center; gap: 9px; min-width: 0; margin-bottom: 8px; }
-.positive-comments-card-avatar { flex: 0 0 30px; height: 30px; border-radius: 50%; background: #25553b; color: #d8ffe5; display: grid; place-items: center; font-size: .81rem; font-weight: 800; }
-.positive-comments-card-byline { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
-.positive-comments-card-author { color: var(--ink); font-size: .74rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.positive-comments-card-age { color: var(--ink-soft); font-size: .62rem; }
-.positive-comments-card-source { margin-left: auto; color: #ff9e94; background: #3d1718; border-radius: 9px; padding: 3px 7px; font-size: .59rem; font-weight: 700; }
-.positive-comments-card-quote { margin: 0; font-size: .8rem; line-height: 1.4; overflow: hidden; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
-.positive-comments-card-meta { margin-top: auto; font-size: .64rem; display: flex; align-items: center; justify-content: flex-end; }
+.positive-comments-card-identity { display: flex; align-items: center; gap: 5px; min-width: 0; margin-bottom: 2px; }
+.positive-comments-card-avatar { flex: 0 0 18px; height: 18px; border-radius: 50%; background: #25553b; color: #d8ffe5; display: grid; place-items: center; font-size: .62rem; font-weight: 800; }
+.positive-comments-card-byline { display: flex; align-items: baseline; min-width: 0; gap: 6px; }
+.positive-comments-card-author { color: var(--ink); font-size: .68rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.positive-comments-card-age { color: var(--ink-soft); font-size: .59rem; white-space: nowrap; }
+.positive-comments-card-source { display: none; }
+.positive-comments-card-quote { margin: 0; font-size: .72rem; line-height: 1.2; overflow: hidden; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.positive-comments-card-meta { margin-top: auto; font-size: .59rem; line-height: 1; display: flex; align-items: center; justify-content: flex-end; }
 .positive-comments-card-meta a, .positive-comments-footer a { color: var(--accent); }
-.positive-comments-footer { display: flex; align-items: center; gap: 8px; min-height: 16px; margin-top: 4px; color: var(--ink-faint); font-size: .64rem; }
+.positive-comments-footer { display: flex; align-items: center; gap: 8px; min-height: 12px; margin-top: 2px; color: var(--ink-faint); font-size: .61rem; }
 .positive-comments-footer [hidden] { display: none; }
 .positive-comments-dots { margin-left: auto; display: flex; gap: 5px; align-items: center; }
 .positive-comments-dots button { width: 17px; height: 5px; padding: 0; border: 0; border-radius: 5px; background: #38514b; cursor: pointer; }
@@ -362,12 +362,10 @@ body.role-reviewer #pmBackFab {
 @media (max-width: 600px) { .positive-comments-card { flex-basis: 83%; } }
 .positive-comments--mobile {
   border: 1px solid var(--border-soft); border-radius: 12px;
-  padding: 8px 10px; min-height: 80px;
+  padding: 6px 8px;
 }
-.positive-comments--mobile .positive-comments-card { flex-basis: 83%; height: 136px; padding: 9px 10px; }
-.positive-comments--mobile .positive-comments-card-video { margin-bottom: 6px; }
-.positive-comments--mobile .positive-comments-card-identity { margin-bottom: 6px; }
-.positive-comments--mobile .positive-comments-card-quote { -webkit-line-clamp: 2; font-size: .73rem; }
+.positive-comments--mobile .positive-comments-card { flex-basis: 83%; height: 84px; padding: 6px 8px; }
+.positive-comments--mobile .positive-comments-card-quote { font-size: .69rem; }
 .positive-comments--mobile .positive-comments-card-meta { font-size: .61rem; }
 body.role-reviewer .positive-comments { display: none; }
 

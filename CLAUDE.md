@@ -23178,3 +23178,18 @@ credential or persistent store is used. The title and author are rendered as
 plain text, and external links remain restricted to HTTPS YouTube. Browser
 checks at 1280px and 390px verified the new title/time layout and no horizontal
 page overflow. The full ops-service suite passed 366/366.
+
+## Appreciation cards compressed to a slim strip (2026-11-16)
+
+Harvey found the review-style cards wasted vertical space across every
+dashboard tab. Their height was reduced from 160px to 84px on desktop (and
+136px to 84px on the phone Project Manager page). Padding, avatar, identity,
+video-title line, quote clamp, and footer were tightened so the title,
+relative age, quote, and original-comment link remain available. The YouTube
+badge was hidden in this compact presentation because the section itself is
+already labeled as YouTube; no comment or metadata was removed. A browser
+check using the live eight-comment payload found the overall desktop strip
+125px tall, all links inside their cards, and no horizontal page overflow at
+1856px or 390px. The full ops-service suite passed 366/366. This is a
+frontend-only change, so deployment uses the static-file path without a
+container restart.
