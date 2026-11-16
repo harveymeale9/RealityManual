@@ -23062,3 +23062,32 @@ the URLs, since crawlers must fetch the pages to discover `noindex`. The
 extensionless `/privacy` and `/terms` URLs serve the same HTML on the live
 site. Search engines remove already indexed URLs after recrawling, not at
 the instant of deployment.
+
+## Weekly shipping-price audit: 9–16 November 2026 (2026-11-16)
+
+The scheduled Monday audit covered paid orders created from
+2026-11-09T09:00:00Z inclusive to 2026-11-16T09:00:00Z exclusive. Production
+checkout now uses Cloudflare D1 `rm-storefront-prod`; the VPS storefront
+SQLite copy is a paused fallback and was not treated as current. Excluding
+refunded and the two owner-marked test orders left 41 real paid orders.
+Each had a saved BookVault PodRef, dispatch cost in GBP, GBP/USD rate,
+shipping service and USD customer shipping charge; there were no missing
+cost/rate verification gaps. The order destinations and postcodes were replayed
+privately through the production non-order-creating `/api/shipping/calculate`
+endpoint at their original quantities. No address/postcode was logged or
+included in the owner report. The saved services were USPS Consolidator
+(24 US orders), Delivery Group (7 GB), and World Post (10 other-country).
+
+For every order, the original shipping charge matched actual BookVault
+dispatch cost converted at the order's saved rate within one cent. Fresh
+USD quotes differed from original charges by at most 23 cents. Separate
+read-only BookVault GBP dispatch quotes confirmed all 41 original shipping
+services, IDs, and GBP tariffs were unchanged, so the small USD differences
+come from later GBP/USD reference-rate movement, not a tariff increase. No
+gap exceeded the audit's
+greater-of-$2-or-10% threshold. Code review confirmed current quotes use
+BookVault UK partner 1 in GBP and convert with the reference rate; no new
+pricing logic defect or tariff undercharge was identified. No past charge,
+payment, BookVault order, or production code was changed. Since there was no
+material mismatch or unresolved verification gap, no owner alert email was
+sent; the Project Manager reported an all-clear.
