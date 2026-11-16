@@ -9,8 +9,9 @@
 // Scopes requested are the strict minimum for what this app actually
 // does, per Google's "least privilege" OAuth verification guidance:
 // youtube.upload to publish videos on the connected channel's behalf,
-// youtube.readonly to look up that channel's own name so Settings can
-// show "Connected as <channel>" — nothing broader.
+// youtube.readonly to look up the connected channel, and force-ssl to read
+// its comments for the private appreciation slider. The latter is a broader
+// Google permission, so an existing connection must be re-consented.
 'use strict';
 
 const AUTH_BASE = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -19,7 +20,8 @@ const CHANNELS_URL = 'https://www.googleapis.com/youtube/v3/channels?part=snippe
 
 const SCOPES = [
   'https://www.googleapis.com/auth/youtube.upload',
-  'https://www.googleapis.com/auth/youtube.readonly'
+  'https://www.googleapis.com/auth/youtube.readonly',
+  'https://www.googleapis.com/auth/youtube.force-ssl'
 ];
 
 function isConfigured() {
@@ -92,6 +94,41 @@ const CHANNELS_LIST_URL = 'https://www.googleapis.com/youtube/v3/channels';
 const PLAYLIST_ITEMS_URL = 'https://www.googleapis.com/youtube/v3/playlistItems';
 const PUBLIC_PLAYER_URL = 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false';
 const PUBLIC_PLAYER_VERSION = '20.10.38';
+const COMMENT_THREADS_URL = 'https://www.googleapis.com/youtube/v3/commentThreads';
+const COMMENTS_URL = 'https://www.googleapis.com/youtube/v3/comments';
+
+async function youtubeCommentsGet(accessToken, url) {
+  const response = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken }, signal: AbortSignal.timeout(15000) });
+  if (!response.ok) {
+    const body = await response.json().catch(function () { return {}; });
+    const error = new Error('YouTube comments lookup failed (' + response.status + ')');
+    error.status = response.status;
+    error.reason = body.error && body.error.errors && body.error.errors[0] && body.error.errors[0].reason || '';
+    throw error;
+  }
+  return response.json();
+}
+
+async function fetchCommentThreadsPage(accessToken, channelId, pageToken) {
+  const url = new URL(COMMENT_THREADS_URL);
+  url.searchParams.set('part', 'snippet,replies');
+  url.searchParams.set('allThreadsRelatedToChannelId', channelId);
+  url.searchParams.set('maxResults', '100');
+  url.searchParams.set('order', 'time');
+  url.searchParams.set('textFormat', 'plainText');
+  if (pageToken) url.searchParams.set('pageToken', pageToken);
+  return youtubeCommentsGet(accessToken, url);
+}
+
+async function fetchCommentRepliesPage(accessToken, parentId, pageToken) {
+  const url = new URL(COMMENTS_URL);
+  url.searchParams.set('part', 'snippet');
+  url.searchParams.set('parentId', parentId);
+  url.searchParams.set('maxResults', '100');
+  url.searchParams.set('textFormat', 'plainText');
+  if (pageToken) url.searchParams.set('pageToken', pageToken);
+  return youtubeCommentsGet(accessToken, url);
+}
 
 async function youtubeGet(accessToken, url, label) {
   const res = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
@@ -432,4 +469,4 @@ async function uploadVideo(accessToken, filePath, mimeType, metadata) {
   return { videoId: data.id };
 }
 
-module.exports = { SCOPES, isConfigured, buildAuthUrl, exchangeCode, refreshAccessToken, fetchChannelInfo, fetchVideoStatistics, fetchOwnChannelStatistics, fetchVideoStatuses, fetchCompetitorChannel, competitorChannelFilter, markOneInTenOutliers, fetchPublicCaptionTranscript, parseCaptionXml, uploadVideo };
+module.exports = { SCOPES, isConfigured, buildAuthUrl, exchangeCode, refreshAccessToken, fetchChannelInfo, fetchVideoStatistics, fetchOwnChannelStatistics, fetchVideoStatuses, fetchCompetitorChannel, competitorChannelFilter, markOneInTenOutliers, fetchPublicCaptionTranscript, parseCaptionXml, fetchCommentThreadsPage, fetchCommentRepliesPage, uploadVideo };

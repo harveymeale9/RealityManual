@@ -23102,3 +23102,32 @@ The next normal slot after this change is Tuesday 2026-11-17T12:00:00Z.
 No card was manually moved or explicitly scheduled time rewritten. The
 focused schedule/runway/UI tests passed (18/18), as did the full ops-service
 suite (361/361). Existing explicit immediate-publish actions remain separate.
+
+## Private YouTube appreciation slider (2026-11-16)
+
+Harvey wanted a quiet view of clearly positive YouTube comments, newest first,
+without needing to sift through negative or ambiguous comments. Content Studio
+now shows a small previous/next comment slider across its main dashboard tabs
+and on the separate phone Project Manager page. It uses the connected channel's
+published YouTube comment threads (including replies), excludes the channel's
+own replies, and renders comment text as plain text with a link to the original.
+A deliberately conservative English-language ruleset admits explicit thanks,
+appreciation, or praise and rejects questions, mixed/negative phrasing, links,
+and uncertain cases. This is a private viewing filter, not moderation: nothing
+is hidden or deleted on YouTube. It can miss positive wording outside its
+strict patterns; it does not claim to classify all sentiment correctly.
+
+The admin-only API scans up to 150 pages of top-level threads and 150 pages of
+additional replies in the background, deduplicates, orders by comment time,
+and returns the newest 100 matches. The scan is shared and cached for six
+hours so changing dashboard tabs does not consume repeated YouTube quota.
+If the page limits are reached it explicitly labels the view partial. There
+is no persistent copy of comment text. A disconnect/reconnect invalidates the
+in-memory cache. The existing YouTube connection's `youtube.readonly` and
+`youtube.upload` scopes cannot read comments: a direct live API call returned
+403 `insufficientPermissions`. Google documents `youtube.force-ssl` for the
+comment API, so that scope is now requested alongside the original two.
+Harvey must click **Reconnect YouTube** in the slider and approve Google's
+new permission once before real comments can populate; the current token
+cannot gain it automatically. A failed reconnect leaves the existing token
+unchanged. No comment API credential or raw token is exposed to the browser.

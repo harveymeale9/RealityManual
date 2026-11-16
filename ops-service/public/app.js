@@ -1399,6 +1399,10 @@
     // admin switch in the same SPA. The first-load-only branch used to leave
     // the reviewer tab list and body class in place after admin login.
     syncRoleNavigation();
+    if (!IS_REVIEWER && window.RMPositiveComments) {
+      var kindWords = window.RMPositiveComments.mount(document.getElementById('positiveComments'));
+      if (kindWords) kindWords.refreshPositiveComments();
+    }
     if (appInitialized) { startEditorUnreadBadgePolling(); renderActiveTab(); return; }
     appInitialized = true;
     bindSideRail();

@@ -15,6 +15,7 @@ const elevenlabs = require('./src/elevenlabs');
 const videoAnalysis = require('./src/videoAnalysis');
 const voiceAttachments = require('./src/voiceAttachments');
 const youtubeAuth = require('./src/youtubeAuth');
+const positiveComments = require('./src/positiveComments');
 const youtubeDescription = require('./src/youtubeDescription');
 const socialDescription = require('./src/socialDescription');
 const tiktokAuth = require('./src/tiktokAuth');
@@ -1044,6 +1045,21 @@ app.get('/api/youtube/status', requireAuthOrReviewer, function (req, res) {
   });
 });
 
+// Private appreciation feed. One bounded background scan is shared by all
+// dashboard tabs; opening another tab does not spend YouTube quota again.
+const positiveCommentFeed = positiveComments.create({
+  fetchThreads: async function (channelId, pageToken) {
+    return youtubeAuth.fetchCommentThreadsPage(await getValidYoutubeAccessToken(), channelId, pageToken);
+  },
+  fetchReplies: async function (parentId, pageToken) {
+    return youtubeAuth.fetchCommentRepliesPage(await getValidYoutubeAccessToken(), parentId, pageToken);
+  }
+});
+app.get('/api/youtube/positive-comments', requireAuth, function (req, res) {
+  const row = stmts.getYoutubeAuth.get();
+  res.json(positiveCommentFeed.get(row && row.refresh_token ? row.channel_id : null));
+});
+
 app.get('/api/youtube/oauth/start', requireAuthOrReviewer, function (req, res) {
   if (!youtubeAuth.isConfigured()) {
     return res.status(500).send('YouTube OAuth is not configured yet — missing YOUTUBE_OAUTH_CLIENT_ID / ' +
@@ -1076,16 +1092,25 @@ app.get('/api/youtube/oauth/callback', requireAuthOrReviewer, function (req, res
   Promise.resolve()
     .then(function () { return youtubeAuth.exchangeCode(req.query.code); })
     .then(function (tokens) {
-      return youtubeAuth.fetchChannelInfo(tokens.access_token).then(function (channel) {
+      return youtubeAuth.fetchChannelInfo(tokens.access_token).then(async function (channel) {
+        if (!channel) throw new Error('The connected YouTube channel could not be identified.');
+        const previous = stmts.getYoutubeAuth.get();
+        const refreshToken = tokens.refresh_token ||
+          (previous && previous.channel_id === channel.channelId ? previous.refresh_token : null);
+        if (!refreshToken) throw new Error('Google did not grant an offline YouTube connection. Please try again.');
+        // Do not replace a working upload token with a new token that still
+        // cannot read comments (for example if Google omitted the new scope).
+        await youtubeAuth.fetchCommentThreadsPage(tokens.access_token, channel.channelId, '');
         const expiresAt = new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString();
         stmts.upsertYoutubeAuth.run(
-          channel ? channel.channelId : null,
-          channel ? channel.channelTitle : null,
+          channel.channelId,
+          channel.channelTitle,
           tokens.access_token,
-          tokens.refresh_token || null,
+          refreshToken,
           expiresAt,
           new Date().toISOString()
         );
+        positiveCommentFeed.invalidate();
       });
     })
     .then(function () { res.redirect(returnTo); })
@@ -1097,6 +1122,7 @@ app.get('/api/youtube/oauth/callback', requireAuthOrReviewer, function (req, res
 
 app.post('/api/youtube/disconnect', requireAuthOrReviewer, function (req, res) {
   stmts.clearYoutubeAuth.run();
+  positiveCommentFeed.invalidate();
   res.json({ ok: true });
 });
 

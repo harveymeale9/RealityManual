@@ -315,6 +315,42 @@ body.role-reviewer #pmBackFab {
   flex-shrink: 0;
 }
 
+.positive-comments {
+  flex-shrink: 0;
+  padding: 8px clamp(16px, 3vw, 36px);
+  border-bottom: 1px solid var(--border-soft);
+  background: #061b11;
+  color: var(--ink);
+}
+.positive-comments-title {
+  color: var(--accent); font-size: .67rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .12em; margin-bottom: 3px;
+}
+.positive-comments-title span { color: var(--ink-faint); letter-spacing: 0; margin-left: 5px; }
+.positive-comments-main { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.positive-comments-main > button {
+  flex: 0 0 28px; height: 28px; border: 1px solid var(--border);
+  border-radius: 50%; background: var(--surface-2); color: var(--accent);
+  cursor: pointer; font-size: 1.25rem; line-height: 1;
+}
+.positive-comments-main > button:disabled { opacity: .35; cursor: default; }
+.positive-comments-copy { flex: 1; min-width: 0; }
+.positive-comments-copy p {
+  margin: 0; font-size: .83rem; line-height: 1.35; overflow: hidden;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+}
+.positive-comments-copy small { color: var(--ink-soft); font-size: .67rem; }
+.positive-comments-copy a { color: var(--accent); margin-left: 7px; }
+.positive-comments-copy [data-positive-connect] { display: inline-block; color: var(--accent); font-size: .68rem; margin: 2px 0 0; }
+.positive-comments-copy [data-positive-connect][hidden] { display: none; }
+.positive-comments-copy [data-positive-status] { display: block; color: var(--ink-faint); font-size: .64rem; }
+.positive-comments--mobile {
+  border: 1px solid var(--border-soft); border-radius: 12px;
+  padding: 8px 10px; min-height: 84px;
+}
+.positive-comments--mobile .positive-comments-copy p { -webkit-line-clamp: 2; }
+body.role-reviewer .positive-comments { display: none; }
+
 .panel-brand { display: flex; align-items: center; gap: 10px; margin-right: 8px; flex-shrink: 0; }
 .panel-brand-text { display: flex; flex-direction: column; gap: 2px; }
 .wordmark-sm {
