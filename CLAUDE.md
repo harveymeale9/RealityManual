@@ -23051,3 +23051,14 @@ orders remained `BatchPayment/Created`, which is a normal monitored wait; no
 payment or print-order mutation was made for this verification. BookVault's
 own payment-failure emails are outside our Resend alert path and are not
 suppressed by this change.
+
+## Legal pages request search deindexing (2026-11-16)
+
+Harvey asked for the public Privacy Policy and Terms of Service to be
+deindexed. Both `frontend/privacy.html` and `frontend/terms.html` now include
+`<meta name="robots" content="noindex" />` in their heads. The pages and footer/
+checkout links remain accessible; `robots.txt` deliberately does not disallow
+the URLs, since crawlers must fetch the pages to discover `noindex`. The
+extensionless `/privacy` and `/terms` URLs serve the same HTML on the live
+site. Search engines remove already indexed URLs after recrawling, not at
+the instant of deployment.
