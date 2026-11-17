@@ -23297,3 +23297,43 @@ cards and five revenue cards, with their existing two-column mobile layout.
 The focused reporting tests cover the Bangkok-day boundary and both 14-day
 totals; frontend rendering and the full ops-service suite were checked before
 deployment.
+
+## Facebook repost inventory and safety copy (2026-11-17)
+
+Harvey is considering deleting pre-creator-setting Facebook Page videos and
+reposting them in unused weekly slots. Before any deletion, a read-only audit
+found 33 Content Studio pieces with completed Facebook publish IDs, dated
+2026-10-14 through 2026-11-17. The normal `publish-ready` R2 copies are
+working storage, automatically removed 14 days after Live (§429): 26 were
+already marked `released`, six `ready`, and one legacy piece had no status.
+Twenty-two pieces had verified R2 Editor original sources; nine older pieces
+had neither a recorded original nor a retained publish-ready/local final.
+**Do not tell Harvey all original masters remain available.**
+
+The connected Page token could still read a `source` URL for every one of the
+33 published Facebook video IDs, and each URL returned a valid media length.
+A one-off, idempotent backup saved those exact Facebook-delivered MP4 versions
+to the private R2 bucket under `facebook-repost/2026-11-17/<piece-id>.mp4`.
+Every object was verified by R2 HEAD against the downloaded content length;
+the manifest `facebook-repost/2026-11-17/manifest.json` was independently
+read back and contains 33 distinct piece IDs totaling 917,150,540 bytes.
+The operational script is at `/root/ops-service-data/facebook-repost-backup.js`
+(outside git, no credentials in the file), and can be rerun without replacing
+an already backed-up object. These are Facebook's encoded versions, not
+necessarily the full-resolution original masters; the manifest maps original
+video IDs, pieces, dates, content types, and backup object keys. This backup
+prefix is outside the app's normal 14-day `publish-ready` cleanup.
+
+No Facebook post was deleted, republished, or rescheduled, and no Kanban card
+was moved. Existing Facebook metrics were 16 measured zero-view pieces and
+17 with at least one measured view; the newest pieces had only 1–3 measured
+views at this check, so the creator-setting change has not been shown to cause
+a reach improvement. The same connected Page ID still responds to Graph API;
+its current Graph `category` is `Book`, which is not proof about a separate
+business/creator profile mode. Meta says previously shared Page videos remain
+eligible for distribution and discourages flooding the Feed. A future replay
+should therefore be Facebook-only, preserve YouTube/Instagram/TikTok IDs and
+the normal schedule, archive old metrics, remove the exact old Facebook post
+only in a controlled per-piece sequence, and write the new Facebook ID/status
+without treating it as a new cross-platform release. Do not mass-delete or
+blindly move Live cards back into the ordinary publishing queue.
