@@ -581,6 +581,7 @@
       var periodConfig = [
         ['Today', data.periods.today],
         ['Last 7 days', data.periods.last_7_days],
+        ['Last 14 days', data.periods.last_14_days],
         ['Last 30 days', data.periods.last_30_days],
         ['All time', data.periods.all_time]
       ];
@@ -600,6 +601,7 @@
         ['Today', books.today || 0],
         ['Yesterday', books.yesterday || 0],
         ['Last 7 days', books.last_7_days || 0],
+        ['Last 14 days', books.last_14_days || 0],
         ['Last 30 days', books.last_30_days || 0],
         ['Avg. per month', Number(books.monthly_average || 0).toFixed(1)]
       ].map(function (entry) {

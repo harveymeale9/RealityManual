@@ -370,6 +370,7 @@ function getSalesDashboard(db, nowValue, excludedIds, unseenOrderIds) {
   const todayStart = new Date(startOfBangkokDay(now));
   const yesterdayStart = new Date(todayStart.getTime() - 86400000);
   const sevenStart = new Date(todayStart.getTime() - 6 * 86400000);
+  const fourteenStart = new Date(todayStart.getTime() - 13 * 86400000);
   const thirtyStart = new Date(todayStart.getTime() - 29 * 86400000);
   const allStart = '1970-01-01T00:00:00.000Z';
 
@@ -517,6 +518,7 @@ function getSalesDashboard(db, nowValue, excludedIds, unseenOrderIds) {
     today: salesTotals(db, todayStart.toISOString(), end, excluded.ids),
     yesterday: salesTotals(db, yesterdayStart.toISOString(), todayStart.toISOString(), excluded.ids),
     last_7_days: salesTotals(db, sevenStart.toISOString(), end, excluded.ids),
+    last_14_days: salesTotals(db, fourteenStart.toISOString(), end, excluded.ids),
     last_30_days: salesTotals(db, thirtyStart.toISOString(), end, excluded.ids),
     all_time: salesTotals(db, allStart, end, excluded.ids)
   };
@@ -535,6 +537,7 @@ function getSalesDashboard(db, nowValue, excludedIds, unseenOrderIds) {
       today: periods.today.units,
       yesterday: periods.yesterday.units,
       last_7_days: periods.last_7_days.units,
+      last_14_days: periods.last_14_days.units,
       last_30_days: periods.last_30_days.units,
       monthly_average: monthCount ? Math.round(periods.all_time.units / monthCount * 10) / 10 : 0,
       month_count: monthCount

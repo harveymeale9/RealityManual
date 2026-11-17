@@ -23284,3 +23284,16 @@ At Harvey's request, “Was this book written by AI?” now appears immediately
 after “Is the author the same person featured in the videos?” in the homepage
 FAQ. The root page and retained `/home2/` alias remain aligned. Question and
 answer wording is unchanged; this is a static HTML ordering change only.
+
+## Sales dashboard last-14-days cards (2026-11-17)
+
+Sales Analytics now shows a Last 14 days card in both the Books sold row and
+the Revenue and gross profit row, between 7 and 30 days. The API uses the
+same Stripe-paid, non-refunded, owner-test-excluded `salesTotals` calculation
+as its existing periods. The window includes today plus the preceding 13
+Asia/Bangkok calendar days, ending at the report's current time; it does not
+wait for BookVault payment or acceptance. The desktop grids have six books
+cards and five revenue cards, with their existing two-column mobile layout.
+The focused reporting tests cover the Bangkok-day boundary and both 14-day
+totals; frontend rendering and the full ops-service suite were checked before
+deployment.

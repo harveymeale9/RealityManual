@@ -194,7 +194,7 @@ test('sales chart heights follow Stripe-paid orders, not BookVault-dependent pro
     shipping_revenue_cents: 0, gross_profit_cents: 68206, profit_pending_orders: 4,
     average_order_cents: 8162, refunded_orders: 0, refunded_value_cents: 0 };
   const dashboard = { generated_at: '2026-10-30T12:00:00.000Z',
-    periods: { today: period, last_7_days: period, last_30_days: period, all_time: period },
+    periods: { today: period, last_7_days: period, last_14_days: period, last_30_days: period, all_time: period },
     books_sold: {}, daily, countries: [], recent_orders: [], recent_refunds: [], excluded_orders: [],
     unseen_sales_order_ids: [] };
   const listeners = {};
@@ -338,7 +338,7 @@ test('sales dashboard returns live periods, a filled daily series and privacy-sa
   const dashboard = reporting.getSalesDashboard(db, '2026-10-10T12:00:00.000Z');
   assert.equal(dashboard.periods.today.paid_orders, 1);
   assert.equal(dashboard.periods.yesterday.units, 2);
-  assert.deepEqual(dashboard.books_sold, { today: 1, yesterday: 2, last_7_days: 3, last_30_days: 3, monthly_average: 3, month_count: 1 });
+  assert.deepEqual(dashboard.books_sold, { today: 1, yesterday: 2, last_7_days: 3, last_14_days: 3, last_30_days: 3, monthly_average: 3, month_count: 1 });
   assert.equal(dashboard.periods.last_7_days.paid_orders, 2);
   assert.equal(dashboard.periods.last_7_days.revenue_cents, 21300);
   assert.equal(dashboard.periods.last_7_days.book_revenue_cents, 20100);
@@ -347,6 +347,8 @@ test('sales dashboard returns live periods, a filled daily series and privacy-sa
   assert.equal(dashboard.periods.last_7_days.gross_profit_cents, 9200);
   assert.equal(dashboard.periods.last_7_days.profit_known_orders, 1);
   assert.equal(dashboard.periods.last_7_days.profit_pending_orders, 1);
+  assert.equal(dashboard.periods.last_14_days.paid_orders, 2);
+  assert.equal(dashboard.periods.last_14_days.revenue_cents, 21300);
   assert.equal(dashboard.daily.find((row) => row.day === '2026-10-09').gross_profit_cents, 9200);
   assert.equal(dashboard.daily.find((row) => row.day === '2026-10-10').profit_pending_orders, 1);
   assert.equal(dashboard.periods.today.refunded_orders, 1);
@@ -437,6 +439,11 @@ test('sales periods, chart days and monthly average use Bangkok midnight, not UT
   assert.equal(report.daily.find((row) => row.day === '2026-11-02').units, 1);
   assert.equal(report.daily.find((row) => row.day === '2026-11-03').units, 2);
   assert.equal(report.daily.find((row) => row.day === '2026-10-31').units, 1);
+  add.run('before-14-days', '2026-10-20T16:59:00.000Z', '2026-10-20T16:59:00.000Z');
+  add.run('first-14-day', '2026-10-20T17:00:00.000Z', '2026-10-20T17:00:00.000Z');
+  const withBoundaryOrders = reporting.getSalesDashboard(db, '2026-11-03T03:00:00.000Z');
+  assert.equal(withBoundaryOrders.books_sold.last_14_days, 5);
+  assert.equal(withBoundaryOrders.periods.last_14_days.revenue_cents, 32500);
   const appSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   assert.match(appSource, /Bangkok time \(UTC\+7\)/);
   assert.match(appSource, /timeZone: 'Asia\/Bangkok'/);
