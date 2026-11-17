@@ -23277,3 +23277,10 @@ health returned 200 and its SQLite schema gained the same flag. The old
 backend container was replaced, but its persistent `/data` volume was kept.
 Worker tests passed 29/29 and backend tests 56/56. The customer who already
 supplied the correction was not sent a redundant automated address request.
+
+## Storefront FAQ AI question moved (2026-11-17)
+
+At Harvey's request, “Was this book written by AI?” now appears immediately
+after “Is the author the same person featured in the videos?” in the homepage
+FAQ. The root page and retained `/home2/` alias remain aligned. Question and
+answer wording is unchanged; this is a static HTML ordering change only.
