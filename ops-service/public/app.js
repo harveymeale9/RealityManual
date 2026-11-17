@@ -944,7 +944,7 @@
               '<p class="analytics-definition">These are browser events, not Stripe payment totals. Check Sales Analytics for confirmed payments, issuer declines and BookVault status.</p>' +
               (refundedOrders ? '<a class="analytics-internal-link" href="#sales-analytics">View refunded orders and reasons in Sales Analytics</a>' : '') +
             '</div>' +
-            referralBreakdownHtml(data.referrals) +
+            referralBreakdownHtml(data.referrals, youtubeClickthrough) +
           '</div>';
       })
       .catch(function () {
@@ -960,15 +960,19 @@
     facebook: { label: 'Facebook', color: '#63a8ff' }
   };
 
-  function referralBreakdownHtml(referrals) {
+  function referralBreakdownHtml(referrals, youtubeClickthrough) {
     referrals = referrals || { total_sessions: 0, sources: [] };
     var sources = referrals.sources || [];
     var total = Number(referrals.total_sessions) || 0;
+    var matchedVideos = new Map((youtubeClickthrough && youtubeClickthrough.videos || []).map(function (video) {
+      return [String(video.seq), video];
+    }));
     var hues = { youtube: 355, facebook: 215, instagram: 290, tiktok: 176 };
     var wedges = [];
     var cursor = 0;
     var sourceRows = sources.map(function (source, sourceIndex) {
       var sourceCount = Number(source.sessions) || 0;
+      var isYoutube = String(source.source).toLowerCase() === 'youtube';
       var hue = Object.prototype.hasOwnProperty.call(hues, String(source.source).toLowerCase())
         ? hues[String(source.source).toLowerCase()] : (75 + sourceIndex * 47) % 360;
       var segments = (source.segments || []).map(function (segment, segmentIndex) {
@@ -983,18 +987,31 @@
           (segment.medium === 'profile' || content.toLowerCase() === 'profile') ? 'Profile link' :
           /^\d{1,6}$/.test(content) ? 'Video #' + content + (segment.piece_title ? ' · ' + segment.piece_title : '') :
           content ? 'Tagged link · ' + content : 'Other / unspecified link';
+        var matchedVideo = isYoutube && !segment.legacy && segment.medium === 'video' &&
+          segment.campaign === 'longform' && /^\d{1,6}$/.test(content) ? matchedVideos.get(String(Number(content))) : null;
+        var viewRate = matchedVideo && matchedVideo.rate_percent != null ? contentPercent(matchedVideo.rate_percent) : '—';
         return '<li><i style="background:' + color + '"></i><span title="' + escapeHtml(label) + '">' + escapeHtml(label) + '</span>' +
-          '<strong>' + count.toLocaleString('en-US') + '</strong><small>' + (total ? (count / total * 100).toFixed(1) : '0') + '%</small></li>';
+          '<strong>' + count.toLocaleString('en-US') + '</strong><small>' + (total ? (count / total * 100).toFixed(1) : '0') + '%</small>' +
+          (isYoutube ? '<small class="referral-view-rate" title="' + (matchedVideo ?
+            escapeHtml(contentNumber(matchedVideo.visits) + ' verified long-form website visits / ' + contentNumber(matchedVideo.views) + ' new YouTube views in the matched period') :
+            'No matched long-form video view denominator for this link') + '">' + viewRate + '</small>' : '') + '</li>';
       }).join('');
-      return '<div class="referral-source"><div class="referral-source-head"><strong>' + escapeHtml(source.source) + '</strong>' +
+      return '<div class="referral-source' + (isYoutube ? ' referral-source-youtube' : '') + '"><div class="referral-source-head"><strong>' + escapeHtml(source.source) + '</strong>' +
         '<span>' + sourceCount.toLocaleString('en-US') + ' · ' + (total ? (sourceCount / total * 100).toFixed(1) : '0') + '%</span></div>' +
+        (isYoutube ? '<div class="referral-column-head"><span>Visits</span><span>Visit share</span><span>Visits / views</span></div>' : '') +
         '<ul>' + segments + '</ul></div>';
     }).join('');
     var gradient = wedges.length ? 'conic-gradient(' + wedges.join(',') + ')' : 'linear-gradient(#173024,#173024)';
+    var matchedRate = youtubeClickthrough ? '<div class="referral-conversion"><strong>' + contentPercent(youtubeClickthrough.rate_percent) +
+      '</strong><span>of measured long-form YouTube views led to a verified website visit' +
+      '<small>' + contentNumber(youtubeClickthrough.visits) + ' tagged visits / ' + contentNumber(youtubeClickthrough.views) +
+      ' new views · ' + escapeHtml(youtubeClickthrough.period.start) + '–' + escapeHtml(youtubeClickthrough.period.end) + ' UTC</small></span></div>' :
+      '<div class="referral-conversion unavailable">Long-form YouTube view-to-visit rate is temporarily unavailable.</div>';
     return '<section class="referral-breakdown"><div class="referral-head"><div class="eyebrow">Content → website · last 30 days</div>' +
       '<h3>Where attributed traffic came from</h3></div>' +
+      matchedRate +
       (total ? '<div class="referral-body"><div class="referral-donut" role="img" aria-label="Share of verified tagged visits by platform and link" style="background:' + gradient + '">' +
-        '<div><strong>' + total.toLocaleString('en-US') + '</strong><span>attributed visits</span></div></div><div class="referral-sources"><p class="referral-share-label">Percentages below are each link’s share of all ' + total.toLocaleString('en-US') + ' attributed website visits, not clicks per YouTube view.</p>' + sourceRows + '</div></div>' :
+        '<div><strong>' + total.toLocaleString('en-US') + '</strong><span>attributed visits</span></div></div><div class="referral-sources"><p class="referral-share-label">Visit share = portion of all ' + total.toLocaleString('en-US') + ' attributed visits. YouTube “visits / views” uses matched long-form video views; — means no comparable view data. These are verified arrivals, not YouTube’s raw click count.</p>' + sourceRows + '</div></div>' :
         '<div class="empty-slot">No verified UTM-tagged visits in this period yet.</div>') +
       '<p class="referral-definition">' + escapeHtml(referrals.definition || 'Verified attribution, not raw clicks.') +
       ' One browser can appear under different links on the same day. Source shares are directional while older source-only history remains in the chart.</p></section>';
@@ -1237,7 +1254,7 @@
         (notices ? '<section class="content-provider-notes">' + notices + '</section>' : '') +
         youtubeClickthroughHtml(youtubeClickthrough) +
         contentOverallChart(data, contentOverallRangeDays) +
-        (website ? referralBreakdownHtml(website.referrals) : '') +
+        (website ? referralBreakdownHtml(website.referrals, youtubeClickthrough) : '') +
         '<section class="content-block"><div class="content-block-head"><div><span>Audience</span><h3>Platform growth</h3></div><small>Followers are not additive identities; the total is directional.</small></div><div class="content-audience-grid">' + audience + '</div></section>' +
         '<div class="content-performance-layout"><section class="content-block content-piece-list"><div class="content-block-head"><div><span>Library</span><h3>Pieces by publish date</h3></div><small>Hover, focus, or tap a title</small></div><div class="content-piece-columns"><span>Piece</span><span>Total</span><span>YT</span><span>TT</span><span>IG</span><span>FB</span><span>Rate</span></div>' + rows + '</section>' +
         '<section class="content-block content-piece-detail" id="contentPieceDetail">' + (data.pieces[0] ? contentDetailMarkup(data.pieces[0]) : '') + '</section></div>' +

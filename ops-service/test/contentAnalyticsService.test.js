@@ -197,7 +197,7 @@ test('Content Analytics owns its analytics route while competitor research keeps
   assert.match(style, /@container \(max-width:600px\)/);
   assert.match(style, /\.content-piece-row>span:nth-child\(6\)\{display:block\}/);
   assert.match(page, /data-tabs="content-analytics,sales-analytics,website-analytics"/);
-  assert.match(page, /app\.js\?v=20261116-10pm-longform/);
+  assert.match(page, /app\.js\?v=20261117-referral-rate/);
   assert.match(page, /id="commentAlertClearAll" disabled/);
   assert.match(app, /comment-alerts\/reviewed-all/);
   assert.match(app, /class="content-overall-yesterday" data-content-day=/);

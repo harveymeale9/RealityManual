@@ -23207,3 +23207,27 @@ normal slot as Tuesday 2026-11-17T15:00:00Z. The full ops-service test suite
 passed 366/366. The deployment requires an ops-service rebuild because the
 server scheduler changed; the existing deploy drain must not interrupt active
 video processing or uploads.
+
+## Referral chart also shows matched YouTube view-to-visit rate (2026-11-17)
+
+Harvey still saw 3–4% figures beside individual YouTube videos in “Where
+attributed traffic came from” and expected the requested percentage of video
+views that reached the website. Those figures were shares of **all** attributed
+website visits, not view-to-visit rates. The correct long-form measure already
+existed in a separate card, but the referral chart did not show it where
+Harvey was looking.
+
+The referral chart now receives the existing matched long-form report on both
+Content Analytics and Website Analytics. It places the aggregate verified
+visits/new views percentage prominently above the donut, with its numerator,
+denominator and UTC window. YouTube rows have separate “Visit share” and
+“Visits / views” columns. Only numeric video links tagged
+`utm_medium=video&utm_campaign=longform` with a measured matching video show
+the per-video rate; source-only history, profile links, Shorts, unmeasured
+videos and other platforms show a dash rather than a fabricated rate. The
+existing source-share figures remain intact. Text explicitly says these are
+verified website arrivals per measured YouTube view, not raw YouTube click
+events. No attribution counters or backend calculations changed. A focused
+UI-rendering test covers a matched long-form video, historical/Shorts dashes,
+and an unavailable report; existing view-matching tests still pass. This is
+frontend-only, so the static-file deploy path does not restart video work.

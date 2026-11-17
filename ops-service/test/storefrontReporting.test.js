@@ -170,9 +170,9 @@ test('referral breakdown attributes verified arrivals to posts and keeps older s
 test('both analytics views show the nested source-and-video referral chart', function () {
   const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const page = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
-  assert.match(app, /function referralBreakdownHtml\(referrals\)/);
-  assert.match(app, /referralBreakdownHtml\(data\.referrals\)/);
-  assert.match(app, /referralBreakdownHtml\(website\.referrals\)/);
+  assert.match(app, /function referralBreakdownHtml\(referrals, youtubeClickthrough\)/);
+  assert.match(app, /referralBreakdownHtml\(data\.referrals, youtubeClickthrough\)/);
+  assert.match(app, /referralBreakdownHtml\(website\.referrals, youtubeClickthrough\)/);
   assert.match(app, /conic-gradient\(/);
   assert.match(app, /segment\.piece_title/);
   assert.match(page, /style\.css\?v=[^"\s]+/);
