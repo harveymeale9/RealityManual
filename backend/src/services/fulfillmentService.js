@@ -7,6 +7,7 @@ const errorLogService = require('./errorLogService');
 const { resendClient, quantityBand } = require('./resendService');
 const {
   orderConfirmedEmail,
+  orderAddressCorrectionEmail,
   orderShippedEmail,
   orderRefundedEmail,
 } = require('./emailTemplates');
@@ -26,14 +27,34 @@ function fulfillmentDeadline(order) {
   return Number.isFinite(paidAt) ? paidAt + FULFILLMENT_WINDOW_MS : null;
 }
 
-async function alertOwner(order, message) {
+function isAddressRejection(message) {
+  const value = String(message || '');
+  return /not recogni[sz]ed from the specified state/i.test(value) ||
+    /(?:valid|invalid|incorrect|unrecognized|unrecognised|does not match|not supplied).{0,70}(?:post(?:al)?\s*code|zip)|(?:post(?:al)?\s*code|zip).{0,70}(?:valid|invalid|incorrect|unrecognized|unrecognised|does not match|not supplied)/i.test(value);
+}
+
+async function requestAddressCorrection(order) {
+  if (order.address_correction_email_sent_at) return;
+  const template = orderAddressCorrectionEmail(order);
+  await resendClient.sendEmail({
+    to: order.email, ...template, idempotencyKey: `${order.id}-address-correction-request`,
+    tags: [{ name: 'email_type', value: 'address_correction_request' },
+      { name: 'customer_status', value: 'purchaser' },
+      { name: 'product', value: 'reality_manual_hardcover' }],
+  });
+  orderService.markAddressCorrectionEmailSent(order.id);
+}
+
+async function alertOwner(order, message, addressContact = null) {
   if (order.fulfillment_alert_sent_at) return;
   try {
     const shortId = order.id.slice(0, 8);
     await resendClient.sendEmail({
       to: process.env.ORDER_ALERT_EMAIL || 'harveymeale9@gmail.com',
-      subject: `Action needed: paid order ${shortId} awaiting BookVault`,
-      html: `<p>A customer payment was accepted, but BookVault has not accepted order ${shortId}.</p><p>${String(message).replaceAll('&', '&amp;').replaceAll('<', '&lt;')}</p><p>Check the BookVault title and GBP funding. The 60-hour refund deadline is ${new Date(fulfillmentDeadline(order) || Date.now()).toISOString()}.</p>`,
+      subject: addressContact === 'sent' ? `Address correction requested for paid order ${shortId}` :
+        addressContact === 'failed' ? `Action needed: address email failed for paid order ${shortId}` :
+          `Action needed: paid order ${shortId} awaiting BookVault`,
+      html: `<p>A customer payment was accepted, but BookVault has not accepted order ${shortId}.</p><p>${String(message).replaceAll('&', '&amp;').replaceAll('<', '&lt;')}</p><p>The 60-hour refund deadline is ${new Date(fulfillmentDeadline(order) || Date.now()).toISOString()}.</p>`,
       text: `Paid order ${shortId} is awaiting BookVault. ${message}\n60-hour refund deadline: ${new Date(fulfillmentDeadline(order) || Date.now()).toISOString()}.`,
       idempotencyKey: `${order.id}-fulfillment-alert`,
     });
@@ -148,7 +169,20 @@ async function submitToBookVault(order) {
         requestReference: order.id,
         attemptNumber: attempts,
       });
-      await alertOwner(order, err.message);
+      let addressContact = null;
+      let alertMessage = err.message;
+      if (isAddressRejection(err.message) && Date.now() < fulfillmentDeadline(order)) {
+        try {
+          await requestAddressCorrection(order);
+          addressContact = 'sent';
+          alertMessage = `Payment accepted. BookVault rejected the delivery address. I emailed the customer to confirm it. ${err.message}`;
+        } catch (contactError) {
+          addressContact = 'failed';
+          alertMessage = `Payment accepted. BookVault rejected the delivery address, but the customer email failed; manual contact is needed. ${err.message}`;
+          errorLogService.logError({ orderId: order.id, service: 'resend', errorType: 'address_correction_email_failed', errorMessage: contactError.message });
+        }
+      }
+      await alertOwner(order, alertMessage, addressContact);
     }
     const deadline = fulfillmentDeadline(order);
     if (deadline && Date.now() >= deadline) {

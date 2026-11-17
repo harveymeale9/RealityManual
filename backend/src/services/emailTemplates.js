@@ -156,6 +156,16 @@ function orderConfirmedEmail(order, { preview = false } = {}) {
   };
 }
 
+function orderAddressCorrectionEmail(order) {
+  const shortId = String(order.id || '').slice(0, 8);
+  const subject = `Please confirm your delivery address for order ${shortId}`;
+  const body = `<p style="margin:0 0 18px;">Hi ${escapeHtml(firstName(order.customer_name))}, we have received your payment and accepted your order for <em>The Reality Manual</em>.</p>
+    <p style="margin:0 0 18px;">Our printer could not verify the ZIP or postal code against the city and state or province on your delivery address, so production is paused while we confirm it.</p>
+    <p style="margin:0;">Please reply with the correct street address, city, state or province, and ZIP or postal code. You do not need to place another order or pay again.</p>`;
+  const text = `Hi ${firstName(order.customer_name)},\n\nWe have received your payment and accepted your Reality Manual order ${shortId}. Our printer could not verify the ZIP or postal code against the city and state or province on your delivery address, so production is paused while we confirm it.\n\nPlease reply with the correct street address, city, state or province, and ZIP or postal code. You do not need to place another order or pay again.\n\nThe Reality Manual`;
+  return { subject, html: layout({ preheader: 'Please confirm your delivery address so we can arrange production.', eyebrow: 'Address confirmation', title: 'Please Confirm Your Delivery Address', body }), text };
+}
+
 function orderShippedEmail(order, shipment = {}, { preview = false } = {}) {
   const orderNumber = order.display_order_id || order.id;
   const address = addressLines(order);
@@ -326,6 +336,7 @@ function reviewRequestEmail(order, { preview = false } = {}) {
 module.exports = {
   escapeHtml,
   orderConfirmedEmail,
+  orderAddressCorrectionEmail,
   orderShippedEmail,
   orderRefundedEmail,
   reviewRequestEmail,

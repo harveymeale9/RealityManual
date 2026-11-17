@@ -2,7 +2,7 @@
 // is code-only sharing; no VPS database or service is contacted for email.
 import templates from '../../backend/src/services/emailTemplates.js';
 
-export const { orderConfirmedEmail, orderShippedEmail, orderRefundedEmail, reviewRequestEmail } = templates;
+export const { orderConfirmedEmail, orderAddressCorrectionEmail, orderShippedEmail, orderRefundedEmail, reviewRequestEmail } = templates;
 
 export async function sendEmail(env, { to, subject, html, text, idempotencyKey, tags, headers }) {
   if (!env.RESEND_API_KEY || !env.RESEND_FROM_EMAIL || !to || !subject || !html || !text) {

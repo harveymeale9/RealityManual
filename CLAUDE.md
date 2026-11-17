@@ -23231,3 +23231,38 @@ events. No attribution counters or backend calculations changed. A focused
 UI-rendering test covers a matched long-form video, historical/Shorts dashes,
 and an unavailable report; existing view-matching tests still pass. This is
 frontend-only, so the static-file deploy path does not restart video work.
+
+## Paid-order address correction after BookVault rejection (2026-11-17)
+
+Paid order `967ac88b` was accepted by Stripe and the customer confirmation
+was sent, but BookVault rejected its submitted ZIP/state combination and had
+not created a PodRef. The customer independently replied to the original
+confirmation with a corrected ZIP. After checking that the reply matched the
+saved purchaser and that the order was still a paid retry with no BookVault
+reference, production D1 was conditionally updated for this one order only.
+The existing DocRef-safe retry then created one BookVault order; D1 recorded
+`BOOKVAULT_ACCEPTED` with PodRef `3082830`. No second payment or blind print
+submission was made. Do not record customer identity or full address here.
+
+The live Worker now treats a BookVault `/Order` postal/ZIP or ZIP/state
+rejection as a post-payment address check. Checkout still accepts payment
+and sends the normal confirmation first. On a specific address rejection,
+fulfillment sends the customer one branded request to confirm street, city,
+state/province and ZIP/postal code, explicitly saying not to reorder or pay
+again. Only after that send succeeds does the owner alert say that the
+customer was contacted; if sending fails, the alert says manual contact is
+needed. It continues the existing 60-hour retry/refund safeguards and never
+submits a duplicate BookVault order. Routine saved-card `Draft` and
+`BatchPayment/Created` waits still do not generate these owner alerts.
+
+The request is idempotent per order via Resend's key and the new
+`address_correction_email_sent_at` order field. The field was added to
+production D1 with `ALTER TABLE orders ADD COLUMN address_correction_email_sent_at TEXT`
+before Worker deployment; the shared schema and paused VPS fallback migration
+include it for future starts. The fallback has the same specific address
+classification, customer request and truthful owner alert. No third-party ZIP
+lookup or speculative address rewrite was added: BookVault's order validation
+is definitive, while its earlier shipping quote is not. The customer must
+confirm any correction. Worker tests exercise the rejected address, one-time
+customer send, owner message and retry idempotency; Worker and backend suites
+passed before release.

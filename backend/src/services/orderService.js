@@ -117,6 +117,7 @@ const setNextAttemptStmt = db.prepare(`
   UPDATE orders SET fulfillment_next_attempt_at = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?
 `);
 const markFulfillmentAlertStmt = db.prepare("UPDATE orders SET fulfillment_alert_sent_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?");
+const markAddressCorrectionEmailStmt = db.prepare("UPDATE orders SET address_correction_email_sent_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?");
 const markFulfillmentDeadlineAlertStmt = db.prepare("UPDATE orders SET fulfillment_deadline_alert_sent_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?");
 
 const markEmailSentStmt = {
@@ -326,6 +327,7 @@ module.exports = {
   setOrderStatus,
   setNextAttempt,
   markFulfillmentAlertSent,
+  markAddressCorrectionEmailSent: (id) => markAddressCorrectionEmailStmt.run(id),
   markFulfillmentDeadlineAlertSent,
   markEmailSent,
   markReviewRequestSkipped,

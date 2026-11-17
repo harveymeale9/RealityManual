@@ -1,6 +1,6 @@
 import { applyPaymentEvent, getOrderById } from './orderStore.js';
 import { cancelUnpaidDraft, getOrder, isAwaitingBookVaultPayment, submitOrder } from './bookvault.js';
-import { orderConfirmedEmail, orderRefundedEmail, orderShippedEmail, quantityBand, sendEmail } from './mail.js';
+import { orderAddressCorrectionEmail, orderConfirmedEmail, orderRefundedEmail, orderShippedEmail, quantityBand, sendEmail } from './mail.js';
 import { refundPayment, stripeClient } from './stripeClient.js';
 import { captureBookVaultCost } from './bookvaultCost.js';
 import { syncPurchaserContact } from './resendContacts.js';
@@ -11,6 +11,15 @@ const FULFILLMENT_WINDOW_MS = 60 * 60 * 60 * 1000;
 const nowIso = () => new Date().toISOString();
 const later = (minutes) => new Date(Date.now() + minutes * 60000).toISOString();
 export const deadlineAt = (order) => Date.parse(order.payment_received_at || order.created_at) + FULFILLMENT_WINDOW_MS;
+
+// BookVault's /Order validation is the definitive post-payment address check.
+// /Dispatch can quote an address that /Order later rejects, so do not pretend
+// a successful shipping quote proves the ZIP/state combination is deliverable.
+export function isAddressRejection(message) {
+  const value = String(message || '');
+  return /not recogni[sz]ed from the specified state/i.test(value) ||
+    /(?:valid|invalid|incorrect|unrecognized|unrecognised|does not match|not supplied).{0,70}(?:post(?:al)?\s*code|zip)|(?:post(?:al)?\s*code|zip).{0,70}(?:valid|invalid|incorrect|unrecognized|unrecognised|does not match|not supplied)/i.test(value);
+}
 
 async function log(db, orderId, service, type, error, attempt = 1) {
   try {
@@ -61,12 +70,14 @@ async function sendTemplate(env, order, kind, template, suffix) {
   await update(env.DB, order.id, `UPDATE orders SET ${kind}_email_sent_at = ?`, nowIso());
 }
 
-async function ownerAlert(env, order, message, deadline = false) {
+async function ownerAlert(env, order, message, deadline = false, addressContact = null) {
   const column = deadline ? 'fulfillment_deadline_alert_sent_at' : 'fulfillment_alert_sent_at';
   if (order[column]) return;
   const shortId = order.id.slice(0, 8);
   const subject = deadline
     ? `URGENT: paid order ${shortId} needs manual refund review`
+    : addressContact === 'sent' ? `Address correction requested for paid order ${shortId}`
+    : addressContact === 'failed' ? `Action needed: address email failed for paid order ${shortId}`
     : `Action needed: paid order ${shortId} awaiting BookVault`;
   const safeMessage = String(message).replaceAll('&', '&amp;').replaceAll('<', '&lt;');
   await sendEmail(env, {
@@ -78,6 +89,18 @@ async function ownerAlert(env, order, message, deadline = false) {
   await update(env.DB, order.id, `UPDATE orders SET ${column} = ?`, nowIso());
 }
 
+async function requestAddressCorrection(env, order) {
+  if (order.address_correction_email_sent_at) return;
+  await sendEmail(env, {
+    to: order.email, ...orderAddressCorrectionEmail(order),
+    idempotencyKey: `${order.id}-address-correction-request`,
+    tags: [{ name: 'email_type', value: 'address_correction_request' },
+      { name: 'customer_status', value: 'purchaser' },
+      { name: 'product', value: 'reality_manual_hardcover' }],
+  });
+  await update(env.DB, order.id, 'UPDATE orders SET address_correction_email_sent_at = ?', nowIso());
+}
+
 async function retry(env, order, error) {
   if (error.podRef && !order.bookvault_order_id) {
     await update(env.DB, order.id, 'UPDATE orders SET bookvault_order_id = ?', String(error.podRef));
@@ -87,7 +110,20 @@ async function retry(env, order, error) {
   const attempts = Number(order.fulfillment_attempts || 0) + (pending ? 0 : 1);
   if (!pending) {
     await log(env.DB, order.id, 'bookvault', 'order_submission_failed', error.message, attempts);
-    try { await ownerAlert(env, order, error.message); }
+    let addressContact = null;
+    let alertMessage = error.message;
+    if (isAddressRejection(error.message) && Date.now() < deadlineAt(order)) {
+      try {
+        await requestAddressCorrection(env, order);
+        addressContact = 'sent';
+        alertMessage = `Payment accepted. BookVault rejected the delivery address. I emailed the customer to confirm it. ${error.message}`;
+      } catch (contactError) {
+        addressContact = 'failed';
+        alertMessage = `Payment accepted. BookVault rejected the delivery address, but the customer email failed; manual contact is needed. ${error.message}`;
+        await log(env.DB, order.id, 'resend', 'address_correction_email_failed', contactError.message);
+      }
+    }
+    try { await ownerAlert(env, order, alertMessage, false, addressContact); }
     catch (alertError) { await log(env.DB, order.id, 'resend', 'fulfillment_alert_failed', alertError.message); }
   }
   const deadline = deadlineAt(order);

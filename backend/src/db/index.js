@@ -48,6 +48,7 @@ for (const column of [
   'fulfillment_last_error TEXT',
   'payment_received_at TEXT',
   'fulfillment_alert_sent_at TEXT',
+  'address_correction_email_sent_at TEXT',
   'fulfillment_deadline_alert_sent_at TEXT',
   'confirmation_email_sent_at TEXT',
   'shipping_email_sent_at TEXT',
