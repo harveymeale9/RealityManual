@@ -23266,3 +23266,14 @@ is definitive, while its earlier shipping quote is not. The customer must
 confirm any correction. Worker tests exercise the rejected address, one-time
 customer send, owner message and retry idempotency; Worker and backend suites
 passed before release.
+
+Release verification: Worker version `92f5ce15-0683-4508-abac-f13f19868877`
+was deployed with checkout and fulfillment still enabled; `/health` returned
+OK and D1 still showed the corrected order paid, its original receipt sent,
+and BookVault accepted under the same order ID. Production D1 includes the
+new address-email flag. The paused VPS backend was separately rebuilt from
+this commit with its checkout still paused and jobs still off; localhost
+health returned 200 and its SQLite schema gained the same flag. The old
+backend container was replaced, but its persistent `/data` volume was kept.
+Worker tests passed 29/29 and backend tests 56/56. The customer who already
+supplied the correction was not sent a redundant automated address request.
