@@ -8,18 +8,24 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   01d9883..78fd292  main       -> origin/main
+   78fd292..a2f5384  main       -> origin/main
 + git merge --ff-only origin/main
-Updating 01d9883..78fd292
+Updating 78fd292..a2f5384
 Fast-forward
- CLAUDE.md                            |   3 +
- ops-service/.ci/last-run.log         | 110 ++++++++++++++++-------------------
- ops-service/server.js                |   9 ++-
- ops-service/src/youtubeAuth.js       |  12 +++-
- ops-service/test/youtubeAuth.test.js |  14 +++++
- 5 files changed, 85 insertions(+), 63 deletions(-)
+ CLAUDE.md                                  |  51 +++++++++++++
+ ops-service/.ci/last-run.log               |  81 +++++++++-----------
+ ops-service/server.js                      | 119 +++++++++++++++++++++++++++++
+ ops-service/src/facebookReplay.js          |  22 ++++++
+ ops-service/src/metaPublisher.js           |  11 +++
+ ops-service/src/r2Storage.js               |   2 +-
+ ops-service/src/socialDescription.js       |  50 +++++++++---
+ ops-service/test/facebookReplay.test.js    |  24 ++++++
+ ops-service/test/socialDescription.test.js |  23 +++++-
+ 9 files changed, 326 insertions(+), 57 deletions(-)
+ create mode 100644 ops-service/src/facebookReplay.js
+ create mode 100644 ops-service/test/facebookReplay.test.js
 ++ git rev-parse HEAD
-+ NEW_HEAD=78fd29234ab1292179a99f97cdedbdc8e1c7f116
++ NEW_HEAD=a2f5384dc19166085867815ccd3dd3b57af1f495
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -28,13 +34,16 @@ Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
 + LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
 ++ cat /root/ops-service-data/last-image-commit.txt
-+ LAST_BUILD_COMMIT=01d9883adff449eb03b0e867573c75cb1077080c
++ LAST_BUILD_COMMIT=78fd29234ab1292179a99f97cdedbdc8e1c7f116
 + NEEDS_REBUILD=1
-+ '[' -n 01d9883adff449eb03b0e867573c75cb1077080c ']'
-+ git cat-file -e '01d9883adff449eb03b0e867573c75cb1077080c^{commit}'
-++ git diff --name-only 01d9883adff449eb03b0e867573c75cb1077080c 78fd29234ab1292179a99f97cdedbdc8e1c7f116 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -n 78fd29234ab1292179a99f97cdedbdc8e1c7f116 ']'
++ git cat-file -e '78fd29234ab1292179a99f97cdedbdc8e1c7f116^{commit}'
+++ git diff --name-only 78fd29234ab1292179a99f97cdedbdc8e1c7f116 a2f5384dc19166085867815ccd3dd3b57af1f495 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z 'ops-service/server.js
-ops-service/src/youtubeAuth.js' ']'
+ops-service/src/facebookReplay.js
+ops-service/src/metaPublisher.js
+ops-service/src/r2Storage.js
+ops-service/src/socialDescription.js' ']'
 + '[' 0 = 1 ']'
 + '[' 1 = 0 ']'
 + UPLOAD_DRAIN_WAITED=0
@@ -79,11 +88,11 @@ ops-service/src/youtubeAuth.js' ']'
 #0 building with "default" instance using docker driver
 
 #1 [internal] load build definition from Dockerfile
-#1 transferring dockerfile: 2.04kB done
+#1 transferring dockerfile: 2.04kB 0.0s done
 #1 DONE 0.0s
 
 #2 [internal] load metadata for docker.io/library/node:22-slim
-#2 DONE 0.1s
+#2 DONE 0.3s
 
 #3 [internal] load .dockerignore
 #3 transferring context: 136B done
@@ -94,16 +103,16 @@ ops-service/src/youtubeAuth.js' ']'
 #4 DONE 0.0s
 
 #5 [internal] load build context
-#5 transferring context: 331.98kB done
+#5 transferring context: 356.62kB 0.0s done
 #5 DONE 0.0s
 
-#6 [ 4/10] COPY package.json ./
+#6 [ 2/10] RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && python3 -m pip install --break-system-packages --no-cache-dir yt-dlp==2026.8.19     && rm -rf /var/lib/apt/lists/*
 #6 CACHED
 
-#7 [ 2/10] RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && python3 -m pip install --break-system-packages --no-cache-dir yt-dlp==2026.8.19     && rm -rf /var/lib/apt/lists/*
+#7 [ 3/10] WORKDIR /app
 #7 CACHED
 
-#8 [ 3/10] WORKDIR /app
+#8 [ 4/10] COPY package.json ./
 #8 CACHED
 
 #9 [ 5/10] RUN npm install --omit=dev
@@ -113,45 +122,44 @@ ops-service/src/youtubeAuth.js' ']'
 #10 DONE 0.1s
 
 #11 [ 7/10] COPY src ./src
-#11 DONE 0.0s
+#11 DONE 0.1s
 
 #12 [ 8/10] COPY public ./public
-#12 DONE 0.1s
+#12 DONE 0.9s
 
 #13 [ 9/10] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
-#13 DONE 11.8s
+#13 DONE 17.3s
 
 #14 [10/10] RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
-#14 DONE 0.2s
+#14 DONE 0.3s
 
 #15 exporting to image
 #15 exporting layers
-#15 exporting layers 2.4s done
-#15 exporting manifest sha256:d71f08dce991df7bb480d63c5b08e7656ea271af6b649b90ab357120ffbd8b56
-#15 exporting manifest sha256:d71f08dce991df7bb480d63c5b08e7656ea271af6b649b90ab357120ffbd8b56 done
-#15 exporting config sha256:d855e5e68748c1e6815e9fce95d2e0f6178458279916727a5f11be0ea93e3652 done
-#15 exporting attestation manifest sha256:f141c407f05928cd3d6a7f5644f2d53f3f7e70ebdae473d00a78a4fb8e7aed57 0.0s done
-#15 exporting manifest list sha256:35b31a110d600a0ba7c170b67cf880f44be4fec2a53726b100eb6892a47801cb done
+#15 exporting layers 2.5s done
+#15 exporting manifest sha256:cc71fdad5fd976982554c13f9660143ac90d95683dfc5901863b1a5c8784b43c 0.0s done
+#15 exporting config sha256:d9541a45c250ba9748faa5e9cb841db7d77cf87a53a38c638346319356a41b3f done
+#15 exporting attestation manifest sha256:a881685e9c6d4c12d3011d292ee56722230dc497f581f9fef68caca76e7cd0ca 0.0s done
+#15 exporting manifest list sha256:4711bdc9cda4621526158d630a1b28e9ecac679a612453d21d7d6e406f13562b done
 #15 naming to docker.io/library/rm-ops-service:latest done
 #15 unpacking to docker.io/library/rm-ops-service:latest
-#15 unpacking to docker.io/library/rm-ops-service:latest 1.2s done
-#15 DONE 3.7s
+#15 unpacking to docker.io/library/rm-ops-service:latest 1.0s done
+#15 DONE 3.6s
 + docker stop rm-ops-service
 rm-ops-service
 + docker rm rm-ops-service
 rm-ops-service
 + docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-data:/data -v /root/realitymanual-backend-data:/store-data:ro -v /srv/realitymanual-repo:/repo -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
-9b01f415f5b3f321198aa2e1173045ed3a8f6900cd5adf016726f83333e1e7d7
-+ echo 78fd29234ab1292179a99f97cdedbdc8e1c7f116
+613c7dd478e3039e3f248b3bde3d806372c5052fc8c555af211346efc3018c2e
++ echo a2f5384dc19166085867815ccd3dd3b57af1f495
 ++ git -C /root/realitymanual-repo rev-parse --short HEAD
-+ echo 'rm-ops-service redeployed at 78fd292'
-rm-ops-service redeployed at 78fd292
++ echo 'rm-ops-service redeployed at a2f5384'
+rm-ops-service redeployed at a2f5384
 + docker image prune -f
 Deleted Images:
-untagged: sha256:03c2340bb6d364e6712639a9b49a5abc7fe9cc9b40179d742353ec72951cf1b1
-deleted: sha256:03c2340bb6d364e6712639a9b49a5abc7fe9cc9b40179d742353ec72951cf1b1
-deleted: sha256:a8999a45eb9f7b66bf3b9acf5e5690a39716cbabc10b2d48439b05d7cfb15e7b
-deleted: sha256:e691e696b64d289dd8c6149c195bb7b330c0d8a63a3b3b8fefbf2872042e90ea
+untagged: sha256:e50518d0f028357ce08eed97e2f2e14d820358077879939034e3453a05cb3bb6
+deleted: sha256:e50518d0f028357ce08eed97e2f2e14d820358077879939034e3453a05cb3bb6
+deleted: sha256:bdd9a9cb103a30f7f6d0ddf4e65dc8967f661adbb3958c043e1f770541d49171
+deleted: sha256:3bd6b458e0a73cf14df88aa94132feeebc3f4ab8ba49811fb628ae63dbb8ed19
 
 Total reclaimed space: 15.67kB
 + docker builder prune -f --max-used-space 8GB
