@@ -23367,3 +23367,13 @@ Focused tests cover JPEG validation, YouTube's exact thumbnail endpoint,
 Facebook file-URL/resumable thumbnail payloads and Instagram offset; the full
 ops-service suite passed 372/372 before deployment. Confirm CI's actual
 backend rebuild and live thumbnail statuses before calling the fix live.
+
+Deployment verification: commit `78fd292` rebuilt `rm-ops-service`; its
+`/api/health` returned `{"ok":true}`. The backfill then called YouTube's
+`thumbnails.set` for all 16 existing published pieces that had a saved
+Production JPEG, and each returned the API confirmation; their piece rows
+now show `youtubeThumbnailStatus=done`, with zero failures. This is evidence
+of YouTube accepting the uploaded images, not a promise that every thumbnail
+CDN/device surface updated instantaneously. Facebook and Instagram payloads
+were unit-tested but await their next real scheduled post for live-platform
+confirmation; do not manufacture a public post just for this check.
