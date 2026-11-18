@@ -23487,3 +23487,11 @@ on a deactivated Buffer channel. Re-enabling requires verifying the account
 and Buffer channel, setting `TIKTOK_PUBLISHING_ENABLED=true` in the live
 environment, and restarting the service. Previously paused cards do not
 automatically regain a TikTok destination; choose those explicitly.
+
+Deployment verification: commit `6cb13cc` rebuilt the ops-service image;
+CI recorded `ssh exit code: 0`, the live health endpoint returned OK, and
+startup removed unpublished TikTok destinations from six pending cards.
+The live database then had zero TikTok entries in queue/scheduled/retry
+destinations and zero TikTok batch targets on queued cards; all 24 historical
+TikTok publication IDs remained. The 376-test suite and JavaScript syntax
+checks passed. No Buffer channel was deleted and no posts were submitted.
