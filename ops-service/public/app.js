@@ -3647,14 +3647,14 @@
 
   function renderQueueCoverage() {
     if (!queueCoverage || !window.RMQueueCoverage) return;
-    var status = tiktokStatusCache && tiktokStatusCache.connected ? tiktokStatusCache : null;
+    var status = tiktokStatusCache;
     var runway = window.RMQueueCoverage.calculate({
       pieces: Object.keys(pieces).map(function (id) { return pieces[id]; }),
       now: Date.now(),
       longformAnchor: boardSettingsCache && boardSettingsCache.longformScheduleAnchor,
       longformIntervalHours: boardSettingsCache && boardSettingsCache.longformIntervalHours,
       longformReleaseOnNext: boardSettingsCache && boardSettingsCache.longformReleaseOnNext !== false,
-      postingSchedule: status && status.channel && status.channel.postingSchedule
+      postingSchedule: status && (status.shortformPostingSchedule || (status.connected && status.channel && status.channel.postingSchedule))
     });
     function dateLabel(value) {
       return new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', weekday: 'short', day: 'numeric', month: 'short' }).format(new Date(value));
@@ -6368,6 +6368,12 @@
       .then(function (s) {
         renderTiktokSchedule(s);
         if (!s) { statusEl.textContent = 'Status unavailable.'; btn.disabled = true; btn.textContent = '—'; return; }
+        if (s.pausedByOwner) {
+          statusEl.textContent = 'TikTok posting is paused while the account is deactivated. Buffer connection and publishing setup are retained.';
+          btn.disabled = true;
+          btn.textContent = 'Paused';
+          return;
+        }
         if (!s.configured) {
           statusEl.textContent = 'Buffer API key is not installed on the server yet.';
           btn.disabled = true;
@@ -6398,10 +6404,11 @@
     var grid = document.getElementById('tiktokScheduleGrid');
     var directSummary = document.getElementById('directShortScheduleSummary');
     if (!grid) return;
-    var days = status && status.connected && status.channel ? (status.channel.postingSchedule || []) : [];
+    var days = status && status.pausedByOwner ? (status.shortformPostingSchedule || [])
+      : status && status.connected && status.channel ? (status.channel.postingSchedule || []) : [];
     if (!days.length) {
       grid.innerHTML = '<span class="ink-faint">Buffer schedule unavailable.</span>';
-      if (directSummary) directSummary.textContent = 'Buffer schedule unavailable; new shorts wait for its active slots.';
+      if (directSummary) directSummary.textContent = 'Short-form posting calendar unavailable.';
       return;
     }
     var labels = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' };
@@ -6409,14 +6416,14 @@
       var times = day.paused ? ['Paused'] : (day.times || []);
       return '<div class="tiktok-schedule-day"><strong>' + (labels[day.day] || escapeHtml(day.day)) + '</strong>' +
         '<span>' + times.map(function (time) { return escapeHtml(time); }).join(' · ') + '</span></div>';
-    }).join('') + '<div class="tiktok-schedule-zone">Timezone: ' + escapeHtml(status.channel.timezone || 'Buffer account') + '</div>';
+    }).join('') + '<div class="tiktok-schedule-zone">Timezone: ' + escapeHtml(status.pausedByOwner ? 'Asia/Bangkok (TikTok paused)' : status.channel.timezone || 'Buffer account') + '</div>';
     if (directSummary) {
       var active = days.filter(function (day) { return !day.paused; });
       var activeSlots = active.flatMap(function (day) {
         return (day.times || []).map(function (time) { return (labels[day.day] || day.day) + ' ' + time; });
       });
       directSummary.textContent = activeSlots.length
-        ? activeSlots.join(' · ') + ' (' + (status.channel.timezone || 'Buffer timezone') + ')'
+        ? activeSlots.join(' · ') + ' (' + (status.pausedByOwner ? 'Asia/Bangkok; TikTok paused' : status.channel.timezone || 'Buffer timezone') + ')'
         : 'No active Buffer slots; new shorts will wait.';
     }
   }

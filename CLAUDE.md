@@ -23461,3 +23461,29 @@ reported `ssh exit code: 0`, `/api/health` returned OK, and the running
 container contains the no-fade renderer. All 45 Editor projects remained
 in `ready` status at the post-deploy check, with no active FFmpeg process
 observed before the rebuild. No existing media was re-encoded or reposted.
+
+## TikTok via Buffer owner-paused after account deactivation (2026-11-18)
+
+Harvey deactivated the TikTok account and asked to stop its Buffer publishing
+for now while keeping the pipeline for later. Buffer still reported the channel
+as connected, so account deactivation alone was not a safe publication switch.
+At the pre-change check, all 24 historical Buffer TikTok posts were live and
+there were no unsent Buffer posts tracked in Content Studio; five short-form
+cards in the publishing queue still had TikTok among their frozen destinations.
+
+`TIKTOK_PUBLISHING_ENABLED` now defaults to false. While false, the direct
+TikTok and Buffer publish endpoints reject new submissions; batch and retry
+paths exclude TikTok; startup removes unpublished TikTok destinations from
+pending Editor/Production/Final Check/queue/scheduled cards, but leaves
+historical published TikTok IDs untouched. New shorts default to YouTube
+Shorts, Instagram and Facebook only. The Buffer connection, credentials,
+OAuth code and publication/metrics plumbing remain intact. The owner status
+card says posting is paused, not disconnected from Buffer.
+
+The shared short-form release clock continues on the pre-pause Buffer
+calendar: Monday 01:54 and Thursday 01:51 Asia/Bangkok. While TikTok is
+paused, those slots come from a local fixed calendar rather than depending
+on a deactivated Buffer channel. Re-enabling requires verifying the account
+and Buffer channel, setting `TIKTOK_PUBLISHING_ENABLED=true` in the live
+environment, and restarting the service. Previously paused cards do not
+automatically regain a TikTok destination; choose those explicitly.

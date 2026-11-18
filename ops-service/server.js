@@ -129,6 +129,16 @@ const buffer = bufferService.setup({
   tiktokChannelId: process.env.BUFFER_TIKTOK_CHANNEL_ID,
   mediaBaseUrl: process.env.BUFFER_MEDIA_BASE_URL || 'https://ops.realitymanual.com'
 });
+// Owner-paused while the TikTok account is deactivated. Keep Buffer credentials
+// and all publish plumbing so this can be re-enabled deliberately later.
+const TIKTOK_PUBLISHING_ENABLED = process.env.TIKTOK_PUBLISHING_ENABLED === 'true';
+const ACTIVE_SHORT_PLATFORMS = TIKTOK_PUBLISHING_ENABLED
+  ? ['ytshort', 'tiktok', 'instagram', 'facebook']
+  : ['ytshort', 'instagram', 'facebook'];
+const PAUSED_SHORT_POSTING_SCHEDULE = [
+  { day: 'mon', paused: false, times: ['01:54'] },
+  { day: 'thu', paused: false, times: ['01:51'] }
+];
 const metaPublisher = metaPublisherService.setup({
   mediaBaseUrl: process.env.META_MEDIA_BASE_URL || 'https://ops.realitymanual.com'
 });
@@ -868,7 +878,7 @@ function createEditorVideoCard(input) {
     title: editorVideoTitle(project),
     preserveWorkingTitle: !!project.planningPieceTitle,
     stage: 'in_editor',
-    platforms: contentType === 'longform' ? ['ytlong', 'facebook'] : ['ytshort', 'tiktok', 'instagram', 'facebook'],
+    platforms: contentType === 'longform' ? ['ytlong', 'facebook'] : ACTIVE_SHORT_PLATFORMS.slice(),
     contentType: contentType,
     contentTypeSelectionExplicit: true,
     videoIsVertical: contentType !== 'longform',
@@ -904,7 +914,7 @@ function syncEditorVideoCard(input) {
   piece.preserveWorkingTitle = !!project.planningPieceTitle;
   piece.contentType = contentType;
   piece.videoIsVertical = contentType !== 'longform';
-  piece.platforms = contentType === 'longform' ? ['ytlong', 'facebook'] : ['ytshort', 'tiktok', 'instagram', 'facebook'];
+  piece.platforms = contentType === 'longform' ? ['ytlong', 'facebook'] : ACTIVE_SHORT_PLATFORMS.slice();
   piece.sourcePlanningPieceId = project.planningPieceId || '';
   piece.audioTrackId = project.audioTrackId || '__none__';
   piece.updatedAt = new Date().toISOString();
@@ -2829,7 +2839,7 @@ async function sendEditorProjectToProduction(input) {
   const contentType = ['ultra_short', 'short', 'long_short', 'longform'].includes(project.detectedContentType)
     ? project.detectedContentType
     : vertical ? (duration <= 25 ? 'ultra_short' : duration <= 60 ? 'short' : 'long_short') : 'longform';
-  const platforms = contentType === 'longform' ? ['ytlong', 'facebook'] : ['ytshort', 'tiktok', 'instagram', 'facebook'];
+  const platforms = contentType === 'longform' ? ['ytlong', 'facebook'] : ACTIVE_SHORT_PLATFORMS.slice();
   const now = new Date().toISOString();
   const fileNameBase = String(project.name || path.parse(project.fileName || 'edited-video').name).replace(/[\\/]+/g, '-').slice(0, 180) || 'edited-video';
   const previousStage = existing && existing.stage;
@@ -3558,6 +3568,7 @@ async function runTiktokPublish(id, opts) {
 }
 
 app.post('/api/tiktok/publish/:id', function (req, res) {
+  if (!TIKTOK_PUBLISHING_ENABLED) return res.status(409).json({ error: 'tiktok_paused_by_owner' });
   const { id } = req.params;
   if (!isValidId(id)) return res.status(400).json({ error: 'invalid_params' });
   const piece = getPieceRecord(id);
@@ -3579,6 +3590,12 @@ app.post('/api/tiktok/publish/:id', function (req, res) {
 // for historical records, but the UI now calls this route for TikTok.
 app.get('/api/buffer/status', requireAuth, async function (req, res) {
   const status = await buffer.status();
+  if (!TIKTOK_PUBLISHING_ENABLED) {
+    status.connected = false;
+    status.pausedByOwner = true;
+    status.reason = 'tiktok_paused_by_owner';
+    status.shortformPostingSchedule = PAUSED_SHORT_POSTING_SCHEDULE;
+  }
   status.publicationSync = bufferPublicationSync.status();
   res.json(status);
 });
@@ -3601,6 +3618,7 @@ app.post('/api/storage/kanban-backup', requireAuth, async function (req, res) {
 });
 
 async function runBufferTiktokPublish(id, opts) {
+  if (!TIKTOK_PUBLISHING_ENABLED) return;
   const piece = getPieceRecord(id);
   if (!piece) return;
   piece.tiktokPublishStatus = 'running';
@@ -3642,6 +3660,7 @@ async function runBufferTiktokPublish(id, opts) {
 }
 
 app.post('/api/buffer/publish/:id', requireAuth, function (req, res) {
+  if (!TIKTOK_PUBLISHING_ENABLED) return res.status(409).json({ error: 'tiktok_paused_by_owner' });
   const id = req.params.id;
   if (!isValidId(id)) return res.status(400).json({ error: 'invalid_params' });
   const piece = getPieceRecord(id);
@@ -3831,6 +3850,38 @@ function uniquePublishDestinations(destinations) {
 
 function allPieceRecords() {
   return stmts.getAll.all('pieces').map(function (row) { return recordConcurrency.decodeRow(row); }).filter(Boolean);
+}
+
+// A previously queued short may contain a frozen TikTok destination. Remove
+// only unpublished TikTok work; never alter an existing Buffer post or history.
+function pauseUnpublishedTiktokWork() {
+  if (TIKTOK_PUBLISHING_ENABLED) return 0;
+  let changed = 0;
+  for (const piece of allPieceRecords()) {
+    if (piece.tiktokPublishId || !['in_editor', 'in_production', 'final_check', 'publishing_queue', 'scheduled'].includes(piece.stage)) continue;
+    let dirty = false;
+    if (Array.isArray(piece.platforms) && piece.platforms.includes('tiktok')) {
+      piece.platforms = piece.platforms.filter(function (platform) { return platform !== 'tiktok'; });
+      piece.tiktokPausedWasSelected = true;
+      dirty = true;
+    }
+    for (const field of ['queuedPublishDestinations', 'publishBatchDestinations', 'scheduledPublishDestinations', 'publishRetryDestinations']) {
+      if (!Array.isArray(piece[field]) || !piece[field].some(function (destination) { return destination.platform === 'tiktok'; })) continue;
+      piece[field] = piece[field].filter(function (destination) { return destination.platform !== 'tiktok'; });
+      dirty = true;
+    }
+    if (Array.isArray(piece.publishBatchPlatforms) && piece.publishBatchPlatforms.includes('tiktok')) {
+      piece.publishBatchPlatforms = piece.publishBatchPlatforms.filter(function (platform) { return platform !== 'tiktok'; });
+      dirty = true;
+    }
+    if (!dirty) continue;
+    piece.tiktokPublishStatus = 'not_required';
+    piece.tiktokPublishError = '';
+    piece.updatedAt = new Date().toISOString();
+    savePieceRecord(piece);
+    changed++;
+  }
+  return changed;
 }
 
 // This is deliberately separate from the normal publishing queue: a replay
@@ -4023,6 +4074,12 @@ async function nextPublishingQueueSlot(type, pieces, nowValue) {
       nowValue, settings.longformScheduleAnchor, settings.longformIntervalHours, occupied, 1
     )[0] || '';
   }
+  if (!TIKTOK_PUBLISHING_ENABLED) {
+    const occupied = pieces.filter(function (piece) {
+      return shortformSchedule.isShortform(piece) && piece.stage === 'scheduled' && piece.scheduledAt;
+    }).map(function (piece) { return piece.scheduledAt; });
+    return shortformSchedule.nextAvailableBangkokSlots(nowValue, PAUSED_SHORT_POSTING_SCHEDULE, occupied, 1)[0] || '';
+  }
   let postingSchedule = publishingBufferScheduleCache.postingSchedule;
   if (publishingBufferScheduleCache.expiresAt <= nowValue) {
     try {
@@ -4119,6 +4176,11 @@ function schedulePublishingQueueDrain() {
 
 async function runPlatformPublishBatch(id, destinations, options) {
   options = options || {};
+  if (!TIKTOK_PUBLISHING_ENABLED) {
+    pauseUnpublishedTiktokWork();
+    destinations = destinations.filter(function (destination) { return destination.platform !== 'tiktok'; });
+    if (!destinations.length) return;
+  }
   const finalPath = path.join(UPLOADS_DIR, 'videos', id + FINAL_VIDEO_SUFFIX);
   const openingPiece = getPieceRecord(id);
   const hasStoredFinal = openingPiece && openingPiece.storageStatus === 'ready' && openingPiece.storageObjectKey;
@@ -4222,14 +4284,15 @@ async function runPlatformPublishBatch(id, destinations, options) {
     const tiktokDestination = destinations.find(function (destination) { return destination.platform === 'tiktok'; });
     const directDestinations = destinations.filter(function (destination) { return destination.platform !== 'tiktok'; });
     let dueAt = null;
-    let postingSchedule = publishingBufferScheduleCache.postingSchedule;
+    let postingSchedule = TIKTOK_PUBLISHING_ENABLED
+      ? publishingBufferScheduleCache.postingSchedule : PAUSED_SHORT_POSTING_SCHEDULE;
     const pieces = allPieceRecords();
     const occupied = pieces.filter(function (other) {
       return other.id !== id && shortformSchedule.isShortform(other) && other.stage === 'scheduled' && other.scheduledAt;
     }).map(function (other) { return other.scheduledAt; });
     const forcedDueAt = publishingQueue.preparationDue(options.dueAt, Date.now(), publishingQueue.PREPARATION_LEAD_MS + 60 * 1000)
       ? options.dueAt : '';
-    if (!forcedDueAt && !postingSchedule.length) {
+    if (TIKTOK_PUBLISHING_ENABLED && !forcedDueAt && !postingSchedule.length) {
       const bufferStatus = await buffer.status();
       if (bufferStatus.connected && bufferStatus.channel && bufferStatus.channel.timezone === 'Asia/Bangkok') {
         postingSchedule = bufferStatus.channel.postingSchedule || [];
@@ -4534,6 +4597,7 @@ app.post('/api/publish/:id', requireAuthOrReviewer, async function (req, res) {
     };
   }).filter(function (destination) {
     return PUBLISH_PLATFORMS.includes(destination.platform) && selected.includes(destination.platform) &&
+      (TIKTOK_PUBLISHING_ENABLED || destination.platform !== 'tiktok') &&
       (req.sessionRole !== 'youtube-reviewer' || destination.platform === 'ytlong' || destination.platform === 'ytshort');
   });
   destinations = uniquePublishDestinations(destinations).filter(function (destination) {
@@ -4552,7 +4616,9 @@ app.post('/api/publish/:id', requireAuthOrReviewer, async function (req, res) {
     if (destinations.some(function (d) { return d.platform === 'instagram'; }) && !auth.instagram_account_id) return res.status(400).json({ error: 'instagram_not_connected' });
   }
 
-  piece.publishBatchPlatforms = uniquePublishDestinations(selected.filter(function (platform) { return PUBLISH_PLATFORMS.includes(platform); }).map(function (platform) { return { platform: platform }; })).map(function (d) { return d.platform; });
+  piece.publishBatchPlatforms = uniquePublishDestinations(selected.filter(function (platform) {
+    return PUBLISH_PLATFORMS.includes(platform) && (TIKTOK_PUBLISHING_ENABLED || platform !== 'tiktok');
+  }).map(function (platform) { return { platform: platform }; })).map(function (d) { return d.platform; });
   piece.publishBatchDestinations = destinations;
   const reviewerPublish = req.sessionRole === 'youtube-reviewer';
   destinations.forEach(function (destination) {
@@ -5501,6 +5567,8 @@ function recoverInflightVideoJobs() {
 
 const httpServer = app.listen(PORT, function () {
   console.log('rm-ops-service listening on ' + PORT);
+  const pausedTiktokPieces = pauseUnpublishedTiktokWork();
+  if (pausedTiktokPieces) console.log('TikTok owner pause: removed unpublished destinations from ' + pausedTiktokPieces + ' piece(s)');
   seedFacebookReplay().then(advanceFacebookReplay)
     .catch(function (error) { console.error('Facebook replay startup paused:', error.message); });
   const facebookReplayTimer = setInterval(function () {
