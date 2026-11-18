@@ -23455,3 +23455,9 @@ or published files are **not** silently rewritten; the retained Facebook
 post will keep its encoded black first frame unless Harvey separately asks
 for a controlled rebuild/repost. Do not treat a code deploy as retroactively
 repairing that post.
+
+Deployment verification: commit `4ef520d` rebuilt `rm-ops-service`; CI
+reported `ssh exit code: 0`, `/api/health` returned OK, and the running
+container contains the no-fade renderer. All 45 Editor projects remained
+in `ready` status at the post-deploy check, with no active FFmpeg process
+observed before the rebuild. No existing media was re-encoded or reposted.
