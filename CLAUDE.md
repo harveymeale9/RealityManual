@@ -23495,3 +23495,19 @@ The live database then had zero TikTok entries in queue/scheduled/retry
 destinations and zero TikTok batch targets on queued cards; all 24 historical
 TikTok publication IDs remained. The 376-test suite and JavaScript syntax
 checks passed. No Buffer channel was deleted and no posts were submitted.
+
+## Kind Words strip can collapse to clear Project Manager space (2026-11-18)
+
+Harvey showed that even the 84px appreciation cards consumed too much of the
+laptop Project Manager viewport above the conversation. The shared Kind Words
+component now has a keyboard-accessible Show/Hide button with `aria-expanded`
+and a controlled body. On desktop it defaults to a 29px collapsed header;
+the phone page retains its expanded default but also offers the same control.
+The preference is stored locally in the browser, so the strip stays as Harvey
+left it across tabs and reloads. Collapsing hides the carousel and footer,
+pauses automatic rotation, and does not delete comments or stop the existing
+refresh; expanding restores the cards and carousel position. A real Chromium
+test at 1052px and 390px verified the initial state, toggle, card visibility,
+heights, and persisted preference. This touches no backend runtime files, so
+deployment should not rebuild or restart the container. The 376-test suite
+passed after updating an obsolete exact CSS cache-buster assertion.

@@ -8,8 +8,27 @@
     var status = root.querySelector('[data-positive-status]');
     var connect = root.querySelector('[data-positive-connect]');
     var count = root.querySelector('[data-positive-count]');
+    var toggle = root.querySelector('[data-positive-toggle]');
+    var toggleLabel = root.querySelector('[data-positive-toggle-label]');
+    var body = root.querySelector('[data-positive-body]');
+    var preferenceKey = 'rm_kind_words_expanded_v1';
+    var expanded = false;
     var rows = [], index = 0, refreshTimer, rotateTimer, paused = false, drag = null, suppressClick = false;
     var reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function setExpanded(value, remember) {
+      expanded = !!value;
+      body.hidden = !expanded;
+      root.classList.toggle('is-collapsed', !expanded);
+      toggle.setAttribute('aria-expanded', String(expanded));
+      toggleLabel.textContent = expanded ? 'Hide' : 'Show';
+      if (remember) try { window.localStorage.setItem(preferenceKey, expanded ? '1' : '0'); } catch (error) {}
+      if (expanded) requestAnimationFrame(function () { goTo(index, 'instant'); startRotation(); });
+      else clearInterval(rotateTimer);
+    }
+    var savedPreference = null;
+    try { savedPreference = window.localStorage.getItem(preferenceKey); } catch (error) {}
+    setExpanded(savedPreference === null ? root.classList.contains('positive-comments--mobile') : savedPreference === '1', false);
+    toggle.addEventListener('click', function () { setExpanded(!expanded, true); });
     function step() { return track.children.length ? track.children[0].getBoundingClientRect().width + 10 : 1; }
     function maxIndex() { return Math.max(0, Math.min(rows.length - 1, Math.ceil((track.scrollWidth - track.clientWidth) / Math.max(step(), 1)))); }
     function goTo(next, behavior) {
@@ -80,7 +99,7 @@
     }
     function startRotation() {
       clearInterval(rotateTimer);
-      if (reducedMotion || rows.length < 2) return;
+      if (!expanded || reducedMotion || rows.length < 2) return;
       rotateTimer = setInterval(function () { if (!paused && document.visibilityState === 'visible' && maxIndex()) goTo(index >= maxIndex() ? 0 : index + 1); }, 6500);
     }
     root.addEventListener('mouseenter', function () { paused = true; });

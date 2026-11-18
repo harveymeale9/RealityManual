@@ -324,9 +324,18 @@ body.role-reviewer #pmBackFab {
 }
 .positive-comments-title {
   color: var(--accent); font-size: .67rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: .12em; margin-bottom: 4px;
+  text-transform: uppercase; letter-spacing: .12em; margin: 0 0 4px;
+  padding: 0; width: 100%; border: 0; background: none; text-align: left;
+  cursor: pointer; display: flex; align-items: center; gap: 5px;
 }
 .positive-comments-title span { color: var(--ink-faint); letter-spacing: 0; margin-left: 5px; }
+.positive-comments-title:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+.positive-comments-toggle-label { margin-left: auto !important; font-size: .63rem; font-weight: 500; text-transform: none; }
+.positive-comments-toggle-chevron { font-size: 1rem; line-height: 1; transform: rotate(180deg); transition: transform .18s ease; }
+.positive-comments.is-collapsed { padding-bottom: 6px; }
+.positive-comments.is-collapsed .positive-comments-title { margin-bottom: 0; }
+.positive-comments.is-collapsed .positive-comments-toggle-chevron { transform: none; }
+.positive-comments-body[hidden] { display: none; }
 .positive-comments-track {
   display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden; min-width: 0;
   scroll-snap-type: x mandatory; scroll-behavior: smooth; scrollbar-width: none;

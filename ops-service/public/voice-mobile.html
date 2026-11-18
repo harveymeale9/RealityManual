@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=20261116-compact-comments" />
+  <link rel="stylesheet" href="style.css?v=20261118-collapsible-comments" />
   <style>
     html, body { height: 100%; overflow: hidden; }
     body { display: flex; }
@@ -165,9 +165,11 @@
         <button type="button" class="pm-alert-btn v-alert-btn" id="vAlertBtn" title="Unread mailbox alerts">✉ <span class="pm-alert-badge" id="vAlertBadge" hidden></span></button>
       </div>
       <section class="positive-comments positive-comments--mobile" id="vPositiveComments" aria-label="Kind words from YouTube">
-        <div class="positive-comments-title">Kind words from YouTube <span data-positive-count></span></div>
-        <div class="positive-comments-track" data-positive-track aria-label="Kind words carousel" tabindex="0"></div>
-        <div class="positive-comments-footer"><span data-positive-status>Loading comments…</span><a data-positive-connect href="/api/youtube/oauth/start" hidden>Reconnect YouTube ↗</a><div class="positive-comments-dots" data-positive-dots aria-label="Jump through kind words"></div></div>
+        <button type="button" class="positive-comments-title" data-positive-toggle aria-expanded="true" aria-controls="vPositiveCommentsBody">Kind words from YouTube <span data-positive-count></span><span class="positive-comments-toggle-label" data-positive-toggle-label>Hide</span><span class="positive-comments-toggle-chevron" aria-hidden="true">⌄</span></button>
+        <div class="positive-comments-body" id="vPositiveCommentsBody" data-positive-body>
+          <div class="positive-comments-track" data-positive-track aria-label="Kind words carousel" tabindex="0"></div>
+          <div class="positive-comments-footer"><span data-positive-status>Loading comments…</span><a data-positive-connect href="/api/youtube/oauth/start" hidden>Reconnect YouTube ↗</a><div class="positive-comments-dots" data-positive-dots aria-label="Jump through kind words"></div></div>
+        </div>
       </section>
       <button type="button" class="v-btn v-btn-ask" id="askBtn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/></svg>
@@ -227,7 +229,7 @@
   <script src="lib/auth.js"></script>
   <script src="lib/voiceClient.js?v=20261015-long-prompts-v137"></script>
   <script src="lib/usageDashboard.js?v=20260921-usage"></script>
-  <script src="lib/positiveComments.js?v=20261116-review-cards"></script>
+  <script src="lib/positiveComments.js?v=20261118-collapsible"></script>
   <script>
     (function () {
       'use strict';

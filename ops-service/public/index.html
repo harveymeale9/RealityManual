@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,400&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=20261117-referral-rate" />
+  <link rel="stylesheet" href="style.css?v=20261118-collapsible-comments" />
 </head>
 <body>
 
@@ -137,9 +137,11 @@
         </div>
       </header>
       <section class="positive-comments" id="positiveComments" aria-label="Kind words from YouTube">
-        <div class="positive-comments-title">Kind words from YouTube <span data-positive-count></span></div>
-        <div class="positive-comments-track" data-positive-track aria-label="Kind words carousel" tabindex="0"></div>
-        <div class="positive-comments-footer"><span data-positive-status>Loading comments…</span><a data-positive-connect href="/api/youtube/oauth/start" hidden>Reconnect YouTube ↗</a><div class="positive-comments-dots" data-positive-dots aria-label="Jump through kind words"></div></div>
+        <button type="button" class="positive-comments-title" data-positive-toggle aria-expanded="false" aria-controls="positiveCommentsBody">Kind words from YouTube <span data-positive-count></span><span class="positive-comments-toggle-label" data-positive-toggle-label>Show</span><span class="positive-comments-toggle-chevron" aria-hidden="true">⌄</span></button>
+        <div class="positive-comments-body" id="positiveCommentsBody" data-positive-body hidden>
+          <div class="positive-comments-track" data-positive-track aria-label="Kind words carousel" tabindex="0"></div>
+          <div class="positive-comments-footer"><span data-positive-status>Loading comments…</span><a data-positive-connect href="/api/youtube/oauth/start" hidden>Reconnect YouTube ↗</a><div class="positive-comments-dots" data-positive-dots aria-label="Jump through kind words"></div></div>
+        </div>
       </section>
       <section class="comment-alert-panel" id="commentAlertPanel" aria-label="Comments to check" hidden>
         <div class="comment-alert-head"><strong>Comments to check</strong><div class="comment-alert-head-actions"><button type="button" class="link-btn" id="commentAlertClearAll" disabled>Clear all</button><button type="button" class="link-btn" id="commentAlertClose" aria-label="Close comment alerts">Close</button></div></div>
@@ -301,7 +303,7 @@
   <script src="lib/auth.js"></script>
   <script src="lib/voiceClient.js?v=20261015-long-prompts-v137"></script>
   <script src="lib/usageDashboard.js?v=20260921-usage"></script>
-  <script src="lib/positiveComments.js?v=20261116-review-cards"></script>
+  <script src="lib/positiveComments.js?v=20261118-collapsible"></script>
   <script src="ideation.js?v=20260922-idea-not-interested"></script>
   <script src="manuscript.js?v=20261019-page7-fourteen"></script>
   <script src="research.js?v=20260928-source-split-v2"></script>
