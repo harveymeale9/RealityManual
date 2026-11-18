@@ -23359,6 +23359,9 @@ video's thumbnail, including older published pieces with saved JPEGs, up to
 five attempts. Existing Facebook/Instagram posts are not silently reposted
 or edited by this change. A platform's actual cover may take time to update
 and must be checked on the live post, not inferred from the local preview.
+YouTube Shorts specifically wait for `processingDetails.processingStatus` to
+be `succeeded` before the thumbnail call, because Google's API warns that an
+earlier successful response may not actually apply the Short's cover.
 
 Focused tests cover JPEG validation, YouTube's exact thumbnail endpoint,
 Facebook file-URL/resumable thumbnail payloads and Instagram offset; the full

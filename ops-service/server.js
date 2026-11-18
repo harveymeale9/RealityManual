@@ -3388,7 +3388,14 @@ async function syncYouTubeThumbnail(id) {
   youtubeThumbnailInFlight.add(id);
   try {
     const jpeg = publishThumbnail.jpegBytes(piece.thumbnailDataUrl);
-    await youtubeAuth.setThumbnail(await getValidYoutubeAccessToken(), piece.youtubeVideoId, jpeg);
+    const accessToken = await getValidYoutubeAccessToken();
+    // YouTube can acknowledge a Short's thumbnail before it has finished
+    // processing without actually applying it. Wait for its processing state.
+    if (piece.youtubePublishType === 'ytshort' &&
+        !(await youtubeAuth.isVideoProcessingComplete(accessToken, piece.youtubeVideoId))) {
+      throw new Error('YouTube Short is still processing; selected thumbnail will be retried.');
+    }
+    await youtubeAuth.setThumbnail(accessToken, piece.youtubeVideoId, jpeg);
     updatePieceFields(id, { youtubeThumbnailStatus: 'done', youtubeThumbnailError: '',
       youtubeThumbnailNextAt: '', youtubeThumbnailUploadedAt: new Date().toISOString() });
   } catch (error) {

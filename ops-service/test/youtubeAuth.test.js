@@ -20,6 +20,20 @@ test('YouTube selected JPEG is uploaded to the existing video, not another video
   assert.equal((await youtubeAuth.setThumbnail('token', 'existing-video', jpeg)).items.length, 1);
 });
 
+test('YouTube Shorts thumbnail waits for completed processing', async function (t) {
+  const originalFetch = global.fetch;
+  t.after(function () { global.fetch = originalFetch; });
+  global.fetch = async function (url, options) {
+    const parsed = new URL(String(url));
+    assert.equal(parsed.pathname, '/youtube/v3/videos');
+    assert.equal(parsed.searchParams.get('part'), 'processingDetails');
+    assert.equal(parsed.searchParams.get('id'), 'short-id');
+    assert.equal(options.headers.Authorization, 'Bearer token');
+    return { ok: true, json: async function () { return { items: [{ id: 'short-id', processingDetails: { processingStatus: 'processing' } }] }; } };
+  };
+  assert.equal(await youtubeAuth.isVideoProcessingComplete('token', 'short-id'), false);
+});
+
 test('YouTube statistics lookup returns numeric performance totals without exposing OAuth data', async function (t) {
   const originalFetch = global.fetch;
   t.after(function () { global.fetch = originalFetch; });

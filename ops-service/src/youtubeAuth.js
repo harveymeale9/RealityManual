@@ -484,4 +484,14 @@ async function setThumbnail(accessToken, videoId, jpeg) {
   return result;
 }
 
-module.exports = { SCOPES, isConfigured, buildAuthUrl, exchangeCode, refreshAccessToken, fetchChannelInfo, fetchVideoStatistics, fetchOwnChannelStatistics, fetchVideoStatuses, competitorChannelFilter, fetchCompetitorChannel, markOneInTenOutliers, fetchPublicCaptionTranscript, parseCaptionXml, fetchCommentThreadsPage, fetchCommentRepliesPage, uploadVideo, setThumbnail };
+async function isVideoProcessingComplete(accessToken, videoId) {
+  const url = 'https://www.googleapis.com/youtube/v3/videos?part=processingDetails&id=' + encodeURIComponent(videoId);
+  const response = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
+  if (!response.ok) throw new Error('YouTube processing lookup failed (' + response.status + '): ' + (await response.text()).slice(0, 300));
+  const result = await response.json();
+  const item = result.items && result.items.find(function (entry) { return entry.id === videoId; });
+  if (!item) throw new Error('YouTube video was not found while checking thumbnail readiness.');
+  return item.processingDetails && item.processingDetails.processingStatus === 'succeeded';
+}
+
+module.exports = { SCOPES, isConfigured, buildAuthUrl, exchangeCode, refreshAccessToken, fetchChannelInfo, fetchVideoStatistics, fetchOwnChannelStatistics, fetchVideoStatuses, competitorChannelFilter, fetchCompetitorChannel, markOneInTenOutliers, fetchPublicCaptionTranscript, parseCaptionXml, fetchCommentThreadsPage, fetchCommentRepliesPage, uploadVideo, setThumbnail, isVideoProcessingComplete };
