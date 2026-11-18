@@ -15,6 +15,7 @@ const elevenlabs = require('./src/elevenlabs');
 const videoAnalysis = require('./src/videoAnalysis');
 const voiceAttachments = require('./src/voiceAttachments');
 const youtubeAuth = require('./src/youtubeAuth');
+const publishThumbnail = require('./src/publishThumbnail');
 const positiveComments = require('./src/positiveComments');
 const youtubeDescription = require('./src/youtubeDescription');
 const socialDescription = require('./src/socialDescription');
@@ -2038,6 +2039,8 @@ const SERVER_OWNED_PIECE_FIELDS = [
   'facebookUploadVideoId', 'facebookUploadSessionId', 'facebookUploadStartedAt',
   'facebookUploadBytesTransferred', 'facebookUploadTotalBytes', 'facebookReconcileLastAt', 'facebookReconcileStatus',
   'tiktokPublishDestination', 'instagramContainerId', 'instagramContainerCreatedAt',
+  'youtubeThumbnailStatus', 'youtubeThumbnailError', 'youtubeThumbnailAttempts',
+  'youtubeThumbnailNextAt', 'youtubeThumbnailUploadedAt',
   'youtubeDescriptionText', 'youtubeDescriptionSourceHash',
   'socialDescriptionText', 'socialDescriptionSourceHash'
 ];
@@ -3377,6 +3380,40 @@ app.get('/api/videos/:id/production-thumbnail-frame', requireAuthOrReviewer, asy
 // open for it. It may only upload the built final video (`<id>-final`) that
 // Final Check plays. A missing final is a hard failure: silently publishing
 // the raw upload would bypass the reviewed audio mix and loudness master.
+const youtubeThumbnailInFlight = new Set();
+async function syncYouTubeThumbnail(id) {
+  if (youtubeThumbnailInFlight.has(id)) return;
+  const piece = getPieceRecord(id);
+  if (!piece || !piece.youtubeVideoId || !piece.thumbnailDataUrl || piece.youtubeThumbnailStatus === 'done') return;
+  youtubeThumbnailInFlight.add(id);
+  try {
+    const jpeg = publishThumbnail.jpegBytes(piece.thumbnailDataUrl);
+    await youtubeAuth.setThumbnail(await getValidYoutubeAccessToken(), piece.youtubeVideoId, jpeg);
+    updatePieceFields(id, { youtubeThumbnailStatus: 'done', youtubeThumbnailError: '',
+      youtubeThumbnailNextAt: '', youtubeThumbnailUploadedAt: new Date().toISOString() });
+  } catch (error) {
+    const attempts = (Number(piece.youtubeThumbnailAttempts) || 0) + 1;
+    updatePieceFields(id, { youtubeThumbnailStatus: 'error',
+      youtubeThumbnailError: String(error.message || error).slice(0, 500), youtubeThumbnailAttempts: attempts,
+      youtubeThumbnailNextAt: attempts < 5 ? new Date(Date.now() + Math.min(attempts * 15, 60) * 60000).toISOString() : '' });
+    console.error('YouTube thumbnail failed for ' + id + ':', String(error.message || error).slice(0, 250));
+  } finally { youtubeThumbnailInFlight.delete(id); }
+}
+
+let youtubeThumbnailRetryRunning = false;
+async function retryYouTubeThumbnails() {
+  if (youtubeThumbnailRetryRunning) return;
+  youtubeThumbnailRetryRunning = true;
+  try {
+    const due = allPieceRecords().filter(function (piece) {
+      return piece.youtubeVideoId && piece.thumbnailDataUrl && piece.youtubeThumbnailStatus !== 'done' &&
+        (Number(piece.youtubeThumbnailAttempts) || 0) < 5 &&
+        (!piece.youtubeThumbnailNextAt || Date.parse(piece.youtubeThumbnailNextAt) <= Date.now());
+    }).sort(function (a, b) { return String(b.postedAt || '').localeCompare(String(a.postedAt || '')); }).slice(0, 3);
+    for (const piece of due) await syncYouTubeThumbnail(piece.id);
+  } finally { youtubeThumbnailRetryRunning = false; }
+}
+
 async function runYoutubePublish(id, opts) {
   const piece = getPieceRecord(id);
   if (!piece) return; // deleted before this started
@@ -3408,6 +3445,9 @@ async function runYoutubePublish(id, opts) {
     latest.postedAt = new Date().toISOString();
     latest.updatedAt = new Date().toISOString();
     savePieceRecord(latest);
+    // The video is already committed on YouTube. Thumbnail errors are a
+    // separate retryable job; never re-upload a second video to fix its cover.
+    await syncYouTubeThumbnail(id);
   } catch (e) {
     console.error('YouTube publish failed for ' + id + ':', e.message);
     const latest = getPieceRecord(id);
@@ -4166,6 +4206,7 @@ async function runPlatformPublishBatch(id, destinations, options) {
           youtubeUrl: 'https://www.youtube.com/watch?v=' + result.videoId,
           youtubePublishType: platform
         });
+        await syncYouTubeThumbnail(id);
       } else if (platform === 'tiktok') {
         const current = getPieceRecord(id);
         const result = await buffer.createTiktokVideoPost({
@@ -4207,6 +4248,7 @@ async function runPlatformPublishBatch(id, destinations, options) {
                 pageId: auth.page_id, pageToken: auth.page_access_token,
                 videoPath: media.path, title: destination.title || 'Untitled',
                 description: maskCaption(socialCaption),
+                thumbnailJpeg: publishThumbnail.jpegBytes(current.thumbnailDataUrl),
                 onSessionStarted: function (videoId, sessionId) {
                   updatePieceFields(id, { facebookUploadVideoId: videoId,
                     facebookUploadSessionId: sessionId, facebookUploadStartedAt: new Date().toISOString(),
@@ -4222,7 +4264,8 @@ async function runPlatformPublishBatch(id, destinations, options) {
             result = await metaPublisher.publishFacebookVideo({
               pageId: auth.page_id, pageToken: auth.page_access_token,
               videoUrl: metaPublisher.mediaUrl(id, auth.app_secret, 60 * 60 * 1000), mimeType: mimeType,
-              title: destination.title || 'Untitled', description: maskCaption(socialCaption)
+              title: destination.title || 'Untitled', description: maskCaption(socialCaption),
+              thumbnailJpeg: publishThumbnail.jpegBytes(current.thumbnailDataUrl)
             });
           }
           // Graph's upload response confirms receipt, not necessarily public
@@ -4247,6 +4290,8 @@ async function runPlatformPublishBatch(id, destinations, options) {
           const result = await metaPublisher.publishInstagramReel({
             instagramAccountId: auth.instagram_account_id, pageToken: auth.page_access_token,
             videoUrl: metaPublisher.mediaUrl(id, auth.app_secret), caption: maskCaption(socialCaption),
+            thumbnailOffsetMs: current && current.thumbnailDataUrl
+              ? publishThumbnail.offsetMilliseconds(current.thumbnailTimeSeconds) : null,
             containerId: current && current.instagramContainerId,
             containerCreatedAt: current && current.instagramContainerCreatedAt,
             onContainerCreated: function (containerId, createdAt) {
@@ -5352,6 +5397,11 @@ const httpServer = app.listen(PORT, function () {
     retryFailedPlatforms().catch(function (error) { console.error('publishing retry check failed:', error.message); });
   }, 60 * 1000);
   if (publishingRetryTimer.unref) publishingRetryTimer.unref();
+  retryYouTubeThumbnails().catch(function (error) { console.error('initial YouTube thumbnail check failed:', error.message); });
+  const youtubeThumbnailTimer = setInterval(function () {
+    retryYouTubeThumbnails().catch(function (error) { console.error('YouTube thumbnail check failed:', error.message); });
+  }, 60 * 1000);
+  if (youtubeThumbnailTimer.unref) youtubeThumbnailTimer.unref();
   releaseDueDirectPosts().catch(function (error) { console.error('initial direct release check failed:', error.message); });
   setInterval(function () {
     releaseDueDirectPosts().catch(function (error) { console.error('direct release check failed:', error.message); });

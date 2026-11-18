@@ -41,6 +41,19 @@ test('Meta publisher lets Facebook fetch an archived video without a large multi
   assert.equal(result.id, 'fb-video-2');
 });
 
+test('Facebook file URL upload includes the selected JPEG thumbnail', async function () {
+  let body;
+  const service = metaPublisher.setup({ fetchImpl: async function (url, options) {
+    assert.equal(options.headers, undefined);
+    body = options.body;
+    return response({ id: 'video-1' });
+  } });
+  await service.publishFacebookVideo({ pageId: 'page-1', pageToken: 'token', videoUrl: 'https://example/video.mp4',
+    thumbnailJpeg: Buffer.from('jpeg-image') });
+  assert.equal(body.get('file_url'), 'https://example/video.mp4');
+  assert.equal(await body.get('thumb').text(), 'jpeg-image');
+});
+
 test('Meta publisher sends a large Facebook video in the ranges Meta requests', async function () {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'meta-chunks-'));
   const file = path.join(dir, 'final.mp4');
@@ -73,6 +86,22 @@ test('Meta publisher sends a large Facebook video in the ranges Meta requests', 
     assert.deepEqual(phases, ['start', 'transfer', 'transfer', 'finish']);
     assert.equal(result.url, 'https://www.facebook.com/watch/?v=video-1');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('Facebook resumable upload attaches the selected thumbnail on finish', async function () {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'meta-thumb-'));
+  const file = path.join(dir, 'final.mp4');
+  fs.writeFileSync(file, 'abcd');
+  const service = metaPublisher.setup({ fetchImpl: async function (url, options) {
+    const phase = options.body.get('upload_phase');
+    if (phase === 'start') return response({ upload_session_id: 'session', video_id: 'video', start_offset: '0', end_offset: '4' });
+    if (phase === 'transfer') return response({ start_offset: '4', end_offset: '4' });
+    assert.equal(await options.body.get('thumb').text(), 'jpeg-image');
+    return response({ success: true });
+  } });
+  try { await service.publishFacebookVideoResumable({ pageId: 'page', pageToken: 'token', videoPath: file,
+    thumbnailJpeg: Buffer.from('jpeg-image') }); }
+  finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('Facebook resumable upload checkpoints its video before transferring bytes', async function () {
@@ -126,12 +155,14 @@ test('Meta publisher creates, waits for, and publishes an Instagram Reel', async
     }
   });
   const result = await service.publishInstagramReel({
-    instagramAccountId: 'ig-1', pageToken: 'page-token', videoUrl: 'https://ops.example/signed-video', caption: 'Instagram caption'
+    instagramAccountId: 'ig-1', pageToken: 'page-token', videoUrl: 'https://ops.example/signed-video', caption: 'Instagram caption',
+    thumbnailOffsetMs: 1234
   });
   assert.equal(result.id, 'ig-media-1');
   assert.equal(result.url, 'https://www.instagram.com/reel/example/');
   assert.equal(calls[0].options.body.get('video_url'), 'https://ops.example/signed-video');
   assert.equal(calls[0].options.body.get('caption'), 'Instagram caption');
+  assert.equal(calls[0].options.body.get('thumb_offset'), '1234');
 });
 
 test('Instagram retry reuses its saved container instead of creating another Reel', async function () {

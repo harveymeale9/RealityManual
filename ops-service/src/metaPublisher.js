@@ -53,13 +53,22 @@ function setup(options) {
     let body;
     let headers;
     if (videoUrl) {
-      body = new URLSearchParams({
-        access_token: clean(input.pageToken, 2000),
-        title: clean(input.title, 255),
-        description: clean(input.description, 60000),
-        file_url: videoUrl
-      });
-      headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+      if (input.thumbnailJpeg) {
+        body = new FormData();
+        body.set('access_token', clean(input.pageToken, 2000));
+        body.set('title', clean(input.title, 255));
+        body.set('description', clean(input.description, 60000));
+        body.set('file_url', videoUrl);
+        body.set('thumb', new Blob([input.thumbnailJpeg], { type: 'image/jpeg' }), 'thumbnail.jpg');
+      } else {
+        body = new URLSearchParams({
+          access_token: clean(input.pageToken, 2000),
+          title: clean(input.title, 255),
+          description: clean(input.description, 60000),
+          file_url: videoUrl
+        });
+        headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+      }
     } else {
       const video = await openAsBlob(input.videoPath, { type: clean(input.mimeType, 100) || 'video/mp4' });
       body = new FormData();
@@ -67,6 +76,7 @@ function setup(options) {
       body.set('title', clean(input.title, 255));
       body.set('description', clean(input.description, 60000));
       body.set('source', video, path.basename(input.videoPath) + '.mp4');
+      if (input.thumbnailJpeg) body.set('thumb', new Blob([input.thumbnailJpeg], { type: 'image/jpeg' }), 'thumbnail.jpg');
     }
     const response = await fetchImpl(GRAPH_VIDEO_URL + '/' + encodeURIComponent(clean(input.pageId, 100)) + '/videos', {
       method: 'POST', headers: headers, body: body
@@ -83,11 +93,12 @@ function setup(options) {
     const filePath = input.videoPath;
     const fileSize = fs.statSync(filePath).size;
     const endpoint = GRAPH_VIDEO_URL + '/' + encodeURIComponent(clean(input.pageId, 100)) + '/videos';
-    async function phase(fields, chunk) {
+    async function phase(fields, chunk, thumbnailJpeg) {
       const body = new FormData();
       Object.keys(fields).forEach(function (key) { body.set(key, String(fields[key])); });
       body.set('access_token', clean(input.pageToken, 2000));
       if (chunk) body.set('video_file_chunk', chunk, 'chunk.mp4');
+      if (thumbnailJpeg) body.set('thumb', new Blob([thumbnailJpeg], { type: 'image/jpeg' }), 'thumbnail.jpg');
       const response = await fetchImpl(endpoint, { method: 'POST', body: body });
       return jsonResponse(response, 'Facebook video ' + fields.upload_phase + ' failed');
     }
@@ -131,7 +142,7 @@ function setup(options) {
     const finished = await phase({
       upload_phase: 'finish', upload_session_id: sessionId,
       title: clean(input.title, 255), description: clean(input.description, 60000)
-    });
+    }, null, input.thumbnailJpeg);
     if (finished.success !== true) throw new Error('Facebook did not confirm the finished video upload.');
     return { id: videoId, url: 'https://www.facebook.com/watch/?v=' + encodeURIComponent(videoId) };
   }
@@ -216,10 +227,14 @@ function setup(options) {
       if (previous.status_code === 'ERROR' || previous.status_code === 'EXPIRED') containerId = '';
     }
     if (!containerId) {
-      const created = await graphPost('/' + accountId + '/media', {
+      const fields = {
         media_type: 'REELS', video_url: clean(input.videoUrl, 2000),
         caption: clean(input.caption, 2200), share_to_feed: 'true', access_token: token
-      }, 'Instagram Reel container creation failed');
+      };
+      if (Number.isSafeInteger(input.thumbnailOffsetMs) && input.thumbnailOffsetMs >= 0) {
+        fields.thumb_offset = String(input.thumbnailOffsetMs);
+      }
+      const created = await graphPost('/' + accountId + '/media', fields, 'Instagram Reel container creation failed');
       if (!created.id) throw new Error('Instagram Reel container creation failed: no container id returned.');
       containerId = clean(created.id, 100);
       containerCreatedAt = new Date().toISOString();

@@ -23337,3 +23337,30 @@ the normal schedule, archive old metrics, remove the exact old Facebook post
 only in a controlled per-piece sequence, and write the new Facebook ID/status
 without treating it as a new cross-platform release. Do not mass-delete or
 blindly move Live cards back into the ordinary publishing queue.
+
+## Selected Production thumbnails now reach publishing APIs (2026-11-18)
+
+Harvey suspected that Content Production's **Use this frame** selection was
+only an internal preview. Audit confirmed this: the JPEG and frame timestamp
+were persisted, but coordinated YouTube uploads never called
+`thumbnails.set`, Facebook uploads never sent `thumb`, and Instagram Reel
+containers never sent `thumb_offset`. Buffer TikTok already received the
+selected frame time. Thus the old `Thumbnail selected` tag did **not** prove
+that YouTube/Meta had received the chosen cover.
+
+The publisher now validates the selected source-resolution JPEG and sends it
+with Facebook Page video uploads, including the large resumable finish phase;
+Instagram Reel creation sends the selected timestamp in milliseconds. After
+YouTube returns a video ID, it calls the official `thumbnails.set` endpoint
+using the existing `youtube.upload` OAuth scope. The video ID/status is saved
+**before** this second call; a thumbnail error is stored separately and never
+causes a second video upload. A bounded background worker retries the same
+video's thumbnail, including older published pieces with saved JPEGs, up to
+five attempts. Existing Facebook/Instagram posts are not silently reposted
+or edited by this change. A platform's actual cover may take time to update
+and must be checked on the live post, not inferred from the local preview.
+
+Focused tests cover JPEG validation, YouTube's exact thumbnail endpoint,
+Facebook file-URL/resumable thumbnail payloads and Instagram offset; the full
+ops-service suite passed 372/372 before deployment. Confirm CI's actual
+backend rebuild and live thumbnail statuses before calling the fix live.

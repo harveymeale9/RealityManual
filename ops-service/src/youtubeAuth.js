@@ -469,4 +469,19 @@ async function uploadVideo(accessToken, filePath, mimeType, metadata) {
   return { videoId: data.id };
 }
 
-module.exports = { SCOPES, isConfigured, buildAuthUrl, exchangeCode, refreshAccessToken, fetchChannelInfo, fetchVideoStatistics, fetchOwnChannelStatistics, fetchVideoStatuses, fetchCompetitorChannel, competitorChannelFilter, markOneInTenOutliers, fetchPublicCaptionTranscript, parseCaptionXml, fetchCommentThreadsPage, fetchCommentRepliesPage, uploadVideo };
+async function setThumbnail(accessToken, videoId, jpeg) {
+  if (!videoId || !Buffer.isBuffer(jpeg) || !jpeg.length) throw new Error('YouTube thumbnail needs a video ID and JPEG.');
+  const url = 'https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=' + encodeURIComponent(videoId);
+  const response = await fetch(url, {
+    method: 'POST', headers: {
+      Authorization: 'Bearer ' + accessToken,
+      'Content-Type': 'image/jpeg', 'Content-Length': String(jpeg.length)
+    }, body: jpeg
+  });
+  if (!response.ok) throw new Error('YouTube thumbnail upload failed (' + response.status + '): ' + (await response.text()).slice(0, 400));
+  const result = await response.json();
+  if (!result.items || !result.items.length) throw new Error('YouTube did not confirm the custom thumbnail.');
+  return result;
+}
+
+module.exports = { SCOPES, isConfigured, buildAuthUrl, exchangeCode, refreshAccessToken, fetchChannelInfo, fetchVideoStatistics, fetchOwnChannelStatistics, fetchVideoStatuses, competitorChannelFilter, fetchCompetitorChannel, markOneInTenOutliers, fetchPublicCaptionTranscript, parseCaptionXml, fetchCommentThreadsPage, fetchCommentRepliesPage, uploadVideo, setThumbnail };

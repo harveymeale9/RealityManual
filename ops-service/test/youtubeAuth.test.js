@@ -4,6 +4,22 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const youtubeAuth = require('../src/youtubeAuth');
 
+test('YouTube selected JPEG is uploaded to the existing video, not another video upload', async function (t) {
+  const originalFetch = global.fetch;
+  t.after(function () { global.fetch = originalFetch; });
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+  global.fetch = async function (url, options) {
+    const parsed = new URL(String(url));
+    assert.equal(parsed.pathname, '/upload/youtube/v3/thumbnails/set');
+    assert.equal(parsed.searchParams.get('videoId'), 'existing-video');
+    assert.equal(options.headers.Authorization, 'Bearer token');
+    assert.equal(options.headers['Content-Type'], 'image/jpeg');
+    assert.deepEqual(options.body, jpeg);
+    return { ok: true, json: async function () { return { items: [{ high: { url: 'https://img.example/cover.jpg' } }] }; } };
+  };
+  assert.equal((await youtubeAuth.setThumbnail('token', 'existing-video', jpeg)).items.length, 1);
+});
+
 test('YouTube statistics lookup returns numeric performance totals without exposing OAuth data', async function (t) {
   const originalFetch = global.fetch;
   t.after(function () { global.fetch = originalFetch; });
