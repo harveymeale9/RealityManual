@@ -1351,13 +1351,13 @@ test('final render splices an inserted clip and its caption timeline between sou
       '-frames:v', '1', '-vf', "select='gte(t," + at + ")',scale=1:1", '-pix_fmt', 'rgb24', '-f', 'rawvideo', 'pipe:1']);
     return Array.from(frame.subarray(0, 3));
   }
-  const openingBlack = frameRgb(0.03);
+  const openingFirst = frameRgb(0.03);
   const openingBook = frameRgb(0.43);
-  assert.ok(openingBlack.every(function (channel) { return channel < 30; }),
-    'the held first frame begins black: ' + JSON.stringify(openingBlack));
-  assert.ok(openingBook.reduce(function (sum, channel) { return sum + channel; }, 0) >
-    openingBlack.reduce(function (sum, channel) { return sum + channel; }, 0) + 80,
-  'the first retained frame is visible before speech: ' + JSON.stringify(openingBook));
+  const openingSum = openingFirst.reduce(function (sum, channel) { return sum + channel; }, 0);
+  const laterSum = openingBook.reduce(function (sum, channel) { return sum + channel; }, 0);
+  assert.ok(openingSum > 80, 'the first retained frame is visible immediately: ' + JSON.stringify(openingFirst));
+  assert.ok(Math.abs(openingSum - laterSum) < 65,
+    'the opening holds a visible frame without fading from black: ' + JSON.stringify({ openingFirst: openingFirst, openingBook: openingBook }));
   const beforeOutro = frameRgb(2.05);
   const nearEnd = frameRgb(3.75);
   assert.ok(beforeOutro.reduce(function (sum, channel) { return sum + channel; }, 0) >
@@ -1369,7 +1369,7 @@ test('final render splices an inserted clip and its caption timeline between sou
     '-t', '0.25', '-vn', '-f', 'f32le', '-acodec', 'pcm_f32le', 'pipe:1']);
   let openingPeak = 0;
   for (let index = 0; index < openingAudio.length; index += 4) openingPeak = Math.max(openingPeak, Math.abs(openingAudio.readFloatLE(index)));
-  assert.ok(openingPeak < 0.001, 'speech stays silent through the opening fade: ' + openingPeak);
+  assert.ok(openingPeak < 0.001, 'speech stays silent through the opening hold: ' + openingPeak);
   const speechAudio = execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-ss', '0.4', '-i', rendered,
     '-t', '0.15', '-vn', '-f', 'f32le', '-acodec', 'pcm_f32le', 'pipe:1']);
   let speechPeak = 0;

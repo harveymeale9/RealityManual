@@ -23431,3 +23431,27 @@ No replay has yet run, so the first live Facebook post and its Meta status
 still need to be verified after the first slot. The full ops-service suite
 passed 376/376 before the final R2 prefix change; focused R2, caption and
 replay tests passed 15/15 afterward.
+
+## Editor openings no longer fade from black in either layout (2026-11-18)
+
+Harvey showed a black Facebook Reels tile and asked to remove the Editor's
+black-to-picture entrance entirely. Earlier §677 added a 0.3-second held
+first book frame faded from black; §678 removed that fade only for portrait
+video, leaving landscape renders with a black first encoded frame. The
+retained latest Facebook video (`2076843426329537`, a long-form piece)
+was checked against its R2 safety copy: frame-zero mean brightness was 0,
+while the picture at 0.5 seconds was visible (mean 52 on a 0–255 gray
+scale). That explains the black tile without assuming it is a live
+Facebook-cover setting problem.
+
+The Editor preview/Production-master FFmpeg graph now holds the first
+retained visible frame through the same 0.3-second speech preroll for both
+portrait and landscape, with no opening fade. The silence, subtitle shift,
+cuts, later page-change and inserted-clip fades, and end fade are unchanged.
+The real horizontal FFmpeg regression now asserts a visible first frame and
+stable brightness through the hold; portrait's existing visible-frame test
+still passes. The full ops-service suite passed 376/376. Existing rendered
+or published files are **not** silently rewritten; the retained Facebook
+post will keep its encoded black first frame unless Harvey separately asks
+for a controlled rebuild/repost. Do not treat a code deploy as retroactively
+repairing that post.
