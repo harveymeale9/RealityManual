@@ -201,6 +201,16 @@ function setup(options) {
     return null;
   }
 
+  async function listFacebookPublishedVideoIds(input) {
+    const result = await graphGet('/' + encodeURIComponent(clean(input.pageId, 100)) + '/videos', {
+      fields: 'id', limit: '100', access_token: clean(input.pageToken, 2000)
+    }, 'Facebook published-video inventory failed');
+    // The replay set has 32 entries. Refuse to post if the inventory is
+    // incomplete; otherwise an old public upload could be mistaken for gone.
+    if (result.paging && result.paging.next) throw new Error('Facebook video inventory has another page; replay paused.');
+    return new Set((result.data || []).map(function (video) { return clean(video.id, 100); }));
+  }
+
   async function graphPost(pathname, fields, label) {
     const response = await fetchImpl(GRAPH_URL + pathname, {
       method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -392,6 +402,7 @@ function setup(options) {
     mediaUrl: mediaUrl,
     verifyMediaSignature: verifyMediaSignature,
     publishFacebookVideo: publishFacebookVideo,
+    listFacebookPublishedVideoIds: listFacebookPublishedVideoIds,
     publishFacebookVideoResumable: publishFacebookVideoResumable,
     reconcileFacebookVideo: reconcileFacebookVideo,
     publishInstagramReel: publishInstagramReel,

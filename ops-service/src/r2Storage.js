@@ -163,7 +163,7 @@ function setup(options) {
 
   function safeDataKey(value) {
     const key = clean(value, 1000);
-    if (!/^backups\/[A-Za-z0-9_./-]+\.json$/.test(key) || key.includes('..')) {
+    if (!/^(?:backups|facebook-repost)\/[A-Za-z0-9_./-]+\.json$/.test(key) || key.includes('..')) {
       throw new Error('Invalid R2 JSON object key.');
     }
     return key;

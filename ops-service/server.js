@@ -44,6 +44,7 @@ const publishBatchState = require('./src/publishBatchState');
 const metaAuth = require('./src/metaAuth');
 const instagramInsightsAuth = require('./src/instagramInsightsAuth');
 const metaPublisherService = require('./src/metaPublisher');
+const facebookReplay = require('./src/facebookReplay');
 const shortformSchedule = require('./src/shortformSchedule');
 const topicSchedule = require('./src/topicSchedule');
 const publishPolicy = require('./src/publishPolicy');
@@ -229,6 +230,12 @@ db.exec(
   '  id INTEGER PRIMARY KEY CHECK (id = 1),' +
   '  app_id TEXT, app_secret TEXT, account_id TEXT, username TEXT,' +
   '  access_token TEXT, expires_at TEXT, refreshed_at TEXT, updated_at TEXT NOT NULL' +
+  ');' +
+  'CREATE TABLE IF NOT EXISTS facebook_replay_jobs (' +
+  '  piece_id TEXT PRIMARY KEY, old_video_id TEXT NOT NULL UNIQUE,' +
+  '  backup_key TEXT NOT NULL, size_bytes INTEGER NOT NULL,' +
+  "  status TEXT NOT NULL DEFAULT 'pending', slot_date TEXT UNIQUE," +
+  '  started_at TEXT, new_video_id TEXT, error TEXT, completed_at TEXT' +
   ');'
 );
 
@@ -3804,6 +3811,7 @@ async function socialCaptionForDestination(id, destination) {
       (socialDescription.hasToken(caption) || typeof destination.socialDescriptionBaseCaption === 'string')) {
     caption = socialDescription.destinationCaption(destination, await ensureSocialDescription(id));
   }
+  caption = socialDescription.introFirstCaption(caption, destination && destination.platform);
   // Buffer and Instagram otherwise truncate at 2,200 characters, which can
   // silently remove the generated addendum at the end of Harvey's caption.
   if (['tiktok', 'instagram'].includes(destination && destination.platform) && caption.length > 2200) {
@@ -3823,6 +3831,110 @@ function uniquePublishDestinations(destinations) {
 
 function allPieceRecords() {
   return stmts.getAll.all('pieces').map(function (row) { return recordConcurrency.decodeRow(row); }).filter(Boolean);
+}
+
+// This is deliberately separate from the normal publishing queue: a replay
+// must never touch another platform or move a Live Kanban card backwards.
+let facebookReplayInFlight = false;
+let facebookReplaySeeded = false;
+async function seedFacebookReplay() {
+  if (facebookReplaySeeded) return;
+  const manifest = await r2Storage.readJson(facebookReplay.MANIFEST_KEY);
+  const entries = manifest && manifest.pieces;
+  if (!Array.isArray(entries) || entries.length !== 33) throw new Error('Facebook replay manifest is incomplete.');
+  const pieces = new Map(allPieceRecords().map(function (piece) { return [piece.id, piece]; }));
+  const replay = entries.filter(function (entry) { return entry.facebookVideoId !== facebookReplay.RETAINED_VIDEO_ID; })
+    .sort(function (a, b) { return Date.parse(a.postedAt) - Date.parse(b.postedAt); });
+  if (replay.length !== 32) throw new Error('Facebook replay set does not contain exactly 32 old videos.');
+  for (const entry of replay) {
+    const piece = pieces.get(entry.pieceId);
+    if (!piece || piece.facebookVideoId !== entry.facebookVideoId ||
+        entry.key !== 'facebook-repost/2026-11-17/' + entry.pieceId + '.mp4' ||
+        !Number.isSafeInteger(entry.sizeBytes) || entry.sizeBytes < 1) {
+      throw new Error('Facebook replay manifest does not match the saved piece inventory.');
+    }
+  }
+  const insert = db.prepare('INSERT OR IGNORE INTO facebook_replay_jobs ' +
+    '(piece_id, old_video_id, backup_key, size_bytes, status) VALUES (?, ?, ?, ?, ?)');
+  db.transaction(function () {
+    for (const entry of replay) insert.run(entry.pieceId, entry.facebookVideoId, entry.key, entry.sizeBytes, 'pending');
+  })();
+  facebookReplaySeeded = true;
+  console.log('Facebook replay queue verified: ' + replay.length + ' old videos; retained latest video excluded.');
+  // Earlier videos may predate the social-summary feature. Prepare those
+  // descriptions now, not at the moment their off-day release is due.
+  (async function () {
+    for (const entry of entries) {
+      const piece = getPieceRecord(entry.pieceId);
+      if (!piece || (piece.socialDescriptionText && piece.socialDescriptionSourceHash === socialDescription.sourceHash(piece))) continue;
+      try { await ensureSocialDescription(entry.pieceId); }
+      catch (error) { console.warn('Facebook replay summary preparation failed for ' + entry.pieceId + ':', error.message); }
+      await new Promise(function (resolve) { setTimeout(resolve, 2000); });
+    }
+  })().catch(function (error) { console.error('Facebook replay summary loop failed:', error.message); });
+}
+
+async function advanceFacebookReplay() {
+  if (facebookReplayInFlight || !facebookReplaySeeded) return;
+  facebookReplayInFlight = true;
+  try {
+    const auth = stmts.getMetaAuth.get();
+    if (!auth || !auth.page_id || !auth.page_access_token) throw new Error('Facebook Page is disconnected.');
+    const unresolved = db.prepare("SELECT * FROM facebook_replay_jobs WHERE status IN ('uploading','uploaded','ambiguous') ORDER BY started_at").all();
+    for (const job of unresolved) {
+      const piece = getPieceRecord(job.piece_id);
+      if (!piece) continue;
+      const match = await metaPublisher.reconcileFacebookVideo({
+        pageId: auth.page_id, pageToken: auth.page_access_token, title: piece.title || 'Untitled',
+        videoId: job.new_video_id, startedAt: job.started_at
+      });
+      if (match && match.id && !match.pending) {
+        db.prepare("UPDATE facebook_replay_jobs SET status='done', new_video_id=?, completed_at=?, error=NULL WHERE piece_id=?")
+          .run(match.id, new Date().toISOString(), job.piece_id);
+        updatePieceFields(job.piece_id, { facebookPreviousVideoId: job.old_video_id,
+          facebookVideoId: match.id, facebookUrl: match.url, facebookPublishStatus: 'done', facebookPublishError: '' });
+        console.log('Facebook replay confirmed for ' + job.piece_id.slice(0, 8));
+      } else if (!match && Date.now() - Date.parse(job.started_at) > 30 * 60 * 1000) {
+        db.prepare("UPDATE facebook_replay_jobs SET status='needs_review', error=? WHERE piece_id=?")
+          .run('Upload response was uncertain; inspect Facebook before any retry.', job.piece_id);
+        console.error('Facebook replay requires manual reconciliation for ' + job.piece_id.slice(0, 8));
+      }
+    }
+    const slot = facebookReplay.bangkokSlot(new Date());
+    if (!slot || db.prepare('SELECT 1 FROM facebook_replay_jobs WHERE slot_date=?').get(slot)) return;
+    const published = await metaPublisher.listFacebookPublishedVideoIds({ pageId: auth.page_id, pageToken: auth.page_access_token });
+    const jobs = db.prepare('SELECT * FROM facebook_replay_jobs ORDER BY rowid').all();
+    const job = facebookReplay.eligibleJob(jobs, published);
+    if (!job) return;
+    const piece = getPieceRecord(job.piece_id);
+    if (!piece || piece.facebookVideoId !== job.old_video_id) throw new Error('Facebook replay piece changed before release.');
+    const remote = await r2Storage.headKey(job.backup_key);
+    if (remote.sizeBytes !== job.size_bytes) throw new Error('Facebook replay backup size mismatch.');
+    const row = stmts.getOne.get('settings', 'settings');
+    const settings = row ? JSON.parse(row.data) : {};
+    const group = piece.contentType === 'longform' ? 'longform' : 'shortform';
+    const template = settings.captions && settings.captions[group] && settings.captions[group].facebook;
+    if (!socialDescription.hasToken(template)) throw new Error('Facebook caption template lacks video summary.');
+    const caption = socialDescription.destinationCaption({ platform: 'facebook', caption: template },
+      await ensureSocialDescription(piece.id));
+    const startedAt = new Date().toISOString();
+    db.prepare("UPDATE facebook_replay_jobs SET status='uploading', slot_date=?, started_at=?, error=NULL WHERE piece_id=? AND status='pending'")
+      .run(slot, startedAt, job.piece_id);
+    try {
+      const result = await metaPublisher.publishFacebookVideo({
+        pageId: auth.page_id, pageToken: auth.page_access_token, title: piece.title || 'Untitled',
+        description: maskCaption(caption), videoUrl: await r2Storage.signedGetUrl(job.backup_key, 6 * 60 * 60),
+        thumbnailJpeg: publishThumbnail.jpegBytes(piece.thumbnailDataUrl)
+      });
+      db.prepare("UPDATE facebook_replay_jobs SET status='uploaded', new_video_id=? WHERE piece_id=?")
+        .run(result.id, job.piece_id);
+      console.log('Facebook replay uploaded for ' + job.piece_id.slice(0, 8) + '; awaiting publication confirmation.');
+    } catch (error) {
+      db.prepare("UPDATE facebook_replay_jobs SET status='ambiguous', error=? WHERE piece_id=?")
+        .run(String(error.message || error).slice(0, 500), job.piece_id);
+      throw error;
+    }
+  } finally { facebookReplayInFlight = false; }
 }
 
 function topicAwarePublishingSlot(piece, candidates, pieces) {
@@ -5389,6 +5501,13 @@ function recoverInflightVideoJobs() {
 
 const httpServer = app.listen(PORT, function () {
   console.log('rm-ops-service listening on ' + PORT);
+  seedFacebookReplay().then(advanceFacebookReplay)
+    .catch(function (error) { console.error('Facebook replay startup paused:', error.message); });
+  const facebookReplayTimer = setInterval(function () {
+    seedFacebookReplay().then(advanceFacebookReplay)
+      .catch(function (error) { console.error('Facebook replay check failed:', error.message); });
+  }, 60 * 1000);
+  if (facebookReplayTimer.unref) facebookReplayTimer.unref();
   recoverInflightVoiceMessages();
   recoverInflightVideoJobs();
   schedulePublishingQueueDrain();

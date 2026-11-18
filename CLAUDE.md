@@ -23377,3 +23377,44 @@ of YouTube accepting the uploaded images, not a promise that every thumbnail
 CDN/device surface updated instantaneously. Facebook and Instagram payloads
 were unit-tested but await their next real scheduled post for live-platform
 confirmation; do not manufacture a public post just for this check.
+
+## Social intro-first captions and controlled Facebook catalog replay (2026-11-18)
+
+Harvey deleted old Facebook Page posts (except the latest) after changing the
+Page's creator setting. The 33 Facebook-delivered MP4s remain in the private
+R2 `facebook-repost/2026-11-17/` safety copy described above. The old catalog
+is **not** re-entered into the ordinary multi-platform publishing queue:
+that would risk duplicating YouTube/Instagram/TikTok posts and moving Live
+Kanban cards. A dedicated `facebook_replay_jobs` table is seeded once from
+the verified 33-entry manifest, excluding retained video `2076843426329537`.
+Its 32 rows retain original video IDs, backup object keys and sizes. One
+missing video can be replayed on each Wednesday, Friday or Sunday at
+**22:00 Asia/Bangkok**; Monday/Thursday shorts and Tuesday/Saturday long-form
+remain unchanged. Before a Graph POST, the worker checks the Page's complete
+published-video inventory, the R2 object size, the piece's original video
+ID, an AI summary and the caption template. It claims the calendar-day slot
+durably before posting, reconciles Meta's result, and never blindly retries
+an uncertain upload. A confirmed new Facebook ID replaces only the piece's
+Facebook ID; the old ID remains in `facebookPreviousVideoId`. Other platform
+IDs and Kanban stage are untouched.
+
+Important caveat: after Harvey's manual deletion, Graph still reported
+**nine old video IDs as published** alongside the retained latest video.
+These could be surviving posts or video-library entries after feed-post
+deletion; the current Page grant cannot read `/feed` (`pages_read_engagement`
+missing). The worker conservatively skips any old ID still in `/videos`, so
+it does not create a duplicate merely because a feed post appears gone. It
+can proceed with the other 23 currently missing IDs and revisit those nine
+on later off-days if they disappear. Do not manually override this guard
+without independent confirmation of the public Page state.
+
+Caption migration version 3 moves the transcript-grounded `[DESCRIPTION]`
+paragraph before the standard book CTA on Facebook long and short,
+Instagram and YouTube Shorts. TikTok is unchanged because Harvey plans to
+delete that account, not asked us to rework or disconnect it. YouTube
+long-form deliberately keeps its current first-line book link and following
+description. The publish path also normalizes already-frozen queued captions
+where the exact standard CTA is first. Missing Facebook catalog summaries
+are generated from each saved transcript in the background after deployment;
+the replay itself refuses to publish without one. No old social post is
+edited retroactively by changing the template.

@@ -25,10 +25,31 @@ test('social template migration preserves Harvey’s copy and later opt-out', fu
   assert.equal(expanded.captions.shortform.facebook, 'FB copy\n\n[DESCRIPTION]');
   assert.equal(expanded.captions.shortform.ytshort, 'Shorts copy\n\n[DESCRIPTION]');
   assert.equal(expanded.captions.shortform.tiktok, 'TikTok copy\n\n[DESCRIPTION]');
-  assert.equal(expanded.socialDescriptionTemplateVersion, 2);
+  assert.equal(expanded.socialDescriptionTemplateVersion, 3);
   expanded.captions.shortform.tiktok = 'Manual opt-out';
   assert.equal(descriptions.upgradeSettings(expanded), null);
   assert.equal(descriptions.appendToken('Already [DESC]'), 'Already [DESC]');
+});
+
+test('standard call to action follows the video introduction except on TikTok and YouTube long-form', function () {
+  const cta = 'The Reality Manual reveals the 14 Rules of the Game of Life and how to use them to master the game. Link in bio!';
+  const intro = 'Why might grief and rejection hurt so much? This video explores connection, separation, and the emotions that follow when a bond breaks.';
+  const settings = { socialDescriptionTemplateVersion: 2, captions: {
+    shortform: { ytshort: cta + '\n\n[DESCRIPTION]', tiktok: cta + '\n\n[DESCRIPTION]',
+      instagram: cta + '\n\n[DESCRIPTION]', facebook: cta + '\n\n[DESCRIPTION]' },
+    longform: { facebook: cta + '\n\n[DESCRIPTION]', ytlong: 'Get your copy: [LINK]\n\n[DESCRIPTION]' }
+  } };
+  const upgraded = descriptions.upgradeSettings(settings);
+  for (const platform of ['ytshort', 'instagram', 'facebook']) {
+    assert.equal(upgraded.captions.shortform[platform], '[DESCRIPTION]\n\n' + cta);
+    assert.equal(descriptions.destinationCaption({ platform, caption: cta + '\n\n[DESCRIPTION]' }, intro), intro + '\n\n' + cta);
+    assert.equal(descriptions.introFirstCaption(cta + '\n\n' + intro, platform), intro + '\n\n' + cta);
+  }
+  assert.equal(upgraded.captions.longform.facebook, '[DESCRIPTION]\n\n' + cta);
+  assert.equal(upgraded.captions.longform.ytlong, settings.captions.longform.ytlong);
+  assert.equal(upgraded.captions.shortform.tiktok, settings.captions.shortform.tiktok);
+  assert.equal(descriptions.destinationCaption({ platform: 'tiktok', caption: cta + '\n\n[DESCRIPTION]' }, intro), cta + '\n\n' + intro);
+  assert.equal(descriptions.upgradeSettings(upgraded), null);
 });
 
 test('social prose is transcript-grounded, short, and safe for both Meta captions', async function () {
