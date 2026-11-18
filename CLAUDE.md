@@ -23398,15 +23398,14 @@ an uncertain upload. A confirmed new Facebook ID replaces only the piece's
 Facebook ID; the old ID remains in `facebookPreviousVideoId`. Other platform
 IDs and Kanban stage are untouched.
 
-Important caveat: after Harvey's manual deletion, Graph still reported
-**nine old video IDs as published** alongside the retained latest video.
-These could be surviving posts or video-library entries after feed-post
-deletion; the current Page grant cannot read `/feed` (`pages_read_engagement`
-missing). The worker conservatively skips any old ID still in `/videos`, so
-it does not create a duplicate merely because a feed post appears gone. It
-can proceed with the other 23 currently missing IDs and revisit those nine
-on later off-days if they disappear. Do not manually override this guard
-without independent confirmation of the public Page state.
+Immediately after Harvey's manual deletion, Graph still reported **nine old
+video IDs as published** alongside the retained latest video. This was
+apparently deletion propagation: after deployment, a fresh Page `/videos`
+query returned just the retained latest, making all 32 replay jobs eligible.
+The current Page grant cannot read `/feed` (`pages_read_engagement` missing),
+so the worker conservatively checks `/videos` again before each POST and
+skips any old ID that reappears. Do not override this guard merely because a
+feed post appears gone.
 
 Caption migration version 3 moves the transcript-grounded `[DESCRIPTION]`
 paragraph before the standard book CTA on Facebook long and short,
@@ -23418,3 +23417,17 @@ where the exact standard CTA is first. Missing Facebook catalog summaries
 are generated from each saved transcript in the background after deployment;
 the replay itself refuses to publish without one. No old social post is
 edited retroactively by changing the template.
+
+Deployment verification: commit `a2f5384` rebuilt `rm-ops-service` and
+`/api/health` returned OK. The v3 settings migration showed intro-first
+YouTube Short/Instagram/Facebook templates; the YouTube long-form template
+still begins with its book-link CTA. The replay table contains 32 pending
+jobs and no uploaded or completed jobs before the first Wednesday 22:00
+Bangkok slot. Its background preparation finished every missing social
+summary: all 33 Facebook catalog pieces now have `socialDescriptionText`.
+The Page inventory showed exactly one published video, the retained latest;
+therefore all 32 old jobs pass the duplicate-presence gate at this check.
+No replay has yet run, so the first live Facebook post and its Meta status
+still need to be verified after the first slot. The full ops-service suite
+passed 376/376 before the final R2 prefix change; focused R2, caption and
+replay tests passed 15/15 afterward.
