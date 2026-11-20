@@ -561,7 +561,24 @@
     var dense = Number(data.days) >= 14;
     var veryDense = Number(data.days) >= 21;
     var percentAt = function (index) { return (index / Math.max(1, bins.length) * 100).toFixed(5) + '%'; };
-    var maxViews = Math.max.apply(Math, bins.map(function (bin) { return Number(bin.views) || 0; }).concat([1]));
+    var plotViews = bins.map(function (bin) { return bin.views == null ? null : Number(bin.views) || 0; });
+    var smoothedHours = {};
+    // A missed hourly poll is included in the next observed counter increase.
+    // Spread only one- or two-hour gaps over their covered hours for the line;
+    // keep the raw bins, headline total and hour details as measured data.
+    for (var gapStart = 1; gapStart < bins.length; gapStart++) {
+      if (plotViews[gapStart] != null || plotViews[gapStart - 1] == null) continue;
+      var next = gapStart;
+      while (next < bins.length && plotViews[next] == null) next++;
+      var missed = next - gapStart;
+      if (missed > 2 || next === bins.length || bins[next].view_coverage !== 'complete') continue;
+      var observed = Number(bins[next].views) || 0;
+      for (var fill = gapStart; fill <= next; fill++) {
+        plotViews[fill] = observed / (missed + 1);
+        smoothedHours[fill] = { observed: observed, hours: missed + 1, missed: fill !== next };
+      }
+    }
+    var maxViews = Math.max.apply(Math, plotViews.map(function (views) { return views || 0; }).concat([1]));
     // Keep a one-sale hour visibly short even when every sale in the selected
     // period happened in a separate hour. Taller bars then mean more sales.
     var maxOrders = Math.max.apply(Math, bins.map(function (bin) { return Number(bin.orders) || 0; }).concat([4]));
@@ -585,20 +602,25 @@
       days[days.length - 1].orders += Number(bin.orders) || 0;
       days[days.length - 1].profitCents += Number(bin.gross_profit_cents) || 0;
       days[days.length - 1].pendingCosts += Number(bin.profit_pending_orders) || 0;
-      if (bin.views == null) {
+      if (plotViews[index] == null) {
         if (viewRun.length) viewRuns.push(viewRun);
         viewRun = [];
       } else {
-        viewRun.push(((index + .5) * hourWidth) + ',' + (viewHeight - 9 - Math.round(Number(bin.views) / maxViews * (viewHeight - 23))));
+        viewRun.push(((index + .5) * hourWidth) + ',' + (viewHeight - 9 - Math.round(plotViews[index] / maxViews * (viewHeight - 23))));
       }
       var tick = bkkHour === 0 ? date.toLocaleDateString('en-GB', { timeZone: 'Asia/Bangkok', day: 'numeric', month: 'short' }) : bkkHour === 12 ? '12h' : '';
       var uploads = Array.isArray(bin.uploads) ? bin.uploads : [];
+      var smoothed = smoothedHours[index];
+      var viewDetail = smoothed ? (smoothed.missed ?
+        'No poll; chart estimates ~' + Math.round(plotViews[index]).toLocaleString() + '/hour from the next ' + smoothed.hours + '-hour gain' :
+        smoothed.observed.toLocaleString() + ' views measured across ' + smoothed.hours + ' hours; chart estimates ~' + Math.round(plotViews[index]).toLocaleString() + '/hour') :
+        (bin.views == null ? 'YouTube views not measured' : Number(bin.views).toLocaleString() + ' measured long-form views' + (bin.view_coverage === 'partial' ? ' (partial)' : ''));
       var detail = bangkok + ' Bangkok · ' + newYork + ' New York · ' +
-        (bin.views == null ? 'YouTube views not measured' : Number(bin.views).toLocaleString() + ' measured long-form views' + (bin.view_coverage === 'partial' ? ' (partial)' : '')) +
+        viewDetail +
         ' · ' + Number(bin.orders || 0) + ' paid orders (' + Number(bin.us_orders || 0) + ' US)' +
         (uploads.length ? ' · Published: ' + uploads.map(function (item) { return item.title; }).join(', ') : '');
       if (uploads.length) releases.push({ index: index, title: uploads.map(function (item) { return item.title; }).join(', '), detail: detail });
-      return '<button type="button" class="sales-timing-hour' + (bin.view_coverage !== 'complete' ? ' views-' + bin.view_coverage : '') + '"' +
+      return '<button type="button" class="sales-timing-hour' + (smoothed ? ' views-estimated' : bin.view_coverage !== 'complete' ? ' views-' + bin.view_coverage : '') + '"' +
         ' data-sales-detail="' + escapeHtml(detail) + '" aria-label="' + escapeHtml(detail) + '">' +
         '<span class="sales-timing-views"></span>' +
         '<span class="sales-timing-orders">' + (bin.orders ? '<i style="height:' + Math.round(Number(bin.orders) / maxOrders * 100) + '%"><b>' + Number(bin.orders) + '</b></i>' : '') + '</span>' +
@@ -630,7 +652,7 @@
       '<span class="uploads">◆ Long-form published' + (releases.length ? '' : ' · none in this range') + '</span></div>' +
       '<p class="sales-timing-detail" aria-live="polite">Point at or tap an hour for Bangkok and New York times, views, sales and upload titles.</p>' +
       '<div class="sales-timing-scroll" role="group" aria-label="Hourly views and paid orders"><div class="sales-timing-grid' + (dense ? ' dense' : '') + (veryDense ? ' very-dense' : '') + '">' + dayBands + hours + viewLine + releaseMarkers + '</div></div>' +
-      '<p class="sales-profit-note">Blue line: observed hourly long-form view increases; labelled green bars: paid orders (bar height follows the count, with four orders filling the scale unless a higher hour occurs). Alternating bands mark Bangkok calendar days; the bottom strip totals each day’s paid sales and cost-known estimated book gross profit (charged total minus BookVault cost, before Stripe fees). Orders awaiting a BookVault cost are counted as sales but omitted from profit and marked pending. Today is partial through the current hour. Gold labelled lines mark public long-form releases. Views are observed at hourly YouTube polls, not exact view times; missing hours appear as line gaps and partial coverage is noted in hour details. Sales use Stripe-paid orders at payment time (creation time if unavailable), excluding refunds and owner-marked tests. ◆ marks the public long-form release, not proof it caused later activity.</p>';
+      '<p class="sales-profit-note">Blue line: observed hourly long-form view increases; labelled green bars: paid orders (bar height follows the count, with four orders filling the scale unless a higher hour occurs). Alternating bands mark Bangkok calendar days; the bottom strip totals each day’s paid sales and cost-known estimated book gross profit (charged total minus BookVault cost, before Stripe fees). Orders awaiting a BookVault cost are counted as sales but omitted from profit and marked pending. Today is partial through the current hour. Gold labelled lines mark public long-form releases. Views are observed at hourly YouTube polls, not exact view times; one- or two-hour polling gaps are displayed as even per-hour estimates from the next measured increase, while longer gaps remain breaks. Raw measured totals are unchanged; hover/tap gives the gap detail, and partial coverage is noted in hour details. Sales use Stripe-paid orders at payment time (creation time if unavailable), excluding refunds and owner-marked tests. ◆ marks the public long-form release, not proof it caused later activity.</p>';
   }
 
   function bindSalesTiming(data) {

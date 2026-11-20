@@ -232,6 +232,23 @@ test('sales timing chart shows hourly views, paid orders, upload markers and all
     { at: '2026-11-19T17:00:00.000Z', views: 0, orders: 0, us_orders: 0, view_coverage: 'complete', uploads: [] }
   ] });
   assert.match(denseHtml, /class="sales-timing-grid dense very-dense"/);
+  const shortGapHtml = render({ days: 3, totals: { measured_views: 30, orders: 0, us_orders: 0 }, hourly: [
+    { at: '2026-11-13T12:00:00.000Z', views: 10, orders: 0, view_coverage: 'complete', uploads: [] },
+    { at: '2026-11-13T13:00:00.000Z', views: null, orders: 0, view_coverage: 'missing', uploads: [] },
+    { at: '2026-11-13T14:00:00.000Z', views: 20, orders: 0, view_coverage: 'complete', uploads: [] }
+  ] });
+  assert.match(shortGapHtml, /class="sales-timing-hour views-estimated"/);
+  assert.match(shortGapHtml, /No poll; chart estimates ~10\/hour from the next 2-hour gain/);
+  assert.match(shortGapHtml, /20 views measured across 2 hours; chart estimates ~10\/hour/);
+  assert.match(shortGapHtml, /<polyline points="7\.5,\d+ 22\.5,\d+ 37\.5,\d+"\/>/);
+  const longGapHtml = render({ days: 3, totals: { measured_views: 30, orders: 0, us_orders: 0 }, hourly: [
+    { at: '2026-11-13T10:00:00.000Z', views: 10, orders: 0, view_coverage: 'complete', uploads: [] },
+    { at: '2026-11-13T11:00:00.000Z', views: null, orders: 0, view_coverage: 'missing', uploads: [] },
+    { at: '2026-11-13T12:00:00.000Z', views: null, orders: 0, view_coverage: 'missing', uploads: [] },
+    { at: '2026-11-13T13:00:00.000Z', views: null, orders: 0, view_coverage: 'missing', uploads: [] },
+    { at: '2026-11-13T14:00:00.000Z', views: 20, orders: 0, view_coverage: 'complete', uploads: [] }
+  ] });
+  assert.doesNotMatch(longGapHtml, /views-estimated/);
   assert.match(source, /<section class="sales-block sales-timing-block"/);
   assert.match(source, /'\/api\/reports\/sales-timing\?days='/);
 });

@@ -23802,3 +23802,18 @@ too narrow; hour detail still provides the count, and release titles appear
 on hover/focus while their gold markers remain visible. The 3-day view
 remains the default, and the 7-day view keeps bar counts. Browser checks
 verify 3/7/14/21/30 day counts and full-width layout at desktop/phone sizes.
+
+## Short YouTube polling gaps no longer break the sales view line (2026-11-20)
+
+The long-form views line had visible one-hour breaks and adjacent spikes
+around the 13 November release. The private report shows no YouTube poll in
+those hours, with the next successful counter increase spanning both hours.
+The chart now spreads only one- or two-hour missed intervals and their next
+complete poll evenly across the covered hours for display. This keeps the
+line continuous without claiming the precise view time is known. It leaves
+the API's raw hourly readings and measured headline total untouched; hour
+hover/tap explains the estimated display values and the actual combined
+reading. Longer outages and the initial unknown baseline still render as
+gaps. The short-gap cells also no longer carry a misleading missing-data
+hatch behind the smoothed line. Focused tests cover short-gap smoothing and
+long-gap preservation; a browser preview was checked against the live data.
