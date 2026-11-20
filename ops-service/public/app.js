@@ -565,7 +565,9 @@
     var averageProfitPerDay = profitAvailable ? salesMoney(profitCents / periodDays) : '—';
     var profitCaveat = pendingCosts ? pendingCosts + ' order' + (pendingCosts === 1 ? '' : 's') + ' awaiting BookVault cost; excluded from profit' : 'Book gross profit before Stripe fees';
     var hourWidth = 15;
-    var viewHeight = 112;
+    // The blue line shares the whole plot above the daily summary, not just
+    // the upper half reserved by the old two-track chart layout.
+    var viewHeight = 231;
     var dense = Number(data.days) >= 14;
     var veryDense = Number(data.days) >= 21;
     var percentAt = function (index) { return (index / Math.max(1, bins.length) * 100).toFixed(5) + '%'; };
@@ -614,7 +616,7 @@
         if (viewRun.length) viewRuns.push(viewRun);
         viewRun = [];
       } else {
-        viewRun.push(((index + .5) * hourWidth) + ',' + (viewHeight - 9 - Math.round(plotViews[index] / maxViews * (viewHeight - 23))));
+        viewRun.push(((index + .5) * hourWidth) + ',' + (viewHeight - 8 - Math.round(plotViews[index] / maxViews * (viewHeight - 22))));
       }
       var tick = bkkHour === 0 ? date.toLocaleDateString('en-GB', { timeZone: 'Asia/Bangkok', day: 'numeric', month: 'short' }) : bkkHour === 12 ? '12h' : '';
       var uploads = Array.isArray(bin.uploads) ? bin.uploads : [];

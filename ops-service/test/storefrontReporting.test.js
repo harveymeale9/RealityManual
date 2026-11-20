@@ -216,6 +216,12 @@ test('sales timing chart shows hourly views, paid orders, upload markers and all
   assert.match(html, /class="sales-timing-grid"/);
   assert.match(html, /width:50\.00000%/);
   assert.match(html, /class="sales-timing-line"[^>]*width="100%"/);
+  assert.match(html, /viewBox="0 0 60 231"/);
+  const scaledHtml = render({ days: 3, totals: { measured_views: 3000, orders: 0, us_orders: 0 }, hourly: [
+    { at: '2026-11-19T15:00:00.000Z', views: 100, orders: 0, view_coverage: 'complete', uploads: [] },
+    { at: '2026-11-19T16:00:00.000Z', views: 2900, orders: 0, view_coverage: 'complete', uploads: [] }
+  ] });
+  assert.match(scaledHtml, /<polyline points="7\.5,216 22\.5,14"\/>/);
   assert.match(html, /1 sale<\/strong><small>Est book profit \$45\.00/);
   assert.match(html, /2 sales<\/strong><small>Est book profit \$20\.00 · 1 pending/);
   assert.match(html, /4 sales<\/strong><small>Est book profit \$0\.00/);

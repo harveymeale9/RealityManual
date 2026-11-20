@@ -23851,6 +23851,18 @@ figures; if all sold orders await costs, profit shows a dash. Averages divide
 by the selected 3/7/14/21/30 Bangkok calendar days including partial today.
 No reporting source or order state changed.
 
+## Full-height linear view scale in hourly Sales Analytics (2026-11-20)
+
+The blue hourly long-form view line looked vertically compressed and sat
+about two-thirds up the overall chart even at roughly 100 views/hour. Its
+numbers were already mapped linearly, but the SVG occupied only the former
+112-pixel upper track of a 231-pixel plot. The line now spans the full
+231-pixel plot above the daily sales/profit strip, with modest top/bottom
+padding and a zero baseline. Thus a 100-view hour sits near the bottom when
+the period peaks around 2,900 views/hour, while the peak sits near the top.
+The independent green sales bars, day bands, release markers, hourly data and
+totals are unchanged. A focused chart test locks the 100/2,900 coordinates.
+
 ## Facebook fallback for repeat failure on the 5.97 GB Friday long-form (2026-11-20)
 
 Friday's approved long-form `83d9ec23` published on YouTube, but its 5.97 GB
