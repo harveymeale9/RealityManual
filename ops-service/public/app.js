@@ -3694,7 +3694,9 @@
         '<div class="queue-map-lane"><small>SHORT</small><span>' + slotMarkers(day.publishedShortform.concat(day.shortform), 'Short-form') + '</span></div>' +
       '</div>';
     }).join('');
-    var longformSummary = summary('Long-form', runway.longform, 'Tuesday & Saturday · 10 p.m. Bangkok');
+    var longformSummary = summary('Long-form', runway.longform,
+      Date.now() < Date.parse('2026-11-22T15:00:00Z')
+        ? 'This week: Fri & Sun · 10 p.m.; then Tue/Sat' : 'Tuesday & Saturday · 10 p.m. Bangkok');
     queueCoverage.innerHTML = '<div class="queue-coverage-summary-row">' +
       longformSummary +
       summary('Short-form', runway.shortform, 'Buffer cadence') + '</div>' +

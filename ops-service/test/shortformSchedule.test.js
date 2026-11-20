@@ -53,7 +53,7 @@ test('topic scheduler can fill open short-form slots instead of appending after 
 test('longform uses Tuesday and Saturday at 10 p.m. Bangkok regardless of old anchor', function () {
   assert.equal(schedule.nextLongformSlot(Date.parse('2026-11-14T17:47:00Z'), schedule.LONGFORM_ANCHOR, 168), '2026-11-17T15:00:00.000Z');
   assert.equal(schedule.nextLongformSlot(Date.parse('2026-11-17T14:59:59Z')), '2026-11-17T15:00:00.000Z');
-  assert.equal(schedule.nextLongformSlot(Date.parse('2026-11-17T15:00:00Z')), '2026-11-21T15:00:00.000Z');
+  assert.equal(schedule.nextLongformSlot(Date.parse('2026-11-17T15:00:00Z')), '2026-11-24T15:00:00.000Z');
   assert.equal(schedule.nextLongformSlot(Date.parse('2026-11-21T15:00:00Z')), '2026-11-24T15:00:00.000Z');
 });
 
@@ -63,7 +63,7 @@ test('occupied long-form slots never shift the fixed calendar', function () {
   assert.equal(schedule.normalizeLongformIntervalHours(2.5), 168);
   assert.deepEqual(schedule.nextAvailableLongformSlots(Date.parse('2026-11-14T17:47:00Z'), schedule.LONGFORM_ANCHOR, 60,
     ['2026-11-17T15:00:00.000Z'], 3), [
-    '2026-11-21T15:00:00.000Z', '2026-11-24T15:00:00.000Z', '2026-11-28T15:00:00.000Z'
+    '2026-11-24T15:00:00.000Z', '2026-11-28T15:00:00.000Z', '2026-12-01T15:00:00.000Z'
   ]);
 });
 

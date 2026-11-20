@@ -98,6 +98,8 @@ function nextLongformSlot(after, anchor, intervalHours) {
   for (let offset = 0; offset < 8; offset++) {
     const day = midnight + offset * 86400000;
     if (![2, 6].includes(new Date(day).getUTCDay())) continue;
+    // One-off 20 November release replaces this Saturday with Sunday.
+    if (new Date(day).toISOString().slice(0, 10) === '2026-11-21') continue;
     const candidate = day + 22 * 3600000 - BANGKOK_OFFSET_MS;
     if (candidate > afterMs) return new Date(candidate).toISOString();
   }

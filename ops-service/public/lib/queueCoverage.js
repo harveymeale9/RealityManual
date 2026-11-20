@@ -33,14 +33,22 @@
     var slots = [];
     var cursor = now;
     while (slots.length < count) {
+      var specials = [Date.parse('2026-11-20T15:00:00.000Z'), Date.parse('2026-11-22T15:00:00.000Z')]
+        .filter(function (candidate) { return candidate > cursor; });
       var local = new Date(cursor + BANGKOK_OFFSET_MS);
       var midnight = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate());
+      var normal = null;
       for (var dayOffset = 0; dayOffset < 8 && slots.length < count; dayOffset++) {
         var day = midnight + dayOffset * DAY_MS;
         if ([2, 6].indexOf(new Date(day).getUTCDay()) === -1) continue;
+        if (new Date(day).toISOString().slice(0, 10) === '2026-11-21') continue;
         var candidate = day + 22 * 3600000 - BANGKOK_OFFSET_MS;
-        if (candidate > cursor) { slots.push(candidate); cursor = candidate; break; }
+        if (candidate > cursor) { normal = candidate; break; }
       }
+      var next = Math.min.apply(Math, (normal === null ? [] : [normal]).concat(specials));
+      if (!Number.isFinite(next)) break;
+      slots.push(next);
+      cursor = next;
     }
     return slots;
   }
@@ -82,7 +90,7 @@
 
   function coverageFor(type, pieces, now, slots, estimated) {
     var matches = pieces.filter(function (piece) { return type === 'longform' ? piece.contentType === 'longform' : isShort(piece); });
-    var waiting = matches.filter(isReady).length;
+    var waiting = matches.filter(isReady);
     var scheduled = matches.filter(function (piece) { return futureScheduled(piece, now); })
       .map(function (piece) { return timestamp(piece.scheduledAt); });
     var timeline = [];
@@ -96,7 +104,18 @@
       });
       var state = 'open';
       if (scheduledIndex !== -1) { state = 'scheduled'; scheduled.splice(scheduledIndex, 1); }
-      else if (waiting > 0) { state = 'queued'; waiting--; }
+      else {
+        var waitingIndex = waiting.findIndex(function (piece) {
+          if (type !== 'longform') return true;
+          if (piece.youtubeAdvanceDueAt) return timestamp(piece.youtubeAdvanceDueAt) === slot;
+          if (slot === Date.parse('2026-11-20T15:00:00.000Z')) {
+            return timestamp(piece.publishingQueuedAt) >= Date.parse('2026-11-20T04:03:13.000Z');
+          }
+          if (slot === Date.parse('2026-11-22T15:00:00.000Z')) return piece.id === '5574bd8e-d0f9-417c-8877-0d21f2db777a';
+          return piece.id !== '5574bd8e-d0f9-417c-8877-0d21f2db777a';
+        });
+        if (waitingIndex !== -1) { state = 'queued'; waiting.splice(waitingIndex, 1); }
+      }
       if (state === 'open' && deadline === null) deadline = slot - PREPARATION_LEAD_MS;
       timeline.push({ at: slot, state: state });
     }

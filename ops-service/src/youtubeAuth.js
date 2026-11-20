@@ -414,7 +414,8 @@ async function fetchVideoStatuses(accessToken, videoIds) {
       results.push({
         id: item.id,
         privacyStatus: item.status && item.status.privacyStatus || null,
-        uploadStatus: item.status && item.status.uploadStatus || null
+        uploadStatus: item.status && item.status.uploadStatus || null,
+        publishAt: item.status && item.status.publishAt || null
       });
     });
   }
@@ -433,6 +434,10 @@ async function uploadVideo(accessToken, filePath, mimeType, metadata) {
   const stat = fs.statSync(filePath);
   const privacyStatus = ['private', 'unlisted', 'public'].indexOf(metadata.privacyStatus) !== -1
     ? metadata.privacyStatus : 'private';
+  const publishAt = metadata.publishAt ? new Date(metadata.publishAt).toISOString() : null;
+  if (publishAt && (privacyStatus !== 'private' || Date.parse(publishAt) <= Date.now() + 60000)) {
+    throw new Error('Scheduled YouTube upload requires private visibility and a future publish time.');
+  }
 
   const initRes = await fetch(UPLOAD_URL, {
     method: 'POST',
@@ -447,7 +452,7 @@ async function uploadVideo(accessToken, filePath, mimeType, metadata) {
         title: (metadata.title || 'Untitled').slice(0, 100),
         description: (metadata.description || '').slice(0, 5000)
       },
-      status: { privacyStatus: privacyStatus }
+      status: Object.assign({ privacyStatus: privacyStatus }, publishAt ? { publishAt: publishAt } : {})
     })
   });
   if (!initRes.ok) throw new Error('YouTube upload session could not be created (' + initRes.status + '): ' + (await initRes.text()));

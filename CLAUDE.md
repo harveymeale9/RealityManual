@@ -23511,3 +23511,42 @@ test at 1052px and 390px verified the initial state, toggle, card visibility,
 heights, and persisted preference. This touches no backend runtime files, so
 deployment should not rebuild or restart the container. The 376-test suite
 passed after updating an obsolete exact CSS cache-buster assertion.
+
+## One-off Friday/Sunday long-form releases and advance YouTube scheduling (2026-11-20)
+
+Harvey requested the next newly approved long-form video for Friday 20 November
+at 22:00 Asia/Bangkok (15:00 UTC), the existing “Money only flows to people who
+understand this” card (`5574bd8e`) for Sunday 22 November at the same clock
+time, no long-form release on Saturday 21 November, then the normal Tuesday/
+Saturday 22:00 calendar from Tuesday 24 November. The next long-form queued
+after the request time (20 November 04:03:13 UTC) gets the Friday exception;
+the Friday slot is reserved for one card only. Money has a fixed Sunday
+reservation. The two other pre-existing queued long-form cards retain first
+claim on the next normal slots. Facebook catalog replay skips this Friday and
+Sunday so it does not collide with the special releases, then resumes its
+Wednesday/Friday/Sunday off-day calendar. The browser runway mirrors these
+one-off dates rather than showing the skipped Saturday slot.
+
+New long-form approvals now reserve their next free slot immediately. The
+server archives the reviewed final, expands its prepared YouTube description,
+uploads it privately to YouTube with `status.publishAt` at the reserved slot,
+verifies YouTube returned the same private schedule, and stores the video ID
+and watch URL. This makes the video available in YouTube Studio for Harvey's
+A/B setup before publication. The card then moves to Scheduled. Other direct
+destinations, notably Facebook, retain the existing release-time worker; Shorts
+and their platform paths are unchanged. A one-minute worker survives restarts,
+confirms YouTube's public state at release, and only then completes the card's
+YouTube status. If an upload starts but returns no ID, it is treated as
+ambiguous and is never uploaded a second time automatically; an owner alert
+requests manual channel inspection. Stale Kanban writes cannot change the
+reserved time or YouTube ID, and deletion of an uploaded/scheduled card is
+refused until its remote schedule is reconciled. The Money card's Sunday
+YouTube upload is deferred until the Friday card is confirmed scheduled (or
+the Friday slot passes), preventing a long Sunday upload from blocking tonight.
+
+The schedule API behavior was verified against Google's YouTube Data API
+`status.publishAt` documentation: a future publish time must accompany a
+private video. Unit tests cover the one-off cadence, replay skips, browser
+runway, scheduled upload payload, and status readback. The full 378-test suite
+passed before deployment. The deploy script must still drain any active
+desktop upload, Editor processing, or final-video build before restarting.

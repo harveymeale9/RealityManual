@@ -10,7 +10,10 @@ function bangkokSlot(now) {
   }).formatToParts(now).filter(function (part) { return part.type !== 'literal'; })
     .map(function (part) { return [part.type, part.value]; }));
   if (!['Wed', 'Fri', 'Sun'].includes(parts.weekday) || Number(parts.hour) !== 22) return '';
-  return parts.year + '-' + parts.month + '-' + parts.day;
+  const date = parts.year + '-' + parts.month + '-' + parts.day;
+  // These off-day slots are reserved for Harvey's one-off long-form releases.
+  if (date === '2026-11-20' || date === '2026-11-22') return '';
+  return date;
 }
 
 function eligibleJob(jobs, publishedIds) {

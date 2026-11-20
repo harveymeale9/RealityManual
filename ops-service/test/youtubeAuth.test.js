@@ -3,6 +3,37 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const youtubeAuth = require('../src/youtubeAuth');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+test('long-form upload sends a private future publishAt with its initial metadata', async function (t) {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-yt-schedule-'));
+  const videoPath = path.join(folder, 'final.mp4');
+  fs.writeFileSync(videoPath, Buffer.from('test video bytes'));
+  const publishAt = new Date(Date.now() + 7 * 86400000).toISOString();
+  const originalFetch = global.fetch;
+  t.after(function () { global.fetch = originalFetch; fs.rmSync(folder, { recursive: true, force: true }); });
+  let calls = 0;
+  global.fetch = async function (url, options) {
+    calls++;
+    if (calls === 1) {
+      const body = JSON.parse(options.body);
+      assert.equal(body.status.privacyStatus, 'private');
+      assert.equal(body.status.publishAt, publishAt);
+      assert.equal(body.snippet.title, 'Money');
+      return { ok: true, headers: { get: function () { return 'https://upload.example/session'; } } };
+    }
+    assert.equal(String(url), 'https://upload.example/session');
+    assert.equal(options.method, 'PUT');
+    for await (const chunk of options.body) { assert.ok(chunk.length); }
+    return { ok: true, json: async function () { return { id: 'scheduled-video' }; } };
+  };
+  assert.deepEqual(await youtubeAuth.uploadVideo('token', videoPath, 'video/mp4', {
+    title: 'Money', description: 'Description', privacyStatus: 'private', publishAt: publishAt
+  }), { videoId: 'scheduled-video' });
+  assert.equal(calls, 2);
+});
 
 test('YouTube selected JPEG is uploaded to the existing video, not another video upload', async function (t) {
   const originalFetch = global.fetch;
@@ -89,14 +120,14 @@ test('YouTube status lookup exposes public visibility and omits no ids itself', 
       json: async function () {
         return { items: [
           { id: 'public-id', status: { privacyStatus: 'public', uploadStatus: 'processed' } },
-          { id: 'private-id', status: { privacyStatus: 'private', uploadStatus: 'processed' } }
+          { id: 'private-id', status: { privacyStatus: 'private', uploadStatus: 'processed', publishAt: '2026-11-22T15:00:00Z' } }
         ] };
       }
     };
   };
   assert.deepEqual(await youtubeAuth.fetchVideoStatuses('synthetic-token', ['public-id', 'private-id', 'deleted-id']), [
-    { id: 'public-id', privacyStatus: 'public', uploadStatus: 'processed' },
-    { id: 'private-id', privacyStatus: 'private', uploadStatus: 'processed' }
+    { id: 'public-id', privacyStatus: 'public', uploadStatus: 'processed', publishAt: null },
+    { id: 'private-id', privacyStatus: 'private', uploadStatus: 'processed', publishAt: '2026-11-22T15:00:00Z' }
   ]);
 });
 

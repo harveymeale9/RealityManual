@@ -2058,6 +2058,7 @@ const SERVER_OWNED_PIECE_FIELDS = [
   'tiktokPublishDestination', 'instagramContainerId', 'instagramContainerCreatedAt',
   'youtubeThumbnailStatus', 'youtubeThumbnailError', 'youtubeThumbnailAttempts',
   'youtubeThumbnailNextAt', 'youtubeThumbnailUploadedAt',
+  'youtubeAdvanceDueAt', 'youtubeAdvanceStatus', 'youtubeAdvanceAlertSentAt',
   'youtubeDescriptionText', 'youtubeDescriptionSourceHash',
   'socialDescriptionText', 'socialDescriptionSourceHash'
 ];
@@ -2109,6 +2110,15 @@ app.put('/api/store/:storeName/:id', function (req, res) {
           if (Object.prototype.hasOwnProperty.call(existing, f)) req.body[f] = existing[f];
           else delete req.body[f];
         });
+        // Once YouTube owns the future publish instant, a stale board save
+        // cannot move the Facebook side to a different date or lose the ID.
+        if (existing.youtubeAdvanceStatus) {
+          for (const field of ['scheduledAt', 'youtubeVideoId', 'youtubeUrl', 'youtubePublishStatus',
+            'youtubePublishError', 'directLongformPublishStatus', 'scheduledPublishDestinations']) {
+            if (Object.prototype.hasOwnProperty.call(existing, field)) req.body[field] = existing[field];
+            else delete req.body[field];
+          }
+        }
       }
     }
     // A browser tab opened before §185 still constructs new planning cards
@@ -2201,6 +2211,10 @@ app.delete('/api/store/:storeName/:id', function (req, res) {
       if (current.stage === 'publishing_queue' && (publishingQueueClaims.has(id) || durableQueueClaim)) {
         return res.status(423).json({ error: 'queue_publish_in_progress',
           message: 'This video is already being scheduled. It was not deleted; refresh the board to see its current state.' });
+      }
+      if (current.youtubeVideoId && ['reserved', 'uploading', 'uploaded', 'scheduled'].includes(current.youtubeAdvanceStatus)) {
+        return res.status(423).json({ error: 'youtube_schedule_exists',
+          message: 'This card has an uploaded or scheduled YouTube video. Unschedule it on YouTube and reconcile the card before deleting.' });
       }
       if (!recordConcurrency.matchesPieceVersion(existingRow, req.get('x-record-version'))) {
         return res.status(409).json({
@@ -4009,6 +4023,150 @@ let publishingQueueDrainRunning = false;
 let publishingQueueDrainRequested = false;
 let publishingBufferScheduleCache = { expiresAt: 0, postingSchedule: [] };
 let publishRetryWorkerRunning = false;
+const ONE_OFF_MONEY_ID = '5574bd8e-d0f9-417c-8877-0d21f2db777a';
+const ONE_OFF_FRIDAY = '2026-11-20T15:00:00.000Z';
+const ONE_OFF_SUNDAY = '2026-11-22T15:00:00.000Z';
+const LONGFORM_ADVANCE_START = Date.parse('2026-11-20T04:03:13.000Z');
+let longformAdvanceRunning = false;
+
+function advancedLongformSlot(piece, pieces, now) {
+  if (!piece || piece.contentType !== 'longform' || piece.stage !== 'publishing_queue') return '';
+  if (!(piece.queuedPublishDestinations || []).some(function (item) { return item.platform === 'ytlong'; })) return '';
+  if (piece.id === ONE_OFF_MONEY_ID) return now < Date.parse(ONE_OFF_SUNDAY) - 60000 ? ONE_OFF_SUNDAY : '';
+  if (Date.parse(piece.publishingQueuedAt || '') < LONGFORM_ADVANCE_START) return '';
+  const reservedFriday = pieces.some(function (other) {
+    return other.id !== piece.id && (other.youtubeAdvanceDueAt === ONE_OFF_FRIDAY ||
+      (other.stage === 'scheduled' && other.scheduledAt === ONE_OFF_FRIDAY));
+  });
+  if (now < Date.parse(ONE_OFF_FRIDAY) - 60000 && !reservedFriday) return ONE_OFF_FRIDAY;
+  const occupied = pieces.filter(function (other) {
+    return other.id !== piece.id && other.contentType === 'longform' &&
+      (['scheduled', 'live'].includes(other.stage) || other.youtubeAdvanceDueAt);
+  }).map(function (other) { return other.youtubeAdvanceDueAt || other.scheduledAt || other.postedAt; });
+  // The pre-existing queue retains first claim on normal slots. Its Money
+  // card has a separately reserved Sunday release, not a Tuesday claim.
+  const legacyWaiting = pieces.filter(function (other) {
+    return other.id !== ONE_OFF_MONEY_ID && other.id !== piece.id && other.contentType === 'longform' &&
+      other.stage === 'publishing_queue' && !other.youtubeAdvanceDueAt &&
+      Date.parse(other.publishingQueuedAt || '') < LONGFORM_ADVANCE_START;
+  }).length;
+  return shortformSchedule.nextAvailableLongformSlots(now, null, null, occupied, legacyWaiting + 1)[legacyWaiting] || '';
+}
+
+async function advanceQueuedLongformYouTube() {
+  if (longformAdvanceRunning) return;
+  longformAdvanceRunning = true;
+  try {
+    const now = Date.now();
+    const candidates = allPieceRecords().filter(function (piece) {
+      return piece.stage === 'publishing_queue' && piece.contentType === 'longform' &&
+        (piece.id === ONE_OFF_MONEY_ID || Date.parse(piece.publishingQueuedAt || '') >= LONGFORM_ADVANCE_START);
+    }).sort(function (a, b) { return a.id === ONE_OFF_MONEY_ID ? -1 : b.id === ONE_OFF_MONEY_ID ? 1 :
+      Date.parse(a.publishingQueuedAt) - Date.parse(b.publishingQueuedAt); });
+    for (const candidate of candidates) {
+      let piece = getPieceRecord(candidate.id);
+      if (!piece || piece.stage !== 'publishing_queue' || !Array.isArray(piece.queuedPublishDestinations)) continue;
+      if (!piece.youtubeAdvanceStatus) {
+        const dueAt = advancedLongformSlot(piece, allPieceRecords(), now);
+        if (!dueAt) continue;
+        piece.youtubeAdvanceDueAt = dueAt;
+        piece.youtubeAdvanceStatus = 'reserved';
+        savePieceRecord(piece);
+      }
+      if (piece.id === ONE_OFF_MONEY_ID && now < Date.parse(ONE_OFF_FRIDAY) &&
+          !allPieceRecords().some(function (other) {
+            return other.id !== piece.id && other.youtubeAdvanceDueAt === ONE_OFF_FRIDAY &&
+              other.youtubeAdvanceStatus === 'scheduled';
+          })) continue;
+      if (piece.youtubeAdvanceStatus === 'uploading' || piece.youtubeAdvanceStatus === 'error') continue;
+      const destination = piece.queuedPublishDestinations.find(function (item) { return item.platform === 'ytlong'; });
+      if (!destination) continue;
+      try {
+        if (piece.youtubeAdvanceStatus === 'reserved') {
+          await ensurePublishMediaArchived(piece.id);
+          let description = destination.caption || '';
+          if (youtubeDescription.hasToken(description)) description = youtubeDescription.expand(description, await ensureYoutubeDescription(piece.id));
+          if (description.length > 5000) throw new Error('YouTube description exceeds 5,000 characters.');
+          const media = await localPublishMedia(piece.id);
+          piece = updatePieceFields(piece.id, { youtubeAdvanceStatus: 'uploading', youtubePublishStatus: 'running' });
+          let result;
+          try {
+            result = await youtubeAuth.uploadVideo(await getValidYoutubeAccessToken(), media.path,
+              piece.storageMimeType || 'video/mp4', { title: destination.title || 'Untitled',
+                description: maskCaption(description), privacyStatus: 'private', publishAt: piece.youtubeAdvanceDueAt });
+          } finally { media.cleanup(); }
+          piece = updatePieceFields(piece.id, { youtubeAdvanceStatus: 'uploaded', youtubeVideoId: result.videoId,
+            youtubeUrl: 'https://www.youtube.com/watch?v=' + result.videoId, youtubePublishType: 'ytlong' });
+        }
+        if (piece.youtubeAdvanceStatus !== 'uploaded' || !piece.youtubeVideoId) continue;
+        const statuses = await youtubeAuth.fetchVideoStatuses(await getValidYoutubeAccessToken(), [piece.youtubeVideoId]);
+        const status = statuses[0];
+        if (!status || status.privacyStatus !== 'private' ||
+            Date.parse(status.publishAt || '') !== Date.parse(piece.youtubeAdvanceDueAt)) {
+          throw new Error('YouTube did not confirm the private scheduled release time.');
+        }
+        const otherDestinations = piece.queuedPublishDestinations.filter(function (item) { return item.platform !== 'ytlong'; });
+        piece.stage = 'scheduled';
+        piece.scheduledAt = piece.youtubeAdvanceDueAt;
+        piece.youtubeAdvanceStatus = 'scheduled';
+        piece.youtubePublishStatus = 'scheduled';
+        piece.youtubePublishError = '';
+        piece.directLongformPublishStatus = otherDestinations.length ? 'scheduled' : 'not_required';
+        piece.scheduledPublishDestinations = otherDestinations;
+        piece.queuedPublishDestinations = [];
+        piece.publishingDequeuedAt = new Date().toISOString();
+        otherDestinations.forEach(function (item) { piece[publishStatusField(item.platform)] = 'scheduled'; });
+        piece.updatedAt = new Date().toISOString();
+        savePieceRecord(piece);
+        try { await syncYouTubeThumbnail(piece.id); }
+        catch (thumbnailError) { console.warn('Scheduled YouTube thumbnail deferred:', thumbnailError.message); }
+        await releaseLocalPublishMedia(piece.id);
+        console.log('YouTube long-form scheduled for ' + piece.id.slice(0, 8) + ' at ' + piece.scheduledAt);
+      } catch (error) {
+        console.error('Advance YouTube scheduling failed for ' + piece.id + ':', error.message);
+        const latest = getPieceRecord(piece.id);
+        if (!latest) continue;
+        // An upload that started but returned no ID is ambiguous. Never send
+        // another copy automatically; Harvey can inspect the channel first.
+        const uploadedId = latest.youtubeVideoId;
+        updatePieceFields(piece.id, { youtubeAdvanceStatus: uploadedId ? 'uploaded' : 'error',
+          youtubePublishStatus: 'error', youtubePublishError: String(error.message || error).slice(0, 500) });
+        if (!latest.youtubeAdvanceAlertSentAt) {
+          try {
+            await mailbox.sendAutomated({ to: [process.env.PUBLISH_ALERT_RECIPIENT || 'harveymeale9@gmail.com'], cc: [],
+              subject: 'YouTube scheduling needs attention: ' + String(latest.title || '').slice(0, 150),
+              textBody: 'The long-form upload was not confirmed for ' + latest.youtubeAdvanceDueAt +
+                '. No second upload will be attempted automatically. Please inspect YouTube Studio.\n\n' + error.message });
+            updatePieceFields(piece.id, { youtubeAdvanceAlertSentAt: new Date().toISOString() });
+          } catch (mailError) { console.error('YouTube scheduling alert failed:', mailError.message); }
+        }
+      }
+    }
+  } finally { longformAdvanceRunning = false; }
+}
+
+async function reconcileAdvancedLongformYouTube() {
+  const due = allPieceRecords().filter(function (piece) {
+    return piece.stage === 'scheduled' && piece.youtubeAdvanceStatus === 'scheduled' &&
+      piece.youtubeVideoId && Date.parse(piece.scheduledAt) <= Date.now();
+  });
+  if (!due.length) return;
+  const statuses = await youtubeAuth.fetchVideoStatuses(await getValidYoutubeAccessToken(), due.map(function (piece) { return piece.youtubeVideoId; }));
+  const byId = new Map(statuses.map(function (status) { return [status.id, status]; }));
+  for (const piece of due) {
+    const status = byId.get(piece.youtubeVideoId);
+    if (!status || status.privacyStatus !== 'public') continue;
+    const latest = getPieceRecord(piece.id);
+    if (!latest || latest.youtubeAdvanceStatus !== 'scheduled') continue;
+    latest.youtubePublishStatus = 'done';
+    latest.youtubeAdvanceStatus = 'published';
+    latest.stage = publishBatchState.completedStage(latest, latest.publishBatchPlatforms) || latest.stage;
+    if (latest.stage === 'live') latest.directLongformPublishStatus = 'done';
+    if (latest.stage === 'live' && !latest.postedAt) latest.postedAt = latest.scheduledAt;
+    latest.updatedAt = new Date().toISOString();
+    savePieceRecord(latest);
+  }
+}
 
 async function retryFailedPlatforms() {
   if (publishRetryWorkerRunning) return;
@@ -4106,7 +4264,8 @@ async function drainPublishingQueue() {
   const now = Date.now();
   const pieces = allPieceRecords();
   const queued = pieces.filter(function (piece) {
-    return piece.stage === 'publishing_queue' && Array.isArray(piece.queuedPublishDestinations) && piece.queuedPublishDestinations.length;
+    return piece.stage === 'publishing_queue' && !piece.youtubeAdvanceStatus &&
+      Array.isArray(piece.queuedPublishDestinations) && piece.queuedPublishDestinations.length;
   });
   const queues = publishingQueue.readyQueues(queued, pieces);
   let activeQueue = null;
@@ -4635,6 +4794,11 @@ app.post('/api/publish/:id', requireAuthOrReviewer, async function (req, res) {
     piece.order = (queueOrders.length ? Math.max.apply(Math, queueOrders) : 0) + 10;
     piece.publishingQueuedAt = piece.publishingQueuedAt || new Date().toISOString();
     piece.queuedPublishDestinations = destinations;
+    const advancedDueAt = advancedLongformSlot(piece, allPieceRecords(), Date.now());
+    if (advancedDueAt) {
+      piece.youtubeAdvanceDueAt = advancedDueAt;
+      piece.youtubeAdvanceStatus = 'reserved';
+    }
   }
   piece.updatedAt = new Date().toISOString();
   savePieceRecord(piece);
@@ -4646,6 +4810,7 @@ app.post('/api/publish/:id', requireAuthOrReviewer, async function (req, res) {
   });
   if (reviewerPublish) runPlatformPublishBatch(id, destinations).catch(function (error) { console.error('unhandled reviewer publish error for ' + id + ':', error.message); });
   else {
+    advanceQueuedLongformYouTube().catch(function (error) { console.error('new long-form advance scheduling failed:', error.message); });
     schedulePublishingQueueDrain();
     archiveQueuedPublishMedia().catch(function (error) { console.error('new queue media archive failed:', error.message); });
   }
@@ -5578,6 +5743,12 @@ const httpServer = app.listen(PORT, function () {
   if (facebookReplayTimer.unref) facebookReplayTimer.unref();
   recoverInflightVoiceMessages();
   recoverInflightVideoJobs();
+  advanceQueuedLongformYouTube().catch(function (error) { console.error('initial long-form advance scheduling failed:', error.message); });
+  const advanceLongformTimer = setInterval(function () {
+    advanceQueuedLongformYouTube().catch(function (error) { console.error('long-form advance scheduling failed:', error.message); });
+    reconcileAdvancedLongformYouTube().catch(function (error) { console.error('long-form YouTube reconciliation failed:', error.message); });
+  }, 60 * 1000);
+  if (advanceLongformTimer.unref) advanceLongformTimer.unref();
   schedulePublishingQueueDrain();
   archiveQueuedPublishMedia().catch(function (error) { console.error('initial queue media archive failed:', error.message); });
   const queueArchiveTimer = setInterval(function () {

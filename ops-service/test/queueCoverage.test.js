@@ -29,7 +29,21 @@ test('runway follows Tuesday and Saturday long-form slots, not previous publicat
   assert.equal(result.longform.timeline[1].state, 'open');
   assert.equal(result.longform.timeline[0].at,
     Date.parse(cadence.nextAvailableLongformSlots(NOW, cadence.LONGFORM_ANCHOR, 60, [pieces[0].postedAt], 1)[0]));
-  assert.equal(new Date(result.longform.timeline[14].at).toISOString(), '2026-12-05T15:00:00.000Z');
+  assert.equal(new Date(result.longform.timeline[14].at).toISOString(), '2026-12-01T15:00:00.000Z');
+});
+
+test('one-off Friday and Sunday releases replace Saturday without consuming the old queue early', function () {
+  const now = Date.parse('2026-11-20T04:00:00Z');
+  const money = Object.assign(ready('5574bd8e-d0f9-417c-8877-0d21f2db777a', 'longform'),
+    { publishingQueuedAt: '2026-11-15T06:53:42Z' });
+  const old = Object.assign(ready('old', 'longform'), { publishingQueuedAt: '2026-11-15T09:21:25Z' });
+  const result = coverage.calculate({ pieces: [money, old], now: now, postingSchedule: DAILY }).longform;
+  assert.deepEqual(result.timeline.slice(0, 4).map(function (slot) { return [new Date(slot.at).toISOString(), slot.state]; }), [
+    ['2026-11-20T15:00:00.000Z', 'open'],
+    ['2026-11-22T15:00:00.000Z', 'queued'],
+    ['2026-11-24T15:00:00.000Z', 'queued'],
+    ['2026-11-28T15:00:00.000Z', 'open']
+  ]);
 });
 
 test('legacy hour setting cannot move the long-form chart', function () {
