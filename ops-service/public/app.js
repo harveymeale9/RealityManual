@@ -3776,7 +3776,9 @@
         var stateLabel = slot.state === 'open' ? 'Needs a video' : slot.state === 'scheduled' ? 'Scheduled' :
           slot.state === 'published' ? 'Published' : 'Ready in queue';
         var detail = label + ' · ' + timeLabel(slot.at) + ' · ' + stateLabel;
-        return '<span class="queue-map-slot queue-map-slot--' + slot.state + '" title="' + escapeHtml(detail) +
+        if (slot.title) detail += ' · ' + (slot.state === 'queued' ? 'Tentative: ' : '') + slot.title;
+        if (slot.state === 'queued' && slot.title) detail += ' (final choice nearer the slot)';
+        return '<span class="queue-map-slot queue-map-slot--' + slot.state + '" tabindex="0" title="' + escapeHtml(detail) +
           '" aria-label="' + escapeHtml(detail) + '">' + (slot.state === 'open' ? '!' : '✓') + '</span>';
       }).join('');
     }

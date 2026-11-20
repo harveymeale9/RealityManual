@@ -28,6 +28,9 @@
       Array.isArray(piece.queuedPublishDestinations) && piece.queuedPublishDestinations.length > 0;
   }
   function futureScheduled(piece, now) { return piece && piece.stage === 'scheduled' && timestamp(piece.scheduledAt) > now; }
+  function videoTitle(piece) {
+    return String(piece && ((Array.isArray(piece.ytTitles) && piece.ytTitles[0]) || piece.title) || '').trim();
+  }
 
   function longformSlots(now, anchor, intervalHours, count, releaseOnNext) {
     var slots = [];
@@ -92,18 +95,23 @@
     var matches = pieces.filter(function (piece) { return type === 'longform' ? piece.contentType === 'longform' : isShort(piece); });
     var waiting = matches.filter(isReady);
     var scheduled = matches.filter(function (piece) { return futureScheduled(piece, now); })
-      .map(function (piece) { return timestamp(piece.scheduledAt); });
+      .map(function (piece) { return { at: timestamp(piece.scheduledAt), title: videoTitle(piece) }; });
     var timeline = [];
     var deadline = null;
     for (var i = 0; i < slots.length; i++) {
       var slot = slots[i];
-      var scheduledIndex = scheduled.findIndex(function (value) {
+      var scheduledIndex = scheduled.findIndex(function (item) {
         return estimated
-          ? localDayKey(value) === localDayKey(slot)
-          : Math.abs(value - slot) < 60 * 60000;
+          ? localDayKey(item.at) === localDayKey(slot)
+          : Math.abs(item.at - slot) < 60 * 60000;
       });
       var state = 'open';
-      if (scheduledIndex !== -1) { state = 'scheduled'; scheduled.splice(scheduledIndex, 1); }
+      var title = '';
+      if (scheduledIndex !== -1) {
+        state = 'scheduled';
+        title = scheduled[scheduledIndex].title;
+        scheduled.splice(scheduledIndex, 1);
+      }
       else {
         var waitingIndex = waiting.findIndex(function (piece) {
           if (type !== 'longform') return true;
@@ -114,10 +122,14 @@
           if (slot === Date.parse('2026-11-22T15:00:00.000Z')) return piece.id === '5574bd8e-d0f9-417c-8877-0d21f2db777a';
           return piece.id !== '5574bd8e-d0f9-417c-8877-0d21f2db777a';
         });
-        if (waitingIndex !== -1) { state = 'queued'; waiting.splice(waitingIndex, 1); }
+        if (waitingIndex !== -1) {
+          state = 'queued';
+          title = videoTitle(waiting[waitingIndex]);
+          waiting.splice(waitingIndex, 1);
+        }
       }
       if (state === 'open' && deadline === null) deadline = slot - PREPARATION_LEAD_MS;
-      timeline.push({ at: slot, state: state });
+      timeline.push({ at: slot, state: state, title: title });
     }
     var covered = timeline.findIndex(function (item) { return item.state === 'open'; });
     if (covered === -1) covered = timeline.length;
@@ -154,9 +166,9 @@
       var publishedToday = published.filter(function (item) { return localDayKey(item.at) === key; });
       days.push({ at: at, today: day === 0,
         publishedLongform: publishedToday.filter(function (item) { return item.piece.contentType === 'longform'; })
-          .map(function (item) { return { at: item.at, state: 'published' }; }),
+          .map(function (item) { return { at: item.at, state: 'published', title: videoTitle(item.piece) }; }),
         publishedShortform: publishedToday.filter(function (item) { return isShort(item.piece); })
-          .map(function (item) { return { at: item.at, state: 'published' }; }),
+          .map(function (item) { return { at: item.at, state: 'published', title: videoTitle(item.piece) }; }),
         longform: longform.allSlots.filter(function (slot) { return localDayKey(slot.at) === key; }),
         shortform: shortform.allSlots.filter(function (slot) { return localDayKey(slot.at) === key; }) });
     }

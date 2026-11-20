@@ -90,6 +90,20 @@ test('short-form runway counts the actual Buffer calendar and scheduled inventor
   assert.equal(new Date(result.nextNeededAt).toISOString(), '2026-10-19T18:35:00.000Z');
 });
 
+test('runway slots carry scheduled titles and identify queued titles as tentative candidates', function () {
+  const now = Date.parse('2026-11-20T04:00:00Z');
+  const pieces = [
+    { id: 'fixed', contentType: 'longform', stage: 'scheduled', scheduledAt: '2026-11-20T15:00:00Z',
+      title: 'Planning title', ytTitles: ['Published YouTube title'] },
+    Object.assign(ready('5574bd8e-d0f9-417c-8877-0d21f2db777a', 'longform'), { title: 'Money video' }),
+    Object.assign(ready('another', 'longform'), { title: 'Queue candidate' })
+  ];
+  const result = coverage.calculate({ pieces: pieces, now: now, postingSchedule: DAILY }).longform;
+  assert.deepEqual(result.timeline.slice(0, 3).map(function (slot) { return [slot.state, slot.title]; }), [
+    ['scheduled', 'Published YouTube title'], ['queued', 'Money video'], ['queued', 'Queue candidate']
+  ]);
+});
+
 test('when Buffer is unavailable, short dates are labelled estimates from the last real slot', function () {
   const pieces = [{ id: 'last', contentType: 'short', stage: 'live', scheduledAt: '2026-10-14T19:03:20Z' }, ready('one', 'short')];
   const result = coverage.calculate({ pieces: pieces, now: NOW }).shortform;

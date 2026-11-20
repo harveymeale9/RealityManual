@@ -23708,3 +23708,17 @@ says when no release falls in the selected period. On 2026-11-20 the three-day
 window had only one-sale nonempty hours and no releases, so its identical
 nonzero bar heights and missing release marker were accurate data, not a chart
 failure; the seven-day period contained one-to-four-sale hours and a release.
+
+## Publishing runway shows long-form video titles on slot hover (2026-11-20)
+
+The Content Ops 15-day publishing map's slot markers now carry the matched
+video title in their native hover tooltip and accessible label. Fixed blue
+Scheduled long-form slots show the actual scheduled piece's first YouTube
+title when present (falling back to the board title). Green ready-in-queue
+slots show the currently matched queue candidate, explicitly marked
+"Tentative" because the release-time selection can change; published markers
+also carry titles. Open slots still say they need a video. This is entirely a
+browser display change: no posting times, reservations, or queue state change.
+The slot calculation retains the title alongside each matched scheduled or
+queued piece, and all markers are keyboard focusable. The app, CSS, and runway
+module cache keys were updated together.

@@ -1935,6 +1935,7 @@ body.role-reviewer .positive-comments { display: none; }
 .queue-map-lane small { color: var(--ink-faint); font-size: .52rem; letter-spacing: .03em; }
 .queue-map-lane > span { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px; }
 .queue-map-slot { display: inline-grid; place-items: center; width: 19px; height: 19px; border-radius: 5px; font-size: .65rem; font-weight: 800; }
+.queue-map-slot:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .queue-map-slot--queued { color: #07180f; background: var(--accent); }
 .queue-map-slot--published { color: #270806; background: #ff716c; }
 .queue-map-slot--scheduled { color: #091728; background: #62a8ff; }
