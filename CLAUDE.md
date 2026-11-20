@@ -23617,3 +23617,18 @@ unassigned, and missing/partially sampled hours are marked. Thus bars show
 the simultaneous release/order markers establish correlation only, not cause.
 The current hour may be incomplete. Focused time-zone, payment, exclusion,
 counter-baseline and chart tests pass, as does the 381-test ops-service suite.
+
+## Face-reveal email draft and empty destination (2026-11-20)
+
+Harvey requested a draft email matching his black-and-gold face-reveal reference,
+but with a portrait video thumbnail. `frontend/email-preview/face-reveal.html` is
+the standalone, table-based HTML email preview. Its image and CTA both link to
+`https://realitymanual.com/iloveyou`; its portrait poster is hosted at
+`frontend/img/email/face-reveal-portrait.png`. The poster was generated from
+the supplied visual reference as a blurred, non-identifiable speaker with a
+baked-in play icon, so an email client need not support video or layered CSS.
+`frontend/iloveyou/index.html` is intentionally an empty, noindex destination.
+The preview is unlinked and noindex, not wired to Resend, any contact list, or
+an automatic send. A real campaign would need its final video/destination,
+recipient consent and unsubscribe handling before sending. Desktop and mobile
+browser previews were checked with the local poster loaded.
