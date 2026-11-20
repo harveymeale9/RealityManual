@@ -2700,7 +2700,7 @@ body.role-reviewer .positive-comments { display: none; }
 .sales-timing-orders i { display: block; width: 100%; min-height: 0; border-radius: 2px 2px 0 0; }
 .sales-timing-orders i { background: linear-gradient(to top,#68f7a4 0 var(--us-share),#267a4b var(--us-share) 100%); }
 .sales-timing-hour.views-missing .sales-timing-views { background: repeating-linear-gradient(45deg,rgba(93,111,100,.13),rgba(93,111,100,.13) 2px,transparent 2px,transparent 5px); }
-.sales-timing-hour.views-partial .sales-timing-views { background: rgba(251,202,97,.15); }
+.sales-timing-hour.views-partial .sales-timing-views { background: repeating-linear-gradient(90deg,rgba(120,186,255,.13),rgba(120,186,255,.13) 2px,transparent 2px,transparent 5px); }
 .sales-timing-hour.has-upload::after { content: ''; position: absolute; z-index: 3; top: 13px; bottom: 25px; left: 50%; border-left: 2px dashed #ffc86a; pointer-events: none; }
 .sales-timing-upload { position: absolute; z-index: 4; top: -7px; left: 0; width: 100%; color: #ffc86a; font-size: .75rem; text-align: center; text-shadow: 0 0 5px #111; }
 .sales-timing-line { position: absolute; z-index: 2; top: 0; left: 0; overflow: visible; pointer-events: none; filter: drop-shadow(0 0 3px rgba(120,186,255,.4)); }
