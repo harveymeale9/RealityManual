@@ -198,6 +198,9 @@ test('sales timing chart shows hourly views, paid orders, upload markers and all
   assert.match(html, /35 measured long-form views/);
   assert.match(html, /Long-form views per sale <b>5<\/b>/);
   assert.match(html, /Average sales per day <b>2\.3<\/b>/);
+  assert.match(html, /Total sales over period<\/span><strong>7<\/strong>/);
+  assert.match(html, /Total profit over period<\/span><strong>\$65\.00<\/strong><small>1 cost pending<\/small>/);
+  assert.match(html, /Average profit per day<\/span><strong>\$21\.67<\/strong>/);
   assert.doesNotMatch(html, /◆ Long-form published/);
   assert.match(html, /all sales; not attributed/);
   assert.match(html, /4 paid orders \(0 US\)/);
@@ -220,16 +223,21 @@ test('sales timing chart shows hourly views, paid orders, upload markers and all
   assert.match(html, /height:50%"><b>2<\/b>/);
   assert.match(html, /height:100%"><b>4<\/b>/);
   assert.doesNotMatch(html, /--us-share/);
-  assert.match(html, /not proof it caused later activity/);
+  assert.doesNotMatch(html, /Blue line: observed hourly/);
   const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'style.css'), 'utf8');
   assert.doesNotMatch(css, /\.sales-timing-hour\.views-partial \.sales-timing-views\s*\{/);
-  assert.match(html, /partial coverage is noted in hour details/);
   const noUploadHtml = render({ days: 3, totals: { measured_views: 0, orders: 0, us_orders: 0 }, hourly: [
     { at: '2026-11-20T16:00:00.000Z', views: 0, orders: 0, us_orders: 0, view_coverage: 'complete', uploads: [] }
   ] });
   assert.match(noUploadHtml, /Average sales per day <b>0\.0<\/b>/);
+  assert.match(noUploadHtml, /Total profit over period<\/span><strong>\$0\.00<\/strong>/);
   assert.match(noUploadHtml, /Long-form views per sale <b>—<\/b>/);
   assert.doesNotMatch(noUploadHtml, /class="sales-timing-release"/);
+  const pendingOnlyHtml = render({ days: 3, totals: { measured_views: 0, orders: 1, us_orders: 0 }, hourly: [
+    { at: '2026-11-20T16:00:00.000Z', views: 0, orders: 1, us_orders: 0, gross_profit_cents: 0, profit_pending_orders: 1, view_coverage: 'complete', uploads: [] }
+  ] });
+  assert.match(pendingOnlyHtml, /Total profit over period<\/span><strong>—<\/strong><small>1 cost pending<\/small>/);
+  assert.match(pendingOnlyHtml, /Average profit per day<\/span><strong>—<\/strong>/);
   const denseHtml = render({ days: 30, totals: { measured_views: 0, orders: 0, us_orders: 0 }, hourly: [
     { at: '2026-11-19T17:00:00.000Z', views: 0, orders: 0, us_orders: 0, view_coverage: 'complete', uploads: [] }
   ] });

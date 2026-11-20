@@ -23837,3 +23837,16 @@ denominator even when partial, matching the selected calendar-day window.
 The redundant “Long-form published” legend text was removed; the gold
 upload lines and title hover/tap details remain in the graph. No sales data
 or upload scheduling changed.
+
+## Period sales/profit summary beneath hourly chart (2026-11-20)
+
+Harvey replaced the dense explanatory paragraph below the hourly chart with
+four selected-period figures: total paid sales, total estimated book gross
+profit, average sales per Bangkok day, and average estimated book gross
+profit per Bangkok day. The repeated “total profit” in the voice request is
+treated as one metric. Profit sums the same cost-known hourly amounts as the
+daily footer (charged total less saved BookVault cost, before Stripe fees),
+and pending-cost orders remain in sales but are excluded and marked on profit
+figures; if all sold orders await costs, profit shows a dash. Averages divide
+by the selected 3/7/14/21/30 Bangkok calendar days including partial today.
+No reporting source or order state changed.

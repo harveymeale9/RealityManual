@@ -556,7 +556,14 @@
     var measuredViews = Number(data.totals.measured_views || 0);
     var paidOrders = Number(data.totals.orders || 0);
     var viewsPerSale = measuredViews > 0 && paidOrders > 0 ? Math.round(measuredViews / paidOrders).toLocaleString() : '—';
-    var averageSalesPerDay = (paidOrders / Math.max(1, Number(data.days) || 1)).toFixed(1);
+    var periodDays = Math.max(1, Number(data.days) || 1);
+    var averageSalesPerDay = (paidOrders / periodDays).toFixed(1);
+    var profitCents = bins.reduce(function (sum, bin) { return sum + (Number(bin.gross_profit_cents) || 0); }, 0);
+    var pendingCosts = bins.reduce(function (sum, bin) { return sum + (Number(bin.profit_pending_orders) || 0); }, 0);
+    var profitAvailable = !paidOrders || pendingCosts < paidOrders;
+    var totalProfit = profitAvailable ? salesMoney(profitCents) : '—';
+    var averageProfitPerDay = profitAvailable ? salesMoney(profitCents / periodDays) : '—';
+    var profitCaveat = pendingCosts ? pendingCosts + ' order' + (pendingCosts === 1 ? '' : 's') + ' awaiting BookVault cost; excluded from profit' : 'Book gross profit before Stripe fees';
     var hourWidth = 15;
     var viewHeight = 112;
     var dense = Number(data.days) >= 14;
@@ -653,7 +660,11 @@
       '<span class="avg-sales" title="Stripe-paid, non-refunded orders divided by the selected number of Bangkok calendar days, including today if selected.">Average sales per day <b>' + averageSalesPerDay + '</b></span></div>' +
       '<p class="sales-timing-detail" aria-live="polite">Point at or tap an hour for Bangkok and New York times, views, sales and upload titles.</p>' +
       '<div class="sales-timing-scroll" role="group" aria-label="Hourly views and paid orders"><div class="sales-timing-grid' + (dense ? ' dense' : '') + (veryDense ? ' very-dense' : '') + '">' + dayBands + hours + viewLine + releaseMarkers + '</div></div>' +
-      '<p class="sales-profit-note">Blue line: observed hourly long-form view increases; labelled green bars: paid orders (bar height follows the count, with four orders filling the scale unless a higher hour occurs). Alternating bands mark Bangkok calendar days; the bottom strip totals each day’s paid sales and cost-known estimated book gross profit (charged total minus BookVault cost, before Stripe fees). Orders awaiting a BookVault cost are counted as sales but omitted from profit and marked pending. Today is partial through the current hour. Gold labelled lines mark public long-form releases. Views are observed at hourly YouTube polls, not exact view times; one- or two-hour polling gaps are displayed as even per-hour estimates from the next measured increase, while longer gaps remain breaks. Raw measured totals are unchanged; hover/tap gives the gap detail, and partial coverage is noted in hour details. Sales use Stripe-paid orders at payment time (creation time if unavailable), excluding refunds and owner-marked tests. ◆ marks the public long-form release, not proof it caused later activity.</p>';
+      '<div class="sales-timing-period-summary" aria-label="Selected period sales and estimated book profit">' +
+      '<div><span>Total sales over period</span><strong>' + paidOrders.toLocaleString() + '</strong></div>' +
+      '<div title="' + escapeHtml(profitCaveat) + '"><span>Total profit over period</span><strong>' + totalProfit + '</strong>' + (pendingCosts ? '<small>' + pendingCosts + ' cost pending</small>' : '') + '</div>' +
+      '<div><span>Average sales per day</span><strong>' + averageSalesPerDay + '</strong></div>' +
+      '<div title="' + escapeHtml(profitCaveat) + '"><span>Average profit per day</span><strong>' + averageProfitPerDay + '</strong>' + (pendingCosts ? '<small>Known costs only</small>' : '') + '</div></div>';
   }
 
   function bindSalesTiming(data) {

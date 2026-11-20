@@ -2720,7 +2720,12 @@ body.role-reviewer .positive-comments { display: none; }
 .sales-timing-line circle { fill: #82c7ff; }
 .sales-timing-line polyline,.sales-timing-line circle { vector-effect: non-scaling-stroke; }
 .sales-timing-tick { display: none; }
-.sales-timing-block .sales-profit-note { margin: 8px 17px 13px; }
+.sales-timing-period-summary { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; margin: 10px 17px 14px; }
+.sales-timing-period-summary > div { min-width: 0; padding: 12px 14px; border: 1px solid var(--border-soft); border-radius: 6px; background: var(--surface-2); }
+.sales-timing-period-summary span,.sales-timing-period-summary small { display: block; color: var(--ink-soft); font: .65rem/1.35 var(--font-body); }
+.sales-timing-period-summary strong { display: block; margin-top: 5px; color: var(--accent); font: 600 1.25rem var(--font-display); font-variant-numeric: tabular-nums; }
+.sales-timing-period-summary small { margin-top: 3px; color: var(--ink-faint); }
+@media(max-width:700px){.sales-timing-period-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:9px 12px 13px}.sales-timing-period-summary>div{padding:9px 10px}.sales-timing-period-summary span{font-size:.59rem}.sales-timing-period-summary strong{font-size:1.1rem}}
 .sales-country-block { margin-bottom: 14px; }
 .website-health { margin: 18px 0; padding: 20px; border: 1px solid var(--border); border-radius: 10px; background: rgba(8,18,12,.94); }
 .website-health-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
