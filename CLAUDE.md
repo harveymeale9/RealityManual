@@ -23751,3 +23751,13 @@ and the worker retains its private `publishAt` verification and no-duplicate
 ambiguous-upload handling. Friday's and Sunday's existing reservations are
 untouched. Behavioral tests verify each exact slot, the legacy cutoff, and
 collision refusal.
+
+Deployment completed at commit `3079348`. The advance worker verified both
+YouTube videos as private with the exact `publishAt` values above, then saved
+their Scheduled cards: Tuesday video ID `zMKc8pPJvYg`, Saturday video ID
+`mFXDE_IopYs`. Both thumbnail syncs report `done`; their Facebook destinations
+remain Scheduled for the same respective slots. Friday's `83d9ec23` and
+Sunday's `5574bd8e` remained at their original 15:00 UTC slots. No duplicate
+YouTube upload was made. The 387-test suite passed on the second full run;
+an unrelated timing-sensitive Editor restart test failed only on the first
+full run and passed in isolation before the clean full rerun.
