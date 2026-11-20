@@ -8,27 +8,15 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   e866a8d..aae3aae  main       -> origin/main
+   aae3aae..42fddb0  main       -> origin/main
 + git merge --ff-only origin/main
-Updating e866a8d..aae3aae
+Updating aae3aae..42fddb0
 Fast-forward
- CLAUDE.md                                      |   40 +
- frontend/email-preview/face-reveal.html        |   37 +
- frontend/iloveyou/index.html                   |   10 +
- frontend/img/email/face-reveal-portrait-v2.png |  Bin 0 -> 1735908 bytes
- frontend/img/email/face-reveal-portrait.png    |  Bin 0 -> 1744962 bytes
- ops-service/.ci/last-run.log                   | 8788 +++++++++++++++++++++++-
- ops-service/public/app.js                      |   29 +-
- ops-service/public/index.html                  |    4 +-
- ops-service/public/style.css                   |   21 +-
- ops-service/test/storefrontReporting.test.js   |   10 +-
- 10 files changed, 8636 insertions(+), 303 deletions(-)
- create mode 100644 frontend/email-preview/face-reveal.html
- create mode 100644 frontend/iloveyou/index.html
- create mode 100644 frontend/img/email/face-reveal-portrait-v2.png
- create mode 100644 frontend/img/email/face-reveal-portrait.png
+ ops-service/.ci/last-run.log | 13841 +----------------------------------------
+ ops-service/public/style.css |     2 +-
+ 2 files changed, 28 insertions(+), 13815 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=aae3aae7ca9eef66507cf09faac76778d2eb6e1a
++ NEW_HEAD=42fddb04b0ce2f6eb3895c1ae34bf1e275cf4a28
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -41,12 +29,12 @@ Already up to date.
 + NEEDS_REBUILD=1
 + '[' -n e866a8dfe5edbd570c82f0e187c9c50b1a125fca ']'
 + git cat-file -e 'e866a8dfe5edbd570c82f0e187c9c50b1a125fca^{commit}'
-++ git diff --name-only e866a8dfe5edbd570c82f0e187c9c50b1a125fca aae3aae7ca9eef66507cf09faac76778d2eb6e1a -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
+++ git diff --name-only e866a8dfe5edbd570c82f0e187c9c50b1a125fca 42fddb04b0ce2f6eb3895c1ae34bf1e275cf4a28 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z '' ']'
 + NEEDS_REBUILD=0
 + '[' 0 = 1 ']'
 + '[' 0 = 0 ']'
-+ echo 'no backend changes between e866a8dfe5edbd570c82f0e187c9c50b1a125fca and aae3aae7ca9eef66507cf09faac76778d2eb6e1a — already live via git pull, skipping rebuild/restart'
-no backend changes between e866a8dfe5edbd570c82f0e187c9c50b1a125fca and aae3aae7ca9eef66507cf09faac76778d2eb6e1a — already live via git pull, skipping rebuild/restart
++ echo 'no backend changes between e866a8dfe5edbd570c82f0e187c9c50b1a125fca and 42fddb04b0ce2f6eb3895c1ae34bf1e275cf4a28 — already live via git pull, skipping rebuild/restart'
+no backend changes between e866a8dfe5edbd570c82f0e187c9c50b1a125fca and 42fddb04b0ce2f6eb3895c1ae34bf1e275cf4a28 — already live via git pull, skipping rebuild/restart
 + exit 0
 ssh exit code: 0
