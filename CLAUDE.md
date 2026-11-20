@@ -23550,3 +23550,12 @@ private video. Unit tests cover the one-off cadence, replay skips, browser
 runway, scheduled upload payload, and status readback. The full 378-test suite
 passed before deployment. The deploy script must still drain any active
 desktop upload, Editor processing, or final-video build before restarting.
+
+On the first safe restart, the Facebook replay seed exposed a pre-existing
+restart bug: the one already completed replay had correctly replaced its
+piece's current Facebook video ID, but seeding still demanded that ID equal
+the original manifest ID. Seeding now also accepts a changed ID only when a
+`done` replay job ties the exact original ID, replacement ID and stored
+`facebookPreviousVideoId` together. This preserves the strict inventory
+guard for pending jobs while allowing the remaining backlog to resume after
+the two skipped special-release days.

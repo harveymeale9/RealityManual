@@ -3914,7 +3914,10 @@ async function seedFacebookReplay() {
   if (replay.length !== 32) throw new Error('Facebook replay set does not contain exactly 32 old videos.');
   for (const entry of replay) {
     const piece = pieces.get(entry.pieceId);
-    if (!piece || piece.facebookVideoId !== entry.facebookVideoId ||
+    const completed = db.prepare("SELECT old_video_id, new_video_id, status FROM facebook_replay_jobs WHERE piece_id=?").get(entry.pieceId);
+    if (!piece || (piece.facebookVideoId !== entry.facebookVideoId &&
+        !(completed && completed.status === 'done' && completed.old_video_id === entry.facebookVideoId &&
+          completed.new_video_id === piece.facebookVideoId && piece.facebookPreviousVideoId === entry.facebookVideoId)) ||
         entry.key !== 'facebook-repost/2026-11-17/' + entry.pieceId + '.mp4' ||
         !Number.isSafeInteger(entry.sizeBytes) || entry.sizeBytes < 1) {
       throw new Error('Facebook replay manifest does not match the saved piece inventory.');
