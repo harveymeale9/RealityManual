@@ -23667,3 +23667,28 @@ status strip. Sales Analytics no longer renders or fetches data solely for
 those panels. The hourly chart, books sold, revenue/profit cards, email
 health, country breakdown, recent orders and detailed refunds remain. The
 underlying report/API data and order/payment behavior were not changed.
+
+## Estimated long-form profit table in Sales Analytics (2026-11-20)
+
+Sales Analytics now includes a six-column sortable table for published YouTube
+long-form pieces: piece title, latest lifetime YouTube views, tracked-link
+arrival percentage, estimated book profit, estimated AdSense profit and their
+sum. The private `/api/reports/longform-profit-estimate` endpoint reads the
+short-lived PII-stripped storefront report snapshot and Content Studio's own
+YouTube counters. It excludes refunded and owner-marked test orders, and also
+excludes any paid order whose recorded first or latest tagged touch is
+Instagram/Facebook. Orders with unknown BookVault cost remain a verification
+gap and are omitted from the cost-known profit pool. Historical orders with
+no saved attribution remain in the pool, so the result is directional rather
+than verified YouTube revenue.
+
+The pool is allocated across videos in proportion to verified UTM long-form
+link arrivals for each piece since 2026-10-25. Compacted daily landings
+supersede matching raw-day events; the displayed percentage divides those
+arrivals by the latest lifetime views. Thus the percentage can understate
+older videos whose views predate link tracking. Arrivals count one
+browser/link/day, not raw YouTube click events. With no tracked arrivals the
+book pool is explicitly unallocated, not divided by zero. The AdSense column
+is a fixed $3 per 1,000 lifetime views proxy, not actual payout; missing view
+counts remain unknown. Allocation rounds to cents while preserving the
+cost-known pool exactly. No order, payout, or attribution record is mutated.

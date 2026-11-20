@@ -2748,6 +2748,21 @@ body.role-reviewer .positive-comments { display: none; }
 .sales-metric-profit { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-soft); }
 .sales-metric-profit span { color: var(--ink-faint); font: .62rem var(--font-mono); }
 .sales-metric-profit b { color: #66d894; font: 600 .92rem var(--font-mono); white-space: nowrap; }
+.sales-profit-estimate { margin: 16px 0; }
+.sales-profit-summary { padding: 12px 17px; color: var(--ink-soft); font-size: .74rem; }
+.sales-profit-summary strong { color: var(--accent); }
+.sales-profit-table-wrap { overflow-x: auto; scrollbar-color: var(--border) transparent; }
+.sales-profit-table-wrap table { width: 100%; min-width: 820px; border-collapse: collapse; font-size: .74rem; font-variant-numeric: tabular-nums; }
+.sales-profit-table-wrap th,.sales-profit-table-wrap td { padding: 11px 13px; border-top: 1px solid var(--border-soft); text-align: right; vertical-align: top; white-space: nowrap; }
+.sales-profit-table-wrap th:first-child,.sales-profit-table-wrap td:first-child { min-width: 220px; max-width: 350px; text-align: left; white-space: normal; }
+.sales-profit-table-wrap tbody th { color: var(--ink); font-weight: 600; }
+.sales-profit-table-wrap tbody tr:hover { background: rgba(87,234,143,.07); }
+.sales-profit-table-wrap td { color: var(--ink-soft); }
+.sales-profit-table-wrap td strong { color: var(--accent); }
+.sales-profit-table-wrap td small { display: block; margin-top: 3px; color: var(--ink-faint); font-size: .62rem; }
+.sales-profit-sort { padding: 0; border: 0; background: none; color: var(--ink-soft); font: 700 .63rem var(--font-mono); white-space: nowrap; cursor: pointer; }
+.sales-profit-sort:hover,.sales-profit-sort:focus-visible { color: var(--accent); text-decoration: underline; }
+.sales-profit-note { margin: 0; padding: 13px 17px 16px; border-top: 1px solid var(--border-soft); color: var(--ink-faint); font-size: .67rem; line-height: 1.5; }
 .sales-dashboard-columns { display: grid; grid-template-columns: minmax(0,1.65fr) minmax(270px,.75fr); gap: 14px; margin-bottom: 14px; }
 .sales-block { min-width: 0; border: 1px solid var(--border); border-radius: 9px; background: rgba(8,15,11,.91); overflow: hidden; }
 .sales-block-head { min-height: 66px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 13px 17px; border-bottom: 1px solid var(--border-soft); }

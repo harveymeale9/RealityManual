@@ -60,6 +60,7 @@ const rangeResponse = require('./src/rangeResponse');
 const kanbanBackupService = require('./src/kanbanBackupService');
 const contentAnalyticsService = require('./src/contentAnalyticsService');
 const youtubeClickthrough = require('./src/youtubeClickthrough');
+const longformProfitEstimate = require('./src/longformProfitEstimate');
 const tiktokPublicMetrics = require('./src/tiktokPublicMetrics');
 const finalReviewPreviewService = require('./src/finalReviewPreview');
 const queuedMediaArchiver = require('./src/queuedMediaArchiver');
@@ -1786,6 +1787,15 @@ app.get('/api/reports/sales-timing', requireAuth, function (req, res) {
   } catch (error) {
     console.error('Sales timing read failed:', error.message);
     res.status(503).json({ error: 'sales_timing_unavailable' });
+  }
+});
+app.get('/api/reports/longform-profit-estimate', requireAuth, function (req, res) {
+  try {
+    res.set('Cache-Control', 'no-store');
+    res.json(longformProfitEstimate.report(getStorefrontReportDb(), db, storedPieces(), excludedSalesOrderIds()));
+  } catch (error) {
+    console.error('Long-form profit estimate read failed:', error.message);
+    res.status(503).json({ error: 'longform_profit_estimate_unavailable' });
   }
 });
 app.get('/api/reports/orders-health', requireAuth, function (req, res) {

@@ -633,6 +633,66 @@
     });
   }
 
+  function longformProfitHtml(data, sortKey, sortDirection) {
+    if (!data) return '<p class="sales-empty">Long-form profit estimates are temporarily unavailable.</p>';
+    var columns = [
+      ['title', 'Long-form piece title'], ['views', 'Views'], ['click_rate_percent', 'Attrib click %'],
+      ['est_book_profit_cents', 'Est book profit'], ['est_adsense_profit_cents', 'Est AdSense profit'],
+      ['est_total_profit_cents', 'Est total profit']
+    ];
+    var rows = (data.videos || []).slice().sort(function (a, b) {
+      var left = a[sortKey], right = b[sortKey];
+      if (left == null && right != null) return 1;
+      if (right == null && left != null) return -1;
+      if (sortKey === 'title') return sortDirection * String(left || '').localeCompare(String(right || ''));
+      return sortDirection * (Number(left || 0) - Number(right || 0)) || String(a.title).localeCompare(String(b.title));
+    });
+    var headings = columns.map(function (column) {
+      var active = sortKey === column[0];
+      return '<th scope="col" aria-sort="' + (active ? sortDirection === -1 ? 'descending' : 'ascending' : 'none') + '">' +
+        '<button type="button" class="sales-profit-sort" data-profit-sort="' + column[0] + '">' + column[1] +
+        (active ? '<span aria-hidden="true"> ' + (sortDirection === -1 ? '↓' : '↑') + '</span>' : '') + '</button></th>';
+    }).join('');
+    var body = rows.map(function (row) {
+      var money = function (cents) { return cents == null ? '—' : salesMoney(cents); };
+      return '<tr><th scope="row" title="' + escapeHtml(row.title) + '">' + escapeHtml(row.title) + '</th>' +
+        '<td>' + (row.views == null ? '—' : contentNumber(row.views)) + '</td>' +
+        '<td>' + (row.click_rate_percent == null ? '—' : contentPercent(row.click_rate_percent)) +
+          '<small>' + contentNumber(row.tracked_clicks) + ' tracked arrivals</small></td>' +
+        '<td>' + money(row.est_book_profit_cents) + '</td>' +
+        '<td>' + money(row.est_adsense_profit_cents) + '</td>' +
+        '<td><strong>' + money(row.est_total_profit_cents) + '</strong></td></tr>';
+    }).join('');
+    return '<div class="sales-block-head"><div><span>Directional estimate · all published YouTube long-form</span><h3>Estimated profit by video</h3></div></div>' +
+      '<div class="sales-profit-summary">Cost-known book-profit pool: <strong>' + salesMoney(data.book_profit_pool_cents) +
+      '</strong> · ' + contentNumber(data.tracked_clicks) + ' tracked arrivals · $' + Number(data.rpm_usd).toFixed(2) + ' assumed AdSense RPM</div>' +
+      '<div class="sales-profit-table-wrap"><table><thead><tr>' + headings + '</tr></thead><tbody>' +
+      (body || '<tr><td colspan="6">No published long-form videos yet.</td></tr>') + '</tbody></table></div>' +
+      '<p class="sales-profit-note">Book profit is the known gross profit from paid, non-refunded, non-test orders, excluding any order tagged Instagram or Facebook on first or last touch. It includes unattributed and Google/YouTube orders; it is divided among videos by each video’s share of verified YouTube long-form link arrivals (views × displayed click rate). These arrivals are a proxy for clicks, counted once per browser/link/day since ' + escapeHtml(data.tracking_since) + '; earlier clicks and order sources may be missing. The click % divides tracked arrivals by lifetime views, so older videos may show a low rate. ' +
+      (data.pending_cost_orders ? contentNumber(data.pending_cost_orders) + ' eligible order(s) with pending BookVault cost are omitted from profit. ' : '') +
+      (!data.tracked_clicks ? 'No tracked arrivals yet, so book profit is not allocated. ' : '') +
+      'AdSense is a $3-per-1,000-views estimate, not actual YouTube earnings. These are modelled allocations, not verified per-video sales.</p>';
+  }
+
+  function bindLongformProfit(data) {
+    var section = panelMain.querySelector('.sales-profit-estimate');
+    if (!section) return;
+    var sortKey = 'est_total_profit_cents';
+    var direction = -1;
+    function render() {
+      section.innerHTML = longformProfitHtml(data, sortKey, direction);
+      section.querySelectorAll('[data-profit-sort]').forEach(function (button) {
+        button.addEventListener('click', function () {
+          var next = button.dataset.profitSort;
+          direction = next === sortKey ? -direction : next === 'title' ? 1 : -1;
+          sortKey = next;
+          render();
+        });
+      });
+    }
+    render();
+  }
+
   function renderSalesAnalytics() {
     var request = ++salesAnalyticsRequest;
     salesTimingRequest++;
@@ -649,6 +709,8 @@
       fetch(STOREFRONT_API_BASE + '/api/analytics/email-health').then(function (res) { return res.ok ? res.json() : null; }).catch(function () { return null; }),
       fetch('/api/mailbox/status', { credentials: 'include' }).then(function (res) { return res.ok ? res.json() : null; }).catch(function () { return null; }),
       fetch('/api/reports/sales-timing?days=' + salesTimingDays, { credentials: 'include', cache: 'no-store' })
+        .then(function (res) { return res.ok ? res.json() : null; }).catch(function () { return null; }),
+      fetch('/api/reports/longform-profit-estimate', { credentials: 'include', cache: 'no-store' })
         .then(function (res) { return res.ok ? res.json() : null; }).catch(function () { return null; })
     ]).then(function (results) {
       if (currentTabId() !== 'sales-analytics' || request !== salesAnalyticsRequest) return;
@@ -747,6 +809,7 @@
         '<section class="sales-books-grid" aria-label="Books sold"><h3>Books sold</h3>' + bookCards + '</section>' +
         '<h3 class="sales-revenue-heading">Revenue and gross profit</h3>' +
         '<section class="sales-metric-grid">' + periodCards + '</section>' +
+        '<section class="sales-block sales-profit-estimate" aria-label="Estimated profit by YouTube long-form video"></section>' +
         emailHealthHtml(emailHealth, mailboxStatus) +
         '<section class="sales-block sales-country-block"><div class="sales-block-head"><div><span>Markets</span><h3>Revenue by country</h3></div></div><div class="sales-country-list">' + countries + '</div></section>' +
         '<section class="sales-block sales-orders"><div class="sales-block-head"><div><span>Operations</span><h3>Recent orders</h3></div><small>Newest 25 · use Refresh for the latest orders</small></div><div class="sales-order-list">' + recentOrders + '</div></section>' +
@@ -757,6 +820,7 @@
       if (refresh) refresh.addEventListener('click', renderSalesAnalytics);
       if (results[3]) bindSalesTiming(results[3]);
       else panelMain.querySelector('.sales-timing-block').textContent = 'Hourly data is temporarily unavailable. Refresh to retry.';
+      bindLongformProfit(results[4]);
       panelMain.querySelectorAll('[data-sales-action]').forEach(function (button) {
         button.addEventListener('click', function () {
           var row = button.closest('[data-sales-order-id], [data-refund-id]');
