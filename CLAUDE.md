@@ -23850,3 +23850,29 @@ and pending-cost orders remain in sales but are excluded and marked on profit
 figures; if all sold orders await costs, profit shows a dash. Averages divide
 by the selected 3/7/14/21/30 Bangkok calendar days including partial today.
 No reporting source or order state changed.
+
+## Facebook fallback for repeat failure on the 5.97 GB Friday long-form (2026-11-20)
+
+Friday's approved long-form `83d9ec23` published on YouTube, but its 5.97 GB
+4K master failed twice on Facebook at exactly 1,675,150,063 transferred
+bytes with Meta video error 6000/1363019. Both checkpoint videos remained
+incomplete and absent from the Page feed. This repeatable failure, rather
+than a slow processing phase, prompted a guarded Facebook-only fallback.
+
+When a large Facebook upload has already failed with code 6000 or progressed
+past 1.5 GiB then failed, its next existing retry makes a temporary H.264
+1080p-or-smaller rendition from the immutable reviewed master, with a capped
+bitrate and 1.4 GiB size limit. It copies the mastered AAC audio, verifies
+duration, codec and size before upload, and deletes the temporary copy after
+the attempt. The original remains the YouTube/source master. The normal Graph
+checkpoint and Page-feed reconciliation still runs first; no new upload is
+started while an existing one might publish. First attempts and smaller
+videos remain on the original path. The deploy drain now waits for an active
+Facebook publish/transcode so a restart does not interrupt it.
+
+Meta's Page Videos reference documents error 6000 as a video-file upload
+problem, but does not establish the exact size limit for this Page endpoint;
+the apparent ~1.7 GB threshold is an inference from two observed failures,
+not a claimed official platform limit. Focused tests cover fallback selection
+and a real short FFmpeg transcode. Verify the live Facebook post separately
+before marking the release complete.

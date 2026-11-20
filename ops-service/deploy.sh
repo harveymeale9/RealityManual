@@ -165,12 +165,18 @@ while [ -f "$DATA_DIR/db.sqlite" ]; do
       AND json_extract(data,'$.stage')='in_production'
       AND json_extract(data,'$.finalBuildStatus') IN ('pending','running');
   " 2>/dev/null || echo 0)"
+  ACTIVE_FACEBOOK_PUBLISH="$(sqlite3 "$DATA_DIR/db.sqlite" "
+    SELECT COUNT(*) FROM records
+    WHERE store_name='pieces'
+      AND json_extract(data,'$.facebookPublishStatus')='running';
+  " 2>/dev/null || echo 0)"
   if [ "$ACTIVE_UPLOAD_QUEUE" = "0" ] && [ "$ACTIVE_EDITOR_PROCESSING" = "0" ] &&
-     [ "$ACTIVE_CLOUD_INTAKE" = "0" ] && [ "$ACTIVE_FINAL_BUILD" = "0" ]; then break; fi
+     [ "$ACTIVE_CLOUD_INTAKE" = "0" ] && [ "$ACTIVE_FINAL_BUILD" = "0" ] &&
+     [ "$ACTIVE_FACEBOOK_PUBLISH" = "0" ]; then break; fi
   if [ "$UPLOAD_DRAIN_WAITED" -ge "$UPLOAD_DRAIN_LIMIT" ]; then
     fail "timed out waiting for active upload or video processing to finish"
   fi
-  echo "upload, cloud intake, Editor processing, or final-video build is active — deferring container restart (${UPLOAD_DRAIN_WAITED}s elapsed)"
+  echo "upload, cloud intake, Editor processing, final-video build, or Facebook publish is active — deferring container restart (${UPLOAD_DRAIN_WAITED}s elapsed)"
   sleep 15
   UPLOAD_DRAIN_WAITED=$((UPLOAD_DRAIN_WAITED + 15))
 done

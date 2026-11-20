@@ -44,6 +44,7 @@ const publishBatchState = require('./src/publishBatchState');
 const metaAuth = require('./src/metaAuth');
 const instagramInsightsAuth = require('./src/instagramInsightsAuth');
 const metaPublisherService = require('./src/metaPublisher');
+const facebookPublishMedia = require('./src/facebookPublishMedia');
 const facebookReplay = require('./src/facebookReplay');
 const shortformSchedule = require('./src/shortformSchedule');
 const topicSchedule = require('./src/topicSchedule');
@@ -4645,10 +4646,18 @@ async function runPlatformPublishBatch(id, destinations, options) {
           if (reconcile && reconcile.id) result = reconcile;
           else if (mediaSize > 1024 * 1024 * 1024) {
             const media = await localPublishMedia(id);
+            let compactPath = '';
             try {
+              let publishPath = media.path;
+              if (facebookPublishMedia.needsCompactCopy(mediaSize, openingPiece, options.retryFailed)) {
+                compactPath = path.join(DATA_DIR, 'tmp', 'facebook-publish-' + id + '-' + crypto.randomUUID() + '.mp4');
+                const compact = await facebookPublishMedia.makeCompactCopy(media.path, compactPath);
+                publishPath = compact.path;
+                console.log('Facebook retry using verified compact rendition for ' + id + ' (' + compact.sizeBytes + ' bytes)');
+              }
               result = await metaPublisher.publishFacebookVideoResumable({
                 pageId: auth.page_id, pageToken: auth.page_access_token,
-                videoPath: media.path, title: destination.title || 'Untitled',
+                videoPath: publishPath, title: destination.title || 'Untitled',
                 description: maskCaption(socialCaption),
                 thumbnailJpeg: publishThumbnail.jpegBytes(current.thumbnailDataUrl),
                 onSessionStarted: function (videoId, sessionId) {
@@ -4660,7 +4669,10 @@ async function runPlatformPublishBatch(id, destinations, options) {
                   updatePieceFields(id, { facebookUploadBytesTransferred: bytes, facebookUploadTotalBytes: total });
                 }
               });
-            } finally { media.cleanup(); }
+            } finally {
+              if (compactPath) fs.rmSync(compactPath, { force: true });
+              media.cleanup();
+            }
           } else {
             updatePieceFields(id, { facebookUploadStartedAt: new Date().toISOString() });
             result = await metaPublisher.publishFacebookVideo({
