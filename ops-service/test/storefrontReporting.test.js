@@ -195,6 +195,8 @@ test('sales timing chart shows hourly views, paid orders, upload markers and all
   assert.match(html, /data-sales-days="3"[^>]*aria-pressed="true"/);
   for (const days of [7, 14, 21, 30]) assert.match(html, new RegExp('data-sales-days="' + days + '"'));
   assert.match(html, /35 measured long-form views/);
+  assert.match(html, /Long-form views per sale <b>5<\/b>/);
+  assert.match(html, /all sales; not attributed/);
   assert.match(html, /4 paid orders \(0 US\)/);
   assert.match(html, /New York/);
   assert.match(html, /class="sales-timing-release"/);
@@ -214,6 +216,7 @@ test('sales timing chart shows hourly views, paid orders, upload markers and all
     { at: '2026-11-20T16:00:00.000Z', views: 0, orders: 0, us_orders: 0, view_coverage: 'complete', uploads: [] }
   ] });
   assert.match(noUploadHtml, /Long-form published · none in this range/);
+  assert.match(noUploadHtml, /Long-form views per sale <b>—<\/b>/);
   assert.doesNotMatch(noUploadHtml, /class="sales-timing-release"/);
   assert.match(source, /<section class="sales-block sales-timing-block"/);
   assert.match(source, /'\/api\/reports\/sales-timing\?days='/);

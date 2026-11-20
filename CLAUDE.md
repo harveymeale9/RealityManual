@@ -23722,3 +23722,15 @@ browser display change: no posting times, reservations, or queue state change.
 The slot calculation retains the title alongside each matched scheduled or
 queued piece, and all markers are keyboard focusable. The app, CSS, and runway
 module cache keys were updated together.
+
+## Sales timing: measured long-form views per sale (2026-11-20)
+
+The hourly Sales Analytics header now shows a rounded "Long-form views per
+sale" ratio for the selected 3/7/14/21/30-day window, using that chart's
+measured YouTube long-form view increments divided by all non-refunded,
+non-test Stripe-paid orders in the same window. This is explicitly labelled
+"all sales; not attributed": the numerator is only observed hourly YouTube
+growth (which can have partial/missing coverage), while the denominator is
+all store orders, not YouTube-attributed orders. It is a directional comparison,
+not a conversion rate or proof of channel causation. Zero paid orders or zero
+measured views displays a dash instead of a misleading division result.

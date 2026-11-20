@@ -553,6 +553,9 @@
 
   function salesTimingHtml(data) {
     var bins = Array.isArray(data.hourly) ? data.hourly : [];
+    var measuredViews = Number(data.totals.measured_views || 0);
+    var paidOrders = Number(data.totals.orders || 0);
+    var viewsPerSale = measuredViews > 0 && paidOrders > 0 ? Math.round(measuredViews / paidOrders).toLocaleString() : '—';
     var hourWidth = 15;
     var viewHeight = 112;
     var maxViews = Math.max.apply(Math, bins.map(function (bin) { return Number(bin.views) || 0; }).concat([1]));
@@ -606,8 +609,9 @@
         '<span>◆ ' + escapeHtml(release.title) + '</span></button>';
     }).join('');
     return '<div class="sales-timing-head"><div><span>Hourly · Bangkok time</span><h3>Long-form views and customer sales</h3></div><div class="sales-timing-periods" aria-label="Time period">' + options + '</div></div>' +
-      '<div class="sales-timing-legend"><span class="views">YouTube long-form views <b>' + Number(data.totals.measured_views || 0).toLocaleString() + '</b></span>' +
-      '<span class="orders">Stripe-paid orders <b>' + Number(data.totals.orders || 0) + '</b> <small>(' + Number(data.totals.us_orders || 0) + ' US)</small></span>' +
+      '<div class="sales-timing-legend"><span class="views">YouTube long-form views <b>' + measuredViews.toLocaleString() + '</b></span>' +
+      '<span class="orders">Stripe-paid orders <b>' + paidOrders + '</b> <small>(' + Number(data.totals.us_orders || 0) + ' US)</small></span>' +
+      '<span class="views-per-sale" title="Measured long-form views divided by all paid orders in this period. Not YouTube-attributed sales; view coverage may be partial.">Long-form views per sale <b>' + viewsPerSale + '</b> <small>(all sales; not attributed)</small></span>' +
       '<span class="uploads">◆ Long-form published' + (releases.length ? '' : ' · none in this range') + '</span></div>' +
       '<p class="sales-timing-detail" aria-live="polite">Point at or tap an hour for Bangkok and New York times, views, sales and upload titles.</p>' +
       '<div class="sales-timing-scroll" role="group" aria-label="Hourly views and paid orders"><div class="sales-timing-grid" style="width:' + (bins.length * hourWidth) + 'px">' + dayBands + hours + viewLine + releaseMarkers + '</div></div>' +
