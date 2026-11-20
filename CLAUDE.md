@@ -23786,3 +23786,19 @@ cost count toward sales but are omitted from profit and explicitly marked
 pending; an all-pending day shows a dash rather than a misleading $0 profit.
 No order data or publishing state changes. Focused API and chart tests cover
 the cost-known/pending split and day-grouped display.
+
+## Hourly Sales Analytics ranges fit one graph width (2026-11-20)
+
+The hourly Sales Analytics plot previously assigned a fixed 15 pixels to
+every hour, leaving only about three days visible in the 7/14/21/30-day
+views unless scrolled. All selected hours now divide the available plot
+width, so each range displays its whole span at once on desktop and phone.
+The blue SVG line uses the same full-width coordinate system; Bangkok day
+bands, hourly sales bars, and gold release guides use percentage positions.
+The day profit strip compresses its labels for longer ranges, while exact
+figures remain in each day's title/accessible label. At 14+ days, hourly bar
+numbers and noon tick text are hidden because the individual columns are
+too narrow; hour detail still provides the count, and release titles appear
+on hover/focus while their gold markers remain visible. The 3-day view
+remains the default, and the 7-day view keeps bar counts. Browser checks
+verify 3/7/14/21/30 day counts and full-width layout at desktop/phone sizes.

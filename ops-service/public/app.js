@@ -558,6 +558,9 @@
     var viewsPerSale = measuredViews > 0 && paidOrders > 0 ? Math.round(measuredViews / paidOrders).toLocaleString() : '—';
     var hourWidth = 15;
     var viewHeight = 112;
+    var dense = Number(data.days) >= 14;
+    var veryDense = Number(data.days) >= 21;
+    var percentAt = function (index) { return (index / Math.max(1, bins.length) * 100).toFixed(5) + '%'; };
     var maxViews = Math.max.apply(Math, bins.map(function (bin) { return Number(bin.views) || 0; }).concat([1]));
     // Keep a one-sale hour visibly short even when every sale in the selected
     // period happened in a separate hour. Taller bars then mean more sales.
@@ -606,15 +609,17 @@
       var profit = day.pendingCosts === day.orders && day.orders ? '—' : salesMoney(day.profitCents);
       var pending = day.pendingCosts ? ' · ' + day.pendingCosts + ' cost pending' : '';
       var summary = day.orders + ' sale' + (day.orders === 1 ? '' : 's') + ' · Est book profit ' + profit + pending;
-      return '<div class="sales-timing-day ' + (index % 2 ? 'day-alt' : 'day-base') + '" style="left:' + (day.start * hourWidth) + 'px;width:' + (day.length * hourWidth) + 'px">' +
-        '<span class="sales-timing-day-label">' + escapeHtml(day.label) + '</span>' +
+      return '<div class="sales-timing-day ' + (index % 2 ? 'day-alt' : 'day-base') + '" style="left:' + percentAt(day.start) + ';width:' + percentAt(day.length) + '">' +
+        '<span class="sales-timing-day-label" title="' + escapeHtml(day.label) + '">' + escapeHtml(veryDense ? day.label.replace(/^\S+\s+/, '') : day.label) + '</span>' +
         '<span class="sales-timing-day-summary" title="' + escapeHtml(day.label + ': ' + summary) + '" aria-label="' + escapeHtml(day.label + ': ' + summary) + '">' +
-        '<strong>' + day.orders + ' sale' + (day.orders === 1 ? '' : 's') + '</strong><small>Est book profit ' + escapeHtml(profit) + (day.pendingCosts ? ' · ' + day.pendingCosts + ' pending' : '') + '</small></span></div>';
+        '<strong>' + day.orders + (veryDense ? '' : ' sale' + (day.orders === 1 ? '' : 's')) + '</strong><small>' +
+        (dense ? escapeHtml(veryDense && profit !== '—' ? '$' + Math.round(day.profitCents / 100) : profit) : 'Est book profit ' + escapeHtml(profit)) +
+        (!dense && day.pendingCosts ? ' · ' + day.pendingCosts + ' pending' : '') + '</small></span></div>';
     }).join('');
-    var viewLine = '<svg class="sales-timing-line" viewBox="0 0 ' + (bins.length * hourWidth) + ' ' + viewHeight + '" width="' + (bins.length * hourWidth) + '" height="' + viewHeight + '" preserveAspectRatio="none" aria-hidden="true">' +
+    var viewLine = '<svg class="sales-timing-line" viewBox="0 0 ' + (bins.length * hourWidth) + ' ' + viewHeight + '" width="100%" height="' + viewHeight + '" preserveAspectRatio="none" aria-hidden="true">' +
       viewRuns.map(function (run) { return run.length > 1 ? '<polyline points="' + run.join(' ') + '"/>' : '<circle cx="' + run[0].split(',')[0] + '" cy="' + run[0].split(',')[1] + '" r="2.5"/>'; }).join('') + '</svg>';
     var releaseMarkers = releases.map(function (release) {
-      return '<button type="button" class="sales-timing-release" style="left:' + ((release.index + .5) * hourWidth) + 'px"' +
+      return '<button type="button" class="sales-timing-release" style="left:' + percentAt(release.index + .5) + '"' +
         ' data-sales-detail="' + escapeHtml(release.detail) + '" aria-label="Long-form published: ' + escapeHtml(release.title) + '" title="' + escapeHtml(release.title) + '">' +
         '<span>◆ ' + escapeHtml(release.title) + '</span></button>';
     }).join('');
@@ -624,7 +629,7 @@
       '<span class="views-per-sale" title="Measured long-form views divided by all paid orders in this period. Not YouTube-attributed sales; view coverage may be partial.">Long-form views per sale <b>' + viewsPerSale + '</b> <small>(all sales; not attributed)</small></span>' +
       '<span class="uploads">◆ Long-form published' + (releases.length ? '' : ' · none in this range') + '</span></div>' +
       '<p class="sales-timing-detail" aria-live="polite">Point at or tap an hour for Bangkok and New York times, views, sales and upload titles.</p>' +
-      '<div class="sales-timing-scroll" role="group" aria-label="Hourly views and paid orders"><div class="sales-timing-grid" style="width:' + (bins.length * hourWidth) + 'px">' + dayBands + hours + viewLine + releaseMarkers + '</div></div>' +
+      '<div class="sales-timing-scroll" role="group" aria-label="Hourly views and paid orders"><div class="sales-timing-grid' + (dense ? ' dense' : '') + (veryDense ? ' very-dense' : '') + '">' + dayBands + hours + viewLine + releaseMarkers + '</div></div>' +
       '<p class="sales-profit-note">Blue line: observed hourly long-form view increases; labelled green bars: paid orders (bar height follows the count, with four orders filling the scale unless a higher hour occurs). Alternating bands mark Bangkok calendar days; the bottom strip totals each day’s paid sales and cost-known estimated book gross profit (charged total minus BookVault cost, before Stripe fees). Orders awaiting a BookVault cost are counted as sales but omitted from profit and marked pending. Today is partial through the current hour. Gold labelled lines mark public long-form releases. Views are observed at hourly YouTube polls, not exact view times; missing hours appear as line gaps and partial coverage is noted in hour details. Sales use Stripe-paid orders at payment time (creation time if unavailable), excluding refunds and owner-marked tests. ◆ marks the public long-form release, not proof it caused later activity.</p>';
   }
 

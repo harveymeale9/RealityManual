@@ -208,6 +208,9 @@ test('sales timing chart shows hourly views, paid orders, upload markers and all
   assert.match(html, /<polyline points="/);
   assert.match(html, /class="sales-timing-day day-base"/);
   assert.match(html, /class="sales-timing-day day-alt"/);
+  assert.match(html, /class="sales-timing-grid"/);
+  assert.match(html, /width:50\.00000%/);
+  assert.match(html, /class="sales-timing-line"[^>]*width="100%"/);
   assert.match(html, /1 sale<\/strong><small>Est book profit \$45\.00/);
   assert.match(html, /2 sales<\/strong><small>Est book profit \$20\.00 · 1 pending/);
   assert.match(html, /4 sales<\/strong><small>Est book profit \$0\.00/);
@@ -225,6 +228,10 @@ test('sales timing chart shows hourly views, paid orders, upload markers and all
   assert.match(noUploadHtml, /Long-form published · none in this range/);
   assert.match(noUploadHtml, /Long-form views per sale <b>—<\/b>/);
   assert.doesNotMatch(noUploadHtml, /class="sales-timing-release"/);
+  const denseHtml = render({ days: 30, totals: { measured_views: 0, orders: 0, us_orders: 0 }, hourly: [
+    { at: '2026-11-19T17:00:00.000Z', views: 0, orders: 0, us_orders: 0, view_coverage: 'complete', uploads: [] }
+  ] });
+  assert.match(denseHtml, /class="sales-timing-grid dense very-dense"/);
   assert.match(source, /<section class="sales-block sales-timing-block"/);
   assert.match(source, /'\/api\/reports\/sales-timing\?days='/);
 });
