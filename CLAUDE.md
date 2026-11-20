@@ -23632,3 +23632,13 @@ The preview is unlinked and noindex, not wired to Resend, any contact list, or
 an automatic send. A real campaign would need its final video/destination,
 recipient consent and unsubscribe handling before sending. Desktop and mobile
 browser previews were checked with the local poster loaded.
+
+Harvey then requested closer fidelity to the reference: a gold gradient CTA,
+visible paused-player controls on the portrait poster, and the bold serif copy
+“I have something important to discuss with you... Please watch this video
+ASAP!” The revised poster is a separate versioned asset at
+`frontend/img/email/face-reveal-portrait-v2.png`, preserving the first draft.
+The controls are part of the image (visual only), while the whole image and CTA
+remain real links to the blank page. The gradient has a solid-gold fallback
+for email clients that do not render CSS gradients. The HTML was rechecked at
+desktop and phone widths before the second preview send.
