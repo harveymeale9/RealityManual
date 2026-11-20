@@ -2739,7 +2739,7 @@ body.role-reviewer .positive-comments { display: none; }
 .sales-revenue-heading { margin: 0 0 10px; color: var(--ink); font: 600 1.25rem var(--font-display); }
 .sales-metric-grid { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 10px; }
 .sales-metric-card { min-width: 0; padding: 17px 18px; border: 1px solid var(--border); border-radius: 9px; background: linear-gradient(145deg,var(--surface),rgba(13,27,19,.96)); }
-.sales-metric-card > span,.sales-secondary-grid article > span { display: block; margin-bottom: 7px; color: var(--ink-faint); font: 700 .63rem var(--font-mono); letter-spacing: .09em; text-transform: uppercase; }
+.sales-metric-card > span { display: block; margin-bottom: 7px; color: var(--ink-faint); font: 700 .63rem var(--font-mono); letter-spacing: .09em; text-transform: uppercase; }
 .sales-metric-card strong { display: block; color: var(--accent); font: 600 clamp(1.45rem,2.3vw,2.15rem)/1.1 var(--font-display); font-variant-numeric: tabular-nums; }
 .sales-metric-total-label { margin: 0 0 5px; color: var(--ink-soft); font: .66rem var(--font-body); }
 .sales-metric-breakdown { display: grid; grid-template-columns: 1fr auto; gap: 5px 9px; margin-top: 10px; color: var(--ink-soft); font: .68rem var(--font-body); }
@@ -2748,16 +2748,6 @@ body.role-reviewer .positive-comments { display: none; }
 .sales-metric-profit { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-soft); }
 .sales-metric-profit span { color: var(--ink-faint); font: .62rem var(--font-mono); }
 .sales-metric-profit b { color: #66d894; font: 600 .92rem var(--font-mono); white-space: nowrap; }
-.sales-secondary-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 1px; margin: 12px 0 18px; overflow: hidden; border: 1px solid var(--border-soft); border-radius: 8px; background: var(--border-soft); }
-.sales-secondary-grid article { min-height: 78px; padding: 14px 17px; background: var(--surface-2); }
-.sales-secondary-grid strong { color: var(--ink); font: 600 1.2rem var(--font-display); }
-.sales-secondary-grid small { margin-left: 7px; color: var(--ink-faint); font-size: .66rem; }
-.sales-payment-overview { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 1px; margin: 0 0 18px; border: 1px solid var(--border-soft); border-radius: 8px; overflow: hidden; background: var(--border-soft); }
-.sales-payment-overview > div { padding: 13px 17px; background: var(--surface-2); }
-.sales-payment-overview span { display: block; color: var(--ink-faint); font: 700 .62rem var(--font-mono); }
-.sales-payment-overview strong { display: block; margin-top: 6px; color: var(--ink); font: 600 1.3rem var(--font-display); }
-.sales-payment-overview p { grid-column: 1 / -1; margin: 0; padding: 9px 17px; color: var(--ink-soft); background: var(--surface); font-size: .69rem; line-height: 1.45; }
-.sales-refund-jump { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer; }
 .sales-dashboard-columns { display: grid; grid-template-columns: minmax(0,1.65fr) minmax(270px,.75fr); gap: 14px; margin-bottom: 14px; }
 .sales-block { min-width: 0; border: 1px solid var(--border); border-radius: 9px; background: rgba(8,15,11,.91); overflow: hidden; }
 .sales-block-head { min-height: 66px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 13px 17px; border-bottom: 1px solid var(--border-soft); }
@@ -2820,10 +2810,6 @@ body.role-reviewer .positive-comments { display: none; }
 .sales-order-row > strong { min-width: 0; color: var(--ink); font: 700 .72rem var(--font-mono); }
 .sales-order-row > strong small { display: block; margin-top: 4px; color: var(--ink-faint); font: .62rem var(--font-body); }
 .sales-order-row > strong .sales-order-source { color: var(--accent); overflow-wrap: anywhere; line-height: 1.35; }
-.sales-attribution-block { padding: 16px 19px; }
-.sales-attribution-block > strong { display: block; margin: 7px 0; color: var(--accent); font: 700 clamp(1.7rem,4vw,2.5rem)/1 var(--font-display); }
-.sales-attribution-block > p { margin: 0 0 5px; color: var(--ink-soft); font-size: .76rem; }
-.sales-attribution-block > small { display: block; color: var(--ink-faint); font-size: .65rem; line-height: 1.45; }
 .sales-order-price { text-align: right; }
 .sales-order-price b { display: block; color: var(--ink); font: 600 .75rem var(--font-mono); }
 .sales-order-price small { display: block; margin-top: 4px; color: var(--ink-faint); font: .57rem/1.4 var(--font-mono); white-space: nowrap; }
@@ -2858,7 +2844,7 @@ body.role-reviewer .positive-comments { display: none; }
   .sales-email-health-grid { grid-template-columns: 1fr; }
   .sales-email-health-grid > div { border-right: 0; border-bottom: 1px solid var(--border-soft); }
   .sales-email-health-grid > div:last-child { border-bottom: 0; }
-  .sales-books-grid,.sales-metric-grid,.sales-secondary-grid,.sales-payment-overview { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .sales-books-grid,.sales-metric-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .sales-dashboard-columns { grid-template-columns: 1fr; }
   .sales-order-row { grid-template-columns: 110px minmax(130px,.7fr) minmax(120px,.8fr) minmax(220px,1fr) minmax(240px,1.4fr); min-width: 1000px; }
   .sales-order-list { overflow-x: auto; }
@@ -2874,7 +2860,6 @@ body.role-reviewer .positive-comments { display: none; }
   .sales-books-card strong { font-size: clamp(2.8rem,13vw,4rem); }
   .sales-metric-card strong { font-size: 1.35rem; }
   .sales-metric-card small { line-height: 1.4; }
-  .sales-secondary-grid article { min-height: 72px; padding: 12px; }
   .sales-chart { height: 180px; gap: 2px; padding-inline: 10px; }
   .sales-block-head > small { display: none; }
   .sales-order-list { overflow: visible; }

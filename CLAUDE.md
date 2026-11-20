@@ -23657,3 +23657,13 @@ visible day boundaries and labels, plus the existing gold release-hour
 diamonds and vertical guides. The 3/7/14/21/30-day ranges, per-hour Bangkok
 and New York detail, US-order highlighting, and data definitions are unchanged.
 This is a frontend-only change; the private report endpoint was not altered.
+
+## Sales Analytics removes redundant summary panels (2026-11-20)
+
+Harvey marked three groups beneath the revenue cards for removal: the
+four-tile 30-day average/refunds/conversion strip, the tagged YouTube
+long-form-to-order attribution panel, and the four-item payment/BookVault
+status strip. Sales Analytics no longer renders or fetches data solely for
+those panels. The hourly chart, books sold, revenue/profit cards, email
+health, country breakdown, recent orders and detailed refunds remain. The
+underlying report/API data and order/payment behavior were not changed.

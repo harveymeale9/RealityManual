@@ -210,6 +210,20 @@ test('sales timing chart shows hourly views, paid orders, upload markers and all
   assert.match(source, /'\/api\/reports\/sales-timing\?days='/);
 });
 
+test('Sales Analytics omits the crossed-out summary panels but keeps detailed reports', function () {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const start = source.indexOf('  function renderSalesAnalytics()');
+  const end = source.indexOf('  function websiteTrafficHtml(', start);
+  const section = source.slice(start, end);
+  assert.ok(start > 0 && end > start);
+  for (const removed of ['sales-secondary-grid', 'sales-attribution-block', 'sales-payment-overview', 'salesRefundJump']) {
+    assert.doesNotMatch(section, new RegExp(removed));
+  }
+  for (const kept of ['sales-timing-block', 'sales-books-grid', 'sales-metric-grid', 'sales-country-block', 'sales-orders', 'sales-refunds']) {
+    assert.match(section, new RegExp(kept));
+  }
+});
+
 test('email health card separates Resend outcomes from ops inbox connectivity', function () {
   const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const start = source.indexOf('  function emailHealthHtml(');

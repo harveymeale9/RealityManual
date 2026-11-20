@@ -429,13 +429,6 @@
     return { label: salesStatusLabel(order.order_status), detail: '' };
   }
 
-  function salesConversion(orders, analytics, step) {
-    if (!analytics || !analytics.funnel) return '—';
-    var row = analytics.funnel.filter(function (entry) { return entry.step === step; })[0];
-    var visits = row ? Number(row.unique_sessions) || 0 : 0;
-    return visits ? ((Number(orders) || 0) / visits * 100).toFixed(1) + '%' : '—';
-  }
-
   function salesTouchLabel(touch) {
     if (!touch) return 'Direct / untagged';
     var source = String(touch.source || '').trim();
@@ -653,7 +646,6 @@
         if (!res.ok) throw new Error('sales_status_' + res.status);
         return res.json();
       }),
-      fetch(STOREFRONT_API_BASE + '/api/analytics/summary').then(function (res) { return res.ok ? res.json() : null; }).catch(function () { return null; }),
       fetch(STOREFRONT_API_BASE + '/api/analytics/email-health').then(function (res) { return res.ok ? res.json() : null; }).catch(function () { return null; }),
       fetch('/api/mailbox/status', { credentials: 'include' }).then(function (res) { return res.ok ? res.json() : null; }).catch(function () { return null; }),
       fetch('/api/reports/sales-timing?days=' + salesTimingDays, { credentials: 'include', cache: 'no-store' })
@@ -661,10 +653,8 @@
     ]).then(function (results) {
       if (currentTabId() !== 'sales-analytics' || request !== salesAnalyticsRequest) return;
       var data = results[0];
-      var analytics = results[1];
-      var longform = data.longform_conversion || { since: '2026-11-12', arrivals: 0, paid_orders: 0, rate_percent: null };
-      var emailHealth = results[2];
-      var mailboxStatus = results[3];
+      var emailHealth = results[1];
+      var mailboxStatus = results[2];
       var periodConfig = [
         ['Today', data.periods.today],
         ['Last 7 days', data.periods.last_7_days],
@@ -696,8 +686,6 @@
           (entry[0] === 'Avg. per month' ? 'Since first sale · includes this month' : 'Books sold · paid, not refunded') +
           '</small></article>';
       }).join('');
-
-      var thirty = data.periods.last_30_days;
 
       var countries = data.countries.length ? data.countries.map(function (country) {
         return '<div class="sales-country-row"><strong>' + escapeHtml(country.country) + '</strong><span>' + country.orders + ' order' + (country.orders === 1 ? '' : 's') + ' · ' + country.units + ' books</span><b>' + salesMoney(country.revenue_cents) + '</b></div>';
@@ -752,13 +740,6 @@
           '<button type="button" class="sales-test-order-action" data-sales-action="restore">Restore to reporting</button></div>';
       }).join('');
 
-      var payments = data.payment_overview || {};
-      var paymentOverview = '<section class="sales-payment-overview" aria-label="Payment and fulfillment status, last 30 days">' +
-        '<div><span>Stripe-paid orders</span><strong>' + (payments.paid || 0) + '</strong></div>' +
-        '<div><span>Issuer declines</span><strong>' + (payments.issuer_declined || 0) + '</strong></div>' +
-        '<div><span>Other payment failures</span><strong>' + (payments.payment_other_failed || 0) + '</strong></div>' +
-        '<div><span>Paid, awaiting BookVault</span><strong>' + (payments.paid_awaiting_bookvault || 0) + '</strong></div>' +
-        '<p>Stripe-paid orders are the sales ledger. A Pay-button click is only an attempt; a thank-you-page event can be missed.</p></section>';
       panelMain.innerHTML = '<div class="sales-dashboard">' +
         '<header class="sales-dashboard-head"><div><div class="eyebrow">Live storefront database · Bangkok time (UTC+7)</div><h2>Sales Analytics</h2><p>Revenue, estimated gross profit, orders and fulfillment.</p></div>' +
           '<div><span>Updated ' + new Date(data.generated_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' }) + ' UTC+7</span><button type="button" class="btn-secondary btn-tiny" id="salesRefresh">Refresh</button></div></header>' +
@@ -766,20 +747,6 @@
         '<section class="sales-books-grid" aria-label="Books sold"><h3>Books sold</h3>' + bookCards + '</section>' +
         '<h3 class="sales-revenue-heading">Revenue and gross profit</h3>' +
         '<section class="sales-metric-grid">' + periodCards + '</section>' +
-        '<section class="sales-secondary-grid">' +
-          '<article><span>30-day average order</span><strong>' + salesMoney(thirty.average_order_cents) + '</strong></article>' +
-          '<article><span>30-day refunds</span><strong>' + thirty.refunded_orders + '</strong><small>' + salesMoney(thirty.refunded_value_cents) + ' · <button type="button" class="sales-refund-jump" id="salesRefundJump">View reasons</button></small></article>' +
-          '<article><span>Landing → order</span><strong>' + salesConversion(thirty.paid_orders, analytics, 'landing_page_view') + '</strong><small>verified visits</small></article>' +
-          '<article><span>Checkout → order</span><strong>' + salesConversion(thirty.paid_orders, analytics, 'checkout_view') + '</strong><small>verified visits</small></article>' +
-        '</section>' +
-        '<section class="sales-block sales-attribution-block" aria-label="YouTube long-form sales attribution">' +
-          '<div class="sales-block-head"><div><span>Tagged link attribution</span><h3>YouTube long-form → order</h3></div></div>' +
-          '<strong>' + (longform.rate_percent == null ? '—' : Number(longform.rate_percent).toFixed(1) + '%') + '</strong>' +
-          '<p>' + Number(longform.paid_orders || 0) + ' paid orders from ' + Number(longform.arrivals || 0) +
-            ' verified long-form link arrivals since ' + escapeHtml(longform.since) + ' (UTC).</p>' +
-          '<small>New orders save their first touch and latest tagged click. Earlier sales cannot be attributed retrospectively. Link arrivals can include repeat visitors, so this is a tagged-arrival rate, not a unique-person cohort rate.</small>' +
-        '</section>' +
-        paymentOverview +
         emailHealthHtml(emailHealth, mailboxStatus) +
         '<section class="sales-block sales-country-block"><div class="sales-block-head"><div><span>Markets</span><h3>Revenue by country</h3></div></div><div class="sales-country-list">' + countries + '</div></section>' +
         '<section class="sales-block sales-orders"><div class="sales-block-head"><div><span>Operations</span><h3>Recent orders</h3></div><small>Newest 25 · use Refresh for the latest orders</small></div><div class="sales-order-list">' + recentOrders + '</div></section>' +
@@ -788,10 +755,8 @@
       '</div>';
       var refresh = document.getElementById('salesRefresh');
       if (refresh) refresh.addEventListener('click', renderSalesAnalytics);
-      if (results[4]) bindSalesTiming(results[4]);
+      if (results[3]) bindSalesTiming(results[3]);
       else panelMain.querySelector('.sales-timing-block').textContent = 'Hourly data is temporarily unavailable. Refresh to retry.';
-      var refundJump = document.getElementById('salesRefundJump');
-      if (refundJump) refundJump.addEventListener('click', function () { document.getElementById('salesRefunds').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
       panelMain.querySelectorAll('[data-sales-action]').forEach(function (button) {
         button.addEventListener('click', function () {
           var row = button.closest('[data-sales-order-id], [data-refund-id]');
