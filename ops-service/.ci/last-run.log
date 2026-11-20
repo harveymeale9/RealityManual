@@ -8,19 +8,18 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   971489f..405cb8c  main       -> origin/main
+   405cb8c..e23942a  main       -> origin/main
 + git merge --ff-only origin/main
-Updating 971489f..405cb8c
+Updating 405cb8c..e23942a
 Fast-forward
- CLAUDE.md                                    |  16 +++
- ops-service/.ci/last-run.log                 | 153 ++++++++++++++++++++++++---
- ops-service/public/app.js                    |  17 +--
- ops-service/public/index.html                |   4 +-
- ops-service/public/style.css                 |  13 ++-
- ops-service/test/storefrontReporting.test.js |   7 ++
- 6 files changed, 184 insertions(+), 26 deletions(-)
+ CLAUDE.md                                    |  15 +++
+ ops-service/.ci/last-run.log                 | 159 +++------------------------
+ ops-service/public/app.js                    |  34 +++++-
+ ops-service/public/index.html                |   2 +-
+ ops-service/test/storefrontReporting.test.js |  17 +++
+ 5 files changed, 79 insertions(+), 148 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=405cb8c937985e4ef673fd5f668440ae8cd21fb5
++ NEW_HEAD=e23942af393233a0dce44ea0f024469a869ada79
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -33,12 +32,12 @@ Already up to date.
 + NEEDS_REBUILD=1
 + '[' -n 971489f2965e24bf4bc581009e5ef7654887bbd7 ']'
 + git cat-file -e '971489f2965e24bf4bc581009e5ef7654887bbd7^{commit}'
-++ git diff --name-only 971489f2965e24bf4bc581009e5ef7654887bbd7 405cb8c937985e4ef673fd5f668440ae8cd21fb5 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
+++ git diff --name-only 971489f2965e24bf4bc581009e5ef7654887bbd7 e23942af393233a0dce44ea0f024469a869ada79 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z '' ']'
 + NEEDS_REBUILD=0
 + '[' 0 = 1 ']'
 + '[' 0 = 0 ']'
-+ echo 'no backend changes between 971489f2965e24bf4bc581009e5ef7654887bbd7 and 405cb8c937985e4ef673fd5f668440ae8cd21fb5 — already live via git pull, skipping rebuild/restart'
-no backend changes between 971489f2965e24bf4bc581009e5ef7654887bbd7 and 405cb8c937985e4ef673fd5f668440ae8cd21fb5 — already live via git pull, skipping rebuild/restart
++ echo 'no backend changes between 971489f2965e24bf4bc581009e5ef7654887bbd7 and e23942af393233a0dce44ea0f024469a869ada79 — already live via git pull, skipping rebuild/restart'
+no backend changes between 971489f2965e24bf4bc581009e5ef7654887bbd7 and e23942af393233a0dce44ea0f024469a869ada79 — already live via git pull, skipping rebuild/restart
 + exit 0
 ssh exit code: 0
