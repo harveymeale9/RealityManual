@@ -186,26 +186,35 @@ test('sales timing chart shows hourly views, paid orders, upload markers and all
   const render = vm.runInNewContext(source.slice(start, end) + '\nsalesTimingHtml', {
     Date, Math, Number, Intl, escapeHtml: function (value) { return String(value); }
   });
-  const html = render({ days: 3, totals: { measured_views: 35, orders: 3, us_orders: 2 }, hourly: [
+  const html = render({ days: 3, totals: { measured_views: 35, orders: 7, us_orders: 2 }, hourly: [
     { at: '2026-11-19T15:00:00.000Z', views: null, orders: 0, us_orders: 0, view_coverage: 'missing', uploads: [{ title: 'A long film' }] },
-    { at: '2026-11-19T16:00:00.000Z', views: 35, orders: 3, us_orders: 2, view_coverage: 'complete', uploads: [] },
-    { at: '2026-11-19T17:00:00.000Z', views: 20, orders: 0, us_orders: 0, view_coverage: 'complete', uploads: [] },
-    { at: '2026-11-20T17:00:00.000Z', views: 25, orders: 0, us_orders: 0, view_coverage: 'complete', uploads: [] }
+    { at: '2026-11-19T16:00:00.000Z', views: 35, orders: 1, us_orders: 1, view_coverage: 'complete', uploads: [] },
+    { at: '2026-11-19T17:00:00.000Z', views: 20, orders: 2, us_orders: 1, view_coverage: 'complete', uploads: [] },
+    { at: '2026-11-20T17:00:00.000Z', views: 25, orders: 4, us_orders: 0, view_coverage: 'complete', uploads: [] }
   ] });
   assert.match(html, /data-sales-days="3"[^>]*aria-pressed="true"/);
   for (const days of [7, 14, 21, 30]) assert.match(html, new RegExp('data-sales-days="' + days + '"'));
   assert.match(html, /35 measured long-form views/);
-  assert.match(html, /3 paid orders \(2 US\)/);
+  assert.match(html, /4 paid orders \(0 US\)/);
   assert.match(html, /New York/);
-  assert.match(html, /has-upload/);
+  assert.match(html, /class="sales-timing-release"/);
+  assert.match(html, /aria-label="Long-form published: A long film"/);
   assert.match(html, /Published: A long film/);
   assert.match(html, /views-missing/);
   assert.match(html, /class="sales-timing-line"/);
   assert.match(html, /<polyline points="/);
   assert.match(html, /class="sales-timing-day day-base"/);
   assert.match(html, /class="sales-timing-day day-alt"/);
-  assert.match(html, /height:100%;--us-share:67%/);
+  assert.match(html, /height:25%"><b>1<\/b>/);
+  assert.match(html, /height:50%"><b>2<\/b>/);
+  assert.match(html, /height:100%"><b>4<\/b>/);
+  assert.doesNotMatch(html, /--us-share/);
   assert.match(html, /not proof it caused later activity/);
+  const noUploadHtml = render({ days: 3, totals: { measured_views: 0, orders: 0, us_orders: 0 }, hourly: [
+    { at: '2026-11-20T16:00:00.000Z', views: 0, orders: 0, us_orders: 0, view_coverage: 'complete', uploads: [] }
+  ] });
+  assert.match(noUploadHtml, /Long-form published · none in this range/);
+  assert.doesNotMatch(noUploadHtml, /class="sales-timing-release"/);
   assert.match(source, /<section class="sales-block sales-timing-block"/);
   assert.match(source, /'\/api\/reports\/sales-timing\?days='/);
 });

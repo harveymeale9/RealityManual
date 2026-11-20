@@ -23692,3 +23692,19 @@ book pool is explicitly unallocated, not divided by zero. The AdSense column
 is a fixed $3 per 1,000 lifetime views proxy, not actual payout; missing view
 counts remain unknown. Allocation rounds to cents while preserving the
 cost-known pool exactly. No order, payout, or attribution record is mutated.
+
+## Sales timing chart: proportional labelled orders and visible release markers (2026-11-20)
+
+The hourly Sales Analytics chart now draws paid-order bars at heights proportional
+to the count and prints the count directly on every nonzero bar. The scale has
+a minimum maximum of four orders per hour, so a one-sale hour occupies one
+quarter of the sales track rather than always appearing full-height. If an
+hour exceeds four orders, the scale grows to that peak. The old bright/dark
+US-share encoding was removed because it made equal-height bars look like the
+primary measure; US order counts remain in the legend and hour detail.
+Public long-form releases are now full-height gold lines with a visible title
+badge, full title on hover/focus, and accessible label. The legend explicitly
+says when no release falls in the selected period. On 2026-11-20 the three-day
+window had only one-sale nonempty hours and no releases, so its identical
+nonzero bar heights and missing release marker were accurate data, not a chart
+failure; the seven-day period contained one-to-four-sale hours and a release.
