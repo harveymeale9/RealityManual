@@ -23761,3 +23761,13 @@ Sunday's `5574bd8e` remained at their original 15:00 UTC slots. No duplicate
 YouTube upload was made. The 387-test suite passed on the second full run;
 an unrelated timing-sensitive Editor restart test failed only on the first
 full run and passed in isolation before the clean full rerun.
+
+## Remove partial-coverage blue stripe overlay from hourly chart (2026-11-20)
+
+Harvey found the thin blue vertical hatching behind the long-form views line
+visually distracting. Those lines were the CSS `views-partial` background on
+individual hourly cells, not additional data series. The overlay is removed;
+the blue views line, green sales bars, alternating Bangkok-day backgrounds,
+and gold release markers remain. Missing-view hours still create line gaps,
+and partial coverage remains available in the hourly hover/tap detail instead
+of being drawn across the chart. App/CSS cache keys were advanced.

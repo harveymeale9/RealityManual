@@ -212,6 +212,9 @@ test('sales timing chart shows hourly views, paid orders, upload markers and all
   assert.match(html, /height:100%"><b>4<\/b>/);
   assert.doesNotMatch(html, /--us-share/);
   assert.match(html, /not proof it caused later activity/);
+  const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'style.css'), 'utf8');
+  assert.doesNotMatch(css, /\.sales-timing-hour\.views-partial \.sales-timing-views\s*\{/);
+  assert.match(html, /partial coverage is noted in hour details/);
   const noUploadHtml = render({ days: 3, totals: { measured_views: 0, orders: 0, us_orders: 0 }, hourly: [
     { at: '2026-11-20T16:00:00.000Z', views: 0, orders: 0, us_orders: 0, view_coverage: 'complete', uploads: [] }
   ] });
