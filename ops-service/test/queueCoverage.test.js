@@ -46,6 +46,17 @@ test('one-off Friday and Sunday releases replace Saturday without consuming the 
   ]);
 });
 
+test('Friday exception is reserved for the exact uploaded Editor card', function () {
+  const now = Date.parse('2026-11-20T05:00:00Z');
+  const another = Object.assign(ready('another-new-longform', 'longform'), { publishingQueuedAt: '2026-11-20T05:00:00Z' });
+  const target = Object.assign(ready('83d9ec23-e8e5-4d78-afbb-d27dcc62e31e', 'longform'),
+    { publishingQueuedAt: '2026-11-20T05:01:00Z' });
+  const withoutTarget = coverage.calculate({ pieces: [another], now: now, postingSchedule: DAILY }).longform;
+  assert.equal(withoutTarget.timeline[0].state, 'open');
+  const withTarget = coverage.calculate({ pieces: [another, target], now: now, postingSchedule: DAILY }).longform;
+  assert.equal(withTarget.timeline[0].state, 'queued');
+});
+
 test('legacy hour setting cannot move the long-form chart', function () {
   const at = Date.parse('2026-10-22T12:00:00Z');
   const result = coverage.calculate({ pieces: [], now: at, longformAnchor: cadence.LONGFORM_ANCHOR,

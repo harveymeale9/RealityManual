@@ -4028,6 +4028,7 @@ let publishingQueueDrainRequested = false;
 let publishingBufferScheduleCache = { expiresAt: 0, postingSchedule: [] };
 let publishRetryWorkerRunning = false;
 const ONE_OFF_MONEY_ID = '5574bd8e-d0f9-417c-8877-0d21f2db777a';
+const ONE_OFF_FRIDAY_ID = '83d9ec23-e8e5-4d78-afbb-d27dcc62e31e';
 const ONE_OFF_FRIDAY = '2026-11-20T15:00:00.000Z';
 const ONE_OFF_SUNDAY = '2026-11-22T15:00:00.000Z';
 const LONGFORM_ADVANCE_START = Date.parse('2026-11-20T04:03:13.000Z');
@@ -4042,7 +4043,7 @@ function advancedLongformSlot(piece, pieces, now) {
     return other.id !== piece.id && (other.youtubeAdvanceDueAt === ONE_OFF_FRIDAY ||
       (other.stage === 'scheduled' && other.scheduledAt === ONE_OFF_FRIDAY));
   });
-  if (now < Date.parse(ONE_OFF_FRIDAY) - 60000 && !reservedFriday) return ONE_OFF_FRIDAY;
+  if (piece.id === ONE_OFF_FRIDAY_ID && now < Date.parse(ONE_OFF_FRIDAY) - 60000 && !reservedFriday) return ONE_OFF_FRIDAY;
   const occupied = pieces.filter(function (other) {
     return other.id !== piece.id && other.contentType === 'longform' &&
       (['scheduled', 'live'].includes(other.stage) || other.youtubeAdvanceDueAt);

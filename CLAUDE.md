@@ -23518,9 +23518,10 @@ Harvey requested the next newly approved long-form video for Friday 20 November
 at 22:00 Asia/Bangkok (15:00 UTC), the existing “Money only flows to people who
 understand this” card (`5574bd8e`) for Sunday 22 November at the same clock
 time, no long-form release on Saturday 21 November, then the normal Tuesday/
-Saturday 22:00 calendar from Tuesday 24 November. The next long-form queued
-after the request time (20 November 04:03:13 UTC) gets the Friday exception;
-the Friday slot is reserved for one card only. Money has a fixed Sunday
+Saturday 22:00 calendar from Tuesday 24 November. The recording uploaded
+after the request time (20 November 04:03:13 UTC) was identified as
+Editor intake/card `83d9ec23`; Friday is pinned specifically to that card so
+another later approval cannot take its exception. Money has a fixed Sunday
 reservation. The two other pre-existing queued long-form cards retain first
 claim on the next normal slots. Facebook catalog replay skips this Friday and
 Sunday so it does not collide with the special releases, then resumes its

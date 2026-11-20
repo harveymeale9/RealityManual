@@ -109,7 +109,7 @@
           if (type !== 'longform') return true;
           if (piece.youtubeAdvanceDueAt) return timestamp(piece.youtubeAdvanceDueAt) === slot;
           if (slot === Date.parse('2026-11-20T15:00:00.000Z')) {
-            return timestamp(piece.publishingQueuedAt) >= Date.parse('2026-11-20T04:03:13.000Z');
+            return piece.id === '83d9ec23-e8e5-4d78-afbb-d27dcc62e31e';
           }
           if (slot === Date.parse('2026-11-22T15:00:00.000Z')) return piece.id === '5574bd8e-d0f9-417c-8877-0d21f2db777a';
           return piece.id !== '5574bd8e-d0f9-417c-8877-0d21f2db777a';
