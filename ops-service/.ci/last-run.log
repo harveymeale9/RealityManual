@@ -8,17 +8,19 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   74ab026..3079348  main       -> origin/main
+   3079348..98a6468  main       -> origin/main
 + git merge --ff-only origin/main
-Updating 74ab026..3079348
+Updating 3079348..98a6468
 Fast-forward
- CLAUDE.md                                  | 17 +++++++++++++++++
- ops-service/.ci/last-run.log               | 28 +++++++++++++---------------
- ops-service/server.js                      | 19 ++++++++++++++++++-
- ops-service/test/shortformSchedule.test.js | 25 +++++++++++++++++++++++++
- 4 files changed, 73 insertions(+), 16 deletions(-)
+ CLAUDE.md                                    |  20 ++++
+ ops-service/.ci/last-run.log                 | 155 ++++++++++++++++++++++++---
+ ops-service/public/app.js                    |   2 +-
+ ops-service/public/index.html                |   4 +-
+ ops-service/public/style.css                 |   1 -
+ ops-service/test/storefrontReporting.test.js |   3 +
+ 6 files changed, 165 insertions(+), 20 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=307934814f1e3c733cefbb77dc573bf0a4003855
++ NEW_HEAD=98a6468b53fc191314817f02047b3ebd4ca2f5ec
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -27,141 +29,16 @@ Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
 + LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
 ++ cat /root/ops-service-data/last-image-commit.txt
-+ LAST_BUILD_COMMIT=3244897aff8ee889a3b87b0784a4c1d2dcfe4bb4
++ LAST_BUILD_COMMIT=307934814f1e3c733cefbb77dc573bf0a4003855
 + NEEDS_REBUILD=1
-+ '[' -n 3244897aff8ee889a3b87b0784a4c1d2dcfe4bb4 ']'
-+ git cat-file -e '3244897aff8ee889a3b87b0784a4c1d2dcfe4bb4^{commit}'
-++ git diff --name-only 3244897aff8ee889a3b87b0784a4c1d2dcfe4bb4 307934814f1e3c733cefbb77dc573bf0a4003855 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
-+ '[' -z ops-service/server.js ']'
++ '[' -n 307934814f1e3c733cefbb77dc573bf0a4003855 ']'
++ git cat-file -e '307934814f1e3c733cefbb77dc573bf0a4003855^{commit}'
+++ git diff --name-only 307934814f1e3c733cefbb77dc573bf0a4003855 98a6468b53fc191314817f02047b3ebd4ca2f5ec -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -z '' ']'
++ NEEDS_REBUILD=0
 + '[' 0 = 1 ']'
-+ '[' 1 = 0 ']'
-+ UPLOAD_DRAIN_WAITED=0
-+ UPLOAD_DRAIN_LIMIT=7200
-+ '[' -f /root/ops-service-data/db.sqlite ']'
-++ sqlite3 /root/ops-service-data/db.sqlite '
-    SELECT COUNT(*) FROM records
-    WHERE store_name='\''desktopUploaders'\''
-      AND COALESCE(json_extract(data,'\''$.revokedAt'\''),'\'''\'')='\'''\''
-      AND COALESCE(json_extract(data,'\''$.queuedCount'\''),0)>0
-      AND julianday(COALESCE(json_extract(data,'\''$.lastSeenAt'\''),'\''1970-01-01'\'')) > julianday('\''now'\'','\''-5 minutes'\'');
-  '
-+ ACTIVE_UPLOAD_QUEUE=0
-++ sqlite3 /root/ops-service-data/db.sqlite '
-    SELECT COUNT(*) FROM records
-    WHERE store_name='\''editorProjects'\''
-      AND (
-        COALESCE(json_extract(data,'\''$.sourcePreparationStatus'\''),'\'''\'') IN ('\''queued'\'','\''archiving'\'','\''compacting'\'')
-        OR COALESCE(json_extract(data,'\''$.browserPreviewStatus'\''),'\'''\'') IN ('\''pending'\'','\''running'\'')
-        OR COALESCE(json_extract(data,'\''$.transcriptionStatus'\''),'\'''\'')='\''running'\''
-        OR (
-          COALESCE(json_extract(data,'\''$.renderStatus'\''),'\'''\'') IN ('\''queued'\'','\''running'\'')
-          AND COALESCE(json_extract(data,'\''$.automaticRenderStartedAt'\''),'\'''\'')='\'''\''
-        )
-        OR COALESCE(json_extract(data,'\''$.clipInsertStatus'\''),'\'''\'')='\''preparing'\''
-      );
-  '
-+ ACTIVE_EDITOR_PROCESSING=0
-++ sqlite3 /root/ops-service-data/db.sqlite '
-    SELECT COUNT(*) FROM records
-    WHERE store_name='\''editorCloudIntake'\''
-      AND json_extract(data,'\''$.cloudQueueStatus'\'')='\''preparing'\'';
-  '
-+ ACTIVE_CLOUD_INTAKE=0
-++ sqlite3 /root/ops-service-data/db.sqlite '
-    SELECT COUNT(*) FROM records
-    WHERE store_name='\''pieces'\''
-      AND json_extract(data,'\''$.stage'\'')='\''in_production'\''
-      AND json_extract(data,'\''$.finalBuildStatus'\'') IN ('\''pending'\'','\''running'\'');
-  '
-+ ACTIVE_FINAL_BUILD=0
 + '[' 0 = 0 ']'
-+ '[' 0 = 0 ']'
-+ '[' 0 = 0 ']'
-+ '[' 0 = 0 ']'
-+ break
-+ docker tag rm-ops-service rm-ops-service:previous
-+ docker build -t rm-ops-service ./ops-service
-#0 building with "default" instance using docker driver
-
-#1 [internal] load build definition from Dockerfile
-#1 transferring dockerfile: 2.04kB done
-#1 DONE 0.0s
-
-#2 [internal] load metadata for docker.io/library/node:22-slim
-#2 DONE 0.9s
-
-#3 [internal] load .dockerignore
-#3 transferring context: 136B done
-#3 DONE 0.0s
-
-#4 [internal] load build context
-#4 DONE 0.0s
-
-#5 [ 1/10] FROM docker.io/library/node:22-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee
-#5 resolve docker.io/library/node:22-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee 0.0s done
-#5 DONE 0.0s
-
-#4 [internal] load build context
-#4 transferring context: 1.02MB 0.0s done
-#4 DONE 0.0s
-
-#6 [ 4/10] COPY package.json ./
-#6 CACHED
-
-#7 [ 2/10] RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && python3 -m pip install --break-system-packages --no-cache-dir yt-dlp==2026.8.19     && rm -rf /var/lib/apt/lists/*
-#7 CACHED
-
-#8 [ 3/10] WORKDIR /app
-#8 CACHED
-
-#9 [ 5/10] RUN npm install --omit=dev
-#9 CACHED
-
-#10 [ 6/10] COPY server.js ./
-#10 DONE 0.2s
-
-#11 [ 7/10] COPY src ./src
-#11 DONE 0.1s
-
-#12 [ 8/10] COPY public ./public
-#12 DONE 0.2s
-
-#13 [ 9/10] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
-#13 DONE 21.7s
-
-#14 [10/10] RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
-#14 DONE 0.3s
-
-#15 exporting to image
-#15 exporting layers
-#15 exporting layers 2.8s done
-#15 exporting manifest sha256:cfafa1033c073a6d82833eb46e8d15faf653aceaa12ea399476cbb127aa92079 0.0s done
-#15 exporting config sha256:a79f559cd39dcb659b2b9d3ed3b2c12a3e41e47aa6be20f4492c0844408e2008 0.0s done
-#15 exporting attestation manifest sha256:a1090d10e8286cd18f3c624daf147458bee9d78588e3fbf71853e1b20ab8b429 0.0s done
-#15 exporting manifest list sha256:0eedce8b01df2f5cbf2336af18774c619e37d2b19b102d405b9b15d1f81ad2f1
-#15 exporting manifest list sha256:0eedce8b01df2f5cbf2336af18774c619e37d2b19b102d405b9b15d1f81ad2f1 0.0s done
-#15 naming to docker.io/library/rm-ops-service:latest done
-#15 unpacking to docker.io/library/rm-ops-service:latest
-#15 unpacking to docker.io/library/rm-ops-service:latest 1.1s done
-#15 DONE 4.1s
-+ docker stop rm-ops-service
-rm-ops-service
-+ docker rm rm-ops-service
-rm-ops-service
-+ docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-data:/data -v /root/realitymanual-backend-data:/store-data:ro -v /srv/realitymanual-repo:/repo -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
-0725f0ae2cb8ec95df634b7ab27cd7dc3fd0d1c6d4d8d45dd5207576fb85ec5e
-+ echo 307934814f1e3c733cefbb77dc573bf0a4003855
-++ git -C /root/realitymanual-repo rev-parse --short HEAD
-+ echo 'rm-ops-service redeployed at 3079348'
-rm-ops-service redeployed at 3079348
-+ docker image prune -f
-Deleted Images:
-untagged: sha256:9bc6967f13b00e6859ddd18ffe1fd754e017a8bef8a9ea78572b3b5a71ceb423
-deleted: sha256:9bc6967f13b00e6859ddd18ffe1fd754e017a8bef8a9ea78572b3b5a71ceb423
-deleted: sha256:f469debd05474fe53ca5409aed5023798b579bc485db373c6f66659f3ef18b85
-deleted: sha256:e6ddcc9936de3ca7fbbcfcb5f96e4da38b37d1bea7409ae61281f2c3e85a551a
-
-Total reclaimed space: 15.67kB
-+ docker builder prune -f --max-used-space 8GB
-Total:	0B
++ echo 'no backend changes between 307934814f1e3c733cefbb77dc573bf0a4003855 and 98a6468b53fc191314817f02047b3ebd4ca2f5ec — already live via git pull, skipping rebuild/restart'
+no backend changes between 307934814f1e3c733cefbb77dc573bf0a4003855 and 98a6468b53fc191314817f02047b3ebd4ca2f5ec — already live via git pull, skipping rebuild/restart
++ exit 0
 ssh exit code: 0
