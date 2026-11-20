@@ -2212,7 +2212,7 @@ app.delete('/api/store/:storeName/:id', function (req, res) {
         return res.status(423).json({ error: 'queue_publish_in_progress',
           message: 'This video is already being scheduled. It was not deleted; refresh the board to see its current state.' });
       }
-      if (current.youtubeAdvanceStatus === 'uploading' ||
+      if (['uploading', 'ambiguous'].includes(current.youtubeAdvanceStatus) ||
           (current.youtubeVideoId && ['uploaded', 'scheduled'].includes(current.youtubeAdvanceStatus))) {
         return res.status(423).json({ error: 'youtube_schedule_exists',
           message: 'This card has an uploaded or scheduled YouTube video. Unschedule it on YouTube and reconcile the card before deleting.' });
@@ -4079,7 +4079,20 @@ async function advanceQueuedLongformYouTube() {
             return other.id !== piece.id && other.youtubeAdvanceDueAt === ONE_OFF_FRIDAY &&
               other.youtubeAdvanceStatus === 'scheduled';
           })) continue;
-      if (piece.youtubeAdvanceStatus === 'uploading' || piece.youtubeAdvanceStatus === 'error') continue;
+      if (piece.youtubeAdvanceStatus === 'uploading') {
+        // This can only survive into a new worker run if the previous process
+        // died mid-upload. The remote result is unknown, so do not retry it.
+        if (!piece.youtubeAdvanceAlertSentAt) {
+          try {
+            await mailbox.sendAutomated({ to: [process.env.PUBLISH_ALERT_RECIPIENT || 'harveymeale9@gmail.com'], cc: [],
+              subject: 'Check interrupted YouTube upload: ' + String(piece.title || '').slice(0, 150),
+              textBody: 'The upload process stopped before Content Studio saved a YouTube video ID. It will not send another copy automatically. Please inspect YouTube Studio for the scheduled video before any retry.' });
+            updatePieceFields(piece.id, { youtubeAdvanceAlertSentAt: new Date().toISOString() });
+          } catch (mailError) { console.error('Interrupted YouTube upload alert failed:', mailError.message); }
+        }
+        continue;
+      }
+      if (piece.youtubeAdvanceStatus === 'error' || piece.youtubeAdvanceStatus === 'ambiguous') continue;
       const destination = piece.queuedPublishDestinations.find(function (item) { return item.platform === 'ytlong'; });
       if (!destination) continue;
       publishingQueueClaims.add(piece.id);
@@ -4131,7 +4144,8 @@ async function advanceQueuedLongformYouTube() {
         // An upload that started but returned no ID is ambiguous. Never send
         // another copy automatically; Harvey can inspect the channel first.
         const uploadedId = latest.youtubeVideoId;
-        updatePieceFields(piece.id, { youtubeAdvanceStatus: uploadedId ? 'uploaded' : 'error',
+        updatePieceFields(piece.id, { youtubeAdvanceStatus: uploadedId ? 'uploaded' :
+          latest.youtubeAdvanceStatus === 'uploading' ? 'ambiguous' : 'error',
           youtubePublishStatus: 'error', youtubePublishError: String(error.message || error).slice(0, 500) });
         if (!latest.youtubeAdvanceAlertSentAt) {
           try {
