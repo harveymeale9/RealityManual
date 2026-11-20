@@ -23642,3 +23642,7 @@ The controls are part of the image (visual only), while the whole image and CTA
 remain real links to the blank page. The gradient has a solid-gold fallback
 for email clients that do not render CSS gradients. The HTML was rechecked at
 desktop and phone widths before the second preview send.
+
+Harvey subsequently changed only the visible email headline from “Face Reveal!”
+to “Important Message”; the browser preview title follows it. The poster,
+body copy, links and blank destination are unchanged.
