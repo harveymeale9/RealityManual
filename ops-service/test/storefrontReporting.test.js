@@ -197,6 +197,8 @@ test('sales timing chart shows hourly views, paid orders, upload markers and all
   for (const days of [7, 14, 21, 30]) assert.match(html, new RegExp('data-sales-days="' + days + '"'));
   assert.match(html, /35 measured long-form views/);
   assert.match(html, /Long-form views per sale <b>5<\/b>/);
+  assert.match(html, /Average sales per day <b>2\.3<\/b>/);
+  assert.doesNotMatch(html, /◆ Long-form published/);
   assert.match(html, /all sales; not attributed/);
   assert.match(html, /4 paid orders \(0 US\)/);
   assert.match(html, /New York/);
@@ -225,7 +227,7 @@ test('sales timing chart shows hourly views, paid orders, upload markers and all
   const noUploadHtml = render({ days: 3, totals: { measured_views: 0, orders: 0, us_orders: 0 }, hourly: [
     { at: '2026-11-20T16:00:00.000Z', views: 0, orders: 0, us_orders: 0, view_coverage: 'complete', uploads: [] }
   ] });
-  assert.match(noUploadHtml, /Long-form published · none in this range/);
+  assert.match(noUploadHtml, /Average sales per day <b>0\.0<\/b>/);
   assert.match(noUploadHtml, /Long-form views per sale <b>—<\/b>/);
   assert.doesNotMatch(noUploadHtml, /class="sales-timing-release"/);
   const denseHtml = render({ days: 30, totals: { measured_views: 0, orders: 0, us_orders: 0 }, hourly: [

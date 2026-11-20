@@ -556,6 +556,7 @@
     var measuredViews = Number(data.totals.measured_views || 0);
     var paidOrders = Number(data.totals.orders || 0);
     var viewsPerSale = measuredViews > 0 && paidOrders > 0 ? Math.round(measuredViews / paidOrders).toLocaleString() : '—';
+    var averageSalesPerDay = (paidOrders / Math.max(1, Number(data.days) || 1)).toFixed(1);
     var hourWidth = 15;
     var viewHeight = 112;
     var dense = Number(data.days) >= 14;
@@ -649,7 +650,7 @@
       '<div class="sales-timing-legend"><span class="views">YouTube long-form views <b>' + measuredViews.toLocaleString() + '</b></span>' +
       '<span class="orders">Stripe-paid orders <b>' + paidOrders + '</b> <small>(' + Number(data.totals.us_orders || 0) + ' US)</small></span>' +
       '<span class="views-per-sale" title="Measured long-form views divided by all paid orders in this period. Not YouTube-attributed sales; view coverage may be partial.">Long-form views per sale <b>' + viewsPerSale + '</b> <small>(all sales; not attributed)</small></span>' +
-      '<span class="uploads">◆ Long-form published' + (releases.length ? '' : ' · none in this range') + '</span></div>' +
+      '<span class="avg-sales" title="Stripe-paid, non-refunded orders divided by the selected number of Bangkok calendar days, including today if selected.">Average sales per day <b>' + averageSalesPerDay + '</b></span></div>' +
       '<p class="sales-timing-detail" aria-live="polite">Point at or tap an hour for Bangkok and New York times, views, sales and upload titles.</p>' +
       '<div class="sales-timing-scroll" role="group" aria-label="Hourly views and paid orders"><div class="sales-timing-grid' + (dense ? ' dense' : '') + (veryDense ? ' very-dense' : '') + '">' + dayBands + hours + viewLine + releaseMarkers + '</div></div>' +
       '<p class="sales-profit-note">Blue line: observed hourly long-form view increases; labelled green bars: paid orders (bar height follows the count, with four orders filling the scale unless a higher hour occurs). Alternating bands mark Bangkok calendar days; the bottom strip totals each day’s paid sales and cost-known estimated book gross profit (charged total minus BookVault cost, before Stripe fees). Orders awaiting a BookVault cost are counted as sales but omitted from profit and marked pending. Today is partial through the current hour. Gold labelled lines mark public long-form releases. Views are observed at hourly YouTube polls, not exact view times; one- or two-hour polling gaps are displayed as even per-hour estimates from the next measured increase, while longer gaps remain breaks. Raw measured totals are unchanged; hover/tap gives the gap detail, and partial coverage is noted in hour details. Sales use Stripe-paid orders at payment time (creation time if unavailable), excluding refunds and owner-marked tests. ◆ marks the public long-form release, not proof it caused later activity.</p>';

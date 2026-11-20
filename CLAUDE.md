@@ -23827,3 +23827,13 @@ in every 3/7/14/21/30-day range, and long-form release markers meet the same
 baseline. Redundant noon/hour tick text is hidden; day labels remain above
 the plot, and exact Bangkok/New York hours remain in each column's hover/tap
 detail. This is presentation-only: hourly data and totals are unchanged.
+
+## Sales chart header: average sales per day (2026-11-20)
+
+The hourly Sales Analytics legend now includes average Stripe-paid sales per
+Bangkok calendar day for the selected 3/7/14/21/30-day period (paid order
+total divided by selected days, shown to one decimal). Today remains in the
+denominator even when partial, matching the selected calendar-day window.
+The redundant “Long-form published” legend text was removed; the gold
+upload lines and title hover/tap details remain in the graph. No sales data
+or upload scheduling changed.

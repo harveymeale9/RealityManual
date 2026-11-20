@@ -2684,9 +2684,8 @@ body.role-reviewer .positive-comments { display: none; }
 .sales-timing-legend { display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 14px 17px 7px; font: .72rem var(--font-body); color: var(--ink-soft); }
 .sales-timing-legend span::before { content: ''; display: inline-block; width: 11px; height: 3px; margin: 0 7px 3px 0; border-radius: 2px; background: #78baff; }
 .sales-timing-legend .orders::before { background: #4fe894; }
-.sales-timing-legend .uploads::before { display: none; }
-.sales-timing-legend .views-per-sale::before { display: none; }
-.sales-timing-legend .views-per-sale { color: var(--ink); }
+.sales-timing-legend .views-per-sale::before,.sales-timing-legend .avg-sales::before { display: none; }
+.sales-timing-legend .views-per-sale,.sales-timing-legend .avg-sales { color: var(--ink); }
 .sales-timing-legend b { color: var(--ink); font-variant-numeric: tabular-nums; }
 .sales-timing-detail { min-height: 31px; margin: 0 17px 7px; padding: 7px 9px; border: 1px solid var(--border-soft); border-radius: 5px; background: var(--surface-2); color: var(--ink-soft); font: .67rem/1.4 var(--font-body); }
 .sales-timing-scroll { overflow-x: hidden; padding: 0 12px 8px; }
