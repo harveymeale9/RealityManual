@@ -23771,3 +23771,18 @@ the blue views line, green sales bars, alternating Bangkok-day backgrounds,
 and gold release markers remain. Missing-view hours still create line gaps,
 and partial coverage remains available in the hourly hover/tap detail instead
 of being drawn across the chart. App/CSS cache keys were advanced.
+
+## Daily sales and estimated book profit beneath hourly chart (2026-11-20)
+
+The Sales Analytics hourly chart now uses the bottom of each alternating
+Bangkok-day band for that day's Stripe-paid, non-refunded, non-test sales count
+and estimated book gross profit. The private hourly report adds cost-known
+profit and pending-cost counts to each hour, using the same definition as
+the existing Sales Analytics revenue cards: charged total minus saved
+BookVault USD cost, before Stripe fees. The browser totals those hours by
+Bangkok calendar day, so all past days in the selected window are complete
+and today is partial through the current hour. Orders awaiting a BookVault
+cost count toward sales but are omitted from profit and explicitly marked
+pending; an all-pending day shows a dash rather than a misleading $0 profit.
+No order data or publishing state changes. Focused API and chart tests cover
+the cost-known/pending split and day-grouped display.

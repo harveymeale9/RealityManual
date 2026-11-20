@@ -568,13 +568,14 @@ function getHourlySalesTiming(storeDb, opsDb, pieces, nowValue, excludedIds, day
   const byHour = new Map();
   for (let at = startMs; at <= endMs; at += hourMs) {
     const bin = { at: new Date(at).toISOString(), orders: 0, us_orders: 0,
+      gross_profit_cents: 0, profit_pending_orders: 0,
       views: null, view_coverage: 'missing', uploads: [] };
     bins.push(bin);
     byHour.set(bin.at, bin);
   }
   const excluded = excludedOrderFilter(excludedIds);
   const paidAt = "COALESCE(NULLIF(payment_received_at,''),created_at)";
-  const orders = storeDb.prepare(`SELECT ${paidAt} AS paid_at,country FROM orders
+  const orders = storeDb.prepare(`SELECT ${paidAt} AS paid_at,country,total_price_cents,bookvault_total_cost_usd_cents FROM orders
     WHERE ${paidAt} >= ? AND ${paidAt} <= ? AND ${PAID_ORDER_SQL}${excluded.sql}`)
     .all(new Date(startMs).toISOString(), now.toISOString(), ...excluded.ids);
   orders.forEach(function (order) {
@@ -583,6 +584,8 @@ function getHourlySalesTiming(storeDb, opsDb, pieces, nowValue, excludedIds, day
     if (!bin) return;
     bin.orders++;
     if (String(order.country || '').toUpperCase() === 'US') bin.us_orders++;
+    if (order.bookvault_total_cost_usd_cents == null) bin.profit_pending_orders++;
+    else bin.gross_profit_cents += (Number(order.total_price_cents) || 0) - Number(order.bookvault_total_cost_usd_cents);
   });
 
   const longforms = (pieces || []).filter(function (piece) {

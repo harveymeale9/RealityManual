@@ -184,12 +184,13 @@ test('sales timing chart shows hourly views, paid orders, upload markers and all
   const end = source.indexOf('  function renderSalesAnalytics()', start);
   assert.ok(start > 0 && end > start);
   const render = vm.runInNewContext(source.slice(start, end) + '\nsalesTimingHtml', {
-    Date, Math, Number, Intl, escapeHtml: function (value) { return String(value); }
+    Date, Math, Number, Intl, escapeHtml: function (value) { return String(value); },
+    salesMoney: function (cents) { return '$' + (Number(cents) / 100).toFixed(2); }
   });
   const html = render({ days: 3, totals: { measured_views: 35, orders: 7, us_orders: 2 }, hourly: [
     { at: '2026-11-19T15:00:00.000Z', views: null, orders: 0, us_orders: 0, view_coverage: 'missing', uploads: [{ title: 'A long film' }] },
-    { at: '2026-11-19T16:00:00.000Z', views: 35, orders: 1, us_orders: 1, view_coverage: 'complete', uploads: [] },
-    { at: '2026-11-19T17:00:00.000Z', views: 20, orders: 2, us_orders: 1, view_coverage: 'complete', uploads: [] },
+    { at: '2026-11-19T16:00:00.000Z', views: 35, orders: 1, us_orders: 1, gross_profit_cents: 4500, profit_pending_orders: 0, view_coverage: 'complete', uploads: [] },
+    { at: '2026-11-19T17:00:00.000Z', views: 20, orders: 2, us_orders: 1, gross_profit_cents: 2000, profit_pending_orders: 1, view_coverage: 'complete', uploads: [] },
     { at: '2026-11-20T17:00:00.000Z', views: 25, orders: 4, us_orders: 0, view_coverage: 'complete', uploads: [] }
   ] });
   assert.match(html, /data-sales-days="3"[^>]*aria-pressed="true"/);
@@ -207,6 +208,9 @@ test('sales timing chart shows hourly views, paid orders, upload markers and all
   assert.match(html, /<polyline points="/);
   assert.match(html, /class="sales-timing-day day-base"/);
   assert.match(html, /class="sales-timing-day day-alt"/);
+  assert.match(html, /1 sale<\/strong><small>Est book profit \$45\.00/);
+  assert.match(html, /2 sales<\/strong><small>Est book profit \$20\.00 · 1 pending/);
+  assert.match(html, /4 sales<\/strong><small>Est book profit \$0\.00/);
   assert.match(html, /height:25%"><b>1<\/b>/);
   assert.match(html, /height:50%"><b>2<\/b>/);
   assert.match(html, /height:100%"><b>4<\/b>/);
