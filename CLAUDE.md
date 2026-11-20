@@ -23646,3 +23646,14 @@ desktop and phone widths before the second preview send.
 Harvey subsequently changed only the visible email headline from “Face Reveal!”
 to “Important Message”; the browser preview title follows it. The poster,
 body copy, links and blank destination are unchanged.
+
+## Hourly Sales Analytics uses a view line and alternating day bands (2026-11-20)
+
+Harvey found the original two-row bar chart difficult to read. The hourly
+YouTube long-form view counts now render as a continuous blue SVG line, broken
+at missing measurement hours; Stripe-paid orders remain green hourly bars.
+The hourly plot has alternating backgrounds for each Bangkok calendar day,
+visible day boundaries and labels, plus the existing gold release-hour
+diamonds and vertical guides. The 3/7/14/21/30-day ranges, per-hour Bangkok
+and New York detail, US-order highlighting, and data definitions are unchanged.
+This is a frontend-only change; the private report endpoint was not altered.

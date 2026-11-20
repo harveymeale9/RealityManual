@@ -560,16 +560,31 @@
 
   function salesTimingHtml(data) {
     var bins = Array.isArray(data.hourly) ? data.hourly : [];
+    var hourWidth = 15;
+    var viewHeight = 112;
     var maxViews = Math.max.apply(Math, bins.map(function (bin) { return Number(bin.views) || 0; }).concat([1]));
     var maxOrders = Math.max.apply(Math, bins.map(function (bin) { return Number(bin.orders) || 0; }).concat([1]));
     var options = [3, 7, 14, 21, 30].map(function (days) {
       return '<button type="button" data-sales-days="' + days + '" class="sales-timing-period' + (days === data.days ? ' active' : '') + '" aria-pressed="' + (days === data.days) + '">' + days + ' days</button>';
     }).join('');
-    var hours = bins.map(function (bin) {
+    var days = [];
+    var viewRuns = [];
+    var viewRun = [];
+    var hours = bins.map(function (bin, index) {
       var date = new Date(bin.at);
       var bangkok = date.toLocaleString('en-GB', { timeZone: 'Asia/Bangkok', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
       var newYork = date.toLocaleString('en-GB', { timeZone: 'America/New_York', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
       var bkkHour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', hourCycle: 'h23' }).format(date));
+      var dayKey = date.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' });
+      if (!days.length || days[days.length - 1].key !== dayKey) days.push({ key: dayKey, start: index, length: 0,
+        label: date.toLocaleDateString('en-GB', { timeZone: 'Asia/Bangkok', weekday: 'short', day: 'numeric', month: 'short' }) });
+      days[days.length - 1].length++;
+      if (bin.views == null) {
+        if (viewRun.length) viewRuns.push(viewRun);
+        viewRun = [];
+      } else {
+        viewRun.push(((index + .5) * hourWidth) + ',' + (viewHeight - 9 - Math.round(Number(bin.views) / maxViews * (viewHeight - 23))));
+      }
       var tick = bkkHour === 0 ? date.toLocaleDateString('en-GB', { timeZone: 'Asia/Bangkok', day: 'numeric', month: 'short' }) : bkkHour === 12 ? '12h' : '';
       var uploads = Array.isArray(bin.uploads) ? bin.uploads : [];
       var usShare = bin.orders ? Math.round(Number(bin.us_orders || 0) / Number(bin.orders) * 100) : 0;
@@ -579,18 +594,24 @@
         (uploads.length ? ' · Published: ' + uploads.map(function (item) { return item.title; }).join(', ') : '');
       return '<button type="button" class="sales-timing-hour' + (uploads.length ? ' has-upload' : '') + (bin.view_coverage !== 'complete' ? ' views-' + bin.view_coverage : '') + '"' +
         ' data-sales-detail="' + escapeHtml(detail) + '" aria-label="' + escapeHtml(detail) + '">' +
-        '<span class="sales-timing-views"><i style="height:' + (bin.views == null ? 0 : Math.max(bin.views ? 3 : 0, Math.round(Number(bin.views) / maxViews * 100))) + '%"></i></span>' +
+        '<span class="sales-timing-views"></span>' +
         '<span class="sales-timing-orders"><i style="height:' + (bin.orders ? Math.max(8, Math.round(Number(bin.orders) / maxOrders * 100)) : 0) + '%;--us-share:' + usShare + '%"></i></span>' +
         (uploads.length ? '<span class="sales-timing-upload" aria-hidden="true">◆</span>' : '') +
         '<span class="sales-timing-tick">' + escapeHtml(tick) + '</span></button>';
     }).join('');
+    if (viewRun.length) viewRuns.push(viewRun);
+    var dayBands = days.map(function (day, index) {
+      return '<div class="sales-timing-day ' + (index % 2 ? 'day-alt' : 'day-base') + '" style="left:' + (day.start * hourWidth) + 'px;width:' + (day.length * hourWidth) + 'px"><span>' + escapeHtml(day.label) + '</span></div>';
+    }).join('');
+    var viewLine = '<svg class="sales-timing-line" viewBox="0 0 ' + (bins.length * hourWidth) + ' ' + viewHeight + '" width="' + (bins.length * hourWidth) + '" height="' + viewHeight + '" preserveAspectRatio="none" aria-hidden="true">' +
+      viewRuns.map(function (run) { return run.length > 1 ? '<polyline points="' + run.join(' ') + '"/>' : '<circle cx="' + run[0].split(',')[0] + '" cy="' + run[0].split(',')[1] + '" r="2.5"/>'; }).join('') + '</svg>';
     return '<div class="sales-timing-head"><div><span>Hourly · Bangkok time</span><h3>Long-form views and customer sales</h3></div><div class="sales-timing-periods" aria-label="Time period">' + options + '</div></div>' +
       '<div class="sales-timing-legend"><span class="views">YouTube long-form views <b>' + Number(data.totals.measured_views || 0).toLocaleString() + '</b></span>' +
       '<span class="orders">Stripe-paid orders <b>' + Number(data.totals.orders || 0) + '</b> <small>(' + Number(data.totals.us_orders || 0) + ' US; bright green)</small></span>' +
       '<span class="uploads">◆ Long-form published</span></div>' +
       '<p class="sales-timing-detail" aria-live="polite">Point at or tap an hour for Bangkok and New York times, views, sales and upload titles.</p>' +
-      '<div class="sales-timing-scroll" role="group" aria-label="Hourly views and paid orders"><div class="sales-timing-grid">' + hours + '</div></div>' +
-      '<p class="sales-profit-note">Each row has its own scale. Views are increases observed at hourly YouTube polls, not exact view times; gaps or partial hours are marked. Sales use Stripe-paid orders at payment time (creation time if unavailable), excluding refunds and owner-marked tests. ◆ marks the public long-form release, not proof it caused later activity.</p>';
+      '<div class="sales-timing-scroll" role="group" aria-label="Hourly views and paid orders"><div class="sales-timing-grid" style="width:' + (bins.length * hourWidth) + 'px">' + dayBands + hours + viewLine + '</div></div>' +
+      '<p class="sales-profit-note">Blue line: observed hourly long-form view increases; green bars: paid orders. Alternating bands mark Bangkok calendar days; gold diamonds mark public long-form releases. Views are observed at hourly YouTube polls, not exact view times; gaps or partial hours are marked. Sales use Stripe-paid orders at payment time (creation time if unavailable), excluding refunds and owner-marked tests. ◆ marks the public long-form release, not proof it caused later activity.</p>';
   }
 
   function bindSalesTiming(data) {
