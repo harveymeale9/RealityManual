@@ -2212,7 +2212,8 @@ app.delete('/api/store/:storeName/:id', function (req, res) {
         return res.status(423).json({ error: 'queue_publish_in_progress',
           message: 'This video is already being scheduled. It was not deleted; refresh the board to see its current state.' });
       }
-      if (current.youtubeVideoId && ['reserved', 'uploading', 'uploaded', 'scheduled'].includes(current.youtubeAdvanceStatus)) {
+      if (current.youtubeAdvanceStatus === 'uploading' ||
+          (current.youtubeVideoId && ['uploaded', 'scheduled'].includes(current.youtubeAdvanceStatus))) {
         return res.status(423).json({ error: 'youtube_schedule_exists',
           message: 'This card has an uploaded or scheduled YouTube video. Unschedule it on YouTube and reconcile the card before deleting.' });
       }
@@ -4081,6 +4082,7 @@ async function advanceQueuedLongformYouTube() {
       if (piece.youtubeAdvanceStatus === 'uploading' || piece.youtubeAdvanceStatus === 'error') continue;
       const destination = piece.queuedPublishDestinations.find(function (item) { return item.platform === 'ytlong'; });
       if (!destination) continue;
+      publishingQueueClaims.add(piece.id);
       try {
         if (piece.youtubeAdvanceStatus === 'reserved') {
           await ensurePublishMediaArchived(piece.id);
@@ -4140,6 +4142,8 @@ async function advanceQueuedLongformYouTube() {
             updatePieceFields(piece.id, { youtubeAdvanceAlertSentAt: new Date().toISOString() });
           } catch (mailError) { console.error('YouTube scheduling alert failed:', mailError.message); }
         }
+      } finally {
+        publishingQueueClaims.delete(piece.id);
       }
     }
   } finally { longformAdvanceRunning = false; }
