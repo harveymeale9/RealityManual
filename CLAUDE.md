@@ -23734,3 +23734,20 @@ growth (which can have partial/missing coverage), while the denominator is
 all store orders, not YouTube-attributed orders. It is a directional comparison,
 not a conversion rate or proof of channel causation. Zero paid orders or zero
 measured views displays a dash instead of a misleading division result.
+
+## Advance-schedule the two pre-existing long-form queue videos (2026-11-20)
+
+Harvey approved uploading the two older Publishing Queue long-forms to
+YouTube now rather than waiting for release-time selection. The precise
+reservations are "Watch this BEFORE all of your dreams come true"
+(`652f9e11`) for Tuesday 24 November 2026 at 22:00 Asia/Bangkok and
+"The Idiot-Proof Guide to Reinventing Yourself" (`0ca49b70`) for Saturday
+28 November at 22:00 Asia/Bangkok. Both keep their queued Facebook
+destination for the existing release-time worker. These are narrow
+exceptions to the pre-2026-11-20 cutoff in the advance YouTube worker;
+other legacy queue cards are unchanged. The first is processed before the
+second, their fixed slots cannot silently override another reservation,
+and the worker retains its private `publishAt` verification and no-duplicate
+ambiguous-upload handling. Friday's and Sunday's existing reservations are
+untouched. Behavioral tests verify each exact slot, the legacy cutoff, and
+collision refusal.

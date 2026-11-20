@@ -4051,8 +4051,12 @@ let publishingBufferScheduleCache = { expiresAt: 0, postingSchedule: [] };
 let publishRetryWorkerRunning = false;
 const ONE_OFF_MONEY_ID = '5574bd8e-d0f9-417c-8877-0d21f2db777a';
 const ONE_OFF_FRIDAY_ID = '83d9ec23-e8e5-4d78-afbb-d27dcc62e31e';
+const LEGACY_WATCH_ID = '652f9e11-5658-4fe7-b9e8-04a46421b429';
+const LEGACY_REINVENT_ID = '0ca49b70-7d12-49b5-a6a6-3cfc82bf1889';
 const ONE_OFF_FRIDAY = '2026-11-20T15:00:00.000Z';
 const ONE_OFF_SUNDAY = '2026-11-22T15:00:00.000Z';
+const LEGACY_WATCH_SLOT = '2026-11-24T15:00:00.000Z';
+const LEGACY_REINVENT_SLOT = '2026-11-28T15:00:00.000Z';
 const LONGFORM_ADVANCE_START = Date.parse('2026-11-20T04:03:13.000Z');
 let longformAdvanceRunning = false;
 
@@ -4060,6 +4064,18 @@ function advancedLongformSlot(piece, pieces, now) {
   if (!piece || piece.contentType !== 'longform' || piece.stage !== 'publishing_queue') return '';
   if (!(piece.queuedPublishDestinations || []).some(function (item) { return item.platform === 'ytlong'; })) return '';
   if (piece.id === ONE_OFF_MONEY_ID) return now < Date.parse(ONE_OFF_SUNDAY) - 60000 ? ONE_OFF_SUNDAY : '';
+  // These two pre-cutoff queue cards were deliberately left for release-time
+  // selection. Harvey has now requested that they be uploaded and fixed in
+  // YouTube Studio early, in their original queue order.
+  const legacySlot = piece.id === LEGACY_WATCH_ID ? LEGACY_WATCH_SLOT :
+    piece.id === LEGACY_REINVENT_ID ? LEGACY_REINVENT_SLOT : '';
+  if (legacySlot) {
+    if (now >= Date.parse(legacySlot) - 60000) return '';
+    if (pieces.some(function (other) { return other.id !== piece.id &&
+      (other.youtubeAdvanceDueAt === legacySlot ||
+        (other.stage === 'scheduled' && other.scheduledAt === legacySlot)); })) return '';
+    return legacySlot;
+  }
   if (Date.parse(piece.publishingQueuedAt || '') < LONGFORM_ADVANCE_START) return '';
   const reservedFriday = pieces.some(function (other) {
     return other.id !== piece.id && (other.youtubeAdvanceDueAt === ONE_OFF_FRIDAY ||
@@ -4087,7 +4103,8 @@ async function advanceQueuedLongformYouTube() {
     const now = Date.now();
     const candidates = allPieceRecords().filter(function (piece) {
       return piece.stage === 'publishing_queue' && piece.contentType === 'longform' &&
-        (piece.id === ONE_OFF_MONEY_ID || Date.parse(piece.publishingQueuedAt || '') >= LONGFORM_ADVANCE_START);
+        ([ONE_OFF_MONEY_ID, LEGACY_WATCH_ID, LEGACY_REINVENT_ID].includes(piece.id) ||
+          Date.parse(piece.publishingQueuedAt || '') >= LONGFORM_ADVANCE_START);
     }).sort(function (a, b) { return a.id === ONE_OFF_MONEY_ID ? -1 : b.id === ONE_OFF_MONEY_ID ? 1 :
       Date.parse(a.publishingQueuedAt) - Date.parse(b.publishingQueuedAt); });
     for (const candidate of candidates) {

@@ -2,6 +2,9 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
 const schedule = require('../src/shortformSchedule');
 
 function daily(times) {
@@ -72,4 +75,26 @@ test('the former immediate-release flag cannot bypass the next Tuesday slot', fu
   const first = schedule.nextLongformReleaseSlot(approval, schedule.LONGFORM_ANCHOR, 168, true);
   assert.equal(first, '2026-11-10T15:00:00.000Z');
   assert.equal(schedule.nextLongformReleaseSlot(Date.parse(first), first, 168, false), '2026-11-14T15:00:00.000Z');
+});
+
+test('the two approved legacy long-forms reserve Tuesday then Saturday without moving existing specials', function () {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const start = source.indexOf('const ONE_OFF_MONEY_ID =');
+  const end = source.indexOf('async function advanceQueuedLongformYouTube()', start);
+  assert.ok(start > 0 && end > start);
+  const choose = vm.runInNewContext(source.slice(start, end) + '\nadvancedLongformSlot', {
+    Date, shortformSchedule: schedule
+  });
+  const queued = function (id) { return {
+    id, contentType: 'longform', stage: 'publishing_queue', publishingQueuedAt: '2026-11-15T09:00:00.000Z',
+    queuedPublishDestinations: [{ platform: 'ytlong' }]
+  }; };
+  const watch = queued('652f9e11-5658-4fe7-b9e8-04a46421b429');
+  const reinvent = queued('0ca49b70-7d12-49b5-a6a6-3cfc82bf1889');
+  const now = Date.parse('2026-11-20T12:00:00.000Z');
+  assert.equal(choose(watch, [watch, reinvent], now), '2026-11-24T15:00:00.000Z');
+  assert.equal(choose(reinvent, [watch, reinvent], now), '2026-11-28T15:00:00.000Z');
+  assert.equal(choose(queued('other-old-card'), [watch, reinvent], now), '');
+  assert.equal(choose(watch, [watch, reinvent, { id: 'collision', stage: 'scheduled',
+    scheduledAt: '2026-11-24T15:00:00.000Z' }], now), '');
 });
