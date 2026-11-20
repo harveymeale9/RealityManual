@@ -1234,7 +1234,7 @@
         manualRevisionLogHtml(project) + '</div>';
       return;
     }
-    if (project.oversizedSource && project.sourcePreparationStatus !== 'ready') {
+    if (project.oversizedSource && project.sourcePreparationStatus !== 'ready' && project.transcriptionStatus !== 'ready') {
       var sourceFailed = project.sourcePreparationStatus === 'error';
       var sourceHeading = sourceFailed ? 'Large recording needs attention' :
         project.sourcePreparationStatus === 'compacting' ? 'Building a faster editing master…' : 'Securing this large recording…';
@@ -1316,8 +1316,9 @@
     var automaticCutsPresent = project.autoSilenceEnabled !== false && (project.gapDecisions || []).some(function (gap) { return !gap.restored; });
     var framingFailureBlocks = framingFailureIsBlocking(project);
     var failedSafetyCheck = framingFailureBlocks;
-    var renderBlocked = automaticEditRunning || failedSafetyCheck || project.layoutReviewRequired;
-    var renderButtonText = automaticEditRunning ? 'Preparing automatic edit…' : framingFailureBlocks ? 'Retry framing or choose a frame' : project.layoutReviewRequired ? 'Confirm Vertical or Horizontal frame' : project.renderDirty ? 'Rebuild preview' : 'Build editing preview';
+    var editingMasterPreparing = project.oversizedSource && project.sourcePreparationStatus !== 'ready';
+    var renderBlocked = editingMasterPreparing || automaticEditRunning || failedSafetyCheck || project.layoutReviewRequired;
+    var renderButtonText = editingMasterPreparing ? 'Waiting for editing master…' : automaticEditRunning ? 'Preparing automatic edit…' : framingFailureBlocks ? 'Retry framing or choose a frame' : project.layoutReviewRequired ? 'Confirm Vertical or Horizontal frame' : project.renderDirty ? 'Rebuild preview' : 'Build editing preview';
     var audioUnavailableText = audioUnavailableMessage(project);
     var rendering = ['queued', 'running'].indexOf(project.renderStatus) !== -1;
     var previewRebuildPending = !!localPreviewRebuilds[project.id] || !!project.renderRebuildPending;
@@ -1332,7 +1333,7 @@
     // It is the untouched camera master only after an explicit Raw click.
     var previewingWorkingEdit = previewMode === 'source' && !explicitSourcePreviews[project.id];
     var browserSafeSource = project.browserPreviewRequired && project.browserPreviewStatus === 'ready';
-    var sourcePreviewPreparing = previewMode === 'source' && project.browserPreviewRequired &&
+    var sourcePreviewPreparing = editingMasterPreparing || previewMode === 'source' && project.browserPreviewRequired &&
       ['pending', 'running'].indexOf(project.browserPreviewStatus) !== -1;
     var mediaUnavailable = previewLocked || sourcePreviewPreparing;
     var sourcePreviewLabel = browserSafeSource ? 'Raw browser-safe copy · no edits/captions' : 'Raw original · no edits/captions';
@@ -1372,7 +1373,7 @@
       ? '<div class="editor-preview-rebuild' + (rebuildFailed ? ' error' : '') + '" id="editorPreviewRebuild" role="status" aria-live="polite"><div class="editor-preview-rebuild-spinner">' + (rebuildFailed ? '!' : '') + '</div><strong id="editorPreviewRebuildLabel">' + rebuildLabel + '</strong><span>' + (rebuildFailed ? 'Playback remains locked because this file was not regenerated. Use Retry failed steps above.' : initialPreviewBuild ? 'No changes have been made. The first editable preview is being prepared from your new recording.' : 'Your latest edit is being applied. Playback will unlock when the regenerated preview is ready.') + '</span>' + (rebuildFailed ? '' : '<div><i id="editorPreviewRebuildBar" style="width:' + (project.renderStatus === 'running' ? Math.max(2, rebuildPercent) : 4) + '%"></i></div>') + '</div>'
       : '';
     var sourcePreparingOverlayHtml = sourcePreviewPreparing
-      ? '<div class="editor-preview-rebuild" id="editorSourcePreviewPreparing" role="status" aria-live="polite"><div class="editor-preview-rebuild-spinner"></div><strong id="editorSourcePreviewProgressLabel">' + (project.browserPreviewStatus === 'running' ? 'Encoding browser-safe preview · ' + Math.max(0, Math.min(99, Math.round(Number(project.browserPreviewProgress) || 0))) + '%' : 'Waiting to prepare browser-safe preview…') + '</strong><span>' + (project.browserPreviewStatus === 'running' ? 'Playback will unlock automatically; your camera master and editing controls remain available.' : 'Encoding will start when the preview queue is ready; your editing controls remain available.') + '</span>' + (project.browserPreviewStatus === 'running' ? '<div><i id="editorSourcePreviewProgressBar" style="width:' + Math.max(0, Math.min(99, Math.round(Number(project.browserPreviewProgress) || 0))) + '%"></i></div>' : '') + '</div>'
+      ? '<div class="editor-preview-rebuild" id="editorSourcePreviewPreparing" role="status" aria-live="polite"><div class="editor-preview-rebuild-spinner"></div><strong id="editorSourcePreviewProgressLabel">' + (editingMasterPreparing ? 'Building editing master…' : project.browserPreviewStatus === 'running' ? 'Encoding browser-safe preview · ' + Math.max(0, Math.min(99, Math.round(Number(project.browserPreviewProgress) || 0))) + '%' : 'Waiting to prepare browser-safe preview…') + '</strong><span>' + (editingMasterPreparing ? 'Your transcript is ready for cuts now. Video playback and preview rebuild will unlock when the working copy is ready.' : project.browserPreviewStatus === 'running' ? 'Playback will unlock automatically; your camera master and editing controls remain available.' : 'Encoding will start when the preview queue is ready; your editing controls remain available.') + '</span>' + (!editingMasterPreparing && project.browserPreviewStatus === 'running' ? '<div><i id="editorSourcePreviewProgressBar" style="width:' + Math.max(0, Math.min(99, Math.round(Number(project.browserPreviewProgress) || 0))) + '%"></i></div>' : '') + '</div>'
       : '';
     var initialLoadingOverlayHtml = mediaUnavailable ? '' : '<div class="editor-preview-loading" id="editorPreviewLoading" role="status" aria-live="polite"><div></div><strong>Loading preview…</strong></div>';
     var rawSourceNoticeHtml = previewMode === 'source' && !!explicitSourcePreviews[project.id]
@@ -1393,6 +1394,7 @@
           (!sentToProduction && project.renderStatus === 'ready' && !project.renderDirty && !previewLocked ? '<button type="button" class="btn-primary btn-tiny editor-quick-approve" data-editor-approve ' + (!audioSelectionReady ? 'disabled title="Choose backing audio first"' : '') + '>Approve &amp; next</button>' : '') +
           '<span class="editor-save-state ' + esc(saveStates[project.id] || '') + '" id="editorSaveState">' + ({ saving: 'Saving…', saved: 'Saved', error: 'Save failed' }[saveStates[project.id]] || '') + '</span><button class="editor-delete" id="editorDelete">' + (sentToProduction ? 'Remove Editor files' : 'Delete recording') + '</button></div></div>' +
       (previewLocked ? '<div class="editor-lock-notice"><strong>' + (initialPreviewBuild ? 'Preparing the first preview' : 'Preview is rebuilding') + '</strong><span>' + (initialPreviewBuild ? 'This is initial processing—not a change you made. Playback will unlock when the first verified preview is ready.' : 'Playback is locked until the updated file has encoded and passed verification.') + '</span></div>' : '') +
+      (editingMasterPreparing ? '<div class="editor-lock-notice"><strong>Transcript ready to edit</strong><span>Make and save word cuts now. Video playback and preview rebuild unlock after the editing master is ready.</span></div>' : '') +
       (project.renderDirty && !previewLocked ? '<div class="editor-lock-notice"><strong>Transcript edits saved</strong><span>Keep cutting mistakes, then press Rebuild preview once when you are finished.</span></div>' : '') +
       (project.browserPreviewRequired && ['pending', 'running'].indexOf(project.browserPreviewStatus) !== -1 && previewMode === 'source' ? '<div class="editor-lock-notice"><strong>Preparing a browser-safe source preview</strong><span>The camera master is preserved and final editing continues. This view will switch to H.264 automatically when ready.</span></div>' : '') +
       (sentToProduction ? '<div class="editor-lock-notice approved"><strong>Approved version locked</strong><span>The exact reviewed file is now in Content Production. Source and final previews remain available here.</span></div>' : '') +

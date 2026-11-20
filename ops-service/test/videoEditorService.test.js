@@ -628,7 +628,7 @@ test('Editor UI batches transcript cuts behind one explicit preview rebuild', fu
   assert.match(source, /Adjusted automatic timeline cut/);
   assert.match(source, /Cut edge moved/);
   assert.match(page, /lib\/captionMask\.js\?v=20261015-mask-swears/);
-  assert.match(page, /editor\.js\?v=20261113-source-preview-progress-v160/);
+  assert.match(page, /editor\.js\?v=20261120-transcript-before-master-v161/);
   assert.match(source, /Transcription needs attention/);
   assert.match(source, /id="editorDeleteFailed">Delete recording/);
   assert.match(source, /workspace\.querySelector\('#editorDeleteFailed'\)\.onclick = function \(\) \{ deleteCurrentRecording\(this\); \}/);
@@ -669,6 +669,40 @@ test('Editor explains and polls oversized source preparation', function () {
   assert.match(source, /Building a faster editing master/);
   assert.match(source, /source-preparation\/retry/);
   assert.match(source, /sourcePreparationStatus/);
+  assert.match(source, /sourcePreparationStatus !== 'ready' && project\.transcriptionStatus !== 'ready'/);
+  assert.match(source, /Transcript ready to edit/);
+  assert.match(source, /var renderBlocked = editingMasterPreparing \|\|/);
+});
+
+test('transcript cuts save while a large editing master is pending, but rendering waits', async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-editor-early-transcript-'));
+  const db = new Database(path.join(dir, 'test.sqlite'));
+  db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  db.prepare('INSERT INTO records (store_name,id,data,updated_at) VALUES (?,?,?,?)').run('editorProjects', id, JSON.stringify({
+    id: id, name: 'Early transcript', fileName: 'take.mp4', duration: 3, width: 320, height: 180,
+    oversizedSource: true, sourcePreparationStatus: 'queued', sourceStorageObjectKey: 'editor-sources/' + id + '/original.mp4',
+    transcriptionStatus: 'ready', transcriptText: 'Hello world.', words: [
+      { index: 0, text: 'Hello', start: 0.1, end: 0.5 }, { index: 1, text: 'world.', start: 0.6, end: 1.0 }
+    ], removedWordIndices: [], renderStatus: '', planningMatchStatus: 'unavailable', retakeAnalysisStatus: 'unavailable',
+    classificationStatus: 'ready', visualClassification: { layout: 'horizontal' }, editRevision: 0,
+    createdAt: now, updatedAt: now
+  }), now);
+  const service = editor.setup({ db: db, dataDir: dir, transcribeDetailed: async function () { return { text: '', words: [] }; } });
+  const app = express(); app.use(express.json()); app.use('/api/editor', service.router);
+  const server = http.createServer(app);
+  await new Promise(function (resolve) { server.listen(0, '127.0.0.1', resolve); });
+  t.after(function () { server.close(); db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+  const base = 'http://127.0.0.1:' + server.address().port + '/api/editor/' + id;
+  const cut = await fetch(base, { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ removedWordIndices: [0], expectedEditRevision: 0 }) });
+  assert.equal(cut.status, 200);
+  const saved = await (await fetch(base)).json();
+  assert.deepEqual(saved.removedWordIndices, [0]);
+  const render = await fetch(base + '/render', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  assert.equal(render.status, 409);
+  assert.equal((await render.json()).error, 'source_preparing');
 });
 
 test('precise manual trims bridge residual fragments between automatic and transcript cuts', function () {
@@ -1786,6 +1820,15 @@ test('R2 intake keeps a completed recording queued without consuming VPS disk', 
   db.exec('CREATE TABLE records (store_name TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, id))');
   let failPart = true;
   let storedParts = 0;
+  let transcriptStartedBeforeMaster = false;
+  const transcriptObservedStatuses = [];
+  let importedId = '';
+  async function transcribeCloudTake() {
+    const row = db.prepare("SELECT data FROM records WHERE store_name='editorProjects' AND id=?").get(importedId);
+    transcriptObservedStatuses.push(row ? JSON.parse(row.data).sourcePreparationStatus : 'missing');
+    transcriptStartedBeforeMaster = transcriptStartedBeforeMaster || (!!row && ['queued', 'archiving'].includes(JSON.parse(row.data).sourcePreparationStatus));
+    return { text: 'Hello.', words: [{ type: 'word', text: 'Hello.', start: 0.1, end: 0.5 }] };
+  }
   let freeBytes = 0;
   const storage = {
     configured: true,
@@ -1807,7 +1850,7 @@ test('R2 intake keeps a completed recording queued without consuming VPS disk', 
     abortEditorSource: async function () {}
   };
   const service = editor.setup({ db: db, dataDir: dir, storage: storage, availableDiskBytes: function () { return freeBytes; },
-    transcribeDetailed: async function () { return { text: '', words: [] }; } });
+    transcribeDetailed: transcribeCloudTake });
   const app = express(); app.use(express.json()); app.use('/api/editor', service.router);
   const server = http.createServer(app);
   await new Promise(function (resolve) { server.listen(0, '127.0.0.1', resolve); });
@@ -1820,6 +1863,7 @@ test('R2 intake keeps a completed recording queued without consuming VPS disk', 
     body: JSON.stringify({ fileName: 'take.mp4', mimeType: 'video/mp4', sizeBytes: bytes.length, name: 'Tomorrow take' }) });
   assert.equal(response.status, 201);
   const session = await response.json();
+  importedId = session.id;
   assert.equal((await (await fetch(base + '/api/editor/uploads/' + session.id)).json()).receivedBytes, 0);
   const chunkUrl = base + '/api/editor/uploads/' + session.id + '/chunks/0';
   const headers = { 'Content-Type': 'application/octet-stream', 'X-Upload-Offset': '0' };
@@ -1832,7 +1876,7 @@ test('R2 intake keeps a completed recording queued without consuming VPS disk', 
   assert.equal(storedParts, 1);
   // A fresh service instance reads the durable R2 part ledger after restart.
   const resumed = editor.setup({ db: db, dataDir: dir, storage: storage, availableDiskBytes: function () { return freeBytes; },
-    transcribeDetailed: async function () { return { text: '', words: [] }; } });
+    transcribeDetailed: transcribeCloudTake });
   app.use('/resumed', resumed.router);
   assert.equal((await (await fetch(base + '/resumed/uploads/' + session.id)).json()).receivedBytes, bytes.length);
   response = await fetch(base + '/resumed/uploads/' + session.id + '/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
@@ -1861,6 +1905,8 @@ test('R2 intake keeps a completed recording queued without consuming VPS disk', 
   assert.equal(imported.cloudQueueStatus, undefined);
   assert.equal(imported.sourceStorageObjectKey, 'editor-sources/' + session.id + '/original.mp4');
   assert.equal(imported.sourcePreparationStatus, 'ready');
+  assert.equal(transcriptStartedBeforeMaster, true, JSON.stringify(transcriptObservedStatuses));
+  assert.equal(imported.transcriptionStatus, 'ready');
   assert.equal(db.prepare("SELECT COUNT(*) AS count FROM records WHERE store_name = 'editorCloudIntake'").get().count, 0);
   for (let attempt = 0; attempt < 100; attempt++) {
     const current = await (await fetch(base + '/api/editor/' + session.id)).json();

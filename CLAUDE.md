@@ -23572,3 +23572,21 @@ download had to restart. The deploy script now also waits for cloud intake
 by signalling its parent shell at the build/stop boundary; this attempt
 arrived too late to prevent `docker stop`. Verify the running container after
 any aborted deploy, and restart the retained stopped container if necessary.
+
+## Oversized Editor recordings expose the transcript before the editing master (2026-11-20)
+
+Harvey could not start word cuts on a large OBS recording while its full-video
+editing master encoded, even though only audio was needed to transcribe it.
+For oversized Editor projects, the worker now archives the original to R2 (or
+uses the already secured cloud original), extracts/transcribes audio from the
+original, and only then encodes the smaller local editing master. The Editor
+opens the word-timed transcript as soon as it is ready, including while source
+preparation is still active; transcript cuts save normally. The video player
+remains unavailable until the master is ready, and both the browser button and
+render API refuse a preview rebuild before that point. Source preparation
+re-reads the project after encoding so cuts made during the encode are kept.
+Restart recovery can resume transcription while source preparation is queued.
+A cloud-intake integration test confirms transcription starts before the
+master; an API test confirms cuts save while render waits. The full 380-test
+suite passes. Deploy only after the active
+recording finishes processing; the deploy drain protects that recording.

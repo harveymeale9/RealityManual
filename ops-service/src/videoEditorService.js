@@ -1925,6 +1925,14 @@ function setup(options) {
           project.sourceStorageEtag = remote.etag;
           project.sourceStoredAt = new Date().toISOString();
         }
+        // The R2 original is safe now. Extract and time the speech before the
+        // expensive full-video encode, so Harvey can begin transcript cuts
+        // while the editing master is still being built.
+        if (project.transcriptionStatus === 'pending' || project.transcriptionStatus === 'running') {
+          await transcribeProject(id);
+          project = getProject(id);
+          if (!project) return;
+        }
         project.sourcePreparationStatus = 'compacting';
         project.sourcePreparationError = '';
         saveProject(project);
@@ -1953,7 +1961,7 @@ function setup(options) {
         project.browserPreviewStatus = 'not_required';
         project.browserPreviewVersion = 0;
         saveProject(project);
-        setImmediate(function () { transcribeProject(id); });
+        if (project.transcriptionStatus === 'pending') setImmediate(function () { transcribeProject(id); });
       } catch (error) {
         fs.rm(compactPath, { force: true }, function () {});
         try { project = getProject(id); } catch (readError) { return; }
@@ -2702,7 +2710,7 @@ function setup(options) {
         project.sourcePreparationError = '';
         migrated = true;
       }
-      const resumeTranscription = !sourceNeedsPreparation && (project.transcriptionStatus === 'running' || project.transcriptionStatus === 'pending');
+      const resumeTranscription = project.transcriptionStatus === 'running' || project.transcriptionStatus === 'pending';
       const resumePreview = !sourceNeedsPreparation && project.browserPreviewRequired && ['running', 'pending'].includes(project.browserPreviewStatus);
       // Before the decision-first workflow, fresh uploads marked their first
       // automatic full render with automaticRenderStartedAt. Those jobs are
@@ -3776,6 +3784,9 @@ function setup(options) {
       req.body && Number(req.body.approvedPreviewRevision) === Number(project.editRevision);
     if (project.productionPieceId && !approvedPreviewRevision) return res.status(409).json({ error: 'approved_read_only', message: 'This approved edit is locked. The approved video is already in Content Production.' });
     if (project.transcriptionStatus !== 'ready') return res.status(409).json({ error: 'transcript_not_ready' });
+    if (project.oversizedSource && project.sourcePreparationStatus !== 'ready') {
+      return res.status(409).json({ error: 'source_preparing', message: 'Transcript cuts are saved; wait for the editing master before building a video preview.' });
+    }
     if (['queued', 'preparing'].includes(project.clipInsertStatus)) return res.status(409).json({ error: 'clip_insert_running', message: 'Wait for the inserted clip to finish preparing.' });
     if (['pending', 'running', 'pending_transcript'].includes(project.planningMatchStatus)) {
       return res.status(409).json({ error: 'automatic_edit_running', message: 'Wait for the planning check to finish.' });
