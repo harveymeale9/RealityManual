@@ -23559,3 +23559,15 @@ the original manifest ID. Seeding now also accepts a changed ID only when a
 `facebookPreviousVideoId` together. This preserves the strict inventory
 guard for pending jobs while allowing the remaining backlog to resume after
 the two skipped special-release days.
+
+The first follow-up deploy exposed another gap: the deploy drain checked the
+desktop upload queue and Editor projects, but not `editorCloudIntake` while a
+9.6 GB recording was being fetched from R2. A second deploy reached container
+stop while that cloud intake was `preparing`. The old service was restarted
+immediately and returned HTTP 200; cloud intake's startup recovery requeues
+an interrupted download and safely starts it again, but the in-flight
+download had to restart. The deploy script now also waits for cloud intake
+`preparing` to clear, under its existing two-hour cap. Do not cancel a deploy
+by signalling its parent shell at the build/stop boundary; this attempt
+arrived too late to prevent `docker stop`. Verify the running container after
+any aborted deploy, and restart the retained stopped container if necessary.
