@@ -23817,3 +23817,13 @@ reading. Longer outages and the initial unknown baseline still render as
 gaps. The short-gap cells also no longer carry a misleading missing-data
 hatch behind the smoothed line. Focused tests cover short-gap smoothing and
 long-gap preservation; a browser preview was checked against the live data.
+
+## Hourly sales bars meet the day-summary baseline (2026-11-20)
+
+The hourly sales columns previously ended 29px above the horizontal divider
+above each day's sales/profit summary because an hour-label row and flex gaps
+reserved space below the bar track. The bar track now extends to that divider
+in every 3/7/14/21/30-day range, and long-form release markers meet the same
+baseline. Redundant noon/hour tick text is hidden; day labels remain above
+the plot, and exact Bangkok/New York hours remain in each column's hover/tap
+detail. This is presentation-only: hourly data and totals are unchanged.

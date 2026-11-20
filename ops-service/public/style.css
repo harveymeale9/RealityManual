@@ -2700,16 +2700,16 @@ body.role-reviewer .positive-comments { display: none; }
 .sales-timing-day-summary small { color: var(--ink-soft); font: .61rem var(--font-mono); }
 .sales-timing-grid.dense .sales-timing-day-summary { padding: 3px 4px; }
 .sales-timing-grid.very-dense .sales-timing-day-summary small { font-size: .54rem; }
-.sales-timing-hour { position: relative; z-index: 1; display: flex; flex: 1 1 0; flex-direction: column; gap: 5px; width: 0; min-width: 0; height: 228px; padding: 0; border: 0; border-left: 1px solid transparent; background: transparent; cursor: crosshair; }
+.sales-timing-hour { position: relative; z-index: 1; display: flex; flex: 1 1 0; flex-direction: column; gap: 5px; width: 0; min-width: 0; height: 231px; padding: 0; border: 0; border-left: 1px solid transparent; background: transparent; cursor: crosshair; }
 .sales-timing-hour:has(.sales-timing-tick:not(:empty)) { border-left-color: var(--border); }
 .sales-timing-hour:hover,.sales-timing-hour:focus-visible { background: rgba(87,234,143,.12); outline: 0; }
 .sales-timing-views,.sales-timing-orders { display: flex; align-items: flex-end; justify-content: center; width: 100%; height: 112px; background: transparent; }
-.sales-timing-orders { height: 85px; }
+.sales-timing-orders { height: 114px; }
 .sales-timing-orders i { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 0; border-radius: 2px 2px 0 0; background: #59e996; }
 .sales-timing-orders b { color: #052012; font: 800 .64rem var(--font-mono); line-height: 1; }
 .sales-timing-grid.dense .sales-timing-orders b { display: none; }
 .sales-timing-hour.views-missing .sales-timing-views { background: repeating-linear-gradient(45deg,rgba(93,111,100,.13),rgba(93,111,100,.13) 2px,transparent 2px,transparent 5px); }
-.sales-timing-release { position: absolute; z-index: 5; top: 0; bottom: 49px; width: 15px; padding: 0; border: 0; background: transparent; color: #ffe18e; cursor: pointer; }
+.sales-timing-release { position: absolute; z-index: 5; top: 0; bottom: 46px; width: 15px; padding: 0; border: 0; background: transparent; color: #ffe18e; cursor: pointer; }
 .sales-timing-release::before { content: ''; position: absolute; top: 0; bottom: 0; left: 6px; border-left: 3px solid #ffc34d; box-shadow: 0 0 8px 2px rgba(255,184,56,.72); }
 .sales-timing-release span { position: absolute; top: 3px; left: 13px; max-width: 180px; overflow: hidden; padding: 3px 6px; border: 1px solid #ffc34d; border-radius: 4px; background: #382707; color: #ffe8a5; font: 700 .6rem var(--font-mono); text-align: left; text-overflow: ellipsis; white-space: nowrap; box-shadow: 0 0 8px rgba(255,184,56,.3); }
 .sales-timing-release:hover,.sales-timing-release:focus-visible { z-index: 7; outline: none; }
@@ -2720,8 +2720,7 @@ body.role-reviewer .positive-comments { display: none; }
 .sales-timing-line polyline { fill: none; stroke: #82c7ff; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
 .sales-timing-line circle { fill: #82c7ff; }
 .sales-timing-line polyline,.sales-timing-line circle { vector-effect: non-scaling-stroke; }
-.sales-timing-tick { display: block; height: 21px; color: var(--ink-faint); font: .55rem var(--font-mono); white-space: nowrap; text-align: left; }
-.sales-timing-grid.dense .sales-timing-tick { visibility: hidden; }
+.sales-timing-tick { display: none; }
 .sales-timing-block .sales-profit-note { margin: 8px 17px 13px; }
 .sales-country-block { margin-bottom: 14px; }
 .website-health { margin: 18px 0; padding: 20px; border: 1px solid var(--border); border-radius: 10px; background: rgba(8,18,12,.94); }
