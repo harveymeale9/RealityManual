@@ -1776,6 +1776,18 @@ app.get('/api/reports/sales-dashboard', requireAuth, function (req, res) {
     res.status(503).json({ error: 'sales_dashboard_unavailable' });
   }
 });
+app.get('/api/reports/sales-timing', requireAuth, function (req, res) {
+  try {
+    const days = Number(req.query.days || 3);
+    if (![3, 7, 14, 21, 30].includes(days)) return res.status(400).json({ error: 'invalid_days' });
+    res.set('Cache-Control', 'no-store');
+    res.json(storefrontReporting.getHourlySalesTiming(getStorefrontReportDb(), db,
+      storedPieces(), undefined, excludedSalesOrderIds(), days));
+  } catch (error) {
+    console.error('Sales timing read failed:', error.message);
+    res.status(503).json({ error: 'sales_timing_unavailable' });
+  }
+});
 app.get('/api/reports/orders-health', requireAuth, function (req, res) {
   try {
     res.set('Cache-Control', 'no-store');

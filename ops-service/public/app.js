@@ -71,9 +71,9 @@
         { id: 'idea-research', label: 'Idea Research' }
       ] },
     { label: 'Analytics', tabs: [
-        { id: 'content-analytics', label: 'Content Analytics' },
         { id: 'sales-analytics', label: 'Sales Analytics' },
-        { id: 'website-analytics', label: 'Website Analytics' }
+        { id: 'website-analytics', label: 'Website Analytics' },
+        { id: 'content-analytics', label: 'Content Analytics' }
       ] },
     { label: 'Orders', tabs: [
         { id: 'orders', label: 'Orders' }
@@ -250,8 +250,8 @@
     });
     document.querySelectorAll('[data-sales-alert-link]').forEach(function (link) {
       // An unread count on Analytics opens the actual Sales panel directly.
-      link.href = salesAlertCount ? '#sales-analytics' : '#content-analytics';
-      link.dataset.tab = salesAlertCount ? 'sales-analytics' : 'content-analytics';
+      link.href = '#sales-analytics';
+      link.dataset.tab = 'sales-analytics';
       link.title = salesAlertCount ? salesAlertCount + ' new sale' + (salesAlertCount === 1 ? '' : 's') + ' · open Sales Analytics' : 'Analytics';
     });
   }
@@ -375,6 +375,8 @@
   var STOREFRONT_API_BASE = 'https://api.realitymanual.com';
 
   var salesAnalyticsRequest = 0;
+  var salesTimingDays = 3;
+  var salesTimingRequest = 0;
   var contentAnalyticsTimer = null;
   var contentOverallRangeDays = 30;
 
@@ -556,8 +558,70 @@
       });
   }
 
+  function salesTimingHtml(data) {
+    var bins = Array.isArray(data.hourly) ? data.hourly : [];
+    var maxViews = Math.max.apply(Math, bins.map(function (bin) { return Number(bin.views) || 0; }).concat([1]));
+    var maxOrders = Math.max.apply(Math, bins.map(function (bin) { return Number(bin.orders) || 0; }).concat([1]));
+    var options = [3, 7, 14, 21, 30].map(function (days) {
+      return '<button type="button" data-sales-days="' + days + '" class="sales-timing-period' + (days === data.days ? ' active' : '') + '" aria-pressed="' + (days === data.days) + '">' + days + ' days</button>';
+    }).join('');
+    var hours = bins.map(function (bin) {
+      var date = new Date(bin.at);
+      var bangkok = date.toLocaleString('en-GB', { timeZone: 'Asia/Bangkok', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+      var newYork = date.toLocaleString('en-GB', { timeZone: 'America/New_York', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+      var bkkHour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', hourCycle: 'h23' }).format(date));
+      var tick = bkkHour === 0 ? date.toLocaleDateString('en-GB', { timeZone: 'Asia/Bangkok', day: 'numeric', month: 'short' }) : bkkHour === 12 ? '12h' : '';
+      var uploads = Array.isArray(bin.uploads) ? bin.uploads : [];
+      var usShare = bin.orders ? Math.round(Number(bin.us_orders || 0) / Number(bin.orders) * 100) : 0;
+      var detail = bangkok + ' Bangkok · ' + newYork + ' New York · ' +
+        (bin.views == null ? 'YouTube views not measured' : Number(bin.views).toLocaleString() + ' measured long-form views' + (bin.view_coverage === 'partial' ? ' (partial)' : '')) +
+        ' · ' + Number(bin.orders || 0) + ' paid orders (' + Number(bin.us_orders || 0) + ' US)' +
+        (uploads.length ? ' · Published: ' + uploads.map(function (item) { return item.title; }).join(', ') : '');
+      return '<button type="button" class="sales-timing-hour' + (uploads.length ? ' has-upload' : '') + (bin.view_coverage !== 'complete' ? ' views-' + bin.view_coverage : '') + '"' +
+        ' data-sales-detail="' + escapeHtml(detail) + '" aria-label="' + escapeHtml(detail) + '">' +
+        '<span class="sales-timing-views"><i style="height:' + (bin.views == null ? 0 : Math.max(bin.views ? 3 : 0, Math.round(Number(bin.views) / maxViews * 100))) + '%"></i></span>' +
+        '<span class="sales-timing-orders"><i style="height:' + (bin.orders ? Math.max(8, Math.round(Number(bin.orders) / maxOrders * 100)) : 0) + '%;--us-share:' + usShare + '%"></i></span>' +
+        (uploads.length ? '<span class="sales-timing-upload" aria-hidden="true">◆</span>' : '') +
+        '<span class="sales-timing-tick">' + escapeHtml(tick) + '</span></button>';
+    }).join('');
+    return '<div class="sales-timing-head"><div><span>Hourly · Bangkok time</span><h3>Long-form views and customer sales</h3></div><div class="sales-timing-periods" aria-label="Time period">' + options + '</div></div>' +
+      '<div class="sales-timing-legend"><span class="views">YouTube long-form views <b>' + Number(data.totals.measured_views || 0).toLocaleString() + '</b></span>' +
+      '<span class="orders">Stripe-paid orders <b>' + Number(data.totals.orders || 0) + '</b> <small>(' + Number(data.totals.us_orders || 0) + ' US; bright green)</small></span>' +
+      '<span class="uploads">◆ Long-form published</span></div>' +
+      '<p class="sales-timing-detail" aria-live="polite">Point at or tap an hour for Bangkok and New York times, views, sales and upload titles.</p>' +
+      '<div class="sales-timing-scroll" role="group" aria-label="Hourly views and paid orders"><div class="sales-timing-grid">' + hours + '</div></div>' +
+      '<p class="sales-profit-note">Each row has its own scale. Views are increases observed at hourly YouTube polls, not exact view times; gaps or partial hours are marked. Sales use Stripe-paid orders at payment time (creation time if unavailable), excluding refunds and owner-marked tests. ◆ marks the public long-form release, not proof it caused later activity.</p>';
+  }
+
+  function bindSalesTiming(data) {
+    var section = panelMain.querySelector('.sales-timing-block');
+    if (!section) return;
+    salesTimingDays = Number(data.days) || 3;
+    section.innerHTML = salesTimingHtml(data);
+    var detail = section.querySelector('.sales-timing-detail');
+    section.querySelectorAll('.sales-timing-hour').forEach(function (hour) {
+      function show() { detail.textContent = hour.dataset.salesDetail; }
+      hour.addEventListener('pointerenter', show);
+      hour.addEventListener('focus', show);
+      hour.addEventListener('click', show);
+    });
+    section.querySelectorAll('[data-sales-days]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var days = Number(button.dataset.salesDays);
+        if (days === salesTimingDays) return;
+        var request = ++salesTimingRequest;
+        detail.textContent = 'Loading ' + days + ' days…';
+        fetch('/api/reports/sales-timing?days=' + days, { credentials: 'include', cache: 'no-store' })
+          .then(function (response) { if (!response.ok) throw new Error('timing_unavailable'); return response.json(); })
+          .then(function (next) { if (currentTabId() === 'sales-analytics' && request === salesTimingRequest) bindSalesTiming(next); })
+          .catch(function () { if (request === salesTimingRequest) detail.textContent = 'Hourly data unavailable. Tap another period or Refresh to retry.'; });
+      });
+    });
+  }
+
   function renderSalesAnalytics() {
     var request = ++salesAnalyticsRequest;
+    salesTimingRequest++;
     // Keep the current dashboard in place during an explicit Refresh click.
     // Background order-alert polling must never replace this tab's DOM.
     if (!panelMain.querySelector('.sales-dashboard:not(.sales-loading)')) {
@@ -570,7 +634,9 @@
       }),
       fetch(STOREFRONT_API_BASE + '/api/analytics/summary').then(function (res) { return res.ok ? res.json() : null; }).catch(function () { return null; }),
       fetch(STOREFRONT_API_BASE + '/api/analytics/email-health').then(function (res) { return res.ok ? res.json() : null; }).catch(function () { return null; }),
-      fetch('/api/mailbox/status', { credentials: 'include' }).then(function (res) { return res.ok ? res.json() : null; }).catch(function () { return null; })
+      fetch('/api/mailbox/status', { credentials: 'include' }).then(function (res) { return res.ok ? res.json() : null; }).catch(function () { return null; }),
+      fetch('/api/reports/sales-timing?days=' + salesTimingDays, { credentials: 'include', cache: 'no-store' })
+        .then(function (res) { return res.ok ? res.json() : null; }).catch(function () { return null; })
     ]).then(function (results) {
       if (currentTabId() !== 'sales-analytics' || request !== salesAnalyticsRequest) return;
       var data = results[0];
@@ -611,18 +677,6 @@
       }).join('');
 
       var thirty = data.periods.last_30_days;
-      var maximumOrders = Math.max.apply(Math, data.daily.map(function (day) { return Number(day.orders) || 0; }).concat([0]));
-      var chart = data.daily.map(function (day, index) {
-        var orders = Number(day.orders) || 0;
-        var height = orders ? Math.max(5, Math.round(orders / (maximumOrders || 1) * 100)) : 0;
-        var label = (index % 5 === 0 || index === data.daily.length - 1) ? day.day.slice(5) : '';
-        var tooltip = day.day + ': ' + orders + ' paid order' + (orders === 1 ? '' : 's') +
-          ' · ' + day.units + ' book' + (day.units === 1 ? '' : 's') +
-          ' · ' + salesMoney(day.revenue_cents) + ' charged';
-        return '<div class="sales-chart-column' + (orders === 0 ? ' zero' : '') +
-          '" role="img" tabindex="0" aria-label="' + escapeHtml(tooltip) + '" data-sales-tooltip="' + escapeHtml(tooltip) + '">' +
-          '<div class="sales-chart-track"><i style="height:' + height + '%"></i></div><span>' + label + '</span></div>';
-      }).join('');
 
       var countries = data.countries.length ? data.countries.map(function (country) {
         return '<div class="sales-country-row"><strong>' + escapeHtml(country.country) + '</strong><span>' + country.orders + ' order' + (country.orders === 1 ? '' : 's') + ' · ' + country.units + ' books</span><b>' + salesMoney(country.revenue_cents) + '</b></div>';
@@ -687,6 +741,7 @@
       panelMain.innerHTML = '<div class="sales-dashboard">' +
         '<header class="sales-dashboard-head"><div><div class="eyebrow">Live storefront database · Bangkok time (UTC+7)</div><h2>Sales Analytics</h2><p>Revenue, estimated gross profit, orders and fulfillment.</p></div>' +
           '<div><span>Updated ' + new Date(data.generated_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' }) + ' UTC+7</span><button type="button" class="btn-secondary btn-tiny" id="salesRefresh">Refresh</button></div></header>' +
+        '<section class="sales-block sales-timing-block" aria-label="Hourly sales and YouTube long-form views">Loading hourly comparison…</section>' +
         '<section class="sales-books-grid" aria-label="Books sold"><h3>Books sold</h3>' + bookCards + '</section>' +
         '<h3 class="sales-revenue-heading">Revenue and gross profit</h3>' +
         '<section class="sales-metric-grid">' + periodCards + '</section>' +
@@ -705,32 +760,15 @@
         '</section>' +
         paymentOverview +
         emailHealthHtml(emailHealth, mailboxStatus) +
-        '<div class="sales-dashboard-columns"><section class="sales-block sales-chart-block"><div class="sales-block-head"><div><span>Stripe-paid customer orders</span><h3>Last 30 days</h3></div><b>' + thirty.paid_orders + '</b></div><div class="sales-chart">' + chart + '<div class="sales-chart-tooltip" hidden></div></div><p class="sales-profit-note">Counted when the customer pays, regardless of when BookVault accepts or charges us. Refunded and excluded test orders are omitted.</p></section>' +
-          '<section class="sales-block"><div class="sales-block-head"><div><span>Markets</span><h3>Revenue by country</h3></div></div><div class="sales-country-list">' + countries + '</div></section></div>' +
+        '<section class="sales-block sales-country-block"><div class="sales-block-head"><div><span>Markets</span><h3>Revenue by country</h3></div></div><div class="sales-country-list">' + countries + '</div></section>' +
         '<section class="sales-block sales-orders"><div class="sales-block-head"><div><span>Operations</span><h3>Recent orders</h3></div><small>Newest 25 · use Refresh for the latest orders</small></div><div class="sales-order-list">' + recentOrders + '</div></section>' +
         '<section class="sales-block sales-refunds" id="salesRefunds"><div class="sales-block-head"><div><span>Money returned</span><h3>Refunds &amp; reasons</h3></div><small>' + data.periods.all_time.refunded_orders + ' all time · newest 100 shown</small></div><div class="sales-refund-list">' + refunds + '</div></section>' +
         (excludedOrders ? '<details class="sales-excluded-block"><summary>' + data.excluded_orders.length + ' test order' + (data.excluded_orders.length === 1 ? '' : 's') + ' excluded from sales reporting</summary><p>These remain in Stripe and the storefront database. Restore one here if it was marked by mistake.</p>' + excludedOrders + '</details>' : '') +
       '</div>';
       var refresh = document.getElementById('salesRefresh');
       if (refresh) refresh.addEventListener('click', renderSalesAnalytics);
-      var salesChart = panelMain.querySelector('.sales-chart');
-      if (salesChart) {
-        var salesTooltip = salesChart.querySelector('.sales-chart-tooltip');
-        salesChart.querySelectorAll('.sales-chart-column').forEach(function (column) {
-          function showSalesTooltip() {
-            salesTooltip.textContent = column.dataset.salesTooltip;
-            salesTooltip.hidden = false;
-          }
-          function hideSalesTooltip() {
-            if (document.activeElement !== column) salesTooltip.hidden = true;
-          }
-          column.addEventListener('pointerenter', showSalesTooltip);
-          column.addEventListener('pointerleave', hideSalesTooltip);
-          column.addEventListener('pointerdown', showSalesTooltip);
-          column.addEventListener('focus', showSalesTooltip);
-          column.addEventListener('blur', function () { salesTooltip.hidden = true; });
-        });
-      }
+      if (results[4]) bindSalesTiming(results[4]);
+      else panelMain.querySelector('.sales-timing-block').textContent = 'Hourly data is temporarily unavailable. Refresh to retry.';
       var refundJump = document.getElementById('salesRefundJump');
       if (refundJump) refundJump.addEventListener('click', function () { document.getElementById('salesRefunds').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
       panelMain.querySelectorAll('[data-sales-action]').forEach(function (button) {

@@ -23590,3 +23590,30 @@ A cloud-intake integration test confirms transcription starts before the
 master; an API test confirms cuts save while render waits. The full 380-test
 suite passes. Deploy only after the active
 recording finishes processing; the deploy drain protects that recording.
+
+## Sales Analytics compares hourly YouTube long-form views and paid orders (2026-11-20)
+
+Analytics now opens Sales first, then Website, then Content in both the top
+subtabs and side rail. Sales Analytics leads with a two-track, independently
+scaled hourly chart, defaulting to the last three Bangkok calendar days
+(including today), with 7/14/21/30-day switches. Blue bars are new YouTube
+long-form views observed by the hourly lifetime-counter collector; green bars
+are Stripe-paid customer orders at payment time, falling back to order
+creation time only when no payment timestamp was saved. The bright green
+portion identifies US orders. Hover, focus, or tap shows the precise Bangkok
+and New York hour, both values, US subset and any long-form title published
+in that hour. Gold markers use each video's saved public release time. The
+old separate 30-day daily sales bar block is replaced; existing books,
+revenue, profitability, markets, refunds and operations remain below.
+
+The private `/api/reports/sales-timing` route combines the in-memory D1
+storefront report snapshot with Content Studio's own hourly YouTube metric
+snapshots; it returns only aggregates and public video titles/links, never
+customer details. It uses the same paid/non-refunded and owner-test exclusions
+as the rest of Sales Analytics. A video's first counter is a baseline, lower
+counters cannot create rebound growth, gaps longer than 36 hours remain
+unassigned, and missing/partially sampled hours are marked. Thus bars show
+*when increases were observed*, not exact YouTube view-event timestamps, and
+the simultaneous release/order markers establish correlation only, not cause.
+The current hour may be incomplete. Focused time-zone, payment, exclusion,
+counter-baseline and chart tests pass, as does the 381-test ops-service suite.

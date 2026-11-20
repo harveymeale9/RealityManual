@@ -552,6 +552,94 @@ function getSalesDashboard(db, nowValue, excludedIds, unseenOrderIds) {
   };
 }
 
+// Align customer payments and observed YouTube long-form counter growth to
+// Bangkok clock-hours. YouTube supplies lifetime counters, not view event
+// times: the first reading is a baseline and long/missing intervals stay
+// unknown rather than being assigned to the hour collection resumed.
+function getHourlySalesTiming(storeDb, opsDb, pieces, nowValue, excludedIds, daysValue) {
+  const days = Number(daysValue);
+  if (![3, 7, 14, 21, 30].includes(days)) throw new Error('invalid_sales_timing_period');
+  const now = new Date(nowValue || Date.now());
+  const endMs = now.getTime();
+  if (!Number.isFinite(endMs)) throw new Error('invalid_sales_timing_time');
+  const hourMs = 60 * 60 * 1000;
+  const startMs = startOfBangkokDay(now) - (days - 1) * 86400000;
+  const bins = [];
+  const byHour = new Map();
+  for (let at = startMs; at <= endMs; at += hourMs) {
+    const bin = { at: new Date(at).toISOString(), orders: 0, us_orders: 0,
+      views: null, view_coverage: 'missing', uploads: [] };
+    bins.push(bin);
+    byHour.set(bin.at, bin);
+  }
+  const excluded = excludedOrderFilter(excludedIds);
+  const paidAt = "COALESCE(NULLIF(payment_received_at,''),created_at)";
+  const orders = storeDb.prepare(`SELECT ${paidAt} AS paid_at,country FROM orders
+    WHERE ${paidAt} >= ? AND ${paidAt} <= ? AND ${PAID_ORDER_SQL}${excluded.sql}`)
+    .all(new Date(startMs).toISOString(), now.toISOString(), ...excluded.ids);
+  orders.forEach(function (order) {
+    const at = Date.parse(order.paid_at);
+    const bin = Number.isFinite(at) && byHour.get(new Date(Math.floor(at / hourMs) * hourMs).toISOString());
+    if (!bin) return;
+    bin.orders++;
+    if (String(order.country || '').toUpperCase() === 'US') bin.us_orders++;
+  });
+
+  const longforms = (pieces || []).filter(function (piece) {
+    return piece && piece.createdBy !== 'youtube-reviewer' && piece.contentType === 'longform' && piece.youtubeVideoId;
+  });
+  const releaseAt = new Map();
+  longforms.forEach(function (piece) {
+    const release = Date.parse(piece.scheduledAt || piece.postedAt || '');
+    if (!Number.isFinite(release) || release > endMs) return;
+    releaseAt.set(piece.id, release);
+    if (release < startMs) return;
+    const bin = byHour.get(new Date(Math.floor(release / hourMs) * hourMs).toISOString());
+    if (bin) bin.uploads.push({ title: String(piece.youtubeTitle || piece.title || 'YouTube long-form').slice(0, 160),
+      at: new Date(release).toISOString(), url: 'https://www.youtube.com/watch?v=' + encodeURIComponent(piece.youtubeVideoId) });
+  });
+  const ids = [...releaseAt.keys()];
+  const observed = new Map();
+  if (ids.length) {
+    const placeholders = ids.map(function () { return '?'; }).join(',');
+    const rows = opsDb.prepare(`SELECT piece_id,captured_at,views FROM content_metric_snapshots
+      WHERE platform='youtube' AND views IS NOT NULL AND captured_at >= ? AND captured_at <= ?
+        AND piece_id IN (${placeholders}) ORDER BY captured_at,piece_id`)
+      .all(new Date(startMs - 36 * hourMs).toISOString(), now.toISOString(), ...ids);
+    const highWater = new Map();
+    rows.forEach(function (row) {
+      const at = Date.parse(row.captured_at);
+      const views = Number(row.views);
+      if (!Number.isFinite(at) || !Number.isFinite(views) || views < 0 ||
+          at < Math.floor(releaseAt.get(row.piece_id) / hourMs) * hourMs) return;
+      const prior = highWater.get(row.piece_id);
+      if (!prior) { highWater.set(row.piece_id, { at: at, views: views }); return; }
+      if (at < prior.at || views < prior.views) return;
+      highWater.set(row.piece_id, { at: at, views: views });
+      if (at - prior.at > 36 * hourMs) return;
+      const bin = byHour.get(new Date(Math.floor(at / hourMs) * hourMs).toISOString());
+      if (!bin) return;
+      bin.views = (bin.views || 0) + Math.max(0, views - prior.views);
+      if (!observed.has(bin.at)) observed.set(bin.at, new Set());
+      observed.get(bin.at).add(row.piece_id);
+    });
+  }
+  bins.forEach(function (bin) {
+    const at = Date.parse(bin.at);
+    const expected = [...releaseAt.values()].filter(function (release) { return release < at + hourMs; }).length;
+    const count = observed.get(bin.at)?.size || 0;
+    bin.view_coverage = !expected || !count ? 'missing' : count < expected ? 'partial' : 'complete';
+  });
+  return {
+    generated_at: now.toISOString(), timezone: 'Asia/Bangkok', days: days,
+    start_at: new Date(startMs).toISOString(), end_at: now.toISOString(),
+    totals: { orders: bins.reduce(function (sum, bin) { return sum + bin.orders; }, 0),
+      us_orders: bins.reduce(function (sum, bin) { return sum + bin.us_orders; }, 0),
+      measured_views: bins.reduce(function (sum, bin) { return sum + (bin.views || 0); }, 0) },
+    hourly: bins
+  };
+}
+
 function getOrdersHealth(db, nowValue, excludedIds) {
   const excluded = excludedOrderFilter(excludedIds);
   const now = new Date(nowValue || Date.now());
@@ -605,5 +693,6 @@ module.exports = {
   getWebsiteTraffic: getWebsiteTraffic,
   getWebsiteAnalyticsSummary: getWebsiteAnalyticsSummary,
   getSalesDashboard: getSalesDashboard,
+  getHourlySalesTiming: getHourlySalesTiming,
   getOrdersHealth: getOrdersHealth
 };

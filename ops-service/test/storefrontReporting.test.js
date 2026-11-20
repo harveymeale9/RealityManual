@@ -178,62 +178,30 @@ test('both analytics views show the nested source-and-video referral chart', fun
   assert.match(page, /style\.css\?v=[^"\s]+/);
 });
 
-test('sales chart heights follow Stripe-paid orders, not BookVault-dependent profit', async function () {
+test('sales timing chart shows hourly views, paid orders, upload markers and all periods', function () {
   const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
-  const start = source.indexOf('  function renderSalesAnalytics()');
-  const end = source.indexOf('  function websiteTrafficHtml(', start);
+  const start = source.indexOf('  function salesTimingHtml(');
+  const end = source.indexOf('  function renderSalesAnalytics()', start);
   assert.ok(start > 0 && end > start);
-  const daily = Array.from({ length: 30 }, function (_, index) {
-    return { day: '2026-10-' + String(index + 1).padStart(2, '0'), orders: index === 29 ? 13 : index === 28 ? 9 : 0,
-      units: index === 29 ? 13 : index === 28 ? 9 : 0, revenue_cents: index === 29 ? 103815 : index === 28 ? 75743 : 0,
-      gross_profit_cents: index === 29 ? 33745 : index === 28 ? 34461 : 0,
-      profit_known_orders: index === 29 ? 9 : index === 28 ? 9 : 0,
-      profit_pending_orders: index === 29 ? 4 : 0 };
+  const render = vm.runInNewContext(source.slice(start, end) + '\nsalesTimingHtml', {
+    Date, Math, Number, Intl, escapeHtml: function (value) { return String(value); }
   });
-  const period = { paid_orders: 22, units: 22, revenue_cents: 179558, book_revenue_cents: 179558,
-    shipping_revenue_cents: 0, gross_profit_cents: 68206, profit_pending_orders: 4,
-    average_order_cents: 8162, refunded_orders: 0, refunded_value_cents: 0 };
-  const dashboard = { generated_at: '2026-10-30T12:00:00.000Z',
-    periods: { today: period, last_7_days: period, last_14_days: period, last_30_days: period, all_time: period },
-    books_sold: {}, daily, countries: [], recent_orders: [], recent_refunds: [], excluded_orders: [],
-    unseen_sales_order_ids: [] };
-  const listeners = {};
-  const column = { dataset: { salesTooltip: '' }, addEventListener: function (name, handler) { listeners[name] = handler; } };
-  const tooltip = { hidden: true, textContent: '' };
-  const chart = { querySelector: function () { return tooltip; }, querySelectorAll: function () { return [column]; } };
-  const panelMain = { innerHTML: '', querySelector: function (selector) { return selector === '.sales-chart' ? chart : null; },
-    querySelectorAll: function () { return []; } };
-  let fetched = 0;
-  const context = { Date, Math, Number, Promise, panelMain, salesAnalyticsRequest: 0,
-    STOREFRONT_API_BASE: '', currentTabId: function () { return 'sales-analytics'; },
-    fetch: function () { fetched += 1; const requestNumber = fetched; return Promise.resolve({ ok: true,
-      json: function () { return Promise.resolve(requestNumber === 1 ? dashboard : null); } }); },
-    document: { getElementById: function () { return null; }, activeElement: null },
-    salesMoney: function (cents) { return '$' + (Number(cents || 0) / 100).toFixed(2); },
-    salesProfit: function () { return '$69.00'; }, salesConversion: function () { return '—'; },
-    emailHealthHtml: function () { return ''; }, escapeHtml: function (value) { return String(value); },
-    acknowledgeVisibleSales: function () {}, renderAnalyticsPlaceholder: function () { throw Error('render failed'); } };
-  const render = vm.runInNewContext(source.slice(start, end) + '\nrenderSalesAnalytics', context);
-  render();
-  await new Promise(function (resolve) { setImmediate(resolve); });
-  const barTooltip = panelMain.innerHTML.match(/data-sales-tooltip="([^"]*13 paid orders[^"]*)"/);
-  assert.ok(barTooltip);
-  assert.match(barTooltip[1], /13 paid orders · 13 books · \$1038\.15 charged/);
-  assert.match(panelMain.innerHTML, /2026-10-29: 9 paid orders[^]*?height:69%/);
-  assert.match(panelMain.innerHTML, /2026-10-30: 13 paid orders[^]*?height:100%/);
-  assert.match(panelMain.innerHTML, /Stripe-paid customer orders/);
-  assert.match(panelMain.innerHTML, /regardless of when BookVault accepts or charges us/);
-  assert.doesNotMatch(panelMain.innerHTML, /sales-line-graph|Gross profit appears when BookVault/);
-  column.dataset.salesTooltip = barTooltip[1];
-  listeners.pointerenter();
-  assert.equal(tooltip.hidden, false);
-  assert.equal(tooltip.textContent, barTooltip[1]);
-  listeners.pointerleave();
-  assert.equal(tooltip.hidden, true);
-  listeners.focus();
-  assert.equal(tooltip.hidden, false);
-  listeners.blur();
-  assert.equal(tooltip.hidden, true);
+  const html = render({ days: 3, totals: { measured_views: 35, orders: 3, us_orders: 2 }, hourly: [
+    { at: '2026-11-19T15:00:00.000Z', views: null, orders: 0, us_orders: 0, view_coverage: 'missing', uploads: [{ title: 'A long film' }] },
+    { at: '2026-11-19T16:00:00.000Z', views: 35, orders: 3, us_orders: 2, view_coverage: 'complete', uploads: [] }
+  ] });
+  assert.match(html, /data-sales-days="3"[^>]*aria-pressed="true"/);
+  for (const days of [7, 14, 21, 30]) assert.match(html, new RegExp('data-sales-days="' + days + '"'));
+  assert.match(html, /35 measured long-form views/);
+  assert.match(html, /3 paid orders \(2 US\)/);
+  assert.match(html, /New York/);
+  assert.match(html, /has-upload/);
+  assert.match(html, /Published: A long film/);
+  assert.match(html, /views-missing/);
+  assert.match(html, /height:100%/);
+  assert.match(html, /not proof it caused later activity/);
+  assert.match(source, /<section class="sales-block sales-timing-block"/);
+  assert.match(source, /'\/api\/reports\/sales-timing\?days='/);
 });
 
 test('email health card separates Resend outcomes from ops inbox connectivity', function () {
