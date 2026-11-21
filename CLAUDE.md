@@ -24100,6 +24100,14 @@ both anchor and nested span, including WebKit text-fill, so Gmail's dark-mode
 link recoloring is less likely to turn it white. The preview sample is
 shortened to match and remains non-redeemable.
 
+Harvey's next Gmail screenshot showed that the button text was still white
+despite those inline declarations. The gold CTA now uses a small hosted PNG
+with dark label pixels inside the link, so Gmail cannot recolor the label;
+the link retains image alt text for accessibility. The HTML voucher preview
+also drops “It helps me make The Reality Manual better,” leaving the short
+requested thank-you. Voucher value, destination and eligibility are unchanged.
+Confirm the hosted image is live before sending the replacement preview.
+
 ## One-recording Editor caption fit (2026-11-21)
 
 For the same thank-you/feedback recording, Harvey reported portrait captions

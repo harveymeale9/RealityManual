@@ -38,5 +38,7 @@ test('preview email uses a non-redeemable sample code and is clearly labelled', 
   assert.match(message.subject, /PREVIEW/);
   assert.match(message.textBody, /not redeemable/);
   assert.match(message.htmlBody, /share such thoughtful feedback/);
-  assert.match(message.htmlBody, /-webkit-text-fill-color:#171109!important/);
+  assert.doesNotMatch(message.htmlBody, /It helps me make The Reality Manual better/);
+  assert.match(message.htmlBody, /img\/email\/voucher-shop-button\.png/);
+  assert.match(message.htmlBody, /alt="SHOP THE BOOK"/);
 });

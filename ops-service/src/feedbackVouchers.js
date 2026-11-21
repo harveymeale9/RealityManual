@@ -22,12 +22,14 @@ function voucherEmail(name, code, preview = false) {
     '<p style="letter-spacing:.22em;color:#e4bd71;font-size:12px">THE REALITY MANUAL</p>' +
     '<h1 style="font:normal 46px Georgia,serif;margin:30px 0 12px">A little thank you.</h1>' + intro +
     '<p style="line-height:1.7">Hi ' + escapeHtml(name) + ',</p>' +
-    '<p style="line-height:1.7">Thank you for taking the time to share such thoughtful feedback. It helps me make The Reality Manual better.</p>' +
+    '<p style="line-height:1.7">Thank you for taking the time to share such thoughtful feedback.</p>' +
     '<div style="border:1px solid #b9904e;border-radius:16px;padding:24px;margin:30px 0;background:#211b12">' +
     '<p style="font-size:13px;color:#d4b47b;letter-spacing:.1em">50% OFF ONE BOOK · NO EXPIRY</p>' +
     '<p style="font:normal 23px Georgia,serif;letter-spacing:.03em;white-space:nowrap">' + safeCode + '</p></div>' +
     '<p style="line-height:1.7">Use it for another copy for a friend now, or save it for Volume II when it launches. The discount is on one book only; shipping is unchanged. Use the same email address you used for your feedback.</p>' +
-    '<a href="' + escapeHtml(link) + '" style="display:inline-block;padding:16px 30px;background:#e9be6d;color:#171109!important;-webkit-text-fill-color:#171109!important;text-decoration:none;border-radius:10px;font-weight:bold"><span style="color:#171109!important;-webkit-text-fill-color:#171109!important">SHOP THE BOOK</span></a>' +
+    // Gmail's dark-mode rewrite can turn even !important dark HTML text white.
+    // Keep the label as dark pixels inside a small hosted image instead.
+    '<a href="' + escapeHtml(link) + '" style="display:inline-block;background:#e9be6d;border-radius:10px;text-decoration:none;color:#171109"><img src="https://realitymanual.com/img/email/voucher-shop-button.png" width="220" height="56" alt="SHOP THE BOOK" style="display:block;width:220px;height:56px;border:0;color:#171109" /></a>' +
     '<p style="margin-top:40px;color:#b7ab98">With gratitude,<br>Harvey</p></div></body></html>';
   const textBody = (preview ? 'PREVIEW ONLY — sample code is not redeemable.\n\n' : '') +
     `Hi ${name},\n\nThank you for taking the time to share such thoughtful feedback. Here is your 50% off voucher for one book: ${code}\n\n` +
