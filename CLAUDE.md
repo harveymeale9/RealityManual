@@ -23944,3 +23944,39 @@ and -3.38 dBTP. Its file SHA-256 matches the saved verified hash, and the
 authenticated inline preview endpoint returned HTTP 206 for a byte-range
 request. The original 723 MB camera file was not modified. The recording
 remains in Editor for Harvey to review; nothing was published or approved.
+
+## Reader thank-you page and direct-to-R2 submissions (2026-11-21)
+
+`frontend/iloveyou/` now hosts a noindex reader landing page with a collapsed
+private-feedback form and an initially open public-review form. Both accept
+name, email, message, and optional media; the media picker is presented as
+photo/video tiles rather than a bare file button. A review requires explicit
+permission to use the review on the site, social media, and in paid-ad
+snippets. The separate optional $50 video consideration requires at least 30
+seconds and a real person holding and discussing the book, preferably showing
+their face. Payment is not conditioned on positive sentiment; the form says
+honest criticism is welcome and payment will be arranged directly after
+human eligibility review. The privacy page now describes this data flow.
+
+The reviewed thank-you video is **not** yet public: its Editor project is
+still awaiting Harvey's approval. The page therefore shows an honest portrait
+placeholder and working forms, not an unapproved render or a fake playable
+video. Replace the placeholder with the approved video when available.
+
+`ops-service/src/customerSubmissions.js` owns the form API and private
+`customer_submissions` SQLite table. The browser sends JSON to
+`/api/customer-submissions/start`, uploads each media part directly to the
+existing private R2 bucket with a 15-minute presigned multipart PUT URL, then
+calls `/complete`; the VPS does not proxy up to 3 GB of video. Limits are one
+video up to 3 GiB, images up to 20 MiB, three files total; 16 MiB parts are
+uploaded with three workers and retries. The server verifies final object
+length, limits starts per IP and origin, expires abandoned multipart sessions,
+and stores a hash of each session token. The admin-only
+`/api/customer-submissions-admin` endpoints list submissions and issue
+10-minute private media links; `ops-service/public/customer-submissions.html`
+is the simple internal inbox. The existing mailbox sends Harvey a notice on
+completion without attaching large files. R2 bucket CORS now allows PUT from
+the two storefront origins and exposes ETag for multipart completion; no R2
+object was made public. These uploads are separate from the video publishing
+pipeline. Customer media must not be treated as approved marketing creative
+until its consent and eligibility have been checked.

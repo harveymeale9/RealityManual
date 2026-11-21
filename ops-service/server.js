@@ -57,6 +57,7 @@ const productionVideoPreviewService = require('./src/productionVideoPreview');
 const editorRetakeAnalysis = require('./src/editorRetakeAnalysis');
 const editorTranscriptSampling = require('./src/editorTranscriptSampling');
 const r2StorageService = require('./src/r2Storage');
+const customerSubmissionsService = require('./src/customerSubmissions');
 const rangeResponse = require('./src/rangeResponse');
 const kanbanBackupService = require('./src/kanbanBackupService');
 const contentAnalyticsService = require('./src/contentAnalyticsService');
@@ -1032,6 +1033,29 @@ const mailbox = mailboxService.setup(db, {
   transport: mailboxTransport
 });
 app.use('/api/mailbox', requireAuth, mailbox.router);
+// Customer feedback and reviews arrive from the public storefront. Files go
+// browser -> private R2 multipart upload, never through the VPS request body.
+// Only the separate admin route can list messages or open short-lived media.
+const customerSubmissions = customerSubmissionsService.setup(db, {
+  endpoint: process.env.R2_ENDPOINT, bucket: process.env.R2_BUCKET_NAME,
+  accessKeyId: process.env.R2_ACCESS_KEY_ID, secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+  allowedOrigins: ALLOWED_ORIGINS,
+  sendNotice: function (submission) {
+    if (!mailbox.configured()) return Promise.resolve();
+    return mailbox.sendAutomated({
+      to: [process.env.PUBLISH_ALERT_RECIPIENT || 'harveymeale9@gmail.com'], cc: [],
+      subject: 'New customer ' + submission.kind + ' from ' + submission.name,
+      textBody: 'A customer ' + submission.kind + ' arrived at /iloveyou.\n\n' +
+        'Name: ' + submission.name + '\nEmail: ' + submission.email +
+        '\nPaid video request: ' + (submission.paidVideo ? 'yes — check eligibility and contact them for payment details' : 'no') +
+        '\nFiles: ' + submission.files.map(file => file.name + ' (' + file.kind + ')').join(', ') +
+        '\n\nMessage:\n' + submission.message + '\n\nSubmission ID: ' + submission.id +
+        '\nOpen private media in Content Studio: https://ops.realitymanual.com/customer-submissions.html'
+    });
+  }
+});
+app.use('/api/customer-submissions', customerSubmissions.publicRouter);
+app.use('/api/customer-submissions-admin', requireAuth, customerSubmissions.adminRouter);
 
 // Normal inbound email is classified through OpenAI Structured Outputs with
 // *zero* tools exposed (email content is untrusted). The sole exception is an exact
