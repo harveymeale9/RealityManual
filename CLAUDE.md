@@ -23929,8 +23929,10 @@ render settings: `topCropFraction` (portrait-only, 0–0.4) and
 the bottom of the shot and source original unchanged. The optional audio path
 high-passes at 80 Hz, applies restrained FFT noise reduction and normalizes
 dialogue toward -18 LUFS with -4 dBTP encoder headroom, then explicitly
-resamples to 48 kHz (FFmpeg's dynamic loudnorm otherwise emitted 96 kHz AAC
-and its encoded true peak approached 0 dBTP). Both settings invalidate the old render and
+resamples to 48 kHz with an explicit stereo layout (FFmpeg's dynamic loudnorm
+otherwise emitted 96 kHz AAC and its encoded true peak approached 0 dBTP;
+resampling without restoring the stereo layout made the downstream audio delay
+filter fail on the full multi-segment timeline). Both settings invalidate the old render and
 persist through the eventual Production master. They do not affect other
 recordings. The existing `openingPushInEnabled` setting disables the camera
 move for this one project. The requested crop was inspected on a real source
