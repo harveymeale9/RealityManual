@@ -600,11 +600,24 @@ test('metadata-only editor changes preserve a verified render', function () {
   assert.equal(editor.patchAffectsRender({ openingPushInEnabled: false }), true);
   assert.equal(editor.patchAffectsRender({ topCropFraction: 0.25 }), true);
   assert.equal(editor.patchAffectsRender({ phoneAudioEnhancement: true }), true);
+  assert.equal(editor.patchAffectsRender({ phoneAudioTreatment: 'level_only' }), true);
+  assert.equal(editor.patchAffectsRender({ mirrorSourceVideo: true }), true);
   assert.equal(editor.patchAffectsRender({ voiceGainAdjustments: [{ start: 15.49, gainDb: -2.93 }] }), true);
   assert.equal(editor.patchAffectsRender({ punchIns: [{ start: 1, end: 2 }] }), false);
   assert.equal(editor.patchNeedsAutoRender({ renderStatus: 'ready' }, false), false);
   assert.equal(editor.patchNeedsAutoRender({ renderStatus: '' }, false), false);
   assert.equal(editor.patchNeedsAutoRender({ renderStatus: 'ready' }, true), false);
+});
+
+test('per-recording mirror affects camera only and level-only voice retains its spectrum', function () {
+  const project = { mirrorSourceVideo: true, phoneAudioEnhancement: false, phoneAudioTreatment: 'level_only' };
+  assert.equal(editor.sourceMirrorFilter(project, { type: 'source' }), ',hflip');
+  assert.equal(editor.sourceMirrorFilter(project, { type: 'insert' }), '');
+  assert.equal(editor.sourceMirrorFilter({}, { type: 'source' }), '');
+  const filter = editor.phoneAudioFilterForProject(project);
+  assert.match(filter, /loudnorm=I=-18:TP=-4/);
+  assert.doesNotMatch(filter, /afftdn|highpass/);
+  assert.equal(editor.phoneAudioFilterForProject({ phoneAudioTreatment: 'none', phoneAudioEnhancement: true }), '');
 });
 
 test('Editor UI batches transcript cuts behind one explicit preview rebuild', function () {

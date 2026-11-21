@@ -81,6 +81,18 @@ const AVAILABLE_CPU_COUNT = typeof os.availableParallelism === 'function'
 const EDITOR_ENCODE_CONCURRENCY = encoderConcurrencyForCpuCount(AVAILABLE_CPU_COUNT, process.env.EDITOR_ENCODE_CONCURRENCY);
 const EDITOR_FFMPEG_THREADS = Math.max(1, Math.floor(Math.max(1, AVAILABLE_CPU_COUNT) / EDITOR_ENCODE_CONCURRENCY));
 
+function sourceMirrorFilter(project, segment) {
+  return segment.type === 'source' && project.mirrorSourceVideo === true ? ',hflip' : '';
+}
+
+function phoneAudioFilterForProject(project) {
+  const outputFormat = ',aresample=48000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo';
+  if (project.phoneAudioTreatment === 'level_only') return 'loudnorm=I=-18:TP=-4:LRA=11' + outputFormat;
+  if (project.phoneAudioTreatment === 'none') return '';
+  return project.phoneAudioEnhancement === true
+    ? 'highpass=f=80,afftdn=nf=-35,loudnorm=I=-18:TP=-4:LRA=11' + outputFormat : '';
+}
+
 function renderShapeForProject(project, layout, master) {
   if (!master) return layout === 'vertical'
     ? (Number(project && project.topCropFraction) > 0 ? { width: 540, height: 720 } : { width: 404, height: 720 })
@@ -719,7 +731,7 @@ function advanceEditRevision(project) {
 function patchAffectsRender(body) {
   body = body && typeof body === 'object' ? body : {};
   return ['removedWordIndices', 'manualTrimCuts', 'wordCorrection', 'autoSilenceEnabled', 'restoredAutoCutIds', 'captionsEnabled',
-    'layoutOverride', 'openingPushInEnabled', 'topCropFraction', 'phoneAudioEnhancement', 'silenceThresholdSeconds', 'retainedPauseSeconds', 'voiceGainAdjustments',
+    'layoutOverride', 'openingPushInEnabled', 'topCropFraction', 'phoneAudioEnhancement', 'phoneAudioTreatment', 'mirrorSourceVideo', 'silenceThresholdSeconds', 'retainedPauseSeconds', 'voiceGainAdjustments',
     'suppressedPageChangeCutKeys', 'outroFadeSeconds'].some(function (key) {
     return Object.prototype.hasOwnProperty.call(body, key);
   });
@@ -2460,6 +2472,9 @@ function setup(options) {
         } else {
           videoFilter += ",crop=w='min(iw\\,ih*16/9)':h='min(ih\\,iw*9/16)':x='(iw-ow)/2':y='(ih-oh)/2'";
         }
+        // Mirror the owner's camera footage before motion/captions; don't
+        // flip inserted third-party clips or make captions read backwards.
+        videoFilter += sourceMirrorFilter(project, segment);
         const cameraMotionEnabled = segment.type === 'source' && project.openingPushInEnabled !== false;
         videoFilter += cameraMotionPreparationFilter(renderShape, cameraMotionEnabled);
         if (segment.type === 'source') {
@@ -2509,8 +2524,10 @@ function setup(options) {
         ',fade=t=out:st=' + (OPENING_PREROLL_SECONDS + contentDuration).toFixed(3) + ':d=' + outro.visualFadeSeconds.toFixed(3) +
         ',fps=30000/1001[outv]');
       const requestedVoiceGain = voiceGainFilter(project.voiceGainAdjustments, contentDuration);
-      const phoneAudioFilter = project.phoneAudioEnhancement === true
-        ? 'highpass=f=80,afftdn=nf=-35,loudnorm=I=-18:TP=-4:LRA=11,aresample=48000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo' : '';
+      // A phone recording can be very quiet without needing spectral denoise.
+      // The level-only option preserves its original timbre: FFT reduction
+      // made one reader message sound muffled even while measuring -18 LUFS.
+      const phoneAudioFilter = phoneAudioFilterForProject(project);
       const voiceFilters = [requestedVoiceGain, phoneAudioFilter].filter(Boolean).join(',');
       if (voiceFilters) filters.push('[outa]' + voiceFilters + '[leveledouta]');
       filters.push('[' + (voiceFilters ? 'leveledouta' : 'outa') + ']adelay=delays=' + Math.round(OPENING_PREROLL_SECONDS * 1000) +
@@ -3599,6 +3616,8 @@ function setup(options) {
       project.topCropFraction = Number(crop.toFixed(3));
     }
     if (typeof (req.body && req.body.phoneAudioEnhancement) === 'boolean') project.phoneAudioEnhancement = req.body.phoneAudioEnhancement;
+    if (req.body && ['none', 'level_only'].includes(req.body.phoneAudioTreatment)) project.phoneAudioTreatment = req.body.phoneAudioTreatment;
+    if (typeof (req.body && req.body.mirrorSourceVideo) === 'boolean') project.mirrorSourceVideo = req.body.mirrorSourceVideo;
     if (['auto', 'vertical', 'horizontal'].includes(req.body && req.body.layoutOverride)) project.layoutOverride = req.body.layoutOverride;
     if (['auto', 'ultra_short', 'short', 'long_short', 'longform'].includes(req.body && req.body.contentTypeOverride)) project.contentTypeOverride = req.body.contentTypeOverride;
     if (typeof (req.body && req.body.audioTrackId) === 'string') {
@@ -4085,6 +4104,8 @@ module.exports = {
   createPriorityTaskQueue,
   encoderConcurrencyForCpuCount,
   renderShapeForProject,
+  sourceMirrorFilter,
+  phoneAudioFilterForProject,
   renderOutroTiming,
   verifiedRenderMatches,
   parseIntegratedLoudness,

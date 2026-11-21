@@ -23980,3 +23980,22 @@ the two storefront origins and exposes ETag for multipart completion; no R2
 object was made public. These uploads are separate from the video publishing
 pipeline. Customer media must not be treated as approved marketing creative
 until its consent and eligibility have been checked.
+
+## One-recording Editor audio clarity and mirror revision (2026-11-21)
+
+The thank-you/feedback Editor preview (`2edd5969`) was reported as muffled
+after its first phone-audio cleanup. That pass used `afftdn=nf=-35` FFT noise
+reduction in addition to a high-pass and loudness normalization; the source
+itself measured around -32.5 LUFS, so simply disabling all processing would
+restore very quiet speech. Editor therefore has a per-project `level_only`
+audio treatment that retains the original phone recording's spectrum while
+normalizing its level toward -18 LUFS and preserving a -4 dBTP ceiling. No
+spectral denoise or high-pass is applied in this mode. The earlier treatment
+remains unchanged for other recordings.
+
+The same project also uses `mirrorSourceVideo` to apply `hflip` to its camera
+segments before motion and subtitles, so captions remain readable and any
+inserted clips are not mirrored. These are render-affecting saved decisions;
+the Editor preview and eventual Production master use the same settings. The
+previous top crop and disabled opening push-in remain in place. The immutable
+original camera file is never modified.
