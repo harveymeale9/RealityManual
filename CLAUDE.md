@@ -24172,5 +24172,15 @@ killer terminated FFmpeg, leaving the preview unavailable. The safe retry
 separates the crossfaded audio into a small PCM-only pass, then feeds that
 file to the existing video renderer; no simultaneous audio filter chain
 remains in the video graph. A synthetic end-to-end Editor render exercises
-both passes and passes. The real recording must be rebuilt and checked
-before this revision can be considered finished.
+both passes and passes. The real recording was rebuilt at edit revision 15
+with a 160 ms audio crossfade and +24 dB source room-tone bed. The
+189.489-second 540×720 preview passed the Editor quality gate, its
+on-disk SHA-256 matched the saved `15a20e37fe61…` digest, and authenticated
+playback served HTTP 206 byte ranges. A 50 ms RMS scan around twelve cut
+positions found the gap floor at roughly -42 to -35 dBFS rather than the
+previous roughly -50 dBFS notches; speech naturally rises above it at the
+next retained phrase. The separate audio pass stayed small (about 35 MB
+PCM and under 300 MB FFmpeg RSS during the observed video render), and CI
+confirmed `ba344be` deployed. The recording remains in Editor, not
+approved or sent to Production; Harvey should make the final listening
+judgment on the new preview.
