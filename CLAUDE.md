@@ -24288,3 +24288,12 @@ Removed the small numbered eyebrow labels above both `/iloveyou/` form
 headings. The first heading now reads “Share feedback” instead of “Share
 private feedback”; the existing explanation that feedback is not published
 remains in the form body. Form fields and submission behavior are unchanged.
+
+## Content Studio header overflow (2026-11-21)
+
+Harvey reported a visible horizontal scrollbar across the top navigation.
+The Quick Add header link was removed (the standalone quick-add route remains
+available), and the H/R avatar lettering was replaced with an accessible
+logout icon so sign-out remains available. The primary tab row now hides its
+native scrollbar while retaining horizontal swipe/scroll on narrow screens;
+removing the Quick Add link also returns width to the desktop navigation.

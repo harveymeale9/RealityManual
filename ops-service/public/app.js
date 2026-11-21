@@ -1593,9 +1593,8 @@
 
   function syncRoleNavigation() {
     document.body.classList.toggle('role-reviewer', IS_REVIEWER);
-    var avatarBtn = document.getElementById('logoutBtn');
-    avatarBtn.textContent = IS_REVIEWER ? 'R' : 'H';
-    avatarBtn.title = IS_REVIEWER ? 'Log out (Reviewer account)' : 'Log out';
+    var logoutBtn = document.getElementById('logoutBtn');
+    logoutBtn.title = IS_REVIEWER ? 'Log out (Reviewer account)' : 'Log out';
     document.getElementById('switchAdminBtn').hidden = !IS_REVIEWER;
     renderTabs();
     syncCommentAlertPolling();
