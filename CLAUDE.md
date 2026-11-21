@@ -24273,3 +24273,11 @@ all three notice emails to Harvey were marked sent. The QA feedback was
 classified `not_constructive`, so no voucher was issued. These test entries
 were intentionally left unread so Harvey can see the notification indicators;
 they are labeled not to publish or assess for payment.
+
+## Reader page video spacing (2026-11-21)
+
+Harvey asked to remove the two small labels beneath the embedded thank-you
+video on `/iloveyou/` (`01 / A NOTE TO YOU` and `With love, Harvey`) and reduce
+the empty space before the next heading. The labels were removed from the
+page markup, and the bridge heading's top margin was reduced to 32 px on
+desktop and 28 px on mobile. The video, forms, and other copy are unchanged.
