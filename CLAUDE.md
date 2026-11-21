@@ -23999,3 +23999,12 @@ inserted clips are not mirrored. These are render-affecting saved decisions;
 the Editor preview and eventual Production master use the same settings. The
 previous top crop and disabled opening push-in remain in place. The immutable
 original camera file is never modified.
+
+The real project was saved at edit revision 11 with denoise off, level-only
+audio on, and mirroring on. Its rebuilt 540×720, 48 kHz stereo preview passed
+the Editor quality gate and matched its saved SHA-256. The extracted opening
+and middle frames show the lamp/bookcase sides reversed from the source while
+preserving the 25% top crop. Rendered audio measured -18.95 LUFS and
+-3.65 dBTP, without the prior FFT reduction; the authenticated inline video
+endpoint returned HTTP 206 for a byte-range request. The recording remains
+unapproved in Editor for Harvey's own listening review.
