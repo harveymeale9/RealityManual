@@ -24245,3 +24245,31 @@ Verified in authenticated 390 px Chromium with touch events: pinching the
 seven-day plot tripled its width, revealed bar labels, preserved the
 midpoint time slice, and enabled one-finger horizontal panning. The reset
 control returned the plot to its fitted width and left scroll at zero.
+
+## Reader-message video release and live form QA (2026-11-21)
+
+Harvey approved the thank-you/feedback recording for `/iloveyou/` but asked
+that it end immediately after his final “thank you,” without the Editor's
+held-frame fade. The existing automatic trailing-silence cut already ends at
+source 304.36 seconds, just after the final word (304.28). Editor now permits
+an explicit per-project `outroFadeSeconds: 0`; other projects keep their
+normal fade. The zero setting skips the clone-frame/fade filters and the
+room-tone fade in both audio render paths. Project `2edd5969` was saved at
+edit revision 16 and rebuilt; its 187.988-second 540×720 render passed the
+Editor quality gate with SHA-256 `b286e3c9ff4ae24abe097c0bbe22db99515eaf53dd05763aac4d3a99bc9f7dad`.
+All 29 decoded frames in its final second were distinct, confirming the
+frozen tail is gone. The verified render is remuxed with fast-start for the
+web and embedded as a native portrait video on the noindex reader page,
+with a frame from the new render as its poster. This does not send the
+recording into the social publishing queue.
+
+The live `/iloveyou/` forms were exercised in Chromium with three clearly
+labeled QA submissions: private feedback, a written review, and a video
+review with a generated test MP4. Each form reported success. The video was
+uploaded directly to private R2 and downloaded back through the admin media
+route. The Content Studio dashboard visibly showed unread `F 1 · R 1 · VR 1`,
+and all three submissions reached the normal Mailbox as inbound messages;
+all three notice emails to Harvey were marked sent. The QA feedback was
+classified `not_constructive`, so no voucher was issued. These test entries
+were intentionally left unread so Harvey can see the notification indicators;
+they are labeled not to publish or assess for payment.
