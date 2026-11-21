@@ -666,7 +666,8 @@
       '<span class="views-per-sale" title="Measured long-form views divided by all paid books in this period. Not YouTube-attributed sales; view coverage may be partial.">Long-form views per book sold <b>' + viewsPerSale + '</b> <small>(all books; not attributed)</small></span>' +
       '<span class="avg-sales" title="Stripe-paid, non-refunded books divided by the selected number of Bangkok calendar days, including today if selected.">Average books sold per day <b>' + averageSalesPerDay + '</b></span></div>' +
       '<p class="sales-timing-detail" aria-live="polite">Point at or tap an hour for Bangkok and New York times, views, books sold and upload titles.</p>' +
-      '<div class="sales-timing-scroll" role="group" aria-label="Hourly views and books sold"><div class="sales-timing-grid' + (dense ? ' dense' : '') + (veryDense ? ' very-dense' : '') + '">' + dayBands + hours + viewLine + releaseMarkers + '</div></div>' +
+      '<div class="sales-timing-scroll" role="group" aria-label="Hourly views and books sold; pinch with two fingers to zoom, then swipe to pan"><div class="sales-timing-grid' + (dense ? ' dense' : '') + (veryDense ? ' very-dense' : '') + '">' + dayBands + hours + viewLine + releaseMarkers + '</div></div>' +
+      '<div class="sales-timing-zoom-help">Pinch the chart to zoom · swipe to pan <button type="button" class="sales-timing-zoom-reset" hidden>Fit all days</button></div>' +
       '<div class="sales-timing-period-summary" aria-label="Selected period sales and estimated book profit">' +
       '<div><span>Total books sold over period</span><strong>' + paidUnits.toLocaleString() + '</strong></div>' +
       '<div title="' + escapeHtml(profitCaveat) + '"><span>Total profit over period</span><strong>' + totalProfit + '</strong>' + (pendingCosts ? '<small>' + pendingCosts + ' cost pending</small>' : '') + '</div>' +
@@ -680,6 +681,43 @@
     salesTimingDays = Number(data.days) || 3;
     section.innerHTML = salesTimingHtml(data);
     var detail = section.querySelector('.sales-timing-detail');
+    var scroll = section.querySelector('.sales-timing-scroll');
+    var grid = section.querySelector('.sales-timing-grid');
+    var resetZoom = section.querySelector('.sales-timing-zoom-reset');
+    var zoom = 1;
+    var pinch = null;
+    function setZoom(nextZoom, anchor, midpoint) {
+      zoom = Math.max(1, Math.min(12, nextZoom));
+      grid.style.width = (zoom * 100) + '%';
+      grid.classList.toggle('zoomed', zoom > 1.1);
+      resetZoom.hidden = zoom <= 1.01;
+      if (zoom <= 1.01) scroll.scrollLeft = 0;
+      else scroll.scrollLeft = anchor * grid.offsetWidth - midpoint + parseFloat(getComputedStyle(scroll).paddingLeft || 0);
+    }
+    function touchDistance(touches) {
+      return Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+    }
+    function touchMidpoint(touches) {
+      return (touches[0].clientX + touches[1].clientX) / 2 - scroll.getBoundingClientRect().left;
+    }
+    scroll.addEventListener('touchstart', function (event) {
+      if (event.touches.length !== 2) return;
+      var midpoint = touchMidpoint(event.touches);
+      var padding = parseFloat(getComputedStyle(scroll).paddingLeft || 0);
+      pinch = {
+        distance: Math.max(1, touchDistance(event.touches)),
+        zoom: zoom,
+        anchor: Math.max(0, Math.min(1, (scroll.scrollLeft + midpoint - padding) / grid.offsetWidth))
+      };
+    }, { passive: true });
+    scroll.addEventListener('touchmove', function (event) {
+      if (!pinch || event.touches.length !== 2) return;
+      event.preventDefault();
+      setZoom(pinch.zoom * touchDistance(event.touches) / pinch.distance, pinch.anchor, touchMidpoint(event.touches));
+    }, { passive: false });
+    scroll.addEventListener('touchend', function (event) { if (event.touches.length < 2) pinch = null; });
+    scroll.addEventListener('touchcancel', function () { pinch = null; });
+    resetZoom.addEventListener('click', function () { setZoom(1, 0, 0); });
     section.querySelectorAll('.sales-timing-hour,.sales-timing-release').forEach(function (hour) {
       function show() { detail.textContent = hour.dataset.salesDetail; }
       hour.addEventListener('pointerenter', show);

@@ -24227,3 +24227,21 @@ Friday/Sunday 05:45 slots while TikTok stayed paused. A real Chromium check
 opened a queued short's card on desktop and mobile: the related-long-form
 selector showed the standalone option plus thirteen existing long-form video
 cards, stayed usable at 390 px, and introduced no horizontal overflow.
+
+## Mobile Sales Analytics pinch zoom (2026-11-21)
+
+The hourly Sales Analytics plot previously fitted every selected hour into
+one viewport, which made mobile sales bars and day labels illegible over
+longer periods. The chart now starts fitted to the full selected period but
+supports a two-finger pinch to widen the same plot up to 12×, anchored at
+the fingers' midpoint. Its own horizontal scroll area allows a one-finger
+swipe to pan without changing the selected 3/7/14/21/30-day range. A small
+mobile hint and Fit all days control make the interaction discoverable and
+reversible; the visible scrollbar is styled for browsers that render it.
+Zoomed plots show sales numbers on bars even for dense periods. The graph's
+hourly data, release markers, and period totals are unchanged.
+
+Verified in authenticated 390 px Chromium with touch events: pinching the
+seven-day plot tripled its width, revealed bar labels, preserved the
+midpoint time slice, and enabled one-finger horizontal panning. The reset
+control returned the plot to its fitted width and left scroll at zero.
