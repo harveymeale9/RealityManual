@@ -24082,3 +24082,9 @@ a second artifact under the same name, which deploy-pages then rejected as
 ambiguous; start a *new run* instead of re-running that failed run. The
 storefront workflow now pauses five seconds between upload and deploy to
 let the metadata become visible.
+
+Harvey subsequently removed the sentence promising payment disclosure from
+the public review-use paragraph. The adjacent eligibility sentence already
+read “Your opinion can be positive, mixed, or negative; its sentiment does
+not affect eligibility,” so it remains unchanged. This is page copy only;
+the review consent, payment criteria, and submission workflow are unchanged.
