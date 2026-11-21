@@ -24102,3 +24102,13 @@ top-crop decision can be evaluated honestly. A saved, portrait-only
 preview overlay, Editor ASS burn-in, and later Production master. Other
 recordings retain their prior caption dimensions and 9:16 frame. The
 specific project is set to 72% caption size with 9% side-safe margins.
+The real recording advanced from edit revision 12 to 13 and was explicitly
+rebuilt. Its 540×720, 190.957-second preview passed the Editor quality gate;
+the saved and actual SHA-256 both begin `88a39c0ea104`. Opening, mid-video,
+and later extracted frames show captions visibly clear of both side edges;
+the opening line that formerly nearly filled the frame now has generous
+room. The authenticated inline preview returned HTTP 206. A browser layout
+check confirmed the review frame is 3:4 at 349×465 on mobile and 430×573
+on desktop. Because the manual-revision lock hides the player until this
+task completes, the actual rendered file and frame CSS were checked
+separately without changing any other recording, transcript, or audio.
