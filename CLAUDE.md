@@ -24297,3 +24297,16 @@ available), and the H/R avatar lettering was replaced with an accessible
 logout icon so sign-out remains available. The primary tab row now hides its
 native scrollbar while retaining horizontal swipe/scroll on narrow screens;
 removing the Quick Add link also returns width to the desktop navigation.
+
+## Face-reveal email real-video poster and inbox preview (2026-11-21)
+
+The face-reveal email draft now uses a frame extracted from the approved
+`/iloveyou/` reader-message video rather than the generated placeholder.
+The frame at 30 seconds was edited with the image-generation tool to obscure
+Harvey's face and bake in a play button/player controls, then saved as the
+versioned `frontend/img/email/face-reveal-harvey-video.png` asset. The HTML
+email references it at its natural 3:4 aspect ratio. The intended inbox
+subject remains “Face Reveal!” (also reflected in the preview document title),
+while the hidden inbox preheader now reads “A message from the author”. The
+visible email headline remains “Important Message”. This is still a draft;
+no campaign or recipient list is wired to the preview HTML.
