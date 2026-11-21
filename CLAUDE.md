@@ -24106,7 +24106,10 @@ with dark label pixels inside the link, so Gmail cannot recolor the label;
 the link retains image alt text for accessibility. The HTML voucher preview
 also drops “It helps me make The Reality Manual better,” leaving the short
 requested thank-you. Voucher value, destination and eligibility are unchanged.
-Confirm the hosted image is live before sending the replacement preview.
+The focused voucher tests passed; the deployed image returned HTTP 200 with
+the same SHA-256 as the committed PNG, CI rebuilt ops-service at `b566f36`,
+and the authenticated preview-send endpoint returned HTTP 200 after sending
+the replacement sample to Harvey's configured address.
 
 ## One-recording Editor caption fit (2026-11-21)
 
