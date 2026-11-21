@@ -567,7 +567,7 @@ function getHourlySalesTiming(storeDb, opsDb, pieces, nowValue, excludedIds, day
   const bins = [];
   const byHour = new Map();
   for (let at = startMs; at <= endMs; at += hourMs) {
-    const bin = { at: new Date(at).toISOString(), orders: 0, us_orders: 0,
+    const bin = { at: new Date(at).toISOString(), orders: 0, us_orders: 0, units: 0, us_units: 0,
       gross_profit_cents: 0, profit_pending_orders: 0,
       views: null, view_coverage: 'missing', uploads: [] };
     bins.push(bin);
@@ -575,15 +575,20 @@ function getHourlySalesTiming(storeDb, opsDb, pieces, nowValue, excludedIds, day
   }
   const excluded = excludedOrderFilter(excludedIds);
   const paidAt = "COALESCE(NULLIF(payment_received_at,''),created_at)";
-  const orders = storeDb.prepare(`SELECT ${paidAt} AS paid_at,country,total_price_cents,bookvault_total_cost_usd_cents FROM orders
+  const orders = storeDb.prepare(`SELECT ${paidAt} AS paid_at,country,quantity,total_price_cents,bookvault_total_cost_usd_cents FROM orders
     WHERE ${paidAt} >= ? AND ${paidAt} <= ? AND ${PAID_ORDER_SQL}${excluded.sql}`)
     .all(new Date(startMs).toISOString(), now.toISOString(), ...excluded.ids);
   orders.forEach(function (order) {
     const at = Date.parse(order.paid_at);
     const bin = Number.isFinite(at) && byHour.get(new Date(Math.floor(at / hourMs) * hourMs).toISOString());
     if (!bin) return;
+    const units = Math.max(0, Number(order.quantity) || 0);
     bin.orders++;
-    if (String(order.country || '').toUpperCase() === 'US') bin.us_orders++;
+    bin.units += units;
+    if (String(order.country || '').toUpperCase() === 'US') {
+      bin.us_orders++;
+      bin.us_units += units;
+    }
     if (order.bookvault_total_cost_usd_cents == null) bin.profit_pending_orders++;
     else bin.gross_profit_cents += (Number(order.total_price_cents) || 0) - Number(order.bookvault_total_cost_usd_cents);
   });
@@ -638,6 +643,8 @@ function getHourlySalesTiming(storeDb, opsDb, pieces, nowValue, excludedIds, day
     start_at: new Date(startMs).toISOString(), end_at: now.toISOString(),
     totals: { orders: bins.reduce(function (sum, bin) { return sum + bin.orders; }, 0),
       us_orders: bins.reduce(function (sum, bin) { return sum + bin.us_orders; }, 0),
+      units: bins.reduce(function (sum, bin) { return sum + bin.units; }, 0),
+      us_units: bins.reduce(function (sum, bin) { return sum + bin.us_units; }, 0),
       measured_views: bins.reduce(function (sum, bin) { return sum + (bin.views || 0); }, 0) },
     hourly: bins
   };

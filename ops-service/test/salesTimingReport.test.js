@@ -9,7 +9,7 @@ test('hourly comparison uses paid time, excludes refunds/tests, and marks observ
   const store = new Database(':memory:');
   const ops = new Database(':memory:');
   store.exec(`CREATE TABLE orders (id TEXT,created_at TEXT,payment_received_at TEXT,country TEXT,
-    order_status TEXT,stripe_payment_status TEXT,total_price_cents INTEGER DEFAULT 0,
+    order_status TEXT,stripe_payment_status TEXT,quantity INTEGER DEFAULT 1,total_price_cents INTEGER DEFAULT 0,
     bookvault_total_cost_usd_cents INTEGER)`);
   ops.exec(`CREATE TABLE content_metric_snapshots (piece_id TEXT,platform TEXT,captured_at TEXT,views INTEGER)`);
   const order = store.prepare('INSERT INTO orders (id,created_at,payment_received_at,country,order_status,stripe_payment_status) VALUES (?,?,?,?,?,?)');
@@ -19,6 +19,7 @@ test('hourly comparison uses paid time, excludes refunds/tests, and marks observ
   order.run('owner-test', '2026-11-19T19:35:00.000Z', null, 'US', 'BOOKVAULT_ACCEPTED', 'succeeded');
   order.run('unpaid', '2026-11-19T19:40:00.000Z', null, 'US', 'FAILED', 'requires_payment_method');
   store.prepare('UPDATE orders SET total_price_cents=?,bookvault_total_cost_usd_cents=? WHERE id=?').run(8000, 3500, 'paid-us');
+  store.prepare('UPDATE orders SET quantity=3 WHERE id=?').run('paid-us');
   store.prepare('UPDATE orders SET total_price_cents=? WHERE id=?').run(6500, 'paid-gb');
   const metric = ops.prepare('INSERT INTO content_metric_snapshots VALUES (?,?,?,?)');
   metric.run('long', 'youtube', '2026-11-19T15:00:00.000Z', 10); // baseline, not ten new views
@@ -35,9 +36,11 @@ test('hourly comparison uses paid time, excludes refunds/tests, and marks observ
   const report = reporting.getHourlySalesTiming(store, ops, pieces, '2026-11-20T06:30:00.000Z', ['owner-test'], 3);
   assert.equal(report.start_at, '2026-11-17T17:00:00.000Z');
   assert.equal(report.hourly.length, 62);
-  assert.deepEqual(report.totals, { orders: 2, us_orders: 1, measured_views: 15 });
+  assert.deepEqual(report.totals, { orders: 2, us_orders: 1, units: 4, us_units: 3, measured_views: 15 });
   assert.equal(report.hourly.find((bin) => bin.at === '2026-11-19T19:00:00.000Z').orders, 2);
   assert.equal(report.hourly.find((bin) => bin.at === '2026-11-19T19:00:00.000Z').us_orders, 1);
+  assert.equal(report.hourly.find((bin) => bin.at === '2026-11-19T19:00:00.000Z').units, 4);
+  assert.equal(report.hourly.find((bin) => bin.at === '2026-11-19T19:00:00.000Z').us_units, 3);
   assert.equal(report.hourly.find((bin) => bin.at === '2026-11-19T19:00:00.000Z').gross_profit_cents, 4500);
   assert.equal(report.hourly.find((bin) => bin.at === '2026-11-19T19:00:00.000Z').profit_pending_orders, 1);
   assert.equal(report.hourly.find((bin) => bin.at === '2026-11-19T15:00:00.000Z').views, null);

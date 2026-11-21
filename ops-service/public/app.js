@@ -555,9 +555,12 @@
     var bins = Array.isArray(data.hourly) ? data.hourly : [];
     var measuredViews = Number(data.totals.measured_views || 0);
     var paidOrders = Number(data.totals.orders || 0);
-    var viewsPerSale = measuredViews > 0 && paidOrders > 0 ? Math.round(measuredViews / paidOrders).toLocaleString() : '—';
+    var paidUnits = Number(data.totals.units == null ? paidOrders : data.totals.units) || 0;
+    var usUnits = Number(data.totals.us_units == null ? data.totals.us_orders : data.totals.us_units) || 0;
+    var unitsInHour = function (bin) { return Number(bin.units == null ? bin.orders : bin.units) || 0; };
+    var viewsPerSale = measuredViews > 0 && paidUnits > 0 ? Math.round(measuredViews / paidUnits).toLocaleString() : '—';
     var periodDays = Math.max(1, Number(data.days) || 1);
-    var averageSalesPerDay = (paidOrders / periodDays).toFixed(1);
+    var averageSalesPerDay = (paidUnits / periodDays).toFixed(1);
     var profitCents = bins.reduce(function (sum, bin) { return sum + (Number(bin.gross_profit_cents) || 0); }, 0);
     var pendingCosts = bins.reduce(function (sum, bin) { return sum + (Number(bin.profit_pending_orders) || 0); }, 0);
     var profitAvailable = !paidOrders || pendingCosts < paidOrders;
@@ -591,7 +594,7 @@
     var maxViews = Math.max.apply(Math, plotViews.map(function (views) { return views || 0; }).concat([1]));
     // Keep a one-sale hour visibly short even when every sale in the selected
     // period happened in a separate hour. Taller bars then mean more sales.
-    var maxOrders = Math.max.apply(Math, bins.map(function (bin) { return Number(bin.orders) || 0; }).concat([4]));
+    var maxOrders = Math.max.apply(Math, bins.map(unitsInHour).concat([4]));
     var options = [3, 7, 14, 21, 30].map(function (days) {
       return '<button type="button" data-sales-days="' + days + '" class="sales-timing-period' + (days === data.days ? ' active' : '') + '" aria-pressed="' + (days === data.days) + '">' + days + ' days</button>';
     }).join('');
@@ -606,10 +609,11 @@
       var bkkHour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', hourCycle: 'h23' }).format(date));
       var dayKey = date.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' });
       if (!days.length || days[days.length - 1].key !== dayKey) days.push({ key: dayKey, start: index, length: 0,
-        orders: 0, profitCents: 0, pendingCosts: 0,
+        orders: 0, units: 0, profitCents: 0, pendingCosts: 0,
         label: date.toLocaleDateString('en-GB', { timeZone: 'Asia/Bangkok', weekday: 'short', day: 'numeric', month: 'short' }) });
       days[days.length - 1].length++;
       days[days.length - 1].orders += Number(bin.orders) || 0;
+      days[days.length - 1].units += unitsInHour(bin);
       days[days.length - 1].profitCents += Number(bin.gross_profit_cents) || 0;
       days[days.length - 1].pendingCosts += Number(bin.profit_pending_orders) || 0;
       if (plotViews[index] == null) {
@@ -627,24 +631,24 @@
         (bin.views == null ? 'YouTube views not measured' : Number(bin.views).toLocaleString() + ' measured long-form views' + (bin.view_coverage === 'partial' ? ' (partial)' : ''));
       var detail = bangkok + ' Bangkok · ' + newYork + ' New York · ' +
         viewDetail +
-        ' · ' + Number(bin.orders || 0) + ' paid orders (' + Number(bin.us_orders || 0) + ' US)' +
+        ' · ' + unitsInHour(bin) + ' books sold (' + Number(bin.us_units == null ? bin.us_orders : bin.us_units) + ' US)' +
         (uploads.length ? ' · Published: ' + uploads.map(function (item) { return item.title; }).join(', ') : '');
       if (uploads.length) releases.push({ index: index, title: uploads.map(function (item) { return item.title; }).join(', '), detail: detail });
       return '<button type="button" class="sales-timing-hour' + (smoothed ? ' views-estimated' : bin.view_coverage !== 'complete' ? ' views-' + bin.view_coverage : '') + '"' +
         ' data-sales-detail="' + escapeHtml(detail) + '" aria-label="' + escapeHtml(detail) + '">' +
         '<span class="sales-timing-views"></span>' +
-        '<span class="sales-timing-orders">' + (bin.orders ? '<i style="height:' + Math.round(Number(bin.orders) / maxOrders * 100) + '%"><b>' + Number(bin.orders) + '</b></i>' : '') + '</span>' +
+        '<span class="sales-timing-orders">' + (unitsInHour(bin) ? '<i style="height:' + Math.round(unitsInHour(bin) / maxOrders * 100) + '%"><b>' + unitsInHour(bin) + '</b></i>' : '') + '</span>' +
         '<span class="sales-timing-tick">' + escapeHtml(tick) + '</span></button>';
     }).join('');
     if (viewRun.length) viewRuns.push(viewRun);
     var dayBands = days.map(function (day, index) {
       var profit = day.pendingCosts === day.orders && day.orders ? '—' : salesMoney(day.profitCents);
       var pending = day.pendingCosts ? ' · ' + day.pendingCosts + ' cost pending' : '';
-      var summary = day.orders + ' sale' + (day.orders === 1 ? '' : 's') + ' · Est book profit ' + profit + pending;
+      var summary = day.units + ' book' + (day.units === 1 ? '' : 's') + ' sold · Est book profit ' + profit + pending;
       return '<div class="sales-timing-day ' + (index % 2 ? 'day-alt' : 'day-base') + '" style="left:' + percentAt(day.start) + ';width:' + percentAt(day.length) + '">' +
         '<span class="sales-timing-day-label" title="' + escapeHtml(day.label) + '">' + escapeHtml(veryDense ? day.label.replace(/^\S+\s+/, '') : day.label) + '</span>' +
         '<span class="sales-timing-day-summary" title="' + escapeHtml(day.label + ': ' + summary) + '" aria-label="' + escapeHtml(day.label + ': ' + summary) + '">' +
-        '<strong>' + day.orders + (veryDense ? '' : ' sale' + (day.orders === 1 ? '' : 's')) + '</strong><small>' +
+        '<strong>' + day.units + (veryDense ? '' : ' book' + (day.units === 1 ? '' : 's')) + '</strong><small>' +
         (dense ? escapeHtml(veryDense && profit !== '—' ? '$' + Math.round(day.profitCents / 100) : profit) : 'Est book profit ' + escapeHtml(profit)) +
         (!dense && day.pendingCosts ? ' · ' + day.pendingCosts + ' pending' : '') + '</small></span></div>';
     }).join('');
@@ -655,17 +659,17 @@
         ' data-sales-detail="' + escapeHtml(release.detail) + '" aria-label="Long-form published: ' + escapeHtml(release.title) + '" title="' + escapeHtml(release.title) + '">' +
         '<span>◆ ' + escapeHtml(release.title) + '</span></button>';
     }).join('');
-    return '<div class="sales-timing-head"><div><span>Hourly · Bangkok time</span><h3>Long-form views and customer sales</h3></div><div class="sales-timing-periods" aria-label="Time period">' + options + '</div></div>' +
+    return '<div class="sales-timing-head"><div><span>Hourly · Bangkok time</span><h3>Long-form views and books sold</h3></div><div class="sales-timing-periods" aria-label="Time period">' + options + '</div></div>' +
       '<div class="sales-timing-legend"><span class="views">YouTube long-form views <b>' + measuredViews.toLocaleString() + '</b></span>' +
-      '<span class="orders">Stripe-paid orders <b>' + paidOrders + '</b> <small>(' + Number(data.totals.us_orders || 0) + ' US)</small></span>' +
-      '<span class="views-per-sale" title="Measured long-form views divided by all paid orders in this period. Not YouTube-attributed sales; view coverage may be partial.">Long-form views per sale <b>' + viewsPerSale + '</b> <small>(all sales; not attributed)</small></span>' +
-      '<span class="avg-sales" title="Stripe-paid, non-refunded orders divided by the selected number of Bangkok calendar days, including today if selected.">Average sales per day <b>' + averageSalesPerDay + '</b></span></div>' +
-      '<p class="sales-timing-detail" aria-live="polite">Point at or tap an hour for Bangkok and New York times, views, sales and upload titles.</p>' +
-      '<div class="sales-timing-scroll" role="group" aria-label="Hourly views and paid orders"><div class="sales-timing-grid' + (dense ? ' dense' : '') + (veryDense ? ' very-dense' : '') + '">' + dayBands + hours + viewLine + releaseMarkers + '</div></div>' +
+      '<span class="orders">Books sold <b>' + paidUnits + '</b> <small>(' + usUnits + ' US)</small></span>' +
+      '<span class="views-per-sale" title="Measured long-form views divided by all paid books in this period. Not YouTube-attributed sales; view coverage may be partial.">Long-form views per book sold <b>' + viewsPerSale + '</b> <small>(all books; not attributed)</small></span>' +
+      '<span class="avg-sales" title="Stripe-paid, non-refunded books divided by the selected number of Bangkok calendar days, including today if selected.">Average books sold per day <b>' + averageSalesPerDay + '</b></span></div>' +
+      '<p class="sales-timing-detail" aria-live="polite">Point at or tap an hour for Bangkok and New York times, views, books sold and upload titles.</p>' +
+      '<div class="sales-timing-scroll" role="group" aria-label="Hourly views and books sold"><div class="sales-timing-grid' + (dense ? ' dense' : '') + (veryDense ? ' very-dense' : '') + '">' + dayBands + hours + viewLine + releaseMarkers + '</div></div>' +
       '<div class="sales-timing-period-summary" aria-label="Selected period sales and estimated book profit">' +
-      '<div><span>Total sales over period</span><strong>' + paidOrders.toLocaleString() + '</strong></div>' +
+      '<div><span>Total books sold over period</span><strong>' + paidUnits.toLocaleString() + '</strong></div>' +
       '<div title="' + escapeHtml(profitCaveat) + '"><span>Total profit over period</span><strong>' + totalProfit + '</strong>' + (pendingCosts ? '<small>' + pendingCosts + ' cost pending</small>' : '') + '</div>' +
-      '<div><span>Average sales per day</span><strong>' + averageSalesPerDay + '</strong></div>' +
+      '<div><span>Average books sold per day</span><strong>' + averageSalesPerDay + '</strong></div>' +
       '<div title="' + escapeHtml(profitCaveat) + '"><span>Average profit per day</span><strong>' + averageProfitPerDay + '</strong>' + (pendingCosts ? '<small>Known costs only</small>' : '') + '</div></div>';
   }
 

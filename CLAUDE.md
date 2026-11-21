@@ -23863,6 +23863,20 @@ the period peaks around 2,900 views/hour, while the peak sits near the top.
 The independent green sales bars, day bands, release markers, hourly data and
 totals are unchanged. A focused chart test locks the 100/2,900 coordinates.
 
+## Hourly sales chart counts books, not checkouts (2026-11-21)
+
+Harvey spotted a day with four paid transactions but six books sold because
+one checkout contained three copies. The private hourly sales-timing report
+now includes `units` and `us_units` from each paid, non-refunded order's
+`quantity`, while retaining `orders` and `us_orders` for compatibility and
+pending-cost accounting. The green bar heights and labels, daily strip,
+period total, per-day average, and long-form-views-per-book ratio now use
+book units, matching the existing Books sold cards. Gross profit still sums
+each order's charged amount less its BookVault cost once; quantity must not
+multiply revenue or profit. UI labels explicitly say books sold to avoid
+confusing units with transactions. A focused test covers a three-book US
+checkout plus a one-book checkout and excludes a refunded five-book order.
+
 ## 05:45 Bangkok publishing clock across active platforms (2026-11-21)
 
 Harvey moved the release clock to **05:45 Asia/Bangkok**, which in November's

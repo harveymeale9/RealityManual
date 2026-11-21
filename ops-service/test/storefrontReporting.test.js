@@ -178,7 +178,34 @@ test('both analytics views show the nested source-and-video referral chart', fun
   assert.match(page, /style\.css\?v=[^"\s]+/);
 });
 
-test('sales timing chart shows hourly views, paid orders, upload markers and all periods', function () {
+test('hourly sales timing counts book units without multiplying order profit', function () {
+  const store = new Database(':memory:');
+  const ops = new Database(':memory:');
+  store.exec(`CREATE TABLE orders (id TEXT, order_status TEXT, stripe_payment_status TEXT,
+    quantity INTEGER, country TEXT, created_at TEXT, payment_received_at TEXT,
+    total_price_cents INTEGER, bookvault_total_cost_usd_cents INTEGER)`);
+  const add = store.prepare('INSERT INTO orders VALUES (?,?,?,?,?,?,?,?,?)');
+  add.run('three', 'COMPLETE', 'succeeded', 3, 'US', '2026-11-20T10:10:00.000Z',
+    '2026-11-20T10:10:00.000Z', 12000, 4000);
+  add.run('one', 'COMPLETE', 'succeeded', 1, 'GB', '2026-11-20T10:20:00.000Z',
+    '2026-11-20T10:20:00.000Z', 4000, 1000);
+  add.run('refunded', 'REFUNDED', 'succeeded', 5, 'US', '2026-11-20T10:30:00.000Z',
+    '2026-11-20T10:30:00.000Z', 20000, 5000);
+  const report = reporting.getHourlySalesTiming(store, ops, [], '2026-11-20T11:00:00.000Z', [], 3);
+  const hour = report.hourly.find(function (bin) { return bin.at === '2026-11-20T10:00:00.000Z'; });
+  assert.equal(hour.orders, 2);
+  assert.equal(hour.units, 4);
+  assert.equal(hour.us_orders, 1);
+  assert.equal(hour.us_units, 3);
+  assert.equal(hour.gross_profit_cents, 11000);
+  assert.equal(report.totals.orders, 2);
+  assert.equal(report.totals.units, 4);
+  assert.equal(report.totals.us_units, 3);
+  store.close();
+  ops.close();
+});
+
+test('sales timing chart shows hourly views, books sold, upload markers and all periods', function () {
   const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const start = source.indexOf('  function salesTimingHtml(');
   const end = source.indexOf('  function renderSalesAnalytics()', start);
@@ -187,23 +214,23 @@ test('sales timing chart shows hourly views, paid orders, upload markers and all
     Date, Math, Number, Intl, escapeHtml: function (value) { return String(value); },
     salesMoney: function (cents) { return '$' + (Number(cents) / 100).toFixed(2); }
   });
-  const html = render({ days: 3, totals: { measured_views: 35, orders: 7, us_orders: 2 }, hourly: [
-    { at: '2026-11-19T15:00:00.000Z', views: null, orders: 0, us_orders: 0, view_coverage: 'missing', uploads: [{ title: 'A long film' }] },
-    { at: '2026-11-19T16:00:00.000Z', views: 35, orders: 1, us_orders: 1, gross_profit_cents: 4500, profit_pending_orders: 0, view_coverage: 'complete', uploads: [] },
-    { at: '2026-11-19T17:00:00.000Z', views: 20, orders: 2, us_orders: 1, gross_profit_cents: 2000, profit_pending_orders: 1, view_coverage: 'complete', uploads: [] },
-    { at: '2026-11-20T17:00:00.000Z', views: 25, orders: 4, us_orders: 0, view_coverage: 'complete', uploads: [] }
+  const html = render({ days: 3, totals: { measured_views: 35, orders: 7, us_orders: 2, units: 9, us_units: 4 }, hourly: [
+    { at: '2026-11-19T15:00:00.000Z', views: null, orders: 0, units: 0, us_units: 0, view_coverage: 'missing', uploads: [{ title: 'A long film' }] },
+    { at: '2026-11-19T16:00:00.000Z', views: 35, orders: 1, units: 3, us_units: 3, gross_profit_cents: 4500, profit_pending_orders: 0, view_coverage: 'complete', uploads: [] },
+    { at: '2026-11-19T17:00:00.000Z', views: 20, orders: 2, units: 2, us_units: 1, gross_profit_cents: 2000, profit_pending_orders: 1, view_coverage: 'complete', uploads: [] },
+    { at: '2026-11-20T17:00:00.000Z', views: 25, orders: 4, units: 4, us_units: 0, view_coverage: 'complete', uploads: [] }
   ] });
   assert.match(html, /data-sales-days="3"[^>]*aria-pressed="true"/);
   for (const days of [7, 14, 21, 30]) assert.match(html, new RegExp('data-sales-days="' + days + '"'));
   assert.match(html, /35 measured long-form views/);
-  assert.match(html, /Long-form views per sale <b>5<\/b>/);
-  assert.match(html, /Average sales per day <b>2\.3<\/b>/);
-  assert.match(html, /Total sales over period<\/span><strong>7<\/strong>/);
+  assert.match(html, /Long-form views per book sold <b>4<\/b>/);
+  assert.match(html, /Average books sold per day <b>3\.0<\/b>/);
+  assert.match(html, /Total books sold over period<\/span><strong>9<\/strong>/);
   assert.match(html, /Total profit over period<\/span><strong>\$65\.00<\/strong><small>1 cost pending<\/small>/);
   assert.match(html, /Average profit per day<\/span><strong>\$21\.67<\/strong>/);
   assert.doesNotMatch(html, /◆ Long-form published/);
-  assert.match(html, /all sales; not attributed/);
-  assert.match(html, /4 paid orders \(0 US\)/);
+  assert.match(html, /all books; not attributed/);
+  assert.match(html, /4 books sold \(0 US\)/);
   assert.match(html, /New York/);
   assert.match(html, /class="sales-timing-release"/);
   assert.match(html, /aria-label="Long-form published: A long film"/);
@@ -222,10 +249,10 @@ test('sales timing chart shows hourly views, paid orders, upload markers and all
     { at: '2026-11-19T16:00:00.000Z', views: 2900, orders: 0, view_coverage: 'complete', uploads: [] }
   ] });
   assert.match(scaledHtml, /<polyline points="7\.5,216 22\.5,14"\/>/);
-  assert.match(html, /1 sale<\/strong><small>Est book profit \$45\.00/);
-  assert.match(html, /2 sales<\/strong><small>Est book profit \$20\.00 · 1 pending/);
-  assert.match(html, /4 sales<\/strong><small>Est book profit \$0\.00/);
-  assert.match(html, /height:25%"><b>1<\/b>/);
+  assert.match(html, /3 books<\/strong><small>Est book profit \$45\.00/);
+  assert.match(html, /2 books<\/strong><small>Est book profit \$20\.00 · 1 pending/);
+  assert.match(html, /4 books<\/strong><small>Est book profit \$0\.00/);
+  assert.match(html, /height:75%"><b>3<\/b>/);
   assert.match(html, /height:50%"><b>2<\/b>/);
   assert.match(html, /height:100%"><b>4<\/b>/);
   assert.doesNotMatch(html, /--us-share/);
@@ -235,9 +262,9 @@ test('sales timing chart shows hourly views, paid orders, upload markers and all
   const noUploadHtml = render({ days: 3, totals: { measured_views: 0, orders: 0, us_orders: 0 }, hourly: [
     { at: '2026-11-20T16:00:00.000Z', views: 0, orders: 0, us_orders: 0, view_coverage: 'complete', uploads: [] }
   ] });
-  assert.match(noUploadHtml, /Average sales per day <b>0\.0<\/b>/);
+  assert.match(noUploadHtml, /Average books sold per day <b>0\.0<\/b>/);
   assert.match(noUploadHtml, /Total profit over period<\/span><strong>\$0\.00<\/strong>/);
-  assert.match(noUploadHtml, /Long-form views per sale <b>—<\/b>/);
+  assert.match(noUploadHtml, /Long-form views per book sold <b>—<\/b>/);
   assert.doesNotMatch(noUploadHtml, /class="sales-timing-release"/);
   const pendingOnlyHtml = render({ days: 3, totals: { measured_views: 0, orders: 1, us_orders: 0 }, hourly: [
     { at: '2026-11-20T16:00:00.000Z', views: 0, orders: 1, us_orders: 0, gross_profit_cents: 0, profit_pending_orders: 1, view_coverage: 'complete', uploads: [] }
