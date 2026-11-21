@@ -24331,3 +24331,13 @@ before playback. The MP4 itself is unchanged and reveals Harvey when played.
 The face-reveal email draft no longer displays the “Important Message” heading;
 the image moves up to avoid leaving an empty band. The “Face Reveal!” email
 subject and hidden “A message from the author” inbox preheader remain intact.
+
+## Reader-video poster double-play-button fix (2026-11-21)
+
+The smudged email thumbnail had a play glyph and player controls baked into its
+pixels. When reused as the `/iloveyou/` native-video poster, mobile browsers
+rendered their own controls over those pixels, creating two stacked play buttons.
+The landing page now points to a separate, image-edited smudged poster with the
+baked UI removed. Its face stays obscured; the browser provides the only play
+button and controls. The email thumbnail remains unchanged because email needs
+its own baked play affordance.
