@@ -88,8 +88,13 @@ test('manual voice-level adjustments are bounded and become timed FFmpeg gain fi
 
 test('an opt-in room-tone bed invalidates the preview without changing other projects', function () {
   assert.equal(editor.patchAffectsRender({ roomTone: { startSeconds: 164, durationSeconds: 2, gainDb: 17 } }), true);
+  assert.equal(editor.patchAffectsRender({ audioCrossfadeSeconds: 0.16 }), true);
   assert.equal(editor.patchAffectsRender({ name: 'Only a title change' }), false);
   assert.equal(editor.phoneAudioFilterForProject({ phoneAudioTreatment: 'level_only' }).includes('afftdn'), false);
+  const segments = [{ type: 'source', start: 0, end: 2 }, { type: 'source', start: 3, end: 5 }];
+  assert.equal(editor.sourceAudioCrossfadeSeconds({ audioCrossfadeSeconds: 0.16 }, segments), 0.16);
+  assert.equal(editor.sourceAudioCrossfadeSeconds({ audioCrossfadeSeconds: 0.16 }, [{ ...segments[0] }, { ...segments[1], start: 2.1 }]), 0);
+  assert.equal(editor.sourceAudioCrossfadeSeconds({ audioCrossfadeSeconds: 0.16 }, [{ ...segments[0] }, { ...segments[1], type: 'insert' }]), 0);
 });
 
 test('inserted clips split the source timeline and supply their own timed captions', function () {

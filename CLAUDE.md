@@ -24151,3 +24151,16 @@ programme window measured about -50 dBFS. Previously the same preview had
 multiple windows of digital zero in the opening and at edit boundaries.
 The recording is still in Editor for Harvey's listening review, not
 approved or pushed to Production.
+
+Harvey's listening check found this first pass still sharply jagged at the
+actual cuts. Measuring the render showed why: the new bed was only about
+-49 dBFS RMS, while the edited foreground could jump by 10–25 dB across
+a hard splice. The prior 8 ms fades prevented clicks but did not make
+the room level sound continuous. A second, opt-in `audioCrossfadeSeconds`
+setting now extends each source-only audio segment into its removed gap by
+half the requested fade and overlaps adjacent segments. Video remains a
+hard cut; adding then consuming those handles preserves exact A/V duration.
+When inserted clips or gaps too short for safe handles exist, this mode
+does not engage. For the reader-message recording the intended fade is
+160 ms and the room-tone gain is raised from +17 to +24 dB, leaving
+speech clear but keeping the background audible through each splice.

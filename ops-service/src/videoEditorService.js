@@ -732,7 +732,7 @@ function patchAffectsRender(body) {
   body = body && typeof body === 'object' ? body : {};
   return ['removedWordIndices', 'manualTrimCuts', 'wordCorrection', 'autoSilenceEnabled', 'restoredAutoCutIds', 'captionsEnabled',
     'layoutOverride', 'openingPushInEnabled', 'topCropFraction', 'portraitCaptionScale', 'phoneAudioEnhancement', 'phoneAudioTreatment', 'mirrorSourceVideo', 'silenceThresholdSeconds', 'retainedPauseSeconds', 'voiceGainAdjustments',
-    'suppressedPageChangeCutKeys', 'outroFadeSeconds', 'roomTone'].some(function (key) {
+    'suppressedPageChangeCutKeys', 'outroFadeSeconds', 'roomTone', 'audioCrossfadeSeconds'].some(function (key) {
     return Object.prototype.hasOwnProperty.call(body, key);
   });
 }
@@ -1256,6 +1256,16 @@ function segmentAudioFades(segments, index, duration) {
     fadeIn: segment.start > 0.015 && (!previous || segment.start - previous.end > 0.015),
     fadeOut: segment.end < Math.max(0, Number(duration) || 0) - 0.015 && (!next || next.start - segment.end > 0.015)
   };
+}
+
+function sourceAudioCrossfadeSeconds(project, segments) {
+  const seconds = Number(project && project.audioCrossfadeSeconds);
+  if (!Number.isFinite(seconds) || seconds < 0.04 || seconds > 0.4 || !Array.isArray(segments) || segments.length < 2) return 0;
+  // The fade handles come from the discarded source gap. Adding one half to
+  // each side, then overlapping by the full fade keeps A/V duration in sync.
+  if (segments.some(function (segment) { return segment.type !== 'source' || segment.end - segment.start <= seconds; })) return 0;
+  if (segments.slice(1).some(function (segment, index) { return segment.start - segments[index].end < seconds + 0.02; })) return 0;
+  return seconds;
 }
 
 function pageChangeFadesForSegment(segment, cuts, confirmedCutIds) {
@@ -2423,6 +2433,7 @@ function setup(options) {
       saveProject(project);
       const segments = editorTimelineSegments(project, cuts);
       if (!segments.length) throw new Error('Every part of the recording is currently cut. Restore some transcript first.');
+      const audioCrossfadeSeconds = sourceAudioCrossfadeSeconds(project, segments);
       const contentDuration = segments.reduce(function (sum, segment) { return sum + segment.end - segment.start; }, 0);
       // Keep a deliberate programme-speed adjustment with the edit decisions,
       // so the Production master cannot silently revert to normal speed.
@@ -2511,7 +2522,10 @@ function setup(options) {
         filters.push(videoFilter + '[v' + index + ']');
         // Tiny boundary fades prevent waveform discontinuities from creating
         // a click at transcript/jump cuts, without audibly crossfading words.
-        let audioFilter = '[' + inputIndex + ':a]atrim=start=' + segment.start.toFixed(3) + ':end=' + segment.end.toFixed(3) + ',asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo';
+        const audioHandle = audioCrossfadeSeconds / 2;
+        const audioStart = segment.start - (index > 0 ? audioHandle : 0);
+        const audioEnd = segment.end + (index + 1 < segments.length ? audioHandle : 0);
+        let audioFilter = '[' + inputIndex + ':a]atrim=start=' + audioStart.toFixed(3) + ':end=' + audioEnd.toFixed(3) + ',asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo';
         if (segment.type === 'insert') {
           const balance = clipAudioBalance.get(segment.clipId);
           // Preserve the measured speech relationship while catching peaks
@@ -2519,12 +2533,26 @@ function setup(options) {
           // can then move the whole programme without changing this match.
           audioFilter += ',volume=' + balance.gainDb.toFixed(2) + 'dB,alimiter=limit=0.841395:level=false';
         }
-        if (index > 0) audioFilter += ',afade=t=in:st=0:d=0.008';
-        if (index + 1 < segments.length) audioFilter += ',afade=t=out:st=' + Math.max(0, segmentDuration - 0.008).toFixed(3) + ':d=0.008';
+        if (!audioCrossfadeSeconds) {
+          if (index > 0) audioFilter += ',afade=t=in:st=0:d=0.008';
+          if (index + 1 < segments.length) audioFilter += ',afade=t=out:st=' + Math.max(0, segmentDuration - 0.008).toFixed(3) + ':d=0.008';
+        }
         filters.push(audioFilter + '[a' + index + ']');
       });
-      const concatInputs = segments.map(function (_, index) { return '[v' + index + '][a' + index + ']'; }).join('');
-      filters.push(concatInputs + 'concat=n=' + segments.length + ':v=1:a=1[joinedv][outa]');
+      if (audioCrossfadeSeconds) {
+        const videoInputs = segments.map(function (_, index) { return '[v' + index + ']'; }).join('');
+        filters.push(videoInputs + 'concat=n=' + segments.length + ':v=1:a=0[joinedv]');
+        let audioLabel = 'a0';
+        for (let index = 1; index < segments.length; index++) {
+          const nextLabel = index + 1 === segments.length ? 'outa' : 'xf' + index;
+          filters.push('[' + audioLabel + '][a' + index + ']acrossfade=d=' + audioCrossfadeSeconds.toFixed(3) +
+            ':c1=tri:c2=tri[' + nextLabel + ']');
+          audioLabel = nextLabel;
+        }
+      } else {
+        const concatInputs = segments.map(function (_, index) { return '[v' + index + '][a' + index + ']'; }).join('');
+        filters.push(concatInputs + 'concat=n=' + segments.length + ':v=1:a=1[joinedv][outa]');
+      }
       // zoompan/concat can leave a coarse inherited time base. Normalize it
       // before extending the stream, otherwise FFmpeg may drop the held frames
       // or interpret a two-second pad as hundreds of seconds.
@@ -3668,6 +3696,13 @@ function setup(options) {
         gainDb: Number(Number(tone.gainDb).toFixed(2))
       };
     }
+    if (req.body && Object.prototype.hasOwnProperty.call(req.body, 'audioCrossfadeSeconds')) {
+      const seconds = Number(req.body.audioCrossfadeSeconds);
+      if (!Number.isFinite(seconds) || (seconds !== 0 && (seconds < 0.04 || seconds > 0.4))) {
+        return res.status(400).json({ error: 'invalid_audio_crossfade', message: 'Audio crossfade must be between 0.04 and 0.4 seconds.' });
+      }
+      project.audioCrossfadeSeconds = Number(seconds.toFixed(3));
+    }
     if (typeof (req.body && req.body.mirrorSourceVideo) === 'boolean') project.mirrorSourceVideo = req.body.mirrorSourceVideo;
     if (['auto', 'vertical', 'horizontal'].includes(req.body && req.body.layoutOverride)) project.layoutOverride = req.body.layoutOverride;
     if (['auto', 'ultra_short', 'short', 'long_short', 'longform'].includes(req.body && req.body.contentTypeOverride)) project.contentTypeOverride = req.body.contentTypeOverride;
@@ -4179,6 +4214,7 @@ module.exports = {
   parseInsertClipDirectives,
   clipTimestampSeconds,
   segmentAudioFades,
+  sourceAudioCrossfadeSeconds,
   pageChangeFadeSeconds: PAGE_CHANGE_FADE_SECONDS,
   pageChangeFadesForSegment,
   mapSourceTimeToEdited,
