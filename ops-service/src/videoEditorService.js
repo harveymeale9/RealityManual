@@ -2510,7 +2510,7 @@ function setup(options) {
         ',fps=30000/1001[outv]');
       const requestedVoiceGain = voiceGainFilter(project.voiceGainAdjustments, contentDuration);
       const phoneAudioFilter = project.phoneAudioEnhancement === true
-        ? 'highpass=f=80,afftdn=nf=-35,loudnorm=I=-18:TP=-2:LRA=11' : '';
+        ? 'highpass=f=80,afftdn=nf=-35,loudnorm=I=-18:TP=-4:LRA=11,aresample=48000' : '';
       const voiceFilters = [requestedVoiceGain, phoneAudioFilter].filter(Boolean).join(',');
       if (voiceFilters) filters.push('[outa]' + voiceFilters + '[leveledouta]');
       filters.push('[' + (voiceFilters ? 'leveledouta' : 'outa') + ']adelay=delays=' + Math.round(OPENING_PREROLL_SECONDS * 1000) +

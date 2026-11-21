@@ -23928,7 +23928,9 @@ render settings: `topCropFraction` (portrait-only, 0–0.4) and
 1080×1440 (3:4) master, with a matching 540×720 decision preview; it keeps
 the bottom of the shot and source original unchanged. The optional audio path
 high-passes at 80 Hz, applies restrained FFT noise reduction and normalizes
-dialogue to -18 LUFS/-2 dBTP. Both settings invalidate the old render and
+dialogue toward -18 LUFS with -4 dBTP encoder headroom, then explicitly
+resamples to 48 kHz (FFmpeg's dynamic loudnorm otherwise emitted 96 kHz AAC
+and its encoded true peak approached 0 dBTP). Both settings invalidate the old render and
 persist through the eventual Production master. They do not affect other
 recordings. The existing `openingPushInEnabled` setting disables the camera
 move for this one project. The requested crop was inspected on a real source
