@@ -24059,7 +24059,9 @@ received the two additive order columns and voucher table before the Worker
 deploy; no historical order values changed. The paused VPS fallback schema
 has matching columns/table, but its checkout voucher path would require a
 separate failover implementation before a voucher customer could use it
-there. The current live checkout is the Worker.
+there; both fallback quote and payment routes reject voucher checkouts with
+503 so they cannot accidentally charge the undiscounted price. The current
+live checkout is the Worker.
 
 Completed reader forms are also ingested idempotently into the normal local
 Mailbox as inbound conversations; form-origin messages are excluded from
@@ -24071,3 +24073,12 @@ voucher email endpoint sends a non-redeemable sample to Harvey on request.
 Focused tests cover the no-expiry one-book discount, unchanged shipping,
 email binding, redemption, feedback classification, retry idempotence and
 form-category counts.
+
+The first Pages deploy of this release failed despite a successful artifact
+upload: deploy-pages queried GitHub metadata roughly 0.35 seconds after the
+artifact finalized and found zero artifacts. This was a GitHub propagation
+race, not an HTML/build failure. Re-running the same workflow run uploaded
+a second artifact under the same name, which deploy-pages then rejected as
+ambiguous; start a *new run* instead of re-running that failed run. The
+storefront workflow now pauses five seconds between upload and deploy to
+let the metadata become visible.

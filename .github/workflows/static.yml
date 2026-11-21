@@ -27,5 +27,8 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: ./frontend
+      # GitHub sometimes finalizes upload before Pages metadata lists it.
+      - name: Wait for artifact metadata
+        run: sleep 5
       - id: deployment
         uses: actions/deploy-pages@v4
