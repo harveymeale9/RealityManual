@@ -24397,11 +24397,12 @@ unsubscribe, and old-opt-in guards remain.
 The Face Reveal request includes a voucher/review invitation and is treated as
 commercial mail. The Worker and paused fallback will not send it without a
 real `MARKETING_POSTAL_ADDRESS` setting; the HTML and plain-text email include
-that address next to the unsubscribe. Do not invent or expose Harvey's home
+that address next to the unsubscribe and identify the message as promotional.
+Do not invent or expose Harvey's home
 address. This is a deliberate activation gate until Harvey provides a suitable
 business mailing address or PO Box. Backend and Worker test suites passed
 (59/59 and 34/34). The D1 `2026-11-21-bookvault-dispatch.sql` migration was
-applied before deploying Worker version `2f7bed6c-9a15-4a7e-9743-f907e0d278e5`.
+applied before deploying Worker version `125f0bf4-5f22-4e91-869e-fa34e613491c`.
 The live API health returned checkout enabled; the paused VPS fallback was
 rebuilt as `rm-storefront-backend:followup-dispatch` and its health returned OK.
 The first five-minute Worker sweep marked ten real orders `SHIPPED`, each with

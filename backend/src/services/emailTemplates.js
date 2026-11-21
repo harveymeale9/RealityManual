@@ -292,6 +292,7 @@ function reviewRequestEmail(order, { preview = false, postalAddress = '' } = {})
     '',
     'Signed, The Reality Manual Author',
     '',
+    'Promotional message from The Reality Manual.',
     'Unsubscribe from review emails:',
     unsubscribeUrl,
     postalAddress,
