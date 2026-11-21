@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const {
   orderConfirmedEmail,
   orderShippedEmail,
@@ -7,6 +9,11 @@ const {
   reviewRequestEmail,
 } = require('../src/services/emailTemplates');
 const { createResendClient } = require('../src/services/resendService');
+
+test('the Worker-safe face-reveal template matches its editable HTML source', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/services/faceRevealEmail.html'), 'utf8');
+  assert.equal(require('../src/services/faceRevealEmail.generated'), source);
+});
 
 const order = {
   id: 'RM-1001',
@@ -76,28 +83,25 @@ test('refund email says the refund was issued without promising bank timing', ()
   assert.match(email.text, /\$139\.98 USD/);
 });
 
-test('review request is personalized and offers written or video feedback', () => {
+test('review request uses the approved face-reveal email and retains unsubscribe controls', () => {
   const preview = reviewRequestEmail(order, { preview: true });
-  assert.equal(preview.subject, '[PREVIEW] How are you finding The Reality Manual?');
-  assert.match(preview.html, /Preview Only: Not a Customer Email/);
-  assert.match(preview.html, /A note from the author/);
-  assert.match(preview.html, /Hi Ava,/);
-  assert.doesNotMatch(preview.html, /<script>alert/);
-  assert.match(reviewRequestEmail({ customer_name: '<img>' }).html, /Hi &lt;img&gt;,/);
-  assert.match(preview.html, /short review, just reply to this email/);
-  assert.match(preview.html, /https:\/\/www\.instagram\.com\/the_reality_manual\//);
-  assert.match(preview.text, /DM it to me there/);
+  assert.equal(preview.subject, '[PREVIEW] Face Reveal!');
+  assert.match(preview.html, /A message from the author/);
+  assert.match(preview.html, /face-reveal-harvey-smudged\.png/);
+  assert.match(preview.html, /I have something important to discuss with you/);
+  assert.match(preview.html, /https:\/\/realitymanual\.com\/iloveyou/);
+  assert.doesNotMatch(preview.html, />Important Message<|How are you finding The Reality Manual/);
+  assert.match(preview.text, /Please watch this video ASAP!/);
   assert.match(preview.text, /Unsubscribe from review emails/);
-  assert.doesNotMatch(preview.text, /future review requests|\b(?:we|us|our)\b|we(?:'|’)ll|we(?:'|’)d/i);
   assert.match(preview.html, /Unsubscribe from review emails/i);
-  assert.match(preview.headers['List-Unsubscribe'], /api\.realitymanual\.com\/api\/review\/unsubscribe/);
+  assert.match(preview.html, /api\.realitymanual\.com\/api\/review\/unsubscribe\?order=RM-1001/);
+  assert.match(preview.headers['List-Unsubscribe'], /api\.realitymanual\.com\/api\/review\/unsubscribe\?order=RM-1001/);
   assert.equal(preview.headers['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click');
-  assert.match(preview.text, /If your book hasn't arrived yet/);
-  assert.doesNotMatch(preview.html, /Order:|Tracking:/);
 
-  const eventualCustomerVersion = reviewRequestEmail({ customer_name: 'Sam Reader' });
-  assert.equal(eventualCustomerVersion.subject, 'How are you finding The Reality Manual?');
-  assert.doesNotMatch(eventualCustomerVersion.html, /Preview Only/);
+  const eventualCustomerVersion = reviewRequestEmail({ id: 'order-1', customer_name: 'Sam Reader' });
+  assert.equal(eventualCustomerVersion.subject, 'Face Reveal!');
+  assert.doesNotMatch(eventualCustomerVersion.html, /\{\{UNSUBSCRIBE_URL\}\}/);
+  assert.match(eventualCustomerVersion.html, /order=order-1/);
 });
 
 test('customer-facing email content never contains an em dash', () => {

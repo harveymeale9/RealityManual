@@ -24341,3 +24341,24 @@ The landing page now points to a separate, image-edited smudged poster with the
 baked UI removed. Its face stays obscured; the browser provides the only play
 button and controls. The email thumbnail remains unchanged because email needs
 its own baked play affordance.
+
+## Default post-delivery email switched to Face Reveal (2026-11-21)
+
+Harvey approved the final face-reveal email as the default one-time reader
+follow-up. The live Cloudflare storefront Worker, not the paused VPS backend,
+runs this automation. Both runtimes share `backend/src/services/emailTemplates.js`;
+its `reviewRequestEmail` now sends the approved “Face Reveal!” subject,
+“A message from the author” hidden preheader, smudged linked thumbnail and
+`/iloveyou` CTA, with no visible headline. The previous “How are you finding
+The Reality Manual?” template is no longer sent by this worker. The existing
+checkout opt-in, estimated-delivery-plus-reading due date, Resend contact
+unsubscribe check, one-click/list-unsubscribe headers, per-order idempotency,
+and sent marker are unchanged. The email body also includes a small visible
+unsubscribe link specific to that order. At activation, production D1 had zero
+pending eligible follow-ups, so deployment did not trigger a catch-up send.
+
+The approved HTML is kept in `backend/src/services/faceRevealEmail.html`.
+Run `npm run build:face-reveal-email` from `backend/` after any edit to refresh
+the checked-in Worker-safe JavaScript string; a test fails if they diverge.
+The storefront preview file remains a standalone copy of the approved design;
+the backend source adds only the unsubscribe footer required for customer mail.

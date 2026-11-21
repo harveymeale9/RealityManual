@@ -9,7 +9,8 @@
     "dev": "node --no-warnings --watch src/server.js",
     "db:migrate": "node --no-warnings src/db/migrate.js",
     "test": "node --test",
-    "email:previews": "node --no-warnings scripts/send-email-previews.js"
+    "email:previews": "node --no-warnings scripts/send-email-previews.js",
+    "build:face-reveal-email": "node scripts/build-face-reveal-email.js"
   },
   "engines": {
     "node": ">=22.5.0"

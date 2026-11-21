@@ -1,3 +1,5 @@
+const faceRevealEmailHtml = require('./faceRevealEmail.generated');
+
 const BRAND = Object.freeze({
   ink: '#0e0b07',
   surface: '#17120c',
@@ -277,54 +279,26 @@ function orderRefundedEmail(order, { preview = false } = {}) {
 }
 
 function reviewRequestEmail(order, { preview = false } = {}) {
-  const name = firstName(order.customer_name);
-  const subject = `${preview ? '[PREVIEW] ' : ''}How are you finding The Reality Manual?`;
-  const unsubscribeUrl = `https://api.realitymanual.com/api/review/unsubscribe?order=${encodeURIComponent(order.id)}`;
-  const body = `
-    <p style="margin:0 0 18px;">Hi ${escapeHtml(name)},</p>
-    <p style="margin:0 0 18px;">I hope your copy of <em>The Reality Manual</em> has arrived and you've had some time with it.</p>
-    <p style="margin:0 0 18px;">How are you finding the book so far? I'd love to hear your honest feedback, whether a passage resonated, challenged you, or left you with a question.</p>
-    <p style="margin:0 0 18px;">If you'd be willing to share a short review, just reply to this email with a few lines in your own words. There's no form to fill out, and no pressure if you're still reading.</p>
-    <p style="margin:0 0 18px;">A short video review would mean a great deal too. You can reply here with the video or a link, tag me on Instagram at <a href="https://www.instagram.com/the_reality_manual/" style="color:${BRAND.gold};text-decoration:underline;">@the_reality_manual</a>, or DM it to me there. I'd be especially grateful to anyone who takes the time to record one.</p>
-    <p style="margin:0 0 18px;">If your book hasn't arrived yet, please reply and I'll look into it.</p>
-    <p style="margin:0 0 18px;font-size:14px;line-height:23px;"><a href="${escapeHtml(unsubscribeUrl)}" style="color:${BRAND.gold};text-decoration:underline;">Unsubscribe from review emails</a></p>
-    <p style="margin:0;">Thank you for reading,<br>The Reality Manual</p>`;
+  const subject = `${preview ? '[PREVIEW] ' : ''}Face Reveal!`;
+  const unsubscribeUrl = `https://api.realitymanual.com/api/review/unsubscribe?order=${encodeURIComponent(order.id || 'preview')}`;
   const text = [
     preview ? 'PREVIEW ONLY: NOT A CUSTOMER EMAIL' : '',
-    'THE REALITY MANUAL',
+    'A message from the author',
     '',
-    'HOW ARE YOU FINDING THE REALITY MANUAL?',
+    'I have something important to discuss with you...',
+    'Please watch this video ASAP!',
     '',
-    `Hi ${name},`,
+    'Watch the video: https://realitymanual.com/iloveyou',
     '',
-    "I hope your copy of The Reality Manual has arrived and you've had some time with it.",
-    '',
-    "How are you finding the book so far? I'd love to hear your honest feedback, whether a passage resonated, challenged you, or left you with a question.",
-    '',
-    "If you'd be willing to share a short review, just reply to this email with a few lines in your own words. There's no form to fill out, and no pressure if you're still reading.",
-    '',
-    "A short video review would mean a great deal too. You can reply here with the video or a link, tag me on Instagram at @the_reality_manual, or DM it to me there. I'd be especially grateful to anyone who takes the time to record one.",
-    'Instagram: https://www.instagram.com/the_reality_manual/',
-    '',
-    "If your book hasn't arrived yet, please reply and I'll look into it.",
+    'Signed, The Reality Manual Author',
     '',
     'Unsubscribe from review emails:',
     unsubscribeUrl,
-    '',
-    'Thank you for reading,',
-    'The Reality Manual',
-  ].filter((line, index, all) => line || index > 0 || all[0]).join('\n');
+  ].filter(Boolean).join('\n');
 
   return {
     subject,
-    html: layout({
-      preview,
-      previewLabel: 'Preview Only: Not a Customer Email',
-      preheader: "I'd love to hear what you think of The Reality Manual.",
-      eyebrow: 'A note from the author',
-      title: 'How are you finding The Reality Manual?',
-      body,
-    }),
+    html: faceRevealEmailHtml.replace('{{UNSUBSCRIBE_URL}}', escapeHtml(unsubscribeUrl)),
     text,
     headers: {
       'List-Unsubscribe': `<${unsubscribeUrl}>`,

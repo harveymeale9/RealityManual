@@ -2,6 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { reviewRequestDueAt } from '../src/reviewSchedule.js';
 import { reviewRoute } from '../src/review.js';
+import { reviewRequestEmail } from '../src/mail.js';
+
+test('active Worker review mail uses the face-reveal invitation', () => {
+  const email = reviewRequestEmail({ id: 'sample-order' });
+  assert.equal(email.subject, 'Face Reveal!');
+  assert.match(email.html, /face-reveal-harvey-smudged\.png/);
+  assert.match(email.html, /realitymanual\.com\/iloveyou/);
+  assert.match(email.html, /Unsubscribe from review emails/);
+  assert.match(email.headers['List-Unsubscribe'], /order=sample-order/);
+});
 
 test('review request waits at least 14 transit days and seven reading days', () => {
   assert.equal(reviewRequestDueAt({ shipping_email_sent_at: '2026-11-02T09:00:00.000Z' }), '2026-11-23T09:00:00.000Z');
