@@ -254,7 +254,8 @@ function setup(db, options) {
     return db.prepare(`SELECT m.*,
       COALESCE((SELECT json_group_array(file_name) FROM mailbox_attachments a WHERE a.message_id=m.id),'[]') AS attachment_names_json
       FROM mailbox_messages m LEFT JOIN mail_triage t ON t.message_id=m.id
-      WHERE m.direction='inbound' AND (t.message_id IS NULL OR t.status='pending'
+      WHERE m.direction='inbound' AND COALESCE(m.provider_id,'') NOT LIKE 'reader-form:%'
+        AND (t.message_id IS NULL OR t.status='pending'
         OR (t.status='error' AND t.attempts < 10 AND t.updated_at <= ?))
       ORDER BY m.created_at ASC LIMIT ?`).all(retryBefore, limit || 5);
   }

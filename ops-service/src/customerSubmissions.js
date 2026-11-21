@@ -68,6 +68,7 @@ function setup(db, options) {
   const insert = db.prepare('INSERT INTO customer_submissions(id,data,token_hash,ip_hash,status,created_at) VALUES(?,?,?,?,?,?)');
   const countRecent = db.prepare('SELECT count(*) AS n FROM customer_submissions WHERE ip_hash=? AND created_at>?');
   const list = db.prepare("SELECT data FROM customer_submissions WHERE status='complete' ORDER BY submitted_at DESC LIMIT 100");
+  const allComplete = db.prepare("SELECT data FROM customer_submissions WHERE status='complete'");
   const abandoned = db.prepare("SELECT data FROM customer_submissions WHERE status='draft' AND created_at<? LIMIT 20");
   const publicRouter = express.Router();
   const adminRouter = express.Router();
@@ -180,8 +181,27 @@ function setup(db, options) {
     res.json({ submissions: list.all().map(row => { const data = parse(row); return {
       id: data.id, kind: data.kind, name: data.name, email: data.email, message: data.message,
       paidVideo: data.paidVideo, consent: data.consent, consentVersion: data.consentVersion,
-      submittedAt: data.submittedAt, files: data.files.map(publicFile)
+      submittedAt: data.submittedAt, seenAt: data.seenAt || null,
+      voucherReview: data.voucherReview ? { status: data.voucherReview.status, reason: data.voucherReview.reason || '', sentAt: data.voucherReview.sentAt || null } : null,
+      files: data.files.map(publicFile)
     }; }) });
+  });
+  adminRouter.get('/summary', function (req, res) {
+    const counts = { F: 0, R: 0, VR: 0 };
+    for (const row of allComplete.all()) {
+      const data = parse(row);
+      if (data.seenAt) continue;
+      const type = data.kind === 'feedback' ? 'F' : data.files.some(file => file.kind === 'video') ? 'VR' : 'R';
+      counts[type]++;
+    }
+    res.set('Cache-Control', 'no-store').json({ counts });
+  });
+  adminRouter.post('/:id/seen', function (req, res) {
+    const row = ID_PATTERN.test(req.params.id || '') && get.get(req.params.id);
+    if (!row || row.status !== 'complete') return res.status(404).json({ error: 'not_found' });
+    const data = parse(row);
+    if (!data.seenAt) { data.seenAt = new Date().toISOString(); persist(data); }
+    res.json({ ok: true });
   });
   adminRouter.get('/:id/files/:fileId', async function (req, res) {
     const data = ID_PATTERN.test(req.params.id || '') ? parse(get.get(req.params.id)) : null;

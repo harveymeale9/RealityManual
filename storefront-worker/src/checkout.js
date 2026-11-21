@@ -2,6 +2,7 @@ import { calculateTotal } from './shipping.js';
 import { createPaymentIntent, stripeClient } from './stripeClient.js';
 import { attachPaymentIntent, createOrder, getOrderById, hasRecentPaidOrder, toPublicStatus } from './orderStore.js';
 import { normalizeOrderAttribution, normalizePostalCode, normalizeQuantity, validateCheckoutInput } from './validation.js';
+import { voucherDiscount } from './vouchers.js';
 
 const PRODUCT_NAME = 'The Reality Manual';
 const PRODUCT_DESCRIPTION = 'Hardcover — Deluxe First Edition';
@@ -29,6 +30,14 @@ async function logError(db, { orderId = null, service, type, message }) {
     await db.prepare(`INSERT INTO error_logs(id,order_id,service,error_type,error_message)
       VALUES(?,?,?,?,?)`).bind(crypto.randomUUID(), orderId, service, type, String(message).slice(0, 1000)).run();
   } catch { /* Logging must not replace the customer-facing error. */ }
+}
+
+async function applyVoucher(db, totals, body) {
+  const voucher = await voucherDiscount(db, body.voucher_code, body.email, totals.bookPriceCents);
+  if (!voucher) return null;
+  return { ...totals, voucherCodeHash: voucher.codeHash,
+    voucherDiscountCents: voucher.discountCents,
+    totalPriceCents: totals.totalPriceCents - voucher.discountCents };
 }
 
 // All calls stay behind CHECKOUT_ENABLED until the webhook, email, and
@@ -79,9 +88,11 @@ export async function checkoutRoute(request, env, path, { quote = calculateTotal
     if (!postcode) return json({ error: 'invalid_postal_code', message: country === 'CA' ? 'Enter a Canadian postal code in the format A1A 1A1.' : 'Please enter a postal/ZIP code.' }, 400);
     if (quantity === null) return json({ error: 'invalid_quantity', message: 'Quantity must be a whole number between 1 and 20.' }, 400);
     try {
-      const totals = await quote(env, country, postcode, quantity);
+      const totals = await applyVoucher(env.DB, await quote(env, country, postcode, quantity), body);
+      if (!totals) return json({ error: 'invalid_voucher', message: 'That voucher is invalid, already used, or belongs to a different email.' }, 400);
       return json({
         book_price_cents: totals.bookPriceCents, book_subtotal_cents: totals.bookSubtotalCents,
+        voucher_discount_cents: totals.voucherDiscountCents,
         shipping_price_cents: totals.shippingPriceCents, total_price_cents: totals.totalPriceCents,
         currency: totals.currency, quantity: totals.quantity, shipping_upgraded: totals.shippingUpgraded,
       });
@@ -104,7 +115,8 @@ export async function checkoutRoute(request, env, path, { quote = calculateTotal
   const quantity = normalizeQuantity(body.quantity);
   let totals;
   try {
-    totals = await quote(env, country, postcode, quantity);
+    totals = await applyVoucher(env.DB, await quote(env, country, postcode, quantity), body);
+    if (!totals) return json({ error: 'invalid_voucher', message: 'That voucher is invalid, already used, or belongs to a different email.' }, 400);
   } catch (error) {
     await logError(env.DB, { service: 'worker', type: 'shipping_calculation_failed', message: error.message });
     return json({ error: 'shipping_unavailable', message: 'Unable to calculate shipping right now.' }, 500);
@@ -113,6 +125,7 @@ export async function checkoutRoute(request, env, path, { quote = calculateTotal
     return json({
       error: 'shipping_quote_changed', message: 'Shipping has been updated. Please review the new total and click Pay again.',
       book_subtotal_cents: totals.bookSubtotalCents, shipping_price_cents: totals.shippingPriceCents,
+      voucher_discount_cents: totals.voucherDiscountCents,
       total_price_cents: totals.totalPriceCents, currency: totals.currency, quantity: totals.quantity,
       shipping_upgraded: totals.shippingUpgraded,
     }, 409);
@@ -127,6 +140,7 @@ export async function checkoutRoute(request, env, path, { quote = calculateTotal
     return json({
       order_id: order.id, client_secret: intent.client_secret,
       book_price_cents: totals.bookPriceCents, book_subtotal_cents: totals.bookSubtotalCents,
+      voucher_discount_cents: totals.voucherDiscountCents,
       shipping_price_cents: totals.shippingPriceCents, total_price_cents: totals.totalPriceCents,
       currency: totals.currency, quantity,
     });

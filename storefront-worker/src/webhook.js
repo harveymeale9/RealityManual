@@ -1,5 +1,6 @@
 import { applyPaymentEvent, attachPaymentIntent, getOrderById, getOrderByPaymentIntent } from './orderStore.js';
 import { stripeClient, verifyWebhook } from './stripeClient.js';
+import { redeemVoucher } from './vouchers.js';
 
 async function recordError(db, type, message) {
   await db.prepare('INSERT INTO error_logs(id,service,error_type,error_message) VALUES(?,?,?,?)')
@@ -46,8 +47,11 @@ export async function stripeWebhook(request, env, { client = stripeClient, verif
         (intent.status !== 'succeeded' || Number(intent.amount_received) !== Number(order.total_price_cents))) {
       throw new Error('Successful payment event lacks the full captured order amount.');
     }
-    await applyPaymentEvent(env.DB, intent.id, transition, intent.status, event.livemode,
+    const updated = await applyPaymentEvent(env.DB, intent.id, transition, intent.status, event.livemode,
       transition === 'FAILED' ? intent.last_payment_error : null);
+    if (transition === 'PAYMENT_RECEIVED' && updated.paid && updated.order) {
+      await redeemVoucher(env.DB, updated.order);
+    }
     return Response.json({ received: true });
   } catch (error) {
     try { await recordError(env.DB, 'webhook_processing_failed', error.message); } catch { /* Stripe will retry. */ }

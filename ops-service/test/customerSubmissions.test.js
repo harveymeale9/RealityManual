@@ -65,6 +65,9 @@ test('public multipart flow stores a private submission and admin can open its m
     assert.equal(listed.submissions.length, 1);
     assert.equal(listed.submissions[0].message, body.message);
     assert.equal(JSON.stringify(listed).includes('upload-1'), false);
+    assert.deepEqual((await (await fetch(base + '/admin/summary')).json()).counts, { F: 0, R: 0, VR: 1 });
+    assert.equal((await post('/admin/' + id + '/seen', {})).status, 200);
+    assert.deepEqual((await (await fetch(base + '/admin/summary')).json()).counts, { F: 0, R: 0, VR: 0 });
     const media = await fetch(base + '/admin/' + id + '/files/' + fileId, { redirect: 'manual' });
     assert.equal(media.status, 302);
     assert.match(media.headers.get('location'), /GetObjectCommand/);

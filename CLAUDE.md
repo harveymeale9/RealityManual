@@ -24022,3 +24022,52 @@ preserving the 25% top crop. Rendered audio measured -18.95 LUFS and
 -3.65 dBTP, without the prior FFT reduction; the authenticated inline video
 endpoint returned HTTP 206 for a byte-range request. The recording remains
 unapproved in Editor for Harvey's own listening review.
+
+## Reader feedback vouchers and form alerts (2026-11-21)
+
+The noindex `/iloveyou/` page now uses the requested “A Message From The
+Author” browser title and header label. Its feedback disclaimer and submit
+button use Harvey's requested wording. The feedback form explains that
+specific, thoughtful feedback can receive a no-expiry 50% voucher, usable
+for a gift copy now or to be carried forward to Volume II when it exists.
+This is one book's price only; shipping remains full price. The Volume II
+checkout does not yet exist, so that future use must be wired to the same
+voucher ledger when Volume II launches.
+
+`ops-service/src/feedbackVouchers.js` scans completed private feedback (not
+reviews) once per minute. A no-tools structured classification calls
+substantive, book-specific observations or useful suggestions constructive;
+generic praise, spam and discount requests alone do not qualify. The
+classification, reason, issue state, code and sent state persist in the
+private submission record so retries after provider outages reuse the same
+code. An approved code is issued to the storefront Worker over the existing
+owner-installed report-token/VPS-IP channel, then emailed through the normal
+mailbox transport. This extends that internal channel from read-only reports
+to narrowly scoped issuance; it does not expose the token to browsers.
+No ordinary feedback or review receives an automatic reply; only the
+explicitly requested voucher email is sent to qualifying feedback.
+
+The live Worker has a `feedback_vouchers` D1 table keyed by submission ID
+and SHA-256 code hash; email is matched at checkout, no expiry is stored, and
+a code is marked redeemed after a successful full-amount Stripe webhook.
+The public `/api/shipping/calculate` and PaymentIntent route both recheck
+the same server-side voucher. A voucher removes $32.50 from one $65 book,
+never from the live BookVault shipping quote, and the order retains the
+discount for reporting. The checkout page has an optional voucher field,
+an explicit discount line and an email-match requirement. Production D1
+received the two additive order columns and voucher table before the Worker
+deploy; no historical order values changed. The paused VPS fallback schema
+has matching columns/table, but its checkout voucher path would require a
+separate failover implementation before a voucher customer could use it
+there. The current live checkout is the Worker.
+
+Completed reader forms are also ingested idempotently into the normal local
+Mailbox as inbound conversations; form-origin messages are excluded from
+automatic mail triage/archiving and courtesy replies. Their existing notice
+to Harvey's Gmail remains. Content Studio's top Mailbox label shows unread
+`F`, `R`, and `VR` counts (video review means an attached video); the private
+reader-messages page lets Harvey mark a submission read. A preview-only
+voucher email endpoint sends a non-redeemable sample to Harvey on request.
+Focused tests cover the no-expiry one-book discount, unchanged shipping,
+email binding, redemption, feedback classification, retry idempotence and
+form-category counts.

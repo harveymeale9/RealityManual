@@ -10,14 +10,16 @@ export async function createOrder(db, body, totals, attributionJson) {
       id, customer_name, email, phone, country, street1, street2, city, state, postal_code,
       quantity, book_price_cents, shipping_price_cents, shipping_service_name, shipping_service_id,
       shipping_min_delivery_days, shipping_max_delivery_days, total_price_cents, currency,
+      voucher_code_hash, voucher_discount_cents,
       review_request_opt_in, review_request_opt_in_at, attribution_json, order_status
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'PAYMENT_PENDING')
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'PAYMENT_PENDING')
   `).bind(
     id, body.customer_name.trim(), body.email.trim(), body.phone.trim(), body.country_code.trim().toUpperCase(),
     body.street1.trim(), body.street2?.trim() || null, body.city.trim(), body.state?.trim() || null,
     body.postal_code.trim(), totals.quantity, totals.bookPriceCents, totals.shippingPriceCents,
     totals.serviceName || null, totals.serviceId || null, totals.minDeliveryDays || null,
     totals.maxDeliveryDays || null, totals.totalPriceCents, totals.currency,
+    totals.voucherCodeHash || null, totals.voucherDiscountCents || 0,
     body.review_request_opt_in === true ? 1 : 0,
     body.review_request_opt_in === true ? new Date().toISOString() : null,
     attributionJson,

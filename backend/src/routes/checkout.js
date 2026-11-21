@@ -33,6 +33,9 @@ router.get('/availability', (_req, res) => {
 });
 
 router.post('/create-payment-intent', async (req, res) => {
+  if (String(req.body?.voucher_code || '').trim()) return res.status(503).json({
+    error: 'voucher_unavailable', message: 'Voucher checkout is temporarily unavailable. Please do not pay full price; try again shortly.'
+  });
   if (config.checkoutPaused) {
     res.set('Cache-Control', 'no-store');
     return res.status(503).json({

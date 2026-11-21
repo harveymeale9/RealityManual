@@ -64,6 +64,8 @@ for (const column of [
   'payment_decline_code TEXT',
   'payment_failure_message TEXT',
   'attribution_json TEXT',
+  'voucher_code_hash TEXT',
+  'voucher_discount_cents INTEGER NOT NULL DEFAULT 0',
 ]) {
   try {
     db.exec(`ALTER TABLE orders ADD COLUMN ${column}`);

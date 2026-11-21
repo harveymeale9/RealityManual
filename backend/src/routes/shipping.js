@@ -6,6 +6,9 @@ const { normalizeQuantity, QUANTITY_MIN, QUANTITY_MAX } = require('../lib/valida
 const router = express.Router();
 
 router.post('/calculate', async (req, res) => {
+  if (String(req.body?.voucher_code || '').trim()) return res.status(503).json({
+    error: 'voucher_unavailable', message: 'Voucher checkout is temporarily unavailable. Please do not pay full price; try again shortly.'
+  });
   const countryCode = String(req.body?.country_code || '').trim().toUpperCase();
   const postalCode = String(req.body?.postal_code || '').trim();
   const quantity = normalizeQuantity(req.body?.quantity);

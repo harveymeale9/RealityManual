@@ -296,7 +296,8 @@
       var ids = g.tabs.map(function (t) { return t.id; });
       return '<a href="#' + ids[0] + '" class="panel-tab" data-tabs="' + ids.join(',') + '"' +
         (g.label === 'Analytics' ? ' data-sales-alert-link' : '') + '>' + g.label +
-        (g.label === 'Analytics' ? '<span class="sales-alert-badge" data-sales-alert-badge hidden></span>' : '') + '</a>';
+        (g.label === 'Analytics' ? '<span class="sales-alert-badge" data-sales-alert-badge hidden></span>' : '') +
+        (g.label === 'Mailbox' ? '<span class="reader-form-counts" id="readerFormCounts" aria-label="New reader forms" hidden></span>' : '') + '</a>';
     }).join('');
     setSalesAlertCount(salesAlertCount);
   }
@@ -1576,10 +1577,11 @@
       var kindWords = window.RMPositiveComments.mount(document.getElementById('positiveComments'));
       if (kindWords) kindWords.refreshPositiveComments();
     }
-    if (appInitialized) { startEditorUnreadBadgePolling(); renderActiveTab(); return; }
+    if (appInitialized) { startEditorUnreadBadgePolling(); startReaderFormBadgePolling(); renderActiveTab(); return; }
     appInitialized = true;
     bindSideRail();
     window.RMMailbox.startBadgePolling();
+    startReaderFormBadgePolling();
     startEditorUnreadBadgePolling();
     bootModal();
     window.addEventListener('hashchange', renderActiveTab);
@@ -1588,6 +1590,27 @@
   }
 
   var editorUnreadTimer = null;
+  var readerFormTimer = null;
+  function refreshReaderFormBadge() {
+    if (IS_REVIEWER) return;
+    fetch('/api/customer-submissions-admin/summary', { credentials: 'include' }).then(function (response) {
+      if (!response.ok) throw new Error('unavailable');
+      return response.json();
+    }).then(function (data) {
+      var badge = document.getElementById('readerFormCounts');
+      if (!badge) return;
+      var counts = data.counts || {};
+      badge.textContent = ['F', 'R', 'VR'].filter(function (key) { return Number(counts[key]) > 0; })
+        .map(function (key) { return key + ' ' + Number(counts[key]); }).join(' · ');
+      badge.hidden = !badge.textContent;
+      badge.title = 'New feedback / review / video review submissions';
+    }).catch(function () {});
+  }
+  function startReaderFormBadgePolling() {
+    if (readerFormTimer || IS_REVIEWER) return;
+    refreshReaderFormBadge();
+    readerFormTimer = setInterval(refreshReaderFormBadge, 30000);
+  }
   function refreshEditorUnreadBadge() {
     if (IS_REVIEWER) return Promise.resolve();
     return fetch('/api/desktop-uploader/unread-count', { credentials: 'include' }).then(function (response) {

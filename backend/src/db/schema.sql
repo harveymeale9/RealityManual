@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS orders (
   shipping_min_delivery_days INTEGER,
   shipping_max_delivery_days INTEGER,
   total_price_cents         INTEGER NOT NULL,
+  voucher_code_hash         TEXT,
+  voucher_discount_cents    INTEGER NOT NULL DEFAULT 0,
   currency                  TEXT NOT NULL DEFAULT 'usd',
   attribution_json          TEXT,
   -- BookVault's PodRef for this order (see CLAUDE.md §25-28/§64). Unused
@@ -64,6 +66,15 @@ CREATE INDEX IF NOT EXISTS idx_orders_stripe_payment_intent ON orders(stripe_pay
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(order_status);
 CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
 CREATE INDEX IF NOT EXISTS idx_orders_review_request ON orders(review_request_opt_in, order_status, shipping_email_sent_at);
+
+CREATE TABLE IF NOT EXISTS feedback_vouchers (
+  submission_id TEXT PRIMARY KEY,
+  code_hash TEXT NOT NULL UNIQUE,
+  email TEXT NOT NULL,
+  issued_at TEXT NOT NULL,
+  redeemed_order_id TEXT,
+  redeemed_at TEXT
+);
 
 -- Optional, explicitly opted-in one-time checkout recovery. No address or
 -- payment details are collected here, and this is not an email campaign list.

@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { checkoutRoute } from '../src/checkout.js';
 import { stripeWebhook } from '../src/webhook.js';
 import { processPendingOrders } from '../src/fulfillment.js';
+import { issueVoucher } from '../src/vouchers.js';
 
 function fixture() {
   const sqlite = new DatabaseSync(':memory:');
@@ -14,6 +15,7 @@ function fixture() {
       const statement = sqlite.prepare(sql);
       return {
         first: async () => statement.get(),
+        run: async () => ({ meta: { changes: statement.run().changes } }),
         bind(...args) {
           return {
             first: async () => statement.get(...args) || null,
@@ -82,6 +84,49 @@ test('changed quote and invalid input do not create a D1 order or Stripe Payment
     '/api/checkout/create-payment-intent', deps);
   assert.equal(invalid.status, 400);
   assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM orders').get().n, 0);
+  sqlite.close();
+});
+
+test('feedback voucher halves one book only, keeps shipping, and cannot be reused after payment', async () => {
+  const { sqlite, env } = fixture();
+  const code = 'RM50-ABCD1234-EFGH5678';
+  const submission = crypto.randomUUID();
+  const issue = new Request('https://example.test/api/internal/feedback-voucher', { method: 'POST',
+    body: JSON.stringify({ submission_id: submission, email: body.email, code }) });
+  assert.equal((await issueVoucher(issue, env)).status, 200);
+  const quoted = await checkoutRoute(makeRequest('/api/shipping/calculate', { country_code: 'US', postal_code: '10001', quantity: 1,
+    email: body.email, voucher_code: code }), env, '/api/shipping/calculate', { quote: async () => totals });
+  const priced = await quoted.json();
+  assert.equal(priced.voucher_discount_cents, 3250);
+  assert.equal(priced.shipping_price_cents, 1810);
+  assert.equal(priced.total_price_cents, 5060);
+  const multi = await checkoutRoute(makeRequest('/api/shipping/calculate', { country_code: 'US', postal_code: '10001', quantity: 3,
+    email: body.email, voucher_code: code }), env, '/api/shipping/calculate', {
+    quote: async () => ({ ...totals, quantity: 3, bookSubtotalCents: 19500, totalPriceCents: 21310 }),
+  });
+  const multiPrice = await multi.json();
+  assert.equal(multiPrice.voucher_discount_cents, 3250);
+  assert.equal(multiPrice.total_price_cents, 18060);
+  const wrongEmail = await checkoutRoute(makeRequest('/api/shipping/calculate', { country_code: 'US', postal_code: '10001', quantity: 1,
+    email: 'other@example.test', voucher_code: code }), env, '/api/shipping/calculate', { quote: async () => totals });
+  assert.equal(wrongEmail.status, 400);
+  const paid = await checkoutRoute(makeRequest('/api/checkout/create-payment-intent', { ...body,
+    voucher_code: code, quoted_total_price_cents: 5060 }), env, '/api/checkout/create-payment-intent', {
+    quote: async () => totals,
+    payments: () => ({ paymentIntents: { create: async () => ({ id: 'pi_voucher', client_secret: 'secret' }) } }),
+  });
+  assert.equal(paid.status, 200);
+  assert.equal(sqlite.prepare('SELECT voucher_discount_cents,total_price_cents FROM orders').get().voucher_discount_cents, 3250);
+  const orderId = (await paid.json()).order_id;
+  const event = { type: 'payment_intent.succeeded', livemode: true, data: { object: {
+    id: 'pi_voucher', status: 'succeeded', amount: 5060, amount_received: 5060, currency: 'usd', metadata: { order_id: orderId },
+  } } };
+  assert.equal((await stripeWebhook(makeRequest('/api/webhooks/stripe', {}), env,
+    { client: () => ({}), verify: async () => event })).status, 200);
+  assert.equal(sqlite.prepare('SELECT redeemed_order_id FROM feedback_vouchers').get().redeemed_order_id, orderId);
+  const reused = await checkoutRoute(makeRequest('/api/shipping/calculate', { country_code: 'US', postal_code: '10001', quantity: 1,
+    email: body.email, voucher_code: code }), env, '/api/shipping/calculate', { quote: async () => totals });
+  assert.equal(reused.status, 400);
   sqlite.close();
 });
 

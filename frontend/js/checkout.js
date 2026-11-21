@@ -8,6 +8,11 @@
   const countrySelect = document.getElementById('country_code');
   const postalInput = document.getElementById('postal_code');
   const quantityInput = document.getElementById('quantity');
+  const voucherInput = document.getElementById('voucher_code');
+  const voucherFromLink = new URLSearchParams(window.location.search).get('voucher');
+  if (voucherFromLink && /^RM50-[A-Z0-9]{8}-[A-Z0-9]{8}$/i.test(voucherFromLink)) voucherInput.value = voucherFromLink.toUpperCase();
+  const voucherDiscountRow = document.getElementById('voucher-discount-row');
+  const summaryVoucherDiscount = document.getElementById('summary-voucher-discount');
   const qtyDecreaseButton = document.getElementById('qty-decrease');
   const qtyIncreaseButton = document.getElementById('qty-increase');
   const summaryBookPrice = document.getElementById('summary-book-price');
@@ -38,6 +43,7 @@
   }
   recoveryOptIn.addEventListener('change', saveRecoveryChoice);
   form.email.addEventListener('input', () => {
+    if (voucherInput.value.trim()) { lastQuote = null; clearTimeout(postalDebounceTimer); postalDebounceTimer = setTimeout(updateShipping, 500); }
     if (!recoveryOptIn.checked) return;
     clearTimeout(recoveryTimer);
     recoveryTimer = setTimeout(saveRecoveryChoice, 600);
@@ -200,6 +206,12 @@
     qtyDecreaseButton.addEventListener('click', () => setQuantity(getQuantity() - 1));
     qtyIncreaseButton.addEventListener('click', () => setQuantity(getQuantity() + 1));
     quantityInput.addEventListener('change', () => setQuantity(getQuantity()));
+    voucherInput.addEventListener('change', updateShipping);
+    voucherInput.addEventListener('input', () => {
+      lastQuote = null;
+      clearTimeout(postalDebounceTimer);
+      postalDebounceTimer = setTimeout(updateShipping, 500);
+    });
 
     renderQtyBooks(getQuantity());
   }
@@ -237,6 +249,7 @@
     const clamped = Math.min(QUANTITY_MAX, Math.max(QUANTITY_MIN, Math.round(n) || QUANTITY_MIN));
     quantityInput.value = clamped;
     lastQuote = null;
+    voucherDiscountRow.hidden = true;
     // Immediate client-side estimate - updateShipping() below then confirms
     // the real (server-authoritative) number once BookVault responds,
     // including whether this quantity triggers the upgraded-shipping
@@ -251,12 +264,20 @@
     const requestId = ++shippingRequestSeq;
     lastQuote = null;
     shippingOriginNote.hidden = true;
+    voucherDiscountRow.hidden = true;
     const countryCode = countrySelect.value;
     const postalCode = postalInput.value.trim();
     const quantity = getQuantity();
+    const email = form.email.value.trim();
+    const voucherCode = voucherInput.value.trim().toUpperCase();
     if (!countryCode || !postalCode) {
       summaryShipping.textContent = 'Enter address';
       summaryTotal.textContent = '-';
+      return;
+    }
+    if (voucherCode && !EMAIL_REGEX.test(email)) {
+      summaryShipping.textContent = 'Enter email';
+      summaryTotal.textContent = 'Enter your email to apply the voucher';
       return;
     }
 
@@ -267,22 +288,26 @@
       const res = await fetch(`${API_BASE_URL}/api/shipping/calculate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ country_code: countryCode, postal_code: postalCode, quantity }),
+        body: JSON.stringify({ country_code: countryCode, postal_code: postalCode, quantity,
+          email, voucher_code: voucherCode }),
       });
-      if (!res.ok) throw new Error('shipping_unavailable');
       const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'We could not calculate shipping for that address.');
 
       // A slower request that resolves after a newer one has already
       // landed would otherwise clobber it with stale numbers.
       if (requestId !== shippingRequestSeq || countryCode !== countrySelect.value ||
-          postalCode !== postalInput.value.trim() || quantity !== getQuantity()) return;
-      applyQuote(data, { countryCode, postalCode, quantity });
+          postalCode !== postalInput.value.trim() || quantity !== getQuantity() ||
+          email !== form.email.value.trim() || voucherCode !== voucherInput.value.trim().toUpperCase()) return;
+      applyQuote(data, { countryCode, postalCode, quantity, email, voucherCode });
+      clearFormError();
     } catch (err) {
       if (requestId !== shippingRequestSeq) return;
       summaryShipping.textContent = 'Unavailable';
       summaryTotal.textContent = '-';
       quantityWarningBanner.hidden = true;
-      showFormError('We could not calculate shipping for that address. Please check the country and postal code.');
+      voucherDiscountRow.hidden = true;
+      showFormError(err.message || 'We could not calculate shipping for that address. Please check the country and postal code.');
     }
   }
 
@@ -290,6 +315,8 @@
     currentTotalCents = data.total_price_cents;
     lastQuote = { ...address, totalPriceCents: data.total_price_cents };
     summaryBookPrice.textContent = formatCents(data.book_subtotal_cents);
+    voucherDiscountRow.hidden = !data.voucher_discount_cents;
+    summaryVoucherDiscount.textContent = '−' + formatCents(data.voucher_discount_cents || 0);
     summaryShipping.textContent = formatCents(data.shipping_price_cents);
     shippingOriginNote.hidden = data.shipping_price_cents <= SHIPPING_ORIGIN_NOTE_THRESHOLD_CENTS;
     summaryTotal.textContent = formatCents(data.total_price_cents);
@@ -307,7 +334,9 @@
   function quoteMatches(values) {
     return lastQuote && lastQuote.countryCode === values.country_code &&
       lastQuote.postalCode === values.postal_code.trim() &&
-      lastQuote.quantity === values.quantity;
+      lastQuote.quantity === values.quantity &&
+      lastQuote.email === values.email.trim() &&
+      lastQuote.voucherCode === values.voucher_code;
   }
 
   function formatCents(cents) {
@@ -413,6 +442,7 @@
       state: form.state.value,
       postal_code: form.postal_code.value,
       quantity: getQuantity(),
+      voucher_code: voucherInput.value.trim().toUpperCase(),
       review_request_opt_in: form.review_request_opt_in.checked,
     };
 
@@ -468,6 +498,7 @@
               countryCode: values.country_code,
               postalCode: values.postal_code.trim(),
               quantity: values.quantity,
+              email: values.email.trim(), voucherCode: values.voucher_code,
             });
           } else {
             await updateShipping();
