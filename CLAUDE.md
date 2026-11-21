@@ -24089,6 +24089,17 @@ read “Your opinion can be positive, mixed, or negative; its sentiment does
 not affect eligibility,” so it remains unchanged. This is page copy only;
 the review consent, payment criteria, and submission workflow are unchanged.
 
+Harvey's mobile voucher preview exposed two presentation issues: the code
+wrapped over three lines and Gmail painted the gold button label white. New
+voucher codes now use `RM50-` plus 11 base-32 characters (55 random bits),
+and the email uses a smaller, unbroken code line. The Worker and checkout
+prefill accept both the new compact form and previously issued 8+8 codes;
+existing vouchers remain valid. The email now says “share such thoughtful
+feedback” in HTML and plain text. The button's dark text is declared on
+both anchor and nested span, including WebKit text-fill, so Gmail's dark-mode
+link recoloring is less likely to turn it white. The preview sample is
+shortened to match and remains non-redeemable.
+
 ## One-recording Editor caption fit (2026-11-21)
 
 For the same thank-you/feedback recording, Harvey reported portrait captions

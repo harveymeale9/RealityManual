@@ -89,11 +89,14 @@ test('changed quote and invalid input do not create a D1 order or Stripe Payment
 
 test('feedback voucher halves one book only, keeps shipping, and cannot be reused after payment', async () => {
   const { sqlite, env } = fixture();
-  const code = 'RM50-ABCD1234-EFGH5678';
+  const code = 'RM50-ABCD1234EFG';
   const submission = crypto.randomUUID();
   const issue = new Request('https://example.test/api/internal/feedback-voucher', { method: 'POST',
     body: JSON.stringify({ submission_id: submission, email: body.email, code }) });
   assert.equal((await issueVoucher(issue, env)).status, 200);
+  const legacy = new Request('https://example.test/api/internal/feedback-voucher', { method: 'POST',
+    body: JSON.stringify({ submission_id: crypto.randomUUID(), email: body.email, code: 'RM50-ABCD1234-EFGH5678' }) });
+  assert.equal((await issueVoucher(legacy, env)).status, 200);
   const quoted = await checkoutRoute(makeRequest('/api/shipping/calculate', { country_code: 'US', postal_code: '10001', quantity: 1,
     email: body.email, voucher_code: code }), env, '/api/shipping/calculate', { quote: async () => totals });
   const priced = await quoted.json();

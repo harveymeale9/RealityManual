@@ -24,7 +24,7 @@ test('constructive feedback receives one no-expiry voucher; review and generic p
   await manager.processPending();
   assert.equal(issued.length, 1);
   assert.equal(sent.length, 1);
-  assert.match(issued[0][1], /^RM50-[A-F0-9]{8}-[A-F0-9]{8}$/);
+  assert.match(issued[0][1], /^RM50-[0-9A-V]{11}$/);
   assert.match(sent[0].htmlBody, /50% OFF ONE BOOK · NO EXPIRY/);
   assert.match(sent[0].textBody, /shipping is unchanged/i);
   assert.equal(JSON.parse(db.prepare('SELECT data FROM customer_submissions WHERE id=?').get(records[0].id).data).voucherReview.status, 'sent');
@@ -34,7 +34,9 @@ test('constructive feedback receives one no-expiry voucher; review and generic p
 });
 
 test('preview email uses a non-redeemable sample code and is clearly labelled', function () {
-  const message = voucherEmail('Harvey', 'RM50-DEMO0000-DEMO0000', true);
+  const message = voucherEmail('Harvey', 'RM50-DEMO0000000', true);
   assert.match(message.subject, /PREVIEW/);
   assert.match(message.textBody, /not redeemable/);
+  assert.match(message.htmlBody, /share such thoughtful feedback/);
+  assert.match(message.htmlBody, /-webkit-text-fill-color:#171109!important/);
 });

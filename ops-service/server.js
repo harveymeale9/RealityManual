@@ -1085,7 +1085,7 @@ const feedbackVouchers = feedbackVouchersService.setup(db, {
 app.post('/api/customer-submissions-admin/voucher-preview', requireAuth, async function (req, res) {
   try {
     await mailbox.sendAutomated({ to: ['harveymeale9@gmail.com'], cc: [],
-      ...feedbackVouchersService.voucherEmail('Harvey', 'RM50-DEMO0000-DEMO0000', true) });
+      ...feedbackVouchersService.voucherEmail('Harvey', 'RM50-DEMO0000000', true) });
     res.json({ ok: true });
   } catch (error) { res.status(503).json({ error: 'preview_send_failed' }); }
 });

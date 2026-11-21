@@ -1,7 +1,8 @@
 // Reader-feedback vouchers are issued only by Content Studio over the
 // existing VPS-IP + bearer protected internal channel. Codes have no expiry
 // and discount one book, never the BookVault shipping quote.
-const CODE = /^RM50-[A-Z0-9]{8}-[A-Z0-9]{8}$/;
+// Accept compact new codes and already-issued legacy codes.
+const CODE = /^RM50-(?:[0-9A-V]{11}|[A-Z0-9]{8}-[A-Z0-9]{8})$/;
 
 async function codeHash(code) {
   const bytes = new TextEncoder().encode(code);

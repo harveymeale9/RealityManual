@@ -22,15 +22,15 @@ function voucherEmail(name, code, preview = false) {
     '<p style="letter-spacing:.22em;color:#e4bd71;font-size:12px">THE REALITY MANUAL</p>' +
     '<h1 style="font:normal 46px Georgia,serif;margin:30px 0 12px">A little thank you.</h1>' + intro +
     '<p style="line-height:1.7">Hi ' + escapeHtml(name) + ',</p>' +
-    '<p style="line-height:1.7">Thank you for taking the time to share thoughtful feedback. It helps me make The Reality Manual better.</p>' +
+    '<p style="line-height:1.7">Thank you for taking the time to share such thoughtful feedback. It helps me make The Reality Manual better.</p>' +
     '<div style="border:1px solid #b9904e;border-radius:16px;padding:24px;margin:30px 0;background:#211b12">' +
     '<p style="font-size:13px;color:#d4b47b;letter-spacing:.1em">50% OFF ONE BOOK · NO EXPIRY</p>' +
-    '<p style="font:normal 28px Georgia,serif;letter-spacing:.08em;word-break:break-word">' + safeCode + '</p></div>' +
+    '<p style="font:normal 23px Georgia,serif;letter-spacing:.03em;white-space:nowrap">' + safeCode + '</p></div>' +
     '<p style="line-height:1.7">Use it for another copy for a friend now, or save it for Volume II when it launches. The discount is on one book only; shipping is unchanged. Use the same email address you used for your feedback.</p>' +
-    '<a href="' + escapeHtml(link) + '" style="display:inline-block;padding:16px 30px;background:#e9be6d;color:#171109;text-decoration:none;border-radius:10px;font-weight:bold">SHOP THE BOOK</a>' +
+    '<a href="' + escapeHtml(link) + '" style="display:inline-block;padding:16px 30px;background:#e9be6d;color:#171109!important;-webkit-text-fill-color:#171109!important;text-decoration:none;border-radius:10px;font-weight:bold"><span style="color:#171109!important;-webkit-text-fill-color:#171109!important">SHOP THE BOOK</span></a>' +
     '<p style="margin-top:40px;color:#b7ab98">With gratitude,<br>Harvey</p></div></body></html>';
   const textBody = (preview ? 'PREVIEW ONLY — sample code is not redeemable.\n\n' : '') +
-    `Hi ${name},\n\nThank you for your thoughtful feedback. Here is your 50% off voucher for one book: ${code}\n\n` +
+    `Hi ${name},\n\nThank you for taking the time to share such thoughtful feedback. Here is your 50% off voucher for one book: ${code}\n\n` +
     'It never expires. Use it for a copy for a friend now, or save it for Volume II when it launches. ' +
     'The discount is on one book only; shipping is unchanged. Use the same email address you used for your feedback.\n\n' +
     link + '\n\nWith gratitude,\nHarvey';
@@ -59,8 +59,9 @@ function setup(db, options = {}) {
           }
           if (review.status !== 'approved' && review.status !== 'issued') continue;
           if (!review.code) {
-            const raw = crypto.randomBytes(8).toString('hex').toUpperCase();
-            review.code = 'RM50-' + raw.slice(0, 8) + '-' + raw.slice(8);
+            // 55 random bits in 11 base-32 characters: shorter in email, still unguessable.
+            const raw = BigInt('0x' + crypto.randomBytes(7).toString('hex')) & ((1n << 55n) - 1n);
+            review.code = 'RM50-' + raw.toString(32).toUpperCase().padStart(11, '0');
             save.run(JSON.stringify(data), data.id);
           }
           if (review.status === 'approved') {
