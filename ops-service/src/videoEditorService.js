@@ -732,7 +732,7 @@ function patchAffectsRender(body) {
   body = body && typeof body === 'object' ? body : {};
   return ['removedWordIndices', 'manualTrimCuts', 'wordCorrection', 'autoSilenceEnabled', 'restoredAutoCutIds', 'captionsEnabled',
     'layoutOverride', 'openingPushInEnabled', 'topCropFraction', 'portraitCaptionScale', 'phoneAudioEnhancement', 'phoneAudioTreatment', 'mirrorSourceVideo', 'silenceThresholdSeconds', 'retainedPauseSeconds', 'voiceGainAdjustments',
-    'suppressedPageChangeCutKeys', 'outroFadeSeconds'].some(function (key) {
+    'suppressedPageChangeCutKeys', 'outroFadeSeconds', 'roomTone'].some(function (key) {
     return Object.prototype.hasOwnProperty.call(body, key);
   });
 }
@@ -2440,6 +2440,22 @@ function setup(options) {
       const assPath = path.join(projectDir(id), 'captions.ass');
       const renderShape = renderShapeForProject(project, layout, master);
       const outputPath = master ? masterOutputPath : renderPath(id);
+      // A room-tone bed is opt-in for recordings whose phone mic gates its
+      // noise floor between words. Use a speech-free slice of that recording,
+      // not generated noise or a denoiser that changes the voice's timbre.
+      const roomTone = project.roomTone || null;
+      const roomTonePath = roomTone ? path.join(projectDir(id), 'room-tone.wav') : null;
+      if (roomTone) {
+        const start = Number(roomTone.startSeconds);
+        const duration = Number(roomTone.durationSeconds);
+        // Short edge fades make each quiet-source loop join click-free without
+        // an audible pumping/gate every time the sample repeats.
+        const toneFilter = 'aresample=48000,aformat=sample_fmts=s16:channel_layouts=stereo' +
+          ',afade=t=in:st=0:d=0.015,afade=t=out:st=' + (duration - 0.015).toFixed(3) + ':d=0.015';
+        await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-ss', start.toFixed(3),
+          '-t', duration.toFixed(3), '-i', renderSourcePath, '-map', '0:a:0', '-af', toneFilter,
+          '-c:a', 'pcm_s16le', roomTonePath], 'room tone extraction');
+      }
       if (project.captionsEnabled !== false) fs.writeFileSync(assPath, buildAss({ ...renderShape, portraitCaptionScale: project.portraitCaptionScale }, renderCaptionGroups(project, cuts, segments), OPENING_PREROLL_SECONDS));
       const filters = [];
       const readyClips = (project.insertedClips || []).filter(function (clip) { return clip.status === 'ready'; });
@@ -2535,15 +2551,25 @@ function setup(options) {
       if (voiceFilters) filters.push('[outa]' + voiceFilters + '[leveledouta]');
       filters.push('[' + (voiceFilters ? 'leveledouta' : 'outa') + ']adelay=delays=' + Math.round(OPENING_PREROLL_SECONDS * 1000) +
         ':all=1,apad=pad_dur=' + outro.totalSeconds.toFixed(3) + '[outaextended]');
+      const finalAudioLabel = roomTone ? 'roommixed' : 'outaextended';
+      if (roomTone) {
+        const toneInputIndex = 1 + readyClips.length;
+        filters.push('[' + toneInputIndex + ':a]volume=' + Number(roomTone.gainDb).toFixed(2) +
+          'dB,atrim=duration=' + (OPENING_PREROLL_SECONDS + contentDuration + outro.totalSeconds).toFixed(3) + ',asetpts=PTS-STARTPTS' +
+          ',afade=t=out:st=' + (OPENING_PREROLL_SECONDS + contentDuration).toFixed(3) +
+          ':d=' + outro.visualFadeSeconds.toFixed(3) + '[roomtone]');
+        filters.push('[outaextended][roomtone]amix=inputs=2:duration=first:normalize=0:dropout_transition=0[roommixed]');
+      }
       if (playbackSpeed !== 1) {
         filters.push('[outv]setpts=(PTS-STARTPTS)/' + playbackSpeed.toFixed(6) + '[spedv]');
-        filters.push('[outaextended]atempo=' + playbackSpeed.toFixed(6) + '[speda]');
+        filters.push('[' + finalAudioLabel + ']atempo=' + playbackSpeed.toFixed(6) + '[speda]');
       }
       let lastReportedProgress = -1;
       const ffmpegInputs = ['-hide_banner', '-loglevel', 'error', '-y', '-filter_complex_threads', String(EDITOR_FFMPEG_THREADS), '-autorotate', '1', '-i', renderSourcePath];
       readyClips.forEach(function (clip) { ffmpegInputs.push('-i', insertedClipPath(id, clip.id)); });
+      if (roomTone) ffmpegInputs.push('-stream_loop', '-1', '-i', roomTonePath);
       await runWithProgress('ffmpeg', ffmpegInputs.concat(['-filter_complex', filters.join(';'),
-        '-map', playbackSpeed === 1 ? '[outv]' : '[spedv]', '-map', playbackSpeed === 1 ? '[outaextended]' : '[speda]', '-c:v', 'libx264',
+        '-map', playbackSpeed === 1 ? '[outv]' : '[spedv]', '-map', playbackSpeed === 1 ? '[' + finalAudioLabel + ']' : '[speda]', '-c:v', 'libx264',
         '-preset', master ? 'veryfast' : 'ultrafast', '-crf', master ? '18' : '30',
         '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', master ? '192k' : '96k',
         '-threads', String(EDITOR_FFMPEG_THREADS),
@@ -3627,6 +3653,21 @@ function setup(options) {
     }
     if (typeof (req.body && req.body.phoneAudioEnhancement) === 'boolean') project.phoneAudioEnhancement = req.body.phoneAudioEnhancement;
     if (req.body && ['none', 'level_only'].includes(req.body.phoneAudioTreatment)) project.phoneAudioTreatment = req.body.phoneAudioTreatment;
+    if (req.body && Object.prototype.hasOwnProperty.call(req.body, 'roomTone')) {
+      const tone = req.body.roomTone;
+      if (tone !== null && (!tone || !Number.isFinite(Number(tone.startSeconds)) ||
+          !Number.isFinite(Number(tone.durationSeconds)) || !Number.isFinite(Number(tone.gainDb)) ||
+          Number(tone.startSeconds) < 0 || Number(tone.durationSeconds) < 0.5 ||
+          Number(tone.startSeconds) + Number(tone.durationSeconds) > Number(project.duration) ||
+          Number(tone.gainDb) < -12 || Number(tone.gainDb) > 30)) {
+        return res.status(400).json({ error: 'invalid_room_tone', message: 'Choose a source interval and gain within the recording.' });
+      }
+      project.roomTone = tone === null ? null : {
+        startSeconds: Number(Number(tone.startSeconds).toFixed(3)),
+        durationSeconds: Number(Number(tone.durationSeconds).toFixed(3)),
+        gainDb: Number(Number(tone.gainDb).toFixed(2))
+      };
+    }
     if (typeof (req.body && req.body.mirrorSourceVideo) === 'boolean') project.mirrorSourceVideo = req.body.mirrorSourceVideo;
     if (['auto', 'vertical', 'horizontal'].includes(req.body && req.body.layoutOverride)) project.layoutOverride = req.body.layoutOverride;
     if (['auto', 'ultra_short', 'short', 'long_short', 'longform'].includes(req.body && req.body.contentTypeOverride)) project.contentTypeOverride = req.body.contentTypeOverride;

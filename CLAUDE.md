@@ -24123,3 +24123,22 @@ check confirmed the review frame is 3:4 at 349×465 on mobile and 430×573
 on desktop. Because the manual-revision lock hides the player until this
 task completes, the actual rendered file and frame CSS were checked
 separately without changing any other recording, transcript, or audio.
+
+## One-recording Editor continuous room tone (2026-11-21)
+
+Harvey heard the thank-you/feedback recording's ambient noise drop to
+digital silence in speech pauses and at edits. The source Pixel 8a audio
+itself has a very quiet, intermittently gated floor; the level-only pass
+preserves vocal clarity but cannot create continuous ambience. Editor now
+supports an opt-in per-project `roomTone` render setting. It extracts a
+speech-free source interval to PCM, applies 15 ms loop-edge fades, repeats
+it beneath the edited, level-normalized dialogue without changing the
+dialogue spectrum, and fades it with the closing picture. This is applied
+by the same renderer to Editor previews and later Production masters; other
+recordings remain unchanged. The API validates the source interval and gain
+and marks the exact project preview dirty when the setting changes.
+
+For this recording, the intended source interval is 164–166 seconds, a
+transcript gap with steady quiet room noise, at +17 dB (roughly -47 dBFS
+RMS under the -18 LUFS voice). The short loop is deliberately subtle:
+it masks zero-noise gaps without introducing music or a second voice.

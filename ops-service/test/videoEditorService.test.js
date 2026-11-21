@@ -86,6 +86,12 @@ test('manual voice-level adjustments are bounded and become timed FFmpeg gain fi
     "volume=-2.93dB:enable='gte(t\\,15.490)'");
 });
 
+test('an opt-in room-tone bed invalidates the preview without changing other projects', function () {
+  assert.equal(editor.patchAffectsRender({ roomTone: { startSeconds: 164, durationSeconds: 2, gainDb: 17 } }), true);
+  assert.equal(editor.patchAffectsRender({ name: 'Only a title change' }), false);
+  assert.equal(editor.phoneAudioFilterForProject({ phoneAudioTreatment: 'level_only' }).includes('afftdn'), false);
+});
+
 test('inserted clips split the source timeline and supply their own timed captions', function () {
   const project = {
     duration: 4, removedWordIndices: [],
