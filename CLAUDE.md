@@ -24221,3 +24221,9 @@ rule so it does not falsely show a blocked short filling an early slot.
 Unlinked cards remain standalone, as a topic similarity guess must not
 silently bind a genuinely independent short to the wrong video. Queue
 selection can use another eligible short instead of wasting the slot.
+The full ops-service test suite passed (399 tests). CI deployed commit
+`1380315`; the authenticated live Buffer-status endpoint returned the two
+Friday/Sunday 05:45 slots while TikTok stayed paused. A real Chromium check
+opened a queued short's card on desktop and mobile: the related-long-form
+selector showed the standalone option plus thirteen existing long-form video
+cards, stayed usable at 390 px, and introduced no horizontal overflow.
