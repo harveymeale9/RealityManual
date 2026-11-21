@@ -24164,3 +24164,13 @@ When inserted clips or gaps too short for safe handles exist, this mode
 does not engage. For the reader-message recording the intended fade is
 160 ms and the room-tone gain is raised from +17 to +24 dB, leaving
 speech clear but keeping the background audible through each splice.
+
+The first crossfade implementation combined thirteen video trim branches
+and an audio acrossfade chain in one FFmpeg graph. At 42% of the real
+preview it reached roughly 5 GiB resident memory and the 8 GiB host OOM
+killer terminated FFmpeg, leaving the preview unavailable. The safe retry
+separates the crossfaded audio into a small PCM-only pass, then feeds that
+file to the existing video renderer; no simultaneous audio filter chain
+remains in the video graph. A synthetic end-to-end Editor render exercises
+both passes and passes. The real recording must be rebuilt and checked
+before this revision can be considered finished.

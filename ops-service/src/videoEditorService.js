@@ -2471,6 +2471,46 @@ function setup(options) {
       const filters = [];
       const readyClips = (project.insertedClips || []).filter(function (clip) { return clip.status === 'ready'; });
       const clipInputIndex = new Map(readyClips.map(function (clip, index) { return [clip.id, index + 1]; }));
+      const crossfadedAudioPath = audioCrossfadeSeconds ? path.join(projectDir(id), 'crossfaded-audio.wav') : '';
+      if (audioCrossfadeSeconds) {
+        // Build audio alone. Combining thirteen simultaneous video trim branches
+        // with a chained acrossfade exhausted host RAM; this small PCM pass
+        // leaves the established video renderer and its memory budget alone.
+        const audioFilters = segments.map(function (segment, index) {
+          const handle = audioCrossfadeSeconds / 2;
+          const start = segment.start - (index > 0 ? handle : 0);
+          const end = segment.end + (index + 1 < segments.length ? handle : 0);
+          return '[0:a]atrim=start=' + start.toFixed(3) + ':end=' + end.toFixed(3) +
+            ',asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo[a' + index + ']';
+        });
+        let label = 'a0';
+        for (let index = 1; index < segments.length; index++) {
+          const next = index + 1 === segments.length ? 'joined' : 'xf' + index;
+          audioFilters.push('[' + label + '][a' + index + ']acrossfade=d=' + audioCrossfadeSeconds.toFixed(3) +
+            ':c1=tri:c2=tri[' + next + ']');
+          label = next;
+        }
+        const voiceFilters = [voiceGainFilter(project.voiceGainAdjustments, contentDuration), phoneAudioFilterForProject(project)].filter(Boolean).join(',');
+        audioFilters.push('[' + label + ']' + (voiceFilters ? voiceFilters + ',' : '') +
+          'adelay=delays=' + Math.round(OPENING_PREROLL_SECONDS * 1000) + ':all=1,apad=pad_dur=' +
+          outro.totalSeconds.toFixed(3) + '[extended]');
+        let finalLabel = 'extended';
+        const audioInputs = ['-hide_banner', '-loglevel', 'error', '-y', '-filter_complex_threads', '1', '-i', renderSourcePath];
+        if (roomTone) {
+          audioInputs.push('-stream_loop', '-1', '-i', roomTonePath);
+          audioFilters.push('[1:a]volume=' + Number(roomTone.gainDb).toFixed(2) + 'dB,atrim=duration=' +
+            (OPENING_PREROLL_SECONDS + contentDuration + outro.totalSeconds).toFixed(3) +
+            ',asetpts=PTS-STARTPTS,afade=t=out:st=' + (OPENING_PREROLL_SECONDS + contentDuration).toFixed(3) +
+            ':d=' + outro.visualFadeSeconds.toFixed(3) + '[roomtone]');
+          audioFilters.push('[extended][roomtone]amix=inputs=2:duration=first:normalize=0:dropout_transition=0[mixed]');
+          finalLabel = 'mixed';
+        }
+        if (playbackSpeed !== 1) {
+          audioFilters.push('[' + finalLabel + ']atempo=' + playbackSpeed.toFixed(6) + '[finala]');
+        } else audioFilters.push('[' + finalLabel + ']anull[finala]');
+        await run('ffmpeg', audioInputs.concat(['-filter_complex', audioFilters.join(';'),
+          '-map', '[finala]', '-vn', '-c:a', 'pcm_s16le', crossfadedAudioPath]), 'crossfaded Editor audio');
+      }
       const clipAudioBalance = new Map();
       let mainVoiceLufs = null;
       if (readyClips.length) {
@@ -2520,35 +2560,21 @@ function setup(options) {
         }
         videoFilter += ',format=yuv420p';
         filters.push(videoFilter + '[v' + index + ']');
-        // Tiny boundary fades prevent waveform discontinuities from creating
-        // a click at transcript/jump cuts, without audibly crossfading words.
-        const audioHandle = audioCrossfadeSeconds / 2;
-        const audioStart = segment.start - (index > 0 ? audioHandle : 0);
-        const audioEnd = segment.end + (index + 1 < segments.length ? audioHandle : 0);
-        let audioFilter = '[' + inputIndex + ':a]atrim=start=' + audioStart.toFixed(3) + ':end=' + audioEnd.toFixed(3) + ',asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo';
-        if (segment.type === 'insert') {
-          const balance = clipAudioBalance.get(segment.clipId);
-          // Preserve the measured speech relationship while catching peaks
-          // introduced by a positive gain. The later production loudness pass
-          // can then move the whole programme without changing this match.
-          audioFilter += ',volume=' + balance.gainDb.toFixed(2) + 'dB,alimiter=limit=0.841395:level=false';
-        }
         if (!audioCrossfadeSeconds) {
+          // Existing projects retain the original short anti-click fades.
+          let audioFilter = '[' + inputIndex + ':a]atrim=start=' + segment.start.toFixed(3) + ':end=' + segment.end.toFixed(3) + ',asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo';
+          if (segment.type === 'insert') {
+            const balance = clipAudioBalance.get(segment.clipId);
+            audioFilter += ',volume=' + balance.gainDb.toFixed(2) + 'dB,alimiter=limit=0.841395:level=false';
+          }
           if (index > 0) audioFilter += ',afade=t=in:st=0:d=0.008';
           if (index + 1 < segments.length) audioFilter += ',afade=t=out:st=' + Math.max(0, segmentDuration - 0.008).toFixed(3) + ':d=0.008';
+          filters.push(audioFilter + '[a' + index + ']');
         }
-        filters.push(audioFilter + '[a' + index + ']');
       });
       if (audioCrossfadeSeconds) {
         const videoInputs = segments.map(function (_, index) { return '[v' + index + ']'; }).join('');
         filters.push(videoInputs + 'concat=n=' + segments.length + ':v=1:a=0[joinedv]');
-        let audioLabel = 'a0';
-        for (let index = 1; index < segments.length; index++) {
-          const nextLabel = index + 1 === segments.length ? 'outa' : 'xf' + index;
-          filters.push('[' + audioLabel + '][a' + index + ']acrossfade=d=' + audioCrossfadeSeconds.toFixed(3) +
-            ':c1=tri:c2=tri[' + nextLabel + ']');
-          audioLabel = nextLabel;
-        }
       } else {
         const concatInputs = segments.map(function (_, index) { return '[v' + index + '][a' + index + ']'; }).join('');
         filters.push(concatInputs + 'concat=n=' + segments.length + ':v=1:a=1[joinedv][outa]');
@@ -2570,34 +2596,34 @@ function setup(options) {
       filters.push('[captionedv]tpad=stop_mode=clone:stop_duration=' + outro.totalSeconds.toFixed(3) +
         ',fade=t=out:st=' + (OPENING_PREROLL_SECONDS + contentDuration).toFixed(3) + ':d=' + outro.visualFadeSeconds.toFixed(3) +
         ',fps=30000/1001[outv]');
-      const requestedVoiceGain = voiceGainFilter(project.voiceGainAdjustments, contentDuration);
-      // A phone recording can be very quiet without needing spectral denoise.
-      // The level-only option preserves its original timbre: FFT reduction
-      // made one reader message sound muffled even while measuring -18 LUFS.
-      const phoneAudioFilter = phoneAudioFilterForProject(project);
-      const voiceFilters = [requestedVoiceGain, phoneAudioFilter].filter(Boolean).join(',');
-      if (voiceFilters) filters.push('[outa]' + voiceFilters + '[leveledouta]');
-      filters.push('[' + (voiceFilters ? 'leveledouta' : 'outa') + ']adelay=delays=' + Math.round(OPENING_PREROLL_SECONDS * 1000) +
-        ':all=1,apad=pad_dur=' + outro.totalSeconds.toFixed(3) + '[outaextended]');
       const finalAudioLabel = roomTone ? 'roommixed' : 'outaextended';
-      if (roomTone) {
-        const toneInputIndex = 1 + readyClips.length;
-        filters.push('[' + toneInputIndex + ':a]volume=' + Number(roomTone.gainDb).toFixed(2) +
-          'dB,atrim=duration=' + (OPENING_PREROLL_SECONDS + contentDuration + outro.totalSeconds).toFixed(3) + ',asetpts=PTS-STARTPTS' +
-          ',afade=t=out:st=' + (OPENING_PREROLL_SECONDS + contentDuration).toFixed(3) +
-          ':d=' + outro.visualFadeSeconds.toFixed(3) + '[roomtone]');
-        filters.push('[outaextended][roomtone]amix=inputs=2:duration=first:normalize=0:dropout_transition=0[roommixed]');
+      if (!audioCrossfadeSeconds) {
+        const requestedVoiceGain = voiceGainFilter(project.voiceGainAdjustments, contentDuration);
+        const phoneAudioFilter = phoneAudioFilterForProject(project);
+        const voiceFilters = [requestedVoiceGain, phoneAudioFilter].filter(Boolean).join(',');
+        if (voiceFilters) filters.push('[outa]' + voiceFilters + '[leveledouta]');
+        filters.push('[' + (voiceFilters ? 'leveledouta' : 'outa') + ']adelay=delays=' + Math.round(OPENING_PREROLL_SECONDS * 1000) +
+          ':all=1,apad=pad_dur=' + outro.totalSeconds.toFixed(3) + '[outaextended]');
+        if (roomTone) {
+          const toneInputIndex = 1 + readyClips.length;
+          filters.push('[' + toneInputIndex + ':a]volume=' + Number(roomTone.gainDb).toFixed(2) +
+            'dB,atrim=duration=' + (OPENING_PREROLL_SECONDS + contentDuration + outro.totalSeconds).toFixed(3) + ',asetpts=PTS-STARTPTS' +
+            ',afade=t=out:st=' + (OPENING_PREROLL_SECONDS + contentDuration).toFixed(3) +
+            ':d=' + outro.visualFadeSeconds.toFixed(3) + '[roomtone]');
+          filters.push('[outaextended][roomtone]amix=inputs=2:duration=first:normalize=0:dropout_transition=0[roommixed]');
+        }
       }
       if (playbackSpeed !== 1) {
         filters.push('[outv]setpts=(PTS-STARTPTS)/' + playbackSpeed.toFixed(6) + '[spedv]');
-        filters.push('[' + finalAudioLabel + ']atempo=' + playbackSpeed.toFixed(6) + '[speda]');
+        if (!audioCrossfadeSeconds) filters.push('[' + finalAudioLabel + ']atempo=' + playbackSpeed.toFixed(6) + '[speda]');
       }
       let lastReportedProgress = -1;
       const ffmpegInputs = ['-hide_banner', '-loglevel', 'error', '-y', '-filter_complex_threads', String(EDITOR_FFMPEG_THREADS), '-autorotate', '1', '-i', renderSourcePath];
       readyClips.forEach(function (clip) { ffmpegInputs.push('-i', insertedClipPath(id, clip.id)); });
-      if (roomTone) ffmpegInputs.push('-stream_loop', '-1', '-i', roomTonePath);
+      if (audioCrossfadeSeconds) ffmpegInputs.push('-i', crossfadedAudioPath);
+      else if (roomTone) ffmpegInputs.push('-stream_loop', '-1', '-i', roomTonePath);
       await runWithProgress('ffmpeg', ffmpegInputs.concat(['-filter_complex', filters.join(';'),
-        '-map', playbackSpeed === 1 ? '[outv]' : '[spedv]', '-map', playbackSpeed === 1 ? '[' + finalAudioLabel + ']' : '[speda]', '-c:v', 'libx264',
+        '-map', playbackSpeed === 1 ? '[outv]' : '[spedv]', '-map', audioCrossfadeSeconds ? (1 + readyClips.length) + ':a:0' : (playbackSpeed === 1 ? '[' + finalAudioLabel + ']' : '[speda]'), '-c:v', 'libx264',
         '-preset', master ? 'veryfast' : 'ultrafast', '-crf', master ? '18' : '30',
         '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', master ? '192k' : '96k',
         '-threads', String(EDITOR_FFMPEG_THREADS),
