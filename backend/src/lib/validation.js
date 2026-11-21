@@ -91,6 +91,12 @@ function validateCheckoutInput(body = {}) {
   if (body.review_request_opt_in !== undefined && typeof body.review_request_opt_in !== 'boolean') {
     errors.review_request_opt_in = 'Review email preference must be true or false.';
   }
+  if (body.review_request_opt_out !== undefined && typeof body.review_request_opt_out !== 'boolean') {
+    errors.review_request_opt_out = 'Review email preference must be true or false.';
+  }
+  if (body.review_request_opt_in !== undefined && body.review_request_opt_out !== undefined) {
+    errors.review_request_opt_out = 'Choose only one review email preference.';
+  }
 
   return errors;
 }

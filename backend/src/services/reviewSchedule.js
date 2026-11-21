@@ -18,8 +18,8 @@ function addWorkingDays(start, count) {
 // destination/service quote or a conservative 14-calendar-day UK-origin
 // allowance. Wait one further week for time to read before asking for a review.
 function reviewRequestDueAt(order) {
-  if (!order?.shipping_email_sent_at) return null;
-  const dispatched = new Date(order.shipping_email_sent_at);
+  if (!order?.bookvault_dispatched_at && !order?.shipping_email_sent_at) return null;
+  const dispatched = new Date(order.bookvault_dispatched_at || order.shipping_email_sent_at);
   if (!Number.isFinite(dispatched.getTime())) return null;
 
   const baselineArrival = new Date(dispatched.getTime() + MIN_TRANSIT_DAYS * DAY_MS);

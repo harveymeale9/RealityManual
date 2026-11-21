@@ -38,6 +38,8 @@ export function validateCheckoutInput(body = {}) {
   }
   if (normalizeQuantity(body.quantity) === null) errors.quantity = 'Quantity must be a whole number between 1 and 20.';
   if (body.review_request_opt_in !== undefined && typeof body.review_request_opt_in !== 'boolean') errors.review_request_opt_in = 'Review email preference must be true or false.';
+  if (body.review_request_opt_out !== undefined && typeof body.review_request_opt_out !== 'boolean') errors.review_request_opt_out = 'Review email preference must be true or false.';
+  if (body.review_request_opt_in !== undefined && body.review_request_opt_out !== undefined) errors.review_request_opt_out = 'Choose only one review email preference.';
   return errors;
 }
 

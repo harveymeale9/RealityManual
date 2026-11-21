@@ -9,6 +9,7 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-review-'));
 process.env.DATABASE_PATH = path.join(scratch, 'test.db');
 process.env.RESEND_API_KEY = 're_test_never_sent';
 process.env.RESEND_FROM_EMAIL = 'The Reality Manual <orders@example.com>';
+process.env.MARKETING_POSTAL_ADDRESS = '1 Example Road, Test City';
 
 const orderService = require('../src/services/orderService');
 const { resendClient } = require('../src/services/resendService');

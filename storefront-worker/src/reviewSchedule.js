@@ -11,8 +11,8 @@ function addWorkingDays(start, count) {
 }
 
 export function reviewRequestDueAt(order) {
-  if (!order?.shipping_email_sent_at) return null;
-  const dispatched = new Date(order.shipping_email_sent_at);
+  if (!order?.bookvault_dispatched_at && !order?.shipping_email_sent_at) return null;
+  const dispatched = new Date(order.bookvault_dispatched_at || order.shipping_email_sent_at);
   if (!Number.isFinite(dispatched.getTime())) return null;
   const baseline = new Date(dispatched.getTime() + 14 * DAY_MS);
   const quotedDays = Number(order.shipping_max_delivery_days);

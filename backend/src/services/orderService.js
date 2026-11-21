@@ -73,13 +73,13 @@ const reviewRequestCandidatesStmt = db.prepare(`
   WHERE stripe_livemode = 1
     AND order_status = 'SHIPPED'
     AND bookvault_order_id IS NOT NULL
-    AND shipping_email_sent_at IS NOT NULL
+    AND COALESCE(bookvault_dispatched_at, shipping_email_sent_at) IS NOT NULL
     AND refund_email_sent_at IS NULL
     AND review_request_opt_in = 1
     AND review_request_email_sent_at IS NULL
     AND review_request_skipped_at IS NULL
     AND review_request_opt_out_at IS NULL
-  ORDER BY shipping_email_sent_at ASC
+  ORDER BY COALESCE(bookvault_dispatched_at, shipping_email_sent_at) ASC
   LIMIT ?
 `);
 
@@ -112,6 +112,10 @@ const setFulfillmentRetryStmt = db.prepare(`
 
 const setOrderStatusStmt = db.prepare(`
   UPDATE orders SET order_status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?
+`);
+const setDispatchedStmt = db.prepare(`
+  UPDATE orders SET order_status = 'SHIPPED', bookvault_dispatched_at = ?, fulfillment_next_attempt_at = NULL,
+    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?
 `);
 const setNextAttemptStmt = db.prepare(`
   UPDATE orders SET fulfillment_next_attempt_at = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?
@@ -170,8 +174,8 @@ function createOrder(input) {
     shipping_max_delivery_days: input.shippingMaxDeliveryDays || null,
     total_price_cents: input.totalPriceCents,
     currency: input.currency,
-    review_request_opt_in: input.review_request_opt_in === true ? 1 : 0,
-    review_request_opt_in_at: input.review_request_opt_in === true ? new Date().toISOString() : null,
+    review_request_opt_in: (input.review_request_opt_out !== undefined ? input.review_request_opt_out === false : input.review_request_opt_in === true) ? 1 : 0,
+    review_request_opt_in_at: (input.review_request_opt_out !== undefined ? input.review_request_opt_out === false : input.review_request_opt_in === true) ? new Date().toISOString() : null,
     attribution_json: normalizeOrderAttribution(input.attribution),
   });
   return getByIdStmt.get(id);
@@ -256,6 +260,10 @@ function setOrderStatus(orderId, status) {
   setOrderStatusStmt.run(status, orderId);
   return getByIdStmt.get(orderId);
 }
+function setDispatched(orderId, actualDispatch) {
+  setDispatchedStmt.run(actualDispatch, orderId);
+  return getByIdStmt.get(orderId);
+}
 
 function setNextAttempt(orderId, nextAttemptAt) {
   setNextAttemptStmt.run(nextAttemptAt, orderId);
@@ -325,6 +333,7 @@ module.exports = {
   setBookVaultCost,
   setFulfillmentRetry,
   setOrderStatus,
+  setDispatched,
   setNextAttempt,
   markFulfillmentAlertSent,
   markAddressCorrectionEmailSent: (id) => markAddressCorrectionEmailStmt.run(id),

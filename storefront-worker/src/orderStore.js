@@ -5,6 +5,10 @@ const PAID_STATES = new Set(['PAYMENT_RECEIVED', 'FULFILLMENT_RETRY', 'BOOKVAULT
 
 export async function createOrder(db, body, totals, attributionJson) {
   const id = crypto.randomUUID();
+  // Explicit opt-out is the new checkout contract. Preserve the old opt-in
+  // meaning for cached checkout clients; an absent preference is not consent.
+  const reviewEligible = body.review_request_opt_out !== undefined
+    ? body.review_request_opt_out === false : body.review_request_opt_in === true;
   await db.prepare(`
     INSERT INTO orders (
       id, customer_name, email, phone, country, street1, street2, city, state, postal_code,
@@ -20,8 +24,8 @@ export async function createOrder(db, body, totals, attributionJson) {
     totals.serviceName || null, totals.serviceId || null, totals.minDeliveryDays || null,
     totals.maxDeliveryDays || null, totals.totalPriceCents, totals.currency,
     totals.voucherCodeHash || null, totals.voucherDiscountCents || 0,
-    body.review_request_opt_in === true ? 1 : 0,
-    body.review_request_opt_in === true ? new Date().toISOString() : null,
+    reviewEligible ? 1 : 0,
+    reviewEligible ? new Date().toISOString() : null,
     attributionJson,
   ).run();
   return getOrderById(db, id);

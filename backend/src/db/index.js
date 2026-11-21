@@ -52,6 +52,7 @@ for (const column of [
   'fulfillment_deadline_alert_sent_at TEXT',
   'confirmation_email_sent_at TEXT',
   'shipping_email_sent_at TEXT',
+  'bookvault_dispatched_at TEXT',
   'refund_email_sent_at TEXT',
   'review_request_opt_in INTEGER NOT NULL DEFAULT 0',
   'review_request_opt_in_at TEXT',

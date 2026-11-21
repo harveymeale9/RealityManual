@@ -11,6 +11,11 @@ const FULFILLMENT_WINDOW_MS = 60 * 60 * 60 * 1000;
 const nowIso = () => new Date().toISOString();
 const later = (minutes) => new Date(Date.now() + minutes * 60000).toISOString();
 export const deadlineAt = (order) => Date.parse(order.payment_received_at || order.created_at) + FULFILLMENT_WINDOW_MS;
+export function dispatchedAt(progress) {
+  if (progress?.IsDispatched !== true && progress?.Status !== 'Dispatched') return null;
+  const time = Date.parse(progress?.Dispatched);
+  return Number.isFinite(time) ? new Date(time).toISOString() : null;
+}
 
 // BookVault's /Order validation is the definitive post-payment address check.
 // /Dispatch can quote an address that /Order later rejects, so do not pretend
@@ -160,14 +165,18 @@ async function checkProgress(env, order) {
     }
     try { await captureBookVaultCost(env.DB, order, current); }
     catch (error) { await log(env.DB, order.id, 'bookvault', 'order_cost_capture_failed', error.message); }
-    if (current?.Progress?.Status === 'Dispatched') {
+    const actualDispatch = dispatchedAt(current?.Progress);
+    if (actualDispatch) {
       const shipment = {
         carrierName: current?.Tracking?.ServName || order.shipping_service_name,
         trackingNumber: current?.Tracking?.TrackingNumber,
         trackingUrl: current?.Tracking?.CombinedURL,
       };
-      await sendTemplate(env, order, 'shipping', orderShippedEmail(order, shipment), 'shipped');
-      await update(env.DB, order.id, "UPDATE orders SET order_status = 'SHIPPED', fulfillment_next_attempt_at = NULL");
+      // Late reconciliation must not send an obsolete "on its way" notice.
+      if (Date.now() - Date.parse(actualDispatch) <= 7 * 86400000) {
+        await sendTemplate(env, order, 'shipping', orderShippedEmail(order, shipment), 'shipped');
+      }
+      await update(env.DB, order.id, "UPDATE orders SET order_status = 'SHIPPED', bookvault_dispatched_at = ?, fulfillment_next_attempt_at = NULL", actualDispatch);
       return;
     }
     await next(env.DB, order);

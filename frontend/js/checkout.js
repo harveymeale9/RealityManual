@@ -443,7 +443,7 @@
       postal_code: form.postal_code.value,
       quantity: getQuantity(),
       voucher_code: voucherInput.value.trim().toUpperCase(),
-      review_request_opt_in: form.review_request_opt_in.checked,
+      review_request_opt_out: form.review_request_opt_out.checked,
     };
 
     const clientErrors = validateClientSide(values);

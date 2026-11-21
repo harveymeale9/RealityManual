@@ -68,8 +68,21 @@ test('checkout saves one D1 order and returns the existing browser contract', as
   assert.equal(order.id, result.order_id);
   assert.equal(order.stripe_payment_intent_id, 'pi_test_one');
   assert.equal(order.order_status, 'PAYMENT_PENDING');
+  assert.equal(order.review_request_opt_in, 0);
   assert.equal(JSON.parse(order.attribution_json).first.referrer_host, 'youtube.com');
   assert.equal(calls[0][1].idempotencyKey, `rm-order-${order.id}`);
+  sqlite.close();
+});
+
+test('new checkout defaults to one follow-up, but explicit opt-out and legacy no-consent stay off', async () => {
+  const { sqlite, db } = fixture();
+  const { createOrder } = await import('../src/orderStore.js');
+  const allowed = await createOrder(db, { ...body, review_request_opt_in: undefined, review_request_opt_out: false }, totals, null);
+  const declined = await createOrder(db, { ...body, review_request_opt_in: undefined, review_request_opt_out: true }, totals, null);
+  const legacy = await createOrder(db, { ...body, review_request_opt_in: false, review_request_opt_out: undefined }, totals, null);
+  assert.equal(allowed.review_request_opt_in, 1);
+  assert.equal(declined.review_request_opt_in, 0);
+  assert.equal(legacy.review_request_opt_in, 0);
   sqlite.close();
 });
 

@@ -176,7 +176,7 @@ test('paid order is submitted once, emailed, then dispatch is emailed with track
     Status: 'Active',
     Partner: { ID: 1, CurrencyID: 'GBP' },
     OrderCost: { ProductionCost: 19.77, DispatchCost: 17.41, GrandTotal: 39.18 },
-    Progress: { Status: 'Dispatched' },
+    Progress: { Status: 'Invoiced', IsDispatched: true, Dispatched: new Date().toISOString() },
     Tracking: {
       ServName: 'USPS',
       TrackingNumber: 'TRACK123',

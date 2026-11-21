@@ -252,15 +252,19 @@ async function checkBookVaultProgress(order) {
       return;
     }
     await captureBookVaultCost(order, current);
-    const status = current?.Progress?.Status;
-    if (status === 'Dispatched') {
+    const progress = current?.Progress;
+    const dispatchedTime = Date.parse(progress?.Dispatched);
+    if ((progress?.IsDispatched === true || progress?.Status === 'Dispatched') && Number.isFinite(dispatchedTime)) {
+      const actualDispatch = new Date(dispatchedTime).toISOString();
       const shipment = {
         carrierName: current?.Tracking?.ServName || order.shipping_service_name,
         trackingNumber: current?.Tracking?.TrackingNumber,
         trackingUrl: current?.Tracking?.CombinedURL,
       };
-      await sendTemplate(order, 'shipping', orderShippedEmail(order, shipment), 'shipped');
-      orderService.setOrderStatus(order.id, 'SHIPPED');
+      if (Date.now() - dispatchedTime <= 7 * 86400000) {
+        await sendTemplate(order, 'shipping', orderShippedEmail(order, shipment), 'shipped');
+      }
+      orderService.setDispatched(order.id, actualDispatch);
       return;
     }
 

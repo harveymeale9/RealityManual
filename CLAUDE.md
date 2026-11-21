@@ -24368,3 +24368,35 @@ checkout enabled. The paused VPS fallback was rebuilt with the same template
 as `rm-storefront-backend:face-reveal`, and health returned OK while its
 `CHECKOUT_PAUSED=true` and `STOREFRONT_JOBS_ENABLED=false` guards remained set.
 All 57 backend tests and 31 storefront Worker tests passed.
+
+## Post-delivery message defaults on for new customers; BookVault dispatch repaired (2026-11-21)
+
+Harvey clarified that the approved Face Reveal email should go to purchasers
+about a week after their *likely receipt*, not only to people who opt in at
+checkout. Checkout now offers a clearly worded, unchecked **opt-out** from this
+one follow-up; new orders save eligibility unless the buyer opts out. Old
+checkout clients still send the original `review_request_opt_in` boolean, whose
+meaning is retained; missing preferences default off. Historical orders that
+left the previous unchecked opt-in empty are not silently reclassified. The
+separate abandoned-checkout recovery opt-in remains unchanged. Privacy copy
+matches the new choice.
+
+Production audit revealed why the previous follow-up never fired: all 73
+accepted BookVault orders remained locally `BOOKVAULT_ACCEPTED` even though
+BookVault reported 17 dispatched. Its `Progress.Status` can say `Invoiced`
+while `Progress.IsDispatched` is true and `Progress.Dispatched` holds the actual
+timestamp. Both Worker and paused VPS fallback now recognize that flag and
+record `bookvault_dispatched_at`; the due date uses actual dispatch, then the
+slower of 14 calendar days or the quoted shipping maximum, plus seven reading
+days. Late reconciliation does not send an obsolete shipping notice more than
+seven days after dispatch. Existing per-order email idempotency and refund,
+unsubscribe, and old-opt-in guards remain.
+
+The Face Reveal request includes a voucher/review invitation and is treated as
+commercial mail. The Worker and paused fallback will not send it without a
+real `MARKETING_POSTAL_ADDRESS` setting; the HTML and plain-text email include
+that address next to the unsubscribe. Do not invent or expose Harvey's home
+address. This is a deliberate activation gate until Harvey provides a suitable
+business mailing address or PO Box. Backend and Worker test suites passed
+(58/58 and 33/33). Apply the D1 `2026-11-21-bookvault-dispatch.sql` migration
+before deploying the Worker code.

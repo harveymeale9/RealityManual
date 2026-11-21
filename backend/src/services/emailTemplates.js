@@ -278,7 +278,7 @@ function orderRefundedEmail(order, { preview = false } = {}) {
   };
 }
 
-function reviewRequestEmail(order, { preview = false } = {}) {
+function reviewRequestEmail(order, { preview = false, postalAddress = '' } = {}) {
   const subject = `${preview ? '[PREVIEW] ' : ''}Face Reveal!`;
   const unsubscribeUrl = `https://api.realitymanual.com/api/review/unsubscribe?order=${encodeURIComponent(order.id || 'preview')}`;
   const text = [
@@ -294,11 +294,13 @@ function reviewRequestEmail(order, { preview = false } = {}) {
     '',
     'Unsubscribe from review emails:',
     unsubscribeUrl,
+    postalAddress,
   ].filter(Boolean).join('\n');
 
   return {
     subject,
-    html: faceRevealEmailHtml.replace('{{UNSUBSCRIBE_URL}}', escapeHtml(unsubscribeUrl)),
+    html: faceRevealEmailHtml.replace('{{UNSUBSCRIBE_URL}}', escapeHtml(unsubscribeUrl))
+      .replace('{{POSTAL_ADDRESS}}', escapeHtml(postalAddress)),
     text,
     headers: {
       'List-Unsubscribe': `<${unsubscribeUrl}>`,

@@ -22,3 +22,7 @@ test('no shipping email means no review request date', () => {
   assert.equal(reviewRequestDueAt({ shipping_max_delivery_days: 8 }), null);
   assert.equal(reviewRequestDueAt({ shipping_email_sent_at: 'not-a-date' }), null);
 });
+
+test('actual BookVault dispatch anchors follow-up despite later shipping reconciliation', () => {
+  assert.equal(reviewRequestDueAt({ bookvault_dispatched_at: '2026-11-02T09:00:00.000Z', shipping_email_sent_at: '2026-11-06T09:00:00.000Z' }), '2026-11-23T09:00:00.000Z');
+});

@@ -22,11 +22,12 @@ async function processReviewRequest(order, now = new Date()) {
   // cannot be ignored by an earlier candidate snapshot.
   const latest = orderService.getById(order.id);
   if (!latest || latest.stripe_livemode !== 1 || latest.order_status !== 'SHIPPED' ||
-      !latest.bookvault_order_id || !latest.shipping_email_sent_at || latest.refund_email_sent_at ||
+      !latest.bookvault_order_id || !(latest.bookvault_dispatched_at || latest.shipping_email_sent_at) || latest.refund_email_sent_at ||
       !latest.review_request_opt_in || latest.review_request_opt_out_at ||
       latest.review_request_email_sent_at || latest.review_request_skipped_at) return false;
 
-  const email = reviewRequestEmail(latest);
+  if (!String(process.env.MARKETING_POSTAL_ADDRESS || '').trim()) return false;
+  const email = reviewRequestEmail(latest, { postalAddress: process.env.MARKETING_POSTAL_ADDRESS });
   await resendClient.sendEmail({
     to: latest.email,
     ...email,
