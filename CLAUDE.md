@@ -24362,3 +24362,9 @@ Run `npm run build:face-reveal-email` from `backend/` after any edit to refresh
 the checked-in Worker-safe JavaScript string; a test fails if they diverge.
 The storefront preview file remains a standalone copy of the approved design;
 the backend source adds only the unsubscribe footer required for customer mail.
+The production Worker was deployed as version
+`22655c32-a627-463f-84a6-759ba95e4582`; the public API health returned
+checkout enabled. The paused VPS fallback was rebuilt with the same template
+as `rm-storefront-backend:face-reveal`, and health returned OK while its
+`CHECKOUT_PAUSED=true` and `STOREFRONT_JOBS_ENABLED=false` guards remained set.
+All 57 backend tests and 31 storefront Worker tests passed.
