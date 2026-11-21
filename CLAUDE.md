@@ -24281,3 +24281,10 @@ video on `/iloveyou/` (`01 / A NOTE TO YOU` and `With love, Harvey`) and reduce
 the empty space before the next heading. The labels were removed from the
 page markup, and the bridge heading's top margin was reduced to 32 px on
 desktop and 28 px on mobile. The video, forms, and other copy are unchanged.
+
+## Reader form headings (2026-11-21)
+
+Removed the small numbered eyebrow labels above both `/iloveyou/` form
+headings. The first heading now reads “Share feedback” instead of “Share
+private feedback”; the existing explanation that feedback is not published
+remains in the form body. Form fields and submission behavior are unchanged.
