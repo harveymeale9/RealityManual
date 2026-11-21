@@ -731,7 +731,7 @@ function advanceEditRevision(project) {
 function patchAffectsRender(body) {
   body = body && typeof body === 'object' ? body : {};
   return ['removedWordIndices', 'manualTrimCuts', 'wordCorrection', 'autoSilenceEnabled', 'restoredAutoCutIds', 'captionsEnabled',
-    'layoutOverride', 'openingPushInEnabled', 'topCropFraction', 'phoneAudioEnhancement', 'phoneAudioTreatment', 'mirrorSourceVideo', 'silenceThresholdSeconds', 'retainedPauseSeconds', 'voiceGainAdjustments',
+    'layoutOverride', 'openingPushInEnabled', 'topCropFraction', 'portraitCaptionScale', 'phoneAudioEnhancement', 'phoneAudioTreatment', 'mirrorSourceVideo', 'silenceThresholdSeconds', 'retainedPauseSeconds', 'voiceGainAdjustments',
     'suppressedPageChangeCutKeys', 'outroFadeSeconds'].some(function (key) {
     return Object.prototype.hasOwnProperty.call(body, key);
   });
@@ -1402,9 +1402,11 @@ function buildAss(project, groups, startOffsetSeconds) {
   const width = Math.max(360, Math.round(Number(project.width) || 1080));
   const height = Math.max(360, Math.round(Number(project.height) || 1920));
   const isLongform = width >= height;
+  const portraitCaptionScale = !isLongform && Number.isFinite(Number(project.portraitCaptionScale))
+    ? clamp(Number(project.portraitCaptionScale), 0.6, 1) : 1;
   const fontSize = isLongform
     ? Math.max(18, Math.round(Math.min(width, height) * 0.036))
-    : Math.max(30, Math.round(Math.min(width, height) * 0.08));
+    : Math.max(18, Math.round(Math.min(width, height) * 0.08 * portraitCaptionScale));
   // Long-form phrases remain on one line, so a large inline size jump can
   // visually crowd neighbouring words. Keep their emphasis gentler and add
   // explicit word room below; vertical three-word windows retain 12%.
@@ -1417,7 +1419,8 @@ function buildAss(project, groups, startOffsetSeconds) {
   const outlineWidth = isLongform ? 2 : Number((3 * portraitScale).toFixed(2));
   const emphasizedOutlineWidth = isLongform ? 3 : Number((4 * portraitScale).toFixed(2));
   const shadowWidth = isLongform ? 1 : Number((2 * portraitScale).toFixed(2));
-  const sideMargin = isLongform ? 40 : Math.round(40 * portraitScale);
+  const sideMargin = isLongform ? 40 : portraitCaptionScale < 1
+    ? Math.round(width * 0.09) : Math.round(40 * portraitScale);
   // Vertical captions sit low over the otherwise-unused lower page area.
   // 22% from the bottom matches the Editor preview and Harvey's marked
   // reference line; the former 30% placement sat visibly over the page text.
@@ -2437,7 +2440,7 @@ function setup(options) {
       const assPath = path.join(projectDir(id), 'captions.ass');
       const renderShape = renderShapeForProject(project, layout, master);
       const outputPath = master ? masterOutputPath : renderPath(id);
-      if (project.captionsEnabled !== false) fs.writeFileSync(assPath, buildAss(renderShape, renderCaptionGroups(project, cuts, segments), OPENING_PREROLL_SECONDS));
+      if (project.captionsEnabled !== false) fs.writeFileSync(assPath, buildAss({ ...renderShape, portraitCaptionScale: project.portraitCaptionScale }, renderCaptionGroups(project, cuts, segments), OPENING_PREROLL_SECONDS));
       const filters = [];
       const readyClips = (project.insertedClips || []).filter(function (clip) { return clip.status === 'ready'; });
       const clipInputIndex = new Map(readyClips.map(function (clip, index) { return [clip.id, index + 1]; }));
@@ -3614,6 +3617,13 @@ function setup(options) {
         return res.status(400).json({ error: 'invalid_top_crop', message: 'Portrait top crop must be between 0 and 40%.' });
       }
       project.topCropFraction = Number(crop.toFixed(3));
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'portraitCaptionScale')) {
+      const scale = Number(req.body.portraitCaptionScale);
+      if (!Number.isFinite(scale) || scale < 0.6 || scale > 1 || (req.body.layoutOverride || effectiveLayout(project)) !== 'vertical') {
+        return res.status(400).json({ error: 'invalid_portrait_caption_scale', message: 'Portrait caption scale must be between 60% and 100%.' });
+      }
+      project.portraitCaptionScale = Number(scale.toFixed(3));
     }
     if (typeof (req.body && req.body.phoneAudioEnhancement) === 'boolean') project.phoneAudioEnhancement = req.body.phoneAudioEnhancement;
     if (req.body && ['none', 'level_only'].includes(req.body.phoneAudioTreatment)) project.phoneAudioTreatment = req.body.phoneAudioTreatment;

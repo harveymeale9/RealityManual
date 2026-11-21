@@ -1379,7 +1379,7 @@
     var rawSourceNoticeHtml = previewMode === 'source' && !!explicitSourcePreviews[project.id]
       ? '<div class="editor-raw-source-notice">Raw original · cuts, captions and animations are not shown</div>'
       : '';
-    var previewPlayerHtml = '<div class="editor-preview' + (mediaUnavailable ? ' rebuilding' : '') + '" id="editorPreview" tabindex="' + (mediaUnavailable ? '-1' : '0') + '" aria-busy="' + (mediaUnavailable ? 'true' : 'false') + '" aria-label="Video review. Space plays or pauses. Left and right arrows move two seconds."><div class="editor-video-frame ' + layout + '"><video id="editorVideo" data-preview-mode="' + previewMode + '" data-seek-time="' + previewSeek.toFixed(3) + '" playsinline preload="auto"' + (mediaUnavailable ? '' : ' src="' + previewUrl + '"') + '></video>' + rawSourceNoticeHtml +
+    var previewPlayerHtml = '<div class="editor-preview' + (mediaUnavailable ? ' rebuilding' : '') + '" id="editorPreview" tabindex="' + (mediaUnavailable ? '-1' : '0') + '" aria-busy="' + (mediaUnavailable ? 'true' : 'false') + '" aria-label="Video review. Space plays or pauses. Left and right arrows move two seconds."><div class="editor-video-frame ' + layout + (layout === 'vertical' && Number(project.topCropFraction) > 0 ? ' cropped-portrait' : '') + '"><video id="editorVideo" data-preview-mode="' + previewMode + '" data-seek-time="' + previewSeek.toFixed(3) + '" playsinline preload="auto"' + (mediaUnavailable ? '' : ' src="' + previewUrl + '"') + '></video>' + rawSourceNoticeHtml +
       '<div class="editor-preview-outro" id="editorPreviewOutro" aria-hidden="true"></div>' +
       '<div class="editor-caption" id="editorCaption"></div>' +
       '<div class="editor-player-controls" id="editorPlayerControls"><button type="button" class="editor-player-icon" id="editorPlayerPlay" aria-label="Play" disabled>▶</button><span id="editorPlayerCurrent">0:00</span><input type="range" id="editorPlayerSeek" min="0" max="1" step="0.01" value="0" aria-label="Video position" disabled><span id="editorPlayerDuration">' + formatTime(previewMode === 'final' ? editedDuration(project) : project.duration) + '</span><i id="editorPlayerBuffering" hidden>Loading</i><button type="button" class="editor-player-icon" id="editorPlayerMute" aria-label="Mute" disabled>VOL</button><button type="button" class="editor-player-icon" id="editorPlayerFullscreen" aria-label="Full screen" disabled>⛶</button></div>' +
@@ -2344,6 +2344,10 @@
       })[0];
       caption.replaceChildren();
       caption.style.removeProperty('font-size');
+      var portraitCaptionScale = Number.isFinite(Number(project.portraitCaptionScale))
+        ? Math.max(0.6, Math.min(1, Number(project.portraitCaptionScale))) : 1;
+      caption.style.left = portraitCaptionScale < 1 ? '9%' : '';
+      caption.style.right = portraitCaptionScale < 1 ? '9%' : '';
       var isLongform = isLongformVideo();
       caption.classList.toggle('longform', isLongform);
       caption.classList.toggle('shortform', !isLongform);
@@ -2375,7 +2379,7 @@
           var windowWords = group.words.slice(windowStart, windowStart + 3);
           var characters = Array.from(windowWords.map(function (word) { return word.text; }).join(' ')).length;
           var fit = Math.max(0.36, Math.min(1, 18 / Math.max(18, characters)));
-          caption.style.fontSize = (8 * fit).toFixed(2) + 'cqw';
+          caption.style.fontSize = (8 * fit * portraitCaptionScale).toFixed(2) + 'cqw';
           windowWords.forEach(function (word, index) {
             if (index) caption.appendChild(document.createTextNode(' '));
             var span = document.createElement('span');

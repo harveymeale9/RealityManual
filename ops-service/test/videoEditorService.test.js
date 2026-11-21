@@ -1169,6 +1169,23 @@ test('portrait preview borders and margins scale with the production master', fu
   assert.match(master, /\\bord4/);
 });
 
+test('one cropped portrait can use smaller captions and a wider safe margin in both outputs', function () {
+  const words = [{ start: 0, end: 1, text: 'Manual your favorite', words: [
+    { text: 'Manual', start: 0, end: .3 }, { text: 'your', start: .3, end: .6 },
+    { text: 'favorite', start: .6, end: 1 }
+  ] }];
+  const preview = editor.buildAss({ width: 540, height: 720, portraitCaptionScale: .72 }, words);
+  const master = editor.buildAss({ width: 1080, height: 1440, portraitCaptionScale: .72 }, words);
+  assert.match(preview, /Style: Default,Arial,31,.*2,49,49,158,1/);
+  assert.match(master, /Style: Default,Arial,62,.*2,97,97,317,1/);
+  assert.equal(editor.patchAffectsRender({ portraitCaptionScale: .72 }), true);
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'editor.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'public', 'style.css'), 'utf8');
+  assert.match(source, /cropped-portrait/);
+  assert.match(source, /8 \* fit \* portraitCaptionScale/);
+  assert.match(styles, /\.editor-video-frame\.vertical\.cropped-portrait\{[^}]*aspect-ratio:3\/4/);
+});
+
 test('Editor source preview keeps vertical three-word windows rather than one spoken word', function () {
   const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'editor.js'), 'utf8');
   const styles = fs.readFileSync(path.join(__dirname, '..', 'public', 'style.css'), 'utf8');

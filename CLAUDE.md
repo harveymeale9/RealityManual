@@ -24088,3 +24088,17 @@ the public review-use paragraph. The adjacent eligibility sentence already
 read “Your opinion can be positive, mixed, or negative; its sentiment does
 not affect eligibility,” so it remains unchanged. This is page copy only;
 the review consent, payment criteria, and submission workflow are unchanged.
+
+## One-recording Editor caption fit (2026-11-21)
+
+For the same thank-you/feedback recording, Harvey reported portrait captions
+too large and spilling toward the left/right frame edges. Its 25% top crop
+creates a 3:4 render, but the Editor review player was still forced into a
+9:16 frame with `object-fit: cover`, clipping both sides of that valid 3:4
+render. A cropped-portrait player class now displays it at its actual 3:4
+ratio on desktop/mobile; raw-source preview remains bottom-aligned so the
+top-crop decision can be evaluated honestly. A saved, portrait-only
+`portraitCaptionScale` render setting applies consistently to the source
+preview overlay, Editor ASS burn-in, and later Production master. Other
+recordings retain their prior caption dimensions and 9:16 frame. The
+specific project is set to 72% caption size with 9% side-safe margins.
