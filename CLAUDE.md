@@ -24142,3 +24142,12 @@ For this recording, the intended source interval is 164–166 seconds, a
 transcript gap with steady quiet room noise, at +17 dB (roughly -47 dBFS
 RMS under the -18 LUFS voice). The short loop is deliberately subtle:
 it masks zero-noise gaps without introducing music or a second voice.
+The real project was saved at edit revision 14 with this setting and rebuilt.
+Its 540×720 preview passed the Editor quality gate; on-disk SHA-256 matched
+the saved `c63a4563fa19…` digest, and the authenticated preview served an
+HTTP 206 byte range. A 100 ms RMS scan of the rendered audio found no
+windows below -70 dBFS before the deliberate closing fade; the quietest
+programme window measured about -50 dBFS. Previously the same preview had
+multiple windows of digital zero in the opening and at edit boundaries.
+The recording is still in Editor for Harvey's listening review, not
+approved or pushed to Production.
