@@ -2,6 +2,10 @@
 
 const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000;
 const DEFAULT_SLOTS = ['00:00', '12:00'];
+const SHORTFORM_POSTING_SCHEDULE = [
+  { day: 'fri', paused: false, times: ['05:45'] },
+  { day: 'sun', paused: false, times: ['05:45'] }
+];
 const DAY_NAMES = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 // 11 p.m. on 23 October 2026 in Bangkok (UTC+7). Future slots are elapsed
 // hours from this instant, so the local publication clock deliberately moves.
@@ -83,6 +87,19 @@ function isShortform(piece) {
   return ['ultra_short', 'short', 'long_short'].indexOf(piece && piece.contentType) !== -1;
 }
 
+// A short only has a counterpart when Harvey explicitly links the two cards.
+// Topic similarity is intentionally not enough to decide which long-form a
+// short belongs to. Wait for the real public release, then count seven full
+// 24-hour days; a scheduled-but-delayed long-form must not start the clock.
+function shortformEligibleAt(piece, pieces, dueAt) {
+  if (!piece || !piece.relatedLongformPieceId) return true;
+  const parent = (pieces || []).find(function (item) { return item.id === piece.relatedLongformPieceId; });
+  if (!parent || parent.contentType !== 'longform' || parent.stage !== 'live') return false;
+  const published = Date.parse(parent.postedAt || '');
+  const due = dueAt instanceof Date ? dueAt.getTime() : Date.parse(String(dueAt || ''));
+  return Number.isFinite(published) && Number.isFinite(due) && due >= published + 7 * 86400000;
+}
+
 function normalizeLongformIntervalHours(value) {
   const hours = Number(value);
   return Number.isInteger(hours) && hours >= 1 && hours <= 720 ? hours : DEFAULT_LONGFORM_INTERVAL_HOURS;
@@ -129,6 +146,7 @@ function nextAvailableLongformSlots(after, anchor, intervalHours, occupiedTimes,
 
 module.exports = {
   DEFAULT_SLOTS: DEFAULT_SLOTS,
+  SHORTFORM_POSTING_SCHEDULE: SHORTFORM_POSTING_SCHEDULE,
   nextBangkokSlot: nextBangkokSlot,
   nextAvailableBangkokSlots: nextAvailableBangkokSlots,
   LONGFORM_ANCHOR: LONGFORM_ANCHOR,
@@ -138,5 +156,6 @@ module.exports = {
   nextAvailableLongformSlots: nextAvailableLongformSlots,
   normalizeLongformIntervalHours: normalizeLongformIntervalHours,
   scheduleMap: scheduleMap,
-  isShortform: isShortform
+  isShortform: isShortform,
+  shortformEligibleAt: shortformEligibleAt
 };

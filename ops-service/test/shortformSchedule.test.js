@@ -25,16 +25,26 @@ test('Buffer day pauses and changed slots remain authoritative', function () {
   assert.equal(schedule.nextBangkokSlot(Date.parse('2026-09-27T18:00:00Z'), custom), '2026-09-28T18:30:00.000Z');
 });
 
-test('Monday and Thursday 5:45 a.m. slots are the only shared short-form release times', function () {
-  const custom = daily(['05:45']);
-  custom.forEach(function (day) { day.paused = !['mon', 'thu'].includes(day.day); });
+test('Friday and Sunday 5:45 a.m. Bangkok are the shared short-form release times', function () {
+  const custom = schedule.SHORTFORM_POSTING_SCHEDULE;
   assert.deepEqual(schedule.nextAvailableBangkokSlots(Date.parse('2026-11-03T04:00:00Z'), custom, [], 3), [
-    '2026-11-04T22:45:00.000Z',
-    '2026-11-08T22:45:00.000Z',
-    '2026-11-11T22:45:00.000Z'
+    '2026-11-05T22:45:00.000Z',
+    '2026-11-07T22:45:00.000Z',
+    '2026-11-12T22:45:00.000Z'
   ]);
-  custom.forEach(function (day) { day.paused = true; });
-  assert.throws(function () { schedule.nextBangkokSlot(Date.parse('2026-11-03T04:00:00Z'), custom); }, /No active short-form posting slot/);
+  assert.throws(function () { schedule.nextBangkokSlot(Date.parse('2026-11-03T04:00:00Z'), custom.map(function (day) {
+    return Object.assign({}, day, { paused: true });
+  })); }, /No active short-form posting slot/);
+});
+
+test('linked shorts wait seven full days after the long-form actually goes live', function () {
+  const short = { id: 'short', contentType: 'long_short', relatedLongformPieceId: 'long' };
+  const planned = { id: 'long', contentType: 'longform', stage: 'scheduled', scheduledAt: '2026-11-20T22:45:00Z' };
+  assert.equal(schedule.shortformEligibleAt(short, [short, planned], '2026-11-29T22:45:00Z'), false);
+  const live = Object.assign({}, planned, { stage: 'live', postedAt: '2026-11-21T00:00:00Z' });
+  assert.equal(schedule.shortformEligibleAt(short, [short, live], '2026-11-27T23:59:59Z'), false);
+  assert.equal(schedule.shortformEligibleAt(short, [short, live], '2026-11-28T00:00:00Z'), true);
+  assert.equal(schedule.shortformEligibleAt({ contentType: 'short' }, [live], '2026-11-22T22:45:00Z'), true);
 });
 
 test('missing Buffer schedule safely falls back to two daily GMT+7 slots', function () {

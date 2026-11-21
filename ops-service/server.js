@@ -139,10 +139,7 @@ const TIKTOK_PUBLISHING_ENABLED = process.env.TIKTOK_PUBLISHING_ENABLED === 'tru
 const ACTIVE_SHORT_PLATFORMS = TIKTOK_PUBLISHING_ENABLED
   ? ['ytshort', 'tiktok', 'instagram', 'facebook']
   : ['ytshort', 'instagram', 'facebook'];
-const PAUSED_SHORT_POSTING_SCHEDULE = [
-  { day: 'mon', paused: false, times: ['05:45'] },
-  { day: 'thu', paused: false, times: ['05:45'] }
-];
+const SHORT_POSTING_SCHEDULE = shortformSchedule.SHORTFORM_POSTING_SCHEDULE;
 const metaPublisher = metaPublisherService.setup({
   mediaBaseUrl: process.env.META_MEDIA_BASE_URL || 'https://ops.realitymanual.com'
 });
@@ -2217,6 +2214,20 @@ app.put('/api/store/:storeName/:id', function (req, res) {
     // that merge may still submit the retired stage id; normalize it at the
     // write boundary so they cannot recreate an invisible Filmed card.
     if (!req.body.hasVideo && req.body.stage === 'filmed') req.body.stage = 'uploaded';
+    const relatedId = String(Object.prototype.hasOwnProperty.call(req.body, 'relatedLongformPieceId')
+      ? req.body.relatedLongformPieceId || '' : existingPiece && existingPiece.relatedLongformPieceId || '').trim();
+    if (existingPiece && ['scheduled', 'live'].includes(existingPiece.stage) &&
+        relatedId !== String(existingPiece.relatedLongformPieceId || '')) {
+      return res.status(409).json({ error: 'related_longform_locked_after_scheduling' });
+    }
+    if (relatedId) {
+      const relatedRow = isValidId(relatedId) && stmts.getOne.get('pieces', relatedId);
+      const related = relatedRow && JSON.parse(relatedRow.data);
+      if (!shortformSchedule.isShortform(req.body) || !related || related.contentType !== 'longform' || related.id === id) {
+        return res.status(400).json({ error: 'invalid_related_longform' });
+      }
+    }
+    req.body.relatedLongformPieceId = relatedId;
   }
 
   if (req.sessionRole === 'youtube-reviewer') {
@@ -3686,11 +3697,11 @@ app.post('/api/tiktok/publish/:id', function (req, res) {
 // for historical records, but the UI now calls this route for TikTok.
 app.get('/api/buffer/status', requireAuth, async function (req, res) {
   const status = await buffer.status();
+  status.shortformPostingSchedule = SHORT_POSTING_SCHEDULE;
   if (!TIKTOK_PUBLISHING_ENABLED) {
     status.connected = false;
     status.pausedByOwner = true;
     status.reason = 'tiktok_paused_by_owner';
-    status.shortformPostingSchedule = PAUSED_SHORT_POSTING_SCHEDULE;
   }
   status.publicationSync = bufferPublicationSync.status();
   res.json(status);
@@ -4106,7 +4117,6 @@ function topicAwarePublishingSlot(piece, candidates, pieces) {
 
 let publishingQueueDrainRunning = false;
 let publishingQueueDrainRequested = false;
-let publishingBufferScheduleCache = { expiresAt: 0, postingSchedule: [] };
 let publishRetryWorkerRunning = false;
 const ONE_OFF_MONEY_ID = '5574bd8e-d0f9-417c-8877-0d21f2db777a';
 const ONE_OFF_FRIDAY_ID = '83d9ec23-e8e5-4d78-afbb-d27dcc62e31e';
@@ -4356,28 +4366,12 @@ async function nextPublishingQueueSlot(type, pieces, nowValue) {
     const occupied = pieces.filter(function (piece) {
       return shortformSchedule.isShortform(piece) && piece.stage === 'scheduled' && piece.scheduledAt;
     }).map(function (piece) { return piece.scheduledAt; });
-    return shortformSchedule.nextAvailableBangkokSlots(nowValue, PAUSED_SHORT_POSTING_SCHEDULE, occupied, 1)[0] || '';
+    return shortformSchedule.nextAvailableBangkokSlots(nowValue, SHORT_POSTING_SCHEDULE, occupied, 1)[0] || '';
   }
-  let postingSchedule = publishingBufferScheduleCache.postingSchedule;
-  if (publishingBufferScheduleCache.expiresAt <= nowValue) {
-    try {
-      const bufferStatus = await buffer.status();
-      if (bufferStatus.connected && bufferStatus.channel && bufferStatus.channel.timezone === 'Asia/Bangkok') {
-        postingSchedule = bufferStatus.channel.postingSchedule || [];
-      }
-    } catch (error) {
-      console.error('Could not read Buffer schedule while checking the publishing queue:', error.message);
-    }
-    const validSchedule = postingSchedule.length > 0;
-    publishingBufferScheduleCache = { expiresAt: nowValue + (validSchedule ? 6 * 60 * 60 * 1000 : 10 * 60 * 1000), postingSchedule: postingSchedule };
-  }
-  // The fallback midnight/noon calendar is not Harvey's actual Buffer slot.
-  // During a quota outage, leave the short in queue and retry the lookup.
-  if (!postingSchedule.length) return '';
   const occupied = pieces.filter(function (piece) {
     return shortformSchedule.isShortform(piece) && piece.stage === 'scheduled' && piece.scheduledAt;
   }).map(function (piece) { return piece.scheduledAt; });
-  return shortformSchedule.nextAvailableBangkokSlots(nowValue, postingSchedule, occupied, 1)[0] || '';
+  return shortformSchedule.nextAvailableBangkokSlots(nowValue, SHORT_POSTING_SCHEDULE, occupied, 1)[0] || '';
 }
 
 async function drainPublishingQueue() {
@@ -4393,7 +4387,11 @@ async function drainPublishingQueue() {
   for (const queue of queues) {
     const candidateDueAt = await nextPublishingQueueSlot(queue.type, pieces, now);
     if (publishingQueue.preparationDue(candidateDueAt, now)) {
-      activeQueue = queue;
+      const eligible = queue.type === 'shortform' ? queue.pieces.filter(function (piece) {
+        return shortformSchedule.shortformEligibleAt(piece, pieces, candidateDueAt);
+      }) : queue.pieces;
+      if (!eligible.length) continue;
+      activeQueue = Object.assign({}, queue, { pieces: eligible });
       dueAt = candidateDueAt;
       break;
     }
@@ -4492,13 +4490,11 @@ async function runPlatformPublishBatch(id, destinations, options) {
   const archivedPiece = getPieceRecord(id);
   const mimeType = archivedPiece && archivedPiece.storageMimeType || videoMeta.mimeType || 'video/mp4';
 
-  // Shorts use one shared release instant across every destination. Content
-  // Studio chooses an exact topic-aware slot from Buffer's Bangkok posting
-  // calendar, then creates TikTok as a custom-scheduled post at that instant
-  // and retains the direct-platform payload until the same time. Longform
-  // uses its separate Tuesday/Saturday calendar, but both calendars compare
-  // against every format so a long and short treatment of the same subject
-  // are deliberately kept apart.
+  // Shorts use one Friday/Sunday 05:45 Bangkok release instant across every
+  // destination. TikTok, when enabled, receives that exact custom dueAt;
+  // direct-platform payloads wait for the same time. A short explicitly
+  // linked to a long-form cannot use a slot until seven full days after the
+  // parent's actual publication, regardless of topic scoring.
   const initialPiece = getPieceRecord(id);
   const isScheduledLongformRelease = initialPiece && initialPiece.contentType === 'longform' &&
     !initialPiece.directLongformReleaseRunning;
@@ -4563,34 +4559,23 @@ async function runPlatformPublishBatch(id, destinations, options) {
     const tiktokDestination = destinations.find(function (destination) { return destination.platform === 'tiktok'; });
     const directDestinations = destinations.filter(function (destination) { return destination.platform !== 'tiktok'; });
     let dueAt = null;
-    let postingSchedule = TIKTOK_PUBLISHING_ENABLED
-      ? publishingBufferScheduleCache.postingSchedule : PAUSED_SHORT_POSTING_SCHEDULE;
+    const postingSchedule = SHORT_POSTING_SCHEDULE;
     const pieces = allPieceRecords();
     const occupied = pieces.filter(function (other) {
       return other.id !== id && shortformSchedule.isShortform(other) && other.stage === 'scheduled' && other.scheduledAt;
     }).map(function (other) { return other.scheduledAt; });
     const forcedDueAt = publishingQueue.preparationDue(options.dueAt, Date.now(), publishingQueue.PREPARATION_LEAD_MS + 60 * 1000)
       ? options.dueAt : '';
-    if (TIKTOK_PUBLISHING_ENABLED && !forcedDueAt && !postingSchedule.length) {
-      const bufferStatus = await buffer.status();
-      if (bufferStatus.connected && bufferStatus.channel && bufferStatus.channel.timezone === 'Asia/Bangkok') {
-        postingSchedule = bufferStatus.channel.postingSchedule || [];
-      }
-    }
-    if (tiktokDestination && !forcedDueAt && !postingSchedule.length) {
-      updatePieceFields(id, { tiktokPublishStatus: 'error',
-        tiktokPublishError: 'Buffer posting calendar is unavailable. No fallback publish time was used; retry when Buffer API access returns.',
-        stage: 'scheduled', queuedPublishDestinations: [], scheduledPublishDestinations: directDestinations,
-        directShortPublishStatus: directDestinations.length ? 'scheduled' : 'not_required' });
-      recordPublishRetryState(id, destinations, false);
-      return;
-    }
     const candidates = forcedDueAt ? [forcedDueAt] : shortformSchedule.nextAvailableBangkokSlots(Date.now(), postingSchedule, occupied, 32);
     // The natural queue decides which video goes next; the chosen video uses
     // the next daily Buffer slot. Topic separation must not manufacture empty
     // publishing days by pushing the only Scheduled short far into the future.
     const scheduled = topicAwarePublishingSlot(initialPiece, candidates.slice(0, 1), pieces);
     dueAt = scheduled.dueAt;
+    if (!shortformSchedule.shortformEligibleAt(initialPiece, pieces, dueAt)) {
+      console.warn('Linked short-form remains queued until seven days after its long-form release:', id);
+      return;
+    }
 
     if (tiktokDestination) {
       try {

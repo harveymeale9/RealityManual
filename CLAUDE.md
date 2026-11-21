@@ -24195,3 +24195,29 @@ PCM and under 300 MB FFmpeg RSS during the observed video render), and CI
 confirmed `ba344be` deployed. The recording remains in Editor, not
 approved or sent to Production; Harvey should make the final listening
 judgment on the new preview.
+
+## Friday/Sunday short-form cadence and linked long-form delay (2026-11-21)
+
+Harvey superseded the Monday/Thursday short-form cadence with **Friday and
+Sunday at 05:45 Asia/Bangkok** for every active short destination. The
+stable Bangkok instant is 22:45 UTC on the preceding calendar day and,
+during New York standard time, 17:45 there. The scheduler uses one fixed
+calendar instead of Buffer's own posting-calendar slots; an enabled TikTok
+destination receives the same explicit custom `dueAt`. TikTok remains
+paused by owner. The Settings calendar and 15-day runway use the fixed
+schedule too. No short was already in Scheduled when this changed; five
+shorts were waiting in Publishing Queue, so no provider reservation needed
+moving.
+
+There was no reliable persisted relation between long- and short-form
+cards; independent titles/transcripts only allowed fuzzy topic similarity.
+The piece modal now offers an optional explicit related-long-form selector
+for shorts. The server validates that relation. A linked short cannot be
+selected or scheduled until its linked long-form is actually Live, and
+the proposed shared release instant is at least seven complete 24-hour
+days after that long-form's actual `postedAt`. A merely scheduled or delayed
+parent does not start the clock. The queue-runway preview applies the same
+rule so it does not falsely show a blocked short filling an early slot.
+Unlinked cards remain standalone, as a topic similarity guess must not
+silently bind a genuinely independent short to the wrong video. Queue
+selection can use another eligible short instead of wasting the slot.

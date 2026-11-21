@@ -90,6 +90,18 @@ test('short-form runway counts the actual Buffer calendar and scheduled inventor
   assert.equal(new Date(result.nextNeededAt).toISOString(), '2026-10-19T18:35:00.000Z');
 });
 
+test('short-form runway leaves slots open until a linked long-form has been live for seven days', function () {
+  const now = Date.parse('2026-11-21T12:00:00Z');
+  const short = Object.assign(ready('short', 'long_short'), { relatedLongformPieceId: 'long' });
+  const long = { id: 'long', contentType: 'longform', stage: 'live', postedAt: '2026-11-20T23:00:00Z' };
+  const result = coverage.calculate({ pieces: [short, long], now: now,
+    postingSchedule: cadence.SHORTFORM_POSTING_SCHEDULE }).shortform;
+  assert.equal(new Date(result.timeline[0].at).toISOString(), '2026-11-21T22:45:00.000Z');
+  assert.equal(result.timeline[0].state, 'open');
+  assert.equal(result.timeline[1].state, 'open');
+  assert.equal(result.timeline[2].state, 'queued');
+});
+
 test('runway slots carry scheduled titles and identify queued titles as tentative candidates', function () {
   const now = Date.parse('2026-11-20T04:00:00Z');
   const pieces = [

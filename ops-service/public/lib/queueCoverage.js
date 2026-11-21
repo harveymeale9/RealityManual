@@ -23,6 +23,12 @@
     return [Number(match[1]), Number(match[2])];
   }
   function isShort(piece) { return SHORT_TYPES.indexOf(piece && piece.contentType) !== -1; }
+  function shortEligibleAt(piece, pieces, slot) {
+    if (!piece.relatedLongformPieceId) return true;
+    var parent = pieces.find(function (other) { return other.id === piece.relatedLongformPieceId; });
+    var published = parent && parent.stage === 'live' && parent.contentType === 'longform' ? timestamp(parent.postedAt) : null;
+    return published !== null && slot >= published + 7 * DAY_MS;
+  }
   function isReady(piece) {
     return piece && piece.hasVideo && piece.stage === 'publishing_queue' &&
       Array.isArray(piece.queuedPublishDestinations) && piece.queuedPublishDestinations.length > 0;
@@ -114,7 +120,7 @@
       }
       else {
         var waitingIndex = waiting.findIndex(function (piece) {
-          if (type !== 'longform') return true;
+          if (type !== 'longform') return shortEligibleAt(piece, pieces, slot);
           if (piece.youtubeAdvanceDueAt) return timestamp(piece.youtubeAdvanceDueAt) === slot;
           if (slot === Date.parse('2026-11-20T15:00:00.000Z')) {
             return piece.id === '83d9ec23-e8e5-4d78-afbb-d27dcc62e31e';

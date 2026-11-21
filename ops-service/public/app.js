@@ -2852,7 +2852,7 @@
      the piece has an uploaded video attached.
      ============================================================ */
 
-  var modalWrap, pieceModal, scrim, fieldTitle, fieldStage, fieldContentType, fieldNotes,
+  var modalWrap, pieceModal, scrim, fieldTitle, fieldStage, fieldContentType, fieldRelatedLongform, relatedLongformField, fieldNotes,
       platformGrid, metaCreated, metaUpdated, saveFlag, modalEyebrowText, modalIdBadge, btnDelete,
       videoSection, videoPreview, fieldTranscript, fieldAudioTrack, thumbPreview,
       pickFrameBtn, thumbScrub, scrubRange, captureFrameBtn, captionReadout,
@@ -3045,6 +3045,8 @@
     fieldTitle = document.getElementById('fieldTitle');
     fieldStage = document.getElementById('fieldStage');
     fieldContentType = document.getElementById('fieldContentType');
+    fieldRelatedLongform = document.getElementById('fieldRelatedLongform');
+    relatedLongformField = document.getElementById('relatedLongformField');
     fieldNotes = document.getElementById('fieldNotes');
     platformGrid = document.getElementById('platformGrid');
     metaCreated = document.getElementById('metaCreated');
@@ -3138,8 +3140,11 @@
         t.querySelector('input').checked = checked;
       });
       clearTimeout(saveTimer);
+      relatedLongformField.hidden = Store.SHORT_TYPES.indexOf(fieldContentType.value) === -1;
+      if (relatedLongformField.hidden) fieldRelatedLongform.value = '';
       syncFromForm();
     });
+    fieldRelatedLongform.addEventListener('change', function () { clearTimeout(saveTimer); syncFromForm(); });
     fieldAudioTrack.addEventListener('change', function () { clearTimeout(saveTimer); syncFromForm(); });
     platformGrid.addEventListener('click', function (e) {
       var toggle = e.target.closest('.platform-toggle');
@@ -3435,6 +3440,22 @@
     teleprompterOpen.hidden = !!p.hasVideo;
     fieldTitle.value = p.title || '';
     fieldContentType.value = p.contentType || '';
+    relatedLongformField.hidden = Store.SHORT_TYPES.indexOf(p.contentType) === -1;
+    fieldRelatedLongform.replaceChildren();
+    var noRelatedLongform = document.createElement('option');
+    noRelatedLongform.value = '';
+    noRelatedLongform.textContent = 'None — standalone short';
+    fieldRelatedLongform.appendChild(noRelatedLongform);
+    Object.keys(pieces).map(function (id) { return pieces[id]; }).filter(function (candidate) {
+      return candidate && candidate.contentType === 'longform' && candidate.hasVideo && candidate.id !== p.id;
+    }).sort(function (a, b) { return String(a.title || '').localeCompare(String(b.title || '')); }).forEach(function (candidate) {
+      var option = document.createElement('option');
+      option.value = candidate.id;
+      option.textContent = (candidate.title || 'Untitled long-form') + ' · ' + stageLabelOf(candidate.stage);
+      fieldRelatedLongform.appendChild(option);
+    });
+    fieldRelatedLongform.value = p.relatedLongformPieceId || '';
+    fieldRelatedLongform.disabled = p.stage === 'scheduled' || p.stage === 'live';
     stageField.hidden = !!p.hasVideo;
     stageReadoutField.hidden = !p.hasVideo;
     if (p.hasVideo) stageReadout.textContent = stageLabelOf(p.stage);
@@ -3516,6 +3537,7 @@
     fieldTitle.disabled = !editable;
     fieldStage.disabled = !editable;
     fieldContentType.disabled = !editable;
+    fieldRelatedLongform.disabled = !editable || p.stage === 'scheduled' || p.stage === 'live';
     fieldNotes.contentEditable = editable ? 'true' : 'false';
     kanbanDictateBtn.disabled = !editable;
     platformGrid.querySelectorAll('.platform-toggle').forEach(function (t) {
@@ -3613,6 +3635,7 @@
     var vals = {
       title: fieldTitle.value,
       contentType: fieldContentType.value,
+      relatedLongformPieceId: relatedLongformField.hidden ? '' : fieldRelatedLongform.value,
       contentTypeSelectionExplicit: !!(p && p.contentTypeSelectionExplicit),
       notesHtml: fieldNotes.innerHTML,
       platforms: platforms,
@@ -6562,11 +6585,7 @@
           return;
         }
         if (s.connected) {
-          var activeDays = s.channel && s.channel.postingSchedule ? s.channel.postingSchedule.filter(function (day) { return !day.paused; }) : [];
-          var weeklySlots = activeDays.reduce(function (count, day) { return count + (day.times || []).length; }, 0);
-          var scheduleNote = s.channel && s.channel.postingSchedule && s.channel.postingSchedule.length
-            ? ' Queue: ' + weeklySlots + ' post' + (weeklySlots === 1 ? '' : 's') + '/week' + (s.channel.timezone ? ' (' + s.channel.timezone + ')' : '') + '.'
-            : ' Queue schedule is configured in Buffer.';
+          var scheduleNote = ' Content Studio schedules custom Friday/Sunday 05:45 Bangkok releases.';
           var insightsNote = s.channel && s.channel.canViewInsights ? ' Performance tracking active.' : '';
           statusEl.textContent = 'Buffer can schedule to ' + ((s.channel && s.channel.displayName) || 'the connected TikTok channel') +
             (s.channel && s.channel.isQueuePaused ? ' — queue is paused.' : '.' + scheduleNote + insightsNote);
@@ -6585,10 +6604,9 @@
     var grid = document.getElementById('tiktokScheduleGrid');
     var directSummary = document.getElementById('directShortScheduleSummary');
     if (!grid) return;
-    var days = status && status.pausedByOwner ? (status.shortformPostingSchedule || [])
-      : status && status.connected && status.channel ? (status.channel.postingSchedule || []) : [];
+    var days = status && status.shortformPostingSchedule || [];
     if (!days.length) {
-      grid.innerHTML = '<span class="ink-faint">Buffer schedule unavailable.</span>';
+      grid.innerHTML = '<span class="ink-faint">Short-form schedule unavailable.</span>';
       if (directSummary) directSummary.textContent = 'Short-form posting calendar unavailable.';
       return;
     }
@@ -6597,7 +6615,7 @@
       var times = day.paused ? ['Paused'] : (day.times || []);
       return '<div class="tiktok-schedule-day"><strong>' + (labels[day.day] || escapeHtml(day.day)) + '</strong>' +
         '<span>' + times.map(function (time) { return escapeHtml(time); }).join(' · ') + '</span></div>';
-    }).join('') + '<div class="tiktok-schedule-zone">Timezone: ' + escapeHtml(status.pausedByOwner ? 'Asia/Bangkok (TikTok paused)' : status.channel.timezone || 'Buffer account') + '</div>';
+    }).join('') + '<div class="tiktok-schedule-zone">Timezone: Asia/Bangkok' + (status.pausedByOwner ? ' (TikTok paused)' : '') + '</div>';
     if (directSummary) {
       var active = days.filter(function (day) { return !day.paused; });
       var activeSlots = active.flatMap(function (day) {
