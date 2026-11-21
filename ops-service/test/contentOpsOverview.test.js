@@ -18,7 +18,7 @@ test('Content Ops keeps one publication timeline with fixed Tuesday/Saturday lon
   const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const runway = app.slice(app.indexOf('function renderQueueCoverage()'), app.indexOf('// opts.hideVideoChip'));
   assert.match(runway, /Next 15 days/);
-  assert.match(runway, /Tuesday & Saturday · 10 p\.m\. Bangkok/);
+  assert.match(runway, /Tuesday & Saturday · 5:45 a\.m\. Bangkok/);
   assert.match(runway, /Tentative: /);
   assert.match(runway, /slot\.title/);
   assert.doesNotMatch(runway, /id="opsLongformIntervalHours"/);

@@ -25,14 +25,13 @@ test('Buffer day pauses and changed slots remain authoritative', function () {
   assert.equal(schedule.nextBangkokSlot(Date.parse('2026-09-27T18:00:00Z'), custom), '2026-09-28T18:30:00.000Z');
 });
 
-test('Monday and Thursday Buffer slots are the only shared short-form release times', function () {
-  const custom = daily(['01:54']);
+test('Monday and Thursday 5:45 a.m. slots are the only shared short-form release times', function () {
+  const custom = daily(['05:45']);
   custom.forEach(function (day) { day.paused = !['mon', 'thu'].includes(day.day); });
-  custom.find(function (day) { return day.day === 'thu'; }).times = ['01:51'];
   assert.deepEqual(schedule.nextAvailableBangkokSlots(Date.parse('2026-11-03T04:00:00Z'), custom, [], 3), [
-    '2026-11-04T18:51:00.000Z',
-    '2026-11-08T18:54:00.000Z',
-    '2026-11-11T18:51:00.000Z'
+    '2026-11-04T22:45:00.000Z',
+    '2026-11-08T22:45:00.000Z',
+    '2026-11-11T22:45:00.000Z'
   ]);
   custom.forEach(function (day) { day.paused = true; });
   assert.throws(function () { schedule.nextBangkokSlot(Date.parse('2026-11-03T04:00:00Z'), custom); }, /No active short-form posting slot/);
@@ -53,11 +52,11 @@ test('topic scheduler can fill open short-form slots instead of appending after 
   ]);
 });
 
-test('longform uses Tuesday and Saturday at 10 p.m. Bangkok regardless of old anchor', function () {
-  assert.equal(schedule.nextLongformSlot(Date.parse('2026-11-14T17:47:00Z'), schedule.LONGFORM_ANCHOR, 168), '2026-11-17T15:00:00.000Z');
-  assert.equal(schedule.nextLongformSlot(Date.parse('2026-11-17T14:59:59Z')), '2026-11-17T15:00:00.000Z');
-  assert.equal(schedule.nextLongformSlot(Date.parse('2026-11-17T15:00:00Z')), '2026-11-24T15:00:00.000Z');
-  assert.equal(schedule.nextLongformSlot(Date.parse('2026-11-21T15:00:00Z')), '2026-11-24T15:00:00.000Z');
+test('longform uses Tuesday and Saturday at 5:45 a.m. Bangkok regardless of old anchor', function () {
+  assert.equal(schedule.nextLongformSlot(Date.parse('2026-11-14T17:47:00Z'), schedule.LONGFORM_ANCHOR, 168), '2026-11-16T22:45:00.000Z');
+  assert.equal(schedule.nextLongformSlot(Date.parse('2026-11-16T22:44:59Z')), '2026-11-16T22:45:00.000Z');
+  assert.equal(schedule.nextLongformSlot(Date.parse('2026-11-16T22:45:00Z')), '2026-11-23T22:45:00.000Z');
+  assert.equal(schedule.nextLongformSlot(Date.parse('2026-11-21T15:00:00Z')), '2026-11-23T22:45:00.000Z');
 });
 
 test('occupied long-form slots never shift the fixed calendar', function () {
@@ -65,16 +64,16 @@ test('occupied long-form slots never shift the fixed calendar', function () {
   assert.equal(schedule.normalizeLongformIntervalHours(0), 168);
   assert.equal(schedule.normalizeLongformIntervalHours(2.5), 168);
   assert.deepEqual(schedule.nextAvailableLongformSlots(Date.parse('2026-11-14T17:47:00Z'), schedule.LONGFORM_ANCHOR, 60,
-    ['2026-11-17T15:00:00.000Z'], 3), [
-    '2026-11-24T15:00:00.000Z', '2026-11-28T15:00:00.000Z', '2026-12-01T15:00:00.000Z'
+    ['2026-11-16T22:45:00.000Z'], 3), [
+    '2026-11-23T22:45:00.000Z', '2026-11-27T22:45:00.000Z', '2026-11-30T22:45:00.000Z'
   ]);
 });
 
 test('the former immediate-release flag cannot bypass the next Tuesday slot', function () {
   const approval = Date.parse('2026-11-10T08:12:00.000Z');
   const first = schedule.nextLongformReleaseSlot(approval, schedule.LONGFORM_ANCHOR, 168, true);
-  assert.equal(first, '2026-11-10T15:00:00.000Z');
-  assert.equal(schedule.nextLongformReleaseSlot(Date.parse(first), first, 168, false), '2026-11-14T15:00:00.000Z');
+  assert.equal(first, '2026-11-13T22:45:00.000Z');
+  assert.equal(schedule.nextLongformReleaseSlot(Date.parse(first), first, 168, false), '2026-11-16T22:45:00.000Z');
 });
 
 test('the two approved legacy long-forms reserve Tuesday then Saturday without moving existing specials', function () {
@@ -92,9 +91,9 @@ test('the two approved legacy long-forms reserve Tuesday then Saturday without m
   const watch = queued('652f9e11-5658-4fe7-b9e8-04a46421b429');
   const reinvent = queued('0ca49b70-7d12-49b5-a6a6-3cfc82bf1889');
   const now = Date.parse('2026-11-20T12:00:00.000Z');
-  assert.equal(choose(watch, [watch, reinvent], now), '2026-11-24T15:00:00.000Z');
-  assert.equal(choose(reinvent, [watch, reinvent], now), '2026-11-28T15:00:00.000Z');
+  assert.equal(choose(watch, [watch, reinvent], now), '2026-11-23T22:45:00.000Z');
+  assert.equal(choose(reinvent, [watch, reinvent], now), '2026-11-27T22:45:00.000Z');
   assert.equal(choose(queued('other-old-card'), [watch, reinvent], now), '');
   assert.equal(choose(watch, [watch, reinvent, { id: 'collision', stage: 'scheduled',
-    scheduledAt: '2026-11-24T15:00:00.000Z' }], now), '');
+    scheduledAt: '2026-11-23T22:45:00.000Z' }], now), '');
 });

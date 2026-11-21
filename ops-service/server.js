@@ -138,8 +138,8 @@ const ACTIVE_SHORT_PLATFORMS = TIKTOK_PUBLISHING_ENABLED
   ? ['ytshort', 'tiktok', 'instagram', 'facebook']
   : ['ytshort', 'instagram', 'facebook'];
 const PAUSED_SHORT_POSTING_SCHEDULE = [
-  { day: 'mon', paused: false, times: ['01:54'] },
-  { day: 'thu', paused: false, times: ['01:51'] }
+  { day: 'mon', paused: false, times: ['05:45'] },
+  { day: 'thu', paused: false, times: ['05:45'] }
 ];
 const metaPublisher = metaPublisherService.setup({
   mediaBaseUrl: process.env.META_MEDIA_BASE_URL || 'https://ops.realitymanual.com'
@@ -4055,9 +4055,9 @@ const ONE_OFF_FRIDAY_ID = '83d9ec23-e8e5-4d78-afbb-d27dcc62e31e';
 const LEGACY_WATCH_ID = '652f9e11-5658-4fe7-b9e8-04a46421b429';
 const LEGACY_REINVENT_ID = '0ca49b70-7d12-49b5-a6a6-3cfc82bf1889';
 const ONE_OFF_FRIDAY = '2026-11-20T15:00:00.000Z';
-const ONE_OFF_SUNDAY = '2026-11-22T15:00:00.000Z';
-const LEGACY_WATCH_SLOT = '2026-11-24T15:00:00.000Z';
-const LEGACY_REINVENT_SLOT = '2026-11-28T15:00:00.000Z';
+const ONE_OFF_SUNDAY = '2026-11-21T22:45:00.000Z';
+const LEGACY_WATCH_SLOT = '2026-11-23T22:45:00.000Z';
+const LEGACY_REINVENT_SLOT = '2026-11-27T22:45:00.000Z';
 const LONGFORM_ADVANCE_START = Date.parse('2026-11-20T04:03:13.000Z');
 let longformAdvanceRunning = false;
 

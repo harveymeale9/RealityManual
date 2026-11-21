@@ -6,10 +6,10 @@ const RETAINED_VIDEO_ID = '2076843426329537';
 function bangkokSlot(now) {
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit',
-    weekday: 'short', hour: '2-digit', hourCycle: 'h23'
+    weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
   }).formatToParts(now).filter(function (part) { return part.type !== 'literal'; })
     .map(function (part) { return [part.type, part.value]; }));
-  if (!['Wed', 'Fri', 'Sun'].includes(parts.weekday) || Number(parts.hour) !== 22) return '';
+  if (!['Wed', 'Fri', 'Sun'].includes(parts.weekday) || Number(parts.hour) !== 5 || Number(parts.minute) < 45) return '';
   const date = parts.year + '-' + parts.month + '-' + parts.day;
   // These off-day slots are reserved for Harvey's one-off long-form releases.
   if (date === '2026-11-20' || date === '2026-11-22') return '';

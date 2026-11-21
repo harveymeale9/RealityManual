@@ -23863,6 +23863,35 @@ the period peaks around 2,900 views/hour, while the peak sits near the top.
 The independent green sales bars, day bands, release markers, hourly data and
 totals are unchanged. A focused chart test locks the 100/2,900 coordinates.
 
+## 05:45 Bangkok publishing clock across active platforms (2026-11-21)
+
+Harvey moved the release clock to **05:45 Asia/Bangkok**, which in November's
+New York standard time is 17:45 on the preceding calendar day. The Bangkok
+day cadence is unchanged: Tuesday/Saturday long-form on YouTube and Facebook,
+Monday/Thursday short-form on YouTube, Instagram and Facebook, and the
+Wednesday/Friday/Sunday Facebook catalog replay on off days. The special
+Sunday 22 November Money release also moves to 05:45 Bangkok. TikTok remains
+deactivated, with its Buffer integration preserved rather than reconnected.
+The fixed short-form schedule, long-form slot planner, replay worker, runway
+calendar and UI cadence labels now use the new hour. Bangkok is the stable
+source-of-truth clock; New York observes daylight saving time, so a fixed
+05:45 Bangkok slot will be 18:45 New York when EDT resumes, not 17:45.
+
+Three already-uploaded, private YouTube long-forms were rescheduled using
+Google `videos.update(part=status)` with their existing writable status fields
+preserved, then read back and confirmed private at the new `publishAt` before
+their Content Studio `scheduledAt` and `youtubeAdvanceDueAt` reservations were
+changed. The exact-IDs one-off migration is
+`ops-service/scripts/reschedule-november-longforms.js` (dry-run default,
+idempotent checks). Money is Sunday 22 November 05:45 Bangkok
+(`2026-11-21T22:45Z`), Watch this BEFORE all of your dreams come true is
+Tuesday 24 November (`2026-11-23T22:45Z`), and The Idiot-Proof Guide is
+Saturday 28 November (`2026-11-27T22:45Z`). Facebook has no remote future
+reservation for these: its direct release worker reads the updated local
+`scheduledAt`. No video file was reuploaded and existing public posts stayed
+at their historical timestamps. The five short-form queue cards are not yet
+scheduled, so they will take the next new Monday/Thursday slots as selected.
+
 ## Facebook fallback for repeat failure on the 5.97 GB Friday long-form (2026-11-20)
 
 Friday's approved long-form `83d9ec23` published on YouTube, but its 5.97 GB

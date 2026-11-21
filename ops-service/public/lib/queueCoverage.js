@@ -36,7 +36,7 @@
     var slots = [];
     var cursor = now;
     while (slots.length < count) {
-      var specials = [Date.parse('2026-11-20T15:00:00.000Z'), Date.parse('2026-11-22T15:00:00.000Z')]
+      var specials = [Date.parse('2026-11-20T15:00:00.000Z'), Date.parse('2026-11-21T22:45:00.000Z')]
         .filter(function (candidate) { return candidate > cursor; });
       var local = new Date(cursor + BANGKOK_OFFSET_MS);
       var midnight = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate());
@@ -45,7 +45,7 @@
         var day = midnight + dayOffset * DAY_MS;
         if ([2, 6].indexOf(new Date(day).getUTCDay()) === -1) continue;
         if (new Date(day).toISOString().slice(0, 10) === '2026-11-21') continue;
-        var candidate = day + 22 * 3600000 - BANGKOK_OFFSET_MS;
+        var candidate = day + 5 * 3600000 + 45 * 60000 - BANGKOK_OFFSET_MS;
         if (candidate > cursor) { normal = candidate; break; }
       }
       var next = Math.min.apply(Math, (normal === null ? [] : [normal]).concat(specials));
@@ -119,7 +119,7 @@
           if (slot === Date.parse('2026-11-20T15:00:00.000Z')) {
             return piece.id === '83d9ec23-e8e5-4d78-afbb-d27dcc62e31e';
           }
-          if (slot === Date.parse('2026-11-22T15:00:00.000Z')) return piece.id === '5574bd8e-d0f9-417c-8877-0d21f2db777a';
+          if (slot === Date.parse('2026-11-21T22:45:00.000Z')) return piece.id === '5574bd8e-d0f9-417c-8877-0d21f2db777a';
           return piece.id !== '5574bd8e-d0f9-417c-8877-0d21f2db777a';
         });
         if (waitingIndex !== -1) {
