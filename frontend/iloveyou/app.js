@@ -134,12 +134,14 @@
           files: files.map(file => ({ name: file.name, type: file.type, size: file.size })) };
         const key = JSON.stringify(details);
         if (!pending || pending.key !== key || pending.files.length !== files.length || pending.files.some((file, index) => file !== files[index])) {
-          pending = { key, files: files.slice(), submission: await api('/start', details) };
+          pending = { key, files: files.slice(), submission: await api('/start', details), uploaded: [] };
         }
         const submission = pending.submission;
         const completed = { bytes: 0, total: files.reduce((sum, file) => sum + file.size, 0) };
-        const uploaded = [];
-        for (let index = 0; index < files.length; index++) uploaded.push(await sendFile(submission, submission.files[index], files[index], completed));
+        const uploaded = pending.uploaded;
+        for (let index = 0; index < files.length; index++) {
+          if (!uploaded[index]) uploaded[index] = await sendFile(submission, submission.files[index], files[index], completed);
+        }
         setStatus('Finishing and verifying your submission…', false);
         await api('/' + submission.id + '/complete', { token: submission.token, files: uploaded });
         pending = null; form.reset(); files.length = 0; renderFiles();
